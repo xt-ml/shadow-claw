@@ -10,7 +10,7 @@ tab.
 
 ```bash
 npm install
-npm start        # Express dev server → http://localhost:3000
+npm start        # Express dev server → http://localhost:8888
 ```
 
 Open Settings, paste your [OpenRouter](https://openrouter.ai/) API key, and start chatting.
@@ -85,7 +85,7 @@ sequenceDiagram
 | `src/config.mjs`                | All constants, provider definitions, and config keys              |
 | `src/types.mjs`                 | JSDoc `@typedef` declarations (full type contract)                |
 | `src/effect.mjs`                | Lightweight `effect()` using TC39 Signal Polyfill                 |
-| `bin/serve.mjs`                 | Express dev/prod server with compression and SPA routing          |
+| `src/serve.mjs`                 | Express dev/prod server with compression and SPA routing          |
 | `service-worker/`               | Workbox-generated PWA service worker                              |
 
 ## Tools Available to the Agent

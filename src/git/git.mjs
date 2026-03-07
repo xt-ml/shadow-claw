@@ -8,6 +8,8 @@
  * so this module works inside Web Workers (which lack the page importmap).
  */
 
+import { DEFAULT_DEV_HOST, DEFAULT_DEV_PORT } from "../config.mjs";
+
 const UNPKG = "https://unpkg.com";
 const JSDELIVR = "https://cdn.jsdelivr.net";
 
@@ -50,8 +52,15 @@ export function getProxyUrl(preference) {
   }
 
   // Default to local proxy
-  const { protocol, host } = globalThis.location;
-  return `${protocol}//${host}/git-proxy`;
+  const { protocol, host, hostname } = globalThis.location;
+
+  // If running on localhost/127.0.0.1, use the current host (works for dev)
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return `${protocol}//${host}/git-proxy`;
+  }
+
+  // If on a remote host (e.g. GitHub Pages), default to local dev server port
+  return `http://${DEFAULT_DEV_HOST}:${DEFAULT_DEV_PORT}/git-proxy`;
 }
 
 /**

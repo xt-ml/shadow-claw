@@ -136,3 +136,12 @@ export const CONFIG_KEYS = {
   GIT_AUTHOR_EMAIL: "git_author_email",
   GIT_CORS_PROXY: "git_cors_proxy",
 };
+
+/** Default dev server host */
+export const DEFAULT_DEV_HOST = "localhost";
+
+/** Default dev server IP */
+export const DEFAULT_DEV_IP = "127.0.0.1";
+
+/** Default dev server port */
+export const DEFAULT_DEV_PORT = 8888;

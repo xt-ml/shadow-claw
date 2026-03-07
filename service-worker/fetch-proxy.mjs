@@ -17,6 +17,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Only skip proxy endpoints on loopback addresses (Private Network Access)
+  // This avoids redundant interception for the local git proxy.
+  const isLoopback =
+    requestUrl.hostname === "localhost" || requestUrl.hostname === "127.0.0.1";
+
+  const isProxyPath =
+    requestUrl.pathname === "/proxy" ||
+    requestUrl.pathname.startsWith("/git-proxy/");
+
+  if (isLoopback && isProxyPath) {
+    return;
+  }
+
   // Only proxy http and https protocols
   if (!requestUrl.protocol.startsWith("http")) {
     return;

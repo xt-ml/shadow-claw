@@ -12,18 +12,19 @@ import express from "express";
 import expressUrlrewrite from "express-urlrewrite";
 import tcpPortUsed from "tcp-port-used";
 
+import { DEFAULT_DEV_IP, DEFAULT_DEV_PORT } from "./config.mjs";
+
 // get details for the current module
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// create an express application
-const app = express();
+// ---------------- ARGUMENT PARSING ----------------
+const args = argv.slice(2);
+const isVerbose = args.includes("--verbose") || args.includes("-v");
 
-// define an ip address
-const ipAddr = "127.0.0.1";
-
-// define a port
-let port = Number(argv[2]) || 8888;
+// Filter out flags to find the port
+const portArg = args.find((arg) => !arg.startsWith("-") && !isNaN(Number(arg)));
+let port = Number(portArg) || DEFAULT_DEV_PORT;
 
 if (port < 1024 || port > 65535) {
   console.error("Port must be between 1024 and 65535.");
@@ -31,10 +32,81 @@ if (port < 1024 || port > 65535) {
   exit(1);
 }
 
+// ---------------- LOGGING SETUP ----------------
+const LOG_LEVELS = {
+  DEFAULT: "DEFAULT",
+  VERBOSE: "VERBOSE",
+};
+
+function log(level, ...messages) {
+  if (level === LOG_LEVELS.DEFAULT || isVerbose) {
+    const timestamp = new Date().toISOString();
+    const prefix = level === LOG_LEVELS.VERBOSE ? "[VERBOSE]" : "[LOG]";
+
+    console.log(`[${timestamp}] ${prefix}`, ...messages);
+  }
+}
+
+// create an express application
+const app = express();
+
+// define an ip address
+const ipAddr = DEFAULT_DEV_IP;
+
+// ---------------- REQUEST LOGGER MIDDLEWARE (Moved to top) ----------------
+// We place this before CORS so we can log the request arrival even if CORS blocks it.
+app.use((req, res, next) => {
+  const start = Date.now();
+
+  // Log incoming request immediately
+  // We log all requests, including OPTIONS, to help debug CORS/PNA issues.
+  log(LOG_LEVELS.DEFAULT, `--> ${req.method} ${req.originalUrl}`);
+
+  res.on("finish", () => {
+    const duration = Date.now() - start;
+    const statusCode = res.statusCode;
+
+    // Basic log for all routes
+    log(
+      LOG_LEVELS.DEFAULT,
+      `<-- ${req.method} ${req.originalUrl} ${statusCode} (${duration}ms)`,
+    );
+
+    // Verbose details
+    if (isVerbose) {
+      log(LOG_LEVELS.VERBOSE, `    Query:`, req.query);
+
+      // Note: req.body might not be populated yet if CORS blocked the request
+      // before body parsing, but we try to log it if available.
+      if (req.body && Object.keys(req.body).length > 0) {
+        log(LOG_LEVELS.VERBOSE, `    Body keys:`, Object.keys(req.body));
+      }
+    }
+  });
+
+  next();
+});
+
+// ---------------- PRIVATE NETWORK ACCESS (PNA) SUPPORT ----------------
+// Chrome requires 'Access-Control-Allow-Private-Network: true' when a public site
+// (like github.io) tries to access a private network (like localhost).
+app.use((req, res, next) => {
+  if (req.headers["access-control-request-private-network"] === "true") {
+    if (isVerbose) {
+      log(LOG_LEVELS.VERBOSE, `[PNA] Allowing Private Network Access`);
+    }
+
+    res.setHeader("Access-Control-Allow-Private-Network", "true");
+  }
+
+  next();
+});
+
 // enable CORS
 const CORS_CONFIG = {
   allowPrivateIPs: false, // Enables 127.*, 10.*, 172.16-31.*, 192.168.*
   allowAllOrigins: false, // True = "*" (no credentials support)
+  allowKnownOriginAndLocalHost: true, // Restricts to this host's
   allowLocalhostOnly: true, // Restricts to localhost only
 };
 
@@ -43,20 +115,48 @@ app.use(
     origin(origin, callback) {
       // Allow non-browser clients (no Origin header)
       if (!origin) {
+        if (isVerbose) {
+          log(LOG_LEVELS.VERBOSE, `[CORS] Allowed (No Origin header)`);
+        }
+
         return callback(null, true);
       }
 
       // Flag: All origins (*)
       if (CORS_CONFIG.allowAllOrigins) {
+        if (isVerbose) {
+          log(LOG_LEVELS.VERBOSE, `[CORS] Allowed (All Origins flag)`);
+        }
+
         return callback(null, true);
       }
 
       // Flag: Localhost only
       if (CORS_CONFIG.allowLocalhostOnly) {
-        const hostname = new URL(origin).hostname;
-        if (hostname === "localhost" || hostname === "127.0.0.1") {
-          return callback(null, true);
+        try {
+          const hostname = new URL(origin).hostname;
+          if (
+            hostname === "localhost" ||
+            hostname === "127.0.0.1" ||
+            hostname === "xt-ml.github.io"
+          ) {
+            if (isVerbose) {
+              log(LOG_LEVELS.VERBOSE, `[CORS] Allowed (Localhost match)`);
+            }
+
+            return callback(null, true);
+          }
+        } catch {
+          // Invalid URL in origin
+          log(LOG_LEVELS.DEFAULT, `[CORS BLOCK] Invalid Origin URL: ${origin}`);
+
+          return callback(new Error("Invalid Origin"));
         }
+
+        log(
+          LOG_LEVELS.DEFAULT,
+          `[CORS BLOCK] Origin not allowed (Localhost only policy): ${origin}`,
+        );
 
         return callback(new Error("Localhost only"));
       }
@@ -72,6 +172,10 @@ app.use(
             /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/;
 
           if (privateIPRegex.test(ip)) {
+            if (isVerbose) {
+              log(LOG_LEVELS.VERBOSE, `[CORS] Allowed (Private IP match)`);
+            }
+
             return callback(null, true);
           }
         } catch {
@@ -80,6 +184,11 @@ app.use(
       }
 
       // Reject other origins
+      log(
+        LOG_LEVELS.DEFAULT,
+        `[CORS BLOCK] Origin not allowed by policy: ${origin}`,
+      );
+
       return callback(new Error("Not allowed by CORS"));
     },
   }),
@@ -93,10 +202,35 @@ app.use(express.json({ limit: "500mb" }));
 
 // ---------------- SHARED PROXY LOGIC ----------------
 async function handleProxyRequest(
-  req,
+  _,
   res,
   { targetUrl, method, headers, body },
 ) {
+  // --- PROXY LOGGING START ---
+  log(
+    LOG_LEVELS.DEFAULT,
+    `[Proxy] Forwarding ${method} request to: ${targetUrl}`,
+  );
+
+  if (isVerbose) {
+    log(
+      LOG_LEVELS.VERBOSE,
+      `[Proxy] Upstream Headers:`,
+      JSON.stringify(headers, null, 2),
+    );
+
+    if (body) {
+      // Log length or snippet to avoid flooding console with massive payloads
+      const bodyPreview =
+        typeof body === "string" && body.length > 100
+          ? `${body.substring(0, 100)}... (${body.length} chars)`
+          : `(Buffer or Object, Length: ${body.length || "N/A"})`;
+
+      log(LOG_LEVELS.VERBOSE, `[Proxy] Body Preview:`, bodyPreview);
+    }
+  }
+  // --- PROXY LOGGING END ---
+
   try {
     // Validate URL
     let target;
@@ -105,6 +239,7 @@ async function handleProxyRequest(
       target = new URL(targetUrl);
     } catch {
       res.status(400).json({ error: "Invalid URL" });
+
       return;
     }
 
@@ -159,8 +294,10 @@ app.all("/proxy", async (req, res) => {
   // Extract URL
   const urlFromQuery =
     typeof req.query.url === "string" ? req.query.url : undefined;
+
   const urlFromBody =
     req.body && typeof req.body.url === "string" ? req.body.url : undefined;
+
   const target = urlFromBody || urlFromQuery;
 
   if (!target) {
@@ -201,6 +338,7 @@ app.all(/^\/git-proxy\/(.*)/, async (req, res) => {
     Object.keys(req.query).length > 0
       ? "?" + new URLSearchParams(req.query).toString()
       : "";
+
   const targetUrlString = "https://" + pathParams + queryString;
 
   // Read Raw Body Stream
@@ -232,6 +370,7 @@ app.use((req, res, next) => {
   fs.stat(filePath, (err, stats) => {
     if (err) {
       next();
+
       return;
     }
 
@@ -269,4 +408,7 @@ if (isPortUsed) {
 // start the server
 app.listen(port, ipAddr, () => {
   console.log(`Server running at http://localhost:${port}`);
+  if (isVerbose) {
+    console.log("Verbose logging enabled.");
+  }
 });

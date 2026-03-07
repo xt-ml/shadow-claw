@@ -30,8 +30,16 @@ module.exports = {
   // define runtime caching rules
   runtimeCaching: [
     {
-      // match any request
-      urlPattern: new RegExp("^.*$"),
+      // exclude only loopback proxy paths
+      urlPattern: ({ url }) => {
+        const isLoopback =
+          url.hostname === "localhost" || url.hostname === "127.0.0.1";
+
+        const isProxyPath =
+          url.pathname === "/proxy" || url.pathname.startsWith("/git-proxy/");
+
+        return !(isLoopback && isProxyPath);
+      },
 
       // apply a network-first strategy
       handler: "NetworkFirst",

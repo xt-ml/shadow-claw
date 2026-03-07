@@ -20,7 +20,7 @@ graph LR
         index_mjs["index.mjs\napp bootstrap"]
         worker_mjs["worker.mjs\nagent worker"]
         sw["service-worker/\nPWA cache"]
-        serve["bin/serve.mjs\nExpress server"]
+        serve["src/serve.mjs\nExpress server"]
     end
 
     subgraph Core ["src/ — Core"]
@@ -144,7 +144,7 @@ await getConfig(CONFIG_KEYS.API_KEY);
 ## Running & Testing
 
 ```bash
-npm start             # Express server (port 3000 by default)
+npm start             # Express server (port 8888 by default)
 npm test              # Jest — runs *.test.mjs files
 npm run tsc           # Type-check only (no output files)
 npm run build         # tsc + Workbox service worker generation

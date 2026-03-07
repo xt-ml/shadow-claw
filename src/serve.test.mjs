@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-describe("bin/serve.mjs proxy simulation", () => {
+describe("src/serve.mjs proxy simulation", () => {
   // Simplified version of the proxy logic from serve.mjs for testing
   async function simulateProxy(req) {
     const target = req.body?.url || req.query?.url;

@@ -5,13 +5,13 @@
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
   "author": "Karl Herrick <me@karlherrick.com>",
-  "main": "bin/serve.mjs",
+  "main": "src/serve.mjs",
   "scripts": {
     "build": "bash bin/build.sh",
     "build:service-worker": "workbox generateSW service-worker/workbox-config.cjs",
     "clean:service-worker": "node bin/rimraf.mjs workbox-*.js && node bin/rimraf.mjs service-worker.js",
     "format": "prettier **/*.{html,css,js,mjs} --write",
-    "start": "npm run clean:service-worker && npm run build:service-worker && node bin/serve.mjs",
+    "start": "npm run clean:service-worker && npm run build:service-worker && node src/serve.mjs",
     "test": "npm -s run tsc && NODE_OPTIONS=--experimental-vm-modules jest",
     "tsc": "tsc --noEmit"
   },

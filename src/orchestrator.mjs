@@ -24,6 +24,7 @@ import { saveMessage } from "./db/saveMessage.mjs";
 import { saveTask } from "./db/saveTask.mjs";
 import { setConfig } from "./db/setConfig.mjs";
 
+import { playNotificationChime } from "./audio.mjs";
 import { Router } from "./router.mjs";
 import { readGroupFile } from "./storage/readGroupFile.mjs";
 import { TaskScheduler } from "./task-scheduler.mjs";
@@ -186,9 +187,36 @@ export class Orchestrator {
     }
 
     // Set up task scheduler
-    this.scheduler = new TaskScheduler((groupId, prompt) =>
-      this.invokeAgent(db, groupId, prompt),
-    );
+    this.scheduler = new TaskScheduler(async (task) => {
+      if (task.isScript) {
+        try {
+          return new Function(task.prompt).call(globalThis);
+        } catch (err) {
+          console.error(`Failed to execute script for task ${task.id}:`, err);
+          return;
+        }
+      }
+
+      // Evaluate template string literals (like ${new Date()}) in prompt
+      let evaluatedPrompt = task.prompt;
+      try {
+        evaluatedPrompt = task.prompt.replace(/\${([^}]+)}/g, (match, expr) => {
+          try {
+            return new Function(`return ${expr}`)();
+          } catch (e) {
+            console.warn(`Failed to evaluate expression: ${expr}`, e);
+            return match;
+          }
+        });
+      } catch (err) {
+        console.warn("Error interpolating task prompt:", err);
+      }
+      return this.invokeAgent(
+        db,
+        task.groupId,
+        `[SCHEDULED TASK]\n\n${evaluatedPrompt}`,
+      );
+    });
     this.scheduler.start();
 
     // Wire up browser chat display callback
@@ -664,6 +692,17 @@ export class Orchestrator {
 
         break;
       }
+
+      case "clear-chat": {
+        const { groupId } = msg.payload;
+        try {
+          await this.newSession(db, groupId);
+        } catch (err) {
+          console.error("Failed to clear chat from agent:", err);
+        }
+
+        break;
+      }
     }
   }
 
@@ -747,13 +786,46 @@ function buildSystemPrompt(assistantName, memory) {
     `You are ${assistantName}, a personal AI assistant running in the client's browser.`,
     "",
     "You have access to the following tools:",
-    "- **bash**: Execute commands in a sandboxed Linux VM (Alpine).",
-    "- **javascript**: Execute JavaScript code. Lighter than bash — no VM boot needed.",
-    "- **read_file** / **write_file** / **list_files**: Manage files in the group workspace.",
-    "- **fetch_url**: Make HTTP requests (subject to CORS).",
-    "- **update_memory**: Persist important context to MEMORY.md.",
-    "- **create_task**: Schedule recurring tasks with cron expressions.",
-    "- **list_tasks** / **update_task** / **delete_task** / **enable_task** / **disable_task**: Manage scheduled tasks.",
+    "",
+    "### Execution",
+    "- **bash**: Execute commands in a sandbox.",
+    "- **javascript**: Execute JavaScript code. Lighter than bash.",
+    "",
+    "### File System",
+    "- **read_file**: Read the contents of a file from the group workspace.",
+    "- **write_file**: Write content to a file in the group workspace. Creates directories if needed.",
+    "- **list_files**: List files and directories in the group workspace.",
+    "",
+    "### Network",
+    "- **fetch_url**: Make HTTP requests (subject to CORS). Returns response body truncated to 100KB.",
+    "",
+    "### Memory",
+    "- **update_memory**: Update the MEMORY.md file to persist important context across conversations.",
+    "",
+    "### Scheduled Tasks",
+    "- **create_task**: Create a scheduled recurring task with a cron expression.",
+    "- **list_tasks**: List all scheduled tasks.",
+    "- **update_task**: Update a task's schedule or prompt.",
+    "- **delete_task**: Delete a scheduled task.",
+    "- **enable_task**: Enable a disabled task.",
+    "- **disable_task**: Disable a task so it stops running.",
+    "",
+    "### Session",
+    "- **clear_chat**: Clear chat history and start a new session.",
+    "",
+    "### Git",
+    "- **git_clone**: Clone a git repository into browser-persistent storage.",
+    "- **git_checkout**: Checkout a branch, tag, or commit.",
+    "- **git_status**: Show working tree status.",
+    "- **git_log**: Show commit log.",
+    "- **git_diff**: Show changed files between refs or HEAD and working tree.",
+    "- **git_branches**: List branches in a cloned repo.",
+    "- **git_list_repos**: List all cloned repositories.",
+    "- **git_add**: Stage specific files or all changes for the next commit.",
+    "- **git_commit**: Stage all changes and create a commit.",
+    "- **git_push**: Push commits to remote (requires configured PAT).",
+    "- **git_pull**: Fetch and merge from remote.",
+    "- **git_sync**: Manually sync files between workspace and git database.",
     "",
     "Guidelines:",
     "- Be concise and direct.",
@@ -770,37 +842,4 @@ function buildSystemPrompt(assistantName, memory) {
   }
 
   return parts.join("\n");
-}
-
-/**
- * Play notification chime
- */
-function playNotificationChime() {
-  try {
-    const ctx = new AudioContext();
-    const now = ctx.currentTime;
-
-    // Two-tone chime: C5 → E5
-    const frequencies = [523.25, 659.25];
-    for (let i = 0; i < frequencies.length; i++) {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc.type = "sine";
-      osc.frequency.value = frequencies[i];
-
-      gain.gain.setValueAtTime(0.3, now + i * 0.15);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.15 + 0.4);
-
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-
-      osc.start(now + i * 0.15);
-      osc.stop(now + i * 0.15 + 0.4);
-    }
-
-    setTimeout(() => ctx.close(), 1000);
-  } catch {
-    // AudioContext may not be available
-  }
 }

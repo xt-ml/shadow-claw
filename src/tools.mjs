@@ -1,14 +1,14 @@
 /**
- * ShadowClaw — Tool definitions for the Claude API
- */
-
-/**
  * @typedef {Object} ToolDefinition
+ *
  * @property {string} name
  * @property {string} description
  * @property {Object} input_schema
  */
 
+/**
+ * ShadowClaw — Tool definitions
+ */
 export const TOOL_DEFINITIONS = [
   {
     name: "bash",
@@ -250,6 +250,289 @@ export const TOOL_DEFINITIONS = [
         },
       },
       required: ["id"],
+    },
+  },
+  {
+    name: "clear_chat",
+    description:
+      "Clear the current chat history and start a new session. " +
+      "Useful for scheduled tasks to prevent context from growing indefinitely.",
+    input_schema: {
+      type: "object",
+      properties: {},
+    },
+  },
+
+  // ── Git tools (isomorphic-git) ─────────────────────────────────────
+  {
+    name: "git_clone",
+    description:
+      "Clone a git repository into browser-persistent storage (LightningFS). " +
+      "The cloned files are automatically synchronized to the OPFS workspace under " +
+      "repos/<repo-name> so you can interact with them. " +
+      "Works with any public GitHub/GitLab repo. Uses a CORS proxy. " +
+      "Returns the short repo name used for subsequent git_* operations.",
+    input_schema: {
+      type: "object",
+      properties: {
+        url: {
+          type: "string",
+          description:
+            "Full HTTPS repo URL (e.g. https://github.com/user/repo)",
+        },
+        branch: {
+          type: "string",
+          description: "Branch to clone (default: default branch)",
+        },
+        depth: {
+          type: "number",
+          description: "Shallow clone depth (default: 20)",
+        },
+        include_git: {
+          type: "boolean",
+          description:
+            "If true, also syncs the internal .git folder to the workspace (default: false)",
+        },
+      },
+      required: ["url"],
+    },
+  },
+  {
+    name: "git_checkout",
+    description: "Checkout a branch, tag, or commit SHA in a cloned repo.",
+    input_schema: {
+      type: "object",
+      properties: {
+        repo: {
+          type: "string",
+          description: "Short repo name (returned by git_clone)",
+        },
+        ref: {
+          type: "string",
+          description: "Branch name, tag, or commit SHA to checkout",
+        },
+      },
+      required: ["repo", "ref"],
+    },
+  },
+  {
+    name: "git_status",
+    description:
+      "Show the working tree status of a cloned repo. " +
+      "Reports modified, added, deleted, and unstaged files.",
+    input_schema: {
+      type: "object",
+      properties: {
+        repo: {
+          type: "string",
+          description: "Short repo name",
+        },
+      },
+      required: ["repo"],
+    },
+  },
+  {
+    name: "git_log",
+    description:
+      "Show the commit log for a cloned repo. " +
+      "Returns commit SHA, date, author, and message.",
+    input_schema: {
+      type: "object",
+      properties: {
+        repo: {
+          type: "string",
+          description: "Short repo name",
+        },
+        ref: {
+          type: "string",
+          description: "Ref to log from (default: HEAD)",
+        },
+        depth: {
+          type: "number",
+          description: "Number of commits to show (default: 10)",
+        },
+      },
+      required: ["repo"],
+    },
+  },
+  {
+    name: "git_diff",
+    description:
+      "Show changed files between HEAD and working tree, or between two refs.",
+    input_schema: {
+      type: "object",
+      properties: {
+        repo: {
+          type: "string",
+          description: "Short repo name",
+        },
+        ref1: {
+          type: "string",
+          description: "First ref (default: HEAD)",
+        },
+        ref2: {
+          type: "string",
+          description: "Second ref (if omitted, diffs HEAD vs workdir)",
+        },
+      },
+      required: ["repo"],
+    },
+  },
+  {
+    name: "git_branches",
+    description:
+      "List branches in a cloned repo. Current branch is marked with *.",
+    input_schema: {
+      type: "object",
+      properties: {
+        repo: {
+          type: "string",
+          description: "Short repo name",
+        },
+        remote: {
+          type: "boolean",
+          description: "List remote-tracking branches instead (default: false)",
+        },
+      },
+      required: ["repo"],
+    },
+  },
+  {
+    name: "git_list_repos",
+    description:
+      "List all git repositories currently cloned in browser storage.",
+    input_schema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "git_add",
+    description:
+      "Stage files in a cloned repo. Accepts a single filepath or an array of filepaths.",
+    input_schema: {
+      type: "object",
+      properties: {
+        repo: {
+          type: "string",
+          description: "Short repo name",
+        },
+        filepath: {
+          oneOf: [
+            { type: "string" },
+            { type: "array", items: { type: "string" } },
+          ],
+          description:
+            "File path or array of file paths to stage (relative to repo root)",
+        },
+      },
+      required: ["repo", "filepath"],
+    },
+  },
+  {
+    name: "git_commit",
+    description:
+      "Stage all changes and create a commit in a cloned repo. " +
+      "Uses configured git author name/email or defaults.",
+    input_schema: {
+      type: "object",
+      properties: {
+        repo: {
+          type: "string",
+          description: "Short repo name",
+        },
+        message: {
+          type: "string",
+          description: "Commit message",
+        },
+        author_name: {
+          type: "string",
+          description: "Author name (optional, uses configured default)",
+        },
+        author_email: {
+          type: "string",
+          description: "Author email (optional, uses configured default)",
+        },
+      },
+      required: ["repo", "message"],
+    },
+  },
+  {
+    name: "git_push",
+    description:
+      "Push commits to the remote repository. " +
+      "Requires a GitHub personal access token (PAT) to be configured. " +
+      "The token is loaded from the encrypted credential store.",
+    input_schema: {
+      type: "object",
+      properties: {
+        repo: {
+          type: "string",
+          description: "Short repo name",
+        },
+        branch: {
+          type: "string",
+          description: "Branch to push (default: current branch)",
+        },
+        force: {
+          type: "boolean",
+          description: "Force push (default: false)",
+        },
+      },
+      required: ["repo"],
+    },
+  },
+  {
+    name: "git_pull",
+    description:
+      "Fetch and merge commits from the remote repository. " +
+      "Uses configured git author name/email for merge commits if needed.",
+    input_schema: {
+      type: "object",
+      properties: {
+        repo: {
+          type: "string",
+          description: "Short repo name",
+        },
+        branch: {
+          type: "string",
+          description: "Branch to pull (default: current branch)",
+        },
+        author_name: {
+          type: "string",
+          description: "Author name (optional, uses configured default)",
+        },
+        author_email: {
+          type: "string",
+          description: "Author email (optional, uses configured default)",
+        },
+      },
+      required: ["repo"],
+    },
+  },
+  {
+    name: "git_sync",
+    description:
+      "Manually synchronize files between the OPFS workspace and the private LightningFS git database.",
+    input_schema: {
+      type: "object",
+      properties: {
+        repo: {
+          type: "string",
+          description: "Short repo name",
+        },
+        direction: {
+          type: "string",
+          description:
+            "Direction to sync: 'push' (workspace to git db) or 'pull' (git db to workspace)",
+        },
+        include_git: {
+          type: "boolean",
+          description:
+            "If true, includes the hidden .git directory in the sync (default: false)",
+        },
+      },
+      required: ["repo", "direction"],
     },
   },
 ];

@@ -37,6 +37,7 @@ graph LR
         tools["tools.mjs\ntool schemas"]
         shell["shell/shell.mjs\nJS shell emulator"]
         vm["vm.mjs\nv86 Alpine VM"]
+        gitmod["git/git.mjs\nisomorphic-git ops"]
         providers["providers.mjs\nLLM registry"]
         scheduler["task-scheduler.mjs\ncron evaluator"]
     end
@@ -50,7 +51,7 @@ graph LR
 
     index_mjs --> orchestrator
     orchestrator --> db & storage & router & scheduler
-    worker_mjs --> tools & shell & vm & providers
+    worker_mjs --> tools & shell & vm & gitmod & providers
     components --> stores & effect
 ```
 
@@ -164,8 +165,18 @@ optional `apiKeyHeaderFormat`, `headers`, and `defaultModel`.
 ### Add a new tool
 
 1. Add the tool schema to `TOOL_DEFINITIONS` in `src/tools.mjs`.
-2. Add the execution branch in `executeTool()` in `worker.mjs`.
+2. Add the execution branch in `executeTool()` in `src/worker/executeTool.mjs`.
 3. Add the tool to the tool table in `README.md`.
+
+### Add a new git operation
+
+1. Add the function to `src/git/git.mjs` (uses `_git` global + LightningFS).
+2. Add a tool schema in `src/tools.mjs` (prefix: `git_`).
+3. Add execution branch in `src/worker/executeTool.mjs` (lazy `import()`).
+4. Git credentials: stored encrypted via `CONFIG_KEYS.GIT_TOKEN` (same crypto vault as API keys).
+5. Repos live in LightningFS under `/git/<repo-name>/` but are **automatically synced** to the OPFS workspace under `repos/<repo-name>/` during tools like `git_clone` and `git_checkout`.
+6. Use the `git_sync` tool to manually push/pull files between the LightningFS git database and the OPFS workspace (useful if you bypass standard automatic syncs).
+   - `.git` directories are skipped by default, but can be synced using the `include_git` parameter.
 
 ### Add a new page / UI section
 

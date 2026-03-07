@@ -1,6 +1,4 @@
 /**
- * ShadowClaw — Shared types with JSDoc
- *
  * @typedef {Object} InboundMessage
  *
  * @property {string} id
@@ -31,6 +29,7 @@
  * @property {string} groupId
  * @property {string} schedule - cron expression
  * @property {string} prompt
+ * @property {boolean} isScript
  * @property {boolean} enabled
  * @property {number|null} lastRun
  * @property {number} createdAt

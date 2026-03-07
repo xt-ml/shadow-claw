@@ -205,7 +205,7 @@ describe("storage.mjs", () => {
       const root = await storage.getStorageRoot(db);
       expect(root.name).toBe("mock-dir");
       expect(consoleSpy).toHaveBeenCalledWith(
-        "Failed to retrieve local storage handle:",
+        "Failed to retrieve local storage handle from DB:",
         expect.any(Error),
       );
       consoleSpy.mockRestore();
@@ -226,11 +226,13 @@ describe("storage.mjs", () => {
       const consoleSpy = jest
         .spyOn(console, "warn")
         .mockImplementation(() => {});
+
       getConfig.mockRejectedValueOnce(new Error("DB Error"));
 
       const status = await storage.getStorageStatus(db);
       expect(status.type).toBe("opfs");
       expect(consoleSpy).toHaveBeenCalled();
+
       consoleSpy.mockRestore();
     });
   });

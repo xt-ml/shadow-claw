@@ -11,6 +11,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // Skip requests to CDNs (used for module imports)
+  const bypassHosts = ["esm.sh", "unpkg.com", "cdn.jsdelivr.net", "esm.run"];
+  if (bypassHosts.includes(requestUrl.hostname)) {
+    return;
+  }
+
   // Only proxy http and https protocols
   if (!requestUrl.protocol.startsWith("http")) {
     return;

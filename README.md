@@ -66,12 +66,16 @@ sequenceDiagram
 | `index.mjs`                     | App entry — opens IndexedDB, boots orchestrator, registers SW     |
 | `worker.mjs`                    | Agent Web Worker — owns the LLM tool-use loop                     |
 | `src/orchestrator.mjs`          | State machine, message queue, agent invocation, task scheduling   |
+| `src/worker/executeTool.mjs`    | Tool execution logic for the agent worker                         |
 | `src/tools.mjs`                 | Tool schema definitions sent to the LLM                           |
 | `src/shell/shell.mjs`           | Pure-JS bash-like shell emulator (OPFS filesystem)                |
 | `src/vm.mjs`                    | Optional v86 Alpine Linux VM (falls back to JS shell)             |
 | `src/db/db.mjs`                 | IndexedDB layer — messages, sessions, tasks, config               |
 | `src/storage/storage.mjs`       | OPFS + Local Folder file storage, zip export/import               |
 | `src/crypto.mjs`                | AES-256-GCM encryption for API keys at rest                       |
+| `src/git/git.mjs`               | Isomorphic-git integration and version control operations         |
+| `src/git/sync.mjs`              | Synchronization between LightningFS and OPFS                      |
+| `src/audio.mjs`                 | AudioContext management and notifications                         |
 | `src/providers.mjs`             | LLM provider registry (OpenRouter + future providers)             |
 | `src/router.mjs`                | Routes inbound messages to channels                               |
 | `src/channels/browser-chat.mjs` | Browser chat channel implementation                               |
@@ -93,8 +97,10 @@ sequenceDiagram
 | `read_file` / `write_file` / `list_files`                    | OPFS workspace file I/O                                          |
 | `fetch_url`                                                  | HTTP requests via browser `fetch()` — CORS applies               |
 | `update_memory`                                              | Write to `MEMORY.md` — loaded as system context every invocation |
-| `create_task` / `list_tasks` / `update_task` / `delete_task` | Scheduled task management                                        |
+| `create_task` / `list_tasks` / `update_task` / `delete_task` | Scheduled task management (can be JS scripts)                    |
 | `enable_task` / `disable_task`                               | Toggle task execution                                            |
+| `clear_chat`                                                 | Clears the chat history and starts a new session                 |
+| `git_*` (`git_clone`, `git_commit`, `git_push`, etc.)        | Isomorphic-git version control operations mapped to OPFS         |
 
 ## Storage
 

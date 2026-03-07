@@ -77,39 +77,51 @@ export class OrchestratorStore {
   get messages() {
     return this._messages.get();
   }
+
   get isTyping() {
     return this._isTyping.get();
   }
+
   get toolActivity() {
     return this._toolActivity.get();
   }
+
   get activityLog() {
     return this._activityLog.get();
   }
+
   get state() {
     return this._state.get();
   }
+
   get tokenUsage() {
     return this._tokenUsage.get();
   }
+
   get error() {
     return this._error.get();
   }
+
   get activeGroupId() {
     return this._activeGroupId.get();
   }
+
   get ready() {
     return this._ready.get();
   }
+
   get tasks() {
     return this._tasks.get();
   }
+
   get files() {
     return this._files.get();
   }
+
   get currentPath() {
     return this._currentPath.get();
   }
+
   get storageStatus() {
     return this._storageStatus.get();
   }
@@ -215,14 +227,27 @@ export class OrchestratorStore {
   }
 
   /**
-   * Run a task by prompt
+   * Run a task
    *
-   * @param {string} prompt
+   * @param {Task} task
    *
    * @returns {void}
    */
-  runTask(prompt) {
-    this.sendMessage(prompt);
+  runTask(task) {
+    if (task.isScript) {
+      try {
+        new Function(task.prompt).call(globalThis);
+      } catch (err) {
+        console.error(`Failed to execute script for task ${task.id}:`, err);
+        alert(
+          `Script Error: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+
+      return;
+    }
+
+    this.sendMessage(task.prompt);
   }
 
   /**
@@ -426,9 +451,13 @@ export class OrchestratorStore {
     if (currentPath === ".") return;
 
     const parts = currentPath.split("/").filter(Boolean);
+
     parts.pop();
+
     const newPath = parts.length === 0 ? "." : parts.join("/");
+
     this._currentPath.set(newPath);
+
     await this.loadFiles(db);
   }
 

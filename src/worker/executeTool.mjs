@@ -225,6 +225,229 @@ export async function executeTool(db, name, input, groupId) {
         return `Task ${input.id} deleted successfully.`;
       }
 
+      case "clear_chat": {
+        post({ type: "clear-chat", payload: { groupId } });
+
+        return "Chat history cleared successfully. New session started.";
+      }
+
+      // ── Git tools (isomorphic-git) ───────────────────────────────
+      case "git_clone": {
+        const { gitClone, getProxyUrl } = await import("../git/git.mjs");
+        const { syncLfsToOpfs } = await import("../git/sync.mjs");
+        const { getConfig } = await import("../db/getConfig.mjs");
+        const { CONFIG_KEYS: CK } = await import("../config.mjs");
+
+        const pref = await getConfig(db, CK.GIT_CORS_PROXY);
+        const corsProxy = getProxyUrl(pref === "public" ? "public" : "local");
+
+        const repo = await gitClone({
+          url: input.url,
+          branch: input.branch,
+          depth: input.depth,
+          corsProxy,
+        });
+
+        const includeGit = input.include_git === true;
+        await syncLfsToOpfs(db, groupId, repo, `repos/${repo}`, includeGit);
+
+        return `Cloned ${input.url} as "${repo}". Files are available recursively at "repos/${repo}". Use repo="${repo}" for other git_ tools.`;
+      }
+
+      case "git_sync": {
+        const { syncLfsToOpfs, syncOpfsToLfs } =
+          await import("../git/sync.mjs");
+        const dir = `repos/${input.repo}`;
+        const includeGit = input.include_git === true;
+
+        if (input.direction === "push") {
+          await syncOpfsToLfs(db, groupId, dir, input.repo, includeGit);
+          return `Synced workspace files in ${dir} to git clone (ready for commit/status).`;
+        } else {
+          await syncLfsToOpfs(db, groupId, input.repo, dir, includeGit);
+          return `Synced git clone files to workspace ${dir} (overwriting local changes).`;
+        }
+      }
+
+      case "git_checkout": {
+        const { gitCheckout } = await import("../git/git.mjs");
+        const { syncLfsToOpfs } = await import("../git/sync.mjs");
+
+        const result = await gitCheckout({ repo: input.repo, ref: input.ref });
+        await syncLfsToOpfs(db, groupId, input.repo, `repos/${input.repo}`);
+
+        return result;
+      }
+
+      case "git_status": {
+        const { gitStatus } = await import("../git/git.mjs");
+        const { syncOpfsToLfs } = await import("../git/sync.mjs");
+
+        try {
+          await syncOpfsToLfs(db, groupId, `repos/${input.repo}`, input.repo);
+        } catch {
+          // Ignore if OPFS folder doesn't exist yet
+        }
+
+        return await gitStatus({ repo: input.repo });
+      }
+
+      case "git_add": {
+        const { gitAdd } = await import("../git/git.mjs");
+        const { syncOpfsToLfs } = await import("../git/sync.mjs");
+
+        try {
+          await syncOpfsToLfs(db, groupId, `repos/${input.repo}`, input.repo);
+        } catch {
+          // Ignore if OPFS folder doesn't exist yet
+        }
+
+        return await gitAdd({ repo: input.repo, filepath: input.filepath });
+      }
+
+      case "git_log": {
+        const { gitLog } = await import("../git/git.mjs");
+
+        return await gitLog({
+          repo: input.repo,
+          ref: input.ref,
+          depth: input.depth,
+        });
+      }
+
+      case "git_diff": {
+        const { gitDiff } = await import("../git/git.mjs");
+        const { syncOpfsToLfs } = await import("../git/sync.mjs");
+
+        try {
+          await syncOpfsToLfs(db, groupId, `repos/${input.repo}`, input.repo);
+        } catch {
+          // Ignore missing OPFS dir
+        }
+
+        return await gitDiff({
+          repo: input.repo,
+          ref1: input.ref1,
+          ref2: input.ref2,
+        });
+      }
+
+      case "git_branches": {
+        const { gitListBranches } = await import("../git/git.mjs");
+
+        return await gitListBranches({
+          repo: input.repo,
+          remote: input.remote,
+        });
+      }
+
+      case "git_list_repos": {
+        const { gitListRepos } = await import("../git/git.mjs");
+
+        return await gitListRepos();
+      }
+
+      case "git_commit": {
+        const { gitCommit } = await import("../git/git.mjs");
+        const { syncOpfsToLfs } = await import("../git/sync.mjs");
+        const { getConfig } = await import("../db/getConfig.mjs");
+        const { CONFIG_KEYS: CK } = await import("../config.mjs");
+
+        try {
+          await syncOpfsToLfs(db, groupId, `repos/${input.repo}`, input.repo);
+        } catch (err) {
+          return `Error: Could not sync from OPFS. Did you delete repos/${input.repo}?`;
+        }
+
+        let authorName = input.author_name;
+        let authorEmail = input.author_email;
+
+        if (!authorName) {
+          const stored = await getConfig(db, CK.GIT_AUTHOR_NAME);
+          if (stored) authorName = stored;
+        }
+
+        if (!authorEmail) {
+          const stored = await getConfig(db, CK.GIT_AUTHOR_EMAIL);
+          if (stored) authorEmail = stored;
+        }
+
+        return await gitCommit({
+          repo: input.repo,
+          message: input.message,
+          authorName,
+          authorEmail,
+        });
+      }
+
+      case "git_pull": {
+        const { gitPull, getProxyUrl } = await import("../git/git.mjs");
+        const { getConfig } = await import("../db/getConfig.mjs");
+        const { CONFIG_KEYS: CK } = await import("../config.mjs");
+        const { decryptValue } = await import("../crypto.mjs");
+
+        const encToken = await getConfig(db, CK.GIT_TOKEN);
+        let token;
+
+        if (encToken) {
+          token = await decryptValue(/** @type {string} */ (encToken));
+        }
+
+        const pref = await getConfig(db, CK.GIT_CORS_PROXY);
+        const corsProxy = getProxyUrl(pref === "public" ? "public" : "local");
+
+        let authorName = input.author_name;
+        let authorEmail = input.author_email;
+
+        if (!authorName) {
+          const stored = await getConfig(db, CK.GIT_AUTHOR_NAME);
+          if (stored) authorName = stored;
+        }
+
+        if (!authorEmail) {
+          const stored = await getConfig(db, CK.GIT_AUTHOR_EMAIL);
+          if (stored) authorEmail = stored;
+        }
+
+        return await gitPull({
+          repo: input.repo,
+          branch: input.branch,
+          authorName,
+          authorEmail,
+          token: token ?? undefined,
+          corsProxy,
+        });
+      }
+
+      case "git_push": {
+        const { gitPush, getProxyUrl } = await import("../git/git.mjs");
+        const { getConfig } = await import("../db/getConfig.mjs");
+        const { CONFIG_KEYS: CK } = await import("../config.mjs");
+        const { decryptValue } = await import("../crypto.mjs");
+
+        const encToken = await getConfig(db, CK.GIT_TOKEN);
+        let token;
+
+        if (encToken) {
+          token = await decryptValue(/** @type {string} */ (encToken));
+        }
+
+        if (!token) {
+          return "Error: No git token configured. Set a GitHub Personal Access Token in Settings → Git.";
+        }
+
+        const pref = await getConfig(db, CK.GIT_CORS_PROXY);
+        const corsProxy = getProxyUrl(pref === "public" ? "public" : "local");
+
+        return await gitPush({
+          repo: input.repo,
+          branch: input.branch,
+          force: input.force,
+          token,
+          corsProxy,
+        });
+      }
+
       default:
         return `Unknown tool: ${name}`;
     }

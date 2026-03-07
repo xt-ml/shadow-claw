@@ -89,82 +89,47 @@ app.use(
 app.use(compression());
 
 // parse JSON bodies (increased limit for large proxy payloads)
-app.use(express.json({ limit: "250mb" }));
+app.use(express.json({ limit: "500mb" }));
 
-// ---------------- PROXY ENDPOINT ----------------
-// Example usages:
-//   GET  /proxy?url=https://example.com
-//   POST /proxy  with JSON { "url": "https://example.com", "method": "GET", "headers": {...}, "body": "..." }
-app.all("/proxy", async (req, res) => {
+// ---------------- SHARED PROXY LOGIC ----------------
+async function handleProxyRequest(
+  req,
+  res,
+  { targetUrl, method, headers, body },
+) {
   try {
-    // You can pass url either as query param or in JSON body
-    const urlFromQuery =
-      typeof req.query.url === "string" ? req.query.url : undefined;
-    const urlFromBody =
-      req.body && typeof req.body.url === "string" ? req.body.url : undefined;
+    // Validate URL
+    let target;
 
-    const target = urlFromBody || urlFromQuery;
-
-    if (!target) {
-      res.status(400).json({ error: "Missing 'url' parameter" });
-      return;
-    }
-
-    let targetUrl;
     try {
-      targetUrl = new URL(target);
+      target = new URL(targetUrl);
     } catch {
       res.status(400).json({ error: "Invalid URL" });
       return;
     }
 
-    // Optional safety: restrict which hosts can be proxied
-    // const allowedHosts = ["example.com"];
-    // if (!allowedHosts.includes(targetUrl.hostname)) {
-    //   res.status(403).json({ error: "Domain not allowed" });
-    //   return;
-    // }
+    // Sanitize Headers (Shared Logic)
+    const safeHeaders = { ...headers };
+    delete safeHeaders.host;
+    delete safeHeaders.origin;
+    delete safeHeaders.referer;
+    delete safeHeaders["accept-encoding"];
+    delete safeHeaders["content-length"];
+    delete safeHeaders.connection;
 
-    // Determine upstream method/headers/body:
-    const method =
-      (req.body && typeof req.body.method === "string" && req.body.method) ||
-      req.method;
-
-    const incomingHeaders =
-      (req.body && req.body.headers && typeof req.body.headers === "object"
-        ? req.body.headers
-        : req.headers) || {};
-
-    const headers = { ...incomingHeaders };
-
-    // Remove hop‑by‑hop / origin‑specific headers that shouldn't be forwarded
-    delete headers.host;
-    delete headers.origin;
-    delete headers.referer;
-    delete headers["accept-encoding"];
-    delete headers["content-length"];
-    delete headers.connection;
-
-    let body;
-
-    // If client explicitly provided a body in JSON, prefer that; otherwise,
-    // for non‑GET/HEAD you might want to forward raw body via middleware (e.g. body-parser).
-    if (req.body && typeof req.body.body === "string") {
-      body = req.body.body;
-    }
-
-    const upstream = await fetch(targetUrl.toString(), {
+    // Perform Upstream Request
+    const upstream = await fetch(target.toString(), {
       method,
-      headers,
+      headers: safeHeaders,
       body: method === "GET" || method === "HEAD" ? undefined : body,
     });
 
-    // Copy status code
+    // Send Response (Shared Logic)
     res.status(upstream.status);
 
-    // Copy headers but drop hop-by-hop ones
     upstream.headers.forEach((value, key) => {
       const lower = key.toLowerCase();
+      // Drop hop-by-hop headers
       if (
         lower === "content-encoding" ||
         lower === "transfer-encoding" ||
@@ -173,19 +138,88 @@ app.all("/proxy", async (req, res) => {
       ) {
         return;
       }
+
       res.setHeader(key, value);
     });
 
-    // Ensure your frontend can always read this response
     res.setHeader("Access-Control-Allow-Origin", "*");
 
     const buf = Buffer.from(await upstream.arrayBuffer());
+
     res.send(buf);
   } catch (err) {
     console.error("Proxy error:", err);
 
     res.status(500).json({ error: "Proxy request failed" });
   }
+}
+
+// ---------------- PROXY ENDPOINT (JSON Based) ----------------
+app.all("/proxy", async (req, res) => {
+  // Extract URL
+  const urlFromQuery =
+    typeof req.query.url === "string" ? req.query.url : undefined;
+  const urlFromBody =
+    req.body && typeof req.body.url === "string" ? req.body.url : undefined;
+  const target = urlFromBody || urlFromQuery;
+
+  if (!target) {
+    return res.status(400).json({ error: "Missing 'url' parameter" });
+  }
+
+  // Extract Method & Headers (Allows override via body)
+  const method =
+    (req.body && typeof req.body.method === "string" && req.body.method) ||
+    req.method;
+
+  const incomingHeaders =
+    (req.body && req.body.headers && typeof req.body.headers === "object"
+      ? req.body.headers
+      : req.headers) || {};
+
+  // Extract Body (String from JSON)
+  // Note: This assumes body-parser middleware has run.
+  let body;
+  if (req.body && typeof req.body.body === "string") {
+    body = req.body.body;
+  }
+
+  // Delegate to shared handler
+  await handleProxyRequest(req, res, {
+    targetUrl: target,
+    method,
+    headers: incomingHeaders,
+    body,
+  });
+});
+
+// ---------------- ISOMORPHIC-GIT PROXY (Stream Based) ----------------
+app.all(/^\/git-proxy\/(.*)/, async (req, res) => {
+  // Construct URL from Path
+  const pathParams = req.params[0];
+  const queryString =
+    Object.keys(req.query).length > 0
+      ? "?" + new URLSearchParams(req.query).toString()
+      : "";
+  const targetUrlString = "https://" + pathParams + queryString;
+
+  // Read Raw Body Stream
+  // We must do this before calling the helper because Git sends binary data
+  // that standard body parsers (like express.json) might skip or corrupt.
+  const bodyBuffers = [];
+  for await (const chunk of req) {
+    bodyBuffers.push(chunk);
+  }
+
+  const rawBody = Buffer.concat(bodyBuffers);
+
+  // Delegate to shared handler
+  await handleProxyRequest(req, res, {
+    targetUrl: targetUrlString,
+    method: req.method,
+    headers: req.headers, // Forward headers as-is
+    body: rawBody.length > 0 ? rawBody : undefined,
+  });
 });
 
 // rewrite rule to remove index.html

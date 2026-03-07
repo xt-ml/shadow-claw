@@ -1,9 +1,7 @@
 /**
  * ShadowClaw — Lightweight Shell Emulator
  *
- * A minimal bash-like shell that runs entirely in JS using OPFS for the
- * filesystem. Handles the most common commands Claude typically uses.
- * Falls back to the v86 WebVM when available, but works standalone.
+ * A minimal bash-like shell that runs entirely in JS.
  *
  * Supported builtins:
  *   echo, printf, cat, head, tail, wc, grep, sort, uniq, tr, cut, sed, awk,
@@ -37,7 +35,7 @@ import { runPipeline } from "./runPipeline.mjs";
  */
 
 /**
- * Execute a shell command string against a group's OPFS workspace.
+ * Execute a shell command string against the workspace.
  *
  * @param {ShadowClawDatabase} db
  * @param {string} command
@@ -73,63 +71,47 @@ export async function executeShell(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Pipeline / operator parsing
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Single command execution
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Command dispatch
-// ---------------------------------------------------------------------------
-
 export const SUPPORTED_COMMANDS = new Set([
-  "echo",
-  "printf",
-  "cat",
-  "head",
-  "tail",
-  "wc",
-  "grep",
-  "sort",
-  "uniq",
-  "tr",
-  "cut",
-  "sed",
   "awk",
-  "ls",
-  "mkdir",
-  "cp",
-  "mv",
-  "rm",
-  "touch",
-  "pwd",
-  "cd",
-  "date",
-  "env",
-  "printenv",
-  "export",
-  "sleep",
-  "seq",
-  "true",
-  "false",
-  "test",
   "base64",
-  "md5sum",
-  "sha256sum",
-  "tee",
   "basename",
-  "dirname",
-  "xargs",
-  "rev",
-  "yes",
-  "jq",
-  "which",
+  "cat",
+  "cd",
   "command",
+  "cp",
+  "cut",
+  "date",
+  "dirname",
+  "echo",
+  "env",
+  "export",
+  "false",
+  "grep",
+  "head",
+  "jq",
+  "ls",
+  "md5sum",
+  "mkdir",
+  "mv",
+  "printenv",
+  "printf",
+  "pwd",
+  "rev",
+  "rm",
+  "sed",
+  "seq",
+  "sha256sum",
+  "sleep",
+  "sort",
+  "tail",
+  "tee",
+  "test",
+  "touch",
+  "tr",
+  "true",
+  "uniq",
+  "wc",
+  "which",
+  "xargs",
+  "yes",
 ]);
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------

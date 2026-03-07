@@ -37,6 +37,8 @@ import "../types.mjs";
  * @typedef {import("../stores/orchestrator.mjs").TokenUsage} TokenUsage
  * @typedef {import("../stores/orchestrator.mjs").ToolActivity} ToolActivity
  * @typedef {import("../types.mjs").LLMProvider} LLMProvider
+ * @typedef {import("../types.mjs").StoredMessage} StoredMessage
+ * @typedef {import("../types.mjs").ThinkingLogEntry} ThinkingLogEntry
  */
 
 /**
@@ -78,26 +80,33 @@ export class ShadowClaw extends HTMLElement {
       <style>
         :host {
           --shadow-claw-font-mono: "Fira Code", "Courier New", monospace;
-          --shadow-claw-font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+          --shadow-claw-font-sans:
+            system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 
           /* Softness tokens */
-          --shadow-claw-radius-s: 8px;
-          --shadow-claw-radius-m: 12px;
-          --shadow-claw-radius-l: 20px;
-          --shadow-claw-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.06);
-          --shadow-claw-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-          --shadow-claw-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+          --shadow-claw-radius-s: 0.5rem;
+          --shadow-claw-radius-m: 0.75rem;
+          --shadow-claw-radius-l: 1.25rem;
+          --shadow-claw-shadow-sm:
+            0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.1),
+            0 0.0625rem 0.125rem rgba(0, 0, 0, 0.06);
+          --shadow-claw-shadow-md:
+            0 0.25rem 0.375rem -0.0625rem rgba(0, 0, 0, 0.1),
+            0 0.125rem 0.25rem -0.0625rem rgba(0, 0, 0, 0.06);
+          --shadow-claw-shadow-lg:
+            0 0.625rem 0.9375rem -0.1875rem rgba(0, 0, 0, 0.1),
+            0 0.25rem 0.375rem -0.125rem rgba(0, 0, 0, 0.05);
 
           /* Icon colors - Refined Premium Red */
-          --shadow-claw-icon-accent-dark: #8E1D13;
+          --shadow-claw-icon-accent-dark: #8e1d13;
           --shadow-claw-icon-bg: transparent;
-          --shadow-claw-icon-body-segment: #C0392B;
-          --shadow-claw-icon-body-shine: #E74C3C;
-          --shadow-claw-icon-body: #922B21;
-          --shadow-claw-icon-claw-inner: #922B21;
-          --shadow-claw-icon-claw-main: #C0392B;
-          --shadow-claw-icon-eye-shine: #FFFFFF;
-          --shadow-claw-icon-eye: #171D1E;
+          --shadow-claw-icon-body-segment: #c0392b;
+          --shadow-claw-icon-body-shine: #e74c3c;
+          --shadow-claw-icon-body: #922b21;
+          --shadow-claw-icon-claw-inner: #922b21;
+          --shadow-claw-icon-claw-main: #c0392b;
+          --shadow-claw-icon-eye-shine: #ffffff;
+          --shadow-claw-icon-eye: #171d1e;
 
           display: contents;
         }
@@ -105,18 +114,18 @@ export class ShadowClaw extends HTMLElement {
         :host(.light-mode) {
           --shadow-claw-accent-hover: #1e293b;
           --shadow-claw-accent-primary: #334155;
-          --shadow-claw-on-primary: #FFFFFF;
+          --shadow-claw-on-primary: #ffffff;
           --shadow-claw-surface-tint: #334155;
           --shadow-claw-bg-primary: #f8fafc;
           --shadow-claw-bg-secondary: #f1f5f9;
           --shadow-claw-bg-tertiary: #e2e8f0;
           --shadow-claw-border-color: #e2e8f0;
-          --shadow-claw-error-color: #BA1A1A;
+          --shadow-claw-error-color: #ba1a1a;
           --shadow-claw-link: #1e40af;
           --shadow-claw-link-hover: #1e3a8a;
-          --shadow-claw-on-error: #FFFFFF;
+          --shadow-claw-on-error: #ffffff;
           --shadow-claw-success-color: #059669;
-          --shadow-claw-warning-color: #D97706;
+          --shadow-claw-warning-color: #d97706;
           --shadow-claw-text-primary: #0f172a;
           --shadow-claw-text-secondary: #475569;
           --shadow-claw-text-tertiary: #64748b;
@@ -131,7 +140,7 @@ export class ShadowClaw extends HTMLElement {
           --shadow-claw-bg-secondary: #1e293b;
           --shadow-claw-bg-tertiary: #334155;
           --shadow-claw-border-color: #334155;
-          --shadow-claw-error-color: #FFB4AB;
+          --shadow-claw-error-color: #ffb4ab;
           --shadow-claw-link: #93c5fd;
           --shadow-claw-link-hover: #bfdbfe;
           --shadow-claw-on-error: #690005;
@@ -141,20 +150,20 @@ export class ShadowClaw extends HTMLElement {
           --shadow-claw-text-tertiary: #94a3b8;
 
           /* Shadow adjustments for Dark Mode */
-          --shadow-claw-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
-          --shadow-claw-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
-          --shadow-claw-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+          --shadow-claw-shadow-sm: 0 0.0625rem 0.1875rem rgba(0, 0, 0, 0.3);
+          --shadow-claw-shadow-md: 0 0.25rem 0.375rem -0.0625rem rgba(0, 0, 0, 0.4);
+          --shadow-claw-shadow-lg: 0 0.625rem 0.9375rem -0.1875rem rgba(0, 0, 0, 0.5);
 
           /* Icon colors - Brightened for Dark Mode */
-          --shadow-claw-icon-accent-dark: #FF6B6B;
+          --shadow-claw-icon-accent-dark: #ff6b6b;
           --shadow-claw-icon-bg: transparent;
-          --shadow-claw-icon-body-segment: #FF5252;
+          --shadow-claw-icon-body-segment: #ff5252;
           --shadow-claw-icon-body-shine: rgba(255, 255, 255, 0.3);
-          --shadow-claw-icon-body: #FF1744;
-          --shadow-claw-icon-claw-inner: #FF1744;
-          --shadow-claw-icon-claw-main: #FF5252;
-          --shadow-claw-icon-eye-shine: #171D1E;
-          --shadow-claw-icon-eye: #DEE3E5;
+          --shadow-claw-icon-body: #ff1744;
+          --shadow-claw-icon-claw-inner: #ff1744;
+          --shadow-claw-icon-claw-main: #ff5252;
+          --shadow-claw-icon-eye-shine: #171d1e;
+          --shadow-claw-icon-eye: #dee3e5;
         }
 
         * {
@@ -166,7 +175,7 @@ export class ShadowClaw extends HTMLElement {
         a {
           color: var(--shadow-claw-link);
           text-decoration: underline;
-          text-underline-offset: 2px;
+          text-underline-offset: 0.125rem;
         }
 
         a:hover {
@@ -174,13 +183,13 @@ export class ShadowClaw extends HTMLElement {
         }
 
         /* Links inside user message bubbles sit on a dark accent background —
-           always render them as white so they're readable in both themes. */
+                  always render them as white so they're readable in both themes. */
         .message.user .message-content a,
         .message.user .message-content a:visited {
           color: #ffffff;
-          text-decoration: underline;
-          text-underline-offset: 2px;
           opacity: 0.9;
+          text-decoration: underline;
+          text-underline-offset: 0.125rem;
         }
 
         .message.user .message-content a:hover {
@@ -191,9 +200,9 @@ export class ShadowClaw extends HTMLElement {
         .header {
           align-items: center;
           background-color: var(--shadow-claw-bg-secondary);
-          border-bottom: 1px solid var(--shadow-claw-bg-tertiary);
+          border-bottom: 0.0625rem solid var(--shadow-claw-bg-tertiary);
           display: flex;
-          gap: 16px;
+          gap: 1rem;
           height: 4rem;
           justify-content: flex-start;
           max-height: 4rem;
@@ -213,15 +222,15 @@ export class ShadowClaw extends HTMLElement {
         }
 
         #menu-button {
+          align-items: center;
           background: transparent;
+          border-radius: 0.25rem;
           border: none;
+          color: var(--shadow-claw-text-secondary);
           cursor: pointer;
           display: flex;
-          align-items: center;
           justify-content: center;
-          padding: 8px;
-          border-radius: 4px;
-          color: var(--shadow-claw-text-secondary);
+          padding: 0.5rem;
         }
 
         #menu-button:hover,
@@ -235,7 +244,8 @@ export class ShadowClaw extends HTMLElement {
           width: 1.5rem;
         }
 
-        .header-title-link, .header-title-link:hover {
+        .header-title-link,
+        .header-title-link:hover {
           color: var(--shadow-claw-text-primary);
           display: flex;
           text-decoration: none;
@@ -249,42 +259,48 @@ export class ShadowClaw extends HTMLElement {
         }
 
         .header-actions {
-          margin-left: auto;
-          display: flex;
           align-items: center;
-          gap: 8px;
+          display: flex;
+          gap: 0.5rem;
+          margin-left: auto;
         }
 
         .theme-toggle {
+          align-items: center;
           background: transparent;
+          border-radius: 0.25rem;
           border: none;
+          color: var(--shadow-claw-text-secondary);
           cursor: pointer;
           display: flex;
-          align-items: center;
           justify-content: center;
-          padding: 8px;
-          border-radius: 4px;
-          color: var(--shadow-claw-text-secondary);
+          padding: 0.5rem;
         }
 
         .github-link {
           align-items: center;
+          color: inherit;
           display: flex;
           flex-direction: row;
           height: 2.5rem;
           justify-content: start;
         }
 
+        .github-link svg {
+          height: 1.5rem;
+          width: 1.5rem;
+        }
+
         .app {
-            background-color: var(--shadow-claw-bg-primary);
-            color: var(--shadow-claw-text-primary);
-            display: flex;
-            flex-direction: column;
-            font-family: var(--shadow-claw-font-sans);
-            height: 100vh;
-            height: 100dvh;
-            width: 100%;
-          }
+          background-color: var(--shadow-claw-bg-primary);
+          color: var(--shadow-claw-text-primary);
+          display: flex;
+          flex-direction: column;
+          font-family: var(--shadow-claw-font-sans);
+          height: 100dvh;
+          height: 100vh;
+          width: 100%;
+        }
 
         .app-body {
           display: flex;
@@ -294,31 +310,31 @@ export class ShadowClaw extends HTMLElement {
         }
 
         .sidebar {
-          width: 250px;
           background-color: var(--shadow-claw-bg-secondary);
-          border-right: 1px solid var(--shadow-claw-bg-tertiary);
+          border-right: 0.0625rem solid var(--shadow-claw-bg-tertiary);
           display: flex;
           flex-direction: column;
-          overflow-y: auto;
           flex: none;
+          overflow-y: auto;
+          width: 15.625rem;
         }
 
-        @media (max-width: 767px) {
+        @media (max-width: 47.9375rem) {
           .sidebar {
             display: none;
           }
           .sidebar.open {
-            display: flex;
-            position: absolute;
-            height: calc(100vh - 4rem);
-            height: calc(100dvh - 4rem);
-            z-index: 100;
-            box-shadow: var(--shadow-claw-shadow-lg);
             border-radius: 0 var(--shadow-claw-radius-m) var(--shadow-claw-radius-m) 0;
+            box-shadow: var(--shadow-claw-shadow-lg);
+            display: flex;
+            height: calc(100dvh - 4rem);
+            height: calc(100vh - 4rem);
+            position: absolute;
+            z-index: 100;
           }
         }
 
-        @media (min-width: 768px) {
+        @media (min-width: 48rem) {
           #menu-button {
             display: none;
           }
@@ -329,32 +345,32 @@ export class ShadowClaw extends HTMLElement {
         }
 
         .sidebar-header {
-          padding: 16px;
-          border-bottom: 1px solid var(--shadow-claw-border-color);
-          font-size: 18px;
-          font-weight: 600;
-          display: flex;
-          gap: 8px;
           align-items: center;
+          border-bottom: 0.0625rem solid var(--shadow-claw-border-color);
+          display: flex;
+          font-size: 1.125rem;
+          font-weight: 600;
+          gap: 0.5rem;
+          padding: 1rem;
         }
 
         .nav-menu {
           flex: 1;
-          padding: 8px;
           list-style: none;
+          padding: 0.5rem;
         }
 
         .nav-item {
-          padding: 10px 12px;
-          margin-bottom: 4px;
           border-radius: var(--shadow-claw-radius-m);
+          color: var(--shadow-claw-text-secondary);
           cursor: pointer;
+          font-size: 0.875rem;
+          font-weight: 500;
+          margin-bottom: 0.25rem;
+          padding: 0.625rem 0.75rem;
           transition:
             background-color 0.15s,
             color 0.15s;
-          font-size: 14px;
-          font-weight: 500;
-          color: var(--shadow-claw-text-secondary);
         }
 
         .nav-item:hover {
@@ -368,42 +384,42 @@ export class ShadowClaw extends HTMLElement {
         }
 
         .sidebar-footer {
-          padding: 8px;
-          border-top: 1px solid var(--shadow-claw-border-color);
+          border-top: 0.0625rem solid var(--shadow-claw-border-color);
           margin-top: auto;
+          padding: 0.5rem;
         }
 
         .settings-btn {
-          width: 100%;
-          padding: 10px 12px;
           background-color: transparent;
-          border: 1px solid var(--shadow-claw-border-color);
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 13px;
+          border-radius: 0.375rem;
+          border: 0.0625rem solid var(--shadow-claw-border-color);
           color: var(--shadow-claw-text-secondary);
+          cursor: pointer;
+          font-size: 0.8125rem;
+          padding: 0.625rem 0.75rem;
           transition: all 0.15s;
+          width: 100%;
         }
 
         .settings-btn:hover {
           background-color: var(--shadow-claw-bg-tertiary);
-          color: var(--shadow-claw-text-primary);
           border-color: var(--shadow-claw-accent-primary);
+          color: var(--shadow-claw-text-primary);
         }
 
         .main-content {
-          flex: 1;
           display: flex;
           flex-direction: column;
+          flex: 1;
           overflow: hidden;
         }
 
         .page {
-          flex: 1;
           display: flex;
-          flex-direction: column;
-          overflow: hidden;
           display: none;
+          flex-direction: column;
+          flex: 1;
+          overflow: hidden;
         }
 
         .page.active {
@@ -415,86 +431,87 @@ export class ShadowClaw extends HTMLElement {
         }
 
         .chat-header {
-          padding: 16px;
-          border-bottom: 1px solid var(--shadow-claw-border-color);
-          background-color: var(--shadow-claw-bg-primary);
-          display: flex;
           align-items: center;
+          background-color: var(--shadow-claw-bg-primary);
+          border-bottom: 0.0625rem solid var(--shadow-claw-border-color);
+          display: flex;
           justify-content: space-between;
+          padding: 1rem;
         }
 
         .chat-header h2 {
-          font-size: 18px;
+          font-size: 1.125rem;
           font-weight: 600;
           margin: 0;
         }
 
         .chat-body {
-          flex: 1;
           display: flex;
           flex-direction: column;
+          flex: 1;
+          gap: 0.75rem;
           overflow: hidden;
-          padding: 16px;
-          gap: 12px;
+          padding: 1rem;
         }
 
         .messages-container {
+          background-color: var(--shadow-claw-bg-secondary);
+          border-radius: var(--shadow-claw-radius-l);
+          border: 0.0625rem solid var(--shadow-claw-bg-tertiary);
+          box-shadow: inset var(--shadow-claw-shadow-sm);
           flex: 1;
           overflow-y: auto;
-          border: 1px solid var(--shadow-claw-bg-tertiary);
-          border-radius: var(--shadow-claw-radius-l);
-          background-color: var(--shadow-claw-bg-secondary);
-          padding: 16px;
-          box-shadow: inset var(--shadow-claw-shadow-sm);
+          padding: 1rem;
         }
 
         .message {
-          margin-bottom: 12px;
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 0.25rem;
+          margin-bottom: 0.75rem;
         }
 
         .message-sender {
-          font-size: 12px;
-          font-weight: 600;
           color: var(--shadow-claw-text-tertiary);
+          font-size: 0.75rem;
+          font-weight: 600;
+          letter-spacing: 0.03125rem;
           text-transform: uppercase;
-          letter-spacing: 0.5px;
         }
 
         .message-header {
+          align-items: baseline;
           display: flex;
           justify-content: space-between;
-          align-items: baseline;
-          margin-bottom: 2px;
+          margin-bottom: 0.125rem;
         }
 
         .message-timestamp {
-          font-size: 10px;
           color: var(--shadow-claw-text-tertiary);
+          font-size: 0.625rem;
           font-weight: 400;
         }
 
         .message-content {
-          padding: 12px 16px;
           background-color: var(--shadow-claw-bg-primary);
+          border-left: 0.25rem solid var(--shadow-claw-accent-primary);
+          border-radius: 0.25rem var(--shadow-claw-radius-m) var(--shadow-claw-radius-m)
+            0.25rem;
           border-radius: var(--shadow-claw-radius-m);
-          border-left: 4px solid var(--shadow-claw-accent-primary);
-          border-radius: 4px var(--shadow-claw-radius-m) var(--shadow-claw-radius-m) 4px;
-          font-size: 14px;
+          font-size: 0.875rem;
           line-height: 1.5;
+          padding: 0.75rem 1rem;
           word-wrap: break-word;
         }
 
         .message.user .message-content {
           background-color: var(--shadow-claw-accent-primary);
-          color: var(--shadow-claw-on-primary);
           border-left-color: var(--shadow-claw-accent-hover);
+          color: var(--shadow-claw-on-primary);
         }
 
         .message-content p {
-          margin-bottom: 8px;
+          margin-bottom: 0.5rem;
         }
 
         .message-content p:last-child {
@@ -502,32 +519,32 @@ export class ShadowClaw extends HTMLElement {
         }
 
         .message-content pre {
-          padding: 0;
-          border-radius: var(--shadow-claw-radius-m);
-          overflow-x: auto;
-          margin: 12px 0;
           background: var(--shadow-claw-bg-secondary);
-          border: 1px solid var(--shadow-claw-border-color);
+          border-radius: var(--shadow-claw-radius-m);
+          border: 0.0625rem solid var(--shadow-claw-border-color);
+          margin: 0.75rem 0;
+          overflow-x: auto;
+          padding: 0;
         }
 
         .message-content pre code.hljs {
           background-color: transparent;
-          padding: 12px;
-          display: block;
-          border-radius: 6px;
-          margin: 0;
+          border-radius: 0.375rem;
           color: var(--shadow-claw-text-primary);
-          font-size: 13px;
+          display: block;
+          font-size: 0.8125rem;
           line-height: 1.6;
+          margin: 0;
+          padding: 0.75rem;
         }
 
         .message-content code {
-          font-family: var(--shadow-claw-font-mono);
-          font-size: 13px;
           background-color: var(--shadow-claw-bg-tertiary);
+          border-radius: 0.1875rem;
           color: var(--shadow-claw-text-primary);
-          padding: 2px 6px;
-          border-radius: 3px;
+          font-family: var(--shadow-claw-font-mono);
+          font-size: 0.8125rem;
+          padding: 0.125rem 0.375rem;
         }
 
         .message-content code.hljs {
@@ -536,11 +553,10 @@ export class ShadowClaw extends HTMLElement {
           padding: 0;
         }
 
-
         .message-content ul,
         .message-content ol {
-          padding-left: 24px;
-          margin-bottom: 8px;
+          padding-left: 1.5rem;
+          margin-bottom: 0.5rem;
         }
 
         .message-content ul:last-child,
@@ -549,7 +565,7 @@ export class ShadowClaw extends HTMLElement {
         }
 
         .message-content li {
-          margin-bottom: 4px;
+          margin-bottom: 0.25rem;
         }
 
         .message-content li:last-child {
@@ -558,33 +574,33 @@ export class ShadowClaw extends HTMLElement {
 
         .message-content li input[type="checkbox"] {
           accent-color: var(--shadow-claw-accent-primary);
-          margin-right: 8px;
-          vertical-align: middle;
           cursor: pointer;
+          margin-right: 0.5rem;
+          vertical-align: middle;
         }
 
         .message-content blockquote {
-          border-left: 4px solid var(--shadow-claw-border-color);
-          padding-left: 12px;
+          border-left: 0.25rem solid var(--shadow-claw-border-color);
           color: var(--shadow-claw-text-secondary);
-          margin: 8px 0;
           font-style: italic;
+          margin: 0.5rem 0;
+          padding-left: 0.75rem;
         }
 
         .message-content hr {
           border: 0;
-          border-top: 1px solid var(--shadow-claw-border-color);
-          margin: 12px 0;
+          border-top: 0.0625rem solid var(--shadow-claw-border-color);
+          margin: 0.75rem 0;
         }
 
         .tool-activity {
-          font-size: 12px;
-          color: var(--shadow-claw-accent-primary);
-          padding: 4px 12px;
-          font-style: italic;
-          display: none;
           align-items: center;
-          gap: 6px;
+          color: var(--shadow-claw-accent-primary);
+          display: none;
+          font-size: 0.75rem;
+          font-style: italic;
+          gap: 0.375rem;
+          padding: 0.25rem 0.75rem;
         }
 
         .tool-activity.active {
@@ -592,16 +608,16 @@ export class ShadowClaw extends HTMLElement {
         }
 
         .activity-log {
-          font-family: var(--shadow-claw-font-mono);
-          font-size: 11px;
-          color: var(--shadow-claw-text-tertiary);
-          padding: 8px 12px;
-          max-height: 100px;
-          overflow-y: auto;
           background-color: var(--shadow-claw-bg-tertiary);
-          border-radius: 4px;
-          margin-bottom: 8px;
+          border-radius: 0.25rem;
+          color: var(--shadow-claw-text-tertiary);
           display: none;
+          font-family: var(--shadow-claw-font-mono);
+          font-size: 0.6875rem;
+          margin-bottom: 0.5rem;
+          max-height: 6.25rem;
+          overflow-y: auto;
+          padding: 0.5rem 0.75rem;
         }
 
         .activity-log.active {
@@ -609,15 +625,15 @@ export class ShadowClaw extends HTMLElement {
         }
 
         .file-viewer-modal {
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
+          align-items: center;
           background-color: rgba(0, 0, 0, 0.5);
           display: none;
-          align-items: center;
+          height: 100%;
           justify-content: center;
+          left: 0;
+          position: fixed;
+          top: 0;
+          width: 100%;
           z-index: 1000;
         }
 
@@ -627,32 +643,32 @@ export class ShadowClaw extends HTMLElement {
 
         .modal-content {
           background-color: var(--shadow-claw-bg-primary);
-          width: 80%;
-          height: 80%;
           border-radius: var(--shadow-claw-radius-l);
+          border: 0.0625rem solid var(--shadow-claw-border-color);
+          box-shadow: var(--shadow-claw-shadow-lg);
           display: flex;
           flex-direction: column;
-          box-shadow: var(--shadow-claw-shadow-lg);
-          border: 1px solid var(--shadow-claw-border-color);
+          height: 80%;
+          width: 80%;
         }
 
         .modal-header {
-          padding: 12px 16px;
-          border-bottom: 1px solid var(--shadow-claw-border-color);
+          align-items: center;
+          border-bottom: 0.0625rem solid var(--shadow-claw-border-color);
           display: flex;
           justify-content: space-between;
-          align-items: center;
+          padding: 0.75rem 1rem;
         }
 
         .modal-body {
           flex: 1;
-          padding: 16px;
           overflow: auto;
+          padding: 1rem;
         }
 
         .modal-body pre {
           font-family: var(--shadow-claw-font-mono);
-          font-size: 13px;
+          font-size: 0.8125rem;
           white-space: pre-wrap;
           word-break: break-all;
         }
@@ -660,42 +676,42 @@ export class ShadowClaw extends HTMLElement {
         .close-modal-btn {
           background: transparent;
           border: none;
-          font-size: 20px;
-          cursor: pointer;
           color: var(--shadow-claw-text-secondary);
+          cursor: pointer;
+          font-size: 1.25rem;
         }
 
         .chat-input-area {
-          display: flex;
-          gap: 8px;
           align-items: flex-end;
+          display: flex;
+          gap: 0.5rem;
         }
 
         .chat-input-wrapper {
-          flex: 1;
-          display: flex;
-          border: 1px solid var(--shadow-claw-border-color);
-          border-radius: var(--shadow-claw-radius-l);
           background-color: var(--shadow-claw-bg-primary);
-          transition: all 0.15s;
+          border-radius: var(--shadow-claw-radius-l);
+          border: 0.0625rem solid var(--shadow-claw-border-color);
           box-shadow: var(--shadow-claw-shadow-sm);
+          display: flex;
+          flex: 1;
+          transition: all 0.15s;
         }
 
         .chat-input-wrapper:focus-within {
           border-color: var(--shadow-claw-accent-primary);
-          box-shadow: 0 0 0 2px var(--shadow-claw-bg-tertiary);
+          box-shadow: 0 0 0 0.125rem var(--shadow-claw-bg-tertiary);
         }
 
         .chat-input {
-          flex: 1;
-          padding: 10px 12px;
-          border: none;
           background: transparent;
-          font-family: var(--shadow-claw-font-sans);
-          font-size: 14px;
+          border: none;
           color: var(--shadow-claw-text-primary);
+          flex: 1;
+          font-family: var(--shadow-claw-font-sans);
+          font-size: 0.875rem;
+          max-height: 6.25rem;
+          padding: 0.625rem 0.75rem;
           resize: none;
-          max-height: 100px;
         }
 
         .chat-input::placeholder {
@@ -707,14 +723,14 @@ export class ShadowClaw extends HTMLElement {
         }
 
         .send-btn {
-          padding: 10px 20px;
           background-color: var(--shadow-claw-accent-primary);
-          color: var(--shadow-claw-on-primary);
-          border: none;
           border-radius: var(--shadow-claw-radius-l);
+          border: none;
+          color: var(--shadow-claw-on-primary);
           cursor: pointer;
+          font-size: 0.875rem;
           font-weight: 500;
-          font-size: 14px;
+          padding: 0.625rem 1.25rem;
           transition: background-color 0.15s;
           white-space: nowrap;
         }
@@ -724,75 +740,125 @@ export class ShadowClaw extends HTMLElement {
         }
 
         .send-btn:disabled {
-          opacity: 0.5;
           cursor: not-allowed;
+          opacity: 0.5;
         }
 
         .settings-page {
-          padding: 16px;
           overflow-y: auto;
+          padding: 1rem;
         }
 
         .settings-section {
-          margin-bottom: 24px;
+          margin-bottom: 1.5rem;
         }
 
         .settings-section h3 {
-          font-size: 16px;
-          font-weight: 600;
-          margin-bottom: 12px;
-          display: flex;
-          gap: 8px;
           align-items: center;
+          display: flex;
+          font-size: 1rem;
+          font-weight: 600;
+          gap: 0.5rem;
+          margin-bottom: 0.75rem;
+        }
+
+        .settings-warning {
+          background-color: #fee2e2;
+          border-radius: 0.375rem;
+          border: 0.0625rem solid #fecaca;
+          color: #991b1b;
+          display: none;
+          font-size: 0.8125rem;
+          margin-bottom: 1rem;
+          padding: 0.75rem;
+        }
+
+        .settings-warning b {
+          font-weight: 700;
+        }
+
+        .radio-group {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+          margin-bottom: 0.5rem;
+        }
+
+        .radio-item {
+          align-items: flex-start;
+          cursor: pointer;
+          display: flex;
+          gap: 0.625rem;
+        }
+
+        .radio-item input {
+          margin-top: 0.1875rem;
+        }
+
+        .radio-label-text {
+          display: flex;
+          flex-direction: column;
+          gap: 0.125rem;
+        }
+
+        .radio-label-title {
+          color: var(--shadow-claw-text-primary);
+          font-size: 0.875rem;
+          font-weight: 500;
+        }
+
+        .radio-label-desc {
+          color: var(--shadow-claw-text-secondary);
+          font-size: 0.75rem;
         }
 
         .form-group {
-          margin-bottom: 16px;
+          margin-bottom: 1rem;
         }
 
         .form-label {
-          display: block;
-          font-size: 13px;
-          font-weight: 500;
-          margin-bottom: 6px;
           color: var(--shadow-claw-text-primary);
+          display: block;
+          font-size: 0.8125rem;
+          font-weight: 500;
+          margin-bottom: 0.375rem;
         }
 
         .form-input,
         .form-select {
-          width: 100%;
-          padding: 10px 12px;
-          border: 1px solid var(--shadow-claw-border-color);
-          border-radius: 6px;
-          font-family: var(--shadow-claw-font-sans);
-          font-size: 14px;
           background-color: var(--shadow-claw-bg-primary);
+          border-radius: 0.375rem;
+          border: 0.0625rem solid var(--shadow-claw-border-color);
           color: var(--shadow-claw-text-primary);
+          font-family: var(--shadow-claw-font-sans);
+          font-size: 0.875rem;
+          padding: 0.625rem 0.75rem;
           transition: border-color 0.15s;
+          width: 100%;
         }
 
         .form-input:focus,
         .form-select:focus {
-          outline: none;
           border-color: var(--shadow-claw-accent-primary);
-          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1);
+          box-shadow: 0 0 0 0.125rem rgba(59, 130, 246, 0.1);
+          outline: none;
         }
 
         .form-helper {
-          font-size: 12px;
           color: var(--shadow-claw-text-tertiary);
-          margin-top: 4px;
+          font-size: 0.75rem;
+          margin-top: 0.25rem;
         }
 
         .save-btn {
-          padding: 10px 24px;
           background-color: var(--shadow-claw-success-color);
-          color: white;
+          border-radius: 0.375rem;
           border: none;
-          border-radius: 6px;
+          color: white;
           cursor: pointer;
+          font-size: 0.875rem;
           font-weight: 500;
-          font-size: 14px;
+          padding: 0.625rem 1.5rem;
           transition: background-color 0.15s;
         }
 
@@ -801,21 +867,21 @@ export class ShadowClaw extends HTMLElement {
         }
 
         .empty-state {
-          flex: 1;
-          display: flex;
           align-items: center;
+          color: var(--shadow-claw-text-tertiary);
+          display: flex;
+          flex: 1;
           justify-content: center;
           text-align: center;
-          color: var(--shadow-claw-text-tertiary);
         }
 
         .empty-state p {
-          font-size: 14px;
+          font-size: 0.875rem;
         }
 
         ::-webkit-scrollbar {
-          width: 8px;
-          height: 8px;
+          height: 0.5rem;
+          width: 0.5rem;
         }
 
         ::-webkit-scrollbar-track {
@@ -824,11 +890,113 @@ export class ShadowClaw extends HTMLElement {
 
         ::-webkit-scrollbar-thumb {
           background: var(--shadow-claw-border-color);
-          border-radius: 4px;
+          border-radius: 0.25rem;
         }
 
         ::-webkit-scrollbar-thumb:hover {
           background: var(--shadow-claw-text-tertiary);
+        }
+
+        /* Utility classes refactored from inline styles */
+        .hidden {
+          display: none;
+        }
+
+        .chat-status-bar {
+          align-items: center;
+          color: var(--shadow-claw-text-tertiary);
+          display: flex;
+          font-size: 0.75rem;
+          gap: 0.5rem;
+        }
+
+        .chat-action-btn {
+          background-color: var(--shadow-claw-bg-tertiary);
+          border-radius: 0.25rem;
+          border: 0.0625rem solid var(--shadow-claw-border-color);
+          color: var(--shadow-claw-text-secondary);
+          cursor: pointer;
+          font-size: 0.75rem;
+          padding: 0.25rem 0.5rem;
+          transition: all 0.15s;
+        }
+
+        .ml-auto {
+          margin-left: auto;
+        }
+
+        .storage-header {
+          display: flex;
+          font-size: 0.8125rem;
+          justify-content: space-between;
+          margin-bottom: 0.375rem;
+        }
+
+        .opacity-60 {
+          opacity: 0.6;
+        }
+
+        .storage-progress-container {
+          background-color: var(--shadow-claw-bg-tertiary);
+          border-radius: 0.25rem;
+          height: 0.5rem;
+          margin-bottom: 0.75rem;
+          overflow: hidden;
+          width: 100%;
+        }
+
+        .storage-progress-bar {
+          background-color: var(--shadow-claw-accent-primary);
+          height: 100%;
+          transition: width 0.3s;
+          width: 0%;
+        }
+
+        .storage-info-row {
+          align-items: center;
+          display: flex;
+          font-size: 0.875rem;
+          gap: 0.5rem;
+          margin-bottom: 0.5rem;
+        }
+
+        .storage-badge {
+          border-radius: 0.25rem;
+          display: none;
+          font-size: 0.6875rem;
+          font-weight: 600;
+          padding: 0.125rem 0.375rem;
+        }
+
+        .persistent-badge {
+          background-color: var(--shadow-claw-success-color);
+          border-radius: 0.25rem;
+          color: white;
+          display: none;
+          font-size: 0.6875rem;
+          font-weight: 600;
+          padding: 0.125rem 0.375rem;
+        }
+
+        .storage-buttons {
+          display: flex;
+          gap: 0.5rem;
+          flex-wrap: wrap;
+        }
+
+        .w-auto {
+          width: auto;
+        }
+
+        .grant-storage-btn {
+          background-color: var(--shadow-claw-accent-primary);
+          border-color: var(--shadow-claw-accent-primary);
+          color: white;
+        }
+
+        .reset-storage-btn {
+          border-color: var(--shadow-claw-error-color);
+          color: var(--shadow-claw-error-color);
         }
       </style>
 
@@ -836,13 +1004,30 @@ export class ShadowClaw extends HTMLElement {
         <!-- Header -->
         <header class="header">
           <button id="menu-button" aria-label="Open menu">
-            <svg xmlns="http://www.w3.org/2000/svg" width="1.5rem" height="1.5rem" fill="currentColor" viewBox="0 -960 960 960"><path d="M120-680v-80h720v80zm0 480v-80h720v80zm0-240v-80h720v80z"/></svg>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="1.5rem"
+              height="1.5rem"
+              fill="currentColor"
+              viewBox="0 -960 960 960"
+            >
+              <path d="M120-680v-80h720v80zm0 480v-80h720v80zm0-240v-80h720v80z" />
+            </svg>
           </button>
           <h1>
             <a class="header-title-link" href="https://xt-ml.github.io/shadow-claw/">
-              <svg class="logo" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+              <svg
+                class="logo"
+                viewBox="0 0 128 128"
+                xmlns="http://www.w3.org/2000/svg"
+              >
                 <!-- Background -->
-                <rect width="128" height="128" rx="16" fill="var(--shadow-claw-icon-bg)" />
+                <rect
+                  width="128"
+                  height="128"
+                  rx="16"
+                  fill="var(--shadow-claw-icon-bg)"
+                />
 
                 <!-- Tail Fan -->
                 <ellipse
@@ -1048,8 +1233,18 @@ export class ShadowClaw extends HTMLElement {
                 <circle cx="56" cy="34" r="5" fill="var(--shadow-claw-icon-eye)" />
                 <circle cx="72" cy="34" r="5" fill="var(--shadow-claw-icon-eye)" />
                 <!-- Shine centered to look friendly -->
-                <circle cx="56" cy="33" r="2" fill="var(--shadow-claw-icon-eye-shine)" />
-                <circle cx="72" cy="33" r="2" fill="var(--shadow-claw-icon-eye-shine)" />
+                <circle
+                  cx="56"
+                  cy="33"
+                  r="2"
+                  fill="var(--shadow-claw-icon-eye-shine)"
+                />
+                <circle
+                  cx="72"
+                  cy="33"
+                  r="2"
+                  fill="var(--shadow-claw-icon-eye-shine)"
+                />
 
                 <!-- Mouth (New: Small smile for happiness) -->
                 <path
@@ -1104,12 +1299,46 @@ export class ShadowClaw extends HTMLElement {
             </a>
             <div class="header-actions">
               <button class="theme-toggle" aria-label="Toggle theme">
-                <svg class="sun-icon" xmlns="http://www.w3.org/2000/svg" width="1.5rem" height="1.5rem" fill="currentColor" viewBox="0 -960 960 960" style="display: none;"><path d="M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35zm0 80q-83 0-141.5-58.5T280-480q0-83 58.5-141.5T480-680q83 0 141.5 58.5T680-480q0 83-58.5 141.5T480-280zM200-440H40v-80h160v80zm720 0H760v-80h160v80zM440-760v-160h80v160h-80zm0 720v-160h80v160h-80zM256-650l-101-97 57-59 96 100-52 56zm492 496-97-101 53-55 101 97-57 59zm-98-550 97-101 59 57-101 97-55-53zM158-190l97-101 55 53-101 97-51-49z"/></svg>
-                <svg class="moon-icon" xmlns="http://www.w3.org/2000/svg" width="1.5rem" height="1.5rem" fill="currentColor" viewBox="0 -960 960 960" style="display: none;"><path d="M480-120q-150 0-255-105T120-480q0-150 105-255t255-105q14 0 27.5 1t26.5 3q-41 29-65.5 75.5T444-660q0 90 63 153t153 63q52 0 99-24.5t75-65.5q2 13 3 26.5t1 27.5q0 150-105 255T480-120zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-74 30-122.5 100T204-480q0 116 82 198t194 82zm-12-274z"/></svg>
+                <svg
+                  class="sun-icon hidden"
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="1.5rem"
+                  height="1.5rem"
+                  fill="currentColor"
+                  viewBox="0 -960 960 960"
+                >
+                  <path
+                    d="M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35zm0 80q-83 0-141.5-58.5T280-480q0-83 58.5-141.5T480-680q83 0 141.5 58.5T680-480q0 83-58.5 141.5T480-280zM200-440H40v-80h160v80zm720 0H760v-80h160v80zM440-760v-160h80v160h-80zm0 720v-160h80v160h-80zM256-650l-101-97 57-59 96 100-52 56zm492 496-97-101 53-55 101 97-57 59zm-98-550 97-101 59 57-101 97-55-53zM158-190l97-101 55 53-101 97-51-49z"
+                  />
+                </svg>
+                <svg
+                  class="moon-icon hidden"
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="1.5rem"
+                  height="1.5rem"
+                  fill="currentColor"
+                  viewBox="0 -960 960 960"
+                >
+                  <path
+                    d="M480-120q-150 0-255-105T120-480q0-150 105-255t255-105q14 0 27.5 1t26.5 3q-41 29-65.5 75.5T444-660q0 90 63 153t153 63q52 0 99-24.5t75-65.5q2 13 3 26.5t1 27.5q0 150-105 255T480-120zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-74 30-122.5 100T204-480q0 116 82 198t194 82zm-12-274z"
+                  />
+                </svg>
               </button>
-              <a aria-label="Github" class="github-link" href="https://github.com/xt-ml/shadow-claw" style="color: inherit;">
-                <svg aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512" style="height: 1.5rem; width: 1.5rem;">
-                  <path fill="currentColor" d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8z"></path>
+              <a
+                aria-label="Github"
+                class="github-link"
+                href="https://github.com/xt-ml/shadow-claw"
+              >
+                <svg
+                  aria-hidden="true"
+                  focusable="false"
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 496 512"
+                >
+                  <path
+                    fill="currentColor"
+                    d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8z"
+                  ></path>
                 </svg>
               </a>
             </div>
@@ -1134,165 +1363,278 @@ export class ShadowClaw extends HTMLElement {
 
           <!-- Main Content -->
           <div class="main-content">
-          <!-- Chat Page -->
-          <div class="page chat-page active" data-page-id="chat">
-            <div class="chat-header">
-              <h2>💬 Chat</h2>
-              <div style="font-size: 12px; color: var(--shadow-claw-text-tertiary); display: flex; gap: 8px; align-items: center;">
-                <span class="status-indicator">●</span> Ready
-                <button class="download-chat-btn" data-action="download-chat" style="margin-left: auto; padding: 4px 8px; font-size: 12px; background-color: var(--shadow-claw-bg-tertiary); border: 1px solid var(--shadow-claw-border-color); border-radius: 4px; cursor: pointer; color: var(--shadow-claw-text-secondary); transition: all 0.15s;">💾 Backup</button>
-                <button class="restore-chat-btn" data-action="restore-chat" style="padding: 4px 8px; font-size: 12px; background-color: var(--shadow-claw-bg-tertiary); border: 1px solid var(--shadow-claw-border-color); border-radius: 4px; cursor: pointer; color: var(--shadow-claw-text-secondary); transition: all 0.15s;">♻️ Restore</button>
-                <button class="compact-chat-btn" data-action="compact-chat" style="padding: 4px 8px; font-size: 12px; background-color: var(--shadow-claw-bg-tertiary); border: 1px solid var(--shadow-claw-border-color); border-radius: 4px; cursor: pointer; color: var(--shadow-claw-text-secondary); transition: all 0.15s;">📦 Compact</button>
-                <button class="clear-chat-btn" data-action="clear-chat" style="padding: 4px 8px; font-size: 12px; background-color: var(--shadow-claw-bg-tertiary); border: 1px solid var(--shadow-claw-border-color); border-radius: 4px; cursor: pointer; color: var(--shadow-claw-text-secondary); transition: all 0.15s;">🗑️ Clear Chat</button>
+            <!-- Chat Page -->
+            <div class="page chat-page active" data-page-id="chat">
+              <div class="chat-header">
+                <h2>💬 Chat</h2>
+                <div class="chat-status-bar">
+                  <span class="status-indicator">●</span> Ready
+                  <button class="chat-action-btn ml-auto" data-action="download-chat">
+                    💾 Backup
+                  </button>
+                  <button class="chat-action-btn" data-action="restore-chat">
+                    ♻️ Restore
+                  </button>
+                  <button class="chat-action-btn" data-action="compact-chat">
+                    📦 Compact
+                  </button>
+                  <button class="chat-action-btn" data-action="clear-chat">
+                    🗑️ Clear Chat
+                  </button>
+                </div>
+              </div>
+              <div class="chat-body">
+                <div class="tool-activity">⚙️ Working...</div>
+                <div class="activity-log"></div>
+                <div class="messages-container"></div>
+                <div class="chat-input-area">
+                  <div class="chat-input-wrapper">
+                    <textarea
+                      class="chat-input"
+                      placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
+                      rows="1"
+                    ></textarea>
+                  </div>
+                  <button class="send-btn" data-action="send-message">Send</button>
+                </div>
               </div>
             </div>
-            <div class="chat-body">
-              <div class="tool-activity">⚙️ Working...</div>
-              <div class="activity-log"></div>
-              <div class="messages-container"></div>
-              <div class="chat-input-area">
-                <div class="chat-input-wrapper">
-                  <textarea
-                    class="chat-input"
-                    placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
-                    rows="1"
-                  ></textarea>
+
+            <!-- Tasks Page -->
+            <div class="page" data-page-id="tasks">
+              <shadow-claw-tasks></shadow-claw-tasks>
+            </div>
+
+            <!-- Files Page -->
+            <div class="page" data-page-id="files">
+              <shadow-claw-files></shadow-claw-files>
+            </div>
+
+            <!-- File Viewer Modal Overlay -->
+            <div class="file-viewer-modal">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h3 class="modal-title">File: name.txt</h3>
+                  <button class="close-modal-btn">&times;</button>
                 </div>
-                <button class="send-btn" data-action="send-message">
-                  Send
-                </button>
+                <div class="modal-body">
+                  <pre class="file-content"></pre>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- Tasks Page -->
-          <div class="page" data-page-id="tasks">
-            <tasks-page></tasks-page>
-          </div>
-
-          <!-- Files Page -->
-          <div class="page" data-page-id="files">
-            <files-page></files-page>
-          </div>
-
-          <!-- File Viewer Modal Overlay -->
-          <div class="file-viewer-modal">
-            <div class="modal-content">
-              <div class="modal-header">
-                <h3 class="modal-title">File: name.txt</h3>
-                <button class="close-modal-btn">&times;</button>
-              </div>
-              <div class="modal-body">
-                <pre class="file-content"></pre>
-              </div>
-            </div>
-          </div>
-
-          <!-- Settings Page -->
-          <div class="page" data-page-id="settings">
-            <div class="chat-header"><h2>⚙️ Settings</h2></div>
-            <div class="settings-page">
-              <div class="settings-section">
-                <h3>🔑 LLM Provider</h3>
-                <div class="form-group">
-                  <label class="form-label">Provider</label>
-                  <select
-                    class="form-select"
-                    data-setting="provider-select"
-                  >
-                    <!-- Populated dynamically -->
-                  </select>
-                </div>
-                <div class="form-group">
-                  <label class="form-label">API Key</label>
-                  <input
-                    type="password"
-                    class="form-input"
-                    data-setting="api-key-input"
-                    placeholder="Enter your API key..."
-                  />
-                  <div class="form-helper" data-setting="api-key-helper">
-                    Your API key is encrypted and stored locally. It never leaves
-                    your browser.
+            <!-- Settings Page -->
+            <div class="page" data-page-id="settings">
+              <div class="chat-header"><h2>⚙️ Settings</h2></div>
+              <div class="settings-page">
+                <div class="settings-section">
+                  <h3>👤 Assistant Name</h3>
+                  <div class="form-group">
+                    <label class="form-label">Name</label>
+                    <input
+                      type="text"
+                      class="form-input"
+                      data-setting="assistant-name-input"
+                      placeholder="rover"
+                      value="rover"
+                    />
+                    <div class="form-helper">
+                      Used to mention the assistant in chat (@name)
+                    </div>
                   </div>
-                </div>
-                <button class="save-btn" data-action="save-api-key">
-                  💾 Save API Key & Provider
-                </button>
-              </div>
-
-              <div class="settings-section">
-                <h3>🤖 Model</h3>
-                <div class="form-group">
-                  <label class="form-label">Select Model</label>
-                  <select class="form-select" data-setting="model-select">
-                    <!-- Populated dynamically based on provider -->
-                  </select>
-                </div>
-                <button class="save-btn" data-action="save-model">
-                  💾 Save Model
-                </button>
-              </div>
-
-              <div class="settings-section">
-                <h3>👤 Assistant Name</h3>
-                <div class="form-group">
-                  <label class="form-label">Name</label>
-                  <input
-                    type="text"
-                    class="form-input"
-                    data-setting="assistant-name-input"
-                    placeholder="rover"
-                    value="rover"
-                  />
-                  <div class="form-helper">
-                    Used to mention the assistant in chat (@name)
-                  </div>
-                </div>
-                <button class="save-btn" data-action="save-assistant-name">
-                  💾 Save Name
-                </button>
-              </div>
-
-              <div class="settings-section">
-                <h3>💾 Storage</h3>
-                <div class="form-group">
-                  <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px;">
-                    <span data-info="storage-usage">0 B used</span>
-                    <span data-info="storage-quota" style="opacity: 0.6;">of 0 B</span>
-                  </div>
-                  <div style="width: 100%; height: 8px; background-color: var(--shadow-claw-bg-tertiary); border-radius: 4px; overflow: hidden; margin-bottom: 12px;">
-                    <div data-info="storage-progress" style="width: 0%; height: 100%; background-color: var(--shadow-claw-accent-primary); transition: width 0.3s;"></div>
-                  </div>
+                  <button class="save-btn" data-action="save-assistant-name">
+                    💾 Save Name
+                  </button>
                 </div>
 
-                <div class="form-group">
-                  <label class="form-label">Storage Type</label>
-                  <div style="display: flex; align-items: center; gap: 8px; font-size: 14px; margin-bottom: 8px;">
-                    <span data-info="storage-type">Browser Internal (OPFS)</span>
-                    <span data-info="storage-status-badge" style="display: none; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: 600;"></span>
-                    <span data-info="storage-persistent-badge" style="display: none; padding: 2px 6px; background-color: var(--shadow-claw-success-color); color: white; border-radius: 4px; font-size: 11px; font-weight: 600;">PERSISTENT</span>
+                <div class="settings-section">
+                  <h3>🔑 LLM Provider</h3>
+                  <div class="form-group">
+                    <label class="form-label">Provider</label>
+                    <select class="form-select" data-setting="provider-select">
+                      <!-- Populated dynamically -->
+                    </select>
                   </div>
-                  <div style="display: flex; gap: 8px; flex-wrap: wrap;">
-                    <button class="settings-btn" style="width: auto; display: none; background-color: var(--shadow-claw-accent-primary); color: white; border-color: var(--shadow-claw-accent-primary);" data-action="grant-storage-permission">
-                      🔓 Grant Permission
-                    </button>
-                    <button class="settings-btn" style="width: auto;" data-action="request-persistent">
-                      🔒 Request Persistent
-                    </button>
-                    <button class="settings-btn" style="width: auto;" data-action="change-storage-dir">
-                      📁 Change Location
-                    </button>
-                    <button class="settings-btn" style="width: auto; border-color: var(--shadow-claw-error-color); color: var(--shadow-claw-error-color);" data-action="reset-storage-dir">
-                      ♻️ Reset to Default
-                    </button>
+                  <div class="form-group">
+                    <label class="form-label">API Key</label>
+                    <input
+                      type="password"
+                      class="form-input"
+                      data-setting="api-key-input"
+                      placeholder="Enter your API key..."
+                    />
+                    <div class="form-helper" data-setting="api-key-helper">
+                      Your API key is encrypted and stored locally. It never leaves
+                      your browser.
+                    </div>
                   </div>
-                  <div class="form-helper" data-info="storage-help-general">
-                    Persistent storage prevents the browser from deleting your chat history and configuration when disk space is low.
-                    <b>Note:</b> Browsers often only grant this if you bookmark the site or use it frequently.
+                  <button class="save-btn" data-action="save-api-key">
+                    💾 Save API Key & Provider
+                  </button>
+                </div>
+
+                <div class="settings-section">
+                  <h3>🤖 Model</h3>
+                  <div class="form-group">
+                    <label class="form-label">Select Model</label>
+                    <select class="form-select" data-setting="model-select">
+                      <!-- Populated dynamically based on provider -->
+                    </select>
                   </div>
-                  <div class="form-helper" data-info="storage-help-local">
-                    You can use a local folder on your computer for storage. This makes files directly accessible on your disk.
+                  <button class="save-btn" data-action="save-model">
+                    💾 Save Model
+                  </button>
+                </div>
+
+                <div class="settings-section">
+                  <h3>🔀 Git</h3>
+                  <div class="form-group">
+                    <label class="form-label">CORS Proxy</label>
+                    <div class="radio-group">
+                      <label class="radio-item">
+                        <input
+                          type="radio"
+                          name="git-proxy"
+                          value="local"
+                          checked
+                          data-setting="git-proxy-local"
+                        />
+                        <div class="radio-label-text">
+                          <span class="radio-label-title"
+                            >Local Proxy (Recommended)</span
+                          >
+                          <span class="radio-label-desc"
+                            >Uses your local server. Secure and private.</span
+                          >
+                        </div>
+                      </label>
+                      <label class="radio-item">
+                        <input
+                          type="radio"
+                          name="git-proxy"
+                          value="public"
+                          data-setting="git-proxy-public"
+                        />
+                        <div class="radio-label-text">
+                          <span class="radio-label-title">Public Proxy</span>
+                          <span class="radio-label-desc"
+                            >Uses cors.isomorphic-git.org. Potential credential leak
+                            risk.</span
+                          >
+                        </div>
+                      </label>
+                    </div>
+                    <div class="settings-warning" data-setting="git-proxy-warning">
+                      ⚠️ <b>Security Warning</b>: You have a Git Token configured and
+                      are using the Public Proxy. Your token will pass through a
+                      third-party server.
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Git Token (PAT)</label>
+                    <input
+                      type="password"
+                      class="form-input"
+                      data-setting="git-token-input"
+                      placeholder="ghp_xxxxxxxxxxxx"
+                    />
+                    <div class="form-helper">
+                      Optional. Required for push or private repos. Stored encrypted
+                      locally.
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Author Name</label>
+                    <input
+                      type="text"
+                      class="form-input"
+                      data-setting="git-author-name-input"
+                      placeholder="ShadowClaw"
+                    />
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Author Email</label>
+                    <input
+                      type="text"
+                      class="form-input"
+                      data-setting="git-author-email-input"
+                      placeholder="k9@shadowclaw.local"
+                    />
+                  </div>
+
+                  <button class="save-btn" data-action="save-git-settings">
+                    💾 Save Git Settings
+                  </button>
+                </div>
+
+                <div class="settings-section">
+                  <h3>💾 Storage</h3>
+                  <div class="form-group">
+                    <div class="storage-header">
+                      <span data-info="storage-usage">0 B used</span>
+                      <span data-info="storage-quota" class="opacity-60">of 0 B</span>
+                    </div>
+                    <div class="storage-progress-container">
+                      <div
+                        data-info="storage-progress"
+                        class="storage-progress-bar"
+                      ></div>
+                    </div>
+                  </div>
+
+                  <div class="form-group">
+                    <label class="form-label">Storage Type</label>
+                    <div class="storage-info-row">
+                      <span data-info="storage-type">Browser Internal (OPFS)</span>
+                      <span
+                        data-info="storage-status-badge"
+                        class="storage-badge"
+                      ></span>
+                      <span
+                        data-info="storage-persistent-badge"
+                        class="persistent-badge"
+                        >PERSISTENT</span
+                      >
+                    </div>
+                    <div class="storage-buttons">
+                      <button
+                        class="settings-btn w-auto hidden grant-storage-btn"
+                        data-action="grant-storage-permission"
+                      >
+                        🔓 Grant Permission
+                      </button>
+                      <button
+                        class="settings-btn w-auto"
+                        data-action="request-persistent"
+                      >
+                        🔒 Request Persistent
+                      </button>
+                      <button
+                        class="settings-btn w-auto"
+                        data-action="change-storage-dir"
+                      >
+                        📁 Change Location
+                      </button>
+                      <button
+                        class="settings-btn w-auto reset-storage-btn"
+                        data-action="reset-storage-dir"
+                      >
+                        ♻️ Reset to Default
+                      </button>
+                    </div>
+                    <div class="form-helper" data-info="storage-help-general">
+                      Persistent storage prevents the browser from deleting your chat
+                      history and configuration when disk space is low.
+                      <b>Note:</b> Browsers often only grant this if you bookmark the
+                      site or use it frequently.
+                    </div>
+                    <div class="form-helper" data-info="storage-help-local">
+                      You can use a local folder on your computer for storage. This
+                      makes files directly accessible on your disk.
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1335,6 +1677,7 @@ export class ShadowClaw extends HTMLElement {
    */
   async initialize(db, orchestrator) {
     this.orchestrator = orchestrator;
+    this.db = db;
 
     // Render the shadow DOM
     const template = ShadowClaw.createTemplate(ShadowClaw.getTemplate());
@@ -1362,6 +1705,7 @@ export class ShadowClaw extends HTMLElement {
         el.style.color = "#10b981";
       }
     }
+
     console.log("ShadowClaw UI initialized");
   }
 
@@ -1461,6 +1805,7 @@ export class ShadowClaw extends HTMLElement {
     const providerSelect = root.querySelector(
       '[data-setting="provider-select"]',
     );
+
     if (providerSelect) {
       providerSelect.addEventListener("change", () =>
         this.onProviderChange(db),
@@ -1554,6 +1899,22 @@ export class ShadowClaw extends HTMLElement {
     const currentTheme = themeStore.resolved;
     this.updateThemeIcons(currentTheme);
     this.updateHostTheme(currentTheme);
+
+    // Git settings listeners
+    const saveGitBtn = root.querySelector('[data-action="save-git-settings"]');
+    if (saveGitBtn) {
+      saveGitBtn.addEventListener("click", () => this.saveGitSettings(db));
+    }
+
+    // Git radio buttons change
+    root.querySelectorAll('input[name="git-proxy"]').forEach((radio) => {
+      radio.addEventListener("change", () => this.updateGitWarning());
+    });
+
+    // Git token input change (to trigger warning if needed)
+    root
+      .querySelector('[data-setting="git-token-input"]')
+      ?.addEventListener("input", () => this.updateGitWarning());
   }
 
   /**
@@ -1585,6 +1946,7 @@ export class ShadowClaw extends HTMLElement {
     const sunIcon = /** @type {HTMLElement} */ (
       root.querySelector(".sun-icon")
     );
+
     const moonIcon = /** @type {HTMLElement} */ (
       root.querySelector(".moon-icon")
     );
@@ -1670,6 +2032,7 @@ export class ShadowClaw extends HTMLElement {
     if (!message) {
       return;
     }
+
     if (!this.orchestrator) {
       alert("ShadowClaw is still initializing. Please try again.");
 
@@ -1703,27 +2066,24 @@ export class ShadowClaw extends HTMLElement {
 
     // React to messages
     effect(() => {
-      /** @type {import('../types.mjs').StoredMessage[]} */
+      /** @type {StoredMessage[]} */
       const messages = orchestratorStore.messages;
       const container = root.querySelector(".messages-container");
       if (container) {
         container.innerHTML = "";
-        messages.forEach(
-          (/** @type {import('../types.mjs').StoredMessage} */ msg) => {
-            const type = msg.isFromMe ? "assistant" : "user";
-            const assistantName =
-              localStorage.getItem("assistantName") || "rover";
+        messages.forEach((/** @type {StoredMessage} */ msg) => {
+          const type = msg.isFromMe ? "assistant" : "user";
+          const assistantName =
+            localStorage.getItem("assistantName") || "rover";
 
-            const sender = msg.isFromMe ? assistantName : msg.sender || "You";
+          const sender = msg.isFromMe ? assistantName : msg.sender || "You";
 
-            const msgDiv = document.createElement("div");
-            msgDiv.className = `message ${type}`;
+          const msgDiv = document.createElement("div");
+          msgDiv.className = `message ${type}`;
 
-            const timestamp = msg.timestamp
-              ? formatTimestamp(msg.timestamp)
-              : "";
+          const timestamp = msg.timestamp ? formatTimestamp(msg.timestamp) : "";
 
-            msgDiv.innerHTML = `
+          msgDiv.innerHTML = `
             <div class="message-header">
               <div class="message-sender">${sender}</div>
               <div class="message-timestamp">${timestamp}</div>
@@ -1731,9 +2091,8 @@ export class ShadowClaw extends HTMLElement {
             <div class="message-content">${renderMarkdown(msg.content)}</div>
           `;
 
-            container.appendChild(msgDiv);
-          },
-        );
+          container.appendChild(msgDiv);
+        });
 
         container.scrollTop = container.scrollHeight;
       }
@@ -1770,7 +2129,7 @@ export class ShadowClaw extends HTMLElement {
 
     // React to activity log
     effect(() => {
-      /** @type {import('../types.mjs').ThinkingLogEntry[]} */
+      /** @type {ThinkingLogEntry[]} */
       const log = orchestratorStore.activityLog;
       const logEl = root.querySelector(".activity-log");
       if (logEl) {
@@ -1778,7 +2137,7 @@ export class ShadowClaw extends HTMLElement {
           logEl.classList.add("active");
           logEl.innerHTML = log
             .map(
-              (/** @type {import('../types.mjs').ThinkingLogEntry} */ entry) =>
+              (/** @type {ThinkingLogEntry} */ entry) =>
                 `<div>[${entry.level}] ${entry.label || ""}: ${entry.message}</div>`,
             )
             .join("");
@@ -1866,6 +2225,7 @@ export class ShadowClaw extends HTMLElement {
       if (statusBadge) {
         /** @type {HTMLElement} */ (statusBadge).style.display =
           status.type === "local" ? "inline-block" : "none";
+
         if (status.type === "local") {
           statusBadge.textContent =
             status.permission === "granted" ? "CONNECTED" : "NEEDS PERMISSION";
@@ -2002,6 +2362,7 @@ export class ShadowClaw extends HTMLElement {
       const fileInput = document.createElement("input");
       fileInput.type = "file";
       fileInput.accept = ".zip";
+
       fileInput.addEventListener("change", async (e) => {
         const target = /** @type {HTMLInputElement} */ (e.target);
         const file = target?.files?.[0];
@@ -2110,6 +2471,53 @@ export class ShadowClaw extends HTMLElement {
         const input = /** @type {HTMLInputElement} */ (nameInput);
         input.value = localStorage.getItem("assistantName") || "rover";
       }
+      // Load Git settings
+      const proxyPref =
+        (await getConfig(db, CONFIG_KEYS.GIT_CORS_PROXY)) || "local";
+
+      const localRadio = /** @type {HTMLInputElement} */ (
+        root.querySelector('[data-setting="git-proxy-local"]')
+      );
+
+      const publicRadio = /** @type {HTMLInputElement} */ (
+        root.querySelector('[data-setting="git-proxy-public"]')
+      );
+
+      if (localRadio && publicRadio) {
+        localRadio.checked = proxyPref === "local";
+        publicRadio.checked = proxyPref === "public";
+      }
+
+      const authorNameInput = /** @type {HTMLInputElement} */ (
+        root.querySelector('[data-setting="git-author-name-input"]')
+      );
+
+      if (authorNameInput)
+        authorNameInput.value =
+          (await getConfig(db, CONFIG_KEYS.GIT_AUTHOR_NAME)) || "ShadowClaw";
+
+      const authorEmailInput = /** @type {HTMLInputElement} */ (
+        root.querySelector('[data-setting="git-author-email-input"]')
+      );
+
+      if (authorEmailInput)
+        authorEmailInput.value =
+          (await getConfig(db, CONFIG_KEYS.GIT_AUTHOR_EMAIL)) ||
+          "k9@shadowclaw.local";
+
+      // Git token is sensitive, we should not populate it except maybe as placeholders or indicators if it exists
+      const gitTokenInput = /** @type {HTMLInputElement} */ (
+        root.querySelector('[data-setting="git-token-input"]')
+      );
+
+      const encToken = await getConfig(db, CONFIG_KEYS.GIT_TOKEN);
+      if (gitTokenInput) {
+        gitTokenInput.placeholder = encToken
+          ? "•••••••••••• (Saved)"
+          : "ghp_xxxxxxxxxxxx";
+      }
+
+      this.updateGitWarning();
     } catch (e) {
       console.warn("Could not load settings:", e);
     }
@@ -2161,9 +2569,13 @@ export class ShadowClaw extends HTMLElement {
       // Check storage type
       const handle = await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE);
       if (handle) {
-        if (typeEl) typeEl.textContent = "Local Directory";
+        if (typeEl) {
+          typeEl.textContent = "Local Directory";
+        }
       } else {
-        if (typeEl) typeEl.textContent = "Browser Internal (OPFS)";
+        if (typeEl) {
+          typeEl.textContent = "Browser Internal (OPFS)";
+        }
       }
 
       // Check persistence
@@ -2306,6 +2718,7 @@ export class ShadowClaw extends HTMLElement {
     if (!confirm("Revert storage to browser-internal (OPFS)?")) {
       return;
     }
+
     try {
       await resetStorageDirectory(db);
 
@@ -2470,6 +2883,7 @@ export class ShadowClaw extends HTMLElement {
       const providerId = select.value;
 
       await this.orchestrator.setApiKey(db, key);
+
       /** @type {HTMLInputElement} */
       const inputEl = /** @type {HTMLInputElement} */ (keyInput);
       inputEl.value = "";
@@ -2575,15 +2989,120 @@ export class ShadowClaw extends HTMLElement {
   }
 
   /**
-   * Get a reference to query within shadowRoot
-   * For compatibility with template queries
-   *
-   * @param {string} selector
-   *
-   * @returns {Element|null}
+   * Update the Git security warning visibility
    */
-  querySelector(selector) {
-    return this.shadowRoot?.querySelector(selector) ?? null;
+  async updateGitWarning() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const warningEl = /** @type {HTMLElement} */ (
+      root.querySelector('[data-setting="git-proxy-warning"]')
+    );
+
+    if (!warningEl) {
+      return;
+    }
+
+    const publicRadio = /** @type {HTMLInputElement} */ (
+      root.querySelector('[data-setting="git-proxy-public"]')
+    );
+
+    const tokenInput = /** @type {HTMLInputElement} */ (
+      root.querySelector('[data-setting="git-token-input"]')
+    );
+
+    // We also check DB to see if there is already a saved token
+    const db = this.db;
+    let hasToken = (tokenInput?.value || "").trim().length > 0;
+
+    if (!hasToken && db) {
+      const { getConfig } = await import("../db/getConfig.mjs");
+      const { CONFIG_KEYS } = await import("../config.mjs");
+      const encToken = await getConfig(db, CONFIG_KEYS.GIT_TOKEN);
+      if (encToken) {
+        hasToken = true;
+      }
+    }
+
+    if (publicRadio?.checked && hasToken) {
+      warningEl.style.display = "block";
+    } else {
+      warningEl.style.display = "none";
+    }
+  }
+
+  /**
+   * Save Git settings
+   *
+   * @param {ShadowClawDatabase} db
+   *
+   * @returns {Promise<void>}
+   */
+  async saveGitSettings(db) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../db/setConfig.mjs");
+      const { CONFIG_KEYS } = await import("../config.mjs");
+      const { encryptValue } = await import("../crypto.mjs");
+
+      // Proxy preference
+      const publicRadio = /** @type {HTMLInputElement} */ (
+        root.querySelector('[data-setting="git-proxy-public"]')
+      );
+
+      const proxyPref = publicRadio?.checked ? "public" : "local";
+      await setConfig(db, CONFIG_KEYS.GIT_CORS_PROXY, proxyPref);
+
+      // Token
+      const tokenInput = /** @type {HTMLInputElement} */ (
+        root.querySelector('[data-setting="git-token-input"]')
+      );
+
+      const token = tokenInput?.value.trim();
+      if (token) {
+        const encrypted = await encryptValue(token);
+        if (encrypted) {
+          await setConfig(db, CONFIG_KEYS.GIT_TOKEN, encrypted);
+          tokenInput.value = "";
+          tokenInput.placeholder = "•••••••••••• (Saved)";
+        }
+      }
+
+      // Author info
+      const nameInput = /** @type {HTMLInputElement} */ (
+        root.querySelector('[data-setting="git-author-name-input"]')
+      );
+      if (nameInput)
+        await setConfig(
+          db,
+          CONFIG_KEYS.GIT_AUTHOR_NAME,
+          nameInput.value.trim() || "ShadowClaw",
+        );
+
+      const emailInput = /** @type {HTMLInputElement} */ (
+        root.querySelector('[data-setting="git-author-email-input"]')
+      );
+
+      if (emailInput)
+        await setConfig(
+          db,
+          CONFIG_KEYS.GIT_AUTHOR_EMAIL,
+          emailInput.value.trim() || "k9@shadowclaw.local",
+        );
+
+      alert("✅ Git settings saved!");
+
+      this.updateGitWarning();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      alert("❌ Error saving Git settings: " + errorMsg);
+    }
   }
 }
 

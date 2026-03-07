@@ -131,4 +131,8 @@ export const CONFIG_KEYS = {
   PASSPHRASE_VERIFY: "passphrase_verify",
   ASSISTANT_NAME: "assistant_name",
   STORAGE_HANDLE: "storage_handle",
+  GIT_TOKEN: "git_token",
+  GIT_AUTHOR_NAME: "git_author_name",
+  GIT_AUTHOR_EMAIL: "git_author_email",
+  GIT_CORS_PROXY: "git_cors_proxy",
 };

@@ -3,10 +3,6 @@ import { deleteConfig } from "../db/deleteConfig.mjs";
 import { getConfig } from "../db/getConfig.mjs";
 
 /**
- * ShadowClaw — OPFS (Origin Private File System) helpers
- */
-
-/**
  * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
  */
 
@@ -43,19 +39,17 @@ export async function getStorageRoot(db) {
       const status = await /** @type {any} */ (handle).queryPermission({
         mode: "readwrite",
       });
-      if (status === "granted") return handle;
-      // Note: We don't fall back to OPFS here if a handle EXISTS but needs permission,
-      // because that would lead to "split brain" where the user thinks they are in
-      // their shared folder but are actually in OPFS.
-      // However, for API calls, we might need a handle.
-      // Tools will fail if they try to use it and it's not granted.
+
+      // If we have a handle but no permission, we still return it so tools
+      // fail with a clear "permission denied" error instead of silently
+      // falling back to OPFS and causing "split brain".
       return handle;
     }
   } catch (err) {
-    console.warn("Failed to retrieve local storage handle:", err);
+    console.warn("Failed to retrieve local storage handle from DB:", err);
   }
 
-  // Fallback to OPFS root
+  // Fallback to OPFS root only if NO local handle is configured
   const opfsRoot = await navigator.storage.getDirectory();
   return opfsRoot.getDirectoryHandle(OPFS_ROOT, { create: true });
 }
@@ -90,7 +84,18 @@ export async function resetStorageDirectory(db) {
  */
 export async function getStorageStatus(db) {
   if (explicitRoot) {
-    return { type: "local", permission: "granted", name: explicitRoot.name };
+    try {
+      const permission = await /** @type {any} */ (
+        explicitRoot
+      ).queryPermission({
+        mode: "readwrite",
+      });
+
+      return { type: "local", permission, name: explicitRoot.name };
+    } catch {
+      // If queryPermission fails, explicitRoot might be stale
+      alert("Getting storage status is failing.");
+    }
   }
 
   try {

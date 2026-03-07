@@ -4,7 +4,7 @@ import { updateTaskLastRun } from "./db/updateTaskLastRun.mjs";
 import { SCHEDULER_INTERVAL } from "./config.mjs";
 
 /**
- * @typedef {(groupId: string, prompt: string) => Promise<void>} TaskRunner
+ * @typedef {(task: Task) => Promise<void>} TaskRunner
  * @typedef {import("./types.mjs").Task} Task
  */
 
@@ -66,8 +66,7 @@ export class TaskScheduler {
           await updateTaskLastRun(task.id, now.getTime());
 
           // Fire task (non-blocking)
-          const prompt = `[SCHEDULED TASK]\n\n${task.prompt}`;
-          this.runner(task.groupId, prompt).catch((err) => {
+          this.runner(task).catch((err) => {
             console.error(`Task ${task.id} failed:`, err);
           });
         }
@@ -82,7 +81,7 @@ export class TaskScheduler {
 
    * @param {Task} task
    * @param {Date} now
-   * 
+   *
    * @returns {boolean}
    */
   ranThisMinute(task, now) {

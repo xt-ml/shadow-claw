@@ -1,3 +1,5 @@
+import { resumeAudioContext } from "./src/audio.mjs";
+
 import ShadowClaw from "./src/components/shadow-claw.mjs";
 
 import { Orchestrator } from "./src/orchestrator.mjs";
@@ -66,6 +68,13 @@ if (document.readyState === "loading") {
 } else {
   initializeApp().catch((err) => {
     console.error("Fatal error during initialization:", err);
+  });
+}
+
+// Register user gesture listeners for audio resumption
+if (typeof window !== "undefined") {
+  ["click", "keydown", "touchstart"].forEach((event) => {
+    window.addEventListener(event, resumeAudioContext, { once: true });
   });
 }
 

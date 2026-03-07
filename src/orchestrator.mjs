@@ -7,31 +7,33 @@ import {
   DEFAULT_PROVIDER,
   PROVIDERS,
   buildTriggerPattern,
-  getProvider,
   getDefaultProvider,
+  getProvider,
 } from "./config.mjs";
 
 import { BrowserChatChannel } from "./channels/browser-chat.mjs";
-import { encryptValue, decryptValue } from "./crypto.mjs";
+import { decryptValue, encryptValue } from "./crypto.mjs";
 
-import {
-  openDatabase,
-  saveMessage,
-  buildConversationMessages,
-  getConfig,
-  setConfig,
-  saveTask,
-  deleteTask,
-  getAllTasks,
-  clearGroupMessages,
-} from "./db.mjs";
+import { buildConversationMessages } from "./db/buildConversationMessages.mjs";
+import { clearGroupMessages } from "./db/clearGroupMessages.mjs";
+import { deleteTask } from "./db/deleteTask.mjs";
+import { getAllTasks } from "./db/getAllTasks.mjs";
+import { getConfig } from "./db/getConfig.mjs";
+import { openDatabase } from "./db/openDatabase.mjs";
+import { saveMessage } from "./db/saveMessage.mjs";
+import { saveTask } from "./db/saveTask.mjs";
+import { setConfig } from "./db/setConfig.mjs";
 
-import { readGroupFile } from "./storage.mjs";
 import { Router } from "./router.mjs";
+import { readGroupFile } from "./storage/readGroupFile.mjs";
 import { TaskScheduler } from "./task-scheduler.mjs";
 import { ulid } from "./ulid.mjs";
 
 import "./types.mjs";
+
+/**
+ * @typedef {import("./db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
+ */
 
 /**
  * Simple event emitter for orchestrator events
@@ -95,7 +97,7 @@ export class Orchestrator {
     this.provider = DEFAULT_PROVIDER;
     /** @type {import('./config.mjs').ProviderConfig} */
     this.providerConfig = getDefaultProvider();
-    /** @type {string} */
+    /** @type {string | null} */
     this.apiKey = "";
     /** @type {string} */
     this.model = getDefaultProvider().defaultModel;
@@ -112,39 +114,39 @@ export class Orchestrator {
   /**
    * Initialize the orchestrator
    *
-   * @returns {Promise<void>}
+   * @returns {Promise<ShadowClawDatabase>}
    */
   async init() {
     // Open database
-    await openDatabase();
+    const db = await openDatabase();
 
     // Load config
     this.assistantName =
-      (await getConfig(CONFIG_KEYS.ASSISTANT_NAME)) || ASSISTANT_NAME;
+      (await getConfig(db, CONFIG_KEYS.ASSISTANT_NAME)) || ASSISTANT_NAME;
 
     this.triggerPattern = buildTriggerPattern(this.assistantName);
 
     // Load provider
-    const storedProvider = await getConfig(CONFIG_KEYS.PROVIDER);
+    const storedProvider = await getConfig(db, CONFIG_KEYS.PROVIDER);
     if (storedProvider && getProvider(storedProvider)) {
       this.provider = storedProvider;
       this.providerConfig = getProvider(storedProvider) || getDefaultProvider();
     }
 
     // Load API key
-    let storedKey = await getConfig(CONFIG_KEYS.API_KEY);
+    let storedKey = await getConfig(db, CONFIG_KEYS.API_KEY);
     if (storedKey) {
       try {
         this.apiKey = await decryptValue(storedKey);
       } catch (_) {
         this.apiKey = "";
 
-        await setConfig(CONFIG_KEYS.API_KEY, "");
+        await setConfig(db, CONFIG_KEYS.API_KEY, "");
       }
     }
 
     // Load model and max tokens
-    const storedModel = await getConfig(CONFIG_KEYS.MODEL);
+    const storedModel = await getConfig(db, CONFIG_KEYS.MODEL);
     if (storedModel) {
       this.model = storedModel;
     } else {
@@ -152,7 +154,8 @@ export class Orchestrator {
     }
 
     this.maxTokens = parseInt(
-      (await getConfig(CONFIG_KEYS.MAX_TOKENS)) || String(DEFAULT_MAX_TOKENS),
+      (await getConfig(db, CONFIG_KEYS.MAX_TOKENS)) ||
+        String(DEFAULT_MAX_TOKENS),
       10,
     );
 
@@ -160,21 +163,21 @@ export class Orchestrator {
     this.router = new Router(this.browserChat);
 
     // Set up channels
-    this.browserChat.onMessage((msg) => this.enqueue(msg));
+    this.browserChat.onMessage((msg) => this.enqueue(db, msg));
 
     this.agentWorker = new Worker(new URL("../worker.mjs", import.meta.url), {
       type: "module",
     });
 
     this.agentWorker.onmessage = (event) =>
-      this.handleWorkerMessage(event.data);
+      this.handleWorkerMessage(db, event.data);
 
     this.agentWorker.onerror = (err) => {
       console.error("Agent worker error:", err);
     };
 
     // Pass storage handle if it exists
-    const storageHandle = await getConfig(CONFIG_KEYS.STORAGE_HANDLE);
+    const storageHandle = await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE);
     if (storageHandle) {
       this.agentWorker.postMessage({
         type: "set-storage",
@@ -184,7 +187,7 @@ export class Orchestrator {
 
     // Set up task scheduler
     this.scheduler = new TaskScheduler((groupId, prompt) =>
-      this.invokeAgent(groupId, prompt),
+      this.invokeAgent(db, groupId, prompt),
     );
     this.scheduler.start();
 
@@ -194,10 +197,13 @@ export class Orchestrator {
     });
 
     this.events.emit("ready", undefined);
+
+    return db;
   }
 
   /**
    * Get current state
+   *
    * @returns {'idle'|'thinking'|'responding'}
    */
   getState() {
@@ -206,21 +212,30 @@ export class Orchestrator {
 
   /**
    * Check if API key is configured
+   *
    * @returns {boolean}
    */
   isConfigured() {
-    return this.apiKey.length > 0;
+    return this.apiKey ? this.apiKey.length > 0 : false;
   }
 
   /**
    * Update API key
+   *
+   * @param {ShadowClawDatabase} db
    * @param {string} key
+   *
    * @returns {Promise<void>}
    */
-  async setApiKey(key) {
+  async setApiKey(db, key) {
     this.apiKey = key;
     const encrypted = await encryptValue(key);
-    await setConfig(CONFIG_KEYS.API_KEY, encrypted);
+
+    if (!encrypted) {
+      throw new Error("key failed to encrypt. config cannot set.");
+    }
+
+    await setConfig(db, CONFIG_KEYS.API_KEY, encrypted);
   }
 
   /**
@@ -248,10 +263,13 @@ export class Orchestrator {
 
   /**
    * Switch to a different provider
+   *
+   * @param {ShadowClawDatabase} db
    * @param {string} providerId
+   *
    * @returns {Promise<void>}
    */
-  async setProvider(providerId) {
+  async setProvider(db, providerId) {
     const newProvider = getProvider(providerId);
     if (!newProvider) {
       throw new Error(`Unknown provider: ${providerId}`);
@@ -259,12 +277,13 @@ export class Orchestrator {
     this.provider = providerId;
     this.providerConfig = newProvider;
     this.model = newProvider.defaultModel;
-    await setConfig(CONFIG_KEYS.PROVIDER, providerId);
-    await setConfig(CONFIG_KEYS.MODEL, this.model);
+    await setConfig(db, CONFIG_KEYS.PROVIDER, providerId);
+    await setConfig(db, CONFIG_KEYS.MODEL, this.model);
   }
 
   /**
    * Get current model
+   *
    * @returns {string}
    */
   getModel() {
@@ -273,12 +292,16 @@ export class Orchestrator {
 
   /**
    * Update model
+   *
+   * @param {ShadowClawDatabase} db
    * @param {string} model
+   *
    * @returns {Promise<void>}
    */
-  async setModel(model) {
+  async setModel(db, model) {
     this.model = model;
-    await setConfig(CONFIG_KEYS.MODEL, model);
+
+    await setConfig(db, CONFIG_KEYS.MODEL, model);
   }
 
   /**
@@ -291,19 +314,22 @@ export class Orchestrator {
 
   /**
    * Update assistant name
+   *
+   * @param {ShadowClawDatabase} db
    * @param {string} name
    *
    * @returns {Promise<void>}
    */
-  async setAssistantName(name) {
+  async setAssistantName(db, name) {
     this.assistantName = name;
     this.triggerPattern = buildTriggerPattern(name);
 
-    await setConfig(CONFIG_KEYS.ASSISTANT_NAME, name);
+    await setConfig(db, CONFIG_KEYS.ASSISTANT_NAME, name);
   }
 
   /**
    * Submit message from browser chat UI
+   *
    * @param {string} text
    * @param {string} [groupId]
    */
@@ -313,23 +339,27 @@ export class Orchestrator {
 
   /**
    * Start a new session (clears message history)
+   *
+   * @param {ShadowClawDatabase} db
    * @param {string} [groupId]
    *
    * @returns {Promise<void>}
    */
-  async newSession(groupId = DEFAULT_GROUP_ID) {
-    await clearGroupMessages(groupId);
+  async newSession(db, groupId = DEFAULT_GROUP_ID) {
+    await clearGroupMessages(db, groupId);
 
     this.events.emit("session-reset", { groupId });
   }
 
   /**
    * Compact (summarize) context
+   *
+   * @param {ShadowClawDatabase} db
    * @param {string} [groupId]
    *
    * @returns {Promise<void>}
    */
-  async compactContext(groupId = DEFAULT_GROUP_ID) {
+  async compactContext(db, groupId = DEFAULT_GROUP_ID) {
     if (!this.apiKey) {
       this.events.emit("error", {
         groupId,
@@ -352,7 +382,7 @@ export class Orchestrator {
 
     let memory = "";
     try {
-      memory = await readGroupFile(groupId, "MEMORY.md");
+      memory = await readGroupFile(db, groupId, "MEMORY.md");
     } catch {
       // No memory file yet
     }
@@ -373,7 +403,7 @@ export class Orchestrator {
         model: this.model,
         maxTokens: this.maxTokens,
         provider: this.provider,
-        storageHandle: await getConfig(CONFIG_KEYS.STORAGE_HANDLE),
+        storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
       },
     });
   }
@@ -395,11 +425,12 @@ export class Orchestrator {
   }
 
   /**
+   * @param {ShadowClawDatabase} db
    * @param {import('./types.mjs').InboundMessage} msg
    *
    * @returns {Promise<void>}
    */
-  async enqueue(msg) {
+  async enqueue(db, msg) {
     // Check trigger
     const isBrowserMain = msg.groupId === DEFAULT_GROUP_ID;
     const hasTrigger = this.triggerPattern.test(msg.content.trim());
@@ -414,16 +445,18 @@ export class Orchestrator {
       this.messageQueue.push(msg);
     }
 
-    await saveMessage(stored);
+    await saveMessage(db, stored);
     this.events.emit("message", stored);
 
-    this.processQueue();
+    this.processQueue(db);
   }
 
   /**
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async processQueue() {
+  async processQueue(db) {
     if (this.processing) return;
     if (this.messageQueue.length === 0) return;
 
@@ -441,24 +474,25 @@ export class Orchestrator {
     const msg = this.messageQueue.shift();
 
     try {
-      await this.invokeAgent(msg.groupId, msg.content);
+      await this.invokeAgent(db, msg.groupId, msg.content);
     } catch (err) {
       console.error("Failed to invoke agent:", err);
     } finally {
       this.processing = false;
       if (this.messageQueue.length > 0) {
-        this.processQueue();
+        this.processQueue(db);
       }
     }
   }
 
   /**
+   * @param {ShadowClawDatabase} db
    * @param {string} groupId
    * @param {string} triggerContent
    *
    * @returns {Promise<void>}
    */
-  async invokeAgent(groupId, triggerContent) {
+  async invokeAgent(db, groupId, triggerContent) {
     this.setState("thinking");
     this.router?.setTyping(groupId, true);
     this.events.emit("typing", { groupId, typing: true });
@@ -480,7 +514,7 @@ export class Orchestrator {
         isTrigger: true,
       };
 
-      await saveMessage(stored);
+      await saveMessage(db, stored);
 
       this.events.emit("message", stored);
     }
@@ -488,7 +522,7 @@ export class Orchestrator {
     // Load group memory
     let memory = "";
     try {
-      memory = await readGroupFile(groupId, "MEMORY.md");
+      memory = await readGroupFile(db, groupId, "MEMORY.md");
     } catch {}
 
     // Build conversation context
@@ -510,28 +544,29 @@ export class Orchestrator {
         model: this.model,
         maxTokens: this.maxTokens,
         provider: this.provider,
-        storageHandle: await getConfig(CONFIG_KEYS.STORAGE_HANDLE),
+        storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
       },
     });
   }
 
   /**
+   * @param {ShadowClawDatabase} db
    * @param {any} msg
    *
    * @returns {Promise<void>}
    */
-  async handleWorkerMessage(msg) {
+  async handleWorkerMessage(db, msg) {
     switch (msg.type) {
       case "response": {
         const { groupId, text } = msg.payload;
-        await this.deliverResponse(groupId, text);
+        await this.deliverResponse(db, groupId, text);
         break;
       }
 
       case "task-created": {
         const { task } = msg.payload;
         try {
-          await saveTask(task);
+          await saveTask(db, task);
           this.events.emit("task-change", { type: "created", task });
         } catch (err) {
           console.error("Failed to save task from agent:", err);
@@ -542,7 +577,7 @@ export class Orchestrator {
 
       case "error": {
         const { groupId, error } = msg.payload;
-        await this.deliverResponse(groupId, `⚠️ Error: ${error}`);
+        await this.deliverResponse(db, groupId, `⚠️ Error: ${error}`);
 
         break;
       }
@@ -578,7 +613,11 @@ export class Orchestrator {
       }
 
       case "compact-done": {
-        await this.handleCompactDone(msg.payload.groupId, msg.payload.summary);
+        await this.handleCompactDone(
+          db,
+          msg.payload.groupId,
+          msg.payload.summary,
+        );
 
         break;
       }
@@ -591,7 +630,7 @@ export class Orchestrator {
 
       case "task-list-request": {
         const { groupId } = msg.payload;
-        const tasks = await getAllTasks();
+        const tasks = await getAllTasks(db);
         const groupTasks = tasks.filter((t) => t.groupId === groupId);
         this.agentWorker?.postMessage({
           type: "task-list-response",
@@ -604,7 +643,7 @@ export class Orchestrator {
       case "update-task": {
         const { task } = msg.payload;
         try {
-          await saveTask(task);
+          await saveTask(db, task);
           this.events.emit("task-change", { type: "updated", task });
         } catch (err) {
           console.error("Failed to update task from agent:", err);
@@ -616,7 +655,8 @@ export class Orchestrator {
       case "delete-task": {
         const { id } = msg.payload;
         try {
-          await deleteTask(id);
+          await deleteTask(db, id);
+
           this.events.emit("task-change", { type: "deleted", id });
         } catch (err) {
           console.error("Failed to delete task from agent:", err);
@@ -628,13 +668,14 @@ export class Orchestrator {
   }
 
   /**
+   * @param {ShadowClawDatabase} db
    * @param {string} groupId
    * @param {string} summary
    *
    * @returns {Promise<void>}
    */
-  async handleCompactDone(groupId, summary) {
-    await clearGroupMessages(groupId);
+  async handleCompactDone(db, groupId, summary) {
+    await clearGroupMessages(db, groupId);
 
     const stored = {
       id: ulid(),
@@ -649,7 +690,7 @@ export class Orchestrator {
       isTrigger: false,
     };
 
-    await saveMessage(stored);
+    await saveMessage(db, stored);
 
     this.events.emit("context-compacted", { groupId, summary });
     this.events.emit("typing", { groupId, typing: false });
@@ -657,12 +698,13 @@ export class Orchestrator {
   }
 
   /**
+   * @param {ShadowClawDatabase} db
    * @param {string} groupId
    * @param {string} text
    *
    * @returns {Promise<void>}
    */
-  async deliverResponse(groupId, text) {
+  async deliverResponse(db, groupId, text) {
     const stored = {
       id: ulid(),
       groupId,
@@ -676,7 +718,7 @@ export class Orchestrator {
       isTrigger: false,
     };
 
-    await saveMessage(stored);
+    await saveMessage(db, stored);
     await this.router?.send(groupId, text);
 
     if (this.pendingScheduledTasks.has(groupId)) {

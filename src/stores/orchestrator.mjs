@@ -1,38 +1,43 @@
 // @ts-ignore
 import { Signal } from "signal-polyfill";
-import { DEFAULT_GROUP_ID } from "../config.mjs";
-import {
-  getRecentMessages,
-  getAllTasks,
-  saveTask,
-  deleteTask,
-} from "../db.mjs";
-import {
-  listGroupFiles,
-  requestStorageAccess,
-  getStorageStatus,
-} from "../storage.mjs";
 
-/** @typedef {import('../orchestrator.mjs').Orchestrator} Orchestrator */
-/** @typedef {import('../types.mjs').StoredMessage} StoredMessage */
-/** @typedef {import('../types.mjs').ThinkingLogEntry} ThinkingLogEntry */
-/** @typedef {import('../types.mjs').ToolActivity} ToolActivity */
-/** @typedef {import('../types.mjs').TokenUsage} TokenUsage */
+import { DEFAULT_GROUP_ID } from "../config.mjs";
+
+import { deleteTask } from "../db/deleteTask.mjs";
+import { getAllTasks } from "../db/getAllTasks.mjs";
+import { getRecentMessages } from "../db/getRecentMessages.mjs";
+import { saveTask } from "../db/saveTask.mjs";
+
+import { listGroupFiles } from "../storage/listGroupFiles.mjs";
+import { requestStorageAccess } from "../storage/requestStorageAccess.mjs";
+import { getStorageStatus } from "../storage/storage.mjs";
+
+/**
+ * @typedef {'idle'|'thinking'|'responding'|'error'} OrchestratorState
+ * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
+ * @typedef {import("../orchestrator.mjs").Orchestrator} Orchestrator
+ * @typedef {import("../storage/storage.mjs").StorageStatus} StorageStatus
+ * @typedef {import("../types.mjs").StoredMessage} StoredMessage
+ * @typedef {import("../types.mjs").Task} Task
+ * @typedef {import("../types.mjs").ThinkingLogEntry} ThinkingLogEntry
+ * @typedef {import("../types.mjs").TokenUsage} TokenUsage
+ * @typedef {import("../types.mjs").ToolActivity} ToolActivity
+ */
 
 /**
  * @typedef {Object} OrchestratorStoreState
  *
- * @property {StoredMessage[]} messages
  * @property {boolean} isTyping
- * @property {ToolActivity|null} toolActivity
- * @property {ThinkingLogEntry[]} activityLog
- * @property {'idle'|'thinking'|'responding'|'error'} state
- * @property {TokenUsage|null} tokenUsage
- * @property {string|null} error
- * @property {string} activeGroupId
  * @property {boolean} ready
+ * @property {OrchestratorState} state
+ * @property {StoredMessage[]} messages
  * @property {string[]} files
+ * @property {string} activeGroupId
  * @property {string} currentPath
+ * @property {string|null} error
+ * @property {ThinkingLogEntry[]} activityLog
+ * @property {TokenUsage|null} tokenUsage
+ * @property {ToolActivity|null} toolActivity
  */
 
 export class OrchestratorStore {
@@ -41,7 +46,7 @@ export class OrchestratorStore {
     this._messages = new Signal.State([]);
     /** @type {Signal.State<boolean>} */
     this._isTyping = new Signal.State(false);
-    /** @type {Signal.State<import('../storage.mjs').StorageStatus|null>} */
+    /** @type {Signal.State<StorageStatus|null>} */
     this._storageStatus = new Signal.State(null);
     /** @type {Signal.State<ToolActivity|null>} */
     this._toolActivity = new Signal.State(null);
@@ -57,7 +62,7 @@ export class OrchestratorStore {
     this._activeGroupId = new Signal.State(DEFAULT_GROUP_ID);
     /** @type {Signal.State<boolean>} */
     this._ready = new Signal.State(false);
-    /** @type {Signal.State<import('../types.mjs').Task[]>} */
+    /** @type {Signal.State<Task[]>} */
     this._tasks = new Signal.State([]);
     /** @type {Signal.State<string[]>} */
     this._files = new Signal.State([]);
@@ -111,10 +116,13 @@ export class OrchestratorStore {
 
   /**
    * Initialize the store with an Orchestrator instance
+   *
+   * @param {ShadowClawDatabase} db
    * @param {Orchestrator} orch
+   *
    * @returns {Promise<void>}
    */
-  async init(orch) {
+  async init(db, orch) {
     this.orchestrator = orch;
 
     // Subscribe to orchestrator events
@@ -150,6 +158,8 @@ export class OrchestratorStore {
     });
 
     orch.events.on("error", (/** @type {{error: string}} */ { error }) => {
+      console.error("[Orchestrator Error Event]", error);
+
       this._error.set(error);
       this._state.set("error");
     });
@@ -176,21 +186,28 @@ export class OrchestratorStore {
     });
 
     orch.events.on("task-change", () => {
-      this.loadTasks();
+      this.loadTasks(db);
     });
 
     orch.events.on("file-change", () => {
-      this.loadFiles();
+      this.loadFiles(db);
     });
 
     // Load initial history, tasks, and files
-    await Promise.all([this.loadHistory(), this.loadTasks(), this.loadFiles()]);
+    await Promise.all([
+      this.loadHistory(),
+      this.loadTasks(db),
+      this.loadFiles(db),
+    ]);
+
     this._ready.set(true);
   }
 
   /**
    * Send a message
+   *
    * @param {string} text
+   *
    * @returns {void}
    */
   sendMessage(text) {
@@ -199,7 +216,9 @@ export class OrchestratorStore {
 
   /**
    * Run a task by prompt
+   *
    * @param {string} prompt
+   *
    * @returns {void}
    */
   runTask(prompt) {
@@ -208,6 +227,7 @@ export class OrchestratorStore {
 
   /**
    * Start a new session
+   *
    * @returns {Promise<void>}
    */
   async newSession() {
@@ -216,10 +236,13 @@ export class OrchestratorStore {
 
   /**
    * Compact context
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async compactContext() {
-    return this.orchestrator?.compactContext?.(this._activeGroupId.get());
+  async compactContext(db) {
+    return this.orchestrator?.compactContext?.(db, this._activeGroupId.get());
   }
 
   /**
@@ -234,6 +257,7 @@ export class OrchestratorStore {
 
   /**
    * Load message history
+   *
    * @returns {Promise<void>}
    */
   async loadHistory() {
@@ -243,46 +267,59 @@ export class OrchestratorStore {
 
   /**
    * Load tasks
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async loadTasks() {
-    const allTasks = await getAllTasks();
+  async loadTasks(db) {
+    const allTasks = await getAllTasks(db);
+
     const currentGroupId = this._activeGroupId.get();
     this._tasks.set(allTasks.filter((t) => t.groupId === currentGroupId));
   }
 
   /**
    * Toggle a task
+   *
+   * @param {ShadowClawDatabase} db
    * @param {import('../types.mjs').Task} task
    * @param {boolean} enabled
    */
-  async toggleTask(task, enabled) {
+  async toggleTask(db, task, enabled) {
     const updatedTask = { ...task, enabled };
-    await saveTask(updatedTask);
-    await this.loadTasks();
+    await saveTask(db, updatedTask);
+    await this.loadTasks(db);
   }
 
   /**
    * Delete a task
+   *
+   * @param {ShadowClawDatabase} db
    * @param {string} id
    */
-  async deleteTask(id) {
-    await deleteTask(id);
-    await this.loadTasks();
+  async deleteTask(db, id) {
+    await deleteTask(db, id);
+    await this.loadTasks(db);
   }
 
   /**
    * Clear all tasks for the current group
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async clearAllTasks() {
-    const allTasks = await getAllTasks();
+  async clearAllTasks(db) {
+    const allTasks = await getAllTasks(db);
     const currentGroupId = this._activeGroupId.get();
     const groupTasks = allTasks.filter((t) => t.groupId === currentGroupId);
+
     for (const task of groupTasks) {
-      await deleteTask(task.id);
+      await deleteTask(db, task.id);
     }
-    await this.loadTasks();
+
+    await this.loadTasks(db);
   }
 
   /**
@@ -295,12 +332,15 @@ export class OrchestratorStore {
 
   /**
    * Restore tasks from backup
+   *
+   * @param {ShadowClawDatabase} db
    * @param {import('../types.mjs').Task[]} tasks
+   *
    * @returns {Promise<void>}
    */
-  async restoreTasksFromBackup(tasks) {
+  async restoreTasksFromBackup(db, tasks) {
     // First, clear all existing tasks
-    await this.clearAllTasks();
+    await this.clearAllTasks(db);
 
     const currentGroupId = this._activeGroupId.get();
     // Save each task with current group ID and new IDs
@@ -312,21 +352,28 @@ export class OrchestratorStore {
           ? crypto.randomUUID()
           : `task-${Date.now()}-${Math.random()}`,
       };
-      await saveTask(taskToSave);
+
+      await saveTask(db, taskToSave);
     }
-    await this.loadTasks();
+
+    await this.loadTasks(db);
   }
 
   /**
    * Load files
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async loadFiles() {
+  async loadFiles(db) {
     const groupId = this._activeGroupId.get();
     const currentPath = this._currentPath.get();
     try {
-      this._storageStatus.set(await getStorageStatus());
-      const files = await listGroupFiles(groupId, currentPath);
+      this._storageStatus.set(await getStorageStatus(db));
+
+      const files = await listGroupFiles(db, groupId, currentPath);
+
       this._files.set(files);
     } catch (err) {
       console.error("Failed to load files in store:", err);
@@ -335,12 +382,15 @@ export class OrchestratorStore {
 
   /**
    * Request storage access
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async grantStorageAccess() {
+  async grantStorageAccess(db) {
     try {
-      await requestStorageAccess();
-      await this.loadFiles(); // Refresh files and status after granting access
+      await requestStorageAccess(db);
+      await this.loadFiles(db); // Refresh files and status after granting access
     } catch (err) {
       console.error("Failed to grant storage access:", err);
     }
@@ -348,24 +398,30 @@ export class OrchestratorStore {
 
   /**
    * Navigate into a folder
+   *
+   * @param {ShadowClawDatabase} db
    * @param {string} folderName
+   *
    * @returns {Promise<void>}
    */
-  async navigateIntoFolder(folderName) {
+  async navigateIntoFolder(db, folderName) {
     const currentPath = this._currentPath.get();
     const newPath =
       currentPath === "."
         ? folderName.replace(/\/$/, "")
         : `${currentPath}/${folderName.replace(/\/$/, "")}`;
     this._currentPath.set(newPath);
-    await this.loadFiles();
+    await this.loadFiles(db);
   }
 
   /**
    * Navigate back to parent folder
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async navigateBackFolder() {
+  async navigateBackFolder(db) {
     const currentPath = this._currentPath.get();
     if (currentPath === ".") return;
 
@@ -373,23 +429,29 @@ export class OrchestratorStore {
     parts.pop();
     const newPath = parts.length === 0 ? "." : parts.join("/");
     this._currentPath.set(newPath);
-    await this.loadFiles();
+    await this.loadFiles(db);
   }
 
   /**
    * Reset to root folder
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async resetToRootFolder() {
+  async resetToRootFolder(db) {
     this._currentPath.set(".");
-    await this.loadFiles();
+
+    await this.loadFiles(db);
   }
 
   /**
    * Set active group
+   *
+   * @param {ShadowClawDatabase} db
    * @param {string} groupId
    */
-  setActiveGroup(groupId) {
+  setActiveGroup(db, groupId) {
     this._activeGroupId.set(groupId);
     this._messages.set([]);
     this._activityLog.set([]);
@@ -397,13 +459,15 @@ export class OrchestratorStore {
     this._isTyping.set(false);
     this._toolActivity.set(null);
     this._currentPath.set(".");
+
     this.loadHistory();
-    this.loadTasks();
-    this.loadFiles();
+    this.loadTasks(db);
+    this.loadFiles(db);
   }
 
   /**
    * Get current state
+   *
    * @returns {OrchestratorStoreState}
    */
   getState() {

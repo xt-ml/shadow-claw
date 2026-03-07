@@ -12,7 +12,7 @@
     "clean:service-worker": "node bin/rimraf.mjs workbox-*.js && node bin/rimraf.mjs service-worker.js",
     "format": "prettier **/*.{html,css,js,mjs} --write",
     "start": "npm run clean:service-worker && npm run build:service-worker && node bin/serve.mjs",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
+    "test": "npm -s run tsc && NODE_OPTIONS=--experimental-vm-modules jest",
     "tsc": "tsc --noEmit"
   },
   "dependencies": {

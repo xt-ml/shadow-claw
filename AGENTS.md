@@ -26,8 +26,8 @@ graph LR
     subgraph Core ["src/ — Core"]
         orchestrator["orchestrator.mjs\nstate machine + queue"]
         config["config.mjs\nconstants + providers"]
-        db["db.mjs\nIndexedDB CRUD"]
-        storage["storage.mjs\nOPFS + local folder"]
+        db["db/db.mjs\nIndexedDB CRUD"]
+        storage["storage/storage.mjs\nOPFS + local folder"]
         crypto["crypto.mjs\nAES-256-GCM"]
         router["router.mjs\nchannel dispatch"]
         types["types.mjs\nJSDoc @typedefs"]
@@ -35,7 +35,7 @@ graph LR
 
     subgraph Agent ["src/ — Agent"]
         tools["tools.mjs\ntool schemas"]
-        shell["shell.mjs\nJS shell emulator"]
+        shell["shell/shell.mjs\nJS shell emulator"]
         vm["vm.mjs\nv86 Alpine VM"]
         providers["providers.mjs\nLLM registry"]
         scheduler["task-scheduler.mjs\ncron evaluator"]
@@ -59,7 +59,7 @@ graph LR
 ### File Naming
 
 - All source files use `.mjs` (ES modules). No `.ts`, `.tsx`, or `.js`.
-- Tests live **next to** their source file: `src/shell.mjs` → `src/shell.test.mjs`.
+- Tests live **next to** their source file: `src/shell/shell.mjs` → `src/shell/shell.test.mjs`.
 - Components are in `src/components/shadow-claw*.mjs`.
 
 ### Types
@@ -121,12 +121,12 @@ Node-only packages (Express, Jest, Workbox CLI) belong in `devDependencies`.
 
 ### IndexedDB
 
-All DB access goes through `src/db.mjs`. Never call `indexedDB` directly elsewhere.
+All DB access goes through `src/db/db.mjs`. Never call `indexedDB` directly elsewhere.
 Call `openDatabase()` once at startup (done in `index.mjs`).
 
 ### Storage
 
-All file I/O goes through `src/storage.mjs`. The group workspace root is:
+All file I/O goes through `src/storage/`. The group workspace root is:
 `shadowclaw/<groupId>/workspace/`. `MEMORY.md` lives at the workspace root and is loaded
 as system context on every agent invocation.
 
@@ -183,6 +183,6 @@ It concatenates the base prompt with `MEMORY.md` content.
 - **Do not** add a frontend framework (React, Vue, Svelte, etc.).
 - **Do not** add `.ts` source files — use JSDoc in `.mjs`.
 - **Do not** add runtime npm dependencies for frontend code — use importmap CDN URLs.
-- **Do not** call `indexedDB` or `navigator.storage.getDirectory()` directly — use `src/db.mjs` and `src/storage.mjs`.
+- **Do not** call `indexedDB` or `navigator.storage.getDirectory()` directly — use `src/db/db.mjs` and `src/storage/storage.mjs`.
 - **Do not** `postMessage` to the worker with ad-hoc shapes — use the typed protocol above.
 - **Do not** store API keys in plaintext — always go through `src/crypto.mjs`.

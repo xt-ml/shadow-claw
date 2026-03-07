@@ -1,6 +1,12 @@
+import { getDb } from "../db/db.mjs";
+import { saveTask } from "../db/saveTask.mjs";
+import { effect } from "../effect.mjs";
 import { orchestratorStore } from "../stores/orchestrator.mjs";
 
-import { effect } from "../effect.mjs";
+/**
+ * @typedef {import("../types.mjs").Task} Task
+ * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
+ */
 
 export class ShadowClawTasks extends HTMLElement {
   constructor() {
@@ -10,7 +16,7 @@ export class ShadowClawTasks extends HTMLElement {
     this.tasks = [];
     /** @type {() => void} */
     this.cleanup = () => {};
-    /** @type {import('../types.mjs').Task|null} */
+    /** @type {Task|null} */
     this.editingTask = null;
   }
 
@@ -382,12 +388,20 @@ export class ShadowClawTasks extends HTMLElement {
   }
 
   connectedCallback() {
+    const db = getDb();
+
+    if (!db) {
+      throw new Error(
+        "shadow-claw-tasks cannot get the db on connectedCallback",
+      );
+    }
+
     this.render();
 
     // Re-render when tasks change
     this.cleanup = effect(() => {
       orchestratorStore.tasks;
-      this.updateTaskList();
+      this.updateTaskList(db);
     });
 
     const root = this.shadowRoot;
@@ -403,13 +417,15 @@ export class ShadowClawTasks extends HTMLElement {
     restoreBtn?.addEventListener("click", () => {
       if (restoreInput instanceof HTMLInputElement) restoreInput.click();
     });
+
     restoreInput?.addEventListener("change", (e) => {
-      if (e.target instanceof HTMLInputElement) this.handleRestore(e.target);
+      if (e.target instanceof HTMLInputElement)
+        this.handleRestore(db, e.target);
     });
 
     // Clear all button
     const clearBtn = root.querySelector(".clear-btn");
-    clearBtn?.addEventListener("click", () => this.handleClearAll());
+    clearBtn?.addEventListener("click", () => this.handleClearAll(db));
 
     // Add task button
     const addBtn = root.querySelector(".add-btn");
@@ -433,7 +449,9 @@ export class ShadowClawTasks extends HTMLElement {
 
     form?.addEventListener("submit", (e) => {
       e.preventDefault();
-      if (form) this.handleEditSubmit(form);
+      if (form) {
+        this.handleEditSubmit(db, form);
+      }
     });
 
     // Close dialog when clicking outside (on backdrop)
@@ -450,18 +468,30 @@ export class ShadowClawTasks extends HTMLElement {
 
   render() {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
+
     const template = document.createElement("template");
     template.innerHTML = ShadowClawTasks.getTemplate();
+
     root.innerHTML = "";
     root.appendChild(template.content.cloneNode(true));
   }
 
-  updateTaskList() {
+  /**
+   * @param {ShadowClawDatabase} db
+   */
+  updateTaskList(db) {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
+
     const list = root.querySelector(".task-list");
-    if (!list) return;
+    if (!list) {
+      return;
+    }
 
     const tasks = orchestratorStore.tasks;
 
@@ -472,11 +502,12 @@ export class ShadowClawTasks extends HTMLElement {
           <p style="font-size: 12px;">Ask the agent to create one using "create_task".</p>
         </div>
       `;
+
       return;
     }
 
     list.innerHTML = "";
-    tasks.forEach((/** @type {import('../types.mjs').Task} */ task) => {
+    tasks.forEach((/** @type {Task} */ task) => {
       const item = document.createElement("div");
       item.className = "task-item";
 
@@ -507,9 +538,10 @@ export class ShadowClawTasks extends HTMLElement {
       const toggle = /** @type {HTMLInputElement | null} */ (
         item.querySelector(".toggle-input")
       );
+
       toggle?.addEventListener("change", (e) => {
         const target = /** @type {HTMLInputElement} */ (e.target);
-        orchestratorStore.toggleTask(task, target.checked);
+        orchestratorStore.toggleTask(db, task, target.checked);
       });
 
       const runBtn = item.querySelector(".run-btn");
@@ -519,7 +551,9 @@ export class ShadowClawTasks extends HTMLElement {
       editBtn?.addEventListener("click", () => this.handleEdit(task));
 
       const deleteBtn = item.querySelector(".delete-btn");
-      deleteBtn?.addEventListener("click", () => this.handleDelete(task.id));
+      deleteBtn?.addEventListener("click", () =>
+        this.handleDelete(db, task.id),
+      );
 
       list.appendChild(item);
     });
@@ -527,7 +561,8 @@ export class ShadowClawTasks extends HTMLElement {
 
   /**
    * Run a task
-   * @param {import('../types.mjs').Task} task
+   *
+   * @param {Task} task
    */
   handleRun(task) {
     orchestratorStore.runTask(task.prompt);
@@ -535,13 +570,17 @@ export class ShadowClawTasks extends HTMLElement {
 
   /**
    * Delete a task
+   *
+   * @param {ShadowClawDatabase} db
    * @param {string} id
    */
-  async handleDelete(id) {
-    if (!confirm("Are you sure you want to delete this scheduled task?"))
+  async handleDelete(db, id) {
+    if (!confirm("Are you sure you want to delete this scheduled task?")) {
       return;
+    }
+
     try {
-      await orchestratorStore.deleteTask(id);
+      await orchestratorStore.deleteTask(db, id);
     } catch (err) {
       console.error("Failed to delete task:", err);
     }
@@ -553,14 +592,18 @@ export class ShadowClawTasks extends HTMLElement {
   handleAdd() {
     this.editingTask = null;
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     const dialog = root.querySelector("dialog");
     const form = root.querySelector(".edit-dialog-form");
     const title = root.querySelector(".dialog-title");
     const submitBtn = root.querySelector(".dialog-submit");
 
-    if (!form || !(form instanceof HTMLFormElement)) return;
+    if (!form || !(form instanceof HTMLFormElement)) {
+      return;
+    }
 
     // Update dialog for add mode
     if (title) title.textContent = "Add Task";
@@ -575,19 +618,24 @@ export class ShadowClawTasks extends HTMLElement {
 
   /**
    * Open edit dialog for a task
-   * @param {import('../types.mjs').Task} task
+   *
+   * @param {Task} task
    */
   handleEdit(task) {
     this.editingTask = task;
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     const dialog = root.querySelector("dialog");
     const form = root.querySelector(".edit-dialog-form");
     const title = root.querySelector(".dialog-title");
     const submitBtn = root.querySelector(".dialog-submit");
 
-    if (!form || !(form instanceof HTMLFormElement)) return;
+    if (!form || !(form instanceof HTMLFormElement)) {
+      return;
+    }
 
     // Update dialog for edit mode
     if (title) title.textContent = "Edit Task";
@@ -609,9 +657,11 @@ export class ShadowClawTasks extends HTMLElement {
 
   /**
    * Handle form submission (add or edit)
+   *
+   * @param {ShadowClawDatabase} db
    * @param {HTMLFormElement} form
    */
-  async handleEditSubmit(form) {
+  async handleEditSubmit(db, form) {
     const formData = new FormData(form);
     const schedule = formData.get("schedule");
     const prompt = formData.get("prompt");
@@ -622,7 +672,6 @@ export class ShadowClawTasks extends HTMLElement {
     }
 
     try {
-      const { saveTask } = await import("../db.mjs");
       let taskToSave;
 
       if (this.editingTask) {
@@ -648,8 +697,8 @@ export class ShadowClawTasks extends HTMLElement {
         };
       }
 
-      await saveTask(taskToSave);
-      await orchestratorStore.loadTasks();
+      await saveTask(db, taskToSave);
+      await orchestratorStore.loadTasks(db);
 
       const root = this.shadowRoot;
       const dialog = root?.querySelector("dialog");
@@ -708,9 +757,11 @@ export class ShadowClawTasks extends HTMLElement {
 
   /**
    * Handle restore (upload and import JSON)
+   *
+   * @param {ShadowClawDatabase} db
    * @param {HTMLInputElement} input
    */
-  async handleRestore(input) {
+  async handleRestore(db, input) {
     const files = input.files;
     if (!files || files.length === 0) return;
 
@@ -739,7 +790,7 @@ export class ShadowClawTasks extends HTMLElement {
         throw new Error("Invalid backup file format");
       }
 
-      await orchestratorStore.restoreTasksFromBackup(tasks);
+      await orchestratorStore.restoreTasksFromBackup(db, tasks);
       input.value = "";
       alert("Tasks restored successfully!");
     } catch (err) {
@@ -755,8 +806,10 @@ export class ShadowClawTasks extends HTMLElement {
 
   /**
    * Handle clear all (delete all tasks)
+   *
+   * @param {ShadowClawDatabase} db
    */
-  async handleClearAll() {
+  async handleClearAll(db) {
     if (!confirm("Delete ALL tasks? This cannot be undone!")) {
       return;
     }
@@ -765,7 +818,7 @@ export class ShadowClawTasks extends HTMLElement {
       const btn = this.shadowRoot?.querySelector(".clear-btn");
       if (btn instanceof HTMLButtonElement) btn.disabled = true;
       if (btn) btn.textContent = "⏳";
-      await orchestratorStore.clearAllTasks();
+      await orchestratorStore.clearAllTasks(db);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       alert(`Failed to clear tasks: ${message}`);

@@ -1,5 +1,6 @@
 .cache
 .env
+coverage
 node_modules
 service-worker.js
 workbox-*.js

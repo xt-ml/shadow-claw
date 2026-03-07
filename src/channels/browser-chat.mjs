@@ -37,6 +37,7 @@ export class BrowserChatChannel {
 
   /**
    * Called by the UI when the user submits a message.
+   *
    * @param {string} text
    * @param {string} [groupId]
    */
@@ -50,13 +51,16 @@ export class BrowserChatChannel {
       timestamp: Date.now(),
       channel: /** @type {import('../types.mjs').ChannelType} */ ("browser"),
     };
+
     this.messageCallback?.(msg);
   }
 
   /**
    * Send a response to the browser chat UI for display.
+   *
    * @param {string} groupId
    * @param {string} text
+   *
    * @returns {Promise<void>}
    */
   async send(groupId, text) {
@@ -65,6 +69,7 @@ export class BrowserChatChannel {
 
   /**
    * Show/hide typing indicator in the UI.
+   *
    * @param {string} groupId
    * @param {boolean} typing
    */
@@ -74,6 +79,7 @@ export class BrowserChatChannel {
 
   /**
    * Register callback for inbound messages (from UI → orchestrator).
+   *
    * @param {MessageCallback} callback
    */
   onMessage(callback) {
@@ -82,6 +88,7 @@ export class BrowserChatChannel {
 
   /**
    * Register callback for typing indicator changes.
+   *
    * @param {TypingCallback} callback
    */
   onTyping(callback) {
@@ -90,6 +97,7 @@ export class BrowserChatChannel {
 
   /**
    * Register callback for displaying messages in the UI.
+   *
    * @param {MessageDisplayCallback} callback
    */
   onDisplay(callback) {
@@ -98,6 +106,7 @@ export class BrowserChatChannel {
 
   /**
    * Set the currently active group (for UI tab switching).
+   *
    * @param {string} groupId
    */
   setActiveGroup(groupId) {
@@ -106,6 +115,7 @@ export class BrowserChatChannel {
 
   /**
    * Get the currently active group.
+   *
    * @returns {string}
    */
   getActiveGroup() {

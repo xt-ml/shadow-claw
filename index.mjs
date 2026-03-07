@@ -28,7 +28,7 @@ async function initializeApp() {
 
     // Create and initialize orchestrator
     const orchestrator = new Orchestrator();
-    await orchestrator.init();
+    const db = await orchestrator.init();
 
     // Get or create the UI element
     let uiElement = document.querySelector("shadow-claw");
@@ -41,7 +41,7 @@ async function initializeApp() {
     if (uiElement) {
       /** @type {ShadowClaw} */
       const ui = /** @type {any} */ (uiElement);
-      await ui.initialize(orchestrator);
+      await ui.initialize(db, orchestrator);
     }
 
     console.log("✅ ShadowClaw initialized successfully");

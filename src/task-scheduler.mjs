@@ -1,19 +1,20 @@
+import { getEnabledTasks } from "./db/getEnabledTasks.mjs";
+import { updateTaskLastRun } from "./db/updateTaskLastRun.mjs";
+
+import { SCHEDULER_INTERVAL } from "./config.mjs";
+
+/**
+ * @typedef {(groupId: string, prompt: string) => Promise<void>} TaskRunner
+ * @typedef {import("./types.mjs").Task} Task
+ */
+
 /**
  * ShadowClaw — Task Scheduler
  *
  * Evaluates cron expressions and fires tasks on schedule.
+ *
  * Runs on the main thread via setInterval.
  */
-
-import { SCHEDULER_INTERVAL } from "./config.mjs";
-import { getEnabledTasks, updateTaskLastRun } from "./db.mjs";
-
-/**
- * @typedef {(groupId: string, prompt: string) => Promise<void>} TaskRunner
- */
-
-import "./types.mjs"; // Import types
-
 export class TaskScheduler {
   /**
    * @param {TaskRunner} runner
@@ -21,6 +22,7 @@ export class TaskScheduler {
   constructor(runner) {
     /** @type {TaskRunner} */
     this.runner = runner;
+
     /** @type {ReturnType<typeof setInterval>|null} */
     this.interval = null;
   }
@@ -29,8 +31,12 @@ export class TaskScheduler {
    * Start the scheduler. Checks for due tasks every 60 seconds.
    */
   start() {
-    if (this.interval) return;
+    if (this.interval) {
+      return;
+    }
+
     this.interval = setInterval(() => this.tick(), SCHEDULER_INTERVAL);
+
     // Immediate first check
     this.tick();
   }
@@ -41,6 +47,7 @@ export class TaskScheduler {
   stop() {
     if (this.interval) {
       clearInterval(this.interval);
+
       this.interval = null;
     }
   }
@@ -73,12 +80,16 @@ export class TaskScheduler {
   /**
    * Check if a task already ran in this minute (prevent double-execution).
 
-   * @param {import('./types.mjs').Task} task
+   * @param {Task} task
    * @param {Date} now
+   * 
    * @returns {boolean}
    */
   ranThisMinute(task, now) {
-    if (!task.lastRun) return false;
+    if (!task.lastRun) {
+      return false;
+    }
+
     const last = new Date(task.lastRun);
     return (
       last.getFullYear() === now.getFullYear() &&
@@ -98,13 +109,17 @@ export class TaskScheduler {
 
 /**
  * Match a cron expression against a date
+ *
  * @param {string} expr
  * @param {Date} date
+ *
  * @returns {boolean}
  */
 export function matchesCron(expr, date) {
   const parts = expr.trim().split(/\s+/);
-  if (parts.length !== 5) return false;
+  if (parts.length !== 5) {
+    return false;
+  }
 
   const [min, hour, dom, mon, dow] = parts;
   return (
@@ -118,19 +133,25 @@ export function matchesCron(expr, date) {
 
 /**
  * Match a single cron field
+ *
  * @param {string} field
  * @param {number} value
+ *
  * @returns {boolean}
  */
 function matchField(field, value) {
-  if (field === "*") return true;
+  if (field === "*") {
+    return true;
+  }
 
   return field.split(",").some((part) => {
     // Step: */N or N/M
     if (part.includes("/")) {
       const [range, stepStr] = part.split("/");
       const step = parseInt(stepStr, 10);
-      if (isNaN(step) || step <= 0) return false;
+      if (isNaN(step) || step <= 0) {
+        return false;
+      }
 
       if (range === "*") {
         return value % step === 0;

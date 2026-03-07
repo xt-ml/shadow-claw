@@ -3,35 +3,41 @@ import JSZip from "jszip";
 
 import { CONFIG_KEYS } from "../config.mjs";
 
-import { fileViewerStore } from "../stores/file-viewer.mjs";
-import { getConfig, exportChatData, importChatData } from "../db.mjs";
-import { Orchestrator } from "../orchestrator.mjs";
-import { orchestratorStore } from "../stores/orchestrator.mjs";
-import { renderMarkdown } from "../markdown.mjs";
-
-import {
-  getStorageEstimate,
-  requestPersistentStorage,
-  isPersistent,
-  selectStorageDirectory,
-  resetStorageDirectory,
-} from "../storage.mjs";
-
-import { themeStore, Themes } from "../stores/theme.mjs";
-import { formatDateForFilename, formatTimestamp } from "../utils.mjs";
+import { exportChatData } from "../db/exportChatData.mjs";
+import { getConfig } from "../db/getConfig.mjs";
+import { importChatData } from "../db/importChatData.mjs";
 
 import { effect } from "../effect.mjs";
+import { renderMarkdown } from "../markdown.mjs";
+import { Orchestrator } from "../orchestrator.mjs";
 
-import "./shadow-claw-tasks.mjs";
+import { resetStorageDirectory } from "../storage/storage.mjs";
+
+import { requestPersistentStorage } from "../storage/requestPersistentStorage.mjs";
+import { getStorageEstimate } from "../storage/getStorageEstimate.mjs";
+import { selectStorageDirectory } from "../storage/selectStorageDirectory.mjs";
+
+import { isPersistent } from "../storage/isPersistent.mjs";
+
+import { fileViewerStore } from "../stores/file-viewer.mjs";
+import { orchestratorStore } from "../stores/orchestrator.mjs";
+import { Themes, themeStore } from "../stores/theme.mjs";
+
+import { formatDateForFilename, formatTimestamp } from "../utils.mjs";
+
 import "./shadow-claw-files.mjs";
-
+import "./shadow-claw-tasks.mjs";
 import "../types.mjs";
 
-/** @typedef {import('../stores/file-viewer.mjs').FileInfo} FileInfo */
-/** @typedef {import('../stores/file-viewer.mjs').FileViewerStore} FileViewerStoreInstance */
-/** @typedef {import('../stores/orchestrator.mjs').OrchestratorStore} OrchestratorStoreInstance */
-/** @typedef {import('../stores/orchestrator.mjs').TokenUsage} TokenUsage */
-/** @typedef {import('../stores/orchestrator.mjs').ToolActivity} ToolActivity */
+/**
+ * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
+ * @typedef {import("../stores/file-viewer.mjs").FileInfo} FileInfo
+ * @typedef {import("../stores/file-viewer.mjs").FileViewerStore} FileViewerStoreInstance
+ * @typedef {import("../stores/orchestrator.mjs").OrchestratorStore} OrchestratorStoreInstance
+ * @typedef {import("../stores/orchestrator.mjs").TokenUsage} TokenUsage
+ * @typedef {import("../stores/orchestrator.mjs").ToolActivity} ToolActivity
+ * @typedef {import("../types.mjs").LLMProvider} LLMProvider
+ */
 
 /**
  * ShadowClaw - main application component
@@ -49,17 +55,22 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Create the template with Declarative Shadow DOM
+   *
    * @param {string} template - HTML template
+   *
    * @returns {HTMLTemplateElement}
    */
   static createTemplate(template) {
     const tmpl = document.createElement("template");
+
     tmpl.innerHTML = template;
+
     return tmpl;
   }
 
   /**
    * Get the static template HTML and styles
+   *
    * @returns {string}
    */
   static getTemplate() {
@@ -1299,17 +1310,16 @@ export class ShadowClaw extends HTMLElement {
   }
 
   async connectedCallback() {
-    // initialize theme
-    // Theme is initialized by the store import itself
-
     // apply highlight.js atom-one-dark.min.css to shadow dom
     const cssText = await (
       await fetch(
         "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css",
       )
     ).text();
+
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(cssText);
+
     if (this.shadowRoot?.adoptedStyleSheets) {
       this.shadowRoot.adoptedStyleSheets.push(sheet);
     }
@@ -1317,10 +1327,13 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Initialize the component with an orchestrator
+   *
+   * @param {ShadowClawDatabase} db
    * @param {Orchestrator} orchestrator
+   *
    * @returns {Promise<void>}
    */
-  async initialize(orchestrator) {
+  async initialize(db, orchestrator) {
     this.orchestrator = orchestrator;
 
     // Render the shadow DOM
@@ -1330,13 +1343,13 @@ export class ShadowClaw extends HTMLElement {
     }
 
     // Bind event listeners
-    this.bindEventListeners();
+    this.bindEventListeners(db);
 
     // Load initial settings
-    await this.loadSettings();
+    await this.loadSettings(db);
 
     // Initialize the orchestratorStore
-    await orchestratorStore.init(this.orchestrator);
+    await orchestratorStore.init(db, orchestrator);
 
     // React to store changes using effect()
     this.setupEffects();
@@ -1354,11 +1367,16 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Bind all event listeners to the component
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {void}
    */
-  bindEventListeners() {
+  bindEventListeners(db) {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     // Navigation items
     root.querySelectorAll(".nav-item[data-page]").forEach((item) => {
@@ -1419,6 +1437,7 @@ export class ShadowClaw extends HTMLElement {
         const event = e;
         if (event.key === "Enter" && !event.shiftKey) {
           event.preventDefault();
+
           this.sendMessage();
         }
       });
@@ -1443,43 +1462,45 @@ export class ShadowClaw extends HTMLElement {
       '[data-setting="provider-select"]',
     );
     if (providerSelect) {
-      providerSelect.addEventListener("change", () => this.onProviderChange());
+      providerSelect.addEventListener("change", () =>
+        this.onProviderChange(db),
+      );
     }
 
     // Settings actions
     const saveApiKeyBtn = root.querySelector('[data-action="save-api-key"]');
     if (saveApiKeyBtn) {
-      saveApiKeyBtn.addEventListener("click", () => this.saveApiKey());
+      saveApiKeyBtn.addEventListener("click", () => this.saveApiKey(db));
     }
 
     const saveModelBtn = root.querySelector('[data-action="save-model"]');
     if (saveModelBtn) {
-      saveModelBtn.addEventListener("click", () => this.saveModel());
+      saveModelBtn.addEventListener("click", () => this.saveModel(db));
     }
 
     const saveNameBtn = root.querySelector(
       '[data-action="save-assistant-name"]',
     );
     if (saveNameBtn) {
-      saveNameBtn.addEventListener("click", () => this.saveAssistantName());
+      saveNameBtn.addEventListener("click", () => this.saveAssistantName(db));
     }
 
     // Clear chat button
     const clearChatBtn = root.querySelector('[data-action="clear-chat"]');
     if (clearChatBtn) {
-      clearChatBtn.addEventListener("click", () => this.handleClearChat());
+      clearChatBtn.addEventListener("click", () => this.handleClearChat(db));
     }
 
     // Download chat button
     const downloadChatBtn = root.querySelector('[data-action="download-chat"]');
     if (downloadChatBtn) {
-      downloadChatBtn.addEventListener("click", () => this.downloadChat());
+      downloadChatBtn.addEventListener("click", () => this.downloadChat(db));
     }
 
     // Restore chat button
     const restoreChatBtn = root.querySelector('[data-action="restore-chat"]');
     if (restoreChatBtn) {
-      restoreChatBtn.addEventListener("click", () => this.restoreChat());
+      restoreChatBtn.addEventListener("click", () => this.restoreChat(db));
     }
 
     // Close modal
@@ -1493,25 +1514,30 @@ export class ShadowClaw extends HTMLElement {
     // Storage actions
     root
       .querySelector('[data-action="request-persistent"]')
-      ?.addEventListener("click", () => this.handleRequestPersistent());
+      ?.addEventListener("click", () => this.handleRequestPersistent(db));
+
     root
       .querySelector('[data-action="compact-chat"]')
-      ?.addEventListener("click", () => this.handleCompactChat());
+      ?.addEventListener("click", () => this.handleCompactChat(db));
+
     root
       .querySelector('[data-action="clear-chat"]')
-      ?.addEventListener("click", () => this.handleClearChat());
+      ?.addEventListener("click", () => this.handleClearChat(db));
+
     root
       .querySelector('[data-action="change-storage-dir"]')
-      ?.addEventListener("click", () => this.handleChangeStorageDir());
+      ?.addEventListener("click", () => this.handleChangeStorageDir(db));
+
     root
       .querySelector('[data-action="reset-storage-dir"]')
-      ?.addEventListener("click", () => this.handleResetStorageDir());
+      ?.addEventListener("click", () => this.handleResetStorageDir(db));
 
     // Theme toggle
     const themeToggle = root.querySelector(".theme-toggle");
     if (themeToggle) {
       themeToggle.addEventListener("click", () => {
         const { resolved } = themeStore.getTheme();
+
         const newTheme = resolved === Themes.Dark ? Themes.Light : Themes.Dark;
         themeStore.setTheme(newTheme);
       });
@@ -1532,6 +1558,7 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Update host element theme classes
+   *
    * @param {string} theme
    */
   updateHostTheme(theme) {
@@ -1546,11 +1573,14 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Update theme toggle icons based on current theme
+   *
    * @param {string} theme
    */
   updateThemeIcons(theme) {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     const sunIcon = /** @type {HTMLElement} */ (
       root.querySelector(".sun-icon")
@@ -1572,18 +1602,23 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Show a specific page
+   *
    * @param {string} page
+   *
    * @returns {void}
    */
   showPage(page) {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     // Hide all pages
     root.querySelectorAll(".page").forEach((p) => {
       const el = p;
       el.classList.remove("active");
     });
+
     root.querySelectorAll(".nav-item").forEach((n) => {
       const el = n;
       el.classList.remove("active");
@@ -1614,22 +1649,30 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Send a message
+   *
    * @returns {Promise<void>}
    */
   async sendMessage() {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     const input = root.querySelector(".chat-input");
-    if (!input) return;
+    if (!input) {
+      return;
+    }
 
     /** @type {HTMLTextAreaElement} */
     const textArea = /** @type {HTMLTextAreaElement} */ (input);
     const message = textArea.value.trim();
 
-    if (!message) return;
+    if (!message) {
+      return;
+    }
     if (!this.orchestrator) {
       alert("ShadowClaw is still initializing. Please try again.");
+
       return;
     }
 
@@ -1641,6 +1684,7 @@ export class ShadowClaw extends HTMLElement {
       orchestratorStore.sendMessage(message);
     } catch (err) {
       console.error("Error sending message:", err);
+
       const errorMsg = err instanceof Error ? err.message : String(err);
       // Small manual override for error display if needed,
       // though typically orchestratorStore handles this.
@@ -1653,7 +1697,9 @@ export class ShadowClaw extends HTMLElement {
    */
   setupEffects() {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     // React to messages
     effect(() => {
@@ -1667,13 +1713,16 @@ export class ShadowClaw extends HTMLElement {
             const type = msg.isFromMe ? "assistant" : "user";
             const assistantName =
               localStorage.getItem("assistantName") || "rover";
+
             const sender = msg.isFromMe ? assistantName : msg.sender || "You";
 
             const msgDiv = document.createElement("div");
             msgDiv.className = `message ${type}`;
+
             const timestamp = msg.timestamp
               ? formatTimestamp(msg.timestamp)
               : "";
+
             msgDiv.innerHTML = `
             <div class="message-header">
               <div class="message-sender">${sender}</div>
@@ -1681,9 +1730,11 @@ export class ShadowClaw extends HTMLElement {
             </div>
             <div class="message-content">${renderMarkdown(msg.content)}</div>
           `;
+
             container.appendChild(msgDiv);
           },
         );
+
         container.scrollTop = container.scrollHeight;
       }
     });
@@ -1731,6 +1782,7 @@ export class ShadowClaw extends HTMLElement {
                 `<div>[${entry.level}] ${entry.label || ""}: ${entry.message}</div>`,
             )
             .join("");
+
           logEl.scrollTop = logEl.scrollHeight;
         } else {
           logEl.classList.remove("active");
@@ -1748,8 +1800,14 @@ export class ShadowClaw extends HTMLElement {
           modal.classList.add("active");
           const title = modal.querySelector(".modal-title");
           const content = modal.querySelector(".file-content");
-          if (title) title.textContent = `File: ${file.name}`;
-          if (content) content.textContent = file.content;
+
+          if (title) {
+            title.textContent = `File: ${file.name}`;
+          }
+
+          if (content) {
+            content.textContent = file.content;
+          }
         } else {
           modal.classList.remove("active");
         }
@@ -1763,7 +1821,9 @@ export class ShadowClaw extends HTMLElement {
         ".chat-header .status-indicator",
       )?.nextSibling;
       const state = orchestratorStore.state;
+
       console.log("Orchestrator state changed:", state);
+
       if (statusIndicator) {
         /** @type {HTMLElement} */
         const el = /** @type {HTMLElement} */ (statusIndicator);
@@ -1774,6 +1834,7 @@ export class ShadowClaw extends HTMLElement {
               ? "var(--shadow-claw-error-color, #ef4444)"
               : "var(--shadow-claw-success-color, #10b981)";
       }
+
       if (statusText) {
         statusText.textContent = ` ● ${state.charAt(0).toUpperCase() + state.slice(1)}`;
       }
@@ -1782,12 +1843,15 @@ export class ShadowClaw extends HTMLElement {
     // React to storage status
     effect(() => {
       const status = orchestratorStore.storageStatus;
-      if (!status) return;
+      if (!status) {
+        return;
+      }
 
       const typeEl = root.querySelector('[data-info="storage-type"]');
       const statusBadge = root.querySelector(
         '[data-info="storage-status-badge"]',
       );
+
       const grantBtn = root.querySelector(
         '[data-action="grant-storage-permission"]',
       );
@@ -1805,10 +1869,12 @@ export class ShadowClaw extends HTMLElement {
         if (status.type === "local") {
           statusBadge.textContent =
             status.permission === "granted" ? "CONNECTED" : "NEEDS PERMISSION";
+
           /** @type {HTMLElement} */ (statusBadge).style.backgroundColor =
             status.permission === "granted"
               ? "var(--shadow-claw-success-color)"
               : "var(--shadow-claw-error-color)";
+
           /** @type {HTMLElement} */ (statusBadge).style.color = "white";
         }
       }
@@ -1823,26 +1889,11 @@ export class ShadowClaw extends HTMLElement {
   }
 
   /**
-   * Add a message (Legacy - mostly replaced by effects now)
-   * @param {string} sender
-   * @param {string} content
-   * @param {string} type
-   */
-  addMessage(sender, content, type) {
-    // This is now mostly handled by orchestratorStore and setupEffects
-    // But we can keep it for manual system messages if needed
-  }
-
-  /**
-   * Restore chat history from localStorage
-   * @returns {void}
-   */
-  // Removed restoreChatHistory as it's now handled by DB and orchestratorStore
-
-  /**
    * Compact chat handler
+   *
+   * @param {ShadowClawDatabase} db
    */
-  async handleCompactChat() {
+  async handleCompactChat(db) {
     if (
       !confirm(
         "This will summarize the conversation to reduce token usage. The summary replaces the current history. Continue?",
@@ -1852,7 +1903,7 @@ export class ShadowClaw extends HTMLElement {
     }
 
     try {
-      await orchestratorStore.compactContext();
+      await orchestratorStore.compactContext(db);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       alert(`Failed to compact chat: ${errorMsg}`);
@@ -1861,11 +1912,16 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Clear chat handler
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async handleClearChat() {
+  async handleClearChat(db) {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     // Clear UI
     const container = root.querySelector(".messages-container");
@@ -1876,7 +1932,7 @@ export class ShadowClaw extends HTMLElement {
     // Clear storage/database
     if (this.orchestrator) {
       try {
-        await this.orchestrator.newSession();
+        await this.orchestrator.newSession(db);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         console.warn("Failed to clear session:", errorMsg);
@@ -1886,15 +1942,18 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Download chat as a zip file
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async downloadChat() {
+  async downloadChat(db) {
     try {
       const groupId = orchestratorStore.activeGroupId;
-      const chatData = await exportChatData(groupId);
-
+      const chatData = await exportChatData(db, groupId);
       if (!chatData) {
         alert("Failed to export chat data");
+
         return;
       }
 
@@ -1908,17 +1967,23 @@ export class ShadowClaw extends HTMLElement {
       // Create download link
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
+
       link.href = url;
       link.download = `chat-${formatDateForFilename()}.zip`;
+
       document.body.appendChild(link);
+
       link.click();
+
       document.body.removeChild(link);
+
       URL.revokeObjectURL(url);
 
       // Show success message
       alert("Chat downloaded successfully");
     } catch (err) {
       console.error("Failed to download chat:", err);
+
       const message = err instanceof Error ? err.message : String(err);
       alert(`Failed to download chat: ${message}`);
     }
@@ -1926,9 +1991,12 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Restore chat from a zip file
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async restoreChat() {
+  async restoreChat(db) {
     try {
       // Create file input
       const fileInput = document.createElement("input");
@@ -1937,7 +2005,9 @@ export class ShadowClaw extends HTMLElement {
       fileInput.addEventListener("change", async (e) => {
         const target = /** @type {HTMLInputElement} */ (e.target);
         const file = target?.files?.[0];
-        if (!file) return;
+        if (!file) {
+          return;
+        }
 
         try {
           // Read zip file
@@ -1963,7 +2033,7 @@ export class ShadowClaw extends HTMLElement {
 
           // Import the chat data to database
           const groupId = orchestratorStore.activeGroupId;
-          await importChatData(groupId, chatData);
+          await importChatData(db, groupId, chatData);
 
           // Clear the store's messages to trigger a re-render, then reload from DB
           orchestratorStore._messages.set([]);
@@ -1989,13 +2059,20 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Load settings
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async loadSettings() {
-    if (!this.orchestrator) return;
+  async loadSettings(db) {
+    if (!this.orchestrator) {
+      return;
+    }
 
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     try {
       // Load provider selector
@@ -2003,18 +2080,18 @@ export class ShadowClaw extends HTMLElement {
       const providerSelect = root.querySelector(
         '[data-setting="provider-select"]',
       );
+
       const currentProvider = this.orchestrator.getProvider();
-      const currentProviderData =
-        /** @type {import('../types.mjs').LLMProvider | undefined} */ (
-          providers.find((p) => p.id === currentProvider)
-        );
+      const currentProviderData = /** @type {LLMProvider | undefined} */ (
+        providers.find((p) => p.id === currentProvider)
+      );
 
       if (providerSelect) {
         /** @type {HTMLSelectElement} */
         const select = /** @type {HTMLSelectElement} */ (providerSelect);
         select.innerHTML = providers
           .map(
-            (/** @type {import('../types.mjs').LLMProvider} */ p) =>
+            (/** @type {LLMProvider} */ p) =>
               `<option value="${p.id}" ${p.id === currentProvider ? "selected" : ""}>${p.name}</option>`,
           )
           .join("");
@@ -2027,6 +2104,7 @@ export class ShadowClaw extends HTMLElement {
       const nameInput = root.querySelector(
         '[data-setting="assistant-name-input"]',
       );
+
       if (nameInput) {
         /** @type {HTMLInputElement} */
         const input = /** @type {HTMLInputElement} */ (nameInput);
@@ -2037,16 +2115,21 @@ export class ShadowClaw extends HTMLElement {
     }
 
     // Load storage info
-    await this.updateStorageInfo();
+    await this.updateStorageInfo(db);
   }
 
   /**
    * Update storage information in UI
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async updateStorageInfo() {
+  async updateStorageInfo(db) {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     try {
       const estimate = await getStorageEstimate();
@@ -2063,13 +2146,20 @@ export class ShadowClaw extends HTMLElement {
         '[data-info="storage-persistent-badge"]',
       );
 
-      if (usageEl) usageEl.textContent = `${usageStr} used`;
-      if (quotaEl) quotaEl.textContent = `of ${quotaStr}`;
-      if (progressEl)
+      if (usageEl) {
+        usageEl.textContent = `${usageStr} used`;
+      }
+
+      if (quotaEl) {
+        quotaEl.textContent = `of ${quotaStr}`;
+      }
+
+      if (progressEl) {
         /** @type {HTMLElement} */ (progressEl).style.width = `${percent}%`;
+      }
 
       // Check storage type
-      const handle = await getConfig(CONFIG_KEYS.STORAGE_HANDLE);
+      const handle = await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE);
       if (handle) {
         if (typeEl) typeEl.textContent = "Local Directory";
       } else {
@@ -2087,9 +2177,11 @@ export class ShadowClaw extends HTMLElement {
       const helpGeneralEl = root.querySelector(
         '[data-info="storage-help-general"]',
       );
+
       const helpLocalEl = root.querySelector(
         '[data-info="storage-help-local"]',
       );
+
       if (helpGeneralEl) {
         if (handle) {
           helpGeneralEl.innerHTML = `
@@ -2103,6 +2195,7 @@ export class ShadowClaw extends HTMLElement {
           `;
         }
       }
+
       if (helpLocalEl) {
         if (handle) {
           helpLocalEl.innerHTML = `
@@ -2121,15 +2214,17 @@ export class ShadowClaw extends HTMLElement {
       const grantStorageBtn = root.querySelector(
         '[data-action="grant-storage-permission"]',
       );
+
       if (grantStorageBtn) {
         grantStorageBtn.addEventListener("click", () =>
-          orchestratorStore.grantStorageAccess(),
+          orchestratorStore.grantStorageAccess(db),
         );
       }
 
       const requestPersistentBtn = root.querySelector(
         '[data-action="request-persistent"]',
       );
+
       if (requestPersistentBtn)
         /** @type {HTMLButtonElement} */ (requestPersistentBtn).disabled =
           persistent;
@@ -2140,11 +2235,16 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Format bytes to human readable string
+   *
    * @param {number} bytes
+   *
    * @returns {string}
    */
   formatBytes(bytes) {
-    if (bytes === 0) return "0 B";
+    if (bytes === 0) {
+      return "0 B";
+    }
+
     const k = 1024;
     const units = ["B", "KB", "MB", "GB", "TB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
@@ -2153,8 +2253,10 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Handle persistent storage request
+   *
+   * @param {ShadowClawDatabase} db
    */
-  async handleRequestPersistent() {
+  async handleRequestPersistent(db) {
     try {
       const granted = await requestPersistentStorage();
       if (granted) {
@@ -2164,7 +2266,8 @@ export class ShadowClaw extends HTMLElement {
           "❌ Persistent storage was not granted. Browsers may deny this based on site usage.",
         );
       }
-      await this.updateStorageInfo();
+
+      await this.updateStorageInfo(db);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       alert(`Error: ${errorMsg}`);
@@ -2173,17 +2276,20 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Handle changing storage directory
+   *
+   * @param {ShadowClawDatabase} db
    */
-  async handleChangeStorageDir() {
+  async handleChangeStorageDir(db) {
     try {
-      const success = await selectStorageDirectory();
+      const success = await selectStorageDirectory(db);
       if (success) {
         alert(
           "✅ Storage location changed successfully! Note that existing files in OPFS were not moved.",
         );
-        await this.updateStorageInfo();
+
+        await this.updateStorageInfo(db);
         // Reload files in store if on files page or just to be safe
-        await orchestratorStore.loadFiles();
+        await orchestratorStore.loadFiles(db);
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -2193,14 +2299,20 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Handle resetting storage directory
+   *
+   * @param {ShadowClawDatabase} db
    */
-  async handleResetStorageDir() {
-    if (!confirm("Revert storage to browser-internal (OPFS)?")) return;
+  async handleResetStorageDir(db) {
+    if (!confirm("Revert storage to browser-internal (OPFS)?")) {
+      return;
+    }
     try {
-      await resetStorageDirectory();
+      await resetStorageDirectory(db);
+
       alert("✅ Reverted to browser-internal storage.");
-      await this.updateStorageInfo();
-      await orchestratorStore.loadFiles();
+
+      await this.updateStorageInfo(db);
+      await orchestratorStore.loadFiles(db);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       alert(`Error: ${errorMsg}`);
@@ -2209,29 +2321,41 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Handle provider change
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async onProviderChange() {
-    if (!this.orchestrator) return;
+  async onProviderChange(db) {
+    if (!this.orchestrator) {
+      return;
+    }
 
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     const providerSelect = root.querySelector(
       '[data-setting="provider-select"]',
     );
-    if (!providerSelect) return;
+
+    if (!providerSelect) {
+      return;
+    }
 
     /** @type {HTMLSelectElement | null} */
     const select = /** @type {HTMLSelectElement | null} */ (providerSelect);
-    if (!select) return;
+    if (!select) {
+      return;
+    }
 
     const providerId = select.value;
     const currentProvider = this.orchestrator.getProvider();
 
     if (providerId !== currentProvider) {
       try {
-        await this.orchestrator.setProvider(providerId);
+        await this.orchestrator.setProvider(db, providerId);
         this.updateModelSelector();
 
         const selectedText = select.selectedOptions[0]?.text || providerId;
@@ -2244,27 +2368,35 @@ export class ShadowClaw extends HTMLElement {
         const selectEl = /** @type {HTMLSelectElement | null} */ (
           root.querySelector('[data-setting="provider-select"]')
         );
-        if (selectEl) selectEl.value = currentProvider;
+
+        if (selectEl) {
+          selectEl.value = currentProvider;
+        }
       }
     }
   }
 
   /**
    * Update model selector based on current provider
+   *
    * @returns {void}
    */
   updateModelSelector() {
-    if (!this.orchestrator) return;
+    if (!this.orchestrator) {
+      return;
+    }
 
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     const providers = this.orchestrator.getAvailableProviders();
     const currentProvider = this.orchestrator.getProvider();
-    const currentProviderData =
-      /** @type {import('../types.mjs').LLMProvider | undefined} */ (
-        providers.find((p) => p.id === currentProvider)
-      );
+    const currentProviderData = /** @type {LLMProvider | undefined} */ (
+      providers.find((p) => p.id === currentProvider)
+    );
+
     const modelSelect = root.querySelector('[data-setting="model-select"]');
     const currentModel = this.orchestrator.getModel();
 
@@ -2294,14 +2426,21 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Save API key and provider
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async saveApiKey() {
+  async saveApiKey(db) {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     const keyInput = root.querySelector('[data-setting="api-key-input"]');
-    if (!keyInput) return;
+    if (!keyInput) {
+      return;
+    }
 
     /** @type {HTMLInputElement} */
     const input = /** @type {HTMLInputElement} */ (keyInput);
@@ -2321,13 +2460,16 @@ export class ShadowClaw extends HTMLElement {
       const providerSelect = root.querySelector(
         '[data-setting="provider-select"]',
       );
-      if (!providerSelect) return;
+
+      if (!providerSelect) {
+        return;
+      }
 
       /** @type {HTMLSelectElement} */
       const select = /** @type {HTMLSelectElement} */ (providerSelect);
       const providerId = select.value;
 
-      await this.orchestrator.setApiKey(key);
+      await this.orchestrator.setApiKey(db, key);
       /** @type {HTMLInputElement} */
       const inputEl = /** @type {HTMLInputElement} */ (keyInput);
       inputEl.value = "";
@@ -2340,23 +2482,33 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Save model selection
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async saveModel() {
+  async saveModel(db) {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     const modelSelect = root.querySelector('[data-setting="model-select"]');
-    if (!modelSelect) return;
+    if (!modelSelect) {
+      return;
+    }
 
     /** @type {HTMLSelectElement} */
     const select = /** @type {HTMLSelectElement} */ (modelSelect);
     const model = select.value;
 
-    if (!this.orchestrator) return;
+    if (!this.orchestrator) {
+      return;
+    }
 
     try {
-      await this.orchestrator.setModel(model);
+      await this.orchestrator.setModel(db, model);
+
       alert("✅ Model saved!");
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -2366,16 +2518,24 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Save assistant name
+   *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async saveAssistantName() {
+  async saveAssistantName(db) {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     const nameInput = root.querySelector(
       '[data-setting="assistant-name-input"]',
     );
-    if (!nameInput) return;
+
+    if (!nameInput) {
+      return;
+    }
 
     /** @type {HTMLInputElement} */
     const input = /** @type {HTMLInputElement} */ (nameInput);
@@ -2383,6 +2543,7 @@ export class ShadowClaw extends HTMLElement {
 
     if (!name) {
       alert("Please enter a name");
+
       return;
     }
 
@@ -2390,7 +2551,7 @@ export class ShadowClaw extends HTMLElement {
 
     if (this.orchestrator) {
       try {
-        await this.orchestrator.setAssistantName(name);
+        await this.orchestrator.setAssistantName(db, name);
       } catch (e) {
         console.warn("Could not update orchestrator:", e);
       }
@@ -2401,19 +2562,24 @@ export class ShadowClaw extends HTMLElement {
 
   /**
    * Escape HTML to prevent XSS
+   *
    * @param {string} text
+   *
    * @returns {string}
    */
   escapeHtml(text) {
     const div = document.createElement("div");
     div.textContent = text;
+
     return div.innerHTML;
   }
 
   /**
    * Get a reference to query within shadowRoot
    * For compatibility with template queries
+   *
    * @param {string} selector
+   *
    * @returns {Element|null}
    */
   querySelector(selector) {

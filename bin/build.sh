@@ -3,7 +3,7 @@
 # change directory to the project root
 cd "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/.." || exit 1
 
-npm run tsc || exit 1
+npm run test || exit 1
 
 echo 'https://xt-ml.github.io/shadow-claw/' | node \
   bin/file-search-replace.mjs \

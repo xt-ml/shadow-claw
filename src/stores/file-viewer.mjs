@@ -1,6 +1,8 @@
 // @ts-ignore
 import { Signal } from "signal-polyfill";
-import { readGroupFile } from "../storage.mjs";
+
+import { readGroupFile } from "../storage/readGroupFile.mjs";
+
 import { DEFAULT_GROUP_ID } from "../config.mjs";
 
 /**
@@ -16,6 +18,10 @@ import { DEFAULT_GROUP_ID } from "../config.mjs";
  * @property {() => void} closeFile
  */
 
+/**
+ * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
+ */
+
 export class FileViewerStore {
   constructor() {
     /** @type {Signal.State<FileInfo|null>} */
@@ -28,13 +34,16 @@ export class FileViewerStore {
 
   /**
    * Open a file
+   *
+   * @param {ShadowClawDatabase} db
    * @param {string} path
    * @param {string} [groupId=DEFAULT_GROUP_ID]
+   *
    * @returns {Promise<void>}
    */
-  async openFile(path, groupId = DEFAULT_GROUP_ID) {
+  async openFile(db, path, groupId = DEFAULT_GROUP_ID) {
     try {
-      const content = await readGroupFile(groupId, path);
+      const content = await readGroupFile(db, groupId, path);
       const name = path.split("/").pop() || path;
       this._file.set({ name, content });
     } catch (err) {

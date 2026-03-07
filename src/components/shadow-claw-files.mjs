@@ -1,18 +1,21 @@
-import {
-  deleteGroupFile,
-  deleteGroupDirectory,
-  downloadGroupDirectoryAsZip,
-  downloadGroupFile,
-  uploadGroupFile,
-  deleteAllGroupFiles,
-  downloadAllGroupFilesAsZip,
-  restoreAllGroupFilesFromZip,
-} from "../storage.mjs";
+import { deleteAllGroupFiles } from "../storage/deleteAllGroupFiles.mjs";
+import { deleteGroupDirectory } from "../storage/deleteGroupDirectory.mjs";
+import { deleteGroupFile } from "../storage/deleteGroupFile.mjs";
+import { downloadAllGroupFilesAsZip } from "../storage/downloadAllGroupFilesAsZip.mjs";
+import { downloadGroupDirectoryAsZip } from "../storage/downloadGroupDirectoryAsZip.mjs";
+import { downloadGroupFile } from "../storage/downloadGroupFile.mjs";
+import { restoreAllGroupFilesFromZip } from "../storage/restoreAllGroupFilesFromZip.mjs";
+import { uploadGroupFile } from "../storage/uploadGroupFile.mjs";
 
+import { effect } from "../effect.mjs";
 import { fileViewerStore } from "../stores/file-viewer.mjs";
 import { orchestratorStore } from "../stores/orchestrator.mjs";
 
-import { effect } from "../effect.mjs";
+import { getDb } from "../db/db.mjs";
+
+/**
+ * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
+ */
 
 export class ShadowClawFiles extends HTMLElement {
   constructor() {
@@ -208,22 +211,34 @@ export class ShadowClawFiles extends HTMLElement {
   }
 
   connectedCallback() {
+    const db = getDb();
+
+    if (!db) {
+      throw new Error(
+        "shadow-claw-files cannot get the db on connectedCallback",
+      );
+    }
+
     this.render();
 
     // Re-render when files or path change
     this.cleanup = effect(() => {
       orchestratorStore.files;
       orchestratorStore.currentPath;
-      this.updateBreadcrumbs();
-      this.updateFileList();
+      this.updateBreadcrumbs(db);
+      this.updateFileList(db);
     });
 
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
 
     // Refresh button
     const refreshBtn = root.querySelector(".refresh-btn");
-    refreshBtn?.addEventListener("click", () => orchestratorStore.loadFiles());
+    refreshBtn?.addEventListener("click", () =>
+      orchestratorStore.loadFiles(db),
+    );
 
     // Upload button
     const uploadBtn = root.querySelector(".upload-btn");
@@ -231,13 +246,14 @@ export class ShadowClawFiles extends HTMLElement {
     uploadBtn?.addEventListener("click", () => {
       if (uploadInput instanceof HTMLInputElement) uploadInput.click();
     });
+
     uploadInput?.addEventListener("change", (e) => {
-      if (e.target instanceof HTMLInputElement) this.handleUpload(e.target);
+      if (e.target instanceof HTMLInputElement) this.handleUpload(db, e.target);
     });
 
     // Backup button
     const backupBtn = root.querySelector(".backup-btn");
-    backupBtn?.addEventListener("click", () => this.handleBackup());
+    backupBtn?.addEventListener("click", () => this.handleBackup(db));
 
     // Restore button
     const restoreBtn = root.querySelector(".restore-btn");
@@ -245,13 +261,15 @@ export class ShadowClawFiles extends HTMLElement {
     restoreBtn?.addEventListener("click", () => {
       if (restoreInput instanceof HTMLInputElement) restoreInput.click();
     });
+
     restoreInput?.addEventListener("change", (e) => {
-      if (e.target instanceof HTMLInputElement) this.handleRestore(e.target);
+      if (e.target instanceof HTMLInputElement)
+        this.handleRestore(db, e.target);
     });
 
     // Clear all button
     const clearBtn = root.querySelector(".clear-btn");
-    clearBtn?.addEventListener("click", () => this.handleClearAll());
+    clearBtn?.addEventListener("click", () => this.handleClearAll(db));
   }
 
   disconnectedCallback() {
@@ -260,18 +278,27 @@ export class ShadowClawFiles extends HTMLElement {
 
   render() {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
     const template = document.createElement("template");
     template.innerHTML = ShadowClawFiles.getTemplate();
     root.innerHTML = "";
     root.appendChild(template.content.cloneNode(true));
   }
 
-  updateBreadcrumbs() {
+  /**
+   * @param {ShadowClawDatabase} db
+   */
+  updateBreadcrumbs(db) {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
     const breadcrumbs = root.querySelector(".breadcrumbs");
-    if (!breadcrumbs) return;
+    if (!breadcrumbs) {
+      return;
+    }
 
     const currentPath = orchestratorStore.currentPath;
     breadcrumbs.innerHTML = "";
@@ -281,7 +308,7 @@ export class ShadowClawFiles extends HTMLElement {
     rootBtn.className = "breadcrumb-btn";
     rootBtn.textContent = "📁 Root";
     rootBtn.addEventListener("click", () =>
-      orchestratorStore.resetToRootFolder(),
+      orchestratorStore.resetToRootFolder(db),
     );
 
     breadcrumbs.appendChild(rootBtn);
@@ -305,7 +332,7 @@ export class ShadowClawFiles extends HTMLElement {
           const pathToNavigate = currentSegmentPath;
           btn.addEventListener("click", async () => {
             orchestratorStore._currentPath.set(pathToNavigate);
-            await orchestratorStore.loadFiles();
+            await orchestratorStore.loadFiles(db);
           });
           breadcrumbs.appendChild(btn);
         },
@@ -313,11 +340,19 @@ export class ShadowClawFiles extends HTMLElement {
     }
   }
 
-  updateFileList() {
+  /**
+   * @param {ShadowClawDatabase} db
+   */
+  updateFileList(db) {
     const root = this.shadowRoot;
-    if (!root) return;
+    if (!root) {
+      return;
+    }
+
     const list = root.querySelector(".file-list");
-    if (!list) return;
+    if (!list) {
+      return;
+    }
 
     const files = orchestratorStore.files;
     const currentPath = orchestratorStore.currentPath;
@@ -360,12 +395,16 @@ export class ShadowClawFiles extends HTMLElement {
           return;
         if (isDir) {
           // Navigate into folder
-          await orchestratorStore.navigateIntoFolder(file);
+          await orchestratorStore.navigateIntoFolder(db, file);
         } else {
           // Open file in viewer
           const filePath =
             currentPath === "." ? file : `${currentPath}/${file}`;
-          fileViewerStore.openFile(filePath, orchestratorStore.activeGroupId);
+          fileViewerStore.openFile(
+            db,
+            filePath,
+            orchestratorStore.activeGroupId,
+          );
         }
       });
 
@@ -382,11 +421,13 @@ export class ShadowClawFiles extends HTMLElement {
               currentPath === "." ? file : `${currentPath}/${file}`;
             if (isDir) {
               await downloadGroupDirectoryAsZip(
+                db,
                 orchestratorStore.activeGroupId,
                 itemPath,
               );
             } else {
               await downloadGroupFile(
+                db,
                 orchestratorStore.activeGroupId,
                 itemPath,
               );
@@ -417,16 +458,18 @@ export class ShadowClawFiles extends HTMLElement {
                 currentPath === "." ? file : `${currentPath}/${file}`;
               if (isDir) {
                 await deleteGroupDirectory(
+                  db,
                   orchestratorStore.activeGroupId,
                   itemPath,
                 );
               } else {
                 await deleteGroupFile(
+                  db,
                   orchestratorStore.activeGroupId,
                   itemPath,
                 );
               }
-              await orchestratorStore.loadFiles();
+              await orchestratorStore.loadFiles(db);
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
               alert(`Failed to delete: ${message}`);
@@ -442,7 +485,9 @@ export class ShadowClawFiles extends HTMLElement {
 
   /**
    * Escape HTML special characters
+   *
    * @param {string} text
+   *
    * @returns {string}
    */
   escapeHtml(text) {
@@ -453,11 +498,15 @@ export class ShadowClawFiles extends HTMLElement {
 
   /**
    * Handle file upload
+   *
+   * @param {ShadowClawDatabase} db
    * @param {HTMLInputElement} input
    */
-  async handleUpload(input) {
+  async handleUpload(db, input) {
     const files = input.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      return;
+    }
 
     const groupId = orchestratorStore.activeGroupId;
     const currentPath = orchestratorStore.currentPath;
@@ -467,12 +516,12 @@ export class ShadowClawFiles extends HTMLElement {
         const file = files[i];
         const filename =
           currentPath === "." ? file.name : `${currentPath}/${file.name}`;
-        await uploadGroupFile(groupId, filename, file);
+        await uploadGroupFile(db, groupId, filename, file);
       }
       // Clear the input
       input.value = "";
       // Reload files
-      await orchestratorStore.loadFiles();
+      await orchestratorStore.loadFiles(db);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       alert(`Failed to upload files: ${message}`);
@@ -482,14 +531,16 @@ export class ShadowClawFiles extends HTMLElement {
 
   /**
    * Handle backup (download all files as zip)
+   *
+   * @param {ShadowClawDatabase} db
    */
-  async handleBackup() {
+  async handleBackup(db) {
     const groupId = orchestratorStore.activeGroupId;
     try {
       const btn = this.shadowRoot?.querySelector(".backup-btn");
       if (btn instanceof HTMLButtonElement) btn.disabled = true;
       if (btn) btn.textContent = "⏳";
-      await downloadAllGroupFilesAsZip(groupId);
+      await downloadAllGroupFilesAsZip(db, groupId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       alert(`Failed to create backup: ${message}`);
@@ -503,11 +554,15 @@ export class ShadowClawFiles extends HTMLElement {
 
   /**
    * Handle restore (upload and extract zip)
+   *
+   * @param {ShadowClawDatabase} db
    * @param {HTMLInputElement} input
    */
-  async handleRestore(input) {
+  async handleRestore(db, input) {
     const files = input.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      return;
+    }
 
     const zipFile = files[0];
     if (!zipFile.name.endsWith(".zip")) {
@@ -526,28 +581,45 @@ export class ShadowClawFiles extends HTMLElement {
 
     try {
       const btn = this.shadowRoot?.querySelector(".restore-btn");
-      if (btn instanceof HTMLButtonElement) btn.disabled = true;
-      if (btn) btn.textContent = "⏳";
-      await restoreAllGroupFilesFromZip(groupId, zipFile);
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = true;
+      }
+
+      if (btn) {
+        btn.textContent = "⏳";
+      }
+
+      await restoreAllGroupFilesFromZip(db, groupId, zipFile);
+
       input.value = "";
-      await orchestratorStore.resetToRootFolder();
-      await orchestratorStore.loadFiles();
+
+      await orchestratorStore.resetToRootFolder(db);
+      await orchestratorStore.loadFiles(db);
       alert("Files restored successfully!");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+
       alert(`Failed to restore from backup: ${message}`);
+
       console.error("Restore error:", err);
     } finally {
       const btn = this.shadowRoot?.querySelector(".restore-btn");
-      if (btn instanceof HTMLButtonElement) btn.disabled = false;
-      if (btn) btn.textContent = "♻️ Restore";
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = false;
+      }
+
+      if (btn) {
+        btn.textContent = "♻️ Restore";
+      }
     }
   }
 
   /**
    * Handle clear all (delete all files)
+   *
+   * @param {ShadowClawDatabase} db
    */
-  async handleClearAll() {
+  async handleClearAll(db) {
     if (!confirm("Delete ALL files? This cannot be undone!")) {
       return;
     }
@@ -556,19 +628,32 @@ export class ShadowClawFiles extends HTMLElement {
 
     try {
       const btn = this.shadowRoot?.querySelector(".clear-btn");
-      if (btn instanceof HTMLButtonElement) btn.disabled = true;
-      if (btn) btn.textContent = "⏳";
-      await deleteAllGroupFiles(groupId);
-      await orchestratorStore.resetToRootFolder();
-      await orchestratorStore.loadFiles();
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = true;
+      }
+
+      if (btn) {
+        btn.textContent = "⏳";
+      }
+
+      await deleteAllGroupFiles(db, groupId);
+      await orchestratorStore.resetToRootFolder(db);
+      await orchestratorStore.loadFiles(db);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+
       alert(`Failed to clear files: ${message}`);
+
       console.error("Clear error:", err);
     } finally {
       const btn = this.shadowRoot?.querySelector(".clear-btn");
-      if (btn instanceof HTMLButtonElement) btn.disabled = false;
-      if (btn) btn.textContent = "🗑️ Clear All";
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = false;
+      }
+
+      if (btn) {
+        btn.textContent = "🗑️ Clear All";
+      }
     }
   }
 }

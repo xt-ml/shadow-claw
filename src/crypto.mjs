@@ -1,3 +1,5 @@
+/** @typedef {import("./db/db.mjs").ShadowClawDatabase} ShadowClawDatabase */
+
 /**
  * ShadowClaw — Web Crypto helpers for API key encryption
  *
@@ -13,7 +15,7 @@ const IV_LENGTH = 12;
 
 /**
  * Open the keystore database
- * @returns {Promise<IDBDatabase>}
+ * @returns {Promise<ShadowClawDatabase>}
  */
 function openKeyStore() {
   return new Promise((resolve, reject) => {
@@ -28,10 +30,15 @@ function openKeyStore() {
 
 /**
  * Retrieve the non-extractable AES-256-GCM key, creating it on first use.
- * @returns {Promise<CryptoKey>}
+ *
+ * @returns {Promise<CryptoKey | null>}
  */
 async function getOrCreateKey() {
   const db = await openKeyStore();
+
+  if (!db) {
+    return null;
+  }
 
   // Try to load an existing key
   const existing = await new Promise((resolve, reject) => {
@@ -70,32 +77,49 @@ async function getOrCreateKey() {
 
 /**
  * Encrypt a plaintext string → base64 (IV + ciphertext)
+ *
  * @param {string} plaintext
- * @returns {Promise<string>}
+ *
+ * @returns {Promise<string|null>}
  */
 export async function encryptValue(plaintext) {
   const key = await getOrCreateKey();
+
+  if (!key) {
+    return null;
+  }
+
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   const ciphertext = await crypto.subtle.encrypt(
     { name: "AES-GCM", iv },
     key,
     new TextEncoder().encode(plaintext),
   );
+
   const combined = new Uint8Array(
     iv.length + new Uint8Array(ciphertext).length,
   );
+
   combined.set(iv);
   combined.set(new Uint8Array(ciphertext), iv.length);
+
   return btoa(String.fromCharCode(...combined));
 }
 
 /**
  * Decrypt a base64 string (IV + ciphertext) → plaintext
+ *
  * @param {string} encoded
- * @returns {Promise<string>}
+ *
+ * @returns {Promise<string|null>}
  */
 export async function decryptValue(encoded) {
   const key = await getOrCreateKey();
+
+  if (!key) {
+    return null;
+  }
+
   const combined = Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0));
   const iv = combined.slice(0, IV_LENGTH);
   const ciphertext = combined.slice(IV_LENGTH);

@@ -14,6 +14,7 @@ module.exports = {
   ],
   globIgnores: [
     "**/bin/**",
+    "**/coverage/**",
     "**/node_modules/**",
     "index.mjs",
     "**service-worker**/**",

@@ -1,6 +1,7 @@
 import { getDb } from "../db/db.mjs";
 import { saveTask } from "../db/saveTask.mjs";
 import { effect } from "../effect.mjs";
+import { renderMarkdown } from "../markdown.mjs";
 import { orchestratorStore } from "../stores/orchestrator.mjs";
 
 /**
@@ -95,6 +96,47 @@ export class ShadowClawTasks extends HTMLElement {
           word-break: break-word;
         }
 
+        .task-prompt p {
+          margin-bottom: 0.5rem;
+        }
+
+        .task-prompt p:last-child {
+          margin-bottom: 0;
+        }
+
+        .task-prompt pre {
+          background-color: var(--shadow-claw-bg-tertiary);
+          border-radius: 0.375rem;
+          margin: 0.75rem 0;
+          overflow-x: auto;
+          padding: 0.5rem;
+        }
+
+        .task-prompt pre code.hljs {
+          background-color: transparent;
+          border-radius: 0.375rem;
+          color: var(--shadow-claw-text-primary);
+          display: block;
+          font-family: var(--shadow-claw-font-mono);
+          font-size: 0.8125rem;
+          padding: 0;
+        }
+
+        .task-prompt code {
+          background-color: var(--shadow-claw-bg-tertiary);
+          border-radius: 0.1875rem;
+          color: var(--shadow-claw-text-primary);
+          font-family: var(--shadow-claw-font-mono);
+          font-size: 0.8125rem;
+          padding: 0.125rem 0.375rem;
+        }
+
+        .task-prompt code.hljs {
+          background: transparent;
+          color: var(--shadow-claw-text-primary);
+          padding: 0;
+        }
+
         .task-actions {
           align-items: center;
           display: flex;
@@ -139,6 +181,61 @@ export class ShadowClawTasks extends HTMLElement {
           padding: 0.375rem 0.625rem;
           transition: all 0.15s;
           white-space: nowrap;
+        }
+
+        /* Accordion styles */
+        .task-content-details {
+          width: 100%;
+        }
+
+        .task-content-summary {
+          align-items: flex-start;
+          color: var(--shadow-claw-text-tertiary);
+          cursor: pointer;
+          display: flex;
+          font-size: 0.75rem;
+          font-weight: 500;
+          gap: 0.5rem;
+          list-style: none;
+          margin-top: 0.25rem;
+          outline: none;
+          padding: 0.25rem 0;
+          user-select: none;
+        }
+
+        .task-content-summary::-webkit-details-marker {
+          display: none;
+        }
+
+        .task-content-summary:hover {
+          color: var(--shadow-claw-accent-primary);
+        }
+
+        .task-content-summary::before {
+          content: '▶';
+          display: inline-block;
+          font-size: 0.625rem;
+          transition: transform 0.2s ease;
+        }
+
+        .task-content-details[open] .task-content-summary::before {
+          transform: rotate(90deg);
+        }
+
+        .task-content-summary .summary-label {
+          flex-shrink: 0;
+          text-decoration: underline;
+          text-underline-offset: 0.125rem;
+        }
+
+        .task-content-summary .summary-text {
+          display: -webkit-box;
+          line-height: 1.35;
+          overflow: hidden;
+          -webkit-box-orient: vertical;
+          -webkit-line-clamp: 2;
+          white-space: pre-wrap;
+          word-break: break-word;
         }
 
         .delete-btn {
@@ -305,6 +402,11 @@ export class ShadowClawTasks extends HTMLElement {
           min-height: 6.25rem;
         }
 
+        .form-textarea.is-script {
+          font-family: var(--shadow-claw-font-mono, monospace);
+          white-space: pre;
+        }
+
         .form-hint {
           font-size: 0.6875rem;
           color: var(--shadow-claw-text-tertiary, #9ca3af);
@@ -426,6 +528,19 @@ export class ShadowClawTasks extends HTMLElement {
           font-weight: bold;
           padding: 0.0625rem 0.25rem;
         }
+
+        .task-preview-container {
+          margin-top: 1rem;
+        }
+
+        .task-preview {
+          background-color: var(--shadow-claw-bg-secondary);
+          border-radius: var(--shadow-claw-radius-s);
+          border: 0.0625rem solid var(--shadow-claw-border-color);
+          margin-top: 0.375rem;
+          min-height: 3rem;
+          padding: 0.75rem;
+        }
       </style>
       <div class="header">
         <h2>✓ Tasks</h2>
@@ -461,6 +576,10 @@ export class ShadowClawTasks extends HTMLElement {
               <input type="checkbox" name="isScript" id="isScriptCheckbox">
               <label for="isScriptCheckbox" class="form-label form-label-inline">Is JavaScript</label>
             </div>
+            <div class="form-group task-preview-container">
+              <label class="form-label">Preview</label>
+              <div class="task-preview task-prompt"></div>
+            </div>
           </div>
           <div class="edit-dialog-footer">
             <button type="button" class="btn-cancel">Cancel</button>
@@ -471,13 +590,31 @@ export class ShadowClawTasks extends HTMLElement {
     `;
   }
 
-  connectedCallback() {
+  async connectedCallback() {
     const db = getDb();
 
     if (!db) {
       throw new Error(
         "shadow-claw-tasks cannot get the db on connectedCallback",
       );
+    }
+
+    // apply highlight.js atom-one-dark.min.css to shadow dom
+    try {
+      const cssText = await (
+        await fetch(
+          "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css",
+        )
+      ).text();
+
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(cssText);
+
+      if (this.shadowRoot?.adoptedStyleSheets) {
+        this.shadowRoot.adoptedStyleSheets.push(sheet);
+      }
+    } catch (err) {
+      console.warn("Failed to load highlight.js styles:", err);
     }
 
     this.render();
@@ -549,11 +686,29 @@ export class ShadowClawTasks extends HTMLElement {
     // Script label toggle
     const isScriptCheckbox = root.getElementById("isScriptCheckbox");
     const taskLabel = root.getElementById("taskLabel");
+    const promptTextarea = root.querySelector("textarea[name='prompt']");
+    const previewDiv = root.querySelector(".task-preview");
+
+    const updatePreview = () => {
+      if (
+        promptTextarea instanceof HTMLTextAreaElement &&
+        isScriptCheckbox instanceof HTMLInputElement &&
+        previewDiv instanceof HTMLElement
+      ) {
+        previewDiv.innerHTML = this.renderPreview(
+          promptTextarea.value,
+          isScriptCheckbox.checked,
+        );
+      }
+    };
+
     isScriptCheckbox?.addEventListener("change", (e) => {
       const target = /** @type {HTMLInputElement} */ (e.target);
-
       this.handleScriptLabel(taskLabel, target.checked);
+      updatePreview();
     });
+
+    promptTextarea?.addEventListener("input", updatePreview);
   }
 
   disconnectedCallback() {
@@ -616,7 +771,9 @@ export class ShadowClawTasks extends HTMLElement {
               <div class="task-schedule">⏰ ${task.schedule}</div>
               ${task.isScript ? '<span class="script-badge">JS SCRIPT</span>' : ""}
             </div>
-            <div class="task-prompt">${this.escapeHtml(task.prompt)}</div>
+            <div class="task-prompt-container">
+              ${this.renderPreview(task.prompt, !!task.isScript, true)}
+            </div>
             <div class="last-run">Last run: ${lastRunStr}</div>
           </div>
           <div class="task-actions">
@@ -714,6 +871,12 @@ export class ShadowClawTasks extends HTMLElement {
     // Clear form
     form.reset();
 
+    // Reset preview
+    const previewDiv = root.querySelector(".task-preview");
+    if (previewDiv instanceof HTMLElement) {
+      previewDiv.innerHTML = this.renderPreview("", false);
+    }
+
     // Reset label
     this.handleScriptLabel(root.getElementById("taskLabel"), false);
 
@@ -766,6 +929,12 @@ export class ShadowClawTasks extends HTMLElement {
     }
     if (isScriptInput instanceof HTMLInputElement) {
       isScriptInput.checked = !!task.isScript;
+    }
+
+    // Set initial preview
+    const previewDiv = root.querySelector(".task-preview");
+    if (previewDiv instanceof HTMLElement) {
+      previewDiv.innerHTML = this.renderPreview(task.prompt, !!task.isScript);
     }
 
     // Show dialog
@@ -834,6 +1003,43 @@ export class ShadowClawTasks extends HTMLElement {
   }
 
   /**
+   * Render a preview of the task prompt
+   *
+   * @param {string} prompt
+   * @param {boolean} isScript
+   * @param {boolean} [allowCollapse=false]
+   * @returns {string}
+   */
+  renderPreview(prompt, isScript, allowCollapse = false) {
+    if (!prompt.trim()) {
+      return '<span style="color: var(--shadow-claw-text-tertiary); font-style: italic;">No content</span>';
+    }
+
+    const lines = prompt.split("\n");
+    const isLong = prompt.length > 120 || lines.length > 1;
+
+    const rendered = isScript
+      ? renderMarkdown("```javascript\n" + prompt + "\n```")
+      : renderMarkdown(prompt);
+
+    if (allowCollapse && isLong) {
+      const summaryText = prompt.trim();
+
+      return `
+        <details class="task-content-details">
+          <summary class="task-content-summary">
+            <span class="summary-text">${this.escapeHtml(summaryText)}</span>
+            <span class="summary-label">(View more)</span>
+          </summary>
+          <div class="task-prompt">${rendered}</div>
+        </details>
+      `;
+    }
+
+    return `<div class="task-prompt">${rendered}</div>`;
+  }
+
+  /**
    * @param {HTMLElement|null} label
    *
    * @param {boolean} [on=false]
@@ -843,10 +1049,15 @@ export class ShadowClawTasks extends HTMLElement {
       return;
     }
 
+    const root = this.shadowRoot;
+    const textarea = root?.querySelector("textarea[name='prompt']");
+
     if (on) {
-      label.textContent = "Task Script";
+      label.textContent = "JavaScript Code";
+      textarea?.classList.add("is-script");
     } else {
       label.textContent = "Task Prompt";
+      textarea?.classList.remove("is-script");
     }
   }
 

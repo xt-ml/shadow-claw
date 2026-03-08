@@ -430,7 +430,7 @@ export class ShadowClaw extends HTMLElement {
           flex-direction: column;
         }
 
-        .chat-header {
+        .chat-header, .settings-header {
           align-items: center;
           background-color: var(--shadow-claw-bg-primary);
           border-bottom: 0.0625rem solid var(--shadow-claw-border-color);
@@ -439,7 +439,7 @@ export class ShadowClaw extends HTMLElement {
           padding: 1rem;
         }
 
-        .chat-header h2 {
+        .chat-header h2, .settings-header h2 {
           font-size: 1.125rem;
           font-weight: 600;
           margin: 0;
@@ -1425,17 +1425,17 @@ export class ShadowClaw extends HTMLElement {
 
             <!-- Settings Page -->
             <div class="page" data-page-id="settings">
-              <div class="chat-header"><h2>⚙️ Settings</h2></div>
+              <div class="settings-header"><h2>⚙️ Settings</h2></div>
               <div class="settings-page">
                 <div class="settings-section">
                   <h3>👤 Assistant Name</h3>
                   <div class="form-group">
                     <label class="form-label">Name</label>
                     <input
-                      type="text"
                       class="form-input"
                       data-setting="assistant-name-input"
                       placeholder="rover"
+                      type="text"
                       value="rover"
                     />
                     <div class="form-helper">

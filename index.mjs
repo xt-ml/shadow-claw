@@ -1,4 +1,13 @@
 import { resumeAudioContext } from "./src/audio.mjs";
+import {
+  clearAllToasts,
+  dismissToast,
+  showError,
+  showInfo,
+  showSuccess,
+  showToast,
+  showWarning,
+} from "./src/toast.mjs";
 
 import ShadowClaw from "./src/components/shadow-claw.mjs";
 
@@ -11,6 +20,13 @@ import "./src/types.mjs";
  *
  * @property {Orchestrator} orchestrator
  * @property {ShadowClaw} ui
+ * @property {typeof showToast} showToast
+ * @property {typeof showSuccess} showSuccess
+ * @property {typeof showError} showError
+ * @property {typeof showWarning} showWarning
+ * @property {typeof showInfo} showInfo
+ * @property {typeof dismissToast} dismissToast
+ * @property {typeof clearAllToasts} clearAllToasts
  */
 
 /**
@@ -53,7 +69,22 @@ async function initializeApp() {
     (globalThis).shadowclaw = {
       orchestrator,
       ui: /** @type {ShadowClaw} */ (uiElement),
+      showToast,
+      showSuccess,
+      showError,
+      showWarning,
+      showInfo,
+      dismissToast,
+      clearAllToasts,
     };
+
+    /** @type {any} */ (globalThis).showToast = showToast;
+    /** @type {any} */ (globalThis).showSuccess = showSuccess;
+    /** @type {any} */ (globalThis).showError = showError;
+    /** @type {any} */ (globalThis).showWarning = showWarning;
+    /** @type {any} */ (globalThis).showInfo = showInfo;
+    /** @type {any} */ (globalThis).dismissToast = dismissToast;
+    /** @type {any} */ (globalThis).clearAllToasts = clearAllToasts;
 
     return orchestrator;
   } catch (error) {

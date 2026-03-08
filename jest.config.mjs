@@ -3,6 +3,7 @@ export default {
   transform: {},
   testPathIgnorePatterns: ["/dist/", "/e2e/"],
   moduleNameMapper: {
+    "^signal-polyfill$": "<rootDir>/src/__mocks__/signal-polyfill.mjs",
     // Bare specifiers (used by other modules or older patterns)
     "^@isomorphic-git/lightning-fs$":
       "<rootDir>/src/git/__mocks__/lightningFs.mjs",

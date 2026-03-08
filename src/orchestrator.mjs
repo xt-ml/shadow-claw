@@ -28,6 +28,7 @@ import { playNotificationChime } from "./audio.mjs";
 import { Router } from "./router.mjs";
 import { readGroupFile } from "./storage/readGroupFile.mjs";
 import { TaskScheduler } from "./task-scheduler.mjs";
+import { showToast } from "./toast.mjs";
 import { ulid } from "./ulid.mjs";
 
 import "./types.mjs";
@@ -700,6 +701,13 @@ export class Orchestrator {
         } catch (err) {
           console.error("Failed to clear chat from agent:", err);
         }
+
+        break;
+      }
+
+      case "show-toast": {
+        const { message, type, duration } = msg.payload;
+        showToast(message, { type: type || "info", duration });
 
         break;
       }

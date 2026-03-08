@@ -94,7 +94,7 @@ export async function getStorageStatus(db) {
       return { type: "local", permission, name: explicitRoot.name };
     } catch {
       // If queryPermission fails, explicitRoot might be stale
-      alert("Getting storage status is failing.");
+      console.warn("Getting storage status failed for explicit storage root.");
     }
   }
 

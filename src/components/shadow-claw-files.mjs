@@ -8,6 +8,7 @@ import { restoreAllGroupFilesFromZip } from "../storage/restoreAllGroupFilesFrom
 import { uploadGroupFile } from "../storage/uploadGroupFile.mjs";
 
 import { effect } from "../effect.mjs";
+import { showError, showSuccess, showWarning } from "../toast.mjs";
 import { fileViewerStore } from "../stores/file-viewer.mjs";
 import { orchestratorStore } from "../stores/orchestrator.mjs";
 
@@ -479,10 +480,15 @@ export class ShadowClawFiles extends HTMLElement {
                 itemPath,
               );
             }
+
+            showSuccess(
+              isDir ? `Downloaded folder: ${name}` : `Downloaded file: ${name}`,
+              2500,
+            );
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
 
-            alert(`Failed to download: ${message}`);
+            showError(`Failed to download ${name}: ${message}`, 6000);
 
             console.error("Download error:", err);
           } finally {
@@ -522,10 +528,14 @@ export class ShadowClawFiles extends HTMLElement {
                 );
               }
               await orchestratorStore.loadFiles(db);
+              showSuccess(
+                isDir ? `Deleted folder: ${name}` : `Deleted file: ${name}`,
+                3000,
+              );
             } catch (err) {
               const message = err instanceof Error ? err.message : String(err);
 
-              alert(`Failed to delete: ${message}`);
+              showError(`Failed to delete ${name}: ${message}`, 6000);
 
               console.error("Delete error:", err);
             }
@@ -580,10 +590,14 @@ export class ShadowClawFiles extends HTMLElement {
 
       // Reload files
       await orchestratorStore.loadFiles(db);
+      showSuccess(
+        `Uploaded ${files.length} file${files.length === 1 ? "" : "s"}`,
+        3000,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
-      alert(`Failed to upload files: ${message}`);
+      showError(`Failed to upload files: ${message}`, 6000);
 
       console.error("Upload error:", err);
     }
@@ -607,10 +621,11 @@ export class ShadowClawFiles extends HTMLElement {
       }
 
       await downloadAllGroupFilesAsZip(db, groupId);
+      showSuccess("Backup created successfully", 3000);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
-      alert(`Failed to create backup: ${message}`);
+      showError(`Failed to create backup: ${message}`, 6000);
 
       console.error("Backup error:", err);
     } finally {
@@ -641,7 +656,7 @@ export class ShadowClawFiles extends HTMLElement {
 
     const zipFile = files[0];
     if (!zipFile.name.endsWith(".zip")) {
-      alert("Please select a .zip file");
+      showWarning("Please select a .zip file", 3500);
 
       return;
     }
@@ -673,11 +688,11 @@ export class ShadowClawFiles extends HTMLElement {
       await orchestratorStore.resetToRootFolder(db);
       await orchestratorStore.loadFiles(db);
 
-      alert("Files restored successfully!");
+      showSuccess("Files restored successfully", 3500);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
-      alert(`Failed to restore from backup: ${message}`);
+      showError(`Failed to restore from backup: ${message}`, 6000);
 
       console.error("Restore error:", err);
     } finally {
@@ -717,10 +732,11 @@ export class ShadowClawFiles extends HTMLElement {
       await deleteAllGroupFiles(db, groupId);
       await orchestratorStore.resetToRootFolder(db);
       await orchestratorStore.loadFiles(db);
+      showSuccess("All files deleted", 3500);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
-      alert(`Failed to clear files: ${message}`);
+      showError(`Failed to clear files: ${message}`, 6000);
 
       console.error("Clear error:", err);
     } finally {

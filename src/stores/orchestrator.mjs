@@ -11,6 +11,7 @@ import { saveTask } from "../db/saveTask.mjs";
 import { listGroupFiles } from "../storage/listGroupFiles.mjs";
 import { requestStorageAccess } from "../storage/requestStorageAccess.mjs";
 import { getStorageStatus } from "../storage/storage.mjs";
+import { showError } from "../toast.mjs";
 
 /**
  * @typedef {'idle'|'thinking'|'responding'|'error'} OrchestratorState
@@ -239,7 +240,7 @@ export class OrchestratorStore {
         new Function(task.prompt).call(globalThis);
       } catch (err) {
         console.error(`Failed to execute script for task ${task.id}:`, err);
-        alert(
+        showError(
           `Script Error: ${err instanceof Error ? err.message : String(err)}`,
         );
       }

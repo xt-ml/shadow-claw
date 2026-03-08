@@ -231,6 +231,19 @@ export async function executeTool(db, name, input, groupId) {
         return "Chat history cleared successfully. New session started.";
       }
 
+      case "show_toast": {
+        post({
+          type: "show-toast",
+          payload: {
+            message: input.message,
+            type: input.type || "info",
+            duration: input.duration,
+          },
+        });
+
+        return `Toast notification sent: ${input.message}`;
+      }
+
       // ── Git tools (isomorphic-git) ───────────────────────────────
       case "git_clone": {
         const { gitClone, getProxyUrl } = await import("../git/git.mjs");

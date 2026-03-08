@@ -3,6 +3,7 @@ import { saveTask } from "../db/saveTask.mjs";
 import { effect } from "../effect.mjs";
 import { renderMarkdown } from "../markdown.mjs";
 import { orchestratorStore } from "../stores/orchestrator.mjs";
+import { showError, showInfo, showSuccess } from "../toast.mjs";
 
 /**
  * @typedef {import("../types.mjs").Task} Task
@@ -954,7 +955,7 @@ export class ShadowClawTasks extends HTMLElement {
     const isScript = formData.get("isScript") === "on";
 
     if (!schedule || !prompt) {
-      alert("Please fill in all fields");
+      showInfo("Please fill in all fields");
 
       return;
     }
@@ -997,7 +998,7 @@ export class ShadowClawTasks extends HTMLElement {
       this.editingTask = null;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      alert(`Failed to save task: ${message}`);
+      showError(`Failed to save task: ${message}`);
       console.error("Save error:", err);
     }
   }
@@ -1095,7 +1096,7 @@ export class ShadowClawTasks extends HTMLElement {
       URL.revokeObjectURL(url);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      alert(`Failed to create backup: ${message}`);
+      showError(`Failed to create backup: ${message}`);
       console.error("Backup error:", err);
     } finally {
       const btn = this.shadowRoot?.querySelector(".backup-btn");
@@ -1116,7 +1117,7 @@ export class ShadowClawTasks extends HTMLElement {
 
     const jsonFile = files[0];
     if (!jsonFile.name.endsWith(".json")) {
-      alert("Please select a .json file");
+      showInfo("Please select a .json file");
       return;
     }
 
@@ -1141,10 +1142,10 @@ export class ShadowClawTasks extends HTMLElement {
 
       await orchestratorStore.restoreTasksFromBackup(db, tasks);
       input.value = "";
-      alert("Tasks restored successfully!");
+      showSuccess("Tasks restored successfully!");
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      alert(`Failed to restore from backup: ${message}`);
+      showError(`Failed to restore from backup: ${message}`);
       console.error("Restore error:", err);
     } finally {
       const btn = this.shadowRoot?.querySelector(".restore-btn");
@@ -1170,7 +1171,7 @@ export class ShadowClawTasks extends HTMLElement {
       await orchestratorStore.clearAllTasks(db);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      alert(`Failed to clear tasks: ${message}`);
+      showError(`Failed to clear tasks: ${message}`);
       console.error("Clear error:", err);
     } finally {
       const btn = this.shadowRoot?.querySelector(".clear-btn");

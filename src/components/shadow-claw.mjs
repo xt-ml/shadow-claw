@@ -24,9 +24,11 @@ import { orchestratorStore } from "../stores/orchestrator.mjs";
 import { Themes, themeStore } from "../stores/theme.mjs";
 
 import { formatDateForFilename, formatTimestamp } from "../utils.mjs";
+import { showError, showInfo, showSuccess, showWarning } from "../toast.mjs";
 
 import "./shadow-claw-files.mjs";
 import "./shadow-claw-tasks.mjs";
+import "./shadow-claw-toast.mjs";
 import "../types.mjs";
 
 /**
@@ -1639,6 +1641,8 @@ export class ShadowClaw extends HTMLElement {
                 </div>
               </div>
             </div>
+
+            <shadow-claw-toast></shadow-claw-toast>
           </div>
         </div>
       </div>
@@ -1649,6 +1653,10 @@ export class ShadowClaw extends HTMLElement {
     super();
 
     this.attachShadow({ mode: "open" });
+    /** @type {'idle'|'thinking'|'responding'|'error'} */
+    this.previousOrchestratorState = "idle";
+    /** @type {string|null} */
+    this.lastErrorToast = null;
   }
 
   async connectedCallback() {
@@ -2034,7 +2042,7 @@ export class ShadowClaw extends HTMLElement {
     }
 
     if (!this.orchestrator) {
-      alert("ShadowClaw is still initializing. Please try again.");
+      showWarning("ShadowClaw is still initializing. Please try again.", 3500);
 
       return;
     }
@@ -2051,7 +2059,7 @@ export class ShadowClaw extends HTMLElement {
       const errorMsg = err instanceof Error ? err.message : String(err);
       // Small manual override for error display if needed,
       // though typically orchestratorStore handles this.
-      alert(`Error: ${errorMsg}`);
+      showError(`Error sending message: ${errorMsg}`, 6000);
     }
   }
 
@@ -2197,6 +2205,25 @@ export class ShadowClaw extends HTMLElement {
       if (statusText) {
         statusText.textContent = ` ● ${state.charAt(0).toUpperCase() + state.slice(1)}`;
       }
+
+      if (
+        state === "idle" &&
+        (this.previousOrchestratorState === "thinking" ||
+          this.previousOrchestratorState === "responding")
+      ) {
+        showSuccess("Response complete", 2500);
+      }
+
+      this.previousOrchestratorState = state;
+    });
+
+    // React to orchestrator errors
+    effect(() => {
+      const error = orchestratorStore.error;
+      if (error && error !== this.lastErrorToast) {
+        showError(error, 6000);
+        this.lastErrorToast = error;
+      }
     });
 
     // React to storage status
@@ -2264,9 +2291,10 @@ export class ShadowClaw extends HTMLElement {
 
     try {
       await orchestratorStore.compactContext(db);
+      showInfo("Compacting context...", 2500);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      alert(`Failed to compact chat: ${errorMsg}`);
+      showError(`Failed to compact chat: ${errorMsg}`, 6000);
     }
   }
 
@@ -2312,7 +2340,7 @@ export class ShadowClaw extends HTMLElement {
       const groupId = orchestratorStore.activeGroupId;
       const chatData = await exportChatData(db, groupId);
       if (!chatData) {
-        alert("Failed to export chat data");
+        showError("Failed to export chat data", 6000);
 
         return;
       }
@@ -2340,12 +2368,12 @@ export class ShadowClaw extends HTMLElement {
       URL.revokeObjectURL(url);
 
       // Show success message
-      alert("Chat downloaded successfully");
+      showSuccess("Chat backup downloaded", 3000);
     } catch (err) {
       console.error("Failed to download chat:", err);
 
       const message = err instanceof Error ? err.message : String(err);
-      alert(`Failed to download chat: ${message}`);
+      showError(`Failed to download chat: ${message}`, 6000);
     }
   }
 
@@ -2377,7 +2405,7 @@ export class ShadowClaw extends HTMLElement {
           // Get chat-data.json from zip
           const dataFile = zip.file("chat-data.json");
           if (!dataFile) {
-            alert("Invalid chat file: missing chat-data.json");
+            showError("Invalid chat file: missing chat-data.json", 6000);
 
             return;
           }
@@ -2387,7 +2415,7 @@ export class ShadowClaw extends HTMLElement {
 
           // Validate data structure
           if (!chatData.messages || !Array.isArray(chatData.messages)) {
-            alert("Invalid chat file: missing messages array");
+            showError("Invalid chat file: missing messages array", 6000);
 
             return;
           }
@@ -2400,12 +2428,12 @@ export class ShadowClaw extends HTMLElement {
           orchestratorStore._messages.set([]);
           await orchestratorStore.loadHistory();
 
-          alert("Chat restored successfully");
+          showSuccess("Chat restored successfully", 3500);
         } catch (err) {
           const errorMsg = err instanceof Error ? err.message : String(err);
           console.error("Failed to restore chat:", err);
 
-          alert(`Failed to restore chat: ${errorMsg}`);
+          showError(`Failed to restore chat: ${errorMsg}`, 6000);
         }
       });
 
@@ -2414,7 +2442,7 @@ export class ShadowClaw extends HTMLElement {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error("Error in restoreChat:", err);
 
-      alert(`Error: ${errorMsg}`);
+      showError(`Error restoring chat: ${errorMsg}`, 6000);
     }
   }
 
@@ -2672,17 +2700,18 @@ export class ShadowClaw extends HTMLElement {
     try {
       const granted = await requestPersistentStorage();
       if (granted) {
-        alert("✅ Persistent storage granted!");
+        showSuccess("Persistent storage granted", 3500);
       } else {
-        alert(
-          "❌ Persistent storage was not granted. Browsers may deny this based on site usage.",
+        showWarning(
+          "Persistent storage was not granted. Browsers may deny this based on site usage.",
+          5500,
         );
       }
 
       await this.updateStorageInfo(db);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      alert(`Error: ${errorMsg}`);
+      showError(`Storage request failed: ${errorMsg}`, 6000);
     }
   }
 
@@ -2695,8 +2724,9 @@ export class ShadowClaw extends HTMLElement {
     try {
       const success = await selectStorageDirectory(db);
       if (success) {
-        alert(
-          "✅ Storage location changed successfully! Note that existing files in OPFS were not moved.",
+        showSuccess(
+          "Storage location changed. Existing OPFS files were not moved.",
+          4500,
         );
 
         await this.updateStorageInfo(db);
@@ -2705,7 +2735,7 @@ export class ShadowClaw extends HTMLElement {
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      alert(`Error: ${errorMsg}`);
+      showError(`Failed to change storage location: ${errorMsg}`, 6000);
     }
   }
 
@@ -2722,13 +2752,13 @@ export class ShadowClaw extends HTMLElement {
     try {
       await resetStorageDirectory(db);
 
-      alert("✅ Reverted to browser-internal storage.");
+      showSuccess("Reverted to browser-internal storage", 3500);
 
       await this.updateStorageInfo(db);
       await orchestratorStore.loadFiles(db);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      alert(`Error: ${errorMsg}`);
+      showError(`Failed to reset storage location: ${errorMsg}`, 6000);
     }
   }
 
@@ -2772,10 +2802,10 @@ export class ShadowClaw extends HTMLElement {
         this.updateModelSelector();
 
         const selectedText = select.selectedOptions[0]?.text || providerId;
-        alert(`✅ Switched to ${selectedText}`);
+        showSuccess(`Switched to ${selectedText}`, 3000);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
-        alert("❌ Error switching provider: " + errorMsg);
+        showError("Error switching provider: " + errorMsg, 6000);
         // Reset the selector
         /** @type {HTMLSelectElement | null} */
         const selectEl = /** @type {HTMLSelectElement | null} */ (
@@ -2860,12 +2890,12 @@ export class ShadowClaw extends HTMLElement {
     const key = input.value.trim();
 
     if (!key) {
-      alert("Please enter an API key");
+      showWarning("Please enter an API key", 3000);
       return;
     }
 
     if (!this.orchestrator) {
-      alert("Orchestrator not initialized");
+      showError("Orchestrator not initialized", 5000);
       return;
     }
 
@@ -2887,10 +2917,10 @@ export class ShadowClaw extends HTMLElement {
       /** @type {HTMLInputElement} */
       const inputEl = /** @type {HTMLInputElement} */ (keyInput);
       inputEl.value = "";
-      alert("✅ API key and provider saved!");
+      showSuccess("API key and provider saved", 3000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      alert("❌ Error saving API key: " + errorMsg);
+      showError("Error saving API key: " + errorMsg, 6000);
     }
   }
 
@@ -2923,10 +2953,10 @@ export class ShadowClaw extends HTMLElement {
     try {
       await this.orchestrator.setModel(db, model);
 
-      alert("✅ Model saved!");
+      showSuccess("Model saved", 3000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      alert("❌ Error saving model: " + errorMsg);
+      showError("Error saving model: " + errorMsg, 6000);
     }
   }
 
@@ -2956,7 +2986,7 @@ export class ShadowClaw extends HTMLElement {
     const name = input.value.trim();
 
     if (!name) {
-      alert("Please enter a name");
+      showWarning("Please enter a name", 3000);
 
       return;
     }
@@ -2971,7 +3001,7 @@ export class ShadowClaw extends HTMLElement {
       }
     }
 
-    alert("✅ Assistant name saved!");
+    showSuccess("Assistant name saved", 3000);
   }
 
   /**
@@ -3096,12 +3126,12 @@ export class ShadowClaw extends HTMLElement {
           emailInput.value.trim() || "k9@shadowclaw.local",
         );
 
-      alert("✅ Git settings saved!");
+      showSuccess("Git settings saved", 3000);
 
       this.updateGitWarning();
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      alert("❌ Error saving Git settings: " + errorMsg);
+      showError("Error saving Git settings: " + errorMsg, 6000);
     }
   }
 }

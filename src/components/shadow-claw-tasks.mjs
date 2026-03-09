@@ -5,6 +5,8 @@ import { renderMarkdown } from "../markdown.mjs";
 import { orchestratorStore } from "../stores/orchestrator.mjs";
 import { showError, showInfo, showSuccess } from "../toast.mjs";
 
+import "./shadow-claw-page-header.mjs";
+
 /**
  * @typedef {import("../types.mjs").Task} Task
  * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
@@ -35,77 +37,104 @@ export class ShadowClawTasks extends HTMLElement {
           overflow: hidden;
         }
 
-        .header {
-          align-items: center;
-          background-color: var(--shadow-claw-bg-primary, #ffffff);
-          border-bottom: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
-          display: flex;
-          justify-content: space-between;
-          padding: 1rem;
+        .tasks__header-btn {
+          background-color: var(--shadow-claw-bg-tertiary);
+          border-radius: var(--shadow-claw-radius-m);
+          border: 0.0625rem solid var(--shadow-claw-border-color);
+          color: var(--shadow-claw-text-secondary);
+          cursor: pointer;
+          font-size: 0.75rem;
+          padding: 0.5rem 0.75rem;
+          white-space: nowrap;
         }
 
-        .header h2 {
-          font-size: 1.125rem;
+        .tasks__add-btn {
+          background-color: var(--shadow-claw-accent-primary);
+          border-color: var(--shadow-claw-accent-primary);
+          color: var(--shadow-claw-on-primary);
           font-weight: 600;
-          margin: 0;
         }
 
-        .content {
+        .tasks__clear-btn {
+          border-color: var(--shadow-claw-error-color, #ef4444);
+          color: var(--shadow-claw-error-color, #ef4444);
+        }
+
+        .tasks__content {
           flex: 1;
           overflow-y: auto;
-          padding: 1rem;
+          padding: 0.75rem;
         }
 
-        .task-list {
+        @media (min-width: 640px) {
+          .tasks__content {
+            padding: 1rem;
+          }
+        }
+
+        .tasks__list {
           display: flex;
           flex-direction: column;
-          gap: 0.75rem;
+          gap: 0.625rem;
         }
 
-        .task-item {
+        @media (min-width: 640px) {
+          .tasks__list {
+            gap: 0.75rem;
+          }
+        }
+
+        .tasks__item {
           background-color: var(--shadow-claw-bg-secondary, #f9fafb);
           border-radius: 0.5rem;
           border: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
           display: flex;
           flex-direction: column;
-          gap: 0.5rem;
-          padding: 0.75rem;
+          gap: 0.75rem;
+          padding: 0.625rem;
         }
 
-        .task-header {
-          align-items: flex-start;
+        .tasks__item-header {
           display: flex;
-          justify-content: space-between;
+          flex-direction: column;
+          gap: 0.75rem;
         }
 
-        .task-info {
+        .tasks__item-info {
           display: flex;
           flex-direction: column;
           gap: 0.125rem;
+          width: 100%;
         }
 
-        .task-schedule {
+        .tasks__schedule {
           color: var(--shadow-claw-accent-primary, #3b82f6);
-          font-size: 0.75rem;
+          font-size: 0.6875rem;
           font-weight: 600;
           text-transform: uppercase;
         }
 
-        .task-prompt {
+        @media (min-width: 640px) {
+          .tasks__schedule {
+            font-size: 0.75rem;
+          }
+        }
+
+        .tasks__prompt {
           color: var(--shadow-claw-text-primary, #111827);
           font-size: 0.875rem;
           word-break: break-word;
         }
 
-        .task-prompt p {
+        .tasks__prompt p {
           margin-bottom: 0.5rem;
         }
 
-        .task-prompt p:last-child {
+        .tasks__prompt p:last-child {
           margin-bottom: 0;
         }
 
-        .task-prompt pre {
+        .tasks__prompt pre {
           background-color: var(--shadow-claw-bg-tertiary);
           border-radius: 0.375rem;
           margin: 0.75rem 0;
@@ -113,7 +142,7 @@ export class ShadowClawTasks extends HTMLElement {
           padding: 0.5rem;
         }
 
-        .task-prompt pre code.hljs {
+        .tasks__prompt pre code.hljs {
           background-color: transparent;
           border-radius: 0.375rem;
           color: var(--shadow-claw-text-primary);
@@ -123,7 +152,7 @@ export class ShadowClawTasks extends HTMLElement {
           padding: 0;
         }
 
-        .task-prompt code {
+        .tasks__prompt code {
           background-color: var(--shadow-claw-bg-tertiary);
           border-radius: 0.1875rem;
           color: var(--shadow-claw-text-primary);
@@ -132,25 +161,21 @@ export class ShadowClawTasks extends HTMLElement {
           padding: 0.125rem 0.375rem;
         }
 
-        .task-prompt code.hljs {
+        .tasks__prompt code.hljs {
           background: transparent;
           color: var(--shadow-claw-text-primary);
           padding: 0;
         }
 
-        .task-actions {
-          align-items: center;
+        .tasks__actions {
           display: flex;
           flex-wrap: wrap;
-          gap: 0.375rem;
-          justify-content: flex-end;
-          margin-left: 1rem;
-          max-width: 12.5rem;
-          min-width: 12.5rem;
-          width: 12.5rem;
+          gap: 0.5rem;
+          max-width: 100%;
+          width: 100%;
         }
 
-        .task-toggle {
+        .tasks__toggle {
           align-items: center;
           color: var(--shadow-claw-text-secondary, #6b7280);
           cursor: pointer;
@@ -158,38 +183,40 @@ export class ShadowClawTasks extends HTMLElement {
           flex-basis: 100%;
           font-size: 0.8125rem;
           gap: 0.5rem;
-          margin-bottom: 0.5rem;
           order: -1;
           user-select: none;
         }
 
-        .task-toggle input[type="checkbox"] {
+        .tasks__toggle input[type="checkbox"] {
           accent-color: var(--shadow-claw-accent-primary);
           cursor: pointer;
+          flex-shrink: 0;
           height: 1rem;
           width: 1rem;
         }
 
-        .delete-btn,
-        .edit-btn {
+        .tasks__delete-btn,
+        .tasks__edit-btn {
           background: transparent;
           border-radius: var(--shadow-claw-radius-m);
           border: 0.0625rem solid;
           cursor: pointer;
-          flex: 1;
+          flex: 1 1 calc(50% - 0.25rem);
           font-size: 0.6875rem;
-          min-width: 4.375rem;
-          padding: 0.375rem 0.625rem;
+          min-width: 0;
+          overflow: hidden;
+          padding: 0.5rem 0.625rem;
+          text-overflow: ellipsis;
           transition: all 0.15s;
           white-space: nowrap;
         }
 
         /* Accordion styles */
-        .task-content-details {
+        .tasks__content-details {
           width: 100%;
         }
 
-        .task-content-summary {
+        .tasks__content-summary {
           align-items: flex-start;
           color: var(--shadow-claw-text-tertiary);
           cursor: pointer;
@@ -204,32 +231,32 @@ export class ShadowClawTasks extends HTMLElement {
           user-select: none;
         }
 
-        .task-content-summary::-webkit-details-marker {
+        .tasks__content-summary::-webkit-details-marker {
           display: none;
         }
 
-        .task-content-summary:hover {
+        .tasks__content-summary:hover {
           color: var(--shadow-claw-accent-primary);
         }
 
-        .task-content-summary::before {
+        .tasks__content-summary::before {
           content: '▶';
           display: inline-block;
           font-size: 0.625rem;
           transition: transform 0.2s ease;
         }
 
-        .task-content-details[open] .task-content-summary::before {
+        .tasks__content-details[open] .tasks__content-summary::before {
           transform: rotate(90deg);
         }
 
-        .task-content-summary .summary-label {
+        .tasks__content-summary .tasks__summary-label {
           flex-shrink: 0;
           text-decoration: underline;
           text-underline-offset: 0.125rem;
         }
 
-        .task-content-summary .summary-text {
+        .tasks__content-summary .tasks__summary-text {
           display: -webkit-box;
           line-height: 1.35;
           overflow: hidden;
@@ -239,48 +266,88 @@ export class ShadowClawTasks extends HTMLElement {
           word-break: break-word;
         }
 
-        .delete-btn {
+        .tasks__delete-btn {
           border-color: var(--shadow-claw-error-color, #ef4444);
           color: var(--shadow-claw-error-color, #ef4444);
         }
 
-        .delete-btn:hover {
+        .tasks__delete-btn:hover,
+        .tasks__delete-btn:focus-visible {
           background-color: var(--shadow-claw-error-color, #ef4444);
           color: white;
         }
 
-        .edit-btn {
+        .tasks__edit-btn {
           border-color: var(--shadow-claw-accent-primary);
           color: var(--shadow-claw-accent-primary);
         }
 
-        .edit-btn:hover {
+        .tasks__edit-btn:hover,
+        .tasks__edit-btn:focus-visible {
           background-color: var(--shadow-claw-accent-primary);
           color: var(--shadow-claw-on-primary);
         }
 
-        .run-btn {
+        .tasks__run-btn {
           background: transparent;
           border-radius: var(--shadow-claw-radius-m);
           border: 0.0625rem solid var(--shadow-claw-success-color, #10b981);
           color: var(--shadow-claw-success-color, #10b981);
           cursor: pointer;
-          flex: 1;
+          flex: 1 1 100%;
           font-size: 0.6875rem;
           font-weight: 600;
-          min-width: 4.375rem;
-          padding: 0.375rem 0.625rem;
+          min-width: 0;
+          overflow: hidden;
+          padding: 0.5rem 0.625rem;
+          text-overflow: ellipsis;
           transition: all 0.15s;
           white-space: nowrap;
         }
 
-        .run-btn:hover {
+        .tasks__run-btn:hover,
+        .tasks__run-btn:focus-visible {
           background-color: var(--shadow-claw-success-color);
           border-color: var(--shadow-claw-success-color);
           color: var(--shadow-claw-on-primary, white);
         }
 
-        .empty-state {
+        /* Tablet and up: horizontal layout */
+        @media (min-width: 640px) {
+          .tasks__item {
+            padding: 0.75rem;
+          }
+
+          .tasks__item-header {
+            flex-direction: row;
+            align-items: flex-start;
+            gap: 1rem;
+          }
+
+          .tasks__item-info {
+            flex: 1;
+            min-width: 0;
+          }
+
+          .tasks__actions {
+            flex-shrink: 0;
+            max-width: 12.5rem;
+            min-width: 10rem;
+            width: auto;
+          }
+
+          .tasks__run-btn {
+            flex: 1 1 auto;
+          }
+
+          .tasks__delete-btn,
+          .tasks__edit-btn {
+            flex: 1 1 auto;
+            min-width: 4.375rem;
+          }
+        }
+
+        .tasks__empty {
           align-items: center;
           color: var(--shadow-claw-text-tertiary, #9ca3af);
           display: flex;
@@ -290,12 +357,12 @@ export class ShadowClawTasks extends HTMLElement {
           text-align: center;
         }
 
-        .empty-state p {
+        .tasks__empty p {
           font-size: 0.875rem;
           margin-top: 0.5rem;
         }
 
-        .last-run {
+        .tasks__last-run {
           color: var(--shadow-claw-text-tertiary, #9ca3af);
           font-size: 0.6875rem;
           margin-top: 0.25rem;
@@ -308,16 +375,23 @@ export class ShadowClawTasks extends HTMLElement {
           border: 0.0625rem solid var(--shadow-claw-border-color);
           box-shadow: var(--shadow-claw-shadow-lg);
           color: var(--shadow-claw-text-primary, #111827);
-          max-width: 31.25rem;
+          max-width: calc(100vw - 2rem);
           padding: 0;
-          width: 90%;
+          width: 100%;
+        }
+
+        @media (min-width: 640px) {
+          dialog {
+            max-width: 31.25rem;
+            width: 90%;
+          }
         }
 
         dialog::backdrop {
           background-color: rgba(0, 0, 0, 0.5);
         }
 
-        .edit-dialog-header {
+        .tasks__dialog-header {
           align-items: center;
           border-bottom: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
           display: flex;
@@ -325,13 +399,13 @@ export class ShadowClawTasks extends HTMLElement {
           padding: 1rem;
         }
 
-        .edit-dialog-header h3 {
+        .tasks__dialog-title {
           font-size: 1rem;
           font-weight: 600;
           margin: 0;
         }
 
-        .edit-dialog-close {
+        .tasks__dialog-close {
           align-items: center;
           background: none;
           border: none;
@@ -345,11 +419,12 @@ export class ShadowClawTasks extends HTMLElement {
           width: 1.5rem;
         }
 
-        .edit-dialog-close:hover {
+        .tasks__dialog-close:hover,
+        .tasks__dialog-close:focus-visible {
           color: var(--shadow-claw-text-primary, #111827);
         }
 
-        .edit-dialog-body {
+        .tasks__dialog-body {
           padding: 1rem;
         }
 
@@ -360,15 +435,15 @@ export class ShadowClawTasks extends HTMLElement {
           width: 1rem;
         }
 
-        .form-group {
+        .tasks__form-group {
           margin-bottom: 1rem;
         }
 
-        .form-group:last-of-type {
+        .tasks__form-group:last-of-type {
           margin-bottom: 0;
         }
 
-        .form-label {
+        .tasks__form-label {
           color: var(--shadow-claw-text-primary, #111827);
           display: block;
           font-size: 0.75rem;
@@ -377,8 +452,8 @@ export class ShadowClawTasks extends HTMLElement {
           text-transform: uppercase;
         }
 
-        .form-input,
-        .form-textarea {
+        .tasks__form-input,
+        .tasks__form-textarea {
           background-color: var(--shadow-claw-bg-secondary, #f9fafb);
           border-radius: var(--shadow-claw-radius-s);
           border: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
@@ -391,30 +466,30 @@ export class ShadowClawTasks extends HTMLElement {
           width: 100%;
         }
 
-        .form-input:focus,
-        .form-textarea:focus {
+        .tasks__form-input:focus,
+        .tasks__form-textarea:focus {
           outline: none;
           border-color: var(--shadow-claw-accent-primary, #3b82f6);
           background-color: var(--shadow-claw-bg-primary, #ffffff);
         }
 
-        .form-textarea {
+        .tasks__form-textarea {
           resize: vertical;
           min-height: 6.25rem;
         }
 
-        .form-textarea.is-script {
+        .tasks__form-textarea--script {
           font-family: var(--shadow-claw-font-mono, monospace);
           white-space: pre;
         }
 
-        .form-hint {
+        .tasks__form-hint {
           font-size: 0.6875rem;
           color: var(--shadow-claw-text-tertiary, #9ca3af);
           margin-top: 0.25rem;
         }
 
-        .edit-dialog-footer {
+        .tasks__dialog-footer {
           padding: 1rem;
           border-top: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
           display: flex;
@@ -422,8 +497,8 @@ export class ShadowClawTasks extends HTMLElement {
           gap: 0.5rem;
         }
 
-        .btn-cancel,
-        .btn-save {
+        .tasks__btn-cancel,
+        .tasks__btn-save {
           padding: 0.5rem 1rem;
           font-size: 0.75rem;
           border-radius: var(--shadow-claw-radius-m);
@@ -433,108 +508,80 @@ export class ShadowClawTasks extends HTMLElement {
           font-weight: 600;
         }
 
-        .btn-cancel {
+        .tasks__btn-cancel {
           background-color: var(--shadow-claw-bg-secondary, #f9fafb);
           border-color: var(--shadow-claw-border-color, #e5e7eb);
           color: var(--shadow-claw-text-primary, #111827);
         }
 
-        .btn-cancel:hover {
+        .tasks__btn-cancel:hover,
+        .tasks__btn-cancel:focus-visible {
           background-color: var(--shadow-claw-bg-tertiary, #f3f4f6);
         }
 
-        .btn-save {
+        .tasks__btn-save {
           background-color: var(--shadow-claw-accent-primary, #3b82f6);
           border-color: var(--shadow-claw-accent-primary, #3b82f6);
           color: var(--shadow-claw-on-primary, white);
         }
 
-        .btn-save:hover {
+        .tasks__btn-save:hover,
+        .tasks__btn-save:focus-visible {
           background-color: var(--shadow-claw-accent-hover, #2563eb);
           border-color: var(--shadow-claw-accent-hover, #2563eb);
         }
 
-        .btn-save:disabled {
+        .tasks__btn-save:disabled {
           opacity: 0.5;
           cursor: not-allowed;
         }
 
-        .header-actions {
-          display: flex;
-          gap: 0.5rem;
-        }
-
-        .add-btn {
-          background-color: var(--shadow-claw-accent-primary);
-          border-radius: var(--shadow-claw-radius-m);
-          border: 0.0625rem solid var(--shadow-claw-accent-primary);
-          color: var(--shadow-claw-on-primary);
-          cursor: pointer;
-          font-size: 0.75rem;
-          font-weight: 600;
-          padding: 0.25rem 0.75rem;
-        }
-
-        .backup-btn,
-        .restore-btn {
-          background-color: var(--shadow-claw-bg-tertiary);
-          border-radius: var(--shadow-claw-radius-m);
-          border: 0.0625rem solid var(--shadow-claw-border-color);
-          color: var(--shadow-claw-text-secondary);
-          cursor: pointer;
-          font-size: 0.75rem;
-          padding: 0.25rem 0.75rem;
-        }
-
-        .clear-btn {
-          background-color: var(--shadow-claw-bg-tertiary);
-          border-radius: var(--shadow-claw-radius-m);
-          border: 0.0625rem solid var(--shadow-claw-error-color, #ef4444);
-          color: var(--shadow-claw-error-color, #ef4444);
-          cursor: pointer;
-          font-size: 0.75rem;
-          padding: 0.25rem 0.75rem;
-        }
-
-        .hidden-restore {
+        .tasks__hidden-restore {
           display: none;
         }
 
-        .form-group-row {
+        .tasks__form-group-row {
           align-items: center;
           display: flex;
           gap: 0.5rem;
         }
 
-        .form-label-inline {
+        .tasks__form-label-inline {
           cursor: pointer;
           margin-bottom: 0;
         }
 
-        .empty-state-hint {
+        .tasks__empty-hint {
           font-size: 0.75rem;
         }
 
-        .task-schedule-row {
+        .tasks__schedule-row {
           align-items: center;
           display: flex;
+          flex-wrap: wrap;
           gap: 0.375rem;
         }
 
-        .script-badge {
+        .tasks__script-badge {
           background: var(--shadow-claw-accent-primary);
           border-radius: 0.25rem;
           color: var(--shadow-claw-on-primary);
-          font-size: 0.625rem;
+          font-size: 0.5625rem;
           font-weight: bold;
           padding: 0.0625rem 0.25rem;
         }
 
-        .task-preview-container {
+        @media (min-width: 640px) {
+          .tasks__script-badge {
+            font-size: 0.625rem;
+          }
+        }
+
+        .tasks__preview-container {
           margin-top: 1rem;
         }
 
-        .task-preview {
+        .tasks__preview {
           background-color: var(--shadow-claw-bg-secondary);
           border-radius: var(--shadow-claw-radius-s);
           border: 0.0625rem solid var(--shadow-claw-border-color);
@@ -542,52 +589,56 @@ export class ShadowClawTasks extends HTMLElement {
           min-height: 3rem;
           padding: 0.75rem;
         }
+
+        .tasks__preview-empty {
+          color: var(--shadow-claw-text-tertiary, #9ca3af);
+          font-style: italic;
+        }
       </style>
-      <div class="header">
-        <h2>✓ Tasks</h2>
-        <div class="header-actions">
-          <button class="add-btn">+ Add Task</button>
-          <button class="backup-btn">💾 Backup</button>
-          <button class="restore-btn">♻️ Restore</button>
-          <button class="clear-btn">🗑️ Clear All</button>
-        </div>
-      </div>
-      <input type="file" class="hidden-restore" accept=".json,application/json">
-      <div class="content">
-        <div class="task-list"></div>
+      <section class="tasks" aria-label="Tasks">
+      <shadow-claw-page-header icon="✓" title="Tasks">
+        <button slot="actions" type="button" class="tasks__add-btn tasks__header-btn">+ Add Task</button>
+        <button slot="actions" type="button" class="tasks__backup-btn tasks__header-btn">💾 Backup</button>
+        <button slot="actions" type="button" class="tasks__restore-btn tasks__header-btn">♻️ Restore</button>
+        <button slot="actions" type="button" class="tasks__clear-btn tasks__header-btn">🗑️ Clear All</button>
+      </shadow-claw-page-header>
+      <input type="file" class="tasks__hidden-restore" accept=".json,application/json" aria-label="Restore tasks from JSON backup">
+      <div class="tasks__content">
+        <div class="tasks__list" role="list" aria-live="polite"></div>
       </div>
       <!-- Add/Edit Task Dialog -->
-      <dialog class="edit-dialog-modal">
-        <div class="edit-dialog-header">
-          <h3 class="dialog-title">Add Task</h3>
-          <button type="button" class="edit-dialog-close">✕</button>
+      <dialog class="tasks__dialog" aria-labelledby="tasksDialogTitle">
+        <div class="tasks__dialog-header">
+          <h3 class="tasks__dialog-title" id="tasksDialogTitle">Add Task</h3>
+          <button type="button" class="tasks__dialog-close" aria-label="Close task dialog">✕</button>
         </div>
-        <form class="edit-dialog-form">
-          <div class="edit-dialog-body">
-            <div class="form-group">
-              <label class="form-label">Schedule (Cron Expression)</label>
-              <input type="text" class="form-input" name="schedule" placeholder="e.g., 0 9 * * * (daily at 9 AM)" required>
-              <div class="form-hint">Standard cron format (sec min hour day month weekday)</div>
+        <form class="tasks__dialog-form">
+          <div class="tasks__dialog-body">
+            <div class="tasks__form-group">
+              <label class="tasks__form-label" for="tasksScheduleInput">Schedule (Cron Expression)</label>
+              <input type="text" class="tasks__form-input" id="tasksScheduleInput" name="schedule" placeholder="e.g., 0 9 * * * (daily at 9 AM)" required aria-describedby="tasksScheduleHint">
+              <div class="tasks__form-hint" id="tasksScheduleHint">Standard cron format (sec min hour day month weekday)</div>
             </div>
-            <div class="form-group">
-              <label class="form-label" id="taskLabel">Task Prompt</label>
-              <textarea class="form-textarea" name="prompt" placeholder="Enter the task prompt..." required></textarea>
+            <div class="tasks__form-group">
+              <label class="tasks__form-label" id="taskLabel" for="tasksPromptInput">Task Prompt</label>
+              <textarea class="tasks__form-textarea" id="tasksPromptInput" name="prompt" placeholder="Enter the task prompt..." required></textarea>
             </div>
-            <div class="form-group form-group-row">
+            <div class="tasks__form-group tasks__form-group-row">
               <input type="checkbox" name="isScript" id="isScriptCheckbox">
-              <label for="isScriptCheckbox" class="form-label form-label-inline">Is JavaScript</label>
+              <label for="isScriptCheckbox" class="tasks__form-label tasks__form-label-inline">Is JavaScript</label>
             </div>
-            <div class="form-group task-preview-container">
-              <label class="form-label">Preview</label>
-              <div class="task-preview task-prompt"></div>
+            <div class="tasks__form-group tasks__preview-container">
+              <label class="tasks__form-label">Preview</label>
+              <div class="tasks__preview tasks__prompt" id="tasksPreview"></div>
             </div>
           </div>
-          <div class="edit-dialog-footer">
-            <button type="button" class="btn-cancel">Cancel</button>
-            <button type="submit" class="btn-save dialog-submit">Add Task</button>
+          <div class="tasks__dialog-footer">
+            <button type="button" class="tasks__btn-cancel">Cancel</button>
+            <button type="submit" class="tasks__btn-save tasks__dialog-submit">Add Task</button>
           </div>
         </form>
       </dialog>
+      </section>
     `;
   }
 
@@ -630,12 +681,12 @@ export class ShadowClawTasks extends HTMLElement {
     if (!root) return;
 
     // Backup button
-    const backupBtn = root.querySelector(".backup-btn");
+    const backupBtn = root.querySelector(".tasks__backup-btn");
     backupBtn?.addEventListener("click", () => this.handleBackup());
 
     // Restore button
-    const restoreBtn = root.querySelector(".restore-btn");
-    const restoreInput = root.querySelector(".hidden-restore");
+    const restoreBtn = root.querySelector(".tasks__restore-btn");
+    const restoreInput = root.querySelector(".tasks__hidden-restore");
     restoreBtn?.addEventListener("click", () => {
       if (restoreInput instanceof HTMLInputElement) restoreInput.click();
     });
@@ -647,19 +698,19 @@ export class ShadowClawTasks extends HTMLElement {
     });
 
     // Clear all button
-    const clearBtn = root.querySelector(".clear-btn");
+    const clearBtn = root.querySelector(".tasks__clear-btn");
     clearBtn?.addEventListener("click", () => this.handleClearAll(db));
 
     // Add task button
-    const addBtn = root.querySelector(".add-btn");
+    const addBtn = root.querySelector(".tasks__add-btn");
     addBtn?.addEventListener("click", () => this.handleAdd());
 
     // Dialog controls
     const dialog = root.querySelector("dialog");
-    const closeBtn = root.querySelector(".edit-dialog-close");
-    const cancelBtn = root.querySelector(".btn-cancel");
+    const closeBtn = root.querySelector(".tasks__dialog-close");
+    const cancelBtn = root.querySelector(".tasks__btn-cancel");
     const form = /** @type {HTMLFormElement | null} */ (
-      root.querySelector(".edit-dialog-form")
+      root.querySelector(".tasks__dialog-form")
     );
 
     closeBtn?.addEventListener("click", () => {
@@ -688,7 +739,7 @@ export class ShadowClawTasks extends HTMLElement {
     const isScriptCheckbox = root.getElementById("isScriptCheckbox");
     const taskLabel = root.getElementById("taskLabel");
     const promptTextarea = root.querySelector("textarea[name='prompt']");
-    const previewDiv = root.querySelector(".task-preview");
+    const previewDiv = root.querySelector(".tasks__preview");
 
     const updatePreview = () => {
       if (
@@ -738,7 +789,7 @@ export class ShadowClawTasks extends HTMLElement {
       return;
     }
 
-    const list = root.querySelector(".task-list");
+    const list = root.querySelector(".tasks__list");
     if (!list) {
       return;
     }
@@ -747,9 +798,9 @@ export class ShadowClawTasks extends HTMLElement {
 
     if (tasks.length === 0) {
       list.innerHTML = `
-        <div class="empty-state">
+        <div class="tasks__empty" role="status">
           <p>No scheduled tasks for this group.</p>
-          <p class="empty-state-hint">Ask the agent to create one using "create_task".</p>
+          <p class="tasks__empty-hint">Ask the agent to create one using "create_task".</p>
         </div>
       `;
 
@@ -759,39 +810,40 @@ export class ShadowClawTasks extends HTMLElement {
     list.innerHTML = "";
     tasks.forEach((/** @type {Task} */ task) => {
       const item = document.createElement("div");
-      item.className = "task-item";
+      item.className = "tasks__item";
+      item.setAttribute("role", "listitem");
 
       const lastRunStr = task.lastRun
         ? new Date(task.lastRun).toLocaleString()
         : "Never";
 
       item.innerHTML = `
-        <div class="task-header">
-          <div class="task-info">
-            <div class="task-schedule-row">
-              <div class="task-schedule">⏰ ${task.schedule}</div>
-              ${task.isScript ? '<span class="script-badge">JS SCRIPT</span>' : ""}
+        <div class="tasks__item-header">
+          <div class="tasks__item-info">
+            <div class="tasks__schedule-row">
+              <div class="tasks__schedule">⏰ ${task.schedule}</div>
+              ${task.isScript ? '<span class="tasks__script-badge">JS SCRIPT</span>' : ""}
             </div>
-            <div class="task-prompt-container">
+            <div class="tasks__prompt-container">
               ${this.renderPreview(task.prompt, !!task.isScript, true)}
             </div>
-            <div class="last-run">Last run: ${lastRunStr}</div>
+            <div class="tasks__last-run">Last run: ${lastRunStr}</div>
           </div>
-          <div class="task-actions">
-            <label class="task-toggle">
-              <input type="checkbox" ${task.enabled ? "checked" : ""} data-id="${task.id}" class="toggle-input">
+          <div class="tasks__actions">
+            <label class="tasks__toggle">
+              <input type="checkbox" ${task.enabled ? "checked" : ""} data-id="${task.id}" class="tasks__toggle-input" aria-label="${task.enabled ? "Disable" : "Enable"} task scheduled ${this.escapeHtml(task.schedule)}">
               ${task.enabled ? "Enabled" : "Disabled"}
             </label>
-            <button class="run-btn" data-id="${task.id}">Run</button>
-            <button class="edit-btn" data-id="${task.id}">✎ Edit</button>
-            <button class="delete-btn" data-id="${task.id}">Delete</button>
+            <button type="button" class="tasks__run-btn" data-id="${task.id}" aria-label="Run task scheduled ${this.escapeHtml(task.schedule)}">Run</button>
+            <button type="button" class="tasks__edit-btn" data-id="${task.id}" aria-label="Edit task scheduled ${this.escapeHtml(task.schedule)}">✎ Edit</button>
+            <button type="button" class="tasks__delete-btn" data-id="${task.id}" aria-label="Delete task scheduled ${this.escapeHtml(task.schedule)}">Delete</button>
           </div>
         </div>
       `;
 
       // Bind events
       const toggle = /** @type {HTMLInputElement | null} */ (
-        item.querySelector(".toggle-input")
+        item.querySelector(".tasks__toggle-input")
       );
 
       toggle?.addEventListener("change", (e) => {
@@ -799,13 +851,13 @@ export class ShadowClawTasks extends HTMLElement {
         orchestratorStore.toggleTask(db, task, target.checked);
       });
 
-      const runBtn = item.querySelector(".run-btn");
+      const runBtn = item.querySelector(".tasks__run-btn");
       runBtn?.addEventListener("click", () => this.handleRun(task));
 
-      const editBtn = item.querySelector(".edit-btn");
+      const editBtn = item.querySelector(".tasks__edit-btn");
       editBtn?.addEventListener("click", () => this.handleEdit(task));
 
-      const deleteBtn = item.querySelector(".delete-btn");
+      const deleteBtn = item.querySelector(".tasks__delete-btn");
       deleteBtn?.addEventListener("click", () =>
         this.handleDelete(db, task.id),
       );
@@ -852,9 +904,9 @@ export class ShadowClawTasks extends HTMLElement {
     }
 
     const dialog = root.querySelector("dialog");
-    const form = root.querySelector(".edit-dialog-form");
-    const title = root.querySelector(".dialog-title");
-    const submitBtn = root.querySelector(".dialog-submit");
+    const form = root.querySelector(".tasks__dialog-form");
+    const title = root.querySelector(".tasks__dialog-title");
+    const submitBtn = root.querySelector(".tasks__dialog-submit");
 
     if (!form || !(form instanceof HTMLFormElement)) {
       return;
@@ -873,7 +925,7 @@ export class ShadowClawTasks extends HTMLElement {
     form.reset();
 
     // Reset preview
-    const previewDiv = root.querySelector(".task-preview");
+    const previewDiv = root.querySelector(".tasks__preview");
     if (previewDiv instanceof HTMLElement) {
       previewDiv.innerHTML = this.renderPreview("", false);
     }
@@ -898,9 +950,9 @@ export class ShadowClawTasks extends HTMLElement {
     }
 
     const dialog = root.querySelector("dialog");
-    const form = root.querySelector(".edit-dialog-form");
-    const title = root.querySelector(".dialog-title");
-    const submitBtn = root.querySelector(".dialog-submit");
+    const form = root.querySelector(".tasks__dialog-form");
+    const title = root.querySelector(".tasks__dialog-title");
+    const submitBtn = root.querySelector(".tasks__dialog-submit");
 
     if (!form || !(form instanceof HTMLFormElement)) {
       return;
@@ -933,7 +985,7 @@ export class ShadowClawTasks extends HTMLElement {
     }
 
     // Set initial preview
-    const previewDiv = root.querySelector(".task-preview");
+    const previewDiv = root.querySelector(".tasks__preview");
     if (previewDiv instanceof HTMLElement) {
       previewDiv.innerHTML = this.renderPreview(task.prompt, !!task.isScript);
     }
@@ -1013,7 +1065,7 @@ export class ShadowClawTasks extends HTMLElement {
    */
   renderPreview(prompt, isScript, allowCollapse = false) {
     if (!prompt.trim()) {
-      return '<span style="color: var(--shadow-claw-text-tertiary); font-style: italic;">No content</span>';
+      return '<span class="tasks__preview-empty">No content</span>';
     }
 
     const lines = prompt.split("\n");
@@ -1027,17 +1079,17 @@ export class ShadowClawTasks extends HTMLElement {
       const summaryText = prompt.trim();
 
       return `
-        <details class="task-content-details">
-          <summary class="task-content-summary">
-            <span class="summary-text">${this.escapeHtml(summaryText)}</span>
-            <span class="summary-label">(View more)</span>
+        <details class="tasks__content-details">
+          <summary class="tasks__content-summary">
+            <span class="tasks__summary-text">${this.escapeHtml(summaryText)}</span>
+            <span class="tasks__summary-label">(View more)</span>
           </summary>
-          <div class="task-prompt">${rendered}</div>
+          <div class="tasks__prompt">${rendered}</div>
         </details>
       `;
     }
 
-    return `<div class="task-prompt">${rendered}</div>`;
+    return `<div class="tasks__prompt">${rendered}</div>`;
   }
 
   /**
@@ -1055,10 +1107,10 @@ export class ShadowClawTasks extends HTMLElement {
 
     if (on) {
       label.textContent = "JavaScript Code";
-      textarea?.classList.add("is-script");
+      textarea?.classList.add("tasks__form-textarea--script");
     } else {
       label.textContent = "Task Prompt";
-      textarea?.classList.remove("is-script");
+      textarea?.classList.remove("tasks__form-textarea--script");
     }
   }
 
@@ -1078,7 +1130,7 @@ export class ShadowClawTasks extends HTMLElement {
    */
   async handleBackup() {
     try {
-      const btn = this.shadowRoot?.querySelector(".backup-btn");
+      const btn = this.shadowRoot?.querySelector(".tasks__backup-btn");
       if (btn instanceof HTMLButtonElement) btn.disabled = true;
       if (btn) btn.textContent = "⏳";
 
@@ -1099,7 +1151,7 @@ export class ShadowClawTasks extends HTMLElement {
       showError(`Failed to create backup: ${message}`);
       console.error("Backup error:", err);
     } finally {
-      const btn = this.shadowRoot?.querySelector(".backup-btn");
+      const btn = this.shadowRoot?.querySelector(".tasks__backup-btn");
       if (btn instanceof HTMLButtonElement) btn.disabled = false;
       if (btn) btn.textContent = "💾 Backup";
     }
@@ -1129,7 +1181,7 @@ export class ShadowClawTasks extends HTMLElement {
     }
 
     try {
-      const btn = this.shadowRoot?.querySelector(".restore-btn");
+      const btn = this.shadowRoot?.querySelector(".tasks__restore-btn");
       if (btn instanceof HTMLButtonElement) btn.disabled = true;
       if (btn) btn.textContent = "⏳";
 
@@ -1148,7 +1200,7 @@ export class ShadowClawTasks extends HTMLElement {
       showError(`Failed to restore from backup: ${message}`);
       console.error("Restore error:", err);
     } finally {
-      const btn = this.shadowRoot?.querySelector(".restore-btn");
+      const btn = this.shadowRoot?.querySelector(".tasks__restore-btn");
       if (btn instanceof HTMLButtonElement) btn.disabled = false;
       if (btn) btn.textContent = "♻️ Restore";
     }
@@ -1165,7 +1217,7 @@ export class ShadowClawTasks extends HTMLElement {
     }
 
     try {
-      const btn = this.shadowRoot?.querySelector(".clear-btn");
+      const btn = this.shadowRoot?.querySelector(".tasks__clear-btn");
       if (btn instanceof HTMLButtonElement) btn.disabled = true;
       if (btn) btn.textContent = "⏳";
       await orchestratorStore.clearAllTasks(db);
@@ -1174,7 +1226,7 @@ export class ShadowClawTasks extends HTMLElement {
       showError(`Failed to clear tasks: ${message}`);
       console.error("Clear error:", err);
     } finally {
-      const btn = this.shadowRoot?.querySelector(".clear-btn");
+      const btn = this.shadowRoot?.querySelector(".tasks__clear-btn");
       if (btn instanceof HTMLButtonElement) btn.disabled = false;
       if (btn) btn.textContent = "🗑️ Clear All";
     }

@@ -81,7 +81,7 @@ sequenceDiagram
 | `src/channels/browser-chat.mjs` | Browser chat channel implementation                               |
 | `src/task-scheduler.mjs`        | Cron expression parser and task runner                            |
 | `src/stores/`                   | Reactive signal-based UI state (orchestrator, file-viewer, theme) |
-| `src/components/`               | Web Components — `<shadow-claw>`, tasks page, files page          |
+| `src/components/`               | Web Components — `<shadow-claw>` (main), `<shadow-claw-chat>`, `<shadow-claw-files>`, `<shadow-claw-tasks>`, `<shadow-claw-page-header>`, `<shadow-claw-toast>` |
 | `src/config.mjs`                | All constants, provider definitions, and config keys              |
 | `src/types.mjs`                 | JSDoc `@typedef` declarations (full type contract)                |
 | `src/effect.mjs`                | Lightweight `effect()` using TC39 Signal Polyfill                 |

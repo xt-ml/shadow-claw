@@ -14,6 +14,8 @@ import { orchestratorStore } from "../stores/orchestrator.mjs";
 
 import { getDb } from "../db/db.mjs";
 
+import "./shadow-claw-page-header.mjs";
+
 /**
  * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
  */
@@ -39,28 +41,7 @@ export class ShadowClawFiles extends HTMLElement {
           overflow: hidden;
         }
 
-        .header {
-          background-color: var(--shadow-claw-bg-primary, #ffffff);
-          border-bottom: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
-          display: flex;
-          flex-direction: column;
-          gap: 0.75rem;
-          padding: 1rem;
-        }
-
-        .header-top {
-          align-items: center;
-          display: flex;
-          justify-content: space-between;
-        }
-
-        .header h2 {
-          font-size: 1.125rem;
-          font-weight: 600;
-          margin: 0;
-        }
-
-        .breadcrumbs {
+        .files__breadcrumbs {
           align-items: center;
           display: flex;
           flex-wrap: wrap;
@@ -68,7 +49,7 @@ export class ShadowClawFiles extends HTMLElement {
           gap: 0.5rem;
         }
 
-        .breadcrumb-btn {
+        .files__breadcrumb-btn {
           background-color: var(--shadow-claw-bg-primary, #ffffff);
           border-radius: 0.1875rem;
           border: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
@@ -78,49 +59,87 @@ export class ShadowClawFiles extends HTMLElement {
           transition: all 0.1s;
         }
 
-        .breadcrumb-btn:hover {
+        .files__breadcrumb-btn:hover,
+        .files__breadcrumb-btn:focus-visible {
           background-color: var(--shadow-claw-bg-tertiary, #f3f4f6);
           border-color: var(--shadow-claw-accent-primary, #3b82f6);
+          outline: none;
         }
 
-        .breadcrumb-separator {
+        .files__breadcrumb-separator {
           color: var(--shadow-claw-text-tertiary, #9ca3af);
         }
 
-        .content {
+        .files__header-btn {
+          background-color: var(--shadow-claw-bg-tertiary);
+          border-radius: var(--shadow-claw-radius-m);
+          border: 0.0625rem solid var(--shadow-claw-border-color);
+          color: var(--shadow-claw-text-secondary);
+          cursor: pointer;
+          font-size: 0.75rem;
+          padding: 0.5rem 0.75rem;
+          white-space: nowrap;
+        }
+
+        .files__header-btn:focus-visible {
+          outline: 0.125rem solid var(--shadow-claw-accent-primary, #3b82f6);
+          outline-offset: 0.0625rem;
+        }
+
+        .files__header-btn--danger {
+          border-color: var(--shadow-claw-error-color, #ef4444);
+          color: var(--shadow-claw-error-color, #ef4444);
+        }
+
+        .files__content {
           flex: 1;
           overflow-y: auto;
           padding: 1rem;
         }
 
-        .file-list {
+        .files__list {
           display: grid;
           gap: 0.75rem;
           grid-template-columns: repeat(auto-fill, minmax(9.375rem, 1fr));
         }
 
-        .file-item {
-          align-items: center;
+        .files__item {
           background-color: var(--shadow-claw-bg-secondary, #f9fafb);
           border-radius: 0.5rem;
           border: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
-          cursor: pointer;
           display: flex;
           flex-direction: column;
-          gap: 0.5rem;
-          padding: 0.75rem;
           position: relative;
-          text-align: center;
           transition: all 0.15s;
         }
 
-        .file-item:hover {
+        .files__item:hover,
+        .files__item:focus-within {
           background-color: var(--shadow-claw-bg-tertiary, #f3f4f6);
           border-color: var(--shadow-claw-accent-primary, #3b82f6);
           transform: translateY(-0.125rem);
         }
 
-        .file-actions {
+        .files__item-main {
+          align-items: center;
+          background: transparent;
+          border: none;
+          color: inherit;
+          cursor: pointer;
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          padding: 0.75rem;
+          text-align: center;
+          width: 100%;
+        }
+
+        .files__item-main:focus-visible {
+          outline: 0.125rem solid var(--shadow-claw-accent-primary, #3b82f6);
+          outline-offset: -0.125rem;
+        }
+
+        .files__actions {
           display: none;
           gap: 0.25rem;
           position: absolute;
@@ -129,11 +148,12 @@ export class ShadowClawFiles extends HTMLElement {
           z-index: 10;
         }
 
-        .file-item:hover .file-actions {
+        .files__item:hover .files__actions,
+        .files__item:focus-within .files__actions {
           display: flex;
         }
 
-        .action-btn {
+        .files__action-btn {
           background-color: var(--shadow-claw-bg-primary, #ffffff);
           border-radius: var(--shadow-claw-radius-s);
           border: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
@@ -144,27 +164,31 @@ export class ShadowClawFiles extends HTMLElement {
           transition: all 0.1s;
         }
 
-        .action-btn:hover {
+        .files__action-btn:hover,
+        .files__action-btn:focus-visible {
           background-color: var(--shadow-claw-accent-primary);
           border-color: var(--shadow-claw-accent-primary);
           color: var(--shadow-claw-on-primary);
+          outline: none;
         }
 
-        .action-btn.delete {
+        .files__action-btn--delete {
           border-color: var(--shadow-claw-error-color, #ef4444);
           color: var(--shadow-claw-error-color, #ef4444);
         }
 
-        .action-btn.delete:hover {
+        .files__action-btn--delete:hover,
+        .files__action-btn--delete:focus-visible {
           background-color: var(--shadow-claw-error-color, #ef4444);
           color: var(--shadow-claw-on-error, white);
+          outline: none;
         }
 
-        .file-icon {
+        .files__icon {
           font-size: 2rem;
         }
 
-        .file-name {
+        .files__name {
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 2;
           color: var(--shadow-claw-text-primary, #111827);
@@ -175,7 +199,7 @@ export class ShadowClawFiles extends HTMLElement {
           word-break: break-all;
         }
 
-        .empty-state {
+        .files__empty {
           align-items: center;
           color: var(--shadow-claw-text-tertiary, #9ca3af);
           display: flex;
@@ -186,56 +210,45 @@ export class ShadowClawFiles extends HTMLElement {
           text-align: center;
         }
 
-        .empty-state p {
+        .files__empty p {
           font-size: 0.875rem;
         }
 
-        .header-actions {
-          display: flex;
-          gap: 0.5rem;
-        }
-
-        .header-btn {
-          background-color: var(--shadow-claw-bg-tertiary);
-          border-radius: var(--shadow-claw-radius-m);
-          border: 0.0625rem solid var(--shadow-claw-border-color);
-          color: var(--shadow-claw-text-secondary);
-          cursor: pointer;
-          font-size: 0.75rem;
-          padding: 0.25rem 0.75rem;
-        }
-
-        .header-btn.danger {
-          border-color: var(--shadow-claw-error-color, #ef4444);
-          color: var(--shadow-claw-error-color, #ef4444);
-        }
-
-        .hidden-input {
+        .files__hidden-input {
           display: none;
         }
 
-        .empty-state-hint {
+        .files__empty-hint {
           font-size: 0.75rem;
         }
+
+        .files__sr-only {
+          border: 0;
+          clip: rect(0 0 0 0);
+          height: 0.0625rem;
+          margin: -0.0625rem;
+          overflow: hidden;
+          padding: 0;
+          position: absolute;
+          white-space: nowrap;
+          width: 0.0625rem;
+        }
       </style>
-      <div class="header">
-        <div class="header-top">
-          <h2>📁 Files</h2>
-          <div class="header-actions">
-            <button class="refresh-btn header-btn">🔄 Refresh</button>
-            <button class="upload-btn header-btn">📤 Upload</button>
-            <button class="backup-btn header-btn">💾 Backup</button>
-            <button class="restore-btn header-btn">♻️ Restore</button>
-            <button class="clear-btn header-btn danger">🗑️ Clear All</button>
-          </div>
+      <section class="files" aria-label="Files">
+        <shadow-claw-page-header icon="📁" title="Files">
+          <button slot="actions" type="button" class="files__refresh-btn files__header-btn">🔄 Refresh</button>
+          <button slot="actions" type="button" class="files__upload-btn files__header-btn">📤 Upload</button>
+          <button slot="actions" type="button" class="files__backup-btn files__header-btn">💾 Backup</button>
+          <button slot="actions" type="button" class="files__restore-btn files__header-btn">♻️ Restore</button>
+          <button slot="actions" type="button" class="files__clear-btn files__header-btn files__header-btn--danger">🗑️ Clear All</button>
+          <nav slot="breadcrumbs" class="files__breadcrumbs" aria-label="Current folder"></nav>
+        </shadow-claw-page-header>
+        <input type="file" class="files__hidden-upload files__hidden-input" multiple accept="*/*" aria-label="Upload files">
+        <input type="file" class="files__hidden-restore files__hidden-input" accept=".zip,application/zip" aria-label="Restore files from zip backup">
+        <div class="files__content">
+          <div class="files__list" role="list" aria-live="polite"></div>
         </div>
-        <div class="breadcrumbs"></div>
-      </div>
-      <input type="file" class="hidden-upload hidden-input" multiple accept="*/*">
-      <input type="file" class="hidden-restore hidden-input" accept=".zip,application/zip">
-      <div class="content">
-        <div class="file-list"></div>
-      </div>
+      </section>
     `;
   }
 
@@ -264,14 +277,14 @@ export class ShadowClawFiles extends HTMLElement {
     }
 
     // Refresh button
-    const refreshBtn = root.querySelector(".refresh-btn");
+    const refreshBtn = root.querySelector(".files__refresh-btn");
     refreshBtn?.addEventListener("click", () =>
       orchestratorStore.loadFiles(db),
     );
 
     // Upload button
-    const uploadBtn = root.querySelector(".upload-btn");
-    const uploadInput = root.querySelector(".hidden-upload");
+    const uploadBtn = root.querySelector(".files__upload-btn");
+    const uploadInput = root.querySelector(".files__hidden-upload");
     uploadBtn?.addEventListener("click", () => {
       if (uploadInput instanceof HTMLInputElement) {
         uploadInput.click();
@@ -285,12 +298,12 @@ export class ShadowClawFiles extends HTMLElement {
     });
 
     // Backup button
-    const backupBtn = root.querySelector(".backup-btn");
+    const backupBtn = root.querySelector(".files__backup-btn");
     backupBtn?.addEventListener("click", () => this.handleBackup(db));
 
     // Restore button
-    const restoreBtn = root.querySelector(".restore-btn");
-    const restoreInput = root.querySelector(".hidden-restore");
+    const restoreBtn = root.querySelector(".files__restore-btn");
+    const restoreInput = root.querySelector(".files__hidden-restore");
     restoreBtn?.addEventListener("click", () => {
       if (restoreInput instanceof HTMLInputElement) {
         restoreInput.click();
@@ -303,7 +316,7 @@ export class ShadowClawFiles extends HTMLElement {
     });
 
     // Clear all button
-    const clearBtn = root.querySelector(".clear-btn");
+    const clearBtn = root.querySelector(".files__clear-btn");
     clearBtn?.addEventListener("click", () => this.handleClearAll(db));
   }
 
@@ -330,7 +343,7 @@ export class ShadowClawFiles extends HTMLElement {
     if (!root) {
       return;
     }
-    const breadcrumbs = root.querySelector(".breadcrumbs");
+    const breadcrumbs = root.querySelector(".files__breadcrumbs");
     if (!breadcrumbs) {
       return;
     }
@@ -340,7 +353,7 @@ export class ShadowClawFiles extends HTMLElement {
 
     // Root button
     const rootBtn = document.createElement("button");
-    rootBtn.className = "breadcrumb-btn";
+    rootBtn.className = "files__breadcrumb-btn";
     rootBtn.textContent = "📁 Root";
     rootBtn.addEventListener("click", () =>
       orchestratorStore.resetToRootFolder(db),
@@ -357,7 +370,7 @@ export class ShadowClawFiles extends HTMLElement {
       parts.forEach(
         (/** @type {string} */ part, /** @type {number} */ index) => {
           const separator = document.createElement("span");
-          separator.className = "breadcrumb-separator";
+          separator.className = "files__breadcrumb-separator";
           separator.textContent = "/";
 
           breadcrumbs.appendChild(separator);
@@ -366,7 +379,7 @@ export class ShadowClawFiles extends HTMLElement {
             index === 0 ? part : `${currentSegmentPath}/${part}`;
 
           const btn = document.createElement("button");
-          btn.className = "breadcrumb-btn";
+          btn.className = "files__breadcrumb-btn";
           btn.textContent = part;
 
           const pathToNavigate = currentSegmentPath;
@@ -390,7 +403,7 @@ export class ShadowClawFiles extends HTMLElement {
       return;
     }
 
-    const list = root.querySelector(".file-list");
+    const list = root.querySelector(".files__list");
     if (!list) {
       return;
     }
@@ -400,9 +413,9 @@ export class ShadowClawFiles extends HTMLElement {
 
     if (files.length === 0) {
       list.innerHTML = `
-        <div class="empty-state">
+        <div class="files__empty" role="status">
           <p>No files in this folder.</p>
-          <p class="empty-state-hint">Ask the agent to create some files!</p>
+          <p class="files__empty-hint">Ask the agent to create some files!</p>
         </div>
       `;
 
@@ -415,28 +428,28 @@ export class ShadowClawFiles extends HTMLElement {
       const name = isDir ? file.slice(0, -1) : file;
 
       const item = document.createElement("div");
-      item.className = "file-item";
+      item.className = "files__item";
+      item.setAttribute("role", "listitem");
 
       const downloadTitle = isDir ? "Download as ZIP" : "Download";
       const actionsHtml = `
-        <div class="file-actions">
-          <button class="action-btn download" title="${downloadTitle}">📥</button>
-          <button class="action-btn delete" title="Delete">🗑️</button>
+        <div class="files__actions" aria-label="Actions for ${this.escapeHtml(name)}">
+          <button type="button" class="files__action-btn files__download" title="${downloadTitle}" aria-label="${downloadTitle} ${this.escapeHtml(name)}">📥</button>
+          <button type="button" class="files__action-btn files__action-btn--delete files__delete" title="Delete" aria-label="Delete ${this.escapeHtml(name)}">🗑️</button>
         </div>
       `;
 
       item.innerHTML = `
-        <div class="file-icon">${isDir ? "📁" : "📄"}</div>
-        <div class="file-name">${this.escapeHtml(name)}</div>
+        <button type="button" class="files__item-main" aria-label="${isDir ? "Open folder" : "Open file"} ${this.escapeHtml(name)}">
+          <div class="files__icon" aria-hidden="true">${isDir ? "📁" : "📄"}</div>
+          <div class="files__name">${this.escapeHtml(name)}</div>
+        </button>
         ${actionsHtml}
       `;
 
       // Click to open file or navigate into folder
-      item.addEventListener("click", async (e) => {
-        if (e.target instanceof Element && e.target.closest(".file-actions")) {
-          return;
-        }
-
+      const itemMain = item.querySelector(".files__item-main");
+      itemMain?.addEventListener("click", async () => {
         if (isDir) {
           // Navigate into folder
           await orchestratorStore.navigateIntoFolder(db, file);
@@ -454,7 +467,7 @@ export class ShadowClawFiles extends HTMLElement {
       });
 
       // Download button (for both files and directories)
-      const downloadBtn = item.querySelector(".download");
+      const downloadBtn = item.querySelector(".files__download");
       if (downloadBtn) {
         downloadBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
@@ -502,7 +515,7 @@ export class ShadowClawFiles extends HTMLElement {
       }
 
       // Delete button
-      const deleteBtn = item.querySelector(".delete");
+      const deleteBtn = item.querySelector(".files__delete");
       if (deleteBtn) {
         deleteBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
@@ -611,7 +624,7 @@ export class ShadowClawFiles extends HTMLElement {
   async handleBackup(db) {
     const groupId = orchestratorStore.activeGroupId;
     try {
-      const btn = this.shadowRoot?.querySelector(".backup-btn");
+      const btn = this.shadowRoot?.querySelector(".files__backup-btn");
       if (btn instanceof HTMLButtonElement) {
         btn.disabled = true;
       }
@@ -629,7 +642,7 @@ export class ShadowClawFiles extends HTMLElement {
 
       console.error("Backup error:", err);
     } finally {
-      const btn = this.shadowRoot?.querySelector(".backup-btn");
+      const btn = this.shadowRoot?.querySelector(".files__backup-btn");
 
       if (btn instanceof HTMLButtonElement) {
         btn.disabled = false;
@@ -672,7 +685,7 @@ export class ShadowClawFiles extends HTMLElement {
     }
 
     try {
-      const btn = this.shadowRoot?.querySelector(".restore-btn");
+      const btn = this.shadowRoot?.querySelector(".files__restore-btn");
       if (btn instanceof HTMLButtonElement) {
         btn.disabled = true;
       }
@@ -696,7 +709,7 @@ export class ShadowClawFiles extends HTMLElement {
 
       console.error("Restore error:", err);
     } finally {
-      const btn = this.shadowRoot?.querySelector(".restore-btn");
+      const btn = this.shadowRoot?.querySelector(".files__restore-btn");
       if (btn instanceof HTMLButtonElement) {
         btn.disabled = false;
       }
@@ -720,7 +733,7 @@ export class ShadowClawFiles extends HTMLElement {
     const groupId = orchestratorStore.activeGroupId;
 
     try {
-      const btn = this.shadowRoot?.querySelector(".clear-btn");
+      const btn = this.shadowRoot?.querySelector(".files__clear-btn");
       if (btn instanceof HTMLButtonElement) {
         btn.disabled = true;
       }
@@ -740,7 +753,7 @@ export class ShadowClawFiles extends HTMLElement {
 
       console.error("Clear error:", err);
     } finally {
-      const btn = this.shadowRoot?.querySelector(".clear-btn");
+      const btn = this.shadowRoot?.querySelector(".files__clear-btn");
       if (btn instanceof HTMLButtonElement) {
         btn.disabled = false;
       }

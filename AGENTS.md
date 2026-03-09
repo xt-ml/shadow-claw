@@ -89,8 +89,10 @@ effect(() => {
 ### Web Components
 
 UI is built with native Custom Elements. The main component is `<shadow-claw>` defined
-in `src/components/shadow-claw.mjs`. Sub-pages are `<shadow-claw-files>` and
-`<shadow-claw-tasks>`. Components use Shadow DOM and direct `innerHTML` for rendering;
+in `src/components/shadow-claw.mjs`. Page components include `<shadow-claw-chat>`,
+`<shadow-claw-files>`, and `<shadow-claw-tasks>`. Shared components include
+`<shadow-claw-page-header>` (reusable mobile-first header) and `<shadow-claw-toast>`
+(notification system). Components use Shadow DOM and direct `innerHTML` for rendering;
 reactive re-renders are driven by `effect()` callbacks in `setupEffects()`.
 
 ### Imports
@@ -183,6 +185,7 @@ optional `apiKeyHeaderFormat`, `headers`, and `defaultModel`.
 1. Create `src/components/shadow-claw-<name>.mjs` as a Custom Element.
 2. Import it in `src/components/shadow-claw.mjs`.
 3. Add a nav item and `data-page-id` section in the main component template.
+4. Consider using `<shadow-claw-page-header>` for consistent mobile-first headers.
 
 ### Modify the system prompt
 

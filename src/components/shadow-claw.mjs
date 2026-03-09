@@ -1,14 +1,9 @@
 // @ts-ignore
-import JSZip from "jszip";
-
 import { CONFIG_KEYS } from "../config.mjs";
 
-import { exportChatData } from "../db/exportChatData.mjs";
 import { getConfig } from "../db/getConfig.mjs";
-import { importChatData } from "../db/importChatData.mjs";
 
 import { effect } from "../effect.mjs";
-import { renderMarkdown } from "../markdown.mjs";
 import { Orchestrator } from "../orchestrator.mjs";
 
 import { resetStorageDirectory } from "../storage/storage.mjs";
@@ -19,13 +14,12 @@ import { selectStorageDirectory } from "../storage/selectStorageDirectory.mjs";
 
 import { isPersistent } from "../storage/isPersistent.mjs";
 
-import { fileViewerStore } from "../stores/file-viewer.mjs";
 import { orchestratorStore } from "../stores/orchestrator.mjs";
 import { Themes, themeStore } from "../stores/theme.mjs";
 
-import { formatDateForFilename, formatTimestamp } from "../utils.mjs";
-import { showError, showInfo, showSuccess, showWarning } from "../toast.mjs";
+import { showError, showSuccess, showWarning } from "../toast.mjs";
 
+import "./shadow-claw-chat.mjs";
 import "./shadow-claw-files.mjs";
 import "./shadow-claw-tasks.mjs";
 import "./shadow-claw-toast.mjs";
@@ -33,14 +27,8 @@ import "../types.mjs";
 
 /**
  * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
- * @typedef {import("../stores/file-viewer.mjs").FileInfo} FileInfo
- * @typedef {import("../stores/file-viewer.mjs").FileViewerStore} FileViewerStoreInstance
  * @typedef {import("../stores/orchestrator.mjs").OrchestratorStore} OrchestratorStoreInstance
- * @typedef {import("../stores/orchestrator.mjs").TokenUsage} TokenUsage
- * @typedef {import("../stores/orchestrator.mjs").ToolActivity} ToolActivity
  * @typedef {import("../types.mjs").LLMProvider} LLMProvider
- * @typedef {import("../types.mjs").StoredMessage} StoredMessage
- * @typedef {import("../types.mjs").ThinkingLogEntry} ThinkingLogEntry
  */
 
 /**
@@ -1367,39 +1355,7 @@ export class ShadowClaw extends HTMLElement {
           <div class="main-content">
             <!-- Chat Page -->
             <div class="page chat-page active" data-page-id="chat">
-              <div class="chat-header">
-                <h2>💬 Chat</h2>
-                <div class="chat-status-bar">
-                  <span class="status-indicator">●</span> Ready
-                  <button class="chat-action-btn ml-auto" data-action="download-chat">
-                    💾 Backup
-                  </button>
-                  <button class="chat-action-btn" data-action="restore-chat">
-                    ♻️ Restore
-                  </button>
-                  <button class="chat-action-btn" data-action="compact-chat">
-                    📦 Compact
-                  </button>
-                  <button class="chat-action-btn" data-action="clear-chat">
-                    🗑️ Clear Chat
-                  </button>
-                </div>
-              </div>
-              <div class="chat-body">
-                <div class="tool-activity">⚙️ Working...</div>
-                <div class="activity-log"></div>
-                <div class="messages-container"></div>
-                <div class="chat-input-area">
-                  <div class="chat-input-wrapper">
-                    <textarea
-                      class="chat-input"
-                      placeholder="Type a message... (Enter to send, Shift+Enter for new line)"
-                      rows="1"
-                    ></textarea>
-                  </div>
-                  <button class="send-btn" data-action="send-message">Send</button>
-                </div>
-              </div>
+              <shadow-claw-chat></shadow-claw-chat>
             </div>
 
             <!-- Tasks Page -->
@@ -1410,19 +1366,6 @@ export class ShadowClaw extends HTMLElement {
             <!-- Files Page -->
             <div class="page" data-page-id="files">
               <shadow-claw-files></shadow-claw-files>
-            </div>
-
-            <!-- File Viewer Modal Overlay -->
-            <div class="file-viewer-modal">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h3 class="modal-title">File: name.txt</h3>
-                  <button class="close-modal-btn">&times;</button>
-                </div>
-                <div class="modal-body">
-                  <pre class="file-content"></pre>
-                </div>
-              </div>
             </div>
 
             <!-- Settings Page -->
@@ -1655,8 +1598,6 @@ export class ShadowClaw extends HTMLElement {
     this.attachShadow({ mode: "open" });
     /** @type {'idle'|'thinking'|'responding'|'error'} */
     this.previousOrchestratorState = "idle";
-    /** @type {string|null} */
-    this.lastErrorToast = null;
   }
 
   async connectedCallback() {
@@ -1704,15 +1645,6 @@ export class ShadowClaw extends HTMLElement {
 
     // React to store changes using effect()
     this.setupEffects();
-
-    // Update status indicator color
-    if (this.shadowRoot) {
-      const statusEl = this.shadowRoot.querySelector(".status-indicator");
-      if (statusEl) {
-        const el = /** @type {HTMLElement} */ (statusEl);
-        el.style.color = "#10b981";
-      }
-    }
 
     console.log("ShadowClaw UI initialized");
   }
@@ -1779,36 +1711,6 @@ export class ShadowClaw extends HTMLElement {
       settingsBtn.addEventListener("click", () => this.showPage("settings"));
     }
 
-    // Chat input
-    const chatInput = root.querySelector(".chat-input");
-    if (chatInput) {
-      /** @type {HTMLTextAreaElement} */
-      const input = /** @type {HTMLTextAreaElement} */ (chatInput);
-      input.addEventListener("keydown", (e) => {
-        /** @type {KeyboardEvent} */
-        const event = e;
-        if (event.key === "Enter" && !event.shiftKey) {
-          event.preventDefault();
-
-          this.sendMessage();
-        }
-      });
-
-      input.addEventListener("input", function (e) {
-        const target = /** @type {HTMLTextAreaElement} */ (e.target);
-        if (target) {
-          target.style.height = "auto";
-          target.style.height = Math.min(target.scrollHeight, 100) + "px";
-        }
-      });
-    }
-
-    // Send button
-    const sendBtn = root.querySelector('[data-action="send-message"]');
-    if (sendBtn) {
-      sendBtn.addEventListener("click", () => this.sendMessage());
-    }
-
     // Provider change
     const providerSelect = root.querySelector(
       '[data-setting="provider-select"]',
@@ -1838,44 +1740,10 @@ export class ShadowClaw extends HTMLElement {
       saveNameBtn.addEventListener("click", () => this.saveAssistantName(db));
     }
 
-    // Clear chat button
-    const clearChatBtn = root.querySelector('[data-action="clear-chat"]');
-    if (clearChatBtn) {
-      clearChatBtn.addEventListener("click", () => this.handleClearChat(db));
-    }
-
-    // Download chat button
-    const downloadChatBtn = root.querySelector('[data-action="download-chat"]');
-    if (downloadChatBtn) {
-      downloadChatBtn.addEventListener("click", () => this.downloadChat(db));
-    }
-
-    // Restore chat button
-    const restoreChatBtn = root.querySelector('[data-action="restore-chat"]');
-    if (restoreChatBtn) {
-      restoreChatBtn.addEventListener("click", () => this.restoreChat(db));
-    }
-
-    // Close modal
-    const closeModalBtn = root.querySelector(".close-modal-btn");
-    if (closeModalBtn) {
-      closeModalBtn.addEventListener("click", () =>
-        fileViewerStore.closeFile(),
-      );
-    }
-
     // Storage actions
     root
       .querySelector('[data-action="request-persistent"]')
       ?.addEventListener("click", () => this.handleRequestPersistent(db));
-
-    root
-      .querySelector('[data-action="compact-chat"]')
-      ?.addEventListener("click", () => this.handleCompactChat(db));
-
-    root
-      .querySelector('[data-action="clear-chat"]')
-      ?.addEventListener("click", () => this.handleClearChat(db));
 
     root
       .querySelector('[data-action="change-storage-dir"]')
@@ -2018,52 +1886,6 @@ export class ShadowClaw extends HTMLElement {
   }
 
   /**
-   * Send a message
-   *
-   * @returns {Promise<void>}
-   */
-  async sendMessage() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const input = root.querySelector(".chat-input");
-    if (!input) {
-      return;
-    }
-
-    /** @type {HTMLTextAreaElement} */
-    const textArea = /** @type {HTMLTextAreaElement} */ (input);
-    const message = textArea.value.trim();
-
-    if (!message) {
-      return;
-    }
-
-    if (!this.orchestrator) {
-      showWarning("ShadowClaw is still initializing. Please try again.", 3500);
-
-      return;
-    }
-
-    // Clear input and reset height
-    textArea.value = "";
-    textArea.style.height = "auto";
-
-    try {
-      orchestratorStore.sendMessage(message);
-    } catch (err) {
-      console.error("Error sending message:", err);
-
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      // Small manual override for error display if needed,
-      // though typically orchestratorStore handles this.
-      showError(`Error sending message: ${errorMsg}`, 6000);
-    }
-  }
-
-  /**
    * Setup reactive effects
    */
   setupEffects() {
@@ -2072,139 +1894,9 @@ export class ShadowClaw extends HTMLElement {
       return;
     }
 
-    // React to messages
+    // React to orchestrator state for completion notifications
     effect(() => {
-      /** @type {StoredMessage[]} */
-      const messages = orchestratorStore.messages;
-      const container = root.querySelector(".messages-container");
-      if (container) {
-        container.innerHTML = "";
-        messages.forEach((/** @type {StoredMessage} */ msg) => {
-          const type = msg.isFromMe ? "assistant" : "user";
-          const assistantName =
-            localStorage.getItem("assistantName") || "rover";
-
-          const sender = msg.isFromMe ? assistantName : msg.sender || "You";
-
-          const msgDiv = document.createElement("div");
-          msgDiv.className = `message ${type}`;
-
-          const timestamp = msg.timestamp ? formatTimestamp(msg.timestamp) : "";
-
-          msgDiv.innerHTML = `
-            <div class="message-header">
-              <div class="message-sender">${sender}</div>
-              <div class="message-timestamp">${timestamp}</div>
-            </div>
-            <div class="message-content">${renderMarkdown(msg.content)}</div>
-          `;
-
-          container.appendChild(msgDiv);
-        });
-
-        container.scrollTop = container.scrollHeight;
-      }
-    });
-
-    // React to tool activity
-    effect(() => {
-      /** @type {ToolActivity|null} */
-      const activity = orchestratorStore.toolActivity;
-      const toolEl = root.querySelector(".tool-activity");
-      if (toolEl) {
-        if (activity) {
-          toolEl.classList.add("active");
-          toolEl.textContent = `⚙️ Using ${activity.tool}...`;
-        } else {
-          toolEl.classList.remove("active");
-        }
-      }
-    });
-
-    // React to token usage
-    effect(() => {
-      /** @type {TokenUsage|null} */
-      const usage = orchestratorStore.tokenUsage;
-      const usageEl = root.querySelector(".token-usage");
-      if (usageEl) {
-        if (usage) {
-          usageEl.textContent = `Tokens: ${usage.inputTokens} in / ${usage.outputTokens} out`;
-        } else {
-          usageEl.textContent = "";
-        }
-      }
-    });
-
-    // React to activity log
-    effect(() => {
-      /** @type {ThinkingLogEntry[]} */
-      const log = orchestratorStore.activityLog;
-      const logEl = root.querySelector(".activity-log");
-      if (logEl) {
-        if (log.length > 0) {
-          logEl.classList.add("active");
-          logEl.innerHTML = log
-            .map(
-              (/** @type {ThinkingLogEntry} */ entry) =>
-                `<div>[${entry.level}] ${entry.label || ""}: ${entry.message}</div>`,
-            )
-            .join("");
-
-          logEl.scrollTop = logEl.scrollHeight;
-        } else {
-          logEl.classList.remove("active");
-        }
-      }
-    });
-
-    // React to file viewer
-    effect(() => {
-      /** @type {FileInfo|null} */
-      const file = fileViewerStore.file;
-      const modal = root.querySelector(".file-viewer-modal");
-      if (modal) {
-        if (file) {
-          modal.classList.add("active");
-          const title = modal.querySelector(".modal-title");
-          const content = modal.querySelector(".file-content");
-
-          if (title) {
-            title.textContent = `File: ${file.name}`;
-          }
-
-          if (content) {
-            content.textContent = file.content;
-          }
-        } else {
-          modal.classList.remove("active");
-        }
-      }
-    });
-
-    // React to orchestrator state
-    effect(() => {
-      const statusIndicator = root.querySelector(".status-indicator");
-      const statusText = root.querySelector(
-        ".chat-header .status-indicator",
-      )?.nextSibling;
       const state = orchestratorStore.state;
-
-      console.log("Orchestrator state changed:", state);
-
-      if (statusIndicator) {
-        /** @type {HTMLElement} */
-        const el = /** @type {HTMLElement} */ (statusIndicator);
-        el.style.color =
-          state === "thinking" || state === "responding"
-            ? "var(--shadow-claw-warning-color, #f59e0b)"
-            : state === "error"
-              ? "var(--shadow-claw-error-color, #ef4444)"
-              : "var(--shadow-claw-success-color, #10b981)";
-      }
-
-      if (statusText) {
-        statusText.textContent = ` ● ${state.charAt(0).toUpperCase() + state.slice(1)}`;
-      }
 
       if (
         state === "idle" &&
@@ -2215,15 +1907,6 @@ export class ShadowClaw extends HTMLElement {
       }
 
       this.previousOrchestratorState = state;
-    });
-
-    // React to orchestrator errors
-    effect(() => {
-      const error = orchestratorStore.error;
-      if (error && error !== this.lastErrorToast) {
-        showError(error, 6000);
-        this.lastErrorToast = error;
-      }
     });
 
     // React to storage status
@@ -2273,177 +1956,6 @@ export class ShadowClaw extends HTMLElement {
             : "none";
       }
     });
-  }
-
-  /**
-   * Compact chat handler
-   *
-   * @param {ShadowClawDatabase} db
-   */
-  async handleCompactChat(db) {
-    if (
-      !confirm(
-        "This will summarize the conversation to reduce token usage. The summary replaces the current history. Continue?",
-      )
-    ) {
-      return;
-    }
-
-    try {
-      await orchestratorStore.compactContext(db);
-      showInfo("Compacting context...", 2500);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError(`Failed to compact chat: ${errorMsg}`, 6000);
-    }
-  }
-
-  /**
-   * Clear chat handler
-   *
-   * @param {ShadowClawDatabase} db
-   *
-   * @returns {Promise<void>}
-   */
-  async handleClearChat(db) {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    // Clear UI
-    const container = root.querySelector(".messages-container");
-    if (container) {
-      container.innerHTML = "";
-    }
-
-    // Clear storage/database
-    if (this.orchestrator) {
-      try {
-        await this.orchestrator.newSession(db);
-      } catch (err) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        console.warn("Failed to clear session:", errorMsg);
-      }
-    }
-  }
-
-  /**
-   * Download chat as a zip file
-   *
-   * @param {ShadowClawDatabase} db
-   *
-   * @returns {Promise<void>}
-   */
-  async downloadChat(db) {
-    try {
-      const groupId = orchestratorStore.activeGroupId;
-      const chatData = await exportChatData(db, groupId);
-      if (!chatData) {
-        showError("Failed to export chat data", 6000);
-
-        return;
-      }
-
-      // Create a zip file
-      const zip = new JSZip();
-      zip.file("chat-data.json", JSON.stringify(chatData, null, 2));
-
-      // Generate zip blob
-      const blob = await zip.generateAsync({ type: "blob" });
-
-      // Create download link
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = url;
-      link.download = `chat-${formatDateForFilename()}.zip`;
-
-      document.body.appendChild(link);
-
-      link.click();
-
-      document.body.removeChild(link);
-
-      URL.revokeObjectURL(url);
-
-      // Show success message
-      showSuccess("Chat backup downloaded", 3000);
-    } catch (err) {
-      console.error("Failed to download chat:", err);
-
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to download chat: ${message}`, 6000);
-    }
-  }
-
-  /**
-   * Restore chat from a zip file
-   *
-   * @param {ShadowClawDatabase} db
-   *
-   * @returns {Promise<void>}
-   */
-  async restoreChat(db) {
-    try {
-      // Create file input
-      const fileInput = document.createElement("input");
-      fileInput.type = "file";
-      fileInput.accept = ".zip";
-
-      fileInput.addEventListener("change", async (e) => {
-        const target = /** @type {HTMLInputElement} */ (e.target);
-        const file = target?.files?.[0];
-        if (!file) {
-          return;
-        }
-
-        try {
-          // Read zip file
-          const zip = await JSZip.loadAsync(file);
-
-          // Get chat-data.json from zip
-          const dataFile = zip.file("chat-data.json");
-          if (!dataFile) {
-            showError("Invalid chat file: missing chat-data.json", 6000);
-
-            return;
-          }
-
-          const jsonString = await dataFile.async("string");
-          const chatData = JSON.parse(jsonString);
-
-          // Validate data structure
-          if (!chatData.messages || !Array.isArray(chatData.messages)) {
-            showError("Invalid chat file: missing messages array", 6000);
-
-            return;
-          }
-
-          // Import the chat data to database
-          const groupId = orchestratorStore.activeGroupId;
-          await importChatData(db, groupId, chatData);
-
-          // Clear the store's messages to trigger a re-render, then reload from DB
-          orchestratorStore._messages.set([]);
-          await orchestratorStore.loadHistory();
-
-          showSuccess("Chat restored successfully", 3500);
-        } catch (err) {
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          console.error("Failed to restore chat:", err);
-
-          showError(`Failed to restore chat: ${errorMsg}`, 6000);
-        }
-      });
-
-      fileInput.click();
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.error("Error in restoreChat:", err);
-
-      showError(`Error restoring chat: ${errorMsg}`, 6000);
-    }
   }
 
   /**
@@ -3002,20 +2514,6 @@ export class ShadowClaw extends HTMLElement {
     }
 
     showSuccess("Assistant name saved", 3000);
-  }
-
-  /**
-   * Escape HTML to prevent XSS
-   *
-   * @param {string} text
-   *
-   * @returns {string}
-   */
-  escapeHtml(text) {
-    const div = document.createElement("div");
-    div.textContent = text;
-
-    return div.innerHTML;
   }
 
   /**

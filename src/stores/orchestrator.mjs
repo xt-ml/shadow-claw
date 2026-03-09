@@ -254,10 +254,13 @@ export class OrchestratorStore {
   /**
    * Start a new session
    *
+   * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
-  async newSession() {
-    return this.orchestrator?.newSession?.(this._activeGroupId.get());
+  async newSession(db) {
+    await this.orchestrator?.newSession?.(db, this._activeGroupId.get());
+    await this.loadHistory();
   }
 
   /**

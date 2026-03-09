@@ -827,13 +827,17 @@ export class ShadowClawChat extends HTMLElement {
       return;
     }
 
+    if (!this.db) {
+      return;
+    }
+
     const container = root.querySelector(".chat__messages");
     if (container instanceof HTMLElement) {
       container.innerHTML = "";
     }
 
     try {
-      await orchestratorStore.newSession();
+      await orchestratorStore.newSession(this.db);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.warn("Failed to clear session:", errorMsg);

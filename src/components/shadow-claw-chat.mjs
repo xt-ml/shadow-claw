@@ -41,7 +41,10 @@ export class ShadowClawChat extends HTMLElement {
         :host {
           display: flex;
           flex: 1;
+          flex-direction: column;
+          height: 100%;
           min-height: 0;
+          overflow: hidden;
         }
 
         .chat {
@@ -49,11 +52,14 @@ export class ShadowClawChat extends HTMLElement {
           flex: 1;
           flex-direction: column;
           min-height: 0;
+          overflow: hidden;
+          width: 100%;
         }
 
         .chat__status {
           align-items: center;
           display: inline-flex;
+          flex-wrap: wrap;
           gap: 0.375rem;
           min-height: 1.5rem;
         }
@@ -80,9 +86,11 @@ export class ShadowClawChat extends HTMLElement {
           color: var(--shadow-claw-text-secondary);
           cursor: pointer;
           font-size: 0.75rem;
-          padding: 0.5rem 0.75rem;
+          line-height: 1.2;
+          padding: 0.4375rem 0.625rem;
+          text-align: left;
           transition: all 0.15s;
-          white-space: nowrap;
+          white-space: normal;
         }
 
         .chat__action-btn:hover,
@@ -141,6 +149,7 @@ export class ShadowClawChat extends HTMLElement {
           box-shadow: inset var(--shadow-claw-shadow-sm);
           flex: 1;
           min-height: 0;
+          overflow-x: hidden;
           overflow-y: auto;
           padding: 0.75rem;
         }
@@ -155,6 +164,8 @@ export class ShadowClawChat extends HTMLElement {
         .chat__message-header {
           align-items: baseline;
           display: flex;
+          flex-wrap: wrap;
+          gap: 0.25rem 0.5rem;
           justify-content: space-between;
           margin-bottom: 0.125rem;
         }
@@ -179,8 +190,10 @@ export class ShadowClawChat extends HTMLElement {
           border-radius: var(--shadow-claw-radius-m);
           font-size: 0.875rem;
           line-height: 1.5;
+          max-width: 100%;
           overflow-wrap: anywhere;
           padding: 0.75rem 1rem;
+          word-break: break-word;
         }
 
         .chat__message--user .chat__message-content {
@@ -284,6 +297,7 @@ export class ShadowClawChat extends HTMLElement {
 
         .chat__input-area {
           display: flex;
+          flex-direction: column;
           gap: 0.5rem;
         }
 
@@ -337,6 +351,7 @@ export class ShadowClawChat extends HTMLElement {
           padding: 0.625rem 1rem;
           transition: background-color 0.15s;
           white-space: nowrap;
+          width: 100%;
         }
 
         .chat__send-btn:hover,
@@ -423,12 +438,23 @@ export class ShadowClawChat extends HTMLElement {
             padding: 1rem;
           }
 
+          .chat__action-btn {
+            padding: 0.5rem 0.75rem;
+            text-align: center;
+            white-space: nowrap;
+          }
+
           .chat__messages {
             padding: 1rem;
           }
 
+          .chat__input-area {
+            flex-direction: row;
+          }
+
           .chat__send-btn {
             padding: 0.625rem 1.25rem;
+            width: auto;
           }
         }
       </style>

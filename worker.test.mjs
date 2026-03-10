@@ -168,4 +168,83 @@ describe("worker.mjs and src/worker/agent.mjs", () => {
       delete global.self;
     });
   });
+
+  describe("Toast helper functions (on globalThis)", () => {
+    let postMessageSpy;
+
+    beforeEach(() => {
+      postMessageSpy = jest.fn();
+      global.self = {
+        postMessage: postMessageSpy,
+      };
+    });
+
+    afterEach(() => {
+      delete global.self;
+    });
+
+    it("should call showToast with default type", () => {
+      globalThis.showToast("Test message");
+      expect(postMessageSpy).toHaveBeenCalledWith({
+        type: "show-toast",
+        payload: { message: "Test message", type: "info", duration: undefined },
+      });
+    });
+
+    it("should call showToast with custom type and duration", () => {
+      globalThis.showToast("Warning message", "warning", 5000);
+      expect(postMessageSpy).toHaveBeenCalledWith({
+        type: "show-toast",
+        payload: {
+          message: "Warning message",
+          type: "warning",
+          duration: 5000,
+        },
+      });
+    });
+
+    it("should call showSuccess", () => {
+      globalThis.showSuccess("Success message", 3000);
+      expect(postMessageSpy).toHaveBeenCalledWith({
+        type: "show-toast",
+        payload: {
+          message: "Success message",
+          type: "success",
+          duration: 3000,
+        },
+      });
+    });
+
+    it("should call showError", () => {
+      globalThis.showError("Error message");
+      expect(postMessageSpy).toHaveBeenCalledWith({
+        type: "show-toast",
+        payload: {
+          message: "Error message",
+          type: "error",
+          duration: undefined,
+        },
+      });
+    });
+
+    it("should call showWarning", () => {
+      globalThis.showWarning("Warning message");
+      expect(postMessageSpy).toHaveBeenCalledWith({
+        type: "show-toast",
+        payload: {
+          message: "Warning message",
+          type: "warning",
+          duration: undefined,
+        },
+      });
+    });
+
+    it("should call showInfo", () => {
+      globalThis.showInfo("Info message", 2000);
+      expect(postMessageSpy).toHaveBeenCalledWith({
+        type: "show-toast",
+        payload: { message: "Info message", type: "info", duration: 2000 },
+      });
+    });
+  });
 });

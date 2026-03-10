@@ -2,6 +2,7 @@
 import { Signal } from "signal-polyfill";
 
 import { readGroupFile } from "../storage/readGroupFile.mjs";
+import { readGroupFileBytes } from "../storage/readGroupFileBytes.mjs";
 
 import { DEFAULT_GROUP_ID } from "../config.mjs";
 
@@ -9,6 +10,8 @@ import { DEFAULT_GROUP_ID } from "../config.mjs";
  * @typedef {Object} FileInfo
  * @property {string} name
  * @property {string} content
+ * @property {"text"|"pdf"} kind
+ * @property {Uint8Array|null} binaryContent
  */
 
 /**
@@ -43,9 +46,18 @@ export class FileViewerStore {
    */
   async openFile(db, path, groupId = DEFAULT_GROUP_ID) {
     try {
-      const content = await readGroupFile(db, groupId, path);
       const name = path.split("/").pop() || path;
-      this._file.set({ name, content });
+      const isPdf = /\.pdf$/i.test(name);
+
+      if (isPdf) {
+        const binaryContent = await readGroupFileBytes(db, groupId, path);
+
+        this._file.set({ name, content: "", kind: "pdf", binaryContent });
+        return;
+      }
+
+      const content = await readGroupFile(db, groupId, path);
+      this._file.set({ name, content, kind: "text", binaryContent: null });
     } catch (err) {
       console.error("Failed to open file:", path, err);
       throw err;

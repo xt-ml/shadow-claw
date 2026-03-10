@@ -10,7 +10,7 @@ via an importmap. TypeScript is used only for type-checking JSDoc annotations
 (`tsc --noEmit`).
 
 **Stack:** HTML + Vanilla JS (ESM) · Web Components · TC39 Signals · IndexedDB · OPFS ·
-Web Workers · Service Worker (Workbox PWA) · Express dev server · Jest tests
+Web Workers · Service Worker (Workbox PWA) · Express dev server · Jest + Playwright tests
 
 ## Codebase Map
 
@@ -61,6 +61,7 @@ graph LR
 
 - All source files use `.mjs` (ES modules). No `.ts`, `.tsx`, or `.js`.
 - Tests live **next to** their source file: `src/shell/shell.mjs` → `src/shell/shell.test.mjs`.
+- End-to-end tests live in `e2e/` and use Playwright with fixtures + Page Objects.
 - Components are in `src/components/shadow-claw*.mjs`.
 
 ### Types
@@ -91,9 +92,11 @@ effect(() => {
 UI is built with native Custom Elements. The main component is `<shadow-claw>` defined
 in `src/components/shadow-claw.mjs`. Page components include `<shadow-claw-chat>`,
 `<shadow-claw-files>`, and `<shadow-claw-tasks>`. Shared components include
-`<shadow-claw-page-header>` (reusable mobile-first header) and `<shadow-claw-toast>`
-(notification system). Components use Shadow DOM and direct `innerHTML` for rendering;
-reactive re-renders are driven by `effect()` callbacks in `setupEffects()`.
+`<shadow-claw-page-header>` (reusable mobile-first header), `<shadow-claw-pdf-viewer>`
+(PDF preview), and `<shadow-claw-toast>` (notification system). A shared file viewer
+dialog now lives in the root `<shadow-claw>` component and is driven by `fileViewerStore`.
+Components use Shadow DOM and direct `innerHTML` for rendering; reactive re-renders are
+driven by `effect()` callbacks in `setupEffects()`.
 
 ### Imports
 
@@ -121,6 +124,7 @@ Node-only packages (Express, Jest, Workbox CLI) belong in `devDependencies`.
 | worker → main | `tool-activity` | `ToolActivityPayload` |
 | worker → main | `thinking-log` | `ThinkingLogEntry` |
 | worker → main | `compact-done` | `CompactDonePayload` |
+| worker → main | `open-file` | `OpenFilePayload` |
 
 ### IndexedDB
 
@@ -148,6 +152,8 @@ await getConfig(CONFIG_KEYS.API_KEY);
 ```bash
 npm start             # Express server (port 8888 by default)
 npm test              # Jest — runs *.test.mjs files
+npm run e2e           # Playwright E2E suite (tests in e2e/)
+npm run e2e:install   # Install Playwright browsers
 npm run tsc           # Type-check only (no output files)
 npm run build         # tsc + Workbox service worker generation
 npm run format        # Prettier
@@ -155,6 +161,9 @@ npm run format        # Prettier
 
 Tests use `jest-environment-jsdom`. Mock `indexedDB`, `navigator.storage`, and
 `FileSystemDirectoryHandle` as needed (see existing test files for patterns).
+
+Playwright E2E tests use `playwright.config.mjs` with a managed `npm start` web server
+and write artifacts under `e2e-results/`.
 
 ## Common Tasks
 

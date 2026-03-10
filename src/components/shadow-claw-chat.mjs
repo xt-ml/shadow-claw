@@ -282,16 +282,27 @@ export class ShadowClawChat extends HTMLElement {
           margin: 0.75rem 0;
         }
 
+        .chat__message-content a,
+        .chat__message-content a:visited {
+          color: var(--shadow-claw-link, #1e40af) !important;
+          text-decoration: underline;
+          text-underline-offset: 0.125rem;
+        }
+
+        .chat__message-content a:hover {
+          color: var(--shadow-claw-link-hover, #1e3a8a) !important;
+        }
+
         .chat__message--user .chat__message-content a,
         .chat__message--user .chat__message-content a:visited {
-          color: #ffffff;
+          color: var(--shadow-claw-on-primary) !important;
           opacity: 0.9;
           text-decoration: underline;
           text-underline-offset: 0.125rem;
         }
 
         .chat__message--user .chat__message-content a:hover {
-          color: #ffffff;
+          color: var(--shadow-claw-on-primary) !important;
           opacity: 1;
         }
 
@@ -369,62 +380,6 @@ export class ShadowClawChat extends HTMLElement {
           display: none;
         }
 
-        .chat__file-modal {
-          align-items: center;
-          background-color: rgba(0, 0, 0, 0.5);
-          display: none;
-          inset: 0;
-          justify-content: center;
-          position: fixed;
-          z-index: 1000;
-        }
-
-        .chat__file-modal--active {
-          display: flex;
-        }
-
-        .chat__modal-content {
-          background-color: var(--shadow-claw-bg-primary);
-          border: 0.0625rem solid var(--shadow-claw-border-color);
-          border-radius: var(--shadow-claw-radius-l);
-          box-shadow: var(--shadow-claw-shadow-lg);
-          display: flex;
-          flex-direction: column;
-          height: min(80vh, 45rem);
-          max-width: 56rem;
-          width: calc(100vw - 1.5rem);
-        }
-
-        .chat__modal-header {
-          align-items: center;
-          border-bottom: 0.0625rem solid var(--shadow-claw-border-color);
-          display: flex;
-          justify-content: space-between;
-          padding: 0.75rem 1rem;
-        }
-
-        .chat__modal-title {
-          font-size: 0.875rem;
-          font-weight: 600;
-          margin: 0;
-        }
-
-        .chat__modal-close-btn {
-          background: transparent;
-          border: none;
-          color: var(--shadow-claw-text-secondary);
-          cursor: pointer;
-          font-size: 1.25rem;
-          min-height: 2rem;
-          min-width: 2rem;
-        }
-
-        .chat__modal-body {
-          flex: 1;
-          overflow: auto;
-          padding: 1rem;
-        }
-
         .chat__file-content {
           font-family: var(--shadow-claw-font-mono);
           font-size: 0.8125rem;
@@ -489,18 +444,6 @@ export class ShadowClawChat extends HTMLElement {
         </div>
 
         <input class="chat__restore-input" type="file" accept=".zip,application/zip" />
-
-        <div class="chat__file-modal" role="dialog" aria-modal="true" aria-label="File viewer">
-          <div class="chat__modal-content">
-            <div class="chat__modal-header">
-              <h3 class="chat__modal-title">File: name.txt</h3>
-              <button class="chat__modal-close-btn" type="button" aria-label="Close file viewer">&times;</button>
-            </div>
-            <div class="chat__modal-body">
-              <pre class="chat__file-content"></pre>
-            </div>
-          </div>
-        </div>
       </section>
     `;
   }
@@ -586,10 +529,6 @@ export class ShadowClawChat extends HTMLElement {
           this.restoreChat(e.target);
         }
       });
-
-    root
-      .querySelector(".chat__modal-close-btn")
-      ?.addEventListener("click", () => fileViewerStore.closeFile());
   }
 
   setupEffects() {
@@ -679,35 +618,6 @@ export class ShadowClawChat extends HTMLElement {
         } else {
           logEl.classList.remove("chat__activity-log--active");
           logEl.innerHTML = "";
-        }
-      }),
-    );
-
-    this.cleanups.push(
-      effect(() => {
-        /** @type {FileInfo | null} */
-        const file = fileViewerStore.file;
-        const modal = root.querySelector(".chat__file-modal");
-
-        if (!(modal instanceof HTMLElement)) {
-          return;
-        }
-
-        if (file) {
-          modal.classList.add("chat__file-modal--active");
-
-          const title = modal.querySelector(".chat__modal-title");
-          const content = modal.querySelector(".chat__file-content");
-
-          if (title instanceof HTMLElement) {
-            title.textContent = `File: ${file.name}`;
-          }
-
-          if (content instanceof HTMLElement) {
-            content.textContent = file.content;
-          }
-        } else {
-          modal.classList.remove("chat__file-modal--active");
         }
       }),
     );

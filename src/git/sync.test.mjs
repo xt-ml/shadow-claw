@@ -125,5 +125,43 @@ describe("sync.mjs", () => {
         expect.anything(),
       );
     });
+
+    it("reads files through createSyncAccessHandle when available", async () => {
+      const { syncOpfsToLfs } = await import("./sync.mjs");
+
+      const syncHandle = {
+        getSize: jest.fn(() => 3),
+        read: jest.fn((buf) => {
+          buf.set([1, 2, 3]);
+        }),
+        close: jest.fn(),
+      };
+
+      const mockFileHandle = {
+        kind: "file",
+        createSyncAccessHandle: jest.fn().mockResolvedValue(syncHandle),
+      };
+
+      const mockRepoDir = {
+        entries: jest.fn().mockReturnValue([["bin.dat", { kind: "file" }]]),
+        getFileHandle: jest.fn().mockResolvedValue(mockFileHandle),
+        getDirectoryHandle: jest.fn(),
+      };
+
+      const mockReposDir = {
+        getDirectoryHandle: jest.fn().mockResolvedValue(mockRepoDir),
+      };
+      mockOpfsRoot.getDirectoryHandle.mockResolvedValue(mockReposDir);
+
+      await syncOpfsToLfs(mockDb, "test-group", "repos/my-repo", "my-repo");
+
+      expect(mockFileHandle.createSyncAccessHandle).toHaveBeenCalledTimes(1);
+      expect(syncHandle.read).toHaveBeenCalledTimes(1);
+      expect(syncHandle.close).toHaveBeenCalledTimes(1);
+      expect(mockPfs.writeFile).toHaveBeenCalledWith(
+        "/git/my-repo/bin.dat",
+        expect.any(Uint8Array),
+      );
+    });
   });
 });

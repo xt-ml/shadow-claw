@@ -32,6 +32,7 @@ describe("git.mjs", () => {
       remove: jest.fn(),
       commit: jest.fn(),
       push: jest.fn(),
+      pull: jest.fn(),
     };
 
     // Set UMD globals that git.mjs expects at runtime
@@ -331,6 +332,94 @@ describe("git.mjs", () => {
 
       const result = await mod.gitListRepos();
       expect(result).toBe("No repos cloned.");
+    });
+  });
+
+  describe("getProxyUrl", () => {
+    it("returns public CORS proxy when preference is public", () => {
+      const url = mod.getProxyUrl("public");
+      expect(url).toBe("https://cors.isomorphic-git.org");
+    });
+
+    it("returns local proxy URL for local preference", () => {
+      const url = mod.getProxyUrl("local");
+      expect(url).toContain("git-proxy");
+    });
+  });
+
+  describe("repoDir", () => {
+    it("returns repo directory path", () => {
+      expect(mod.repoDir("my-repo")).toBe("/git/my-repo");
+      expect(mod.repoDir("another-repo")).toBe("/git/another-repo");
+    });
+  });
+
+  describe("ensureDir", () => {
+    it("creates directory if it does not exist", async () => {
+      mockPfs.mkdir.mockResolvedValue(undefined);
+
+      await mod.ensureDir(mockPfs, "/test-dir");
+
+      expect(mockPfs.mkdir).toHaveBeenCalledWith("/test-dir");
+    });
+
+    it("does not throw if directory already exists", async () => {
+      mockPfs.mkdir.mockRejectedValue(new Error("EEXIST"));
+
+      await expect(mod.ensureDir(mockPfs, "/test-dir")).resolves.not.toThrow();
+    });
+  });
+
+  describe("gitAdd", () => {
+    it("adds a file to staging", async () => {
+      const result = await mod.gitAdd({
+        repo: "my-repo",
+        filepath: "file.txt",
+      });
+
+      expect(result).toContain("file.txt");
+      expect(result).toContain("my-repo");
+      expect(mockGit.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filepath: "file.txt",
+        }),
+      );
+    });
+  });
+
+  describe("gitPull", () => {
+    it("pulls changes from remote", async () => {
+      mockGit.currentBranch.mockResolvedValue("main");
+      mockGit.pull.mockResolvedValue(undefined);
+
+      const result = await mod.gitPull({
+        repo: "my-repo",
+        token: "ghp_test123",
+      });
+
+      expect(result).toContain("Pulled latest changes");
+      expect(mockGit.pull).toHaveBeenCalled();
+    });
+
+    it("throws on detached HEAD", async () => {
+      mockGit.currentBranch.mockResolvedValue(null);
+
+      await expect(
+        mod.gitPull({ repo: "my-repo", token: "ghp_test" }),
+      ).rejects.toThrow("No branch to pull");
+    });
+
+    it("uses custom branch", async () => {
+      mockGit.currentBranch.mockResolvedValue("dev");
+      mockGit.pull.mockResolvedValue(undefined);
+
+      const result = await mod.gitPull({
+        repo: "my-repo",
+        token: "ghp_test123",
+        branch: "dev",
+      });
+
+      expect(result).toContain("dev");
     });
   });
 });

@@ -59,4 +59,43 @@ describe("exportChatData", () => {
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
   });
+
+  it("should return null when db transaction is null", async () => {
+    const mockDb = {
+      transaction: jest.fn().mockReturnValue(null),
+    };
+
+    const consoleSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    const result = await exportChatData(mockDb, "group1");
+
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
+
+  it("should return null when request fails", async () => {
+    const mockRequest = {};
+    const mockIndex = { getAll: jest.fn().mockReturnValue(mockRequest) };
+    const mockStore = { index: jest.fn().mockReturnValue(mockIndex) };
+    const mockTx = { objectStore: jest.fn().mockReturnValue(mockStore) };
+    const mockDb = { transaction: jest.fn().mockReturnValue(mockTx) };
+
+    const consoleSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    const promise = exportChatData(mockDb, "group1");
+
+    mockRequest.error = new Error("getAll failed");
+    mockRequest.onerror();
+
+    const result = await promise;
+
+    expect(result).toBeNull();
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
+  });
 });

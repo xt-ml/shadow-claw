@@ -4,6 +4,7 @@ import { CONFIG_KEYS } from "../config.mjs";
 import { getConfig } from "../db/getConfig.mjs";
 
 import { effect } from "../effect.mjs";
+import { renderMarkdown } from "../markdown.mjs";
 import { Orchestrator } from "../orchestrator.mjs";
 
 import { resetStorageDirectory } from "../storage/storage.mjs";
@@ -16,11 +17,13 @@ import { isPersistent } from "../storage/isPersistent.mjs";
 
 import { orchestratorStore } from "../stores/orchestrator.mjs";
 import { Themes, themeStore } from "../stores/theme.mjs";
+import { fileViewerStore } from "../stores/file-viewer.mjs";
 
 import { showError, showSuccess, showWarning } from "../toast.mjs";
 
 import "./shadow-claw-chat.mjs";
 import "./shadow-claw-files.mjs";
+import "./shadow-claw-pdf-viewer.mjs";
 import "./shadow-claw-tasks.mjs";
 import "./shadow-claw-toast.mjs";
 import "../types.mjs";
@@ -131,8 +134,8 @@ export class ShadowClaw extends HTMLElement {
           --shadow-claw-bg-tertiary: #334155;
           --shadow-claw-border-color: #334155;
           --shadow-claw-error-color: #ffb4ab;
-          --shadow-claw-link: #93c5fd;
-          --shadow-claw-link-hover: #bfdbfe;
+          --shadow-claw-link: #60a5fa;
+          --shadow-claw-link-hover: #93c5fd;
           --shadow-claw-on-error: #690005;
           --shadow-claw-success-color: #34d399;
           --shadow-claw-text-primary: #f1f5f9;
@@ -172,18 +175,30 @@ export class ShadowClaw extends HTMLElement {
           color: var(--shadow-claw-link-hover);
         }
 
+        /* Override highlight.js link styles in message content */
+        .message-content a,
+        .message-content a:visited {
+          color: var(--shadow-claw-link) !important;
+          text-decoration: underline;
+          text-underline-offset: 0.125rem;
+        }
+
+        .message-content a:hover {
+          color: var(--shadow-claw-link-hover) !important;
+        }
+
         /* Links inside user message bubbles sit on a dark accent background —
                   always render them as white so they're readable in both themes. */
         .message.user .message-content a,
         .message.user .message-content a:visited {
-          color: #ffffff;
+          color: var(--shadow-claw-on-primary) !important;
           opacity: 0.9;
           text-decoration: underline;
           text-underline-offset: 0.125rem;
         }
 
         .message.user .message-content a:hover {
-          color: #ffffff;
+          color: var(--shadow-claw-on-primary) !important;
           opacity: 1;
         }
 
@@ -988,6 +1003,257 @@ export class ShadowClaw extends HTMLElement {
           border-color: var(--shadow-claw-error-color);
           color: var(--shadow-claw-error-color);
         }
+
+        /* File Viewer Modal */
+        .file-modal {
+          background: transparent;
+          border: none;
+          max-height: unset;
+          max-width: unset;
+          margin: 0;
+          padding: 0;
+        }
+
+        .file-modal[open] {
+          align-items: flex-start;
+          box-sizing: border-box;
+          display: flex;
+          inset: 0;
+          justify-content: center;
+          padding: 0.5rem;
+          position: fixed;
+          width: auto;
+          z-index: 1000;
+        }
+
+        .file-modal::backdrop {
+          background-color: rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-content {
+          background-color: var(--shadow-claw-bg-primary);
+          border: 0.0625rem solid var(--shadow-claw-border-color);
+          border-radius: var(--shadow-claw-radius-l);
+          box-shadow: var(--shadow-claw-shadow-lg);
+          display: flex;
+          flex-direction: column;
+          height: min(88dvh, 45rem);
+          max-height: calc(100dvh - 1rem);
+          max-width: 56rem;
+          width: calc(100vw - 1rem);
+        }
+
+        .modal-header {
+          align-items: center;
+          border-bottom: 0.0625rem solid var(--shadow-claw-border-color);
+          display: flex;
+          gap: 0.5rem;
+          justify-content: space-between;
+          min-width: 0;
+          padding: 0.625rem 0.75rem;
+        }
+
+        .modal-header-actions {
+          align-items: center;
+          flex: none;
+          display: flex;
+          gap: 0.5rem;
+        }
+
+        .modal-title {
+          color: var(--shadow-claw-text-primary);
+          font-size: 0.8125rem;
+          font-weight: 600;
+          margin: 0;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .modal-preview-btn {
+          background-color: var(--shadow-claw-bg-tertiary);
+          border: 0.0625rem solid var(--shadow-claw-border-color);
+          border-radius: var(--shadow-claw-radius-m);
+          color: var(--shadow-claw-text-secondary);
+          cursor: pointer;
+          font-size: 0.75rem;
+          font-weight: 600;
+          min-height: 2rem;
+          padding: 0.375rem 0.625rem;
+        }
+
+        .modal-preview-btn:hover,
+        .modal-preview-btn:focus-visible {
+          background-color: var(--shadow-claw-bg-secondary);
+          border-color: var(--shadow-claw-accent-primary);
+          color: var(--shadow-claw-text-primary);
+          outline: none;
+        }
+
+        .modal-preview-btn[aria-pressed="true"] {
+          background-color: var(--shadow-claw-accent-primary);
+          border-color: var(--shadow-claw-accent-primary);
+          color: var(--shadow-claw-on-primary);
+        }
+
+        .modal-close-btn {
+          background: transparent;
+          border: none;
+          color: var(--shadow-claw-text-secondary);
+          cursor: pointer;
+          font-size: 1.25rem;
+          min-height: 2rem;
+          min-width: 2rem;
+        }
+
+        .modal-body {
+          display: flex;
+          flex: 1;
+          min-height: 0;
+          overflow: hidden;
+          padding: 0.75rem;
+        }
+
+        .file-content {
+          flex: 1;
+          margin: 0;
+          min-height: 0;
+          overflow: auto;
+        }
+
+        .file-content shadow-claw-pdf-viewer {
+          display: block;
+          height: 100%;
+          min-height: 0;
+        }
+
+        .file-content--raw {
+          color: var(--shadow-claw-text-primary);
+          font-family: var(--shadow-claw-font-mono);
+          font-size: 0.8125rem;
+          line-height: 1.5;
+          white-space: pre-wrap;
+          word-break: break-all;
+        }
+
+        .file-content--preview {
+          color: var(--shadow-claw-text-primary);
+          font-size: 0.875rem;
+          line-height: 1.5;
+          overflow-wrap: anywhere;
+        }
+
+        .file-content--preview p {
+          margin: 0 0 0.5rem;
+        }
+
+        .file-content--preview p:last-child {
+          margin-bottom: 0;
+        }
+
+        .file-content--preview pre {
+          background: var(--shadow-claw-bg-secondary);
+          border: 0.0625rem solid var(--shadow-claw-border-color);
+          border-radius: var(--shadow-claw-radius-m);
+          margin: 0.75rem 0;
+          overflow-x: auto;
+          padding: 0;
+        }
+
+        .file-content--preview pre code.hljs {
+          background-color: transparent;
+          color: var(--shadow-claw-text-primary);
+          display: block;
+          font-family: var(--shadow-claw-font-mono);
+          font-size: 0.8125rem;
+          line-height: 1.6;
+          margin: 0;
+          padding: 0.75rem;
+        }
+
+        .file-content--preview code {
+          background-color: var(--shadow-claw-bg-tertiary);
+          border-radius: 0.1875rem;
+          color: var(--shadow-claw-text-primary);
+          font-family: var(--shadow-claw-font-mono);
+          font-size: 0.8125rem;
+          padding: 0.125rem 0.375rem;
+        }
+
+        .file-content--preview code.hljs {
+          background: transparent;
+          padding: 0;
+        }
+
+        .file-content--preview ul,
+        .file-content--preview ol {
+          margin: 0 0 0.5rem;
+          padding-left: 1.5rem;
+        }
+
+        .file-content--preview li {
+          margin-bottom: 0.25rem;
+        }
+
+        .file-content--preview a {
+          color: var(--shadow-claw-link);
+          text-decoration: underline;
+          text-decoration-thickness: 0.0625rem;
+        }
+
+        .file-content--preview a:hover,
+        .file-content--preview a:focus-visible {
+          color: var(--shadow-claw-link-hover);
+          outline: none;
+        }
+
+        .file-content--preview img {
+          max-width: 100%;
+          height: auto;
+        }
+
+        .file-content--iframe {
+          height: 100%;
+        }
+
+        .file-content-iframe {
+          background-color: var(--shadow-claw-bg-secondary);
+          border: none;
+          border-radius: var(--shadow-claw-radius-m);
+          display: block;
+          height: 100%;
+          min-height: 14rem;
+          width: 100%;
+        }
+
+        @media (min-width: 48rem) {
+          .file-modal[open] {
+            padding: 1rem 0.75rem 0.75rem;
+          }
+
+          .modal-content {
+            height: min(80vh, 45rem);
+            max-height: calc(100dvh - 1.75rem);
+            width: calc(100vw - 1.5rem);
+          }
+
+          .modal-header {
+            padding: 0.75rem 1rem;
+          }
+
+          .modal-title {
+            font-size: 0.875rem;
+          }
+
+          .modal-body {
+            padding: 1rem;
+          }
+
+          .file-content-iframe {
+            min-height: 24rem;
+          }
+        }
       </style>
 
       <div class="app">
@@ -1587,6 +1853,22 @@ export class ShadowClaw extends HTMLElement {
 
             <shadow-claw-toast></shadow-claw-toast>
           </div>
+
+          <!-- File Viewer Modal -->
+          <dialog class="file-modal" aria-label="File viewer">
+            <div class="modal-content">
+              <div class="modal-header">
+                <h3 class="modal-title">File: name.txt</h3>
+                <div class="modal-header-actions">
+                  <button class="modal-preview-btn" type="button" aria-label="Toggle preview mode" aria-pressed="false">👁️ Preview</button>
+                  <button class="modal-close-btn" type="button" aria-label="Close file viewer">&times;</button>
+                </div>
+              </div>
+              <div class="modal-body">
+                <div class="file-content file-content--raw"></div>
+              </div>
+            </div>
+          </dialog>
         </div>
       </div>
     `;
@@ -1598,6 +1880,10 @@ export class ShadowClaw extends HTMLElement {
     this.attachShadow({ mode: "open" });
     /** @type {'idle'|'thinking'|'responding'|'error'} */
     this.previousOrchestratorState = "idle";
+    /** @type {boolean} */
+    this.isFilePreviewMode = false;
+    /** @type {string} */
+    this.lastOpenedFileName = "";
   }
 
   async connectedCallback() {
@@ -1642,6 +1928,21 @@ export class ShadowClaw extends HTMLElement {
 
     // Initialize the orchestratorStore
     await orchestratorStore.init(db, orchestrator);
+
+    // Allow agent tools to open files directly in the shared file viewer dialog.
+    orchestrator.events.on(
+      "open-file",
+      async (/** @type {{groupId: string, path: string}} */ payload) => {
+        try {
+          await fileViewerStore.openFile(db, payload.path, payload.groupId);
+          this.showPage("chat");
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+
+          showError(`Failed to open file \"${payload.path}\": ${message}`);
+        }
+      },
+    );
 
     // React to store changes using effect()
     this.setupEffects();
@@ -1956,6 +2257,273 @@ export class ShadowClaw extends HTMLElement {
             : "none";
       }
     });
+
+    // React to file viewer state
+    effect(() => {
+      const file = fileViewerStore.file;
+      const modal = root.querySelector(".file-modal");
+
+      if (!(modal instanceof HTMLDialogElement)) {
+        return;
+      }
+
+      if (file) {
+        if (!modal.open) {
+          modal.showModal();
+        }
+
+        const title = modal.querySelector(".modal-title");
+
+        if (title instanceof HTMLElement) {
+          title.textContent = `File: ${file.name}`;
+        }
+
+        if (this.lastOpenedFileName !== file.name) {
+          this.lastOpenedFileName = file.name;
+          this.isFilePreviewMode = false;
+        }
+
+        this.renderFileViewerContent(modal, file);
+      } else {
+        if (modal.open) {
+          modal.close();
+        }
+
+        this.lastOpenedFileName = "";
+        this.isFilePreviewMode = false;
+        this.resetFileViewerContent(modal);
+      }
+    });
+
+    const modal = root.querySelector(".file-modal");
+    modal?.addEventListener("close", () => {
+      if (fileViewerStore.file) {
+        fileViewerStore.closeFile();
+      }
+    });
+
+    // Close file modal when close button is clicked
+    const closeBtn = root.querySelector(".modal-close-btn");
+    closeBtn?.addEventListener("click", () => fileViewerStore.closeFile());
+
+    const previewBtn = root.querySelector(".modal-preview-btn");
+    previewBtn?.addEventListener("click", () => {
+      this.isFilePreviewMode = !this.isFilePreviewMode;
+
+      const modal = root.querySelector(".file-modal");
+      const file = fileViewerStore.file;
+
+      if (modal instanceof HTMLElement && file) {
+        this.renderFileViewerContent(modal, file);
+      }
+    });
+  }
+
+  /**
+   * @param {HTMLElement} modal
+   * @param {{name: string, content: string, kind?: "text"|"pdf", binaryContent?: Uint8Array|null}} file
+   */
+  renderFileViewerContent(modal, file) {
+    const content = modal.querySelector(".file-content");
+    const previewBtn = modal.querySelector(".modal-preview-btn");
+
+    if (previewBtn instanceof HTMLButtonElement) {
+      previewBtn.textContent = this.isFilePreviewMode ? "📄 Raw" : "👁️ Preview";
+      previewBtn.setAttribute("aria-pressed", String(this.isFilePreviewMode));
+      previewBtn.setAttribute(
+        "aria-label",
+        this.isFilePreviewMode
+          ? "Switch to raw text view"
+          : "Switch to preview mode",
+      );
+    }
+
+    if (!(content instanceof HTMLElement)) {
+      return;
+    }
+
+    content.classList.remove("file-content--iframe");
+
+    if (this.isFilePreviewMode) {
+      if (file.kind === "pdf") {
+        content.classList.remove("file-content--raw");
+        content.classList.remove("file-content--preview");
+        content.classList.remove("file-content--iframe");
+
+        const pdfViewer = document.createElement("shadow-claw-pdf-viewer");
+
+        if (pdfViewer instanceof HTMLElement) {
+          // @ts-ignore - Custom element property for passing binary content.
+          pdfViewer.file = file;
+        }
+
+        content.replaceChildren(pdfViewer);
+
+        return;
+      }
+
+      if (this.isIframePreviewFile(file.name)) {
+        content.classList.remove("file-content--raw");
+        content.classList.remove("file-content--preview");
+        content.classList.add("file-content--iframe");
+
+        const iframe = document.createElement("iframe");
+        iframe.className = "file-content-iframe";
+        iframe.setAttribute("title", `Preview: ${file.name}`);
+        iframe.setAttribute(
+          "sandbox",
+          this.getIframeSandboxPermissions(file.name),
+        );
+
+        iframe.setAttribute("referrerpolicy", "no-referrer");
+        iframe.srcdoc = this.buildIframePreviewSrcdoc(file);
+
+        content.replaceChildren(iframe);
+
+        return;
+      }
+
+      content.classList.remove("file-content--raw");
+      content.classList.add("file-content--preview");
+
+      content.innerHTML = renderMarkdown(this.toPreviewMarkdown(file));
+
+      return;
+    }
+
+    if (file.kind === "pdf") {
+      content.classList.add("file-content--raw");
+      content.classList.remove("file-content--preview");
+      content.classList.remove("file-content--iframe");
+      content.textContent =
+        "Binary PDF file. Click Preview to render this document.";
+
+      return;
+    }
+
+    content.classList.add("file-content--raw");
+    content.classList.remove("file-content--preview");
+    content.classList.remove("file-content--iframe");
+    content.textContent = file.content;
+  }
+
+  /**
+   * @param {HTMLElement} modal
+   */
+  resetFileViewerContent(modal) {
+    const content = modal.querySelector(".file-content");
+    const previewBtn = modal.querySelector(".modal-preview-btn");
+
+    if (previewBtn instanceof HTMLButtonElement) {
+      previewBtn.textContent = "👁️ Preview";
+      previewBtn.setAttribute("aria-pressed", "false");
+      previewBtn.setAttribute("aria-label", "Switch to preview mode");
+    }
+
+    if (!(content instanceof HTMLElement)) {
+      return;
+    }
+
+    content.classList.add("file-content--raw");
+    content.classList.remove("file-content--preview");
+    content.classList.remove("file-content--iframe");
+    content.textContent = "";
+  }
+
+  /**
+   * @param {string} fileName
+   *
+   * @returns {boolean}
+   */
+  isIframePreviewFile(fileName) {
+    return /\.(?:html?|svg)$/i.test(fileName);
+  }
+
+  /**
+   * @param {string} fileName
+   *
+   * @returns {string}
+   */
+  getIframeSandboxPermissions(fileName) {
+    if (/\.svg$/i.test(fileName)) {
+      return "allow-popups allow-popups-to-escape-sandbox";
+    }
+
+    return "allow-scripts allow-popups allow-popups-to-escape-sandbox";
+  }
+
+  /**
+   * @param {{name: string, content: string}} file
+   *
+   * @returns {string}
+   */
+  buildIframePreviewSrcdoc(file) {
+    if (/\.svg$/i.test(file.name)) {
+      return file.content;
+    }
+
+    return (
+      "<!doctype html>" +
+      '<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
+      '<base target="_blank">' +
+      "</head><body>" +
+      file.content +
+      "</body></html>"
+    );
+  }
+
+  /**
+   * @param {{name: string, content: string}} file
+   *
+   * @returns {string}
+   */
+  toPreviewMarkdown(file) {
+    if (this.isMarkdownLikeFile(file.name)) {
+      return file.content;
+    }
+
+    const lang = this.getLanguageFromFilename(file.name);
+    return "```" + lang + "\n" + file.content + "\n```";
+  }
+
+  /**
+   * @param {string} fileName
+   *
+   * @returns {boolean}
+   */
+  isMarkdownLikeFile(fileName) {
+    return /(?:^readme$|\.mdx?$|\.markdown$|\.mdown$)/i.test(fileName);
+  }
+
+  /**
+   * @param {string} fileName
+   *
+   * @returns {string}
+   */
+  getLanguageFromFilename(fileName) {
+    const extension = fileName.toLowerCase().split(".").pop() || "";
+    /** @type {Record<string, string>} */
+    const languageMap = {
+      bash: "bash",
+      cjs: "javascript",
+      css: "css",
+      html: "html",
+      java: "java",
+      js: "javascript",
+      json: "json",
+      jsx: "javascript",
+      mjs: "javascript",
+      py: "python",
+      sh: "bash",
+      ts: "typescript",
+      tsx: "typescript",
+      txt: "plaintext",
+      xml: "xml",
+      yaml: "yaml",
+      yml: "yaml",
+    };
+
+    return languageMap[extension] || "plaintext";
   }
 
   /**
@@ -2242,6 +2810,7 @@ export class ShadowClaw extends HTMLElement {
         );
 
         await this.updateStorageInfo(db);
+
         // Reload files in store if on files page or just to be safe
         await orchestratorStore.loadFiles(db);
       }
@@ -2403,11 +2972,13 @@ export class ShadowClaw extends HTMLElement {
 
     if (!key) {
       showWarning("Please enter an API key", 3000);
+
       return;
     }
 
     if (!this.orchestrator) {
       showError("Orchestrator not initialized", 5000);
+
       return;
     }
 
@@ -2597,6 +3168,7 @@ export class ShadowClaw extends HTMLElement {
         const encrypted = await encryptValue(token);
         if (encrypted) {
           await setConfig(db, CONFIG_KEYS.GIT_TOKEN, encrypted);
+
           tokenInput.value = "";
           tokenInput.placeholder = "•••••••••••• (Saved)";
         }

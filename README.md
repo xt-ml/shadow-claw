@@ -2,15 +2,13 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/xt-ml/shadow-claw)
 
-Browser-native personal AI assistant. A complete reimagination of NanoClaw — same
-single-user, small-enough-to-understand philosophy, but running entirely in a browser
-tab.
+Browser-native personal AI assistant.
 
 ## Quick Start
 
 ```bash
 npm install
-npm start        # Express dev server → http://localhost:8888
+npm start        # Express server → http://localhost:8888
 ```
 
 Open Settings, paste your [OpenRouter](https://openrouter.ai/) API key, and start chatting.
@@ -19,44 +17,44 @@ Open Settings, paste your [OpenRouter](https://openrouter.ai/) API key, and star
 
 ```mermaid
 graph TD
-    User["👤 User"] --> UI["&lt;shadow-claw&gt; Web Component<br>Chat · Files · Tasks · Settings"]
-      UI --> Orchestrator["Orchestrator<br>(main thread)"]
-      Orchestrator --> MessageQueue["Message Queue<br>FIFO per group"]
-    Orchestrator --> StateFSM["State Machine<br>idle → thinking → responding"]
-    Orchestrator --> TaskScheduler["Task Scheduler<br>cron expressions"]
-    Orchestrator --> Router["Router<br>channel dispatch"]
-      MessageQueue --> Worker["Agent Worker<br>(Web Worker)"]
-    Worker --> OpenRouter["☁️ OpenRouter API<br>Claude / any model"]
-    Worker --> ToolExec["Tool Execution<br>bash · js · files · fetch"]
-    ToolExec --> JSShell["JS Shell Emulator<br>~40 Unix commands<br>via OPFS"]
-    ToolExec --> WebVM["v86 Alpine Linux VM<br>(optional, WASM)"]
-      Orchestrator --> IndexedDB["IndexedDB<br>messages · sessions<br>tasks · config"]
-    Orchestrator --> OPFS["OPFS / Local Folder<br>per-group workspace<br>MEMORY.md"]
-      UI --> ServiceWorker["Service Worker<br>PWA · offline cache"]
+  User["👤 User"] --> UI["&lt;shadow-claw&gt; Web Component<br>Chat · Files · Tasks · Settings"]
+    UI --> Orchestrator["Orchestrator<br>(main thread)"]
+    Orchestrator --> MessageQueue["Message Queue<br>FIFO per group"]
+  Orchestrator --> StateFSM["State Machine<br>idle → thinking → responding"]
+  Orchestrator --> TaskScheduler["Task Scheduler<br>cron expressions"]
+  Orchestrator --> Router["Router<br>channel dispatch"]
+    MessageQueue --> Worker["Agent Worker<br>(Web Worker)"]
+  Worker --> OpenRouter["☁️ OpenRouter API<br>Claude / any model"]
+  Worker --> ToolExec["Tool Execution<br>bash · js · files · fetch"]
+  ToolExec --> JSShell["JS Shell Emulator<br>~40 Unix commands<br>via OPFS"]
+  ToolExec --> WebVM["v86 Alpine Linux VM<br>(optional, WASM)"]
+    Orchestrator --> IndexedDB["IndexedDB<br>messages · sessions<br>tasks · config"]
+  Orchestrator --> OPFS["OPFS / Local Folder<br>per-group workspace<br>MEMORY.md"]
+    UI --> ServiceWorker["Service Worker<br>PWA · offline cache"]
 ```
 
 ### Message Flow
 
 ```mermaid
 sequenceDiagram
-    participant U as User
-    participant UI as Web Component
-    participant O as Orchestrator
-    participant IDB as IndexedDB
-    participant W as Agent Worker
-    participant OR as OpenRouter
-      U->>UI: types message
-    UI->>O: submitMessage()
-    O->>IDB: saveMessage()
-    O->>W: postMessage({type:'invoke'})
-    W->>OR: POST /chat/completions
-    OR-->>W: tool_use response
-    W->>W: executeTool() → OPFS / fetch / JS
-    W->>OR: POST (tool result)
-    OR-->>W: final text response
-    W->>O: postMessage({type:'response'})
-    O->>IDB: saveMessage()
-    O->>UI: signal update → re-render
+  participant U as User
+  participant UI as Web Component
+  participant O as Orchestrator
+  participant IDB as IndexedDB
+  participant W as Agent Worker
+  participant OR as OpenRouter
+    U->>UI: types message
+  UI->>O: submitMessage()
+  O->>IDB: saveMessage()
+  O->>W: postMessage({type:'invoke'})
+  W->>OR: POST /chat/completions
+  OR-->>W: tool_use response
+  W->>W: executeTool() → OPFS / fetch / JS
+  W->>OR: POST (tool result)
+  OR-->>W: final text response
+  W->>O: postMessage({type:'response'})
+  O->>IDB: saveMessage()
+  O->>UI: signal update → re-render
 ```
 
 ## Key Files
@@ -72,6 +70,7 @@ sequenceDiagram
 | `src/vm.mjs`                    | Optional v86 Alpine Linux VM (falls back to JS shell)             |
 | `src/db/db.mjs`                 | IndexedDB layer — messages, sessions, tasks, config               |
 | `src/storage/storage.mjs`       | OPFS + Local Folder file storage, zip export/import               |
+| `src/storage/readGroupFileBytes.mjs` | Reads raw file bytes (used for binary previews like PDFs)    |
 | `src/crypto.mjs`                | AES-256-GCM encryption for API keys at rest                       |
 | `src/git/git.mjs`               | Isomorphic-git integration and version control operations         |
 | `src/git/sync.mjs`              | Synchronization between LightningFS and OPFS                      |
@@ -80,13 +79,15 @@ sequenceDiagram
 | `src/router.mjs`                | Routes inbound messages to channels                               |
 | `src/channels/browser-chat.mjs` | Browser chat channel implementation                               |
 | `src/task-scheduler.mjs`        | Cron expression parser and task runner                            |
-| `src/stores/`                   | Reactive signal-based UI state (orchestrator, file-viewer, theme) |
-| `src/components/`               | Web Components — `<shadow-claw>` (main), `<shadow-claw-chat>`, `<shadow-claw-files>`, `<shadow-claw-tasks>`, `<shadow-claw-page-header>`, `<shadow-claw-toast>` |
 | `src/config.mjs`                | All constants, provider definitions, and config keys              |
 | `src/types.mjs`                 | JSDoc `@typedef` declarations (full type contract)                |
 | `src/effect.mjs`                | Lightweight `effect()` using TC39 Signal Polyfill                 |
 | `src/serve.mjs`                 | Express dev/prod server with compression and SPA routing          |
+| `src/stores/`                   | Reactive signal-based UI state (orchestrator, file-viewer, theme) |
 | `service-worker/`               | Workbox-generated PWA service worker                              |
+| `src/components/`               | Web Components — `<shadow-claw>` (main), `<shadow-claw-toast>`,   |
+|                                 |  `<shadow-claw-files>`, `<shadow-claw-tasks>`, `<shadow-claw-chat>` |
+|                                 |  `<shadow-claw-page-header>`, `<shadow-claw-pdf-viewer>`          |
 
 ## Tools Available to the Agent
 
@@ -95,6 +96,7 @@ sequenceDiagram
 | `bash`                                                       | Shell commands — JS emulator or full Alpine VM if assets present |
 | `javascript`                                                 | Run JS in an isolated `Function` scope — no DOM, no network      |
 | `read_file` / `write_file` / `list_files`                    | OPFS workspace file I/O                                          |
+| `open_file`                                                  | Opens a workspace file directly in the UI file viewer dialog      |
 | `fetch_url`                                                  | HTTP requests via browser `fetch()` — CORS applies               |
 | `update_memory`                                              | Write to `MEMORY.md` — loaded as system context every invocation |
 | `create_task` / `list_tasks` / `update_task` / `delete_task` | Scheduled task management (can be JS scripts)                    |
@@ -106,18 +108,18 @@ sequenceDiagram
 
 ```mermaid
 graph LR
-    subgraph IndexedDB ["IndexedDB (shadowclaw)"]
-        messages["messages<br>(by group + timestamp)"]
-        sessions["sessions<br>(LLM conversation history)"]
-        tasks["tasks<br>(scheduled cron jobs)"]
-        config["config<br>(API key · provider · model)"]
-    end
-      subgraph FileSystem ["File System"]
-        OPFS["OPFS<br>browser-sandboxed<br>shadowclaw/&lt;groupId&gt;/workspace/"]
-        LocalFolder["Local Folder<br>File System Access API<br>user-chosen directory"]
-    end
-      OPFS -->|zip export/import| Downloads["⬇️ Downloads"]
-    config -->|AES-256-GCM encrypted| ApiKey["🔑 API Key"]
+  subgraph IndexedDB ["IndexedDB (shadowclaw)"]
+    messages["messages<br>(by group + timestamp)"]
+    sessions["sessions<br>(LLM conversation history)"]
+    tasks["tasks<br>(scheduled cron jobs)"]
+    config["config<br>(API key · provider · model)"]
+  end
+  subgraph FileSystem ["File System"]
+    OPFS["OPFS<br>browser-sandboxed<br>shadowclaw/&lt;groupId&gt;/workspace/"]
+    LocalFolder["Local Folder<br>File System Access API<br>user-chosen directory"]
+  end
+    OPFS -->|zip export/import| Downloads["⬇️ Downloads"]
+  config -->|AES-256-GCM encrypted| ApiKey["🔑 API Key"]
 ```
 
 ## WebVM (Optional `bash` Backend)
@@ -164,8 +166,10 @@ helper re-runs DOM updates whenever signals change. No virtual DOM, no framework
 ## Development
 
 ```bash
-npm start          # Express dev server
+npm start          # Express server
 npm test           # Jest (*.test.mjs files live next to source)
+npm run e2e        # Playwright E2E tests (e2e/*.test.mjs)
+npm run e2e:install # Install Playwright browser binaries
 npm run tsc        # TypeScript type-check (JSDoc, --noEmit)
 npm run build      # Type-check + generate service worker
 npm run format     # Prettier

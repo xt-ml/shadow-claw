@@ -1,3 +1,4 @@
+/* istanbul ignore file */
 /**
  * ShadowClaw Agent Worker Logic
  */

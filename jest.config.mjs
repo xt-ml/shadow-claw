@@ -19,5 +19,11 @@ export default {
       "<rootDir>/src/git/__mocks__/httpWeb.mjs",
     "^https://cdn\\.jsdelivr\\.net/npm/buffer.+$":
       "<rootDir>/src/git/__mocks__/buffer.mjs",
+    "^zip$": "<rootDir>/src/__mocks__/zip.mjs",
+    "^jszip$": "<rootDir>/src/__mocks__/jszip.mjs",
+    "^dompurify$": "<rootDir>/src/__mocks__/dompurify.mjs",
+    "^marked$": "<rootDir>/src/__mocks__/marked.mjs",
+    "^highlight\\.js$": "<rootDir>/src/__mocks__/highlightjs.mjs",
+    "^pdfjs-dist$": "<rootDir>/src/__mocks__/pdfjs-dist.mjs",
   },
 };

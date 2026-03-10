@@ -711,6 +711,12 @@ export class Orchestrator {
 
         break;
       }
+
+      case "open-file": {
+        this.events.emit("open-file", msg.payload);
+
+        break;
+      }
     }
   }
 

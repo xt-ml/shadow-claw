@@ -52,6 +52,48 @@ describe("Shell Pipelines", () => {
       expect(runSingle).toHaveBeenCalledTimes(1);
       expect(runSingle).toHaveBeenCalledWith(db, "echo 'a | b'", ctx, "");
     });
+
+    it("should handle double-quoted pipes", async () => {
+      runSingle
+        .mockResolvedValueOnce({ stdout: "a | b", stderr: "", exitCode: 0 })
+        .mockResolvedValueOnce({ stdout: "done", stderr: "", exitCode: 0 });
+
+      const result = await runPipe(db, 'echo "a | b" | cat', ctx);
+
+      expect(runSingle).toHaveBeenNthCalledWith(1, db, 'echo "a | b"', ctx, "");
+      expect(runSingle).toHaveBeenNthCalledWith(2, db, "cat", ctx, "a | b");
+      expect(result.stdout).toBe("done");
+    });
+
+    it("should ignore pipes inside subshell syntax", async () => {
+      runSingle
+        .mockResolvedValueOnce({ stdout: "sub", stderr: "", exitCode: 0 })
+        .mockResolvedValueOnce({ stdout: "ok", stderr: "", exitCode: 0 });
+
+      await runPipe(db, "echo $(a | b) | wc", ctx);
+
+      expect(runSingle).toHaveBeenCalledTimes(2);
+      expect(runSingle).toHaveBeenNthCalledWith(
+        1,
+        db,
+        "echo $(a | b)",
+        ctx,
+        "",
+      );
+      expect(runSingle).toHaveBeenNthCalledWith(2, db, "wc", ctx, "sub");
+    });
+
+    it("should ignore empty pipeline segments", async () => {
+      runSingle
+        .mockResolvedValueOnce({ stdout: "x", stderr: "", exitCode: 0 })
+        .mockResolvedValueOnce({ stdout: "y", stderr: "", exitCode: 0 });
+
+      await runPipe(db, " | cmd1 |   | cmd2 | ", ctx);
+
+      expect(runSingle).toHaveBeenCalledTimes(2);
+      expect(runSingle).toHaveBeenNthCalledWith(1, db, "cmd1", ctx, "");
+      expect(runSingle).toHaveBeenNthCalledWith(2, db, "cmd2", ctx, "x");
+    });
   });
 
   describe("runPipeline", () => {

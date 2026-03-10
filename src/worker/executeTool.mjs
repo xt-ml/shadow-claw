@@ -42,6 +42,19 @@ export async function executeTool(db, name, input, groupId) {
       case "read_file":
         return await readGroupFile(db, groupId, input.path);
 
+      case "open_file": {
+        if (!input.path || typeof input.path !== "string") {
+          return "Error: open_file requires a valid path string.";
+        }
+
+        post({
+          type: "open-file",
+          payload: { groupId, path: input.path },
+        });
+
+        return `Opening file in viewer: ${input.path}`;
+      }
+
       case "write_file":
         await writeGroupFile(db, groupId, input.path, input.content);
 

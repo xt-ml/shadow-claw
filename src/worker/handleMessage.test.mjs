@@ -118,4 +118,40 @@ describe("handleMessage.mjs", () => {
 
     consoleSpy.mockRestore();
   });
+
+  it("should handle set-storage without storageHandle", async () => {
+    mockOpenDatabase.mockResolvedValue({});
+    const event = {
+      data: { type: "set-storage", payload: {} },
+    };
+
+    await handleMessage(event);
+
+    expect(mockSetStorageRoot).not.toHaveBeenCalled();
+  });
+
+  it("should handle task-list-response when no pending resolver exists", async () => {
+    mockOpenDatabase.mockResolvedValue({});
+
+    const event = {
+      data: {
+        type: "task-list-response",
+        payload: { groupId: "unknown", tasks: [] },
+      },
+    };
+
+    // Should not throw
+    await expect(handleMessage(event)).resolves.toBeUndefined();
+  });
+
+  it("should handle cancel message type", async () => {
+    mockOpenDatabase.mockResolvedValue({});
+
+    const event = {
+      data: { type: "cancel", payload: {} },
+    };
+
+    // Should not throw - currently a no-op
+    await expect(handleMessage(event)).resolves.toBeUndefined();
+  });
 });

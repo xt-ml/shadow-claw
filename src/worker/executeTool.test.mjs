@@ -11,6 +11,22 @@ describe("executeTool.mjs", () => {
   let mockStripHtml;
   let mockUlid;
   let mockWriteGroupFile;
+  let mockGetConfig;
+  let mockGitAdd;
+  let mockGitCheckout;
+  let mockGitClone;
+  let mockGitCommit;
+  let mockGitDiff;
+  let mockGitListBranches;
+  let mockGitListRepos;
+  let mockGitLog;
+  let mockGitPull;
+  let mockGitPush;
+  let mockGitStatus;
+  let mockGetProxyUrl;
+  let mockDecryptValue;
+  let mockSyncLfsToOpfs;
+  let mockSyncOpfsToLfs;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -24,9 +40,59 @@ describe("executeTool.mjs", () => {
     mockStripHtml = jest.fn((html) => html.replace(/<[^>]*>/g, ""));
     mockUlid = jest.fn(() => "mock-ulid");
     mockWriteGroupFile = jest.fn();
+    mockGetConfig = jest.fn();
+    mockGitAdd = jest.fn();
+    mockGitCheckout = jest.fn();
+    mockGitClone = jest.fn();
+    mockGitCommit = jest.fn();
+    mockGitDiff = jest.fn();
+    mockGitListBranches = jest.fn();
+    mockGitListRepos = jest.fn();
+    mockGitLog = jest.fn();
+    mockGitPull = jest.fn();
+    mockGitPush = jest.fn();
+    mockGitStatus = jest.fn();
+    mockGetProxyUrl = jest.fn(() => "https://proxy.local");
+    mockDecryptValue = jest.fn();
+    mockSyncLfsToOpfs = jest.fn();
+    mockSyncOpfsToLfs = jest.fn();
 
     jest.unstable_mockModule("../config.mjs", () => ({
       FETCH_MAX_RESPONSE: 1000,
+      CONFIG_KEYS: {
+        GIT_TOKEN: "git-token",
+        GIT_CORS_PROXY: "git-cors-proxy",
+        GIT_AUTHOR_NAME: "git-author-name",
+        GIT_AUTHOR_EMAIL: "git-author-email",
+      },
+    }));
+
+    jest.unstable_mockModule("../db/getConfig.mjs", () => ({
+      getConfig: mockGetConfig,
+    }));
+
+    jest.unstable_mockModule("../crypto.mjs", () => ({
+      decryptValue: mockDecryptValue,
+    }));
+
+    jest.unstable_mockModule("../git/git.mjs", () => ({
+      gitAdd: mockGitAdd,
+      gitCheckout: mockGitCheckout,
+      gitClone: mockGitClone,
+      gitCommit: mockGitCommit,
+      gitDiff: mockGitDiff,
+      gitListBranches: mockGitListBranches,
+      gitListRepos: mockGitListRepos,
+      gitLog: mockGitLog,
+      gitPull: mockGitPull,
+      gitPush: mockGitPush,
+      gitStatus: mockGitStatus,
+      getProxyUrl: mockGetProxyUrl,
+    }));
+
+    jest.unstable_mockModule("../git/sync.mjs", () => ({
+      syncLfsToOpfs: mockSyncLfsToOpfs,
+      syncOpfsToLfs: mockSyncOpfsToLfs,
     }));
 
     jest.unstable_mockModule("../shell/shell.mjs", () => ({
@@ -67,6 +133,8 @@ describe("executeTool.mjs", () => {
 
     const module = await import("./executeTool.mjs");
     executeTool = module.executeTool;
+
+    delete global.fetch;
   });
 
   it("should handle bash tool", async () => {
@@ -75,6 +143,14 @@ describe("executeTool.mjs", () => {
     const result = await executeTool({}, "bash", { command: "ls" }, "group1");
     expect(mockExecuteShell).toHaveBeenCalledWith({}, "ls", "group1", {}, 30);
     expect(result).toBe("formatted: shell output");
+  });
+
+  it("should clamp bash timeout to 240 seconds", async () => {
+    mockExecuteShell.mockResolvedValue("shell output");
+
+    await executeTool({}, "bash", { command: "ls", timeout: 999 }, "group1");
+
+    expect(mockExecuteShell).toHaveBeenCalledWith({}, "ls", "group1", {}, 240);
   });
 
   it("should handle read_file tool", async () => {
@@ -88,6 +164,30 @@ describe("executeTool.mjs", () => {
 
     expect(mockReadGroupFile).toHaveBeenCalledWith({}, "group1", "test.txt");
     expect(result).toBe("file content");
+  });
+
+  it("should post open_file event", async () => {
+    const result = await executeTool(
+      {},
+      "open_file",
+      { path: "src/app.mjs" },
+      "group1",
+    );
+
+    expect(result).toBe("Opening file in viewer: src/app.mjs");
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "open-file",
+      payload: { groupId: "group1", path: "src/app.mjs" },
+    });
+  });
+
+  it("should validate open_file path", async () => {
+    const result = await executeTool({}, "open_file", {}, "group1");
+
+    expect(result).toBe("Error: open_file requires a valid path string.");
+    expect(mockPost).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "open-file" }),
+    );
   });
 
   it("should handle write_file tool", async () => {
@@ -177,6 +277,22 @@ describe("executeTool.mjs", () => {
     expect(result).toContain("Error body");
   });
 
+  it("should handle fetch_url network error", async () => {
+    global.fetch = jest.fn().mockRejectedValue(new Error("connection reset"));
+
+    const result = await executeTool(
+      {},
+      "fetch_url",
+      { url: "http://example.com" },
+      "group1",
+    );
+
+    expect(result).toContain(
+      "Network Error: Failed to fetch http://example.com",
+    );
+    expect(result).toContain("connection reset");
+  });
+
   it("should handle update_memory tool", async () => {
     const result = await executeTool(
       {},
@@ -222,6 +338,27 @@ describe("executeTool.mjs", () => {
     expect(result).toBe("2");
   });
 
+  it("should handle javascript tool null and undefined results", async () => {
+    await expect(
+      executeTool({}, "javascript", { code: "undefined" }, "group1"),
+    ).resolves.toBe("(no return value)");
+
+    await expect(
+      executeTool({}, "javascript", { code: "null" }, "group1"),
+    ).resolves.toBe("null");
+  });
+
+  it("should handle javascript tool object stringify fallback", async () => {
+    const result = await executeTool(
+      {},
+      "javascript",
+      { code: "const x = {}; x.self = x; x;" },
+      "group1",
+    );
+
+    expect(result).toBe("[object Object]");
+  });
+
   it("should handle list_tasks tool", async () => {
     const tasks = [{ id: "1", schedule: "*", prompt: "p", enabled: true }];
     const promise = executeTool({}, "list_tasks", {}, "group1");
@@ -237,6 +374,394 @@ describe("executeTool.mjs", () => {
 
     const result = await promise;
     expect(result).toContain("[ID: 1] Schedule: *, Prompt: p, Enabled: true");
+  });
+
+  it("should handle list_tasks tool with no tasks", async () => {
+    const promise = executeTool({}, "list_tasks", {}, "group1");
+
+    const resolve = mockPendingTasks.get("group1");
+    resolve([]);
+
+    await expect(promise).resolves.toBe("No tasks found for this group.");
+  });
+
+  it("should update an existing task", async () => {
+    const task = {
+      id: "t1",
+      schedule: "* * * * *",
+      prompt: "old",
+      enabled: true,
+    };
+    const promise = executeTool(
+      {},
+      "update_task",
+      { id: "t1", schedule: "*/5 * * * *", prompt: "new", enabled: 0 },
+      "group1",
+    );
+
+    const resolve = mockPendingTasks.get("group1");
+    resolve([task]);
+
+    await expect(promise).resolves.toBe("Task t1 updated successfully.");
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "update-task",
+      payload: {
+        task: {
+          id: "t1",
+          schedule: "*/5 * * * *",
+          prompt: "new",
+          enabled: false,
+        },
+      },
+    });
+  });
+
+  it("should return an error when update_task target is missing", async () => {
+    const promise = executeTool({}, "update_task", { id: "missing" }, "group1");
+    const resolve = mockPendingTasks.get("group1");
+    resolve([{ id: "other" }]);
+
+    await expect(promise).resolves.toBe(
+      "Error: Task with ID missing not found.",
+    );
+  });
+
+  it("should enable a task", async () => {
+    const task = { id: "t2", enabled: false };
+    const promise = executeTool({}, "enable_task", { id: "t2" }, "group1");
+    mockPendingTasks.get("group1")([task]);
+
+    await expect(promise).resolves.toBe("Task t2 enabled successfully.");
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "update-task",
+      payload: { task: { id: "t2", enabled: true } },
+    });
+  });
+
+  it("should disable a task", async () => {
+    const task = { id: "t3", enabled: true };
+    const promise = executeTool({}, "disable_task", { id: "t3" }, "group1");
+    mockPendingTasks.get("group1")([task]);
+
+    await expect(promise).resolves.toBe("Task t3 disabled successfully.");
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "update-task",
+      payload: { task: { id: "t3", enabled: false } },
+    });
+  });
+
+  it("should post delete_task event", async () => {
+    const result = await executeTool(
+      {},
+      "delete_task",
+      { id: "task-5" },
+      "group1",
+    );
+
+    expect(result).toBe("Task task-5 deleted successfully.");
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "delete-task",
+      payload: { id: "task-5" },
+    });
+  });
+
+  it("should post clear_chat event", async () => {
+    const result = await executeTool({}, "clear_chat", {}, "group1");
+
+    expect(result).toBe(
+      "Chat history cleared successfully. New session started.",
+    );
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "clear-chat",
+      payload: { groupId: "group1" },
+    });
+  });
+
+  it("should post show_toast event", async () => {
+    const result = await executeTool(
+      {},
+      "show_toast",
+      { message: "Saved", type: "success", duration: 2500 },
+      "group1",
+    );
+
+    expect(result).toBe("Toast notification sent: Saved");
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "show-toast",
+      payload: {
+        message: "Saved",
+        type: "success",
+        duration: 2500,
+      },
+    });
+  });
+
+  it("should return an error when git_push has no configured token", async () => {
+    mockGetConfig.mockResolvedValue(null);
+
+    const result = await executeTool(
+      {},
+      "git_push",
+      { repo: "demo", branch: "main" },
+      "group1",
+    );
+
+    expect(result).toContain("No git token configured");
+    expect(mockGitPush).not.toHaveBeenCalled();
+  });
+
+  it("should clone a repo and sync it to workspace", async () => {
+    mockGetConfig.mockImplementation(async (_db, key) =>
+      key === "git-cors-proxy" ? "public" : null,
+    );
+    mockGitClone.mockResolvedValue("demo-repo");
+
+    const result = await executeTool(
+      {},
+      "git_clone",
+      { url: "https://github.com/x/y.git", branch: "main", include_git: true },
+      "group1",
+    );
+
+    expect(mockGitClone).toHaveBeenCalledWith({
+      url: "https://github.com/x/y.git",
+      branch: "main",
+      depth: undefined,
+      corsProxy: "https://proxy.local",
+    });
+    expect(mockSyncLfsToOpfs).toHaveBeenCalledWith(
+      {},
+      "group1",
+      "demo-repo",
+      "repos/demo-repo",
+      true,
+    );
+    expect(result).toContain(
+      'Cloned https://github.com/x/y.git as "demo-repo"',
+    );
+  });
+
+  it("should handle git_sync push and pull", async () => {
+    await expect(
+      executeTool(
+        {},
+        "git_sync",
+        { repo: "demo", direction: "push", include_git: true },
+        "group1",
+      ),
+    ).resolves.toContain("Synced workspace files in repos/demo");
+
+    expect(mockSyncOpfsToLfs).toHaveBeenCalledWith(
+      {},
+      "group1",
+      "repos/demo",
+      "demo",
+      true,
+    );
+
+    await expect(
+      executeTool(
+        {},
+        "git_sync",
+        { repo: "demo", direction: "pull" },
+        "group1",
+      ),
+    ).resolves.toContain("Synced git clone files to workspace repos/demo");
+
+    expect(mockSyncLfsToOpfs).toHaveBeenCalledWith(
+      {},
+      "group1",
+      "demo",
+      "repos/demo",
+      false,
+    );
+  });
+
+  it("should handle git_checkout", async () => {
+    mockGitCheckout.mockResolvedValue("Checked out main");
+
+    await expect(
+      executeTool({}, "git_checkout", { repo: "demo", ref: "main" }, "group1"),
+    ).resolves.toBe("Checked out main");
+
+    expect(mockSyncLfsToOpfs).toHaveBeenCalledWith(
+      {},
+      "group1",
+      "demo",
+      "repos/demo",
+    );
+  });
+
+  it("should handle git_status even when OPFS sync fails", async () => {
+    mockSyncOpfsToLfs.mockRejectedValueOnce(new Error("missing dir"));
+    mockGitStatus.mockResolvedValue("clean");
+
+    await expect(
+      executeTool({}, "git_status", { repo: "demo" }, "group1"),
+    ).resolves.toBe("clean");
+
+    expect(mockGitStatus).toHaveBeenCalledWith({ repo: "demo" });
+  });
+
+  it("should handle git_add", async () => {
+    mockGitAdd.mockResolvedValue("added file.txt");
+
+    await expect(
+      executeTool(
+        {},
+        "git_add",
+        { repo: "demo", filepath: "file.txt" },
+        "group1",
+      ),
+    ).resolves.toBe("added file.txt");
+
+    expect(mockGitAdd).toHaveBeenCalledWith({
+      repo: "demo",
+      filepath: "file.txt",
+    });
+  });
+
+  it("should handle git_log", async () => {
+    mockGitLog.mockResolvedValue("commit list");
+
+    await expect(
+      executeTool(
+        {},
+        "git_log",
+        { repo: "demo", ref: "main", depth: 5 },
+        "group1",
+      ),
+    ).resolves.toBe("commit list");
+
+    expect(mockGitLog).toHaveBeenCalledWith({
+      repo: "demo",
+      ref: "main",
+      depth: 5,
+    });
+  });
+
+  it("should handle git_diff", async () => {
+    mockGitDiff.mockResolvedValue("diff output");
+
+    await expect(
+      executeTool(
+        {},
+        "git_diff",
+        { repo: "demo", ref1: "a", ref2: "b" },
+        "group1",
+      ),
+    ).resolves.toBe("diff output");
+
+    expect(mockGitDiff).toHaveBeenCalledWith({
+      repo: "demo",
+      ref1: "a",
+      ref2: "b",
+    });
+  });
+
+  it("should handle git_branches and git_list_repos", async () => {
+    mockGitListBranches.mockResolvedValue("main\nfeature");
+    mockGitListRepos.mockResolvedValue("demo");
+
+    await expect(
+      executeTool({}, "git_branches", { repo: "demo", remote: true }, "group1"),
+    ).resolves.toBe("main\nfeature");
+
+    expect(mockGitListBranches).toHaveBeenCalledWith({
+      repo: "demo",
+      remote: true,
+    });
+
+    await expect(executeTool({}, "git_list_repos", {}, "group1")).resolves.toBe(
+      "demo",
+    );
+    expect(mockGitListRepos).toHaveBeenCalled();
+  });
+
+  it("should return sync error message for git_commit when workspace sync fails", async () => {
+    mockSyncOpfsToLfs.mockRejectedValueOnce(new Error("sync failed"));
+
+    const result = await executeTool(
+      {},
+      "git_commit",
+      { repo: "demo", message: "msg" },
+      "group1",
+    );
+
+    expect(result).toContain("Could not sync from OPFS");
+    expect(mockGitCommit).not.toHaveBeenCalled();
+  });
+
+  it("should commit using stored author defaults", async () => {
+    mockGetConfig.mockImplementation(async (_db, key) => {
+      if (key === "git-author-name") return "Jane Dev";
+      if (key === "git-author-email") return "jane@example.com";
+      return null;
+    });
+    mockGitCommit.mockResolvedValue("committed");
+
+    await expect(
+      executeTool({}, "git_commit", { repo: "demo", message: "msg" }, "group1"),
+    ).resolves.toBe("committed");
+
+    expect(mockGitCommit).toHaveBeenCalledWith({
+      repo: "demo",
+      message: "msg",
+      authorName: "Jane Dev",
+      authorEmail: "jane@example.com",
+    });
+  });
+
+  it("should pull using decrypted token and author defaults", async () => {
+    mockGetConfig.mockImplementation(async (_db, key) => {
+      if (key === "git-token") return "encrypted-token";
+      if (key === "git-cors-proxy") return "public";
+      if (key === "git-author-name") return "Jane Dev";
+      if (key === "git-author-email") return "jane@example.com";
+      return null;
+    });
+    mockDecryptValue.mockResolvedValue("plaintext-token");
+    mockGitPull.mockResolvedValue("pulled");
+
+    await expect(
+      executeTool({}, "git_pull", { repo: "demo", branch: "main" }, "group1"),
+    ).resolves.toBe("pulled");
+
+    expect(mockGitPull).toHaveBeenCalledWith({
+      repo: "demo",
+      branch: "main",
+      authorName: "Jane Dev",
+      authorEmail: "jane@example.com",
+      token: "plaintext-token",
+      corsProxy: "https://proxy.local",
+    });
+  });
+
+  it("should push using decrypted token and proxy", async () => {
+    mockGetConfig.mockImplementation(async (_db, key) => {
+      if (key === "git-token") return "encrypted-token";
+      if (key === "git-cors-proxy") return "public";
+      return null;
+    });
+    mockDecryptValue.mockResolvedValue("plaintext-token");
+    mockGitPush.mockResolvedValue("pushed");
+
+    await expect(
+      executeTool(
+        {},
+        "git_push",
+        { repo: "demo", branch: "main", force: true },
+        "group1",
+      ),
+    ).resolves.toBe("pushed");
+
+    expect(mockGitPush).toHaveBeenCalledWith({
+      repo: "demo",
+      branch: "main",
+      force: true,
+      token: "plaintext-token",
+      corsProxy: "https://proxy.local",
+    });
   });
 
   it("should handle unknown tool", async () => {

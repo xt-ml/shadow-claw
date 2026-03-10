@@ -129,6 +129,7 @@ export class ShadowClawFiles extends HTMLElement {
           display: flex;
           flex-direction: column;
           gap: 0.5rem;
+          height: 100%;
           padding: 0.75rem;
           text-align: center;
           width: 100%;
@@ -430,6 +431,7 @@ export class ShadowClawFiles extends HTMLElement {
       const item = document.createElement("div");
       item.className = "files__item";
       item.setAttribute("role", "listitem");
+      item.setAttribute("data-file-name", name);
 
       const downloadTitle = isDir ? "Download as ZIP" : "Download";
       const actionsHtml = `

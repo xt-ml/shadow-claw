@@ -51,6 +51,22 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "open_file",
+    description:
+      "Open a file from the group workspace in the UI file viewer dialog. " +
+      "Use this when the user asks to inspect a file visually with preview support.",
+    input_schema: {
+      type: "object",
+      properties: {
+        path: {
+          type: "string",
+          description: "File path relative to the group workspace root",
+        },
+      },
+      required: ["path"],
+    },
+  },
+  {
     name: "write_file",
     description:
       "Write content to a file in the group workspace. " +

@@ -12,6 +12,7 @@ import {
 import ShadowClaw from "./src/components/shadow-claw.mjs";
 
 import { Orchestrator } from "./src/orchestrator.mjs";
+import { orchestratorStore } from "./src/stores/orchestrator.mjs";
 
 import "./src/types.mjs";
 
@@ -77,6 +78,10 @@ async function initializeApp() {
       dismissToast,
       clearAllToasts,
     };
+
+    // Expose orchestratorStore and db for e2e tests
+    /** @type {any} */ (globalThis).orchestratorStore = orchestratorStore;
+    /** @type {any} */ (globalThis).__SHADOWCLAW_DB__ = db;
 
     /** @type {any} */ (globalThis).showToast = showToast;
     /** @type {any} */ (globalThis).showSuccess = showSuccess;

@@ -167,6 +167,17 @@ export class ShadowClawTasks extends HTMLElement {
           padding: 0;
         }
 
+        .tasks__prompt a,
+        .tasks__prompt a:visited {
+          color: var(--shadow-claw-link, #1e40af) !important;
+          text-decoration: underline;
+          text-underline-offset: 0.125rem;
+        }
+
+        .tasks__prompt a:hover {
+          color: var(--shadow-claw-link-hover, #1e3a8a) !important;
+        }
+
         .tasks__actions {
           display: flex;
           flex-wrap: wrap;

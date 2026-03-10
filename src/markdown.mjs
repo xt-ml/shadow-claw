@@ -50,6 +50,7 @@ marked.use({
 /**
  * Render a Markdown string to safe HTML.
  * @param {string} src
+ *
  * @returns {string}
  */
 export function renderMarkdown(src) {

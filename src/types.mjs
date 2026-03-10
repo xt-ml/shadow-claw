@@ -184,6 +184,13 @@
  */
 
 /**
+ * @typedef {Object} OpenFilePayload
+ *
+ * @property {string} groupId
+ * @property {string} path
+ */
+
+/**
  * @typedef {Object} LLMProvider
  *
  * @property {string} id
@@ -199,6 +206,7 @@
  *   | { type: 'tool-activity'; payload: ToolActivityPayload }
  *   | { type: 'thinking-log'; payload: ThinkingLogEntry }
  *   | { type: 'compact-done'; payload: CompactDonePayload }
+ *   | { type: 'open-file'; payload: OpenFilePayload }
  * } WorkerOutbound
  */
 

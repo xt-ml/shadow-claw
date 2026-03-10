@@ -1,6 +1,7 @@
 .cache
 .env
 coverage
+e2e-results
 node_modules
 service-worker.js
 workbox-*.js

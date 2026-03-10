@@ -259,4 +259,49 @@ describe("handleInvoke.mjs", () => {
       }),
     );
   });
+
+  it("should handle unknown provider", async () => {
+    const payload = {
+      groupId: "g1",
+      provider: "unknown-provider",
+      messages: [],
+    };
+
+    mockGetProvider.mockReturnValue(null);
+
+    await handleInvoke({}, payload);
+
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "error",
+      payload: { groupId: "g1", error: "Unknown provider: unknown-provider" },
+    });
+
+    expect(mockLog).not.toHaveBeenCalled();
+  });
+
+  it("should set storage root when storageHandle is provided", async () => {
+    const storageHandle = {};
+    const payload = {
+      groupId: "g1",
+      messages: [],
+      provider: "p1",
+      storageHandle,
+    };
+
+    mockGetProvider.mockReturnValue({ name: "P1", baseUrl: "http://p1" });
+    mockFormatRequest.mockReturnValue({ body: "req" });
+    mockParseResponse.mockReturnValue({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: "done" }],
+    });
+
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({}),
+    });
+
+    await handleInvoke({}, payload);
+
+    expect(mockSetStorageRoot).toHaveBeenCalledWith(storageHandle);
+  });
 });

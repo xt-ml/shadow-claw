@@ -43,6 +43,13 @@ export const OPFS_ROOT = "shadowclaw";
 /** Default group for browser chat */
 export const DEFAULT_GROUP_ID = "br:main";
 
+/** Copilot-specific Azure AI Inference proxy endpoint */
+export const COPILOT_AZURE_OPENAI_PROXY_URL =
+  "http://localhost:8888/copilot-proxy/azure-openai/chat/completions";
+
+/** Verified Copilot Azure models. Keep this as the single allowlist source. */
+export const COPILOT_AZURE_OPENAI_ALLOWED_MODELS = ["gpt-4o", "gpt-4o-mini"];
+
 /**
  * @typedef {Object} ProviderConfig
  *
@@ -54,6 +61,7 @@ export const DEFAULT_GROUP_ID = "br:main";
  * @property {string} [apiKeyHeaderFormat]
  * @property {Record<string, string>} headers
  * @property {string} defaultModel
+ * @property {string[]} [models]
  */
 
 /**
@@ -77,6 +85,16 @@ export const PROVIDERS = {
     },
     defaultModel: "anthropic/claude-haiku-4.5",
   },
+  copilot_azure_openai_proxy: {
+    id: "copilot_azure_openai_proxy",
+    name: "Copilot Azure OpenAI (Local Proxy)",
+    baseUrl: COPILOT_AZURE_OPENAI_PROXY_URL,
+    format: "openai",
+    apiKeyHeader: "api-key",
+    headers: {},
+    defaultModel: "gpt-4o-mini",
+    models: COPILOT_AZURE_OPENAI_ALLOWED_MODELS,
+  },
   // anthropic: {
   //   id: "anthropic",
   //   name: "Anthropic (Claude)",
@@ -98,6 +116,7 @@ export const PROVIDERS = {
 /**
  * Get provider configuration by ID
  * @param {string} providerId - The provider ID (e.g., 'anthropic', 'openrouter')
+ *
  * @returns {ProviderConfig|null} - The provider config or null if not found
  */
 export function getProvider(providerId) {
@@ -106,6 +125,7 @@ export function getProvider(providerId) {
 
 /**
  * Get the default provider configuration
+ *
  * @returns {ProviderConfig} - The default provider config
  */
 export function getDefaultProvider() {
@@ -114,10 +134,22 @@ export function getDefaultProvider() {
 
 /**
  * Get list of available provider IDs
+ *
  * @returns {string[]} - Array of provider IDs
  */
 export function getAvailableProviders() {
   return Object.keys(PROVIDERS);
+}
+
+/**
+ * Get the config key used to store an API key for a specific provider.
+ *
+ * @param {string} providerId
+ *
+ * @returns {string}
+ */
+export function getProviderApiKeyConfigKey(providerId) {
+  return `api_key:${providerId}`;
 }
 
 /** Config keys */

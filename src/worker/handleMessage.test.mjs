@@ -51,7 +51,11 @@ describe("handleMessage.mjs", () => {
 
     await handleMessage(event);
 
-    expect(mockHandleInvoke).toHaveBeenCalledWith(db, { some: "data" });
+    expect(mockHandleInvoke).toHaveBeenCalledWith(
+      db,
+      { some: "data" },
+      expect.any(Object),
+    );
   });
 
   it("should dispatch compact message", async () => {
@@ -64,7 +68,11 @@ describe("handleMessage.mjs", () => {
 
     await handleMessage(event);
 
-    expect(mockHandleCompact).toHaveBeenCalledWith(db, { some: "data" });
+    expect(mockHandleCompact).toHaveBeenCalledWith(
+      db,
+      { some: "data" },
+      expect.any(Object),
+    );
   });
 
   it("should dispatch set-storage message", async () => {
@@ -146,12 +154,27 @@ describe("handleMessage.mjs", () => {
 
   it("should handle cancel message type", async () => {
     mockOpenDatabase.mockResolvedValue({});
+    let capturedSignal;
+
+    mockHandleInvoke.mockImplementation(async (_, __, signal) => {
+      capturedSignal = signal;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
+    const invokePromise = handleMessage({
+      data: { type: "invoke", payload: { groupId: "g1" } },
+    });
 
     const event = {
-      data: { type: "cancel", payload: {} },
+      data: { type: "cancel", payload: { groupId: "g1" } },
     };
 
-    // Should not throw - currently a no-op
+    await Promise.resolve();
+
     await expect(handleMessage(event)).resolves.toBeUndefined();
+    expect(capturedSignal).toBeDefined();
+    expect(capturedSignal.aborted).toBe(true);
+
+    await invokePromise;
   });
 });

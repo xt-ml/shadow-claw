@@ -22,8 +22,9 @@ import { post } from "./post.mjs";
  *
  * @param {ShadowClawDatabase} db
  * @param {any} payload
+ * @param {AbortSignal} [abortSignal]
  */
-export async function handleInvoke(db, payload) {
+export async function handleInvoke(db, payload, abortSignal) {
   const {
     groupId,
     messages,
@@ -96,6 +97,7 @@ export async function handleInvoke(db, payload) {
         method: "POST",
         headers,
         body: JSON.stringify(body),
+        signal: abortSignal,
       });
 
       if (!res.ok) {
@@ -224,6 +226,10 @@ export async function handleInvoke(db, payload) {
       },
     });
   } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return;
+    }
+
     const message = err instanceof Error ? err.message : String(err);
     post({ type: "error", payload: { groupId, error: message } });
   }

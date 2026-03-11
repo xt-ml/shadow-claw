@@ -25,5 +25,6 @@ export default {
     "^marked$": "<rootDir>/src/__mocks__/marked.mjs",
     "^highlight\\.js$": "<rootDir>/src/__mocks__/highlightjs.mjs",
     "^pdfjs-dist$": "<rootDir>/src/__mocks__/pdfjs-dist.mjs",
+    "^quill$": "<rootDir>/src/__mocks__/quill.mjs",
   },
 };

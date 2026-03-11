@@ -275,6 +275,13 @@ export class OrchestratorStore {
   }
 
   /**
+   * Stop the active in-flight request for the current group.
+   */
+  stopCurrentRequest() {
+    this.orchestrator?.stopCurrentRequest?.(this._activeGroupId.get());
+  }
+
+  /**
    * Clear error
    */
   clearError() {

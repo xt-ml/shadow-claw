@@ -4,6 +4,9 @@ import { handleCompact } from "./handleCompact.mjs";
 import { handleInvoke } from "./handleInvoke.mjs";
 import { pendingTasks } from "./pendingTasks.mjs";
 
+/** @type {Map<string, AbortController>} */
+const inFlightControllers = new Map();
+
 /**
  * Main message handler logic
  *
@@ -21,12 +24,52 @@ export async function handleMessage(event) {
   }
 
   switch (type) {
-    case "invoke":
-      await handleInvoke(db, payload);
+    case "invoke": {
+      const groupId = payload?.groupId;
+      const controller = new AbortController();
+
+      if (groupId) {
+        const previous = inFlightControllers.get(groupId);
+        if (previous) {
+          previous.abort();
+        }
+
+        inFlightControllers.set(groupId, controller);
+      }
+
+      try {
+        await handleInvoke(db, payload, controller.signal);
+      } finally {
+        if (groupId && inFlightControllers.get(groupId) === controller) {
+          inFlightControllers.delete(groupId);
+        }
+      }
+
       break;
-    case "compact":
-      await handleCompact(db, payload);
+    }
+    case "compact": {
+      const groupId = payload?.groupId;
+      const controller = new AbortController();
+
+      if (groupId) {
+        const previous = inFlightControllers.get(groupId);
+        if (previous) {
+          previous.abort();
+        }
+
+        inFlightControllers.set(groupId, controller);
+      }
+
+      try {
+        await handleCompact(db, payload, controller.signal);
+      } finally {
+        if (groupId && inFlightControllers.get(groupId) === controller) {
+          inFlightControllers.delete(groupId);
+        }
+      }
+
       break;
+    }
     case "set-storage":
       if (payload.storageHandle) {
         setStorageRoot(payload.storageHandle);
@@ -46,7 +89,20 @@ export async function handleMessage(event) {
       break;
     }
     case "cancel":
-      // TODO: AbortController-based cancellation
+      if (payload?.groupId) {
+        const controller = inFlightControllers.get(payload.groupId);
+        if (controller) {
+          controller.abort();
+          inFlightControllers.delete(payload.groupId);
+        }
+      } else {
+        for (const controller of inFlightControllers.values()) {
+          controller.abort();
+        }
+
+        inFlightControllers.clear();
+      }
+
       break;
   }
 }

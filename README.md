@@ -59,35 +59,36 @@ sequenceDiagram
 
 ## Key Files
 
-| File                            | Purpose                                                           |
-| ------------------------------- | ----------------------------------------------------------------- |
-| `index.mjs`                     | App entry — opens IndexedDB, boots orchestrator, registers SW     |
-| `worker.mjs`                    | Agent Web Worker — owns the LLM tool-use loop                     |
-| `src/orchestrator.mjs`          | State machine, message queue, agent invocation, task scheduling   |
-| `src/worker/executeTool.mjs`    | Tool execution logic for the agent worker                         |
-| `src/tools.mjs`                 | Tool schema definitions sent to the LLM                           |
-| `src/shell/shell.mjs`           | Pure-JS bash-like shell emulator (OPFS filesystem)                |
-| `src/vm.mjs`                    | Optional v86 Alpine Linux VM (falls back to JS shell)             |
-| `src/db/db.mjs`                 | IndexedDB layer — messages, sessions, tasks, config               |
-| `src/storage/storage.mjs`       | OPFS + Local Folder file storage, zip export/import               |
-| `src/storage/readGroupFileBytes.mjs` | Reads raw file bytes (used for binary previews like PDFs)    |
-| `src/crypto.mjs`                | AES-256-GCM encryption for API keys at rest                       |
-| `src/git/git.mjs`               | Isomorphic-git integration and version control operations         |
-| `src/git/sync.mjs`              | Synchronization between LightningFS and OPFS                      |
-| `src/audio.mjs`                 | AudioContext management and notifications                         |
-| `src/providers.mjs`             | LLM provider registry (OpenRouter + future providers)             |
-| `src/router.mjs`                | Routes inbound messages to channels                               |
-| `src/channels/browser-chat.mjs` | Browser chat channel implementation                               |
-| `src/task-scheduler.mjs`        | Cron expression parser and task runner                            |
-| `src/config.mjs`                | All constants, provider definitions, and config keys              |
-| `src/types.mjs`                 | JSDoc `@typedef` declarations (full type contract)                |
-| `src/effect.mjs`                | Lightweight `effect()` using TC39 Signal Polyfill                 |
-| `src/serve.mjs`                 | Express dev/prod server with compression and SPA routing          |
-| `src/stores/`                   | Reactive signal-based UI state (orchestrator, file-viewer, theme) |
-| `service-worker/`               | Workbox-generated PWA service worker                              |
-| `src/components/`               | Web Components — `<shadow-claw>` (main), `<shadow-claw-toast>`,   |
-|                                 |  `<shadow-claw-files>`, `<shadow-claw-tasks>`, `<shadow-claw-chat>` |
-|                                 |  `<shadow-claw-page-header>`, `<shadow-claw-pdf-viewer>`          |
+| File                                 | Purpose                                                            |
+| ------------------------------------ | ------------------------------------------------------------------ |
+| `index.mjs`                          | App entry — opens IndexedDB, boots orchestrator, registers SW      |
+| `worker.mjs`                         | Agent Web Worker — owns the LLM tool-use loop                      |
+| `src/orchestrator.mjs`               | State machine, message queue, agent invocation, task scheduling    |
+| `src/worker/executeTool.mjs`         | Tool execution logic for the agent worker                          |
+| `src/tools.mjs`                      | Tool schema definitions sent to the LLM                            |
+| `src/shell/shell.mjs`                | Pure-JS bash-like shell emulator (OPFS filesystem)                 |
+| `src/vm.mjs`                         | Optional v86 Alpine Linux VM (falls back to JS shell)              |
+| `src/db/db.mjs`                      | IndexedDB layer — messages, sessions, tasks, config                |
+| `src/storage/storage.mjs`            | OPFS + Local Folder file storage, zip export/import                |
+| `src/storage/readGroupFileBytes.mjs` | Reads raw file bytes (used for binary previews like PDFs)          |
+| `src/crypto.mjs`                     | AES-256-GCM encryption for API keys at rest                        |
+| `src/git/git.mjs`                    | Isomorphic-git integration and version control operations          |
+| `src/git/sync.mjs`                   | Synchronization between LightningFS and OPFS                       |
+| `src/audio.mjs`                      | AudioContext management and notifications                          |
+| `src/providers.mjs`                  | LLM provider registry (OpenRouter + future providers)              |
+| `src/router.mjs`                     | Routes inbound messages to channels                                |
+| `src/channels/browser-chat.mjs`      | Browser chat channel implementation                                |
+| `src/task-scheduler.mjs`             | Cron expression parser and task runner                             |
+| `src/config.mjs`                     | All constants, provider definitions, and config keys               |
+| `src/types.mjs`                      | JSDoc `@typedef` declarations (full type contract)                 |
+| `src/effect.mjs`                     | Lightweight `effect()` using TC39 Signal Polyfill                  |
+| `src/serve.mjs`                      | Express dev/prod server + Git/LLM CORS proxy                       |
+| `src/stores/`                        | Reactive signal-based UI state (orchestrator, file-viewer, theme)  |
+| `service-worker/`                    | Workbox-generated PWA service worker                               |
+| `src/components/`                    | Web Components — `<shadow-claw>` (main), `<shadow-claw-toast>`,    |
+|                                      | `<shadow-claw-files>`, `<shadow-claw-tasks>`, `<shadow-claw-chat>` |
+|                                      | (with "Stop Chat" support), `<shadow-claw-page-header>`,           |
+|                                      | `<shadow-claw-pdf-viewer>`                                         |
 
 ## Tools Available to the Agent
 
@@ -96,7 +97,7 @@ sequenceDiagram
 | `bash`                                                       | Shell commands — JS emulator or full Alpine VM if assets present |
 | `javascript`                                                 | Run JS in an isolated `Function` scope — no DOM, no network      |
 | `read_file` / `write_file` / `list_files`                    | OPFS workspace file I/O                                          |
-| `open_file`                                                  | Opens a workspace file directly in the UI file viewer dialog      |
+| `open_file`                                                  | Opens a workspace file directly in the UI file viewer dialog     |
 | `fetch_url`                                                  | HTTP requests via browser `fetch()` — CORS applies               |
 | `update_memory`                                              | Write to `MEMORY.md` — loaded as system context every invocation |
 | `create_task` / `list_tasks` / `update_task` / `delete_task` | Scheduled task management (can be JS scripts)                    |

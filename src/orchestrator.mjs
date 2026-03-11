@@ -8,6 +8,7 @@ import {
   PROVIDERS,
   buildTriggerPattern,
   getDefaultProvider,
+  getProviderApiKeyConfigKey,
   getProvider,
 } from "./config.mjs";
 
@@ -135,17 +136,7 @@ export class Orchestrator {
       this.providerConfig = getProvider(storedProvider) || getDefaultProvider();
     }
 
-    // Load API key
-    let storedKey = await getConfig(db, CONFIG_KEYS.API_KEY);
-    if (storedKey) {
-      try {
-        this.apiKey = await decryptValue(storedKey);
-      } catch (_) {
-        this.apiKey = "";
-
-        await setConfig(db, CONFIG_KEYS.API_KEY, "");
-      }
-    }
+    await this.loadApiKeyForProvider(db, this.provider);
 
     // Load model and max tokens
     const storedModel = await getConfig(db, CONFIG_KEYS.MODEL);
@@ -212,12 +203,14 @@ export class Orchestrator {
       } catch (err) {
         console.warn("Error interpolating task prompt:", err);
       }
+
       return this.invokeAgent(
         db,
         task.groupId,
         `[SCHEDULED TASK]\n\n${evaluatedPrompt}`,
       );
     });
+
     this.scheduler.start();
 
     // Wire up browser chat display callback
@@ -264,11 +257,52 @@ export class Orchestrator {
       throw new Error("key failed to encrypt. config cannot set.");
     }
 
-    await setConfig(db, CONFIG_KEYS.API_KEY, encrypted);
+    await setConfig(db, getProviderApiKeyConfigKey(this.provider), encrypted);
+  }
+
+  /**
+   * Load the API key for a provider into memory.
+   *
+   * Legacy migration note: before provider-specific keys existed, only the
+   * default OpenRouter provider used CONFIG_KEYS.API_KEY. We only migrate that
+   * legacy slot for openrouter to avoid leaking an old key into other providers.
+   *
+   * @param {ShadowClawDatabase} db
+   * @param {string} providerId
+   *
+   * @returns {Promise<void>}
+   */
+  async loadApiKeyForProvider(db, providerId) {
+    let storedKey = await getConfig(db, getProviderApiKeyConfigKey(providerId));
+
+    if (!storedKey && providerId === "openrouter") {
+      const legacyKey = await getConfig(db, CONFIG_KEYS.API_KEY);
+      if (legacyKey) {
+        storedKey = legacyKey;
+        await setConfig(db, getProviderApiKeyConfigKey(providerId), legacyKey);
+      }
+    }
+
+    if (!storedKey) {
+      this.apiKey = "";
+      return;
+    }
+
+    try {
+      this.apiKey = await decryptValue(storedKey);
+    } catch (_) {
+      this.apiKey = "";
+      await setConfig(db, getProviderApiKeyConfigKey(providerId), "");
+
+      if (providerId === "openrouter") {
+        await setConfig(db, CONFIG_KEYS.API_KEY, "");
+      }
+    }
   }
 
   /**
    * Get current provider
+   *
    * @returns {string}
    */
   getProvider() {
@@ -276,17 +310,16 @@ export class Orchestrator {
   }
 
   /**
-   * Get available providers
-   * @returns {Object[]}
-   */
-  /**
    * @returns {import('./types.mjs').LLMProvider[]}
    */
   getAvailableProviders() {
     return Object.entries(PROVIDERS).map(([id, config]) => ({
       id,
       name: config.name,
-      models: [config.defaultModel], // Can be expanded with more models per provider
+      models:
+        Array.isArray(config.models) && config.models.length > 0
+          ? config.models
+          : [config.defaultModel],
     }));
   }
 
@@ -306,6 +339,7 @@ export class Orchestrator {
     this.provider = providerId;
     this.providerConfig = newProvider;
     this.model = newProvider.defaultModel;
+    await this.loadApiKeyForProvider(db, providerId);
     await setConfig(db, CONFIG_KEYS.PROVIDER, providerId);
     await setConfig(db, CONFIG_KEYS.MODEL, this.model);
   }
@@ -435,6 +469,26 @@ export class Orchestrator {
         storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
       },
     });
+  }
+
+  /**
+   * Stop the active in-flight agent request for a group.
+   *
+   * @param {string} [groupId]
+   */
+  stopCurrentRequest(groupId = DEFAULT_GROUP_ID) {
+    if (this.state !== "thinking" && this.state !== "responding") {
+      return;
+    }
+
+    this.agentWorker?.postMessage({
+      type: "cancel",
+      payload: { groupId },
+    });
+
+    this.events.emit("typing", { groupId, typing: false });
+    this.router?.setTyping(groupId, false);
+    this.setState("idle");
   }
 
   /**

@@ -12,10 +12,13 @@ import {
   DB_VERSION,
   OPFS_ROOT,
   DEFAULT_GROUP_ID,
+  COPILOT_AZURE_OPENAI_PROXY_URL,
+  COPILOT_AZURE_OPENAI_ALLOWED_MODELS,
   PROVIDERS,
   getProvider,
   getDefaultProvider,
   getAvailableProviders,
+  getProviderApiKeyConfigKey,
   CONFIG_KEYS,
   DEFAULT_DEV_HOST,
   DEFAULT_DEV_IP,
@@ -66,6 +69,19 @@ describe("config.mjs", () => {
 
     it("should have valid DEFAULT_GROUP_ID", () => {
       expect(DEFAULT_GROUP_ID).toBe("br:main");
+    });
+
+    it("should have valid Copilot Azure proxy URL", () => {
+      expect(COPILOT_AZURE_OPENAI_PROXY_URL).toBe(
+        "http://localhost:8888/copilot-proxy/azure-openai/chat/completions",
+      );
+    });
+
+    it("should have Copilot Azure model allowlist", () => {
+      expect(COPILOT_AZURE_OPENAI_ALLOWED_MODELS).toEqual([
+        "gpt-4o",
+        "gpt-4o-mini",
+      ]);
     });
 
     it("should have valid DEFAULT_DEV_HOST", () => {
@@ -120,6 +136,10 @@ describe("config.mjs", () => {
       expect(PROVIDERS.openrouter).toBeDefined();
     });
 
+    it("should have copilot azure proxy provider", () => {
+      expect(PROVIDERS.copilot_azure_openai_proxy).toBeDefined();
+    });
+
     it("openrouter should have required fields", () => {
       const provider = PROVIDERS.openrouter;
       expect(provider.id).toBe("openrouter");
@@ -130,6 +150,18 @@ describe("config.mjs", () => {
       expect(provider.apiKeyHeaderFormat).toBe("Bearer {key}");
       expect(provider.headers).toBeDefined();
       expect(provider.defaultModel).toBeDefined();
+    });
+
+    it("copilot proxy provider should have required fields", () => {
+      const provider = PROVIDERS.copilot_azure_openai_proxy;
+      expect(provider.id).toBe("copilot_azure_openai_proxy");
+      expect(provider.name).toBe("Copilot Azure OpenAI (Local Proxy)");
+      expect(provider.baseUrl).toBe(COPILOT_AZURE_OPENAI_PROXY_URL);
+      expect(provider.format).toBe("openai");
+      expect(provider.apiKeyHeader).toBe("api-key");
+      expect(provider.defaultModel).toBe("gpt-4o-mini");
+      expect(Array.isArray(provider.models)).toBe(true);
+      expect(provider.models).toEqual(COPILOT_AZURE_OPENAI_ALLOWED_MODELS);
     });
   });
 
@@ -195,11 +227,28 @@ describe("config.mjs", () => {
       expect(providers).toContain("openrouter");
     });
 
+    it("should include copilot azure proxy in available providers", () => {
+      const providers = getAvailableProviders();
+      expect(providers).toContain("copilot_azure_openai_proxy");
+    });
+
     it("should return only string IDs", () => {
       const providers = getAvailableProviders();
       providers.forEach((id) => {
         expect(typeof id).toBe("string");
       });
+    });
+  });
+
+  describe("getProviderApiKeyConfigKey", () => {
+    it("should return a provider-scoped API key config key", () => {
+      expect(getProviderApiKeyConfigKey("openrouter")).toBe(
+        "api_key:openrouter",
+      );
+
+      expect(getProviderApiKeyConfigKey("copilot_azure_openai_proxy")).toBe(
+        "api_key:copilot_azure_openai_proxy",
+      );
     });
   });
 });

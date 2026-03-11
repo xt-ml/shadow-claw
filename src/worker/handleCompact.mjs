@@ -15,8 +15,9 @@ import { post } from "./post.mjs";
  *
  * @param {ShadowClawDatabase} db
  * @param {any} payload
+ * @param {AbortSignal} [abortSignal]
  */
-export async function handleCompact(db, payload) {
+export async function handleCompact(db, payload, abortSignal) {
   const {
     groupId,
     messages,
@@ -71,6 +72,7 @@ export async function handleCompact(db, payload) {
       method: "POST",
       headers,
       body: JSON.stringify(body),
+      signal: abortSignal,
     });
 
     if (!res.ok) {
@@ -97,6 +99,10 @@ export async function handleCompact(db, payload) {
 
     post({ type: "compact-done", payload: { groupId, summary } });
   } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") {
+      return;
+    }
+
     const message = err instanceof Error ? err.message : String(err);
 
     post({

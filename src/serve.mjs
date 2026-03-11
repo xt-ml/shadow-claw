@@ -3,7 +3,7 @@
 // dev server
 import fs from "node:fs";
 import path from "node:path";
-import { argv, exit } from "node:process";
+import { argv, env, exit } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import compression from "compression";
@@ -12,7 +12,11 @@ import express from "express";
 import expressUrlrewrite from "express-urlrewrite";
 import tcpPortUsed from "tcp-port-used";
 
-import { DEFAULT_DEV_IP, DEFAULT_DEV_PORT } from "./config.mjs";
+import {
+  COPILOT_AZURE_OPENAI_ALLOWED_MODELS,
+  DEFAULT_DEV_IP,
+  DEFAULT_DEV_PORT,
+} from "./config.mjs";
 
 // get details for the current module
 const __filename = fileURLToPath(import.meta.url);
@@ -289,6 +293,30 @@ async function handleProxyRequest(
   }
 }
 
+/**
+ * @param {string | string[] | undefined} headerValue
+ *
+ * @returns {string}
+ */
+function getFirstHeaderValue(headerValue) {
+  if (Array.isArray(headerValue)) {
+    return headerValue[0] || "";
+  }
+
+  return typeof headerValue === "string" ? headerValue : "";
+}
+
+/**
+ * @param {string} authorizationHeader
+ *
+ * @returns {string}
+ */
+function extractBearerToken(authorizationHeader) {
+  const match = authorizationHeader.match(/^Bearer\s+(.+)$/i);
+
+  return match ? match[1].trim() : "";
+}
+
 // ---------------- PROXY ENDPOINT (JSON Based) ----------------
 app.all("/proxy", async (req, res) => {
   // Extract URL
@@ -308,6 +336,7 @@ app.all("/proxy", async (req, res) => {
   const method =
     (req.body && typeof req.body.method === "string" && req.body.method) ||
     req.method;
+  const normalizedMethod = method.toUpperCase();
 
   const incomingHeaders =
     (req.body && req.body.headers && typeof req.body.headers === "object"
@@ -324,9 +353,61 @@ app.all("/proxy", async (req, res) => {
   // Delegate to shared handler
   await handleProxyRequest(req, res, {
     targetUrl: target,
-    method,
+    method: normalizedMethod,
     headers: incomingHeaders,
     body,
+  });
+});
+
+// ---------------- COPILOT / AZURE AI INFERENCE PROXY ----------------
+app.post("/copilot-proxy/azure-openai/chat/completions", async (req, res) => {
+  const allowedModels = new Set(COPILOT_AZURE_OPENAI_ALLOWED_MODELS);
+  const endpoint = (
+    env.COPILOT_AZURE_OPENAI_ENDPOINT || "https://models.inference.ai.azure.com"
+  ).replace(/\/$/, "");
+
+  const targetUrl = `${endpoint}/chat/completions`;
+  const serverApiKey =
+    env.COPILOT_AZURE_OPENAI_API_KEY || env.API_KEY || undefined;
+  const defaultModel = env.COPILOT_AZURE_OPENAI_MODEL || undefined;
+
+  const requestBody =
+    req.body && typeof req.body === "object" ? { ...req.body } : {};
+
+  if (!requestBody.model && defaultModel) {
+    requestBody.model = defaultModel;
+  }
+
+  if (
+    typeof requestBody.model !== "string" ||
+    !allowedModels.has(requestBody.model)
+  ) {
+    return res.status(400).json({
+      error: `Model '${String(requestBody.model || "")}' is not allowed. Allowed models: ${COPILOT_AZURE_OPENAI_ALLOWED_MODELS.join(", ")}.`,
+    });
+  }
+
+  const clientApiKey = getFirstHeaderValue(req.headers["api-key"]);
+  const clientAuthorization = getFirstHeaderValue(req.headers.authorization);
+  const resolvedApiKey =
+    clientApiKey ||
+    extractBearerToken(clientAuthorization) ||
+    serverApiKey ||
+    "";
+  const incomingHeaders = { ...req.headers };
+  delete incomingHeaders["api-key"];
+  delete incomingHeaders.authorization;
+
+  if (resolvedApiKey) {
+    incomingHeaders["api-key"] = resolvedApiKey;
+    incomingHeaders.authorization = `Bearer ${resolvedApiKey}`;
+  }
+
+  await handleProxyRequest(req, res, {
+    targetUrl,
+    method: "POST",
+    headers: incomingHeaders,
+    body: JSON.stringify(requestBody),
   });
 });
 

@@ -1,4 +1,8 @@
 // @ts-ignore
+import Quill from "quill";
+// @ts-ignore
+import hljs from "highlight.js";
+
 import { CONFIG_KEYS } from "../config.mjs";
 
 import { getConfig } from "../db/getConfig.mjs";
@@ -18,6 +22,7 @@ import { isPersistent } from "../storage/isPersistent.mjs";
 import { orchestratorStore } from "../stores/orchestrator.mjs";
 import { Themes, themeStore } from "../stores/theme.mjs";
 import { fileViewerStore } from "../stores/file-viewer.mjs";
+import { writeGroupFile } from "../storage/writeGroupFile.mjs";
 
 import { showError, showSuccess, showWarning } from "../toast.mjs";
 
@@ -324,7 +329,7 @@ export class ShadowClaw extends HTMLElement {
           width: 15.625rem;
         }
 
-        @media (max-width: 47.9375rem) {
+        @media (max-width: 55.9375rem) {
           .sidebar {
             display: none;
           }
@@ -339,7 +344,7 @@ export class ShadowClaw extends HTMLElement {
           }
         }
 
-        @media (min-width: 48rem) {
+        @media (min-width: 56rem) {
           #menu-button {
             display: none;
           }
@@ -1060,6 +1065,38 @@ export class ShadowClaw extends HTMLElement {
           gap: 0.5rem;
         }
 
+        .modal-edit-btn,
+        .modal-save-btn {
+          background-color: var(--shadow-claw-bg-tertiary);
+          border: 0.0625rem solid var(--shadow-claw-border-color);
+          border-radius: var(--shadow-claw-radius-m);
+          color: var(--shadow-claw-text-secondary);
+          cursor: pointer;
+          font-size: 0.75rem;
+          font-weight: 600;
+          min-height: 2rem;
+          padding: 0.375rem 0.625rem;
+        }
+
+        .modal-edit-btn:hover,
+        .modal-save-btn:hover {
+          background-color: var(--shadow-claw-bg-secondary);
+          border-color: var(--shadow-claw-accent-primary);
+          color: var(--shadow-claw-text-primary);
+        }
+
+        .modal-save-btn {
+          background-color: var(--shadow-claw-success-color);
+          border-color: var(--shadow-claw-success-color);
+          color: white;
+        }
+
+        .modal-save-btn:hover {
+          background-color: #059669;
+          border-color: #059669;
+          color: white;
+        }
+
         .modal-title {
           color: var(--shadow-claw-text-primary);
           font-size: 0.8125rem;
@@ -1126,6 +1163,52 @@ export class ShadowClaw extends HTMLElement {
           display: block;
           height: 100%;
           min-height: 0;
+        }
+
+        .file-editor-container {
+          display: none;
+          flex-direction: column;
+          height: 100%;
+          min-height: 0;
+          width: 100%;
+        }
+
+        .file-editor-container.active {
+          display: flex;
+        }
+
+        .quill-editor {
+          flex: 1;
+          min-height: 0;
+          border-bottom-left-radius: var(--shadow-claw-radius-m);
+          border-bottom-right-radius: var(--shadow-claw-radius-m);
+          user-select: text !important;
+          -webkit-user-select: text !important;
+        }
+
+        .ql-editor {
+          user-select: text !important;
+          -webkit-user-select: text !important;
+        }
+
+        /* Quill theme overrides for dark mode */
+        :host(.dark-mode) .ql-toolbar {
+          background-color: var(--shadow-claw-bg-secondary);
+          border-color: var(--shadow-claw-border-color);
+        }
+        :host(.dark-mode) .ql-container {
+          border-color: var(--shadow-claw-border-color);
+          background-color: var(--shadow-claw-bg-primary);
+          color: var(--shadow-claw-text-primary);
+        }
+        :host(.dark-mode) .ql-stroke {
+          stroke: var(--shadow-claw-text-secondary);
+        }
+        :host(.dark-mode) .ql-fill {
+          fill: var(--shadow-claw-text-secondary);
+        }
+        :host(.dark-mode) .ql-picker {
+          color: var(--shadow-claw-text-secondary);
         }
 
         .file-content--raw {
@@ -1860,12 +1943,17 @@ export class ShadowClaw extends HTMLElement {
               <div class="modal-header">
                 <h3 class="modal-title">File: name.txt</h3>
                 <div class="modal-header-actions">
+                  <button class="modal-edit-btn" type="button" aria-label="Edit file">✏️ Edit</button>
+                  <button class="modal-save-btn hidden" type="button" aria-label="Save file">💾 Save</button>
                   <button class="modal-preview-btn" type="button" aria-label="Toggle preview mode" aria-pressed="false">👁️ Preview</button>
                   <button class="modal-close-btn" type="button" aria-label="Close file viewer">&times;</button>
                 </div>
               </div>
               <div class="modal-body">
                 <div class="file-content file-content--raw"></div>
+                <div class="file-editor-container">
+                  <div class="quill-editor"></div>
+                </div>
               </div>
             </div>
           </dialog>
@@ -1882,23 +1970,33 @@ export class ShadowClaw extends HTMLElement {
     this.previousOrchestratorState = "idle";
     /** @type {boolean} */
     this.isFilePreviewMode = false;
+    /** @type {boolean} */
+    this.isFileEditMode = false;
+    /** @type {Quill|null} */
+    this.quill = null;
     /** @type {string} */
     this.lastOpenedFileName = "";
   }
 
   async connectedCallback() {
     // apply highlight.js atom-one-dark.min.css to shadow dom
-    const cssText = await (
-      await fetch(
+    const [hjsCss, quillCss] = await Promise.all([
+      fetch(
         "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css",
-      )
-    ).text();
+      ).then((r) => r.text()),
+      fetch("https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css").then(
+        (r) => r.text(),
+      ),
+    ]);
 
     const sheet = new CSSStyleSheet();
-    sheet.replaceSync(cssText);
+    sheet.replaceSync(hjsCss);
+
+    const quillSheet = new CSSStyleSheet();
+    quillSheet.replaceSync(quillCss);
 
     if (this.shadowRoot?.adoptedStyleSheets) {
-      this.shadowRoot.adoptedStyleSheets.push(sheet);
+      this.shadowRoot.adoptedStyleSheets.push(sheet, quillSheet);
     }
   }
 
@@ -1983,14 +2081,14 @@ export class ShadowClaw extends HTMLElement {
       // Close sidebar when an item is tapped (only on mobile)
       root.querySelectorAll(".nav-item, .settings-btn").forEach((item) => {
         item.addEventListener("click", () => {
-          if (window.innerWidth < 768) {
+          if (window.innerWidth < 896) {
             sidebar.classList.remove("open");
           }
         });
       });
 
       // Responsive matchMedia handler for orientation/resizing
-      const matchMedia = globalThis.matchMedia("(min-width: 768px)");
+      const matchMedia = globalThis.matchMedia("(min-width: 896px)");
 
       /** @param {MediaQueryListEvent|MediaQueryList} e */
       const handleMediaQuery = (e) => {
@@ -2281,6 +2379,7 @@ export class ShadowClaw extends HTMLElement {
         if (this.lastOpenedFileName !== file.name) {
           this.lastOpenedFileName = file.name;
           this.isFilePreviewMode = false;
+          this.isFileEditMode = false;
         }
 
         this.renderFileViewerContent(modal, file);
@@ -2309,12 +2408,89 @@ export class ShadowClaw extends HTMLElement {
     const previewBtn = root.querySelector(".modal-preview-btn");
     previewBtn?.addEventListener("click", () => {
       this.isFilePreviewMode = !this.isFilePreviewMode;
+      // Exit edit mode if we switch to preview/raw
+      this.isFileEditMode = false;
 
       const modal = root.querySelector(".file-modal");
       const file = fileViewerStore.file;
 
       if (modal instanceof HTMLElement && file) {
         this.renderFileViewerContent(modal, file);
+      }
+    });
+
+    // Edit button
+    const editBtn = root.querySelector(".modal-edit-btn");
+    editBtn?.addEventListener("click", () => {
+      this.isFileEditMode = !this.isFileEditMode;
+      // If we enter edit mode, we are definitely NOT in preview mode (we are in raw/quill)
+      if (this.isFileEditMode) {
+        this.isFilePreviewMode = false;
+      }
+
+      const modal = root.querySelector(".file-modal");
+      const file = fileViewerStore.file;
+
+      if (modal instanceof HTMLElement && file) {
+        this.renderFileViewerContent(modal, file);
+      }
+    });
+
+    // Save button
+    const saveBtn = root.querySelector(".modal-save-btn");
+    saveBtn?.addEventListener("click", async () => {
+      const file = fileViewerStore.file;
+      if (!file || !this.quill) {
+        return;
+      }
+
+      try {
+        if (!this.db) {
+          return;
+        }
+
+        if (saveBtn instanceof HTMLButtonElement) {
+          saveBtn.disabled = true;
+        }
+
+        saveBtn.textContent = "⏳ saving...";
+
+        const newContent = this.quill.getText();
+        const filePath =
+          orchestratorStore.currentPath === "."
+            ? file.name
+            : `${orchestratorStore.currentPath}/${file.name}`;
+
+        await writeGroupFile(
+          this.db,
+          orchestratorStore.activeGroupId,
+          filePath,
+          newContent,
+        );
+
+        showSuccess(`Saved ${file.name}`);
+
+        // Refresh the file list
+        await orchestratorStore.loadFiles(this.db);
+
+        // Update the store's file content so the view updates if we exit edit mode
+        file.content = newContent;
+
+        // Exit edit mode
+        this.isFileEditMode = false;
+
+        const modal = root.querySelector(".file-modal");
+        if (modal instanceof HTMLElement) {
+          this.renderFileViewerContent(modal, file);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        showError(`Failed to save file: ${message}`);
+      } finally {
+        if (saveBtn instanceof HTMLButtonElement) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "💾 Save";
+        }
       }
     });
   }
@@ -2391,20 +2567,71 @@ export class ShadowClaw extends HTMLElement {
       return;
     }
 
-    if (file.kind === "pdf") {
+    // Toggle Quill Editor visibility
+    const editorContainer = modal.querySelector(".file-editor-container");
+    const editBtn = modal.querySelector(".modal-edit-btn");
+    const saveBtn = modal.querySelector(".modal-save-btn");
+
+    if (this.isFileEditMode && file.kind !== "pdf") {
+      content.classList.add("hidden");
+
+      editorContainer?.classList.add("active");
+
+      saveBtn?.classList.remove("hidden");
+      if (editBtn instanceof HTMLButtonElement)
+        editBtn.textContent = "❌ Cancel";
+
+      // Initialize Quill if needed
+      if (!this.quill) {
+        const quillEl = editorContainer?.querySelector(".quill-editor");
+        if (quillEl instanceof HTMLElement) {
+          this.quill = new Quill(quillEl, {
+            theme: "snow",
+            modules: {
+              syntax: { hljs: hljs.default },
+              toolbar: false,
+            },
+          });
+        }
+      }
+
+      if (this.quill) {
+        // We use setText for raw editing as requested ("let us edit as well as save")
+        // but if it's already set we might want to avoid resetting it if it's the same
+        // to preserve selection and focus. Note: getText() adds a trailing newline.
+        const currentText = this.quill.getText();
+        if (
+          currentText !== file.content &&
+          currentText !== file.content + "\n"
+        ) {
+          this.quill.setText(file.content);
+        }
+      }
+    } else {
+      content.classList.remove("hidden");
+      editorContainer?.classList.remove("active");
+      saveBtn?.classList.add("hidden");
+      if (editBtn instanceof HTMLButtonElement) {
+        editBtn.textContent = "✏️ Edit";
+        // Hide edit button for PDFs
+        editBtn.classList.toggle("hidden", file.kind === "pdf");
+      }
+
+      if (file.kind === "pdf") {
+        content.classList.add("file-content--raw");
+        content.classList.remove("file-content--preview");
+        content.classList.remove("file-content--iframe");
+        content.textContent =
+          "Binary PDF file. Click Preview to render this document.";
+
+        return;
+      }
+
       content.classList.add("file-content--raw");
       content.classList.remove("file-content--preview");
       content.classList.remove("file-content--iframe");
-      content.textContent =
-        "Binary PDF file. Click Preview to render this document.";
-
-      return;
+      content.textContent = file.content;
     }
-
-    content.classList.add("file-content--raw");
-    content.classList.remove("file-content--preview");
-    content.classList.remove("file-content--iframe");
-    content.textContent = file.content;
   }
 
   /**
@@ -2420,10 +2647,22 @@ export class ShadowClaw extends HTMLElement {
       previewBtn.setAttribute("aria-label", "Switch to preview mode");
     }
 
+    const editBtn = modal.querySelector(".modal-edit-btn");
+    if (editBtn instanceof HTMLButtonElement) {
+      editBtn.textContent = "✏️ Edit";
+    }
+
+    const saveBtn = modal.querySelector(".modal-save-btn");
+    saveBtn?.classList.add("hidden");
+
+    const editorContainer = modal.querySelector(".file-editor-container");
+    editorContainer?.classList.remove("active");
+
     if (!(content instanceof HTMLElement)) {
       return;
     }
 
+    content.classList.remove("hidden");
     content.classList.add("file-content--raw");
     content.classList.remove("file-content--preview");
     content.classList.remove("file-content--iframe");
@@ -2944,7 +3183,10 @@ export class ShadowClaw extends HTMLElement {
       /** @type {HTMLSelectElement} */
       const select = /** @type {HTMLSelectElement} */ (providerSelect);
       const providerName = select.selectedOptions[0]?.text || "Provider";
-      helperText.textContent = `Enter your ${providerName} API key. It is encrypted and stored locally.`;
+      helperText.textContent =
+        currentProvider === "copilot_azure_openai_proxy"
+          ? "Enter your Azure/GitHub Models API key. It is encrypted and stored locally, then forwarded only through your local proxy."
+          : `Enter your ${providerName} API key. It is encrypted and stored locally.`;
     }
   }
 

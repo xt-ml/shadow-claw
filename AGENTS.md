@@ -16,43 +16,43 @@ Web Workers · Service Worker (Workbox PWA) · Express dev server · Jest + Play
 
 ```mermaid
 graph LR
-    subgraph Entry ["Entry Points"]
-        index_mjs["index.mjs\napp bootstrap"]
-        worker_mjs["worker.mjs\nagent worker"]
-        sw["service-worker/\nPWA cache"]
-        serve["src/serve.mjs\nExpress server"]
-    end
+  subgraph Entry ["Entry Points"]
+    index_mjs["index.mjs<br>app bootstrap"]
+    worker_mjs["worker.mjs<br>agent worker"]
+    sw["service-worker/<br>PWA cache"]
+    serve["src/serve.mjs<br>Express server + Proxy"]
+  end
 
-    subgraph Core ["src/ — Core"]
-        orchestrator["orchestrator.mjs\nstate machine + queue"]
-        config["config.mjs\nconstants + providers"]
-        db["db/db.mjs\nIndexedDB CRUD"]
-        storage["storage/storage.mjs\nOPFS + local folder"]
-        crypto["crypto.mjs\nAES-256-GCM"]
-        router["router.mjs\nchannel dispatch"]
-        types["types.mjs\nJSDoc @typedefs"]
-    end
+  subgraph Core ["src/ — Core"]
+    orchestrator["orchestrator.mjs<br>state machine + queue"]
+    config["config.mjs<br>constants + providers"]
+    db["db/db.mjs<br>IndexedDB CRUD"]
+    storage["storage/storage.mjs<br>OPFS + local folder"]
+    crypto["crypto.mjs<br>AES-256-GCM"]
+    router["router.mjs<br>channel dispatch"]
+    types["types.mjs<br>JSDoc @typedefs"]
+  end
 
-    subgraph Agent ["src/ — Agent"]
-        tools["tools.mjs\ntool schemas"]
-        shell["shell/shell.mjs\nJS shell emulator"]
-        vm["vm.mjs\nv86 Alpine VM"]
-        gitmod["git/git.mjs\nisomorphic-git ops"]
-        providers["providers.mjs\nLLM registry"]
-        scheduler["task-scheduler.mjs\ncron evaluator"]
-    end
+  subgraph Agent ["src/ — Agent"]
+    tools["tools.mjs<br>tool schemas"]
+    shell["shell/shell.mjs<br>JS shell emulator"]
+    vm["vm.mjs<br>v86 Alpine VM"]
+    gitmod["git/git.mjs<br>isomorphic-git ops"]
+    providers["providers.mjs<br>LLM registry"]
+    scheduler["task-scheduler.mjs<br>cron evaluator"]
+  end
 
-    subgraph UI ["src/ — UI"]
-        components["components/\nWeb Components"]
-        stores["stores/\nSignal stores"]
-        effect["effect.mjs\nreactive effect()"]
-        markdown["markdown.mjs\nmarkdown renderer"]
-    end
+  subgraph UI ["src/ — UI"]
+    components["components/<br>Web Components"]
+    stores["stores/<br>Signal stores"]
+    effect["effect.mjs<br>reactive effect()"]
+    markdown["markdown.mjs<br>markdown renderer"]
+  end
 
-    index_mjs --> orchestrator
-    orchestrator --> db & storage & router & scheduler
-    worker_mjs --> tools & shell & vm & gitmod & providers
-    components --> stores & effect
+  index_mjs --> orchestrator
+  orchestrator --> db & storage & router & scheduler
+  worker_mjs --> tools & shell & vm & gitmod & providers
+  components --> stores & effect
 ```
 
 ## Conventions
@@ -77,11 +77,11 @@ UI state lives in `src/stores/`. Each store exports a reactive object backed by
 
 ```js
 // Reading reactive state
-import { orchestratorStore } from './stores/orchestrator.mjs';
+import { orchestratorStore } from "./stores/orchestrator.mjs";
 const messages = orchestratorStore.messages; // triggers effect tracking
 
 // Reacting to state changes
-import { effect } from './effect.mjs';
+import { effect } from "./effect.mjs";
 effect(() => {
   console.log(orchestratorStore.state); // re-runs on every state change
 });
@@ -113,18 +113,18 @@ Node-only packages (Express, Jest, Workbox CLI) belong in `devDependencies`.
 
 `worker.mjs` communicates via `postMessage`. Message shapes are typed in `src/types.mjs`:
 
-| Direction | Type | Payload |
-|-----------|------|---------|
-| main → worker | `invoke` | `InvokePayload` |
-| main → worker | `compact` | `CompactPayload` |
-| main → worker | `cancel` | `{ groupId }` |
-| worker → main | `response` | `ResponsePayload` |
-| worker → main | `error` | `ErrorPayload` |
-| worker → main | `typing` | `TypingPayload` |
-| worker → main | `tool-activity` | `ToolActivityPayload` |
-| worker → main | `thinking-log` | `ThinkingLogEntry` |
-| worker → main | `compact-done` | `CompactDonePayload` |
-| worker → main | `open-file` | `OpenFilePayload` |
+| Direction     | Type            | Payload                               |
+| ------------- | --------------- | ------------------------------------- |
+| main → worker | `invoke`        | `InvokePayload`                       |
+| main → worker | `compact`       | `CompactPayload`                      |
+| main → worker | `cancel`        | `{ groupId }` (aborts in-flight task) |
+| worker → main | `response`      | `ResponsePayload`                     |
+| worker → main | `error`         | `ErrorPayload`                        |
+| worker → main | `typing`        | `TypingPayload`                       |
+| worker → main | `tool-activity` | `ToolActivityPayload`                 |
+| worker → main | `thinking-log`  | `ThinkingLogEntry`                    |
+| worker → main | `compact-done`  | `CompactDonePayload`                  |
+| worker → main | `open-file`     | `OpenFilePayload`                     |
 
 ### IndexedDB
 
@@ -137,13 +137,23 @@ All file I/O goes through `src/storage/`. The group workspace root is:
 `shadowclaw/<groupId>/workspace/`. `MEMORY.md` lives at the workspace root and is loaded
 as system context on every agent invocation.
 
+### Request Cancellation
+
+Cancellation is handled via `AbortController`. When the main thread sends a `cancel` message
+(or a new `invoke`/`compact` for the same `groupId`), the worker:
+
+1.  Calls `controller.abort()` on the in-flight task's controller.
+2.  The `fetch()` call to the LLM provider (which received the `signal`) throws an `AbortError`.
+3.  The worker catches this, cleans up its state, and becomes ready for the next task.
+4.  The orchestrator tracks these tasks via `orchestratorStore.stopCurrentRequest()`.
+
 ### Config Keys
 
 All config keys are constants in `src/config.mjs` under `CONFIG_KEYS`. Use those
 constants — never hard-code string keys:
 
 ```js
-import { CONFIG_KEYS } from './config.mjs';
+import { CONFIG_KEYS } from "./config.mjs";
 await getConfig(CONFIG_KEYS.API_KEY);
 ```
 

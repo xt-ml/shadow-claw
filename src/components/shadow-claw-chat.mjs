@@ -101,6 +101,23 @@ export class ShadowClawChat extends HTMLElement {
           outline: none;
         }
 
+        .chat__action-btn--stop {
+          border-color: var(--shadow-claw-error-color);
+          color: var(--shadow-claw-error-color);
+        }
+
+        .chat__action-btn--stop:hover,
+        .chat__action-btn--stop:focus-visible {
+          background-color: var(--shadow-claw-error-color);
+          border-color: var(--shadow-claw-error-color);
+          color: var(--shadow-claw-on-primary);
+        }
+
+        .chat__action-btn--stop:disabled {
+          cursor: not-allowed;
+          opacity: 0.45;
+        }
+
         .chat__body {
           display: flex;
           flex: 1;
@@ -423,6 +440,7 @@ export class ShadowClawChat extends HTMLElement {
           <button slot="actions" class="chat__action-btn" data-action="download-chat" type="button">💾 Backup</button>
           <button slot="actions" class="chat__action-btn" data-action="restore-chat" type="button">♻️ Restore</button>
           <button slot="actions" class="chat__action-btn" data-action="compact-chat" type="button">📦 Compact</button>
+          <button slot="actions" class="chat__action-btn chat__action-btn--stop" data-action="stop-chat" type="button" disabled>⏹️ Stop Chat</button>
           <button slot="actions" class="chat__action-btn" data-action="clear-chat" type="button">🗑️ Clear Chat</button>
         </shadow-claw-page-header>
 
@@ -508,6 +526,10 @@ export class ShadowClawChat extends HTMLElement {
     root
       .querySelector('[data-action="clear-chat"]')
       ?.addEventListener("click", () => this.handleClearChat());
+
+    root
+      .querySelector('[data-action="stop-chat"]')
+      ?.addEventListener("click", () => this.handleStopChat());
 
     root
       .querySelector('[data-action="download-chat"]')
@@ -657,9 +679,15 @@ export class ShadowClawChat extends HTMLElement {
       effect(() => {
         const state = orchestratorStore.state;
         const sendButton = root.querySelector('[data-action="send-message"]');
+        const stopButton = root.querySelector('[data-action="stop-chat"]');
+        const isProcessing = state === "thinking" || state === "responding";
 
         if (sendButton instanceof HTMLButtonElement) {
-          sendButton.disabled = state === "thinking" || state === "responding";
+          sendButton.disabled = isProcessing;
+        }
+
+        if (stopButton instanceof HTMLButtonElement) {
+          stopButton.disabled = !isProcessing;
         }
       }),
     );
@@ -751,6 +779,16 @@ export class ShadowClawChat extends HTMLElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.warn("Failed to clear session:", errorMsg);
+    }
+  }
+
+  handleStopChat() {
+    try {
+      orchestratorStore.stopCurrentRequest();
+      showInfo("Stopped current request", 2200);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Failed to stop request: ${errorMsg}`, 6000);
     }
   }
 

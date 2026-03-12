@@ -8,12 +8,35 @@ describe("worker.mjs and src/worker/agent.mjs", () => {
   beforeAll(async () => {
     // Mock the dependencies that agent.mjs imports
     jest.unstable_mockModule("./src/config.mjs", () => ({
+      CONFIG_KEYS: {
+        PROVIDER: "provider",
+        API_KEY: "api_key",
+        MODEL: "model",
+        MAX_TOKENS: "max_tokens",
+        VM_BOOT_MODE: "vm_boot_mode",
+      },
       FETCH_MAX_RESPONSE: 1000,
       getProvider: jest.fn(),
     }));
 
+    jest.unstable_mockModule("./src/db/getConfig.mjs", () => ({
+      getConfig: jest.fn(),
+    }));
+
     jest.unstable_mockModule("./src/db/openDatabase.mjs", () => ({
       openDatabase: jest.fn(),
+    }));
+
+    jest.unstable_mockModule("./src/vm.mjs", () => ({
+      bootVM: jest.fn(),
+      createTerminalSession: jest.fn(),
+      executeInVM: jest.fn(),
+      getVMBootModePreference: jest.fn(),
+      getVMStatus: jest.fn(),
+      isVMReady: jest.fn(),
+      setVMBootModePreference: jest.fn(),
+      shutdownVM: jest.fn(),
+      subscribeVMStatus: jest.fn(),
     }));
 
     jest.unstable_mockModule("./src/providers.mjs", () => ({
@@ -36,6 +59,7 @@ describe("worker.mjs and src/worker/agent.mjs", () => {
     }));
 
     jest.unstable_mockModule("./src/storage/storage.mjs", () => ({
+      getStorageRoot: jest.fn(),
       setStorageRoot: jest.fn(),
     }));
 

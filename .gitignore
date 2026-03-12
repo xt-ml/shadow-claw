@@ -1,5 +1,6 @@
 .cache
 .env
+assets/v86*
 coverage
 e2e-results
 node_modules

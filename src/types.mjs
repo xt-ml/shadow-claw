@@ -191,6 +191,27 @@
  */
 
 /**
+ * @typedef {Object} VMStatusPayload
+ *
+ * @property {boolean} ready
+ * @property {boolean} booting
+ * @property {boolean} bootAttempted
+ * @property {string|null} error
+ */
+
+/**
+ * @typedef {Object} VMTerminalOutputPayload
+ *
+ * @property {string} chunk
+ */
+
+/**
+ * @typedef {Object} VMTerminalErrorPayload
+ *
+ * @property {string} error
+ */
+
+/**
  * @typedef {Object} LLMProvider
  *
  * @property {string} id
@@ -207,6 +228,11 @@
  *   | { type: 'thinking-log'; payload: ThinkingLogEntry }
  *   | { type: 'compact-done'; payload: CompactDonePayload }
  *   | { type: 'open-file'; payload: OpenFilePayload }
+ *   | { type: 'vm-status'; payload: VMStatusPayload }
+ *   | { type: 'vm-terminal-opened'; payload: { ok: true } }
+ *   | { type: 'vm-terminal-output'; payload: VMTerminalOutputPayload }
+ *   | { type: 'vm-terminal-closed'; payload: { ok: true } }
+ *   | { type: 'vm-terminal-error'; payload: VMTerminalErrorPayload }
  * } WorkerOutbound
  */
 
@@ -215,6 +241,10 @@
  *   | { type: 'invoke'; payload: InvokePayload }
  *   | { type: 'cancel'; payload: { groupId: string } }
  *   | { type: 'compact'; payload: CompactPayload }
+ *   | { type: 'set-vm-mode'; payload: { mode: 'disabled'|'auto'|'9p'|'ext2' } }
+ *   | { type: 'vm-terminal-open'; payload?: undefined }
+ *   | { type: 'vm-terminal-input'; payload: { data: string } }
+ *   | { type: 'vm-terminal-close'; payload?: undefined }
  * } WorkerInbound
  */
 

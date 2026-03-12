@@ -7,6 +7,12 @@ describe("handleMessage.mjs", () => {
   let mockOpenDatabase;
   let mockPendingTasks;
   let mockSetStorageRoot;
+  let mockBootVM;
+  let mockCreateTerminalSession;
+  let mockGetVMStatus;
+  let mockPost;
+  let mockSetVMBootModePreference;
+  let mockShutdownVM;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -16,6 +22,12 @@ describe("handleMessage.mjs", () => {
     mockOpenDatabase = jest.fn();
     mockPendingTasks = new Map();
     mockSetStorageRoot = jest.fn();
+    mockBootVM = jest.fn();
+    mockCreateTerminalSession = jest.fn();
+    mockGetVMStatus = jest.fn();
+    mockPost = jest.fn();
+    mockSetVMBootModePreference = jest.fn();
+    mockShutdownVM = jest.fn();
 
     jest.unstable_mockModule("../db/openDatabase.mjs", () => ({
       openDatabase: mockOpenDatabase,
@@ -23,6 +35,18 @@ describe("handleMessage.mjs", () => {
 
     jest.unstable_mockModule("../storage/storage.mjs", () => ({
       setStorageRoot: mockSetStorageRoot,
+    }));
+
+    jest.unstable_mockModule("../vm.mjs", () => ({
+      bootVM: mockBootVM,
+      createTerminalSession: mockCreateTerminalSession,
+      getVMStatus: mockGetVMStatus,
+      setVMBootModePreference: mockSetVMBootModePreference,
+      shutdownVM: mockShutdownVM,
+    }));
+
+    jest.unstable_mockModule("./post.mjs", () => ({
+      post: mockPost,
     }));
 
     jest.unstable_mockModule("./handleInvoke.mjs", () => ({
@@ -150,6 +174,92 @@ describe("handleMessage.mjs", () => {
 
     // Should not throw
     await expect(handleMessage(event)).resolves.toBeUndefined();
+  });
+
+  it("should handle set-vm-mode message", async () => {
+    mockOpenDatabase.mockResolvedValue({});
+    mockShutdownVM.mockResolvedValue(undefined);
+    mockBootVM.mockResolvedValue(undefined);
+
+    await handleMessage({
+      data: { type: "set-vm-mode", payload: { mode: "9p" } },
+    });
+
+    expect(mockSetVMBootModePreference).toHaveBeenCalledWith("9p");
+    expect(mockShutdownVM).toHaveBeenCalled();
+    expect(mockBootVM).toHaveBeenCalled();
+  });
+
+  it("should not boot when vm mode is disabled", async () => {
+    mockOpenDatabase.mockResolvedValue({});
+    mockShutdownVM.mockResolvedValue(undefined);
+
+    await handleMessage({
+      data: { type: "set-vm-mode", payload: { mode: "disabled" } },
+    });
+
+    expect(mockSetVMBootModePreference).toHaveBeenCalledWith("disabled");
+    expect(mockShutdownVM).toHaveBeenCalled();
+    expect(mockBootVM).not.toHaveBeenCalled();
+  });
+
+  it("should open a worker-owned terminal session", async () => {
+    const send = jest.fn();
+    mockOpenDatabase.mockResolvedValue({});
+    mockGetVMStatus.mockReturnValue({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+    mockCreateTerminalSession.mockImplementation((onOutput) => {
+      onOutput("booted\n");
+      return { close: jest.fn(), send };
+    });
+
+    await handleMessage({
+      data: { type: "vm-terminal-open" },
+    });
+
+    expect(mockCreateTerminalSession).toHaveBeenCalled();
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "vm-terminal-output",
+      payload: { chunk: "booted\n" },
+    });
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "vm-terminal-opened",
+      payload: { ok: true },
+    });
+  });
+
+  it("should forward terminal input to the active session", async () => {
+    const send = jest.fn();
+    const close = jest.fn();
+    mockOpenDatabase.mockResolvedValue({});
+    mockGetVMStatus.mockReturnValue({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+    mockCreateTerminalSession.mockReturnValue({ close, send });
+
+    await handleMessage({
+      data: { type: "vm-terminal-open" },
+    });
+    await handleMessage({
+      data: { type: "vm-terminal-input", payload: { data: "ls\n" } },
+    });
+    await handleMessage({
+      data: { type: "vm-terminal-close" },
+    });
+
+    expect(send).toHaveBeenCalledWith("ls\n");
+    expect(close).toHaveBeenCalled();
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "vm-terminal-closed",
+      payload: { ok: true },
+    });
   });
 
   it("should handle cancel message type", async () => {

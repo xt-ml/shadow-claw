@@ -16,8 +16,8 @@ export const TRIGGER_PATTERN = buildTriggerPattern(ASSISTANT_NAME);
 /** How many recent messages to include in agent context */
 export const CONTEXT_WINDOW_SIZE = 50;
 
-/** Max tokens for Claude API response */
-export const DEFAULT_MAX_TOKENS = 8096;
+/** Max tokens for API response */
+export const DEFAULT_MAX_TOKENS = 8096; //16384
 
 /** Default provider */
 export const DEFAULT_PROVIDER = "openrouter";
@@ -167,6 +167,7 @@ export const CONFIG_KEYS = {
   GIT_AUTHOR_NAME: "git_author_name",
   GIT_AUTHOR_EMAIL: "git_author_email",
   GIT_CORS_PROXY: "git_cors_proxy",
+  VM_BOOT_MODE: "vm_boot_mode",
 };
 
 /** Default dev server host */

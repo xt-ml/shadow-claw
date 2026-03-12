@@ -202,7 +202,7 @@ app.use(
 app.use(compression());
 
 // parse JSON bodies (increased limit for large proxy payloads)
-app.use(express.json({ limit: "500mb" }));
+app.use(express.json({ limit: "1000mb" }));
 
 // ---------------- SHARED PROXY LOGIC ----------------
 async function handleProxyRequest(

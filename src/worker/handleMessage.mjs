@@ -1,11 +1,35 @@
 import { openDatabase } from "../db/openDatabase.mjs";
 import { setStorageRoot } from "../storage/storage.mjs";
+import {
+  bootVM,
+  createTerminalSession,
+  getVMStatus,
+  setVMBootModePreference,
+  shutdownVM,
+} from "../vm.mjs";
 import { handleCompact } from "./handleCompact.mjs";
 import { handleInvoke } from "./handleInvoke.mjs";
 import { pendingTasks } from "./pendingTasks.mjs";
+import { post } from "./post.mjs";
 
 /** @type {Map<string, AbortController>} */
 const inFlightControllers = new Map();
+
+/** @type {import("../vm.mjs").VMTerminalSession|null} */
+let activeTerminalSession = null;
+
+/**
+ * @returns {boolean}
+ */
+function closeTerminalSession() {
+  if (!activeTerminalSession) {
+    return false;
+  }
+
+  activeTerminalSession.close();
+  activeTerminalSession = null;
+  return true;
+}
 
 /**
  * Main message handler logic
@@ -76,6 +100,94 @@ export async function handleMessage(event) {
       }
 
       break;
+    case "set-vm-mode": {
+      const mode = payload?.mode;
+      if (
+        mode === "disabled" ||
+        mode === "auto" ||
+        mode === "9p" ||
+        mode === "ext2"
+      ) {
+        const sessionWasClosed = closeTerminalSession();
+        if (sessionWasClosed) {
+          post({ type: "vm-terminal-closed", payload: { ok: true } });
+        }
+
+        setVMBootModePreference(mode);
+        await shutdownVM();
+
+        if (mode !== "disabled") {
+          await bootVM().catch((err) => {
+            console.warn("[WebVM] Reboot after mode change failed:", err);
+          });
+        }
+      }
+
+      break;
+    }
+    case "vm-terminal-open": {
+      if (activeTerminalSession) {
+        post({ type: "vm-terminal-opened", payload: { ok: true } });
+        break;
+      }
+
+      if (!getVMStatus().ready) {
+        await bootVM().catch((err) => {
+          console.warn("[WebVM] Terminal boot failed:", err);
+        });
+      }
+
+      const status = getVMStatus();
+      if (!status.ready) {
+        post({
+          type: "vm-terminal-error",
+          payload: {
+            error: status.error || "WebVM is still booting.",
+          },
+        });
+        break;
+      }
+
+      try {
+        activeTerminalSession = createTerminalSession((chunk) => {
+          post({
+            type: "vm-terminal-output",
+            payload: { chunk },
+          });
+        });
+        post({ type: "vm-terminal-opened", payload: { ok: true } });
+      } catch (err) {
+        post({
+          type: "vm-terminal-error",
+          payload: {
+            error: err instanceof Error ? err.message : String(err),
+          },
+        });
+      }
+
+      break;
+    }
+    case "vm-terminal-input": {
+      const data = payload?.data;
+      if (!activeTerminalSession) {
+        post({
+          type: "vm-terminal-error",
+          payload: { error: "WebVM terminal is not connected." },
+        });
+        break;
+      }
+
+      if (typeof data === "string" && data.length > 0) {
+        activeTerminalSession.send(data);
+      }
+
+      break;
+    }
+    case "vm-terminal-close": {
+      closeTerminalSession();
+      post({ type: "vm-terminal-closed", payload: { ok: true } });
+      break;
+    }
     case "task-list-response": {
       const { groupId, tasks } = payload;
 

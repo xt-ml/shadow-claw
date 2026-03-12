@@ -1,14 +1,9 @@
 // @ts-ignore
-import Quill from "quill";
-// @ts-ignore
-import hljs from "highlight.js";
-
 import { CONFIG_KEYS } from "../config.mjs";
 
 import { getConfig } from "../db/getConfig.mjs";
 
 import { effect } from "../effect.mjs";
-import { renderMarkdown } from "../markdown.mjs";
 import { Orchestrator } from "../orchestrator.mjs";
 
 import { resetStorageDirectory } from "../storage/storage.mjs";
@@ -19,16 +14,17 @@ import { selectStorageDirectory } from "../storage/selectStorageDirectory.mjs";
 
 import { isPersistent } from "../storage/isPersistent.mjs";
 
+import { fileViewerStore } from "../stores/file-viewer.mjs";
 import { orchestratorStore } from "../stores/orchestrator.mjs";
 import { Themes, themeStore } from "../stores/theme.mjs";
-import { fileViewerStore } from "../stores/file-viewer.mjs";
-import { writeGroupFile } from "../storage/writeGroupFile.mjs";
 
 import { showError, showSuccess, showWarning } from "../toast.mjs";
 
 import "./shadow-claw-chat.mjs";
 import "./shadow-claw-files.mjs";
+import "./shadow-claw-file-viewer.mjs";
 import "./shadow-claw-pdf-viewer.mjs";
+import "./shadow-claw-terminal.mjs";
 import "./shadow-claw-tasks.mjs";
 import "./shadow-claw-toast.mjs";
 import "../types.mjs";
@@ -53,6 +49,26 @@ export class ShadowClaw extends HTMLElement {
    */
   currentPage = "chat";
 
+  /** @type {boolean} */
+  terminalVisible = false;
+
+  /** @type {import("../vm.mjs").VMStatus} */
+  vmStatus = {
+    ready: false,
+    booting: false,
+    bootAttempted: false,
+    error: null,
+  };
+
+  /** @type {HTMLElement|null} */
+  terminalElement = null;
+
+  /** @type {number|null} */
+  terminalPlacementFrame = null;
+
+  /** @type {(() => void)|null} */
+  vmStatusCleanup = null;
+
   /**
    * Create the template with Declarative Shadow DOM
    *
@@ -76,6 +92,11 @@ export class ShadowClaw extends HTMLElement {
   static getTemplate() {
     return `
       <style>
+        /* Utility classes refactored from inline styles */
+        .hidden, [hidden] {
+          display: none !important;
+        }
+
         :host {
           --shadow-claw-font-mono: "Fira Code", "Courier New", monospace;
           --shadow-claw-font-sans:
@@ -285,6 +306,20 @@ export class ShadowClaw extends HTMLElement {
           display: flex;
           justify-content: center;
           padding: 0.5rem;
+        }
+
+        .webvm-toggle--hidden {
+          color: #dc2626;
+        }
+
+        .webvm-toggle--booting,
+        .webvm-toggle--ready,
+        .webvm-toggle--visible {
+          color: #16a34a;
+        }
+
+        .webvm-toggle--error {
+          color: var(--shadow-claw-text-tertiary);
         }
 
         .github-link {
@@ -907,11 +942,6 @@ export class ShadowClaw extends HTMLElement {
           background: var(--shadow-claw-text-tertiary);
         }
 
-        /* Utility classes refactored from inline styles */
-        .hidden {
-          display: none;
-        }
-
         .chat-status-bar {
           align-items: center;
           color: var(--shadow-claw-text-tertiary);
@@ -1009,95 +1039,16 @@ export class ShadowClaw extends HTMLElement {
           color: var(--shadow-claw-error-color);
         }
 
-        /* File Viewer Modal */
-        .file-modal {
-          background: transparent;
-          border: none;
-          max-height: unset;
-          max-width: unset;
-          margin: 0;
-          padding: 0;
-        }
-
-        .file-modal[open] {
-          align-items: flex-start;
-          box-sizing: border-box;
-          display: flex;
-          inset: 0;
-          justify-content: center;
-          padding: 0.5rem;
-          position: fixed;
-          width: auto;
-          z-index: 1000;
-        }
-
-        .file-modal::backdrop {
-          background-color: rgba(0, 0, 0, 0.5);
-        }
-
-        .modal-content {
-          background-color: var(--shadow-claw-bg-primary);
-          border: 0.0625rem solid var(--shadow-claw-border-color);
-          border-radius: var(--shadow-claw-radius-l);
-          box-shadow: var(--shadow-claw-shadow-lg);
-          display: flex;
-          flex-direction: column;
-          height: min(88dvh, 45rem);
-          max-height: calc(100dvh - 1rem);
-          max-width: 56rem;
-          width: calc(100vw - 1rem);
-        }
-
-        .modal-header {
-          align-items: center;
-          border-bottom: 0.0625rem solid var(--shadow-claw-border-color);
-          display: flex;
-          gap: 0.5rem;
-          justify-content: space-between;
-          min-width: 0;
-          padding: 0.625rem 0.75rem;
-        }
-
-        .modal-header-actions {
-          align-items: center;
-          flex: none;
-          display: flex;
-          gap: 0.5rem;
-        }
-
-        .modal-edit-btn,
-        .modal-save-btn {
-          background-color: var(--shadow-claw-bg-tertiary);
-          border: 0.0625rem solid var(--shadow-claw-border-color);
-          border-radius: var(--shadow-claw-radius-m);
-          color: var(--shadow-claw-text-secondary);
-          cursor: pointer;
-          font-size: 0.75rem;
-          font-weight: 600;
-          min-height: 2rem;
-          padding: 0.375rem 0.625rem;
-        }
-
-        .modal-edit-btn:hover,
-        .modal-save-btn:hover {
-          background-color: var(--shadow-claw-bg-secondary);
-          border-color: var(--shadow-claw-accent-primary);
-          color: var(--shadow-claw-text-primary);
-        }
-
-        .modal-save-btn {
-          background-color: var(--shadow-claw-success-color);
-          border-color: var(--shadow-claw-success-color);
-          color: white;
-        }
-
-        .modal-save-btn:hover {
-          background-color: #059669;
-          border-color: #059669;
-          color: white;
-        }
-
         .modal-title {
+          color: var(--shadow-claw-text-primary);
+          flex: 1;
+          font-size: 1rem;
+          font-weight: 600;
+          margin: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
           color: var(--shadow-claw-text-primary);
           font-size: 0.8125rem;
           font-weight: 600;
@@ -1177,39 +1128,6 @@ export class ShadowClaw extends HTMLElement {
           display: flex;
         }
 
-        .quill-editor {
-          flex: 1;
-          min-height: 0;
-          border-bottom-left-radius: var(--shadow-claw-radius-m);
-          border-bottom-right-radius: var(--shadow-claw-radius-m);
-          user-select: text !important;
-          -webkit-user-select: text !important;
-        }
-
-        .ql-editor {
-          user-select: text !important;
-          -webkit-user-select: text !important;
-        }
-
-        /* Quill theme overrides for dark mode */
-        :host(.dark-mode) .ql-toolbar {
-          background-color: var(--shadow-claw-bg-secondary);
-          border-color: var(--shadow-claw-border-color);
-        }
-        :host(.dark-mode) .ql-container {
-          border-color: var(--shadow-claw-border-color);
-          background-color: var(--shadow-claw-bg-primary);
-          color: var(--shadow-claw-text-primary);
-        }
-        :host(.dark-mode) .ql-stroke {
-          stroke: var(--shadow-claw-text-secondary);
-        }
-        :host(.dark-mode) .ql-fill {
-          fill: var(--shadow-claw-text-secondary);
-        }
-        :host(.dark-mode) .ql-picker {
-          color: var(--shadow-claw-text-secondary);
-        }
 
         .file-content--raw {
           color: var(--shadow-claw-text-primary);
@@ -1637,6 +1555,25 @@ export class ShadowClaw extends HTMLElement {
               <span class="header-title">ShadowClaw</span>
             </a>
             <div class="header-actions">
+              <button
+                class="theme-toggle webvm-toggle hidden"
+                aria-label="Hide WebVM terminal"
+                aria-pressed="true"
+                type="button"
+                hidden
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="1.5rem"
+                  height="1.5rem"
+                  fill="currentColor"
+                  viewBox="0 -960 960 960"
+                >
+                  <path
+                    d="M320-280 120-480l200-200 56 56-104 104h568v80H272l104 104-56 56Zm320 0-56-56 104-104H120v-80h568L584-624l56-56 200 200-200 200Z"
+                  />
+                </svg>
+              </button>
               <button class="theme-toggle" aria-label="Toggle theme">
                 <svg
                   class="sun-icon hidden"
@@ -1777,6 +1714,25 @@ export class ShadowClaw extends HTMLElement {
                   </div>
                   <button class="save-btn" data-action="save-model">
                     💾 Save Model
+                  </button>
+                </div>
+
+                <div class="settings-section">
+                  <h3>🖥️ WebVM</h3>
+                  <div class="form-group">
+                    <label class="form-label">Boot Mode</label>
+                    <select class="form-select" data-setting="vm-boot-mode-select">
+                      <option value="disabled">Disabled (Use JavaScript Bash Emulator)</option>
+                      <option value="auto">Auto (Prefer 9p, fallback to ext2)</option>
+                      <option value="9p">9p / VirtFS</option>
+                      <option value="ext2">ext2 / hda</option>
+                    </select>
+                    <div class="form-helper">
+                      Disabled is the default and uses the JavaScript Bash Emulator. Auto keeps fallback behavior. Selecting 9p or ext2 forces that mode.
+                    </div>
+                  </div>
+                  <button class="save-btn" data-action="save-vm-boot-mode">
+                    💾 Save WebVM Mode
                   </button>
                 </div>
 
@@ -1934,29 +1890,9 @@ export class ShadowClaw extends HTMLElement {
               </div>
             </div>
 
+            <shadow-claw-file-viewer id="file-viewer"></shadow-claw-file-viewer>
             <shadow-claw-toast></shadow-claw-toast>
           </div>
-
-          <!-- File Viewer Modal -->
-          <dialog class="file-modal" aria-label="File viewer">
-            <div class="modal-content">
-              <div class="modal-header">
-                <h3 class="modal-title">File: name.txt</h3>
-                <div class="modal-header-actions">
-                  <button class="modal-edit-btn" type="button" aria-label="Edit file">✏️ Edit</button>
-                  <button class="modal-save-btn hidden" type="button" aria-label="Save file">💾 Save</button>
-                  <button class="modal-preview-btn" type="button" aria-label="Toggle preview mode" aria-pressed="false">👁️ Preview</button>
-                  <button class="modal-close-btn" type="button" aria-label="Close file viewer">&times;</button>
-                </div>
-              </div>
-              <div class="modal-body">
-                <div class="file-content file-content--raw"></div>
-                <div class="file-editor-container">
-                  <div class="quill-editor"></div>
-                </div>
-              </div>
-            </div>
-          </dialog>
         </div>
       </div>
     `;
@@ -1968,35 +1904,31 @@ export class ShadowClaw extends HTMLElement {
     this.attachShadow({ mode: "open" });
     /** @type {'idle'|'thinking'|'responding'|'error'} */
     this.previousOrchestratorState = "idle";
-    /** @type {boolean} */
-    this.isFilePreviewMode = false;
-    /** @type {boolean} */
-    this.isFileEditMode = false;
-    /** @type {Quill|null} */
-    this.quill = null;
-    /** @type {string} */
-    this.lastOpenedFileName = "";
+  }
+
+  disconnectedCallback() {
+    if (this.vmStatusCleanup) {
+      this.vmStatusCleanup();
+      this.vmStatusCleanup = null;
+    }
+
+    if (this.terminalPlacementFrame !== null) {
+      cancelAnimationFrame(this.terminalPlacementFrame);
+      this.terminalPlacementFrame = null;
+    }
   }
 
   async connectedCallback() {
     // apply highlight.js atom-one-dark.min.css to shadow dom
-    const [hjsCss, quillCss] = await Promise.all([
-      fetch(
-        "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css",
-      ).then((r) => r.text()),
-      fetch("https://cdn.jsdelivr.net/npm/quill@2/dist/quill.snow.css").then(
-        (r) => r.text(),
-      ),
-    ]);
+    const hjsCss = await fetch(
+      "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css",
+    ).then((r) => r.text());
 
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(hjsCss);
 
-    const quillSheet = new CSSStyleSheet();
-    quillSheet.replaceSync(quillCss);
-
     if (this.shadowRoot?.adoptedStyleSheets) {
-      this.shadowRoot.adoptedStyleSheets.push(sheet, quillSheet);
+      this.shadowRoot.adoptedStyleSheets.push(sheet);
     }
   }
 
@@ -2021,26 +1953,61 @@ export class ShadowClaw extends HTMLElement {
     // Bind event listeners
     this.bindEventListeners(db);
 
-    // Load initial settings
-    await this.loadSettings(db);
+    this.terminalElement = document.createElement("shadow-claw-terminal");
+    /** @type {any} */ (this.terminalElement).orchestrator = orchestrator;
+    this.updateTerminalToggle();
+    this.scheduleTerminalPlacement();
 
-    // Initialize the orchestratorStore
+    /** @param {import("../vm.mjs").VMStatus} status */
+    const vmStatusListener = (status) => {
+      this.vmStatus = status;
+      this.updateTerminalToggle();
+    };
+
+    this.vmStatus = orchestrator.getVMStatus?.() || this.vmStatus;
+    this.updateTerminalToggle();
+    orchestrator?.events?.on?.("vm-status", vmStatusListener);
+    this.vmStatusCleanup = () => {
+      orchestrator?.events?.off?.("vm-status", vmStatusListener);
+    };
+
+    // Initialize reactive app store wiring before child components rely on ready state.
     await orchestratorStore.init(db, orchestrator);
 
-    // Allow agent tools to open files directly in the shared file viewer dialog.
-    orchestrator.events.on(
+    // Bridge worker tool events to UI actions.
+    orchestrator?.events?.on?.(
       "open-file",
-      async (/** @type {{groupId: string, path: string}} */ payload) => {
+      async (/** @type {{path?: string, groupId?: string}} */ payload) => {
+        const path = payload?.path;
+        if (!path || !this.db) {
+          return;
+        }
+
         try {
-          await fileViewerStore.openFile(db, payload.path, payload.groupId);
-          this.showPage("chat");
+          await fileViewerStore.openFile(
+            this.db,
+            path,
+            payload.groupId || orchestratorStore.activeGroupId,
+          );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
-
-          showError(`Failed to open file \"${payload.path}\": ${message}`);
+          showError(`Failed to open file from tool: ${message}`, 5000);
         }
       },
     );
+
+    // Load initial settings
+    await this.loadSettings(db);
+
+    // Initialize the file viewer
+    const fileViewer = this.shadowRoot?.getElementById("file-viewer");
+    if (
+      fileViewer instanceof HTMLElement &&
+      typeof (/** @type {any} */ (fileViewer).initialize) === "function"
+    ) {
+      // @ts-ignore
+      fileViewer.initialize(db);
+    }
 
     // React to store changes using effect()
     this.setupEffects();
@@ -2132,6 +2099,15 @@ export class ShadowClaw extends HTMLElement {
       saveModelBtn.addEventListener("click", () => this.saveModel(db));
     }
 
+    const saveVMBootModeBtn = root.querySelector(
+      '[data-action="save-vm-boot-mode"]',
+    );
+    if (saveVMBootModeBtn) {
+      saveVMBootModeBtn.addEventListener("click", () =>
+        this.saveVMBootMode(db),
+      );
+    }
+
     const saveNameBtn = root.querySelector(
       '[data-action="save-assistant-name"]',
     );
@@ -2153,7 +2129,7 @@ export class ShadowClaw extends HTMLElement {
       ?.addEventListener("click", () => this.handleResetStorageDir(db));
 
     // Theme toggle
-    const themeToggle = root.querySelector(".theme-toggle");
+    const themeToggle = root.querySelector(".theme-toggle:not(.webvm-toggle)");
     if (themeToggle) {
       themeToggle.addEventListener("click", () => {
         const { resolved } = themeStore.getTheme();
@@ -2162,6 +2138,14 @@ export class ShadowClaw extends HTMLElement {
         themeStore.setTheme(newTheme);
       });
     }
+
+    root
+      .querySelector(".webvm-toggle")
+      ?.addEventListener("click", () => this.toggleTerminalVisibility());
+
+    root.addEventListener("shadow-claw-terminal-slot-ready", () => {
+      this.scheduleTerminalPlacement();
+    });
 
     // Listen for theme changes to update icons and host class
     window.addEventListener("shadow-claw-theme-change", (e) => {
@@ -2229,10 +2213,20 @@ export class ShadowClaw extends HTMLElement {
     if (sunIcon && moonIcon) {
       if (theme === Themes.Dark) {
         sunIcon.style.display = "block";
+        sunIcon.removeAttribute("hidden");
+        sunIcon.classList.remove("hidden");
+
         moonIcon.style.display = "none";
+        moonIcon.setAttribute("hidden", "hidden");
+        moonIcon.classList.add("hidden");
       } else {
         sunIcon.style.display = "none";
+        sunIcon.setAttribute("hidden", "hidden");
+        sunIcon.classList.add("hidden");
+
         moonIcon.style.display = "block";
+        moonIcon.removeAttribute("hidden");
+        moonIcon.classList.remove("hidden");
       }
     }
   }
@@ -2275,6 +2269,7 @@ export class ShadowClaw extends HTMLElement {
     }
 
     this.currentPage = page;
+    this.scheduleTerminalPlacement();
 
     // Scroll to top
     const activePage = root.querySelector(".page.active");
@@ -2282,6 +2277,134 @@ export class ShadowClaw extends HTMLElement {
       const el = activePage;
       el.scrollTo(0, 0);
     }
+
+    // Auto-refresh files if switching to the files tab
+    if (page === "files" && this.db) {
+      orchestratorStore.loadFiles(this.db).catch(console.error);
+    }
+  }
+
+  toggleTerminalVisibility() {
+    this.terminalVisible = !this.terminalVisible;
+    this.updateTerminalToggle();
+    this.scheduleTerminalPlacement();
+  }
+
+  scheduleTerminalPlacement() {
+    if (this.terminalPlacementFrame !== null) {
+      cancelAnimationFrame(this.terminalPlacementFrame);
+    }
+
+    this.terminalPlacementFrame = requestAnimationFrame(() => {
+      this.terminalPlacementFrame = null;
+      this.syncTerminalPlacement();
+    });
+  }
+
+  syncTerminalPlacement() {
+    const terminal = this.terminalElement;
+    if (!terminal) {
+      return;
+    }
+
+    const slot = this.getTerminalSlotForPage(this.currentPage);
+    if (!slot) {
+      return;
+    }
+
+    if (terminal.parentElement !== slot) {
+      slot.appendChild(terminal);
+    }
+
+    const shouldHide = !this.terminalVisible;
+    terminal.hidden = shouldHide;
+
+    if (shouldHide) {
+      slot.setAttribute("hidden", "hidden");
+      this.shadowRoot
+        ?.querySelector("shadow-claw-terminal")
+        ?.setAttribute("hidden", "hidden");
+    } else {
+      slot.removeAttribute("hidden");
+      this.shadowRoot
+        ?.querySelector("shadow-claw-terminal")
+        ?.removeAttribute("hidden");
+    }
+  }
+
+  /**
+   * @param {string} page
+   *
+   * @returns {HTMLElement|null}
+   */
+  getTerminalSlotForPage(page) {
+    const root = this.shadowRoot;
+    if (!root || !["chat", "tasks", "files"].includes(page)) {
+      return null;
+    }
+
+    const pageEl = root.querySelector(`[data-page-id="${page}"]`);
+    if (!(pageEl instanceof HTMLElement)) {
+      return null;
+    }
+
+    const child = pageEl.querySelector(
+      "shadow-claw-chat, shadow-claw-tasks, shadow-claw-files",
+    );
+
+    const slot =
+      child instanceof HTMLElement
+        ? child.shadowRoot?.querySelector("[data-terminal-slot]")
+        : null;
+
+    return slot instanceof HTMLElement ? slot : null;
+  }
+
+  updateTerminalToggle() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const button = root.querySelector(".webvm-toggle");
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    const available = !this.vmStatus.error;
+
+    button.hidden = !available;
+    button.classList.toggle("hidden", !available);
+    button.classList.remove(
+      "webvm-toggle--hidden",
+      "webvm-toggle--visible",
+      "webvm-toggle--booting",
+      "webvm-toggle--ready",
+      "webvm-toggle--error",
+    );
+
+    if (!available) {
+      button.classList.add("webvm-toggle--error");
+
+      return;
+    }
+
+    button.classList.add(
+      this.terminalVisible ? "webvm-toggle--visible" : "webvm-toggle--hidden",
+    );
+
+    if (this.vmStatus.ready) {
+      button.classList.add("webvm-toggle--ready");
+    } else if (this.vmStatus.booting || this.vmStatus.bootAttempted) {
+      button.classList.add("webvm-toggle--booting");
+    }
+
+    button.setAttribute(
+      "aria-label",
+      this.terminalVisible ? "Hide WebVM terminal" : "Show WebVM terminal",
+    );
+
+    button.setAttribute("aria-pressed", String(this.terminalVisible));
   }
 
   /**
@@ -2355,414 +2478,6 @@ export class ShadowClaw extends HTMLElement {
             : "none";
       }
     });
-
-    // React to file viewer state
-    effect(() => {
-      const file = fileViewerStore.file;
-      const modal = root.querySelector(".file-modal");
-
-      if (!(modal instanceof HTMLDialogElement)) {
-        return;
-      }
-
-      if (file) {
-        if (!modal.open) {
-          modal.showModal();
-        }
-
-        const title = modal.querySelector(".modal-title");
-
-        if (title instanceof HTMLElement) {
-          title.textContent = `File: ${file.name}`;
-        }
-
-        if (this.lastOpenedFileName !== file.name) {
-          this.lastOpenedFileName = file.name;
-          this.isFilePreviewMode = false;
-          this.isFileEditMode = false;
-        }
-
-        this.renderFileViewerContent(modal, file);
-      } else {
-        if (modal.open) {
-          modal.close();
-        }
-
-        this.lastOpenedFileName = "";
-        this.isFilePreviewMode = false;
-        this.resetFileViewerContent(modal);
-      }
-    });
-
-    const modal = root.querySelector(".file-modal");
-    modal?.addEventListener("close", () => {
-      if (fileViewerStore.file) {
-        fileViewerStore.closeFile();
-      }
-    });
-
-    // Close file modal when close button is clicked
-    const closeBtn = root.querySelector(".modal-close-btn");
-    closeBtn?.addEventListener("click", () => fileViewerStore.closeFile());
-
-    const previewBtn = root.querySelector(".modal-preview-btn");
-    previewBtn?.addEventListener("click", () => {
-      this.isFilePreviewMode = !this.isFilePreviewMode;
-      // Exit edit mode if we switch to preview/raw
-      this.isFileEditMode = false;
-
-      const modal = root.querySelector(".file-modal");
-      const file = fileViewerStore.file;
-
-      if (modal instanceof HTMLElement && file) {
-        this.renderFileViewerContent(modal, file);
-      }
-    });
-
-    // Edit button
-    const editBtn = root.querySelector(".modal-edit-btn");
-    editBtn?.addEventListener("click", () => {
-      this.isFileEditMode = !this.isFileEditMode;
-      // If we enter edit mode, we are definitely NOT in preview mode (we are in raw/quill)
-      if (this.isFileEditMode) {
-        this.isFilePreviewMode = false;
-      }
-
-      const modal = root.querySelector(".file-modal");
-      const file = fileViewerStore.file;
-
-      if (modal instanceof HTMLElement && file) {
-        this.renderFileViewerContent(modal, file);
-      }
-    });
-
-    // Save button
-    const saveBtn = root.querySelector(".modal-save-btn");
-    saveBtn?.addEventListener("click", async () => {
-      const file = fileViewerStore.file;
-      if (!file || !this.quill) {
-        return;
-      }
-
-      try {
-        if (!this.db) {
-          return;
-        }
-
-        if (saveBtn instanceof HTMLButtonElement) {
-          saveBtn.disabled = true;
-        }
-
-        saveBtn.textContent = "⏳ saving...";
-
-        const newContent = this.quill.getText();
-        const filePath =
-          orchestratorStore.currentPath === "."
-            ? file.name
-            : `${orchestratorStore.currentPath}/${file.name}`;
-
-        await writeGroupFile(
-          this.db,
-          orchestratorStore.activeGroupId,
-          filePath,
-          newContent,
-        );
-
-        showSuccess(`Saved ${file.name}`);
-
-        // Refresh the file list
-        await orchestratorStore.loadFiles(this.db);
-
-        // Update the store's file content so the view updates if we exit edit mode
-        file.content = newContent;
-
-        // Exit edit mode
-        this.isFileEditMode = false;
-
-        const modal = root.querySelector(".file-modal");
-        if (modal instanceof HTMLElement) {
-          this.renderFileViewerContent(modal, file);
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        showError(`Failed to save file: ${message}`);
-      } finally {
-        if (saveBtn instanceof HTMLButtonElement) {
-          saveBtn.disabled = false;
-          saveBtn.textContent = "💾 Save";
-        }
-      }
-    });
-  }
-
-  /**
-   * @param {HTMLElement} modal
-   * @param {{name: string, content: string, kind?: "text"|"pdf", binaryContent?: Uint8Array|null}} file
-   */
-  renderFileViewerContent(modal, file) {
-    const content = modal.querySelector(".file-content");
-    const previewBtn = modal.querySelector(".modal-preview-btn");
-
-    if (previewBtn instanceof HTMLButtonElement) {
-      previewBtn.textContent = this.isFilePreviewMode ? "📄 Raw" : "👁️ Preview";
-      previewBtn.setAttribute("aria-pressed", String(this.isFilePreviewMode));
-      previewBtn.setAttribute(
-        "aria-label",
-        this.isFilePreviewMode
-          ? "Switch to raw text view"
-          : "Switch to preview mode",
-      );
-    }
-
-    if (!(content instanceof HTMLElement)) {
-      return;
-    }
-
-    content.classList.remove("file-content--iframe");
-
-    if (this.isFilePreviewMode) {
-      if (file.kind === "pdf") {
-        content.classList.remove("file-content--raw");
-        content.classList.remove("file-content--preview");
-        content.classList.remove("file-content--iframe");
-
-        const pdfViewer = document.createElement("shadow-claw-pdf-viewer");
-
-        if (pdfViewer instanceof HTMLElement) {
-          // @ts-ignore - Custom element property for passing binary content.
-          pdfViewer.file = file;
-        }
-
-        content.replaceChildren(pdfViewer);
-
-        return;
-      }
-
-      if (this.isIframePreviewFile(file.name)) {
-        content.classList.remove("file-content--raw");
-        content.classList.remove("file-content--preview");
-        content.classList.add("file-content--iframe");
-
-        const iframe = document.createElement("iframe");
-        iframe.className = "file-content-iframe";
-        iframe.setAttribute("title", `Preview: ${file.name}`);
-        iframe.setAttribute(
-          "sandbox",
-          this.getIframeSandboxPermissions(file.name),
-        );
-
-        iframe.setAttribute("referrerpolicy", "no-referrer");
-        iframe.srcdoc = this.buildIframePreviewSrcdoc(file);
-
-        content.replaceChildren(iframe);
-
-        return;
-      }
-
-      content.classList.remove("file-content--raw");
-      content.classList.add("file-content--preview");
-
-      content.innerHTML = renderMarkdown(this.toPreviewMarkdown(file));
-
-      return;
-    }
-
-    // Toggle Quill Editor visibility
-    const editorContainer = modal.querySelector(".file-editor-container");
-    const editBtn = modal.querySelector(".modal-edit-btn");
-    const saveBtn = modal.querySelector(".modal-save-btn");
-
-    if (this.isFileEditMode && file.kind !== "pdf") {
-      content.classList.add("hidden");
-
-      editorContainer?.classList.add("active");
-
-      saveBtn?.classList.remove("hidden");
-      if (editBtn instanceof HTMLButtonElement)
-        editBtn.textContent = "❌ Cancel";
-
-      // Initialize Quill if needed
-      if (!this.quill) {
-        const quillEl = editorContainer?.querySelector(".quill-editor");
-        if (quillEl instanceof HTMLElement) {
-          this.quill = new Quill(quillEl, {
-            theme: "snow",
-            modules: {
-              syntax: { hljs: hljs.default },
-              toolbar: false,
-            },
-          });
-        }
-      }
-
-      if (this.quill) {
-        // We use setText for raw editing as requested ("let us edit as well as save")
-        // but if it's already set we might want to avoid resetting it if it's the same
-        // to preserve selection and focus. Note: getText() adds a trailing newline.
-        const currentText = this.quill.getText();
-        if (
-          currentText !== file.content &&
-          currentText !== file.content + "\n"
-        ) {
-          this.quill.setText(file.content);
-        }
-      }
-    } else {
-      content.classList.remove("hidden");
-      editorContainer?.classList.remove("active");
-      saveBtn?.classList.add("hidden");
-      if (editBtn instanceof HTMLButtonElement) {
-        editBtn.textContent = "✏️ Edit";
-        // Hide edit button for PDFs
-        editBtn.classList.toggle("hidden", file.kind === "pdf");
-      }
-
-      if (file.kind === "pdf") {
-        content.classList.add("file-content--raw");
-        content.classList.remove("file-content--preview");
-        content.classList.remove("file-content--iframe");
-        content.textContent =
-          "Binary PDF file. Click Preview to render this document.";
-
-        return;
-      }
-
-      content.classList.add("file-content--raw");
-      content.classList.remove("file-content--preview");
-      content.classList.remove("file-content--iframe");
-      content.textContent = file.content;
-    }
-  }
-
-  /**
-   * @param {HTMLElement} modal
-   */
-  resetFileViewerContent(modal) {
-    const content = modal.querySelector(".file-content");
-    const previewBtn = modal.querySelector(".modal-preview-btn");
-
-    if (previewBtn instanceof HTMLButtonElement) {
-      previewBtn.textContent = "👁️ Preview";
-      previewBtn.setAttribute("aria-pressed", "false");
-      previewBtn.setAttribute("aria-label", "Switch to preview mode");
-    }
-
-    const editBtn = modal.querySelector(".modal-edit-btn");
-    if (editBtn instanceof HTMLButtonElement) {
-      editBtn.textContent = "✏️ Edit";
-    }
-
-    const saveBtn = modal.querySelector(".modal-save-btn");
-    saveBtn?.classList.add("hidden");
-
-    const editorContainer = modal.querySelector(".file-editor-container");
-    editorContainer?.classList.remove("active");
-
-    if (!(content instanceof HTMLElement)) {
-      return;
-    }
-
-    content.classList.remove("hidden");
-    content.classList.add("file-content--raw");
-    content.classList.remove("file-content--preview");
-    content.classList.remove("file-content--iframe");
-    content.textContent = "";
-  }
-
-  /**
-   * @param {string} fileName
-   *
-   * @returns {boolean}
-   */
-  isIframePreviewFile(fileName) {
-    return /\.(?:html?|svg)$/i.test(fileName);
-  }
-
-  /**
-   * @param {string} fileName
-   *
-   * @returns {string}
-   */
-  getIframeSandboxPermissions(fileName) {
-    if (/\.svg$/i.test(fileName)) {
-      return "allow-popups allow-popups-to-escape-sandbox";
-    }
-
-    return "allow-scripts allow-popups allow-popups-to-escape-sandbox";
-  }
-
-  /**
-   * @param {{name: string, content: string}} file
-   *
-   * @returns {string}
-   */
-  buildIframePreviewSrcdoc(file) {
-    if (/\.svg$/i.test(file.name)) {
-      return file.content;
-    }
-
-    return (
-      "<!doctype html>" +
-      '<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
-      '<base target="_blank">' +
-      "</head><body>" +
-      file.content +
-      "</body></html>"
-    );
-  }
-
-  /**
-   * @param {{name: string, content: string}} file
-   *
-   * @returns {string}
-   */
-  toPreviewMarkdown(file) {
-    if (this.isMarkdownLikeFile(file.name)) {
-      return file.content;
-    }
-
-    const lang = this.getLanguageFromFilename(file.name);
-    return "```" + lang + "\n" + file.content + "\n```";
-  }
-
-  /**
-   * @param {string} fileName
-   *
-   * @returns {boolean}
-   */
-  isMarkdownLikeFile(fileName) {
-    return /(?:^readme$|\.mdx?$|\.markdown$|\.mdown$)/i.test(fileName);
-  }
-
-  /**
-   * @param {string} fileName
-   *
-   * @returns {string}
-   */
-  getLanguageFromFilename(fileName) {
-    const extension = fileName.toLowerCase().split(".").pop() || "";
-    /** @type {Record<string, string>} */
-    const languageMap = {
-      bash: "bash",
-      cjs: "javascript",
-      css: "css",
-      html: "html",
-      java: "java",
-      js: "javascript",
-      json: "json",
-      jsx: "javascript",
-      mjs: "javascript",
-      py: "python",
-      sh: "bash",
-      ts: "typescript",
-      tsx: "typescript",
-      txt: "plaintext",
-      xml: "xml",
-      yaml: "yaml",
-      yml: "yaml",
-    };
-
-    return languageMap[extension] || "plaintext";
   }
 
   /**
@@ -2862,6 +2577,23 @@ export class ShadowClaw extends HTMLElement {
         gitTokenInput.placeholder = encToken
           ? "•••••••••••• (Saved)"
           : "ghp_xxxxxxxxxxxx";
+      }
+
+      const vmBootModeSelect = /** @type {HTMLSelectElement|null} */ (
+        root.querySelector('[data-setting="vm-boot-mode-select"]')
+      );
+
+      const vmBootMode = await getConfig(db, CONFIG_KEYS.VM_BOOT_MODE);
+      const normalizedVMBootMode =
+        vmBootMode === "disabled" ||
+        vmBootMode === "9p" ||
+        vmBootMode === "ext2" ||
+        vmBootMode === "auto"
+          ? vmBootMode
+          : "disabled";
+
+      if (vmBootModeSelect) {
+        vmBootModeSelect.value = normalizedVMBootMode;
       }
 
       this.updateGitWarning();
@@ -3327,6 +3059,41 @@ export class ShadowClaw extends HTMLElement {
     }
 
     showSuccess("Assistant name saved", 3000);
+  }
+
+  /**
+   * Save VM boot mode setting.
+   *
+   * @param {ShadowClawDatabase} db
+   * @returns {Promise<void>}
+   */
+  async saveVMBootMode(db) {
+    const root = this.shadowRoot;
+    if (!root || !this.orchestrator) {
+      return;
+    }
+
+    const select = /** @type {HTMLSelectElement|null} */ (
+      root.querySelector('[data-setting="vm-boot-mode-select"]')
+    );
+
+    const selected = select?.value || "disabled";
+    const mode =
+      selected === "disabled" ||
+      selected === "9p" ||
+      selected === "ext2" ||
+      selected === "auto"
+        ? selected
+        : "disabled";
+
+    try {
+      await this.orchestrator.setVMBootMode(db, mode);
+
+      showSuccess("WebVM boot mode saved", 3000);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving WebVM mode: " + errorMsg, 6000);
+    }
   }
 
   /**

@@ -15,6 +15,11 @@ export class ShadowClawPageHeader extends HTMLElement {
   static getTemplate() {
     return `
       <style>
+        /* Utility classes refactored from inline styles */
+        .hidden, [hidden] {
+          display: none !important;
+        }
+
         :host {
           display: block;
         }
@@ -62,7 +67,7 @@ export class ShadowClawPageHeader extends HTMLElement {
         }
 
         /* Tablet and up: horizontal layout */
-        @media (min-width: 640px) {
+        @media (min-width: 650px) {
           .header__main {
             padding: 1rem;
           }
@@ -114,7 +119,7 @@ export class ShadowClawPageHeader extends HTMLElement {
           display: none;
         }
 
-        @media (min-width: 640px) {
+        @media (min-width: 650px) {
           .header__status {
             align-items: center;
             flex-direction: row;

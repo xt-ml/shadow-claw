@@ -32,6 +32,14 @@ module.exports = {
     {
       // exclude only loopback proxy paths
       urlPattern: ({ url }) => {
+        // Skip VM asset paths to avoid flooding CacheStorage with high-volume chunk requests.
+        if (
+          url.pathname.startsWith("/assets/v86.9pfs/") ||
+          url.pathname.startsWith("/assets/v86.ext2/")
+        ) {
+          return false;
+        }
+
         const isLoopback =
           url.hostname === "localhost" || url.hostname === "127.0.0.1";
 

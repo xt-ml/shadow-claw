@@ -39,4 +39,32 @@ describe("Orchestrator", () => {
 
     expect(events).toEqual([{ groupId: "g1", path: "a.txt" }]);
   });
+
+  it("tracks vm status from worker messages", async () => {
+    const o = new Orchestrator();
+    const events = [];
+
+    o.events.on("vm-status", (payload) => events.push(payload));
+
+    await o.handleWorkerMessage(
+      {},
+      {
+        type: "vm-status",
+        payload: {
+          ready: true,
+          booting: false,
+          bootAttempted: true,
+          error: null,
+        },
+      },
+    );
+
+    expect(o.getVMStatus()).toEqual({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+    expect(events).toHaveLength(1);
+  });
 });

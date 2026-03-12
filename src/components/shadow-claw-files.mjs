@@ -6,6 +6,7 @@ import { downloadGroupDirectoryAsZip } from "../storage/downloadGroupDirectoryAs
 import { downloadGroupFile } from "../storage/downloadGroupFile.mjs";
 import { restoreAllGroupFilesFromZip } from "../storage/restoreAllGroupFilesFromZip.mjs";
 import { uploadGroupFile } from "../storage/uploadGroupFile.mjs";
+import { writeGroupFile } from "../storage/writeGroupFile.mjs";
 
 import { effect } from "../effect.mjs";
 import { showError, showSuccess, showWarning } from "../toast.mjs";
@@ -23,9 +24,12 @@ import "./shadow-claw-page-header.mjs";
 export class ShadowClawFiles extends HTMLElement {
   constructor() {
     super();
+
     this.attachShadow({ mode: "open" });
+
     /** @type {string[]} */
     this.files = [];
+
     /** @type {() => void} */
     this.cleanup = () => {};
   }
@@ -33,6 +37,11 @@ export class ShadowClawFiles extends HTMLElement {
   static getTemplate() {
     return `
       <style>
+        /* Utility classes refactored from inline styles */
+        .hidden, [hidden] {
+          display: none !important;
+        }
+
         :host {
           display: flex;
           flex-direction: column;
@@ -95,6 +104,15 @@ export class ShadowClawFiles extends HTMLElement {
           flex: 1;
           overflow-y: auto;
           padding: 1rem;
+        }
+
+        .files__terminal-slot {
+          margin-bottom: 1rem;
+        }
+
+        .files__terminal-slot:empty {
+          display: none;
+          margin-bottom: 0;
         }
 
         .files__list {
@@ -234,11 +252,95 @@ export class ShadowClawFiles extends HTMLElement {
           white-space: nowrap;
           width: 0.0625rem;
         }
+
+        .files__new-dialog {
+          background-color: var(--shadow-claw-bg-primary, #ffffff);
+          border: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
+          border-radius: var(--shadow-claw-radius-m);
+          color: var(--shadow-claw-text-primary, #111827);
+          max-width: 22rem;
+          padding: 0;
+          width: calc(100vw - 2rem);
+        }
+
+        .files__new-dialog::backdrop {
+          background-color: rgba(0, 0, 0, 0.35);
+        }
+
+        .files__new-form {
+          display: flex;
+          flex-direction: column;
+          gap: 0.75rem;
+          padding: 1rem;
+        }
+
+        .files__new-label {
+          color: var(--shadow-claw-text-secondary, #4b5563);
+          font-size: 0.875rem;
+          font-weight: 600;
+        }
+
+        .files__new-input {
+          background-color: var(--shadow-claw-bg-primary, #ffffff);
+          border: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
+          border-radius: var(--shadow-claw-radius-s);
+          color: var(--shadow-claw-text-primary, #111827);
+          font-size: 0.875rem;
+          min-height: 2rem;
+          padding: 0.375rem 0.5rem;
+        }
+
+        .files__new-input:focus {
+          border-color: var(--shadow-claw-accent-primary, #3b82f6);
+          box-shadow: 0 0 0 0.125rem var(--shadow-claw-bg-tertiary, #f3f4f6);
+          outline: none;
+        }
+
+        .files__new-actions {
+          display: flex;
+          gap: 0.5rem;
+          justify-content: flex-end;
+        }
+
+        .files__new-ok,
+        .files__new-cancel {
+          background-color: var(--shadow-claw-bg-tertiary, #f3f4f6);
+          border: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
+          border-radius: var(--shadow-claw-radius-s);
+          color: var(--shadow-claw-text-primary, #111827);
+          cursor: pointer;
+          font-size: 0.8125rem;
+          font-weight: 600;
+          min-height: 2rem;
+          min-width: 4.5rem;
+          padding: 0.375rem 0.625rem;
+        }
+
+        .files__new-ok {
+          background-color: var(--shadow-claw-success-color, #10b981);
+          border-color: var(--shadow-claw-success-color, #10b981);
+          color: white;
+        }
+
+        .files__new-ok:hover,
+        .files__new-ok:focus-visible {
+          background-color: #059669;
+          border-color: #059669;
+          outline: none;
+        }
+
+        .files__new-cancel:hover,
+        .files__new-cancel:focus-visible {
+          background-color: var(--shadow-claw-bg-secondary, #f9fafb);
+          border-color: var(--shadow-claw-accent-primary, #3b82f6);
+          outline: none;
+        }
       </style>
       <section class="files" aria-label="Files">
         <shadow-claw-page-header icon="📁" title="Files">
           <button slot="actions" type="button" class="files__refresh-btn files__header-btn">🔄 Refresh</button>
           <button slot="actions" type="button" class="files__upload-btn files__header-btn">📤 Upload</button>
+          <button slot="actions" type="button" class="files__new-btn files__header-btn">➕ New</button>
           <button slot="actions" type="button" class="files__backup-btn files__header-btn">💾 Backup</button>
           <button slot="actions" type="button" class="files__restore-btn files__header-btn">♻️ Restore</button>
           <button slot="actions" type="button" class="files__clear-btn files__header-btn files__header-btn--danger">🗑️ Clear All</button>
@@ -246,7 +348,25 @@ export class ShadowClawFiles extends HTMLElement {
         </shadow-claw-page-header>
         <input type="file" class="files__hidden-upload files__hidden-input" multiple accept="*/*" aria-label="Upload files">
         <input type="file" class="files__hidden-restore files__hidden-input" accept=".zip,application/zip" aria-label="Restore files from zip backup">
+        <dialog class="files__new-dialog" aria-label="Create new file">
+          <form class="files__new-form" method="dialog">
+            <label class="files__new-label" for="files-new-name">File name</label>
+            <input
+              class="files__new-input"
+              id="files-new-name"
+              name="files-new-name"
+              type="text"
+              autocomplete="off"
+              required
+            >
+            <div class="files__new-actions">
+              <button class="files__new-cancel" type="button">Cancel</button>
+              <button class="files__new-ok" type="submit">OK</button>
+            </div>
+          </form>
+        </dialog>
         <div class="files__content">
+          <div class="files__terminal-slot" data-terminal-slot hidden></div>
           <div class="files__list" role="list" aria-live="polite"></div>
         </div>
       </section>
@@ -263,11 +383,13 @@ export class ShadowClawFiles extends HTMLElement {
     }
 
     this.render();
+    this.dispatchTerminalSlotReady();
 
     // Re-render when files or path change
     this.cleanup = effect(() => {
       orchestratorStore.files;
       orchestratorStore.currentPath;
+
       this.updateBreadcrumbs(db);
       this.updateFileList(db);
     });
@@ -296,6 +418,26 @@ export class ShadowClawFiles extends HTMLElement {
       if (e.target instanceof HTMLInputElement) {
         this.handleUpload(db, e.target);
       }
+    });
+
+    // New button
+    const newBtn = root.querySelector(".files__new-btn");
+    const newDialog = root.querySelector(".files__new-dialog");
+    const newCancelBtn = root.querySelector(".files__new-cancel");
+    const newForm = root.querySelector(".files__new-form");
+
+    newBtn?.addEventListener("click", () => this.openNewFileDialog());
+
+    newCancelBtn?.addEventListener("click", () => {
+      if (newDialog instanceof HTMLDialogElement) {
+        newDialog.close();
+      }
+    });
+
+    newForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      await this.handleCreateNewFile(db);
     });
 
     // Backup button
@@ -332,8 +474,18 @@ export class ShadowClawFiles extends HTMLElement {
     }
     const template = document.createElement("template");
     template.innerHTML = ShadowClawFiles.getTemplate();
+
     root.innerHTML = "";
     root.appendChild(template.content.cloneNode(true));
+  }
+
+  dispatchTerminalSlotReady() {
+    this.dispatchEvent(
+      new CustomEvent("shadow-claw-terminal-slot-ready", {
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   /**
@@ -344,6 +496,7 @@ export class ShadowClawFiles extends HTMLElement {
     if (!root) {
       return;
     }
+
     const breadcrumbs = root.querySelector(".files__breadcrumbs");
     if (!breadcrumbs) {
       return;
@@ -542,7 +695,9 @@ export class ShadowClawFiles extends HTMLElement {
                   itemPath,
                 );
               }
+
               await orchestratorStore.loadFiles(db);
+
               showSuccess(
                 isDir ? `Deleted folder: ${name}` : `Deleted file: ${name}`,
                 3000,
@@ -600,11 +755,13 @@ export class ShadowClawFiles extends HTMLElement {
 
         await uploadGroupFile(db, groupId, filename, file);
       }
+
       // Clear the input
       input.value = "";
 
       // Reload files
       await orchestratorStore.loadFiles(db);
+
       showSuccess(
         `Uploaded ${files.length} file${files.length === 1 ? "" : "s"}`,
         3000,
@@ -615,6 +772,73 @@ export class ShadowClawFiles extends HTMLElement {
       showError(`Failed to upload files: ${message}`, 6000);
 
       console.error("Upload error:", err);
+    }
+  }
+
+  openNewFileDialog() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const dialog = root.querySelector(".files__new-dialog");
+    const input = root.querySelector(".files__new-input");
+
+    if (!(dialog instanceof HTMLDialogElement)) {
+      return;
+    }
+
+    dialog.showModal();
+
+    if (input instanceof HTMLInputElement) {
+      input.value = "";
+      input.focus();
+    }
+  }
+
+  /**
+   * @param {ShadowClawDatabase} db
+   */
+  async handleCreateNewFile(db) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const dialog = root.querySelector(".files__new-dialog");
+    const input = root.querySelector(".files__new-input");
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const fileName = input.value.trim();
+    if (!fileName) {
+      showWarning("Please enter a file name", 3000);
+      return;
+    }
+
+    if (fileName.includes("/") || fileName.includes("\\")) {
+      showWarning("Use only a file name, not a path", 3500);
+      return;
+    }
+
+    const filePath =
+      orchestratorStore.currentPath === "."
+        ? fileName
+        : `${orchestratorStore.currentPath}/${fileName}`;
+
+    try {
+      await writeGroupFile(db, orchestratorStore.activeGroupId, filePath, "");
+      await orchestratorStore.loadFiles(db);
+
+      showSuccess(`Created file: ${fileName}`, 3000);
+
+      if (dialog instanceof HTMLDialogElement) {
+        dialog.close();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to create file: ${message}`, 6000);
     }
   }
 
@@ -636,6 +860,7 @@ export class ShadowClawFiles extends HTMLElement {
       }
 
       await downloadAllGroupFilesAsZip(db, groupId);
+
       showSuccess("Backup created successfully", 3000);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -745,8 +970,10 @@ export class ShadowClawFiles extends HTMLElement {
       }
 
       await deleteAllGroupFiles(db, groupId);
+
       await orchestratorStore.resetToRootFolder(db);
       await orchestratorStore.loadFiles(db);
+
       showSuccess("All files deleted", 3500);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

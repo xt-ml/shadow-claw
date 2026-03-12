@@ -1,4 +1,12 @@
 import { handleMessage } from "./src/worker/agent.mjs";
+import { CONFIG_KEYS } from "./src/config.mjs";
+import { getConfig } from "./src/db/getConfig.mjs";
+import { openDatabase } from "./src/db/openDatabase.mjs";
+import {
+  bootVM,
+  setVMBootModePreference,
+  subscribeVMStatus,
+} from "./src/vm.mjs";
 
 /**
  * ShadowClaw Agent Worker
@@ -7,6 +15,36 @@ import { handleMessage } from "./src/worker/agent.mjs";
  *
  * Communicates with the main thread via postMessage.
  */
+
+subscribeVMStatus((status) => {
+  self.postMessage({
+    type: "vm-status",
+    payload: status,
+  });
+});
+
+// Eagerly boot the VM using persisted mode preference so it's ready for bash.
+(async () => {
+  try {
+    const db = await openDatabase();
+    const stored = await getConfig(db, CONFIG_KEYS.VM_BOOT_MODE);
+    const mode =
+      stored === "disabled" ||
+      stored === "9p" ||
+      stored === "ext2" ||
+      stored === "auto"
+        ? stored
+        : "disabled";
+
+    setVMBootModePreference(mode);
+
+    if (mode !== "disabled") {
+      await bootVM();
+    }
+  } catch (err) {
+    console.warn("[WebVM] Eager boot failed:", err);
+  }
+})();
 
 // ── Expose toast helpers on worker globalThis for JavaScript tasks ──
 

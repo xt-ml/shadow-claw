@@ -20,7 +20,7 @@ e2e/
 │   └── index.mjs       # DB helpers, constants, wait functions
 ├── fixtures.mjs        # Shared test fixtures (app, chat, files, tasks)
 ├── *.test.mjs          # Test suites
-│   └── file-viewer.test.mjs  # File viewer modal integration coverage
+│   └── file-viewer.test.mjs  # File viewer component integration coverage
 └── README.md           # This file
 ```
 

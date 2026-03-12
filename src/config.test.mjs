@@ -180,6 +180,7 @@ describe("config.mjs", () => {
       expect(CONFIG_KEYS.GIT_AUTHOR_NAME).toBe("git_author_name");
       expect(CONFIG_KEYS.GIT_AUTHOR_EMAIL).toBe("git_author_email");
       expect(CONFIG_KEYS.GIT_CORS_PROXY).toBe("git_cors_proxy");
+      expect(CONFIG_KEYS.VM_BOOT_MODE).toBe("vm_boot_mode");
     });
   });
 

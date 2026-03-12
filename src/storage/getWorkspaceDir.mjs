@@ -2,6 +2,8 @@
  * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
  */
 
+import { getGroupDir } from "./getGroupDir.mjs";
+
 /**
  * Get the workspace subdirectory for a group.
  *

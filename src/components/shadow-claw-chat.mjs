@@ -38,6 +38,11 @@ export class ShadowClawChat extends HTMLElement {
   static getTemplate() {
     return `
       <style>
+        /* Utility classes refactored from inline styles */
+        .hidden, [hidden] {
+          display: none !important;
+        }
+
         :host {
           display: flex;
           flex: 1;
@@ -126,6 +131,10 @@ export class ShadowClawChat extends HTMLElement {
           min-height: 0;
           overflow: hidden;
           padding: 0.75rem;
+        }
+
+        .chat__terminal-slot:empty {
+          display: none;
         }
 
         .chat__tool-activity {
@@ -445,6 +454,7 @@ export class ShadowClawChat extends HTMLElement {
         </shadow-claw-page-header>
 
         <div class="chat__body">
+          <div class="chat__terminal-slot" data-terminal-slot hidden></div>
           <div class="chat__tool-activity" aria-live="polite">⚙️ Working...</div>
           <div class="chat__activity-log" aria-live="polite"></div>
           <div class="chat__messages" role="log" aria-live="polite" aria-label="Conversation messages"></div>
@@ -477,6 +487,7 @@ export class ShadowClawChat extends HTMLElement {
 
     this.db = db;
     this.render();
+    this.dispatchTerminalSlotReady();
     this.bindEventListeners();
     this.setupEffects();
   }
@@ -497,6 +508,15 @@ export class ShadowClawChat extends HTMLElement {
 
     root.innerHTML = "";
     root.appendChild(template.content.cloneNode(true));
+  }
+
+  dispatchTerminalSlotReady() {
+    this.dispatchEvent(
+      new CustomEvent("shadow-claw-terminal-slot-ready", {
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   bindEventListeners() {

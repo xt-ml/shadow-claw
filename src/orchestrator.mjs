@@ -112,6 +112,13 @@ export class Orchestrator {
     this.processing = false;
     /** @type {Set<string>} */
     this.pendingScheduledTasks = new Set();
+    /** @type {import('./vm.mjs').VMStatus} */
+    this.vmStatus = {
+      ready: false,
+      booting: false,
+      bootAttempted: false,
+      error: null,
+    };
   }
 
   /**
@@ -177,6 +184,8 @@ export class Orchestrator {
         payload: { storageHandle },
       });
     }
+
+    // The worker reads persisted VM boot mode and eagerly boots the VM itself.
 
     // Set up task scheduler
     this.scheduler = new TaskScheduler(async (task) => {
@@ -365,6 +374,58 @@ export class Orchestrator {
     this.model = model;
 
     await setConfig(db, CONFIG_KEYS.MODEL, model);
+  }
+
+  /**
+   * Update preferred VM boot mode and notify worker.
+   *
+   * @param {ShadowClawDatabase} db
+   * @param {'disabled'|'auto'|'9p'|'ext2'} mode
+   * @returns {Promise<void>}
+   */
+  async setVMBootMode(db, mode) {
+    const normalized =
+      mode === "disabled" || mode === "9p" || mode === "ext2" || mode === "auto"
+        ? mode
+        : "disabled";
+
+    await setConfig(db, CONFIG_KEYS.VM_BOOT_MODE, normalized);
+    this.agentWorker?.postMessage({
+      type: "set-vm-mode",
+      payload: { mode: normalized },
+    });
+  }
+
+  /**
+   * @returns {import('./vm.mjs').VMStatus}
+   */
+  getVMStatus() {
+    return this.vmStatus;
+  }
+
+  /**
+   * @returns {void}
+   */
+  openTerminalSession() {
+    this.agentWorker?.postMessage({ type: "vm-terminal-open" });
+  }
+
+  /**
+   * @param {string} data
+   * @returns {void}
+   */
+  sendTerminalInput(data) {
+    this.agentWorker?.postMessage({
+      type: "vm-terminal-input",
+      payload: { data },
+    });
+  }
+
+  /**
+   * @returns {void}
+   */
+  closeTerminalSession() {
+    this.agentWorker?.postMessage({ type: "vm-terminal-close" });
   }
 
   /**
@@ -762,6 +823,37 @@ export class Orchestrator {
       case "show-toast": {
         const { message, type, duration } = msg.payload;
         showToast(message, { type: type || "info", duration });
+
+        break;
+      }
+
+      case "vm-status": {
+        this.vmStatus = { ...msg.payload };
+        this.events.emit("vm-status", this.vmStatus);
+
+        break;
+      }
+
+      case "vm-terminal-opened": {
+        this.events.emit("vm-terminal-opened", msg.payload);
+
+        break;
+      }
+
+      case "vm-terminal-output": {
+        this.events.emit("vm-terminal-output", msg.payload);
+
+        break;
+      }
+
+      case "vm-terminal-closed": {
+        this.events.emit("vm-terminal-closed", msg.payload);
+
+        break;
+      }
+
+      case "vm-terminal-error": {
+        this.events.emit("vm-terminal-error", msg.payload);
 
         break;
       }

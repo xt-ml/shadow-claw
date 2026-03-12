@@ -85,10 +85,12 @@ sequenceDiagram
 | `src/serve.mjs`                      | Express dev/prod server + Git/LLM CORS proxy                       |
 | `src/stores/`                        | Reactive signal-based UI state (orchestrator, file-viewer, theme)  |
 | `service-worker/`                    | Workbox-generated PWA service worker                               |
+| `src/worker/handleMessage.mjs`       | Worker message dispatcher — handles terminal RPC and VM lifecycle  |
 | `src/components/`                    | Web Components — `<shadow-claw>` (main), `<shadow-claw-toast>`,    |
 |                                      | `<shadow-claw-files>`, `<shadow-claw-tasks>`, `<shadow-claw-chat>` |
 |                                      | (with "Stop Chat" support), `<shadow-claw-page-header>`,           |
-|                                      | `<shadow-claw-pdf-viewer>`                                         |
+|                                      | `<shadow-claw-pdf-viewer>`, `<shadow-claw-file-viewer>`,           |
+|                                      | `<shadow-claw-terminal>` (interactive WebVM terminal)              |
 
 ## Tools Available to the Agent
 
@@ -131,19 +133,24 @@ The `bash` tool has two execution tiers:
    Implements ~40 Unix commands (`cat`, `grep`, `sed`, `awk`, `jq`, `ls`, `mkdir`, `rm -rf`, etc.)
    against OPFS. Supports pipes, redirects (including `/dev/null` and `2>&1`), `&&`/`||`, variable expansion, command substitution.
 
-2. **v86 Alpine Linux VM** — full x86 Linux in WebAssembly. The worker attempts to boot it
-   on startup; commands fall back to the JS shell while the VM is booting.
+2. **v86 Alpine Linux VM** — full x86 Linux in WebAssembly. The VM is **worker-owned**:
+  `worker.mjs` eagerly boots it on startup using the persisted `CONFIG_KEYS.VM_BOOT_MODE`
+  setting. The `<shadow-claw-terminal>` component provides an interactive terminal via
+  the orchestrator's terminal bridge; `bash` tool execution and the interactive terminal
+  are serialized by an exclusivity lock in `vm.mjs` to prevent serial-stream corruption.
 
-   Serve these files at `/assets/` to enable:
+  VM assets are expected under `/assets/v86/`.
 
-   | File                          | Description                  |
-   | ----------------------------- | ---------------------------- |
-   | `alpine-rootfs.ext2`          | Alpine Linux root filesystem |
-   | `bzImage`                     | Linux kernel                 |
-   | `initrd`                      | Initial RAM disk             |
-   | `v86.wasm`                    | v86 WebAssembly binary       |
-   | `libv86.mjs`                  | v86 JavaScript glue          |
-   | `seabios.bin` / `vgabios.bin` | Firmware                     |
+  Serve these files under `/assets/v86/` to enable:
+
+  | File                          | Description                  |
+  | ----------------------------- | ---------------------------- |
+  | `alpine-rootfs.ext2`          | Alpine Linux root filesystem |
+  | `bzImage`                     | Linux kernel                 |
+  | `initrd`                      | Initial RAM disk             |
+  | `v86.wasm`                    | v86 WebAssembly binary       |
+  | `libv86.mjs`                  | v86 JavaScript glue          |
+  | `seabios.bin` / `vgabios.bin` | Firmware                     |
 
 ## Reactive UI
 

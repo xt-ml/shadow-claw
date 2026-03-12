@@ -1,5 +1,6 @@
 import { FETCH_MAX_RESPONSE } from "../config.mjs";
 import { executeShell } from "../shell/shell.mjs";
+import { executeInVM, isVMReady } from "../vm.mjs";
 import { listGroupFiles } from "../storage/listGroupFiles.mjs";
 import { readGroupFile } from "../storage/readGroupFile.mjs";
 import { writeGroupFile } from "../storage/writeGroupFile.mjs";
@@ -27,13 +28,19 @@ export async function executeTool(db, name, input, groupId) {
   try {
     switch (name) {
       case "bash": {
-        // VM unavailable — fall back to JS shell emulator
+        const timeoutSec = Math.min(input.timeout || 30, 240);
+
+        if (isVMReady()) {
+          return await executeInVM(input.command, timeoutSec, { db, groupId });
+        }
+
+        // VM not yet ready — fall back to JS shell emulator
         const shellResult = await executeShell(
           db,
           input.command,
           groupId,
           {},
-          Math.min(input.timeout || 30, 240),
+          timeoutSec,
         );
 
         return formatShellOutput(shellResult);

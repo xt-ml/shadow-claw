@@ -29,6 +29,11 @@ export class ShadowClawTasks extends HTMLElement {
   static getTemplate() {
     return `
       <style>
+        /* Utility classes refactored from inline styles */
+        .hidden, [hidden] {
+          display: none !important;
+        }
+
         :host {
           display: flex;
           flex-direction: column;
@@ -66,9 +71,22 @@ export class ShadowClawTasks extends HTMLElement {
           padding: 0.75rem;
         }
 
-        @media (min-width: 640px) {
+        .tasks__terminal-slot {
+          margin-bottom: 0.75rem;
+        }
+
+        .tasks__terminal-slot:empty {
+          display: none;
+          margin-bottom: 0;
+        }
+
+        @media (min-width: 650px) {
           .tasks__content {
             padding: 1rem;
+          }
+
+          .tasks__terminal-slot {
+            margin-bottom: 1rem;
           }
         }
 
@@ -78,7 +96,7 @@ export class ShadowClawTasks extends HTMLElement {
           gap: 0.625rem;
         }
 
-        @media (min-width: 640px) {
+        @media (min-width: 650px) {
           .tasks__list {
             gap: 0.75rem;
           }
@@ -114,7 +132,7 @@ export class ShadowClawTasks extends HTMLElement {
           text-transform: uppercase;
         }
 
-        @media (min-width: 640px) {
+        @media (min-width: 650px) {
           .tasks__schedule {
             font-size: 0.75rem;
           }
@@ -324,7 +342,7 @@ export class ShadowClawTasks extends HTMLElement {
         }
 
         /* Tablet and up: horizontal layout */
-        @media (min-width: 640px) {
+        @media (min-width: 650px) {
           .tasks__item {
             padding: 0.75rem;
           }
@@ -391,7 +409,7 @@ export class ShadowClawTasks extends HTMLElement {
           width: 100%;
         }
 
-        @media (min-width: 640px) {
+        @media (min-width: 650px) {
           dialog {
             max-width: 31.25rem;
             width: 90%;
@@ -582,7 +600,7 @@ export class ShadowClawTasks extends HTMLElement {
           padding: 0.0625rem 0.25rem;
         }
 
-        @media (min-width: 640px) {
+        @media (min-width: 650px) {
           .tasks__script-badge {
             font-size: 0.625rem;
           }
@@ -615,6 +633,7 @@ export class ShadowClawTasks extends HTMLElement {
       </shadow-claw-page-header>
       <input type="file" class="tasks__hidden-restore" accept=".json,application/json" aria-label="Restore tasks from JSON backup">
       <div class="tasks__content">
+        <div class="tasks__terminal-slot" data-terminal-slot hidden></div>
         <div class="tasks__list" role="list" aria-live="polite"></div>
       </div>
       <!-- Add/Edit Task Dialog -->
@@ -681,6 +700,7 @@ export class ShadowClawTasks extends HTMLElement {
     }
 
     this.render();
+    this.dispatchTerminalSlotReady();
 
     // Re-render when tasks change
     this.cleanup = effect(() => {
@@ -789,6 +809,15 @@ export class ShadowClawTasks extends HTMLElement {
 
     root.innerHTML = "";
     root.appendChild(template.content.cloneNode(true));
+  }
+
+  dispatchTerminalSlotReady() {
+    this.dispatchEvent(
+      new CustomEvent("shadow-claw-terminal-slot-ready", {
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   /**

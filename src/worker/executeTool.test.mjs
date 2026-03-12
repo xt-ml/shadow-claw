@@ -59,6 +59,7 @@ describe("executeTool.mjs", () => {
 
     jest.unstable_mockModule("../config.mjs", () => ({
       FETCH_MAX_RESPONSE: 1000,
+      OPFS_ROOT: "shadowclaw",
       CONFIG_KEYS: {
         GIT_TOKEN: "git-token",
         GIT_CORS_PROXY: "git-cors-proxy",

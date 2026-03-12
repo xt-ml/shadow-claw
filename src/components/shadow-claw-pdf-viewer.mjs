@@ -40,6 +40,11 @@ export class ShadowClawPdfViewer extends HTMLElement {
   static getTemplate() {
     return `
       <style>
+        /* Utility classes refactored from inline styles */
+        .hidden, [hidden] {
+          display: none !important;
+        }
+
         :host {
           display: block;
           height: 100%;

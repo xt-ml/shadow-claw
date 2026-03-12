@@ -92,11 +92,13 @@ effect(() => {
 UI is built with native Custom Elements. The main component is `<shadow-claw>` defined
 in `src/components/shadow-claw.mjs`. Page components include `<shadow-claw-chat>`,
 `<shadow-claw-files>`, and `<shadow-claw-tasks>`. Shared components include
-`<shadow-claw-page-header>` (reusable mobile-first header), `<shadow-claw-pdf-viewer>`
-(PDF preview), and `<shadow-claw-toast>` (notification system). A shared file viewer
-dialog now lives in the root `<shadow-claw>` component and is driven by `fileViewerStore`.
-Components use Shadow DOM and direct `innerHTML` for rendering; reactive re-renders are
-driven by `effect()` callbacks in `setupEffects()`.
+`<shadow-claw-page-header>` (reusable mobile-first header), `<shadow-claw-file-viewer>`
+(file viewer and editor with Highlight.js syntax highlighting), `<shadow-claw-pdf-viewer>`
+(PDF preview), `<shadow-claw-terminal>` (interactive WebVM terminal), and `<shadow-claw-toast>`
+(notification system). The file viewer and terminal components are driven by their respective
+stores (`fileViewerStore`). The terminal component talks to the orchestrator's terminal bridge
+methods — it does **not** access `vm.mjs` directly. Components use Shadow DOM and direct
+`innerHTML` for rendering; reactive re-renders are driven by `effect()` callbacks in `setupEffects()`.
 
 ### Imports
 
@@ -113,18 +115,26 @@ Node-only packages (Express, Jest, Workbox CLI) belong in `devDependencies`.
 
 `worker.mjs` communicates via `postMessage`. Message shapes are typed in `src/types.mjs`:
 
-| Direction     | Type            | Payload                               |
-| ------------- | --------------- | ------------------------------------- |
-| main → worker | `invoke`        | `InvokePayload`                       |
-| main → worker | `compact`       | `CompactPayload`                      |
-| main → worker | `cancel`        | `{ groupId }` (aborts in-flight task) |
-| worker → main | `response`      | `ResponsePayload`                     |
-| worker → main | `error`         | `ErrorPayload`                        |
-| worker → main | `typing`        | `TypingPayload`                       |
-| worker → main | `tool-activity` | `ToolActivityPayload`                 |
-| worker → main | `thinking-log`  | `ThinkingLogEntry`                    |
-| worker → main | `compact-done`  | `CompactDonePayload`                  |
-| worker → main | `open-file`     | `OpenFilePayload`                     |
+| Direction     | Type                  | Payload                               |
+| ------------- | --------------------- | ------------------------------------- |
+| main → worker | `invoke`              | `InvokePayload`                       |
+| main → worker | `compact`             | `CompactPayload`                      |
+| main → worker | `cancel`              | `{ groupId }` (aborts in-flight task) |
+| main → worker | `vm-terminal-open`    | `{}` (opens interactive terminal)     |
+| main → worker | `vm-terminal-input`   | `{ data: string }` (stdin bytes)      |
+| main → worker | `vm-terminal-close`   | `{}` (detaches terminal session)      |
+| worker → main | `response`            | `ResponsePayload`                     |
+| worker → main | `error`               | `ErrorPayload`                        |
+| worker → main | `typing`              | `TypingPayload`                       |
+| worker → main | `tool-activity`       | `ToolActivityPayload`                 |
+| worker → main | `thinking-log`        | `ThinkingLogEntry`                    |
+| worker → main | `compact-done`        | `CompactDonePayload`                  |
+| worker → main | `open-file`           | `OpenFilePayload`                     |
+| worker → main | `vm-status`           | `VMStatus`                            |
+| worker → main | `vm-terminal-opened`  | `{}`                                  |
+| worker → main | `vm-terminal-output`  | `{ data: string }` (stdout bytes)     |
+| worker → main | `vm-terminal-closed`  | `{}`                                  |
+| worker → main | `vm-terminal-error`   | `{ message: string }`                 |
 
 ### IndexedDB
 
@@ -136,6 +146,22 @@ Call `openDatabase()` once at startup (done in `index.mjs`).
 All file I/O goes through `src/storage/`. The group workspace root is:
 `shadowclaw/<groupId>/workspace/`. `MEMORY.md` lives at the workspace root and is loaded
 as system context on every agent invocation.
+
+### WebVM Assets
+
+`src/vm.mjs` expects v86 files under `/assets/v86/` (for example
+`/assets/v86/libv86.mjs`, `/assets/v86/v86.wasm`, and firmware/rootfs files).
+`worker.mjs` eagerly boots the VM on startup using the persisted `CONFIG_KEYS.VM_BOOT_MODE`
+preference. The VM is **worker-owned** — the only non-test runtime imports of `vm.mjs` are
+`src/worker/handleMessage.mjs` and `src/worker/executeTool.mjs`. The UI terminal component
+(`<shadow-claw-terminal>`) talks to the orchestrator's terminal bridge, never directly to `vm.mjs`.
+
+### WebVM Exclusivity Guard
+
+`vm.mjs` serializes access between interactive terminal sessions and `bash` tool execution via
+an `activeUsage` lock (`'command' | 'terminal' | null`). If the terminal owns the VM, `bash`
+tool calls receive a clear busy error rather than corrupting the serial stream. Mode changes
+explicitly close any active terminal session and notify the UI before rebooting.
 
 ### Request Cancellation
 

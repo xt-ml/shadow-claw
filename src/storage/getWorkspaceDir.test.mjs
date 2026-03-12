@@ -1,11 +1,16 @@
 import { jest } from "@jest/globals";
 
-import { getWorkspaceDir } from "./getWorkspaceDir.mjs";
+jest.unstable_mockModule("./getGroupDir.mjs", () => ({
+  getGroupDir: jest.fn(),
+}));
+
+const { getWorkspaceDir } = await import("./getWorkspaceDir.mjs");
+const { getGroupDir } = await import("./getGroupDir.mjs");
 
 describe("getWorkspaceDir", () => {
   it("returns workspace dir handle", async () => {
     const workspace = {};
-    globalThis.getGroupDir = jest.fn().mockResolvedValue({
+    getGroupDir.mockResolvedValue({
       getDirectoryHandle: jest.fn().mockResolvedValue(workspace),
     });
 

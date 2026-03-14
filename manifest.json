@@ -5,7 +5,7 @@
   "id": "shadow-claw",
   "name": "ShadowClaw",
   "short_name": "ShadowClaw",
-  "start_url": "http://localhost:8888",
+  "start_url": "https://xt-ml.github.io/shadow-claw/",
   "theme_color": "#000000",
   "icons": [
     {

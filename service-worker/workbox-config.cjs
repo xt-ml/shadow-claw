@@ -24,7 +24,7 @@ module.exports = {
   ],
   swDest: "./service-worker.js",
   sourcemap: false,
-  importScripts: ["service-worker/fetch-proxy.mjs"],
+  // importScripts: ["service-worker/fetch-proxy.mjs"],
   // // Force new service worker versions to activate and control pages immediately.
   // skipWaiting: true,
   // clientsClaim: true,

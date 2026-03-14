@@ -20,6 +20,7 @@ import {
   getAvailableProviders,
   getProviderApiKeyConfigKey,
   CONFIG_KEYS,
+  DEFAULT_VM_BOOT_HOST,
   DEFAULT_DEV_HOST,
   DEFAULT_DEV_IP,
   DEFAULT_DEV_PORT,
@@ -94,6 +95,10 @@ describe("config.mjs", () => {
 
     it("should have valid DEFAULT_DEV_PORT", () => {
       expect(DEFAULT_DEV_PORT).toBe(8888);
+    });
+
+    it("should have valid DEFAULT_VM_BOOT_HOST", () => {
+      expect(DEFAULT_VM_BOOT_HOST).toBe("https://xt-ml.github.io/v86");
     });
   });
 
@@ -181,6 +186,9 @@ describe("config.mjs", () => {
       expect(CONFIG_KEYS.GIT_AUTHOR_EMAIL).toBe("git_author_email");
       expect(CONFIG_KEYS.GIT_CORS_PROXY).toBe("git_cors_proxy");
       expect(CONFIG_KEYS.VM_BOOT_MODE).toBe("vm_boot_mode");
+      expect(CONFIG_KEYS.VM_BOOT_HOST).toBe("vm_boot_host");
+      expect(CONFIG_KEYS.VM_NETWORK_RELAY_URL).toBe("vm_network_relay_url");
+      expect(CONFIG_KEYS.VM_BASH_TIMEOUT_SEC).toBe("vm_bash_timeout_sec");
     });
   });
 

@@ -8,11 +8,18 @@ describe("handleMessage.mjs", () => {
   let mockPendingTasks;
   let mockSetStorageRoot;
   let mockBootVM;
+  let mockAttachTerminalWorkspaceAutoSync;
   let mockCreateTerminalSession;
+  let mockFlushVMWorkspaceToHost;
   let mockGetVMStatus;
+  let mockGetVMBootModePreference;
   let mockPost;
+  let mockSetVMBootHostPreference;
   let mockSetVMBootModePreference;
+  let mockSetVMNetworkRelayURLPreference;
   let mockShutdownVM;
+  let mockSubscribeVMBootOutput;
+  let mockSyncVMWorkspaceFromHost;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -23,11 +30,18 @@ describe("handleMessage.mjs", () => {
     mockPendingTasks = new Map();
     mockSetStorageRoot = jest.fn();
     mockBootVM = jest.fn();
+    mockAttachTerminalWorkspaceAutoSync = jest.fn();
     mockCreateTerminalSession = jest.fn();
+    mockFlushVMWorkspaceToHost = jest.fn().mockResolvedValue(undefined);
     mockGetVMStatus = jest.fn();
+    mockGetVMBootModePreference = jest.fn(() => "disabled");
     mockPost = jest.fn();
+    mockSetVMBootHostPreference = jest.fn();
     mockSetVMBootModePreference = jest.fn();
+    mockSetVMNetworkRelayURLPreference = jest.fn();
     mockShutdownVM = jest.fn();
+    mockSubscribeVMBootOutput = jest.fn(() => jest.fn());
+    mockSyncVMWorkspaceFromHost = jest.fn().mockResolvedValue(undefined);
 
     jest.unstable_mockModule("../db/openDatabase.mjs", () => ({
       openDatabase: mockOpenDatabase,
@@ -38,10 +52,17 @@ describe("handleMessage.mjs", () => {
     }));
 
     jest.unstable_mockModule("../vm.mjs", () => ({
+      attachTerminalWorkspaceAutoSync: mockAttachTerminalWorkspaceAutoSync,
       bootVM: mockBootVM,
       createTerminalSession: mockCreateTerminalSession,
+      flushVMWorkspaceToHost: mockFlushVMWorkspaceToHost,
+      getVMBootModePreference: mockGetVMBootModePreference,
       getVMStatus: mockGetVMStatus,
+      setVMBootHostPreference: mockSetVMBootHostPreference,
       setVMBootModePreference: mockSetVMBootModePreference,
+      setVMNetworkRelayURLPreference: mockSetVMNetworkRelayURLPreference,
+      subscribeVMBootOutput: mockSubscribeVMBootOutput,
+      syncVMWorkspaceFromHost: mockSyncVMWorkspaceFromHost,
       shutdownVM: mockShutdownVM,
     }));
 
@@ -203,6 +224,30 @@ describe("handleMessage.mjs", () => {
     expect(mockBootVM).not.toHaveBeenCalled();
   });
 
+  it("should apply relay and boot host preferences without mode", async () => {
+    mockOpenDatabase.mockResolvedValue({});
+    mockShutdownVM.mockResolvedValue(undefined);
+
+    await handleMessage({
+      data: {
+        type: "set-vm-mode",
+        payload: {
+          bootHost: "https://example.com",
+          networkRelayUrl: "wss://relay.example.com/",
+        },
+      },
+    });
+
+    expect(mockSetVMBootHostPreference).toHaveBeenCalledWith(
+      "https://example.com",
+    );
+    expect(mockSetVMNetworkRelayURLPreference).toHaveBeenCalledWith(
+      "wss://relay.example.com/",
+    );
+    expect(mockShutdownVM).toHaveBeenCalled();
+    expect(mockBootVM).not.toHaveBeenCalled();
+  });
+
   it("should open a worker-owned terminal session", async () => {
     const send = jest.fn();
     mockOpenDatabase.mockResolvedValue({});
@@ -229,6 +274,68 @@ describe("handleMessage.mjs", () => {
     expect(mockPost).toHaveBeenCalledWith({
       type: "vm-terminal-opened",
       payload: { ok: true },
+    });
+  });
+
+  it("should not block terminal-opened on initial workspace sync", async () => {
+    mockOpenDatabase.mockResolvedValue({});
+    mockGetVMStatus.mockReturnValue({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+
+    mockSyncVMWorkspaceFromHost.mockReturnValue(new Promise(() => {}));
+    mockCreateTerminalSession.mockReturnValue({
+      close: jest.fn(),
+      send: jest.fn(),
+    });
+
+    await expect(
+      handleMessage({
+        data: { type: "vm-terminal-open" },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(mockCreateTerminalSession).toHaveBeenCalled();
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "vm-terminal-opened",
+      payload: { ok: true },
+    });
+  });
+
+  it("should show a warning toast when initial workspace sync fails", async () => {
+    mockOpenDatabase.mockResolvedValue({});
+    mockGetVMStatus.mockReturnValue({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+    mockCreateTerminalSession.mockReturnValue({
+      close: jest.fn(),
+      send: jest.fn(),
+    });
+    mockSyncVMWorkspaceFromHost.mockRejectedValue(new Error("File not found"));
+
+    await expect(
+      handleMessage({
+        data: { type: "vm-terminal-open" },
+      }),
+    ).resolves.toBeUndefined();
+
+    // Allow the async catch handler to run.
+    await Promise.resolve();
+
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "show-toast",
+      payload: {
+        message:
+          "WebVM terminal connected, but workspace sync failed. File changes may not appear until the next sync.",
+        type: "warning",
+        duration: 5000,
+      },
     });
   });
 
@@ -260,6 +367,34 @@ describe("handleMessage.mjs", () => {
       type: "vm-terminal-closed",
       payload: { ok: true },
     });
+  });
+
+  it("flushes guest workspace changes on terminal close without reseeding host files", async () => {
+    const send = jest.fn();
+    const close = jest.fn();
+    const db = {};
+
+    mockOpenDatabase.mockResolvedValue(db);
+    mockGetVMStatus.mockReturnValue({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+    mockCreateTerminalSession.mockReturnValue({ close, send });
+
+    await handleMessage({
+      data: { type: "vm-terminal-open", payload: { groupId: "g1" } },
+    });
+    await handleMessage({
+      data: { type: "vm-terminal-close", payload: { groupId: "g1" } },
+    });
+
+    expect(mockFlushVMWorkspaceToHost).toHaveBeenCalledWith({
+      db,
+      groupId: "g1",
+    });
+    expect(mockSyncVMWorkspaceFromHost).toHaveBeenCalledTimes(1);
   });
 
   it("should handle cancel message type", async () => {

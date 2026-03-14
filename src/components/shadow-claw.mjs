@@ -1,5 +1,11 @@
 // @ts-ignore
-import { CONFIG_KEYS } from "../config.mjs";
+import {
+  BASH_DEFAULT_TIMEOUT_SEC,
+  BASH_MAX_TIMEOUT_SEC,
+  CONFIG_KEYS,
+  DEFAULT_VM_BOOT_HOST,
+  DEFAULT_VM_NETWORK_RELAY_URL,
+} from "../config.mjs";
 
 import { getConfig } from "../db/getConfig.mjs";
 
@@ -284,9 +290,15 @@ export class ShadowClaw extends HTMLElement {
 
         .header-title {
           align-items: center;
-          display: flex;
+          display: none;
           height: 2.5rem;
           margin-left: 0.5rem;
+        }
+
+        @media (min-width: 25rem) {
+          .header-title {
+            display: flex;
+          }
         }
 
         .header-actions {
@@ -368,6 +380,7 @@ export class ShadowClaw extends HTMLElement {
           .sidebar {
             display: none;
           }
+
           .sidebar.open {
             border-radius: 0 var(--shadow-claw-radius-m) var(--shadow-claw-radius-m) 0;
             box-shadow: var(--shadow-claw-shadow-lg);
@@ -905,6 +918,10 @@ export class ShadowClaw extends HTMLElement {
           font-weight: 500;
           padding: 0.625rem 1.5rem;
           transition: background-color 0.15s;
+        }
+
+        .save-btn--inline {
+          margin-top: 0.625rem;
         }
 
         .save-btn:hover {
@@ -1723,17 +1740,78 @@ export class ShadowClaw extends HTMLElement {
                     <label class="form-label">Boot Mode</label>
                     <select class="form-select" data-setting="vm-boot-mode-select">
                       <option value="disabled">Disabled (Use JavaScript Bash Emulator)</option>
-                      <option value="auto">Auto (Prefer 9p, fallback to ext2)</option>
-                      <option value="9p">9p / VirtFS</option>
+                      <option value="auto">Auto (Prefer ext2, fallback to 9p)</option>
                       <option value="ext2">ext2 / hda</option>
+                      <option value="9p">9p / VirtFS</option>
                     </select>
                     <div class="form-helper">
                       Disabled is the default and uses the JavaScript Bash Emulator. Auto keeps fallback behavior. Selecting 9p or ext2 forces that mode.
                     </div>
+                    <button
+                      class="save-btn save-btn--inline"
+                      data-action="save-vm-boot-mode"
+                    >
+                      💾 Save WebVM Mode
+                    </button>
                   </div>
-                  <button class="save-btn" data-action="save-vm-boot-mode">
-                    💾 Save WebVM Mode
-                  </button>
+                  <div class="form-group">
+                    <label class="form-label">Default Bash Timeout (seconds)</label>
+                    <input
+                      class="form-input"
+                      data-setting="vm-bash-timeout-input"
+                      type="number"
+                      min="1"
+                      max="1800"
+                      step="1"
+                      value="120"
+                    />
+                    <div class="form-helper">
+                      Used when a bash tool call does not pass an explicit timeout. Range: 1 to 1800 seconds.
+                    </div>
+                    <button
+                      class="save-btn save-btn--inline"
+                      data-action="save-vm-bash-timeout"
+                    >
+                      💾 Save Bash Timeout
+                    </button>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Boot Asset Host</label>
+                    <input
+                      class="form-input"
+                      data-setting="vm-boot-host-input"
+                      type="url"
+                      placeholder="Auto (use current deployment host)"
+                      value="${DEFAULT_VM_BOOT_HOST}"
+                    />
+                    <div class="form-helper">
+                      Leave empty to use this app's deployed host.
+                    </div>
+                    <button
+                      class="save-btn save-btn--inline"
+                      data-action="save-vm-boot-host"
+                    >
+                      💾 Save Boot Host
+                    </button>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Network Relay URL</label>
+                    <input
+                      class="form-input"
+                      data-setting="vm-network-relay-url-input"
+                      type="url"
+                      value="wss://relay.widgetry.org/"
+                    />
+                    <div class="form-helper">
+                      Default is wss://relay.widgetry.org/. Use ws:// or wss://.
+                    </div>
+                    <button
+                      class="save-btn save-btn--inline"
+                      data-action="save-vm-network-relay-url"
+                    >
+                      💾 Save Relay URL
+                    </button>
+                  </div>
                 </div>
 
                 <div class="settings-section">
@@ -2102,15 +2180,47 @@ export class ShadowClaw extends HTMLElement {
     const saveVMBootModeBtn = root.querySelector(
       '[data-action="save-vm-boot-mode"]',
     );
+
     if (saveVMBootModeBtn) {
       saveVMBootModeBtn.addEventListener("click", () =>
         this.saveVMBootMode(db),
       );
     }
 
+    const saveVMBashTimeoutBtn = root.querySelector(
+      '[data-action="save-vm-bash-timeout"]',
+    );
+
+    if (saveVMBashTimeoutBtn) {
+      saveVMBashTimeoutBtn.addEventListener("click", () =>
+        this.saveVMBashTimeout(db),
+      );
+    }
+
+    const saveVMBootHostBtn = root.querySelector(
+      '[data-action="save-vm-boot-host"]',
+    );
+
+    if (saveVMBootHostBtn) {
+      saveVMBootHostBtn.addEventListener("click", () =>
+        this.saveVMBootHost(db),
+      );
+    }
+
+    const saveVMNetworkRelayURLBtn = root.querySelector(
+      '[data-action="save-vm-network-relay-url"]',
+    );
+
+    if (saveVMNetworkRelayURLBtn) {
+      saveVMNetworkRelayURLBtn.addEventListener("click", () =>
+        this.saveVMNetworkRelayURL(db),
+      );
+    }
+
     const saveNameBtn = root.querySelector(
       '[data-action="save-assistant-name"]',
     );
+
     if (saveNameBtn) {
       saveNameBtn.addEventListener("click", () => this.saveAssistantName(db));
     }
@@ -2596,6 +2706,56 @@ export class ShadowClaw extends HTMLElement {
         vmBootModeSelect.value = normalizedVMBootMode;
       }
 
+      const vmBashTimeoutInput = /** @type {HTMLInputElement|null} */ (
+        root.querySelector('[data-setting="vm-bash-timeout-input"]')
+      );
+
+      const vmBashTimeoutRaw = await getConfig(
+        db,
+        CONFIG_KEYS.VM_BASH_TIMEOUT_SEC,
+      );
+
+      const vmBashTimeoutParsed = Number(vmBashTimeoutRaw);
+      const normalizedVMBashTimeout = Number.isFinite(vmBashTimeoutParsed)
+        ? Math.min(
+            Math.max(Math.floor(vmBashTimeoutParsed), 1),
+            BASH_MAX_TIMEOUT_SEC,
+          )
+        : BASH_DEFAULT_TIMEOUT_SEC;
+
+      if (vmBashTimeoutInput) {
+        vmBashTimeoutInput.value = String(normalizedVMBashTimeout);
+      }
+
+      const vmBootHostInput = /** @type {HTMLInputElement|null} */ (
+        root.querySelector('[data-setting="vm-boot-host-input"]')
+      );
+
+      const vmBootHostRaw = await getConfig(db, CONFIG_KEYS.VM_BOOT_HOST);
+      if (vmBootHostInput) {
+        if (typeof vmBootHostRaw === "string") {
+          vmBootHostInput.value = vmBootHostRaw.trim();
+        } else {
+          vmBootHostInput.value = DEFAULT_VM_BOOT_HOST;
+        }
+      }
+
+      const vmNetworkRelayURLInput = /** @type {HTMLInputElement|null} */ (
+        root.querySelector('[data-setting="vm-network-relay-url-input"]')
+      );
+
+      const vmNetworkRelayURLRaw = await getConfig(
+        db,
+        CONFIG_KEYS.VM_NETWORK_RELAY_URL,
+      );
+
+      if (vmNetworkRelayURLInput) {
+        // Keep template/default value when config has never been set.
+        if (typeof vmNetworkRelayURLRaw === "string") {
+          vmNetworkRelayURLInput.value = vmNetworkRelayURLRaw.trim();
+        }
+      }
+
       this.updateGitWarning();
     } catch (e) {
       console.warn("Could not load settings:", e);
@@ -3065,6 +3225,7 @@ export class ShadowClaw extends HTMLElement {
    * Save VM boot mode setting.
    *
    * @param {ShadowClawDatabase} db
+   *
    * @returns {Promise<void>}
    */
   async saveVMBootMode(db) {
@@ -3093,6 +3254,131 @@ export class ShadowClaw extends HTMLElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving WebVM mode: " + errorMsg, 6000);
+    }
+  }
+
+  /**
+   * Save WebVM default bash timeout.
+   *
+   * @param {ShadowClawDatabase} db
+   *
+   * @returns {Promise<void>}
+   */
+  async saveVMBashTimeout(db) {
+    const root = this.shadowRoot;
+    if (!root || !this.orchestrator) {
+      return;
+    }
+
+    const input = /** @type {HTMLInputElement|null} */ (
+      root.querySelector('[data-setting="vm-bash-timeout-input"]')
+    );
+
+    const parsed = Number(input?.value);
+    if (!Number.isFinite(parsed)) {
+      showWarning("Please enter a valid timeout in seconds", 3000);
+      return;
+    }
+
+    const normalized = Math.min(
+      Math.max(Math.floor(parsed), 1),
+      BASH_MAX_TIMEOUT_SEC,
+    );
+
+    if (input) {
+      input.value = String(normalized);
+    }
+
+    try {
+      await this.orchestrator.setVMBashTimeout(db, normalized);
+      showSuccess("WebVM bash timeout saved", 3000);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving WebVM bash timeout: " + errorMsg, 6000);
+    }
+  }
+
+  /**
+   * Save WebVM boot host override.
+   *
+   * @param {ShadowClawDatabase} db
+   *
+   * @returns {Promise<void>}
+   */
+  async saveVMBootHost(db) {
+    const root = this.shadowRoot;
+    if (!root || !this.orchestrator) {
+      return;
+    }
+
+    const input = /** @type {HTMLInputElement|null} */ (
+      root.querySelector('[data-setting="vm-boot-host-input"]')
+    );
+
+    const value = input?.value?.trim() || "";
+
+    if (value) {
+      try {
+        const parsed = new URL(value);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+          throw new Error("Boot host must use http:// or https://");
+        }
+      } catch {
+        showWarning("Please enter a valid HTTP(S) boot host URL", 3500);
+        return;
+      }
+    }
+
+    try {
+      await this.orchestrator.setVMBootHost(db, value);
+      showSuccess("WebVM boot host saved", 3000);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving WebVM boot host: " + errorMsg, 6000);
+    }
+  }
+
+  /**
+   * Save WebVM network relay URL.
+   *
+   * @param {ShadowClawDatabase} db
+   *
+   * @returns {Promise<void>}
+   */
+  async saveVMNetworkRelayURL(db) {
+    const root = this.shadowRoot;
+    if (!root || !this.orchestrator) {
+      return;
+    }
+
+    const input = /** @type {HTMLInputElement|null} */ (
+      root.querySelector('[data-setting="vm-network-relay-url-input"]')
+    );
+
+    const value = input?.value?.trim() || "";
+
+    if (value) {
+      try {
+        const parsed = new URL(value);
+        if (parsed.protocol !== "ws:" && parsed.protocol !== "wss:") {
+          throw new Error("Relay URL must use ws:// or wss://");
+        }
+      } catch {
+        showWarning("Please enter a valid ws:// or wss:// relay URL", 3500);
+        return;
+      }
+    }
+
+    if (input) {
+      input.value = value;
+    }
+
+    try {
+      await this.orchestrator.setVMNetworkRelayURL(db, value);
+      showSuccess("WebVM relay URL saved", 3000);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving WebVM relay URL: " + errorMsg, 6000);
     }
   }
 

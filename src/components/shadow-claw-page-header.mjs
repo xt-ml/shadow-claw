@@ -38,10 +38,10 @@ export class ShadowClawPageHeader extends HTMLElement {
         }
 
         .header__top {
-          align-items: stretch;
-          display: flex;
-          flex-direction: column;
+          align-items: center;
+          display: grid;
           gap: 0.75rem;
+          grid-template-columns: 1fr auto;
           width: 100%;
         }
 
@@ -51,12 +51,15 @@ export class ShadowClawPageHeader extends HTMLElement {
           margin: 0;
         }
 
-        /* Mobile-first: actions container */
         .header__actions {
           display: flex;
           flex-direction: column;
           gap: 0.375rem;
           width: 100%;
+        }
+
+        .header__actions[hidden] {
+          display: none !important;
         }
 
         /* Mobile: make all slotted buttons full-width and stacked */
@@ -77,9 +80,8 @@ export class ShadowClawPageHeader extends HTMLElement {
           }
 
           .header__top {
-            align-items: center;
-            flex-direction: row;
-            justify-content: space-between;
+            align-items: start;
+            grid-template-columns: 1fr auto;
           }
 
           .header__actions {
@@ -178,6 +180,33 @@ export class ShadowClawPageHeader extends HTMLElement {
       const title = this.getAttribute("title") || "";
       titleEl.textContent = icon ? `${icon} ${title}` : title;
     }
+
+    this.setupActionsContainer(root);
+  }
+
+  /**
+   * Hide the actions container when no action buttons are slotted.
+   *
+   * @param {ShadowRoot} root
+   */
+  setupActionsContainer(root) {
+    const actionSlot = root.querySelector('slot[name="actions"]');
+    const actions = root.querySelector(".header__actions");
+
+    if (
+      !(actionSlot instanceof HTMLSlotElement) ||
+      !(actions instanceof HTMLElement)
+    ) {
+      return;
+    }
+
+    const updateVisibility = () => {
+      const hasActions = actionSlot.assignedElements().length > 0;
+      actions.hidden = !hasActions;
+    };
+
+    actionSlot.addEventListener("slotchange", updateVisibility);
+    updateVisibility();
   }
 }
 

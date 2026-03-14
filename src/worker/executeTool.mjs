@@ -1,14 +1,46 @@
-import { FETCH_MAX_RESPONSE } from "../config.mjs";
-import { executeShell } from "../shell/shell.mjs";
-import { executeInVM, isVMReady } from "../vm.mjs";
+import {
+  BASH_DEFAULT_TIMEOUT_SEC,
+  BASH_MAX_TIMEOUT_SEC,
+  CONFIG_KEYS,
+  FETCH_MAX_RESPONSE,
+} from "../config.mjs";
+import { getConfig } from "../db/getConfig.mjs";
+import { bootVM, executeInVM, getVMStatus, isVMReady } from "../vm.mjs";
 import { listGroupFiles } from "../storage/listGroupFiles.mjs";
 import { readGroupFile } from "../storage/readGroupFile.mjs";
 import { writeGroupFile } from "../storage/writeGroupFile.mjs";
 import { ulid } from "../ulid.mjs";
-import { formatShellOutput } from "./formatShellOutput.mjs";
 import { pendingTasks } from "./pendingTasks.mjs";
 import { post } from "./post.mjs";
 import { stripHtml } from "./stripHtml.mjs";
+
+const VM_READY_POLL_MS = 50;
+
+/**
+ * Wait until the VM reports ready, or until timeout elapses.
+ *
+ * @param {number} timeoutMs
+ *
+ * @returns {Promise<boolean>}
+ */
+async function waitForVMReady(timeoutMs) {
+  if (isVMReady()) {
+    return true;
+  }
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => {
+      setTimeout(resolve, VM_READY_POLL_MS);
+    });
+
+    if (isVMReady()) {
+      return true;
+    }
+  }
+
+  return isVMReady();
+}
 
 /**
  * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
@@ -28,22 +60,46 @@ export async function executeTool(db, name, input, groupId) {
   try {
     switch (name) {
       case "bash": {
-        const timeoutSec = Math.min(input.timeout || 30, 240);
+        const configuredTimeoutRaw = await getConfig(
+          db,
+          CONFIG_KEYS.VM_BASH_TIMEOUT_SEC,
+        );
+        const configuredTimeout = Number(configuredTimeoutRaw);
+        const defaultTimeoutSec = Number.isFinite(configuredTimeout)
+          ? Math.min(Math.max(configuredTimeout, 1), BASH_MAX_TIMEOUT_SEC)
+          : BASH_DEFAULT_TIMEOUT_SEC;
+
+        const requestedTimeout = Number(input.timeout);
+        const timeoutSec = Number.isFinite(requestedTimeout)
+          ? Math.min(Math.max(requestedTimeout, 1), BASH_MAX_TIMEOUT_SEC)
+          : defaultTimeoutSec;
+
+        if (!isVMReady()) {
+          await bootVM();
+          const status = getVMStatus();
+
+          // Give the eager boot path a chance to finish before returning an error.
+          if (!isVMReady() && status.booting) {
+            await waitForVMReady(Math.min(timeoutSec * 1000, 30_000));
+          }
+        }
 
         if (isVMReady()) {
           return await executeInVM(input.command, timeoutSec, { db, groupId });
         }
 
-        // VM not yet ready — fall back to JS shell emulator
-        const shellResult = await executeShell(
-          db,
-          input.command,
-          groupId,
-          {},
-          timeoutSec,
-        );
+        const status = getVMStatus();
+        const reason = status.error
+          ? `Reason: ${status.error}`
+          : status.booting
+            ? "Reason: WebVM is still booting."
+            : "Reason: WebVM is unavailable.";
 
-        return formatShellOutput(shellResult);
+        return (
+          "Error: bash command was not executed in WebVM.\n" +
+          `${reason}\n` +
+          "To avoid inaccurate results, no fallback shell was used."
+        );
       }
 
       case "read_file":

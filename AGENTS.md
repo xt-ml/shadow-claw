@@ -120,9 +120,9 @@ Node-only packages (Express, Jest, Workbox CLI) belong in `devDependencies`.
 | main → worker | `invoke`              | `InvokePayload`                       |
 | main → worker | `compact`             | `CompactPayload`                      |
 | main → worker | `cancel`              | `{ groupId }` (aborts in-flight task) |
-| main → worker | `vm-terminal-open`    | `{}` (opens interactive terminal)     |
+| main → worker | `vm-terminal-open`    | `{ groupId?: string }` (opens terminal for group workspace) |
 | main → worker | `vm-terminal-input`   | `{ data: string }` (stdin bytes)      |
-| main → worker | `vm-terminal-close`   | `{}` (detaches terminal session)      |
+| main → worker | `vm-terminal-close`   | `{ groupId?: string }` (detaches terminal session) |
 | worker → main | `response`            | `ResponsePayload`                     |
 | worker → main | `error`               | `ErrorPayload`                        |
 | worker → main | `typing`              | `TypingPayload`                       |
@@ -135,6 +135,8 @@ Node-only packages (Express, Jest, Workbox CLI) belong in `devDependencies`.
 | worker → main | `vm-terminal-output`  | `{ data: string }` (stdout bytes)     |
 | worker → main | `vm-terminal-closed`  | `{}`                                  |
 | worker → main | `vm-terminal-error`   | `{ message: string }`                 |
+| worker → main | `vm-workspace-synced` | `{ groupId: string }`                 |
+| worker → main | `show-toast`          | `{ message: string, type?: 'info'|'success'|'warning'|'error', duration?: number }` |
 
 ### IndexedDB
 
@@ -149,19 +151,21 @@ as system context on every agent invocation.
 
 ### WebVM Assets
 
-`src/vm.mjs` expects v86 files under `/assets/v86/` (for example
-`/assets/v86/libv86.mjs`, `/assets/v86/v86.wasm`, and firmware/rootfs files).
-`worker.mjs` eagerly boots the VM on startup using the persisted `CONFIG_KEYS.VM_BOOT_MODE`
-preference. The VM is **worker-owned** — the only non-test runtime imports of `vm.mjs` are
+`src/vm.mjs` resolves assets from `/assets/v86.ext2/` and `/assets/v86.9pfs/` by default,
+with optional host override from `CONFIG_KEYS.VM_BOOT_HOST`.
+`worker.mjs` eagerly boots the VM on startup using persisted preferences (`CONFIG_KEYS.VM_BOOT_MODE`,
+`CONFIG_KEYS.VM_NETWORK_RELAY_URL`, and `CONFIG_KEYS.VM_BOOT_HOST`).
+The VM is **worker-owned** — the only non-test runtime imports of `vm.mjs` are
 `src/worker/handleMessage.mjs` and `src/worker/executeTool.mjs`. The UI terminal component
 (`<shadow-claw-terminal>`) talks to the orchestrator's terminal bridge, never directly to `vm.mjs`.
 
 ### WebVM Exclusivity Guard
 
-`vm.mjs` serializes access between interactive terminal sessions and `bash` tool execution via
-an `activeUsage` lock (`'command' | 'terminal' | null`). If the terminal owns the VM, `bash`
-tool calls receive a clear busy error rather than corrupting the serial stream. Mode changes
-explicitly close any active terminal session and notify the UI before rebooting.
+`vm.mjs` coordinates access between interactive terminal sessions and `bash` tool execution via
+an `activeUsage` lock (`'command' | 'terminal' | null`). When a command runs during an active
+terminal session, terminal output is temporarily suspended, command execution completes, and
+terminal streaming resumes. Mode changes still close active terminal sessions and notify the UI
+before rebooting.
 
 ### Request Cancellation
 

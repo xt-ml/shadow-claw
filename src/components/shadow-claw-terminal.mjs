@@ -1,4 +1,7 @@
+import { orchestratorStore } from "../stores/orchestrator.mjs";
+
 const MAX_OUTPUT_LENGTH = 80_000;
+const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 12;
 
 export class ShadowClawTerminal extends HTMLElement {
   constructor() {
@@ -26,6 +29,16 @@ export class ShadowClawTerminal extends HTMLElement {
     };
     /** @type {boolean} */
     this.connectedToWorkerTerminal = false;
+    /** @type {boolean} */
+    this.terminalAttachRequested = false;
+    /** @type {boolean} */
+    this.autoScrollEnabled = true;
+    /** @type {boolean} */
+    this.isApplyingAutoScroll = false;
+    /** @type {number|null} */
+    this.pendingAutoScrollFrame = null;
+    /** @type {ResizeObserver|null} */
+    this.screenResizeObserver = null;
   }
 
   static getTemplate() {
@@ -267,15 +280,25 @@ export class ShadowClawTerminal extends HTMLElement {
     this.render();
     this.renderOutput();
     this.bindEventListeners();
+    this.bindResizeObserver();
     this.connectOrchestrator();
     void this.startTerminal();
   }
 
   disconnectedCallback() {
+    if (this.pendingAutoScrollFrame !== null) {
+      cancelAnimationFrame(this.pendingAutoScrollFrame);
+      this.pendingAutoScrollFrame = null;
+    }
+
+    this.screenResizeObserver?.disconnect();
+    this.screenResizeObserver = null;
+
     this.cleanups.forEach((cleanup) => cleanup());
     this.cleanups = [];
     this.connectedToWorkerTerminal = false;
-    this.orchestrator?.closeTerminalSession?.();
+    this.terminalAttachRequested = false;
+    this.orchestrator?.closeTerminalSession?.(orchestratorStore.activeGroupId);
   }
 
   connectOrchestrator() {
@@ -287,6 +310,12 @@ export class ShadowClawTerminal extends HTMLElement {
     const statusListener = (status) => {
       this.vmStatus = status;
       this.updateStatus(status);
+
+      // After VM mode switches, the old terminal session is closed. Re-open
+      // the bridge once the new VM reports ready.
+      if (status.ready && !this.connectedToWorkerTerminal) {
+        this.attachSession();
+      }
     };
     /** @param {{chunk: string}} payload */
     const outputListener = ({ chunk }) => {
@@ -296,6 +325,7 @@ export class ShadowClawTerminal extends HTMLElement {
     };
     const openedListener = () => {
       this.connectedToWorkerTerminal = true;
+      this.terminalAttachRequested = false;
       this.updateStatus(this.vmStatus);
 
       if (!this.outputBuffer) {
@@ -306,11 +336,13 @@ export class ShadowClawTerminal extends HTMLElement {
     };
     const closedListener = () => {
       this.connectedToWorkerTerminal = false;
+      this.terminalAttachRequested = false;
       this.updateStatus(this.vmStatus);
     };
     /** @param {{error: string}} payload */
     const errorListener = ({ error }) => {
       this.connectedToWorkerTerminal = false;
+      this.terminalAttachRequested = false;
       this.vmStatus = {
         ...this.vmStatus,
         error: typeof error === "string" ? error : "WebVM terminal error",
@@ -379,6 +411,29 @@ export class ShadowClawTerminal extends HTMLElement {
         const input = this.getInput();
         input?.focus();
       });
+
+    root
+      .querySelector('[data-role="screen"]')
+      ?.addEventListener("scroll", () => this.handleScreenScroll());
+  }
+
+  bindResizeObserver() {
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const screen = this.getScreen();
+    if (!screen) {
+      return;
+    }
+
+    this.screenResizeObserver = new ResizeObserver(() => {
+      if (this.autoScrollEnabled) {
+        this.scheduleAutoScroll();
+      }
+    });
+
+    this.screenResizeObserver.observe(screen);
   }
 
   async startTerminal() {
@@ -406,7 +461,7 @@ export class ShadowClawTerminal extends HTMLElement {
 
     if (!this.bootRequested) {
       this.bootRequested = true;
-      this.orchestrator.openTerminalSession();
+      this.attachSession();
     }
 
     if (!this.isConnected || !this.connectedToWorkerTerminal) {
@@ -418,11 +473,17 @@ export class ShadowClawTerminal extends HTMLElement {
   }
 
   attachSession() {
-    if (this.connectedToWorkerTerminal) {
+    if (this.connectedToWorkerTerminal || this.terminalAttachRequested) {
       return;
     }
 
-    this.orchestrator?.openTerminalSession?.();
+    // Fresh boot attach should start with a clean terminal viewport.
+    if (!this.vmStatus.ready) {
+      this.clearOutput();
+    }
+
+    this.terminalAttachRequested = true;
+    this.orchestrator?.openTerminalSession?.(orchestratorStore.activeGroupId);
   }
 
   runCommand() {
@@ -444,6 +505,7 @@ export class ShadowClawTerminal extends HTMLElement {
   clearOutput() {
     this.outputBuffer = "";
     this.pendingEscape = "";
+    this.autoScrollEnabled = true;
     this.renderOutput();
   }
 
@@ -482,7 +544,51 @@ export class ShadowClawTerminal extends HTMLElement {
     }
 
     output.textContent = this.outputBuffer;
+
+    if (this.autoScrollEnabled) {
+      this.scheduleAutoScroll();
+    }
+  }
+
+  handleScreenScroll() {
+    if (this.isApplyingAutoScroll) {
+      return;
+    }
+
+    const screen = this.getScreen();
+    if (!screen) {
+      return;
+    }
+
+    this.autoScrollEnabled = isNearBottom(screen);
+  }
+
+  scheduleAutoScroll() {
+    if (this.pendingAutoScrollFrame !== null) {
+      cancelAnimationFrame(this.pendingAutoScrollFrame);
+    }
+
+    this.pendingAutoScrollFrame = requestAnimationFrame(() => {
+      this.pendingAutoScrollFrame = null;
+      this.scrollScreenToBottom();
+    });
+  }
+
+  scrollScreenToBottom() {
+    const screen = this.getScreen();
+    if (!screen) {
+      return;
+    }
+
+    this.isApplyingAutoScroll = true;
     screen.scrollTop = screen.scrollHeight;
+    this.isApplyingAutoScroll = false;
+    this.autoScrollEnabled = isNearBottom(screen);
+  }
+
+  getScreen() {
+    const screen = this.shadowRoot?.querySelector('[data-role="screen"]');
+    return screen instanceof HTMLElement ? screen : null;
   }
 
   /**
@@ -513,7 +619,7 @@ export class ShadowClawTerminal extends HTMLElement {
       statusEl.dataset.state = "ready";
       statusEl.textContent = this.connectedToWorkerTerminal
         ? "Connected to Alpine WebVM"
-        : "WebVM ready";
+        : "WebVM ready. Connecting terminal...";
     } else if (status.error) {
       statusEl.dataset.state = "error";
       statusEl.textContent = `WebVM unavailable: ${status.error}`;
@@ -529,9 +635,11 @@ export class ShadowClawTerminal extends HTMLElement {
       input.placeholder =
         status.ready && this.connectedToWorkerTerminal
           ? "Type a shell command"
-          : status.error
-            ? "WebVM unavailable"
-            : "Booting WebVM...";
+          : status.ready
+            ? "Connecting to WebVM terminal..."
+            : status.error
+              ? "WebVM unavailable"
+              : "Booting WebVM...";
     }
 
     runButton.disabled = !(status.ready && this.connectedToWorkerTerminal);
@@ -547,6 +655,18 @@ export class ShadowClawTerminal extends HTMLElement {
 }
 
 customElements.define("shadow-claw-terminal", ShadowClawTerminal);
+
+/**
+ * @param {HTMLElement} screen
+ *
+ * @returns {boolean}
+ */
+function isNearBottom(screen) {
+  const distanceToBottom =
+    screen.scrollHeight - (screen.scrollTop + screen.clientHeight);
+
+  return distanceToBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
+}
 
 /**
  * Apply minimal terminal control character handling to the visible buffer.
@@ -603,7 +723,32 @@ function normalizeTerminalText(current, chunk, pendingEscape = "") {
     next += char;
   }
 
+  // Drop internal command protocol noise used by VM command execution.
+  next = stripInternalVMNoise(next);
+
   return { text: next, pending: "" };
+}
+
+/**
+ * Remove internal WebVM control markers and setup command echoes from the
+ * visible terminal output. These are implementation details, not user output.
+ *
+ * @param {string} text
+ *
+ * @returns {string}
+ */
+function stripInternalVMNoise(text) {
+  const withoutInternalCommandEcho = text.replace(
+    /(?:^|\n)[^\n]*mkdir -p \/workspace 2>&1; echo "?__BCDONE_\d+__\$\?"?[^\n]*(?:\n|$)/g,
+    "\n",
+  );
+
+  const withoutMarkers = withoutInternalCommandEcho.replace(
+    /(?:^|\n)\s*__BCDONE_\d+__(?:\d+|\$\?)?\s*(?:\n|$)/g,
+    "\n",
+  );
+
+  return withoutMarkers.replace(/^\n+(?=\S)/, "");
 }
 
 /**

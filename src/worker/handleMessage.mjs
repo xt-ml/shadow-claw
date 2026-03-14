@@ -1,10 +1,18 @@
 import { openDatabase } from "../db/openDatabase.mjs";
 import { setStorageRoot } from "../storage/storage.mjs";
+import { DEFAULT_GROUP_ID } from "../config.mjs";
 import {
+  attachTerminalWorkspaceAutoSync,
   bootVM,
   createTerminalSession,
+  flushVMWorkspaceToHost,
+  getVMBootModePreference,
   getVMStatus,
+  setVMBootHostPreference,
   setVMBootModePreference,
+  setVMNetworkRelayURLPreference,
+  subscribeVMBootOutput,
+  syncVMWorkspaceFromHost,
   shutdownVM,
 } from "../vm.mjs";
 import { handleCompact } from "./handleCompact.mjs";
@@ -18,6 +26,15 @@ const inFlightControllers = new Map();
 /** @type {import("../vm.mjs").VMTerminalSession|null} */
 let activeTerminalSession = null;
 
+/** @type {string} */
+let activeTerminalGroupId = DEFAULT_GROUP_ID;
+
+/** @type {(() => void)|null} */
+let detachTerminalWorkspaceAutoSync = null;
+
+/** @type {boolean} */
+let terminalSyncWarningShown = false;
+
 /**
  * @returns {boolean}
  */
@@ -26,8 +43,12 @@ function closeTerminalSession() {
     return false;
   }
 
+  detachTerminalWorkspaceAutoSync?.();
+  detachTerminalWorkspaceAutoSync = null;
+
   activeTerminalSession.close();
   activeTerminalSession = null;
+  terminalSyncWarningShown = false;
   return true;
 }
 
@@ -102,21 +123,45 @@ export async function handleMessage(event) {
       break;
     case "set-vm-mode": {
       const mode = payload?.mode;
-      if (
+      const hasMode =
         mode === "disabled" ||
         mode === "auto" ||
         mode === "9p" ||
-        mode === "ext2"
-      ) {
+        mode === "ext2";
+
+      const hasBootHost = Object.prototype.hasOwnProperty.call(
+        payload || {},
+        "bootHost",
+      );
+
+      const hasNetworkRelayUrl = Object.prototype.hasOwnProperty.call(
+        payload || {},
+        "networkRelayUrl",
+      );
+
+      if (hasMode || hasBootHost || hasNetworkRelayUrl) {
         const sessionWasClosed = closeTerminalSession();
         if (sessionWasClosed) {
           post({ type: "vm-terminal-closed", payload: { ok: true } });
         }
 
-        setVMBootModePreference(mode);
+        if (hasMode) {
+          setVMBootModePreference(mode);
+        }
+
+        if (hasBootHost) {
+          setVMBootHostPreference(payload?.bootHost);
+        }
+
+        if (hasNetworkRelayUrl) {
+          setVMNetworkRelayURLPreference(payload?.networkRelayUrl);
+        }
+
+        const effectiveMode = hasMode ? mode : getVMBootModePreference();
+
         await shutdownVM();
 
-        if (mode !== "disabled") {
+        if (effectiveMode !== "disabled") {
           await bootVM().catch((err) => {
             console.warn("[WebVM] Reboot after mode change failed:", err);
           });
@@ -126,15 +171,34 @@ export async function handleMessage(event) {
       break;
     }
     case "vm-terminal-open": {
+      const groupId =
+        typeof payload?.groupId === "string" && payload.groupId
+          ? payload.groupId
+          : DEFAULT_GROUP_ID;
+
+      /** @type {(() => void)|null} */
+      let detachBootOutput = null;
+
       if (activeTerminalSession) {
+        activeTerminalGroupId = groupId;
         post({ type: "vm-terminal-opened", payload: { ok: true } });
         break;
       }
 
       if (!getVMStatus().ready) {
+        detachBootOutput = subscribeVMBootOutput((chunk) => {
+          post({
+            type: "vm-terminal-output",
+            payload: { chunk },
+          });
+        });
+
         await bootVM().catch((err) => {
           console.warn("[WebVM] Terminal boot failed:", err);
         });
+
+        detachBootOutput?.();
+        detachBootOutput = null;
       }
 
       const status = getVMStatus();
@@ -149,13 +213,51 @@ export async function handleMessage(event) {
       }
 
       try {
+        const context = { db, groupId };
+        activeTerminalGroupId = groupId;
+
         activeTerminalSession = createTerminalSession((chunk) => {
           post({
             type: "vm-terminal-output",
             payload: { chunk },
           });
         });
+
         post({ type: "vm-terminal-opened", payload: { ok: true } });
+
+        syncVMWorkspaceFromHost(context)
+          .then(() =>
+            post({
+              type: "vm-workspace-synced",
+              payload: { groupId },
+            }),
+          )
+          .catch((err) => {
+            console.warn("[WebVM] Failed to sync host workspace into VM:", err);
+
+            if (!terminalSyncWarningShown) {
+              terminalSyncWarningShown = true;
+              post({
+                type: "show-toast",
+                payload: {
+                  message:
+                    "WebVM terminal connected, but workspace sync failed. File changes may not appear until the next sync.",
+                  type: "warning",
+                  duration: 5000,
+                },
+              });
+            }
+          });
+
+        detachTerminalWorkspaceAutoSync = attachTerminalWorkspaceAutoSync(
+          context,
+          () => {
+            post({
+              type: "vm-workspace-synced",
+              payload: { groupId },
+            });
+          },
+        );
       } catch (err) {
         post({
           type: "vm-terminal-error",
@@ -184,7 +286,24 @@ export async function handleMessage(event) {
       break;
     }
     case "vm-terminal-close": {
+      const groupId =
+        typeof payload?.groupId === "string" && payload.groupId
+          ? payload.groupId
+          : activeTerminalGroupId;
+
       closeTerminalSession();
+      // Sync files the user may have written directly in the terminal back
+      // to the host workspace so the Files panel reflects them.
+      flushVMWorkspaceToHost({ db, groupId })
+        .then(() => {
+          post({
+            type: "vm-workspace-synced",
+            payload: { groupId },
+          });
+        })
+        .catch(() => {
+          /* ignore */
+        });
       post({ type: "vm-terminal-closed", payload: { ok: true } });
       break;
     }

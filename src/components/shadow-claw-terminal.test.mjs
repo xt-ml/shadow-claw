@@ -47,9 +47,34 @@ function createOrchestratorStub(initialStatus) {
 }
 
 describe("shadow-claw-terminal", () => {
+  /** @type {typeof globalThis.requestAnimationFrame|undefined} */
+  let originalRequestAnimationFrame;
+  /** @type {typeof globalThis.cancelAnimationFrame|undefined} */
+  let originalCancelAnimationFrame;
+
   beforeEach(() => {
     jest.clearAllMocks();
     document.body.innerHTML = "";
+
+    originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+
+    globalThis.requestAnimationFrame = (callback) => {
+      callback(0);
+      return 1;
+    };
+
+    globalThis.cancelAnimationFrame = () => {};
+  });
+
+  afterEach(() => {
+    if (originalRequestAnimationFrame) {
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+    }
+
+    if (originalCancelAnimationFrame) {
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
   });
 
   it("registers the custom element", () => {
@@ -194,5 +219,176 @@ describe("shadow-claw-terminal", () => {
     });
     orchestrator.events.emit("vm-terminal-output", { chunk: "6nfind /\n" });
     expect(output?.textContent).toBe("(none):~# find /\n");
+  });
+
+  it("drops internal WebVM completion markers from visible output", async () => {
+    const orchestrator = createOrchestratorStub({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+
+    const element = new ShadowClawTerminal();
+    element.orchestrator = orchestrator;
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    orchestrator.events.emit("vm-terminal-output", {
+      chunk: "echo hi\n__BCDONE_1773436232041__0\n",
+    });
+
+    const output = element.shadowRoot?.querySelector('[data-role="output"]');
+    expect(output?.textContent).toBe("echo hi\n");
+  });
+
+  it("drops internal WebVM bootstrap command echo noise", async () => {
+    const orchestrator = createOrchestratorStub({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+
+    const element = new ShadowClawTerminal();
+    element.orchestrator = orchestrator;
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    orchestrator.events.emit("vm-terminal-output", {
+      chunk:
+        'localhost:~# mkdir -p /workspace 2>&1; echo "__BCDONE_1773440632906__$?"\n',
+    });
+    orchestrator.events.emit("vm-terminal-output", {
+      chunk: "__BCDONE_1773440632906__0\nlocalhost:~# ",
+    });
+
+    const output = element.shadowRoot?.querySelector('[data-role="output"]');
+    expect(output?.textContent).toBe("localhost:~# ");
+  });
+
+  it("reconnects terminal after mode switch closes previous session", async () => {
+    const orchestrator = createOrchestratorStub({
+      ready: false,
+      booting: true,
+      bootAttempted: true,
+      error: null,
+    });
+
+    const element = new ShadowClawTerminal();
+    element.orchestrator = orchestrator;
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Simulate mode switch closing the current terminal bridge.
+    orchestrator.events.emit("vm-terminal-closed", { ok: true });
+
+    // New VM boots and reports ready; component should auto-attach again.
+    orchestrator.events.emit("vm-status", {
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+
+    expect(orchestrator.openTerminalSession).toHaveBeenCalledTimes(2);
+
+    const status = element.shadowRoot?.querySelector('[data-role="status"]');
+    const input = element.shadowRoot?.querySelector('[data-role="input"]');
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Expected terminal input");
+    }
+
+    expect(status?.textContent).toContain("Connected to Alpine WebVM");
+    expect(input.disabled).toBe(false);
+    expect(input.placeholder).toBe("Type a shell command");
+  });
+
+  it("keeps auto-scrolling while output arrives when user stays at bottom", async () => {
+    const orchestrator = createOrchestratorStub({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+
+    const element = new ShadowClawTerminal();
+    element.orchestrator = orchestrator;
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const screen = element.shadowRoot?.querySelector('[data-role="screen"]');
+    if (!(screen instanceof HTMLElement)) {
+      throw new Error("Expected terminal screen");
+    }
+
+    Object.defineProperty(screen, "clientHeight", {
+      configurable: true,
+      value: 120,
+    });
+    Object.defineProperty(screen, "scrollHeight", {
+      configurable: true,
+      get() {
+        return 600;
+      },
+    });
+
+    screen.scrollTop = 480;
+
+    orchestrator.events.emit("vm-terminal-output", { chunk: "line 1\n" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(screen.scrollTop).toBe(600);
+  });
+
+  it("pauses auto-scroll when user scrolls up and resumes when they return to bottom", async () => {
+    const orchestrator = createOrchestratorStub({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+
+    const element = new ShadowClawTerminal();
+    element.orchestrator = orchestrator;
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const screen = element.shadowRoot?.querySelector('[data-role="screen"]');
+    if (!(screen instanceof HTMLElement)) {
+      throw new Error("Expected terminal screen");
+    }
+
+    Object.defineProperty(screen, "clientHeight", {
+      configurable: true,
+      value: 120,
+    });
+
+    let scrollHeightValue = 600;
+    Object.defineProperty(screen, "scrollHeight", {
+      configurable: true,
+      get() {
+        return scrollHeightValue;
+      },
+    });
+
+    // User manually scrolls away from the bottom.
+    screen.scrollTop = 120;
+    screen.dispatchEvent(new Event("scroll"));
+
+    // New output should not force scroll while user is browsing history.
+    scrollHeightValue = 700;
+    orchestrator.events.emit("vm-terminal-output", { chunk: "line 1\n" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.scrollTop).toBe(120);
+
+    // User returns to bottom; auto-scroll should resume for subsequent output.
+    screen.scrollTop = 580;
+    screen.dispatchEvent(new Event("scroll"));
+
+    scrollHeightValue = 760;
+    orchestrator.events.emit("vm-terminal-output", { chunk: "line 2\n" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.scrollTop).toBe(760);
   });
 });

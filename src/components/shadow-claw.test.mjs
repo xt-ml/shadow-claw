@@ -323,8 +323,12 @@ describe("shadow-claw", () => {
       const select = component.shadowRoot?.querySelector(
         '[data-setting="vm-boot-mode-select"]',
       );
+      const timeoutInput = component.shadowRoot?.querySelector(
+        '[data-setting="vm-bash-timeout-input"]',
+      );
 
       expect(select).toHaveProperty("value", "disabled");
+      expect(timeoutInput).toHaveProperty("value", "900");
     } finally {
       globalThis.matchMedia = originalMatchMedia;
     }

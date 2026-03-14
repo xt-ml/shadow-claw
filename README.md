@@ -67,7 +67,7 @@ sequenceDiagram
 | `src/worker/executeTool.mjs`         | Tool execution logic for the agent worker                          |
 | `src/tools.mjs`                      | Tool schema definitions sent to the LLM                            |
 | `src/shell/shell.mjs`                | Pure-JS bash-like shell emulator (OPFS filesystem)                 |
-| `src/vm.mjs`                         | Optional v86 Alpine Linux VM (falls back to JS shell)              |
+| `src/vm.mjs`                         | v86 Alpine Linux VM for `bash` tool execution + terminal bridge     |
 | `src/db/db.mjs`                      | IndexedDB layer — messages, sessions, tasks, config                |
 | `src/storage/storage.mjs`            | OPFS + Local Folder file storage, zip export/import                |
 | `src/storage/readGroupFileBytes.mjs` | Reads raw file bytes (used for binary previews like PDFs)          |
@@ -96,7 +96,7 @@ sequenceDiagram
 
 | Tool                                                         | What it does                                                     |
 | ------------------------------------------------------------ | ---------------------------------------------------------------- |
-| `bash`                                                       | Shell commands — JS emulator or full Alpine VM if assets present |
+| `bash`                                                       | Shell commands executed in worker-owned WebVM (no JS fallback)   |
 | `javascript`                                                 | Run JS in an isolated `Function` scope — no DOM, no network      |
 | `read_file` / `write_file` / `list_files`                    | OPFS workspace file I/O                                          |
 | `open_file`                                                  | Opens a workspace file directly in the UI file viewer dialog     |
@@ -125,23 +125,27 @@ graph LR
   config -->|AES-256-GCM encrypted| ApiKey["🔑 API Key"]
 ```
 
-## WebVM (Optional `bash` Backend)
+## WebVM (`bash` Backend)
 
-The `bash` tool has two execution tiers:
+`bash` tool calls execute only in the worker-owned WebVM. If WebVM is unavailable,
+the tool returns an explicit error instead of falling back to a JS shell emulator.
 
-1. **JS Shell Emulator** (`src/shell/shell.mjs`) — always available, no assets needed.
-   Implements ~40 Unix commands (`cat`, `grep`, `sed`, `awk`, `jq`, `ls`, `mkdir`, `rm -rf`, etc.)
-   against OPFS. Supports pipes, redirects (including `/dev/null` and `2>&1`), `&&`/`||`, variable expansion, command substitution.
+`worker.mjs` eagerly boots WebVM on startup using persisted VM settings:
 
-2. **v86 Alpine Linux VM** — full x86 Linux in WebAssembly. The VM is **worker-owned**:
-  `worker.mjs` eagerly boots it on startup using the persisted `CONFIG_KEYS.VM_BOOT_MODE`
-  setting. The `<shadow-claw-terminal>` component provides an interactive terminal via
-  the orchestrator's terminal bridge; `bash` tool execution and the interactive terminal
-  are serialized by an exclusivity lock in `vm.mjs` to prevent serial-stream corruption.
+1. `CONFIG_KEYS.VM_BOOT_MODE` (`disabled` | `auto` | `ext2` | `9p`)
+2. `CONFIG_KEYS.VM_BASH_TIMEOUT_SEC` (default timeout for `bash` tool calls)
+3. `CONFIG_KEYS.VM_BOOT_HOST` (optional HTTP(S) host override for VM assets)
+4. `CONFIG_KEYS.VM_NETWORK_RELAY_URL` (ws/wss relay for VM networking)
 
-  VM assets are expected under `/assets/v86/`.
+The `<shadow-claw-terminal>` component uses orchestrator terminal bridge APIs.
+Interactive terminal sessions and tool-driven `bash` execution are coordinated in
+`vm.mjs` so command execution can temporarily suspend terminal output and then resume
+cleanly. In 9p mode, terminal and command activity sync `/workspace` changes back to
+OPFS so the Files view stays up to date.
 
-  Serve these files under `/assets/v86/` to enable:
+VM assets are expected under `/assets/v86.ext2/` and `/assets/v86.9pfs/`.
+
+Serve these files (under `/assets/v86.ext2/`) to enable ext2 boot:
 
   | File                          | Description                  |
   | ----------------------------- | ---------------------------- |

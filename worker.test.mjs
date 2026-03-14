@@ -8,14 +8,21 @@ describe("worker.mjs and src/worker/agent.mjs", () => {
   beforeAll(async () => {
     // Mock the dependencies that agent.mjs imports
     jest.unstable_mockModule("./src/config.mjs", () => ({
+      BASH_DEFAULT_TIMEOUT_SEC: 120,
+      BASH_MAX_TIMEOUT_SEC: 1800,
       CONFIG_KEYS: {
         PROVIDER: "provider",
         API_KEY: "api_key",
         MODEL: "model",
         MAX_TOKENS: "max_tokens",
         VM_BOOT_MODE: "vm_boot_mode",
+        VM_BOOT_HOST: "vm_boot_host",
+        VM_NETWORK_RELAY_URL: "vm_network_relay_url",
+        VM_BASH_TIMEOUT_SEC: "vm_bash_timeout_sec",
       },
+      DEFAULT_GROUP_ID: "br:main",
       FETCH_MAX_RESPONSE: 1000,
+      DEFAULT_VM_BOOT_HOST: "https://xt-ml.github.io/v86",
       getProvider: jest.fn(),
     }));
 
@@ -28,15 +35,23 @@ describe("worker.mjs and src/worker/agent.mjs", () => {
     }));
 
     jest.unstable_mockModule("./src/vm.mjs", () => ({
+      attachTerminalWorkspaceAutoSync: jest.fn(),
       bootVM: jest.fn(),
       createTerminalSession: jest.fn(),
       executeInVM: jest.fn(),
+      flushVMWorkspaceToHost: jest.fn(),
       getVMBootModePreference: jest.fn(),
+      getVMBootHostPreference: jest.fn(),
+      getVMNetworkRelayURLPreference: jest.fn(),
       getVMStatus: jest.fn(),
       isVMReady: jest.fn(),
+      setVMBootHostPreference: jest.fn(),
       setVMBootModePreference: jest.fn(),
+      setVMNetworkRelayURLPreference: jest.fn(),
       shutdownVM: jest.fn(),
+      subscribeVMBootOutput: jest.fn(),
       subscribeVMStatus: jest.fn(),
+      syncVMWorkspaceFromHost: jest.fn(),
     }));
 
     jest.unstable_mockModule("./src/providers.mjs", () => ({
@@ -155,41 +170,39 @@ describe("worker.mjs and src/worker/agent.mjs", () => {
         postMessage: postMessageSpy,
       };
 
-      // Mock openDatabase failure or success is fine, let's just mock it to return a dummy db
-      const { openDatabase } = await import("./src/db/openDatabase.mjs");
-      const { getProvider } = await import("./src/config.mjs");
-      openDatabase.mockResolvedValueOnce({});
-      getProvider.mockReturnValueOnce({
-        name: "test-provider",
-        baseUrl: "http://test",
-      });
+      try {
+        // Mock openDatabase failure or success is fine, let's just mock it to return a dummy db
+        const { openDatabase } = await import("./src/db/openDatabase.mjs");
+        openDatabase.mockResolvedValueOnce({});
 
-      // Call handleMessage directly
-      await agentModule.handleMessage({
-        data: {
-          type: "invoke",
-          payload: {
-            groupId: "test-group",
-            messages: [],
-            systemPrompt: "test prompt",
-            apiKey: "test-key",
-            model: "test-model",
-            maxTokens: 100,
-            provider: "test-provider",
+        // Call handleMessage directly
+        await agentModule.handleMessage({
+          data: {
+            type: "invoke",
+            payload: {
+              groupId: "test-group",
+              messages: [],
+              systemPrompt: "test prompt",
+              apiKey: "test-key",
+              model: "test-model",
+              maxTokens: 100,
+              provider: "test-provider",
+            },
           },
-        },
-      });
+        });
 
-      // Verify that at least some message was posted
-      // (Starting with 'typing' and then 'error' since test-provider is unknown)
-      expect(postMessageSpy).toHaveBeenCalled();
-      expect(postMessageSpy).toHaveBeenCalledWith(
-        expect.objectContaining({
-          type: "typing",
-        }),
-      );
-
-      delete global.self;
+        expect(postMessageSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: "error",
+            payload: expect.objectContaining({
+              groupId: "test-group",
+              error: "Unknown provider: test-provider",
+            }),
+          }),
+        );
+      } finally {
+        delete global.self;
+      }
     });
   });
 

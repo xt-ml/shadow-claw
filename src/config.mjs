@@ -31,6 +31,21 @@ export const PROCESS_LOOP_INTERVAL = 100;
 /** Fetch tool response truncation limit */
 export const FETCH_MAX_RESPONSE = 20_000;
 
+/** Default bash tool timeout in WebVM (seconds) */
+export const BASH_DEFAULT_TIMEOUT_SEC = 900;
+
+/** Max bash tool timeout in WebVM (seconds) */
+export const BASH_MAX_TIMEOUT_SEC = 1_800;
+
+/** Default VM network relay URL */
+export const DEFAULT_VM_NETWORK_RELAY_URL = "wss://relay.widgetry.org/";
+
+/**
+ * Default hosted WebVM asset root used by Settings and worker startup when
+ * vm_boot_host has never been configured.
+ */
+export const DEFAULT_VM_BOOT_HOST = "https://xt-ml.github.io/v86";
+
 /** IndexedDB database name */
 export const DB_NAME = "shadowclaw";
 
@@ -168,6 +183,9 @@ export const CONFIG_KEYS = {
   GIT_AUTHOR_EMAIL: "git_author_email",
   GIT_CORS_PROXY: "git_cors_proxy",
   VM_BOOT_MODE: "vm_boot_mode",
+  VM_BOOT_HOST: "vm_boot_host",
+  VM_NETWORK_RELAY_URL: "vm_network_relay_url",
+  VM_BASH_TIMEOUT_SEC: "vm_bash_timeout_sec",
 };
 
 /** Default dev server host */

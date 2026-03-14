@@ -232,7 +232,9 @@
  *   | { type: 'vm-terminal-opened'; payload: { ok: true } }
  *   | { type: 'vm-terminal-output'; payload: VMTerminalOutputPayload }
  *   | { type: 'vm-terminal-closed'; payload: { ok: true } }
+ *   | { type: 'vm-workspace-synced'; payload: { groupId: string } }
  *   | { type: 'vm-terminal-error'; payload: VMTerminalErrorPayload }
+ *   | { type: 'show-toast'; payload: { message: string, type?: 'info'|'success'|'warning'|'error', duration?: number } }
  * } WorkerOutbound
  */
 
@@ -241,10 +243,10 @@
  *   | { type: 'invoke'; payload: InvokePayload }
  *   | { type: 'cancel'; payload: { groupId: string } }
  *   | { type: 'compact'; payload: CompactPayload }
- *   | { type: 'set-vm-mode'; payload: { mode: 'disabled'|'auto'|'9p'|'ext2' } }
- *   | { type: 'vm-terminal-open'; payload?: undefined }
+ *   | { type: 'set-vm-mode'; payload: { mode?: 'disabled'|'auto'|'9p'|'ext2', bootHost?: string, networkRelayUrl?: string } }
+ *   | { type: 'vm-terminal-open'; payload?: { groupId?: string } }
  *   | { type: 'vm-terminal-input'; payload: { data: string } }
- *   | { type: 'vm-terminal-close'; payload?: undefined }
+ *   | { type: 'vm-terminal-close'; payload?: { groupId?: string } }
  * } WorkerInbound
  */
 

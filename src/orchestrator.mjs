@@ -397,6 +397,56 @@ export class Orchestrator {
   }
 
   /**
+   * Update preferred VM boot host and notify worker.
+   * Empty string means use deployment default.
+   *
+   * @param {ShadowClawDatabase} db
+   * @param {string} bootHost
+   *
+   * @returns {Promise<void>}
+   */
+  async setVMBootHost(db, bootHost) {
+    const normalized = typeof bootHost === "string" ? bootHost.trim() : "";
+
+    await setConfig(db, CONFIG_KEYS.VM_BOOT_HOST, normalized);
+    this.agentWorker?.postMessage({
+      type: "set-vm-mode",
+      payload: { bootHost: normalized },
+    });
+  }
+
+  /**
+   * Update VM network relay URL and notify worker.
+   *
+   * @param {ShadowClawDatabase} db
+   * @param {string} relayUrl
+   *
+   * @returns {Promise<void>}
+   */
+  async setVMNetworkRelayURL(db, relayUrl) {
+    const normalized = typeof relayUrl === "string" ? relayUrl.trim() : "";
+
+    await setConfig(db, CONFIG_KEYS.VM_NETWORK_RELAY_URL, normalized);
+    this.agentWorker?.postMessage({
+      type: "set-vm-mode",
+      payload: { networkRelayUrl: normalized },
+    });
+  }
+
+  /**
+   * Update default WebVM bash timeout.
+   *
+   * @param {ShadowClawDatabase} db
+   * @param {number} timeoutSec
+   *
+   * @returns {Promise<void>}
+   */
+  async setVMBashTimeout(db, timeoutSec) {
+    const normalized = Math.min(Math.max(Math.floor(timeoutSec), 1), 1800);
+    await setConfig(db, CONFIG_KEYS.VM_BASH_TIMEOUT_SEC, String(normalized));
+  }
+
+  /**
    * @returns {import('./vm.mjs').VMStatus}
    */
   getVMStatus() {
@@ -404,14 +454,20 @@ export class Orchestrator {
   }
 
   /**
+   * @param {string} [groupId]
+   *
    * @returns {void}
    */
-  openTerminalSession() {
-    this.agentWorker?.postMessage({ type: "vm-terminal-open" });
+  openTerminalSession(groupId = DEFAULT_GROUP_ID) {
+    this.agentWorker?.postMessage({
+      type: "vm-terminal-open",
+      payload: { groupId },
+    });
   }
 
   /**
    * @param {string} data
+   *
    * @returns {void}
    */
   sendTerminalInput(data) {
@@ -422,10 +478,15 @@ export class Orchestrator {
   }
 
   /**
+   * @param {string} [groupId]
+   *
    * @returns {void}
    */
-  closeTerminalSession() {
-    this.agentWorker?.postMessage({ type: "vm-terminal-close" });
+  closeTerminalSession(groupId = DEFAULT_GROUP_ID) {
+    this.agentWorker?.postMessage({
+      type: "vm-terminal-close",
+      payload: { groupId },
+    });
   }
 
   /**
@@ -848,6 +909,12 @@ export class Orchestrator {
 
       case "vm-terminal-closed": {
         this.events.emit("vm-terminal-closed", msg.payload);
+
+        break;
+      }
+
+      case "vm-workspace-synced": {
+        this.events.emit("file-change", { groupId: msg.payload?.groupId });
 
         break;
       }

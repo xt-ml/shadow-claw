@@ -2,8 +2,10 @@ import { jest } from "@jest/globals";
 
 describe("executeTool.mjs", () => {
   let executeTool;
-  let mockExecuteShell;
-  let mockFormatShellOutput;
+  let mockBootVM;
+  let mockExecuteInVM;
+  let mockGetVMStatus;
+  let mockIsVMReady;
   let mockListGroupFiles;
   let mockPendingTasks;
   let mockPost;
@@ -31,8 +33,15 @@ describe("executeTool.mjs", () => {
   beforeEach(async () => {
     jest.resetModules();
 
-    mockExecuteShell = jest.fn();
-    mockFormatShellOutput = jest.fn((res) => `formatted: ${res}`);
+    mockBootVM = jest.fn();
+    mockExecuteInVM = jest.fn();
+    mockGetVMStatus = jest.fn(() => ({
+      ready: false,
+      booting: false,
+      bootAttempted: true,
+      error: "WebVM unavailable",
+    }));
+    mockIsVMReady = jest.fn(() => true);
     mockListGroupFiles = jest.fn();
     mockPendingTasks = new Map();
     mockPost = jest.fn();
@@ -58,6 +67,8 @@ describe("executeTool.mjs", () => {
     mockSyncOpfsToLfs = jest.fn();
 
     jest.unstable_mockModule("../config.mjs", () => ({
+      BASH_DEFAULT_TIMEOUT_SEC: 120,
+      BASH_MAX_TIMEOUT_SEC: 1800,
       FETCH_MAX_RESPONSE: 1000,
       OPFS_ROOT: "shadowclaw",
       CONFIG_KEYS: {
@@ -65,6 +76,7 @@ describe("executeTool.mjs", () => {
         GIT_CORS_PROXY: "git-cors-proxy",
         GIT_AUTHOR_NAME: "git-author-name",
         GIT_AUTHOR_EMAIL: "git-author-email",
+        VM_BASH_TIMEOUT_SEC: "vm-bash-timeout-sec",
       },
     }));
 
@@ -96,8 +108,11 @@ describe("executeTool.mjs", () => {
       syncOpfsToLfs: mockSyncOpfsToLfs,
     }));
 
-    jest.unstable_mockModule("../shell/shell.mjs", () => ({
-      executeShell: mockExecuteShell,
+    jest.unstable_mockModule("../vm.mjs", () => ({
+      bootVM: mockBootVM,
+      executeInVM: mockExecuteInVM,
+      getVMStatus: mockGetVMStatus,
+      isVMReady: mockIsVMReady,
     }));
 
     jest.unstable_mockModule("../storage/listGroupFiles.mjs", () => ({
@@ -114,10 +129,6 @@ describe("executeTool.mjs", () => {
 
     jest.unstable_mockModule("../ulid.mjs", () => ({
       ulid: mockUlid,
-    }));
-
-    jest.unstable_mockModule("./formatShellOutput.mjs", () => ({
-      formatShellOutput: mockFormatShellOutput,
     }));
 
     jest.unstable_mockModule("./pendingTasks.mjs", () => ({
@@ -139,19 +150,111 @@ describe("executeTool.mjs", () => {
   });
 
   it("should handle bash tool", async () => {
-    mockExecuteShell.mockResolvedValue("shell output");
+    mockExecuteInVM.mockResolvedValue("vm output");
 
     const result = await executeTool({}, "bash", { command: "ls" }, "group1");
-    expect(mockExecuteShell).toHaveBeenCalledWith({}, "ls", "group1", {}, 30);
-    expect(result).toBe("formatted: shell output");
+    expect(mockExecuteInVM).toHaveBeenCalledWith("ls", 120, {
+      db: {},
+      groupId: "group1",
+    });
+
+    expect(result).toBe("vm output");
   });
 
-  it("should clamp bash timeout to 240 seconds", async () => {
-    mockExecuteShell.mockResolvedValue("shell output");
+  it("should clamp bash timeout to 1800 seconds", async () => {
+    mockExecuteInVM.mockResolvedValue("vm output");
 
     await executeTool({}, "bash", { command: "ls", timeout: 999 }, "group1");
 
-    expect(mockExecuteShell).toHaveBeenCalledWith({}, "ls", "group1", {}, 240);
+    expect(mockExecuteInVM).toHaveBeenCalledWith("ls", 999, {
+      db: {},
+      groupId: "group1",
+    });
+  });
+
+  it("should cap bash timeout to 1800 seconds", async () => {
+    mockExecuteInVM.mockResolvedValue("vm output");
+
+    await executeTool({}, "bash", { command: "ls", timeout: 9_999 }, "group1");
+
+    expect(mockExecuteInVM).toHaveBeenCalledWith("ls", 1800, {
+      db: {},
+      groupId: "group1",
+    });
+  });
+
+  it("should use configured VM bash timeout when input timeout is omitted", async () => {
+    mockGetConfig.mockResolvedValue("600");
+    mockExecuteInVM.mockResolvedValue("vm output");
+
+    await executeTool({}, "bash", { command: "ls" }, "group1");
+
+    expect(mockExecuteInVM).toHaveBeenCalledWith("ls", 600, {
+      db: {},
+      groupId: "group1",
+    });
+  });
+
+  it("should prefer explicit bash timeout over configured VM default", async () => {
+    mockGetConfig.mockResolvedValue("600");
+    mockExecuteInVM.mockResolvedValue("vm output");
+
+    await executeTool({}, "bash", { command: "ls", timeout: 45 }, "group1");
+
+    expect(mockExecuteInVM).toHaveBeenCalledWith("ls", 45, {
+      db: {},
+      groupId: "group1",
+    });
+  });
+
+  it("should wait for VM boot when bash is called before ready", async () => {
+    mockIsVMReady
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(false)
+      .mockReturnValueOnce(true)
+      .mockReturnValue(true);
+
+    mockGetVMStatus.mockReturnValue({
+      ready: false,
+      booting: true,
+      bootAttempted: true,
+      error: null,
+    });
+
+    mockExecuteInVM.mockResolvedValue("booted output");
+
+    const result = await executeTool({}, "bash", { command: "wget" }, "group1");
+
+    expect(mockBootVM).toHaveBeenCalledTimes(1);
+    expect(mockExecuteInVM).toHaveBeenCalledWith("wget", 120, {
+      db: {},
+      groupId: "group1",
+    });
+
+    expect(result).toBe("booted output");
+  });
+
+  it("returns an explicit WebVM error when VM is unavailable", async () => {
+    mockIsVMReady.mockReturnValue(false);
+    mockGetVMStatus.mockReturnValue({
+      ready: false,
+      booting: false,
+      bootAttempted: true,
+      error: "Assets missing",
+    });
+
+    const result = await executeTool(
+      {},
+      "bash",
+      { command: "wget", timeout: 1 },
+      "group1",
+    );
+
+    expect(mockBootVM).toHaveBeenCalledTimes(1);
+    expect(mockExecuteInVM).not.toHaveBeenCalled();
+    expect(result).toContain("bash command was not executed in WebVM");
+    expect(result).toContain("Reason: Assets missing");
+    expect(result).toContain("no fallback shell was used");
   });
 
   it("should handle read_file tool", async () => {

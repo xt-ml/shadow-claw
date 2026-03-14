@@ -28,7 +28,8 @@ export const TOOL_DEFINITIONS = [
         },
         timeout: {
           type: "number",
-          description: "Timeout in seconds (default: 30, max: 240)",
+          description:
+            "Timeout in seconds (default from Settings, initially 120; max: 1800)",
         },
       },
       required: ["command"],

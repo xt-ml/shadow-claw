@@ -18,6 +18,32 @@ import { getConfig } from "../db/getConfig.mjs";
 let explicitRoot = null;
 
 /**
+ * Determine whether a value behaves like a FileSystemDirectoryHandle.
+ * In workers, `FileSystemDirectoryHandle` may be undefined, so rely on
+ * capability checks as a fallback.
+ *
+ * @param {any} handle
+ *
+ * @returns {boolean}
+ */
+function isDirectoryHandle(handle) {
+  if (!handle || typeof handle !== "object") {
+    return false;
+  }
+
+  const ctor = globalThis.FileSystemDirectoryHandle;
+  if (typeof ctor !== "undefined" && handle instanceof ctor) {
+    return true;
+  }
+
+  return (
+    typeof handle.getDirectoryHandle === "function" &&
+    typeof handle.getFileHandle === "function" &&
+    typeof handle.queryPermission === "function"
+  );
+}
+
+/**
  * Get the current storage root handle.
  *
  * @param {ShadowClawDatabase} db
@@ -30,13 +56,11 @@ export async function getStorageRoot(db) {
   }
 
   try {
-    const handle = await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE);
-    if (
-      handle &&
-      /** @type {any} */ (handle) instanceof FileSystemDirectoryHandle
-    ) {
+    const storedHandle = await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE);
+    if (isDirectoryHandle(storedHandle)) {
+      const handle = /** @type {any} */ (storedHandle);
       // Check if we still have permission
-      const status = await /** @type {any} */ (handle).queryPermission({
+      const status = await handle.queryPermission({
         mode: "readwrite",
       });
 
@@ -99,13 +123,11 @@ export async function getStorageStatus(db) {
   }
 
   try {
-    const handle = await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE);
+    const storedHandle = await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE);
 
-    if (
-      handle &&
-      /** @type {any} */ (handle) instanceof FileSystemDirectoryHandle
-    ) {
-      const permission = await /** @type {any} */ (handle).queryPermission({
+    if (isDirectoryHandle(storedHandle)) {
+      const handle = /** @type {any} */ (storedHandle);
+      const permission = await handle.queryPermission({
         mode: "readwrite",
       });
 

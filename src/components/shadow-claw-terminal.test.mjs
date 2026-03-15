@@ -140,6 +140,38 @@ describe("shadow-claw-terminal", () => {
     expect(orchestrator.openTerminalSession).not.toHaveBeenCalled();
   });
 
+  it("opens terminal when VM leaves disabled state and starts booting", async () => {
+    const events = createEventBus();
+    const orchestrator = {
+      events,
+      getVMStatus: jest.fn(() => ({
+        ready: false,
+        booting: false,
+        bootAttempted: true,
+        error: "WebVM is disabled. Enable it in Settings to use WebVM.",
+      })),
+      openTerminalSession: jest.fn(),
+      sendTerminalInput: jest.fn(),
+      closeTerminalSession: jest.fn(),
+    };
+
+    const element = new ShadowClawTerminal();
+    element.orchestrator = orchestrator;
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(orchestrator.openTerminalSession).not.toHaveBeenCalled();
+
+    orchestrator.events.emit("vm-status", {
+      ready: false,
+      booting: true,
+      bootAttempted: true,
+      error: null,
+    });
+
+    expect(orchestrator.openTerminalSession).toHaveBeenCalledTimes(1);
+  });
+
   it("clears output and sends ctrl-c when requested", async () => {
     const orchestrator = createOrchestratorStub({
       ready: true,
@@ -190,6 +222,42 @@ describe("shadow-claw-terminal", () => {
     const output = element.shadowRoot?.querySelector('[data-role="output"]');
 
     expect(output?.textContent).toBe("(none):~# ");
+  });
+
+  it("preserves boot transcript when clear-screen escapes arrive before VM is ready", async () => {
+    const events = createEventBus();
+    const orchestrator = {
+      events,
+      getVMStatus: jest.fn(() => ({
+        ready: false,
+        booting: true,
+        bootAttempted: true,
+        error: null,
+      })),
+      openTerminalSession: jest.fn(),
+      sendTerminalInput: jest.fn(),
+      closeTerminalSession: jest.fn(),
+    };
+
+    const element = new ShadowClawTerminal();
+    element.orchestrator = orchestrator;
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    orchestrator.events.emit("vm-terminal-output", {
+      chunk: "Booting kernel\n",
+    });
+    orchestrator.events.emit("vm-terminal-output", {
+      chunk: "\u001b[H\u001b[J",
+    });
+    orchestrator.events.emit("vm-terminal-output", {
+      chunk: "Loading init drivers\n",
+    });
+
+    const output = element.shadowRoot?.querySelector('[data-role="output"]');
+
+    expect(output?.textContent).toContain("Booting kernel\n");
+    expect(output?.textContent).toContain("Loading init drivers\n");
   });
 
   it("handles ANSI escape sequences split across chunks", async () => {

@@ -333,4 +333,63 @@ describe("shadow-claw", () => {
       globalThis.matchMedia = originalMatchMedia;
     }
   });
+
+  it("force-hides open WebVM panel when VM becomes unavailable", async () => {
+    const originalMatchMedia = globalThis.matchMedia;
+    const originalRequestAnimationFrame = globalThis.requestAnimationFrame;
+    const originalCancelAnimationFrame = globalThis.cancelAnimationFrame;
+
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+
+    globalThis.requestAnimationFrame = (callback) => {
+      callback(0);
+      return 1;
+    };
+
+    globalThis.cancelAnimationFrame = () => {};
+
+    /** @type {((status: import("../vm.mjs").VMStatus) => void)|null} */
+    let vmStatusHandler = null;
+
+    const mockOrchestrator = createOrchestratorStub({
+      events: {
+        on: jest.fn((event, handler) => {
+          if (event === "vm-status") {
+            vmStatusHandler = handler;
+          }
+        }),
+        off: jest.fn(),
+      },
+    });
+
+    const component = new ShadowClaw();
+
+    try {
+      await component.initialize({}, /** @type {any} */ (mockOrchestrator));
+
+      component.toggleTerminalVisibility();
+
+      expect(component.terminalVisible).toBe(true);
+
+      vmStatusHandler?.({
+        ready: false,
+        booting: false,
+        bootAttempted: true,
+        error: "WebVM is disabled. Enable it in Settings to use WebVM.",
+      });
+
+      expect(component.terminalVisible).toBe(false);
+      expect(component.terminalElement?.hidden).toBe(true);
+    } finally {
+      globalThis.matchMedia = originalMatchMedia;
+      globalThis.requestAnimationFrame = originalRequestAnimationFrame;
+      globalThis.cancelAnimationFrame = originalCancelAnimationFrame;
+    }
+  });
 });

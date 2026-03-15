@@ -311,6 +311,15 @@ export class ShadowClawTerminal extends HTMLElement {
       this.vmStatus = status;
       this.updateStatus(status);
 
+      if (
+        !status.error &&
+        !this.connectedToWorkerTerminal &&
+        !this.terminalAttachRequested
+      ) {
+        this.attachSession();
+        return;
+      }
+
       // After VM mode switches, the old terminal session is closed. Re-open
       // the bridge once the new VM reports ready.
       if (status.ready && !this.connectedToWorkerTerminal) {
@@ -519,6 +528,12 @@ export class ShadowClawTerminal extends HTMLElement {
       this.outputBuffer,
       chunk,
       this.pendingEscape,
+      {
+        // During boot we prefer a stable transcript over VT100 erase semantics.
+        // Some boot paths clear the screen repeatedly, which otherwise leaves the
+        // visible panel blank even though boot text was received.
+        respectEraseSequences: this.vmStatus.ready,
+      },
     );
     this.outputBuffer = result.text;
     this.pendingEscape = result.pending;
@@ -677,10 +692,12 @@ function isNearBottom(screen) {
  * @param {string} current
  * @param {string} chunk
  * @param {string} [pendingEscape]
+ * @param {{ respectEraseSequences?: boolean }} [options]
  *
  * @returns {{ text: string, pending: string }}
  */
-function normalizeTerminalText(current, chunk, pendingEscape = "") {
+function normalizeTerminalText(current, chunk, pendingEscape = "", options) {
+  const respectEraseSequences = options?.respectEraseSequences ?? true;
   const input = pendingEscape + chunk;
   let next = current;
 
@@ -694,11 +711,11 @@ function normalizeTerminalText(current, chunk, pendingEscape = "") {
         return { text: next, pending: input.slice(index) };
       }
 
-      if (escape.action === "clear-screen") {
+      if (escape.action === "clear-screen" && respectEraseSequences) {
         next = "";
       }
 
-      if (escape.action === "clear-line") {
+      if (escape.action === "clear-line" && respectEraseSequences) {
         const lastLineBreak = next.lastIndexOf("\n");
         next = lastLineBreak === -1 ? "" : next.slice(0, lastLineBreak + 1);
       }

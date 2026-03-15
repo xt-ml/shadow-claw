@@ -31,7 +31,7 @@ import {
  * @property {(command: string, timeoutSec: number) => Promise<VMResult>} execute
  * @property {() => any} getEmulator
  * @property {() => 'ext2' | '9p'} getMode
- * @property {() => void} destroy
+ * @property {() => (void|Promise<void>)} destroy
  */
 
 /**
@@ -115,6 +115,9 @@ let terminalSuspended = false;
 /** @type {string} */
 let pendingBootTranscript = "";
 
+/** @type {string} */
+let liveBootTranscript = "";
+
 /** @type {Set<(chunk: string) => void>} */
 const bootOutputListeners = new Set();
 
@@ -175,6 +178,26 @@ function isCurrentBoot(bootToken) {
  */
 function getVMLogPrefix() {
   return `[WebVM:${VM_RUNTIME}]`;
+}
+
+/**
+ * Destroy a v86 emulator instance while swallowing both sync throws and
+ * async rejection paths from some v86 builds.
+ *
+ * @param {any} emulator
+ *
+ * @returns {Promise<void>}
+ */
+async function destroyEmulatorSafely(emulator) {
+  if (!emulator?.destroy) {
+    return;
+  }
+
+  try {
+    await Promise.resolve(emulator.destroy());
+  } catch (_) {
+    /* ignore teardown failures */
+  }
 }
 
 /**
@@ -355,6 +378,7 @@ export function __setVMInstanceForTests(nextInstance) {
   terminalOutputAttached = false;
   terminalSuspended = false;
   pendingBootTranscript = "";
+  liveBootTranscript = "";
   bootOutputListeners.clear();
   suppressBootTranscriptReplay = false;
   terminalAutoSyncState = null;
@@ -375,10 +399,22 @@ export async function shutdownVM() {
   terminalOutputAttached = false;
   terminalSuspended = false;
   pendingBootTranscript = "";
+  liveBootTranscript = "";
   bootOutputListeners.clear();
   suppressBootTranscriptReplay = false;
   terminalAutoSyncState = null;
-  instance?.destroy();
+  const emulatorToDestroy = activeEmulator || instance?.getEmulator?.() || null;
+  let destroyedViaInstance = false;
+
+  if (instance?.destroy) {
+    try {
+      await Promise.resolve(instance.destroy());
+      destroyedViaInstance = true;
+    } catch {
+      destroyedViaInstance = false;
+    }
+  }
+
   instance = null;
   bootPromise = null;
   lastBootError = null;
@@ -392,14 +428,9 @@ export async function shutdownVM() {
   hostSeededFilePruneProtection.clear();
   vmObservedWorkspaceFilesByGroup.clear();
 
-  if (activeEmulator) {
-    try {
-      activeEmulator.destroy();
-    } catch (_) {
-      /* ignore */
-    }
-
-    activeEmulator = null;
+  activeEmulator = null;
+  if (!destroyedViaInstance) {
+    await destroyEmulatorSafely(emulatorToDestroy);
   }
 
   emitVMStatus();
@@ -658,10 +689,13 @@ export function createTerminalSession(onOutput) {
  * @returns {() => void}
  */
 export function subscribeVMBootOutput(onOutput) {
-  suppressBootTranscriptReplay = true;
+  const snapshot = liveBootTranscript || pendingBootTranscript;
 
-  if (pendingBootTranscript) {
-    onOutput(pendingBootTranscript);
+  if (snapshot) {
+    onOutput(snapshot);
+    // The listener already got a transcript snapshot, so avoid replaying it
+    // again when the interactive terminal session attaches.
+    suppressBootTranscriptReplay = true;
   }
 
   bootOutputListeners.add(onOutput);
@@ -669,6 +703,23 @@ export function subscribeVMBootOutput(onOutput) {
   return () => {
     bootOutputListeners.delete(onOutput);
   };
+}
+
+/**
+ * Test-only helper to seed pending boot transcript behavior.
+ *
+ * @param {string} transcript
+ * @param {boolean} [suppressReplay=false]
+ *
+ * @returns {void}
+ */
+export function __setBootTranscriptForTests(
+  transcript,
+  suppressReplay = false,
+) {
+  pendingBootTranscript = typeof transcript === "string" ? transcript : "";
+  liveBootTranscript = "";
+  suppressBootTranscriptReplay = !!suppressReplay;
 }
 
 /**
@@ -883,11 +934,7 @@ async function doBootVM(bootToken) {
     activeEmulator = emulator;
 
     if (!isCurrentBoot(bootToken)) {
-      try {
-        emulator.destroy();
-      } catch (_) {
-        /* ignore */
-      }
+      await destroyEmulatorSafely(emulator);
 
       if (activeEmulator === emulator) {
         activeEmulator = null;
@@ -903,19 +950,22 @@ async function doBootVM(bootToken) {
     // Log serial output during boot for debugging
     /** @type {string} */
     let bootLog = "";
-    /** @type {string} */
-    let bootTranscript = "";
+    liveBootTranscript = "";
 
     /** @param {number} byte */
     const bootLogger = (byte) => {
       const ch = String.fromCharCode(byte);
 
-      bootTranscript += ch;
-      if (bootTranscript.length > VM_MAX_BOOT_TRANSCRIPT_LENGTH) {
-        bootTranscript = bootTranscript.slice(-VM_MAX_BOOT_TRANSCRIPT_LENGTH);
+      liveBootTranscript += ch;
+      if (liveBootTranscript.length > VM_MAX_BOOT_TRANSCRIPT_LENGTH) {
+        liveBootTranscript = liveBootTranscript.slice(
+          -VM_MAX_BOOT_TRANSCRIPT_LENGTH,
+        );
       }
 
       if (bootOutputListeners.size > 0) {
+        // Only suppress replay when live boot bytes were actually delivered.
+        suppressBootTranscriptReplay = true;
         bootOutputListeners.forEach((listener) => {
           try {
             listener(ch);
@@ -943,11 +993,7 @@ async function doBootVM(bootToken) {
     // Wait for shell prompt — 9p boot from chunks is slow, allow 600s
     await waitForSerial(emulator, "login:", 600_000);
     if (!isCurrentBoot(bootToken)) {
-      try {
-        emulator.destroy();
-      } catch (_) {
-        /* ignore */
-      }
+      await destroyEmulatorSafely(emulator);
 
       if (activeEmulator === emulator) {
         activeEmulator = null;
@@ -962,11 +1008,7 @@ async function doBootVM(bootToken) {
 
     await waitForSerial(emulator, "# ", 60000);
     if (!isCurrentBoot(bootToken)) {
-      try {
-        emulator.destroy();
-      } catch (_) {
-        /* ignore */
-      }
+      await destroyEmulatorSafely(emulator);
 
       if (activeEmulator === emulator) {
         activeEmulator = null;
@@ -980,18 +1022,14 @@ async function doBootVM(bootToken) {
       emulator.remove_listener("serial0-output-byte", bootLogger);
     }
 
-    if (bootTranscript) {
-      pendingBootTranscript = bootTranscript;
+    if (liveBootTranscript) {
+      pendingBootTranscript = liveBootTranscript;
     }
 
     if (bootConfig.mode === "9p") {
       await executeCommand(emulator, "mkdir -p /workspace", 20);
       if (!isCurrentBoot(bootToken)) {
-        try {
-          emulator.destroy();
-        } catch (_) {
-          /* ignore */
-        }
+        await destroyEmulatorSafely(emulator);
 
         if (activeEmulator === emulator) {
           activeEmulator = null;
@@ -1005,14 +1043,13 @@ async function doBootVM(bootToken) {
       isReady: () => true,
       getEmulator: () => emulator,
       getMode: () => bootConfig.mode,
-      destroy: () => {
-        try {
-          emulator?.destroy();
-        } catch (_) {
-          /* ignore */
-        }
+      destroy: async () => {
         instance = null;
-        activeEmulator = null;
+        if (activeEmulator === emulator) {
+          activeEmulator = null;
+        }
+
+        await destroyEmulatorSafely(emulator);
       },
       execute: (cmd, timeout) => executeCommand(emulator, cmd, timeout),
     };
@@ -1028,11 +1065,7 @@ async function doBootVM(bootToken) {
   } catch (err) {
     if (!isCurrentBoot(bootToken)) {
       if (emulator) {
-        try {
-          emulator.destroy();
-        } catch (_) {
-          /* ignore */
-        }
+        await destroyEmulatorSafely(emulator);
       }
 
       if (activeEmulator === emulator) {
@@ -1054,11 +1087,7 @@ async function doBootVM(bootToken) {
         `${getVMLogPrefix()} Destroying emulator to stop chunk downloads...`,
       );
 
-      try {
-        emulator.destroy();
-      } catch (_) {
-        /* ignore */
-      }
+      await destroyEmulatorSafely(emulator);
 
       activeEmulator = null;
     }
@@ -1253,6 +1282,9 @@ async function syncHostWorkspaceToVM(emulator, context) {
   /** @type {Set<string>} */
   const hostFileSet = new Set(hostFiles);
 
+  /** @type {Set<string>} */
+  const ensuredDirs = new Set();
+
   if (fs9p?.read_dir) {
     /** @type {string[]} */
     const vmFiles = [];
@@ -1317,7 +1349,8 @@ async function syncHostWorkspaceToVM(emulator, context) {
       ? relPath.slice(0, relPath.lastIndexOf("/"))
       : "";
 
-    if (dirPath) {
+    if (dirPath && !ensuredDirs.has(dirPath)) {
+      ensuredDirs.add(dirPath);
       await runInternalVMCommand(
         emulator,
         `mkdir -p ${quoteShellPath(`/workspace/${dirPath}`)}`,
@@ -2118,17 +2151,81 @@ async function runInternalVMCommand(emulator, command, timeoutSec) {
 
   if (shouldSuspendTerminal) {
     terminalSuspended = true;
-    detachActiveTerminalOutputListener(emulator);
   }
 
   try {
-    return await executeCommand(emulator, command, timeoutSec);
+    const result = await executeCommand(emulator, command, timeoutSec);
+
+    // Keep terminal suspended briefly to swallow trailing prompt redraw bytes
+    // emitted immediately after internal command completion.
+    if (shouldSuspendTerminal) {
+      await waitForSerialQuiet(emulator, 30, 250);
+    }
+
+    return result;
   } finally {
     if (shouldSuspendTerminal) {
       terminalSuspended = wasSuspended;
-      attachActiveTerminalOutputListener(emulator);
     }
   }
+}
+
+/**
+ * Wait until serial output has been quiet for `quietMs`, or stop after `maxMs`.
+ * Used to avoid leaking shell prompt redraw bytes after internal commands.
+ *
+ * @param {any} emulator
+ * @param {number} quietMs
+ * @param {number} maxMs
+ *
+ * @returns {Promise<void>}
+ */
+function waitForSerialQuiet(emulator, quietMs, maxMs) {
+  if (!emulator?.add_listener || !emulator?.remove_listener) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    let settled = false;
+    /** @type {ReturnType<typeof setTimeout>|null} */
+    let quietTimer = null;
+
+    const settle = () => {
+      if (settled) {
+        return;
+      }
+
+      settled = true;
+      if (quietTimer) {
+        clearTimeout(quietTimer);
+        quietTimer = null;
+      }
+
+      clearTimeout(maxTimer);
+      emulator.remove_listener("serial0-output-byte", listener);
+      resolve();
+    };
+
+    /** @param {number} _byte */
+    const listener = (_byte) => {
+      if (quietTimer) {
+        clearTimeout(quietTimer);
+      }
+
+      quietTimer = setTimeout(() => {
+        settle();
+      }, quietMs);
+    };
+
+    const maxTimer = setTimeout(() => {
+      settle();
+    }, maxMs);
+
+    emulator.add_listener("serial0-output-byte", listener);
+    quietTimer = setTimeout(() => {
+      settle();
+    }, quietMs);
+  });
 }
 
 /**

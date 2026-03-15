@@ -232,7 +232,11 @@ export async function handleMessage(event) {
         await shutdownVM();
 
         if (effectiveMode !== "disabled") {
-          await bootVM().catch((err) => {
+          // Do not block the worker message loop on boot. The UI may send
+          // vm-terminal-open immediately after changing mode, and that message
+          // must be handled while boot is in progress so live boot bytes can
+          // stream into the on-screen terminal.
+          Promise.resolve(bootVM()).catch((err) => {
             console.warn("[WebVM] Reboot after mode change failed:", err);
           });
         }
@@ -294,6 +298,9 @@ export async function handleMessage(event) {
         });
 
         post({ type: "vm-terminal-opened", payload: { ok: true } });
+        // Force a prompt render so the terminal is visibly attached even if
+        // there is no pending boot transcript to replay.
+        activeTerminalSession.send("\n");
 
         requestTerminalWorkspaceSync(context.db, groupId, {
           emitSyncedOnSuccess: true,

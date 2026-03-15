@@ -2038,6 +2038,17 @@ export class ShadowClaw extends HTMLElement {
     /** @param {import("../vm.mjs").VMStatus} status */
     const vmStatusListener = (status) => {
       this.vmStatus = status;
+
+      // When WebVM is unavailable (for example mode = disabled), force-close
+      // the panel before hiding the toggle so the UI cannot get stuck open.
+      if (status.error && this.terminalVisible) {
+        this.terminalVisible = false;
+        if (this.terminalElement) {
+          this.terminalElement.hidden = true;
+        }
+        this.scheduleTerminalPlacement();
+      }
+
       this.updateTerminalToggle();
     };
 

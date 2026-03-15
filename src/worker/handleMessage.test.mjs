@@ -214,6 +214,20 @@ describe("handleMessage.mjs", () => {
     expect(mockBootVM).toHaveBeenCalled();
   });
 
+  it("should not block set-vm-mode on boot completion", async () => {
+    mockOpenDatabase.mockResolvedValue({});
+    mockShutdownVM.mockResolvedValue(undefined);
+    mockBootVM.mockReturnValue(new Promise(() => {}));
+
+    await expect(
+      handleMessage({
+        data: { type: "set-vm-mode", payload: { mode: "9p" } },
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(mockBootVM).toHaveBeenCalledTimes(1);
+  });
+
   it("should not boot when vm mode is disabled", async () => {
     mockOpenDatabase.mockResolvedValue({});
     mockShutdownVM.mockResolvedValue(undefined);

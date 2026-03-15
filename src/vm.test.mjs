@@ -2,6 +2,7 @@ import { jest } from "@jest/globals";
 import { BASH_DEFAULT_TIMEOUT_SEC } from "./config.mjs";
 
 import {
+  __setBootTranscriptForTests,
   __resolveBootConfigForTests,
   __setVMInstanceForTests,
   bootVM,
@@ -14,6 +15,7 @@ import {
   setVMBootHostPreference,
   setVMBootModePreference,
   setVMNetworkRelayURLPreference,
+  subscribeVMBootOutput,
   shutdownVM,
 } from "./vm.mjs";
 import { DEFAULT_VM_NETWORK_RELAY_URL } from "./config.mjs";
@@ -210,6 +212,42 @@ describe("vm wrapper", () => {
     await expect(firstCommand).resolves.toBe("done");
   });
 
+  it("calls emulator destroy once during shutdown", async () => {
+    const emulator = createMockEmulator();
+    emulator.destroy = jest.fn(() => Promise.resolve());
+
+    __setVMInstanceForTests({
+      isReady: () => true,
+      execute: jest.fn(),
+      getEmulator: () => emulator,
+      getMode: () => "ext2",
+      destroy: () => emulator.destroy(),
+    });
+
+    await shutdownVM();
+
+    expect(emulator.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to direct emulator destroy when instance.destroy fails", async () => {
+    const emulator = createMockEmulator();
+    emulator.destroy = jest.fn(() => Promise.resolve());
+
+    __setVMInstanceForTests({
+      isReady: () => true,
+      execute: jest.fn(),
+      getEmulator: () => emulator,
+      getMode: () => "9p",
+      destroy: () => {
+        throw new Error("instance destroy failed");
+      },
+    });
+
+    await shutdownVM();
+
+    expect(emulator.destroy).toHaveBeenCalledTimes(1);
+  });
+
   it("honors explicit 9p preference even when ext2 assets also exist", async () => {
     setVMBootHostPreference("https://example.com");
     setVMBootModePreference("9p");
@@ -268,5 +306,33 @@ describe("vm wrapper", () => {
     expect(config?.mode).toBe("ext2");
 
     expect(config?.label).toContain("ext2");
+  });
+
+  it("backfills transcript to boot listeners and avoids duplicate replay on terminal attach", () => {
+    const emulator = createMockEmulator();
+    const execute = jest.fn();
+    const bootChunks = [];
+    const terminalChunks = [];
+
+    __setVMInstanceForTests(createReadyVM(execute, emulator));
+    __setBootTranscriptForTests("Booting kernel\n", false);
+
+    // Simulates terminal-open subscribing while boot wraps up.
+    // No live boot bytes are emitted after this point.
+    // Replay should still happen when terminal session attaches.
+    const detachBootOutput = subscribeVMBootOutput((chunk) => {
+      bootChunks.push(chunk);
+    });
+    detachBootOutput();
+
+    expect(bootChunks).toEqual(["Booting kernel\n"]);
+
+    const session = createTerminalSession((chunk) => {
+      terminalChunks.push(chunk);
+    });
+
+    expect(terminalChunks).toEqual([]);
+
+    session.close();
   });
 });

@@ -31,5 +31,6 @@ echo '// importScripts: [' | node \
   './service-worker/workbox-config.cjs' || exit 1
 
 node bin/touch-nojekyll.mjs \
+  && npm run build:pkg:meta "$(npm run -s build:pkg:get:meta)" \
   && npm run -s clean:service-worker \
   && npm run -s build:service-worker || exit 1

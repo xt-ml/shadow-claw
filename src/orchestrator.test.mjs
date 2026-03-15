@@ -60,6 +60,7 @@ describe("Orchestrator", () => {
           ready: true,
           booting: false,
           bootAttempted: true,
+          mode: "9p",
           error: null,
         },
       },
@@ -69,6 +70,7 @@ describe("Orchestrator", () => {
       ready: true,
       booting: false,
       bootAttempted: true,
+      mode: "9p",
       error: null,
     });
 
@@ -86,5 +88,28 @@ describe("Orchestrator", () => {
       type: "vm-workspace-sync",
       payload: { groupId: "g1" },
     });
+  });
+
+  it("posts manual vm-to-host flush requests", () => {
+    const o = new Orchestrator();
+    const postMessage = jest.fn();
+
+    o.agentWorker = /** @type {any} */ ({ postMessage });
+    o.flushTerminalWorkspace("g1");
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: "vm-workspace-flush",
+      payload: { groupId: "g1" },
+    });
+  });
+
+  it("tracks vm boot mode preference", () => {
+    const o = new Orchestrator();
+
+    expect(o.getVMBootMode()).toBe("disabled");
+
+    o.vmBootMode = "9p";
+
+    expect(o.getVMBootMode()).toBe("9p");
   });
 });

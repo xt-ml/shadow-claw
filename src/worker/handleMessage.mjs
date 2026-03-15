@@ -376,6 +376,25 @@ export async function handleMessage(event) {
 
       break;
     }
+    case "vm-workspace-flush": {
+      const groupId =
+        typeof payload?.groupId === "string" && payload.groupId
+          ? payload.groupId
+          : activeTerminalGroupId;
+
+      flushVMWorkspaceToHost({ db, groupId })
+        .then(() => {
+          post({
+            type: "vm-workspace-synced",
+            payload: { groupId },
+          });
+        })
+        .catch(() => {
+          /* ignore */
+        });
+
+      break;
+    }
     case "task-list-response": {
       const { groupId, tasks } = payload;
 

@@ -39,7 +39,17 @@ export class ShadowClawTasks extends HTMLElement {
           flex-direction: column;
           font-family: var(--shadow-claw-font-sans, system-ui, sans-serif);
           height: 100%;
+          min-height: 0;
           overflow: hidden;
+        }
+
+        .tasks {
+          display: flex;
+          flex: 1;
+          flex-direction: column;
+          min-height: 0;
+          overflow: hidden;
+          width: 100%;
         }
 
         .tasks__header-btn {
@@ -67,6 +77,7 @@ export class ShadowClawTasks extends HTMLElement {
 
         .tasks__content {
           flex: 1;
+          min-height: 0;
           overflow-y: auto;
           padding: 0.75rem;
         }

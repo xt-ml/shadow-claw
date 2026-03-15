@@ -197,6 +197,7 @@
  * @property {boolean} booting
  * @property {boolean} bootAttempted
  * @property {string|null} error
+ * @property {'ext2'|'9p'|null} [mode]
  */
 
 /**
@@ -248,6 +249,7 @@
  *   | { type: 'vm-terminal-input'; payload: { data: string } }
  *   | { type: 'vm-terminal-close'; payload?: { groupId?: string } }
  *   | { type: 'vm-workspace-sync'; payload?: { groupId?: string } }
+ *   | { type: 'vm-workspace-flush'; payload?: { groupId?: string } }
  * } WorkerInbound
  */
 

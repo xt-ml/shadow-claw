@@ -10,7 +10,7 @@ const { setConfig } = await import("../db/setConfig.mjs");
 describe("selectStorageDirectory", () => {
   it("stores selected directory handle", async () => {
     const handle = { name: "dir" };
-    window.showDirectoryPicker = jest.fn().mockResolvedValue(handle);
+    globalThis.showDirectoryPicker = jest.fn().mockResolvedValue(handle);
 
     await expect(selectStorageDirectory({})).resolves.toBe(true);
 
@@ -20,8 +20,22 @@ describe("selectStorageDirectory", () => {
   it("returns false when user aborts picker", async () => {
     const err = new Error("aborted");
     err.name = "AbortError";
-    window.showDirectoryPicker = jest.fn().mockRejectedValue(err);
+    globalThis.showDirectoryPicker = jest.fn().mockRejectedValue(err);
 
     await expect(selectStorageDirectory({})).resolves.toBe(false);
+  });
+
+  it("throws when directory picker feature is unavailable", async () => {
+    const previousPicker = globalThis.showDirectoryPicker;
+
+    try {
+      // @ts-ignore
+      delete globalThis.showDirectoryPicker;
+      await expect(selectStorageDirectory({})).rejects.toThrow(
+        "Local folder picker is unavailable in this browser/context.",
+      );
+    } finally {
+      globalThis.showDirectoryPicker = previousPicker;
+    }
   });
 });

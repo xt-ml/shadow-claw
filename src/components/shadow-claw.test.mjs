@@ -28,6 +28,9 @@ jest.unstable_mockModule("../markdown.mjs", () => ({
 }));
 
 jest.unstable_mockModule("../storage/storage.mjs", () => ({
+  getStorageStatus: jest
+    .fn()
+    .mockResolvedValue({ type: "opfs", permission: "granted", name: "OPFS" }),
   getStorageRoot: jest.fn(),
   resetStorageDirectory: jest.fn(),
 }));

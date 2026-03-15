@@ -318,17 +318,9 @@ describe("OrchestratorStore", () => {
     const store = new OrchestratorStore();
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
-    store.orchestrator = /** @type {any} */ ({
-      syncTerminalWorkspace: jest.fn(),
-    });
-
     await store.loadFiles({});
 
     expect(store.files).toEqual(["file.txt"]);
-
-    expect(store.orchestrator.syncTerminalWorkspace).toHaveBeenCalledWith(
-      DEFAULT_GROUP_ID,
-    );
 
     mockListGroupFiles.mockRejectedValueOnce(new Error("list failed"));
     await store.loadFiles({});
@@ -356,6 +348,25 @@ describe("OrchestratorStore", () => {
     );
 
     errorSpy.mockRestore();
+  });
+
+  it("manual workspace sync helpers call orchestrator bridge", () => {
+    const store = new OrchestratorStore();
+    store.orchestrator = /** @type {any} */ ({
+      syncTerminalWorkspace: jest.fn(),
+      flushTerminalWorkspace: jest.fn(),
+    });
+
+    store.syncHostWorkspaceToVM();
+    store.syncVMWorkspaceToHost();
+
+    expect(store.orchestrator.syncTerminalWorkspace).toHaveBeenCalledWith(
+      DEFAULT_GROUP_ID,
+    );
+
+    expect(store.orchestrator.flushTerminalWorkspace).toHaveBeenCalledWith(
+      DEFAULT_GROUP_ID,
+    );
   });
 
   it("supports folder navigation and reset", async () => {

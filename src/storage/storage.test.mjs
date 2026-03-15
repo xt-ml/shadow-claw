@@ -127,6 +127,20 @@ describe("storage.mjs", () => {
       const root = await storage.getStorageRoot(db);
       expect(root.name).toBe("db-handle");
     });
+
+    it("does not silently fallback to OPFS when a local handle exists", async () => {
+      const dbHandle = {
+        name: "local-no-writable-probe",
+        queryPermission: jest.fn().mockResolvedValue("granted"),
+        getDirectoryHandle: jest.fn(),
+        getFileHandle: jest.fn(),
+      };
+
+      getConfig.mockResolvedValueOnce(dbHandle);
+
+      const root = await storage.getStorageRoot(db);
+      expect(root).toBe(dbHandle);
+    });
   });
 
   describe("getStorageStatus", () => {

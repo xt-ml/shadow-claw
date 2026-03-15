@@ -119,6 +119,8 @@ export class Orchestrator {
       bootAttempted: false,
       error: null,
     };
+    /** @type {'disabled'|'auto'|'9p'|'ext2'} */
+    this.vmBootMode = "disabled";
   }
 
   /**
@@ -158,6 +160,15 @@ export class Orchestrator {
         String(DEFAULT_MAX_TOKENS),
       10,
     );
+
+    const storedVMBootMode = await getConfig(db, CONFIG_KEYS.VM_BOOT_MODE);
+    this.vmBootMode =
+      storedVMBootMode === "disabled" ||
+      storedVMBootMode === "auto" ||
+      storedVMBootMode === "9p" ||
+      storedVMBootMode === "ext2"
+        ? storedVMBootMode
+        : "disabled";
 
     // Set up router
     this.router = new Router(this.browserChat);
@@ -389,6 +400,8 @@ export class Orchestrator {
         ? mode
         : "disabled";
 
+    this.vmBootMode = normalized;
+
     await setConfig(db, CONFIG_KEYS.VM_BOOT_MODE, normalized);
     this.agentWorker?.postMessage({
       type: "set-vm-mode",
@@ -454,6 +467,13 @@ export class Orchestrator {
   }
 
   /**
+   * @returns {'disabled'|'auto'|'9p'|'ext2'}
+   */
+  getVMBootMode() {
+    return this.vmBootMode;
+  }
+
+  /**
    * @param {string} [groupId]
    *
    * @returns {void}
@@ -476,6 +496,20 @@ export class Orchestrator {
   syncTerminalWorkspace(groupId = DEFAULT_GROUP_ID) {
     this.agentWorker?.postMessage({
       type: "vm-workspace-sync",
+      payload: { groupId },
+    });
+  }
+
+  /**
+   * Flush VM workspace changes back to host storage.
+   *
+   * @param {string} [groupId]
+   *
+   * @returns {void}
+   */
+  flushTerminalWorkspace(groupId = DEFAULT_GROUP_ID) {
+    this.agentWorker?.postMessage({
+      type: "vm-workspace-flush",
       payload: { groupId },
     });
   }

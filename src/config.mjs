@@ -45,7 +45,7 @@ export const DEFAULT_VM_NETWORK_RELAY_URL = "wss://relay.widgetry.org/";
  * Default hosted WebVM asset root used by Settings and worker startup when
  * vm_boot_host has never been configured.
  */
-export const DEFAULT_VM_BOOT_HOST = "https://xt-ml.github.io/v86";
+export const DEFAULT_VM_BOOT_HOST = "http://localhost:8888";
 
 /** IndexedDB database name */
 export const DB_NAME = "shadowclaw";

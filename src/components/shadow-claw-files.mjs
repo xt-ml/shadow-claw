@@ -32,6 +32,18 @@ export class ShadowClawFiles extends HTMLElement {
 
     /** @type {() => void} */
     this.cleanup = () => {};
+
+    /** @type {() => void} */
+    this.vmStatusCleanup = () => {};
+
+    /** @type {number} */
+    this.uploadTotal = 0;
+
+    /** @type {number} */
+    this.uploadCompleted = 0;
+
+    /** @type {boolean} */
+    this.isDragActive = false;
   }
 
   static getTemplate() {
@@ -47,7 +59,17 @@ export class ShadowClawFiles extends HTMLElement {
           flex-direction: column;
           font-family: var(--shadow-claw-font-sans, system-ui, sans-serif);
           height: 100%;
+          min-height: 0;
           overflow: hidden;
+        }
+
+        .files {
+          display: flex;
+          flex: 1;
+          flex-direction: column;
+          min-height: 0;
+          overflow: hidden;
+          width: 100%;
         }
 
         .files__breadcrumbs {
@@ -56,6 +78,33 @@ export class ShadowClawFiles extends HTMLElement {
           flex-wrap: wrap;
           font-size: 0.8125rem;
           gap: 0.5rem;
+        }
+
+        .files__breadcrumbs-spacer {
+          flex: 1;
+        }
+
+        .files__sync-btn {
+          background-color: var(--shadow-claw-bg-primary, #ffffff);
+          border-radius: 0.375rem;
+          border: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
+          color: var(--shadow-claw-text-secondary, #4b5563);
+          cursor: pointer;
+          font-size: 0.75rem;
+          padding: 0.25rem 0.5rem;
+          white-space: nowrap;
+        }
+
+        .files__sync-btn:hover,
+        .files__sync-btn:focus-visible {
+          border-color: var(--shadow-claw-accent-primary, #3b82f6);
+          color: var(--shadow-claw-accent-primary, #3b82f6);
+          outline: none;
+        }
+
+        .files__sync-btn:disabled {
+          cursor: not-allowed;
+          opacity: 0.6;
         }
 
         .files__breadcrumb-btn {
@@ -101,9 +150,60 @@ export class ShadowClawFiles extends HTMLElement {
         }
 
         .files__content {
+          border-radius: var(--shadow-claw-radius-m);
           flex: 1;
+          min-height: 0;
           overflow-y: auto;
           padding: 1rem;
+          position: relative;
+        }
+
+        .files__content--dragover {
+          background-color: color-mix(in oklab, var(--shadow-claw-accent-primary) 8%, transparent);
+          outline: 0.125rem dashed var(--shadow-claw-accent-primary);
+          outline-offset: -0.25rem;
+        }
+
+        .files__drop-hint {
+          color: var(--shadow-claw-text-tertiary, #9ca3af);
+          font-size: 0.75rem;
+          margin-bottom: 0.625rem;
+        }
+
+        .files__upload-progress {
+          background-color: var(--shadow-claw-bg-secondary, #f9fafb);
+          border: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
+          border-radius: var(--shadow-claw-radius-m);
+          display: none;
+          margin-bottom: 0.75rem;
+          padding: 0.625rem;
+        }
+
+        .files__upload-progress.active {
+          display: block;
+        }
+
+        .files__upload-progress-label {
+          color: var(--shadow-claw-text-secondary, #4b5563);
+          display: block;
+          font-size: 0.75rem;
+          font-weight: 600;
+          margin-bottom: 0.375rem;
+        }
+
+        .files__upload-progress-track {
+          background-color: var(--shadow-claw-bg-tertiary, #f3f4f6);
+          border-radius: 999px;
+          height: 0.5rem;
+          overflow: hidden;
+          width: 100%;
+        }
+
+        .files__upload-progress-bar {
+          background-color: var(--shadow-claw-accent-primary, #3b82f6);
+          height: 100%;
+          transition: width 0.2s ease;
+          width: 0%;
         }
 
         .files__terminal-slot {
@@ -344,7 +444,12 @@ export class ShadowClawFiles extends HTMLElement {
           <button slot="actions" type="button" class="files__backup-btn files__header-btn">💾 Backup</button>
           <button slot="actions" type="button" class="files__restore-btn files__header-btn">♻️ Restore</button>
           <button slot="actions" type="button" class="files__clear-btn files__header-btn files__header-btn--danger">🗑️ Clear All</button>
-          <nav slot="breadcrumbs" class="files__breadcrumbs" aria-label="Current folder"></nav>
+          <nav slot="breadcrumbs" class="files__breadcrumbs" aria-label="Current folder">
+            <span class="files__breadcrumbs-path" data-breadcrumb-path></span>
+            <span class="files__breadcrumbs-spacer" aria-hidden="true" hidden></span>
+            <button type="button" class="files__sync-btn files__sync-host-btn" title="Push host Files panel changes into /workspace inside WebVM" hidden>Host → VM</button>
+            <button type="button" class="files__sync-btn files__sync-vm-btn" title="Pull /workspace changes from WebVM terminal back into Files panel" hidden>VM → Host</button>
+          </nav>
         </shadow-claw-page-header>
         <input type="file" class="files__hidden-upload files__hidden-input" multiple accept="*/*" aria-label="Upload files">
         <input type="file" class="files__hidden-restore files__hidden-input" accept=".zip,application/zip" aria-label="Restore files from zip backup">
@@ -367,6 +472,13 @@ export class ShadowClawFiles extends HTMLElement {
         </dialog>
         <div class="files__content">
           <div class="files__terminal-slot" data-terminal-slot hidden></div>
+          <p class="files__drop-hint">Drop files here to upload</p>
+          <div class="files__upload-progress" aria-live="polite" aria-label="Upload progress">
+            <span class="files__upload-progress-label">Uploading files...</span>
+            <div class="files__upload-progress-track">
+              <div class="files__upload-progress-bar"></div>
+            </div>
+          </div>
           <div class="files__list" role="list" aria-live="polite"></div>
         </div>
       </section>
@@ -394,6 +506,19 @@ export class ShadowClawFiles extends HTMLElement {
       this.updateFileList(db);
     });
 
+    const vmStatusListener = () => {
+      this.updateSyncButtonsVisibility();
+    };
+
+    orchestratorStore.orchestrator?.events?.on?.("vm-status", vmStatusListener);
+    this.vmStatusCleanup = () =>
+      orchestratorStore.orchestrator?.events?.off?.(
+        "vm-status",
+        vmStatusListener,
+      );
+
+    this.updateSyncButtonsVisibility();
+
     const root = this.shadowRoot;
     if (!root) {
       return;
@@ -419,6 +544,25 @@ export class ShadowClawFiles extends HTMLElement {
         this.handleUpload(db, e.target);
       }
     });
+
+    const content = root.querySelector(".files__content");
+    if (content instanceof HTMLElement) {
+      content.addEventListener("dragenter", (event) =>
+        this.handleDragEnter(event, content),
+      );
+
+      content.addEventListener("dragover", (event) =>
+        this.handleDragOver(event, content),
+      );
+
+      content.addEventListener("dragleave", (event) =>
+        this.handleDragLeave(event, content),
+      );
+
+      content.addEventListener("drop", (event) =>
+        this.handleDrop(event, db, content),
+      );
+    }
 
     // New button
     const newBtn = root.querySelector(".files__new-btn");
@@ -461,10 +605,17 @@ export class ShadowClawFiles extends HTMLElement {
     // Clear all button
     const clearBtn = root.querySelector(".files__clear-btn");
     clearBtn?.addEventListener("click", () => this.handleClearAll(db));
+
+    const syncHostBtn = root.querySelector(".files__sync-host-btn");
+    syncHostBtn?.addEventListener("click", () => this.handleSyncHostToVM());
+
+    const syncVmBtn = root.querySelector(".files__sync-vm-btn");
+    syncVmBtn?.addEventListener("click", () => this.handleSyncVMToHost(db));
   }
 
   disconnectedCallback() {
     this.cleanup();
+    this.vmStatusCleanup();
   }
 
   render() {
@@ -489,6 +640,36 @@ export class ShadowClawFiles extends HTMLElement {
   }
 
   /**
+   * @returns {void}
+   */
+  updateSyncButtonsVisibility() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const spacer = root.querySelector(".files__breadcrumbs-spacer");
+    const hostBtn = root.querySelector(".files__sync-host-btn");
+    const vmBtn = root.querySelector(".files__sync-vm-btn");
+
+    const vmStatus = orchestratorStore.orchestrator?.getVMStatus?.();
+    const vmMode = vmStatus?.mode;
+    const showSyncButtons = vmMode === "9p";
+
+    if (spacer instanceof HTMLElement) {
+      spacer.hidden = !showSyncButtons;
+    }
+
+    if (hostBtn instanceof HTMLButtonElement) {
+      hostBtn.hidden = !showSyncButtons;
+    }
+
+    if (vmBtn instanceof HTMLButtonElement) {
+      vmBtn.hidden = !showSyncButtons;
+    }
+  }
+
+  /**
    * @param {ShadowClawDatabase} db
    */
   updateBreadcrumbs(db) {
@@ -497,8 +678,8 @@ export class ShadowClawFiles extends HTMLElement {
       return;
     }
 
-    const breadcrumbs = root.querySelector(".files__breadcrumbs");
-    if (!breadcrumbs) {
+    const breadcrumbs = root.querySelector("[data-breadcrumb-path]");
+    if (!(breadcrumbs instanceof HTMLElement)) {
       return;
     }
 
@@ -545,6 +726,63 @@ export class ShadowClawFiles extends HTMLElement {
           breadcrumbs.appendChild(btn);
         },
       );
+    }
+  }
+
+  /**
+   * @returns {void}
+   */
+  handleSyncHostToVM() {
+    const root = this.shadowRoot;
+    const button = root?.querySelector(".files__sync-host-btn");
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = "Syncing...";
+
+    try {
+      orchestratorStore.syncHostWorkspaceToVM();
+      showSuccess("Requested host → VM workspace sync", 2200);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to request host → VM sync: ${message}`, 5000);
+    } finally {
+      setTimeout(() => {
+        button.disabled = false;
+        button.textContent = "Host → VM";
+      }, 300);
+    }
+  }
+
+  /**
+   * @param {ShadowClawDatabase} db
+   *
+   * @returns {Promise<void>}
+   */
+  async handleSyncVMToHost(db) {
+    const root = this.shadowRoot;
+    const button = root?.querySelector(".files__sync-vm-btn");
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = "Syncing...";
+
+    try {
+      orchestratorStore.syncVMWorkspaceToHost();
+      // Give the worker a short moment to emit vm-workspace-synced.
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      await orchestratorStore.loadFiles(db);
+      showSuccess("Requested VM → host workspace sync", 2200);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to request VM → host sync: ${message}`, 5000);
+    } finally {
+      button.disabled = false;
+      button.textContent = "VM → Host";
     }
   }
 
@@ -744,35 +982,171 @@ export class ShadowClawFiles extends HTMLElement {
       return;
     }
 
+    await this.uploadFileList(db, files);
+
+    // Clear the input
+    input.value = "";
+  }
+
+  /**
+   * @param {ShadowClawDatabase} db
+   * @param {FileList|File[]} files
+   */
+  async uploadFileList(db, files) {
+    const fileList = Array.from(files);
+    if (fileList.length === 0) {
+      return;
+    }
+
     const groupId = orchestratorStore.activeGroupId;
     const currentPath = orchestratorStore.currentPath;
+    const count = fileList.length;
+
+    this.uploadTotal = count;
+    this.uploadCompleted = 0;
+    this.updateUploadProgressUI(true);
 
     try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (let i = 0; i < count; i++) {
+        const file = fileList[i];
         const filename =
           currentPath === "." ? file.name : `${currentPath}/${file.name}`;
 
         await uploadGroupFile(db, groupId, filename, file);
+        this.uploadCompleted = i + 1;
+        this.updateUploadProgressUI(true);
       }
-
-      // Clear the input
-      input.value = "";
 
       // Reload files
       await orchestratorStore.loadFiles(db);
 
-      showSuccess(
-        `Uploaded ${files.length} file${files.length === 1 ? "" : "s"}`,
-        3000,
-      );
+      showSuccess(`Uploaded ${count} file${count === 1 ? "" : "s"}`, 3000);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 
       showError(`Failed to upload files: ${message}`, 6000);
 
       console.error("Upload error:", err);
+    } finally {
+      this.updateUploadProgressUI(false);
+      this.uploadTotal = 0;
+      this.uploadCompleted = 0;
     }
+  }
+
+  /**
+   * @param {boolean} active
+   */
+  updateUploadProgressUI(active) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const panel = root.querySelector(".files__upload-progress");
+    const label = root.querySelector(".files__upload-progress-label");
+    const bar = root.querySelector(".files__upload-progress-bar");
+
+    if (!(panel instanceof HTMLElement)) {
+      return;
+    }
+
+    panel.classList.toggle("active", active);
+
+    const percent =
+      this.uploadTotal > 0
+        ? Math.round((this.uploadCompleted / this.uploadTotal) * 100)
+        : 0;
+
+    if (label instanceof HTMLElement) {
+      label.textContent =
+        this.uploadTotal > 0
+          ? `Uploading ${this.uploadCompleted}/${this.uploadTotal} files (${percent}%)`
+          : "Uploading files...";
+    }
+
+    if (bar instanceof HTMLElement) {
+      bar.style.width = `${percent}%`;
+    }
+  }
+
+  /**
+   * @param {DragEvent} event
+   * @param {HTMLElement} content
+   */
+  handleDragEnter(event, content) {
+    if (!this.hasDragFiles(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    this.isDragActive = true;
+    content.classList.add("files__content--dragover");
+  }
+
+  /**
+   * @param {DragEvent} event
+   * @param {HTMLElement} content
+   */
+  handleDragOver(event, content) {
+    if (!this.hasDragFiles(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+    this.isDragActive = true;
+    content.classList.add("files__content--dragover");
+  }
+
+  /**
+   * @param {DragEvent} event
+   * @param {HTMLElement} content
+   */
+  handleDragLeave(event, content) {
+    if (!this.isDragActive) {
+      return;
+    }
+
+    const related = event.relatedTarget;
+    if (related instanceof Node && content.contains(related)) {
+      return;
+    }
+
+    this.isDragActive = false;
+    content.classList.remove("files__content--dragover");
+  }
+
+  /**
+   * @param {DragEvent} event
+   * @param {ShadowClawDatabase} db
+   * @param {HTMLElement} content
+   */
+  async handleDrop(event, db, content) {
+    if (!this.hasDragFiles(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    this.isDragActive = false;
+    content.classList.remove("files__content--dragover");
+
+    const dropped = event.dataTransfer?.files;
+    if (!dropped || dropped.length === 0) {
+      return;
+    }
+
+    await this.uploadFileList(db, dropped);
+  }
+
+  /**
+   * @param {DragEvent} event
+   */
+  hasDragFiles(event) {
+    const types = event.dataTransfer?.types;
+    return Boolean(types && Array.from(types).includes("Files"));
   }
 
   openNewFileDialog() {

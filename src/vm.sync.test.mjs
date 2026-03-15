@@ -271,6 +271,16 @@ function createNinePEmulator(vmFiles, opts = {}) {
       listeners.get(event)?.delete(listener);
     },
     serial0_send: jest.fn(),
+    emit(event, value) {
+      const eventListeners = listeners.get(event);
+      if (!eventListeners) {
+        return;
+      }
+
+      for (const listener of eventListeners) {
+        listener(value);
+      }
+    },
     emitSerial(text) {
       const serialListeners = listeners.get("serial0-output-byte");
       if (!serialListeners) {
@@ -470,6 +480,176 @@ describe("vm 9p workspace sync", () => {
       await jest.advanceTimersByTimeAsync(250);
 
       expect(workspaceDir.hasFile("file")).toBe(true);
+
+      detachAutoSync?.();
+      session.close();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("ignores idle 9p write-end events before any terminal command", async () => {
+    jest.useFakeTimers();
+
+    try {
+      const workspaceDir = createWorkspaceDir();
+      mockGetWorkspaceDir.mockResolvedValue(workspaceDir);
+
+      const vmFiles = new Map();
+      const emulator = createNinePEmulator(vmFiles);
+      const onFlushed = jest.fn();
+
+      __setVMInstanceForTests({
+        isReady: () => true,
+        execute: jest.fn(),
+        getEmulator: () => emulator,
+        getMode: () => "9p",
+        destroy: jest.fn(),
+      });
+
+      const detachAutoSync = attachTerminalWorkspaceAutoSync(
+        { db: /** @type {any} */ ({}), groupId: "g1" },
+        onFlushed,
+      );
+
+      // No command has been entered yet; background 9p writes should be ignored.
+      emulator.emit("9p-write-end");
+      emulator.emit("9p-write-end");
+
+      await jest.advanceTimersByTimeAsync(250);
+
+      expect(onFlushed).not.toHaveBeenCalled();
+
+      detachAutoSync?.();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("treats no-space shell prompts as command completion", async () => {
+    jest.useFakeTimers();
+
+    try {
+      const workspaceDir = createWorkspaceDir();
+      mockGetWorkspaceDir.mockResolvedValue(workspaceDir);
+
+      const vmFiles = new Map();
+      const emulator = createNinePEmulator(vmFiles);
+      const onFlushed = jest.fn();
+
+      __setVMInstanceForTests({
+        isReady: () => true,
+        execute: jest.fn(),
+        getEmulator: () => emulator,
+        getMode: () => "9p",
+        destroy: jest.fn(),
+      });
+
+      const detachAutoSync = attachTerminalWorkspaceAutoSync(
+        { db: /** @type {any} */ ({}), groupId: "g1" },
+        onFlushed,
+      );
+
+      const session = createTerminalSession(() => {});
+
+      session.send("cat /workspace/foo/Testing\n");
+      emulator.emitSerial("output\r\nlocalhost:~#");
+
+      await jest.advanceTimersByTimeAsync(250);
+      expect(onFlushed).toHaveBeenCalledTimes(1);
+
+      // Subsequent idle writes should not retrigger flushes once command ended.
+      emulator.emit("9p-write-end");
+      emulator.emit("9p-write-end");
+
+      await jest.advanceTimersByTimeAsync(250);
+      expect(onFlushed).toHaveBeenCalledTimes(1);
+
+      detachAutoSync?.();
+      session.close();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("does not flush non-workspace commands when prompt returns", async () => {
+    jest.useFakeTimers();
+
+    try {
+      const workspaceDir = createWorkspaceDir();
+      mockGetWorkspaceDir.mockResolvedValue(workspaceDir);
+
+      const vmFiles = new Map();
+      const emulator = createNinePEmulator(vmFiles);
+      const onFlushed = jest.fn();
+
+      __setVMInstanceForTests({
+        isReady: () => true,
+        execute: jest.fn(),
+        getEmulator: () => emulator,
+        getMode: () => "9p",
+        destroy: jest.fn(),
+      });
+
+      const detachAutoSync = attachTerminalWorkspaceAutoSync(
+        { db: /** @type {any} */ ({}), groupId: "g1" },
+        onFlushed,
+      );
+
+      const session = createTerminalSession(() => {});
+
+      session.send("npm -g root\n");
+      emulator.emitSerial(
+        "/usr/lib/node_modules\r\nlocalhost:/usr/local/lib# ",
+      );
+
+      await jest.advanceTimersByTimeAsync(250);
+
+      expect(onFlushed).not.toHaveBeenCalled();
+
+      detachAutoSync?.();
+      session.close();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("flushes relative commands when prompt indicates /workspace cwd", async () => {
+    jest.useFakeTimers();
+
+    try {
+      const workspaceDir = createWorkspaceDir();
+      mockGetWorkspaceDir.mockResolvedValue(workspaceDir);
+
+      const vmFiles = new Map();
+      const emulator = createNinePEmulator(vmFiles);
+      const onFlushed = jest.fn();
+
+      __setVMInstanceForTests({
+        isReady: () => true,
+        execute: jest.fn(),
+        getEmulator: () => emulator,
+        getMode: () => "9p",
+        destroy: jest.fn(),
+      });
+
+      const detachAutoSync = attachTerminalWorkspaceAutoSync(
+        { db: /** @type {any} */ ({}), groupId: "g1" },
+        onFlushed,
+      );
+
+      const session = createTerminalSession(() => {});
+
+      emulator.emitSerial("localhost:/workspace# ");
+
+      session.send("touch file.txt\n");
+      vmFiles.set("file.txt", new Uint8Array());
+      emulator.emitSerial("localhost:/workspace# ");
+
+      await jest.advanceTimersByTimeAsync(250);
+
+      expect(onFlushed).toHaveBeenCalledTimes(1);
+      expect(workspaceDir.hasFile("file.txt")).toBe(true);
 
       detachAutoSync?.();
       session.close();

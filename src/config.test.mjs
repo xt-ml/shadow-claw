@@ -98,7 +98,7 @@ describe("config.mjs", () => {
     });
 
     it("should have valid DEFAULT_VM_BOOT_HOST", () => {
-      expect(DEFAULT_VM_BOOT_HOST).toBe("https://xt-ml.github.io/v86");
+      expect(DEFAULT_VM_BOOT_HOST).toBe("http://localhost:8888");
     });
   });
 

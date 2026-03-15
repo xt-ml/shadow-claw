@@ -13,14 +13,18 @@ import { setConfig } from "../db/setConfig.mjs";
  * @returns {Promise<boolean>} Success
  */
 export async function selectStorageDirectory(db) {
-  // @ts-ignore
-  if (!window.showDirectoryPicker) {
-    throw new Error("Local folder access not supported by this browser.");
+  const pickerMaybe = Reflect.get(globalThis, "showDirectoryPicker");
+  const picker =
+    typeof pickerMaybe === "function" ? pickerMaybe.bind(globalThis) : null;
+
+  if (!picker) {
+    throw new Error(
+      "Local folder picker is unavailable in this browser/context.",
+    );
   }
 
   try {
-    // @ts-ignore
-    const handle = await window.showDirectoryPicker({
+    const handle = await picker({
       mode: "readwrite",
       id: "shadowclaw-storage",
     });

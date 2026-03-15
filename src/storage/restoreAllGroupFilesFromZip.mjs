@@ -2,6 +2,7 @@
 import * as zip from "zip";
 import { deleteAllGroupFiles } from "./deleteAllGroupFiles.mjs";
 import { getGroupDir } from "./getGroupDir.mjs";
+import { writeFileHandle } from "./writeFileHandle.mjs";
 
 /**
  * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
@@ -56,11 +57,7 @@ export async function restoreAllGroupFilesFromZip(db, groupId, zipBlob) {
       const fileHandle = await currentDir.getFileHandle(filename, {
         create: true,
       });
-
-      // @ts-ignore - createWritable is a newer File System Access API method
-      const writable = await fileHandle.createWritable();
-      await writable.write(blob);
-      await writable.close();
+      await writeFileHandle(fileHandle, blob);
     }
   }
 

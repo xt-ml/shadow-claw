@@ -44,6 +44,9 @@ export class ShadowClawFileViewer extends HTMLElement {
    */
   lastOpenedFileName = "";
 
+  /** @type {string|null} */
+  currentObjectUrl = null;
+
   constructor() {
     super();
 
@@ -340,6 +343,10 @@ export class ShadowClawFileViewer extends HTMLElement {
     this.bindEventListeners();
   }
 
+  disconnectedCallback() {
+    this.revokeObjectUrl();
+  }
+
   /**
    * Initialize the component
    *
@@ -440,7 +447,7 @@ export class ShadowClawFileViewer extends HTMLElement {
 
         if (this.lastOpenedFileName !== file.name) {
           this.lastOpenedFileName = file.name;
-          this.isFilePreviewMode = false;
+          this.isFilePreviewMode = this.shouldAutoPreview(file);
           this.isFileEditMode = false;
           this.isEditorDirty = false;
         }
@@ -516,7 +523,7 @@ export class ShadowClawFileViewer extends HTMLElement {
       return;
     }
 
-    if (this.isFileEditMode && file.kind !== "pdf") {
+    if (this.isFileEditMode && file.kind === "text") {
       modalBody?.classList.add("modal-body--editing");
 
       content.classList.add("hidden");
@@ -557,8 +564,13 @@ export class ShadowClawFileViewer extends HTMLElement {
       }
 
       content.classList.add("file-content--raw");
-      content.classList.remove("file-content--preview");
-      content.textContent = file.content || "";
+      content.classList.remove("file-content--preview", "file-content--iframe");
+
+      if (file.kind === "binary") {
+        content.textContent = `Binary file (${file.mimeType || "application/octet-stream"}). Switch to Preview to view.`;
+      } else {
+        content.textContent = file.content || "";
+      }
     }
   }
 
@@ -568,6 +580,8 @@ export class ShadowClawFileViewer extends HTMLElement {
    * @param {any} file
    */
   renderPreview(content, file) {
+    this.revokeObjectUrl();
+
     if (file.kind === "pdf") {
       content.classList.remove(
         "file-content--raw",
@@ -583,6 +597,12 @@ export class ShadowClawFileViewer extends HTMLElement {
       return;
     }
 
+    if (file.kind === "binary") {
+      this.renderBinaryPreview(content, file);
+
+      return;
+    }
+
     if (this.isIframePreviewFile(file.name)) {
       content.classList.remove("file-content--raw", "file-content--preview");
       content.classList.add("file-content--iframe");
@@ -594,6 +614,7 @@ export class ShadowClawFileViewer extends HTMLElement {
         "sandbox",
         this.getIframeSandboxPermissions(file.name),
       );
+
       iframe.setAttribute("referrerpolicy", "no-referrer");
       iframe.srcdoc = this.buildIframePreviewSrcdoc(file);
 
@@ -605,6 +626,80 @@ export class ShadowClawFileViewer extends HTMLElement {
     content.classList.remove("file-content--raw");
     content.classList.add("file-content--preview");
     content.innerHTML = renderMarkdown(this.toPreviewMarkdown(file));
+  }
+
+  /**
+   * @param {HTMLElement} content
+   * @param {any} file
+   */
+  renderBinaryPreview(content, file) {
+    const bytes = file.binaryContent;
+    if (!(bytes instanceof Uint8Array) || bytes.length === 0) {
+      content.classList.remove("file-content--raw", "file-content--iframe");
+      content.classList.add("file-content--preview");
+      content.textContent = "Binary content unavailable.";
+      return;
+    }
+
+    const mimeType = file.mimeType || "application/octet-stream";
+    // Copy into a plain ArrayBuffer-backed view so BlobPart typing is stable in checkJs.
+    const blobBytes = new Uint8Array(bytes.byteLength);
+    blobBytes.set(bytes);
+
+    const blob = new Blob([blobBytes], { type: mimeType });
+    this.currentObjectUrl = URL.createObjectURL(blob);
+
+    content.classList.remove("file-content--raw", "file-content--preview");
+    content.classList.add("file-content--iframe");
+
+    if (mimeType.startsWith("image/")) {
+      const image = document.createElement("img");
+      image.className = "file-content-iframe";
+      image.alt = `Preview: ${file.name}`;
+      image.src = this.currentObjectUrl;
+      image.style.objectFit = "contain";
+
+      content.replaceChildren(image);
+      return;
+    }
+
+    if (mimeType.startsWith("video/")) {
+      const video = document.createElement("video");
+      video.className = "file-content-iframe";
+      video.controls = true;
+      video.src = this.currentObjectUrl;
+      video.style.backgroundColor = "black";
+
+      content.replaceChildren(video);
+      return;
+    }
+
+    if (mimeType.startsWith("audio/")) {
+      const audioWrap = document.createElement("div");
+      audioWrap.className = "file-content file-content--preview";
+      audioWrap.style.padding = "1rem";
+
+      const label = document.createElement("p");
+      label.textContent = file.name;
+
+      const audio = document.createElement("audio");
+      audio.controls = true;
+      audio.src = this.currentObjectUrl;
+      audio.style.width = "100%";
+
+      audioWrap.replaceChildren(label, audio);
+      content.replaceChildren(audioWrap);
+      content.classList.remove("file-content--iframe");
+      return;
+    }
+
+    const iframe = document.createElement("iframe");
+    iframe.className = "file-content-iframe";
+    iframe.setAttribute("title", `Preview: ${file.name}`);
+    iframe.setAttribute("referrerpolicy", "no-referrer");
+    iframe.src = this.currentObjectUrl;
+
+    content.replaceChildren(iframe);
   }
 
   resetContent() {
@@ -651,10 +746,41 @@ export class ShadowClawFileViewer extends HTMLElement {
       return;
     }
 
+    this.revokeObjectUrl();
+
     content.classList.remove("hidden");
     content.classList.add("file-content--raw");
     content.classList.remove("file-content--preview", "file-content--iframe");
     content.textContent = "";
+  }
+
+  revokeObjectUrl() {
+    if (this.currentObjectUrl) {
+      URL.revokeObjectURL(this.currentObjectUrl);
+      this.currentObjectUrl = null;
+    }
+  }
+
+  /**
+   * @param {any} file
+   */
+  shouldAutoPreview(file) {
+    if (!file || typeof file !== "object") {
+      return false;
+    }
+
+    if (file.kind === "pdf" || file.kind === "binary") {
+      return true;
+    }
+
+    if (file.kind === "text") {
+      return (
+        this.isIframePreviewFile(file.name) ||
+        this.isMarkdownLikeFile(file.name)
+      );
+    }
+
+    return false;
   }
 
   async handleSave() {

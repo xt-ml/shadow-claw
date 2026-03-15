@@ -29,6 +29,7 @@ describe("FileViewerStore", () => {
       content: "hello",
       kind: "text",
       binaryContent: null,
+      mimeType: "text/plain",
     });
   });
 
@@ -39,6 +40,7 @@ describe("FileViewerStore", () => {
       content: "y",
       kind: "text",
       binaryContent: null,
+      mimeType: "text/plain",
     });
     s.closeFile();
 
@@ -56,6 +58,7 @@ describe("FileViewerStore", () => {
       content: "content",
       kind: "text",
       binaryContent: null,
+      mimeType: "text/plain",
     });
   });
 
@@ -79,6 +82,29 @@ describe("FileViewerStore", () => {
       content: "",
       kind: "pdf",
       binaryContent: pdfBytes,
+      mimeType: "application/pdf",
+    });
+  });
+
+  it("openFile reads browser-previewable binaries as bytes", async () => {
+    const pngBytes = new Uint8Array([137, 80, 78, 71]);
+    readGroupFileBytes.mockResolvedValue(pngBytes);
+    const s = new FileViewerStore();
+
+    await s.openFile({}, "images/logo.png", "g1");
+
+    expect(readGroupFileBytes).toHaveBeenCalledWith(
+      {},
+      "g1",
+      "images/logo.png",
+    );
+    expect(readGroupFile).not.toHaveBeenCalled();
+    expect(s.file).toEqual({
+      name: "logo.png",
+      content: "",
+      kind: "binary",
+      binaryContent: pngBytes,
+      mimeType: "image/png",
     });
   });
 
@@ -105,6 +131,7 @@ describe("FileViewerStore", () => {
       content: "content",
       kind: "text",
       binaryContent: null,
+      mimeType: "text/plain",
     });
   });
 });

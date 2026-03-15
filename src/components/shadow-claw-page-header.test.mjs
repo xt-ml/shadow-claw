@@ -17,4 +17,26 @@ describe("shadow-claw-page-header", () => {
 
     el.remove();
   });
+
+  it("renders actions disclosure with summary toggle", () => {
+    const el = document.createElement("shadow-claw-page-header");
+    el.setAttribute("title", "Files");
+
+    const action = document.createElement("button");
+    action.slot = "actions";
+    action.textContent = "Upload";
+    el.appendChild(action);
+
+    document.body.appendChild(el);
+
+    const disclosure = el.shadowRoot.querySelector(
+      ".header__actions-disclosure",
+    );
+    const summary = el.shadowRoot.querySelector(".header__actions-toggle");
+
+    expect(disclosure).toBeTruthy();
+    expect(summary?.textContent).toContain("Actions");
+
+    el.remove();
+  });
 });

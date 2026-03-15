@@ -100,6 +100,10 @@ stores (`fileViewerStore`). The terminal component talks to the orchestrator's t
 methods — it does **not** access `vm.mjs` directly. Components use Shadow DOM and direct
 `innerHTML` for rendering; reactive re-renders are driven by `effect()` callbacks in `setupEffects()`.
 
+The file viewer supports MIME-aware previews for PDFs and common image/audio/video formats,
+defaults preview mode for previewable types, and revokes object URLs when previews are replaced
+or closed.
+
 ### Imports
 
 External libraries are loaded via **importmap** in `index.html`. Never `npm install`
@@ -126,6 +130,7 @@ Node-only packages (Express, Jest, Workbox CLI) belong in `devDependencies`.
 | main → worker | `vm-terminal-input`   | `{ data: string }` (stdin bytes)      |
 | main → worker | `vm-terminal-close`   | `{ groupId?: string }` (detaches terminal session) |
 | main → worker | `vm-workspace-sync`   | `{ groupId?: string }` (request 9p workspace sync) |
+| main → worker | `vm-workspace-flush`  | `{ groupId?: string }` (request immediate 9p VM → host flush) |
 | worker → main | `response`            | `ResponsePayload`                     |
 | worker → main | `error`               | `ErrorPayload`                        |
 | worker → main | `typing`              | `TypingPayload`                       |
@@ -152,12 +157,17 @@ All file I/O goes through `src/storage/`. The group workspace root is:
 `shadowclaw/<groupId>/workspace/`. `MEMORY.md` lives at the workspace root and is loaded
 as system context on every agent invocation.
 
+Cross-browser writes must go through `src/storage/writeFileHandle.mjs`:
+
+- Use `writeFileHandle()` for normal writes (`createWritable`, legacy `createWriteable`, or `createSyncAccessHandle`).
+- Use `writeOpfsPathViaWorker()` when OPFS writes need worker-side sync handles (for example Safari main-thread limitations).
+- Do not add ad-hoc direct `createWritable()` calls in feature code paths.
+
 ### WebVM Assets
 
 `src/vm.mjs` resolves assets from `/assets/v86.ext2/` and `/assets/v86.9pfs/` by default,
 with optional host override from `CONFIG_KEYS.VM_BOOT_HOST`.
-When unset, the worker seeds VM boot host from `DEFAULT_VM_BOOT_HOST`
-(`https://xt-ml.github.io/v86`).
+When unset, the worker seeds VM boot host from `DEFAULT_VM_BOOT_HOST` 'http://localhost:8888'.
 `worker.mjs` eagerly boots the VM on startup using persisted preferences (`CONFIG_KEYS.VM_BOOT_MODE`,
 `CONFIG_KEYS.VM_NETWORK_RELAY_URL`, and `CONFIG_KEYS.VM_BOOT_HOST`).
 The VM is **worker-owned** — the only non-test runtime imports of `vm.mjs` are
@@ -191,6 +201,9 @@ constants — never hard-code string keys:
 import { CONFIG_KEYS } from "./config.mjs";
 await getConfig(CONFIG_KEYS.API_KEY);
 ```
+
+Build metadata also writes the deployed Git revision into `<meta name="revision">` in
+`index.html`; Settings reads this value at runtime.
 
 ## Running & Testing
 

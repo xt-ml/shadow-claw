@@ -22,7 +22,7 @@ describe("worker.mjs and src/worker/agent.mjs", () => {
       },
       DEFAULT_GROUP_ID: "br:main",
       FETCH_MAX_RESPONSE: 1000,
-      DEFAULT_VM_BOOT_HOST: "https://xt-ml.github.io/v86",
+      DEFAULT_VM_BOOT_HOST: "http://localhost:8888",
       getProvider: jest.fn(),
     }));
 

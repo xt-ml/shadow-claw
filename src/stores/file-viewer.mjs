@@ -10,8 +10,9 @@ import { DEFAULT_GROUP_ID } from "../config.mjs";
  * @typedef {Object} FileInfo
  * @property {string} name
  * @property {string} content
- * @property {"text"|"pdf"} kind
+ * @property {"text"|"pdf"|"binary"} kind
  * @property {Uint8Array|null} binaryContent
+ * @property {string} mimeType
  */
 
 /**
@@ -48,16 +49,44 @@ export class FileViewerStore {
     try {
       const name = path.split("/").pop() || path;
       const isPdf = /\.pdf$/i.test(name);
+      const binaryMimeType = this.getPreviewBinaryMimeType(name);
 
       if (isPdf) {
         const binaryContent = await readGroupFileBytes(db, groupId, path);
 
-        this._file.set({ name, content: "", kind: "pdf", binaryContent });
+        this._file.set({
+          name,
+          content: "",
+          kind: "pdf",
+          binaryContent,
+          mimeType: "application/pdf",
+        });
+
+        return;
+      }
+
+      if (binaryMimeType) {
+        const binaryContent = await readGroupFileBytes(db, groupId, path);
+
+        this._file.set({
+          name,
+          content: "",
+          kind: "binary",
+          binaryContent,
+          mimeType: binaryMimeType,
+        });
+
         return;
       }
 
       const content = await readGroupFile(db, groupId, path);
-      this._file.set({ name, content, kind: "text", binaryContent: null });
+      this._file.set({
+        name,
+        content,
+        kind: "text",
+        binaryContent: null,
+        mimeType: "text/plain",
+      });
     } catch (err) {
       console.error("Failed to open file:", path, err);
       throw err;
@@ -77,6 +106,38 @@ export class FileViewerStore {
    */
   getFile() {
     return this.file;
+  }
+
+  /**
+   * @param {string} fileName
+   *
+   * @returns {string}
+   */
+  getPreviewBinaryMimeType(fileName) {
+    const extension = fileName.toLowerCase().split(".").pop() || "";
+
+    /** @type {Record<string, string>} */
+    const mimeTypes = {
+      apng: "image/apng",
+      avif: "image/avif",
+      bmp: "image/bmp",
+      gif: "image/gif",
+      ico: "image/x-icon",
+      jpeg: "image/jpeg",
+      jpg: "image/jpeg",
+      m4a: "audio/mp4",
+      mp3: "audio/mpeg",
+      mp4: "video/mp4",
+      oga: "audio/ogg",
+      ogg: "audio/ogg",
+      ogv: "video/ogg",
+      png: "image/png",
+      wav: "audio/wav",
+      webm: "video/webm",
+      webp: "image/webp",
+    };
+
+    return mimeTypes[extension] || "";
   }
 }
 

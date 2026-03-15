@@ -99,4 +99,68 @@ describe("shadow-claw-file-viewer", () => {
       "allow-modals",
     );
   });
+
+  it("auto-previews html and svg files", () => {
+    const component = new ShadowClawFileViewer();
+
+    expect(
+      component.shouldAutoPreview({
+        name: "index.html",
+        kind: "text",
+        content: "<h1>Hello</h1>",
+      }),
+    ).toBe(true);
+
+    expect(
+      component.shouldAutoPreview({
+        name: "icon.svg",
+        kind: "text",
+        content: '<svg xmlns="http://www.w3.org/2000/svg"></svg>',
+      }),
+    ).toBe(true);
+  });
+
+  it("auto-previews pdf and binary files", () => {
+    const component = new ShadowClawFileViewer();
+
+    expect(
+      component.shouldAutoPreview({
+        name: "doc.pdf",
+        kind: "pdf",
+        content: "",
+      }),
+    ).toBe(true);
+
+    expect(
+      component.shouldAutoPreview({
+        name: "photo.png",
+        kind: "binary",
+        content: "",
+      }),
+    ).toBe(true);
+  });
+
+  it("auto-previews markdown files", () => {
+    const component = new ShadowClawFileViewer();
+
+    expect(
+      component.shouldAutoPreview({
+        name: "notes.md",
+        kind: "text",
+        content: "# hello",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not auto-preview plain text files", () => {
+    const component = new ShadowClawFileViewer();
+
+    expect(
+      component.shouldAutoPreview({
+        name: "notes.txt",
+        kind: "text",
+        content: "hello",
+      }),
+    ).toBe(false);
+  });
 });

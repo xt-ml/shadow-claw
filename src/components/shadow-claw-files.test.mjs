@@ -54,6 +54,16 @@ jest.unstable_mockModule("../stores/orchestrator.mjs", () => ({
     loadFiles: jest.fn(),
     db: {},
     triggerFilesRefresh: jest.fn(),
+    orchestrator: {
+      getVMStatus: jest.fn(() => ({
+        ready: false,
+        booting: false,
+        bootAttempted: false,
+        error: null,
+        mode: null,
+      })),
+      events: { on: jest.fn(), off: jest.fn() },
+    },
   },
 }));
 
@@ -83,6 +93,10 @@ describe("shadow-claw-files", () => {
     expect(template).toContain("files__new-btn");
 
     expect(template).toContain("files__new-dialog");
+
+    expect(template).toContain("files__drop-hint");
+
+    expect(template).toContain("files__upload-progress");
   });
 
   it("creates a file from New dialog input", async () => {
@@ -122,5 +136,55 @@ describe("shadow-claw-files", () => {
       "Use only a file name, not a path",
       3500,
     );
+  });
+
+  it("hides sync buttons when runtime mode is not 9p", () => {
+    const component = new ShadowClawFiles();
+    component.render();
+
+    /** @type {any} */ (
+      orchestratorStore.orchestrator
+    ).getVMStatus.mockReturnValue({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+      mode: "ext2",
+    });
+
+    component.updateSyncButtonsVisibility();
+
+    const hostBtn = component.shadowRoot?.querySelector(
+      ".files__sync-host-btn",
+    );
+    const vmBtn = component.shadowRoot?.querySelector(".files__sync-vm-btn");
+
+    expect(hostBtn).toHaveProperty("hidden", true);
+    expect(vmBtn).toHaveProperty("hidden", true);
+  });
+
+  it("shows sync buttons when runtime mode is 9p", () => {
+    const component = new ShadowClawFiles();
+    component.render();
+
+    /** @type {any} */ (
+      orchestratorStore.orchestrator
+    ).getVMStatus.mockReturnValue({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+      mode: "9p",
+    });
+
+    component.updateSyncButtonsVisibility();
+
+    const hostBtn = component.shadowRoot?.querySelector(
+      ".files__sync-host-btn",
+    );
+    const vmBtn = component.shadowRoot?.querySelector(".files__sync-vm-btn");
+
+    expect(hostBtn).toHaveProperty("hidden", false);
+    expect(vmBtn).toHaveProperty("hidden", false);
   });
 });

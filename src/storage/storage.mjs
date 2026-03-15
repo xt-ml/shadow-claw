@@ -18,6 +18,14 @@ import { getConfig } from "../db/getConfig.mjs";
 let explicitRoot = null;
 
 /**
+ * @returns {Promise<FileSystemDirectoryHandle>}
+ */
+async function getOpfsRoot() {
+  const opfsRoot = await navigator.storage.getDirectory();
+  return opfsRoot.getDirectoryHandle(OPFS_ROOT, { create: true });
+}
+
+/**
  * Determine whether a value behaves like a FileSystemDirectoryHandle.
  * In workers, `FileSystemDirectoryHandle` may be undefined, so rely on
  * capability checks as a fallback.
@@ -74,8 +82,7 @@ export async function getStorageRoot(db) {
   }
 
   // Fallback to OPFS root only if NO local handle is configured
-  const opfsRoot = await navigator.storage.getDirectory();
-  return opfsRoot.getDirectoryHandle(OPFS_ROOT, { create: true });
+  return getOpfsRoot();
 }
 
 /**

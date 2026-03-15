@@ -50,6 +50,7 @@ import {
  * @property {boolean} booting
  * @property {boolean} bootAttempted
  * @property {string|null} error
+ * @property {'ext2'|'9p'|null} [mode]
  */
 
 /**
@@ -66,6 +67,8 @@ import {
  * @property {(() => void)|null} onFlushed
  * @property {string} recentOutput
  * @property {boolean} commandPending
+ * @property {boolean} commandTouchesWorkspace
+ * @property {boolean} cwdInWorkspace
  * @property {boolean} disposed
  * @property {() => void} flushSoon
  */
@@ -455,6 +458,7 @@ export function getVMStatus() {
     ready: instance?.isReady() ?? false,
     booting,
     bootAttempted,
+    mode: activeMode,
     error:
       preferredBootMode === "disabled" ? WEBVM_DISABLED_MESSAGE : lastBootError,
   };
@@ -764,12 +768,28 @@ export function attachTerminalWorkspaceAutoSync(context, onFlushed = null) {
     onFlushed,
     recentOutput: "",
     commandPending: false,
+    commandTouchesWorkspace: false,
+    cwdInWorkspace: false,
     disposed: false,
     flushSoon: () => scheduleTerminalWorkspaceFlush(state),
   };
 
+  // Ignore idle/background 9p writes (for example boot-time daemons) so
+  // auto-sync is driven by interactive terminal commands only.
+  const onNinePWriteEnd = () => {
+    if (terminalAutoSyncState !== state || state.disposed) {
+      return;
+    }
+
+    if (!state.commandPending || !state.commandTouchesWorkspace) {
+      return;
+    }
+
+    state.flushSoon();
+  };
+
   terminalAutoSyncState = state;
-  emulator.add_listener("9p-write-end", state.flushSoon);
+  emulator.add_listener("9p-write-end", onNinePWriteEnd);
 
   return () => {
     if (terminalAutoSyncState === state) {
@@ -780,7 +800,7 @@ export function attachTerminalWorkspaceAutoSync(context, onFlushed = null) {
     state.commandPending = false;
     state.recentOutput = "";
 
-    emulator.remove_listener("9p-write-end", state.flushSoon);
+    emulator.remove_listener("9p-write-end", onNinePWriteEnd);
     const timer = workspaceFlushTimers.get(groupId);
     if (timer) {
       clearTimeout(timer);
@@ -1860,7 +1880,13 @@ function recordTerminalAutoSyncInput(data) {
   }
 
   if (data.includes("\n") || data.includes("\r")) {
+    // Only auto-flush commands that can plausibly touch /workspace.
+    const touchesWorkspace =
+      terminalAutoSyncState.cwdInWorkspace ||
+      commandTextMentionsWorkspacePath(data);
+
     terminalAutoSyncState.commandPending = true;
+    terminalAutoSyncState.commandTouchesWorkspace = touchesWorkspace;
     terminalAutoSyncState.recentOutput = "";
   }
 }
@@ -1871,11 +1897,7 @@ function recordTerminalAutoSyncInput(data) {
  * @returns {void}
  */
 function recordTerminalAutoSyncOutput(chunk) {
-  if (
-    !terminalAutoSyncState ||
-    terminalAutoSyncState.disposed ||
-    !terminalAutoSyncState.commandPending
-  ) {
+  if (!terminalAutoSyncState || terminalAutoSyncState.disposed) {
     return;
   }
 
@@ -1887,22 +1909,69 @@ function recordTerminalAutoSyncOutput(chunk) {
       terminalAutoSyncState.recentOutput.slice(-VM_TERMINAL_PROMPT_TAIL_LENGTH);
   }
 
-  if (!looksLikeShellPrompt(terminalAutoSyncState.recentOutput)) {
+  const promptInfo = detectShellPrompt(terminalAutoSyncState.recentOutput);
+  if (promptInfo.cwd) {
+    terminalAutoSyncState.cwdInWorkspace = isWorkspaceShellPath(promptInfo.cwd);
+  }
+
+  if (!terminalAutoSyncState.commandPending || !promptInfo.matches) {
     return;
   }
 
+  const shouldFlush = terminalAutoSyncState.commandTouchesWorkspace;
+
   terminalAutoSyncState.commandPending = false;
+  terminalAutoSyncState.commandTouchesWorkspace = false;
   terminalAutoSyncState.recentOutput = "";
+
+  if (!shouldFlush) {
+    return;
+  }
+
   terminalAutoSyncState.flushSoon();
 }
 
 /**
  * @param {string} text
  *
+ * @returns {{ matches: boolean, cwd: string|null }}
+ */
+function detectShellPrompt(text) {
+  const promptMatches = text.matchAll(
+    /(?:^|[\r\n])[^\r\n]*:([^\r\n#\$]+)[#$](?:\s|$)/g,
+  );
+
+  /** @type {string|null} */
+  let cwd = null;
+
+  for (const match of promptMatches) {
+    if (typeof match[1] === "string") {
+      cwd = match[1].trim();
+    }
+  }
+
+  return {
+    matches: /(?:^|[\r\n])[^\r\n]*[#$](?:\s|$)/.test(text),
+    cwd,
+  };
+}
+
+/**
+ * @param {string} data
+ *
  * @returns {boolean}
  */
-function looksLikeShellPrompt(text) {
-  return /(?:^|[\r\n])[^\r\n]*[#$] $/.test(text);
+function commandTextMentionsWorkspacePath(data) {
+  return /(?:^|\s|['"`])\/workspace(?:\/|\s|$|['"`])/.test(data);
+}
+
+/**
+ * @param {string} path
+ *
+ * @returns {boolean}
+ */
+function isWorkspaceShellPath(path) {
+  return path === "/workspace" || path.startsWith("/workspace/");
 }
 
 /**

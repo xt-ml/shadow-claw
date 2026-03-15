@@ -7,6 +7,8 @@
   "author": "Karl Herrick <me@karlherrick.com>",
   "main": "src/serve.mjs",
   "scripts": {
+    "build:pkg:get:meta": "git rev-parse HEAD",
+    "build:pkg:meta": "node -e \"import fs from 'node:fs/promises';const m=process.argv[1],f='index.html',s=await fs.readFile(f,'utf8');await fs.writeFile(f,s.replace(/<meta\\s+name=\\\"revision\\\"\\s+content=\\\"[^\\\"]*\\\"\\s*\\\/>/,'<meta name=\\\"revision\\\" content=\\\"'+m+'\\\" />'));\"",
     "build": "bash bin/build.sh",
     "build:service-worker": "workbox generateSW service-worker/workbox-config.cjs",
     "clean:service-worker": "node bin/rimraf.mjs workbox-*.js && node bin/rimraf.mjs service-worker.js",

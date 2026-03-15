@@ -74,6 +74,7 @@ sequenceDiagram
 | `src/vm.mjs`                         | v86 Alpine Linux VM for `bash` tool execution + terminal bridge     |
 | `src/db/db.mjs`                      | IndexedDB layer — messages, sessions, tasks, config                |
 | `src/storage/storage.mjs`            | OPFS + Local Folder file storage, zip export/import                |
+| `src/storage/writeFileHandle.mjs`    | Cross-browser file writes (stream, legacy, sync-handle, worker path fallback) |
 | `src/storage/readGroupFileBytes.mjs` | Reads raw file bytes (used for binary previews like PDFs)          |
 | `src/crypto.mjs`                     | AES-256-GCM encryption for API keys at rest                        |
 | `src/git/git.mjs`                    | Isomorphic-git integration and version control operations          |
@@ -129,6 +130,12 @@ graph LR
   config -->|AES-256-GCM encrypted| ApiKey["🔑 API Key"]
 ```
 
+Write paths are centralized through `src/storage/writeFileHandle.mjs`:
+
+- `writeFileHandle()` supports `createWritable()`, legacy `createWriteable()`, and `createSyncAccessHandle()`.
+- `writeOpfsPathViaWorker()` is the Safari-friendly fallback for OPFS writes when main-thread handles are not writable.
+- `writeGroupFile`, `uploadGroupFile`, and ZIP restore flows all use this shared layer.
+
 ## WebVM (`bash` Backend)
 
 `bash` tool calls prefer the worker-owned WebVM.
@@ -146,13 +153,21 @@ graph LR
 4. `CONFIG_KEYS.VM_NETWORK_RELAY_URL` (ws/wss relay for VM networking)
 
 When no VM boot host has been configured yet, startup defaults to
-`DEFAULT_VM_BOOT_HOST` (`https://xt-ml.github.io/v86`).
+`DEFAULT_VM_BOOT_HOST` 'http://localhost:8888'.
 
 The `<shadow-claw-terminal>` component uses orchestrator terminal bridge APIs.
 Interactive terminal sessions and tool-driven `bash` execution are coordinated in
 `vm.mjs` so command execution can temporarily suspend terminal output and then resume
 cleanly. In 9p mode, terminal and command activity sync `/workspace` changes back to
 OPFS so the Files view stays up to date.
+
+The Files page also exposes manual sync controls when VM mode is `9p`:
+
+- `Host -> VM`: requests `vm-workspace-sync` (push host workspace into VM `/workspace`)
+- `VM -> Host`: requests `vm-workspace-flush` (pull VM `/workspace` changes back to host)
+
+Terminal-driven 9p auto-sync only flushes when workspace-affecting commands complete,
+and ignores idle background write events.
 
 VM assets are expected under `/assets/v86.ext2/` and `/assets/v86.9pfs/`.
 
@@ -171,6 +186,14 @@ Serve these files (under `/assets/v86.ext2/`) to enable ext2 boot:
 
 Vanilla Web Components + **TC39 Signals** (via `signal-polyfill`). A small `effect()`
 helper re-runs DOM updates whenever signals change. No virtual DOM, no framework.
+
+The file viewer now loads text, PDF, and browser-previewable binary files with MIME-aware
+preview defaults, and revokes temporary object URLs on close/swap to avoid leaks.
+
+## Build Metadata
+
+Build-time metadata stamps the current Git revision into `<meta name="revision">` in
+`index.html`. The Settings panel reads and displays this value as `Deployed revision:`.
 
 ## Comparison with NanoClaw
 

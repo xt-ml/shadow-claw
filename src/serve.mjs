@@ -114,6 +114,14 @@ const CORS_CONFIG = {
   allowLocalhostOnly: true, // Restricts to localhost only
 };
 
+const CORS_EXPOSED_HEADERS = [
+  "Content-Range",
+  "Accept-Ranges",
+  "Content-Length",
+  "Content-Type",
+  "ETag",
+];
+
 app.use(
   cors({
     origin(origin, callback) {
@@ -195,6 +203,7 @@ app.use(
 
       return callback(new Error("Not allowed by CORS"));
     },
+    exposedHeaders: CORS_EXPOSED_HEADERS,
   }),
 );
 
@@ -445,7 +454,18 @@ app.all(/^\/git-proxy\/(.*)/, async (req, res) => {
 app.use(expressUrlrewrite(/^(.+)\/index\.html$/, "$1/"));
 
 app.use((req, res, next) => {
-  res.setHeader("Cache-Control", "no-cache");
+  const requestPath = new URL(req.originalUrl, "http://localhost").pathname;
+  const isWebVMAsset =
+    requestPath.startsWith("/assets/v86.9pfs/") ||
+    requestPath.startsWith("/assets/v86.ext2/");
+
+  if (isWebVMAsset) {
+    // WebVM chunk files are immutable content-addressed assets; allow the
+    // browser HTTP cache to absorb repeated 9p demand-load reads in dev.
+    res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  } else {
+    res.setHeader("Cache-Control", "no-cache");
+  }
 
   const filePath = path.join(__dirname, path.sep, "..", path.sep, req.url);
   fs.stat(filePath, (err, stats) => {

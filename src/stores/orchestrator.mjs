@@ -411,10 +411,27 @@ export class OrchestratorStore {
       const files = await listGroupFiles(db, groupId, currentPath);
 
       this._files.set(files);
-      this.orchestrator?.syncTerminalWorkspace?.(groupId);
     } catch (err) {
       console.error("Failed to load files in store:", err);
     }
+  }
+
+  /**
+   * Request a manual host -> VM workspace sync for the active group.
+   *
+   * @returns {void}
+   */
+  syncHostWorkspaceToVM() {
+    this.orchestrator?.syncTerminalWorkspace?.(this._activeGroupId.get());
+  }
+
+  /**
+   * Request a manual VM -> host workspace flush for the active group.
+   *
+   * @returns {void}
+   */
+  syncVMWorkspaceToHost() {
+    this.orchestrator?.flushTerminalWorkspace?.(this._activeGroupId.get());
   }
 
   /**

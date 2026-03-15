@@ -196,6 +196,31 @@ describe("shadow-claw-terminal", () => {
     expect(orchestrator.sendTerminalInput).toHaveBeenCalledWith("\u0003");
   });
 
+  it("preserves visible prompt when clear is pressed", async () => {
+    const orchestrator = createOrchestratorStub({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+
+    const element = new ShadowClawTerminal();
+    element.orchestrator = orchestrator;
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    orchestrator.events.emit("vm-terminal-output", {
+      chunk:
+        "localhost:~# cat /workspace/foo/Testing\nfile contents\nlocalhost:~# ",
+    });
+
+    element.clearOutput();
+
+    const output = element.shadowRoot?.querySelector('[data-role="output"]');
+
+    expect(output?.textContent).toBe("localhost:~# ");
+  });
+
   it("strips ANSI codes and honors clear-screen sequences", async () => {
     const orchestrator = createOrchestratorStub({
       ready: true,

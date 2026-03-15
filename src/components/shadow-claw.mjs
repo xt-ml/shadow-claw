@@ -354,8 +354,8 @@ export class ShadowClaw extends HTMLElement {
           display: flex;
           flex-direction: column;
           font-family: var(--shadow-claw-font-sans);
-          height: 100dvh;
           height: 100vh;
+          height: 100dvh;
           width: 100%;
         }
 
@@ -363,6 +363,7 @@ export class ShadowClaw extends HTMLElement {
           display: flex;
           flex-direction: row;
           flex: 1;
+          min-height: 0;
           overflow: hidden;
         }
 
@@ -385,8 +386,8 @@ export class ShadowClaw extends HTMLElement {
             border-radius: 0 var(--shadow-claw-radius-m) var(--shadow-claw-radius-m) 0;
             box-shadow: var(--shadow-claw-shadow-lg);
             display: flex;
-            height: calc(100dvh - 4rem);
             height: calc(100vh - 4rem);
+            height: calc(100dvh - 4rem);
             position: absolute;
             z-index: 100;
           }
@@ -469,6 +470,7 @@ export class ShadowClaw extends HTMLElement {
           display: flex;
           flex-direction: column;
           flex: 1;
+          min-height: 0;
           overflow: hidden;
         }
 
@@ -477,6 +479,7 @@ export class ShadowClaw extends HTMLElement {
           display: none;
           flex-direction: column;
           flex: 1;
+          min-height: 0;
           overflow: hidden;
         }
 
@@ -809,6 +812,13 @@ export class ShadowClaw extends HTMLElement {
 
         .settings-section {
           margin-bottom: 1.5rem;
+        }
+
+        .settings-version-text {
+          color: var(--shadow-claw-text-secondary);
+          font-size: 0.75rem;
+          margin-top: 1rem;
+          opacity: 0.7;
         }
 
         .settings-section h3 {
@@ -1776,6 +1786,7 @@ export class ShadowClaw extends HTMLElement {
                   </div>
                   <div class="form-group">
                     <label class="form-label">Boot Asset Host</label>
+                    <!-- https://xt-ml.github.io/v86 -->
                     <input
                       class="form-input"
                       data-setting="vm-boot-host-input"
@@ -1963,6 +1974,10 @@ export class ShadowClaw extends HTMLElement {
                       makes files directly accessible on your disk.
                     </div>
                   </div>
+                </div>
+
+                <div class="settings-version-text" data-info="deployed-revision">
+                  Deployed revision: unknown
                 </div>
               </div>
             </div>
@@ -2615,6 +2630,17 @@ export class ShadowClaw extends HTMLElement {
     const root = this.shadowRoot;
     if (!root) {
       return;
+    }
+
+    const revisionEl = root.querySelector('[data-info="deployed-revision"]');
+    if (revisionEl) {
+      const revision =
+        document
+          .querySelector('meta[name="revision"]')
+          ?.getAttribute("content")
+          ?.trim() || "";
+
+      revisionEl.textContent = `Deployed revision: ${revision || "unknown"}`;
     }
 
     try {

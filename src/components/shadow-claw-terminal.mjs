@@ -512,9 +512,19 @@ export class ShadowClawTerminal extends HTMLElement {
   }
 
   clearOutput() {
+    const preservedPrompt =
+      this.vmStatus.ready && this.connectedToWorkerTerminal
+        ? extractLastPromptLine(this.outputBuffer)
+        : "";
+
     this.outputBuffer = "";
     this.pendingEscape = "";
     this.autoScrollEnabled = true;
+
+    if (preservedPrompt) {
+      this.outputBuffer = preservedPrompt;
+    }
+
     this.renderOutput();
   }
 
@@ -681,6 +691,27 @@ function isNearBottom(screen) {
     screen.scrollHeight - (screen.scrollTop + screen.clientHeight);
 
   return distanceToBottom <= AUTO_SCROLL_BOTTOM_THRESHOLD_PX;
+}
+
+/**
+ * @param {string} text
+ *
+ * @returns {string}
+ */
+function extractLastPromptLine(text) {
+  if (!text) {
+    return "";
+  }
+
+  const lines = text.split("\n");
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    const line = lines[index] || "";
+    if (/[#$](?:\s|$)/.test(line)) {
+      return line;
+    }
+  }
+
+  return "";
 }
 
 /**

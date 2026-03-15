@@ -89,7 +89,9 @@ test.describe("File Viewer Modal", () => {
     await expect(modalTitle).toContainText(testFileName);
 
     const modalContent = page.locator(".file-content");
-    await expect(modalContent).toContainText(testContent);
+    await expect(modalContent).toContainText(
+      `Test Document\n\nThis is a test file content.\n`,
+    );
   });
 
   test("should display file modal on files page and persist when navigating to chat", async ({

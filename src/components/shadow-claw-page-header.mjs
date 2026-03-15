@@ -6,6 +6,9 @@ export class ShadowClawPageHeader extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
+
+    /** @type {() => void} */
+    this.actionsLayoutCleanup = () => {};
   }
 
   static get observedAttributes() {
@@ -38,10 +41,10 @@ export class ShadowClawPageHeader extends HTMLElement {
         }
 
         .header__top {
-          align-items: center;
+          align-items: flex-start;
           display: grid;
           gap: 0.75rem;
-          grid-template-columns: 1fr auto;
+          grid-template-columns: minmax(0, 1fr);
           width: 100%;
         }
 
@@ -55,11 +58,66 @@ export class ShadowClawPageHeader extends HTMLElement {
           display: flex;
           flex-direction: column;
           gap: 0.375rem;
+          padding-top: 0.5rem;
           width: 100%;
         }
 
         .header__actions[hidden] {
           display: none !important;
+        }
+
+        .header__actions-disclosure {
+          width: 100%;
+        }
+
+        .header__actions-disclosure[hidden] {
+          display: none !important;
+        }
+
+        .header__actions-toggle {
+          align-items: center;
+          background-color: var(--shadow-claw-bg-secondary, #f8fafc);
+          border: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
+          border-radius: var(--shadow-claw-radius-m, 0.75rem);
+          color: var(--shadow-claw-text-secondary, #475569);
+          cursor: pointer;
+          display: flex;
+          font-size: 0.75rem;
+          font-weight: 600;
+          gap: 0.5rem;
+          justify-content: space-between;
+          list-style: none;
+          min-height: 2rem;
+          padding: 0.375rem 0.625rem;
+          user-select: none;
+          width: calc(100% - 1.5rem);
+        }
+
+        .header__actions-toggle::-webkit-details-marker {
+          display: none;
+        }
+
+        .header__actions-toggle::after {
+          border-color: currentColor transparent transparent;
+          border-style: solid;
+          border-width: 0.375rem 0.3125rem 0;
+          content: "";
+          display: inline-block;
+          flex: none;
+          transform: rotate(0deg);
+          transition: transform 0.2s ease;
+        }
+
+        .header__actions-disclosure[open] .header__actions-toggle::after {
+          transform: rotate(180deg);
+        }
+
+        .header__actions-toggle:hover,
+        .header__actions-toggle:focus-visible {
+          background-color: var(--shadow-claw-bg-tertiary, #f1f5f9);
+          border-color: var(--shadow-claw-accent-primary, #334155);
+          color: var(--shadow-claw-text-primary, #0f172a);
+          outline: none;
         }
 
         /* Mobile: make all slotted buttons full-width and stacked */
@@ -89,6 +147,15 @@ export class ShadowClawPageHeader extends HTMLElement {
             flex-wrap: wrap;
             gap: 0.5rem;
             justify-content: flex-end;
+            padding-top: 0;
+            width: auto;
+          }
+
+          .header__actions-toggle {
+            display: none;
+          }
+
+          .header__actions-disclosure {
             width: auto;
           }
 
@@ -134,9 +201,14 @@ export class ShadowClawPageHeader extends HTMLElement {
         <div class="header__main">
           <div class="header__top">
             <h2 class="header__title"></h2>
-            <div class="header__actions">
-              <slot name="actions"></slot>
-            </div>
+            <details class="header__actions-disclosure">
+              <summary class="header__actions-toggle" aria-label="Toggle page actions">
+                Actions
+              </summary>
+              <div class="header__actions" id="header-actions-panel">
+                <slot name="actions"></slot>
+              </div>
+            </details>
           </div>
           <div class="header__status">
             <slot name="status"></slot>
@@ -182,6 +254,7 @@ export class ShadowClawPageHeader extends HTMLElement {
     }
 
     this.setupActionsContainer(root);
+    this.setupResponsiveActionsDisclosure(root);
   }
 
   /**
@@ -192,10 +265,12 @@ export class ShadowClawPageHeader extends HTMLElement {
   setupActionsContainer(root) {
     const actionSlot = root.querySelector('slot[name="actions"]');
     const actions = root.querySelector(".header__actions");
+    const disclosure = root.querySelector(".header__actions-disclosure");
 
     if (
       !(actionSlot instanceof HTMLSlotElement) ||
-      !(actions instanceof HTMLElement)
+      !(actions instanceof HTMLElement) ||
+      !(disclosure instanceof HTMLElement)
     ) {
       return;
     }
@@ -203,10 +278,57 @@ export class ShadowClawPageHeader extends HTMLElement {
     const updateVisibility = () => {
       const hasActions = actionSlot.assignedElements().length > 0;
       actions.hidden = !hasActions;
+      disclosure.hidden = !hasActions;
     };
 
     actionSlot.addEventListener("slotchange", updateVisibility);
     updateVisibility();
+  }
+
+  /**
+   * Keep actions collapsed by default on stacked/mobile layout and expanded on wider screens.
+   *
+   * @param {ShadowRoot} root
+   */
+  setupResponsiveActionsDisclosure(root) {
+    this.actionsLayoutCleanup();
+
+    const disclosure = root.querySelector(".header__actions-disclosure");
+    if (!(disclosure instanceof HTMLDetailsElement)) {
+      return;
+    }
+
+    if (typeof globalThis.matchMedia !== "function") {
+      disclosure.open = false;
+      this.actionsLayoutCleanup = () => {};
+      return;
+    }
+
+    const mediaQuery = globalThis.matchMedia("(min-width: 650px)");
+
+    const applyLayoutMode = () => {
+      if (mediaQuery.matches) {
+        disclosure.open = true;
+      } else {
+        disclosure.open = false;
+      }
+    };
+
+    applyLayoutMode();
+
+    const onChange = () => {
+      applyLayoutMode();
+    };
+
+    mediaQuery.addEventListener("change", onChange);
+
+    this.actionsLayoutCleanup = () => {
+      mediaQuery.removeEventListener("change", onChange);
+    };
+  }
+
+  disconnectedCallback() {
+    this.actionsLayoutCleanup();
   }
 }
 

@@ -1,6 +1,60 @@
 // @ts-ignore
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
 
+/**
+ * pdf.js 5.x may call Map/WeakMap#getOrInsertComputed in some builds.
+ * Safari versions without that proposal need a tiny shim.
+ *
+ * @returns {void}
+ */
+function installGetOrInsertComputedPolyfill() {
+  /**
+   * @typedef {{
+   *   has: (key: object) => boolean,
+   *   get: (key: object) => any,
+   *   set: (key: object, value: any) => any,
+   *   getOrInsertComputed?: (key: object, compute: () => any) => any,
+   * }} MapLikeProto
+   */
+
+  /**
+   * @param {MapLikeProto|undefined|null} proto
+   *
+   * @returns {void}
+   */
+  const install = (proto) => {
+    if (!proto || typeof proto.getOrInsertComputed === "function") {
+      return;
+    }
+
+    Object.defineProperty(proto, "getOrInsertComputed", {
+      configurable: true,
+      writable: true,
+      /**
+       * @param {object} key
+       * @param {() => any} compute
+       *
+       * @returns {any}
+       */
+      value(key, compute) {
+        if (this.has(key)) {
+          return this.get(key);
+        }
+
+        const value = compute();
+        this.set(key, value);
+
+        return value;
+      },
+    });
+  };
+
+  install(Map.prototype);
+  install(WeakMap.prototype);
+}
+
+installGetOrInsertComputedPolyfill();
+
 // Keep worker source aligned with the import map pdfjs-dist version in index.html.
 GlobalWorkerOptions.workerSrc =
   "https://cdn.jsdelivr.net/npm/pdfjs-dist@5.5.207/build/pdf.worker.min.mjs";
@@ -113,7 +167,7 @@ export class ShadowClawPdfViewer extends HTMLElement {
         canvas {
           display: block;
           margin: 0 auto;
-          max-width: 100%;
+          max-width: none;
         }
 
         @media (max-width: 31.25rem) {

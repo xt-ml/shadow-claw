@@ -183,6 +183,11 @@ Handles file list, breadcrumbs, and upload UI.
 - `expectCoreUi()` — Assert file list and upload controls are present
 - `navigateToBreadcrumb(index)` — Click breadcrumb link
 
+Behavior notes:
+
+- Files view supports drag-and-drop uploads and shows an in-panel upload progress bar.
+- `Host -> VM` and `VM -> Host` sync buttons are mode-gated; they render only when VM mode is `9p`.
+
 ## Page Object Guide
 
 ### `AppPage`
@@ -271,6 +276,7 @@ export const TIME_MINUTES_ONE = 60000;
 - Compose page objects from component objects
 - Write intent-driven assertions: `expect(await chat.messageCount()).toBe(2)`
 - Use `toHaveCount()` instead of `toBeVisible()` for custom element hosts (they use `display: contents`)
+- For mode-gated controls (for example VM sync buttons), assert hidden/visible state based on runtime VM mode
 - Feature-gate tests that rely on browser-specific APIs (OPFS, IndexedDB)
 
 ### ❌ DON'T

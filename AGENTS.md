@@ -35,7 +35,7 @@ graph LR
 
   subgraph Agent ["src/ — Agent"]
     tools["tools.mjs<br>tool schemas"]
-    shell["shell/shell.mjs<br>JS shell emulator"]
+    shell["shell/shell.mjs<br>shell runtime + command registry"]
     vm["vm.mjs<br>v86 Alpine VM"]
     gitmod["git/git.mjs<br>isomorphic-git ops"]
     providers["providers.mjs<br>LLM registry"]
@@ -120,9 +120,12 @@ Node-only packages (Express, Jest, Workbox CLI) belong in `devDependencies`.
 | main → worker | `invoke`              | `InvokePayload`                       |
 | main → worker | `compact`             | `CompactPayload`                      |
 | main → worker | `cancel`              | `{ groupId }` (aborts in-flight task) |
+| main → worker | `set-storage`         | `{ storageHandle }`                    |
+| main → worker | `set-vm-mode`         | `{ mode?, bootHost?, networkRelayUrl? }` |
 | main → worker | `vm-terminal-open`    | `{ groupId?: string }` (opens terminal for group workspace) |
 | main → worker | `vm-terminal-input`   | `{ data: string }` (stdin bytes)      |
 | main → worker | `vm-terminal-close`   | `{ groupId?: string }` (detaches terminal session) |
+| main → worker | `vm-workspace-sync`   | `{ groupId?: string }` (request 9p workspace sync) |
 | worker → main | `response`            | `ResponsePayload`                     |
 | worker → main | `error`               | `ErrorPayload`                        |
 | worker → main | `typing`              | `TypingPayload`                       |
@@ -131,10 +134,10 @@ Node-only packages (Express, Jest, Workbox CLI) belong in `devDependencies`.
 | worker → main | `compact-done`        | `CompactDonePayload`                  |
 | worker → main | `open-file`           | `OpenFilePayload`                     |
 | worker → main | `vm-status`           | `VMStatus`                            |
-| worker → main | `vm-terminal-opened`  | `{}`                                  |
-| worker → main | `vm-terminal-output`  | `{ data: string }` (stdout bytes)     |
-| worker → main | `vm-terminal-closed`  | `{}`                                  |
-| worker → main | `vm-terminal-error`   | `{ message: string }`                 |
+| worker → main | `vm-terminal-opened`  | `{ ok: true }`                        |
+| worker → main | `vm-terminal-output`  | `{ chunk: string }` (stdout bytes)    |
+| worker → main | `vm-terminal-closed`  | `{ ok: true }`                        |
+| worker → main | `vm-terminal-error`   | `{ error: string }`                   |
 | worker → main | `vm-workspace-synced` | `{ groupId: string }`                 |
 | worker → main | `show-toast`          | `{ message: string, type?: 'info'|'success'|'warning'|'error', duration?: number }` |
 
@@ -153,6 +156,8 @@ as system context on every agent invocation.
 
 `src/vm.mjs` resolves assets from `/assets/v86.ext2/` and `/assets/v86.9pfs/` by default,
 with optional host override from `CONFIG_KEYS.VM_BOOT_HOST`.
+When unset, the worker seeds VM boot host from `DEFAULT_VM_BOOT_HOST`
+(`https://xt-ml.github.io/v86`).
 `worker.mjs` eagerly boots the VM on startup using persisted preferences (`CONFIG_KEYS.VM_BOOT_MODE`,
 `CONFIG_KEYS.VM_NETWORK_RELAY_URL`, and `CONFIG_KEYS.VM_BOOT_HOST`).
 The VM is **worker-owned** — the only non-test runtime imports of `vm.mjs` are
@@ -228,6 +233,13 @@ optional `apiKeyHeaderFormat`, `headers`, and `defaultModel`.
 5. Repos live in LightningFS under `/git/<repo-name>/` but are **automatically synced** to the OPFS workspace under `repos/<repo-name>/` during tools like `git_clone` and `git_checkout`.
 6. Use the `git_sync` tool to manually push/pull files between the LightningFS git database and the OPFS workspace (useful if you bypass standard automatic syncs).
    - `.git` directories are skipped by default, but can be synced using the `include_git` parameter.
+
+### Add or update a shell command
+
+1. Add or edit the command implementation in `src/shell/commands/<name>.mjs`.
+2. Register it in `src/shell/commands/registry.mjs`.
+3. Keep `SUPPORTED_COMMANDS` in `src/shell/shell.mjs` in sync.
+4. Add or update tests in `src/shell/commands/<name>.test.mjs` and related shell runtime tests as needed.
 
 ### Add a new page / UI section
 

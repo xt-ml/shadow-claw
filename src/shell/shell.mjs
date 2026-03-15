@@ -5,8 +5,10 @@
  *
  * Supported builtins:
  *   echo, printf, cat, head, tail, wc, grep, sort, uniq, tr, cut, sed, awk,
- *   ls, mkdir, cp, mv, rm, touch, pwd, cd, date, env, printenv, export, true,
- *   false, base64, md5sum/sha256sum (Web Crypto), sleep, seq, jq (basic), tee, test
+ *   ls, find, mkdir, cp, mv, rm, touch, pwd, cd, date, env, printenv, export,
+ *   true, false, base64, md5sum, sha1sum, sha256sum, sha384sum, sha512sum,
+ *   sleep, seq, jq (basic), tee, test, diff, du, readlink, realpath,
+ *   tar (internal format)
  *
  * Operators: |  >  >>  &&  ||  ;  $()  ``  $VAR  "interpolation"
  */
@@ -81,11 +83,14 @@ export const SUPPORTED_COMMANDS = new Set([
   "cp",
   "cut",
   "date",
+  "diff",
   "dirname",
+  "du",
   "echo",
   "env",
   "export",
   "false",
+  "find",
   "grep",
   "head",
   "jq",
@@ -98,9 +103,15 @@ export const SUPPORTED_COMMANDS = new Set([
   "pwd",
   "rev",
   "rm",
+  "readlink",
+  "realpath",
+  "tar",
   "sed",
   "seq",
+  "sha1sum",
   "sha256sum",
+  "sha384sum",
+  "sha512sum",
   "sleep",
   "sort",
   "tail",

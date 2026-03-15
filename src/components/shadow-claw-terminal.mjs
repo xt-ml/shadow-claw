@@ -328,10 +328,6 @@ export class ShadowClawTerminal extends HTMLElement {
       this.terminalAttachRequested = false;
       this.updateStatus(this.vmStatus);
 
-      if (!this.outputBuffer) {
-        this.orchestrator?.sendTerminalInput?.("\n");
-      }
-
       this.getInput()?.focus();
     };
     const closedListener = () => {
@@ -493,6 +489,10 @@ export class ShadowClawTerminal extends HTMLElement {
     }
 
     const command = input.value;
+
+    if (!command.trim()) {
+      return;
+    }
 
     this.orchestrator?.sendTerminalInput?.(`${command}\n`);
     input.value = "";
@@ -704,15 +704,35 @@ function normalizeTerminalText(current, chunk, pendingEscape = "") {
       }
 
       index = escape.nextIndex - 1;
+
       continue;
     }
 
     if (char === "\r") {
-      continue;
+      const nextChar = input[index + 1];
+
+      if (nextChar === "\n") {
+        // CRLF: skip the CR, let the LF be processed normally.
+        continue;
+      }
+
+      if (nextChar !== undefined) {
+        // Lone CR within the same chunk: cursor back to column 0,
+        // overwriting the current line (e.g. shell prompt redraw).
+        const lastLineBreak = next.lastIndexOf("\n");
+        next = lastLineBreak === -1 ? "" : next.slice(0, lastLineBreak + 1);
+
+        continue;
+      }
+
+      // CR at end of chunk — we can't tell yet whether it's CR or CRLF.
+      // Defer it so the next chunk can resolve the ambiguity.
+      return { text: next, pending: "\r" };
     }
 
     if (char === "\b" || char === "\u007f") {
       next = next.slice(0, -1);
+
       continue;
     }
 

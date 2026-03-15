@@ -72,9 +72,13 @@ describe("shadow-claw-pdf-viewer", () => {
     const secondBytes = getDocumentMock.mock.calls[1][0].data;
 
     expect(firstBytes).toBeInstanceOf(Uint8Array);
+
     expect(secondBytes).toBeInstanceOf(Uint8Array);
+
     expect(firstBytes).not.toBe(originalBytes);
+
     expect(secondBytes).not.toBe(originalBytes);
+
     expect(secondBytes).not.toBe(firstBytes);
 
     firstBytes[0] = 99;

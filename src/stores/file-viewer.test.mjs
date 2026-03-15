@@ -41,6 +41,7 @@ describe("FileViewerStore", () => {
       binaryContent: null,
     });
     s.closeFile();
+
     expect(s.getFile()).toBeNull();
   });
 
@@ -70,7 +71,9 @@ describe("FileViewerStore", () => {
       "g1",
       "docs/manual.pdf",
     );
+
     expect(readGroupFile).not.toHaveBeenCalled();
+
     expect(s.file).toEqual({
       name: "manual.pdf",
       content: "",
@@ -96,6 +99,7 @@ describe("FileViewerStore", () => {
     await s.openFile({}, "file.txt");
 
     expect(readGroupFile).toHaveBeenCalledWith({}, "br:main", "file.txt");
+
     expect(s.file).toEqual({
       name: "file.txt",
       content: "content",

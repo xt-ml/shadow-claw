@@ -13,6 +13,7 @@ describe("getSession", () => {
     txPromise.mockResolvedValue(session);
 
     await expect(getSession({}, "g1")).resolves.toEqual(session);
+
     expect(txPromise).toHaveBeenCalledWith(
       {},
       "sessions",

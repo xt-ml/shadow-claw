@@ -1,10 +1,15 @@
+import { jest } from "@jest/globals";
+
 import { Orchestrator } from "./orchestrator.mjs";
 
 describe("Orchestrator", () => {
   it("initializes defaults", () => {
     const o = new Orchestrator();
+
     expect(o.getState()).toBe("idle");
+
     expect(typeof o.getAssistantName()).toBe("string");
+
     expect(Array.isArray(o.getAvailableProviders())).toBe(true);
   });
 
@@ -16,6 +21,7 @@ describe("Orchestrator", () => {
     o.setState("thinking");
 
     expect(events).toEqual(["thinking"]);
+
     expect(o.getState()).toBe("thinking");
   });
 
@@ -65,6 +71,20 @@ describe("Orchestrator", () => {
       bootAttempted: true,
       error: null,
     });
+
     expect(events).toHaveLength(1);
+  });
+
+  it("posts silent host-to-vm sync requests", () => {
+    const o = new Orchestrator();
+    const postMessage = jest.fn();
+
+    o.agentWorker = /** @type {any} */ ({ postMessage });
+    o.syncTerminalWorkspace("g1");
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: "vm-workspace-sync",
+      payload: { groupId: "g1" },
+    });
   });
 });

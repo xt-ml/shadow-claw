@@ -5,16 +5,28 @@ import {
   FETCH_MAX_RESPONSE,
 } from "../config.mjs";
 import { getConfig } from "../db/getConfig.mjs";
-import { bootVM, executeInVM, getVMStatus, isVMReady } from "../vm.mjs";
+import { executeShell } from "../shell/shell.mjs";
+import {
+  bootVM,
+  executeInVM,
+  getVMBootModePreference,
+  getVMStatus,
+  isVMReady,
+} from "../vm.mjs";
 import { listGroupFiles } from "../storage/listGroupFiles.mjs";
 import { readGroupFile } from "../storage/readGroupFile.mjs";
 import { writeGroupFile } from "../storage/writeGroupFile.mjs";
 import { ulid } from "../ulid.mjs";
+import { formatShellOutput } from "./formatShellOutput.mjs";
 import { pendingTasks } from "./pendingTasks.mjs";
 import { post } from "./post.mjs";
 import { stripHtml } from "./stripHtml.mjs";
 
 const VM_READY_POLL_MS = 50;
+
+/**
+ * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
+ */
 
 /**
  * Wait until the VM reports ready, or until timeout elapses.
@@ -43,8 +55,19 @@ async function waitForVMReady(timeoutMs) {
 }
 
 /**
- * @typedef {import("../db/db.mjs").ShadowClawDatabase} ShadowClawDatabase
+ * Execute a command via JS shell emulator.
+ *
+ * @param {ShadowClawDatabase} db
+ * @param {string} command
+ * @param {string} groupId
+ * @param {number} timeoutSec
+ *
+ * @returns {Promise<string>}
  */
+async function executeViaShellFallback(db, command, groupId, timeoutSec) {
+  const shellResult = await executeShell(db, command, groupId, {}, timeoutSec);
+  return formatShellOutput(shellResult);
+}
 
 /**
  * Execute a tool
@@ -74,6 +97,16 @@ export async function executeTool(db, name, input, groupId) {
           ? Math.min(Math.max(requestedTimeout, 1), BASH_MAX_TIMEOUT_SEC)
           : defaultTimeoutSec;
 
+        // Explicit disabled mode means "always use JS shell emulator".
+        if (getVMBootModePreference() === "disabled") {
+          return await executeViaShellFallback(
+            db,
+            input.command,
+            groupId,
+            timeoutSec,
+          );
+        }
+
         if (!isVMReady()) {
           await bootVM();
           const status = getVMStatus();
@@ -95,10 +128,22 @@ export async function executeTool(db, name, input, groupId) {
             ? "Reason: WebVM is still booting."
             : "Reason: WebVM is unavailable.";
 
-        return (
-          "Error: bash command was not executed in WebVM.\n" +
-          `${reason}\n` +
-          "To avoid inaccurate results, no fallback shell was used."
+        post({
+          type: "show-toast",
+          payload: {
+            message:
+              `WebVM unavailable for this bash command. ${reason} ` +
+              "Falling back to JavaScript Bash Emulator and retrying WebVM on the next command.",
+            type: "warning",
+            duration: 7000,
+          },
+        });
+
+        return await executeViaShellFallback(
+          db,
+          input.command,
+          groupId,
+          timeoutSec,
         );
       }
 

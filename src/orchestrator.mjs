@@ -466,6 +466,21 @@ export class Orchestrator {
   }
 
   /**
+   * Refresh the 9p VM workspace from host storage without triggering a UI
+   * file-change loop.
+   *
+   * @param {string} [groupId]
+   *
+   * @returns {void}
+   */
+  syncTerminalWorkspace(groupId = DEFAULT_GROUP_ID) {
+    this.agentWorker?.postMessage({
+      type: "vm-workspace-sync",
+      payload: { groupId },
+    });
+  }
+
+  /**
    * @param {string} data
    *
    * @returns {void}

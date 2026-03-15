@@ -411,6 +411,7 @@ export class OrchestratorStore {
       const files = await listGroupFiles(db, groupId, currentPath);
 
       this._files.set(files);
+      this.orchestrator?.syncTerminalWorkspace?.(groupId);
     } catch (err) {
       console.error("Failed to load files in store:", err);
     }

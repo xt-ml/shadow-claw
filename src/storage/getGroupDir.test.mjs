@@ -23,7 +23,9 @@ describe("getGroupDir", () => {
     const result = await getGroupDir(db, "user:123");
 
     expect(result).toBe("group-dir-handle");
+
     expect(getStorageRoot).toHaveBeenCalledWith(db);
+
     expect(getNestedDir).toHaveBeenCalledWith(root, "groups", "user-123");
   });
 
@@ -36,6 +38,7 @@ describe("getGroupDir", () => {
     const result = await getGroupDir(db, "mygroup");
 
     expect(result).toBe("group-dir-handle");
+
     expect(getNestedDir).toHaveBeenCalledWith(root, "groups", "mygroup");
   });
 });

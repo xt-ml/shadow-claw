@@ -46,7 +46,9 @@ describe("restoreAllGroupFilesFromZip", () => {
     await restoreAllGroupFilesFromZip({}, "g", new Blob(["zip"]));
 
     expect(deleteAllGroupFiles).toHaveBeenCalledWith({}, "g");
+
     expect(writable.write).toHaveBeenCalled();
+
     expect(writable.close).toHaveBeenCalled();
   });
 });

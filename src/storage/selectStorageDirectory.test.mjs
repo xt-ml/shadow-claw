@@ -13,6 +13,7 @@ describe("selectStorageDirectory", () => {
     window.showDirectoryPicker = jest.fn().mockResolvedValue(handle);
 
     await expect(selectStorageDirectory({})).resolves.toBe(true);
+
     expect(setConfig).toHaveBeenCalled();
   });
 

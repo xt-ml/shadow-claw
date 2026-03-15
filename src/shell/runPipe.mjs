@@ -61,6 +61,7 @@ export async function runPipe(db, line, ctx) {
     if (ch === "|" && !inSingle && !inDouble && subshellDepth === 0) {
       if (current.trim()) parts.push(current.trim());
       current = "";
+
       continue;
     }
 

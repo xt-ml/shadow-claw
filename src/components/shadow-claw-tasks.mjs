@@ -1017,9 +1017,11 @@ export class ShadowClawTasks extends HTMLElement {
     if (scheduleInput instanceof HTMLInputElement) {
       scheduleInput.value = task.schedule;
     }
+
     if (promptInput instanceof HTMLTextAreaElement) {
       promptInput.value = task.prompt;
     }
+
     if (isScriptInput instanceof HTMLInputElement) {
       isScriptInput.checked = !!task.isScript;
     }

@@ -80,6 +80,7 @@ export async function getStorageRoot(db) {
 
 /**
  * Set an explicit storage root handle (used to sync handle to workers).
+ *
  * @param {FileSystemDirectoryHandle} handle
  */
 export function setStorageRoot(handle) {

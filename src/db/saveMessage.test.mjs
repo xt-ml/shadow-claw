@@ -13,6 +13,7 @@ describe("saveMessage", () => {
     const msg = { id: "m1" };
 
     await expect(saveMessage({}, msg)).resolves.toBeUndefined();
+
     expect(txPromise).toHaveBeenCalledWith(
       {},
       "messages",

@@ -13,6 +13,7 @@ describe("saveSession", () => {
     const session = { groupId: "g1" };
 
     await expect(saveSession({}, session)).resolves.toBeUndefined();
+
     expect(txPromise).toHaveBeenCalledWith(
       {},
       "sessions",

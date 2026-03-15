@@ -95,13 +95,15 @@ describe("shadow-claw-terminal", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     expect(orchestrator.openTerminalSession).toHaveBeenCalled();
-    expect(orchestrator.sendTerminalInput).toHaveBeenCalledWith("\n");
+
+    expect(orchestrator.sendTerminalInput).not.toHaveBeenCalledWith("\n");
 
     orchestrator.events.emit("vm-terminal-output", {
       chunk: "echo hi\r\nhi\r\n",
     });
 
     const output = element.shadowRoot?.querySelector('[data-role="output"]');
+
     expect(output?.textContent).toContain("echo hi\nhi\n");
 
     const input = element.shadowRoot?.querySelector('[data-role="input"]');
@@ -132,7 +134,9 @@ describe("shadow-claw-terminal", () => {
     const input = element.shadowRoot?.querySelector('[data-role="input"]');
 
     expect(status?.textContent).toContain("Assets not found");
+
     expect(input).toHaveProperty("disabled", true);
+
     expect(orchestrator.openTerminalSession).not.toHaveBeenCalled();
   });
 
@@ -154,7 +158,9 @@ describe("shadow-claw-terminal", () => {
     element.interrupt();
 
     const output = element.shadowRoot?.querySelector('[data-role="output"]');
+
     expect(output?.textContent).toBe("");
+
     expect(orchestrator.sendTerminalInput).toHaveBeenCalledWith("\u0003");
   });
 
@@ -182,6 +188,7 @@ describe("shadow-claw-terminal", () => {
     });
 
     const output = element.shadowRoot?.querySelector('[data-role="output"]');
+
     expect(output?.textContent).toBe("(none):~# ");
   });
 
@@ -204,6 +211,7 @@ describe("shadow-claw-terminal", () => {
     });
 
     const output = element.shadowRoot?.querySelector('[data-role="output"]');
+
     expect(output?.textContent).toBe("helloworld\n");
 
     element.clearOutput();
@@ -211,6 +219,7 @@ describe("shadow-claw-terminal", () => {
     orchestrator.events.emit("vm-terminal-output", {
       chunk: "32mbar\u001b[m\n",
     });
+
     expect(output?.textContent).toBe("foobar\n");
 
     element.clearOutput();
@@ -218,7 +227,67 @@ describe("shadow-claw-terminal", () => {
       chunk: "(none):~# \u001b[",
     });
     orchestrator.events.emit("vm-terminal-output", { chunk: "6nfind /\n" });
+
     expect(output?.textContent).toBe("(none):~# find /\n");
+  });
+
+  it("collapses CR-based prompt redraw spam to a single visible prompt", async () => {
+    const orchestrator = createOrchestratorStub({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+
+    const element = new ShadowClawTerminal();
+    element.orchestrator = orchestrator;
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Initial prompt
+    orchestrator.events.emit("vm-terminal-output", { chunk: "localhost:~# " });
+
+    // Shell redraws: CR arrives alone (deferred) then the next char resolves it
+    // as a lone CR (not CRLF), clearing the current line.
+    orchestrator.events.emit("vm-terminal-output", { chunk: "\r" });
+    orchestrator.events.emit("vm-terminal-output", { chunk: "l" });
+    for (const c of "ocalhost:~# ") {
+      orchestrator.events.emit("vm-terminal-output", { chunk: c });
+    }
+
+    // Another redraw
+    orchestrator.events.emit("vm-terminal-output", { chunk: "\r" });
+    orchestrator.events.emit("vm-terminal-output", { chunk: "l" });
+    for (const c of "ocalhost:~# ") {
+      orchestrator.events.emit("vm-terminal-output", { chunk: c });
+    }
+
+    const output = element.shadowRoot?.querySelector('[data-role="output"]');
+
+    expect(output?.textContent).toBe("localhost:~# ");
+  });
+
+  it("preserves CRLF boot output when CR and LF arrive as separate single-byte chunks", async () => {
+    const orchestrator = createOrchestratorStub({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+
+    const element = new ShadowClawTerminal();
+    element.orchestrator = orchestrator;
+    document.body.appendChild(element);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Simulate serial port delivering CRLF one byte at a time
+    for (const c of "Booting kernel\r\nAlpine Linux 3.21\r\n") {
+      orchestrator.events.emit("vm-terminal-output", { chunk: c });
+    }
+
+    const output = element.shadowRoot?.querySelector('[data-role="output"]');
+
+    expect(output?.textContent).toBe("Booting kernel\nAlpine Linux 3.21\n");
   });
 
   it("drops internal WebVM completion markers from visible output", async () => {
@@ -239,6 +308,7 @@ describe("shadow-claw-terminal", () => {
     });
 
     const output = element.shadowRoot?.querySelector('[data-role="output"]');
+
     expect(output?.textContent).toBe("echo hi\n");
   });
 
@@ -264,6 +334,7 @@ describe("shadow-claw-terminal", () => {
     });
 
     const output = element.shadowRoot?.querySelector('[data-role="output"]');
+
     expect(output?.textContent).toBe("localhost:~# ");
   });
 
@@ -300,7 +371,9 @@ describe("shadow-claw-terminal", () => {
     }
 
     expect(status?.textContent).toContain("Connected to Alpine WebVM");
+
     expect(input.disabled).toBe(false);
+
     expect(input.placeholder).toBe("Type a shell command");
   });
 
@@ -380,6 +453,7 @@ describe("shadow-claw-terminal", () => {
     scrollHeightValue = 700;
     orchestrator.events.emit("vm-terminal-output", { chunk: "line 1\n" });
     await new Promise((resolve) => setTimeout(resolve, 0));
+
     expect(screen.scrollTop).toBe(120);
 
     // User returns to bottom; auto-scroll should resume for subsequent output.
@@ -389,6 +463,7 @@ describe("shadow-claw-terminal", () => {
     scrollHeightValue = 760;
     orchestrator.events.emit("vm-terminal-output", { chunk: "line 2\n" });
     await new Promise((resolve) => setTimeout(resolve, 0));
+
     expect(screen.scrollTop).toBe(760);
   });
 });

@@ -17,7 +17,9 @@ describe("ToastStore", () => {
     const id = store.show("hello");
 
     expect(id).toBe(1);
+
     expect(store.toasts).toHaveLength(1);
+
     expect(store.toasts[0]).toMatchObject({
       id: 1,
       message: "hello",
@@ -53,13 +55,16 @@ describe("ToastStore", () => {
     store.pause(1);
 
     jest.advanceTimersByTime(1000);
+
     expect(store.toasts).toHaveLength(1);
 
     store.resume(1);
     jest.advanceTimersByTime(599);
+
     expect(store.toasts).toHaveLength(1);
 
     jest.advanceTimersByTime(1);
+
     expect(store.toasts).toHaveLength(0);
   });
 });

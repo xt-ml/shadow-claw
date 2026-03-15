@@ -39,6 +39,7 @@ describe("exportChatData", () => {
       messages: mockMessages,
       session: mockSession,
     });
+
     expect(mockDb.transaction).toHaveBeenCalledWith("messages", "readonly");
   });
 
@@ -56,6 +57,7 @@ describe("exportChatData", () => {
     const result = await exportChatData(mockDb, "group1");
 
     expect(result).toBeNull();
+
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
   });
@@ -72,6 +74,7 @@ describe("exportChatData", () => {
     const result = await exportChatData(mockDb, "group1");
 
     expect(result).toBeNull();
+
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
   });
@@ -95,6 +98,7 @@ describe("exportChatData", () => {
     const result = await promise;
 
     expect(result).toBeNull();
+
     expect(consoleSpy).toHaveBeenCalled();
     consoleSpy.mockRestore();
   });

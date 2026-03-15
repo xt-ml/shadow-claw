@@ -147,6 +147,7 @@ describe("handleMessage.mjs", () => {
     await handleMessage(event);
 
     expect(resolve).toHaveBeenCalledWith(["t1"]);
+
     expect(mockPendingTasks.has("g1")).toBe(false);
   });
 
@@ -207,7 +208,9 @@ describe("handleMessage.mjs", () => {
     });
 
     expect(mockSetVMBootModePreference).toHaveBeenCalledWith("9p");
+
     expect(mockShutdownVM).toHaveBeenCalled();
+
     expect(mockBootVM).toHaveBeenCalled();
   });
 
@@ -220,7 +223,9 @@ describe("handleMessage.mjs", () => {
     });
 
     expect(mockSetVMBootModePreference).toHaveBeenCalledWith("disabled");
+
     expect(mockShutdownVM).toHaveBeenCalled();
+
     expect(mockBootVM).not.toHaveBeenCalled();
   });
 
@@ -241,10 +246,13 @@ describe("handleMessage.mjs", () => {
     expect(mockSetVMBootHostPreference).toHaveBeenCalledWith(
       "https://example.com",
     );
+
     expect(mockSetVMNetworkRelayURLPreference).toHaveBeenCalledWith(
       "wss://relay.example.com/",
     );
+
     expect(mockShutdownVM).toHaveBeenCalled();
+
     expect(mockBootVM).not.toHaveBeenCalled();
   });
 
@@ -257,6 +265,7 @@ describe("handleMessage.mjs", () => {
       bootAttempted: true,
       error: null,
     });
+
     mockCreateTerminalSession.mockImplementation((onOutput) => {
       onOutput("booted\n");
       return { close: jest.fn(), send };
@@ -267,10 +276,12 @@ describe("handleMessage.mjs", () => {
     });
 
     expect(mockCreateTerminalSession).toHaveBeenCalled();
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "vm-terminal-output",
       payload: { chunk: "booted\n" },
     });
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "vm-terminal-opened",
       payload: { ok: true },
@@ -299,6 +310,7 @@ describe("handleMessage.mjs", () => {
     ).resolves.toBeUndefined();
 
     expect(mockCreateTerminalSession).toHaveBeenCalled();
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "vm-terminal-opened",
       payload: { ok: true },
@@ -313,10 +325,12 @@ describe("handleMessage.mjs", () => {
       bootAttempted: true,
       error: null,
     });
+
     mockCreateTerminalSession.mockReturnValue({
       close: jest.fn(),
       send: jest.fn(),
     });
+
     mockSyncVMWorkspaceFromHost.mockRejectedValue(new Error("File not found"));
 
     await expect(
@@ -349,20 +363,25 @@ describe("handleMessage.mjs", () => {
       bootAttempted: true,
       error: null,
     });
+
     mockCreateTerminalSession.mockReturnValue({ close, send });
 
     await handleMessage({
       data: { type: "vm-terminal-open" },
     });
+
     await handleMessage({
       data: { type: "vm-terminal-input", payload: { data: "ls\n" } },
     });
+
     await handleMessage({
       data: { type: "vm-terminal-close" },
     });
 
     expect(send).toHaveBeenCalledWith("ls\n");
+
     expect(close).toHaveBeenCalled();
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "vm-terminal-closed",
       payload: { ok: true },
@@ -381,11 +400,13 @@ describe("handleMessage.mjs", () => {
       bootAttempted: true,
       error: null,
     });
+
     mockCreateTerminalSession.mockReturnValue({ close, send });
 
     await handleMessage({
       data: { type: "vm-terminal-open", payload: { groupId: "g1" } },
     });
+
     await handleMessage({
       data: { type: "vm-terminal-close", payload: { groupId: "g1" } },
     });
@@ -394,7 +415,55 @@ describe("handleMessage.mjs", () => {
       db,
       groupId: "g1",
     });
+
     expect(mockSyncVMWorkspaceFromHost).toHaveBeenCalledTimes(1);
+  });
+
+  it("silently syncs host workspace into the VM on request", async () => {
+    const db = {};
+
+    mockOpenDatabase.mockResolvedValue(db);
+    mockGetVMStatus.mockReturnValue({
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+
+    mockCreateTerminalSession.mockReturnValue({
+      close: jest.fn(),
+      send: jest.fn(),
+    });
+
+    await handleMessage({
+      data: { type: "vm-terminal-open", payload: { groupId: "g1" } },
+    });
+
+    mockSyncVMWorkspaceFromHost.mockClear();
+    mockPost.mockClear();
+
+    await handleMessage({
+      data: { type: "vm-workspace-sync", payload: { groupId: "g1" } },
+    });
+
+    expect(mockSyncVMWorkspaceFromHost).toHaveBeenCalledWith({
+      db,
+      groupId: "g1",
+    });
+
+    expect(mockPost).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "vm-workspace-synced" }),
+    );
+  });
+
+  it("ignores silent host-to-vm sync requests without an active terminal session", async () => {
+    mockOpenDatabase.mockResolvedValue({});
+
+    await handleMessage({
+      data: { type: "vm-workspace-sync", payload: { groupId: "g1" } },
+    });
+
+    expect(mockSyncVMWorkspaceFromHost).not.toHaveBeenCalled();
   });
 
   it("should handle cancel message type", async () => {
@@ -417,7 +486,9 @@ describe("handleMessage.mjs", () => {
     await Promise.resolve();
 
     await expect(handleMessage(event)).resolves.toBeUndefined();
+
     expect(capturedSignal).toBeDefined();
+
     expect(capturedSignal.aborted).toBe(true);
 
     await invokePromise;

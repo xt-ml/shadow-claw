@@ -21,6 +21,7 @@ e2e/
 ├── fixtures.mjs        # Shared test fixtures (app, chat, files, tasks)
 ├── *.test.mjs          # Test suites
 │   └── file-viewer.test.mjs  # File viewer component integration coverage
+│   └── orchestrator.test.mjs / storage.test.mjs  # System integration coverage
 └── README.md           # This file
 ```
 
@@ -94,6 +95,7 @@ test.describe("Feature Name", () => {
   test("should do something", async ({ chat }) => {
     await chat.open();
     await chat.sendMessage("Test message");
+
     expect(await chat.messageCount()).toBe(1);
   });
 });

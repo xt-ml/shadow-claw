@@ -24,6 +24,7 @@ describe("resolvePath.mjs", () => {
   it("should return . for empty or / path", () => {
     const ctx = { cwd: "home" };
     expect(resolvePath("/", ctx)).toBe(".");
+
     expect(resolvePath("", ctx)).toBe(".");
   });
 

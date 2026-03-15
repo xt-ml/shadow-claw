@@ -35,6 +35,74 @@ let detachTerminalWorkspaceAutoSync = null;
 /** @type {boolean} */
 let terminalSyncWarningShown = false;
 
+/** @type {Promise<void>|null} */
+let terminalWorkspaceSyncPromise = null;
+
+/** @type {{ db: import("../db/db.mjs").ShadowClawDatabase, groupId: string }|null} */
+let queuedTerminalWorkspaceSync = null;
+
+/**
+ * @param {import("../db/db.mjs").ShadowClawDatabase} db
+ * @param {string} groupId
+ * @param {{ emitSyncedOnSuccess?: boolean, showWarningOnFailure?: boolean }} [options]
+ *
+ * @returns {void}
+ */
+function requestTerminalWorkspaceSync(db, groupId, options = {}) {
+  if (!activeTerminalSession || groupId !== activeTerminalGroupId) {
+    return;
+  }
+
+  const { emitSyncedOnSuccess = false, showWarningOnFailure = false } = options;
+
+  if (terminalWorkspaceSyncPromise) {
+    queuedTerminalWorkspaceSync = { db, groupId };
+    return;
+  }
+
+  terminalWorkspaceSyncPromise = syncVMWorkspaceFromHost({ db, groupId })
+    .then(() => {
+      if (emitSyncedOnSuccess) {
+        post({
+          type: "vm-workspace-synced",
+          payload: { groupId },
+        });
+      }
+    })
+    .catch((err) => {
+      console.warn("[WebVM] Failed to sync host workspace into VM:", err);
+
+      if (showWarningOnFailure && !terminalSyncWarningShown) {
+        terminalSyncWarningShown = true;
+        post({
+          type: "show-toast",
+          payload: {
+            message:
+              "WebVM terminal connected, but workspace sync failed. File changes may not appear until the next sync.",
+            type: "warning",
+            duration: 5000,
+          },
+        });
+      }
+    })
+    .finally(() => {
+      terminalWorkspaceSyncPromise = null;
+
+      const next = queuedTerminalWorkspaceSync;
+      queuedTerminalWorkspaceSync = null;
+
+      if (
+        !next ||
+        !activeTerminalSession ||
+        next.groupId !== activeTerminalGroupId
+      ) {
+        return;
+      }
+
+      requestTerminalWorkspaceSync(next.db, next.groupId);
+    });
+}
+
 /**
  * @returns {boolean}
  */
@@ -49,6 +117,8 @@ function closeTerminalSession() {
   activeTerminalSession.close();
   activeTerminalSession = null;
   terminalSyncWarningShown = false;
+  terminalWorkspaceSyncPromise = null;
+  queuedTerminalWorkspaceSync = null;
   return true;
 }
 
@@ -225,29 +295,10 @@ export async function handleMessage(event) {
 
         post({ type: "vm-terminal-opened", payload: { ok: true } });
 
-        syncVMWorkspaceFromHost(context)
-          .then(() =>
-            post({
-              type: "vm-workspace-synced",
-              payload: { groupId },
-            }),
-          )
-          .catch((err) => {
-            console.warn("[WebVM] Failed to sync host workspace into VM:", err);
-
-            if (!terminalSyncWarningShown) {
-              terminalSyncWarningShown = true;
-              post({
-                type: "show-toast",
-                payload: {
-                  message:
-                    "WebVM terminal connected, but workspace sync failed. File changes may not appear until the next sync.",
-                  type: "warning",
-                  duration: 5000,
-                },
-              });
-            }
-          });
+        requestTerminalWorkspaceSync(context.db, groupId, {
+          emitSyncedOnSuccess: true,
+          showWarningOnFailure: true,
+        });
 
         detachTerminalWorkspaceAutoSync = attachTerminalWorkspaceAutoSync(
           context,
@@ -305,6 +356,17 @@ export async function handleMessage(event) {
           /* ignore */
         });
       post({ type: "vm-terminal-closed", payload: { ok: true } });
+
+      break;
+    }
+    case "vm-workspace-sync": {
+      const groupId =
+        typeof payload?.groupId === "string" && payload.groupId
+          ? payload.groupId
+          : activeTerminalGroupId;
+
+      requestTerminalWorkspaceSync(db, groupId);
+
       break;
     }
     case "task-list-response": {

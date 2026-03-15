@@ -3,6 +3,7 @@ let audioCtx = null;
 
 /**
  * Get or create the shared AudioContext
+ *
  * @returns {AudioContext}
  */
 export function getAudioContext() {

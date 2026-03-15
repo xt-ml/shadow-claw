@@ -43,9 +43,13 @@ describe("readGroupFileBytes", () => {
     const content = await readGroupFileBytes({}, "g1", "nested/a.pdf");
 
     expect(Array.from(content)).toEqual(Array.from(bytes));
+
     expect(groupDir.getDirectoryHandle).toHaveBeenCalledWith("nested");
+
     expect(groupDir.getFileHandle).toHaveBeenCalledWith("a.pdf");
+
     expect(fileHandle.createSyncAccessHandle).toHaveBeenCalledTimes(1);
+
     expect(syncHandle.close).toHaveBeenCalledTimes(1);
   });
 
@@ -71,6 +75,7 @@ describe("readGroupFileBytes", () => {
     const content = await readGroupFileBytes({}, "g2", "b.bin");
 
     expect(Array.from(content)).toEqual([1, 2, 3, 4]);
+
     expect(fileHandle.getFile).toHaveBeenCalledTimes(1);
   });
 });

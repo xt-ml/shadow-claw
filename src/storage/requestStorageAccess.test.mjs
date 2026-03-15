@@ -32,6 +32,7 @@ describe("requestStorageAccess", () => {
     getConfig.mockResolvedValue(handle);
 
     await expect(requestStorageAccess({})).resolves.toBe(true);
+
     expect(handle.requestPermission).toHaveBeenCalledWith({
       mode: "readwrite",
     });

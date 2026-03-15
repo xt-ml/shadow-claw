@@ -27,6 +27,7 @@ describe("safeRead", () => {
     const result = await safeRead(db, groupId, path);
 
     expect(result).toBe(mockContent);
+
     expect(readGroupFile).toHaveBeenCalledWith(db, groupId, path);
   });
 

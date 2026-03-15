@@ -4,6 +4,9 @@ describe("executeTool.mjs", () => {
   let executeTool;
   let mockBootVM;
   let mockExecuteInVM;
+  let mockExecuteShell;
+  let mockFormatShellOutput;
+  let mockGetVMBootModePreference;
   let mockGetVMStatus;
   let mockIsVMReady;
   let mockListGroupFiles;
@@ -35,6 +38,9 @@ describe("executeTool.mjs", () => {
 
     mockBootVM = jest.fn();
     mockExecuteInVM = jest.fn();
+    mockExecuteShell = jest.fn();
+    mockFormatShellOutput = jest.fn((shellResult) => shellResult.stdout || "");
+    mockGetVMBootModePreference = jest.fn(() => "auto");
     mockGetVMStatus = jest.fn(() => ({
       ready: false,
       booting: false,
@@ -111,8 +117,13 @@ describe("executeTool.mjs", () => {
     jest.unstable_mockModule("../vm.mjs", () => ({
       bootVM: mockBootVM,
       executeInVM: mockExecuteInVM,
+      getVMBootModePreference: mockGetVMBootModePreference,
       getVMStatus: mockGetVMStatus,
       isVMReady: mockIsVMReady,
+    }));
+
+    jest.unstable_mockModule("../shell/shell.mjs", () => ({
+      executeShell: mockExecuteShell,
     }));
 
     jest.unstable_mockModule("../storage/listGroupFiles.mjs", () => ({
@@ -139,6 +150,10 @@ describe("executeTool.mjs", () => {
       post: mockPost,
     }));
 
+    jest.unstable_mockModule("./formatShellOutput.mjs", () => ({
+      formatShellOutput: mockFormatShellOutput,
+    }));
+
     jest.unstable_mockModule("./stripHtml.mjs", () => ({
       stripHtml: mockStripHtml,
     }));
@@ -153,6 +168,7 @@ describe("executeTool.mjs", () => {
     mockExecuteInVM.mockResolvedValue("vm output");
 
     const result = await executeTool({}, "bash", { command: "ls" }, "group1");
+
     expect(mockExecuteInVM).toHaveBeenCalledWith("ls", 120, {
       db: {},
       groupId: "group1",
@@ -226,6 +242,7 @@ describe("executeTool.mjs", () => {
     const result = await executeTool({}, "bash", { command: "wget" }, "group1");
 
     expect(mockBootVM).toHaveBeenCalledTimes(1);
+
     expect(mockExecuteInVM).toHaveBeenCalledWith("wget", 120, {
       db: {},
       groupId: "group1",
@@ -234,7 +251,38 @@ describe("executeTool.mjs", () => {
     expect(result).toBe("booted output");
   });
 
-  it("returns an explicit WebVM error when VM is unavailable", async () => {
+  it("uses JS shell emulator when VM mode is disabled", async () => {
+    mockGetVMBootModePreference.mockReturnValue("disabled");
+    mockIsVMReady.mockReturnValue(false);
+    mockExecuteShell.mockResolvedValue({
+      stdout: "shell fallback output",
+      stderr: "",
+      exitCode: 0,
+    });
+    mockFormatShellOutput.mockReturnValue("shell fallback output");
+
+    const result = await executeTool(
+      {},
+      "bash",
+      { command: "wget", timeout: 1 },
+      "group1",
+    );
+
+    expect(mockBootVM).not.toHaveBeenCalled();
+    expect(mockExecuteInVM).not.toHaveBeenCalled();
+    expect(mockExecuteShell).toHaveBeenCalledWith({}, "wget", "group1", {}, 1);
+    expect(mockFormatShellOutput).toHaveBeenCalledWith({
+      stdout: "shell fallback output",
+      stderr: "",
+      exitCode: 0,
+    });
+    expect(mockPost).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "show-toast" }),
+    );
+    expect(result).toBe("shell fallback output");
+  });
+
+  it("falls back to JS shell emulator with toast when WebVM is unavailable", async () => {
     mockIsVMReady.mockReturnValue(false);
     mockGetVMStatus.mockReturnValue({
       ready: false,
@@ -242,6 +290,12 @@ describe("executeTool.mjs", () => {
       bootAttempted: true,
       error: "Assets missing",
     });
+    mockExecuteShell.mockResolvedValue({
+      stdout: "shell fallback output",
+      stderr: "",
+      exitCode: 0,
+    });
+    mockFormatShellOutput.mockReturnValue("shell fallback output");
 
     const result = await executeTool(
       {},
@@ -251,10 +305,48 @@ describe("executeTool.mjs", () => {
     );
 
     expect(mockBootVM).toHaveBeenCalledTimes(1);
+
     expect(mockExecuteInVM).not.toHaveBeenCalled();
-    expect(result).toContain("bash command was not executed in WebVM");
-    expect(result).toContain("Reason: Assets missing");
-    expect(result).toContain("no fallback shell was used");
+    expect(mockExecuteShell).toHaveBeenCalledWith({}, "wget", "group1", {}, 1);
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "show-toast",
+      payload: {
+        message:
+          "WebVM unavailable for this bash command. Reason: Assets missing Falling back to JavaScript Bash Emulator and retrying WebVM on the next command.",
+        type: "warning",
+        duration: 7000,
+      },
+    });
+    expect(result).toBe("shell fallback output");
+  });
+
+  it("retries WebVM on a later bash command after fallback", async () => {
+    mockIsVMReady.mockReturnValue(false);
+    mockGetVMStatus.mockReturnValue({
+      ready: false,
+      booting: false,
+      bootAttempted: true,
+      error: "Assets missing",
+    });
+    mockExecuteShell.mockResolvedValue({
+      stdout: "shell fallback output",
+      stderr: "",
+      exitCode: 0,
+    });
+    mockFormatShellOutput.mockReturnValue("shell fallback output");
+
+    const first = await executeTool({}, "bash", { command: "date" }, "group1");
+    expect(first).toBe("shell fallback output");
+
+    mockIsVMReady.mockReturnValue(true);
+    mockExecuteInVM.mockResolvedValue("vm output");
+
+    const second = await executeTool({}, "bash", { command: "date" }, "group1");
+    expect(second).toBe("vm output");
+    expect(mockExecuteInVM).toHaveBeenCalledWith("date", 120, {
+      db: {},
+      groupId: "group1",
+    });
   });
 
   it("should handle read_file tool", async () => {
@@ -267,6 +359,7 @@ describe("executeTool.mjs", () => {
     );
 
     expect(mockReadGroupFile).toHaveBeenCalledWith({}, "group1", "test.txt");
+
     expect(result).toBe("file content");
   });
 
@@ -279,6 +372,7 @@ describe("executeTool.mjs", () => {
     );
 
     expect(result).toBe("Opening file in viewer: src/app.mjs");
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "open-file",
       payload: { groupId: "group1", path: "src/app.mjs" },
@@ -289,6 +383,7 @@ describe("executeTool.mjs", () => {
     const result = await executeTool({}, "open_file", {}, "group1");
 
     expect(result).toBe("Error: open_file requires a valid path string.");
+
     expect(mockPost).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "open-file" }),
     );
@@ -316,7 +411,9 @@ describe("executeTool.mjs", () => {
     mockListGroupFiles.mockResolvedValue(["file1", "file2"]);
 
     const result = await executeTool({}, "list_files", { path: "." }, "group1");
+
     expect(mockListGroupFiles).toHaveBeenCalledWith({}, "group1", ".");
+
     expect(result).toBe("file1\nfile2");
   });
 
@@ -324,6 +421,7 @@ describe("executeTool.mjs", () => {
     mockListGroupFiles.mockResolvedValue([]);
 
     const result = await executeTool({}, "list_files", {}, "group1");
+
     expect(result).toBe("(empty directory)");
   });
 
@@ -352,6 +450,7 @@ describe("executeTool.mjs", () => {
     });
 
     expect(mockStripHtml).toHaveBeenCalledWith("<html>body</html>");
+
     expect(result).toContain("[HTTP 200 OK]");
   });
 
@@ -378,6 +477,7 @@ describe("executeTool.mjs", () => {
     );
 
     expect(result).toContain("Error fetching URL");
+
     expect(result).toContain("Error body");
   });
 
@@ -394,6 +494,7 @@ describe("executeTool.mjs", () => {
     expect(result).toContain(
       "Network Error: Failed to fetch http://example.com",
     );
+
     expect(result).toContain("connection reset");
   });
 
@@ -424,6 +525,7 @@ describe("executeTool.mjs", () => {
     );
 
     expect(mockUlid).toHaveBeenCalled();
+
     expect(mockPost).toHaveBeenCalledWith(
       expect.objectContaining({ type: "task-created" }),
     );
@@ -507,6 +609,7 @@ describe("executeTool.mjs", () => {
     resolve([task]);
 
     await expect(promise).resolves.toBe("Task t1 updated successfully.");
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "update-task",
       payload: {
@@ -536,6 +639,7 @@ describe("executeTool.mjs", () => {
     mockPendingTasks.get("group1")([task]);
 
     await expect(promise).resolves.toBe("Task t2 enabled successfully.");
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "update-task",
       payload: { task: { id: "t2", enabled: true } },
@@ -548,6 +652,7 @@ describe("executeTool.mjs", () => {
     mockPendingTasks.get("group1")([task]);
 
     await expect(promise).resolves.toBe("Task t3 disabled successfully.");
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "update-task",
       payload: { task: { id: "t3", enabled: false } },
@@ -563,6 +668,7 @@ describe("executeTool.mjs", () => {
     );
 
     expect(result).toBe("Task task-5 deleted successfully.");
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "delete-task",
       payload: { id: "task-5" },
@@ -575,6 +681,7 @@ describe("executeTool.mjs", () => {
     expect(result).toBe(
       "Chat history cleared successfully. New session started.",
     );
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "clear-chat",
       payload: { groupId: "group1" },
@@ -590,6 +697,7 @@ describe("executeTool.mjs", () => {
     );
 
     expect(result).toBe("Toast notification sent: Saved");
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "show-toast",
       payload: {
@@ -611,6 +719,7 @@ describe("executeTool.mjs", () => {
     );
 
     expect(result).toContain("No git token configured");
+
     expect(mockGitPush).not.toHaveBeenCalled();
   });
 
@@ -633,6 +742,7 @@ describe("executeTool.mjs", () => {
       depth: undefined,
       corsProxy: "https://proxy.local",
     });
+
     expect(mockSyncLfsToOpfs).toHaveBeenCalledWith(
       {},
       "group1",
@@ -640,6 +750,7 @@ describe("executeTool.mjs", () => {
       "repos/demo-repo",
       true,
     );
+
     expect(result).toContain(
       'Cloned https://github.com/x/y.git as "demo-repo"',
     );
@@ -779,6 +890,7 @@ describe("executeTool.mjs", () => {
     await expect(executeTool({}, "git_list_repos", {}, "group1")).resolves.toBe(
       "demo",
     );
+
     expect(mockGitListRepos).toHaveBeenCalled();
   });
 
@@ -793,6 +905,7 @@ describe("executeTool.mjs", () => {
     );
 
     expect(result).toContain("Could not sync from OPFS");
+
     expect(mockGitCommit).not.toHaveBeenCalled();
   });
 
@@ -870,6 +983,7 @@ describe("executeTool.mjs", () => {
 
   it("should handle unknown tool", async () => {
     const result = await executeTool({}, "unknown", {}, "group1");
+
     expect(result).toBe("Unknown tool: unknown");
   });
 
@@ -877,6 +991,7 @@ describe("executeTool.mjs", () => {
     mockReadGroupFile.mockRejectedValue(new Error("fail"));
 
     const result = await executeTool({}, "read_file", { path: "x" }, "group1");
+
     expect(result).toContain("Tool error (read_file): fail");
   });
 });

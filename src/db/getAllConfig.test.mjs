@@ -13,6 +13,7 @@ describe("getAllConfig", () => {
     const result = await getAllConfig();
 
     expect(result).toEqual([{ key: "k", value: "v" }]);
+
     expect(txPromise).toHaveBeenCalledWith(
       "config",
       "readonly",

@@ -15,12 +15,15 @@ const { updateTaskLastRun } = await import("./db/updateTaskLastRun.mjs");
 describe("matchesCron", () => {
   it("matches wildcards and exact values", () => {
     const d = new Date("2026-03-09T12:30:00");
+
     expect(matchesCron("30 12 * * *", d)).toBe(true);
+
     expect(matchesCron("29 12 * * *", d)).toBe(false);
   });
 
   it("supports ranges/lists/steps", () => {
     const d = new Date("2026-03-09T12:30:00");
+
     expect(matchesCron("*/15 10-13 * * 1,2,3", d)).toBe(true);
   });
 });
@@ -42,6 +45,7 @@ describe("TaskScheduler", () => {
     await scheduler.tick();
 
     expect(updateTaskLastRun).toHaveBeenCalledWith("t1", expect.any(Number));
+
     expect(runner).toHaveBeenCalledWith(expect.objectContaining({ id: "t1" }));
 
     getEnabledTasks.mockResolvedValue([
@@ -61,9 +65,11 @@ describe("TaskScheduler", () => {
     scheduler.start();
 
     expect(scheduler.interval).toBe(firstInterval);
+
     expect(tickSpy).toHaveBeenCalledTimes(1);
 
     scheduler.stop();
+
     expect(scheduler.interval).toBeNull();
     jest.useRealTimers();
   });

@@ -27,7 +27,9 @@ describe("shell.mjs integration", () => {
     const result = await executeShell(db, "echo hello", groupId);
 
     expect(result.stdout).toBe("hello\n");
+
     expect(result.exitCode).toBe(0);
+
     expect(dispatch).toHaveBeenCalledWith(
       db,
       "echo",
@@ -50,6 +52,7 @@ describe("shell.mjs integration", () => {
     const result = await executeShell(db, "false", groupId);
 
     expect(result.stderr).toBe("error");
+
     expect(result.exitCode).toBe(1);
   });
 
@@ -61,6 +64,7 @@ describe("shell.mjs integration", () => {
     const result = await executeShell(db, "true && echo success", groupId);
 
     expect(result.stdout).toBe("success\n");
+
     expect(dispatch).toHaveBeenCalledTimes(2);
   });
 
@@ -70,6 +74,7 @@ describe("shell.mjs integration", () => {
     const result = await executeShell(db, "false && echo success", groupId);
 
     expect(result.exitCode).toBe(1);
+
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
@@ -81,6 +86,7 @@ describe("shell.mjs integration", () => {
     const result = await executeShell(db, "false || echo fallback", groupId);
 
     expect(result.stdout).toBe("fallback\n");
+
     expect(dispatch).toHaveBeenCalledTimes(2);
   });
 
@@ -90,6 +96,7 @@ describe("shell.mjs integration", () => {
     const result = await executeShell(db, "true || echo never", groupId);
 
     expect(result.exitCode).toBe(0);
+
     expect(dispatch).toHaveBeenCalledTimes(1);
   });
 
@@ -99,6 +106,7 @@ describe("shell.mjs integration", () => {
     const result = await executeShell(db, "echo crash", groupId);
 
     expect(result.stderr).toBe("Unexpected crash");
+
     expect(result.exitCode).toBe(1);
   });
 

@@ -86,6 +86,7 @@ describe("handleCompact.mjs", () => {
     await handleCompact({}, payload);
 
     expect(mockSetStorageRoot).toHaveBeenCalledWith("h1");
+
     expect(mockLog).toHaveBeenCalledWith(
       "g1",
       "info",
@@ -128,6 +129,7 @@ describe("handleCompact.mjs", () => {
     });
 
     await handleCompact({}, { groupId: "g1", provider: "p1", messages: [] });
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "error",
       payload: {
@@ -143,6 +145,7 @@ describe("handleCompact.mjs", () => {
     global.fetch = jest.fn().mockRejectedValue(new Error("network fail"));
 
     await handleCompact({}, { groupId: "g1", provider: "p1", messages: [] });
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "error",
       payload: { groupId: "g1", error: "Compaction failed: network fail" },

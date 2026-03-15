@@ -21,6 +21,7 @@ export function formatDateForFilename(date = new Date()) {
 /**
  * Format a timestamp for display: e.g. "Sun, Mar 1, 1:25 PM"
  * @param {number} timestamp - epoch ms
+ *
  * @returns {string}
  */
 export function formatTimestamp(timestamp) {

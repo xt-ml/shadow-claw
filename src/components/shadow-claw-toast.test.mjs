@@ -16,6 +16,7 @@ describe("shadow-claw-toast", () => {
     el.renderToasts();
 
     const message = el.shadowRoot?.querySelector(".toast-message");
+
     expect(message?.textContent).toBe("Rendered toast");
   });
 
@@ -42,8 +43,11 @@ describe("shadow-claw-toast", () => {
     document.body.appendChild(el);
 
     expect(el.iconForType("success")).toBe("✓");
+
     expect(el.iconForType("error")).toBe("!");
+
     expect(el.iconForType("warning")).toBe("⚠");
+
     expect(el.iconForType("info")).toBe("i");
   });
 
@@ -52,8 +56,11 @@ describe("shadow-claw-toast", () => {
     document.body.appendChild(el);
 
     const escaped = el.escapeHtml("<script>alert('xss')</script>");
+
     expect(escaped).toContain("&lt;");
+
     expect(escaped).toContain("&gt;");
+
     expect(escaped).not.toContain("<script>");
   });
 
@@ -72,6 +79,7 @@ describe("shadow-claw-toast", () => {
     el.renderToasts();
 
     const actionButton = el.shadowRoot?.querySelector(".toast-action");
+
     expect(actionButton?.textContent).toBe("Click me");
   });
 
@@ -310,6 +318,7 @@ describe("shadow-claw-toast", () => {
     el.renderToasts();
 
     const toasts = el.shadowRoot?.querySelectorAll(".toast");
+
     expect(toasts?.length).toBe(3);
   });
 
@@ -331,8 +340,11 @@ describe("shadow-claw-toast", () => {
     );
 
     expect(errorToast?.getAttribute("role")).toBe("alert");
+
     expect(errorToast?.getAttribute("aria-live")).toBe("assertive");
+
     expect(infoToast?.getAttribute("role")).toBe("status");
+
     expect(infoToast?.getAttribute("aria-live")).toBe("polite");
   });
 });

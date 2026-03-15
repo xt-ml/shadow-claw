@@ -11,7 +11,9 @@ npm install
 npm start        # Express server → http://localhost:8888
 ```
 
-Open Settings, paste your [OpenRouter](https://openrouter.ai/) API key, and start chatting.
+Open Settings, select a provider, then paste your API key and start chatting.
+`OpenRouter` is the default provider, and `Copilot Azure OpenAI (Local Proxy)`
+is also available for local Azure proxy workflows.
 
 ## Architecture
 
@@ -24,9 +26,9 @@ graph TD
   Orchestrator --> TaskScheduler["Task Scheduler<br>cron expressions"]
   Orchestrator --> Router["Router<br>channel dispatch"]
     MessageQueue --> Worker["Agent Worker<br>(Web Worker)"]
-  Worker --> OpenRouter["☁️ OpenRouter API<br>Claude / any model"]
+  Worker --> OpenRouter["☁️ Provider API<br>OpenRouter / Copilot local proxy"]
   Worker --> ToolExec["Tool Execution<br>bash · js · files · fetch"]
-  ToolExec --> JSShell["JS Shell Emulator<br>~40 Unix commands<br>via OPFS"]
+  ToolExec --> JSShell["JS Shell Emulator<br>modular command registry<br>via OPFS"]
   ToolExec --> WebVM["v86 Alpine Linux VM<br>(optional, WASM)"]
     Orchestrator --> IndexedDB["IndexedDB<br>messages · sessions<br>tasks · config"]
   Orchestrator --> OPFS["OPFS / Local Folder<br>per-group workspace<br>MEMORY.md"]
@@ -67,6 +69,8 @@ sequenceDiagram
 | `src/worker/executeTool.mjs`         | Tool execution logic for the agent worker                          |
 | `src/tools.mjs`                      | Tool schema definitions sent to the LLM                            |
 | `src/shell/shell.mjs`                | Pure-JS bash-like shell emulator (OPFS filesystem)                 |
+| `src/shell/commands/registry.mjs`    | Shell command registry that maps command names to handlers         |
+| `src/shell/commands/*.mjs`           | Individual command implementations (awk, jq, grep, tar, etc.)      |
 | `src/vm.mjs`                         | v86 Alpine Linux VM for `bash` tool execution + terminal bridge     |
 | `src/db/db.mjs`                      | IndexedDB layer — messages, sessions, tasks, config                |
 | `src/storage/storage.mjs`            | OPFS + Local Folder file storage, zip export/import                |
@@ -75,7 +79,7 @@ sequenceDiagram
 | `src/git/git.mjs`                    | Isomorphic-git integration and version control operations          |
 | `src/git/sync.mjs`                   | Synchronization between LightningFS and OPFS                       |
 | `src/audio.mjs`                      | AudioContext management and notifications                          |
-| `src/providers.mjs`                  | LLM provider registry (OpenRouter + future providers)              |
+| `src/providers.mjs`                  | LLM provider adapters and request/response format conversion        |
 | `src/router.mjs`                     | Routes inbound messages to channels                                |
 | `src/channels/browser-chat.mjs`      | Browser chat channel implementation                                |
 | `src/task-scheduler.mjs`             | Cron expression parser and task runner                             |
@@ -96,7 +100,7 @@ sequenceDiagram
 
 | Tool                                                         | What it does                                                     |
 | ------------------------------------------------------------ | ---------------------------------------------------------------- |
-| `bash`                                                       | Shell commands executed in worker-owned WebVM (no JS fallback)   |
+| `bash`                                                       | Shell commands prefer worker-owned WebVM, with JS shell fallback |
 | `javascript`                                                 | Run JS in an isolated `Function` scope — no DOM, no network      |
 | `read_file` / `write_file` / `list_files`                    | OPFS workspace file I/O                                          |
 | `open_file`                                                  | Opens a workspace file directly in the UI file viewer dialog     |
@@ -127,8 +131,12 @@ graph LR
 
 ## WebVM (`bash` Backend)
 
-`bash` tool calls execute only in the worker-owned WebVM. If WebVM is unavailable,
-the tool returns an explicit error instead of falling back to a JS shell emulator.
+`bash` tool calls prefer the worker-owned WebVM.
+
+- If `VM_BOOT_MODE` is `disabled`, commands run in the JavaScript Bash Emulator.
+- If WebVM is enabled but unavailable or still booting, the current command
+  falls back to the JavaScript Bash Emulator, a warning toast is shown, and the
+  next command attempts WebVM again.
 
 `worker.mjs` eagerly boots WebVM on startup using persisted VM settings:
 
@@ -136,6 +144,9 @@ the tool returns an explicit error instead of falling back to a JS shell emulato
 2. `CONFIG_KEYS.VM_BASH_TIMEOUT_SEC` (default timeout for `bash` tool calls)
 3. `CONFIG_KEYS.VM_BOOT_HOST` (optional HTTP(S) host override for VM assets)
 4. `CONFIG_KEYS.VM_NETWORK_RELAY_URL` (ws/wss relay for VM networking)
+
+When no VM boot host has been configured yet, startup defaults to
+`DEFAULT_VM_BOOT_HOST` (`https://xt-ml.github.io/v86`).
 
 The `<shadow-claw-terminal>` component uses orchestrator terminal bridge APIs.
 Interactive terminal sessions and tool-driven `bash` execution are coordinated in
@@ -170,7 +181,7 @@ helper re-runs DOM updates whenever signals change. No virtual DOM, no framework
 | Database             | SQLite (better-sqlite3)  | IndexedDB              |
 | Files                | Filesystem               | OPFS + Local Folder    |
 | Primary channel      | WhatsApp                 | In-browser chat        |
-| LLM API              | Anthropic SDK            | OpenRouter (raw fetch) |
+| LLM API              | Anthropic SDK            | OpenRouter + optional Copilot Azure local proxy |
 | Background tasks     | launchd service          | Service Worker (PWA)   |
 | Build step           | Required                 | None (pure ESM)        |
 | Runtime dependencies | ~50 npm packages         | 0                      |

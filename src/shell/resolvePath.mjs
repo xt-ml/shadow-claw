@@ -23,7 +23,9 @@ export function resolvePath(p, ctx) {
   // Normalise . and ..
   const parts = [];
   for (const seg of cleaned.split("/")) {
-    if (seg === "." || seg === "") continue;
+    if (seg === "." || seg === "") {
+      continue;
+    }
 
     if (seg === "..") {
       parts.pop();

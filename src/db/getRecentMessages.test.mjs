@@ -42,10 +42,12 @@ describe("getRecentMessages", () => {
     request.onsuccess();
 
     await expect(promise).resolves.toEqual([{ id: "m1" }, { id: "m2" }]);
+
     expect(global.IDBKeyRange.bound).toHaveBeenCalledWith(
       ["group-1", 0],
       ["group-1", Infinity],
     );
+
     expect(index.openCursor).toHaveBeenCalledWith("mock-range", "prev");
   });
 

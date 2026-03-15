@@ -47,7 +47,9 @@ describe("downloadGroupDirectoryAsZip", () => {
     await downloadGroupDirectoryAsZip({}, "g", "logs");
 
     expect(root.getDirectoryHandle).toHaveBeenCalledWith("logs");
+
     expect(clickSpy).toHaveBeenCalled();
+
     expect(revokeSpy).toHaveBeenCalledWith("blob:dir");
 
     createSpy.mockRestore();

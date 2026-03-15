@@ -55,6 +55,7 @@ describe("effect", () => {
     const dispose = effect(callback);
 
     expect(callback).toHaveBeenCalledTimes(1);
+
     expect(watcherInstance.watch).toHaveBeenCalled();
 
     dispose();
@@ -85,8 +86,11 @@ describe("effect", () => {
     watcherInstance.trigger();
 
     expect(globalThis.queueMicrotask).toHaveBeenCalledTimes(1);
+
     expect(pendingA.get).toHaveBeenCalledTimes(1);
+
     expect(pendingB.get).toHaveBeenCalledTimes(1);
+
     expect(watcherInstance.watch).toHaveBeenCalledTimes(1);
   });
 
@@ -107,6 +111,7 @@ describe("effect", () => {
     queued[0]();
 
     watcherInstance.trigger();
+
     expect(globalThis.queueMicrotask).toHaveBeenCalledTimes(2);
   });
 });

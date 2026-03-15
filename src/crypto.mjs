@@ -15,6 +15,7 @@ const IV_LENGTH = 12;
 
 /**
  * Open the keystore database
+ *
  * @returns {Promise<ShadowClawDatabase>}
  */
 function openKeyStore() {

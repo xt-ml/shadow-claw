@@ -20,7 +20,11 @@ import { splitOnOperators } from "./splitOnOperators.mjs";
  */
 export async function runPipeline(db, line, ctx) {
   const segments = splitOnOperators(line);
-  let lastResult = { stdout: "", stderr: "", exitCode: 0 };
+  let lastResult = {
+    stdout: "",
+    stderr: "",
+    exitCode: 0,
+  };
 
   for (const seg of segments) {
     checkTimeout(ctx);

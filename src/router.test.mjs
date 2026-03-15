@@ -11,6 +11,7 @@ describe("Router", () => {
     router.setTyping("br:main", true);
 
     expect(channel.send).toHaveBeenCalledWith("br:main", "hello");
+
     expect(channel.setTyping).toHaveBeenCalledWith("br:main", true);
   });
 
@@ -22,6 +23,7 @@ describe("Router", () => {
     ]);
 
     expect(xml).toContain("A&amp;B");
+
     expect(xml).toContain("&lt;ok&gt;&quot;");
   });
 });

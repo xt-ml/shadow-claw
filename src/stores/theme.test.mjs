@@ -22,8 +22,11 @@ describe("themeStore", () => {
     themeStore.setTheme("dark");
 
     expect(themeStore.theme).toBe("dark");
+
     expect(themeStore.resolved).toBe("dark");
+
     expect(localStorage.getItem("shadow-claw-theme")).toBe("dark");
+
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 
@@ -33,10 +36,13 @@ describe("themeStore", () => {
     themeStore.setTheme("light");
 
     expect(themeStore.theme).toBe("light");
+
     expect(themeStore.resolved).toBe("light");
+
     expect(document.documentElement.classList.contains("light-mode")).toBe(
       true,
     );
+
     expect(document.documentElement.classList.contains("dark-mode")).toBe(
       false,
     );
@@ -87,6 +93,7 @@ describe("themeStore", () => {
     themeStore.setTheme("dark");
 
     expect(shadowClawElement.classList.contains("dark-mode")).toBe(true);
+
     expect(shadowClawElement.classList.contains("light-mode")).toBe(false);
   });
 

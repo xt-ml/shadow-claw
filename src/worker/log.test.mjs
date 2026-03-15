@@ -15,7 +15,9 @@ const { post } = await import("./post.mjs");
 describe("log", () => {
   it("posts generated log message", () => {
     log("g", "info", "label", "m");
+
     expect(createLogMessage).toHaveBeenCalledWith("g", "info", "label", "m");
+
     expect(post).toHaveBeenCalledWith({ type: "thinking-log" });
   });
 });

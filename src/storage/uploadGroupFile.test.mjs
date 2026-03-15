@@ -26,7 +26,9 @@ describe("uploadGroupFile", () => {
     await uploadGroupFile({}, "g", "d/f.bin", blob);
 
     expect(root.getDirectoryHandle).toHaveBeenCalledWith("d", { create: true });
+
     expect(writable.write).toHaveBeenCalledWith(blob);
+
     expect(writable.close).toHaveBeenCalled();
   });
 });

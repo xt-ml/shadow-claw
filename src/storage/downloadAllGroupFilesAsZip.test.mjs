@@ -47,8 +47,11 @@ describe("downloadAllGroupFilesAsZip", () => {
     await downloadAllGroupFilesAsZip({}, "g");
 
     expect(addDirToZip).toHaveBeenCalled();
+
     expect(createSpy).toHaveBeenCalled();
+
     expect(clickSpy).toHaveBeenCalled();
+
     expect(revokeSpy).toHaveBeenCalledWith("blob:zip");
 
     createSpy.mockRestore();

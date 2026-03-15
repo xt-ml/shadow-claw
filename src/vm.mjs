@@ -152,6 +152,9 @@ const groupDeletionTimestamps = new Map();
 /** @type {Map<string, number>} */
 const hostSeededFilePruneProtection = new Map();
 
+/** @type {Map<string, Set<string>>} */
+const vmObservedWorkspaceFilesByGroup = new Map();
+
 /** @type {TerminalAutoSyncState|null} */
 let terminalAutoSyncState = null;
 
@@ -355,6 +358,7 @@ export function __setVMInstanceForTests(nextInstance) {
   bootOutputListeners.clear();
   suppressBootTranscriptReplay = false;
   terminalAutoSyncState = null;
+  vmObservedWorkspaceFilesByGroup.clear();
 }
 
 /**
@@ -386,6 +390,7 @@ export async function shutdownVM() {
   missingFileSeenCount.clear();
   groupDeletionTimestamps.clear();
   hostSeededFilePruneProtection.clear();
+  vmObservedWorkspaceFilesByGroup.clear();
 
   if (activeEmulator) {
     try {
@@ -1253,6 +1258,7 @@ async function syncHostWorkspaceToVM(emulator, context) {
     const vmFiles = [];
     try {
       collectVMFiles(fs9p, "/workspace", "", vmFiles);
+      recordObservedVMWorkspaceFiles(groupId, vmFiles);
     } catch {
       // If /workspace cannot be enumerated yet, skip pruning for this pass.
     }
@@ -1263,6 +1269,7 @@ async function syncHostWorkspaceToVM(emulator, context) {
       if (hostFileSet.has(relPath)) {
         missingFileDeleteRetryAt.delete(missingFileKey);
         missingFileSeenCount.delete(missingFileKey);
+
         continue;
       }
 
@@ -1381,6 +1388,7 @@ async function syncVMWorkspaceToHost(emulator, context) {
   /** @type {string[]} */
   const vmFiles = [];
   collectVMFiles(fs9p, "/workspace", "", vmFiles);
+  recordObservedVMWorkspaceFiles(context.groupId, vmFiles);
 
   /** @type {Set<string>} */
   const vmFileSet = new Set(vmFiles);
@@ -1398,6 +1406,11 @@ async function syncVMWorkspaceToHost(emulator, context) {
 
     if (vmFileSet.has(relPath)) {
       clearHostSeededFilePruneProtection(context.groupId, relPath);
+
+      continue;
+    }
+
+    if (!wasWorkspaceFileObservedInVM(context.groupId, relPath)) {
       continue;
     }
 
@@ -1435,6 +1448,47 @@ async function syncVMWorkspaceToHost(emulator, context) {
 
     await writeWorkspaceFileBytes(workspaceDir, relPath, bytes);
   }
+}
+
+/**
+ * @param {string} groupId
+ * @param {string[]} relPaths
+ *
+ * @returns {void}
+ */
+function recordObservedVMWorkspaceFiles(groupId, relPaths) {
+  if (!groupId || !Array.isArray(relPaths) || relPaths.length === 0) {
+    return;
+  }
+
+  let observed = vmObservedWorkspaceFilesByGroup.get(groupId);
+  if (!observed) {
+    observed = new Set();
+    vmObservedWorkspaceFilesByGroup.set(groupId, observed);
+  }
+
+  for (const relPath of relPaths) {
+    if (!relPath || shouldIgnoreWorkspaceSyncPath(relPath)) {
+      continue;
+    }
+
+    observed.add(relPath);
+  }
+}
+
+/**
+ * @param {string} groupId
+ * @param {string} relPath
+ *
+ * @returns {boolean}
+ */
+function wasWorkspaceFileObservedInVM(groupId, relPath) {
+  if (!groupId || !relPath) {
+    return false;
+  }
+
+  const observed = vmObservedWorkspaceFilesByGroup.get(groupId);
+  return observed ? observed.has(relPath) : false;
 }
 
 /**

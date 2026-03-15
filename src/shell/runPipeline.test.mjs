@@ -38,6 +38,7 @@ describe("runPipeline", () => {
     });
 
     expect(runPipe).toHaveBeenCalledWith({}, "echo a | cat", {});
+
     expect(checkTimeout).toHaveBeenCalled();
   });
 
@@ -52,6 +53,7 @@ describe("runPipeline", () => {
     const result = await runPipeline({}, "line", {});
 
     expect(result.exitCode).toBe(1);
+
     expect(runSingle).toHaveBeenCalledTimes(1);
   });
 });

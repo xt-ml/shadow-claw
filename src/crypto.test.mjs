@@ -104,6 +104,7 @@ describe("crypto helpers", () => {
     const plain = await decryptValue(encoded);
 
     expect(typeof encoded).toBe("string");
+
     expect(plain).toBe("secret");
   });
 });

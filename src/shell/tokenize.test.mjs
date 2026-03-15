@@ -15,6 +15,7 @@ describe("tokenize", () => {
 
   it("should handle escaped characters", () => {
     expect(tokenize("echo hello\\ world")).toEqual(["echo", "hello world"]);
+
     expect(tokenize('echo "quoted \\" quote"')).toEqual([
       "echo",
       'quoted " quote',
@@ -23,6 +24,7 @@ describe("tokenize", () => {
 
   it("should handle nested quotes", () => {
     expect(tokenize('echo "it\'s a test"')).toEqual(["echo", "it's a test"]);
+
     expect(tokenize("echo '\"double\" in single'")).toEqual([
       "echo",
       '"double" in single',

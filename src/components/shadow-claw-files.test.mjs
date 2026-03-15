@@ -79,7 +79,9 @@ describe("shadow-claw-files", () => {
     const template = ShadowClawFiles.getTemplate();
 
     expect(template).toContain("files__upload-btn");
+
     expect(template).toContain("files__new-btn");
+
     expect(template).toContain("files__new-dialog");
   });
 
@@ -96,7 +98,9 @@ describe("shadow-claw-files", () => {
     await component.handleCreateNewFile({});
 
     expect(writeGroupFile).toHaveBeenCalledWith({}, "default", "notes.txt", "");
+
     expect(orchestratorStore.loadFiles).toHaveBeenCalledWith({});
+
     expect(showSuccess).toHaveBeenCalledWith("Created file: notes.txt", 3000);
   });
 
@@ -113,6 +117,7 @@ describe("shadow-claw-files", () => {
     await component.handleCreateNewFile({});
 
     expect(writeGroupFile).not.toHaveBeenCalled();
+
     expect(showWarning).toHaveBeenCalledWith(
       "Use only a file name, not a path",
       3500,

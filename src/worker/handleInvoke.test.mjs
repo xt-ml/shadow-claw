@@ -153,6 +153,7 @@ describe("handleInvoke.mjs", () => {
     await handleInvoke({}, payload);
 
     expect(mockExecuteTool).toHaveBeenCalledWith({}, "tool1", { arg: 1 }, "g1");
+
     expect(mockPost).toHaveBeenCalledWith(
       expect.objectContaining({
         type: "response",
@@ -191,6 +192,7 @@ describe("handleInvoke.mjs", () => {
 
     // Should call executeTool 3 times, then block on the 4th
     expect(mockExecuteTool).toHaveBeenCalledTimes(3);
+
     expect(mockLog).toHaveBeenCalledWith(
       "g1",
       "tool-result",
@@ -210,6 +212,7 @@ describe("handleInvoke.mjs", () => {
     });
 
     await handleInvoke({}, { groupId: "g1", provider: "p1", messages: [] });
+
     expect(mockPost).toHaveBeenCalledWith({
       type: "error",
       payload: {

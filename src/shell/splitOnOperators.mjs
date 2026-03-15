@@ -20,12 +20,15 @@ export function splitOnOperators(line) {
       inSingle = !inSingle;
       current += ch;
       i++;
+
       continue;
     }
+
     if (ch === '"' && !inSingle) {
       inDouble = !inDouble;
       current += ch;
       i++;
+
       continue;
     }
 
@@ -34,11 +37,14 @@ export function splitOnOperators(line) {
         subshellDepth++;
         current += "$(";
         i += 2;
+
         continue;
       }
+
       if (ch === "(") {
         subshellDepth++;
       }
+
       if (ch === ")") {
         if (subshellDepth > 0) subshellDepth--;
       }
@@ -47,6 +53,7 @@ export function splitOnOperators(line) {
     if (inSingle || inDouble || subshellDepth > 0) {
       current += ch;
       i++;
+
       continue;
     }
 
@@ -54,18 +61,23 @@ export function splitOnOperators(line) {
       segments.push({ cmd: current, op: "&&" });
       current = "";
       i += 2;
+
       continue;
     }
+
     if (ch === "|" && line[i + 1] === "|") {
       segments.push({ cmd: current, op: "||" });
       current = "";
       i += 2;
+
       continue;
     }
+
     if (ch === ";") {
       segments.push({ cmd: current, op: ";" });
       current = "";
       i++;
+
       continue;
     }
 

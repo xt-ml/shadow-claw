@@ -36,22 +36,31 @@ export async function runSingle(db, raw, ctx, stdin = "") {
     if (stderrMatch) {
       cmdStr = cmdStr.slice(0, stderrMatch.index).trim();
       matched = true;
+
       continue;
     }
 
     const appendMatch = cmdStr.match(/\s*>>\s*(\S+)\s*$/);
     if (appendMatch) {
-      if (!appendFile && !writeFile) appendFile = appendMatch[1];
+      if (!appendFile && !writeFile) {
+        appendFile = appendMatch[1];
+      }
+
       cmdStr = cmdStr.slice(0, appendMatch.index).trim();
       matched = true;
+
       continue;
     }
 
     const writeMatch = cmdStr.match(/\s*>\s*(\S+)\s*$/);
     if (writeMatch) {
-      if (!writeFile && !appendFile) writeFile = writeMatch[1];
+      if (!writeFile && !appendFile) {
+        writeFile = writeMatch[1];
+      }
+
       cmdStr = cmdStr.slice(0, writeMatch.index).trim();
       matched = true;
+
       continue;
     }
 
@@ -59,12 +68,23 @@ export async function runSingle(db, raw, ctx, stdin = "") {
   }
 
   const pseudoFiles = ["&1", "&2", "/dev/null", "dev/null"];
-  if (writeFile && pseudoFiles.includes(writeFile)) writeFile = null;
-  if (appendFile && pseudoFiles.includes(appendFile)) appendFile = null;
+  if (writeFile && pseudoFiles.includes(writeFile)) {
+    writeFile = null;
+  }
+
+  if (appendFile && pseudoFiles.includes(appendFile)) {
+    appendFile = null;
+  }
 
   cmdStr = await expandVarsAndSub(db, cmdStr, ctx);
+
   const tokens = tokenize(cmdStr);
-  if (tokens.length === 0) return { stdout: "", stderr: "", exitCode: 0 };
+  if (tokens.length === 0)
+    return {
+      stdout: "",
+      stderr: "",
+      exitCode: 0,
+    };
 
   const name = tokens[0];
   const args = tokens.slice(1);
@@ -73,6 +93,7 @@ export async function runSingle(db, raw, ctx, stdin = "") {
   if (/^[A-Za-z_]\w*=/.test(name) && args.length === 0) {
     const eq = name.indexOf("=");
     ctx.env[name.slice(0, eq)] = name.slice(eq + 1);
+
     return { stdout: "", stderr: "", exitCode: 0 };
   }
 
@@ -89,10 +110,13 @@ export async function runSingle(db, raw, ctx, stdin = "") {
 
     return { stdout: "", stderr: result.stderr, exitCode: result.exitCode };
   }
+
   if (typeof appendFile === "string") {
     const path = resolvePath(appendFile, ctx);
     const existing = (await safeRead(db, ctx.groupId, path)) || "";
+
     await writeGroupFile(db, ctx.groupId, path, existing + result.stdout);
+
     return { stdout: "", stderr: result.stderr, exitCode: result.exitCode };
   }
 

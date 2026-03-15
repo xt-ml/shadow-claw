@@ -14,6 +14,7 @@ test.describe("File Viewer Modal", () => {
       "File APIs are unavailable",
     );
   });
+
   test("should have file viewer modal in DOM and styled correctly", async ({
     app,
     page,

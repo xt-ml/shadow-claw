@@ -35,6 +35,7 @@ describe("getAllTasks", () => {
     await getAllTasks({});
 
     expect(store.getAll).toHaveBeenCalled();
+
     expect(txPromise).toHaveBeenCalledWith(
       {},
       "tasks",

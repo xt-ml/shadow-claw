@@ -10,6 +10,7 @@ test.describe("Files Interface", () => {
   test("should display workspace directory", async ({ files }) => {
     await files.open();
     const contentRegions = files.host.locator(".files__content, .files__list");
+
     expect(await contentRegions.count()).toBeGreaterThan(0);
   });
 
@@ -37,6 +38,7 @@ test.describe("Files Interface", () => {
 
   test("should have file actions (delete, rename, etc)", async ({ files }) => {
     await files.open();
+
     expect(await files.allButtons().count()).toBeGreaterThan(0);
   });
 

@@ -86,7 +86,9 @@ describe("OrchestratorStore", () => {
     await store.init({}, orch);
 
     expect(store.ready).toBe(true);
+
     expect(store.messages).toEqual([{ id: "m1", role: "assistant" }]);
+
     expect(store.tasks).toEqual([
       {
         id: "t-default",
@@ -95,7 +97,9 @@ describe("OrchestratorStore", () => {
         prompt: "p",
       },
     ]);
+
     expect(store.files).toEqual(["file.txt"]);
+
     expect(store.storageStatus).toEqual({ type: "opfs", name: "OPFS" });
   });
 
@@ -107,18 +111,22 @@ describe("OrchestratorStore", () => {
     await store.init({}, orch);
 
     events.emit("message", { id: "m2", role: "user" });
+
     expect(store.messages.at(-1)).toEqual({ id: "m2", role: "user" });
 
     events.emit("typing", { typing: true });
+
     expect(store.isTyping).toBe(true);
 
     events.emit("tool-activity", { tool: "read_file", status: "running" });
+
     expect(store.toolActivity).toEqual({
       tool: "read_file",
       status: "running",
     });
 
     events.emit("tool-activity", { tool: "read_file", status: "done" });
+
     expect(store.toolActivity).toBeNull();
 
     events.emit("thinking-log", {
@@ -126,6 +134,7 @@ describe("OrchestratorStore", () => {
       label: "Starting",
       message: "a",
     });
+
     expect(store.activityLog).toHaveLength(1);
 
     events.emit("thinking-log", {
@@ -133,29 +142,41 @@ describe("OrchestratorStore", () => {
       label: "Step",
       message: "b",
     });
+
     expect(store.activityLog).toHaveLength(2);
 
     events.emit("state-change", "thinking");
+
     expect(store.state).toBe("thinking");
 
     events.emit("state-change", "idle");
+
     expect(store.state).toBe("idle");
+
     expect(store.toolActivity).toBeNull();
 
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
     events.emit("error", { error: "boom" });
+
     expect(store.error).toBe("boom");
+
     expect(store.state).toBe("error");
     errorSpy.mockRestore();
 
     events.emit("token-usage", { input: 3, output: 4, total: 7 });
+
     expect(store.tokenUsage).toEqual({ input: 3, output: 4, total: 7 });
 
     events.emit("session-reset");
+
     expect(store.messages).toEqual([]);
+
     expect(store.activityLog).toEqual([]);
+
     expect(store.tokenUsage).toBeNull();
+
     expect(store.isTyping).toBe(false);
+
     expect(store.state).toBe("idle");
   });
 
@@ -180,6 +201,7 @@ describe("OrchestratorStore", () => {
       isScript: true,
       prompt: "globalThis.__taskRan = true;",
     });
+
     expect(globalThis.__taskRan).toBe(true);
 
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
@@ -188,6 +210,7 @@ describe("OrchestratorStore", () => {
       isScript: true,
       prompt: "throw new Error('bad script')",
     });
+
     expect(mockShowError).toHaveBeenCalledWith("Script Error: bad script");
     errorSpy.mockRestore();
   });
@@ -214,10 +237,13 @@ describe("OrchestratorStore", () => {
       .mockResolvedValue(undefined);
 
     await store.newSession({});
+
     expect(newSession).toHaveBeenCalledWith({}, DEFAULT_GROUP_ID);
+
     expect(loadSpy).toHaveBeenCalled();
 
     await expect(store.compactContext({})).resolves.toBe("ok");
+
     expect(compactContext).toHaveBeenCalledWith({}, DEFAULT_GROUP_ID);
   });
 
@@ -229,6 +255,7 @@ describe("OrchestratorStore", () => {
     store.clearError();
 
     expect(store.error).toBeNull();
+
     expect(store.state).toBe("idle");
   });
 
@@ -237,10 +264,13 @@ describe("OrchestratorStore", () => {
     const loadSpy = jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
 
     await store.toggleTask({}, { id: "t1", enabled: false }, true);
+
     expect(mockSaveTask).toHaveBeenCalledWith({}, { id: "t1", enabled: true });
 
     await store.deleteTask({}, "t1");
+
     expect(mockDeleteTask).toHaveBeenCalledWith({}, "t1");
+
     expect(loadSpy).toHaveBeenCalledTimes(2);
   });
 
@@ -251,7 +281,9 @@ describe("OrchestratorStore", () => {
     await store.clearAllTasks({});
 
     expect(mockDeleteTask).toHaveBeenCalledWith({}, "t-default");
+
     expect(mockDeleteTask).not.toHaveBeenCalledWith({}, "t-other");
+
     expect(loadSpy).toHaveBeenCalled();
   });
 
@@ -270,6 +302,7 @@ describe("OrchestratorStore", () => {
       {},
       expect.objectContaining({ groupId: DEFAULT_GROUP_ID, prompt: "a" }),
     );
+
     expect(mockSaveTask).toHaveBeenNthCalledWith(
       2,
       {},
@@ -277,6 +310,7 @@ describe("OrchestratorStore", () => {
     );
 
     expect(mockSaveTask.mock.calls[0][1].id).not.toBe("old1");
+
     expect(mockSaveTask.mock.calls[1][1].id).not.toBe("old2");
   });
 
@@ -284,11 +318,21 @@ describe("OrchestratorStore", () => {
     const store = new OrchestratorStore();
     const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
+    store.orchestrator = /** @type {any} */ ({
+      syncTerminalWorkspace: jest.fn(),
+    });
+
     await store.loadFiles({});
+
     expect(store.files).toEqual(["file.txt"]);
+
+    expect(store.orchestrator.syncTerminalWorkspace).toHaveBeenCalledWith(
+      DEFAULT_GROUP_ID,
+    );
 
     mockListGroupFiles.mockRejectedValueOnce(new Error("list failed"));
     await store.loadFiles({});
+
     expect(errorSpy).toHaveBeenCalledWith(
       "Failed to load files in store:",
       expect.any(Error),
@@ -296,13 +340,16 @@ describe("OrchestratorStore", () => {
 
     const loadSpy = jest.spyOn(store, "loadFiles").mockResolvedValue(undefined);
     await store.grantStorageAccess({});
+
     expect(mockRequestStorageAccess).toHaveBeenCalledWith({});
+
     expect(loadSpy).toHaveBeenCalled();
 
     mockRequestStorageAccess.mockRejectedValueOnce(
       new Error("permission denied"),
     );
     await store.grantStorageAccess({});
+
     expect(errorSpy).toHaveBeenCalledWith(
       "Failed to grant storage access:",
       expect.any(Error),
@@ -316,22 +363,29 @@ describe("OrchestratorStore", () => {
     const loadSpy = jest.spyOn(store, "loadFiles").mockResolvedValue(undefined);
 
     await store.navigateIntoFolder({}, "dir/");
+
     expect(store.currentPath).toBe("dir");
 
     await store.navigateIntoFolder({}, "sub/");
+
     expect(store.currentPath).toBe("dir/sub");
 
     await store.navigateBackFolder({});
+
     expect(store.currentPath).toBe("dir");
 
     await store.navigateBackFolder({});
+
     expect(store.currentPath).toBe(".");
 
     await store.navigateBackFolder({});
+
     expect(store.currentPath).toBe(".");
 
     await store.resetToRootFolder({});
+
     expect(store.currentPath).toBe(".");
+
     expect(loadSpy).toHaveBeenCalled();
   });
 
@@ -355,14 +409,23 @@ describe("OrchestratorStore", () => {
     store.setActiveGroup({}, "group-2");
 
     expect(store.activeGroupId).toBe("group-2");
+
     expect(store.messages).toEqual([]);
+
     expect(store.activityLog).toEqual([]);
+
     expect(store.error).toBeNull();
+
     expect(store.isTyping).toBe(false);
+
     expect(store.toolActivity).toBeNull();
+
     expect(store.currentPath).toBe(".");
+
     expect(historySpy).toHaveBeenCalled();
+
     expect(taskSpy).toHaveBeenCalledWith({});
+
     expect(filesSpy).toHaveBeenCalledWith({});
   });
 
@@ -371,6 +434,7 @@ describe("OrchestratorStore", () => {
     store._tasks.set([{ id: "t1" }]);
 
     expect(store.getTasksForBackup()).toEqual([{ id: "t1" }]);
+
     expect(store.getState()).toMatchObject({
       activeGroupId: DEFAULT_GROUP_ID,
       currentPath: ".",

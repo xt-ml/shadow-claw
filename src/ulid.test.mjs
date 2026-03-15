@@ -34,6 +34,7 @@ describe("ulid", () => {
     const id = ulid();
 
     expect(id).toHaveLength(26);
+
     expect(id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/);
   });
 
@@ -52,6 +53,7 @@ describe("ulid", () => {
     const second = ulid();
 
     expect(second).not.toBe(first);
+
     expect(second > first).toBe(true);
   });
 
@@ -77,6 +79,7 @@ describe("ulid", () => {
     const second = ulid();
 
     expect(first.slice(0, 10)).not.toBe(second.slice(0, 10));
+
     expect(second).not.toBe(first);
   });
 });

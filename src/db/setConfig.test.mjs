@@ -12,6 +12,7 @@ describe("setConfig", () => {
     txPromise.mockResolvedValue(1);
 
     await expect(setConfig({}, "k", "v")).resolves.toBeUndefined();
+
     expect(txPromise).toHaveBeenCalledWith(
       {},
       "config",

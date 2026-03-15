@@ -26,6 +26,7 @@ describe("updateTaskLastRun", () => {
     putReq.onsuccess();
 
     await expect(pending).resolves.toBeUndefined();
+
     expect(store.put).toHaveBeenCalledWith({ id: "t1", lastRun: 1234 });
   });
 
@@ -45,6 +46,7 @@ describe("updateTaskLastRun", () => {
     getReq.onsuccess();
 
     await expect(pending).resolves.toBeUndefined();
+
     expect(store.put).not.toHaveBeenCalled();
   });
 });

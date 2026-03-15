@@ -82,7 +82,9 @@ describe("src/serve.mjs proxy simulation", () => {
     });
 
     expect(response.status).toBe(200);
+
     expect(response.body).toBe("OK");
+
     expect(global.fetch).toHaveBeenCalledWith(
       "https://httpbin.org/headers",
       expect.objectContaining({ method: "GET" }),
@@ -99,6 +101,7 @@ describe("src/serve.mjs proxy simulation", () => {
     );
 
     expect(headers["api-key"]).toBe("ui-key");
+
     expect(headers.authorization).toBe("Bearer ui-key");
   });
 
@@ -111,6 +114,7 @@ describe("src/serve.mjs proxy simulation", () => {
     );
 
     expect(headers["api-key"]).toBe("server-key");
+
     expect(headers.authorization).toBe("Bearer server-key");
   });
 });

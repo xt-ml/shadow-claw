@@ -50,9 +50,13 @@ describe("readGroupFile", () => {
     const content = await readGroupFile({}, "g1", "nested/a.txt");
 
     expect(content).toBe("hello");
+
     expect(groupDir.getDirectoryHandle).toHaveBeenCalledWith("nested");
+
     expect(groupDir.getFileHandle).toHaveBeenCalledWith("a.txt");
+
     expect(fileHandle.createSyncAccessHandle).toHaveBeenCalledTimes(1);
+
     expect(syncHandle.close).toHaveBeenCalledTimes(1);
 
     globalThis.TextDecoder = originalTextDecoder;
@@ -77,6 +81,7 @@ describe("readGroupFile", () => {
     const content = await readGroupFile({}, "g2", "b.txt");
 
     expect(content).toBe("fallback");
+
     expect(fileHandle.getFile).toHaveBeenCalledTimes(1);
   });
 });

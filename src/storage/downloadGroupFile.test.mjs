@@ -32,7 +32,9 @@ describe("downloadGroupFile", () => {
     await downloadGroupFile({}, "g", "d/f.txt");
 
     expect(urlSpy).toHaveBeenCalled();
+
     expect(clickSpy).toHaveBeenCalled();
+
     expect(revokeSpy).toHaveBeenCalledWith("blob:1");
 
     urlSpy.mockRestore();

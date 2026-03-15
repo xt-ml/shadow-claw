@@ -31,8 +31,11 @@ describe("deleteGroupFile", () => {
     await deleteGroupFile({}, "g1", "a/b/file.txt");
 
     expect(getGroupDir).toHaveBeenCalledWith({}, "g1");
+
     expect(dir.getDirectoryHandle).toHaveBeenCalledWith("a");
+
     expect(dir.getDirectoryHandle).toHaveBeenCalledWith("b");
+
     expect(dir.removeEntry).toHaveBeenCalledWith("file.txt");
   });
 });
@@ -54,8 +57,11 @@ describe("deleteGroupDirectory", () => {
     await deleteGroupDirectory({}, "g2", "x/to-remove/");
 
     expect(getGroupDir).toHaveBeenCalledWith({}, "g2");
+
     expect(parsePath).toHaveBeenCalledWith("x/to-remove");
+
     expect(dir.getDirectoryHandle).toHaveBeenCalledWith("x");
+
     expect(dir.removeEntry).toHaveBeenCalledWith("to-remove", {
       recursive: true,
     });

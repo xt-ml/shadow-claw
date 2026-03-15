@@ -117,6 +117,7 @@ export async function initGitFs() {
  * "https://github.com/xt-ml/shadow-claw.git" → "shadow-claw"
  *
  * @param {string} url
+ *
  * @returns {string}
  */
 export function repoNameFromUrl(url) {

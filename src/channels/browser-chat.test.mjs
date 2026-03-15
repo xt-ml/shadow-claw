@@ -11,9 +11,13 @@ describe("BrowserChatChannel", () => {
     ch.submit("hello", "br:abc");
 
     expect(seen).toHaveLength(1);
+
     expect(seen[0].groupId).toBe("br:abc");
+
     expect(seen[0].sender).toBe("You");
+
     expect(seen[0].content).toBe("hello");
+
     expect(seen[0].channel).toBe("browser");
   });
 
@@ -28,6 +32,7 @@ describe("BrowserChatChannel", () => {
     ch.submit("msg");
 
     expect(payload.groupId).toBe("br:custom");
+
     expect(ch.getActiveGroup()).toBe("br:custom");
   });
 
@@ -43,6 +48,7 @@ describe("BrowserChatChannel", () => {
     ch.setTyping("br:g", true);
 
     expect(display).toHaveBeenCalledWith("br:g", "hi", true);
+
     expect(typing).toHaveBeenCalledWith("br:g", true);
   });
 });

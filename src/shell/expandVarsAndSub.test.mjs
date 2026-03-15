@@ -27,16 +27,19 @@ describe("expandVarsAndSub.mjs", () => {
 
   it("should expand simple variables", async () => {
     const result = await expandVarsAndSub(db, "hello $FOO", ctx);
+
     expect(result).toBe("hello bar");
   });
 
   it("should expand braced variables", async () => {
     const result = await expandVarsAndSub(db, "hello ${BAZ}", ctx);
+
     expect(result).toBe("hello qux");
   });
 
   it("should handle missing variables", async () => {
     const result = await expandVarsAndSub(db, "hello $MISSING", ctx);
+
     expect(result).toBe("hello ");
   });
 
@@ -48,7 +51,9 @@ describe("expandVarsAndSub.mjs", () => {
     });
 
     const result = await expandVarsAndSub(db, "echo $(some command)", ctx);
+
     expect(result).toBe("echo cmd output");
+
     expect(runPipeline).toHaveBeenCalledWith(db, "some command", ctx);
   });
 
@@ -67,6 +72,7 @@ describe("expandVarsAndSub.mjs", () => {
     );
 
     expect(result).toBe("result: outer inner");
+
     expect(runPipeline).toHaveBeenCalledWith(
       db,
       "echo outer $(echo inner)",

@@ -74,6 +74,7 @@ function createWorkspaceDir(initialFiles = {}) {
 
         current.entries.set(part, node);
         current = node;
+
         continue;
       }
 
@@ -430,6 +431,45 @@ describe("vm 9p workspace sync", () => {
 
       expect(workspaceDir.hasFile("O_O")).toBe(true);
       expect(onFlushed).toHaveBeenCalledTimes(1);
+
+      detachAutoSync?.();
+      session.close();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it("does not prune host-only files after terminal ls prompt flush", async () => {
+    jest.useFakeTimers();
+
+    try {
+      const workspaceDir = createWorkspaceDir({ file: new Uint8Array() });
+      mockGetWorkspaceDir.mockResolvedValue(workspaceDir);
+
+      const vmFiles = new Map();
+      const emulator = createNinePEmulator(vmFiles);
+
+      __setVMInstanceForTests({
+        isReady: () => true,
+        execute: jest.fn(),
+        getEmulator: () => emulator,
+        getMode: () => "9p",
+        destroy: jest.fn(),
+      });
+
+      const detachAutoSync = attachTerminalWorkspaceAutoSync({
+        db: /** @type {any} */ ({}),
+        groupId: "g1",
+      });
+
+      const session = createTerminalSession(() => {});
+
+      session.send("ls -al\n");
+      emulator.emitSerial("ls -al\r\nlocalhost:/workspace# ");
+
+      await jest.advanceTimersByTimeAsync(250);
+
+      expect(workspaceDir.hasFile("file")).toBe(true);
 
       detachAutoSync?.();
       session.close();

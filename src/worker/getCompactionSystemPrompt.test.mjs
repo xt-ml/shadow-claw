@@ -5,7 +5,9 @@ describe("getCompactionSystemPrompt", () => {
     const result = getCompactionSystemPrompt("base prompt");
 
     expect(result).toContain("base prompt");
+
     expect(result).toContain("## COMPACTION TASK");
+
     expect(result).toContain("token limits");
   });
 });

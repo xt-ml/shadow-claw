@@ -35,6 +35,7 @@ describe("audio", () => {
     if (originalAudioContext) {
       window.AudioContext = originalAudioContext;
     }
+
     if (originalWebkitAudioContext) {
       window.webkitAudioContext = originalWebkitAudioContext;
     }
@@ -50,7 +51,9 @@ describe("audio", () => {
     const b = getAudioContext();
 
     expect(a).toBe(ctx);
+
     expect(b).toBe(ctx);
+
     expect(CtxCtor).toHaveBeenCalledTimes(1);
   });
 
@@ -72,6 +75,7 @@ describe("audio", () => {
     playNotificationChime();
 
     expect(ctx.createOscillator).toHaveBeenCalledTimes(2);
+
     expect(ctx.createGain).toHaveBeenCalledTimes(2);
   });
 });

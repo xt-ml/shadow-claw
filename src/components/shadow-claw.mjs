@@ -1709,7 +1709,6 @@ export class ShadowClaw extends HTMLElement {
                       type="password"
                       class="form-input"
                       data-setting="api-key-input"
-                      placeholder="Enter your API key..."
                     />
                     <div class="form-helper" data-setting="api-key-helper">
                       Your API key is encrypted and stored locally. It never leaves

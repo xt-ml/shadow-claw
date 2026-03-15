@@ -45,6 +45,7 @@ test.describe("Chat Interface", () => {
   test("should render markdown content in messages", async ({ chat }) => {
     await chat.open();
     const markdownNodes = chat.host.locator(".hljs, pre code, .markdown");
+
     expect(await markdownNodes.count()).toBeGreaterThanOrEqual(0);
   });
 });

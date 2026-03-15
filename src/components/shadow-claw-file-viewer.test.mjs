@@ -44,7 +44,9 @@ describe("shadow-claw-file-viewer", () => {
 
   it("includes preview toggle in template", () => {
     const template = ShadowClawFileViewer.getTemplate();
+
     expect(template).toContain("modal-preview-btn");
+
     expect(template).toContain('aria-pressed="false"');
   });
 
@@ -52,8 +54,11 @@ describe("shadow-claw-file-viewer", () => {
     const component = new ShadowClawFileViewer();
 
     expect(component.isIframePreviewFile("diagram.svg")).toBe(true);
+
     expect(component.isIframePreviewFile("index.html")).toBe(true);
+
     expect(component.isIframePreviewFile("index.htm")).toBe(true);
+
     expect(component.isIframePreviewFile("notes.md")).toBe(false);
   });
 
@@ -65,7 +70,9 @@ describe("shadow-claw-file-viewer", () => {
     });
 
     expect(srcdoc).toContain("<!doctype html>");
+
     expect(srcdoc).toContain('<base target="_blank">');
+
     expect(srcdoc).toContain("<main>Hello</main>");
   });
 
@@ -87,6 +94,7 @@ describe("shadow-claw-file-viewer", () => {
     expect(component.getIframeSandboxPermissions("index.html")).toContain(
       "allow-modals",
     );
+
     expect(component.getIframeSandboxPermissions("diagram.svg")).toContain(
       "allow-modals",
     );

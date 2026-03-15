@@ -70,6 +70,7 @@ describe("runSingle.mjs", () => {
     await runSingle(db, "echo hello > /dev/null 2>&1", ctx, "");
 
     expect(dispatch).toHaveBeenCalledWith(db, "echo", ["hello"], ctx, "");
+
     expect(writeGroupFile).not.toHaveBeenCalled();
   });
 
@@ -80,7 +81,9 @@ describe("runSingle.mjs", () => {
     const result = await runSingle(db, "FOO=bar", ctx, "");
 
     expect(ctx.env.FOO).toBe("bar");
+
     expect(result.exitCode).toBe(0);
+
     expect(dispatch).not.toHaveBeenCalled();
   });
 
@@ -123,7 +126,9 @@ describe("runSingle.mjs", () => {
     const db = {};
 
     const result = await runSingle(db, "   ", ctx, "");
+
     expect(result).toEqual({ stdout: "", stderr: "", exitCode: 0 });
+
     expect(dispatch).not.toHaveBeenCalled();
   });
 
@@ -137,6 +142,7 @@ describe("runSingle.mjs", () => {
     await runSingle(db, "echo hello > out.txt 2>&1", ctx, "");
 
     expect(dispatch).toHaveBeenCalledWith(db, "echo", ["hello"], ctx, "");
+
     expect(writeGroupFile).toHaveBeenCalledWith(
       db,
       "test-group",

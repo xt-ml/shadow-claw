@@ -247,6 +247,7 @@
  *   | { type: 'vm-terminal-open'; payload?: { groupId?: string } }
  *   | { type: 'vm-terminal-input'; payload: { data: string } }
  *   | { type: 'vm-terminal-close'; payload?: { groupId?: string } }
+ *   | { type: 'vm-workspace-sync'; payload?: { groupId?: string } }
  * } WorkerInbound
  */
 

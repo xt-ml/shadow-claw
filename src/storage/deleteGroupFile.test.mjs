@@ -24,6 +24,7 @@ describe("deleteGroupFile", () => {
     await deleteGroupFile({}, "g", "a/x.txt");
 
     expect(root.getDirectoryHandle).toHaveBeenCalledWith("a");
+
     expect(nested.removeEntry).toHaveBeenCalledWith("x.txt");
   });
 });

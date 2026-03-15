@@ -52,25 +52,34 @@ describe("openDatabase", () => {
     const db = await promise;
 
     expect(db).toBe(database);
+
     expect(database.createObjectStore).toHaveBeenCalledWith("messages", {
       keyPath: "id",
     });
+
     expect(msgStore.createIndex).toHaveBeenCalledWith("by-group-time", [
       "groupId",
       "timestamp",
     ]);
+
     expect(msgStore.createIndex).toHaveBeenCalledWith("by-group", "groupId");
+
     expect(database.createObjectStore).toHaveBeenCalledWith("sessions", {
       keyPath: "groupId",
     });
+
     expect(database.createObjectStore).toHaveBeenCalledWith("tasks", {
       keyPath: "id",
     });
+
     expect(taskStore.createIndex).toHaveBeenCalledWith("by-group", "groupId");
+
     expect(taskStore.createIndex).toHaveBeenCalledWith("by-enabled", "enabled");
+
     expect(database.createObjectStore).toHaveBeenCalledWith("config", {
       keyPath: "key",
     });
+
     expect(setDB).toHaveBeenCalledWith(database);
   });
 

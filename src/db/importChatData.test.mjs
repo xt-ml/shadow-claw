@@ -46,7 +46,9 @@ describe("importChatData", () => {
     await pending;
 
     expect(clearGroupMessages).toHaveBeenCalledWith(db, "g1");
+
     expect(saveMessage).toHaveBeenCalledTimes(2);
+
     expect(saveSession).toHaveBeenCalledWith(
       db,
       expect.objectContaining({ groupId: "g1" }),
@@ -86,6 +88,7 @@ describe("importChatData", () => {
     await pending;
 
     expect(saveMessage).not.toHaveBeenCalled();
+
     expect(saveSession).toHaveBeenCalled();
   });
 
@@ -110,6 +113,7 @@ describe("importChatData", () => {
     await pending;
 
     expect(saveMessage).toHaveBeenCalled();
+
     expect(saveSession).not.toHaveBeenCalled();
   });
 

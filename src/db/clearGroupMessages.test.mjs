@@ -35,7 +35,9 @@ describe("clearGroupMessages", () => {
     request.onsuccess();
 
     await expect(pending).resolves.toBeUndefined();
+
     expect(cursorA.delete).toHaveBeenCalled();
+
     expect(cursorB.delete).toHaveBeenCalled();
   });
 });

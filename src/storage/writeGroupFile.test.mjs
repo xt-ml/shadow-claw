@@ -25,6 +25,7 @@ describe("writeGroupFile", () => {
     await writeGroupFile({}, "g", "d/f.txt", "hello");
 
     expect(writable.write).toHaveBeenCalledWith("hello");
+
     expect(writable.close).toHaveBeenCalled();
   });
 });

@@ -22,6 +22,7 @@ describe("deleteAllGroupFiles", () => {
     await deleteAllGroupFiles({}, "g1");
 
     expect(dir.removeEntry).toHaveBeenCalledWith("a.txt", { recursive: true });
+
     expect(dir.removeEntry).toHaveBeenCalledWith("nested", { recursive: true });
   });
 });

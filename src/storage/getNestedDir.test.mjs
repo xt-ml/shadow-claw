@@ -10,6 +10,7 @@ describe("getNestedDir", () => {
     const result = await getNestedDir(mockHandle, "sub");
 
     expect(result).toBe("nested-handle");
+
     expect(mockHandle.getDirectoryHandle).toHaveBeenCalledWith("sub", {
       create: true,
     });
@@ -29,7 +30,9 @@ describe("getNestedDir", () => {
     const result = await getNestedDir(root, "a", "b");
 
     expect(result).toBe(level2);
+
     expect(root.getDirectoryHandle).toHaveBeenCalledWith("a", { create: true });
+
     expect(level1.getDirectoryHandle).toHaveBeenCalledWith("b", {
       create: true,
     });
@@ -38,6 +41,7 @@ describe("getNestedDir", () => {
   it("should return root if no segments provided", async () => {
     const root = { name: "root" };
     const result = await getNestedDir(root);
+
     expect(result).toBe(root);
   });
 });

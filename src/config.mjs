@@ -4,6 +4,7 @@ export const ASSISTANT_NAME = "rover";
 /**
  * Build a trigger pattern for the assistant name
  * @param {string} name
+ *
  * @returns {RegExp}
  */
 export function buildTriggerPattern(name) {

@@ -78,8 +78,11 @@ class OpenAIAdapter extends BaseAdapter {
 
     for (const msg of messages) {
       if (msg.role === "system") {
-        if (system) continue;
+        if (system) {
+          continue;
+        }
         openaiMessages.push(msg);
+
         continue;
       }
 
@@ -110,6 +113,7 @@ class OpenAIAdapter extends BaseAdapter {
         }
 
         openaiMessages.push(resultMsg);
+
         continue;
       }
 

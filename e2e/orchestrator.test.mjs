@@ -13,12 +13,14 @@ test.describe("Orchestrator Integration", () => {
     const groupIds = await getAllGroupIds(page);
 
     expect(Array.isArray(groupIds)).toBe(true);
+
     expect(groupIds.length).toBeGreaterThanOrEqual(0);
   });
 
   test("should handle page switching", async ({ app }) => {
     await app.navigateTo("chat");
     await expect(app.activePage()).toHaveAttribute("data-page-id", "chat");
+
     expect(await app.navItems().count()).toBeGreaterThanOrEqual(3);
   });
 

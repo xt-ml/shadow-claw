@@ -18,6 +18,7 @@ test.describe("Storage Integration", () => {
     });
 
     expect(opfsSupport.hasStorageAPI).toBe(true);
+
     expect(opfsSupport.hasGetDirectory).toBe(true);
   });
 
@@ -30,6 +31,7 @@ test.describe("Storage Integration", () => {
     });
 
     expect(idbSupport.hasIndexedDB).toBe(true);
+
     expect(idbSupport.canOpen).toBe(true);
   });
 
@@ -65,6 +67,7 @@ test.describe("Storage Integration", () => {
     });
 
     expect(dbInitialized.dbExists).toBe(true);
+
     expect(dbInitialized.hasStores).toBe(true);
   });
 
@@ -98,6 +101,7 @@ test.describe("Storage Integration", () => {
     });
 
     expect(workspaceAccess.success).toBe(true);
+
     expect(workspaceAccess.canAccessRoot).toBe(true);
   });
 
@@ -169,7 +173,9 @@ test.describe("Storage Integration", () => {
     });
 
     expect(fileOperations.success).toBe(true);
+
     expect(fileOperations.canWrite).toBe(true);
+
     expect(fileOperations.canRead).toBe(true);
   });
 

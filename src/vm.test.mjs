@@ -68,6 +68,7 @@ describe("vm wrapper", () => {
   it("reports not ready and returns fallback error output", async () => {
     expect(isVMReady()).toBe(false);
     const out = await executeInVM("echo hi");
+
     expect(out).toContain("WebVM is not available");
   });
 
@@ -86,19 +87,23 @@ describe("vm wrapper", () => {
 
   it("normalizes boot host preference and clears on invalid", () => {
     setVMBootHostPreference("https://example.com///");
+
     expect(getVMBootHostPreference()).toBe("https://example.com");
 
     setVMBootHostPreference("not-a-url");
+
     expect(getVMBootHostPreference()).toBeNull();
   });
 
   it("uses default relay when invalid relay URL is provided", () => {
     setVMNetworkRelayURLPreference("wss://relay.example.com/path");
+
     expect(getVMNetworkRelayURLPreference()).toBe(
       "wss://relay.example.com/path",
     );
 
     setVMNetworkRelayURLPreference("https://invalid.example.com");
+
     expect(getVMNetworkRelayURLPreference()).toBe(DEFAULT_VM_NETWORK_RELAY_URL);
   });
 
@@ -107,6 +112,7 @@ describe("vm wrapper", () => {
     global.fetch = jest.fn().mockResolvedValue({ ok: false });
 
     await bootVM();
+
     expect(getVMStatus().bootAttempted).toBe(true);
 
     await shutdownVM();
@@ -138,6 +144,7 @@ describe("vm wrapper", () => {
     });
 
     emulator.emitSerial("A");
+
     expect(terminalChunks).toEqual(["A"]);
 
     const commandPromise = executeInVM("echo hello");
@@ -148,9 +155,11 @@ describe("vm wrapper", () => {
     );
 
     session.send("pwd\n");
+
     expect(emulator.serial0_send).not.toHaveBeenCalled();
 
     emulator.emitSerial("B");
+
     expect(terminalChunks).toEqual(["A"]);
 
     resolveExecute({
@@ -163,9 +172,11 @@ describe("vm wrapper", () => {
     await expect(commandPromise).resolves.toBe("hello");
 
     emulator.emitSerial("C");
+
     expect(terminalChunks).toEqual(["A", "C"]);
 
     session.send("pwd\n");
+
     expect(emulator.serial0_send).toHaveBeenCalledWith("pwd\n");
   });
 
@@ -225,6 +236,7 @@ describe("vm wrapper", () => {
     const config = await __resolveBootConfigForTests();
 
     expect(config?.mode).toBe("9p");
+
     expect(config?.label).toContain("9p");
   });
 
@@ -254,6 +266,7 @@ describe("vm wrapper", () => {
     const config = await __resolveBootConfigForTests();
 
     expect(config?.mode).toBe("ext2");
+
     expect(config?.label).toContain("ext2");
   });
 });

@@ -129,6 +129,29 @@ describe("OrchestratorStore", () => {
 
     expect(store.toolActivity).toBeNull();
 
+    events.emit("model-download-progress", {
+      groupId: DEFAULT_GROUP_ID,
+      status: "running",
+      progress: 0.5,
+      message: "Downloading Prompt API model... 50%",
+    });
+
+    expect(store.modelDownloadProgress).toEqual({
+      groupId: DEFAULT_GROUP_ID,
+      status: "running",
+      progress: 0.5,
+      message: "Downloading Prompt API model... 50%",
+    });
+
+    events.emit("model-download-progress", {
+      groupId: DEFAULT_GROUP_ID,
+      status: "done",
+      progress: 1,
+      message: "Prompt API model ready.",
+    });
+
+    expect(store.modelDownloadProgress).toBeNull();
+
     events.emit("thinking-log", {
       level: "info",
       label: "Starting",
@@ -176,6 +199,8 @@ describe("OrchestratorStore", () => {
     expect(store.tokenUsage).toBeNull();
 
     expect(store.isTyping).toBe(false);
+
+    expect(store.modelDownloadProgress).toBeNull();
 
     expect(store.state).toBe("idle");
   });

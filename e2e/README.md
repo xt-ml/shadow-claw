@@ -226,6 +226,11 @@ Chat interface controller.
 - `messageCount()` — Count rendered messages
 - `expectCoreUi()` — Assert input, send button, and message container exist
 
+Behavior notes:
+
+- Chat can show a transient model download progress panel when using Prompt API provider.
+- Assertions around that panel should be state-based (present/hidden) and not rely on fixed timing.
+
 ### `FilesPage`
 
 File browser controller.
@@ -278,6 +283,8 @@ export const TIME_MINUTES_ONE = 60000;
 - Use `toHaveCount()` instead of `toBeVisible()` for custom element hosts (they use `display: contents`)
 - For mode-gated controls (for example VM sync buttons), assert hidden/visible state based on runtime VM mode
 - Feature-gate tests that rely on browser-specific APIs (OPFS, IndexedDB)
+- Feature-gate Prompt API flows when `LanguageModel` is unavailable in the browser build
+- For Prompt API UI checks, assert API-key input disablement and provider helper text in Settings
 
 ### ❌ DON'T
 
@@ -338,6 +345,16 @@ await chat.sendButton().highlight();
 ### Screenshot on Failure
 
 Screenshots are automatically captured on failure and saved to `e2e-results/`.
+
+## Prompt API and Browser Capability Gates
+
+Some runtime paths are browser-capability dependent and should be handled similarly
+to storage feature gates.
+
+- Prompt API provider depends on `globalThis.LanguageModel` support.
+- WebMCP integration depends on `navigator.modelContext` support.
+- In unsupported browsers, tests should verify graceful fallback/error messaging,
+  not hard-fail on unavailable platform features.
 
 ## Storage Tests (Feature-Gated)
 

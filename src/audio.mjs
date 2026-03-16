@@ -1,5 +1,7 @@
 /** @type {AudioContext|null} */
 let audioCtx = null;
+/** @type {boolean} */
+let audioUnlocked = false;
 
 /**
  * Get or create the shared AudioContext
@@ -19,6 +21,8 @@ export function getAudioContext() {
  * Resume AudioContext on user gesture
  */
 export function resumeAudioContext() {
+  audioUnlocked = true;
+
   const ctx = getAudioContext();
   if (ctx.state === "suspended") {
     ctx.resume().catch((err) => {
@@ -32,6 +36,12 @@ export function resumeAudioContext() {
  */
 export function playNotificationChime() {
   try {
+    // Browsers block Web Audio until a user gesture has occurred.
+    // Skip chime requests until the unlock gesture handler runs.
+    if (!audioUnlocked) {
+      return;
+    }
+
     const ctx = getAudioContext();
     const now = ctx.currentTime;
 

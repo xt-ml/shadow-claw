@@ -78,6 +78,7 @@ export const COPILOT_AZURE_OPENAI_ALLOWED_MODELS = ["gpt-4o", "gpt-4o-mini"];
  * @property {Record<string, string>} headers
  * @property {string} defaultModel
  * @property {string[]} [models]
+ * @property {boolean} [requiresApiKey]
  */
 
 /**
@@ -100,6 +101,7 @@ export const PROVIDERS = {
       "X-Title": "ShadowClaw",
     },
     defaultModel: "anthropic/claude-haiku-4.5",
+    requiresApiKey: true,
   },
   copilot_azure_openai_proxy: {
     id: "copilot_azure_openai_proxy",
@@ -110,6 +112,18 @@ export const PROVIDERS = {
     headers: {},
     defaultModel: "gpt-4o-mini",
     models: COPILOT_AZURE_OPENAI_ALLOWED_MODELS,
+    requiresApiKey: true,
+  },
+  prompt_api: {
+    id: "prompt_api",
+    name: "Web Prompt API (Experimental)",
+    baseUrl: "builtin://language-model",
+    format: "prompt_api",
+    apiKeyHeader: "Authorization",
+    headers: {},
+    defaultModel: "browser-built-in",
+    models: ["browser-built-in", "gemini-nano", "phi-4-mini"],
+    requiresApiKey: false,
   },
   // anthropic: {
   //   id: "anthropic",

@@ -168,6 +168,42 @@ export class ShadowClawChat extends HTMLElement {
           display: block;
         }
 
+        .chat__model-progress {
+          background-color: var(--shadow-claw-bg-secondary, #f9fafb);
+          border: 0.0625rem solid var(--shadow-claw-border-color, #e5e7eb);
+          border-radius: var(--shadow-claw-radius-m);
+          display: none;
+          margin-top: 0.25rem;
+          padding: 0.625rem;
+        }
+
+        .chat__model-progress--active {
+          display: block;
+        }
+
+        .chat__model-progress-label {
+          color: var(--shadow-claw-text-secondary, #4b5563);
+          display: block;
+          font-size: 0.75rem;
+          font-weight: 600;
+          margin-bottom: 0.375rem;
+        }
+
+        .chat__model-progress-track {
+          background-color: var(--shadow-claw-bg-tertiary, #f3f4f6);
+          border-radius: 999px;
+          height: 0.5rem;
+          overflow: hidden;
+          width: 100%;
+        }
+
+        .chat__model-progress-bar {
+          background-color: var(--shadow-claw-accent-primary, #3b82f6);
+          height: 100%;
+          transition: width 0.2s ease;
+          width: 0%;
+        }
+
         .chat__messages {
           background-color: var(--shadow-claw-bg-secondary);
           border: 0.0625rem solid var(--shadow-claw-bg-tertiary);
@@ -214,6 +250,7 @@ export class ShadowClawChat extends HTMLElement {
           border: 0.0625rem solid transparent;
           border-left: 0.25rem solid var(--shadow-claw-accent-primary);
           border-radius: var(--shadow-claw-radius-m);
+          display: flow-root;
           font-size: 0.875rem;
           line-height: 1.5;
           max-width: 100%;
@@ -229,10 +266,18 @@ export class ShadowClawChat extends HTMLElement {
         }
 
         .chat__message-content p {
-          margin-bottom: 0.5rem;
+          margin: 0 0 0.5rem;
         }
 
         .chat__message-content p:last-child {
+          margin-bottom: 0;
+        }
+
+        .chat__message-content > :first-child {
+          margin-top: 0;
+        }
+
+        .chat__message-content > :last-child {
           margin-bottom: 0;
         }
 
@@ -273,7 +318,7 @@ export class ShadowClawChat extends HTMLElement {
 
         .chat__message-content ul,
         .chat__message-content ol {
-          margin-bottom: 0.5rem;
+          margin: 0 0 0.5rem;
           padding-left: 1.5rem;
         }
 
@@ -298,7 +343,7 @@ export class ShadowClawChat extends HTMLElement {
           border-left: 0.25rem solid var(--shadow-claw-border-color);
           color: var(--shadow-claw-text-secondary);
           font-style: italic;
-          margin: 0.5rem 0;
+          margin: 0 0 0.5rem;
           padding-left: 0.75rem;
         }
 
@@ -339,6 +384,7 @@ export class ShadowClawChat extends HTMLElement {
         }
 
         .chat__input-wrapper {
+          align-items: center;
           background-color: var(--shadow-claw-bg-primary);
           border: 0.0625rem solid var(--shadow-claw-border-color);
           border-radius: var(--shadow-claw-radius-l);
@@ -355,13 +401,16 @@ export class ShadowClawChat extends HTMLElement {
 
         .chat__input {
           background: transparent;
+          box-sizing: border-box;
           border: none;
           color: var(--shadow-claw-text-primary);
           flex: 1;
           font-family: var(--shadow-claw-font-sans);
           font-size: 0.875rem;
+          line-height: 1.4;
+          height: 2.5rem;
           max-height: 6.25rem;
-          min-height: 2.5rem;
+          min-height: 0;
           overflow-y: auto;
           padding: 0.625rem 0.75rem;
           resize: none;
@@ -456,6 +505,12 @@ export class ShadowClawChat extends HTMLElement {
         <div class="chat__body">
           <div class="chat__terminal-slot" data-terminal-slot hidden></div>
           <div class="chat__tool-activity" aria-live="polite">⚙️ Working...</div>
+          <div class="chat__model-progress" aria-live="polite" aria-label="Model download progress">
+            <span class="chat__model-progress-label">Preparing Prompt API model...</span>
+            <div class="chat__model-progress-track">
+              <div class="chat__model-progress-bar"></div>
+            </div>
+          </div>
           <div class="chat__activity-log" aria-live="polite"></div>
           <div class="chat__messages" role="log" aria-live="polite" aria-label="Conversation messages"></div>
           <div class="chat__input-area">
@@ -634,6 +689,42 @@ export class ShadowClawChat extends HTMLElement {
           toolEl.classList.remove("chat__tool-activity--active");
           toolEl.textContent = "⚙️ Working...";
         }
+      }),
+    );
+
+    this.cleanups.push(
+      effect(() => {
+        const progress = orchestratorStore.modelDownloadProgress;
+        const progressEl = root.querySelector(".chat__model-progress");
+        const labelEl = root.querySelector(".chat__model-progress-label");
+        const barEl = root.querySelector(".chat__model-progress-bar");
+
+        if (
+          !(progressEl instanceof HTMLElement) ||
+          !(labelEl instanceof HTMLElement) ||
+          !(barEl instanceof HTMLElement)
+        ) {
+          return;
+        }
+
+        if (!progress) {
+          progressEl.classList.remove("chat__model-progress--active");
+          labelEl.textContent = "Preparing Prompt API model...";
+          barEl.style.width = "0%";
+
+          return;
+        }
+
+        const normalized =
+          typeof progress.progress === "number"
+            ? Math.max(0, Math.min(1, progress.progress))
+            : 0;
+        const percent = Math.round(normalized * 100);
+
+        progressEl.classList.add("chat__model-progress--active");
+        labelEl.textContent =
+          progress.message || `Downloading Prompt API model... ${percent}%`;
+        barEl.style.width = `${percent}%`;
       }),
     );
 

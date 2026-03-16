@@ -135,6 +135,7 @@ Node-only packages (Express, Jest, Workbox CLI) belong in `devDependencies`.
 | worker → main | `error`               | `ErrorPayload`                        |
 | worker → main | `typing`              | `TypingPayload`                       |
 | worker → main | `tool-activity`       | `ToolActivityPayload`                 |
+| worker → main | `model-download-progress` | `ModelDownloadProgressPayload`   |
 | worker → main | `thinking-log`        | `ThinkingLogEntry`                    |
 | worker → main | `compact-done`        | `CompactDonePayload`                  |
 | worker → main | `open-file`           | `OpenFilePayload`                     |
@@ -145,6 +146,10 @@ Node-only packages (Express, Jest, Workbox CLI) belong in `devDependencies`.
 | worker → main | `vm-terminal-error`   | `{ error: string }`                   |
 | worker → main | `vm-workspace-synced` | `{ groupId: string }`                 |
 | worker → main | `show-toast`          | `{ message: string, type?: 'info'|'success'|'warning'|'error', duration?: number }` |
+
+When `prompt_api` provider is active, orchestration can emit `model-download-progress`
+from the main-thread Prompt API path (not only from worker runtime). Keep payload shape
+aligned with `ModelDownloadProgressPayload` in `src/types.mjs`.
 
 ### IndexedDB
 
@@ -192,6 +197,31 @@ Cancellation is handled via `AbortController`. When the main thread sends a `can
 3.  The worker catches this, cleans up its state, and becomes ready for the next task.
 4.  The orchestrator tracks these tasks via `orchestratorStore.stopCurrentRequest()`.
 
+Prompt API invocation/compaction uses per-group `AbortController` instances in
+`Orchestrator.promptControllers`; cancellation must abort and clear controller state.
+
+### Prompt API Provider
+
+`PROVIDERS.prompt_api` is a keyless provider backed by browser Prompt API (`LanguageModel`).
+
+- It uses provider `format: "prompt_api"`.
+- `requiresApiKey: false` controls config gating and settings UX.
+- Invocation and compaction are routed through `src/prompt-api-provider.mjs`.
+- Chat model download progress is surfaced to UI through `model-download-progress` events.
+
+When adding or changing providers in `src/config.mjs`, include `requiresApiKey`
+explicitly so settings/orchestrator behavior stays consistent.
+
+### WebMCP Tool Registration
+
+`src/webmcp.mjs` bridges `TOOL_DEFINITIONS` into browser WebMCP (`navigator.modelContext`).
+
+- Use `isWebMcpSupported()` for feature detection.
+- Use `registerWebMcpTools()` during orchestrator init.
+- Use `unregisterWebMcpTools()` during shutdown.
+- Route side-effect worker messages via `setPostHandler()` when executing tools
+  outside worker context.
+
 ### Config Keys
 
 All config keys are constants in `src/config.mjs` under `CONFIG_KEYS`. Use those
@@ -228,8 +258,9 @@ and write artifacts under `e2e-results/`.
 ### Add a new LLM provider
 
 Edit `src/config.mjs` — add an entry to `PROVIDERS`. The provider needs:
-`id`, `name`, `baseUrl`, `format` (`"openai"` or `"anthropic"`), `apiKeyHeader`,
-optional `apiKeyHeaderFormat`, `headers`, and `defaultModel`.
+`id`, `name`, `baseUrl`, `format` (`"openai"` or `"anthropic"` or `"prompt_api"`),
+`apiKeyHeader`, optional `apiKeyHeaderFormat`, `headers`, `defaultModel`, and
+`requiresApiKey`.
 
 ### Add a new tool
 

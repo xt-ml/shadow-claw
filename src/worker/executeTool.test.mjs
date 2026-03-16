@@ -10,7 +10,7 @@ describe("executeTool.mjs", () => {
   let mockGetVMStatus;
   let mockIsVMReady;
   let mockListGroupFiles;
-  let mockPendingTasks;
+  let mockGetAllTasks;
   let mockPost;
   let mockReadGroupFile;
   let mockStripHtml;
@@ -49,7 +49,7 @@ describe("executeTool.mjs", () => {
     }));
     mockIsVMReady = jest.fn(() => true);
     mockListGroupFiles = jest.fn();
-    mockPendingTasks = new Map();
+    mockGetAllTasks = jest.fn().mockResolvedValue([]);
     mockPost = jest.fn();
     mockReadGroupFile = jest.fn();
     mockStripHtml = jest.fn((html) => html.replace(/<[^>]*>/g, ""));
@@ -88,6 +88,10 @@ describe("executeTool.mjs", () => {
 
     jest.unstable_mockModule("../db/getConfig.mjs", () => ({
       getConfig: mockGetConfig,
+    }));
+
+    jest.unstable_mockModule("../db/getAllTasks.mjs", () => ({
+      getAllTasks: mockGetAllTasks,
     }));
 
     jest.unstable_mockModule("../crypto.mjs", () => ({
@@ -140,10 +144,6 @@ describe("executeTool.mjs", () => {
 
     jest.unstable_mockModule("../ulid.mjs", () => ({
       ulid: mockUlid,
-    }));
-
-    jest.unstable_mockModule("./pendingTasks.mjs", () => ({
-      pendingTasks: mockPendingTasks,
     }));
 
     jest.unstable_mockModule("./post.mjs", () => ({
@@ -566,29 +566,27 @@ describe("executeTool.mjs", () => {
   });
 
   it("should handle list_tasks tool", async () => {
-    const tasks = [{ id: "1", schedule: "*", prompt: "p", enabled: true }];
-    const promise = executeTool({}, "list_tasks", {}, "group1");
+    mockGetAllTasks.mockResolvedValue([
+      { id: "1", groupId: "group1", schedule: "*", prompt: "p", enabled: true },
+      {
+        id: "2",
+        groupId: "group2",
+        schedule: "*",
+        prompt: "q",
+        enabled: false,
+      },
+    ]);
 
-    expect(mockPost).toHaveBeenCalledWith({
-      type: "task-list-request",
-      payload: { groupId: "group1" },
-    });
-
-    // Simulate resolution of pending task
-    const resolve = mockPendingTasks.get("group1");
-    resolve(tasks);
-
-    const result = await promise;
+    const result = await executeTool({}, "list_tasks", {}, "group1");
     expect(result).toContain("[ID: 1] Schedule: *, Prompt: p, Enabled: true");
+    expect(result).not.toContain("ID: 2");
   });
 
   it("should handle list_tasks tool with no tasks", async () => {
-    const promise = executeTool({}, "list_tasks", {}, "group1");
-
-    const resolve = mockPendingTasks.get("group1");
-    resolve([]);
-
-    await expect(promise).resolves.toBe("No tasks found for this group.");
+    mockGetAllTasks.mockResolvedValue([]);
+    await expect(executeTool({}, "list_tasks", {}, "group1")).resolves.toBe(
+      "No tasks found for this group.",
+    );
   });
 
   it("should update an existing task", async () => {
@@ -598,15 +596,19 @@ describe("executeTool.mjs", () => {
       prompt: "old",
       enabled: true,
     };
+    mockGetAllTasks.mockResolvedValue([
+      {
+        ...task,
+        groupId: "group1",
+      },
+    ]);
+
     const promise = executeTool(
       {},
       "update_task",
       { id: "t1", schedule: "*/5 * * * *", prompt: "new", enabled: 0 },
       "group1",
     );
-
-    const resolve = mockPendingTasks.get("group1");
-    resolve([task]);
 
     await expect(promise).resolves.toBe("Task t1 updated successfully.");
 
@@ -615,6 +617,7 @@ describe("executeTool.mjs", () => {
       payload: {
         task: {
           id: "t1",
+          groupId: "group1",
           schedule: "*/5 * * * *",
           prompt: "new",
           enabled: false,
@@ -624,9 +627,8 @@ describe("executeTool.mjs", () => {
   });
 
   it("should return an error when update_task target is missing", async () => {
+    mockGetAllTasks.mockResolvedValue([{ id: "other", groupId: "group1" }]);
     const promise = executeTool({}, "update_task", { id: "missing" }, "group1");
-    const resolve = mockPendingTasks.get("group1");
-    resolve([{ id: "other" }]);
 
     await expect(promise).resolves.toBe(
       "Error: Task with ID missing not found.",
@@ -635,27 +637,27 @@ describe("executeTool.mjs", () => {
 
   it("should enable a task", async () => {
     const task = { id: "t2", enabled: false };
+    mockGetAllTasks.mockResolvedValue([{ ...task, groupId: "group1" }]);
     const promise = executeTool({}, "enable_task", { id: "t2" }, "group1");
-    mockPendingTasks.get("group1")([task]);
 
     await expect(promise).resolves.toBe("Task t2 enabled successfully.");
 
     expect(mockPost).toHaveBeenCalledWith({
       type: "update-task",
-      payload: { task: { id: "t2", enabled: true } },
+      payload: { task: { id: "t2", groupId: "group1", enabled: true } },
     });
   });
 
   it("should disable a task", async () => {
     const task = { id: "t3", enabled: true };
+    mockGetAllTasks.mockResolvedValue([{ ...task, groupId: "group1" }]);
     const promise = executeTool({}, "disable_task", { id: "t3" }, "group1");
-    mockPendingTasks.get("group1")([task]);
 
     await expect(promise).resolves.toBe("Task t3 disabled successfully.");
 
     expect(mockPost).toHaveBeenCalledWith({
       type: "update-task",
-      payload: { task: { id: "t3", enabled: false } },
+      payload: { task: { id: "t3", groupId: "group1", enabled: false } },
     });
   });
 

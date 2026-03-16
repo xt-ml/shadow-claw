@@ -31,6 +31,17 @@ import { readGroupFile } from "./storage/readGroupFile.mjs";
 import { TaskScheduler } from "./task-scheduler.mjs";
 import { showToast } from "./toast.mjs";
 import { ulid } from "./ulid.mjs";
+import { getCompactionSystemPrompt } from "./worker/getCompactionSystemPrompt.mjs";
+import {
+  compactWithPromptApi,
+  invokeWithPromptApi,
+  isPromptApiSupported,
+} from "./prompt-api-provider.mjs";
+import {
+  isWebMcpSupported,
+  registerWebMcpTools,
+  unregisterWebMcpTools,
+} from "./webmcp.mjs";
 
 import "./types.mjs";
 
@@ -121,6 +132,10 @@ export class Orchestrator {
     };
     /** @type {'disabled'|'auto'|'9p'|'ext2'} */
     this.vmBootMode = "disabled";
+    /** @type {ShadowClawDatabase | null} */
+    this.db = null;
+    /** @type {Map<string, AbortController>} */
+    this.promptControllers = new Map();
   }
 
   /**
@@ -131,6 +146,7 @@ export class Orchestrator {
   async init() {
     // Open database
     const db = await openDatabase();
+    this.db = db;
 
     // Load config
     this.assistantName =
@@ -240,6 +256,12 @@ export class Orchestrator {
 
     this.events.emit("ready", undefined);
 
+    if (isWebMcpSupported()) {
+      await registerWebMcpTools(async (msg) => {
+        await this.handleWorkerMessage(db, msg);
+      }, DEFAULT_GROUP_ID);
+    }
+
     return db;
   }
 
@@ -258,6 +280,14 @@ export class Orchestrator {
    * @returns {boolean}
    */
   isConfigured() {
+    if (!this.providerConfig?.requiresApiKey) {
+      if (this.provider === "prompt_api") {
+        return isPromptApiSupported();
+      }
+
+      return true;
+    }
+
     return this.apiKey ? this.apiKey.length > 0 : false;
   }
 
@@ -594,7 +624,8 @@ export class Orchestrator {
    * @returns {Promise<void>}
    */
   async compactContext(db, groupId = DEFAULT_GROUP_ID) {
-    if (!this.apiKey) {
+    const requiresApiKey = this.providerConfig?.requiresApiKey !== false;
+    if (requiresApiKey && !this.apiKey) {
       this.events.emit("error", {
         groupId,
         error: "API key not configured. Cannot compact context.",
@@ -627,6 +658,53 @@ export class Orchestrator {
     );
     const systemPrompt = buildSystemPrompt(this.assistantName, memory);
 
+    if (this.provider === "prompt_api") {
+      if (!isPromptApiSupported()) {
+        this.events.emit("error", {
+          groupId,
+          error:
+            "Prompt API is not available in this browser. Switch provider or enable experimental browser flags.",
+        });
+
+        this.events.emit("typing", { groupId, typing: false });
+        this.setState("idle");
+
+        return;
+      }
+
+      const controller = new AbortController();
+      this.promptControllers.set(groupId, controller);
+
+      try {
+        const summary = await compactWithPromptApi(
+          getCompactionSystemPrompt(systemPrompt),
+          messages,
+          controller.signal,
+          async (msg) => {
+            await this.handleWorkerMessage(db, msg);
+          },
+          groupId,
+        );
+
+        await this.handleCompactDone(db, groupId, summary);
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+
+        const message = err instanceof Error ? err.message : String(err);
+        await this.deliverResponse(
+          db,
+          groupId,
+          `⚠️ Error: Compaction failed: ${message}`,
+        );
+      } finally {
+        this.promptControllers.delete(groupId);
+      }
+
+      return;
+    }
+
     this.agentWorker?.postMessage({
       type: "compact",
       payload: {
@@ -657,6 +735,12 @@ export class Orchestrator {
       payload: { groupId },
     });
 
+    const promptController = this.promptControllers.get(groupId);
+    if (promptController) {
+      promptController.abort();
+      this.promptControllers.delete(groupId);
+    }
+
     this.events.emit("typing", { groupId, typing: false });
     this.router?.setTyping(groupId, false);
     this.setState("idle");
@@ -668,6 +752,8 @@ export class Orchestrator {
   shutdown() {
     this.scheduler?.stop();
     this.agentWorker?.terminate();
+
+    unregisterWebMcpTools();
   }
 
   /**
@@ -711,10 +797,16 @@ export class Orchestrator {
    * @returns {Promise<void>}
    */
   async processQueue(db) {
-    if (this.processing) return;
-    if (this.messageQueue.length === 0) return;
+    if (this.processing) {
+      return;
+    }
 
-    if (!this.apiKey) {
+    if (this.messageQueue.length === 0) {
+      return;
+    }
+
+    const requiresApiKey = this.providerConfig?.requiresApiKey !== false;
+    if (requiresApiKey && !this.apiKey) {
       const msg = this.messageQueue.shift();
       this.events.emit("error", {
         groupId: msg.groupId,
@@ -787,6 +879,45 @@ export class Orchestrator {
 
     const systemPrompt = buildSystemPrompt(this.assistantName, memory);
 
+    if (this.provider === "prompt_api") {
+      if (!isPromptApiSupported()) {
+        await this.deliverResponse(
+          db,
+          groupId,
+          "⚠️ Error: Prompt API is not available in this browser. Switch provider or enable experimental browser flags.",
+        );
+        return;
+      }
+
+      const controller = new AbortController();
+      this.promptControllers.set(groupId, controller);
+
+      try {
+        await invokeWithPromptApi(
+          db,
+          groupId,
+          systemPrompt,
+          messages,
+          this.maxTokens,
+          async (msg) => {
+            await this.handleWorkerMessage(db, msg);
+          },
+          controller.signal,
+        );
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+
+        const message = err instanceof Error ? err.message : String(err);
+        await this.deliverResponse(db, groupId, `⚠️ Error: ${message}`);
+      } finally {
+        this.promptControllers.delete(groupId);
+      }
+
+      return;
+    }
+
     // Send to agent worker
     this.agentWorker?.postMessage({
       type: "invoke",
@@ -856,6 +987,12 @@ export class Orchestrator {
             groupId: msg.payload.groupId,
           });
         }
+
+        break;
+      }
+
+      case "model-download-progress": {
+        this.events.emit("model-download-progress", msg.payload);
 
         break;
       }

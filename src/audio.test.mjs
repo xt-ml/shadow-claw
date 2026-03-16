@@ -71,11 +71,27 @@ describe("audio", () => {
     const ctx = createMockAudioContext("running");
     window.AudioContext = jest.fn(() => ctx);
 
-    const { playNotificationChime } = await import("./audio.mjs");
+    const { playNotificationChime, resumeAudioContext } =
+      await import("./audio.mjs");
+
+    resumeAudioContext();
     playNotificationChime();
 
     expect(ctx.createOscillator).toHaveBeenCalledTimes(2);
 
     expect(ctx.createGain).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not create or play audio before user unlock", async () => {
+    const ctx = createMockAudioContext("running");
+    const CtxCtor = jest.fn(() => ctx);
+    window.AudioContext = CtxCtor;
+
+    const { playNotificationChime } = await import("./audio.mjs");
+    playNotificationChime();
+
+    expect(CtxCtor).not.toHaveBeenCalled();
+    expect(ctx.createOscillator).not.toHaveBeenCalled();
+    expect(ctx.createGain).not.toHaveBeenCalled();
   });
 });

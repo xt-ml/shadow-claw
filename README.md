@@ -15,6 +15,9 @@ Open Settings, select a provider, then paste your API key and start chatting.
 `OpenRouter` is the default provider, and `Copilot Azure OpenAI (Local Proxy)`
 is also available for local Azure proxy workflows.
 
+`Web Prompt API (Experimental)` is also available as a keyless provider when
+the browser exposes the Prompt API (`LanguageModel`).
+
 ## Architecture
 
 ```mermaid
@@ -81,6 +84,7 @@ sequenceDiagram
 | `src/git/sync.mjs`                   | Synchronization between LightningFS and OPFS                       |
 | `src/audio.mjs`                      | AudioContext management and notifications                          |
 | `src/providers.mjs`                  | LLM provider adapters and request/response format conversion        |
+| `src/prompt-api-provider.mjs`        | Prompt API provider runtime (keyless local model + tool-use loop)   |
 | `src/router.mjs`                     | Routes inbound messages to channels                                |
 | `src/channels/browser-chat.mjs`      | Browser chat channel implementation                                |
 | `src/task-scheduler.mjs`             | Cron expression parser and task runner                             |
@@ -88,6 +92,7 @@ sequenceDiagram
 | `src/types.mjs`                      | JSDoc `@typedef` declarations (full type contract)                 |
 | `src/effect.mjs`                     | Lightweight `effect()` using TC39 Signal Polyfill                  |
 | `src/serve.mjs`                      | Express dev/prod server + Git/LLM CORS proxy                       |
+| `src/webmcp.mjs`                     | WebMCP bridge for registering ShadowClaw tools with browser APIs   |
 | `src/stores/`                        | Reactive signal-based UI state (orchestrator, file-viewer, theme)  |
 | `service-worker/`                    | Workbox-generated PWA service worker                               |
 | `src/worker/handleMessage.mjs`       | Worker message dispatcher — handles terminal RPC and VM lifecycle  |
@@ -111,6 +116,35 @@ sequenceDiagram
 | `enable_task` / `disable_task`                               | Toggle task execution                                            |
 | `clear_chat`                                                 | Clears the chat history and starts a new session                 |
 | `git_*` (`git_clone`, `git_commit`, `git_push`, etc.)        | Isomorphic-git version control operations mapped to OPFS         |
+
+When the browser WebMCP API is available (`navigator.modelContext`), these
+tools can also be registered through `src/webmcp.mjs` so browser-side model
+contexts can invoke the same tool surface.
+
+## Prompt API Provider (Experimental)
+
+ShadowClaw supports a browser-native keyless provider with
+`PROVIDERS.prompt_api`.
+
+- The provider uses `LanguageModel` (Prompt API) and does not require an API key.
+- Settings disables API key entry for this provider and saves provider-only config.
+- During model download, chat renders a progress card with percentage updates.
+- Compaction and regular invoke flows run through `src/prompt-api-provider.mjs`.
+- Prompt sessions are warmed/cached and cloned when supported for faster reuse.
+- If Prompt API is unavailable, the app returns a user-visible provider error and stays responsive.
+
+This is experimental browser functionality and may require feature flags in
+supported Chromium builds.
+
+## WebMCP Integration
+
+On startup, the orchestrator checks `navigator.modelContext` support and
+registers all ShadowClaw tools through `registerWebMcpTools()`.
+
+- Registrations use `TOOL_DEFINITIONS` and delegate execution to `executeTool()`.
+- Tool side effects (`show-toast`, `open-file`, task updates) are bridged through
+  `setPostHandler()` so they are handled by the same orchestrator pathways.
+- `shutdown()` unregisters tools via `unregisterWebMcpTools()`.
 
 ## Storage
 
@@ -189,6 +223,28 @@ helper re-runs DOM updates whenever signals change. No virtual DOM, no framework
 
 The file viewer now loads text, PDF, and browser-previewable binary files with MIME-aware
 preview defaults, and revokes temporary object URLs on close/swap to avoid leaks.
+
+The chat UI also tracks model download progress state from
+`model-download-progress` events and shows/hides the progress bar automatically.
+
+Notification chimes are now gated behind an explicit user gesture unlock to avoid
+autoplay policy violations in browsers.
+
+## Dev Server CLI and CORS Modes
+
+`src/serve.mjs` supports host and CORS configuration via CLI and environment variables.
+
+```bash
+npm start -- 8888 --host 0.0.0.0 --cors-mode private
+npm start -- --cors-mode all --cors-allow-origin https://example.com
+node src/serve.mjs --help
+```
+
+- Host resolution order: CLI (`--host/--ip/--bind-ip`) -> env -> default.
+- CORS modes: `localhost` (default), `private`, `all`.
+- Explicit allowlist is supported by repeated `--cors-allow-origin` and
+  `SHADOWCLAW_CORS_ALLOWED_ORIGINS`.
+- Request logs include origin/client/preflight diagnostics to simplify proxy/CORS troubleshooting.
 
 ## Build Metadata
 

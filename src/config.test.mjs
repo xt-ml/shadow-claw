@@ -145,6 +145,10 @@ describe("config.mjs", () => {
       expect(PROVIDERS.copilot_azure_openai_proxy).toBeDefined();
     });
 
+    it("should have prompt api provider", () => {
+      expect(PROVIDERS.prompt_api).toBeDefined();
+    });
+
     it("openrouter should have required fields", () => {
       const provider = PROVIDERS.openrouter;
       expect(provider.id).toBe("openrouter");
@@ -167,6 +171,18 @@ describe("config.mjs", () => {
       expect(provider.defaultModel).toBe("gpt-4o-mini");
       expect(Array.isArray(provider.models)).toBe(true);
       expect(provider.models).toEqual(COPILOT_AZURE_OPENAI_ALLOWED_MODELS);
+    });
+
+    it("prompt api provider should be keyless and experimental", () => {
+      const provider = PROVIDERS.prompt_api;
+      expect(provider.id).toBe("prompt_api");
+      expect(provider.format).toBe("prompt_api");
+      expect(provider.requiresApiKey).toBe(false);
+      expect(Array.isArray(provider.models)).toBe(true);
+      expect(provider.defaultModel).toBe("browser-built-in");
+      expect(provider.models).toContain("browser-built-in");
+      expect(provider.models).toContain("gemini-nano");
+      expect(provider.models).toContain("phi-4-mini");
     });
   });
 
@@ -239,6 +255,11 @@ describe("config.mjs", () => {
     it("should include copilot azure proxy in available providers", () => {
       const providers = getAvailableProviders();
       expect(providers).toContain("copilot_azure_openai_proxy");
+    });
+
+    it("should include prompt api in available providers", () => {
+      const providers = getAvailableProviders();
+      expect(providers).toContain("prompt_api");
     });
 
     it("should return only string IDs", () => {

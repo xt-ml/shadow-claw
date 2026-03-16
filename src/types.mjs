@@ -151,6 +151,15 @@
  */
 
 /**
+ * @typedef {Object} ModelDownloadProgressPayload
+ *
+ * @property {string} groupId
+ * @property {'running'|'done'|'error'} status
+ * @property {number | null} progress - 0..1 when known.
+ * @property {string} [message]
+ */
+
+/**
  * @typedef {Object} ThinkingLogEntry
  *
  * @property {string} groupId
@@ -226,6 +235,7 @@
  *   | { type: 'error'; payload: ErrorPayload }
  *   | { type: 'typing'; payload: TypingPayload }
  *   | { type: 'tool-activity'; payload: ToolActivityPayload }
+ *   | { type: 'model-download-progress'; payload: ModelDownloadProgressPayload }
  *   | { type: 'thinking-log'; payload: ThinkingLogEntry }
  *   | { type: 'compact-done'; payload: CompactDonePayload }
  *   | { type: 'open-file'; payload: OpenFilePayload }

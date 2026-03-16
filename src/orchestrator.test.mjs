@@ -77,6 +77,35 @@ describe("Orchestrator", () => {
     expect(events).toHaveLength(1);
   });
 
+  it("emits model download progress from worker message", async () => {
+    const o = new Orchestrator();
+    const events = [];
+
+    o.events.on("model-download-progress", (payload) => events.push(payload));
+
+    await o.handleWorkerMessage(
+      {},
+      {
+        type: "model-download-progress",
+        payload: {
+          groupId: "g1",
+          status: "running",
+          progress: 0.42,
+          message: "Downloading Prompt API model... 42%",
+        },
+      },
+    );
+
+    expect(events).toEqual([
+      {
+        groupId: "g1",
+        status: "running",
+        progress: 0.42,
+        message: "Downloading Prompt API model... 42%",
+      },
+    ]);
+  });
+
   it("posts silent host-to-vm sync requests", () => {
     const o = new Orchestrator();
     const postMessage = jest.fn();

@@ -3114,7 +3114,18 @@ export class ShadowClaw extends HTMLElement {
       helperText.textContent =
         currentProvider === "copilot_azure_openai_proxy"
           ? "Enter your Azure/GitHub Models API key. It is encrypted and stored locally, then forwarded only through your local proxy."
-          : `Enter your ${providerName} API key. It is encrypted and stored locally.`;
+          : currentProvider === "prompt_api"
+            ? "This provider uses the browser's experimental built-in Prompt API (for example Edge Dev/Canary Phi or Chrome Gemini Nano) and does not require an API key."
+            : `Enter your ${providerName} API key. It is encrypted and stored locally.`;
+    }
+
+    const keyInput = root.querySelector('[data-setting="api-key-input"]');
+    if (keyInput) {
+      /** @type {HTMLInputElement} */
+      const input = /** @type {HTMLInputElement} */ (keyInput);
+      const noKeyProvider = currentProvider === "prompt_api";
+      input.disabled = noKeyProvider;
+      input.placeholder = noKeyProvider ? "No API key required" : "sk-...";
     }
   }
 
@@ -3140,11 +3151,16 @@ export class ShadowClaw extends HTMLElement {
     const input = /** @type {HTMLInputElement} */ (keyInput);
     const key = input.value.trim();
 
-    if (!key) {
-      showWarning("Please enter an API key", 3000);
-
+    const providerSelect = root.querySelector(
+      '[data-setting="provider-select"]',
+    );
+    if (!providerSelect) {
       return;
     }
+
+    /** @type {HTMLSelectElement} */
+    const select = /** @type {HTMLSelectElement} */ (providerSelect);
+    const providerId = select.value;
 
     if (!this.orchestrator) {
       showError("Orchestrator not initialized", 5000);
@@ -3152,19 +3168,26 @@ export class ShadowClaw extends HTMLElement {
       return;
     }
 
-    try {
-      const providerSelect = root.querySelector(
-        '[data-setting="provider-select"]',
-      );
-
-      if (!providerSelect) {
-        return;
+    if (providerId === "prompt_api") {
+      try {
+        await this.orchestrator.setProvider(db, providerId);
+        input.value = "";
+        showSuccess("Provider saved (no API key required)", 3000);
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        showError("Error saving provider: " + errorMsg, 6000);
       }
 
-      /** @type {HTMLSelectElement} */
-      const select = /** @type {HTMLSelectElement} */ (providerSelect);
-      const providerId = select.value;
+      return;
+    }
 
+    if (!key) {
+      showWarning("Please enter an API key", 3000);
+
+      return;
+    }
+
+    try {
       await this.orchestrator.setApiKey(db, key);
 
       /** @type {HTMLInputElement} */

@@ -25,13 +25,161 @@ const __dirname = path.dirname(__filename);
 // ---------------- ARGUMENT PARSING ----------------
 const args = argv.slice(2);
 const isVerbose = args.includes("--verbose") || args.includes("-v");
+const showHelp = args.includes("--help") || args.includes("-h");
+
+/**
+ * @param {string[]} argvArgs
+ * @param {string[]} names
+ *
+ * @returns {string}
+ */
+function getArgValue(argvArgs, names) {
+  for (let i = 0; i < argvArgs.length; i++) {
+    const arg = argvArgs[i];
+
+    for (const name of names) {
+      if (arg === name) {
+        const next = argvArgs[i + 1];
+        if (typeof next === "string" && !next.startsWith("-")) {
+          return next;
+        }
+
+        return "";
+      }
+
+      const prefix = `${name}=`;
+      if (arg.startsWith(prefix)) {
+        return arg.slice(prefix.length).trim();
+      }
+    }
+  }
+
+  return "";
+}
+
+/**
+ * @param {string[]} argvArgs
+ * @param {string[]} names
+ *
+ * @returns {string[]}
+ */
+function getArgValues(argvArgs, names) {
+  /** @type {string[]} */
+  const values = [];
+
+  for (let i = 0; i < argvArgs.length; i++) {
+    const arg = argvArgs[i];
+
+    for (const name of names) {
+      if (arg === name) {
+        const next = argvArgs[i + 1];
+        if (typeof next === "string" && !next.startsWith("-")) {
+          values.push(next.trim());
+        }
+
+        continue;
+      }
+
+      const prefix = `${name}=`;
+      if (arg.startsWith(prefix)) {
+        values.push(arg.slice(prefix.length).trim());
+      }
+    }
+  }
+
+  return values.filter(Boolean);
+}
+
+/**
+ * @param {string} value
+ *
+ * @returns {string[]}
+ */
+function parseCsv(value) {
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function printHelp() {
+  const lines = [
+    "ShadowClaw dev server",
+    "",
+    "Usage:",
+    "  npm start -- [port] [options]",
+    "  node src/serve.mjs [port] [options]",
+    "",
+    "Options:",
+    "  -h, --help                         Show this help and exit",
+    "  -v, --verbose                      Enable verbose request/proxy logging",
+    "  --host, --ip, --bind-ip <host>     Bind host/IP (CLI overrides env)",
+    "  --cors-mode <mode>                 CORS policy: localhost | private | all",
+    "  --cors-allow-origin <origin>       Add explicit allowed origin (repeatable)",
+    "                                     Also accepts comma-separated values",
+    "",
+    "Environment:",
+    "  SHADOWCLAW_DEV_IP                  Bind host/IP fallback",
+    "  SHADOWCLAW_HOST                    Alternate bind host/IP fallback",
+    "  DEV_IP                             Legacy bind host/IP fallback",
+    "  HOST                               Generic bind host/IP fallback",
+    "  SHADOWCLAW_CORS_MODE               localhost | private | all",
+    "  SHADOWCLAW_CORS_ALLOWED_ORIGINS    Comma-separated explicit origins",
+    "",
+    `Defaults:`,
+    `  port=${DEFAULT_DEV_PORT}`,
+    `  host=${DEFAULT_DEV_IP}`,
+    "  cors-mode=localhost",
+  ];
+
+  console.log(lines.join("\n"));
+}
 
 // Filter out flags to find the port
 const portArg = args.find((arg) => !arg.startsWith("-") && !isNaN(Number(arg)));
 let port = Number(portArg) || DEFAULT_DEV_PORT;
 
+const cliHost = getArgValue(args, ["--host", "--ip", "--bind-ip"]);
+const envHost =
+  env.SHADOWCLAW_DEV_IP || env.SHADOWCLAW_HOST || env.DEV_IP || env.HOST || "";
+const bindHost = (cliHost || envHost || DEFAULT_DEV_IP).trim();
+
+const cliCorsMode = getArgValue(args, ["--cors-mode"]).toLowerCase();
+const envCorsMode = (env.SHADOWCLAW_CORS_MODE || "").toLowerCase().trim();
+const corsMode = (cliCorsMode || envCorsMode || "localhost").trim();
+const allowedOriginArgs = getArgValues(args, ["--cors-allow-origin"]);
+const allowedOriginsFromArgs = allowedOriginArgs.flatMap(parseCsv);
+const allowedOriginsFromEnv = parseCsv(
+  env.SHADOWCLAW_CORS_ALLOWED_ORIGINS || "",
+);
+const configuredAllowedOrigins = [
+  ...allowedOriginsFromEnv,
+  ...allowedOriginsFromArgs,
+];
+
+if (showHelp) {
+  printHelp();
+  exit(0);
+}
+
 if (port < 1024 || port > 65535) {
   console.error("Port must be between 1024 and 65535.");
+
+  exit(1);
+}
+
+if (!bindHost) {
+  console.error(
+    "Bind host cannot be empty. Use --host <value> or set SHADOWCLAW_DEV_IP.",
+  );
+
+  exit(1);
+}
+
+if (!["localhost", "private", "all"].includes(corsMode)) {
+  console.error(
+    "Invalid CORS mode. Use --cors-mode localhost|private|all or SHADOWCLAW_CORS_MODE.",
+  );
 
   exit(1);
 }
@@ -55,25 +203,51 @@ function log(level, ...messages) {
 const app = express();
 
 // define an ip address
-const ipAddr = DEFAULT_DEV_IP;
+const ipAddr = bindHost;
 
 // ---------------- REQUEST LOGGER MIDDLEWARE (Moved to top) ----------------
 // We place this before CORS so we can log the request arrival even if CORS blocks it.
 app.use((req, res, next) => {
   const start = Date.now();
+  const forwardedFor = getFirstHeaderValue(req.headers["x-forwarded-for"]);
+  const clientIp =
+    forwardedFor || req.socket?.remoteAddress || req.ip || "unknown";
+  const origin = getFirstHeaderValue(req.headers.origin) || "-";
+  const host = getFirstHeaderValue(req.headers.host) || "-";
+  const requestedMethod =
+    getFirstHeaderValue(req.headers["access-control-request-method"]) || "-";
+  const requestedHeaders =
+    getFirstHeaderValue(req.headers["access-control-request-headers"]) || "-";
+  const requestedPrivateNetwork =
+    getFirstHeaderValue(
+      req.headers["access-control-request-private-network"],
+    ) || "-";
 
   // Log incoming request immediately
   // We log all requests, including OPTIONS, to help debug CORS/PNA issues.
-  log(LOG_LEVELS.DEFAULT, `--> ${req.method} ${req.originalUrl}`);
+  log(
+    LOG_LEVELS.DEFAULT,
+    `--> ${req.method} ${req.originalUrl} ip=${clientIp} host=${host} origin=${origin}`,
+  );
+
+  if (req.method === "OPTIONS") {
+    log(
+      LOG_LEVELS.DEFAULT,
+      `    [Preflight] request-method=${requestedMethod} request-headers=${requestedHeaders} private-network=${requestedPrivateNetwork}`,
+    );
+  }
 
   res.on("finish", () => {
     const duration = Date.now() - start;
     const statusCode = res.statusCode;
+    const allowOrigin = res.getHeader("access-control-allow-origin") || "-";
+    const allowPrivateNetwork =
+      res.getHeader("access-control-allow-private-network") || "-";
 
     // Basic log for all routes
     log(
       LOG_LEVELS.DEFAULT,
-      `<-- ${req.method} ${req.originalUrl} ${statusCode} (${duration}ms)`,
+      `<-- ${req.method} ${req.originalUrl} ${statusCode} (${duration}ms) allow-origin=${allowOrigin} allow-private-network=${allowPrivateNetwork}`,
     );
 
     // Verbose details
@@ -108,10 +282,10 @@ app.use((req, res, next) => {
 
 // enable CORS
 const CORS_CONFIG = {
-  allowPrivateIPs: false, // Enables 127.*, 10.*, 172.16-31.*, 192.168.*
-  allowAllOrigins: false, // True = "*" (no credentials support)
-  allowKnownOriginAndLocalHost: true, // Restricts to this host's
-  allowLocalhostOnly: true, // Restricts to localhost only
+  mode: corsMode,
+  // Explicit origin allowlist has highest priority and can be provided
+  // through SHADOWCLAW_CORS_ALLOWED_ORIGINS or --cors-allow-origin.
+  allowedOrigins: new Set(configuredAllowedOrigins),
 };
 
 const CORS_EXPOSED_HEADERS = [
@@ -135,7 +309,7 @@ app.use(
       }
 
       // Flag: All origins (*)
-      if (CORS_CONFIG.allowAllOrigins) {
+      if (CORS_CONFIG.mode === "all") {
         if (isVerbose) {
           log(LOG_LEVELS.VERBOSE, `[CORS] Allowed (All Origins flag)`);
         }
@@ -143,65 +317,64 @@ app.use(
         return callback(null, true);
       }
 
-      // Flag: Localhost only
-      if (CORS_CONFIG.allowLocalhostOnly) {
-        try {
-          const hostname = new URL(origin).hostname;
-          if (
-            hostname === "localhost" ||
-            hostname === "127.0.0.1" ||
-            hostname === "xt-ml.github.io"
-          ) {
-            if (isVerbose) {
-              log(LOG_LEVELS.VERBOSE, `[CORS] Allowed (Localhost match)`);
-            }
-
-            return callback(null, true);
+      if (CORS_CONFIG.allowedOrigins.size > 0) {
+        if (CORS_CONFIG.allowedOrigins.has(origin)) {
+          if (isVerbose) {
+            log(LOG_LEVELS.VERBOSE, `[CORS] Allowed (Explicit allowlist)`);
           }
-        } catch {
-          // Invalid URL in origin
-          log(LOG_LEVELS.DEFAULT, `[CORS BLOCK] Invalid Origin URL: ${origin}`);
 
-          return callback(new Error("Invalid Origin"));
-        }
-
-        log(
-          LOG_LEVELS.DEFAULT,
-          `[CORS BLOCK] Origin not allowed (Localhost only policy): ${origin}`,
-        );
-
-        return callback(new Error("Localhost only"));
-      }
-
-      // Flag: Private IP ranges
-      if (CORS_CONFIG.allowPrivateIPs) {
-        try {
-          const url = new URL(origin);
-          const ip = url.hostname;
-
-          // Fixed single-line regex for private IPs
-          const privateIPRegex =
-            /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/;
-
-          if (privateIPRegex.test(ip)) {
-            if (isVerbose) {
-              log(LOG_LEVELS.VERBOSE, `[CORS] Allowed (Private IP match)`);
-            }
-
-            return callback(null, true);
-          }
-        } catch {
-          // Invalid URL, skip
+          return callback(null, true);
         }
       }
+
+      let hostname = "";
+      try {
+        hostname = new URL(origin).hostname;
+      } catch {
+        log(LOG_LEVELS.DEFAULT, `[CORS BLOCK] Invalid Origin URL: ${origin}`);
+
+        return callback(new Error("Invalid Origin"));
+      }
+
+      const isLoopback = hostname === "localhost" || hostname === "127.0.0.1";
+      const isGithubPages = hostname === "xt-ml.github.io";
+      const isPrivateIp =
+        /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname);
+
+      if (isLoopback || isGithubPages) {
+        if (isVerbose) {
+          log(LOG_LEVELS.VERBOSE, `[CORS] Allowed (Known host match)`);
+        }
+
+        return callback(null, true);
+      }
+
+      if (CORS_CONFIG.mode === "private" && isPrivateIp) {
+        if (isVerbose) {
+          log(LOG_LEVELS.VERBOSE, `[CORS] Allowed (Private IP mode)`);
+        }
+
+        return callback(null, true);
+      }
+
+      const policyLabel =
+        CORS_CONFIG.mode === "private"
+          ? "Private/LAN mode policy"
+          : "Localhost only policy";
 
       // Reject other origins
       log(
         LOG_LEVELS.DEFAULT,
-        `[CORS BLOCK] Origin not allowed by policy: ${origin}`,
+        `[CORS BLOCK] Origin not allowed (${policyLabel}): ${origin}`,
       );
 
-      return callback(new Error("Not allowed by CORS"));
+      return callback(
+        new Error(
+          CORS_CONFIG.mode === "private"
+            ? "Private network policy"
+            : "Localhost only",
+        ),
+      );
     },
     exposedHeaders: CORS_EXPOSED_HEADERS,
   }),
@@ -403,6 +576,7 @@ app.post("/copilot-proxy/azure-openai/chat/completions", async (req, res) => {
     extractBearerToken(clientAuthorization) ||
     serverApiKey ||
     "";
+
   const incomingHeaders = { ...req.headers };
   delete incomingHeaders["api-key"];
   delete incomingHeaders.authorization;
@@ -508,7 +682,28 @@ if (isPortUsed) {
 
 // start the server
 app.listen(port, ipAddr, () => {
-  console.log(`Server running at http://localhost:${port}`);
+  console.log(`Server running at http://${ipAddr}:${port}`);
+
+  if (ipAddr === DEFAULT_DEV_IP) {
+    console.log(
+      `Bind host source: default (${DEFAULT_DEV_IP}). Use --host/--ip or SHADOWCLAW_DEV_IP to override.`,
+    );
+  } else if (cliHost) {
+    console.log(`Bind host source: CLI (${ipAddr})`);
+  } else {
+    console.log(`Bind host source: env (${ipAddr})`);
+  }
+
+  console.log(
+    `CORS mode: ${CORS_CONFIG.mode}${CORS_CONFIG.allowedOrigins.size > 0 ? " (with explicit allowlist)" : ""}`,
+  );
+
+  if (CORS_CONFIG.allowedOrigins.size > 0) {
+    console.log(
+      `CORS allowlist origins: ${Array.from(CORS_CONFIG.allowedOrigins).join(", ")}`,
+    );
+  }
+
   if (isVerbose) {
     console.log("Verbose logging enabled.");
   }

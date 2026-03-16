@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -8,7 +8,7 @@
   "main": "src/serve.mjs",
   "scripts": {
     "build:pkg:get:meta": "git rev-parse HEAD",
-    "build:pkg:meta": "node -e \"import fs from 'node:fs/promises';const m=process.argv[1],f='index.html',s=await fs.readFile(f,'utf8');await fs.writeFile(f,s.replace(/<meta\\s+name=\\\"revision\\\"\\s+content=\\\"[^\\\"]*\\\"\\s*\\\/>/,'<meta name=\\\"revision\\\" content=\\\"'+m+'\\\" />'));\"",
+    "build:pkg:meta": "node -e \"import fs from 'node:fs/promises';const m=process.argv[1],f='index.html',s=await fs.readFile(f,'utf8');await fs.writeFile(f,s.replace(/<meta\\s+name=\\\"revision\\\"\\s+content=\\\"[^\\\"]*\\\"\\s*\\/>/,'<meta name=\\\"revision\\\" content=\\\"'+m+'\\\" />'));\"",
     "build": "bash bin/build.sh",
     "build:service-worker": "workbox generateSW service-worker/workbox-config.cjs",
     "clean:service-worker": "node bin/rimraf.mjs workbox-*.js && node bin/rimraf.mjs service-worker.js",

@@ -5,6 +5,7 @@ import {
   FETCH_MAX_RESPONSE,
 } from "../config.mjs";
 import { getConfig } from "../db/getConfig.mjs";
+import { getAllTasks } from "../db/getAllTasks.mjs";
 import { executeShell } from "../shell/shell.mjs";
 import {
   bootVM,
@@ -18,9 +19,19 @@ import { readGroupFile } from "../storage/readGroupFile.mjs";
 import { writeGroupFile } from "../storage/writeGroupFile.mjs";
 import { ulid } from "../ulid.mjs";
 import { formatShellOutput } from "./formatShellOutput.mjs";
-import { pendingTasks } from "./pendingTasks.mjs";
 import { post } from "./post.mjs";
 import { stripHtml } from "./stripHtml.mjs";
+
+/**
+ * @param {ShadowClawDatabase} db
+ * @param {string} groupId
+ *
+ * @returns {Promise<import("../types.mjs").Task[]>}
+ */
+async function getGroupTasks(db, groupId) {
+  const all = await getAllTasks(db);
+  return all.filter((task) => task.groupId === groupId);
+}
 
 const VM_READY_POLL_MS = 50;
 
@@ -255,29 +266,21 @@ export async function executeTool(db, name, input, groupId) {
       }
 
       case "list_tasks": {
-        return new Promise((resolve) => {
-          pendingTasks.set(groupId, (tasks) => {
-            if (tasks.length === 0) resolve("No tasks found for this group.");
-            const list = tasks
-              .map(
-                (t) =>
-                  `[ID: ${t.id}] Schedule: ${t.schedule}, Prompt: ${t.prompt}, Enabled: ${t.enabled}`,
-              )
-              .join("\n");
+        const tasks = await getGroupTasks(db, groupId);
+        if (tasks.length === 0) {
+          return "No tasks found for this group.";
+        }
 
-            resolve(list);
-          });
-
-          post({ type: "task-list-request", payload: { groupId } });
-        });
+        return tasks
+          .map(
+            (t) =>
+              `[ID: ${t.id}] Schedule: ${t.schedule}, Prompt: ${t.prompt}, Enabled: ${t.enabled}`,
+          )
+          .join("\n");
       }
 
       case "update_task": {
-        const tasks = await new Promise((resolve) => {
-          pendingTasks.set(groupId, resolve);
-
-          post({ type: "task-list-request", payload: { groupId } });
-        });
+        const tasks = await getGroupTasks(db, groupId);
 
         const task = tasks.find((/** @type {any} */ t) => t.id === input.id);
 
@@ -303,11 +306,7 @@ export async function executeTool(db, name, input, groupId) {
       }
 
       case "enable_task": {
-        const tasks = await new Promise((resolve) => {
-          pendingTasks.set(groupId, resolve);
-
-          post({ type: "task-list-request", payload: { groupId } });
-        });
+        const tasks = await getGroupTasks(db, groupId);
 
         const task = tasks.find((/** @type {any} */ t) => t.id === input.id);
         if (!task) {
@@ -322,11 +321,7 @@ export async function executeTool(db, name, input, groupId) {
       }
 
       case "disable_task": {
-        const tasks = await new Promise((resolve) => {
-          pendingTasks.set(groupId, resolve);
-
-          post({ type: "task-list-request", payload: { groupId } });
-        });
+        const tasks = await getGroupTasks(db, groupId);
 
         const task = tasks.find((/** @type {any} */ t) => t.id === input.id);
         if (!task) {

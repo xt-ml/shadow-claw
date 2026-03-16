@@ -21,6 +21,7 @@ import { showError } from "../toast.mjs";
  * @typedef {import("../types.mjs").StoredMessage} StoredMessage
  * @typedef {import("../types.mjs").Task} Task
  * @typedef {import("../types.mjs").ThinkingLogEntry} ThinkingLogEntry
+ * @typedef {import("../types.mjs").ModelDownloadProgressPayload} ModelDownloadProgressPayload
  * @typedef {import("../types.mjs").TokenUsage} TokenUsage
  * @typedef {import("../types.mjs").ToolActivity} ToolActivity
  */
@@ -39,6 +40,7 @@ import { showError } from "../toast.mjs";
  * @property {ThinkingLogEntry[]} activityLog
  * @property {TokenUsage|null} tokenUsage
  * @property {ToolActivity|null} toolActivity
+ * @property {ModelDownloadProgressPayload|null} modelDownloadProgress
  */
 
 export class OrchestratorStore {
@@ -51,6 +53,8 @@ export class OrchestratorStore {
     this._storageStatus = new Signal.State(null);
     /** @type {Signal.State<ToolActivity|null>} */
     this._toolActivity = new Signal.State(null);
+    /** @type {Signal.State<ModelDownloadProgressPayload|null>} */
+    this._modelDownloadProgress = new Signal.State(null);
     /** @type {Signal.State<ThinkingLogEntry[]>} */
     this._activityLog = new Signal.State([]);
     /** @type {Signal.State<'idle'|'thinking'|'responding'|'error'>} */
@@ -89,6 +93,10 @@ export class OrchestratorStore {
 
   get activityLog() {
     return this._activityLog.get();
+  }
+
+  get modelDownloadProgress() {
+    return this._modelDownloadProgress.get();
   }
 
   get state() {
@@ -154,6 +162,15 @@ export class OrchestratorStore {
       },
     );
 
+    orch.events.on(
+      "model-download-progress",
+      (/** @type {ModelDownloadProgressPayload} */ payload) => {
+        this._modelDownloadProgress.set(
+          payload.status === "done" ? null : payload,
+        );
+      },
+    );
+
     orch.events.on("thinking-log", (/** @type {ThinkingLogEntry} */ entry) => {
       // Reset log when a new invocation starts
       if (entry.level === "info" && entry.label === "Starting") {
@@ -167,6 +184,7 @@ export class OrchestratorStore {
       this._state.set(state);
       if (state === "idle") {
         this._toolActivity.set(null);
+        this._modelDownloadProgress.set(null);
       }
     });
 
@@ -182,6 +200,7 @@ export class OrchestratorStore {
       this._activityLog.set([]);
       this._tokenUsage.set(null);
       this._toolActivity.set(null);
+      this._modelDownloadProgress.set(null);
       this._isTyping.set(false);
       this._state.set("idle");
     });
@@ -516,6 +535,7 @@ export class OrchestratorStore {
     this._error.set(null);
     this._isTyping.set(false);
     this._toolActivity.set(null);
+    this._modelDownloadProgress.set(null);
     this._currentPath.set(".");
 
     this.loadHistory();
@@ -536,6 +556,7 @@ export class OrchestratorStore {
       activityLog: this.activityLog,
       state: this.state,
       tokenUsage: this.tokenUsage,
+      modelDownloadProgress: this.modelDownloadProgress,
       error: this.error,
       activeGroupId: this.activeGroupId,
       ready: this.ready,

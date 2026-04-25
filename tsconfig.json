@@ -1,25 +1,26 @@
 {
+  "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "allowJs": true,
-    "checkJs": true,
-    "strict": true,
-    "esModuleInterop": true,
-    "target": "esnext",
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "outDir": "dist",
+    "outDir": "out",
+    "rootDir": "src",
     "lib": [
-      "esnext",
-      "dom",
-      "webworker"
-    ],
-    "skipLibCheck": true
+      "ESNext",
+      "DOM"
+    ]
   },
-  "exclude": [
-    "deps"
+  "include": [
+    "src/**/*.ts",
+    "src/service-worker/init.ts",
+    "src/index.ts"
   ],
-  "files": [
-    "index.mjs",
-    "worker.mjs"
+  "exclude": [
+    "**/*.test.ts",
+    "coverage",
+    "dist",
+    "e2e",
+    "node_modules",
+    "src/server",
+    "src/service-worker",
+    "src/worker"
   ]
 }

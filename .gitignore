@@ -1,8 +1,10 @@
 .cache
 .env
+assets/llamafile*
 assets/v86*
 coverage
+dist
+dist-electron
 e2e-results
 node_modules
-service-worker.js
-workbox-*.js
+out

@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "noImplicitAny": false,
+    "target": "esnext",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "skipLibCheck": true,
+    "noEmit": false,
+    "types": [
+      "jest"
+    ]
+  }
+}

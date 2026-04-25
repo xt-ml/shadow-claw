@@ -1,0 +1,853 @@
+import { deleteAllGroupFiles } from "../../storage/deleteAllGroupFiles.js";
+import { deleteGroupDirectory } from "../../storage/deleteGroupDirectory.js";
+import { deleteGroupFile } from "../../storage/deleteGroupFile.js";
+import { downloadAllGroupFilesAsZip } from "../../storage/downloadAllGroupFilesAsZip.js";
+import { downloadGroupDirectoryAsZip } from "../../storage/downloadGroupDirectoryAsZip.js";
+import { downloadGroupFile } from "../../storage/downloadGroupFile.js";
+import { restoreAllGroupFilesFromZip } from "../../storage/restoreAllGroupFilesFromZip.js";
+import { uploadGroupFile } from "../../storage/uploadGroupFile.js";
+import { writeGroupFile } from "../../storage/writeGroupFile.js";
+
+import { effect } from "../../effect.js";
+import { fileViewerStore } from "../../stores/file-viewer.js";
+import { orchestratorStore } from "../../stores/orchestrator.js";
+import { showError, showSuccess, showWarning } from "../../toast.js";
+
+import { getDb } from "../../db/db.js";
+
+import { escapeHtml } from "../../utils.js";
+import "../shadow-claw-page-header/shadow-claw-page-header.js";
+
+import type { ShadowClawDatabase } from "../../types.js";
+import ShadowClawElement from "../shadow-claw-element.js";
+
+const elementName = "shadow-claw-files";
+
+export class ShadowClawFiles extends ShadowClawElement {
+  static componentPath = `components/${elementName}`;
+  static styles = `${ShadowClawFiles.componentPath}/${elementName}.css`;
+  static template = `${ShadowClawFiles.componentPath}/${elementName}.html`;
+
+  files: string[] = [];
+  isDragActive: boolean = false;
+
+  uploadCompleted: number = 0;
+  uploadTotal: number = 0;
+
+  cleanup: () => void = () => {};
+  vmStatusCleanup: () => void = () => {};
+
+  constructor() {
+    super();
+  }
+
+  async connectedCallback() {
+    await Promise.all([this.onStylesReady, this.onTemplateReady]);
+
+    const root = this.shadowRoot;
+    if (!root) {
+      throw new Error("shadowRoot not found");
+    }
+
+    const db = await getDb();
+
+    this.dispatchTerminalSlotReady();
+
+    // Re-render when files or path change
+    this.cleanup = effect(() => {
+      orchestratorStore.files;
+      orchestratorStore.currentPath;
+
+      this.updateBreadcrumbs(db);
+      this.updateFileList(db);
+    });
+
+    const vmStatusListener = () => {
+      this.updateSyncButtonsVisibility();
+    };
+
+    orchestratorStore.orchestrator?.events?.on?.("vm-status", vmStatusListener);
+    this.vmStatusCleanup = () =>
+      orchestratorStore.orchestrator?.events?.off?.(
+        "vm-status",
+        vmStatusListener,
+      );
+
+    this.updateSyncButtonsVisibility();
+
+    // Refresh button
+    const refreshBtn = root.querySelector(".files__refresh-btn");
+    refreshBtn?.addEventListener("click", () =>
+      orchestratorStore.loadFiles(db),
+    );
+
+    // Upload button
+    const uploadBtn = root.querySelector(".files__upload-btn");
+    const uploadInput = root.querySelector(".files__hidden-upload");
+    uploadBtn?.addEventListener("click", () => {
+      if (uploadInput instanceof HTMLInputElement) {
+        uploadInput.click();
+      }
+    });
+
+    uploadInput?.addEventListener("change", (e) => {
+      if (e.target instanceof HTMLInputElement) {
+        this.handleUpload(db, e.target);
+      }
+    });
+
+    const content = root.querySelector(".files__content");
+    if (content instanceof HTMLElement) {
+      content.addEventListener("dragenter", (event) =>
+        this.handleDragEnter(event, content),
+      );
+
+      content.addEventListener("dragover", (event) =>
+        this.handleDragOver(event, content),
+      );
+
+      content.addEventListener("dragleave", (event) =>
+        this.handleDragLeave(event, content),
+      );
+
+      content.addEventListener("drop", (event) =>
+        this.handleDrop(event, db, content),
+      );
+    }
+
+    // New button
+    const newBtn = root.querySelector(".files__new-btn");
+    const newDialog = root.querySelector(".files__new-dialog");
+    const newCancelBtn = root.querySelector(".files__new-cancel");
+    const newForm = root.querySelector(".files__new-form");
+
+    newBtn?.addEventListener("click", () => this.openNewFileDialog());
+
+    newCancelBtn?.addEventListener("click", () => {
+      if (newDialog instanceof HTMLDialogElement) {
+        newDialog.close();
+      }
+    });
+
+    newForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      await this.handleCreateNewFile(db);
+    });
+
+    // Backup button
+    const backupBtn = root.querySelector(".files__backup-btn");
+    backupBtn?.addEventListener("click", () => this.handleBackup(db));
+
+    // Restore button
+    const restoreBtn = root.querySelector(".files__restore-btn");
+    const restoreInput = root.querySelector(".files__hidden-restore");
+    restoreBtn?.addEventListener("click", () => {
+      if (restoreInput instanceof HTMLInputElement) {
+        restoreInput.click();
+      }
+    });
+
+    restoreInput?.addEventListener("change", (e) => {
+      if (e.target instanceof HTMLInputElement) {
+        this.handleRestore(db, e.target);
+      }
+    });
+
+    // Clear all button
+    const clearBtn = root.querySelector(".files__clear-btn");
+    clearBtn?.addEventListener("click", () => this.handleClearAll(db));
+
+    const syncHostBtn = root.querySelector(".files__sync-host-btn");
+    syncHostBtn?.addEventListener("click", () => this.handleSyncHostToVM());
+
+    const syncVmBtn = root.querySelector(".files__sync-vm-btn");
+    syncVmBtn?.addEventListener("click", () => this.handleSyncVMToHost(db));
+  }
+
+  disconnectedCallback() {
+    this.cleanup();
+    this.vmStatusCleanup();
+  }
+
+  dispatchTerminalSlotReady() {
+    this.dispatchEvent(
+      new CustomEvent("shadow-claw-terminal-slot-ready", {
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  updateSyncButtonsVisibility() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const spacer = root.querySelector(".files__breadcrumbs-spacer");
+    const hostBtn = root.querySelector(".files__sync-host-btn");
+    const vmBtn = root.querySelector(".files__sync-vm-btn");
+
+    const vmStatus = orchestratorStore.orchestrator?.getVMStatus?.();
+    const vmMode = vmStatus?.mode;
+    const showSyncButtons = vmMode === "9p";
+
+    if (spacer instanceof HTMLElement) {
+      spacer.hidden = !showSyncButtons;
+    }
+
+    if (hostBtn instanceof HTMLButtonElement) {
+      hostBtn.hidden = !showSyncButtons;
+    }
+
+    if (vmBtn instanceof HTMLButtonElement) {
+      vmBtn.hidden = !showSyncButtons;
+    }
+  }
+
+  updateBreadcrumbs(db: ShadowClawDatabase) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const breadcrumbs = root.querySelector("[data-breadcrumb-path]");
+    if (!(breadcrumbs instanceof HTMLElement)) {
+      return;
+    }
+
+    const currentPath = orchestratorStore.currentPath;
+    breadcrumbs.innerHTML = "";
+
+    // Root button
+    const rootBtn = document.createElement("button");
+    rootBtn.className = "files__breadcrumb-btn";
+    rootBtn.textContent = "📁 Root";
+    rootBtn.addEventListener("click", () =>
+      orchestratorStore.resetToRootFolder(db),
+    );
+
+    breadcrumbs.appendChild(rootBtn);
+
+    // Path segments
+    if (currentPath !== ".") {
+      const parts = currentPath.split("/").filter(Boolean);
+
+      let currentSegmentPath = "";
+
+      parts.forEach((part, index) => {
+        const separator = document.createElement("span");
+        separator.className = "files__breadcrumb-separator";
+        separator.textContent = "/";
+
+        breadcrumbs.appendChild(separator);
+
+        currentSegmentPath =
+          index === 0 ? part : `${currentSegmentPath}/${part}`;
+
+        const btn = document.createElement("button");
+        btn.className = "files__breadcrumb-btn";
+        btn.textContent = part;
+
+        const pathToNavigate = currentSegmentPath;
+        btn.addEventListener("click", async () => {
+          (orchestratorStore as any)._currentPath.set(pathToNavigate);
+          await orchestratorStore.loadFiles(db);
+        });
+
+        breadcrumbs.appendChild(btn);
+      });
+    }
+  }
+
+  handleSyncHostToVM() {
+    const root = this.shadowRoot;
+    const button = root?.querySelector(".files__sync-host-btn");
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = "Syncing...";
+
+    try {
+      orchestratorStore.syncHostWorkspaceToVM();
+      showSuccess("Requested host → VM workspace sync", 2200);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to request host → VM sync: ${message}`, 5000);
+    } finally {
+      setTimeout(() => {
+        button.disabled = false;
+        button.textContent = "Host → VM";
+      }, 300);
+    }
+  }
+
+  async handleSyncVMToHost(db: ShadowClawDatabase) {
+    const root = this.shadowRoot;
+    const button = root?.querySelector(".files__sync-vm-btn");
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = "Syncing...";
+
+    try {
+      orchestratorStore.syncVMWorkspaceToHost();
+      // Give the worker a short moment to emit vm-workspace-synced.
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      await orchestratorStore.loadFiles(db);
+      showSuccess("Requested VM → host workspace sync", 2200);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to request VM → host sync: ${message}`, 5000);
+    } finally {
+      button.disabled = false;
+      button.textContent = "VM → Host";
+    }
+  }
+
+  updateFileList(db: ShadowClawDatabase) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const list = root.querySelector(".files__list");
+    if (!list) {
+      return;
+    }
+
+    const files = orchestratorStore.files;
+    const currentPath = orchestratorStore.currentPath;
+
+    if (files.length === 0) {
+      list.innerHTML = `
+        <div class="files__empty" role="status">
+          <p>No files in this folder.</p>
+          <p class="files__empty-hint">Ask the agent to create some files!</p>
+        </div>
+      `;
+
+      return;
+    }
+
+    list.innerHTML = "";
+    files.forEach((file) => {
+      const isDir = file.endsWith("/");
+      const name = isDir ? file.slice(0, -1) : file;
+
+      const item = document.createElement("div");
+      item.className = "files__item";
+      item.setAttribute("role", "listitem");
+      item.setAttribute("data-file-name", name);
+
+      const downloadTitle = isDir ? "Download as ZIP" : "Download";
+      const actionsHtml = `
+        <div class="files__actions" aria-label="Actions for ${escapeHtml(name)}">
+          <button type="button" class="files__action-btn files__download" title="${downloadTitle}" aria-label="${downloadTitle} ${escapeHtml(name)}">📥</button>
+          <button type="button" class="files__action-btn files__action-btn--delete files__delete" title="Delete" aria-label="Delete ${escapeHtml(name)}">🗑️</button>
+        </div>
+      `;
+
+      item.innerHTML = `
+        <button type="button" class="files__item-main" aria-label="${isDir ? "Open folder" : "Open file"} ${escapeHtml(name)}">
+          <div class="files__icon" aria-hidden="true">${isDir ? "📁" : "📄"}</div>
+          <div class="files__name">${escapeHtml(name)}</div>
+        </button>
+        ${actionsHtml}
+      `;
+
+      // Click to open file or navigate into folder
+      const itemMain = item.querySelector(".files__item-main");
+      itemMain?.addEventListener("click", async () => {
+        if (isDir) {
+          // Navigate into folder
+          await orchestratorStore.navigateIntoFolder(db, file);
+        } else {
+          // Open file in viewer
+          const filePath =
+            currentPath === "." ? file : `${currentPath}/${file}`;
+
+          fileViewerStore.openFile(
+            db,
+            filePath,
+            orchestratorStore.activeGroupId,
+          );
+        }
+      });
+
+      // Download button (for both files and directories)
+      const downloadBtn = item.querySelector(".files__download");
+      if (downloadBtn) {
+        downloadBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          try {
+            if (downloadBtn instanceof HTMLButtonElement) {
+              downloadBtn.disabled = true;
+            }
+
+            downloadBtn.textContent = "⏳";
+
+            const itemPath =
+              currentPath === "." ? file : `${currentPath}/${file}`;
+
+            if (isDir) {
+              await downloadGroupDirectoryAsZip(
+                db,
+                orchestratorStore.activeGroupId,
+                itemPath,
+              );
+            } else {
+              await downloadGroupFile(
+                db,
+                orchestratorStore.activeGroupId,
+                itemPath,
+              );
+            }
+
+            showSuccess(
+              isDir ? `Downloaded folder: ${name}` : `Downloaded file: ${name}`,
+              2500,
+            );
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+
+            showError(`Failed to download ${name}: ${message}`, 6000);
+
+            console.error("Download error:", err);
+          } finally {
+            if (downloadBtn instanceof HTMLButtonElement) {
+              downloadBtn.disabled = false;
+            }
+
+            downloadBtn.textContent = "📥";
+          }
+        });
+      }
+
+      // Delete button
+      const deleteBtn = item.querySelector(".files__delete");
+      if (deleteBtn) {
+        deleteBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          const action = isDir
+            ? "delete this folder and all its contents"
+            : "delete this file";
+
+          if (confirm(`Are you sure you want to ${action}?\n\n${name}`)) {
+            try {
+              const itemPath =
+                currentPath === "." ? file : `${currentPath}/${file}`;
+              if (isDir) {
+                await deleteGroupDirectory(
+                  db,
+                  orchestratorStore.activeGroupId,
+                  itemPath,
+                );
+              } else {
+                await deleteGroupFile(
+                  db,
+                  orchestratorStore.activeGroupId,
+                  itemPath,
+                );
+              }
+
+              await orchestratorStore.loadFiles(db);
+
+              showSuccess(
+                isDir ? `Deleted folder: ${name}` : `Deleted file: ${name}`,
+                3000,
+              );
+            } catch (err) {
+              const message = err instanceof Error ? err.message : String(err);
+
+              showError(`Failed to delete ${name}: ${message}`, 6000);
+
+              console.error("Delete error:", err);
+            }
+          }
+        });
+      }
+
+      list.appendChild(item);
+    });
+  }
+
+  /**
+   * Escape HTML special characters
+   */
+  escapeHtml(text: string): string {
+    const div = document.createElement("div");
+
+    div.textContent = text;
+
+    return div.innerHTML;
+  }
+
+  async handleUpload(db: ShadowClawDatabase, input: HTMLInputElement) {
+    const files = input.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    await this.uploadFileList(db, files);
+
+    // Clear the input
+    input.value = "";
+  }
+
+  async uploadFileList(db: ShadowClawDatabase, files: FileList | File[]) {
+    const fileList: File[] = Array.from(files) as File[];
+    if (fileList.length === 0) {
+      return;
+    }
+
+    const groupId = orchestratorStore.activeGroupId;
+    const currentPath = orchestratorStore.currentPath;
+    const count = fileList.length;
+
+    this.uploadTotal = count;
+    this.uploadCompleted = 0;
+    this.updateUploadProgressUI(true);
+
+    try {
+      for (let i = 0; i < count; i++) {
+        const file = fileList[i];
+        const filename =
+          currentPath === "." ? file.name : `${currentPath}/${file.name}`;
+
+        await uploadGroupFile(db, groupId, filename, file);
+        this.uploadCompleted = i + 1;
+        this.updateUploadProgressUI(true);
+      }
+
+      // Reload files
+      await orchestratorStore.loadFiles(db);
+
+      showSuccess(`Uploaded ${count} file${count === 1 ? "" : "s"}`, 3000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      showError(`Failed to upload files: ${message}`, 6000);
+
+      console.error("Upload error:", err);
+    } finally {
+      this.updateUploadProgressUI(false);
+      this.uploadTotal = 0;
+      this.uploadCompleted = 0;
+    }
+  }
+
+  updateUploadProgressUI(active: boolean) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const panel = root.querySelector(".files__upload-progress");
+    const label = root.querySelector(".files__upload-progress-label");
+    const bar = root.querySelector(".files__upload-progress-bar");
+
+    if (!(panel instanceof HTMLElement)) {
+      return;
+    }
+
+    panel.classList.toggle("active", active);
+
+    const percent =
+      this.uploadTotal > 0
+        ? Math.round((this.uploadCompleted / this.uploadTotal) * 100)
+        : 0;
+
+    if (label instanceof HTMLElement) {
+      label.textContent =
+        this.uploadTotal > 0
+          ? `Uploading ${this.uploadCompleted}/${this.uploadTotal} files (${percent}%)`
+          : "Uploading files...";
+    }
+
+    if (bar instanceof HTMLElement) {
+      bar.style.width = `${percent}%`;
+    }
+  }
+
+  handleDragEnter(event: DragEvent, content: HTMLElement) {
+    if (!this.hasDragFiles(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    this.isDragActive = true;
+    content.classList.add("files__content--dragover");
+  }
+
+  handleDragOver(event: DragEvent, content: HTMLElement) {
+    if (!this.hasDragFiles(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+
+    this.isDragActive = true;
+    content.classList.add("files__content--dragover");
+  }
+
+  handleDragLeave(event: DragEvent, content: HTMLElement) {
+    if (!this.isDragActive) {
+      return;
+    }
+
+    const related = event.relatedTarget;
+    if (related instanceof Node && content.contains(related)) {
+      return;
+    }
+
+    this.isDragActive = false;
+    content.classList.remove("files__content--dragover");
+  }
+
+  async handleDrop(
+    event: DragEvent,
+    db: ShadowClawDatabase,
+    content: HTMLElement,
+  ) {
+    if (!this.hasDragFiles(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    this.isDragActive = false;
+    content.classList.remove("files__content--dragover");
+
+    const dropped = event.dataTransfer?.files;
+    if (!dropped || dropped.length === 0) {
+      return;
+    }
+
+    await this.uploadFileList(db, dropped);
+  }
+
+  hasDragFiles(event: DragEvent): boolean {
+    const types = event.dataTransfer?.types;
+
+    return Boolean(types && Array.from(types).includes("Files"));
+  }
+
+  openNewFileDialog() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const dialog = root.querySelector(".files__new-dialog");
+    const input = root.querySelector(".files__new-input");
+
+    if (!(dialog instanceof HTMLDialogElement)) {
+      return;
+    }
+
+    dialog.showModal();
+
+    if (input instanceof HTMLInputElement) {
+      input.value = "";
+      input.focus();
+    }
+  }
+
+  async handleCreateNewFile(db: ShadowClawDatabase) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const dialog = root.querySelector(".files__new-dialog");
+    const input = root.querySelector(".files__new-input");
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const fileName = input.value.trim();
+    if (!fileName) {
+      showWarning("Please enter a file name", 3000);
+
+      return;
+    }
+
+    if (fileName.includes("/") || fileName.includes("\\")) {
+      showWarning("Use only a file name, not a path", 3500);
+
+      return;
+    }
+
+    const filePath =
+      orchestratorStore.currentPath === "."
+        ? fileName
+        : `${orchestratorStore.currentPath}/${fileName}`;
+
+    try {
+      await writeGroupFile(db, orchestratorStore.activeGroupId, filePath, "");
+      await orchestratorStore.loadFiles(db);
+
+      showSuccess(`Created file: ${fileName}`, 3000);
+
+      if (dialog instanceof HTMLDialogElement) {
+        dialog.close();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to create file: ${message}`, 6000);
+    }
+  }
+
+  /**
+   * Handle backup (download all files as zip)
+   */
+  async handleBackup(db: ShadowClawDatabase) {
+    const groupId = orchestratorStore.activeGroupId;
+    try {
+      const btn = this.shadowRoot?.querySelector(".files__backup-btn");
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = true;
+      }
+
+      if (btn) {
+        btn.textContent = "⏳";
+      }
+
+      await downloadAllGroupFilesAsZip(db, groupId);
+
+      showSuccess("Backup created successfully", 3000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      showError(`Failed to create backup: ${message}`, 6000);
+
+      console.error("Backup error:", err);
+    } finally {
+      const btn = this.shadowRoot?.querySelector(".files__backup-btn");
+
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = false;
+      }
+
+      if (btn) {
+        btn.textContent = "💾 Backup";
+      }
+    }
+  }
+
+  /**
+   * Handle restore (upload and extract zip)
+   */
+  async handleRestore(db: ShadowClawDatabase, input: HTMLInputElement) {
+    const files = input.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    const zipFile = files[0];
+    if (!zipFile.name.endsWith(".zip")) {
+      showWarning("Please select a .zip file", 3500);
+
+      return;
+    }
+
+    const groupId = orchestratorStore.activeGroupId;
+
+    if (
+      !confirm("Restore from backup will replace all current files. Continue?")
+    ) {
+      input.value = "";
+
+      return;
+    }
+
+    try {
+      const btn = this.shadowRoot?.querySelector(".files__restore-btn");
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = true;
+      }
+
+      if (btn) {
+        btn.textContent = "⏳";
+      }
+
+      await restoreAllGroupFilesFromZip(db, groupId, zipFile);
+
+      input.value = "";
+
+      await orchestratorStore.resetToRootFolder(db);
+      await orchestratorStore.loadFiles(db);
+
+      showSuccess("Files restored successfully", 3500);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      showError(`Failed to restore from backup: ${message}`, 6000);
+
+      console.error("Restore error:", err);
+    } finally {
+      const btn = this.shadowRoot?.querySelector(".files__restore-btn");
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = false;
+      }
+
+      if (btn) {
+        btn.textContent = "♻️ Restore";
+      }
+    }
+  }
+
+  /**
+   * Handle clear all (delete all files)
+   */
+  async handleClearAll(db: ShadowClawDatabase) {
+    if (!confirm("Delete ALL files? This cannot be undone!")) {
+      return;
+    }
+
+    const groupId = orchestratorStore.activeGroupId;
+
+    try {
+      const btn = this.shadowRoot?.querySelector(".files__clear-btn");
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = true;
+      }
+
+      if (btn) {
+        btn.textContent = "⏳";
+      }
+
+      await deleteAllGroupFiles(db, groupId);
+
+      await orchestratorStore.resetToRootFolder(db);
+      await orchestratorStore.loadFiles(db);
+
+      showSuccess("All files deleted", 3500);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      showError(`Failed to clear files: ${message}`, 6000);
+
+      console.error("Clear error:", err);
+    } finally {
+      const btn = this.shadowRoot?.querySelector(".files__clear-btn");
+      if (btn instanceof HTMLButtonElement) {
+        btn.disabled = false;
+      }
+
+      if (btn) {
+        btn.textContent = "🗑️ Clear All";
+      }
+    }
+  }
+}
+
+customElements.define(elementName, ShadowClawFiles);

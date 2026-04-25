@@ -1,0 +1,35 @@
+<template>
+  <section class="pdf-viewer" aria-label="PDF preview">
+    <div class="pdf-controls">
+      <button
+        type="button"
+        class="pdf-btn pdf-prev"
+        aria-label="Previous PDF page"
+      >
+        &larr; Prev
+      </button>
+      <span class="pdf-page" aria-live="polite">Page 1 of 1</span>
+      <button type="button" class="pdf-btn pdf-next" aria-label="Next PDF page">
+        Next &rarr;
+      </button>
+      <button
+        type="button"
+        class="pdf-btn pdf-zoom-out"
+        aria-label="Zoom out PDF"
+      >
+        &minus;
+      </button>
+      <button
+        type="button"
+        class="pdf-btn pdf-zoom-in"
+        aria-label="Zoom in PDF"
+      >
+        +
+      </button>
+      <span class="pdf-status" aria-live="polite"></span>
+    </div>
+    <div class="pdf-canvas-wrap">
+      <canvas class="pdf-canvas"></canvas>
+    </div>
+  </section>
+</template>

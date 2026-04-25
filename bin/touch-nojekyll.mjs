@@ -7,8 +7,7 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-const dataProjectRoot = join(__dirname, "..");
 
-chdir(dataProjectRoot);
+chdir(join(__dirname, "..", "dist", "public"));
 
 await writeFile(".nojekyll", "", "utf-8");

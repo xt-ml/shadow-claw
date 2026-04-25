@@ -1,0 +1,84 @@
+<template>
+  <div class="settings-section">
+    <h3>🖥️ WebVM</h3>
+    <div class="form-group">
+      <label class="form-label">Boot Mode</label>
+      <select class="form-select" data-setting="vm-boot-mode-select">
+        <option value="disabled">
+          Disabled (Use JavaScript Bash Emulator)
+        </option>
+        <option value="auto">Auto (Prefer 9p, fallback to ext2)</option>
+        <option value="ext2">ext2 / hda</option>
+        <option value="9p">9p / VirtFS</option>
+      </select>
+      <div class="form-helper">
+        Disabled is the default and uses the JavaScript Bash Emulator. Auto
+        keeps fallback behavior (favoring 9p). Selecting 9p or ext2 forces that
+        mode.
+      </div>
+      <button class="save-btn save-btn--inline" data-action="save-vm-boot-mode">
+        💾 Save WebVM Mode
+      </button>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Default Bash Timeout (seconds)</label>
+      <input
+        class="form-input"
+        data-setting="vm-bash-timeout-input"
+        max="1800"
+        min="1"
+        step="1"
+        type="number"
+        value="120"
+      />
+      <div class="form-helper">
+        Used when a bash tool call does not pass an explicit timeout. Range: 1
+        to 1800 seconds.
+      </div>
+      <button
+        class="save-btn save-btn--inline"
+        data-action="save-vm-bash-timeout"
+      >
+        💾 Save Bash Timeout
+      </button>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Boot Asset Host</label>
+      <!-- https://xt-ml.github.io/v86 -->
+      <input
+        class="form-input"
+        data-setting="vm-boot-host-input"
+        placeholder="Auto (use current deployment host)"
+        type="url"
+        value="${DEFAULT_VM_BOOT_HOST}"
+      />
+      <div class="form-helper">
+        Leave empty to use this app's deployed host.
+      </div>
+      <button class="save-btn save-btn--inline" data-action="save-vm-boot-host">
+        💾 Save Boot Host
+      </button>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Network Relay URL</label>
+      <input
+        class="form-input"
+        data-setting="vm-network-relay-url-input"
+        type="url"
+        value="wss://relay.widgetry.org/"
+      />
+      <div class="form-helper">
+        Default is wss://relay.widgetry.org/. Use ws:// or wss://.
+      </div>
+      <button
+        class="save-btn save-btn--inline"
+        data-action="save-vm-network-relay-url"
+      >
+        💾 Save Relay URL
+      </button>
+    </div>
+  </div>
+</template>

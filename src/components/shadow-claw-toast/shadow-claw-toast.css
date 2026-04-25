@@ -1,0 +1,167 @@
+*,
+*::before,
+*::after {
+  font-family: var(--shadow-claw-font-sans);
+}
+
+:host {
+  --toast-gap: 0.625rem;
+  --toast-padding: 0.75rem;
+  bottom: 1rem;
+  display: block;
+  pointer-events: none;
+  position: fixed;
+  right: 1rem;
+  z-index: 9999;
+}
+
+.toast-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--toast-gap);
+  max-width: min(20rem, calc(100vw - 2rem));
+  width: min(20rem, calc(100vw - 2rem));
+}
+
+.toast {
+  align-items: flex-start;
+  animation: toast-enter 100ms ease-out;
+  background: var(--shadow-claw-bg-secondary);
+  border-left: 0.25rem solid var(--toast-accent);
+  border-radius: var(--shadow-claw-radius-m, 0.75rem);
+  box-shadow: var(--shadow-claw-shadow-md);
+  color: var(--shadow-claw-text-primary);
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: auto 1fr auto;
+  opacity: 1;
+  padding: var(--toast-padding);
+  pointer-events: auto;
+  transform: translateX(0);
+}
+
+.toast.exiting {
+  animation: toast-exit 150ms ease-in forwards;
+}
+
+.toast.success {
+  --toast-accent: var(--shadow-claw-success-color);
+}
+
+.toast.warning {
+  --toast-accent: var(--shadow-claw-warning-color);
+}
+
+.toast.error {
+  --toast-accent: var(--shadow-claw-error-color);
+}
+
+.toast.info {
+  --toast-accent: var(--shadow-claw-accent-primary);
+}
+
+.toast-icon {
+  color: var(--toast-accent);
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-top: 0.0625rem;
+}
+
+.toast-message {
+  font-size: var(--shadow-claw-font-size-sm);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.toast-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.375rem;
+  grid-column: 2 / 4;
+  justify-content: flex-end;
+}
+
+.toast-action,
+.toast-close {
+  align-items: center;
+  background: transparent;
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-s, 0.5rem);
+  color: var(--shadow-claw-text-primary);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 600;
+  justify-content: center;
+  min-height: 1.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.toast-action:hover,
+.toast-close:hover {
+  background: var(--shadow-claw-bg-tertiary);
+}
+
+.toast-action:focus-visible,
+.toast-close:focus-visible {
+  box-shadow: 0 0 0 0.125rem var(--shadow-claw-bg-tertiary);
+  outline: 0.0625rem solid var(--shadow-claw-accent-primary);
+  outline-offset: 0.0625rem;
+}
+
+.toast-close {
+  border: none;
+  font-size: var(--shadow-claw-font-size-md);
+  font-weight: 400;
+  line-height: 1;
+  margin-left: 0.375rem;
+  min-height: auto;
+  min-width: 1.75rem;
+  padding: 0.125rem;
+}
+
+@keyframes toast-enter {
+  from {
+    opacity: 0;
+    transform: translateX(1.5rem);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toast-exit {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  to {
+    opacity: 0;
+    transform: translateX(150%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast,
+  .toast.exiting {
+    animation: none;
+  }
+}
+
+@media (max-width: 47.9375rem) {
+  :host {
+    bottom: 0.75rem;
+    left: 0.75rem;
+    right: 0.75rem;
+  }
+
+  .toast-container {
+    max-width: 100%;
+    width: 100%;
+  }
+}

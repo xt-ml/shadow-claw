@@ -1,0 +1,373 @@
+import { jest } from "@jest/globals";
+import { BASH_DEFAULT_TIMEOUT_SEC } from "./config.js";
+
+import {
+  __resolveBootConfigForTests,
+  __setBootTranscriptForTests,
+  __setVMInstanceForTests,
+  bootVM,
+  createTerminalSession,
+  executeInVM,
+  getVMBootHostPreference,
+  getVMNetworkRelayURLPreference,
+  getVMStatus,
+  isVMReady,
+  setVMBootHostPreference,
+  setVMBootModePreference,
+  setVMNetworkRelayURLPreference,
+  shutdownVM,
+  subscribeVMBootOutput,
+} from "./vm.js";
+
+import { DEFAULT_VM_NETWORK_RELAY_URL } from "./config.js";
+
+function createMockEmulator() {
+  /* @type Map<string, Set<(value: any) => void>> */
+  const listeners = new Map();
+
+  return {
+    add_listener: jest.fn((event, listener) => {
+      if (!listeners.has(event)) {
+        listeners.set(event, new Set());
+      }
+
+      listeners.get(event)?.add(listener);
+    }),
+    remove_listener: jest.fn((event, listener) => {
+      listeners.get(event)?.delete(listener);
+    }),
+    serial0_send: jest.fn(),
+    emitSerial(text: string) {
+      const serialListeners = listeners.get("serial0-output-byte");
+      if (!serialListeners) {
+        return;
+      }
+
+      for (const ch of text) {
+        for (const listener of serialListeners) {
+          listener(ch.charCodeAt(0));
+        }
+      }
+    },
+  };
+}
+
+function createReadyVM(execute, emulator, mode = "ext2") {
+  return {
+    isReady: () => true,
+    execute,
+    getEmulator: () => emulator,
+    getMode: () => mode,
+    destroy: jest.fn(),
+  };
+}
+
+describe("vm wrapper", () => {
+  afterEach(async () => {
+    delete (global as any).fetch;
+    await shutdownVM();
+  });
+
+  it("reports not ready and returns fallback error output", async () => {
+    expect(isVMReady()).toBe(false);
+    const out = await executeInVM("echo hi");
+
+    expect(out).toContain("WebVM is not available");
+  });
+
+  it("shutdown is safe when VM is not booted", async () => {
+    await expect(shutdownVM()).resolves.toBeUndefined();
+  });
+
+  it("defaults to disabled boot mode", () => {
+    expect(getVMStatus()).toMatchObject({
+      ready: false,
+      booting: false,
+      bootAttempted: false,
+      error: "WebVM is disabled. Enable it in Settings to use WebVM.",
+    });
+  });
+
+  it("normalizes boot host preference and clears on invalid", () => {
+    setVMBootHostPreference("https://example.com///");
+
+    expect(getVMBootHostPreference()).toBe("https://example.com");
+
+    setVMBootHostPreference("not-a-url");
+
+    expect(getVMBootHostPreference()).toBeNull();
+  });
+
+  it("uses default relay when invalid relay URL is provided", () => {
+    setVMNetworkRelayURLPreference("wss://relay.widgetry.org/path");
+
+    expect(getVMNetworkRelayURLPreference()).toBe(
+      "wss://relay.widgetry.org/path",
+    );
+
+    setVMNetworkRelayURLPreference("https://invalid.example.com");
+
+    expect(getVMNetworkRelayURLPreference()).toBe(DEFAULT_VM_NETWORK_RELAY_URL);
+  });
+
+  it("resets boot state on shutdown", async () => {
+    setVMBootModePreference("ext2");
+
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({ ok: false });
+
+    await bootVM();
+
+    expect(getVMStatus().bootAttempted).toBe(true);
+
+    await shutdownVM();
+
+    expect(getVMStatus()).toMatchObject({
+      ready: false,
+      booting: false,
+      bootAttempted: false,
+      error: null,
+    });
+  });
+
+  it("suspends terminal output while a command runs and resumes afterward", async () => {
+    const emulator = createMockEmulator();
+    const terminalChunks: string[] = [];
+    let resolveExecute;
+
+    const execute = jest.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveExecute = resolve;
+        }),
+    );
+
+    __setVMInstanceForTests(createReadyVM(execute, emulator) as any);
+
+    const session = createTerminalSession((chunk) => {
+      terminalChunks.push(chunk);
+    });
+
+    emulator.emitSerial("A");
+
+    expect(terminalChunks).toEqual(["A"]);
+
+    const commandPromise = executeInVM("echo hello");
+
+    expect(execute).toHaveBeenCalledWith(
+      "echo hello",
+      BASH_DEFAULT_TIMEOUT_SEC,
+    );
+
+    session.send("pwd\n");
+
+    expect(emulator.serial0_send).not.toHaveBeenCalled();
+
+    emulator.emitSerial("B");
+
+    expect(terminalChunks).toEqual(["A"]);
+
+    resolveExecute({
+      stdout: "hello",
+      stderr: "",
+      exitCode: 0,
+      timedOut: false,
+    });
+
+    await expect(commandPromise).resolves.toBe("hello");
+
+    emulator.emitSerial("C");
+
+    expect(terminalChunks).toEqual(["A", "C"]);
+
+    session.send("pwd\n");
+
+    expect(emulator.serial0_send).toHaveBeenCalledWith("pwd\n");
+  });
+
+  it("returns a busy error when another command is already running", async () => {
+    const emulator = createMockEmulator();
+    let resolveExecute;
+
+    const execute = jest.fn(
+      () =>
+        new Promise((resolve) => {
+          resolveExecute = resolve;
+        }),
+    );
+
+    __setVMInstanceForTests(createReadyVM(execute, emulator) as any);
+
+    const firstCommand = executeInVM("sleep 1");
+    const secondCommand = await executeInVM("echo second");
+
+    expect(secondCommand).toBe(
+      "Error: WebVM is currently busy running another command.",
+    );
+
+    resolveExecute({
+      stdout: "done",
+      stderr: "",
+      exitCode: 0,
+      timedOut: false,
+    });
+
+    await expect(firstCommand).resolves.toBe("done");
+  });
+
+  it("calls emulator destroy once during shutdown", async () => {
+    const emulator: any = createMockEmulator();
+
+    emulator.destroy = jest.fn(() => Promise.resolve());
+
+    __setVMInstanceForTests({
+      isReady: () => true,
+      execute: jest.fn() as any,
+      getEmulator: () => emulator,
+      getMode: () => "ext2",
+
+      destroy: () => (emulator as any).destroy(),
+    });
+
+    await shutdownVM();
+
+    expect(emulator.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to direct emulator destroy when instance.destroy fails", async () => {
+    const emulator: any = createMockEmulator();
+
+    emulator.destroy = jest.fn(() => Promise.resolve());
+
+    __setVMInstanceForTests({
+      isReady: () => true,
+      execute: jest.fn() as any,
+      getEmulator: () => emulator,
+      getMode: () => "9p",
+      destroy: () => {
+        throw new Error("instance destroy failed");
+      },
+    });
+
+    await shutdownVM();
+
+    expect(emulator.destroy).toHaveBeenCalledTimes(1);
+  });
+
+  it("honors explicit 9p preference even when ext2 assets also exist", async () => {
+    setVMBootHostPreference("https://example.com");
+    setVMBootModePreference("9p");
+
+    const okUrls = new Set([
+      // ext2 assets
+      "https://example.com/assets/v86.ext2/libv86.mjs",
+      "https://example.com/assets/v86.ext2/v86.wasm",
+      "https://example.com/assets/v86.ext2/seabios.bin",
+      "https://example.com/assets/v86.ext2/vgabios.bin",
+      "https://example.com/assets/v86.ext2/alpine-rootfs.ext2",
+      "https://example.com/assets/v86.ext2/bzImage",
+      "https://example.com/assets/v86.ext2/initrd",
+      // 9p assets
+      "https://example.com/assets/v86.9pfs/libv86.mjs",
+      "https://example.com/assets/v86.9pfs/v86.wasm",
+      "https://example.com/assets/v86.9pfs/seabios.bin",
+      "https://example.com/assets/v86.9pfs/vgabios.bin",
+      "https://example.com/assets/v86.9pfs/alpine-fs.json",
+    ]);
+
+    (global as any).fetch = jest.fn(async (url) => ({
+      ok: okUrls.has(String(url)),
+    }));
+
+    const config = await __resolveBootConfigForTests();
+
+    expect(config?.mode).toBe("9p");
+
+    expect(config?.label).toContain("9p");
+  });
+
+  it("keeps auto preference favoring 9p before ext2 fallback", async () => {
+    setVMBootHostPreference("https://example.com");
+    setVMBootModePreference("auto");
+
+    const okUrls = new Set([
+      // ext2 assets
+      "https://example.com/assets/v86.ext2/libv86.mjs",
+      "https://example.com/assets/v86.ext2/v86.wasm",
+      "https://example.com/assets/v86.ext2/seabios.bin",
+      "https://example.com/assets/v86.ext2/vgabios.bin",
+      "https://example.com/assets/v86.ext2/alpine-rootfs.ext2",
+      "https://example.com/assets/v86.ext2/bzImage",
+      "https://example.com/assets/v86.ext2/initrd",
+      // 9p assets
+      "https://example.com/assets/v86.9pfs/libv86.mjs",
+      "https://example.com/assets/v86.9pfs/v86.wasm",
+      "https://example.com/assets/v86.9pfs/seabios.bin",
+      "https://example.com/assets/v86.9pfs/vgabios.bin",
+      "https://example.com/assets/v86.9pfs/alpine-fs.json",
+    ]);
+
+    (global as any).fetch = jest.fn(async (url) => ({
+      ok: okUrls.has(String(url)),
+    }));
+
+    const config = await __resolveBootConfigForTests();
+
+    expect(config?.mode).toBe("9p");
+
+    expect(config?.label).toContain("9p");
+  });
+
+  it("falls back to ext2 in auto mode when 9p assets are missing", async () => {
+    setVMBootHostPreference("https://example.com");
+    setVMBootModePreference("auto");
+
+    const okUrls = new Set([
+      // ext2 assets only
+      "https://example.com/assets/v86.ext2/libv86.mjs",
+      "https://example.com/assets/v86.ext2/v86.wasm",
+      "https://example.com/assets/v86.ext2/seabios.bin",
+      "https://example.com/assets/v86.ext2/vgabios.bin",
+      "https://example.com/assets/v86.ext2/alpine-rootfs.ext2",
+      "https://example.com/assets/v86.ext2/bzImage",
+      "https://example.com/assets/v86.ext2/initrd",
+    ]);
+
+    (global as any).fetch = jest.fn(async (url) => ({
+      ok: okUrls.has(String(url)),
+    }));
+
+    const config = await __resolveBootConfigForTests();
+
+    expect(config?.mode).toBe("ext2");
+
+    expect(config?.label).toContain("ext2");
+  });
+
+  it("backfills transcript to boot listeners and avoids duplicate replay on terminal attach", () => {
+    const emulator = createMockEmulator();
+    const execute = jest.fn();
+    const bootChunks = [];
+    const terminalChunks: string[] = [];
+
+    __setVMInstanceForTests(createReadyVM(execute, emulator) as any);
+    __setBootTranscriptForTests("Booting kernel\n", false);
+
+    // Simulates terminal-open subscribing while boot wraps up.
+    // No live boot bytes are emitted after this point.
+    // Replay should still happen when terminal session attaches.
+    const detachBootOutput = subscribeVMBootOutput((chunk) => {
+      (bootChunks as any).push(chunk);
+    });
+    detachBootOutput();
+
+    expect(bootChunks).toEqual(["Booting kernel\n"]);
+
+    const session = createTerminalSession((chunk) => {
+      terminalChunks.push(chunk);
+    });
+
+    expect(terminalChunks).toEqual([]);
+
+    session.close();
+  });
+});

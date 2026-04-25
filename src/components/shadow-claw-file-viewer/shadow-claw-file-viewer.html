@@ -1,0 +1,47 @@
+<template>
+  <dialog class="file-modal" aria-label="File viewer">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">File:</h3>
+        <div class="modal-header-actions">
+          <button aria-label="Edit file" class="modal-edit-btn" type="button">
+            ✏️ Edit
+          </button>
+          <button
+            aria-label="Save file"
+            class="modal-save-btn hidden"
+            type="button"
+          >
+            💾 Save
+          </button>
+          <button
+            aria-pressed="false"
+            aria-label="Toggle preview mode"
+            class="modal-preview-btn"
+            type="button"
+          >
+            👁️ Preview
+          </button>
+          <button
+            aria-label="Close file viewer"
+            class="modal-close-btn"
+            type="button"
+          >
+            &times;
+          </button>
+        </div>
+      </div>
+      <div class="modal-body">
+        <div class="file-content file-content--raw"></div>
+        <div class="file-editor-container">
+          <textarea
+            aria-label="File editor"
+            class="file-editor"
+            is="highlighted-code"
+            spellcheck="false"
+          ></textarea>
+        </div>
+      </div>
+    </div>
+  </dialog>
+</template>

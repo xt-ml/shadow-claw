@@ -1,0 +1,110 @@
+<template>
+  <section aria-label="Tasks" class="tasks">
+    <shadow-claw-page-header icon="✓" title="Tasks">
+      <button
+        class="tasks__add-btn tasks__header-btn"
+        slot="actions"
+        type="button"
+      >
+        + Add Task
+      </button>
+      <button
+        class="tasks__backup-btn tasks__header-btn"
+        slot="actions"
+        type="button"
+      >
+        💾 Backup
+      </button>
+      <button
+        class="tasks__restore-btn tasks__header-btn"
+        slot="actions"
+        type="button"
+      >
+        ♻️ Restore
+      </button>
+      <button
+        class="tasks__clear-btn tasks__header-btn"
+        slot="actions"
+        type="button"
+      >
+        🗑️ Clear All
+      </button>
+    </shadow-claw-page-header>
+    <input
+      accept=".json,application/json"
+      aria-label="Restore tasks from JSON backup"
+      class="tasks__hidden-restore"
+      type="file"
+    />
+    <div class="tasks__content">
+      <div class="tasks__terminal-slot" data-terminal-slot hidden></div>
+      <div aria-live="polite" class="tasks__list" role="list"></div>
+    </div>
+    <dialog aria-labelledby="tasksDialogTitle" class="tasks__dialog">
+      <div class="tasks__dialog-header">
+        <h3 class="tasks__dialog-title" id="tasksDialogTitle">Add Task</h3>
+        <button
+          aria-label="Close task dialog"
+          class="tasks__dialog-close"
+          type="button"
+        >
+          ✕
+        </button>
+      </div>
+      <form class="tasks__dialog-form">
+        <div class="tasks__dialog-body">
+          <div class="tasks__form-group">
+            <label class="tasks__form-label" for="tasksScheduleInput"
+              >Schedule (Cron Expression)</label
+            >
+            <input
+              aria-describedby="tasksScheduleHint"
+              class="tasks__form-input"
+              id="tasksScheduleInput"
+              name="schedule"
+              placeholder="e.g., 0 9 * * * (daily at 9 AM)"
+              required
+              type="text"
+            />
+            <div class="tasks__form-hint" id="tasksScheduleHint">
+              Standard cron format (minute hour day-of-month month day-of-week)
+            </div>
+          </div>
+          <div class="tasks__form-group">
+            <label
+              class="tasks__form-label"
+              id="taskLabel"
+              for="tasksPromptInput"
+              >Task Prompt</label
+            >
+            <textarea
+              class="tasks__form-textarea"
+              id="tasksPromptInput"
+              name="prompt"
+              placeholder="Enter the task prompt..."
+              required
+            ></textarea>
+          </div>
+          <div class="tasks__form-group tasks__form-group-row">
+            <input id="isScriptCheckbox" name="isScript" type="checkbox" />
+            <label
+              class="tasks__form-label tasks__form-label-inline"
+              for="isScriptCheckbox"
+              >Is JavaScript</label
+            >
+          </div>
+          <div class="tasks__form-group tasks__preview-container">
+            <label class="tasks__form-label">Preview</label>
+            <div class="tasks__preview tasks__prompt" id="tasksPreview"></div>
+          </div>
+        </div>
+        <div class="tasks__dialog-footer">
+          <button class="tasks__btn-cancel" type="button">Cancel</button>
+          <button class="tasks__btn-save tasks__dialog-submit" type="submit">
+            Add Task
+          </button>
+        </div>
+      </form>
+    </dialog>
+  </section>
+</template>

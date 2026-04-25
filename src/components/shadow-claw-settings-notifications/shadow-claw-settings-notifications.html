@@ -1,0 +1,70 @@
+<template>
+  <div class="settings-section">
+    <h3>🔔 Push Notifications</h3>
+
+    <div class="form-group">
+      <div class="toggle-row">
+        <button
+          aria-checked="false"
+          class="toggle-switch"
+          data-action="toggle-push"
+          role="switch"
+        ></button>
+        <span class="status-text" data-info="subscription-status"
+          >Disabled</span
+        >
+      </div>
+      <div class="form-helper">
+        Enable push notifications to receive alerts even when the app is in the
+        background. Your browser will ask for permission.
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="push-proxy-url">Push Proxy URL</label>
+      <input
+        class="notification-input"
+        data-input="push-proxy-url"
+        id="push-proxy-url"
+        placeholder="e.g. http://localhost:8888"
+        type="url"
+      />
+      <div class="form-helper">
+        If you are hosting ShadowClaw on a static site (like GitHub Pages),
+        enter the URL of your push proxy here.
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Stored Subscriptions</label>
+      <div class="subscription-list" data-info="subscription-list">
+        <span class="empty-text">No subscriptions stored.</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Send Notification</label>
+      <input
+        class="notification-input"
+        data-input="notification-text"
+        placeholder="Enter notification message…"
+        type="text"
+      />
+      <div class="action-row">
+        <button class="settings-btn" data-action="send-notification" disabled>
+          📤 Send to Selected
+        </button>
+        <button
+          class="danger settings-btn"
+          data-action="delete-subscription"
+          disabled
+        >
+          🗑️ Delete Selected
+        </button>
+        <button class="settings-btn" data-action="refresh-subscriptions">
+          🔄 Refresh
+        </button>
+      </div>
+    </div>
+  </div>
+</template>

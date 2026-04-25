@@ -1,0 +1,98 @@
+<template>
+  <section class="chat" aria-label="Chat">
+    <shadow-claw-page-header icon="&#128172;" title="Chat">
+      <div slot="status" class="chat__status" aria-live="polite">
+        <span class="chat__status-indicator" aria-hidden="true">&#9679;</span>
+        <span class="chat__status-text">Ready</span>
+      </div>
+      <button
+        slot="actions"
+        class="chat__action-btn"
+        data-action="download-chat"
+        type="button"
+      >
+        &#128190; Backup
+      </button>
+      <button
+        slot="actions"
+        class="chat__action-btn"
+        data-action="restore-chat"
+        type="button"
+      >
+        &#9851;&#65039; Restore
+      </button>
+      <button
+        slot="actions"
+        class="chat__action-btn"
+        data-action="compact-chat"
+        type="button"
+      >
+        &#128230; Compact
+      </button>
+      <button
+        slot="actions"
+        class="chat__action-btn chat__action-btn--stop"
+        data-action="stop-chat"
+        type="button"
+        disabled
+      >
+        &#9209;&#65039; Stop Chat
+      </button>
+      <button
+        slot="actions"
+        class="chat__action-btn"
+        data-action="clear-chat"
+        type="button"
+      >
+        &#128465;&#65039; Clear Chat
+      </button>
+    </shadow-claw-page-header>
+
+    <div class="chat__body">
+      <div class="chat__terminal-slot" data-terminal-slot hidden></div>
+      <div class="chat__tool-activity" aria-live="polite">
+        &#9881;&#65039; Working...
+      </div>
+      <div
+        class="chat__model-progress"
+        aria-live="polite"
+        aria-label="Model download progress"
+      >
+        <span class="chat__model-progress-label"
+          >Preparing Prompt API model...</span
+        >
+        <div class="chat__model-progress-track">
+          <div class="chat__model-progress-bar"></div>
+        </div>
+      </div>
+      <div class="chat__activity-log" aria-live="polite"></div>
+      <div
+        class="chat__messages"
+        role="log"
+        aria-live="polite"
+        aria-label="Conversation messages"
+      ></div>
+      <div class="chat__token-usage" aria-live="polite"></div>
+      <div class="chat__context-usage" aria-live="polite"></div>
+      <div class="chat__input-area">
+        <div class="chat__input-wrapper">
+          <textarea
+            class="chat__input"
+            placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
+            rows="1"
+            aria-label="Message input"
+          ></textarea>
+        </div>
+        <button class="chat__send-btn" data-action="send-message" type="button">
+          Send
+        </button>
+      </div>
+    </div>
+
+    <input
+      class="chat__restore-input"
+      type="file"
+      accept=".zip,application/zip"
+    />
+  </section>
+</template>

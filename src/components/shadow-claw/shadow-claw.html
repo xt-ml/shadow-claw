@@ -1,0 +1,147 @@
+<template>
+  <div class="app">
+    <!-- Header -->
+    <header class="header">
+      <button aria-label="Open menu" id="menu-button">
+        <svg
+          height="1.5rem"
+          fill="currentColor"
+          viewBox="0 -960 960 960"
+          width="1.5rem"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path d="M120-680v-80h720v80zm0 480v-80h720v80zm0-240v-80h720v80z" />
+        </svg>
+      </button>
+      <h1>
+        <slot name="header-title-link"></slot>
+        <div class="header-actions">
+          <button
+            aria-label="Hide WebVM terminal"
+            aria-pressed="true"
+            class="theme-toggle webvm-toggle hidden"
+            hidden
+            type="button"
+          >
+            <svg
+              height="1.5rem"
+              fill="currentColor"
+              viewBox="0 -960 960 960"
+              width="1.5rem"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M320-280 120-480l200-200 56 56-104 104h568v80H272l104 104-56 56Zm320 0-56-56 104-104H120v-80h568L584-624l56-56 200 200-200 200Z"
+              />
+            </svg>
+          </button>
+          <button aria-label="Toggle theme" class="theme-toggle">
+            <svg
+              class="sun-icon hidden"
+              height="1.5rem"
+              fill="currentColor"
+              viewBox="0 -960 960 960"
+              width="1.5rem"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35zm0 80q-83 0-141.5-58.5T280-480q0-83 58.5-141.5T480-680q83 0 141.5 58.5T680-480q0 83-58.5 141.5T480-280zM200-440H40v-80h160v80zm720 0H760v-80h160v80zM440-760v-160h80v160h-80zm0 720v-160h80v160h-80zM256-650l-101-97 57-59 96 100-52 56zm492 496-97-101 53-55 101 97-57 59zm-98-550 97-101 59 57-101 97-55-53zM158-190l97-101 55 53-101 97-51-49z"
+              />
+            </svg>
+            <svg
+              class="moon-icon hidden"
+              height="1.5rem"
+              fill="currentColor"
+              viewBox="0 -960 960 960"
+              width="1.5rem"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M480-120q-150 0-255-105T120-480q0-150 105-255t255-105q14 0 27.5 1t26.5 3q-41 29-65.5 75.5T444-660q0 90 63 153t153 63q52 0 99-24.5t75-65.5q2 13 3 26.5t1 27.5q0 150-105 255T480-120zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-74 30-122.5 100T204-480q0 116 82 198t194 82zm-12-274z"
+              />
+            </svg>
+          </button>
+          <slot name="header-actions-logo"></slot>
+        </div>
+      </h1>
+    </header>
+
+    <!-- Main Body -->
+    <div class="app-body">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <nav class="nav-menu">
+          <li class="nav-item active" data-page="chat">💬 Chat</li>
+          <li class="nav-item" data-page="tasks">&nbsp;✓&nbsp;&nbsp;Tasks</li>
+          <li class="nav-item" data-page="files">📁 Files</li>
+        </nav>
+        <div class="sidebar-spacer"></div>
+        <shadow-claw-conversations></shadow-claw-conversations>
+        <div class="sidebar-footer">
+          <button class="settings-btn" data-action="show-settings">
+            ⚙️ Settings
+          </button>
+        </div>
+      </aside>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <!-- Chat Page -->
+        <div class="page chat-page active" data-page-id="chat">
+          <shadow-claw-chat></shadow-claw-chat>
+        </div>
+
+        <!-- Tasks Page -->
+        <div class="page" data-page-id="tasks">
+          <shadow-claw-tasks></shadow-claw-tasks>
+        </div>
+
+        <!-- Files Page -->
+        <div class="page" data-page-id="files">
+          <shadow-claw-files></shadow-claw-files>
+        </div>
+
+        <!-- Settings Page (delegated to sub-components) -->
+        <div class="page" data-page-id="settings">
+          <shadow-claw-settings></shadow-claw-settings>
+        </div>
+
+        <!-- Tools Config Page (hidden from sidebar) -->
+        <div class="page" data-page-id="tools">
+          <shadow-claw-tools></shadow-claw-tools>
+        </div>
+
+        <!-- Channels Config Page (hidden from sidebar) -->
+        <div class="page" data-page-id="channels">
+          <shadow-claw-channels></shadow-claw-channels>
+        </div>
+
+        <shadow-claw-file-viewer id="file-viewer"></shadow-claw-file-viewer>
+        <shadow-claw-toast></shadow-claw-toast>
+      </div>
+    </div>
+
+    <dialog class="app-confirm-dialog" aria-labelledby="appConfirmTitle">
+      <form method="dialog" class="app-confirm-dialog__form">
+        <h2 id="appConfirmTitle" class="app-confirm-dialog__title">Confirm</h2>
+        <p class="app-confirm-dialog__message"></p>
+        <div class="app-confirm-dialog__actions">
+          <button
+            type="submit"
+            value="cancel"
+            class="app-confirm-dialog__btn app-confirm-dialog__btn--cancel"
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            value="confirm"
+            class="app-confirm-dialog__btn app-confirm-dialog__btn--confirm"
+          >
+            Confirm
+          </button>
+        </div>
+      </form>
+    </dialog>
+  </div>
+</template>

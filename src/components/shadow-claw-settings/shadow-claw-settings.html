@@ -1,0 +1,42 @@
+<template>
+  <div class="settings-header"><h2>⚙️ Settings</h2></div>
+  <div class="settings-page">
+    <shadow-claw-settings-llm></shadow-claw-settings-llm>
+    <shadow-claw-settings-webvm></shadow-claw-settings-webvm>
+    <shadow-claw-settings-git></shadow-claw-settings-git>
+    <shadow-claw-settings-accounts></shadow-claw-settings-accounts>
+    <shadow-claw-settings-mcp-remote></shadow-claw-settings-mcp-remote>
+    <shadow-claw-settings-storage></shadow-claw-settings-storage>
+    <shadow-claw-settings-notifications></shadow-claw-settings-notifications>
+
+    <div class="settings-section">
+      <h3>💬 Messaging Channels</h3>
+      <div class="form-group">
+        <div class="form-helper">
+          Configure Telegram and iMessage bridge integrations in a dedicated
+          channel configuration interface.
+        </div>
+      </div>
+      <button class="save-btn" data-action="show-channels-config">
+        💬 Configure Channels
+      </button>
+    </div>
+
+    <div class="settings-section">
+      <h3>🛠️ Tools</h3>
+      <div class="form-group">
+        <div class="form-helper">
+          Configure which tools are available to the AI, edit the system prompt,
+          and manage custom tools.
+        </div>
+      </div>
+      <button class="save-btn" data-action="show-tools-config">
+        🛠️ Configure Tools
+      </button>
+    </div>
+
+    <div class="settings-version-text" data-info="deployed-revision">
+      Deployed revision: unknown
+    </div>
+  </div>
+</template>

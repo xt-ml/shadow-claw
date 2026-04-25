@@ -4,24 +4,31 @@ Professional end-to-end test suite for ShadowClaw using Playwright with the Page
 
 ## Architecture Overview
 
-```
+```text
 e2e/
 ├── components/          # Reusable component objects for UI regions
-│   ├── nav.component.mjs
-│   ├── message-input.component.mjs
-│   ├── chat-actions.component.mjs
-│   └── file-browser.component.mjs
+│   ├── nav.component.ts
+│   ├── message-input.component.ts
+│   ├── chat-actions.component.ts
+│   ├── file-browser.component.ts
+│   └── conversations.component.ts
 ├── pages/              # Page objects representing app views
-│   ├── app.page.mjs    # Root app + navigation
-│   ├── chat.page.mjs   # Chat interface
-│   ├── files.page.mjs  # Files browser
-│   └── tasks.page.mjs  # Task scheduler
+│   ├── app.page.ts    # Root app + navigation
+│   ├── chat.page.ts   # Chat interface
+│   ├── files.page.ts  # Files browser
+│   ├── tasks.page.ts  # Task scheduler
+│   ├── tools.page.ts  # Tool management and profiles
+│   └── settings.page.ts  # Settings panel
 ├── shared/             # Low-level utilities and helpers
-│   └── index.mjs       # DB helpers, constants, wait functions
-├── fixtures.mjs        # Shared test fixtures (app, chat, files, tasks)
-├── *.test.mjs          # Test suites
-│   └── file-viewer.test.mjs  # File viewer component integration coverage
-│   └── orchestrator.test.mjs / storage.test.mjs  # System integration coverage
+│   └── index.ts       # DB helpers, constants, wait functions
+├── fixtures.ts        # Shared test fixtures (app, chat, files, tasks, settings, conversations)
+├── *.test.ts          # Test suites
+│   └── conversations.test.ts  # Conversation CRUD (create, rename, switch, delete, clone, reorder)
+│   └── settings.test.ts       # Settings persistence (max iterations, streaming, assistant name)
+│   └── streaming-chat.test.ts # Chat flow with mock SSE streaming + non-streaming
+│   └── task-crud.test.ts       # Task CRUD (create, edit, toggle, delete)
+│   └── file-viewer.test.ts    # File viewer component integration coverage
+│   └── orchestrator.test.ts / storage.test.ts  # System integration coverage
 └── README.md           # This file
 ```
 
@@ -35,10 +42,10 @@ e2e/
 
 ### 2. **Fixtures Over Setup Boilerplate**
 
-All tests use shared fixtures from `fixtures.mjs`:
+All tests use shared fixtures from `fixtures.ts`:
 
 ```js
-import { test, expect } from "./fixtures.mjs";
+import { test, expect } from "./fixtures.js";
 
 test("example", async ({ app, chat }) => {
   // app is already initialized and ready
@@ -53,6 +60,8 @@ test("example", async ({ app, chat }) => {
 - `chat` — `ChatPage` instance (requires `.open()` to navigate)
 - `files` — `FilesPage` instance
 - `tasks` — `TasksPage` instance
+- `settings` — `SettingsPage` instance (requires `.open()` to navigate)
+- `conversations` — `ConversationsComponent` instance (sidebar conversation list)
 - `page` — Raw Playwright `Page` (for low-level browser API checks)
 
 ### 3. **Component Composition**
@@ -60,8 +69,8 @@ test("example", async ({ app, chat }) => {
 Page objects compose smaller component objects for reusability:
 
 ```js
-// chat.page.mjs
-import { MessageInputComponent } from "../components/message-input.component.mjs";
+// chat.page.ts
+import { MessageInputComponent } from "../components/message-input.component.ts";
 
 export class ChatPage {
   constructor(app) {
@@ -82,14 +91,14 @@ Tests should **not** contain `page.evaluate()` blocks for DOM queries. Instead:
 - ✅ Use component locators: `chat.messages()`
 - ❌ Avoid: `page.evaluate(() => document.querySelector(...))`
 
-**Exception:** Low-level browser API checks (IndexedDB, OPFS) in `storage.test.mjs` are acceptable.
+**Exception:** Low-level browser API checks (IndexedDB, OPFS) in `storage.test.ts` are acceptable.
 
 ## Writing Tests
 
 ### Test Structure
 
 ```js
-import { test, expect } from "./fixtures.mjs";
+import { test, expect } from "./fixtures.js";
 
 test.describe("Feature Name", () => {
   test("should do something", async ({ chat }) => {
@@ -171,6 +180,42 @@ Provides backup/restore/compact/clear operations.
 - `downloadButton()`, `restoreButton()`, `compactButton()`, `clearButton()` — Locators
 - `expectAllActionsPresent()` — Assert all action buttons exist
 - `downloadChat()`, `clearChat()`, `compactChat()` — Action methods
+
+### `ConversationsComponent`
+
+Manages the sidebar conversation list CRUD operations. The list is **resizable**
+via a drag handle at the bottom and fills all available sidebar space by default;
+double-clicking the handle resets to auto-fill. The resize preference is persisted.
+Conversations with **unread messages** display a pulsing highlight animation
+(`.unread` CSS class); the indicator clears when the conversation is selected.
+
+**Methods:**
+
+- `host()` — Locator for `<shadow-claw-conversations>`
+- `items()` — All conversation items in the list
+- `item(groupId)` — Specific conversation item by group ID
+- `activeItem()` — The currently active (selected) conversation
+- `itemName(locator)` — Get name text of a conversation item
+- `createButton()` — The "+" create conversation button
+- `cloneButton(itemLocator)` — Clone button (visible on hover)
+- `renameButton(itemLocator)` — Rename button (visible on hover)
+- `deleteButton(itemLocator)` — Delete button (visible on hover)
+- `dragHandle(itemLocator)` — Drag handle for reordering (⠿ icon)
+- `liveRegion()` — ARIA live region for reorder announcements
+- `count()` — Count of conversations
+- `activeConversationName()` — Name of the active conversation
+- `expectCount(count)` — Assert a specific number of conversations
+
+### `ToolsComponent`
+
+Handles tool selection, custom tool creation, and profile management. (Note: Currently integrated via SettingsPage in most tests).
+
+**Methods:**
+
+- `expectCoreUi()` — Assert tools list and prompt area exist
+- `toolItem(name)` — Locate specific tool item
+- `toggleTool(name, enabled)` — Toggle tool checkbox
+- `savePrompt(text)` — Update system prompt override
 
 ### `FileBrowserComponent`
 
@@ -254,7 +299,25 @@ Task scheduler controller.
 - `allButtons()`, `textInputs()`, `toggles()` — Locator helpers
 - `taskLikeElements()` — Query task-related DOM nodes
 
-## Shared Utilities (`shared/index.mjs`)
+### `SettingsPage`
+
+Settings panel controller.
+
+**Methods:**
+
+- `open()` — Navigate to settings page
+- `llm()` — LLM settings sub-component locator
+- `maxIterationsInput()` — Max iterations number input
+- `saveMaxIterationsButton()` — Save max iterations button
+- `streamingToggle()` — Streaming toggle checkbox
+- `providerSelect()` — Provider select dropdown
+- `modelSelect()` — Model select dropdown
+- `apiKeyInput()` — API key input
+- `saveApiKeyButton()` — Save API key button
+- `assistantNameInput()` — Assistant name input
+- `saveAssistantNameButton()` — Save assistant name button
+
+## Shared Utilities (`shared/index.ts`)
 
 ### Constants
 
@@ -284,6 +347,7 @@ export const TIME_MINUTES_ONE = 60000;
 - For mode-gated controls (for example VM sync buttons), assert hidden/visible state based on runtime VM mode
 - Feature-gate tests that rely on browser-specific APIs (OPFS, IndexedDB)
 - Feature-gate Prompt API flows when `LanguageModel` is unavailable in the browser build
+- Isolate the application's runtime environment from the Service Worker in tests to prevent intermittent failures caused by background reloads or "controlling" state changes.
 - For Prompt API UI checks, assert API-key input disablement and provider helper text in Settings
 
 ### ❌ DON'T
@@ -301,7 +365,7 @@ export const TIME_MINUTES_ONE = 60000;
 npm run e2e
 
 # Run specific test file
-npm run e2e -- chat.test.mjs
+npm run e2e -- chat.test.ts
 
 # Run with UI mode (interactive debugging)
 npm run e2e -- --ui
@@ -358,7 +422,7 @@ to storage feature gates.
 
 ## Storage Tests (Feature-Gated)
 
-Storage integration tests (`storage.test.mjs`) are **feature-gated** at runtime:
+Storage integration tests (`storage.test.ts`) are **feature-gated** at runtime:
 
 - Tests skip if `indexedDB` or `navigator.storage` are unavailable
 - This is intentional — not all browsers/contexts support OPFS
@@ -374,21 +438,21 @@ Storage integration tests (`storage.test.mjs`) are **feature-gated** at runtime:
 
 ### Adding a New Page
 
-1. Create page object in `pages/<name>.page.mjs`
-2. Add fixture to `fixtures.mjs`
-3. Create test suite `<name>.test.mjs`
+1. Create page object in `pages/<name>.page.ts`
+2. Add fixture to `fixtures.ts`
+3. Create test suite `<name>.test.ts`
 4. Document selectors and methods in this README
 
 ### Adding a New Component
 
-1. Create component in `components/<name>.component.mjs`
+1. Create component in `components/<name>.component.ts`
 2. Import and instantiate in relevant page object
 3. Expose component methods via page object (optional)
 4. Document in this README
 
 ### Extending Fixtures
 
-Edit `fixtures.mjs`:
+Edit `fixtures.ts`:
 
 ```js
 export const test = base.extend({

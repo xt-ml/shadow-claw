@@ -1,0 +1,84 @@
+<template>
+  <div class="resize-handle" title="Drag to resize"></div>
+  <div class="conversations-header">
+    <span>Conversations</span>
+
+    <button class="create-btn" data-action="create" title="New Conversation">
+      +
+    </button>
+  </div>
+  <span class="sr-only" id="reorder-instructions">
+    Press Space to grab. Use Arrow Up and Down to move. Press Space or Enter to
+    drop. Press Escape to cancel.
+  </span>
+  <div
+    aria-live="assertive"
+    class="sr-only"
+    id="live-region"
+    role="status"
+  ></div>
+
+  <ul class="conversation-list" role="list"></ul>
+
+  <dialog
+    aria-label="Create new conversation"
+    class="conversations__dialog conversations__create-dialog"
+  >
+    <form class="conversations__form" method="dialog">
+      <label class="conversations__label" for="conversations-create-name">
+        Conversation name
+      </label>
+      <input
+        autocomplete="off"
+        class="conversations__input"
+        id="conversations-create-name"
+        name="conversations-create-name"
+        required
+        type="text"
+      />
+      <div class="conversations__actions">
+        <button class="conversations__cancel" type="button">Cancel</button>
+        <button class="conversations__ok" type="submit">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog
+    aria-label="Rename conversation"
+    class="conversations__dialog conversations__rename-dialog"
+  >
+    <form class="conversations__form" method="dialog">
+      <label class="conversations__label" for="conversations-rename-name">
+        Rename conversation
+      </label>
+      <input
+        autocomplete="off"
+        class="conversations__input"
+        id="conversations-rename-name"
+        name="conversations-rename-name"
+        required
+        type="text"
+      />
+      <div class="conversations__actions">
+        <button class="conversations__cancel" type="button">Cancel</button>
+        <button class="conversations__ok" type="submit">OK</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog
+    aria-label="Delete conversation"
+    class="conversations__dialog conversations__delete-dialog"
+  >
+    <form class="conversations__form" method="dialog">
+      <p class="conversations__delete-message">
+        Delete conversation "<span class="conversations__delete-name"></span>"?
+        This cannot be undone.
+      </p>
+      <div class="conversations__actions">
+        <button class="conversations__cancel" type="button">Cancel</button>
+        <button class="conversations__delete-ok" type="submit">Delete</button>
+      </div>
+    </form>
+  </dialog>
+</template>

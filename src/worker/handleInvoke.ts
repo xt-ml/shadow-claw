@@ -53,6 +53,7 @@ export async function handleInvoke(
     isScheduledTask = false,
     contextCompression = false,
     contextLimit: payloadContextLimit,
+    providerHeaders = {},
   } = payload;
 
   const tools =
@@ -143,7 +144,10 @@ export async function handleInvoke(
         `${payloadMessages.length} messages in context`,
       );
 
-      const headers = buildHeaders(typedProvider, apiKey);
+      const headers = {
+        ...buildHeaders(typedProvider, apiKey),
+        ...providerHeaders,
+      };
 
       let result: any;
 

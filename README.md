@@ -13,6 +13,8 @@ npm install
 npm start        # Express server → http://localhost:8888
 ```
 
+`npm start` performs a full Rollup build and then serves `dist/server.js`.
+
 Open Settings, select a provider, and start chatting.
 
 ### Electron Desktop App
@@ -171,6 +173,7 @@ automatically support them.
 | `src/worker/handleMessage.ts` | Worker message dispatcher — handles terminal RPC and VM lifecycle            |
 | `src/types.ts`                | TypeScript interfaces and types (full type contract)                         |
 | `src/config.ts`               | All constants, provider definitions, and config keys                         |
+| `rollup.config.mjs`           | Bundles browser app, workers, service worker, server, and Electron entries   |
 | `src/server/server.ts`        | Express dev/prod server source. Compiles to `dist/server.js`.                |
 | `src/shell/shell.ts`          | Runs `just-bash` AST-based shell evaluation engine bridging OPFS storage     |
 | `electron/main.ts`            | Electron main process: Express server, window, power-save blocker            |
@@ -184,31 +187,33 @@ automatically support them.
 
 ## Tools Available to the Agent
 
-| Tool                                                             | What it does                                                                          |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `javascript`                                                     | Run JS in a sandboxed strict-mode Worker — no DOM, network, `eval`, or `Function`.    |
-|                                                                  | Code **must** use `return` to produce output                                          |
-| `read_file` / `write_file` / `patch_file` / `list_files`         | OPFS workspace file I/O — `read_file` supports a `paths` array to batch-read multiple |
-|                                                                  | files in one call; `patch_file` for targeted search-and-replace edits in large files  |
-|                                                                  | (preferred over bash/sed)                                                             |
-| `open_file`                                                      | Opens a workspace file directly in the UI file viewer dialog                          |
-| `fetch_url`                                                      | HTTP requests via browser `fetch()` — CORS applies; `use_git_auth: true` auto-injects |
-|                                                                  | saved Git credentials (auth format auto-detected per host); login-page responses from |
-|                                                                  | Git hosts are detected and flagged; response headers are captured and returned.       |
-| `update_memory`                                                  | Write to `MEMORY.md` — loaded as system context every invocation                      |
-| `create_task` / `list_tasks` / `update_task` / `delete_task`     | Scheduled task management (can be JS scripts)                                         |
-| `enable_task` / `disable_task`                                   | Toggle task execution                                                                 |
-| `clear_chat`                                                     | Clears the chat history and starts a new session                                      |
-| `git_*` (`git_clone`, `git_merge`, `git_push`, `git_diff`, etc.) | Isomorphic-git version control: clone (auto-wipes stale state), branch, merge (with   |
-|                                                                  | inline conflict reports), diff (unified-style content diffs), reset, push (with       |
-|                                                                  | `remote_ref`), pull, delete repo                                                      |
-| `show_toast`                                                     | Agent-triggered UI toast notifications                                                |
-| `send_notification`                                              | OS-level Web Push notification (works even when app is in background)                 |
-| `bash`                                                           | Shell commands prefer worker-owned WebVM, falling back to `just-bash` AST emulator.   |
-|                                                                  | Supports POSIX standards, loops, redirects, string manipulations, and commands like   |
-|                                                                  | `grep`, `sed`, `awk`, `cat`, etc., fully synced to OPFS workspace storage.            |
-| `remote_mcp_*`                                                   | Remote MCP integration tools (`remote_mcp_list_tools`, `remote_mcp_call_tool`) to     |
-|                                                                  | dynamically discover and execute tools from configured external MCP servers.          |
+| Tool                                                             | What it does                                                                           |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `javascript`                                                     | Run JS in a sandboxed strict-mode Worker — no DOM, network, `eval`, or `Function`.     |
+|                                                                  | Code **must** use `return` to produce output                                           |
+| `read_file` / `write_file` / `patch_file` / `list_files`         | OPFS workspace file I/O — `read_file` supports a `paths` array to batch-read multiple  |
+|                                                                  | files in one call; `patch_file` for targeted search-and-replace edits in large files   |
+|                                                                  | (preferred over bash/sed)                                                              |
+| `attach_file_to_chat`                                            | Validates a workspace file path and returns exact markdown snippet for chat attachment |
+|                                                                  | delivery (including inline image rendering support)                                    |
+| `open_file`                                                      | Opens a workspace file directly in the UI file viewer dialog                           |
+| `fetch_url`                                                      | HTTP requests via browser `fetch()` — CORS applies; `use_git_auth: true` auto-injects  |
+|                                                                  | saved Git credentials (auth format auto-detected per host); login-page responses from  |
+|                                                                  | Git hosts are detected and flagged; response headers are captured and returned.        |
+| `update_memory`                                                  | Write to `MEMORY.md` — loaded as system context every invocation                       |
+| `create_task` / `list_tasks` / `update_task` / `delete_task`     | Scheduled task management (can be JS scripts)                                          |
+| `enable_task` / `disable_task`                                   | Toggle task execution                                                                  |
+| `clear_chat`                                                     | Clears the chat history and starts a new session                                       |
+| `git_*` (`git_clone`, `git_merge`, `git_push`, `git_diff`, etc.) | Isomorphic-git version control: clone (auto-wipes stale state), branch, merge (with    |
+|                                                                  | inline conflict reports), diff (unified-style content diffs), reset, push (with        |
+|                                                                  | `remote_ref`), pull, delete repo                                                       |
+| `show_toast`                                                     | Agent-triggered UI toast notifications                                                 |
+| `send_notification`                                              | OS-level Web Push notification (works even when app is in background)                  |
+| `bash`                                                           | Shell commands prefer worker-owned WebVM, falling back to `just-bash` AST emulator.    |
+|                                                                  | Supports POSIX standards, loops, redirects, string manipulations, and commands like    |
+|                                                                  | `grep`, `sed`, `awk`, `cat`, etc., fully synced to OPFS workspace storage.             |
+| `remote_mcp_*`                                                   | Remote MCP integration tools (`remote_mcp_list_tools`, `remote_mcp_call_tool`) to      |
+|                                                                  | dynamically discover and execute tools from configured external MCP servers.           |
 
 When the browser WebMCP API is available (`navigator.modelContext`), these
 tools can also be registered through `src/webmcp.ts` so browser-side model

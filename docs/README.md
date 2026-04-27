@@ -65,7 +65,11 @@ The _why_ behind key choices.
 
 **Building ShadowClaw?** Start with the [System Overview](architecture/overview.md), then dive into whatever subsystem you're touching.
 
+**Changing build/runtime behavior?** Cross-check the architecture docs with root-level [README](../README.md) so scripts, output paths, and runtime topology stay aligned.
+
 **Adding a feature?** Check the [Guides](#guides) section for step-by-step instructions.
+
+**Working on E2E coverage?** Use the test architecture guide in [e2e/README.md](../e2e/README.md) for fixtures, page objects, and interaction patterns.
 
 **Wondering why something is the way it is?** The [Decisions](#decisions) section has you covered.
 
@@ -77,4 +81,5 @@ The _why_ behind key choices.
 - Architecture docs describe _what is_ and _how it works_.
 - Guides describe _how to do things_.
 - Decision docs describe _why decisions were made_ and are append-only (supersede, don't edit).
+- Keep references in this index in sync with actual files under `docs/`, plus root-level `README.md` and `e2e/README.md` when behavior changes cross boundaries.
 - Use Mermaid diagrams generously — they render on GitHub and in most editors.

@@ -576,6 +576,59 @@ describe("executeTool.js", () => {
     );
   });
 
+  it("should prepare image markdown via attach_file_to_chat", async () => {
+    (mockReadGroupFile as any).mockResolvedValue("binary-content-placeholder");
+
+    const result = await executeTool(
+      {},
+      "attach_file_to_chat",
+      { path: "/assets/key-images/TheLamb-NT-Jesus.png", alt: "The Lamb" },
+      "group1",
+    );
+
+    expect(mockReadGroupFile).toHaveBeenCalledWith(
+      {} as any,
+      "group1",
+      "assets/key-images/TheLamb-NT-Jesus.png",
+    );
+    expect(result).toContain(
+      "![The Lamb](assets/key-images/TheLamb-NT-Jesus.png)",
+    );
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "intermediate-response",
+      payload: {
+        groupId: "group1",
+        text: "![The Lamb](assets/key-images/TheLamb-NT-Jesus.png)",
+      },
+    });
+  });
+
+  it("should validate attach_file_to_chat path", async () => {
+    const result = await executeTool(
+      {} as any,
+      "attach_file_to_chat",
+      {},
+      "group1",
+    );
+
+    expect(result).toBe(
+      "Error: attach_file_to_chat requires a valid path string.",
+    );
+  });
+
+  it("should reject traversal in attach_file_to_chat path", async () => {
+    const result = await executeTool(
+      {} as any,
+      "attach_file_to_chat",
+      { path: "../secret.png" },
+      "group1",
+    );
+
+    expect(result).toBe(
+      "Error: attach_file_to_chat path cannot contain '..' segments.",
+    );
+  });
+
   it("should handle write_file tool", async () => {
     const result = await executeTool(
       {},

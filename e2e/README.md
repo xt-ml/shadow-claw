@@ -17,13 +17,12 @@ e2e/
 │   ├── chat.page.ts   # Chat interface
 │   ├── files.page.ts  # Files browser
 │   ├── tasks.page.ts  # Task scheduler
-│   ├── tools.page.ts  # Tool management and profiles
 │   └── settings.page.ts  # Settings panel
 ├── shared/             # Low-level utilities and helpers
 │   └── index.ts       # DB helpers, constants, wait functions
 ├── fixtures.ts        # Shared test fixtures (app, chat, files, tasks, settings, conversations)
 ├── *.test.ts          # Test suites
-│   └── conversations.test.ts  # Conversation CRUD (create, rename, switch, delete, clone, reorder)
+│   └── conversations.test.ts  # Conversation CRUD (create, rename, switch, delete)
 │   └── settings.test.ts       # Settings persistence (max iterations, streaming, assistant name)
 │   └── streaming-chat.test.ts # Chat flow with mock SSE streaming + non-streaming
 │   └── task-crud.test.ts       # Task CRUD (create, edit, toggle, delete)
@@ -183,11 +182,7 @@ Provides backup/restore/compact/clear operations.
 
 ### `ConversationsComponent`
 
-Manages the sidebar conversation list CRUD operations. The list is **resizable**
-via a drag handle at the bottom and fills all available sidebar space by default;
-double-clicking the handle resets to auto-fill. The resize preference is persisted.
-Conversations with **unread messages** display a pulsing highlight animation
-(`.unread` CSS class); the indicator clears when the conversation is selected.
+Manages sidebar conversation CRUD operations.
 
 **Methods:**
 
@@ -197,25 +192,23 @@ Conversations with **unread messages** display a pulsing highlight animation
 - `activeItem()` — The currently active (selected) conversation
 - `itemName(locator)` — Get name text of a conversation item
 - `createButton()` — The "+" create conversation button
-- `cloneButton(itemLocator)` — Clone button (visible on hover)
+- `createDialog()` — Create conversation dialog
+- `createInput()` — Create dialog input field
+- `createOkButton()` — Create dialog confirm button
 - `renameButton(itemLocator)` — Rename button (visible on hover)
+- `renameDialog()` — Rename dialog
+- `renameInput()` — Rename dialog input field
+- `renameOkButton()` — Rename dialog confirm button
 - `deleteButton(itemLocator)` — Delete button (visible on hover)
-- `dragHandle(itemLocator)` — Drag handle for reordering (⠿ icon)
-- `liveRegion()` — ARIA live region for reorder announcements
+- `deleteDialog()` — Delete confirm dialog
+- `deleteOkButton()` — Delete confirm button
+- `deleteCancelButton()` — Delete cancel button
 - `count()` — Count of conversations
 - `activeConversationName()` — Name of the active conversation
 - `expectCount(count)` — Assert a specific number of conversations
-
-### `ToolsComponent`
-
-Handles tool selection, custom tool creation, and profile management. (Note: Currently integrated via SettingsPage in most tests).
-
-**Methods:**
-
-- `expectCoreUi()` — Assert tools list and prompt area exist
-- `toolItem(name)` — Locate specific tool item
-- `toggleTool(name, enabled)` — Toggle tool checkbox
-- `savePrompt(text)` — Update system prompt override
+- `createConversation(name)` — Create a conversation via the create dialog
+- `renameConversation(itemLocator, name)` — Rename an existing conversation
+- `deleteConversation(itemLocator, confirmDelete)` — Delete or cancel delete
 
 ### `FileBrowserComponent`
 

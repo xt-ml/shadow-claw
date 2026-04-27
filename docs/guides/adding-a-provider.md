@@ -48,21 +48,14 @@ my_provider: {
 
 Only set this if the provider explicitly advertises compaction support (e.g., Claude API via Anthropic).
 
-## Step 2 — Add a config key for the API key (if needed)
+## Step 2 — API key storage (if needed)
 
-If your provider needs its own API key (not shared with an existing one), add a config key:
+Provider API keys are stored generically by provider id using
+`getProviderApiKeyConfigKey(providerId)`, which resolves to `api_key:<providerId>`.
 
-```ts
-// In src/config.ts, under CONFIG_KEYS:
-MY_PROVIDER_API_KEY: "my_provider_api_key",
-```
+No extra `CONFIG_KEYS` entry is required for standard provider API keys.
 
-Then add the key lookup in `getProviderApiKeyConfigKey(providerId)`:
-
-```ts
-case "my_provider":
-  return CONFIG_KEYS.MY_PROVIDER_API_KEY;
-```
+If `requiresApiKey: true`, Settings and orchestrator gating use this storage path automatically.
 
 ## Step 3 — Add model context limits (optional)
 
@@ -80,6 +73,9 @@ The function uses a **fallback chain**:
 1. **Model registry** (`src/model-registry.ts`) — dynamic metadata if available
 2. **Pattern matching** — model name matching against known families
 3. **Fallback** — defaults to 4,096 tokens if no match
+
+When adding multiple model patterns, put more specific patterns before broader
+ones so family-level matches do not hide model-specific limits.
 
 ## Step 4 — Add model fetching (optional)
 
@@ -159,7 +155,7 @@ describe("my_provider", () => {
 });
 ```
 
-## Step 6 — Type-check
+## Step 7 — Type-check
 
 ```bash
 npm run tsc

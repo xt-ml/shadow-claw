@@ -1056,16 +1056,38 @@ export async function handleStreamingProxyRequest(
 const BEDROCK_REGION = env.BEDROCK_REGION || "";
 const BEDROCK_PROFILE = env.BEDROCK_PROFILE || "";
 
-function createBedrockCredentials() {
-  return fromSSO({ profile: BEDROCK_PROFILE });
+function getBedrockRuntimeOptions(req: Request): {
+  region: string;
+  profile: string;
+} {
+  const region =
+    BEDROCK_REGION ||
+    getFirstHeaderValue(req.headers["x-bedrock-region"])?.trim() ||
+    "";
+  const profile =
+    BEDROCK_PROFILE ||
+    getFirstHeaderValue(req.headers["x-bedrock-profile"])?.trim() ||
+    "";
+
+  return { region, profile };
 }
 
-function toInferenceProfileId(modelId: string): string {
+function createBedrockCredentials(profile: string) {
+  return fromSSO({ profile });
+}
+
+function toInferenceProfileId(modelId: string, region: string): string {
   if (/^[a-z]{2}\.anthropic\./.test(modelId)) {
     return modelId;
   }
 
-  const regionPrefix = BEDROCK_REGION.split("-")[0];
+  const regionPrefix = region.split("-")[0];
+
+  if (!regionPrefix) {
+    throw new Error(
+      "Bedrock region is not configured. Set BEDROCK_REGION or provide x-bedrock-region header.",
+    );
+  }
 
   return `${regionPrefix}.${modelId}`;
 }
@@ -1452,11 +1474,19 @@ export function registerProxyRoutes(
   app.get("/github-models-proxy/catalog/models", handleGitHubModelsCatalog);
 
   // ---- Bedrock: list models ----
-  app.get("/bedrock-proxy/models", async (_req, res) => {
+  app.get("/bedrock-proxy/models", async (req, res) => {
     try {
+      const runtime = getBedrockRuntimeOptions(req);
+      if (!runtime.region || !runtime.profile) {
+        return res.status(400).json({
+          error:
+            "Bedrock is not configured. Set BEDROCK_REGION and BEDROCK_PROFILE environment variables or provide Bedrock fallback settings in the UI.",
+        });
+      }
+
       const client = new BedrockClient({
-        region: BEDROCK_REGION,
-        credentials: createBedrockCredentials(),
+        region: runtime.region,
+        credentials: createBedrockCredentials(runtime.profile),
       });
 
       // Fetch Foundation Models
@@ -1508,6 +1538,14 @@ export function registerProxyRoutes(
   // ---- Bedrock: invoke model ----
   app.post("/bedrock-proxy/invoke", async (req, res) => {
     try {
+      const runtime = getBedrockRuntimeOptions(req);
+      if (!runtime.region || !runtime.profile) {
+        return res.status(400).json({
+          error:
+            "Bedrock is not configured. Set BEDROCK_REGION and BEDROCK_PROFILE environment variables or provide Bedrock fallback settings in the UI.",
+        });
+      }
+
       const body = req.body;
       if (!body || typeof body !== "object") {
         return res.status(400).json({ error: "Missing request body" });
@@ -1524,7 +1562,7 @@ export function registerProxyRoutes(
         });
       }
 
-      const modelId = toInferenceProfileId(rawModelId);
+      const modelId = toInferenceProfileId(rawModelId, runtime.region);
       const wantsStreaming = body.stream === true;
 
       // Strip fields not accepted by Bedrock (model, stream)
@@ -1534,8 +1572,8 @@ export function registerProxyRoutes(
       }
 
       const client = new BedrockRuntimeClient({
-        region: BEDROCK_REGION,
-        credentials: createBedrockCredentials(),
+        region: runtime.region,
+        credentials: createBedrockCredentials(runtime.profile),
       });
 
       if (wantsStreaming) {

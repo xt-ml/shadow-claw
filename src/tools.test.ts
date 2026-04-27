@@ -21,6 +21,8 @@ describe("TOOL_DEFINITIONS", () => {
 
     expect(names.has("open_file")).toBe(true);
 
+    expect(names.has("attach_file_to_chat")).toBe(true);
+
     expect(names.has("write_file")).toBe(true);
 
     expect(names.has("patch_file")).toBe(true);

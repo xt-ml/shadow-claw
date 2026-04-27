@@ -230,6 +230,29 @@ class HttpError extends Error {
   }
 }
 
+function normalizeWorkspacePath(inputPath: string): string {
+  return inputPath
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/^\.\//, "");
+}
+
+function hasPathTraversal(path: string): boolean {
+  return path
+    .split("/")
+    .filter(Boolean)
+    .some((part) => part === "..");
+}
+
+function escapeMarkdownLabel(label: string): string {
+  return label.replace(/[\[\]\\]/g, "\\$&");
+}
+
+function isImagePath(path: string): boolean {
+  return /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(path);
+}
+
 /**
  * Execute a tool
  */
@@ -361,6 +384,52 @@ export async function executeTool(
         return `Opening file in viewer: ${input.path}`;
       }
 
+      case "attach_file_to_chat": {
+        if (!input.path || typeof input.path !== "string") {
+          return "Error: attach_file_to_chat requires a valid path string.";
+        }
+
+        const normalizedPath = normalizeWorkspacePath(input.path);
+        if (!normalizedPath) {
+          return "Error: attach_file_to_chat received an empty file path.";
+        }
+
+        if (hasPathTraversal(normalizedPath)) {
+          return "Error: attach_file_to_chat path cannot contain '..' segments.";
+        }
+
+        try {
+          // Verify the file exists in the current group workspace.
+          await readGroupFile(db, groupId, normalizedPath);
+        } catch (err: any) {
+          return `Error: attach_file_to_chat could not find ${normalizedPath}: ${err?.message || String(err)}`;
+        }
+
+        const defaultLabel = normalizedPath.split("/").pop() || normalizedPath;
+        const labelInput =
+          typeof input.alt === "string" && input.alt.trim()
+            ? input.alt.trim()
+            : defaultLabel;
+        const label = escapeMarkdownLabel(labelInput);
+
+        const markdown = isImagePath(normalizedPath)
+          ? `![${label}](${normalizedPath})`
+          : `[${label}](${normalizedPath})`;
+
+        // Emit the attachment markdown immediately so it is persisted/rendered
+        // even if the model forgets to include it in its final response.
+        post({
+          type: "intermediate-response",
+          payload: { groupId, text: markdown },
+        });
+
+        return (
+          `Attachment prepared: ${normalizedPath}\n` +
+          "Attachment markdown has been emitted to chat. If needed, reuse this exact markdown:\n" +
+          markdown
+        );
+      }
+
       case "write_file":
         await writeGroupFile(db, groupId, input.path, input.content);
 
@@ -487,7 +556,10 @@ export async function executeTool(
                     headerInfo += "\n";
                   }
 
-                  const successMsg = `Successfully downloaded binary file (${blob.size} bytes) to workspace path: ${savePath}\n\nTo display this file to the user, output a Markdown image or link in your response exactly like this:\n![Attachment](${savePath})`;
+                  const markdownSnippet = contentType.includes("image/")
+                    ? `![Attachment](${savePath})`
+                    : `[Attachment](${savePath})`;
+                  const successMsg = `Successfully downloaded binary file (${blob.size} bytes) to workspace path: ${savePath}\n\nTo display this file to the user, output this Markdown in your response:\n${markdownSnippet}`;
 
                   return {
                     status: statusLine,

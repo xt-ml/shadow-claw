@@ -29,13 +29,37 @@ export const open_file: ToolDefinition = {
   name: "open_file",
   description:
     "Open a file from the group workspace in the UI file viewer dialog. " +
-    "Use this when the user asks to inspect a file visually with preview support.",
+    "Use this only when the user explicitly asks to inspect a file visually with preview support. " +
+    "Do not use this tool to send or attach files in chat responses.",
   input_schema: {
     type: "object",
     properties: {
       path: {
         type: "string",
         description: "File path relative to the group workspace root",
+      },
+    },
+    required: ["path"],
+  },
+};
+
+export const attach_file_to_chat: ToolDefinition = {
+  name: "attach_file_to_chat",
+  description:
+    "Prepare a workspace file for chat delivery by generating an exact markdown attachment snippet. " +
+    "Validates the file path and returns markdown that works for inline image rendering in ShadowClaw " +
+    "and attachment upload in external channels like Telegram/iMessage.",
+  input_schema: {
+    type: "object",
+    properties: {
+      path: {
+        type: "string",
+        description: "File path relative to the group workspace root",
+      },
+      alt: {
+        type: "string",
+        description:
+          "Optional alt/caption text to use in the generated markdown",
       },
     },
     required: ["path"],

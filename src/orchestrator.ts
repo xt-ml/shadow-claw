@@ -29,7 +29,10 @@ import { playNotificationChime } from "./audio.js";
 import { decryptValue, encryptValue } from "./crypto.js";
 import { effect } from "./effect.js";
 import { modelRegistry } from "./model-registry.js";
-import { persistMessageAttachments } from "./message-attachments.js";
+import {
+  inferAttachmentMimeType,
+  persistMessageAttachments,
+} from "./message-attachments.js";
 import { getContextLimit } from "./providers.js";
 import { Router } from "./router.js";
 import { TaskScheduler } from "./task-scheduler.js";
@@ -130,6 +133,8 @@ export class Orchestrator {
   apiKey: string | null = null;
   assistantName: string = ASSISTANT_NAME;
   browserChat: BrowserChatChannel = new BrowserChatChannel();
+  bedrockRegionFallback: string = "";
+  bedrockProfileFallback: string = "";
   channelRegistry: ChannelRegistry = new ChannelRegistry();
   contextCompressionEnabled: boolean = false;
   channelEnabledByType: Record<string, boolean> = {
@@ -274,6 +279,13 @@ export class Orchestrator {
     if (storedLlamafileOffline === "false") {
       this.llamafileOffline = false;
     }
+
+    this.bedrockRegionFallback = (
+      (await getConfig(db, CONFIG_KEYS.BEDROCK_REGION_FALLBACK)) || ""
+    ).trim();
+    this.bedrockProfileFallback = (
+      (await getConfig(db, CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK)) || ""
+    ).trim();
 
     this.applyLlamafileHeaders();
 
@@ -1105,10 +1117,66 @@ export class Orchestrator {
         model: this.model,
         provider: this.provider,
         storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
+        providerHeaders: this.getProviderRuntimeHeaders(this.provider),
         contextCompression: this.contextCompressionEnabled,
         contextLimit: getContextLimit(this.model),
       },
     });
+  }
+
+  getBedrockSettings(): {
+    region: string;
+    profile: string;
+  } {
+    return {
+      region: this.bedrockRegionFallback,
+      profile: this.bedrockProfileFallback,
+    };
+  }
+
+  async setBedrockSettings(
+    db: ShadowClawDatabase,
+    settings: {
+      region: string;
+      profile: string;
+    },
+  ): Promise<void> {
+    const region =
+      typeof settings.region === "string" ? settings.region.trim() : "";
+    const profile =
+      typeof settings.profile === "string" ? settings.profile.trim() : "";
+
+    this.bedrockRegionFallback = region;
+    this.bedrockProfileFallback = profile;
+
+    await setConfig(db, CONFIG_KEYS.BEDROCK_REGION_FALLBACK, region);
+    await setConfig(db, CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK, profile);
+  }
+
+  getProviderRuntimeHeaders(providerId: string): Record<string, string> {
+    if (providerId === "llamafile") {
+      return {
+        "x-llamafile-mode": this.llamafileMode,
+        "x-llamafile-host": this.llamafileHost,
+        "x-llamafile-port": String(this.llamafilePort),
+        "x-llamafile-offline": this.llamafileOffline ? "true" : "false",
+      };
+    }
+
+    if (providerId === "bedrock_proxy") {
+      const headers: Record<string, string> = {};
+      if (this.bedrockRegionFallback) {
+        headers["x-bedrock-region"] = this.bedrockRegionFallback;
+      }
+
+      if (this.bedrockProfileFallback) {
+        headers["x-bedrock-profile"] = this.bedrockProfileFallback;
+      }
+
+      return headers;
+    }
+
+    return {};
   }
 
   stopCurrentRequest(groupId = DEFAULT_GROUP_ID): void {
@@ -1403,34 +1471,30 @@ export class Orchestrator {
     this.telegramChatIds = telegramChatIds;
     this.telegramUseProxy = telegramUseProxy;
     this.telegram.configure(telegramToken, telegramChatIds, telegramUseProxy);
-    this.telegram.fileReader = async (groupId: string, path: string) => {
+    const readWorkspaceFileAsBlob = async (
+      groupId: string,
+      path: string,
+    ): Promise<Blob | null> => {
       try {
         const bytes = await readGroupFileBytes(db, groupId, path);
         const blobBytes = new Uint8Array(bytes.byteLength);
         blobBytes.set(bytes);
 
-        let mimeType = "image/png";
-        const lowerSrc = path.toLowerCase();
-        if (lowerSrc.endsWith(".jpg") || lowerSrc.endsWith(".jpeg")) {
-          mimeType = "image/jpeg";
-        } else if (lowerSrc.endsWith(".gif")) {
-          mimeType = "image/gif";
-        } else if (lowerSrc.endsWith(".webp")) {
-          mimeType = "image/webp";
-        } else if (lowerSrc.endsWith(".svg")) {
-          mimeType = "image/svg+xml";
-        }
+        const fileName = path.split("/").pop() || path;
+        const mimeType = inferAttachmentMimeType(fileName);
 
         return new Blob([blobBytes], { type: mimeType });
       } catch (err) {
         console.warn(
-          `Orchestrator: Telegram fileReader failed for ${path}:`,
+          `Orchestrator: channel fileReader failed for ${path}:`,
           err,
         );
 
         return null;
       }
     };
+    this.telegram.fileReader = readWorkspaceFileAsBlob;
+    this.imessage.fileReader = readWorkspaceFileAsBlob;
 
     const imessageServerUrl = (
       (await getConfig(db, CONFIG_KEYS.IMESSAGE_SERVER_URL)) || ""
@@ -1879,6 +1943,7 @@ export class Orchestrator {
         provider: this.provider,
         storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
         enabledTools: activeTools,
+        providerHeaders: this.getProviderRuntimeHeaders(this.provider),
         streaming: shouldStream,
         contextCompression: this.contextCompressionEnabled,
         contextLimit: getContextLimit(this.model),
@@ -2396,7 +2461,9 @@ export function buildSystemPrompt(
     "- Use read_file with paths (array) to batch-read multiple files in one call — minimizes API round-trips.",
     "- Prefer write_file over bash for writing files.",
     "- Use patch_file for targeted edits in existing files — it finds and replaces a single unique text match, works reliably with large files, and avoids the pitfalls of sed or heredocs. Include 2-3 lines of surrounding context to ensure a unique match.",
-    "- Use javascript for data analysis, string processing, and computations — not bash.",
+    "- When sharing workspace images or files in chat, prefer attach_file_to_chat first. It validates the path and returns exact markdown references to the file path (for example: ![alt](path/to/image.png) or [report.pdf](path/to/report.pdf)) so ShadowClaw can inline and external channels can attach reliably.",
+    "- Do not use open_file to attach or send files in chat. Use open_file only when the user explicitly asks to open/view a file in the ShadowClaw file viewer.",
+    "- Prefer javascript usage for data analysis, string processing, and computations over bash.",
     "- Shell commands may fail if WebVM is unavailable. When a bash command fails with 'command not found', do NOT retry — use read_file, write_file, or javascript instead.",
     "- Analyze code by reading files and reasoning, not by running syntax checkers in bash.",
     "- Minimize API calls: gather context with a few read_file calls, think carefully, then act.",

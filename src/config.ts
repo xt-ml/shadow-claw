@@ -829,6 +829,8 @@ export const CONFIG_KEYS = {
   LLAMAFILE_HOST: "llamafile_host",
   LLAMAFILE_PORT: "llamafile_port",
   LLAMAFILE_OFFLINE: "llamafile_offline",
+  BEDROCK_REGION_FALLBACK: "bedrock_region_fallback",
+  BEDROCK_PROFILE_FALLBACK: "bedrock_profile_fallback",
   LAST_ACTIVE_PAGE: "last_active_page",
 };
 

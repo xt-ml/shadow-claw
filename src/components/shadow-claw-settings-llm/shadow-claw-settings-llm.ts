@@ -224,6 +224,10 @@ export class ShadowClawSettingsLlm extends ShadowClawElement {
       ?.addEventListener("click", () => this.saveLlamafileSettings());
 
     root
+      .querySelector('[data-action="save-bedrock-settings"]')
+      ?.addEventListener("click", () => this.saveBedrockSettings());
+
+    root
       .querySelector('[data-setting="llamafile-mode"]')
       ?.addEventListener("change", () => {
         this.updateLlamafileModeVisibility();
@@ -268,6 +272,8 @@ export class ShadowClawSettingsLlm extends ShadowClawElement {
     this.renderLlamafileSettings();
     this.updateLlamafileModeVisibility();
     this.updateLlamafileModelSectionVisibility();
+    this.updateBedrockSettingsVisibility(currentProvider);
+    this.renderBedrockSettings();
 
     // Load assistant name
     const nameInput = root.querySelector(
@@ -659,6 +665,15 @@ export class ShadowClawSettingsLlm extends ShadowClawElement {
             ? "true"
             : "false";
         }
+      } else if (currentProvider === "bedrock_proxy") {
+        const bedrockSettings = this.orchestrator.getBedrockSettings?.();
+        if (bedrockSettings?.region) {
+          headers["x-bedrock-region"] = bedrockSettings.region;
+        }
+
+        if (bedrockSettings?.profile) {
+          headers["x-bedrock-profile"] = bedrockSettings.profile;
+        }
       }
 
       if (this.orchestrator.apiKey && currentProviderData.apiKeyHeader) {
@@ -765,6 +780,50 @@ export class ShadowClawSettingsLlm extends ShadowClawElement {
     }
 
     section.style.display = providerId === "llamafile" ? "block" : "none";
+  }
+
+  updateBedrockSettingsVisibility(providerId: string) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const section = root.querySelector(
+      '[data-setting="bedrock-settings"]',
+    ) as HTMLElement | null;
+    if (!section) {
+      return;
+    }
+
+    section.style.display = providerId === "bedrock_proxy" ? "block" : "none";
+  }
+
+  renderBedrockSettings() {
+    if (!this.orchestrator) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const settings = this.orchestrator.getBedrockSettings?.();
+
+    const regionInput = root.querySelector(
+      '[data-setting="bedrock-region-input"]',
+    ) as HTMLInputElement | null;
+    const profileInput = root.querySelector(
+      '[data-setting="bedrock-profile-input"]',
+    ) as HTMLInputElement | null;
+
+    if (regionInput) {
+      regionInput.value = settings?.region || "";
+    }
+
+    if (profileInput) {
+      profileInput.value = settings?.profile || "";
+    }
   }
 
   updateLlamafileModeVisibility() {
@@ -908,6 +967,8 @@ export class ShadowClawSettingsLlm extends ShadowClawElement {
         this.renderLlamafileSettings();
         this.updateLlamafileModeVisibility();
         this.updateLlamafileModelSectionVisibility();
+        this.updateBedrockSettingsVisibility(providerId);
+        this.renderBedrockSettings();
 
         const selectedText =
           providerSelect.selectedOptions[0]?.text || providerId;
@@ -1327,6 +1388,57 @@ export class ShadowClawSettingsLlm extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving llamafile settings: " + errorMsg, 6000);
+    }
+  }
+
+  async saveBedrockSettings() {
+    if (!this.orchestrator || !this.db) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const regionInput = root.querySelector(
+      '[data-setting="bedrock-region-input"]',
+    ) as HTMLInputElement | null;
+    const profileInput = root.querySelector(
+      '[data-setting="bedrock-profile-input"]',
+    ) as HTMLInputElement | null;
+
+    if (!regionInput || !profileInput) {
+      return;
+    }
+
+    const region = regionInput.value.trim();
+    const profile = profileInput.value.trim();
+
+    if ((region && !profile) || (!region && profile)) {
+      showWarning(
+        "Enter both Bedrock region and profile (or leave both blank to rely on environment variables)",
+        4000,
+      );
+
+      return;
+    }
+
+    if (!this.orchestrator.setBedrockSettings) {
+      showError("Bedrock settings are not available in this build", 5000);
+
+      return;
+    }
+
+    try {
+      await this.orchestrator.setBedrockSettings(this.db, { region, profile });
+      showSuccess("Bedrock fallback settings saved", 3000);
+      if (this.orchestrator.getProvider() === "bedrock_proxy") {
+        this.updateModelSelector();
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving Bedrock fallback settings: " + errorMsg, 6000);
     }
   }
 }

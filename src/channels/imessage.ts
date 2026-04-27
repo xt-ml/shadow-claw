@@ -11,6 +11,11 @@ import {
 
 const IMESSAGE_DEDUP_TTL_MS = 60_000;
 
+export type IMessageFileReader = (
+  groupId: string,
+  path: string,
+) => Promise<Blob | null>;
+
 export class IMessageChannel implements Channel {
   type: Channel["type"] = "imessage";
   serverUrl = "";
@@ -22,6 +27,8 @@ export class IMessageChannel implements Channel {
   running = false;
   reconnectDelayMs = 1000;
   seenMessageIds: Map<string, number> = new Map();
+  fileReader: IMessageFileReader | null = null;
+  apiMode: "unknown" | "beeper-desktop" | "legacy" = "unknown";
 
   configure(serverUrl: string, apiKey: string, chatIds: string[]): void {
     this.serverUrl = normalizeBaseUrl(serverUrl);
@@ -30,6 +37,7 @@ export class IMessageChannel implements Channel {
       chatIds.map((chatId) => chatId.trim()).filter(Boolean),
     );
     this.cursor = null;
+    this.apiMode = "unknown";
   }
 
   start(): void {
@@ -50,9 +58,149 @@ export class IMessageChannel implements Channel {
 
   async send(groupId: string, text: string): Promise<void> {
     const chatId = groupId.replace(/^im:/, "");
+    const { remainingText, attachments } = extractMarkdownAttachments(text);
+
+    for (const attachment of attachments) {
+      if (!this.fileReader) {
+        await this.sendText(
+          chatId,
+          `[${attachment.alt}] (file: ${attachment.path})`,
+        );
+
+        continue;
+      }
+
+      try {
+        const blob = await this.fileReader(groupId, attachment.path);
+        if (!blob || blob.size === 0) {
+          throw new Error("Attachment file is empty or unavailable.");
+        }
+
+        await this.sendAttachment(chatId, blob, attachment);
+      } catch (err) {
+        console.warn(
+          `iMessage attachment send failed for ${attachment.path}:`,
+          err,
+        );
+
+        await this.sendText(
+          chatId,
+          `[${attachment.alt}] (file: ${attachment.path})`,
+        );
+      }
+    }
+
+    const trimmed = remainingText.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    await this.sendText(chatId, trimmed);
+  }
+
+  async sendAttachment(
+    chatId: string,
+    blob: Blob,
+    attachment: { alt: string; path: string },
+  ): Promise<void> {
+    const mode = await this.ensureApiMode();
+    if (mode === "beeper-desktop") {
+      await this.sendAttachmentViaBeeperDesktop(chatId, blob, attachment);
+
+      return;
+    }
+
+    await this.sendAttachmentViaLegacyBridge(chatId, blob, attachment);
+  }
+
+  async sendText(chatId: string, text: string): Promise<void> {
+    const mode = await this.ensureApiMode();
+    if (mode === "beeper-desktop") {
+      await this.requestJson(
+        `/v1/chats/${encodeURIComponent(chatId)}/messages`,
+        {
+          method: "POST",
+          body: JSON.stringify({ text }),
+        },
+      );
+
+      return;
+    }
+
     await this.requestJson("/messages/send", {
       method: "POST",
       body: JSON.stringify({ chatId, text }),
+    });
+  }
+
+  async ensureApiMode(): Promise<"beeper-desktop" | "legacy"> {
+    if (this.apiMode !== "unknown") {
+      return this.apiMode;
+    }
+
+    try {
+      await this.requestJson("/v1/info", { method: "GET" });
+      this.apiMode = "beeper-desktop";
+    } catch {
+      this.apiMode = "legacy";
+    }
+
+    return this.apiMode;
+  }
+
+  async sendAttachmentViaLegacyBridge(
+    chatId: string,
+    blob: Blob,
+    attachment: { alt: string; path: string },
+  ): Promise<void> {
+    const basename = attachment.path.split("/").pop() || "attachment.bin";
+    const formData = new FormData();
+    formData.append("chatId", chatId);
+    if (attachment.alt) {
+      formData.append("text", attachment.alt);
+    }
+
+    formData.append("file", blob, basename);
+
+    await this.requestJson("/messages/send", {
+      method: "POST",
+      body: formData,
+    });
+  }
+
+  async sendAttachmentViaBeeperDesktop(
+    chatId: string,
+    blob: Blob,
+    attachment: { alt: string; path: string },
+  ): Promise<void> {
+    const basename = attachment.path.split("/").pop() || "attachment.bin";
+    const formData = new FormData();
+    formData.append("file", blob, basename);
+    formData.append("fileName", basename);
+    if (blob.type) {
+      formData.append("mimeType", blob.type);
+    }
+
+    const uploadResponse = (await this.requestJson("/v1/assets/upload", {
+      method: "POST",
+      body: formData,
+    })) as { uploadID?: string };
+
+    const uploadID = `${uploadResponse.uploadID || ""}`.trim();
+    if (!uploadID) {
+      throw new Error("Beeper asset upload failed: missing uploadID");
+    }
+
+    await this.requestJson(`/v1/chats/${encodeURIComponent(chatId)}/messages`, {
+      method: "POST",
+      body: JSON.stringify({
+        text: attachment.alt || undefined,
+        attachment: {
+          uploadID,
+          fileName: basename,
+          mimeType: blob.type || undefined,
+        },
+      }),
     });
   }
 
@@ -180,7 +328,11 @@ export class IMessageChannel implements Channel {
       const headers = new Headers(init.headers);
       headers.set("Accept", "application/json");
 
-      if (!headers.has("Content-Type") && init.body) {
+      if (
+        !headers.has("Content-Type") &&
+        init.body &&
+        !(init.body instanceof FormData)
+      ) {
         headers.set("Content-Type", "application/json");
       }
 
@@ -250,6 +402,58 @@ function normalizeTimestamp(value: unknown): number {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function extractMarkdownAttachments(text: string): {
+  remainingText: string;
+  attachments: { alt: string; path: string }[];
+} {
+  const attachments: { alt: string; path: string }[] = [];
+  const regex = /!?\[([^\]]*)\]\(([^)]+)\)/g;
+  let match: RegExpExecArray | null = null;
+  let remainingText = text;
+
+  while ((match = regex.exec(text)) !== null) {
+    const alt = match[1] || "";
+    const rawPath = (match[2] || "").trim();
+    const path = normalizeAttachmentPath(rawPath);
+
+    if (path) {
+      attachments.push({ alt, path });
+      remainingText = remainingText.replace(match[0], "");
+    }
+  }
+
+  return { remainingText, attachments };
+}
+
+function normalizeAttachmentPath(path: string): string | null {
+  if (!path) {
+    return null;
+  }
+
+  const trimmed = path.trim();
+
+  // Ignore URI schemes (https:, data:, mailto:, etc.) and protocol-relative URLs.
+  if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed) || trimmed.startsWith("//")) {
+    return null;
+  }
+
+  const normalized = trimmed
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/^\.\//, "");
+
+  if (!normalized) {
+    return null;
+  }
+
+  const segments = normalized.split("/").filter(Boolean);
+  if (segments.some((seg) => seg === "..")) {
+    return null;
+  }
+
+  return segments.join("/");
 }
 
 interface IMessagePollResponse {

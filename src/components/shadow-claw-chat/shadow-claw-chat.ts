@@ -862,6 +862,31 @@ export class ShadowClawChat extends ShadowClawElement {
         }
       }
     }
+
+    const links = Array.from(container.querySelectorAll("a[href]"));
+    for (const link of links) {
+      const href = link.getAttribute("href") || "";
+      const filePath = this.resolveWorkspaceLinkPath(href);
+      if (!filePath || !filePath.toLowerCase().endsWith(".pdf")) {
+        continue;
+      }
+
+      try {
+        const bytes = await readGroupFileBytes(this.#db, groupId, filePath);
+        const blobBytes = new Uint8Array(bytes.byteLength);
+        blobBytes.set(bytes);
+
+        const viewer = document.createElement("shadow-claw-pdf-viewer") as any;
+        viewer.file = {
+          name: filePath.split("/").pop() || "document.pdf",
+          binaryContent: blobBytes,
+        };
+
+        link.insertAdjacentElement("afterend", viewer);
+      } catch (e) {
+        console.warn(`Failed to load inline PDF: ${filePath}`, e);
+      }
+    }
   }
 
   formatAttachmentSubtitle(attachment: MessageAttachment): string {

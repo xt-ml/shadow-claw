@@ -573,19 +573,46 @@ export function extractMarkdownAttachments(text: string): {
   // Find all matches
   while ((match = regex.exec(text)) !== null) {
     const alt = match[1];
-    const path = match[2];
+    const path = (match[2] || "").trim();
 
-    // Only capture relative paths (like workspace paths)
-    if (
-      !path.startsWith("http://") &&
-      !path.startsWith("https://") &&
-      !path.startsWith("data:")
-    ) {
-      attachments.push({ alt, path });
+    const normalizedPath = normalizeAttachmentPath(path);
+
+    // Only capture valid normalized workspace-relative paths.
+    if (normalizedPath) {
+      attachments.push({ alt, path: normalizedPath });
       // Remove the markdown from the text
       remainingText = remainingText.replace(match[0], "");
     }
   }
 
   return { remainingText, attachments };
+}
+
+function normalizeAttachmentPath(path: string): string | null {
+  if (!path) {
+    return null;
+  }
+
+  const trimmed = path.trim();
+
+  // Ignore URI schemes (https:, data:, mailto:, etc.) and protocol-relative URLs.
+  if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed) || trimmed.startsWith("//")) {
+    return null;
+  }
+
+  const normalized = trimmed
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/^\.\//, "");
+
+  if (!normalized) {
+    return null;
+  }
+
+  const segments = normalized.split("/").filter(Boolean);
+  if (segments.some((seg) => seg === "..")) {
+    return null;
+  }
+
+  return segments.join("/");
 }

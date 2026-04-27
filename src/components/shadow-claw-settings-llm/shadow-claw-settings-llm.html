@@ -132,6 +132,41 @@
     </button>
   </div>
 
+  <div
+    class="settings-section"
+    data-setting="bedrock-settings"
+    style="display: none"
+  >
+    <h3>☁️ AWS Bedrock Fallback</h3>
+    <div class="form-group">
+      <label class="form-label" for="bedrock-region-input">Region</label>
+      <input
+        class="form-input"
+        data-setting="bedrock-region-input"
+        id="bedrock-region-input"
+        placeholder="us-east-1"
+        type="text"
+      />
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="bedrock-profile-input">SSO Profile</label>
+      <input
+        class="form-input"
+        data-setting="bedrock-profile-input"
+        id="bedrock-profile-input"
+        placeholder="default"
+        type="text"
+      />
+      <div class="form-helper">
+        Used when BEDROCK_REGION and BEDROCK_PROFILE environment variables are
+        not set on the local proxy.
+      </div>
+    </div>
+    <button class="save-btn" data-action="save-bedrock-settings">
+      💾 Save Bedrock Fallback
+    </button>
+  </div>
+
   <div class="settings-section">
     <h3>📏 Max Output Tokens</h3>
     <div class="form-group">

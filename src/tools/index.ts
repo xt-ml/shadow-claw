@@ -15,6 +15,7 @@ import { update_memory } from "./memory.js";
 import { send_notification, show_toast } from "./notifications.js";
 
 import {
+  attach_file_to_chat,
   list_files,
   open_file,
   patch_file,
@@ -51,6 +52,7 @@ import {
 } from "./tasks.js";
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
+  attach_file_to_chat,
   bash,
   clear_chat,
   create_task,

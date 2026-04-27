@@ -23,6 +23,21 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("use_account_auth");
     expect(prompt).toContain("Settings → Accounts");
   });
+
+  it("prefers markdown file references for attachments", () => {
+    const prompt = buildSystemPrompt("TestAgent", "");
+
+    expect(prompt).toContain("markdown references to the file path");
+    expect(prompt).toContain("![alt](path/to/image.png)");
+    expect(prompt).toContain("[report.pdf](path/to/report.pdf)");
+  });
+
+  it("restricts open_file to explicit viewer requests", () => {
+    const prompt = buildSystemPrompt("TestAgent", "");
+
+    expect(prompt).toContain("Do not use open_file to attach or send files");
+    expect(prompt).toContain("explicitly asks to open/view");
+  });
 });
 
 describe("Orchestrator", () => {

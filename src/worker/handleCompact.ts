@@ -24,6 +24,7 @@ export async function handleCompact(
     maxTokens,
     provider: providerId,
     storageHandle,
+    providerHeaders = {},
     contextCompression = false,
   } = payload;
 
@@ -65,7 +66,10 @@ export async function handleCompact(
       },
     );
 
-    const headers = buildHeaders(typedProvider, apiKey);
+    const headers = {
+      ...buildHeaders(typedProvider, apiKey),
+      ...providerHeaders,
+    };
     const res = await fetch(typedProvider.baseUrl, {
       method: "POST",
       headers,

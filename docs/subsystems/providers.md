@@ -27,13 +27,16 @@ Provider (config) → Adapter (format-specific) → Request/Response transformat
 
 All providers are declared in `src/config.ts` under `PROVIDERS`:
 
-| Provider ID           | Format       | Streaming | API Key Required    |
-| --------------------- | ------------ | --------- | ------------------- |
-| `openrouter`          | `openai`     | ✅        | ✅                  |
-| `copilot_azure`       | `openai`     | ✅        | ✅                  |
-| `copilot_azure_proxy` | `openai`     | ✅        | via proxy           |
-| `bedrock`             | `anthropic`  | ✅        | via proxy (AWS SSO) |
-| `prompt_api`          | `prompt_api` | ❌        | ❌                  |
+| Provider ID                  | Format       | Streaming | API Key Required       |
+| ---------------------------- | ------------ | --------- | ---------------------- |
+| `openrouter`                 | `openai`     | ✅        | ✅                     |
+| `huggingface`                | `openai`     | ✅        | ✅                     |
+| `ollama`                     | `openai`     | ✅        | ❌                     |
+| `llamafile`                  | `openai`     | ✅        | ❌                     |
+| `github_models`              | `openai`     | ✅        | ✅                     |
+| `copilot_azure_openai_proxy` | `openai`     | ✅        | ✅                     |
+| `bedrock_proxy`              | `anthropic`  | ✅        | ❌ (AWS SSO via proxy) |
+| `prompt_api`                 | `prompt_api` | ❌        | ❌                     |
 
 ### Provider shape
 
@@ -151,6 +154,10 @@ The Bedrock provider is configured as `format: "anthropic"` since Bedrock models
 2. Adds SigV4 signing headers using `@aws-sdk/credential-providers`
 3. Forwards to the Bedrock endpoint
 4. Passes the SSE response stream through (compression-excluded for real-time delivery)
+
+When `BEDROCK_REGION`/`BEDROCK_PROFILE` environment variables are not set,
+the runtime can provide fallback values via request headers (`x-bedrock-region`,
+`x-bedrock-profile`) from Settings.
 
 ## Model Selection
 

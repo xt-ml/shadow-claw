@@ -385,10 +385,11 @@ describe("prompt-api-provider", () => {
     expect(noResponseEmit).toBeUndefined();
   });
 
-  it("includes open_file in PROMPT_API_TOOLS", async () => {
+  it("includes file-viewer and attachment tools in PROMPT_API_TOOLS", async () => {
     const { PROMPT_API_TOOLS } = await import("./prompt-api-provider.js");
     const names = PROMPT_API_TOOLS.map((t) => t.name);
     expect(names).toContain("open_file");
+    expect(names).toContain("attach_file_to_chat");
   });
 });
 

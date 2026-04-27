@@ -426,6 +426,12 @@ describe("config.js", () => {
       expect(CONFIG_KEYS.LLAMAFILE_HOST).toBe("llamafile_host");
       expect(CONFIG_KEYS.LLAMAFILE_PORT).toBe("llamafile_port");
       expect(CONFIG_KEYS.LLAMAFILE_OFFLINE).toBe("llamafile_offline");
+      expect(CONFIG_KEYS.BEDROCK_REGION_FALLBACK).toBe(
+        "bedrock_region_fallback",
+      );
+      expect(CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK).toBe(
+        "bedrock_profile_fallback",
+      );
     });
 
     it("should include STREAMING_ENABLED config key", () => {

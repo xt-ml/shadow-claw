@@ -174,6 +174,7 @@ export interface InvokePayload {
   provider?: any;
   storageHandle?: any;
   enabledTools?: string[];
+  providerHeaders?: Record<string, string>;
   streaming?: boolean;
   contextCompression?: boolean;
   contextLimit?: number;
@@ -188,6 +189,7 @@ export interface CompactPayload {
   maxTokens: number;
   provider?: any;
   storageHandle?: any;
+  providerHeaders?: Record<string, string>;
   contextCompression?: boolean;
   contextLimit?: number;
 }

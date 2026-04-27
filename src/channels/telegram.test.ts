@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-import { TelegramChannel } from "./telegram.js";
+import { extractMarkdownAttachments, TelegramChannel } from "./telegram.js";
 
 describe("TelegramChannel", () => {
   beforeEach(() => {
@@ -248,6 +248,31 @@ describe("TelegramChannel", () => {
     await done;
 
     expect(retryDelays).toEqual([1000, 1000]);
+  });
+
+  it("normalizes markdown attachment paths", () => {
+    const result = extractMarkdownAttachments(
+      "Here ![img]( /assets\\key-images\\TheLamb-NT-Jesus.png )",
+    );
+
+    expect(result.attachments).toEqual([
+      {
+        alt: "img",
+        path: "assets/key-images/TheLamb-NT-Jesus.png",
+      },
+    ]);
+    expect(result.remainingText).toContain("Here");
+  });
+
+  it("ignores non-workspace and unsafe markdown links", () => {
+    const result = extractMarkdownAttachments(
+      "[web](https://example.com/a.png) [bad](../secrets.png) [mail](mailto:test@example.com)",
+    );
+
+    expect(result.attachments).toEqual([]);
+    expect(result.remainingText).toContain("https://example.com/a.png");
+    expect(result.remainingText).toContain("../secrets.png");
+    expect(result.remainingText).toContain("mailto:test@example.com");
   });
 
   it("caps poll retry delay at one minute", () => {

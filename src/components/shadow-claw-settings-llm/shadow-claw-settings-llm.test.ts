@@ -90,6 +90,7 @@ function createOrchestratorStub(overrides = {}) {
     setMaxIterations: jest.fn<any>().mockResolvedValue(undefined),
     setStreamingEnabled: jest.fn<any>().mockResolvedValue(undefined),
     setUseProxy: jest.fn<any>().mockResolvedValue(undefined),
+    setBedrockSettings: jest.fn<any>().mockResolvedValue(undefined),
     setCompressionEnabled: jest.fn<any>().mockResolvedValue(undefined),
     getAvailableProviders: jest
       .fn<any>()
@@ -104,6 +105,9 @@ function createOrchestratorStub(overrides = {}) {
     getUseProxy: jest.fn<any>().mockReturnValue(false),
     getCompressionEnabled: jest.fn<any>().mockReturnValue(false),
     getContextCompressionEnabled: jest.fn<any>().mockReturnValue(false),
+    getBedrockSettings: jest
+      .fn<any>()
+      .mockReturnValue({ region: "", profile: "" }),
     getProxyUrl: jest.fn<any>().mockReturnValue(""),
     ...overrides,
   };
@@ -189,6 +193,49 @@ describe("shadow-claw-settings-llm", () => {
 
     expect(orch.setMaxTokens).toHaveBeenCalledWith(expect.anything(), 2048);
     expect(showSuccess).toHaveBeenCalledWith("Max tokens saved", 3000);
+
+    document.body.removeChild(el);
+  });
+
+  it("saves bedrock fallback settings", async () => {
+    const orch = createOrchestratorStub({
+      getProvider: jest.fn<any>().mockReturnValue("bedrock_proxy"),
+      getBedrockSettings: jest
+        .fn<any>()
+        .mockReturnValue({ region: "", profile: "" }),
+    });
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawSettingsLlm();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const regionInput = el.shadowRoot?.querySelector(
+      '[data-setting="bedrock-region-input"]',
+    ) as HTMLInputElement | null;
+    const profileInput = el.shadowRoot?.querySelector(
+      '[data-setting="bedrock-profile-input"]',
+    ) as HTMLInputElement | null;
+
+    if (!regionInput || !profileInput) {
+      throw new Error("bedrock inputs not found");
+    }
+
+    regionInput.value = "us-east-1";
+    profileInput.value = "default";
+
+    await el.saveBedrockSettings();
+
+    expect(orch.setBedrockSettings).toHaveBeenCalledWith(expect.anything(), {
+      region: "us-east-1",
+      profile: "default",
+    });
+    expect(showSuccess).toHaveBeenCalledWith(
+      "Bedrock fallback settings saved",
+      3000,
+    );
 
     document.body.removeChild(el);
   });

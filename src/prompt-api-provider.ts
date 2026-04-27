@@ -17,6 +17,7 @@ const PROMPT_API_CORE_TOOL_NAMES = new Set([
   "read_file",
   "write_file",
   "list_files",
+  "attach_file_to_chat",
   "open_file",
   "fetch_url",
   "update_memory",
@@ -856,46 +857,6 @@ export async function invokeWithPromptApi(
         );
 
         await emit(createToolActivityMessage(groupId, call.name, "done"));
-
-        // Auto-open viewable files after write_file succeeds.
-        // Nano is too small to chain write_file → open_file reliably,
-        // so we open the file automatically when it's a viewable type.
-        if (
-          call.name === "write_file" &&
-          typeof toolOutput === "string" &&
-          toolOutput.startsWith("Written") &&
-          call.input?.path
-        ) {
-          const ext = String(call.input.path).split(".").pop()?.toLowerCase();
-          const viewable = new Set([
-            "html",
-            "htm",
-            "txt",
-            "json",
-            "md",
-            "csv",
-            "xml",
-            "svg",
-            "css",
-            "js",
-            "mjs",
-            "ts",
-            "py",
-            "sh",
-            "yaml",
-            "yml",
-            "toml",
-            "ini",
-            "cfg",
-            "log",
-          ]);
-          if (ext && viewable.has(ext)) {
-            deferredOpenFileMessages.push({
-              type: "open-file",
-              payload: { groupId, path: call.input.path },
-            });
-          }
-        }
 
         toolResults.push({
           type: "tool_result",

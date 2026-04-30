@@ -14,6 +14,10 @@ export interface ResolvedRemoteMcpAuth {
   reauthRequired?: boolean;
 }
 
+export interface ResolveRemoteMcpAuthOptions {
+  forceRefresh?: boolean;
+}
+
 function toAccountAuthMode(authType: AuthType): "pat" | "oauth" {
   return authType === "oauth" ? "oauth" : "pat";
 }
@@ -21,6 +25,7 @@ function toAccountAuthMode(authType: AuthType): "pat" | "oauth" {
 export async function resolveRemoteMcpConnectionAuth(
   db: ShadowClawDatabase,
   connectionId: string,
+  options: ResolveRemoteMcpAuthOptions = {},
 ): Promise<ResolvedRemoteMcpAuth | null> {
   const connection = await getRemoteMcpConnection(db, connectionId);
   if (!connection) {
@@ -60,6 +65,7 @@ export async function resolveRemoteMcpConnectionAuth(
     const creds = await resolveServiceCredentials(db, connection.serverUrl, {
       accountId: ref.accountId,
       authMode,
+      forceRefresh: options.forceRefresh,
     });
 
     if (!creds) {
@@ -92,6 +98,7 @@ export async function resolveRemoteMcpConnectionAuth(
     const creds = await resolveGitCredentials(db, connection.serverUrl, {
       accountId: ref.gitAccountId,
       authMode,
+      forceRefresh: options.forceRefresh,
     });
 
     if (creds.reauthRequired) {

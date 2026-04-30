@@ -65,7 +65,6 @@ export async function syncLfsToOpfs(
             create: true,
           });
 
-          // @ts-ignore
           const writable = await (fileHandle as any).createWritable();
           await writable.write(content);
           await writable.close();
@@ -125,7 +124,6 @@ export async function syncOpfsToLfs(
     // because they may cache stale file metadata
     const entries: { name: string; kind: "file" | "directory" }[] = [];
 
-    // @ts-ignore
     for await (const [name, handle] of (opfsDirHandle as any).entries()) {
       if (!includeGit && name === ".git") {
         continue;
@@ -159,7 +157,6 @@ export async function syncOpfsToLfs(
 
             // Try OPFS-only createSyncAccessHandle for guaranteed fresh read
             try {
-              // @ts-ignore
               const syncHandle = await (
                 fileHandle as any
               ).createSyncAccessHandle();

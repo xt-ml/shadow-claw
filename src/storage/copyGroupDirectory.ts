@@ -34,7 +34,6 @@ async function copyDirectoryContents(
   sourceDir: FileSystemDirectoryHandle,
   targetDir: FileSystemDirectoryHandle,
 ): Promise<void> {
-  // @ts-ignore - entries() is supported on File System Access directory handles.
   for await (const [name, handle] of (sourceDir as any).entries()) {
     if (handle.kind === "directory") {
       const nextTargetDir = await targetDir.getDirectoryHandle(name, {

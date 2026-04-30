@@ -432,6 +432,10 @@ describe("config.js", () => {
       expect(CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK).toBe(
         "bedrock_profile_fallback",
       );
+      expect(CONFIG_KEYS.RATE_LIMIT_CALLS_PER_MINUTE).toBe(
+        "rate_limit_calls_per_minute",
+      );
+      expect(CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT).toBe("rate_limit_auto_adapt");
     });
 
     it("should include STREAMING_ENABLED config key", () => {

@@ -102,26 +102,23 @@ export class ShadowClawMyPage extends ShadowClawElement {
   static styles = `${ShadowClawMyPage.componentPath}/${elementName}.css`;
   static template = `${ShadowClawMyPage.componentPath}/${elementName}.html`;
 
-  private cleanups: Array<() => void> = [];
-
   async connectedCallback() {
     await Promise.all([this.onStylesReady, this.onTemplateReady]);
     this.setupEffects();
   }
 
   disconnectedCallback() {
-    this.cleanups.forEach((c) => c());
-    this.cleanups = [];
+    super.disconnectedCallback();
   }
 
   private setupEffects() {
     // Re-run whenever signals change
-    const dispose = effect(() => {
-      const state = orchestratorStore.state;
-      this.render(state);
-    });
-
-    this.cleanups.push(dispose);
+    this.addCleanup(
+      effect(() => {
+        const state = orchestratorStore.state;
+        this.render(state);
+      }),
+    );
   }
 
   private render(state: string) {
@@ -184,7 +181,7 @@ npm run tsc
 ## Tips
 
 - **Always `await` both `onStylesReady` and `onTemplateReady`** before querying the shadow DOM
-- **Clean up `effect()` disposers** in `disconnectedCallback()` to prevent memory leaks
+- **Register disposers with `addCleanup(...)`** and call `super.disconnectedCallback()` if you override disconnect logic
 - **Use unique IDs** for interactive elements (prefixed with the component name) for Playwright E2E tests
 - **`<shadow-claw-page-header>`** is the reusable mobile-first header — use it for consistent navigation
 - **Don't manipulate the light DOM** — all rendering happens inside the shadow root

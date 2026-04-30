@@ -169,7 +169,16 @@ export async function getRemoteMcpConnection(
 
   const all = await loadConnections(db);
 
-  return all.find((connection) => connection.id === id) || null;
+  // Match by exact ID first, then fall back to case-insensitive label match
+  // so agents can reference connections by human-readable name.
+
+  return (
+    all.find((connection) => connection.id === id) ||
+    all.find(
+      (connection) => connection.label.toLowerCase() === id.toLowerCase(),
+    ) ||
+    null
+  );
 }
 
 export async function upsertRemoteMcpConnection(

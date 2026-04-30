@@ -16,6 +16,9 @@ describe("handleInvoke.js", () => {
   let mockPost;
   let mockSetStorageRoot;
   let mockWithRetry;
+  let mockGetToolState;
+  let mockClearToolState;
+  let mockBuildSystemPrompt;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -46,6 +49,10 @@ describe("handleInvoke.js", () => {
     // Mock withRetry to pass through the function call without actual delays.
     // This keeps handleInvoke tests focused; retry logic is tested in withRetry.test.mjs.
     mockWithRetry = jest.fn(async (fn) => fn());
+
+    mockGetToolState = jest.fn();
+    mockClearToolState = jest.fn();
+    mockBuildSystemPrompt = jest.fn();
 
     jest.unstable_mockModule("../config.js", () => ({
       DEFAULT_MAX_ITERATIONS: 50,
@@ -94,6 +101,15 @@ describe("handleInvoke.js", () => {
     jest.unstable_mockModule("./withRetry.js", () => ({
       withRetry: mockWithRetry,
       isRetryableHttpError: jest.fn(() => false),
+    }));
+
+    jest.unstable_mockModule("./tool-state.js", () => ({
+      getToolState: mockGetToolState,
+      clearToolState: mockClearToolState,
+    }));
+
+    jest.unstable_mockModule("./system-prompt.js", () => ({
+      buildSystemPrompt: mockBuildSystemPrompt,
     }));
 
     const module = await import("./handleInvoke.js");
@@ -751,5 +767,118 @@ describe("handleInvoke.js", () => {
         expect.stringContaining("provider does not support streaming"),
       );
     });
+  });
+
+  it("should pick up mid-invocation tool updates", async () => {
+    const payload: any = {
+      groupId: "g1",
+      messages: [{ role: "user", content: "activate tools and use them" }],
+      systemPrompt: "original prompt",
+      assistantName: "ShadowClaw",
+      memory: "memory content",
+      provider: "p1",
+      enabledTools: [],
+    };
+
+    (mockGetProvider as any).mockReturnValue({
+      name: "P1",
+      baseUrl: "http://p1",
+      format: "openai",
+    });
+
+    // 1st iteration: returns tool_use (manage_tools)
+    mockFormatRequest.mockReturnValueOnce({ body: "req1" });
+    mockParseResponse.mockReturnValueOnce({
+      stop_reason: "tool_use",
+      content: [
+        {
+          type: "tool_use",
+          id: "t1",
+          name: "manage_tools",
+          input: { action: "activate_profile", profile_id: "full" },
+        },
+      ],
+    });
+
+    // 2nd iteration: returns final response
+    mockFormatRequest.mockReturnValueOnce({ body: "req2" });
+    mockParseResponse.mockReturnValueOnce({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: "Tools activated and used." }],
+    });
+
+    mockExecuteTool.mockResolvedValue("Tool management request sent");
+
+    // Simulate tool state update appearing BEFORE the 2nd iteration
+    mockGetToolState
+      .mockReturnValueOnce(undefined) // 1st iteration loop start
+      .mockReturnValueOnce({
+        // 2nd iteration loop start
+        enabledTools: [{ name: "new_tool", description: "A new tool" }],
+        systemPromptOverride: "overridden prompt",
+      });
+
+    mockBuildSystemPrompt.mockReturnValue("new built prompt");
+
+    (global as any).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({}),
+    });
+
+    await handleInvoke({} as any, payload);
+
+    // Verify system prompt was rebuilt for the 2nd iteration
+    expect(mockBuildSystemPrompt).toHaveBeenCalledWith(
+      "ShadowClaw",
+      "memory content",
+      [{ name: "new_tool", description: "A new tool" }],
+      "overridden prompt",
+    );
+
+    // Verify 2nd iteration used the NEW prompt and tools
+    expect(mockFormatRequest).toHaveBeenNthCalledWith(
+      2,
+      expect.anything(),
+      expect.anything(),
+      [{ name: "new_tool", description: "A new tool" }],
+      expect.objectContaining({ system: "new built prompt" }),
+    );
+
+    expect(mockClearToolState).toHaveBeenCalledWith("g1");
+  });
+
+  it("should respect empty enabledTools array", async () => {
+    const payload: any = {
+      groupId: "g1",
+      messages: [{ role: "user", content: "hi" }],
+      provider: "p1",
+      enabledTools: [], // Explicitly empty
+    };
+
+    (mockGetProvider as any).mockReturnValue({
+      name: "P1",
+      baseUrl: "http://p1",
+      format: "openai",
+    });
+    (mockFormatRequest as any).mockReturnValue({ body: "req" });
+    (mockParseResponse as any).mockReturnValue({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: "hello" }],
+    });
+
+    (global as any).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({}),
+    });
+
+    await handleInvoke({} as any, payload);
+
+    // Verify formatRequest was called with an empty tools array, NOT the default TOOL_DEFINITIONS
+    expect(mockFormatRequest).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      [], // Empty tools
+      expect.anything(),
+    );
   });
 });

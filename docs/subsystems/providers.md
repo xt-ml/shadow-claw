@@ -121,6 +121,29 @@ graph LR
   B -->|prompt_api| E["JSON description string"]
 ```
 
+## Adaptive Rate Limiting
+
+**Source:** `src/worker/rate-limit.ts`
+
+To prevent `429 Too Many Requests` errors, the worker uses an adaptive rate limiter that synchronizes with provider-level quotas.
+
+### Logic Flow
+
+1. **Pre-flight Check**: Before every provider call, `waitForRateLimitSlot()` checks if a slot is available.
+2. **Header Sync**: After every call, `updateRateLimitFromHeaders()` parses response headers to update internal state.
+3. **Adaptive Waiting**: If a limit is reached, the worker posts a `thinking-log` and pauses execution until the next slot opens.
+
+### Supported Headers
+
+- `x-ratelimit-limit`: Total requests allowed in the window.
+- `x-ratelimit-remaining`: Remaining requests in the window.
+- `x-ratelimit-reset`: Epoch (seconds or ms) when the window resets.
+- `retry-after`: Delta seconds or UTC date until retry is allowed.
+
+### Manual Configuration
+
+For providers that do not emit rate limit headers, users can configure a fixed `callsPerMinute` limit in Settings.
+
 ## Model Registry
 
 **File:** `src/model-registry.ts`

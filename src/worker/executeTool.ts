@@ -4,6 +4,7 @@ import {
   CONFIG_KEYS,
   FETCH_MAX_RESPONSE,
 } from "../config.js";
+import { NANO_BUILTIN_PROFILE } from "../tools/builtin-profiles.js";
 import { getConfig } from "../db/getConfig.js";
 import { getAllTasks } from "../db/getAllTasks.js";
 import { executeShell } from "../shell/shell.js";
@@ -416,16 +417,9 @@ export async function executeTool(
           ? `![${label}](${normalizedPath})`
           : `[${label}](${normalizedPath})`;
 
-        // Emit the attachment markdown immediately so it is persisted/rendered
-        // even if the model forgets to include it in its final response.
-        post({
-          type: "intermediate-response",
-          payload: { groupId, text: markdown },
-        });
-
         return (
           `Attachment prepared: ${normalizedPath}\n` +
-          "Attachment markdown has been emitted to chat. If needed, reuse this exact markdown:\n" +
+          "Please include the following markdown in your response to show it to the user:\n" +
           markdown
         );
       }
@@ -465,6 +459,44 @@ export async function executeTool(
         )) as string[];
 
         return entries.length > 0 ? entries.join("\n") : "(empty directory)";
+      }
+
+      case "manage_tools": {
+        const { action, tool_names, profile_id } = input;
+        post({
+          type: "manage-tools",
+          payload: {
+            action,
+            toolNames: tool_names,
+            profileId: profile_id,
+            groupId,
+          },
+        });
+
+        return `Tool management request sent: ${action}${profile_id ? " " + profile_id : ""}${tool_names ? " (" + tool_names.join(", ") + ")" : ""}`;
+      }
+
+      case "list_tool_profiles": {
+        const profilesRaw = await getConfig(db, CONFIG_KEYS.TOOL_PROFILES);
+        let profiles: any[] = [];
+        if (typeof profilesRaw === "string") {
+          try {
+            profiles = JSON.parse(profilesRaw);
+          } catch {
+            profiles = [];
+          }
+        } else if (Array.isArray(profilesRaw)) {
+          profiles = profilesRaw;
+        }
+
+        const allProfiles = [NANO_BUILTIN_PROFILE, ...profiles];
+
+        return allProfiles
+          .map(
+            (p) =>
+              `[Profile ID: ${p.id}] ${p.name}\n  Tools: ${p.enabledToolNames.join(", ")}`,
+          )
+          .join("\n\n");
       }
 
       case "fetch_url": {

@@ -10,12 +10,14 @@ import { writeGroupFile } from "../../storage/writeGroupFile.js";
 
 import { effect } from "../../effect.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
+import { filesUiStore } from "../../stores/files-ui.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../toast.js";
 
 import { getDb } from "../../db/db.js";
 
 import { escapeHtml } from "../../utils.js";
+import "../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
 import type { ShadowClawDatabase } from "../../types.js";
@@ -27,15 +29,6 @@ export class ShadowClawFiles extends ShadowClawElement {
   static componentPath = `components/${elementName}`;
   static styles = `${ShadowClawFiles.componentPath}/${elementName}.css`;
   static template = `${ShadowClawFiles.componentPath}/${elementName}.html`;
-
-  files: string[] = [];
-  isDragActive: boolean = false;
-
-  uploadCompleted: number = 0;
-  uploadTotal: number = 0;
-
-  cleanup: () => void = () => {};
-  vmStatusCleanup: () => void = () => {};
 
   constructor() {
     super();
@@ -53,25 +46,53 @@ export class ShadowClawFiles extends ShadowClawElement {
 
     this.dispatchTerminalSlotReady();
 
-    // Re-render when files or path change
-    this.cleanup = effect(() => {
-      orchestratorStore.files;
-      orchestratorStore.currentPath;
+    const content = root.querySelector(".files__content");
 
-      this.updateBreadcrumbs(db);
-      this.updateFileList(db);
-    });
+    // Re-render when files or path change
+    this.addCleanup(
+      effect(() => {
+        orchestratorStore.files;
+        orchestratorStore.currentPath;
+
+        this.updateBreadcrumbs(db);
+        this.updateFileList(db);
+      }),
+    );
+
+    // Keep upload progress UI in sync with signal state.
+    this.addCleanup(
+      effect(() => {
+        const uploadTotal = filesUiStore.uploadTotal;
+        const uploadCompleted = filesUiStore.uploadCompleted;
+        this.updateUploadProgressUI(
+          uploadTotal > 0,
+          uploadCompleted,
+          uploadTotal,
+        );
+      }),
+    );
+
+    // Toggle drag-over styling from signal state.
+    this.addCleanup(
+      effect(() => {
+        const isDragActive = filesUiStore.isDragActive;
+        if (content instanceof HTMLElement) {
+          content.classList.toggle("files__content--dragover", isDragActive);
+        }
+      }),
+    );
 
     const vmStatusListener = () => {
       this.updateSyncButtonsVisibility();
     };
 
     orchestratorStore.orchestrator?.events?.on?.("vm-status", vmStatusListener);
-    this.vmStatusCleanup = () =>
+    this.addCleanup(() =>
       orchestratorStore.orchestrator?.events?.off?.(
         "vm-status",
         vmStatusListener,
-      );
+      ),
+    );
 
     this.updateSyncButtonsVisibility();
 
@@ -96,7 +117,6 @@ export class ShadowClawFiles extends ShadowClawElement {
       }
     });
 
-    const content = root.querySelector(".files__content");
     if (content instanceof HTMLElement) {
       content.addEventListener("dragenter", (event) =>
         this.handleDragEnter(event, content),
@@ -166,8 +186,7 @@ export class ShadowClawFiles extends ShadowClawElement {
   }
 
   disconnectedCallback() {
-    this.cleanup();
-    this.vmStatusCleanup();
+    super.disconnectedCallback();
   }
 
   dispatchTerminalSlotReady() {
@@ -252,8 +271,12 @@ export class ShadowClawFiles extends ShadowClawElement {
 
         const pathToNavigate = currentSegmentPath;
         btn.addEventListener("click", async () => {
-          (orchestratorStore as any)._currentPath.set(pathToNavigate);
-          await orchestratorStore.loadFiles(db);
+          try {
+            await orchestratorStore.setCurrentPath(db, pathToNavigate);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            showError(`Failed to navigate to folder: ${message}`, 4500);
+          }
         });
 
         breadcrumbs.appendChild(btn);
@@ -326,10 +349,11 @@ export class ShadowClawFiles extends ShadowClawElement {
 
     if (files.length === 0) {
       list.innerHTML = `
-        <div class="files__empty" role="status">
-          <p>No files in this folder.</p>
-          <p class="files__empty-hint">Ask the agent to create some files!</p>
-        </div>
+          <shadow-claw-empty-state
+            class="files__empty"
+            message="No files in this folder."
+            hint="Ask the agent to create some files!"
+          ></shadow-claw-empty-state>
       `;
 
       return;
@@ -510,9 +534,7 @@ export class ShadowClawFiles extends ShadowClawElement {
     const currentPath = orchestratorStore.currentPath;
     const count = fileList.length;
 
-    this.uploadTotal = count;
-    this.uploadCompleted = 0;
-    this.updateUploadProgressUI(true);
+    filesUiStore.startUpload(count);
 
     try {
       for (let i = 0; i < count; i++) {
@@ -521,8 +543,7 @@ export class ShadowClawFiles extends ShadowClawElement {
           currentPath === "." ? file.name : `${currentPath}/${file.name}`;
 
         await uploadGroupFile(db, groupId, filename, file);
-        this.uploadCompleted = i + 1;
-        this.updateUploadProgressUI(true);
+        filesUiStore.setUploadCompleted(i + 1);
       }
 
       // Reload files
@@ -536,13 +557,15 @@ export class ShadowClawFiles extends ShadowClawElement {
 
       console.error("Upload error:", err);
     } finally {
-      this.updateUploadProgressUI(false);
-      this.uploadTotal = 0;
-      this.uploadCompleted = 0;
+      filesUiStore.resetUpload();
     }
   }
 
-  updateUploadProgressUI(active: boolean) {
+  updateUploadProgressUI(
+    active: boolean,
+    uploadCompleted: number,
+    uploadTotal: number,
+  ) {
     const root = this.shadowRoot;
     if (!root) {
       return;
@@ -559,14 +582,12 @@ export class ShadowClawFiles extends ShadowClawElement {
     panel.classList.toggle("active", active);
 
     const percent =
-      this.uploadTotal > 0
-        ? Math.round((this.uploadCompleted / this.uploadTotal) * 100)
-        : 0;
+      uploadTotal > 0 ? Math.round((uploadCompleted / uploadTotal) * 100) : 0;
 
     if (label instanceof HTMLElement) {
       label.textContent =
-        this.uploadTotal > 0
-          ? `Uploading ${this.uploadCompleted}/${this.uploadTotal} files (${percent}%)`
+        uploadTotal > 0
+          ? `Uploading ${uploadCompleted}/${uploadTotal} files (${percent}%)`
           : "Uploading files...";
     }
 
@@ -581,8 +602,7 @@ export class ShadowClawFiles extends ShadowClawElement {
     }
 
     event.preventDefault();
-    this.isDragActive = true;
-    content.classList.add("files__content--dragover");
+    filesUiStore.setDragActive(true);
   }
 
   handleDragOver(event: DragEvent, content: HTMLElement) {
@@ -595,12 +615,11 @@ export class ShadowClawFiles extends ShadowClawElement {
       event.dataTransfer.dropEffect = "copy";
     }
 
-    this.isDragActive = true;
-    content.classList.add("files__content--dragover");
+    filesUiStore.setDragActive(true);
   }
 
   handleDragLeave(event: DragEvent, content: HTMLElement) {
-    if (!this.isDragActive) {
+    if (!filesUiStore.isDragActive) {
       return;
     }
 
@@ -609,8 +628,7 @@ export class ShadowClawFiles extends ShadowClawElement {
       return;
     }
 
-    this.isDragActive = false;
-    content.classList.remove("files__content--dragover");
+    filesUiStore.setDragActive(false);
   }
 
   async handleDrop(
@@ -623,8 +641,7 @@ export class ShadowClawFiles extends ShadowClawElement {
     }
 
     event.preventDefault();
-    this.isDragActive = false;
-    content.classList.remove("files__content--dragover");
+    filesUiStore.setDragActive(false);
 
     const dropped = event.dataTransfer?.files;
     if (!dropped || dropped.length === 0) {

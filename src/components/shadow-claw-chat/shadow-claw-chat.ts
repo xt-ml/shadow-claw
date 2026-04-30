@@ -8,6 +8,7 @@ import { importChatData } from "../../db/importChatData.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { downloadGroupFile } from "../../storage/downloadGroupFile.js";
 
+import { chatUiStore } from "../../stores/chat-ui.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 
@@ -22,11 +23,7 @@ import {
   ToolActivity,
 } from "../../types.js";
 import type { ShadowClawDatabase } from "../../types.js";
-import {
-  escapeHtml,
-  formatDateForFilename,
-  formatTimestamp,
-} from "../../utils.js";
+import { formatDateForFilename, formatTimestamp } from "../../utils.js";
 
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 import ShadowClawElement from "../shadow-claw-element.js";
@@ -40,18 +37,22 @@ export class ShadowClawChat extends ShadowClawElement {
   static template = `${ShadowClawChat.componentPath}/${elementName}.html`;
 
   #db: ShadowClawDatabase | null;
-  #isNearBottom: boolean;
-  #attachmentObjectUrls: Set<string>;
-
-  cleanups: Array<() => void>;
+  #renderVersion: number;
+  #streamRenderVersion: number;
+  #suppressScrollTracking: boolean;
+  #userScrollEpoch: number;
+  #responseAutoFollow: boolean;
 
   constructor() {
     super();
 
-    this.#isNearBottom = true;
-    this.#attachmentObjectUrls = new Set();
-    this.cleanups = [];
+    chatUiStore.reset();
     this.#db = null;
+    this.#renderVersion = 0;
+    this.#streamRenderVersion = 0;
+    this.#suppressScrollTracking = false;
+    this.#userScrollEpoch = 0;
+    this.#responseAutoFollow = true;
   }
 
   async connectedCallback() {
@@ -71,17 +72,13 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 
   disconnectedCallback() {
-    this.revokeAttachmentObjectUrls();
-    this.cleanups.forEach((cleanup) => cleanup());
-    this.cleanups = [];
+    chatUiStore.revokeAttachmentObjectUrls();
+    chatUiStore.resetNearBottom();
+    super.disconnectedCallback();
   }
 
   revokeAttachmentObjectUrls() {
-    for (const objectUrl of this.#attachmentObjectUrls) {
-      URL.revokeObjectURL(objectUrl);
-    }
-
-    this.#attachmentObjectUrls.clear();
+    chatUiStore.revokeAttachmentObjectUrls();
   }
 
   dispatchTerminalSlotReady() {
@@ -93,6 +90,179 @@ export class ShadowClawChat extends ShadowClawElement {
     );
   }
 
+  isLatestRender(version: number): boolean {
+    return version === this.#renderVersion;
+  }
+
+  isContainerNearBottom(container: HTMLElement): boolean {
+    const { scrollTop, scrollHeight, clientHeight } = container;
+
+    return scrollHeight - scrollTop - clientHeight < AUTO_SCROLL_THRESHOLD;
+  }
+
+  getContainerDistanceFromBottom(container: HTMLElement): number {
+    return Math.max(
+      0,
+      container.scrollHeight - container.scrollTop - container.clientHeight,
+    );
+  }
+
+  persistGroupScrollState(container: HTMLElement): void {
+    const groupId = orchestratorStore.activeGroupId;
+    const nearBottom = this.isContainerNearBottom(container);
+    const distanceFromBottom = nearBottom
+      ? 0
+      : this.getContainerDistanceFromBottom(container);
+
+    chatUiStore.setGroupScrollState(groupId, distanceFromBottom, nearBottom);
+  }
+
+  scrollMessagesToBottomIfNeeded() {
+    const messagesEl = this.shadowRoot?.querySelector(".chat__messages");
+    if (!(messagesEl instanceof HTMLElement)) {
+      return;
+    }
+
+    if (!chatUiStore.isNearBottom) {
+      return;
+    }
+
+    this.setMessagesScrollTop(messagesEl, messagesEl.scrollHeight);
+    chatUiStore.setNearBottom(this.isContainerNearBottom(messagesEl));
+    this.persistGroupScrollState(messagesEl);
+  }
+
+  setMessagesScrollTop(container: HTMLElement, value: number) {
+    this.#suppressScrollTracking = true;
+    container.scrollTop = value;
+    requestAnimationFrame(() => {
+      this.#suppressScrollTracking = false;
+    });
+  }
+
+  shouldAutoFollow(container: HTMLElement): boolean {
+    const state = orchestratorStore.state;
+    const isResponseActive = state === "thinking" || state === "responding";
+    const nearBottom = this.isContainerNearBottom(container);
+
+    if (!isResponseActive) {
+      this.#responseAutoFollow = true;
+
+      return chatUiStore.nearBottomSnapshot || nearBottom;
+    }
+
+    if (nearBottom) {
+      this.#responseAutoFollow = true;
+    }
+
+    return this.#responseAutoFollow;
+  }
+
+  scheduleBottomSnap(version: number) {
+    const snap = () => {
+      if (!this.isLatestRender(version)) {
+        return;
+      }
+
+      this.scrollMessagesToBottomIfNeeded();
+    };
+
+    requestAnimationFrame(() => {
+      snap();
+      requestAnimationFrame(snap);
+    });
+
+    setTimeout(snap, 120);
+  }
+
+  getMessagesContainer(): HTMLElement | null {
+    const container = this.shadowRoot?.querySelector(".chat__messages");
+
+    return container instanceof HTMLElement ? container : null;
+  }
+
+  removeStreamingBubble(container: HTMLElement) {
+    container.querySelector(".chat__message--streaming")?.remove();
+  }
+
+  async renderStreamingBubble(streamingText: string | null) {
+    const version = ++this.#streamRenderVersion;
+    const container = this.getMessagesContainer();
+    if (!container) {
+      return;
+    }
+
+    const shouldKeepBottom = this.shouldAutoFollow(container);
+
+    if (!(typeof streamingText === "string" && streamingText.length > 0)) {
+      this.removeStreamingBubble(container);
+
+      return;
+    }
+
+    let streamDiv = container.querySelector(
+      ".chat__message--streaming",
+    ) as HTMLElement | null;
+    let contentEl: HTMLElement | null = null;
+
+    if (!streamDiv) {
+      const assistantName = localStorage.getItem("assistantName") || "k9";
+
+      streamDiv = document.createElement("article");
+      streamDiv.className =
+        "chat__message chat__message--assistant chat__message--streaming";
+
+      const headerEl = document.createElement("div");
+      headerEl.className = "chat__message-header";
+
+      const senderEl = document.createElement("div");
+      senderEl.className = "chat__message-sender";
+      senderEl.textContent = assistantName;
+
+      const timestampEl = document.createElement("div");
+      timestampEl.className = "chat__message-timestamp";
+      timestampEl.textContent = "streaming…";
+
+      headerEl.append(senderEl, timestampEl);
+
+      contentEl = document.createElement("div");
+      contentEl.className = "chat__message-content";
+
+      streamDiv.append(headerEl, contentEl);
+      container.appendChild(streamDiv);
+    } else {
+      contentEl = streamDiv.querySelector(".chat__message-content");
+      if (!(contentEl instanceof HTMLElement)) {
+        return;
+      }
+    }
+
+    const renderedContent = await renderMarkdown(streamingText, {
+      breaks: true,
+    });
+    if (version !== this.#streamRenderVersion) {
+      return;
+    }
+
+    // Intentional HTML insertion: markdown renderer output.
+    contentEl.innerHTML = renderedContent;
+
+    const cursorEl = document.createElement("span");
+    cursorEl.setAttribute("aria-hidden", "true");
+    cursorEl.className = "chat__streaming-cursor";
+    contentEl.append(cursorEl);
+
+    streamDiv.querySelector(".chat__msg-copy-btn")?.remove();
+    this.injectMessageCopyButton(streamDiv, streamingText);
+    this.injectCopyButtons(contentEl);
+
+    if (shouldKeepBottom) {
+      this.setMessagesScrollTop(container, container.scrollHeight);
+      chatUiStore.setNearBottom(this.isContainerNearBottom(container));
+      this.persistGroupScrollState(container);
+    }
+  }
+
   bindEventListeners() {
     const root = this.shadowRoot;
     if (!root) {
@@ -102,9 +272,15 @@ export class ShadowClawChat extends ShadowClawElement {
     const messagesEl = root.querySelector(".chat__messages");
     if (messagesEl instanceof HTMLElement) {
       messagesEl.addEventListener("scroll", () => {
-        const { scrollTop, scrollHeight, clientHeight } = messagesEl;
-        this.#isNearBottom =
-          scrollHeight - scrollTop - clientHeight < AUTO_SCROLL_THRESHOLD;
+        if (!this.#suppressScrollTracking) {
+          this.#userScrollEpoch += 1;
+          if (!this.isContainerNearBottom(messagesEl)) {
+            this.#responseAutoFollow = false;
+          }
+        }
+
+        chatUiStore.setNearBottom(this.isContainerNearBottom(messagesEl));
+        this.persistGroupScrollState(messagesEl);
       });
 
       messagesEl.addEventListener("click", (event) => {
@@ -112,12 +288,13 @@ export class ShadowClawChat extends ShadowClawElement {
       });
 
       const resizeObserver = new ResizeObserver(() => {
-        if (this.#isNearBottom) {
-          messagesEl.scrollTop = messagesEl.scrollHeight;
+        if (this.shouldAutoFollow(messagesEl)) {
+          this.setMessagesScrollTop(messagesEl, messagesEl.scrollHeight);
+          this.persistGroupScrollState(messagesEl);
         }
       });
       resizeObserver.observe(messagesEl);
-      this.cleanups.push(() => resizeObserver.disconnect());
+      this.addCleanup(() => resizeObserver.disconnect());
     }
 
     const chatInput = root.querySelector(".chat__input");
@@ -263,21 +440,23 @@ export class ShadowClawChat extends ShadowClawElement {
     btn.type = "button";
     btn.setAttribute("aria-label", "Copy message to clipboard");
 
-    btn.innerHTML = `
-      <svg
-        fill="none"
-        stroke-width="1.5"
-        stroke="currentColor"
-        viewBox="0 0 24 24"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
-    `;
+    const svgNs = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNs, "svg");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke-width", "1.5");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("viewBox", "0 0 24 24");
+
+    const path = document.createElementNS(svgNs, "path");
+    path.setAttribute(
+      "d",
+      "M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75",
+    );
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+
+    svg.append(path);
+    btn.append(svg);
 
     btn.addEventListener("click", async () => {
       try {
@@ -365,29 +544,41 @@ export class ShadowClawChat extends ShadowClawElement {
       return;
     }
 
-    this.cleanups.push(
+    this.addCleanup(
       effect(() => {
+        const renderVersion = ++this.#renderVersion;
+        const activeGroupId = orchestratorStore.activeGroupId;
         const messages = orchestratorStore.messages as StoredMessage[];
-        const streamingText = orchestratorStore.streamingText as string | null;
         const container = root.querySelector(".chat__messages");
 
         if (!(container instanceof HTMLElement)) {
           return;
         }
 
-        const shouldScroll = this.#isNearBottom;
+        const savedScrollState = chatUiStore.getGroupScrollState(activeGroupId);
+        if (savedScrollState) {
+          chatUiStore.setNearBottom(savedScrollState.nearBottom);
+        } else {
+          chatUiStore.setNearBottom(true);
+        }
+
+        const shouldScroll = this.shouldAutoFollow(container);
+        const userScrollEpochAtRenderStart = this.#userScrollEpoch;
         const distanceFromBottom = shouldScroll
           ? 0
-          : container.scrollHeight -
-            container.scrollTop -
-            container.clientHeight;
+          : (savedScrollState?.distanceFromBottom ??
+            this.getContainerDistanceFromBottom(container));
 
         this.revokeAttachmentObjectUrls();
-        container.innerHTML = "";
+        container.replaceChildren();
 
         // Render messages sequentially to ensure order and proper awaiting
         const renderMessages = async () => {
           for (const msg of messages) {
+            if (!this.isLatestRender(renderVersion)) {
+              return false;
+            }
+
             const messageType = msg.isFromMe ? "assistant" : "user";
             const assistantName = localStorage.getItem("assistantName") || "k9";
             const sender = msg.isFromMe ? assistantName : msg.sender || "You";
@@ -403,18 +594,29 @@ export class ShadowClawChat extends ShadowClawElement {
               breaks: true,
             });
 
-            msgDiv.innerHTML = `
-              <div class="chat__message-header">
-                <div class="chat__message-sender">${escapeHtml(sender)}</div>
-                <div class="chat__message-timestamp">${escapeHtml(timestamp)}</div>
-              </div>
-            `;
+            const headerEl = document.createElement("div");
+            headerEl.className = "chat__message-header";
+
+            const senderEl = document.createElement("div");
+            senderEl.className = "chat__message-sender";
+            senderEl.textContent = sender;
+
+            const timestampEl = document.createElement("div");
+            timestampEl.className = "chat__message-timestamp";
+            timestampEl.textContent = timestamp;
+
+            headerEl.append(senderEl, timestampEl);
+            msgDiv.append(headerEl);
 
             const contentEl = document.createElement("div");
             contentEl.className = "chat__message-content";
             if (msg.content) {
+              // Intentional HTML insertion: markdown renderer output.
               contentEl.innerHTML = renderedContent;
               await this.resolveImagePaths(msg.groupId, contentEl);
+              if (!this.isLatestRender(renderVersion)) {
+                return false;
+              }
             }
 
             const attachmentsEl = await this.renderMessageAttachments(msg);
@@ -426,6 +628,11 @@ export class ShadowClawChat extends ShadowClawElement {
 
             container.appendChild(msgDiv);
 
+            if (shouldScroll) {
+              this.setMessagesScrollTop(container, container.scrollHeight);
+              this.persistGroupScrollState(container);
+            }
+
             if (msg.content) {
               this.injectMessageCopyButton(msgDiv, msg.content);
             }
@@ -434,65 +641,49 @@ export class ShadowClawChat extends ShadowClawElement {
               this.injectCopyButtons(contentEl);
             }
           }
+
+          return true;
         };
 
-        renderMessages().then(async () => {
-          if (typeof streamingText === "string" && streamingText.length > 0) {
-            const assistantName = localStorage.getItem("assistantName") || "k9";
-
-            const streamDiv = document.createElement("article");
-            streamDiv.className =
-              "chat__message chat__message--assistant chat__message--streaming";
-
-            const renderedContent = await renderMarkdown(streamingText, {
-              breaks: true,
-            });
-
-            streamDiv.innerHTML = `
-              <div class="chat__message-header">
-                <div class="chat__message-sender">${escapeHtml(assistantName)}</div>
-                <div class="chat__message-timestamp">streaming…</div>
-              </div>
-              <div class="chat__message-content">
-                ${renderedContent}
-                <span
-                  aria-hidden="true"
-                  class="chat__streaming-cursor"
-                >
-                </span>
-              </div>
-            `;
-
-            container.appendChild(streamDiv);
-
-            if (streamingText) {
-              this.injectMessageCopyButton(streamDiv, streamingText);
-            }
-
-            // Inject copy buttons and resolve images for any code blocks already streamed
-            const contentEl = streamDiv.querySelector(".chat__message-content");
-            if (contentEl instanceof HTMLElement) {
-              await this.resolveImagePaths(
-                orchestratorStore.activeGroupId,
-                contentEl,
-              );
-              this.injectCopyButtons(contentEl);
-            }
+        renderMessages().then(async (renderCompleted) => {
+          if (!renderCompleted || !this.isLatestRender(renderVersion)) {
+            return;
           }
 
-          if (shouldScroll) {
-            container.scrollTop = container.scrollHeight;
-          } else {
-            container.scrollTop =
+          const userScrolledDuringRender =
+            this.#userScrollEpoch !== userScrollEpochAtRenderStart;
+          const shouldScrollNow = this.shouldAutoFollow(container);
+
+          if (shouldScrollNow) {
+            this.setMessagesScrollTop(container, container.scrollHeight);
+            chatUiStore.setNearBottom(this.isContainerNearBottom(container));
+            this.persistGroupScrollState(container);
+            this.scheduleBottomSnap(renderVersion);
+          } else if (!userScrolledDuringRender) {
+            this.setMessagesScrollTop(
+              container,
               container.scrollHeight -
-              container.clientHeight -
-              distanceFromBottom;
+                container.clientHeight -
+                distanceFromBottom,
+            );
+            chatUiStore.setNearBottom(this.isContainerNearBottom(container));
+            this.persistGroupScrollState(container);
+          } else {
+            chatUiStore.setNearBottom(this.isContainerNearBottom(container));
+            this.persistGroupScrollState(container);
           }
         });
       }),
     );
 
-    this.cleanups.push(
+    this.addCleanup(
+      effect(() => {
+        const streamingText = orchestratorStore.streamingText as string | null;
+        void this.renderStreamingBubble(streamingText);
+      }),
+    );
+
+    this.addCleanup(
       effect(() => {
         const usage = orchestratorStore.tokenUsage;
         const usageEl = root.querySelector(".chat__token-usage");
@@ -503,18 +694,24 @@ export class ShadowClawChat extends ShadowClawElement {
 
         if (usage && (usage.inputTokens || usage.outputTokens)) {
           usageEl.classList.add("chat__token-usage--visible");
-          usageEl.innerHTML =
-            `<span>⬆ ${this.formatTokenCount(usage.inputTokens)} in</span>` +
-            `<span>⬇ ${this.formatTokenCount(usage.outputTokens)} out</span>` +
-            `<span>Σ ${this.formatTokenCount(usage.totalTokens)}</span>`;
+          const inEl = document.createElement("span");
+          inEl.textContent = `⬆ ${this.formatTokenCount(usage.inputTokens)} in`;
+
+          const outEl = document.createElement("span");
+          outEl.textContent = `⬇ ${this.formatTokenCount(usage.outputTokens)} out`;
+
+          const totalEl = document.createElement("span");
+          totalEl.textContent = `Σ ${this.formatTokenCount(usage.totalTokens)}`;
+
+          usageEl.replaceChildren(inEl, outEl, totalEl);
         } else {
           usageEl.classList.remove("chat__token-usage--visible");
-          usageEl.innerHTML = "";
+          usageEl.replaceChildren();
         }
       }),
     );
 
-    this.cleanups.push(
+    this.addCleanup(
       effect(() => {
         const ctx = orchestratorStore.contextUsage;
         const ctxEl = root.querySelector(".chat__context-usage");
@@ -528,23 +725,36 @@ export class ShadowClawChat extends ShadowClawElement {
           const level = pct > 80 ? "high" : pct > 50 ? "medium" : "low";
 
           ctxEl.classList.add("chat__context-usage--visible");
-          ctxEl.innerHTML =
-            `<span>${this.formatTokenCount(ctx.estimatedTokens)} / ${this.formatTokenCount(ctx.contextLimit)}</span>` +
-            `<div class="chat__context-bar">` +
-            `<div class="chat__context-bar-fill chat__context-bar-fill--${level}" style="width:${pct}%"></div>` +
-            `</div>` +
-            `<span>${pct.toFixed(0)}%</span>` +
-            (ctx.truncatedCount > 0
-              ? `<span>(${ctx.truncatedCount} msgs trimmed)</span>`
-              : "");
+          const countEl = document.createElement("span");
+          countEl.textContent = `${this.formatTokenCount(ctx.estimatedTokens)} / ${this.formatTokenCount(ctx.contextLimit)}`;
+
+          const barWrap = document.createElement("div");
+          barWrap.className = "chat__context-bar";
+
+          const barFill = document.createElement("div");
+          barFill.className = `chat__context-bar-fill chat__context-bar-fill--${level}`;
+          barFill.style.width = `${pct}%`;
+          barWrap.append(barFill);
+
+          const pctEl = document.createElement("span");
+          pctEl.textContent = `${pct.toFixed(0)}%`;
+
+          const children: Node[] = [countEl, barWrap, pctEl];
+          if (ctx.truncatedCount > 0) {
+            const trimmedEl = document.createElement("span");
+            trimmedEl.textContent = `(${ctx.truncatedCount} msgs trimmed)`;
+            children.push(trimmedEl);
+          }
+
+          ctxEl.replaceChildren(...children);
         } else {
           ctxEl.classList.remove("chat__context-usage--visible");
-          ctxEl.innerHTML = "";
+          ctxEl.replaceChildren();
         }
       }),
     );
 
-    this.cleanups.push(
+    this.addCleanup(
       effect(() => {
         const activity = orchestratorStore.toolActivity as ToolActivity | null;
         const toolEl = root.querySelector(".chat__tool-activity");
@@ -563,7 +773,7 @@ export class ShadowClawChat extends ShadowClawElement {
       }),
     );
 
-    this.cleanups.push(
+    this.addCleanup(
       effect(() => {
         const progress = orchestratorStore.modelDownloadProgress;
         const progressEl = root.querySelector(".chat__model-progress");
@@ -599,7 +809,7 @@ export class ShadowClawChat extends ShadowClawElement {
       }),
     );
 
-    this.cleanups.push(
+    this.addCleanup(
       effect(() => {
         const log = orchestratorStore.activityLog as ThinkingLogEntry[];
         const logEl = root.querySelector(".chat__activity-log");
@@ -610,22 +820,23 @@ export class ShadowClawChat extends ShadowClawElement {
 
         if (log.length > 0) {
           logEl.classList.add("chat__activity-log--active");
-          logEl.innerHTML = log
-            .map(
-              (entry) =>
-                `<div>[${escapeHtml(entry.level)}] ${escapeHtml(entry.label || "")}: ${escapeHtml(entry.message)}</div>`,
-            )
-            .join("");
+          const fragment = document.createDocumentFragment();
+          log.forEach((entry) => {
+            const entryEl = document.createElement("div");
+            entryEl.textContent = `[${entry.level}] ${entry.label || ""}: ${entry.message}`;
+            fragment.append(entryEl);
+          });
+          logEl.replaceChildren(fragment);
 
           logEl.scrollTop = logEl.scrollHeight;
         } else {
           logEl.classList.remove("chat__activity-log--active");
-          logEl.innerHTML = "";
+          logEl.replaceChildren();
         }
       }),
     );
 
-    this.cleanups.push(
+    this.addCleanup(
       effect(() => {
         const state = orchestratorStore.state;
         const statusText = root.querySelector(".chat__status-text");
@@ -656,7 +867,7 @@ export class ShadowClawChat extends ShadowClawElement {
       }),
     );
 
-    this.cleanups.push(
+    this.addCleanup(
       effect(() => {
         const state = orchestratorStore.state;
         const sendButton = root.querySelector('[data-action="send-message"]');
@@ -673,7 +884,7 @@ export class ShadowClawChat extends ShadowClawElement {
       }),
     );
 
-    this.cleanups.push(
+    this.addCleanup(
       effect(() => {
         const error = orchestratorStore.error;
 
@@ -779,7 +990,7 @@ export class ShadowClawChat extends ShadowClawElement {
         type: attachment.mimeType || "image/png",
       });
       const objectUrl = URL.createObjectURL(blob);
-      this.#attachmentObjectUrls.add(objectUrl);
+      chatUiStore.registerAttachmentObjectUrl(objectUrl);
 
       const previewButton = document.createElement("button");
       previewButton.className = "chat__attachment-preview-btn";
@@ -853,8 +1064,13 @@ export class ShadowClawChat extends ShadowClawElement {
             const blob = new Blob([blobBytes], { type: mimeType });
             const objectUrl = URL.createObjectURL(blob);
 
-            this.#attachmentObjectUrls.add(objectUrl);
+            chatUiStore.registerAttachmentObjectUrl(objectUrl);
 
+            img.addEventListener(
+              "load",
+              () => this.scrollMessagesToBottomIfNeeded(),
+              { once: true },
+            );
             img.src = objectUrl;
           }
         } catch (e) {
@@ -883,6 +1099,8 @@ export class ShadowClawChat extends ShadowClawElement {
         };
 
         link.insertAdjacentElement("afterend", viewer);
+        requestAnimationFrame(() => this.scrollMessagesToBottomIfNeeded());
+        setTimeout(() => this.scrollMessagesToBottomIfNeeded(), 120);
       } catch (e) {
         console.warn(`Failed to load inline PDF: ${filePath}`, e);
       }
@@ -966,7 +1184,8 @@ export class ShadowClawChat extends ShadowClawElement {
     input.value = "";
 
     // Resume auto-scroll so the user sees their own message and the response
-    this.#isNearBottom = true;
+    this.#responseAutoFollow = true;
+    chatUiStore.setNearBottom(true);
 
     try {
       orchestratorStore.sendMessage(message);
@@ -1011,7 +1230,7 @@ export class ShadowClawChat extends ShadowClawElement {
 
     const container = root.querySelector(".chat__messages");
     if (container instanceof HTMLElement) {
-      container.innerHTML = "";
+      container.replaceChildren();
     }
 
     try {

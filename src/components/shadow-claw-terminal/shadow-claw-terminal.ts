@@ -14,7 +14,6 @@ export class ShadowClawTerminal extends ShadowClawElement {
   session: any | null;
   outputBuffer: string;
   pendingEscape: string;
-  cleanups: Array<() => void>;
   bootRequested: boolean;
   orchestrator: any | null;
   vmStatus: any;
@@ -31,7 +30,6 @@ export class ShadowClawTerminal extends ShadowClawElement {
     this.session = null;
     this.outputBuffer = "";
     this.pendingEscape = "";
-    this.cleanups = [];
     this.bootRequested = false;
     this.orchestrator = orchestratorStore.orchestrator;
     this.vmStatus = {
@@ -71,8 +69,7 @@ export class ShadowClawTerminal extends ShadowClawElement {
     this.screenResizeObserver?.disconnect();
     this.screenResizeObserver = null;
 
-    this.cleanups.forEach((cleanup) => cleanup());
-    this.cleanups = [];
+    super.disconnectedCallback();
     this.connectedToWorkerTerminal = false;
     this.terminalAttachRequested = false;
     this.orchestrator?.closeTerminalSession?.(orchestratorStore.activeGroupId);
@@ -132,23 +129,23 @@ export class ShadowClawTerminal extends ShadowClawElement {
     this.orchestrator.events.on("vm-terminal-closed", closedListener);
     this.orchestrator.events.on("vm-terminal-error", errorListener);
 
-    this.cleanups.push(() =>
+    this.addCleanup(() =>
       this.orchestrator?.events?.off?.("vm-status", statusListener),
     );
 
-    this.cleanups.push(() =>
+    this.addCleanup(() =>
       this.orchestrator?.events?.off?.("vm-terminal-output", outputListener),
     );
 
-    this.cleanups.push(() =>
+    this.addCleanup(() =>
       this.orchestrator?.events?.off?.("vm-terminal-opened", openedListener),
     );
 
-    this.cleanups.push(() =>
+    this.addCleanup(() =>
       this.orchestrator?.events?.off?.("vm-terminal-closed", closedListener),
     );
 
-    this.cleanups.push(() =>
+    this.addCleanup(() =>
       this.orchestrator?.events?.off?.("vm-terminal-error", errorListener),
     );
 

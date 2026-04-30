@@ -90,9 +90,9 @@ The crypto key is derived from browser storage (IndexedDB, OPFS, or session stat
 
 The **Settings UI** provides panels for managing service accounts:
 
-- `<shadow-claw-settings-channels>` — Telegram/iMessage account setup
-- `<shadow-claw-settings-llm>` — Provider API key management
-- `<shadow-claw-settings-accounts>` — General account CRUD (future)
+- `<shadow-claw-channel-config>` — Telegram/iMessage account setup
+- `<shadow-claw-llm>` — Provider API key management
+- `<shadow-claw-accounts>` — General account CRUD (future)
 
 ## Best Practices
 

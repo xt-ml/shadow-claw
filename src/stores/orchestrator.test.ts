@@ -590,7 +590,7 @@ describe("OrchestratorStore", () => {
 
   it("supports folder navigation and reset", async () => {
     const store = new OrchestratorStore();
-    const loadSpy = jest.spyOn(store, "loadFiles").mockResolvedValue(undefined);
+    const setPathSpy = jest.spyOn(store, "setCurrentPath");
 
     await store.navigateIntoFolder({} as any, "dir/");
 
@@ -616,7 +616,7 @@ describe("OrchestratorStore", () => {
 
     expect(store.currentPath).toBe(".");
 
-    expect(loadSpy).toHaveBeenCalled();
+    expect(setPathSpy).toHaveBeenCalled();
   });
 
   it("setActiveGroup resets transient state and reloads views", () => {

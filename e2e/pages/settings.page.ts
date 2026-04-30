@@ -22,7 +22,7 @@ export class SettingsPage {
   }
 
   llm() {
-    return this.host.locator("shadow-claw-settings-llm");
+    return this.host.locator("shadow-claw-llm");
   }
 
   maxIterationsInput() {

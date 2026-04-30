@@ -82,9 +82,9 @@ describe("writeOpfsPathViaWorker", () => {
   });
 
   it("sends path segments and bytes to the inline worker", async () => {
-    let postedData;
-    let postedTransfer;
-    let onMessageHandler;
+    let postedData: any;
+    let postedTransfer: any;
+    let onMessageHandler: any;
     const fakeWorker: any = {
       terminate: jest.fn(),
       postMessage: jest.fn((data, transfer) => {
@@ -92,19 +92,17 @@ describe("writeOpfsPathViaWorker", () => {
         postedTransfer = transfer;
         setTimeout(() => onMessageHandler({ data: { ok: true } }), 0);
       }),
-      set onmessage(fn) {
+      set onmessage(fn: any) {
         onMessageHandler = fn;
       },
-      set onerror(_fn) {},
+      set onerror(_fn: any) {},
     };
 
     const origWorker = (globalThis as any).Worker;
     const origCreateObjectURL = URL.createObjectURL;
     const origRevokeObjectURL = URL.revokeObjectURL;
     try {
-      // @ts-ignore
       (globalThis as any).Worker = jest.fn(() => fakeWorker);
-      // @ts-ignore
       URL.createObjectURL = jest.fn(() => "blob:mock");
       URL.revokeObjectURL = jest.fn();
 
@@ -127,7 +125,7 @@ describe("writeOpfsPathViaWorker", () => {
   });
 
   it("rejects when the inline worker reports an error", async () => {
-    let onMessageHandler;
+    let onMessageHandler: any;
     const fakeWorker: any = {
       terminate: jest.fn(),
       postMessage: jest.fn(() => {
@@ -136,19 +134,17 @@ describe("writeOpfsPathViaWorker", () => {
           0,
         );
       }),
-      set onmessage(fn) {
+      set onmessage(fn: any) {
         onMessageHandler = fn;
       },
-      set onerror(_fn) {},
+      set onerror(_fn: any) {},
     };
 
     const origWorker = (globalThis as any).Worker;
     const origCreateObjectURL = URL.createObjectURL;
     const origRevokeObjectURL = URL.revokeObjectURL;
     try {
-      // @ts-ignore
       (globalThis as any).Worker = jest.fn(() => fakeWorker);
-      // @ts-ignore
       URL.createObjectURL = jest.fn(() => "blob:mock");
       URL.revokeObjectURL = jest.fn();
 

@@ -22,7 +22,6 @@ export async function readGroupFile(
   const fileHandle = await dir.getFileHandle(filename);
 
   try {
-    // @ts-ignore — createSyncAccessHandle is only on OPFS handles in Workers
     const syncHandle = await (fileHandle as any).createSyncAccessHandle();
     const size = syncHandle.getSize();
     const buf = new Uint8Array(size);

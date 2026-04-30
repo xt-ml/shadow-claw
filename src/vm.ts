@@ -744,7 +744,6 @@ async function doBootVM(bootToken: number): Promise<void> {
     let V86;
     try {
       // Use local v86 module from assets
-      // @ts-ignore
       const v86Module = await import(bootConfig.libUrl);
       if (!isCurrentBoot(bootToken)) {
         return;
@@ -1133,8 +1132,7 @@ async function syncHostWorkspaceToVM(emulator: any, context: VMExecuteContext) {
   // Diagnostic: enumerate what's actually in the workspace dir
   const debugEntries: string[] = [];
   try {
-    // @ts-ignore - entries() is available on FileSystemDirectoryHandle
-    for await (const [name, handle] of workspaceDir.entries()) {
+    for await (const [name, handle] of (workspaceDir as any).entries()) {
       debugEntries.push(`${name}(${handle.kind})`);
     }
   } catch (e) {
@@ -1390,8 +1388,7 @@ async function collectWorkspaceFiles(
   prefix: string,
   out: string[],
 ): Promise<void> {
-  // @ts-ignore - entries() is available in workers for FileSystemDirectoryHandle.
-  for await (const [name, handle] of dir.entries()) {
+  for await (const [name, handle] of (dir as any).entries()) {
     if (name === ".git") {
       continue;
     }
@@ -1513,10 +1510,7 @@ async function writeWorkspaceFileBytes(
   }
 
   const fileHandle = await dir.getFileHandle(filename, { create: true });
-
-  // @ts-ignore - createWritable is available in File System Access API.
-  const writable = await fileHandle.createWritable();
-  // @ts-ignore - File System Access API accepts BufferSource at runtime.
+  const writable: any = await fileHandle.createWritable();
   await writable.write(bytes);
   await writable.close();
 }

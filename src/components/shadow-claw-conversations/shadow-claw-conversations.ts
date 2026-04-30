@@ -5,7 +5,6 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 
 import { effect } from "../../effect.js";
 import { setConfig } from "../../db/setConfig.js";
-import { escapeHtml } from "../../utils.js";
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
@@ -70,9 +69,9 @@ export class ShadowClawConversations extends ShadowClawElement {
     // Re-render when store state changes
     this._effectCleanup = effect(() => {
       // Access signals to establish tracking
-      orchestratorStore._groups.get();
-      orchestratorStore._activeGroupId.get();
-      orchestratorStore._unreadGroupIds.get();
+      orchestratorStore.groups;
+      orchestratorStore.activeGroupId;
+      orchestratorStore.unreadGroupIds;
 
       this.render();
     });
@@ -169,7 +168,7 @@ export class ShadowClawConversations extends ShadowClawElement {
     const unreadIds = orchestratorStore.unreadGroupIds || new Set();
     const channelRegistry = this.getChannelRegistry();
 
-    list.innerHTML = "";
+    list.replaceChildren();
 
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i];
@@ -197,22 +196,55 @@ export class ShadowClawConversations extends ShadowClawElement {
         ? channelRegistry.getBadge(group.groupId)
         : "";
 
-      const badgeHtml = badge
-        ? `<span class="channel-badge">${badge}</span>`
-        : "";
-
       const canDelete = groups.length > 1;
 
-      li.innerHTML = `
-        <span class="drag-handle" draggable="true" aria-hidden="true" title="Drag to reorder">⠿</span>
-        ${badgeHtml}
-        <span class="conversation-name">${escapeHtml(group.name)}</span>
-        <span class="conversation-actions">
-          <button data-action="clone" title="Clone" aria-label="Clone ${escapeHtml(group.name)}">📋</button>
-          <button data-action="rename" title="Rename" aria-label="Rename ${escapeHtml(group.name)}">✏️</button>
-          ${canDelete ? `<button data-action="delete" title="Delete" aria-label="Delete ${escapeHtml(group.name)}">🗑️</button>` : ""}
-        </span>
-      `;
+      const handle = document.createElement("span");
+      handle.className = "drag-handle";
+      handle.setAttribute("draggable", "true");
+      handle.setAttribute("aria-hidden", "true");
+      handle.setAttribute("title", "Drag to reorder");
+      handle.textContent = "⠿";
+
+      li.append(handle);
+
+      if (badge) {
+        const badgeEl = document.createElement("span");
+        badgeEl.className = "channel-badge";
+        badgeEl.textContent = badge;
+        li.append(badgeEl);
+      }
+
+      const nameEl = document.createElement("span");
+      nameEl.className = "conversation-name";
+      nameEl.textContent = group.name;
+
+      const actionsEl = document.createElement("span");
+      actionsEl.className = "conversation-actions";
+
+      const cloneBtn = document.createElement("button");
+      cloneBtn.setAttribute("data-action", "clone");
+      cloneBtn.setAttribute("title", "Clone");
+      cloneBtn.setAttribute("aria-label", `Clone ${group.name}`);
+      cloneBtn.textContent = "📋";
+
+      const renameBtn = document.createElement("button");
+      renameBtn.setAttribute("data-action", "rename");
+      renameBtn.setAttribute("title", "Rename");
+      renameBtn.setAttribute("aria-label", `Rename ${group.name}`);
+      renameBtn.textContent = "✏️";
+
+      actionsEl.append(cloneBtn, renameBtn);
+
+      if (canDelete) {
+        const deleteBtn = document.createElement("button");
+        deleteBtn.setAttribute("data-action", "delete");
+        deleteBtn.setAttribute("title", "Delete");
+        deleteBtn.setAttribute("aria-label", `Delete ${group.name}`);
+        deleteBtn.textContent = "🗑️";
+        actionsEl.append(deleteBtn);
+      }
+
+      li.append(nameEl, actionsEl);
 
       li.addEventListener("click", (e) => {
         const target = e.target as HTMLElement;
@@ -235,44 +267,41 @@ export class ShadowClawConversations extends ShadowClawElement {
         this._handleKeyboardReorder(e, group.groupId, group.name);
       });
 
-      const handle = li.querySelector(".drag-handle");
-      if (handle) {
-        handle.addEventListener("dragstart", (e) => {
-          this._draggedGroupId = group.groupId;
+      handle.addEventListener("dragstart", (e) => {
+        this._draggedGroupId = group.groupId;
+
+        li.classList.add("dragging");
+
+        (e as DragEvent).dataTransfer?.setData("text/plain", group.groupId);
+      });
+
+      handle.addEventListener("dragend", () => {
+        li.classList.remove("dragging");
+
+        this._draggedGroupId = null;
+
+        list
+          .querySelectorAll(".drag-over")
+          .forEach((el) => el.classList.remove("drag-over"));
+      });
+
+      handle.addEventListener(
+        "touchstart",
+        (e) => {
+          const touch = (e as TouchEvent).touches[0];
+          if (!touch) {
+            return;
+          }
+
+          this._touchId = touch.identifier;
+          this._touchDraggedGroupId = group.groupId;
 
           li.classList.add("dragging");
 
-          (e as DragEvent).dataTransfer?.setData("text/plain", group.groupId);
-        });
-
-        handle.addEventListener("dragend", () => {
-          li.classList.remove("dragging");
-
-          this._draggedGroupId = null;
-
-          list
-            .querySelectorAll(".drag-over")
-            .forEach((el) => el.classList.remove("drag-over"));
-        });
-
-        handle.addEventListener(
-          "touchstart",
-          (e) => {
-            const touch = (e as TouchEvent).touches[0];
-            if (!touch) {
-              return;
-            }
-
-            this._touchId = touch.identifier;
-            this._touchDraggedGroupId = group.groupId;
-
-            li.classList.add("dragging");
-
-            e.preventDefault();
-          },
-          { passive: false },
-        );
-      }
+          e.preventDefault();
+        },
+        { passive: false },
+      );
 
       li.addEventListener("dragover", (e) => {
         e.preventDefault();
@@ -656,7 +685,7 @@ export class ShadowClawConversations extends ShadowClawElement {
     }
 
     if (nameSpan) {
-      nameSpan.textContent = escapeHtml(name);
+      nameSpan.textContent = name;
     }
 
     dialog.showModal();

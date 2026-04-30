@@ -65,6 +65,7 @@ import { readGroupFile } from "./storage/readGroupFile.js";
 import { readGroupFileBytes } from "./storage/readGroupFileBytes.js";
 import { toolsStore } from "./stores/tools.js";
 import { getCompactionSystemPrompt } from "./worker/getCompactionSystemPrompt.js";
+import { buildSystemPrompt } from "./worker/system-prompt.js";
 import { getPushUrl } from "./notifications/push-client.js";
 
 import type {
@@ -158,6 +159,8 @@ export class Orchestrator {
   llamafileOffline: boolean = true;
   maxIterations: number = DEFAULT_MAX_ITERATIONS;
   maxTokens: number = DEFAULT_MAX_TOKENS;
+  rateLimitCallsPerMinute: number = 0;
+  rateLimitAutoAdapt: boolean = true;
   messageQueue: any[] = [];
   model: string = getDefaultProvider().defaultModel;
   pendingScheduledTasks: Set<string> = new Set();
@@ -247,6 +250,23 @@ export class Orchestrator {
       this.maxIterations =
         parseInt(storedMaxIterations, 10) || DEFAULT_MAX_ITERATIONS;
     }
+
+    const storedRateLimitCallsPerMinute = await getConfig(
+      db,
+      CONFIG_KEYS.RATE_LIMIT_CALLS_PER_MINUTE,
+    );
+    if (storedRateLimitCallsPerMinute) {
+      const parsed = parseInt(storedRateLimitCallsPerMinute, 10);
+      this.rateLimitCallsPerMinute = Number.isFinite(parsed)
+        ? Math.max(0, parsed)
+        : 0;
+    }
+
+    const storedRateLimitAutoAdapt = await getConfig(
+      db,
+      CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT,
+    );
+    this.rateLimitAutoAdapt = storedRateLimitAutoAdapt !== "false";
 
     const storedLlamafileMode = await getConfig(db, CONFIG_KEYS.LLAMAFILE_MODE);
     if (storedLlamafileMode === "cli" || storedLlamafileMode === "server") {
@@ -663,6 +683,42 @@ export class Orchestrator {
     await setConfig(db, CONFIG_KEYS.MAX_ITERATIONS, String(value));
   }
 
+  getRateLimitCallsPerMinute(): number {
+    return this.rateLimitCallsPerMinute;
+  }
+
+  async setRateLimitCallsPerMinute(
+    db: ShadowClawDatabase,
+    value: number,
+  ): Promise<void> {
+    const normalized = Number.isFinite(value)
+      ? Math.max(0, Math.floor(value))
+      : 0;
+
+    this.rateLimitCallsPerMinute = normalized;
+    await setConfig(
+      db,
+      CONFIG_KEYS.RATE_LIMIT_CALLS_PER_MINUTE,
+      String(normalized),
+    );
+  }
+
+  getRateLimitAutoAdapt(): boolean {
+    return this.rateLimitAutoAdapt;
+  }
+
+  async setRateLimitAutoAdapt(
+    db: ShadowClawDatabase,
+    enabled: boolean,
+  ): Promise<void> {
+    this.rateLimitAutoAdapt = !!enabled;
+    await setConfig(
+      db,
+      CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT,
+      this.rateLimitAutoAdapt ? "true" : "false",
+    );
+  }
+
   async setModel(db: ShadowClawDatabase, model: string): Promise<void> {
     this.model = model;
 
@@ -1046,6 +1102,7 @@ export class Orchestrator {
       this.assistantName,
       memory,
       compactTools,
+      toolsStore.systemPromptOverride,
     );
 
     const contextLimit = getContextLimit(this.model);
@@ -1113,6 +1170,8 @@ export class Orchestrator {
         groupId,
         messages,
         systemPrompt,
+        assistantName: this.assistantName,
+        memory,
         apiKey: this.apiKey,
         model: this.model,
         provider: this.provider,
@@ -1120,6 +1179,8 @@ export class Orchestrator {
         providerHeaders: this.getProviderRuntimeHeaders(this.provider),
         contextCompression: this.contextCompressionEnabled,
         contextLimit: getContextLimit(this.model),
+        rateLimitCallsPerMinute: this.rateLimitCallsPerMinute,
+        rateLimitAutoAdapt: this.rateLimitAutoAdapt,
       },
     });
   }
@@ -1265,6 +1326,14 @@ export class Orchestrator {
     }
 
     navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data?.type === "request-proxy-config") {
+        // The service worker just restarted and lost its in-memory proxy config.
+        // Re-sync so fetch interception resumes immediately.
+        this.syncProxyConfigToServiceWorker();
+
+        return;
+      }
+
       if (event.data?.type !== "scheduled-task-trigger") {
         return;
       }
@@ -1842,6 +1911,7 @@ export class Orchestrator {
       this.assistantName,
       memory,
       activeTools,
+      toolsStore.systemPromptOverride,
     );
 
     // Build conversation context with dynamic token-aware windowing
@@ -1936,6 +2006,8 @@ export class Orchestrator {
         groupId,
         messages,
         systemPrompt,
+        assistantName: this.assistantName,
+        memory,
         apiKey: this.apiKey,
         model: this.model,
         maxTokens: this.maxTokens,
@@ -1947,6 +2019,8 @@ export class Orchestrator {
         streaming: shouldStream,
         contextCompression: this.contextCompressionEnabled,
         contextLimit: getContextLimit(this.model),
+        rateLimitCallsPerMinute: this.rateLimitCallsPerMinute,
+        rateLimitAutoAdapt: this.rateLimitAutoAdapt,
         isScheduledTask: this._schedulerTriggeredGroups.has(groupId),
       },
     });
@@ -2214,6 +2288,30 @@ export class Orchestrator {
         break;
       }
 
+      case "manage-tools": {
+        const { action, toolNames, profileId } = msg.payload;
+        if (action === "activate_profile" && profileId) {
+          await toolsStore.activateProfile(db, profileId);
+        } else if ((action === "enable" || action === "disable") && toolNames) {
+          const enabled = action === "enable";
+          for (const name of toolNames) {
+            await toolsStore.setToolEnabled(db, name, enabled);
+          }
+        }
+
+        const finalGroupId = msg.payload.groupId || DEFAULT_GROUP_ID;
+        this.agentWorker?.postMessage({
+          type: "update-tools",
+          payload: {
+            groupId: finalGroupId,
+            enabledTools: toolsStore.enabledTools,
+            systemPromptOverride: toolsStore.systemPromptOverride,
+          },
+        });
+
+        break;
+      }
+
       case "send-notification": {
         const { title, body, groupId: notifGroupId } = msg.payload;
 
@@ -2421,77 +2519,4 @@ function parseStoredStringList(value: string | undefined): string[] {
   }
 
   return normalizeStringList(value.split(","));
-}
-
-/**
- * Build system prompt
- */
-export function buildSystemPrompt(
-  assistantName: string,
-  memory: string,
-  tools?: ToolDefinition[],
-): string {
-  const defs = tools || TOOL_DEFINITIONS;
-  const toolList = defs
-    .map((t) => {
-      const brief = t.description.split(". ")[0];
-
-      return `- **${t.name}**: ${brief}.`;
-    })
-    .join("\n");
-
-  const parts = [
-    `You are ${assistantName}, a personal AI assistant running in the client's browser.`,
-    "",
-    "You have access to the following tools:",
-    "",
-    toolList,
-    "",
-    "Guidelines:",
-    "- Be concise and direct.",
-    "- Use tools proactively when they help answer the question.",
-    "- Update memory when you learn important preferences or context.",
-    "- For scheduled tasks, confirm the schedule with the client.",
-    "- The cron expression for a task to be executed once, should be for that exact time.",
-    "- Manage tasks. If you create a task, make sure to disable (or delete) it when it's no longer needed.",
-    "- Strip <internal> tags from your responses.",
-    "",
-    "Tool usage strategy:",
-    "- Prefer read_file over bash for reading files — it's faster and always works.",
-    "- Use read_file with paths (array) to batch-read multiple files in one call — minimizes API round-trips.",
-    "- Prefer write_file over bash for writing files.",
-    "- Use patch_file for targeted edits in existing files — it finds and replaces a single unique text match, works reliably with large files, and avoids the pitfalls of sed or heredocs. Include 2-3 lines of surrounding context to ensure a unique match.",
-    "- When sharing workspace images or files in chat, prefer attach_file_to_chat first. It validates the path and returns exact markdown references to the file path (for example: ![alt](path/to/image.png) or [report.pdf](path/to/report.pdf)) so ShadowClaw can inline and external channels can attach reliably.",
-    "- Do not use open_file to attach or send files in chat. Use open_file only when the user explicitly asks to open/view a file in the ShadowClaw file viewer.",
-    "- Prefer javascript usage for data analysis, string processing, and computations over bash.",
-    "- Shell commands may fail if WebVM is unavailable. When a bash command fails with 'command not found', do NOT retry — use read_file, write_file, or javascript instead.",
-    "- Analyze code by reading files and reasoning, not by running syntax checkers in bash.",
-    "- Minimize API calls: gather context with a few read_file calls, think carefully, then act.",
-    "- When using fetch_url with Git hosting services (github.com, gitlab.com, dev.azure.com, git.* hosts, etc.), always set use_git_auth: true to inject saved credentials. Without it, many Git servers return a login page instead of API data.",
-    "- When using fetch_url with non-Git services that have a saved account (e.g. Figma, Notion, or any service configured under Settings → Accounts), set use_account_auth: true to inject the matching PAT in the service's expected format (e.g. Bearer token, X-Figma-Token, etc.). The account is matched by host pattern automatically. Do NOT also pass manual auth headers when using use_account_auth — they are mutually exclusive.",
-    "",
-    "Shell fallback tips (when WebVM is unavailable):",
-    "- grep -r works: use 'grep -rn PATTERN dir' to recursively search files. Supports --include=GLOB and --exclude=GLOB.",
-    "- sed -i works: use 'sed -i \"s/old/new/g\" file' for in-place file edits. For multi-line or complex edits, prefer patch_file instead.",
-    "- find works: supports -name, -iname, -type, -maxdepth. Does NOT support -exec (use find | xargs or javascript).",
-    "- Prefer list_files over 'ls' and read_file over 'cat' — dedicated tools are faster and more reliable than shell fallback.",
-    "- The javascript tool MUST use 'return <value>' to produce output — bare expressions yield nothing.",
-    "",
-    "Git merge conflict resolution:",
-    "- After git_merge reports conflicts, use read_file to see each conflicted file (with <<<<<<< / ======= / >>>>>>> markers).",
-    "- Use write_file to overwrite each file with the fully resolved content — no conflict markers.",
-    "- Do NOT use bash, sed, or awk for conflict resolution. Use read_file + write_file exclusively.",
-    "- After resolving all files, git_add each file then git_commit.",
-  ];
-
-  if (memory) {
-    parts.push("", "## Persistent Memory", "", memory);
-  }
-
-  const promptOverride = toolsStore.systemPromptOverride;
-  if (promptOverride) {
-    parts.push("", promptOverride);
-  }
-
-  return parts.join("\n");
 }

@@ -1,4 +1,3 @@
-// @ts-ignore
 import { Signal } from "signal-polyfill";
 
 export type ThemeChoice = "light" | "dark" | "system";

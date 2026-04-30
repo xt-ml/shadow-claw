@@ -10,7 +10,6 @@ export async function addDirToZip(
   dirHandle: FileSystemDirectoryHandle,
   zipPath: string = "",
 ): Promise<void> {
-  // @ts-ignore - entries() is a newer File System Access API iterator method
   for await (const [name, handle] of (dirHandle as any).entries()) {
     const fullPath = zipPath ? `${zipPath}/${name}` : name;
     if (handle.kind === "directory") {

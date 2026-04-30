@@ -28,6 +28,45 @@ interface JsonRpcError {
 
 type JsonRpcResponse<T> = JsonRpcSuccess<T> | JsonRpcError;
 
+interface JsonRpcServerRequest {
+  jsonrpc: "2.0";
+  id: string | number;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+function isServerRequest(msg: unknown): msg is JsonRpcServerRequest {
+  return (
+    typeof msg === "object" &&
+    msg !== null &&
+    "method" in msg &&
+    "id" in msg &&
+    !("result" in msg) &&
+    !("error" in msg)
+  );
+}
+
+function buildElicitationDefaults(
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const schema = (params.requestedSchema || {}) as Record<string, unknown>;
+  const properties = (schema.properties || {}) as Record<
+    string,
+    Record<string, unknown>
+  >;
+  const defaults: Record<string, unknown> = {};
+
+  for (const [key, prop] of Object.entries(properties)) {
+    if ("default" in prop) {
+      defaults[key] = prop.default;
+    } else if (prop.type === "boolean") {
+      defaults[key] = true;
+    }
+  }
+
+  return defaults;
+}
+
 interface ToolListResult {
   tools?: Array<{ name: string; description?: string }>;
 }
@@ -45,6 +84,15 @@ class InvalidRemoteMcpSessionError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "InvalidRemoteMcpSessionError";
+  }
+}
+
+class HttpRemoteMcpError extends Error {
+  status: number;
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "HttpRemoteMcpError";
+    this.status = status;
   }
 }
 
@@ -84,7 +132,8 @@ function toError(
   }
 
   if (!response.ok) {
-    return new Error(
+    return new HttpRemoteMcpError(
+      response.status,
       jsonRpcMessage
         ? `Remote MCP HTTP error: ${response.status} (${jsonRpcMessage})`
         : `Remote MCP HTTP error: ${response.status}`,
@@ -217,7 +266,9 @@ async function ensureRemoteMcpSession(
       method: "initialize",
       params: {
         protocolVersion: "2025-03-26",
-        capabilities: {},
+        capabilities: {
+          elicitation: {},
+        },
         clientInfo: {
           name: "shadowclaw-remote-mcp-client",
           version: "1.0.0",
@@ -271,14 +322,52 @@ async function callRemoteMcpWithSession<T>(
       params: params || {},
     };
 
-    const { response, payload } = await postJsonRpc<T>(
+    const sessionHeaders = {
+      ...headers,
+      "mcp-session-id": activeSessionId,
+    };
+
+    let { response, payload } = await postJsonRpc<T>(
       serverUrl,
-      {
-        ...headers,
-        "mcp-session-id": activeSessionId,
-      },
+      sessionHeaders,
       body,
     );
+
+    // Handle server-initiated requests (e.g., elicitation/create).
+    // The gateway may ask the client to confirm before completing a tool call.
+    let elicitationAttempts = 0;
+    while (isServerRequest(payload) && elicitationAttempts < 5) {
+      elicitationAttempts++;
+
+      if (payload.method === "elicitation/create") {
+        const elicitationParams = (payload.params || {}) as Record<
+          string,
+          unknown
+        >;
+        const defaults = buildElicitationDefaults(elicitationParams);
+
+        ({ response, payload } = await postJsonRpc<T>(
+          serverUrl,
+          sessionHeaders,
+          {
+            jsonrpc: "2.0",
+            id: payload.id,
+            result: {
+              action: "accept",
+              content: defaults,
+            },
+          },
+        ));
+      } else {
+        break;
+      }
+    }
+
+    if (isServerRequest(payload)) {
+      throw new Error(
+        `Unsupported server request: ${(payload as JsonRpcServerRequest).method}`,
+      );
+    }
 
     if (!response.ok || !payload || "error" in payload) {
       throw toError(response, payload);
@@ -336,19 +425,48 @@ async function callRemoteMcp<T>(
     throw new Error("OAuth reconnect required for remote MCP connection");
   }
 
-  const { connection, headers } = resolved;
+  const { connection, authType, headers } = resolved;
 
   if (connection.transport !== "streamable_http") {
     throw new Error("Unsupported remote MCP transport");
   }
 
-  return callRemoteMcpWithSession<T>(
-    connectionId,
-    connection.serverUrl,
-    headers,
-    method,
-    params,
-  );
+  try {
+    return await callRemoteMcpWithSession<T>(
+      connectionId,
+      connection.serverUrl,
+      headers,
+      method,
+      params,
+    );
+  } catch (err) {
+    if (
+      !(err instanceof HttpRemoteMcpError) ||
+      err.status !== 401 ||
+      authType !== "oauth"
+    ) {
+      throw err;
+    }
+
+    // 401 with OAuth — force-refresh token and retry once.
+    clearRemoteMcpSession(connectionId);
+
+    const refreshed = await resolveRemoteMcpConnectionAuth(db, connectionId, {
+      forceRefresh: true,
+    });
+
+    if (!refreshed || refreshed.reauthRequired) {
+      throw new Error("OAuth reconnect required for remote MCP connection");
+    }
+
+    return callRemoteMcpWithSession<T>(
+      connectionId,
+      refreshed.connection.serverUrl,
+      refreshed.headers,
+      method,
+      params,
+    );
+  }
 }
 
 export async function listRemoteMcpTools(
@@ -374,4 +492,233 @@ export async function callRemoteMcpTool(
     name,
     arguments: argumentsInput,
   });
+}
+
+export interface McpConnectionTestStep {
+  step: string;
+  status: "ok" | "error" | "skipped";
+  detail?: string;
+}
+
+export interface McpConnectionTestResult {
+  success: boolean;
+  error: string | null;
+  toolCount: number;
+  toolNames: string[];
+  steps: McpConnectionTestStep[];
+}
+
+export async function testRemoteMcpConnection(
+  db: ShadowClawDatabase,
+  connectionId: string,
+): Promise<McpConnectionTestResult> {
+  const steps: McpConnectionTestStep[] = [];
+
+  // Step 1: Resolve auth
+  let resolved;
+  try {
+    resolved = await resolveRemoteMcpConnectionAuth(db, connectionId);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    steps.push({
+      step: "Resolve authentication",
+      status: "error",
+      detail: message,
+    });
+
+    return {
+      success: false,
+      error: message,
+      toolCount: 0,
+      toolNames: [],
+      steps,
+    };
+  }
+
+  if (!resolved) {
+    steps.push({
+      step: "Resolve authentication",
+      status: "error",
+      detail: "Connection not found",
+    });
+
+    return {
+      success: false,
+      error: "Connection not found",
+      toolCount: 0,
+      toolNames: [],
+      steps,
+    };
+  }
+
+  if (resolved.reauthRequired) {
+    const detail =
+      "OAuth token expired or revoked — re-authenticate in Settings";
+    steps.push({ step: "Resolve authentication", status: "error", detail });
+
+    return {
+      success: false,
+      error: detail,
+      toolCount: 0,
+      toolNames: [],
+      steps,
+    };
+  }
+
+  steps.push({
+    step: "Resolve authentication",
+    status: "ok",
+    detail: `Auth type: ${resolved.authType}`,
+  });
+
+  let { connection, authType, headers } = resolved;
+
+  if (connection.transport !== "streamable_http") {
+    const detail = `Unsupported transport: ${connection.transport}`;
+    steps.push({ step: "Establish MCP session", status: "error", detail });
+
+    return {
+      success: false,
+      error: detail,
+      toolCount: 0,
+      toolNames: [],
+      steps,
+    };
+  }
+
+  // Step 2: Establish session (clear any stale session first)
+  clearRemoteMcpSession(connectionId);
+
+  try {
+    await ensureRemoteMcpSession(connectionId, connection.serverUrl, headers);
+    steps.push({
+      step: "Establish MCP session",
+      status: "ok",
+      detail: "Session established",
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    steps.push({
+      step: "Establish MCP session",
+      status: "error",
+      detail: message,
+    });
+
+    // If 401 with OAuth, try force-refreshing the token and retrying.
+    if (
+      err instanceof HttpRemoteMcpError &&
+      err.status === 401 &&
+      authType === "oauth"
+    ) {
+      clearRemoteMcpSession(connectionId);
+
+      const refreshed = await resolveRemoteMcpConnectionAuth(db, connectionId, {
+        forceRefresh: true,
+      });
+
+      if (refreshed && !refreshed.reauthRequired) {
+        steps.push({
+          step: "Refresh OAuth token",
+          status: "ok",
+          detail: "Token refreshed, retrying",
+        });
+
+        connection = refreshed.connection;
+        headers = refreshed.headers;
+
+        try {
+          await ensureRemoteMcpSession(
+            connectionId,
+            connection.serverUrl,
+            headers,
+          );
+          steps.push({
+            step: "Establish MCP session",
+            status: "ok",
+            detail: "Session established",
+          });
+        } catch (retryErr) {
+          const retryMessage =
+            retryErr instanceof Error ? retryErr.message : String(retryErr);
+          const isStill401 =
+            retryErr instanceof HttpRemoteMcpError && retryErr.status === 401;
+          const detail = isStill401
+            ? `${retryMessage} — re-authorize in Settings → Accounts`
+            : retryMessage;
+          steps.push({
+            step: "Establish MCP session",
+            status: "error",
+            detail,
+          });
+
+          return {
+            success: false,
+            error: detail,
+            toolCount: 0,
+            toolNames: [],
+            steps,
+          };
+        }
+      } else {
+        steps.push({
+          step: "Refresh OAuth token",
+          status: "error",
+          detail: "Token refresh failed — re-authenticate in Settings",
+        });
+
+        return {
+          success: false,
+          error: message,
+          toolCount: 0,
+          toolNames: [],
+          steps,
+        };
+      }
+    } else {
+      return {
+        success: false,
+        error: message,
+        toolCount: 0,
+        toolNames: [],
+        steps,
+      };
+    }
+  }
+
+  // Step 3: Discover tools
+  try {
+    const result = await callRemoteMcpWithSession<ToolListResult>(
+      connectionId,
+      connection.serverUrl,
+      headers,
+      "tools/list",
+    );
+
+    const tools = Array.isArray(result.tools) ? result.tools : [];
+    const toolNames = tools.map((t) => t.name);
+    steps.push({
+      step: "Discover tools",
+      status: "ok",
+      detail: `${tools.length} tool${tools.length === 1 ? "" : "s"} available`,
+    });
+
+    return {
+      success: true,
+      error: null,
+      toolCount: tools.length,
+      toolNames,
+      steps,
+    };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    steps.push({ step: "Discover tools", status: "error", detail: message });
+
+    return {
+      success: false,
+      error: message,
+      toolCount: 0,
+      toolNames: [],
+      steps,
+    };
+  }
 }

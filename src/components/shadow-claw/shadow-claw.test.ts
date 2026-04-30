@@ -35,9 +35,8 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
     init: jest.fn(async (db, orchestrator) => {}),
     setDb: jest.fn(),
     db: {},
-    _ready: { set: jest.fn() },
+    setReady: jest.fn(),
     setActivePage: (jest.fn() as any).mockResolvedValue(undefined),
-    // @ts-ignore
     loadFiles: (jest.fn() as any).mockResolvedValue(undefined),
   },
 }));
@@ -63,7 +62,6 @@ jest.unstable_mockModule("../../toast.js", () => ({
 
 jest.unstable_mockModule("../../stores/tools.js", () => ({
   toolsStore: {
-    // @ts-ignore
     load: (jest.fn() as any).mockResolvedValue(undefined),
     enabledTools: [],
     enabledToolNames: new Set(),
@@ -74,7 +72,6 @@ jest.unstable_mockModule("../../stores/tools.js", () => ({
 }));
 
 jest.unstable_mockModule("../../vm.js", () => ({
-  // @ts-ignore
   bootVM: (jest.fn() as any).mockResolvedValue(undefined),
   getVMStatus: jest.fn(() => ({
     ready: false,
@@ -83,10 +80,8 @@ jest.unstable_mockModule("../../vm.js", () => ({
     error: null,
   })),
   setVMBootModePreference: jest.fn(),
-  // @ts-ignore
   shutdownVM: (jest.fn() as any).mockResolvedValue(undefined),
-  subscribeVMStatus: jest.fn((listener) => {
-    // @ts-ignore
+  subscribeVMStatus: jest.fn((listener: any) => {
     listener({ ready: false, booting: true, bootAttempted: true, error: null });
 
     return jest.fn();
@@ -97,8 +92,7 @@ jest.unstable_mockModule("../shadow-claw-chat/shadow-claw-chat.js", () => {
   class MockChat extends HTMLElement {
     connectedCallback() {
       this.attachShadow({ mode: "open" });
-      // @ts-ignore
-      this.shadowRoot.innerHTML = "<div data-terminal-slot></div>";
+      this.shadowRoot!.innerHTML = "<div data-terminal-slot></div>";
       this.dispatchEvent(
         new CustomEvent("shadow-claw-terminal-slot-ready", {
           bubbles: true,
@@ -119,8 +113,7 @@ jest.unstable_mockModule("../shadow-claw-files/shadow-claw-files.js", () => {
   class MockFiles extends HTMLElement {
     connectedCallback() {
       this.attachShadow({ mode: "open" });
-      // @ts-ignore
-      this.shadowRoot.innerHTML = "<div data-terminal-slot></div>";
+      this.shadowRoot!.innerHTML = "<div data-terminal-slot></div>";
       this.dispatchEvent(
         new CustomEvent("shadow-claw-terminal-slot-ready", {
           bubbles: true,
@@ -158,8 +151,7 @@ jest.unstable_mockModule("../shadow-claw-tasks/shadow-claw-tasks.js", () => {
   class MockTasks extends HTMLElement {
     connectedCallback() {
       this.attachShadow({ mode: "open" });
-      // @ts-ignore
-      this.shadowRoot.innerHTML = "<div data-terminal-slot></div>";
+      this.shadowRoot!.innerHTML = "<div data-terminal-slot></div>";
       this.dispatchEvent(
         new CustomEvent("shadow-claw-terminal-slot-ready", {
           bubbles: true,
@@ -258,7 +250,6 @@ jest.unstable_mockModule(
 // To work around this we use the orchestratorStore.init mock (which runs after
 // the template has been rendered but before the settings-init check) to patch
 // the initialize spy directly onto the element at the right moment.
-// @ts-ignore
 const _mockSettingsInitialize = (jest.fn() as any).mockResolvedValue(undefined);
 
 jest.unstable_mockModule(
@@ -290,7 +281,6 @@ let Themes: any;
 
 function createOrchestratorStub(extra = {}) {
   return {
-    // @ts-ignore
     init: (jest.fn() as any).mockResolvedValue({} as any),
     isConfigured: () => true,
     getAssistantName: () => "Shadow",
@@ -558,8 +548,7 @@ describe("shadow-claw", () => {
       events: {
         on: jest.fn((event, handler) => {
           if (event === "vm-status") {
-            // @ts-ignore
-            vmStatusHandler = handler;
+            vmStatusHandler = handler as any;
           }
         }),
         off: jest.fn(),
@@ -576,8 +565,7 @@ describe("shadow-claw", () => {
 
     expect(component.terminalVisible).toBe(true);
 
-    // @ts-ignore
-    vmStatusHandler?.({
+    (vmStatusHandler as any)({
       ready: false,
       booting: false,
       bootAttempted: true,

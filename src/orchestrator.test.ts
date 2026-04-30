@@ -1,6 +1,8 @@
 import { jest } from "@jest/globals";
 
-import { Orchestrator, buildSystemPrompt } from "./orchestrator.js";
+import { Orchestrator } from "./orchestrator.js";
+import { buildSystemPrompt } from "./worker/system-prompt.js";
+import { toolsStore } from "./stores/tools.js";
 
 describe("buildSystemPrompt", () => {
   it("includes patch_file in tool usage strategy", () => {
@@ -140,6 +142,42 @@ describe("Orchestrator", () => {
         message: "Downloading Prompt API model... 42%",
       },
     ]);
+  });
+
+  it("handles manage-tools message from worker", async () => {
+    const o = new Orchestrator();
+    const db = {} as any;
+
+    const activateProfileSpy = jest
+      .spyOn(toolsStore, "activateProfile")
+      .mockResolvedValue(undefined);
+    const setToolEnabledSpy = jest
+      .spyOn(toolsStore, "setToolEnabled")
+      .mockResolvedValue(undefined);
+
+    // Test activate_profile
+    await o.handleWorkerMessage(db, {
+      type: "manage-tools",
+      payload: { action: "activate_profile", profileId: "git-ops" },
+    });
+    expect(activateProfileSpy).toHaveBeenCalledWith(db, "git-ops");
+
+    // Test enable
+    await o.handleWorkerMessage(db, {
+      type: "manage-tools",
+      payload: { action: "enable", toolNames: ["git_add"] },
+    });
+    expect(setToolEnabledSpy).toHaveBeenCalledWith(db, "git_add", true);
+
+    // Test disable
+    await o.handleWorkerMessage(db, {
+      type: "manage-tools",
+      payload: { action: "disable", toolNames: ["bash"] },
+    });
+    expect(setToolEnabledSpy).toHaveBeenCalledWith(db, "bash", false);
+
+    activateProfileSpy.mockRestore();
+    setToolEnabledSpy.mockRestore();
   });
 
   it("posts silent host-to-vm sync requests", () => {

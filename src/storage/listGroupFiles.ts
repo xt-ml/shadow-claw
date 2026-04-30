@@ -42,7 +42,6 @@ export async function listGroupFiles(
       }
 
       const entries: string[] = [];
-      // @ts-ignore - entries() is a newer File System Access API iterator method
       for await (const [name, handle] of (dir as any).entries()) {
         entries.push(handle.kind === "directory" ? `${name}/` : name);
       }

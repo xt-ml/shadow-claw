@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 jest.unstable_mockModule(
-  "../shadow-claw-settings-accounts/shadow-claw-settings-accounts.js",
+  "../settings/shadow-claw-accounts/shadow-claw-accounts.js",
   () => {
     class MockAccounts extends HTMLElement {
       constructor() {
@@ -14,14 +14,14 @@ jest.unstable_mockModule(
       render = jest.fn();
     }
 
-    customElements.define("shadow-claw-settings-accounts", MockAccounts);
+    customElements.define("shadow-claw-accounts", MockAccounts);
 
-    return { ShadowClawSettingsAccounts: MockAccounts };
+    return { ShadowClawAccounts: MockAccounts };
   },
 );
 
 jest.unstable_mockModule(
-  "../shadow-claw-settings-llm/shadow-claw-settings-llm.js",
+  "../settings/shadow-claw-llm/shadow-claw-llm.js",
   () => {
     class MockLlm extends HTMLElement {
       constructor() {
@@ -32,14 +32,14 @@ jest.unstable_mockModule(
       render = jest.fn();
     }
 
-    customElements.define("shadow-claw-settings-llm", MockLlm);
+    customElements.define("shadow-claw-llm", MockLlm);
 
-    return { ShadowClawSettingsLlm: MockLlm };
+    return { ShadowClawLlm: MockLlm };
   },
 );
 
 jest.unstable_mockModule(
-  "../shadow-claw-settings-git/shadow-claw-settings-git.js",
+  "../settings/shadow-claw-git/shadow-claw-git.js",
   () => {
     class MockGit extends HTMLElement {
       constructor() {
@@ -50,14 +50,14 @@ jest.unstable_mockModule(
       render = jest.fn();
     }
 
-    customElements.define("shadow-claw-settings-git", MockGit);
+    customElements.define("shadow-claw-git", MockGit);
 
-    return { ShadowClawSettingsGit: MockGit };
+    return { ShadowClawGit: MockGit };
   },
 );
 
 jest.unstable_mockModule(
-  "../shadow-claw-settings-storage/shadow-claw-settings-storage.js",
+  "../settings/shadow-claw-storage/shadow-claw-storage.js",
   () => {
     class MockStorage extends HTMLElement {
       constructor() {
@@ -68,14 +68,14 @@ jest.unstable_mockModule(
       render = jest.fn();
     }
 
-    customElements.define("shadow-claw-settings-storage", MockStorage);
+    customElements.define("shadow-claw-storage", MockStorage);
 
-    return { ShadowClawSettingsStorage: MockStorage };
+    return { ShadowClawStorage: MockStorage };
   },
 );
 
 jest.unstable_mockModule(
-  "../shadow-claw-settings-webvm/shadow-claw-settings-webvm.js",
+  "../settings/shadow-claw-webvm/shadow-claw-webvm.js",
   () => {
     class MockWebvm extends HTMLElement {
       constructor() {
@@ -86,14 +86,14 @@ jest.unstable_mockModule(
       render = jest.fn();
     }
 
-    customElements.define("shadow-claw-settings-webvm", MockWebvm);
+    customElements.define("shadow-claw-webvm", MockWebvm);
 
-    return { ShadowClawSettingsWebvm: MockWebvm };
+    return { ShadowClawWebvm: MockWebvm };
   },
 );
 
 jest.unstable_mockModule(
-  "../shadow-claw-settings-mcp-remote/shadow-claw-settings-mcp-remote.js",
+  "../settings/shadow-claw-mcp-remote/shadow-claw-mcp-remote.js",
   () => {
     class MockMcpRemote extends HTMLElement {
       constructor() {
@@ -104,14 +104,14 @@ jest.unstable_mockModule(
       render = jest.fn();
     }
 
-    customElements.define("shadow-claw-settings-mcp-remote", MockMcpRemote);
+    customElements.define("shadow-claw-mcp-remote", MockMcpRemote);
 
-    return { ShadowClawSettingsMcpRemote: MockMcpRemote };
+    return { ShadowClawMcpRemote: MockMcpRemote };
   },
 );
 
 jest.unstable_mockModule(
-  "../shadow-claw-settings-notifications/shadow-claw-settings-notifications.js",
+  "../settings/shadow-claw-notifications/shadow-claw-notifications.js",
   () => {
     class MockNotifications extends HTMLElement {
       constructor() {
@@ -122,12 +122,9 @@ jest.unstable_mockModule(
       render = jest.fn();
     }
 
-    customElements.define(
-      "shadow-claw-settings-notifications",
-      MockNotifications,
-    );
+    customElements.define("shadow-claw-notifications", MockNotifications);
 
-    return { ShadowClawSettingsNotifications: MockNotifications };
+    return { ShadowClawNotifications: MockNotifications };
   },
 );
 
@@ -150,18 +147,12 @@ describe("shadow-claw-settings", () => {
     await el.onTemplateReady;
     await el.render();
 
-    const accounts = el.shadowRoot?.querySelector(
-      "shadow-claw-settings-accounts",
-    );
-    const remoteMcp = el.shadowRoot?.querySelector(
-      "shadow-claw-settings-mcp-remote",
-    );
-    const llm = el.shadowRoot?.querySelector("shadow-claw-settings-llm");
-    const webvm = el.shadowRoot?.querySelector("shadow-claw-settings-webvm");
-    const git = el.shadowRoot?.querySelector("shadow-claw-settings-git");
-    const storage = el.shadowRoot?.querySelector(
-      "shadow-claw-settings-storage",
-    );
+    const accounts = el.shadowRoot?.querySelector("shadow-claw-accounts");
+    const remoteMcp = el.shadowRoot?.querySelector("shadow-claw-mcp-remote");
+    const llm = el.shadowRoot?.querySelector("shadow-claw-llm");
+    const webvm = el.shadowRoot?.querySelector("shadow-claw-webvm");
+    const git = el.shadowRoot?.querySelector("shadow-claw-git");
+    const storage = el.shadowRoot?.querySelector("shadow-claw-storage");
 
     expect(accounts).not.toBeNull();
     expect(remoteMcp).not.toBeNull();
@@ -169,6 +160,75 @@ describe("shadow-claw-settings", () => {
     expect(webvm).not.toBeNull();
     expect(git).not.toBeNull();
     expect(storage).not.toBeNull();
+
+    document.body.removeChild(el);
+  });
+
+  it("shows AI tab by default", async () => {
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+
+    const aiTab = el.shadowRoot?.querySelector('[data-tab-target="ai"]');
+    const aiPanel = el.shadowRoot?.querySelector('[data-tab-panel="ai"]');
+    const envPanel = el.shadowRoot?.querySelector(
+      '[data-tab-panel="environment"]',
+    );
+
+    expect(aiTab?.getAttribute("aria-selected")).toBe("true");
+    expect(aiPanel?.hasAttribute("hidden")).toBe(false);
+    expect(envPanel?.hasAttribute("hidden")).toBe(true);
+
+    document.body.removeChild(el);
+  });
+
+  it("switches visible panel when a tab is selected", async () => {
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+
+    const envTab = el.shadowRoot?.querySelector(
+      '[data-tab-target="environment"]',
+    );
+    const aiPanel = el.shadowRoot?.querySelector('[data-tab-panel="ai"]');
+    const envPanel = el.shadowRoot?.querySelector(
+      '[data-tab-panel="environment"]',
+    );
+
+    envTab?.dispatchEvent(new Event("click"));
+
+    expect(envTab?.getAttribute("aria-selected")).toBe("true");
+    expect(aiPanel?.hasAttribute("hidden")).toBe(true);
+    expect(envPanel?.hasAttribute("hidden")).toBe(false);
+
+    document.body.removeChild(el);
+  });
+
+  it("switches tabs with arrow keys", async () => {
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+
+    const aiTab = el.shadowRoot?.querySelector<HTMLButtonElement>(
+      '[data-tab-target="ai"]',
+    );
+    const envTab = el.shadowRoot?.querySelector<HTMLButtonElement>(
+      '[data-tab-target="environment"]',
+    );
+    const envPanel = el.shadowRoot?.querySelector(
+      '[data-tab-panel="environment"]',
+    );
+
+    aiTab?.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+    );
+
+    expect(envTab?.getAttribute("aria-selected")).toBe("true");
+    expect(el.shadowRoot?.activeElement).toBe(envTab);
+    expect(envPanel?.hasAttribute("hidden")).toBe(false);
 
     document.body.removeChild(el);
   });

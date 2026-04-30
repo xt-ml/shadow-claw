@@ -1,0 +1,26 @@
+:host {
+  display: block;
+}
+
+.empty-state {
+  border: 0.0625rem dashed var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-s, 0.625rem);
+  color: var(--shadow-claw-text-tertiary);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  padding: 1rem;
+  text-align: center;
+}
+
+.empty-state__hint {
+  margin-top: 0.25rem;
+  opacity: 0.9;
+}
+
+:host([compact]) .empty-state {
+  padding: 0.75rem;
+}
+
+:host([warning]) .empty-state {
+  border-style: solid;
+}

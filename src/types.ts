@@ -167,23 +167,29 @@ export interface InvokePayload {
   groupId: string;
   messages: ConversationMessage[];
   systemPrompt: string;
+  assistantName: string;
+  memory: string;
   apiKey: string;
   model: string;
   maxTokens: number;
   maxIterations?: number;
   provider?: any;
   storageHandle?: any;
-  enabledTools?: string[];
+  enabledTools?: any;
   providerHeaders?: Record<string, string>;
   streaming?: boolean;
   contextCompression?: boolean;
   contextLimit?: number;
+  rateLimitCallsPerMinute?: number;
+  rateLimitAutoAdapt?: boolean;
 }
 
 export interface CompactPayload {
   groupId: string;
   messages: ConversationMessage[];
   systemPrompt: string;
+  assistantName: string;
+  memory: string;
   apiKey: string;
   model: string;
   maxTokens: number;
@@ -192,6 +198,8 @@ export interface CompactPayload {
   providerHeaders?: Record<string, string>;
   contextCompression?: boolean;
   contextLimit?: number;
+  rateLimitCallsPerMinute?: number;
+  rateLimitAutoAdapt?: boolean;
 }
 
 export interface ResponsePayload {
@@ -274,6 +282,12 @@ export interface VMTerminalErrorPayload {
   error: string;
 }
 
+export interface ManageToolsPayload {
+  action: "enable" | "disable" | "activate_profile";
+  toolNames?: string[];
+  profileId?: string;
+}
+
 export interface LLMProvider {
   id: string;
   name: string;
@@ -307,7 +321,8 @@ export type WorkerOutbound =
         type?: ToastType;
         duration?: number;
       };
-    };
+    }
+  | { type: "manage-tools"; payload: ManageToolsPayload };
 
 export type WorkerInbound =
   | { type: "invoke"; payload: InvokePayload }

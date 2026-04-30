@@ -253,11 +253,13 @@ registers all ShadowClaw tools through `registerWebMcpTools()`.
 
 ## Remote MCP Connections
 
-ShadowClaw supports connecting to external Model Context Protocol (MCP) servers using SSE (Server-Sent Events) transports.
+ShadowClaw supports connecting to external Model Context Protocol (MCP) servers using streamable HTTP transports with session-based JSON-RPC exchanges.
 
 - Configure connections in **Settings → Remote MCP**.
 - Supports Bearer, Basic, and custom Header authentication via the credential store.
 - The agent can discover and invoke remote tools using the `remote_mcp_list_tools` and `remote_mcp_call_tool` built-in tools.
+- Connections can be referenced by either connection ID or human-readable label.
+- OAuth-backed connections force-refresh credentials and retry once on HTTP 401 responses.
 - Connections are persisted securely in IndexedDB.
 
 ## AWS Bedrock Proxy
@@ -324,7 +326,7 @@ Users can override this via **Settings → Max Iterations** (stored under
 `CONFIG_KEYS.MAX_ITERATIONS`, valid range 1–200). The orchestrator loads
 the persisted value at init and passes it to the worker in every `invoke` payload.
 
-## Dynamic Context Management
+### Dynamic Context & Auto-Compaction
 
 Instead of a fixed message window, the orchestrator uses **token-budget-aware
 dynamic context windowing**. On each invocation the system prompt is built first
@@ -335,6 +337,30 @@ Large tool outputs are truncated at line boundaries (default 25 K chars).
 A `context-usage` event emits `ContextUsage` stats so the chat UI can render a
 color-coded progress bar (green → amber → red). When usage exceeds 80 % and
 messages have been truncated, auto-compaction triggers automatically.
+
+## LLM Providers & Rate Limiting
+
+ShadowClaw supports multiple provider formats (OpenAI, Anthropic, Prompt API)
+and handles network-bound tool calls with robust error handling.
+
+### Adaptive Rate Limiting
+
+The agent worker includes an **adaptive rate limiter** that prevents 429 errors
+by tracking provider-specific limits.
+
+- **Header Parsing**: Automatically extracts `x-ratelimit-limit`, `x-ratelimit-remaining`,
+  and `x-ratelimit-reset` from provider responses.
+- **Retry-After Support**: Respects `retry-after` headers with sub-second precision.
+- **Manual Overrides**: Configurable calls-per-minute limits for providers that don't
+  emit limit headers.
+- **Backoff & Jitter**: Integrated retry logic with exponential backoff for transient failures.
+
+### Prompt API & Nano Optimization
+
+The **Prompt API** (`window.LanguageModel`) provides zero-cost, browser-native
+inference via Gemini Nano. To maximize performance on constrained local models,
+ShadowClaw uses a **Nano Optimized** tool profile that minimizes system prompt
+overhead and concentrates on core file/shell capabilities.
 
 ## Storage
 
@@ -393,6 +419,26 @@ The Files page also exposes manual sync controls when VM mode is `9p`:
 Terminal-driven 9p auto-sync only flushes when workspace-affecting commands complete,
 and ignores idle background write events.
 
+## Agent-Driven Tool Management
+
+Agents can dynamically manage their own capability surface using `manage_tools`.
+
+- **Profiles**: Activate predefined sets of tools (e.g., `git-ops`, `minimal`, `full`)
+  tailored for specific tasks or model constraints.
+- **Fine-grained Control**: Enable or disable individual tools on-the-fly to optimize
+  the context window.
+- **Auto-Activation**: Saved profiles can be linked to specific models (e.g., Gemini
+  Nano automatically activates the `Nano Optimized` profile).
+
+## Remote MCP
+
+ShadowClaw integrates with remote Model Context Protocol (MCP) servers via the
+`remote-mcp-client`.
+
+- **Transport**: Supports both `stdio` (via `bash` tool) and `sse` (native browser fetch) transports.
+- **Authentication**: Native support for **Basic** and **Bearer** authentication schemes.
+- **Tool Discovery**: Automatic registration of remote tools into the agent's toolset.
+
 VM assets are expected under `/assets/v86.ext2/` and `/assets/v86.9pfs/`.
 
 Serve these files (under `/assets/v86.ext2/`) to enable ext2 boot:
@@ -409,16 +455,32 @@ Serve these files (under `/assets/v86.ext2/`) to enable ext2 boot:
 ## Reactive UI
 
 Web Components + **TC39 Signals** (via `signal-polyfill`). A small `effect()`
-helper re-runs DOM updates whenever signals change. No virtual DOM, no framework.
+helper re-runs DOM updates whenever signals change. Components inherit from
+`ShadowClawElement`, providing a declarative template-based rendering system.
 
-The file viewer now loads text, PDF, and browser-previewable binary files with MIME-aware
-preview defaults, and revokes temporary object URLs on close/swap to avoid leaks. The
-built-in code editor uses `highlighted-code` with an explicit `caret-color !important`
-that overrides the library's inline style so the text cursor stays visible over the
-syntax-highlighting overlay in both light and dark mode.
+The base element now includes cleanup lifecycle helpers (`addCleanup` and
+automatic disposal in `disconnectedCallback`) so signal effects, observers,
+and event subscriptions are consistently released when components unmount.
 
-The chat UI also tracks model download progress state from
-`model-download-progress` events and shows/hides the progress bar automatically.
+The UI is organized into modular components and dedicated stores:
+
+- **Settings**: Refactored into specialized cards (`shadow-claw-card`) for
+  LLM, Accounts, Git, and MCP configuration.
+- **Common primitives**: Reusable components such as
+  `shadow-claw-page-header`, `shadow-claw-empty-state`,
+  `shadow-claw-card`, and `shadow-claw-actions` reduce
+  duplicated markup and behavior across pages.
+- **Chat**: Smart auto-scroll with ResizeObserver integration and streaming bubble support.
+- **File Viewer**: MIME-aware previews for PDF, binary, and text content with syntax highlighting.
+- **Terminal**: Interactive Xterm.js terminal with WebVM bridge.
+
+Recommended component organization:
+
+- Keep shared UI primitives in `src/components/common/`.
+- Group settings feature components under `src/components/settings/` for
+  discoverability (for example `settings/shadow-claw-llm/`).
+- Migrate incrementally as components are touched, rather than a single large
+  rename/refactor.
 
 Notification chimes are now gated behind an explicit user gesture unlock to avoid
 autoplay policy violations in browsers.

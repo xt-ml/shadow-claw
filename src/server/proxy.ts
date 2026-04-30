@@ -838,6 +838,7 @@ export async function handleProxyRequest(
     verbose?: boolean;
     maxRetries?: number;
     requestTimeoutMs?: number;
+    forwardAuth?: boolean;
   },
 ): Promise<void> {
   const {
@@ -848,6 +849,7 @@ export async function handleProxyRequest(
     verbose,
     maxRetries,
     requestTimeoutMs,
+    forwardAuth,
   } = opts;
 
   if (verbose) {
@@ -872,8 +874,11 @@ export async function handleProxyRequest(
     delete safeHeaders.host;
     delete safeHeaders.origin;
     delete safeHeaders.referer;
-    delete safeHeaders["Authorization"];
-    delete safeHeaders["authorization"];
+    if (!forwardAuth) {
+      delete safeHeaders["Authorization"];
+      delete safeHeaders["authorization"];
+    }
+
     delete safeHeaders["accept-encoding"];
     delete safeHeaders["content-length"];
     delete safeHeaders.connection;
@@ -1191,15 +1196,24 @@ export function registerProxyRoutes(
       req.method;
     const normalizedMethod = method.toUpperCase();
 
+    const headersFromBody = !!(
+      req.body &&
+      req.body.headers &&
+      typeof req.body.headers === "object"
+    );
     const incomingHeaders =
-      (req.body && req.body.headers && typeof req.body.headers === "object"
-        ? req.body.headers
-        : req.headers) || {};
+      (headersFromBody ? req.body.headers : req.headers) || {};
 
     let body;
     if (req.body && typeof req.body.body === "string") {
       body = req.body.body;
     }
+
+    // When headers come from the request body (e.g. service worker proxy),
+    // the caller explicitly set them — preserve Authorization.
+    const hasExplicitAuth =
+      headersFromBody &&
+      !!(incomingHeaders["Authorization"] || incomingHeaders["authorization"]);
 
     await handleProxyRequest(req, res, {
       targetUrl: target,
@@ -1207,6 +1221,7 @@ export function registerProxyRoutes(
       headers: incomingHeaders,
       body,
       verbose,
+      forwardAuth: hasExplicitAuth,
     });
   });
 
@@ -1667,6 +1682,10 @@ export function registerProxyRoutes(
       headers: req.headers,
       body: rawBody.length > 0 ? rawBody : undefined,
       verbose,
+      // Git smart-HTTP needs the client's Authorization header to reach the
+      // upstream host (e.g. Azure DevOps, GitHub). Without this the upstream
+      // returns an anonymous sign-in page and isomorphic-git hangs.
+      forwardAuth: true,
     });
   });
 

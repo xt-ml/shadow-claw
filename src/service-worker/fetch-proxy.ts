@@ -9,6 +9,15 @@ import { shouldBypassFetchProxy } from "./fetch-proxy-rules.js";
 let useProxy = false;
 let proxyUrl = "/proxy";
 
+// On every SW startup (including after the browser terminates and restarts the SW
+// to save memory), request the current proxy config from all window clients so the
+// in-memory state is restored without requiring the user to re-save settings.
+self.clients.matchAll({ type: "window" }).then((clients) => {
+  clients.forEach((client) =>
+    client.postMessage({ type: "request-proxy-config" }),
+  );
+});
+
 self.addEventListener("message", (event: MessageEvent) => {
   if (event.data?.type === "set-proxy-config") {
     useProxy = !!event.data.payload?.useProxy;

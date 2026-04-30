@@ -8,6 +8,7 @@ import { Task } from "../../types.js";
 import { escapeHtml } from "../../utils.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
+import "../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
@@ -183,10 +184,11 @@ export class ShadowClawTasks extends ShadowClawElement {
 
     if (tasks.length === 0) {
       list.innerHTML = `
-        <div class="tasks__empty" role="status">
-          <p>No scheduled tasks for this group.</p>
-          <p class="tasks__empty-hint">Ask the agent to create one using "create_task".</p>
-        </div>
+        <shadow-claw-empty-state
+          class="tasks__empty"
+          message="No scheduled tasks for this group."
+          hint="Ask the agent to create one using 'create_task'."
+        ></shadow-claw-empty-state>
       `;
 
       return;

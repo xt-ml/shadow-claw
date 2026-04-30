@@ -79,16 +79,16 @@ describe("IMessageChannel", () => {
   });
 
   it("sends markdown attachments as uploaded files plus remaining text", async () => {
-    const channel = new IMessageChannel();
+    const channel: any = new IMessageChannel();
     channel.configure("https://bridge.example", "secret", ["chat-1"]);
     channel.apiMode = "legacy";
-    channel.fileReader = jest
-      .fn()
-      .mockResolvedValue(new Blob(["pdf"], { type: "application/pdf" }));
+    channel.fileReader = (jest.fn() as any).mockResolvedValue(
+      new Blob(["pdf"], { type: "application/pdf" }),
+    );
 
     const sendAttachment = jest
       .spyOn(channel, "sendAttachment")
-      .mockResolvedValue();
+      .mockResolvedValue(undefined);
     const requestJson = jest
       .spyOn(channel, "requestJson")
       .mockResolvedValue({ ok: true } as any);
@@ -136,16 +136,16 @@ describe("IMessageChannel", () => {
   });
 
   it("normalizes markdown attachment paths before reading workspace files", async () => {
-    const channel = new IMessageChannel();
+    const channel: any = new IMessageChannel();
     channel.configure("https://bridge.example", "secret", ["chat-1"]);
     channel.apiMode = "legacy";
-    channel.fileReader = jest
-      .fn()
-      .mockResolvedValue(new Blob(["img"], { type: "image/png" }));
+    channel.fileReader = (jest.fn() as any).mockResolvedValue(
+      new Blob(["img"], { type: "image/png" }),
+    );
 
     const sendAttachment = jest
       .spyOn(channel, "sendAttachment")
-      .mockResolvedValue();
+      .mockResolvedValue(undefined);
     jest.spyOn(channel, "requestJson").mockResolvedValue({ ok: true } as any);
 
     await channel.send("im:chat-1", "![diagram]( /./images\\diagram.png )");
@@ -161,16 +161,15 @@ describe("IMessageChannel", () => {
   });
 
   it("uses Beeper Desktop upload+send flow when /v1/info is available", async () => {
-    const channel = new IMessageChannel();
+    const channel: any = new IMessageChannel();
     channel.configure("https://bridge.example", "secret", ["chat-1"]);
-    channel.fileReader = jest
-      .fn()
-      .mockResolvedValue(new Blob(["pdf"], { type: "application/pdf" }));
+    channel.fileReader = (jest.fn() as any).mockResolvedValue(
+      new Blob(["pdf"], { type: "application/pdf" }),
+    );
 
     const calls: Array<{ path: string; init: RequestInit }> = [];
-    jest
-      .spyOn(channel, "requestJson")
-      .mockImplementation(async (path: string, init: RequestInit) => {
+    (jest.spyOn(channel, "requestJson") as any).mockImplementation(
+      async (path: string, init: RequestInit) => {
         calls.push({ path, init });
 
         if (path === "/v1/info") {
@@ -186,7 +185,8 @@ describe("IMessageChannel", () => {
         }
 
         throw new Error(`Unexpected path: ${path}`);
-      });
+      },
+    );
 
     await channel.send(
       "im:chat-1",
@@ -202,16 +202,15 @@ describe("IMessageChannel", () => {
   });
 
   it("falls back to legacy multipart when /v1/info is unavailable", async () => {
-    const channel = new IMessageChannel();
+    const channel: any = new IMessageChannel();
     channel.configure("https://bridge.example", "secret", ["chat-1"]);
-    channel.fileReader = jest
-      .fn()
-      .mockResolvedValue(new Blob(["img"], { type: "image/png" }));
+    channel.fileReader = (jest.fn() as any).mockResolvedValue(
+      new Blob(["img"], { type: "image/png" }),
+    );
 
     const calls: Array<{ path: string; init: RequestInit }> = [];
-    jest
-      .spyOn(channel, "requestJson")
-      .mockImplementation(async (path: string, init: RequestInit) => {
+    (jest.spyOn(channel, "requestJson") as any).mockImplementation(
+      async (path: string, init: RequestInit) => {
         calls.push({ path, init });
 
         if (path === "/v1/info") {
@@ -223,7 +222,8 @@ describe("IMessageChannel", () => {
         }
 
         throw new Error(`Unexpected path: ${path}`);
-      });
+      },
+    );
 
     await channel.send("im:chat-1", "![diagram](images/diagram.png)");
 

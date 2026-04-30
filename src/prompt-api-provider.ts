@@ -5,6 +5,7 @@ import { createLogMessage } from "./worker/createLogMessage.js";
 import { createToolActivityMessage } from "./worker/createToolActivityMessage.js";
 import { executeTool } from "./worker/executeTool.js";
 import { setPostHandler } from "./worker/post.js";
+import { NANO_BUILTIN_PROFILE } from "./tools/builtin-profiles.js";
 
 /**
  * Core tools exposed to the Prompt API (Gemini Nano).
@@ -12,45 +13,13 @@ import { setPostHandler } from "./worker/post.js";
  * by too many tool definitions. All other tools remain available to
  * cloud-hosted providers.
  */
-const PROMPT_API_CORE_TOOL_NAMES = new Set([
-  "bash",
-  "read_file",
-  "write_file",
-  "list_files",
-  "attach_file_to_chat",
-  "open_file",
-  "fetch_url",
-  "update_memory",
-  "create_task",
-  "javascript",
-  "list_tasks",
-  "show_toast",
-  "send_notification",
-]);
+export { NANO_BUILTIN_PROFILE };
 
 const PROMPT_API_TOOLS = TOOL_DEFINITIONS.filter((t) =>
-  PROMPT_API_CORE_TOOL_NAMES.has(t.name),
+  NANO_BUILTIN_PROFILE.enabledToolNames.includes(t.name),
 );
 
 export { PROMPT_API_TOOLS };
-
-/**
- * Built-in profile optimized for Gemini Nano (Prompt API).
- * Minimizes context consumption so Nano has maximum tokens for generation.
- */
-export const NANO_BUILTIN_PROFILE: ToolProfile = {
-  id: "__builtin_nano",
-  name: "Nano Optimized",
-  providerId: "prompt_api",
-  enabledToolNames: [...PROMPT_API_CORE_TOOL_NAMES],
-  customTools: [],
-  systemPromptOverride:
-    "You are a helpful coding assistant.\n" +
-    "When asked to create a file, use write_file with COMPLETE, production-ready content.\n" +
-    "For HTML files: include full <!DOCTYPE html>, <html>, <head>, <body>, inline <style> and <script>.\n" +
-    "Write working code — do not leave placeholders or TODOs.\n" +
-    "Keep responses short.",
-};
 
 function getLanguageModelApi(): {
   availability: Function;

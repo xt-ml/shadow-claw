@@ -4,7 +4,6 @@ import { effect } from "../../effect.js";
 import { renderMarkdown } from "../../markdown.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
-import { listGroupFiles } from "../../storage/listGroupFiles.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
 import { showError, showSuccess } from "../../toast.js";
 
@@ -223,7 +222,9 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       } catch (err) {
         const isNotFound =
           err instanceof DOMException && err.name === "NotFoundError";
-        if (!isNotFound) {
+        const isDirectory =
+          err instanceof DOMException && err.name === "TypeMismatchError";
+        if (!isNotFound && !isDirectory) {
           const message = err instanceof Error ? err.message : String(err);
           showError(`Failed to open linked file: ${message}`, 5000);
 
@@ -259,16 +260,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
 
     try {
-      // Validate folder existence first so we never commit an invalid path
-      // and leave users stuck drilling into stale directory listings.
-      await listGroupFiles(
-        this.db,
-        orchestratorStore.activeGroupId,
-        normalizedPath,
-      );
-
-      (orchestratorStore as any)._currentPath.set(normalizedPath);
-      await orchestratorStore.loadFiles(this.db);
+      await orchestratorStore.setCurrentPath(this.db, normalizedPath);
       fileViewerStore.closeFile();
 
       const maybeUi = (window as any)?.shadowclaw?.ui;
@@ -533,8 +525,11 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         "file-content--iframe",
       );
 
-      const pdfViewer = document.createElement("shadow-claw-pdf-viewer");
-      // @ts-ignore
+      const pdfViewer = document.createElement(
+        "shadow-claw-pdf-viewer",
+      ) as HTMLElement & {
+        file: any;
+      };
       pdfViewer.file = file;
       content.replaceChildren(pdfViewer);
 

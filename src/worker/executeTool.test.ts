@@ -113,6 +113,7 @@ describe("executeTool.js", () => {
         GIT_AUTHOR_NAME: "git-author-name",
         GIT_AUTHOR_EMAIL: "git-author-email",
         VM_BASH_TIMEOUT_SEC: "vm-bash-timeout-sec",
+        TOOL_PROFILES: "tool_profiles",
       },
       DEFAULT_DEV_HOST: "localhost",
       DEFAULT_DEV_PORT: 8888,
@@ -594,13 +595,9 @@ describe("executeTool.js", () => {
     expect(result).toContain(
       "![The Lamb](assets/key-images/TheLamb-NT-Jesus.png)",
     );
-    expect(mockPost).toHaveBeenCalledWith({
-      type: "intermediate-response",
-      payload: {
-        groupId: "group1",
-        text: "![The Lamb](assets/key-images/TheLamb-NT-Jesus.png)",
-      },
-    });
+    expect(mockPost).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "intermediate-response" }),
+    );
   });
 
   it("should validate attach_file_to_chat path", async () => {
@@ -2315,6 +2312,55 @@ describe("executeTool.js", () => {
 
     expect(mockSyncLfsToOpfs).toHaveBeenCalled();
     expect(result).toBe("Merged main into feature (abc1234).");
+  });
+
+  it("should handle manage_tools tool", async () => {
+    const result = await executeTool(
+      {},
+      "manage_tools",
+      { action: "activate_profile", profile_id: "git-ops" },
+      "group1",
+    );
+
+    expect(result).toBe(
+      "Tool management request sent: activate_profile git-ops",
+    );
+
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "manage-tools",
+      payload: {
+        action: "activate_profile",
+        profileId: "git-ops",
+        toolNames: undefined,
+        groupId: "group1",
+      },
+    });
+  });
+
+  it("should handle list_tool_profiles tool (pre-parsed array)", async () => {
+    (mockGetConfig as any).mockResolvedValue([
+      { id: "p1", name: "Profile 1", enabledToolNames: ["bash"] },
+    ]);
+
+    const result = await executeTool({}, "list_tool_profiles", {}, "group1");
+
+    expect(mockGetConfig).toHaveBeenCalledWith({}, "tool_profiles");
+    expect(result).toContain("Nano Optimized");
+    expect(result).toContain("Profile 1");
+    expect(result).toContain("bash");
+  });
+
+  it("should handle list_tool_profiles tool (JSON string)", async () => {
+    (mockGetConfig as any).mockResolvedValue(
+      JSON.stringify([
+        { id: "p2", name: "Profile 2", enabledToolNames: ["read_file"] },
+      ]),
+    );
+
+    const result = await executeTool({}, "list_tool_profiles", {}, "group1");
+
+    expect(result).toContain("Profile 2");
+    expect(result).toContain("read_file");
   });
 
   it("should handle unknown tool", async () => {

@@ -18,18 +18,14 @@ jest.unstable_mockModule("../../stores/file-viewer.js", () => ({
 jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
   orchestratorStore: {
     currentPath: ".",
-    _currentPath: { set: jest.fn() },
     activeGroupId: "test-group",
+    setCurrentPath: jest.fn(),
     loadFiles: jest.fn(),
   },
 }));
 
 jest.unstable_mockModule("../../storage/writeGroupFile.js", () => ({
   writeGroupFile: jest.fn(),
-}));
-
-jest.unstable_mockModule("../../storage/listGroupFiles.js", () => ({
-  listGroupFiles: jest.fn(),
 }));
 
 jest.unstable_mockModule("../../toast.js", () => ({
@@ -43,16 +39,14 @@ jest.unstable_mockModule("../../toast.js", () => ({
 const { ShadowClawFileViewer } = await import("./shadow-claw-file-viewer.js");
 const { fileViewerStore } = await import("../../stores/file-viewer.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
-const { listGroupFiles } = await import("../../storage/listGroupFiles.js");
 const { renderMarkdown } = await import("../../markdown.js");
 
 describe("shadow-claw-file-viewer", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    (orchestratorStore.loadFiles as jest.Mock).mockImplementation(
+    (orchestratorStore.setCurrentPath as jest.Mock).mockImplementation(
       async () => undefined,
     );
-    (listGroupFiles as jest.Mock).mockImplementation(async () => []);
   });
 
   it("registers custom element", () => {
@@ -399,15 +393,10 @@ describe("shadow-claw-file-viewer", () => {
         "test-group",
       );
 
-      expect((orchestratorStore as any)._currentPath.set).toHaveBeenCalledWith(
-        "weather/archive/2026/2026-04",
-      );
-      expect(listGroupFiles).toHaveBeenCalledWith(
+      expect(orchestratorStore.setCurrentPath).toHaveBeenCalledWith(
         component.db,
-        "test-group",
         "weather/archive/2026/2026-04",
       );
-      expect(orchestratorStore.loadFiles).toHaveBeenCalledWith(component.db);
       expect(closeFileMock).toHaveBeenCalledTimes(1);
       expect(showPage).toHaveBeenCalledWith("files");
     });
@@ -422,21 +411,19 @@ describe("shadow-claw-file-viewer", () => {
         throw new DOMException("missing", "NotFoundError");
       });
 
-      (listGroupFiles as jest.Mock).mockImplementationOnce(async () => {
-        throw new DOMException("missing", "NotFoundError");
-      });
-
-      const setPathMock = (orchestratorStore as any)._currentPath
-        .set as jest.Mock;
-      setPathMock.mockReset();
+      (orchestratorStore.setCurrentPath as jest.Mock).mockImplementationOnce(
+        async () => {
+          throw new DOMException("missing", "NotFoundError");
+        },
+      );
 
       await component.openWorkspaceLink(
         "2026-04",
         "weather/archive/2026/index.md",
       );
 
-      expect(setPathMock).not.toHaveBeenCalled();
-      expect(orchestratorStore.loadFiles).not.toHaveBeenCalled();
+      expect(orchestratorStore.setCurrentPath).toHaveBeenCalledTimes(1);
+      expect(fileViewerStore.closeFile).not.toHaveBeenCalled();
     });
 
     it("opens extensionless files directly when they exist", async () => {
@@ -455,7 +442,7 @@ describe("shadow-claw-file-viewer", () => {
       );
 
       expect(openFileMock).toHaveBeenCalledTimes(1);
-      expect(orchestratorStore.loadFiles).not.toHaveBeenCalled();
+      expect(orchestratorStore.setCurrentPath).not.toHaveBeenCalled();
       expect(closeFileMock).not.toHaveBeenCalled();
     });
   });

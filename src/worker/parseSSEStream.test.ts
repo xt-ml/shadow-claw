@@ -1,6 +1,5 @@
+import { jest } from "@jest/globals";
 import { TextEncoder, TextDecoder } from "node:util";
-import { ReadableStream } from "node:stream/web";
-import { describe, it, expect } from "@jest/globals";
 
 // jsdom doesn't expose TextDecoder globally — polyfill before importing the
 // module under test so its `new TextDecoder()` call succeeds.
@@ -11,7 +10,7 @@ import { parseSSEStream } from "./parseSSEStream.js";
 /**
  * Helper: create a ReadableStream from an array of string chunks.
  */
-function createStream(chunks: any) {
+function createStream(chunks: string[]): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   let i = 0;
 

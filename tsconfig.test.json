@@ -1,0 +1,24 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "lib": [
+      "ESNext",
+      "DOM"
+    ],
+    "types": [
+      "jest"
+    ]
+  },
+  "include": [
+    "src/**/*.test.ts",
+    "src/jest-setup.ts",
+    "src/test-types.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "e2e"
+  ]
+}

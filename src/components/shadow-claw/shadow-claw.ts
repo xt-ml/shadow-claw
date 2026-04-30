@@ -157,7 +157,7 @@ export default class ShadowClaw extends ShadowClawElement {
     console.log("ShadowClaw UI initialized");
 
     // Signal that the UI is fully ready (listeners bound, etc.)
-    orchestratorStore._ready.set(true);
+    orchestratorStore.setReady();
   }
 
   disconnectedCallback() {

@@ -18,11 +18,24 @@ All communication uses `postMessage()` with typed payloads defined in `src/types
 | `cancel`             | `{ groupId }`                            | Abort in-flight task                     |
 | `set-storage`        | `{ storageHandle }`                      | Set OPFS root directory handle           |
 | `set-vm-mode`        | `{ mode?, bootHost?, networkRelayUrl? }` | Change VM configuration                  |
+| `update-tools`       | `{ groupId, enabledTools, systemPromptOverride }` | Refresh worker-side tool state for a conversation |
 | `vm-terminal-open`   | `{ groupId?: string }`                   | Open interactive terminal session        |
 | `vm-terminal-input`  | `{ data: string }`                       | Send stdin bytes to terminal             |
 | `vm-terminal-close`  | `{ groupId?: string }`                   | Close terminal session                   |
 | `vm-workspace-sync`  | `{ groupId?: string }`                   | Push host workspace into VM              |
 | `vm-workspace-flush` | `{ groupId?: string }`                   | Pull VM workspace back to host           |
+
+### Invoke and compact payload fields
+
+`InvokePayload` and `CompactPayload` both include the rendered `systemPrompt`, plus conversation-scoped `assistantName` and `memory` values so the worker can rebuild prompts consistently during invoke and compaction flows.
+
+`InvokePayload` also carries:
+
+- `enabledTools` — the current tool definitions exposed to the model
+- `rateLimitCallsPerMinute` — persisted local per-minute request cap
+- `rateLimitAutoAdapt` — whether provider rate-limit headers should override local pacing
+
+`CompactPayload` carries the same rate-limit fields so auto-compaction respects the same throttling policy as normal invocation.
 
 ### Worker → Main
 
@@ -51,6 +64,7 @@ All communication uses `postMessage()` with typed payloads defined in `src/types
 | `show-toast`              | `{ message, type?, duration? }` | UI toast notification             |
 | `send-notification`       | `{ title, body, groupId }`      | OS-level push notification        |
 | `open-file`               | `{ groupId, path }`             | Open file in UI viewer            |
+| `manage-tools`            | `ManageToolsPayload`            | Agent-driven tool reconfiguration |
 | `task-created`            | `{ task }`                      | New task created by agent         |
 | `update-task`             | `{ task }`                      | Task updated by agent             |
 | `delete-task`             | `{ id, groupId }`               | Task deleted by agent             |
@@ -78,13 +92,15 @@ flowchart TD
   A[Receive invoke payload] --> B[Create AbortController]
   B --> C["iteration = 0, toolCallHistory = {}"]
   C --> D{"iteration < maxIterations?"}
-  D -->|yes| E[Format request for provider]
+  D -->|yes| DA[waitForRateLimitSlot]
+  DA --> E[Format request for provider]
   E --> F{Streaming enabled?}
   F -->|yes| G[callWithStreaming]
   F -->|no| H[callWithoutStreaming]
   G --> I[Parse result]
   H --> I
-  I --> J{"stop_reason === tool_use?"}
+  I --> IA[updateRateLimitFromHeaders]
+  IA --> J{"stop_reason === tool_use?"}
   J -->|yes| K[Extract intermediate text]
   K --> L[Post intermediate-response if text]
   L --> M[Post streaming-end if streaming]

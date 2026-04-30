@@ -1,4 +1,3 @@
-// @ts-ignore
 import { Signal } from "signal-polyfill";
 
 import { readGroupFile } from "../storage/readGroupFile.js";

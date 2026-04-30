@@ -178,21 +178,23 @@ sequenceDiagram
 
 ## Key Directories
 
-| Directory             | Contents                                                                     |
-| --------------------- | ---------------------------------------------------------------------------- |
-| `src/`                | All application source code                                                  |
-| `src/components/`     | Web Components (`<shadow-claw-*>`), each in its own subdirectory             |
-| `src/stores/`         | Reactive signal-based state stores                                           |
-| `src/tools/`          | Agent tool definitions (modular `.ts` files)                                 |
-| `src/worker/`         | Worker internals (invoke handler, tool executor, stream parser, retry logic) |
-| `src/shell/`          | JS shell emulator + OPFS bridge                                              |
-| `src/context/`        | Token estimation, dynamic windowing, output truncation                       |
-| `src/channels/`       | Channel registry + browser chat channel                                      |
-| `src/db/`             | IndexedDB layer (granular modules for each DB operation)                     |
-| `src/storage/`        | OPFS + File System Access API abstractions                                   |
-| `src/git/`            | isomorphic-git operations + OPFS sync                                        |
-| `src/notifications/`  | Web Push + server-side SQLite task scheduling                                |
-| `src/server/`         | Express server + proxy routes                                                |
-| `src/service-worker/` | Service worker modules                                                       |
-| `electron/`           | Electron desktop app entry point                                             |
-| `e2e/`                | Playwright E2E tests (Page Object Model pattern)                             |
+| Directory                  | Contents                                                                        |
+| -------------------------- | ------------------------------------------------------------------------------- |
+| `src/`                     | All application source code                                                     |
+| `src/components/`          | Web Components (`<shadow-claw-*>`), each in its own subdirectory                |
+| `src/components/common/`   | Reusable shared components (`empty-state`, `card`, `actions`) |
+| `src/components/settings/` | Recommended home for settings feature components (incremental migration)        |
+| `src/stores/`              | Reactive signal-based state stores                                              |
+| `src/tools/`               | Agent tool definitions (modular `.ts` files)                                    |
+| `src/worker/`              | Worker internals (invoke handler, tool executor, stream parser, retry logic)    |
+| `src/shell/`               | JS shell emulator + OPFS bridge                                                 |
+| `src/context/`             | Token estimation, dynamic windowing, output truncation                          |
+| `src/channels/`            | Channel registry + browser chat channel                                         |
+| `src/db/`                  | IndexedDB layer (granular modules for each DB operation)                        |
+| `src/storage/`             | OPFS + File System Access API abstractions                                      |
+| `src/git/`                 | isomorphic-git operations + OPFS sync                                           |
+| `src/notifications/`       | Web Push + server-side SQLite task scheduling                                   |
+| `src/server/`              | Express server + proxy routes                                                   |
+| `src/service-worker/`      | Service worker modules                                                          |
+| `electron/`                | Electron desktop app entry point                                                |
+| `e2e/`                     | Playwright E2E tests (Page Object Model pattern)                                |

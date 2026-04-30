@@ -89,6 +89,7 @@ export default class ShadowClawElement extends HTMLElement {
 
   onStylesReady: Promise<void>;
   onTemplateReady: Promise<void>;
+  // addCleanup() registers teardown callbacks disposed on disconnect
   // ...
 }
 ```
@@ -100,6 +101,16 @@ In `constructor()`, `ShadowClawElement`:
 3. Fetches the `.css` via `fetch()` and applies via `adoptedStyleSheets`
 
 Both operations are async and exposed as `onStylesReady` / `onTemplateReady` promises. Components `await` both in `connectedCallback()` before calling `render()`.
+
+### Cleanup lifecycle helpers
+
+`ShadowClawElement` provides a built-in cleanup registry:
+
+- `addCleanup(fn)` registers teardown callbacks
+- `disconnectedCallback()` automatically disposes all registered callbacks
+
+This is the preferred pattern for `effect()` disposers, `ResizeObserver` disconnects,
+and event listener teardown.
 
 ### Component file structure
 
@@ -188,32 +199,43 @@ _profiles (State) ──────────┘
 
 ### Component inventory
 
-| Component                | Element                                | Purpose                                              |
-| ------------------------ | -------------------------------------- | ---------------------------------------------------- |
-| Main app                 | `<shadow-claw>`                        | Shell, navigation, page routing                      |
-| Chat                     | `<shadow-claw-chat>`                   | Message display, smart auto-scroll, streaming bubble |
-| Files                    | `<shadow-claw-files>`                  | File browser for group workspace                     |
-| Tasks                    | `<shadow-claw-tasks>`                  | Task list with cron scheduling                       |
-| Settings                 | `<shadow-claw-settings>`               | Provider config, tool profiles                       |
-| Conversations            | `<shadow-claw-conversations>`          | Sidebar list with CRUD, drag-and-drop                |
-| File Viewer              | `<shadow-claw-file-viewer>`            | Code editor + MIME-aware preview                     |
-| PDF Viewer               | `<shadow-claw-pdf-viewer>`             | PDF preview (pdf.js)                                 |
-| Terminal                 | `<shadow-claw-terminal>`               | Interactive WebVM terminal                           |
-| Toast                    | `<shadow-claw-toast>`                  | Notification overlay                                 |
-| Page Header              | `<shadow-claw-page-header>`            | Reusable mobile-first header                         |
-| Settings — LLM           | `<shadow-claw-settings-llm>`           | Provider and model settings                          |
-| Settings — Git           | `<shadow-claw-settings-git>`           | Git token and proxy settings                         |
-| Settings — Storage       | `<shadow-claw-settings-storage>`       | Storage backend and quota                            |
-| Settings — WebVM         | `<shadow-claw-settings-webvm>`         | VM boot mode and configuration                       |
-| Settings — Notifications | `<shadow-claw-settings-notifications>` | Push notification management                         |
-| Tools                    | `<shadow-claw-tools>`                  | Tool management and profiles UI                      |
+| Component                 | Element                          | Purpose                                              |
+| ------------------------- | -------------------------------- | ---------------------------------------------------- |
+| Main app                  | `<shadow-claw>`                  | Shell, navigation, page routing                      |
+| Chat                      | `<shadow-claw-chat>`             | Message display, smart auto-scroll, streaming bubble |
+| Files                     | `<shadow-claw-files>`            | File browser for group workspace                     |
+| Tasks                     | `<shadow-claw-tasks>`            | Task list with cron scheduling                       |
+| Settings                  | `<shadow-claw-settings>`         | Provider config, tool profiles                       |
+| Conversations             | `<shadow-claw-conversations>`    | Sidebar list with CRUD, drag-and-drop                |
+| File Viewer               | `<shadow-claw-file-viewer>`      | Code editor + MIME-aware preview                     |
+| PDF Viewer                | `<shadow-claw-pdf-viewer>`       | PDF preview (pdf.js)                                 |
+| Terminal                  | `<shadow-claw-terminal>`         | Interactive WebVM terminal                           |
+| Toast                     | `<shadow-claw-toast>`            | Notification overlay                                 |
+| Page Header               | `<shadow-claw-page-header>`      | Reusable mobile-first header                         |
+| Settings — LLM            | `<shadow-claw-llm>`              | Provider and model settings                          |
+| Settings — Git            | `<shadow-claw-git>`              | Git token and proxy settings                         |
+| Settings — Storage        | `<shadow-claw-storage>`          | Storage backend and quota                            |
+| Settings — WebVM          | `<shadow-claw-webvm>`            | VM boot mode and configuration                       |
+| Settings — Notifications  | `<shadow-claw-notifications>`    | Push notification management                         |
+| Tools                     | `<shadow-claw-tools>`            | Tool management and profiles UI                      |
+| Empty State (common)      | `<shadow-claw-empty-state>`      | Reusable empty/placeholder messaging block           |
+| Card (common)             | `<shadow-claw-card>`             | Reusable settings item card layout                   |
+| Actions (common)          | `<shadow-claw-actions>`          | Reusable settings action button group                |
 
 ### Rendering strategy
 
 - **Shadow DOM** for style isolation (each component has its own adopted stylesheet)
 - **Co-located HTML templates** fetched via `ShadowClawElement.getTemplate()` at connect time
 - **`effect()` callbacks** in `setupEffects()` drive reactive re-renders on signal changes
-- **`dispose()`** in `disconnectedCallback()` prevents memory leaks
+- **`addCleanup()` + base disconnect disposal** prevent memory leaks
+
+### Settings component organization
+
+Use this convention for settings UI moving forward:
+
+- Shared settings primitives stay in `src/components/common/`
+- Settings feature components should be grouped under `src/components/settings/`
+- Existing components can migrate gradually when files are already being modified
 
 ### Smart auto-scroll (chat)
 

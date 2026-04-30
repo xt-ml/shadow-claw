@@ -11,7 +11,6 @@ export async function deleteAllGroupFiles(
   const groupDir = await getGroupDir(db, groupId);
 
   // Delete everything in the group directory
-  // @ts-ignore - entries() is a newer File System Access API iterator method
   for await (const [name] of (groupDir as any).entries()) {
     await groupDir.removeEntry(name, { recursive: true });
   }

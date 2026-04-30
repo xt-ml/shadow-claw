@@ -438,7 +438,7 @@ Storage integration tests (`storage.test.ts`) are **feature-gated** at runtime:
 
 ### Adding a New Component
 
-1. Create component in `components/<name>.component.ts`
+1. Create component in `src/components/shadow-claw-<name>/shadow-claw-<name>.ts`
 2. Import and instantiate in relevant page object
 3. Expose component methods via page object (optional)
 4. Document in this README

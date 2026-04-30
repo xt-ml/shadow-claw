@@ -5,6 +5,7 @@ export default class ShadowClawElement extends HTMLElement {
 
   onStylesReady: Promise<void>;
   onTemplateReady: Promise<void>;
+  private _cleanups: Array<() => void> = [];
 
   static getTemplate(
     template: URL | string = (this as any).template,
@@ -110,6 +111,19 @@ export default class ShadowClawElement extends HTMLElement {
     Promise.all([this.onStylesReady, this.onTemplateReady])
       .then(() => this.render())
       .catch(console.error);
+  }
+
+  disconnectedCallback() {
+    this.disposeCleanups();
+  }
+
+  protected addCleanup(cleanup: () => void): void {
+    this._cleanups.push(cleanup);
+  }
+
+  protected disposeCleanups(): void {
+    this._cleanups.forEach((cleanup) => cleanup());
+    this._cleanups = [];
   }
 
   async render() {}

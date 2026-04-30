@@ -12,6 +12,12 @@ export interface OAuthAuthorizeRequest {
   audience?: string;
   clientSecret?: string;
   extraAuthorizeParams?: Record<string, string>;
+  /** Custom authorize URL override (only accepted for custom_mcp provider). */
+  authorizeUrl?: string;
+  /** Custom token URL override (only accepted for custom_mcp provider). */
+  tokenUrl?: string;
+  /** Custom PKCE override (only accepted for custom_mcp provider). */
+  usePkce?: boolean;
 }
 
 export interface OAuthRefreshRequest {
@@ -20,6 +26,8 @@ export interface OAuthRefreshRequest {
   clientSecret?: string;
   refreshToken: string;
   scope?: string | string[];
+  /** Custom token URL override (only accepted for custom_mcp provider). */
+  tokenUrl?: string;
 }
 
 interface OAuthAuthorizeUrlInput extends OAuthAuthorizeRequest {
@@ -231,18 +239,37 @@ export function registerOAuthRoutes(
       return;
     }
 
-    if (!isSafeAbsoluteUrl(provider.authorizeUrl)) {
-      res
-        .status(500)
-        .json({ error: "Invalid provider authorizeUrl configuration" });
+    // For custom_mcp, allow caller-supplied OAuth URLs (validated below).
+    const isCustomMcp = body.providerId === "custom_mcp";
+    const effectiveAuthorizeUrl =
+      isCustomMcp && isSafeAbsoluteUrl(body.authorizeUrl)
+        ? body.authorizeUrl
+        : provider.authorizeUrl;
+    const effectiveTokenUrl =
+      isCustomMcp && isSafeAbsoluteUrl(body.tokenUrl)
+        ? body.tokenUrl
+        : provider.tokenUrl;
+    const effectiveUsePkce =
+      isCustomMcp && typeof body.usePkce === "boolean"
+        ? body.usePkce
+        : provider.usePkce;
+
+    if (!isSafeAbsoluteUrl(effectiveAuthorizeUrl)) {
+      res.status(isCustomMcp ? 400 : 500).json({
+        error: isCustomMcp
+          ? "Custom MCP requires a valid authorizeUrl"
+          : "Invalid provider authorizeUrl configuration",
+      });
 
       return;
     }
 
-    if (!isSafeAbsoluteUrl(provider.tokenUrl)) {
-      res
-        .status(500)
-        .json({ error: "Invalid provider tokenUrl configuration" });
+    if (!isSafeAbsoluteUrl(effectiveTokenUrl)) {
+      res.status(isCustomMcp ? 400 : 500).json({
+        error: isCustomMcp
+          ? "Custom MCP requires a valid tokenUrl"
+          : "Invalid provider tokenUrl configuration",
+      });
 
       return;
     }
@@ -273,7 +300,7 @@ export function registerOAuthRoutes(
       : provider.defaultScopes;
 
     const state = createRandomToken();
-    const shouldUsePkce = provider.usePkce;
+    const shouldUsePkce = effectiveUsePkce;
     const codeVerifier = shouldUsePkce ? createRandomToken(48) : undefined;
     const codeChallenge = codeVerifier
       ? createPkceChallenge(codeVerifier)
@@ -284,7 +311,7 @@ export function registerOAuthRoutes(
 
     sessions.set(state, {
       providerId: body.providerId,
-      tokenUrl: provider.tokenUrl,
+      tokenUrl: effectiveTokenUrl,
       clientId: body.clientId,
       clientSecret: body.clientSecret,
       redirectUri: body.redirectUri,
@@ -297,10 +324,10 @@ export function registerOAuthRoutes(
     const authorizeUrl = buildAuthorizeUrl(
       {
         ...body,
-        authorizeUrl: provider.authorizeUrl,
-        tokenUrl: provider.tokenUrl,
+        authorizeUrl: effectiveAuthorizeUrl,
+        tokenUrl: effectiveTokenUrl,
         scope: effectiveScopes,
-        usePkce: provider.usePkce,
+        usePkce: effectiveUsePkce,
         scopeSeparator: provider.scopeSeparator,
       },
       state,
@@ -537,6 +564,13 @@ export function registerOAuthRoutes(
       return;
     }
 
+    // For custom_mcp, allow caller-supplied token URL.
+    const isCustomMcp = body.providerId === "custom_mcp";
+    const effectiveTokenUrl =
+      isCustomMcp && isSafeAbsoluteUrl(body.tokenUrl)
+        ? body.tokenUrl
+        : provider.tokenUrl;
+
     if (!body.clientId || typeof body.clientId !== "string") {
       res.status(400).json({ error: "Missing required clientId" });
 
@@ -576,7 +610,7 @@ export function registerOAuthRoutes(
     }
 
     try {
-      const response = await fetchImpl(provider.tokenUrl, {
+      const response = await fetchImpl(effectiveTokenUrl, {
         method: "POST",
         headers: buildClientAuthHeaders(
           provider.clientAuthMethod,

@@ -20,6 +20,7 @@ import { handleInvoke } from "./handleInvoke.js";
 import { pendingTasks } from "./pendingTasks.js";
 import { post } from "./post.js";
 import { executeTool } from "./executeTool.js";
+import { setToolState } from "./tool-state.js";
 
 /** In-flight abort controllers for group tasks */
 const inFlightControllers = new Map<string, AbortController>();
@@ -470,6 +471,13 @@ export async function handleMessage(event: MessageEvent): Promise<void> {
       }
 
       break;
+
+    case "update-tools": {
+      const { groupId, enabledTools, systemPromptOverride } = payload;
+      setToolState(groupId, enabledTools, systemPromptOverride);
+
+      break;
+    }
 
     case "execute-tool":
       try {

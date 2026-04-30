@@ -11,4 +11,7 @@
   "include": [
     "src/worker/**/*.ts"
   ],
+  "exclude": [
+    "src/worker/**/*.test.ts"
+  ]
 }

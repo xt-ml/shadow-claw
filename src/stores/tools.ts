@@ -1,11 +1,10 @@
-// @ts-ignore
 import { Signal } from "signal-polyfill";
 
 import { CONFIG_KEYS } from "../config.js";
 import { getConfig } from "../db/getConfig.js";
 import { setConfig } from "../db/setConfig.js";
 import { TOOL_DEFINITIONS } from "../tools.js";
-import { NANO_BUILTIN_PROFILE } from "../prompt-api-provider.js";
+import { NANO_BUILTIN_PROFILE } from "../tools/builtin-profiles.js";
 import type { ShadowClawDatabase } from "../types.js";
 import type { ToolDefinition, ToolProfile } from "../tools.js";
 

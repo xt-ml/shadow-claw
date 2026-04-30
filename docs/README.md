@@ -30,9 +30,9 @@ Detailed docs for each major subsystem.
 | [Accounts & Credentials](subsystems/accounts.md)          | Service account management, credential storage, auth bridges                     |
 | [Tools & Profiles](subsystems/tools.md)                   | Tool definitions, execution dispatch, profiles, adding new tools                 |
 | [Notifications & Scheduling](subsystems/notifications.md) | Web Push, VAPID, server-side SQLite scheduler, recursion guards                  |
-| [Providers & Adapters](subsystems/providers.md)           | LLM provider registry, adapter pattern, OpenAI/Anthropic formats, Bedrock proxy  |
+| [Providers & Rate Limiting](subsystems/providers.md)      | LLM provider registry, adapter pattern, adaptive rate limiting, Prompt API       |
 | [Electron Desktop](subsystems/electron.md)                | Desktop app architecture, in-process server, power management                    |
-| [Reactive UI](subsystems/reactive-ui.md)                  | TC39 Signals, `effect()`, stores, `ShadowClawElement` base class, Web Components |
+| [Reactive UI](subsystems/reactive-ui.md)                  | Signals, `ShadowClawElement`, `reconcileList`, Web Components, stores            |
 | [Crypto](subsystems/crypto.md)                            | AES-256-GCM encryption for API keys at rest                                      |
 
 ### Guides
@@ -81,5 +81,6 @@ The _why_ behind key choices.
 - Architecture docs describe _what is_ and _how it works_.
 - Guides describe _how to do things_.
 - Decision docs describe _why decisions were made_ and are append-only (supersede, don't edit).
+- For UI documentation, keep component organization guidance aligned with `src/components/common/` for shared primitives and `src/components/settings/` for settings feature components.
 - Keep references in this index in sync with actual files under `docs/`, plus root-level `README.md` and `e2e/README.md` when behavior changes cross boundaries.
 - Use Mermaid diagrams generously — they render on GitHub and in most editors.

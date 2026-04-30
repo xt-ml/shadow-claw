@@ -136,6 +136,7 @@ async function tryRefreshOAuthAccount(
         clientSecret: oauthClientSecret,
         refreshToken: decryptedRefreshToken,
         scope: account.scopes,
+        tokenUrl: account.oauthCustomTokenUrl,
       }),
     });
 

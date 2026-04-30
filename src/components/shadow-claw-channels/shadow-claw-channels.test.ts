@@ -20,7 +20,7 @@ jest.unstable_mockModule(
 );
 
 jest.unstable_mockModule(
-  "../shadow-claw-settings-channels/shadow-claw-settings-channels.js",
+  "../settings/shadow-claw-channel-config/shadow-claw-channel-config.js",
   () => {
     class MockSettingsChannels extends HTMLElement {
       connectedCallback() {
@@ -30,14 +30,11 @@ jest.unstable_mockModule(
       }
     }
 
-    if (!customElements.get("shadow-claw-settings-channels")) {
-      customElements.define(
-        "shadow-claw-settings-channels",
-        MockSettingsChannels,
-      );
+    if (!customElements.get("shadow-claw-channel-config")) {
+      customElements.define("shadow-claw-channel-config", MockSettingsChannels);
     }
 
-    return { ShadowClawSettingsChannels: MockSettingsChannels };
+    return { ShadowClawChannelConfig: MockSettingsChannels };
   },
 );
 

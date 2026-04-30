@@ -629,8 +629,8 @@ describe("auto-scroll pause on user scroll-up", () => {
     );
   });
 
-  it("should reset _isNearBottom to true when sending a message", async () => {
-    // sendMessage() must set _isNearBottom = true so that when the user sends
+  it("should reset near-bottom state to true when sending a message", async () => {
+    // sendMessage() must set near-bottom state to true so that when the user sends
     // a message while scrolled up, auto-scroll resumes — the user wants to see
     // their own message and the response.
     const fs = await import("fs");
@@ -644,9 +644,9 @@ describe("auto-scroll pause on user scroll-up", () => {
       ),
       "utf8",
     );
-    // The sendMessage method must contain #isNearBottom = true
+    // The sendMessage method must resume near-bottom state.
     const sendMessageMatch = src.match(
-      /async\s+sendMessage\s*\(\)\s*\{[\s\S]*?#isNearBottom\s*=\s*true/,
+      /async\s+sendMessage\s*\(\)\s*\{[\s\S]*?chatUiStore\.setNearBottom\(true\)/,
     );
     expect(sendMessageMatch).not.toBeNull();
   });
@@ -701,9 +701,11 @@ describe("auto-scroll on container resize", () => {
       "utf8",
     );
     // The component must create a ResizeObserver that references
-    // #isNearBottom and scrollHeight
+    // the chat auto-follow logic and scrollHeight.
     expect(src).toMatch(/ResizeObserver/);
-    expect(src).toMatch(/ResizeObserver[\s\S]*?#isNearBottom/);
+    expect(src).toMatch(
+      /ResizeObserver[\s\S]*?this\.shouldAutoFollow\(messagesEl\)/,
+    );
     expect(src).toMatch(/\.observe\(/);
   });
 });

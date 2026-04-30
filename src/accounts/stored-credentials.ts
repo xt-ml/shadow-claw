@@ -19,6 +19,14 @@ export interface StoredCredentialOAuthFields {
   oauthRefreshFailureCount?: number;
   oauthReauthRequired?: boolean;
   oauthReauthRequiredAt?: number;
+  /** Custom authorize URL (used when oauthProviderId is "custom_mcp"). */
+  oauthCustomAuthorizeUrl?: string;
+  /** Custom token URL (used when oauthProviderId is "custom_mcp"). */
+  oauthCustomTokenUrl?: string;
+  /** Custom PKCE preference (used when oauthProviderId is "custom_mcp"). */
+  oauthCustomUsePkce?: boolean;
+  /** Custom redirect URI (used when oauthProviderId is "custom_mcp"). */
+  oauthCustomRedirectUri?: string;
 }
 
 export interface PendingOAuthResult {

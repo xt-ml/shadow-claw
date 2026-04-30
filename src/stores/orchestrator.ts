@@ -1,4 +1,3 @@
-// @ts-ignore
 import { Signal } from "signal-polyfill";
 
 import { DEFAULT_GROUP_ID, CONFIG_KEYS } from "../config.js";
@@ -392,6 +391,10 @@ export class OrchestratorStore {
 
   get gitProxyUrl() {
     return this._gitProxyUrl.get();
+  }
+
+  setReady(ready: boolean = true): void {
+    this._ready.set(ready);
   }
 
   /**
@@ -846,6 +849,22 @@ export class OrchestratorStore {
   }
 
   /**
+   * Set and load the current file browser path.
+   */
+  async setCurrentPath(db: ShadowClawDatabase, path: string): Promise<void> {
+    const normalizedPath = path.replace(/^\/+|\/+$/g, "");
+    const nextPath = normalizedPath ? normalizedPath : ".";
+    const groupId = this._activeGroupId.get();
+
+    this._storageStatus.set(await getStorageStatus(db));
+
+    const files = await listGroupFiles(db, groupId, nextPath);
+
+    this._currentPath.set(nextPath);
+    this._files.set(files);
+  }
+
+  /**
    * Request a manual host -> VM workspace sync for the active group.
    */
   syncHostWorkspaceToVM() {
@@ -884,13 +903,8 @@ export class OrchestratorStore {
         ? folderName.replace(/\/$/, "")
         : `${currentPath}/${folderName.replace(/\/$/, "")}`;
 
-    const groupId = this._activeGroupId.get();
-
     try {
-      this._storageStatus.set(await getStorageStatus(db));
-      const files = await listGroupFiles(db, groupId, newPath);
-      this._currentPath.set(newPath);
-      this._files.set(files);
+      await this.setCurrentPath(db, newPath);
     } catch (err) {
       console.error("Failed to navigate into folder in store:", err);
       showError(`Folder not found: ${newPath}`, 4500);
@@ -913,18 +927,14 @@ export class OrchestratorStore {
 
     const newPath = parts.length === 0 ? "." : parts.join("/");
 
-    this._currentPath.set(newPath);
-
-    await this.loadFiles(db);
+    await this.setCurrentPath(db, newPath);
   }
 
   /**
    * Reset to root folder
    */
   async resetToRootFolder(db: ShadowClawDatabase): Promise<void> {
-    this._currentPath.set(".");
-
-    await this.loadFiles(db);
+    await this.setCurrentPath(db, ".");
   }
 
   /**

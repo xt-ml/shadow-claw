@@ -5,6 +5,11 @@ import { getCompactionMessages } from "./getCompactionMessages.js";
 import { getCompactionSystemPrompt } from "./getCompactionSystemPrompt.js";
 import { log } from "./log.js";
 import { post } from "./post.js";
+import {
+  waitForRateLimitSlot,
+  updateRateLimitFromHeaders,
+  RateLimitConfig,
+} from "./rate-limit.js";
 import { CompactPayload } from "../types.js";
 
 /**
@@ -21,12 +26,21 @@ export async function handleCompact(
     systemPrompt,
     apiKey,
     model,
-    maxTokens,
+    maxTokens = 4096,
     provider: providerId,
     storageHandle,
     providerHeaders = {},
     contextCompression = false,
+    rateLimitCallsPerMinute = 0,
+    rateLimitAutoAdapt = true,
   } = payload;
+
+  const rateLimitConfig: RateLimitConfig = {
+    callsPerMinute: Number.isFinite(rateLimitCallsPerMinute)
+      ? Math.max(0, Math.floor(rateLimitCallsPerMinute))
+      : 0,
+    autoAdapt: rateLimitAutoAdapt !== false,
+  };
 
   if (storageHandle) {
     setStorageRoot(storageHandle);
@@ -70,12 +84,22 @@ export async function handleCompact(
       ...buildHeaders(typedProvider, apiKey),
       ...providerHeaders,
     };
+
+    await waitForRateLimitSlot(
+      providerId,
+      groupId,
+      rateLimitConfig,
+      abortSignal,
+    );
+
     const res = await fetch(typedProvider.baseUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(body),
       signal: abortSignal,
     });
+
+    updateRateLimitFromHeaders(providerId, res.headers, rateLimitConfig);
 
     if (!res.ok) {
       const errBody = await res.text();

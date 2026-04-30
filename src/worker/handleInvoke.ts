@@ -21,6 +21,13 @@ import { log } from "./log.js";
 import { parseSSEStream } from "./parseSSEStream.js";
 import { post } from "./post.js";
 import { StreamAccumulator, StreamFormat } from "./StreamAccumulator.js";
+import { buildSystemPrompt } from "./system-prompt.js";
+import { clearToolState, getToolState } from "./tool-state.js";
+import {
+  waitForRateLimitSlot,
+  updateRateLimitFromHeaders,
+  RateLimitConfig,
+} from "./rate-limit.js";
 import { withRetry, isRetryableHttpError } from "./withRetry.js";
 import { InvokePayload, ContentBlock } from "../types.js";
 
@@ -54,12 +61,18 @@ export async function handleInvoke(
     contextCompression = false,
     contextLimit: payloadContextLimit,
     providerHeaders = {},
+    rateLimitCallsPerMinute = 0,
+    rateLimitAutoAdapt = true,
+    assistantName,
+    memory,
   } = payload;
 
-  const tools =
-    Array.isArray(enabledTools) && enabledTools.length > 0
-      ? enabledTools
-      : TOOL_DEFINITIONS;
+  const rateLimitConfig: RateLimitConfig = {
+    callsPerMinute: Number.isFinite(rateLimitCallsPerMinute)
+      ? Math.max(0, Math.floor(rateLimitCallsPerMinute))
+      : 0,
+    autoAdapt: rateLimitAutoAdapt !== false,
+  };
 
   if (storageHandle) {
     setStorageRoot(storageHandle);
@@ -101,14 +114,31 @@ export async function handleInvoke(
         ? payloadMaxIterations
         : DEFAULT_MAX_ITERATIONS;
 
+    let currentTools = Array.isArray(enabledTools)
+      ? enabledTools
+      : TOOL_DEFINITIONS;
+    let currentSystemPrompt = systemPrompt;
+
     // Track exact tool calls to prevent loops
     const toolCallHistory: string[] = [];
 
     while (iterations < maxIterations) {
       iterations++;
 
+      // Check for mid-invocation tool updates from main thread
+      const updatedState = getToolState(groupId);
+      if (updatedState) {
+        currentTools = updatedState.enabledTools;
+        currentSystemPrompt = buildSystemPrompt(
+          assistantName,
+          memory,
+          currentTools,
+          updatedState.systemPromptOverride,
+        );
+      }
+
       const contextLimit = payloadContextLimit ?? getContextLimit(model);
-      const systemPromptTokens = estimateTokens(systemPrompt);
+      const systemPromptTokens = estimateTokens(currentSystemPrompt);
 
       // Re-evaluate context dynamically for each API call to handle large tool outputs
       const { messages: payloadMessages, estimatedTokens } =
@@ -130,12 +160,17 @@ export async function handleInvoke(
         Math.min(maxTokens, contextLimit - totalPromptEstimate - SAFETY_BUFFER),
       );
 
-      const body = formatRequest(typedProvider, payloadMessages, tools as any, {
-        model,
-        maxTokens: safeMaxTokens,
-        system: systemPrompt,
-        contextCompression,
-      });
+      const body = formatRequest(
+        typedProvider,
+        payloadMessages,
+        currentTools as any,
+        {
+          model,
+          maxTokens: safeMaxTokens,
+          system: currentSystemPrompt,
+          contextCompression,
+        },
+      );
 
       log(
         groupId,
@@ -153,19 +188,23 @@ export async function handleInvoke(
 
       if (useStreaming) {
         result = await callWithStreaming(
+          providerId,
           typedProvider,
           headers,
           body,
           groupId,
           model,
+          rateLimitConfig,
           abortSignal,
         );
       } else {
         result = await callWithoutStreaming(
+          providerId,
           typedProvider,
           headers,
           body,
           groupId,
+          rateLimitConfig,
           abortSignal,
         );
       }
@@ -333,6 +372,8 @@ export async function handleInvoke(
     }
 
     post({ type: "error", payload: { groupId, error: message } });
+  } finally {
+    clearToolState(groupId);
   }
 }
 
@@ -340,20 +381,31 @@ export async function handleInvoke(
  * Make a non-streaming LLM API call with retry.
  */
 async function callWithoutStreaming(
+  providerId: string,
   typedProvider: ProviderConfig,
   headers: Record<string, string>,
   body: any,
   groupId: string,
+  rateLimitConfig: RateLimitConfig,
   abortSignal?: AbortSignal,
 ): Promise<any> {
   return withRetry(
     async () => {
+      await waitForRateLimitSlot(
+        providerId,
+        groupId,
+        rateLimitConfig,
+        abortSignal,
+      );
+
       const res = await fetch(typedProvider.baseUrl, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
         signal: abortSignal,
       });
+
+      updateRateLimitFromHeaders(providerId, res.headers, rateLimitConfig);
 
       if (!res.ok) {
         const errBody = await res.text();
@@ -403,11 +455,13 @@ async function callWithoutStreaming(
  * Make a streaming LLM API call.
  */
 async function callWithStreaming(
+  providerId: string,
   typedProvider: ProviderConfig,
   headers: Record<string, string>,
   body: any,
   groupId: string,
   model: string,
+  rateLimitConfig: RateLimitConfig,
   abortSignal?: AbortSignal,
 ): Promise<any> {
   // Add stream flag to the request body
@@ -420,12 +474,16 @@ async function callWithStreaming(
     }),
   };
 
+  await waitForRateLimitSlot(providerId, groupId, rateLimitConfig, abortSignal);
+
   const res = await fetch(typedProvider.baseUrl, {
     method: "POST",
     headers,
     body: JSON.stringify(streamBody),
     signal: abortSignal,
   });
+
+  updateRateLimitFromHeaders(providerId, res.headers, rateLimitConfig);
 
   if (!res.ok) {
     const errBody = await res.text();

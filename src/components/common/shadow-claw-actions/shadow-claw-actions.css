@@ -1,0 +1,30 @@
+:host {
+  display: contents;
+}
+
+.actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+button {
+  background: none;
+  border: none;
+  border-radius: 0.25rem;
+  color: var(--shadow-claw-text-secondary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  transition:
+    color 0.15s,
+    background-color 0.15s;
+}
+
+button:hover {
+  background-color: var(--shadow-claw-bg-primary);
+  color: var(--shadow-claw-text-primary);
+}
+
+button.delete-btn:hover {
+  color: #dc2626;
+}

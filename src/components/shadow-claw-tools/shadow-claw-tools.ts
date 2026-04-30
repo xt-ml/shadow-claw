@@ -221,8 +221,11 @@ export class ShadowClawTools extends ShadowClawElement {
             '[name="providerId"]',
           );
           if (providerSelect) {
-            providerSelect.innerHTML =
-              '<option value="">— Any provider —</option>';
+            providerSelect.replaceChildren();
+            const defaultOption = document.createElement("option");
+            defaultOption.value = "";
+            defaultOption.textContent = "— Any provider —";
+            providerSelect.append(defaultOption);
             for (const pid of getAvailableProviders()) {
               const p = getProvider(pid);
               if (p) {
@@ -294,7 +297,7 @@ export class ShadowClawTools extends ShadowClawElement {
     const enabled = toolsStore.enabledToolNames;
     const allTools = toolsStore.allTools;
 
-    list.innerHTML = "";
+    list.replaceChildren();
 
     for (const tool of allTools) {
       const isCustom = !BUILTIN_TOOL_NAMES.has(tool.name);
@@ -305,40 +308,69 @@ export class ShadowClawTools extends ShadowClawElement {
       item.className = "tools__item";
       item.setAttribute("role", "listitem");
 
-      item.innerHTML = `
-        <input type="checkbox" class="tools__item-checkbox"
-          data-tool="${tool.name}"
-          ${isChecked ? "checked" : ""}
-          aria-label="Enable ${tool.name}">
-        <div class="tools__item-info">
-          <div class="tools__item-name">${tool.name}</div>
-          <div class="tools__item-desc" title="${tool.description}">${brief}</div>
-        </div>
-        ${isCustom ? '<span class="tools__item-badge">custom</span>' : ""}
-        <button class="tools__item-clone" data-clone="${tool.name}" aria-label="Clone ${tool.name}" title="Clone tool">📋</button>
-        ${isCustom ? `<button class="tools__item-delete" data-delete="${tool.name}" aria-label="Delete ${tool.name}">🗑️</button>` : ""}
-      `;
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "tools__item-checkbox";
+      checkbox.setAttribute("data-tool", tool.name);
+      checkbox.setAttribute("aria-label", `Enable ${tool.name}`);
+      checkbox.checked = isChecked;
+
+      const info = document.createElement("div");
+      info.className = "tools__item-info";
+
+      const name = document.createElement("div");
+      name.className = "tools__item-name";
+      name.textContent = tool.name;
+
+      const desc = document.createElement("div");
+      desc.className = "tools__item-desc";
+      desc.setAttribute("title", tool.description);
+      desc.textContent = brief;
+      info.append(name, desc);
+
+      const cloneBtn = document.createElement("button");
+      cloneBtn.className = "tools__item-clone";
+      cloneBtn.setAttribute("data-clone", tool.name);
+      cloneBtn.setAttribute("aria-label", `Clone ${tool.name}`);
+      cloneBtn.setAttribute("title", "Clone tool");
+      cloneBtn.textContent = "📋";
+
+      item.append(checkbox, info);
+
+      if (isCustom) {
+        const badge = document.createElement("span");
+        badge.className = "tools__item-badge";
+        badge.textContent = "custom";
+        item.append(badge);
+      }
+
+      item.append(cloneBtn);
+
+      let deleteBtn: HTMLButtonElement | null = null;
+      if (isCustom) {
+        deleteBtn = document.createElement("button");
+        deleteBtn.className = "tools__item-delete";
+        deleteBtn.setAttribute("data-delete", tool.name);
+        deleteBtn.setAttribute("aria-label", `Delete ${tool.name}`);
+        deleteBtn.textContent = "🗑️";
+        item.append(deleteBtn);
+      }
 
       // Toggle
-      const checkbox = item.querySelector("input");
       checkbox?.addEventListener("change", () => {
         toolsStore.setToolEnabled(db, tool.name, checkbox.checked);
       });
 
       // Clone
-      const cloneBtn = item.querySelector(".tools__item-clone");
       cloneBtn?.addEventListener("click", () => {
         this.openCloneDialog(tool.name);
       });
 
       // Delete custom tool
-      if (isCustom) {
-        const deleteBtn = item.querySelector(".tools__item-delete");
-        deleteBtn?.addEventListener("click", () => {
-          toolsStore.removeCustomTool(db, tool.name);
-          showInfo(`Removed custom tool: ${tool.name}`);
-        });
-      }
+      deleteBtn?.addEventListener("click", () => {
+        toolsStore.removeCustomTool(db, tool.name);
+        showInfo(`Removed custom tool: ${tool.name}`);
+      });
 
       list.appendChild(item);
     }
@@ -379,8 +411,11 @@ export class ShadowClawTools extends ShadowClawElement {
     const activeId = toolsStore.activeProfileId;
 
     // Preserve selection
-    select.innerHTML =
-      '<option value="">— No profile (manual config) —</option>';
+    select.replaceChildren();
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "— No profile (manual config) —";
+    select.append(defaultOption);
     for (const p of profiles) {
       const opt = document.createElement("option");
       opt.value = p.id;

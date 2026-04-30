@@ -44,11 +44,39 @@ Tool definitions live in modular files under `src/tools/` and are assembled in `
 | `chat.ts`          | `clear_chat`                                                                                                                                                                                                               |
 | `notifications.ts` | `show_toast`, `send_notification`                                                                                                                                                                                          |
 | `git.ts`           | `git_clone`, `git_sync`, `git_checkout`, `git_branch`, `git_status`, `git_add`, `git_log`, `git_diff`, `git_branches`, `git_list_repos`, `git_delete_repo`, `git_commit`, `git_pull`, `git_push`, `git_merge`, `git_reset` |
+| `manage_tools.ts`  | `manage_tools`, `list_tool_profiles`                                                                                                                                                                                       |
 | `mcp.ts`           | `remote_mcp_list_tools`, `remote_mcp_call_tool`                                                                                                                                                                            |
 
 All are re-exported from `src/tools/index.ts` as the `TOOL_DEFINITIONS` array.
 
-## Tool Execution
+## Agent-Driven Tool Management
+
+ShadowClaw allows agents to dynamically manage their own toolset via the `manage_tools` tool. This is particularly useful for optimizing the context window or focusing the agent on specific capabilities.
+
+### `manage_tools`
+
+- **Action: `enable` / `disable`**: Toggle specific tools by name.
+- **Action: `activate_profile`**: Switch to a predefined set of tools.
+- Changes are applied on the **next** turn after the orchestrator syncs updated tool state back to the worker.
+
+### `list_tool_profiles`
+
+- Returns the available profile IDs, names, and enabled tool lists so the agent can pick a profile before calling `manage_tools`.
+
+### Tool Profiles
+
+Predefined sets of tools optimized for specific use cases.
+
+- **`git-ops`**: Optimized for repository management.
+- **`minimal`**: Only essential file and shell tools.
+- **`full`**: All available tools enabled.
+- **`__builtin_nano`**: Specialized profile for Gemini Nano (`prompt_api`) that minimizes context consumption.
+
+### Auto-Activation
+
+Saved profiles can specify a `providerId`. When the orchestrator switches to a model from that provider, the associated profile is automatically activated. For example, selecting Gemini Nano automatically triggers the Nano Optimized profile.
+
+## Tool Execution Dispatch
 
 `executeTool(db, name, input, groupId, options)` in `src/worker/executeTool.ts` is the single dispatcher. It:
 

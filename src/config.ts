@@ -239,6 +239,7 @@ export interface OAuthProviderFlowCapabilities {
   authorizeUrl: string;
   tokenUrl: string;
   refreshUrl?: string;
+  redirectUri?: string;
   defaultScopes: string[];
   usePkce: boolean;
   clientAuthMethod: OAuthClientAuthMethod;
@@ -280,6 +281,7 @@ export interface OAuthProviderDefinition {
   name: string;
   authorizeUrl: string;
   tokenUrl: string;
+  redirectUri?: string;
   defaultScopes: string[];
   usePkce: boolean;
   clientAuthMethod?: OAuthClientAuthMethod;
@@ -534,6 +536,14 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
       pat: { headerName: "Authorization", headerPrefix: "Bearer " },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
     },
+    oauth: {
+      authorizeUrl: "https://example.com/oauth/authorize",
+      tokenUrl: "https://example.com/oauth/token",
+      defaultScopes: [],
+      usePkce: true,
+      clientAuthMethod: "request_body",
+      scopeSeparator: "space",
+    },
   },
 };
 
@@ -557,6 +567,7 @@ export const OAUTH_PROVIDER_DEFINITIONS: Record<
           name: provider.name,
           authorizeUrl: oauth.authorizeUrl,
           tokenUrl: oauth.tokenUrl,
+          redirectUri: oauth.redirectUri,
           defaultScopes: oauth.defaultScopes,
           usePkce: oauth.usePkce,
           clientAuthMethod: oauth.clientAuthMethod,
@@ -814,6 +825,8 @@ export const CONFIG_KEYS = {
   ACTIVE_TOOL_PROFILE: "active_tool_profile",
   STREAMING_ENABLED: "streaming_enabled",
   MAX_ITERATIONS: "max_iterations",
+  RATE_LIMIT_CALLS_PER_MINUTE: "rate_limit_calls_per_minute",
+  RATE_LIMIT_AUTO_ADAPT: "rate_limit_auto_adapt",
   TASK_SYNC_OUTBOX: "task_sync_outbox",
   LAST_ACTIVE_GROUP: "last_active_group",
   CONVERSATIONS_HEIGHT: "conversations_height",

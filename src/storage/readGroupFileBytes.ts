@@ -21,7 +21,6 @@ export async function readGroupFileBytes(
   const fileHandle = await dir.getFileHandle(filename);
 
   try {
-    // @ts-ignore - createSyncAccessHandle only exists for OPFS handles.
     const syncHandle = await (fileHandle as any).createSyncAccessHandle();
     const size = syncHandle.getSize();
     const buf = new Uint8Array(size);

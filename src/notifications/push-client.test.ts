@@ -1,5 +1,4 @@
 import { jest } from "@jest/globals";
-
 // Mock service worker and Push API
 const mockSubscription: any = {
   endpoint: "https://fcm.googleapis.com/fcm/send/abc123",
@@ -41,11 +40,11 @@ Object.defineProperty((globalThis as any).navigator, "serviceWorker", {
 
 // Mock database functions using ESM-compatible unstable_mockModule
 jest.unstable_mockModule("../db/db.js", () => ({
-  getDb: jest.fn().mockResolvedValue({}),
+  getDb: (jest.fn() as any).mockResolvedValue({}),
 }));
 
 jest.unstable_mockModule("../db/getConfig.js", () => ({
-  getConfig: jest.fn().mockResolvedValue(null),
+  getConfig: (jest.fn() as any).mockResolvedValue(null),
 }));
 
 const {

@@ -20,7 +20,6 @@ async function probeHandleAccess(
   reportedPermission: "granted" | "denied" | "prompt",
 ): Promise<"granted" | "denied" | "prompt"> {
   try {
-    // @ts-ignore - entries() is a newer File System Access API method
     const iter = (handle as any).entries();
     await iter.next();
 

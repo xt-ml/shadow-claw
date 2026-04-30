@@ -1,10 +1,10 @@
-import "../shadow-claw-settings-accounts/shadow-claw-settings-accounts.js";
-import "../shadow-claw-settings-git/shadow-claw-settings-git.js";
-import "../shadow-claw-settings-llm/shadow-claw-settings-llm.js";
-import "../shadow-claw-settings-mcp-remote/shadow-claw-settings-mcp-remote.js";
-import "../shadow-claw-settings-notifications/shadow-claw-settings-notifications.js";
-import "../shadow-claw-settings-storage/shadow-claw-settings-storage.js";
-import "../shadow-claw-settings-webvm/shadow-claw-settings-webvm.js";
+import "../settings/shadow-claw-accounts/shadow-claw-accounts.js";
+import "../settings/shadow-claw-git/shadow-claw-git.js";
+import "../settings/shadow-claw-llm/shadow-claw-llm.js";
+import "../settings/shadow-claw-mcp-remote/shadow-claw-mcp-remote.js";
+import "../settings/shadow-claw-notifications/shadow-claw-notifications.js";
+import "../settings/shadow-claw-storage/shadow-claw-storage.js";
+import "../settings/shadow-claw-webvm/shadow-claw-webvm.js";
 
 import type { Orchestrator } from "../../orchestrator.js";
 import type { ShadowClawDatabase } from "../../types.js";
@@ -17,10 +17,10 @@ const elementName = "shadow-claw-settings";
 /**
  * Parent settings component that composes the dedicated sub-components:
  *
- *  - <shadow-claw-settings-llm>    — Provider, model, API key, assistant name
- *  - <shadow-claw-settings-webvm>  — VM boot mode, timeout, host, relay
- *  - <shadow-claw-settings-git>    — CORS proxy, PAT, author config
- *  - <shadow-claw-settings-storage>— OPFS, persistent, directory
+ *  - <shadow-claw-llm>    — Provider, model, API key, assistant name
+ *  - <shadow-claw-webvm>  — VM boot mode, timeout, host, relay
+ *  - <shadow-claw-git>    — CORS proxy, PAT, author config
+ *  - <shadow-claw-storage>— OPFS, persistent, directory
  *
  *  - Channels button                — navigates to the channels config page
  *  - Tools button                   — navigates to the tools config page
@@ -33,6 +33,7 @@ export class ShadowClawSettings extends ShadowClawElement {
 
   db: ShadowClawDatabase | null = null;
   orchestrator: Orchestrator | null = null;
+  activeTab = "ai";
 
   constructor() {
     super();
@@ -86,6 +87,20 @@ export class ShadowClawSettings extends ShadowClawElement {
       );
     });
 
+    // Bind tab controls
+    const tabButtons =
+      root.querySelectorAll<HTMLButtonElement>("[data-tab-target]");
+    tabButtons.forEach((tabButton) => {
+      tabButton.addEventListener("click", () => {
+        this.activateTab(tabButton.dataset.tabTarget);
+      });
+
+      tabButton.addEventListener("keydown", (event) => {
+        this.handleTabKeydown(event, tabButton);
+      });
+    });
+    this.applyTabState();
+
     // Set the deployed revision
     const revisionEl = root.querySelector('[data-info="deployed-revision"]');
     if (revisionEl) {
@@ -96,6 +111,82 @@ export class ShadowClawSettings extends ShadowClawElement {
           ?.trim() || "";
       revisionEl.textContent = `Deployed revision: ${revision || "unknown"}`;
     }
+  }
+
+  applyTabState() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const tabButtons =
+      root.querySelectorAll<HTMLButtonElement>("[data-tab-target]");
+    tabButtons.forEach((tabButton) => {
+      const isActive = tabButton.dataset.tabTarget === this.activeTab;
+      tabButton.classList.toggle("active", isActive);
+      tabButton.setAttribute("aria-selected", String(isActive));
+      tabButton.tabIndex = isActive ? 0 : -1;
+    });
+
+    const tabPanels = root.querySelectorAll<HTMLElement>("[data-tab-panel]");
+    tabPanels.forEach((tabPanel) => {
+      const isActive = tabPanel.dataset.tabPanel === this.activeTab;
+      tabPanel.hidden = !isActive;
+    });
+  }
+
+  activateTab(tabId: string | undefined) {
+    if (!tabId || this.activeTab === tabId) {
+      return;
+    }
+
+    this.activeTab = tabId;
+    this.applyTabState();
+  }
+
+  handleTabKeydown(event: KeyboardEvent, currentButton: HTMLButtonElement) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const tabButtons = Array.from(
+      root.querySelectorAll<HTMLButtonElement>("[data-tab-target]"),
+    );
+    const currentIndex = tabButtons.indexOf(currentButton);
+    if (currentIndex < 0) {
+      return;
+    }
+
+    let nextIndex = -1;
+
+    switch (event.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        nextIndex = (currentIndex + 1) % tabButtons.length;
+
+        break;
+      case "ArrowLeft":
+      case "ArrowUp":
+        nextIndex = (currentIndex - 1 + tabButtons.length) % tabButtons.length;
+
+        break;
+      case "Home":
+        nextIndex = 0;
+
+        break;
+      case "End":
+        nextIndex = tabButtons.length - 1;
+
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    const nextButton = tabButtons[nextIndex];
+    nextButton.focus();
+    this.activateTab(nextButton.dataset.tabTarget);
   }
 }
 

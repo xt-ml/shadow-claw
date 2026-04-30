@@ -24,9 +24,7 @@ export async function writeFileHandle(
     return;
   }
 
-  // @ts-ignore - createSyncAccessHandle exists for OPFS handles but is not in the standard FileSystemFileHandle type.
   if (typeof (fileHandle as any).createSyncAccessHandle === "function") {
-    // @ts-ignore - createSyncAccessHandle exists for OPFS handles.
     const syncHandle = await (fileHandle as any).createSyncAccessHandle();
 
     try {

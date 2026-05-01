@@ -15,6 +15,8 @@ import {
   COPILOT_AZURE_OPENAI_PROXY_URL,
   GITHUB_MODELS_PROXY_URL,
   GITHUB_MODELS_PROXY_MODELS_URL,
+  TRANSFORMERS_JS_PROXY_URL,
+  TRANSFORMERS_JS_PROXY_MODELS_URL,
   LLAMAFILE_PROXY_URL,
   LLAMAFILE_PROXY_MODELS_URL,
   PROVIDERS,
@@ -185,6 +187,10 @@ describe("config.js", () => {
       expect(PROVIDERS.llamafile).toBeDefined();
     });
 
+    it("should have transformers js local provider", () => {
+      expect(PROVIDERS.transformers_js_local).toBeDefined();
+    });
+
     it("openrouter should have required fields", () => {
       const provider = PROVIDERS.openrouter;
       expect(provider.id).toBe("openrouter");
@@ -231,6 +237,17 @@ describe("config.js", () => {
       expect(provider.supportsStreaming).toBe(true);
     });
 
+    it("transformers js local provider should have required fields", () => {
+      const provider = PROVIDERS.transformers_js_local;
+      expect(provider.id).toBe("transformers_js_local");
+      expect(provider.name).toBe("Transformers.js (Local Proxy)");
+      expect(provider.baseUrl).toBe(TRANSFORMERS_JS_PROXY_URL);
+      expect(provider.modelsUrl).toBe(TRANSFORMERS_JS_PROXY_MODELS_URL);
+      expect(provider.format).toBe("openai");
+      expect(provider.requiresApiKey).toBe(false);
+      expect(provider.defaultModel).toBe("onnx-community/gemma-4-E2B-it-ONNX");
+    });
+
     it("prompt api provider should be keyless and experimental", () => {
       const provider = PROVIDERS.prompt_api;
       expect(provider.id).toBe("prompt_api");
@@ -274,6 +291,10 @@ describe("config.js", () => {
 
       it("llamafile should support streaming (CLI SSE adaptation or SERVER passthrough)", () => {
         expect(PROVIDERS.llamafile.supportsStreaming).toBe(true);
+      });
+
+      it("transformers_js_local should support streaming via SSE", () => {
+        expect(PROVIDERS.transformers_js_local.supportsStreaming).toBe(true);
       });
     });
   });
@@ -510,6 +531,11 @@ describe("config.js", () => {
     it("should include llamafile in available providers", () => {
       const providers = getAvailableProviders();
       expect(providers).toContain("llamafile");
+    });
+
+    it("should include transformers js local in available providers", () => {
+      const providers = getAvailableProviders();
+      expect(providers).toContain("transformers_js_local");
     });
 
     it("should return only string IDs", () => {

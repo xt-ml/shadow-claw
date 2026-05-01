@@ -1,0 +1,99 @@
+*,
+*::before,
+*::after {
+  font-family: var(--shadow-claw-font-sans);
+}
+
+:host {
+  display: block;
+}
+
+.settings-section {
+  margin-bottom: 1.75rem;
+}
+
+.settings-section h3 {
+  align-items: center;
+  display: flex;
+  font-size: 1rem;
+  font-weight: 600;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-label {
+  color: var(--shadow-claw-text-primary);
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-bottom: 0.375rem;
+}
+
+.form-input {
+  background-color: var(--shadow-claw-bg-primary);
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-s, 0.625rem);
+  box-sizing: border-box;
+  color: var(--shadow-claw-text-primary);
+  font-family: var(--shadow-claw-font-sans);
+  font-size: var(--shadow-claw-font-size-sm);
+  padding: 0.625rem 0.75rem;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+
+.form-input:focus {
+  border-color: var(--shadow-claw-accent-primary);
+  box-shadow: 0 0 0 0.125rem rgba(0, 0, 0, 0.06);
+  outline: none;
+}
+
+.form-helper {
+  color: var(--shadow-claw-text-tertiary);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.form-toggle {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.form-toggle input[type="checkbox"] {
+  accent-color: var(--shadow-claw-accent-primary);
+  cursor: pointer;
+  height: 1.125rem;
+  width: 1.125rem;
+}
+
+.form-toggle .form-label {
+  cursor: pointer;
+  display: inline;
+  margin-bottom: 0;
+}
+
+.save-btn {
+  background-color: var(--shadow-claw-text-primary);
+  border: none;
+  border-radius: 62.5rem;
+  color: var(--shadow-claw-bg-primary);
+  cursor: pointer;
+  font-size: var(--shadow-claw-font-size-sm);
+  font-weight: 600;
+  padding: 0.625rem 1.5rem;
+  transition: background-color 150ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.save-btn:hover {
+  background-color: var(--shadow-claw-accent-primary);
+  color: var(--shadow-claw-on-primary);
+}
+
+.save-btn--inline {
+  margin-top: 0.5rem;
+}

@@ -1,6 +1,4 @@
 import { jest } from "@jest/globals";
-import fs from "node:fs";
-import path from "node:path";
 
 jest.unstable_mockModule("../../../config.js", () => ({
   CONFIG_KEYS: {
@@ -134,8 +132,6 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
     })),
   }),
 }));
-
-// Global fetch is already mocked in jest-setup.ts
 
 const { setConfig } = await import("../../../db/setConfig.js");
 const { getConfig } = await import("../../../db/getConfig.js");

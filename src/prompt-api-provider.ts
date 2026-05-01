@@ -59,7 +59,9 @@ const PROMPT_IO_OPTIONS = {
   expectedOutputs: [{ type: "text", languages: ["en"] }],
 };
 
-const WARM_SESSION_IDLE_MS = 120_000;
+// Keep the warm session window short to avoid prolonged CPU/GPU activity
+// on constrained machines after a response is finished.
+const WARM_SESSION_IDLE_MS = 10_000;
 
 const warmSessionState: {
   key: string | null;

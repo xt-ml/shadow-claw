@@ -515,6 +515,11 @@ describe("providers.js", () => {
       expect(getContextLimit("gpt-4o-mini")).toBe(128000);
     });
 
+    it("should return 32k for gemma family models", () => {
+      expect(getContextLimit("onnx-community/gemma-4-E2B-it-ONNX")).toBe(32000);
+      expect(getContextLimit("google/gemma-2-9b-it")).toBe(32000);
+    });
+
     it("should return 4k default for completely unknown model", () => {
       expect(getContextLimit("my-custom-model")).toBe(4096);
     });

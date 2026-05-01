@@ -1,6 +1,4 @@
 import { jest } from "@jest/globals";
-import fs from "node:fs";
-import path from "node:path";
 
 // Mock CSSStyleSheet for JSDOM
 (globalThis as any).CSSStyleSheet = class {
@@ -47,8 +45,6 @@ jest.unstable_mockModule("../../../storage/getStorageEstimate.js", () => ({
     .fn<any>()
     .mockResolvedValue({ usage: 1024, quota: 10240 }),
 }));
-
-// Global fetch is already mocked in jest-setup.ts
 
 const { ShadowClawStorage } = await import("./shadow-claw-storage.js");
 

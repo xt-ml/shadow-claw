@@ -73,6 +73,7 @@ import type {
   ChannelType,
   InboundMessage,
   LLMProvider,
+  ModelDownloadProgressPayload,
   Task,
 } from "./types.js";
 
@@ -166,6 +167,7 @@ export class Orchestrator {
   pendingScheduledTasks: Set<string> = new Set();
   processing: boolean = false;
   promptControllers: Map<string, AbortController> = new Map();
+  transformersProgressPollers: Map<string, number> = new Map();
   inFlightTriggerByGroup: Map<string, string> = new Map();
   provider: string = DEFAULT_PROVIDER;
   providerConfig: import("./config.js").ProviderConfig = getDefaultProvider();
@@ -1240,10 +1242,94 @@ export class Orchestrator {
     return {};
   }
 
+  private getTransformersStatusUrl(): string {
+    const base = this.providerConfig?.baseUrl || "";
+    if (base.includes("/chat/completions")) {
+      return base.replace("/chat/completions", "/status");
+    }
+
+    return "http://localhost:8888/transformers-js-proxy/status";
+  }
+
+  private stopTransformersProgressPolling(groupId: string): void {
+    const timer = this.transformersProgressPollers.get(groupId);
+    if (typeof timer === "number") {
+      clearInterval(timer);
+      this.transformersProgressPollers.delete(groupId);
+    }
+  }
+
+  private async pollTransformersProgress(groupId: string): Promise<void> {
+    try {
+      const res = await fetch(this.getTransformersStatusUrl(), {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+        },
+      });
+
+      if (!res.ok) {
+        return;
+      }
+
+      const status = await res.json();
+      const raw = Number(status?.progress);
+      const normalizedProgress =
+        Number.isFinite(raw) && raw > 1
+          ? Math.max(0, Math.min(1, raw / 100))
+          : Number.isFinite(raw)
+            ? Math.max(0, Math.min(1, raw))
+            : null;
+
+      const payload: ModelDownloadProgressPayload = {
+        groupId,
+        status:
+          status?.status === "done" || status?.status === "error"
+            ? status.status
+            : "running",
+        progress: normalizedProgress,
+        message:
+          typeof status?.message === "string" && status.message
+            ? status.message
+            : undefined,
+      };
+
+      this.events.emit("model-download-progress", payload);
+
+      if (payload.status === "done" || payload.status === "error") {
+        this.stopTransformersProgressPolling(groupId);
+      }
+    } catch {
+      // Ignore status polling failures so inference can continue uninterrupted.
+    }
+  }
+
+  private startTransformersProgressPolling(groupId: string): void {
+    this.stopTransformersProgressPolling(groupId);
+
+    // Show immediate feedback while the first network poll is in flight.
+    this.events.emit("model-download-progress", {
+      groupId,
+      status: "running",
+      progress: null,
+      message: "Preparing local model download...",
+    });
+
+    void this.pollTransformersProgress(groupId);
+
+    const timer = setInterval(() => {
+      void this.pollTransformersProgress(groupId);
+    }, 1000);
+
+    this.transformersProgressPollers.set(groupId, timer as unknown as number);
+  }
+
   stopCurrentRequest(groupId = DEFAULT_GROUP_ID): void {
     if (this.state !== "thinking" && this.state !== "responding") {
       return;
     }
+
+    this.stopTransformersProgressPolling(groupId);
 
     this.agentWorker?.postMessage({
       type: "cancel",
@@ -1288,6 +1374,11 @@ export class Orchestrator {
    * Prefers exact provider+model match, then provider-only, then does nothing.
    */
   async _autoActivateProfile(db: ShadowClawDatabase): Promise<void> {
+    // Preserve an explicit manual "no tools" configuration.
+    if (!toolsStore.activeProfileId && toolsStore.enabledToolNames.size === 0) {
+      return;
+    }
+
     const candidates = toolsStore.findProfilesForProvider(
       this.provider,
       this.model,
@@ -1486,6 +1577,10 @@ export class Orchestrator {
   shutdown() {
     this.scheduler?.stop();
     this.channelRegistry.stopAll();
+    for (const groupId of this.transformersProgressPollers.keys()) {
+      this.stopTransformersProgressPolling(groupId);
+    }
+
     this.agentWorker?.terminate();
 
     if (typeof this._webMcpEffectCleanup === "function") {
@@ -1999,6 +2094,10 @@ export class Orchestrator {
       (this.providerConfig.format === "openai" ||
         this.providerConfig.format === "anthropic");
 
+    if (this.provider === "transformers_js_local") {
+      this.startTransformersProgressPolling(groupId);
+    }
+
     // Send to agent worker
     this.agentWorker?.postMessage({
       type: "invoke",
@@ -2030,6 +2129,7 @@ export class Orchestrator {
     switch (msg.type) {
       case "response": {
         const { groupId, text } = msg.payload;
+        this.stopTransformersProgressPolling(groupId);
         this.inFlightTriggerByGroup.delete(groupId);
         await this.deliverResponse(db, groupId, text);
 
@@ -2116,6 +2216,7 @@ export class Orchestrator {
 
       case "error": {
         const { groupId, error } = msg.payload;
+        this.stopTransformersProgressPolling(groupId);
         this.inFlightTriggerByGroup.delete(groupId);
         let finalError = error;
 

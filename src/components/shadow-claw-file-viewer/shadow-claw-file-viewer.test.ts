@@ -1,6 +1,4 @@
 import { jest } from "@jest/globals";
-import fs from "node:fs";
-import path from "node:path";
 
 jest.unstable_mockModule("../../effect.js", () => ({ effect: jest.fn() }));
 jest.unstable_mockModule("../../markdown.js", () => ({
@@ -33,8 +31,6 @@ jest.unstable_mockModule("../../toast.js", () => ({
   showSuccess: jest.fn(),
   showWarning: jest.fn(),
 }));
-
-// Global fetch is already mocked in jest-setup.ts
 
 const { ShadowClawFileViewer } = await import("./shadow-claw-file-viewer.js");
 const { fileViewerStore } = await import("../../stores/file-viewer.js");

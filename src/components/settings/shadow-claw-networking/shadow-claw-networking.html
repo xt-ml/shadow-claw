@@ -1,0 +1,34 @@
+<template>
+  <div class="settings-section">
+    <h3>🌐 Networking</h3>
+    <div class="form-group">
+      <div class="form-toggle">
+        <input data-setting="proxy-toggle" id="proxy-toggle" type="checkbox" />
+        <label class="form-label" for="proxy-toggle"> Use CORS Proxy </label>
+      </div>
+      <div class="form-helper">
+        Intercept cross-origin requests and route them through your local proxy
+        server. Enable this if you are getting CORS errors when fetching models
+        or completions, but keep it disabled for standalone operation without a
+        backend.
+      </div>
+    </div>
+
+    <div class="form-group" data-proxy-config>
+      <label class="form-label">Proxy URL</label>
+      <input
+        class="form-input"
+        data-setting="proxy-url-input"
+        placeholder="/proxy"
+        type="text"
+      />
+      <div class="form-helper">
+        The endpoint on this host (e.g. /proxy) or a full URL (e.g.
+        http://localhost:8888/proxy).
+      </div>
+      <button class="save-btn save-btn--inline" data-action="save-proxy-url">
+        💾 Save Proxy URL
+      </button>
+    </div>
+  </div>
+</template>

@@ -318,6 +318,163 @@ describe("handleInvoke.js", () => {
     );
   });
 
+  it("should convert [tool_code] print(tool()) text to tool_use", async () => {
+    const payload: any = {
+      groupId: "g1",
+      messages: [{ role: "user", content: "please list_tool_profiles" }],
+      provider: "p1",
+      enabledTools: [
+        {
+          name: "list_tool_profiles",
+          description: "List tool profiles",
+          input_schema: {
+            type: "object",
+            properties: {},
+          },
+        },
+      ],
+    };
+
+    (mockGetProvider as any).mockReturnValue({
+      name: "P1",
+      baseUrl: "http://p1",
+    });
+    (mockFormatRequest as any).mockReturnValue({ body: "req" });
+
+    (mockParseResponse as any)
+      .mockReturnValueOnce({
+        stop_reason: "end_turn",
+        content: [
+          {
+            type: "text",
+            text: "[tool_code]\nprint(list_tool_profiles())\n[/tool_code]",
+          },
+        ],
+      })
+      .mockReturnValueOnce({
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: "Tool profiles listed." }],
+      });
+
+    (mockExecuteTool as any).mockResolvedValue("default");
+
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
+      ok: true,
+      json: (jest.fn() as any).mockResolvedValue({} as any),
+    });
+
+    await handleInvoke({} as any, payload);
+
+    expect(mockExecuteTool).toHaveBeenCalledWith(
+      {},
+      "list_tool_profiles",
+      {},
+      "g1",
+      { isScheduledTask: false },
+    );
+
+    expect(mockPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "response",
+        payload: { groupId: "g1", text: "Tool profiles listed." },
+      }),
+    );
+  });
+
+  it("should fall back to tool result text when final turn is empty", async () => {
+    const payload: any = {
+      groupId: "g1",
+      messages: [{ role: "user", content: "please list tool profiles" }],
+      provider: "p1",
+    };
+
+    (mockGetProvider as any).mockReturnValue({
+      name: "P1",
+      baseUrl: "http://p1",
+    });
+    (mockFormatRequest as any).mockReturnValue({ body: "req" });
+
+    (mockParseResponse as any)
+      .mockReturnValueOnce({
+        stop_reason: "tool_use",
+        content: [
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "list_tool_profiles",
+            input: {},
+          },
+        ],
+      })
+      .mockReturnValueOnce({
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: "   " }],
+      });
+
+    (mockExecuteTool as any).mockResolvedValue("Profile A\nProfile B");
+
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
+      ok: true,
+      json: (jest.fn() as any).mockResolvedValue({} as any),
+    });
+
+    await handleInvoke({} as any, payload);
+
+    expect(mockPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "response",
+        payload: { groupId: "g1", text: "Tool result:\nProfile A\nProfile B" },
+      }),
+    );
+  });
+
+  it("should ignore literal '(no response)' when tool fallback exists", async () => {
+    const payload: any = {
+      groupId: "g1",
+      messages: [{ role: "user", content: "please list tool profiles" }],
+      provider: "p1",
+    };
+
+    (mockGetProvider as any).mockReturnValue({
+      name: "P1",
+      baseUrl: "http://p1",
+    });
+    (mockFormatRequest as any).mockReturnValue({ body: "req" });
+
+    (mockParseResponse as any)
+      .mockReturnValueOnce({
+        stop_reason: "tool_use",
+        content: [
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "list_tool_profiles",
+            input: {},
+          },
+        ],
+      })
+      .mockReturnValueOnce({
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: "(no response)" }],
+      });
+
+    (mockExecuteTool as any).mockResolvedValue("Profile X");
+
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
+      ok: true,
+      json: (jest.fn() as any).mockResolvedValue({} as any),
+    });
+
+    await handleInvoke({} as any, payload);
+
+    expect(mockPost).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "response",
+        payload: { groupId: "g1", text: "Tool result:\nProfile X" },
+      }),
+    );
+  });
+
   it("should prevent infinite loops with identical tool calls", async () => {
     const payload: any = {
       groupId: "g1",

@@ -4,12 +4,15 @@ import {
   getCurrentSubscription,
   getPushUrl,
 } from "../../../notifications/push-client.js";
+
 import { CONFIG_KEYS } from "../../../config.js";
 import { getDb } from "../../../db/db.js";
 import { getConfig } from "../../../db/getConfig.js";
 import { setConfig } from "../../../db/setConfig.js";
 import { showError, showSuccess } from "../../../toast.js";
+
 import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
+
 import ShadowClawElement from "../../shadow-claw-element.js";
 
 const elementName = "shadow-claw-notifications";
@@ -29,6 +32,7 @@ export class ShadowClawNotifications extends ShadowClawElement {
     endpoint: string;
     created_at: string;
   }> = [];
+
   public _selectedId: number | null = null;
   public _backendAvailable: boolean = true;
 

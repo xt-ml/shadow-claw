@@ -17,6 +17,11 @@ npm start        # Express server → http://localhost:8888
 
 Open Settings, select a provider, and start chatting.
 
+For large local models (for example Gemma 4 via Transformers.js), use
+`Transformers.js (Local Proxy)` in Settings. In this Phase 1 path, model
+artifacts are cached server-side by Node.js, not in browser Cache API or
+IndexedDB.
+
 ### Electron Desktop App
 
 ```bash
@@ -27,7 +32,8 @@ npm run electron:build:mac    # Build for macOS (ZIP)
 ```
 
 The Electron app runs the same Express server + proxy in-process, so all
-providers (including the Bedrock and Copilot proxies) work identically.
+providers (including the Bedrock, Copilot, and Transformers.js local proxy)
+work identically.
 A power-save blocker keeps the machine awake so scheduled tasks fire on
 time.
 
@@ -94,7 +100,7 @@ graph TD
   Orchestrator --> TaskScheduler["Task Scheduler<br>cron expressions"]
   Orchestrator --> Router["Router<br>channel dispatch<br>via ChannelRegistry"]
   MessageQueue --> Worker["Agent Worker<br>(Web Worker, .ts)"]
-  Worker --> OpenRouter["☁️ Provider API<br>OpenRouter / Bedrock / Copilot / Prompt API"]
+  Worker --> OpenRouter["☁️ Provider API<br>OpenRouter / Bedrock / Copilot / Transformers.js Local Proxy / Prompt API"]
   Worker --> ToolExec["Tool Execution<br>bash · js · files · fetch · git"]
   ToolExec --> JSShell["JS Shell Emulator<br>via just-bash AST<br>synced to OPFS"]
   ToolExec --> WebVM["v86 Alpine Linux VM<br>(optional, WASM)"]

@@ -1,11 +1,4 @@
 import { jest } from "@jest/globals";
-import fs from "node:fs";
-import path from "node:path";
-
-jest.unstable_mockModule("../../../toast.js", () => ({
-  showError: jest.fn(),
-  showSuccess: jest.fn(),
-}));
 
 jest.unstable_mockModule("../../../notifications/push-client.js", () => ({
   getCurrentSubscription: jest.fn<any>().mockResolvedValue(null),
@@ -35,11 +28,8 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
   }),
 }));
 
-// Global fetch is already mocked in jest-setup.ts
-
 const { ShadowClawNotifications } =
   await import("./shadow-claw-notifications.js");
-const { showSuccess, showError } = await import("../../../toast.js");
 const pushClient = await import("../../../notifications/push-client.js");
 
 describe("shadow-claw-notifications", () => {

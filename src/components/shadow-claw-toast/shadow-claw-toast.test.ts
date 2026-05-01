@@ -1,6 +1,4 @@
 import { jest } from "@jest/globals";
-import fs from "node:fs";
-import path from "node:path";
 import { toastStore } from "../../stores/toast.js";
 
 jest.unstable_mockModule("../../effect.js", () => ({
@@ -10,8 +8,6 @@ jest.unstable_mockModule("../../effect.js", () => ({
     return () => {};
   }),
 }));
-
-// Global fetch is already mocked in jest-setup.ts
 
 const { ShadowClawToast } = await import("./shadow-claw-toast.js");
 

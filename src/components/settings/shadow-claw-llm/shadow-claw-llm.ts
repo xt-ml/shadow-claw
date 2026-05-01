@@ -188,24 +188,12 @@ export class ShadowClawLlm extends ShadowClawElement {
       });
 
     root
-      .querySelector('[data-setting="proxy-toggle"]')
-      ?.addEventListener("change", (e) => {
-        if (e.target instanceof HTMLInputElement) {
-          this.onProxyToggle(e.target.checked);
-        }
-      });
-
-    root
       .querySelector('[data-setting="context-compression-toggle"]')
       ?.addEventListener("change", (e) => {
         if (e.target instanceof HTMLInputElement) {
           this.onContextCompressionToggle(e.target.checked);
         }
       });
-
-    root
-      .querySelector('[data-action="save-proxy-url"]')
-      ?.addEventListener("click", () => this.saveProxyUrl());
 
     root
       .querySelector('[data-action="save-max-iterations"]')
@@ -295,28 +283,12 @@ export class ShadowClawLlm extends ShadowClawElement {
       streamingToggle.checked = this.orchestrator.getStreamingEnabled();
     }
 
-    // Load proxy toggle
-    const proxyToggle = root.querySelector(
-      '[data-setting="proxy-toggle"]',
-    ) as HTMLInputElement | null;
-    if (proxyToggle) {
-      proxyToggle.checked = this.orchestrator.getUseProxy();
-    }
-
     // Load context compression toggle
     const ccToggle = root.querySelector(
       '[data-setting="context-compression-toggle"]',
     ) as HTMLInputElement | null;
     if (ccToggle) {
       ccToggle.checked = this.orchestrator.getContextCompressionEnabled();
-    }
-
-    // Load proxy URL
-    const proxyUrlInput = root.querySelector(
-      '[data-setting="proxy-url-input"]',
-    ) as HTMLInputElement | null;
-    if (proxyUrlInput && this.orchestrator) {
-      proxyUrlInput.value = this.orchestrator.getProxyUrl();
     }
 
     // Load max iterations
@@ -423,6 +395,20 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-setting="custom-model-input"]',
     ) as HTMLInputElement | null;
     const currentModel = this.orchestrator.getModel();
+    const localOnlyProviderIds = new Set([
+      "transformers_js_local",
+      "ollama",
+      "llamafile",
+      "prompt_api",
+    ]);
+
+    const escapeHtml = (value: string): string =>
+      value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 
     /**
      * Heuristic to determine if a model is "free" or "included" based on provider metadata
@@ -602,6 +588,12 @@ export class ShadowClawLlm extends ShadowClawElement {
 
       const toOption = (m) => {
         const id = typeof m === "string" ? m : m.id;
+        const displayName =
+          typeof m === "string"
+            ? id
+            : typeof m.name === "string" && m.name.trim()
+              ? m.name.trim()
+              : id;
         const toolsBadge = getToolsBadge(m);
         const ctx = getContextLength(m);
         let ctxStr = "";
@@ -613,16 +605,22 @@ export class ShadowClawLlm extends ShadowClawElement {
           ctxStr = ` (${ctx})`;
         }
 
-        return `<option value="${id}">${id}${ctxStr}${toolsBadge}</option>`;
+        const label = displayName === id ? id : `${displayName} - ${id}`;
+
+        return `<option value="${escapeHtml(id)}">${escapeHtml(label)}${ctxStr}${toolsBadge}</option>`;
       };
 
       let html = "";
-      if (currentProvider === "llamafile") {
+      if (localOnlyProviderIds.has(currentProvider)) {
         const localModels = [...freeModels, ...paidModels].sort(
           modelComparator,
         );
         if (localModels.length > 0) {
-          html += `<optgroup label="Local">`;
+          const localLabel =
+            currentProvider === "prompt_api"
+              ? "Built-in"
+              : "Local / Self-hosted";
+          html += `<optgroup label="${localLabel}">`;
           html += localModels.map(toOption).join("");
           html += `</optgroup>`;
         }
@@ -1189,59 +1187,6 @@ export class ShadowClawLlm extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving context compression setting: " + errorMsg, 6000);
-    }
-  }
-
-  /**
-   * Handle proxy toggle change.
-   */
-  async onProxyToggle(enabled: boolean) {
-    if (!this.orchestrator || !this.db) {
-      return;
-    }
-
-    try {
-      await this.orchestrator.setUseProxy(this.db, enabled);
-      showSuccess(enabled ? "CORS Proxy enabled" : "CORS Proxy disabled", 2500);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError("Error saving proxy setting: " + errorMsg, 6000);
-    }
-  }
-
-  /**
-   * Save custom proxy URL.
-   */
-  async saveProxyUrl() {
-    if (!this.orchestrator || !this.db) {
-      return;
-    }
-
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const input = root.querySelector(
-      '[data-setting="proxy-url-input"]',
-    ) as HTMLInputElement | null;
-    if (!input) {
-      return;
-    }
-
-    const url = input.value.trim();
-    if (!url) {
-      showWarning("Please enter a proxy URL (e.g. /proxy)", 3000);
-
-      return;
-    }
-
-    try {
-      await this.orchestrator.setProxyUrl(this.db, url);
-      showSuccess("Proxy URL saved", 3000);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError("Error saving proxy URL: " + errorMsg, 6000);
     }
   }
 

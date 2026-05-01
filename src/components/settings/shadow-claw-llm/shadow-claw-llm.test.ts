@@ -1,6 +1,4 @@
 import { jest } from "@jest/globals";
-import fs from "node:fs";
-import path from "node:path";
 
 const PROVIDERS: any = {
   "provider-a": {
@@ -77,8 +75,6 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
     })),
   }),
 }));
-
-// Global fetch is already mocked in jest-setup.ts
 
 const { orchestratorStore } = await import("../../../stores/orchestrator.js");
 const { ShadowClawLlm } = await import("./shadow-claw-llm.js");

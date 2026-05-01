@@ -2,6 +2,7 @@ import "../settings/shadow-claw-accounts/shadow-claw-accounts.js";
 import "../settings/shadow-claw-git/shadow-claw-git.js";
 import "../settings/shadow-claw-llm/shadow-claw-llm.js";
 import "../settings/shadow-claw-mcp-remote/shadow-claw-mcp-remote.js";
+import "../settings/shadow-claw-networking/shadow-claw-networking.js";
 import "../settings/shadow-claw-notifications/shadow-claw-notifications.js";
 import "../settings/shadow-claw-storage/shadow-claw-storage.js";
 import "../settings/shadow-claw-webvm/shadow-claw-webvm.js";
@@ -18,8 +19,9 @@ const elementName = "shadow-claw-settings";
  * Parent settings component that composes the dedicated sub-components:
  *
  *  - <shadow-claw-llm>    — Provider, model, API key, assistant name
+ *  - <shadow-claw-networking> — CORS proxy toggle and proxy URL
  *  - <shadow-claw-webvm>  — VM boot mode, timeout, host, relay
- *  - <shadow-claw-git>    — CORS proxy, PAT, author config
+ *  - <shadow-claw-git>    — PAT, author config
  *  - <shadow-claw-storage>— OPFS, persistent, directory
  *
  *  - Channels button                — navigates to the channels config page

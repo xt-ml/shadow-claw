@@ -1,11 +1,14 @@
 import { jest } from "@jest/globals";
-import {
-  TransformStream,
-  ReadableStream,
-  WritableStream,
-} from "node:stream/web";
 
 import "fake-indexeddb/auto";
+
+import { existsSync, readFileSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
+import {
+  ReadableStream,
+  TransformStream,
+  WritableStream,
+} from "node:stream/web";
 
 class MockAudioContext {
   state: "suspended" | "running" = "suspended";
@@ -42,9 +45,6 @@ class MockAudioContext {
   }
 }
 
-import fs from "node:fs";
-import path from "node:path";
-
 // Add generic Web APIs for JSDOM from Node globals
 globalThis.Response = global.Response;
 globalThis.Request = global.Request;
@@ -59,31 +59,31 @@ globalThis.fetch = jest.fn((url: string | URL | Request) => {
 
   // Resolve relative paths from the src directory
   let filePath: string;
-  if (path.isAbsolute(urlStr)) {
+  if (isAbsolute(urlStr)) {
     filePath = urlStr;
   } else {
     // If it starts with src/, it's relative to CWD
     if (urlStr.startsWith("src/")) {
-      filePath = path.join(process.cwd(), urlStr);
+      filePath = join(process.cwd(), urlStr);
     } else {
       // Otherwise assume it's relative to src/
-      filePath = path.join(process.cwd(), "src", urlStr);
+      filePath = join(process.cwd(), "src", urlStr);
     }
   }
 
   // Handle leading slashes (from components)
   if (urlStr.startsWith("/")) {
     if (urlStr.startsWith("/src/")) {
-      filePath = path.join(process.cwd(), urlStr);
+      filePath = join(process.cwd(), urlStr);
     } else {
-      filePath = path.join(process.cwd(), "src", urlStr);
+      filePath = join(process.cwd(), "src", urlStr);
     }
   }
 
   try {
     console.log(`[fetch mock] URL: ${urlStr} -> Resolved Path: ${filePath}`);
 
-    if (!fs.existsSync(filePath)) {
+    if (!existsSync(filePath)) {
       console.error(`[fetch mock] File not found: ${filePath}`);
 
       return Promise.resolve({
@@ -94,7 +94,7 @@ globalThis.fetch = jest.fn((url: string | URL | Request) => {
       } as Response);
     }
 
-    const content = fs.readFileSync(filePath, "utf8");
+    const content = readFileSync(filePath, "utf8");
 
     return Promise.resolve({
       ok: true,

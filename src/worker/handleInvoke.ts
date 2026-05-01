@@ -37,6 +37,162 @@ import { InvokePayload, ContentBlock } from "../types.js";
  */
 const STREAM_THROTTLE_MS = 50;
 
+type ParsedToolCodeBlock = {
+  toolBlocks: Array<{
+    type: "tool_use";
+    id: string;
+    name: string;
+    input: Record<string, any>;
+  }>;
+  residualText: string;
+};
+
+function parseToolCodeBlock(
+  text: string,
+  allowedToolNames: Set<string>,
+): ParsedToolCodeBlock {
+  const trimmed = text.trim();
+  const wrappedMatch = trimmed.match(
+    /^\[tool_code\]([\s\S]*?)\[\/tool_code\]$/i,
+  );
+  if (!wrappedMatch?.[1]) {
+    return { toolBlocks: [], residualText: text };
+  }
+
+  const body = wrappedMatch[1].trim();
+
+  const printMatch = body.match(
+    /^print\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*(.*?)\s*\)\s*\)$/s,
+  );
+  const directMatch = body.match(
+    /^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*(.*?)\s*\)$/s,
+  );
+  const match = printMatch || directMatch;
+  if (!match?.[1]) {
+    return { toolBlocks: [], residualText: text };
+  }
+
+  const toolName = match[1];
+  if (!allowedToolNames.has(toolName)) {
+    return { toolBlocks: [], residualText: text };
+  }
+
+  const rawArgs = (match[2] || "").trim();
+  let input: Record<string, any> = {};
+  if (rawArgs) {
+    if (!rawArgs.startsWith("{") || !rawArgs.endsWith("}")) {
+      return { toolBlocks: [], residualText: text };
+    }
+
+    try {
+      const parsed = JSON.parse(rawArgs);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return { toolBlocks: [], residualText: text };
+      }
+
+      input = parsed as Record<string, any>;
+    } catch {
+      return { toolBlocks: [], residualText: text };
+    }
+  }
+
+  return {
+    toolBlocks: [
+      {
+        type: "tool_use",
+        id: `tool_code_${Date.now()}_${Math.random()}`,
+        name: toolName,
+        input,
+      },
+    ],
+    residualText: "",
+  };
+}
+
+function normalizeToolCodeResponses(result: any, enabledTools: any[]): any {
+  if (
+    !result ||
+    result.stop_reason === "tool_use" ||
+    !Array.isArray(result.content)
+  ) {
+    return result;
+  }
+
+  const allowedToolNames = new Set(
+    (enabledTools || [])
+      .map((tool: any) => (typeof tool?.name === "string" ? tool.name : ""))
+      .filter(Boolean),
+  );
+
+  if (allowedToolNames.size === 0) {
+    return result;
+  }
+
+  const normalizedContent: any[] = [];
+  let convertedAny = false;
+
+  for (const block of result.content) {
+    if (block?.type !== "text" || typeof block.text !== "string") {
+      normalizedContent.push(block);
+
+      continue;
+    }
+
+    const parsed = parseToolCodeBlock(block.text, allowedToolNames);
+    if (parsed.toolBlocks.length > 0) {
+      convertedAny = true;
+      if (parsed.residualText.trim()) {
+        normalizedContent.push({ type: "text", text: parsed.residualText });
+      }
+
+      normalizedContent.push(...parsed.toolBlocks);
+
+      continue;
+    }
+
+    normalizedContent.push(block);
+  }
+
+  if (!convertedAny) {
+    return result;
+  }
+
+  return {
+    ...result,
+    content: normalizedContent,
+    stop_reason: "tool_use",
+  };
+}
+
+function buildToolResultsFallbackText(toolResults: ContentBlock[]): string {
+  const lines = toolResults
+    .filter((entry) => entry?.type === "tool_result")
+    .map((entry) => {
+      const content =
+        typeof entry.content === "string"
+          ? entry.content.trim()
+          : JSON.stringify(entry.content).trim();
+
+      return content;
+    })
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return "";
+  }
+
+  return lines.join("\n\n").slice(0, 10_000);
+}
+
+function formatToolFallbackResponseText(text: string): string {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return `Tool result:\n${trimmed}`;
+}
+
 /**
  * Handle agent invocation with tool-use loop
  */
@@ -118,6 +274,7 @@ export async function handleInvoke(
       ? enabledTools
       : TOOL_DEFINITIONS;
     let currentSystemPrompt = systemPrompt;
+    let latestToolResultsFallbackText = "";
 
     // Track exact tool calls to prevent loops
     const toolCallHistory: string[] = [];
@@ -208,6 +365,8 @@ export async function handleInvoke(
           abortSignal,
         );
       }
+
+      result = normalizeToolCodeResponses(result, currentTools as any[]);
 
       // Emit token usage
       if (result.usage) {
@@ -316,6 +475,8 @@ export async function handleInvoke(
         }
 
         // Continue conversation with tool results
+        latestToolResultsFallbackText =
+          buildToolResultsFallbackText(toolResults);
         currentMessages.push({ role: "assistant", content: result.content });
         currentMessages.push({ role: "user", content: toolResults as any });
 
@@ -330,18 +491,25 @@ export async function handleInvoke(
         const cleaned = text
           .replace(/<internal>[\s\S]*?<\/internal>/g, "")
           .trim();
+        const isPlaceholderOnly = cleaned.toLowerCase() === "(no response)";
+        const preferredModelText = isPlaceholderOnly ? "" : cleaned;
+        const finalText = preferredModelText
+          ? preferredModelText
+          : latestToolResultsFallbackText
+            ? formatToolFallbackResponseText(latestToolResultsFallbackText)
+            : "(no response)";
 
         // If streaming was used, the text was already streamed chunk-by-chunk.
         if (useStreaming) {
           post({
             type: "streaming-done",
-            payload: { groupId, text: cleaned || "(no response)" },
+            payload: { groupId, text: finalText },
           });
         }
 
         post({
           type: "response",
-          payload: { groupId, text: cleaned || "(no response)" },
+          payload: { groupId, text: finalText },
         });
 
         return;

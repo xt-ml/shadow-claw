@@ -10,7 +10,15 @@
 import { env } from "node:process";
 import { spawn } from "node:child_process";
 import { constants as fsConstants } from "node:fs";
-import { readdir, stat, access } from "node:fs/promises";
+import {
+  readdir,
+  stat,
+  access,
+  readFile,
+  writeFile,
+  mkdir,
+  unlink,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isIP } from "node:net";
@@ -44,6 +52,1016 @@ const LLAMAFILE_ALLOWED_LOOPBACK_HOSTS = new Set([
 
 const DEFAULT_USER_AGENT =
   process.env.SHADOWCLAW_USER_AGENT || "ShadowClaw/1.0";
+const TRANSFORMERS_JS_MODULE_ID = "@huggingface/transformers";
+const DEFAULT_TRANSFORMERS_JS_MODEL = "onnx-community/gemma-4-E2B-it-ONNX";
+const TRANSFORMERS_JS_MODELS_CACHE_FILE = path.resolve(
+  process.cwd(),
+  "cache/transformers-js-models.json",
+);
+const TRANSFORMERS_JS_RUNTIME_CACHE_DIR = path.resolve(
+  process.cwd(),
+  "cache/transformers-js",
+);
+const TRANSFORMERS_JS_DISCOVERY_DOWNLOAD_FILE = path.resolve(
+  process.cwd(),
+  "cache/transformers-js-models-discovery.json.part",
+);
+const TRANSFORMERS_JS_RUNTIME_IDLE_MS = 10_000;
+const DEFAULT_TRANSFORMERS_JS_REQUEST_TIMEOUT_MS = 300_000;
+
+type TransformersJsRuntime = {
+  processor: any;
+  model: any;
+  TextStreamer: any;
+  modelLoaderName: string;
+};
+
+const transformersJsRuntimeCache = new Map<
+  string,
+  Promise<TransformersJsRuntime>
+>();
+const transformersJsRuntimeActiveRequests = new Map<string, number>();
+const transformersJsRuntimeCleanupTimers = new Map<
+  string,
+  ReturnType<typeof setTimeout>
+>();
+
+const TRANSFORMERS_JS_MODELS = [
+  {
+    id: DEFAULT_TRANSFORMERS_JS_MODEL,
+    name: "Gemma 4 E2B (ONNX)",
+    context_length: 32000,
+    max_completion_tokens: 4096,
+    supports_tools: true,
+  },
+  {
+    id: "onnx-community/gemma-4-E4B-it-ONNX",
+    name: "Gemma 4 E4B (ONNX)",
+    context_length: 32000,
+    max_completion_tokens: 4096,
+    supports_tools: true,
+  },
+  {
+    id: "onnx-community/gemma-4-E9B-it-ONNX",
+    name: "Gemma 4 E9B (ONNX)",
+    context_length: 32000,
+    max_completion_tokens: 4096,
+    supports_tools: true,
+  },
+  {
+    id: "onnx-community/gemma-4-E27B-it-ONNX",
+    name: "Gemma 4 E27B (ONNX)",
+    context_length: 32000,
+    max_completion_tokens: 4096,
+    supports_tools: true,
+  },
+];
+
+let transformersJsModelsCache: {
+  models: Array<{
+    id: string;
+    name: string;
+    context_length: number;
+    max_completion_tokens: number;
+    supports_tools: boolean;
+  }>;
+} | null = null;
+
+type TransformersJsDownloadStatus = {
+  status: "idle" | "running" | "done" | "error";
+  progress: number | null;
+  message: string;
+  modelId: string | null;
+  updatedAt: number;
+};
+
+const transformersJsDownloadStatus: TransformersJsDownloadStatus = {
+  status: "idle",
+  progress: null,
+  message: "Idle",
+  modelId: null,
+  updatedAt: Date.now(),
+};
+
+function setTransformersJsDownloadStatus(
+  next: Partial<TransformersJsDownloadStatus>,
+) {
+  Object.assign(transformersJsDownloadStatus, next, { updatedAt: Date.now() });
+}
+
+function clearTransformersJsRuntimeCleanupTimer(modelId: string): void {
+  const timer = transformersJsRuntimeCleanupTimers.get(modelId);
+  if (timer) {
+    clearTimeout(timer);
+    transformersJsRuntimeCleanupTimers.delete(modelId);
+  }
+}
+
+function markTransformersJsRuntimeInUse(modelId: string): void {
+  clearTransformersJsRuntimeCleanupTimer(modelId);
+  const active = transformersJsRuntimeActiveRequests.get(modelId) || 0;
+  transformersJsRuntimeActiveRequests.set(modelId, active + 1);
+}
+
+async function disposeTransformersJsRuntime(modelId: string): Promise<void> {
+  clearTransformersJsRuntimeCleanupTimer(modelId);
+
+  const pendingRuntime = transformersJsRuntimeCache.get(modelId);
+  transformersJsRuntimeCache.delete(modelId);
+  transformersJsRuntimeActiveRequests.delete(modelId);
+
+  if (!pendingRuntime) {
+    return;
+  }
+
+  try {
+    const runtime = await pendingRuntime;
+    await Promise.resolve(runtime.model?.dispose?.()).catch(() => {});
+    await Promise.resolve(runtime.processor?.dispose?.()).catch(() => {});
+  } catch {
+    // Ignore dispose failures so runtime eviction never crashes proxy routes.
+  }
+}
+
+function scheduleTransformersJsRuntimeCleanup(modelId: string): void {
+  clearTransformersJsRuntimeCleanupTimer(modelId);
+
+  const timer = setTimeout(() => {
+    const active = transformersJsRuntimeActiveRequests.get(modelId) || 0;
+    if (active > 0) {
+      return;
+    }
+
+    void disposeTransformersJsRuntime(modelId);
+  }, TRANSFORMERS_JS_RUNTIME_IDLE_MS);
+
+  transformersJsRuntimeCleanupTimers.set(modelId, timer);
+}
+
+function releaseTransformersJsRuntime(modelId: string): void {
+  const active = transformersJsRuntimeActiveRequests.get(modelId) || 0;
+  if (active <= 1) {
+    transformersJsRuntimeActiveRequests.delete(modelId);
+    scheduleTransformersJsRuntimeCleanup(modelId);
+
+    return;
+  }
+
+  transformersJsRuntimeActiveRequests.set(modelId, active - 1);
+}
+
+function createAbortError(message: string): Error {
+  const error = new Error(message);
+  error.name = "AbortError";
+
+  return error;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === "AbortError"
+    : error instanceof Error && error.name === "AbortError";
+}
+
+async function awaitTransformersJsOperation<T>(
+  promise: Promise<T>,
+  opts: {
+    modelId: string;
+    phase: string;
+    timeoutMs: number;
+    abortSignal?: AbortSignal;
+  },
+): Promise<T> {
+  const { modelId, phase, timeoutMs, abortSignal } = opts;
+  if (!timeoutMs || timeoutMs <= 0) {
+    return promise;
+  }
+
+  return await new Promise<T>((resolve, reject) => {
+    let settled = false;
+
+    const finalize = () => {
+      settled = true;
+      clearTimeout(timeoutHandle);
+      abortSignal?.removeEventListener("abort", onAbort);
+    };
+
+    const onAbort = () => {
+      if (settled) {
+        return;
+      }
+
+      finalize();
+      reject(createAbortError("Transformers.js request was aborted"));
+    };
+
+    const timeoutHandle = setTimeout(() => {
+      if (settled) {
+        return;
+      }
+
+      finalize();
+
+      const message = `Transformers.js ${phase} timed out after ${timeoutMs}ms for model '${modelId}'.`;
+      setTransformersJsDownloadStatus({
+        status: "error",
+        progress: null,
+        message,
+        modelId,
+      });
+      void disposeTransformersJsRuntime(modelId);
+
+      reject(new Error(message));
+    }, timeoutMs);
+
+    abortSignal?.addEventListener("abort", onAbort, { once: true });
+
+    promise.then(
+      (value) => {
+        if (settled) {
+          return;
+        }
+
+        finalize();
+        resolve(value);
+      },
+      (error) => {
+        if (settled) {
+          return;
+        }
+
+        finalize();
+        reject(error);
+      },
+    );
+  });
+}
+
+function getTransformersJsRequestTimeoutMs(): number {
+  return parsePositiveInteger(
+    env.TRANSFORMERS_JS_REQUEST_TIMEOUT_MS,
+    DEFAULT_TRANSFORMERS_JS_REQUEST_TIMEOUT_MS,
+  );
+}
+
+export function __setTransformersJsRuntimeForTests(
+  modelId: string,
+  runtime: TransformersJsRuntime,
+): void {
+  clearTransformersJsRuntimeCleanupTimer(modelId);
+  transformersJsRuntimeCache.set(modelId, Promise.resolve(runtime));
+}
+
+export async function __resetTransformersJsRuntimeForTests(): Promise<void> {
+  const modelIds = new Set<string>([
+    ...transformersJsRuntimeCache.keys(),
+    ...transformersJsRuntimeCleanupTimers.keys(),
+    ...transformersJsRuntimeActiveRequests.keys(),
+  ]);
+
+  await Promise.all(
+    [...modelIds].map(async (modelId) => {
+      await disposeTransformersJsRuntime(modelId);
+    }),
+  );
+}
+
+async function ensureTransformersJsDiskCacheConfig(transformers: any) {
+  const envConfig = Reflect.get(transformers, "env");
+  if (!envConfig || typeof envConfig !== "object") {
+    return;
+  }
+
+  await mkdir(TRANSFORMERS_JS_RUNTIME_CACHE_DIR, { recursive: true });
+  Reflect.set(envConfig, "useFSCache", true);
+  Reflect.set(envConfig, "useBrowserCache", false);
+  Reflect.set(envConfig, "cacheDir", TRANSFORMERS_JS_RUNTIME_CACHE_DIR);
+}
+
+async function pathExists(target: string): Promise<boolean> {
+  try {
+    await stat(target);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getTransformersJsDiskCacheStatus() {
+  const [modelsCatalogExists, runtimeCacheDirExists] = await Promise.all([
+    pathExists(TRANSFORMERS_JS_MODELS_CACHE_FILE),
+    pathExists(TRANSFORMERS_JS_RUNTIME_CACHE_DIR),
+  ]);
+
+  const runtimeCacheEntries = runtimeCacheDirExists
+    ? await readdir(TRANSFORMERS_JS_RUNTIME_CACHE_DIR).catch(() => [])
+    : [];
+
+  return {
+    modelsCatalogPath: TRANSFORMERS_JS_MODELS_CACHE_FILE,
+    modelsCatalogExists,
+    runtimeCacheDir: TRANSFORMERS_JS_RUNTIME_CACHE_DIR,
+    runtimeCacheDirExists,
+    runtimeCacheEntryCount: runtimeCacheEntries.length,
+    runtimeCacheEntries,
+    loadedRuntimeModels: [...transformersJsRuntimeCache.keys()],
+  };
+}
+
+async function prewarmTransformersJsModel(modelId: string, verbose: boolean) {
+  // Loading runtime triggers the processor/model downloads into the FS cache.
+  const runtime = await loadTransformersJsRuntime(modelId, verbose);
+
+  return {
+    modelId,
+    loader: runtime.modelLoaderName,
+    cacheDir: TRANSFORMERS_JS_RUNTIME_CACHE_DIR,
+  };
+}
+
+function estimateTextTokens(text: string): number {
+  return Math.max(1, Math.ceil(text.length / 4));
+}
+
+function sanitizeTransformersOutputText(text: string): string {
+  return text.replace(/<\s*turn\|>\s*|<\|end_of_turn\|>|<\|eot_id\|>/gi, "");
+}
+
+function normalizeTransformersJsModelDisplayName(modelId: string): string {
+  const shortId = modelId.replace(/^onnx-community\//, "");
+  const gemmaMatch = shortId.match(/gemma-4-([^-]+)-it-onnx/i);
+  if (gemmaMatch?.[1]) {
+    return `Gemma 4 ${gemmaMatch[1].toUpperCase()} (ONNX)`;
+  }
+
+  return shortId;
+}
+
+function normalizeTransformersJsModelInfo(modelId: string): {
+  id: string;
+  name: string;
+  context_length: number;
+  max_completion_tokens: number;
+  supports_tools: boolean;
+} {
+  return {
+    id: modelId,
+    name: normalizeTransformersJsModelDisplayName(modelId),
+    context_length: 32000,
+    max_completion_tokens: 4096,
+    supports_tools: true,
+  };
+}
+
+function isValidTransformersModelCatalog(models: unknown): models is Array<{
+  id: string;
+  name: string;
+  context_length: number;
+  max_completion_tokens: number;
+  supports_tools: boolean;
+}> {
+  if (!Array.isArray(models) || models.length === 0) {
+    return false;
+  }
+
+  return models.every(
+    (model) =>
+      !!model &&
+      typeof model === "object" &&
+      typeof (model as any).id === "string" &&
+      typeof (model as any).name === "string" &&
+      typeof (model as any).context_length === "number" &&
+      typeof (model as any).max_completion_tokens === "number" &&
+      typeof (model as any).supports_tools === "boolean",
+  );
+}
+
+async function readTransformersJsModelsDiskCache() {
+  try {
+    const raw = await readFile(TRANSFORMERS_JS_MODELS_CACHE_FILE, "utf8");
+    const parsed = JSON.parse(raw);
+    const models = (
+      parsed && typeof parsed === "object" ? parsed.models : null
+    ) as unknown;
+    if (!isValidTransformersModelCatalog(models)) {
+      return null;
+    }
+
+    return models;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `[Proxy] Failed reading Transformers.js models disk cache: ${message}`,
+    );
+
+    return null;
+  }
+}
+
+async function downloadTransformersJsDiscoveryRows(endpoint: string) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const shouldTryResume = attempt === 0;
+    let resumeOffset = 0;
+    if (shouldTryResume) {
+      try {
+        const info = await stat(TRANSFORMERS_JS_DISCOVERY_DOWNLOAD_FILE);
+        if (info.isFile()) {
+          resumeOffset = info.size;
+        }
+      } catch {
+        resumeOffset = 0;
+      }
+    }
+
+    const headers: Record<string, string> = {
+      "User-Agent": DEFAULT_USER_AGENT,
+      Accept: "application/json",
+      "Accept-Encoding": "identity",
+    };
+
+    if (resumeOffset > 0) {
+      headers.Range = `bytes=${resumeOffset}-`;
+    }
+
+    const response = await fetch(endpoint, { headers });
+    if (response.status === 416 && shouldTryResume) {
+      // Partial file is no longer valid for resume; retry once from scratch.
+      await unlink(TRANSFORMERS_JS_DISCOVERY_DOWNLOAD_FILE).catch(() => {});
+
+      continue;
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        `Failed to discover Transformers.js models (${response.status})`,
+      );
+    }
+
+    const appendMode = resumeOffset > 0 && response.status === 206;
+    if (!appendMode) {
+      await writeFile(TRANSFORMERS_JS_DISCOVERY_DOWNLOAD_FILE, "", "utf8");
+    }
+
+    if (response.body) {
+      const reader = response.body.getReader();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+
+          if (value && value.length > 0) {
+            await writeFile(TRANSFORMERS_JS_DISCOVERY_DOWNLOAD_FILE, value, {
+              flag: "a",
+            });
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } else {
+      const bodyText = await response.text();
+      await writeFile(TRANSFORMERS_JS_DISCOVERY_DOWNLOAD_FILE, bodyText, {
+        encoding: "utf8",
+        flag: "a",
+      });
+    }
+
+    try {
+      const raw = await readFile(
+        TRANSFORMERS_JS_DISCOVERY_DOWNLOAD_FILE,
+        "utf8",
+      );
+      const parsed = JSON.parse(raw);
+
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      if (shouldTryResume && resumeOffset > 0) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(
+          `[Proxy] Transformers.js discovery resume parse failed; retrying full download: ${message}`,
+        );
+        await unlink(TRANSFORMERS_JS_DISCOVERY_DOWNLOAD_FILE).catch(() => {});
+
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw new Error("Failed to download Transformers.js discovery catalog");
+}
+
+async function writeTransformersJsModelsDiskCache(
+  models: Array<{
+    id: string;
+    name: string;
+    context_length: number;
+    max_completion_tokens: number;
+    supports_tools: boolean;
+  }>,
+) {
+  try {
+    await mkdir(path.dirname(TRANSFORMERS_JS_MODELS_CACHE_FILE), {
+      recursive: true,
+    });
+    await writeFile(
+      TRANSFORMERS_JS_MODELS_CACHE_FILE,
+      JSON.stringify({ models }, null, 2),
+      "utf8",
+    );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(
+      `[Proxy] Failed writing Transformers.js models disk cache: ${message}`,
+    );
+  }
+}
+
+async function fetchDynamicTransformersJsModels(): Promise<
+  Array<{
+    id: string;
+    name: string;
+    context_length: number;
+    max_completion_tokens: number;
+    supports_tools: boolean;
+  }>
+> {
+  if (transformersJsModelsCache) {
+    return transformersJsModelsCache.models;
+  }
+
+  const cachedModels = await readTransformersJsModelsDiskCache();
+  if (cachedModels) {
+    transformersJsModelsCache = { models: cachedModels };
+
+    return cachedModels;
+  }
+
+  const endpoint =
+    env.TRANSFORMERS_JS_MODELS_DISCOVERY_URL ||
+    "https://huggingface.co/api/models?author=onnx-community&search=gemma-4&limit=50";
+
+  const data = await downloadTransformersJsDiscoveryRows(endpoint);
+  const rows = Array.isArray(data) ? data : [];
+
+  const ids = rows
+    .map((row: any) => (typeof row?.id === "string" ? row.id : ""))
+    .filter((id: string) => id.startsWith("onnx-community/gemma-4-"))
+    .filter((id: string) => id.toLowerCase().endsWith("-onnx"));
+
+  const uniqueIds = [...new Set(ids)];
+  const baselineIds = TRANSFORMERS_JS_MODELS.map((model) => model.id);
+  const mergedIds = [...new Set([...baselineIds, ...uniqueIds])];
+  if (!mergedIds.includes(DEFAULT_TRANSFORMERS_JS_MODEL)) {
+    mergedIds.unshift(DEFAULT_TRANSFORMERS_JS_MODEL);
+  }
+
+  const staticModelsById = new Map(
+    TRANSFORMERS_JS_MODELS.map((model) => [model.id, model]),
+  );
+
+  const models = mergedIds
+    .sort((a, b) => a.localeCompare(b))
+    .map(
+      (id) => staticModelsById.get(id) || normalizeTransformersJsModelInfo(id),
+    );
+
+  transformersJsModelsCache = {
+    models,
+  };
+  await writeTransformersJsModelsDiskCache(models);
+
+  return models;
+}
+
+function extractMessageText(message: any): string {
+  const content = message?.content;
+  if (typeof content === "string") {
+    return content;
+  }
+
+  if (!Array.isArray(content)) {
+    return "";
+  }
+
+  return content
+    .map((block: any) => {
+      if (block?.type === "text" && typeof block.text === "string") {
+        return block.text;
+      }
+
+      if (
+        block?.type === "tool_result" &&
+        typeof block.content === "string" &&
+        block.content
+      ) {
+        return `[tool-result] ${block.content}`;
+      }
+
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function buildPromptFromMessages(messages: any[]): string {
+  const lines = messages
+    .map((message: any) => {
+      const role =
+        message?.role === "assistant"
+          ? "assistant"
+          : message?.role === "system"
+            ? "system"
+            : "user";
+      const text = extractMessageText(message).trim();
+      if (!text) {
+        return "";
+      }
+
+      return `${role}: ${text}`;
+    })
+    .filter(Boolean);
+
+  if (lines.length === 0) {
+    return "user: Say hello.";
+  }
+
+  return lines.join("\n");
+}
+
+function parseMaxCompletionTokens(value: unknown, fallback: number): number {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : Number.parseInt(typeof value === "string" ? value : "", 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return fallback;
+  }
+
+  return Math.min(Math.floor(parsed), 4096);
+}
+
+async function loadTransformersJsRuntime(
+  modelId: string,
+  verbose: boolean,
+): Promise<TransformersJsRuntime> {
+  const cached = transformersJsRuntimeCache.get(modelId);
+  if (cached) {
+    return cached;
+  }
+
+  const loadingPromise = (async () => {
+    const transformers = await import(TRANSFORMERS_JS_MODULE_ID);
+    await ensureTransformersJsDiskCacheConfig(transformers);
+    const AutoProcessor = Reflect.get(transformers, "AutoProcessor");
+    const Gemma4Processor = Reflect.get(transformers, "Gemma4Processor");
+    const Gemma4ForConditionalGeneration = Reflect.get(
+      transformers,
+      "Gemma4ForConditionalGeneration",
+    );
+    const AutoModelForImageTextToText = Reflect.get(
+      transformers,
+      "AutoModelForImageTextToText",
+    );
+    const AutoModelForCausalLM = Reflect.get(
+      transformers,
+      "AutoModelForCausalLM",
+    );
+    const TextStreamer = Reflect.get(transformers, "TextStreamer");
+    const isGemma4Model = modelId.toLowerCase().includes("gemma-4");
+
+    const loaderCandidates: Array<{
+      name: string;
+      from_pretrained?: Function;
+    }> = [];
+
+    // Match the known working script path for Gemma 4 models.
+    if (
+      isGemma4Model &&
+      typeof Gemma4ForConditionalGeneration?.from_pretrained === "function"
+    ) {
+      loaderCandidates.push({
+        name: "Gemma4ForConditionalGeneration",
+        from_pretrained: Gemma4ForConditionalGeneration.from_pretrained,
+      });
+    }
+
+    // For Gemma 4 we intentionally avoid AutoModel fallbacks because they can
+    // mask the real error with unsupported auto-class mapping failures.
+    if (
+      !isGemma4Model &&
+      typeof AutoModelForImageTextToText?.from_pretrained === "function"
+    ) {
+      loaderCandidates.push({
+        name: "AutoModelForImageTextToText",
+        from_pretrained: AutoModelForImageTextToText.from_pretrained,
+      });
+    }
+
+    if (
+      !isGemma4Model &&
+      typeof AutoModelForCausalLM?.from_pretrained === "function"
+    ) {
+      loaderCandidates.push({
+        name: "AutoModelForCausalLM",
+        from_pretrained: AutoModelForCausalLM.from_pretrained,
+      });
+    }
+
+    if (
+      typeof AutoProcessor?.from_pretrained !== "function" ||
+      loaderCandidates.length === 0 ||
+      typeof TextStreamer !== "function"
+    ) {
+      if (isGemma4Model) {
+        throw new Error(
+          "Transformers.js runtime is unavailable for Gemma 4. Ensure @huggingface/transformers exports Gemma4Processor and Gemma4ForConditionalGeneration, then restart the server.",
+        );
+      }
+
+      throw new Error(
+        "Transformers.js runtime is unavailable. Ensure @huggingface/transformers exports AutoProcessor and at least one model loader (AutoModelForImageTextToText or AutoModelForCausalLM).",
+      );
+    }
+
+    if (verbose) {
+      console.log(`[Proxy] Loading Transformers.js model: ${modelId}`);
+    }
+
+    setTransformersJsDownloadStatus({
+      status: "running",
+      progress: 0,
+      message: `Preparing model ${modelId}...`,
+      modelId,
+    });
+
+    const processor = isGemma4Model
+      ? await (typeof Gemma4Processor?.from_pretrained === "function"
+          ? Gemma4Processor.from_pretrained(modelId)
+          : AutoProcessor.from_pretrained(modelId))
+      : await AutoProcessor.from_pretrained(modelId);
+
+    let model: any = null;
+    let modelLoaderName = "";
+    let lastLoaderError: unknown = null;
+
+    if (isGemma4Model) {
+      const gemmaDtypes = ["q4f16", "q4", "fp16"];
+      for (const dtype of gemmaDtypes) {
+        try {
+          model = await Gemma4ForConditionalGeneration.from_pretrained(
+            modelId,
+            {
+              dtype,
+              device: "cpu",
+              progress_callback: (info: any) => {
+                if (verbose && info?.status === "progress_total") {
+                  console.log(
+                    `[Proxy] Transformers.js ${modelId} loading (Gemma4ForConditionalGeneration/${dtype}): ${info.progress}%`,
+                  );
+                }
+
+                if (info?.status === "progress_total") {
+                  const pct = Number(info.progress);
+                  setTransformersJsDownloadStatus({
+                    status: "running",
+                    progress: Number.isFinite(pct)
+                      ? Math.max(0, Math.min(1, pct / 100))
+                      : null,
+                    message: `Downloading ${modelId} (${dtype})...`,
+                    modelId,
+                  });
+                }
+              },
+            },
+          );
+          modelLoaderName = `Gemma4ForConditionalGeneration/${dtype}`;
+
+          break;
+        } catch (error) {
+          lastLoaderError = error;
+          if (verbose) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            console.warn(
+              `[Proxy] Gemma4ForConditionalGeneration failed for ${modelId} with dtype=${dtype}: ${message}`,
+            );
+          }
+        }
+      }
+    } else {
+      for (const candidate of loaderCandidates) {
+        try {
+          model = await candidate.from_pretrained?.(modelId, {
+            dtype: "q4f16",
+            device: "cpu",
+            progress_callback: (info: any) => {
+              if (verbose && info?.status === "progress_total") {
+                console.log(
+                  `[Proxy] Transformers.js ${modelId} loading (${candidate.name}): ${info.progress}%`,
+                );
+              }
+
+              if (info?.status === "progress_total") {
+                const pct = Number(info.progress);
+                setTransformersJsDownloadStatus({
+                  status: "running",
+                  progress: Number.isFinite(pct)
+                    ? Math.max(0, Math.min(1, pct / 100))
+                    : null,
+                  message: `Downloading ${modelId} (${candidate.name})...`,
+                  modelId,
+                });
+              }
+            },
+          });
+          modelLoaderName = candidate.name;
+
+          break;
+        } catch (error) {
+          lastLoaderError = error;
+          if (verbose) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            console.warn(
+              `[Proxy] ${candidate.name} failed for ${modelId}: ${message}`,
+            );
+          }
+        }
+      }
+    }
+
+    if (!model) {
+      const detail =
+        lastLoaderError instanceof Error
+          ? lastLoaderError.message
+          : String(lastLoaderError || "unknown error");
+
+      setTransformersJsDownloadStatus({
+        status: "error",
+        progress: null,
+        message: detail,
+        modelId,
+      });
+
+      if (isGemma4Model) {
+        throw new Error(
+          `Gemma4ForConditionalGeneration failed to initialize '${modelId}' for all attempted dtypes (q4f16, q4, fp16). Last error: ${detail}`,
+        );
+      }
+
+      throw new Error(
+        `No supported Transformers.js model loader could initialize '${modelId}'. Last error: ${detail}`,
+      );
+    }
+
+    if (verbose) {
+      console.log(
+        `[Proxy] Transformers.js model ready: ${modelId} via ${modelLoaderName}`,
+      );
+    }
+
+    setTransformersJsDownloadStatus({
+      status: "done",
+      progress: 1,
+      message: `Model ready: ${modelId}`,
+      modelId,
+    });
+
+    return { processor, model, TextStreamer, modelLoaderName };
+  })().catch((error) => {
+    transformersJsRuntimeCache.delete(modelId);
+
+    throw error;
+  });
+
+  transformersJsRuntimeCache.set(modelId, loadingPromise);
+
+  return loadingPromise;
+}
+
+export async function runTransformersJsChatCompletion(params: {
+  modelId: string;
+  messages: any[];
+  maxCompletionTokens: number;
+  verbose: boolean;
+  onToken?: (text: string) => void;
+  abortSignal?: AbortSignal;
+}): Promise<{ text: string; promptTokens: number; completionTokens: number }> {
+  const {
+    modelId,
+    messages,
+    maxCompletionTokens,
+    verbose,
+    onToken,
+    abortSignal,
+  } = params;
+  const requestTimeoutMs = getTransformersJsRequestTimeoutMs();
+  markTransformersJsRuntimeInUse(modelId);
+  let runtime: TransformersJsRuntime;
+  try {
+    runtime = await awaitTransformersJsOperation(
+      loadTransformersJsRuntime(modelId, verbose),
+      {
+        modelId,
+        phase: "model load",
+        timeoutMs: requestTimeoutMs,
+        abortSignal,
+      },
+    );
+  } catch (error) {
+    releaseTransformersJsRuntime(modelId);
+
+    throw error;
+  }
+
+  try {
+    if (verbose) {
+      console.log(
+        `[Proxy] Using loader ${runtime.modelLoaderName} for model ${modelId}`,
+      );
+    }
+
+    const promptText = buildPromptFromMessages(messages);
+
+    const formattedMessages = [
+      {
+        role: "user",
+        content: [{ type: "text", text: promptText }],
+      },
+    ];
+
+    const prompt = runtime.processor.apply_chat_template(formattedMessages, {
+      enable_thinking: false,
+      add_generation_prompt: true,
+    });
+
+    const inputs = await runtime.processor(prompt, null, null, {
+      add_special_tokens: false,
+    });
+
+    const streamed: string[] = [];
+
+    const outputs: any = await awaitTransformersJsOperation(
+      runtime.model.generate({
+        ...inputs,
+        ...(abortSignal ? { signal: abortSignal } : {}),
+        max_new_tokens: maxCompletionTokens,
+        do_sample: false,
+        streamer: new runtime.TextStreamer(runtime.processor.tokenizer, {
+          skip_prompt: true,
+          skip_special_tokens: true,
+          callback_function: (text: string) => {
+            if (abortSignal?.aborted) {
+              return;
+            }
+
+            const cleaned = sanitizeTransformersOutputText(text);
+            if (!cleaned) {
+              return;
+            }
+
+            streamed.push(cleaned);
+            onToken?.(cleaned);
+          },
+        }),
+      }),
+      {
+        modelId,
+        phase: "generation",
+        timeoutMs: requestTimeoutMs,
+        abortSignal,
+      },
+    );
+
+    let text = sanitizeTransformersOutputText(streamed.join("")).trim();
+    if (!text) {
+      const decoded = runtime.processor.batch_decode(
+        outputs.slice(null, [inputs.input_ids.dims.at(-1), null]),
+        { skip_special_tokens: true },
+      );
+      text = sanitizeTransformersOutputText(String(decoded?.[0] || "")).trim();
+    }
+
+    return {
+      text,
+      promptTokens: estimateTextTokens(promptText),
+      completionTokens: estimateTextTokens(text),
+    };
+  } catch (error) {
+    if (isAbortError(error) && abortSignal?.aborted) {
+      throw error;
+    }
+
+    throw error;
+  } finally {
+    releaseTransformersJsRuntime(modelId);
+  }
+}
 
 type LlamafileMode = "server" | "cli";
 
@@ -258,6 +1276,33 @@ function writeOpenAiDoneChunk(res: ExpressResponse, model: string) {
 
   res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
   res.write("data: [DONE]\n\n");
+}
+
+export function sendStreamingProxyError(
+  res: Pick<
+    ExpressResponse,
+    "headersSent" | "writableEnded" | "write" | "end" | "status" | "json"
+  >,
+  opts: {
+    status: number;
+    publicMessage: string;
+    streamMessage: string;
+  },
+): void {
+  if (!res.headersSent) {
+    res.status(opts.status).json({ error: opts.publicMessage });
+
+    return;
+  }
+
+  if (res.writableEnded) {
+    return;
+  }
+
+  res.write(
+    `data: ${JSON.stringify({ type: "error", error: { type: "server_error", message: opts.streamMessage } })}\n\n`,
+  );
+  res.end();
 }
 
 function sanitizeLlamafileRequestBody(
@@ -1487,6 +2532,198 @@ export function registerProxyRoutes(
   // Backward-compatible legacy route + explicit GitHub Models route.
   app.get("/copilot-proxy/azure-openai/models", handleGitHubModelsCatalog);
   app.get("/github-models-proxy/catalog/models", handleGitHubModelsCatalog);
+
+  // ---- Transformers.js local runtime (Node-side) ----
+  app.get("/transformers-js-proxy/models", async (_req, res) => {
+    try {
+      const models = await fetchDynamicTransformersJsModels();
+      res.json({ models });
+    } catch (error) {
+      if (verbose) {
+        console.warn(
+          "[Proxy] Falling back to static Transformers.js model catalog:",
+          error,
+        );
+      }
+
+      res.json({ models: TRANSFORMERS_JS_MODELS });
+    }
+  });
+
+  app.get("/transformers-js-proxy/status", async (_req, res) => {
+    const cache = await getTransformersJsDiskCacheStatus();
+    res.json({
+      ...transformersJsDownloadStatus,
+      cache,
+    });
+  });
+
+  app.post("/transformers-js-proxy/prewarm", async (req, res) => {
+    try {
+      const requestBody =
+        req.body && typeof req.body === "object" ? req.body : null;
+      const requestedModel =
+        requestBody && typeof (requestBody as any).model === "string"
+          ? String((requestBody as any).model).trim()
+          : "";
+      const modelId = requestedModel || DEFAULT_TRANSFORMERS_JS_MODEL;
+
+      const warmed = await prewarmTransformersJsModel(modelId, verbose);
+      const cache = await getTransformersJsDiskCacheStatus();
+
+      res.json({
+        ok: true,
+        ...warmed,
+        cache,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({
+        ok: false,
+        error: `Transformers.js prewarm failed: ${message}`,
+      });
+    }
+  });
+
+  app.post("/transformers-js-proxy/chat/completions", async (req, res) => {
+    try {
+      const requestBody =
+        req.body && typeof req.body === "object" ? req.body : null;
+      if (!requestBody) {
+        return res.status(400).json({ error: "Missing request body" });
+      }
+
+      const modelId =
+        typeof requestBody.model === "string" && requestBody.model.trim()
+          ? requestBody.model.trim()
+          : DEFAULT_TRANSFORMERS_JS_MODEL;
+
+      const messages = Array.isArray(requestBody.messages)
+        ? requestBody.messages
+        : [];
+
+      const maxCompletionTokens = parseMaxCompletionTokens(
+        requestBody.max_tokens,
+        512,
+      );
+
+      if (requestBody.stream === true) {
+        const abortController = new AbortController();
+        const abortInference = () => abortController.abort();
+        req.once("aborted", abortInference);
+        res.once("close", abortInference);
+
+        res.setHeader("Content-Type", "text/event-stream");
+        res.setHeader("Cache-Control", "no-cache");
+        res.setHeader("Connection", "keep-alive");
+        res.setHeader("X-Accel-Buffering", "no");
+        res.flushHeaders?.();
+
+        let streamedAny = false;
+        const result = await runTransformersJsChatCompletion({
+          modelId,
+          messages,
+          maxCompletionTokens,
+          verbose,
+          abortSignal: abortController.signal,
+          onToken: (text: string) => {
+            if (!text || abortController.signal.aborted || res.writableEnded) {
+              return;
+            }
+
+            streamedAny = true;
+            writeOpenAiDeltaChunk(res, modelId, text);
+          },
+        }).finally(() => {
+          req.off("aborted", abortInference);
+          res.off("close", abortInference);
+        });
+
+        // Fallback: if streamer produced no token callbacks, emit final text once.
+        if (
+          !abortController.signal.aborted &&
+          !streamedAny &&
+          result.text &&
+          !res.writableEnded
+        ) {
+          writeOpenAiDeltaChunk(res, modelId, result.text);
+        }
+
+        if (abortController.signal.aborted || res.writableEnded) {
+          return;
+        }
+
+        writeOpenAiDoneChunk(res, modelId);
+
+        return res.end();
+      }
+
+      const abortController = new AbortController();
+      const abortInference = () => abortController.abort();
+      req.once("aborted", abortInference);
+      res.once("close", abortInference);
+
+      const result = await runTransformersJsChatCompletion({
+        modelId,
+        messages,
+        maxCompletionTokens,
+        verbose,
+        abortSignal: abortController.signal,
+      }).finally(() => {
+        req.off("aborted", abortInference);
+        res.off("close", abortInference);
+      });
+
+      if (abortController.signal.aborted || res.writableEnded) {
+        return;
+      }
+
+      const created = Math.floor(Date.now() / 1000);
+      const usage = {
+        prompt_tokens: result.promptTokens,
+        completion_tokens: result.completionTokens,
+        total_tokens: result.promptTokens + result.completionTokens,
+      };
+
+      res.json({
+        id: `chatcmpl-transformers-${Date.now()}`,
+        object: "chat.completion",
+        created,
+        model: modelId,
+        choices: [
+          {
+            index: 0,
+            message: {
+              role: "assistant",
+              content: result.text || "(no response)",
+            },
+            finish_reason: "stop",
+          },
+        ],
+        usage,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const status = /timed out after \d+ms/i.test(message)
+        ? 504
+        : message.includes("Cannot find package") &&
+            message.includes("@huggingface/transformers")
+          ? 501
+          : 500;
+      if (verbose) {
+        console.error("Transformers.js proxy error:", message);
+      }
+
+      sendStreamingProxyError(res, {
+        status,
+        publicMessage:
+          status === 501
+            ? "Transformers.js runtime is not installed on the server. Install @huggingface/transformers to enable this provider."
+            : `Transformers.js invocation failed: ${message}`,
+        streamMessage: message,
+      });
+    }
+  });
 
   // ---- Bedrock: list models ----
   app.get("/bedrock-proxy/models", async (req, res) => {

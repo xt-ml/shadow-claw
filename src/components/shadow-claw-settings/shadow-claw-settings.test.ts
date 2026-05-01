@@ -1,6 +1,4 @@
 import { jest } from "@jest/globals";
-import fs from "node:fs";
-import path from "node:path";
 
 jest.unstable_mockModule(
   "../settings/shadow-claw-accounts/shadow-claw-accounts.js",
@@ -93,6 +91,24 @@ jest.unstable_mockModule(
 );
 
 jest.unstable_mockModule(
+  "../settings/shadow-claw-networking/shadow-claw-networking.js",
+  () => {
+    class MockNetworking extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: "open" });
+      }
+
+      render = jest.fn();
+    }
+
+    customElements.define("shadow-claw-networking", MockNetworking);
+
+    return { ShadowClawNetworking: MockNetworking };
+  },
+);
+
+jest.unstable_mockModule(
   "../settings/shadow-claw-mcp-remote/shadow-claw-mcp-remote.js",
   () => {
     class MockMcpRemote extends HTMLElement {
@@ -132,8 +148,6 @@ jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue({} as any),
 }));
 
-// Global fetch is already mocked in jest-setup.ts
-
 const { ShadowClawSettings } = await import("./shadow-claw-settings.js");
 
 describe("shadow-claw-settings", () => {
@@ -150,6 +164,7 @@ describe("shadow-claw-settings", () => {
     const accounts = el.shadowRoot?.querySelector("shadow-claw-accounts");
     const remoteMcp = el.shadowRoot?.querySelector("shadow-claw-mcp-remote");
     const llm = el.shadowRoot?.querySelector("shadow-claw-llm");
+    const networking = el.shadowRoot?.querySelector("shadow-claw-networking");
     const webvm = el.shadowRoot?.querySelector("shadow-claw-webvm");
     const git = el.shadowRoot?.querySelector("shadow-claw-git");
     const storage = el.shadowRoot?.querySelector("shadow-claw-storage");
@@ -157,6 +172,7 @@ describe("shadow-claw-settings", () => {
     expect(accounts).not.toBeNull();
     expect(remoteMcp).not.toBeNull();
     expect(llm).not.toBeNull();
+    expect(networking).not.toBeNull();
     expect(webvm).not.toBeNull();
     expect(git).not.toBeNull();
     expect(storage).not.toBeNull();
@@ -202,6 +218,22 @@ describe("shadow-claw-settings", () => {
     expect(envTab?.getAttribute("aria-selected")).toBe("true");
     expect(aiPanel?.hasAttribute("hidden")).toBe(true);
     expect(envPanel?.hasAttribute("hidden")).toBe(false);
+
+    document.body.removeChild(el);
+  });
+
+  it("renders networking at top of environment panel", async () => {
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+
+    const envPanel = el.shadowRoot?.querySelector(
+      '[data-tab-panel="environment"]',
+    );
+    expect(envPanel?.firstElementChild?.tagName.toLowerCase()).toBe(
+      "shadow-claw-networking",
+    );
 
     document.body.removeChild(el);
   });

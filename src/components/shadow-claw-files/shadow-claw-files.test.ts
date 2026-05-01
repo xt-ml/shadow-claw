@@ -1,6 +1,4 @@
 import { jest } from "@jest/globals";
-import fs from "node:fs";
-import path from "node:path";
 
 jest.unstable_mockModule("../../storage/deleteAllGroupFiles.js", () => ({
   deleteAllGroupFiles: jest.fn(),

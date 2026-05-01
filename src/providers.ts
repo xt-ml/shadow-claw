@@ -404,6 +404,11 @@ export function getContextLimit(model: string): number {
     return 128_000;
   }
 
+  // Gemma family (for example local Transformers.js Gemma 4 variants)
+  if (m.includes("gemma-4") || m.includes("gemma 4") || m.includes("gemma")) {
+    return 32_000;
+  }
+
   // Mistral (Bedrock or OpenRouter)
   if (m.includes("mistral-large")) {
     return 128_000;

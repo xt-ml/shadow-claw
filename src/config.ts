@@ -173,6 +173,14 @@ export const GITHUB_MODELS_PROXY_URL =
 export const GITHUB_MODELS_PROXY_MODELS_URL =
   "http://localhost:8888/github-models-proxy/catalog/models";
 
+/** Transformers.js local proxy endpoint (Node-side inference) */
+export const TRANSFORMERS_JS_PROXY_URL =
+  "http://localhost:8888/transformers-js-proxy/chat/completions";
+
+/** Transformers.js local proxy models endpoint */
+export const TRANSFORMERS_JS_PROXY_MODELS_URL =
+  "http://localhost:8888/transformers-js-proxy/models";
+
 /** Llamafile proxy endpoint (local binary execution) */
 export const LLAMAFILE_PROXY_URL =
   "http://localhost:8888/llamafile-proxy/chat/completions";
@@ -629,6 +637,18 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     defaultModel: "meta-llama/Llama-3.1-8B-Instruct",
     modelsUrl: "https://router.huggingface.co/v1/models",
     requiresApiKey: true,
+    supportsStreaming: true,
+  },
+  transformers_js_local: {
+    id: "transformers_js_local",
+    name: "Transformers.js (Local Proxy)",
+    baseUrl: TRANSFORMERS_JS_PROXY_URL,
+    format: "openai",
+    apiKeyHeader: "Authorization",
+    headers: {},
+    defaultModel: "onnx-community/gemma-4-E2B-it-ONNX",
+    modelsUrl: TRANSFORMERS_JS_PROXY_MODELS_URL,
+    requiresApiKey: false,
     supportsStreaming: true,
   },
   ollama: {

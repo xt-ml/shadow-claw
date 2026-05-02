@@ -17,10 +17,9 @@ npm start        # Express server → http://localhost:8888
 
 Open Settings, select a provider, and start chatting.
 
-For large local models (for example Gemma 4 via Transformers.js), use
-`Transformers.js (Local Proxy)` in Settings. In this Phase 1 path, model
-artifacts are cached server-side by Node.js, not in browser Cache API or
-IndexedDB.
+For large local models (for example Gemma 4), use `Transformers.js (Local Proxy)`,
+or `Llamafile (Local Proxy)`, in Settings. Model artifacts are cached server-side
+by Node.js, rather than in browser Cache API or IndexedDB.
 
 Local cache paths:
 
@@ -266,6 +265,25 @@ When the browser WebMCP API is available (`navigator.modelContext`), these
 tools can also be registered through `src/webmcp.ts` so browser-side model
 contexts can invoke the same tool surface.
 
+## Model Registry & Attachment Capabilities
+
+ShadowClaw includes a dynamic **Model Registry** (`src/model-registry.ts`) that
+fetches and caches model metadata (context window, tool support, input/output
+modalities) from provider APIs.
+
+The **Attachment Capabilities** system (`src/attachment-capabilities.ts`) uses
+this metadata to determine how to deliver files to the agent:
+
+- **Native Delivery**: If the model supports the specific input modality (image,
+  audio, video, PDF), the attachment is sent as a native content block.
+- **Fallback Delivery**: If native support is missing or unknown, ShadowClaw
+  automatically converts the attachment into a markdown-optimized text
+  representation (e.g., OCR-style layout for PDFs, MIME-aware descriptions).
+
+This allows ShadowClaw to operate as an **agent-driven assistant** where the
+assistant can reason about its own capabilities and the best way to process
+user-supplied files.
+
 ## Prompt API Provider (Experimental)
 
 ShadowClaw supports a browser-native keyless provider with
@@ -379,6 +397,13 @@ messages have been truncated, auto-compaction triggers automatically.
 
 ShadowClaw supports multiple provider formats (OpenAI, Anthropic, Prompt API)
 and handles network-bound tool calls with robust error handling.
+
+### Provider Help & UX
+
+When provider requests fail due to common configuration issues (missing/invalid
+API keys, rate limits, or network connectivity), ShadowClaw detects the failure
+mode and displays a **contextual help dialog** with step-by-step resolution
+instructions and direct links to provider settings.
 
 ### Adaptive Rate Limiting
 

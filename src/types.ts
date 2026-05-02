@@ -62,7 +62,21 @@ export interface RemoteUrlAttachmentSource {
   headers?: Record<string, string>;
 }
 
-export type MessageAttachmentSource = RemoteUrlAttachmentSource;
+export interface LocalFileAttachmentSource {
+  kind: "local-file";
+  file: Blob;
+}
+
+export interface InlineTextAttachmentSource {
+  kind: "inline-text";
+  text: string;
+  mimeType?: string;
+}
+
+export type MessageAttachmentSource =
+  | RemoteUrlAttachmentSource
+  | LocalFileAttachmentSource
+  | InlineTextAttachmentSource;
 
 export interface MessageAttachment {
   id?: string;
@@ -136,7 +150,21 @@ export interface ToolResultContent {
   content: string;
 }
 
-export type ContentBlock = TextContent | ToolUseContent | ToolResultContent;
+export interface AttachmentContent {
+  type: "attachment";
+  mediaType: "image" | "audio" | "video" | "document" | "file";
+  fileName: string;
+  mimeType: string;
+  size?: number;
+  path?: string;
+  data?: string;
+}
+
+export type ContentBlock =
+  | TextContent
+  | ToolUseContent
+  | ToolResultContent
+  | AttachmentContent;
 
 export interface ConfigEntry {
   key: string;

@@ -1,5 +1,169 @@
+import { getModelAttachmentCapabilities } from "./attachment-capabilities.js";
 import { modelRegistry } from "./model-registry.js";
 import type { ProviderConfig } from "./config.js";
+
+function formatAttachmentFallbackText(block: any): string {
+  return `[Attachment: ${block.fileName} (${block.mimeType}) is available in chat history${block.path ? ` at ${block.path}` : ""}]`;
+}
+
+function canSendNativeImage(model: string): boolean {
+  const capabilities = getModelAttachmentCapabilities(model);
+
+  return capabilities.images || capabilities.routerByFeatures;
+}
+
+function canSendNativeAudio(model: string): boolean {
+  const capabilities = getModelAttachmentCapabilities(model);
+
+  return capabilities.audio || capabilities.routerByFeatures;
+}
+
+function canSendNativeDocument(model: string): boolean {
+  const capabilities = getModelAttachmentCapabilities(model);
+
+  return capabilities.documents || capabilities.routerByFeatures;
+}
+
+/**
+ * Map an audio MIME type to the format string expected by OpenAI's input_audio.
+ */
+function mimeTypeToAudioFormat(mimeType: string): string {
+  const m = mimeType.toLowerCase();
+  if (m.includes("wav")) {
+    return "wav";
+  }
+
+  if (m.includes("flac")) {
+    return "flac";
+  }
+
+  if (m.includes("ogg")) {
+    return "ogg";
+  }
+
+  if (m.includes("aac")) {
+    return "aac";
+  }
+
+  if (m.includes("webm")) {
+    return "webm";
+  }
+
+  if (m.includes("mp4")) {
+    return "mp4";
+  }
+
+  // audio/mpeg covers mp3
+
+  return "mp3";
+}
+
+function mapOpenAiUserContent(blocks: any[], model: string): any[] {
+  const content: any[] = [];
+  const canSendImages = canSendNativeImage(model);
+
+  for (const block of blocks) {
+    if (block?.type === "text") {
+      content.push({ type: "text", text: block.text || "" });
+
+      continue;
+    }
+
+    if (block?.type === "attachment") {
+      if (
+        block.mediaType === "image" &&
+        typeof block.data === "string" &&
+        block.data &&
+        canSendImages
+      ) {
+        content.push({
+          type: "image_url",
+          image_url: {
+            url: `data:${block.mimeType};base64,${block.data}`,
+          },
+        });
+      } else if (
+        block.mediaType === "audio" &&
+        typeof block.data === "string" &&
+        block.data &&
+        canSendNativeAudio(model)
+      ) {
+        content.push({
+          type: "input_audio",
+          input_audio: {
+            data: block.data,
+            format: mimeTypeToAudioFormat(block.mimeType),
+          },
+        });
+      } else {
+        content.push({
+          type: "text",
+          text: formatAttachmentFallbackText(block),
+        });
+      }
+    }
+  }
+
+  return content;
+}
+
+function mapAnthropicContent(blocks: any[], model: string): any[] {
+  const content: any[] = [];
+  const canSendImages = canSendNativeImage(model);
+
+  for (const block of blocks) {
+    if (block?.type === "text") {
+      content.push({ type: "text", text: block.text || "" });
+
+      continue;
+    }
+
+    if (block?.type === "tool_use" || block?.type === "tool_result") {
+      content.push(block);
+
+      continue;
+    }
+
+    if (block?.type === "attachment") {
+      if (
+        block.mediaType === "image" &&
+        typeof block.data === "string" &&
+        block.data &&
+        canSendImages
+      ) {
+        content.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: block.mimeType,
+            data: block.data,
+          },
+        });
+      } else if (
+        block.mediaType === "document" &&
+        typeof block.data === "string" &&
+        block.data &&
+        canSendNativeDocument(model)
+      ) {
+        content.push({
+          type: "document",
+          source: {
+            type: "base64",
+            media_type: "application/pdf",
+            data: block.data,
+          },
+        });
+      } else {
+        content.push({
+          type: "text",
+          text: formatAttachmentFallbackText(block),
+        });
+      }
+    }
+  }
+
+  return content;
+}
 
 /**
  * Prepare API headers for a specific provider
@@ -117,10 +281,19 @@ class OpenAIAdapter extends BaseAdapter {
 
       if (msg.role === "user" && Array.isArray(msg.content)) {
         const toolResults = msg.content.filter((b) => b.type === "tool_result");
-        const textContent = msg.content
+        const contentBlocks = mapOpenAiUserContent(msg.content, model);
+        const textContent = contentBlocks
           .filter((b) => b.type === "text")
           .map((b) => b.text)
           .join("\n");
+
+        if (toolResults.length === 0) {
+          if (contentBlocks.length > 0) {
+            openaiMessages.push({ role: "user", content: contentBlocks });
+          }
+
+          continue;
+        }
 
         if (textContent) {
           openaiMessages.push({ role: "user", content: textContent });
@@ -272,7 +445,18 @@ class AnthropicAdapter extends BaseAdapter {
 
     // Messages are already in Anthropic format internally.
     // Filter out system messages (system is passed separately).
-    const filteredMessages = messages.filter((msg) => msg.role !== "system");
+    const filteredMessages = messages
+      .filter((msg) => msg.role !== "system")
+      .map((msg) => {
+        if (!Array.isArray(msg.content)) {
+          return msg;
+        }
+
+        return {
+          ...msg,
+          content: mapAnthropicContent(msg.content, model),
+        };
+      });
 
     const anthropicTools =
       tools?.map((tool) => ({

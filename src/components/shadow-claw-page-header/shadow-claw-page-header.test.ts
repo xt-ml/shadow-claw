@@ -41,4 +41,91 @@ describe("shadow-claw-page-header", () => {
 
     el.remove();
   });
+
+  it("is collapsed by default on small/mobile viewports", async () => {
+    const originalMatchMedia = globalThis.matchMedia;
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() =>
+        ({
+          matches: false,
+          media: "(min-width: 56rem)",
+          onchange: null,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+          dispatchEvent: () => true,
+        }) as unknown as MediaQueryList);
+
+    const el = new ShadowClawPageHeader();
+    el.setAttribute("title", "Chat");
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+
+    expect(el.isMainCollapsed()).toBe(true);
+
+    el.remove();
+    globalThis.matchMedia = originalMatchMedia;
+  });
+
+  it("shows automatically on larger viewports", async () => {
+    const originalMatchMedia = globalThis.matchMedia;
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() =>
+        ({
+          matches: true,
+          media: "(min-width: 56rem) and (min-height: 401px)",
+          onchange: null,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+          dispatchEvent: () => true,
+        }) as unknown as MediaQueryList);
+
+    const el = new ShadowClawPageHeader();
+    el.setAttribute("title", "Chat");
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+
+    expect(el.isMainCollapsed()).toBe(false);
+
+    el.remove();
+    globalThis.matchMedia = originalMatchMedia;
+  });
+
+  it("supports manual override toggle regardless of viewport", async () => {
+    const originalMatchMedia = globalThis.matchMedia;
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() =>
+        ({
+          matches: true,
+          media: "(min-width: 56rem) and (min-height: 401px)",
+          onchange: null,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          addListener: () => {},
+          removeListener: () => {},
+          dispatchEvent: () => true,
+        }) as unknown as MediaQueryList);
+
+    const el = new ShadowClawPageHeader();
+    el.setAttribute("title", "Chat");
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+
+    expect(el.isMainCollapsed()).toBe(false);
+
+    el.toggleMainCollapsedOverride();
+    expect(el.isMainCollapsed()).toBe(true);
+
+    el.toggleMainCollapsedOverride();
+    expect(el.isMainCollapsed()).toBe(false);
+
+    el.remove();
+    globalThis.matchMedia = originalMatchMedia;
+  });
 });

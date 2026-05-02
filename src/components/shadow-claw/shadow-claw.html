@@ -16,25 +16,6 @@
       <h1>
         <slot name="header-title-link"></slot>
         <div class="header-actions">
-          <button
-            aria-label="Hide WebVM terminal"
-            aria-pressed="true"
-            class="theme-toggle webvm-toggle hidden"
-            hidden
-            type="button"
-          >
-            <svg
-              height="1.5rem"
-              fill="currentColor"
-              viewBox="0 -960 960 960"
-              width="1.5rem"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M320-280 120-480l200-200 56 56-104 104h568v80H272l104 104-56 56Zm320 0-56-56 104-104H120v-80h568L584-624l56-56 200 200-200 200Z"
-              />
-            </svg>
-          </button>
           <button aria-label="Toggle theme" class="theme-toggle">
             <svg
               class="sun-icon hidden"
@@ -61,6 +42,43 @@
               />
             </svg>
           </button>
+          <button
+            aria-label="Hide page header details"
+            aria-pressed="false"
+            class="theme-toggle header-main-toggle"
+            type="button"
+          >
+            <svg
+              height="1.5rem"
+              fill="currentColor"
+              viewBox="0 -960 960 960"
+              width="1.5rem"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M280-200h400v-80H280v80Zm200-200L280-600l56-56 104 104v-328h80v328l104-104 56 56-200 200Z"
+              />
+            </svg>
+          </button>
+          <button
+            aria-label="Hide WebVM terminal"
+            aria-pressed="true"
+            class="theme-toggle webvm-toggle hidden"
+            hidden
+            type="button"
+          >
+            <svg
+              height="1.5rem"
+              fill="currentColor"
+              viewBox="0 -960 960 960"
+              width="1.5rem"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M320-280 120-480l200-200 56 56-104 104h568v80H272l104 104-56 56Zm320 0-56-56 104-104H120v-80h568L584-624l56-56 200 200-200 200Z"
+              />
+            </svg>
+          </button>
           <slot name="header-actions-logo"></slot>
         </div>
       </h1>
@@ -83,6 +101,7 @@
           </button>
         </div>
       </aside>
+      <div class="sidebar-resize-handle" title="Drag to resize sidebar"></div>
 
       <!-- Main Content -->
       <div class="main-content">

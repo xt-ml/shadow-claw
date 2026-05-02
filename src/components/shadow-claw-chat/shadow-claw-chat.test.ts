@@ -314,7 +314,6 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
     });
 
     it("should include the updated placeholder with keyboard hint", () => {
-      expect(templateHtml).toContain("Enter to send");
       expect(templateHtml).toContain("Shift+Enter for newline");
     });
 
@@ -328,6 +327,16 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
 
     it("should include copy-button copied state class", () => {
       expect(templateHtml).toContain("chat__code-copy-btn--copied");
+    });
+
+    it("should include an attach-files action button", () => {
+      expect(templateHtml).toContain('data-action="attach-files"');
+      expect(templateHtml).toContain("chat__attach-btn");
+    });
+
+    it("should include a hidden multi-file attachment input", () => {
+      expect(templateHtml).toContain("chat__attachment-input");
+      expect(templateHtml).toContain('type="file" multiple');
     });
   });
 

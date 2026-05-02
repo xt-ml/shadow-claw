@@ -1,12 +1,19 @@
 import { effect } from "../../effect.js";
+import { CONFIG_KEYS } from "../../config.js";
 
 import { ShadowClawDatabase, setDB } from "../../db/db.js";
+import { getConfig } from "../../db/getConfig.js";
+import { setConfig } from "../../db/setConfig.js";
 import { Orchestrator, OrchestratorState } from "../../orchestrator.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { Themes, themeStore } from "../../stores/theme.js";
 import { toolsStore } from "../../stores/tools.js";
 import { showError, showSuccess } from "../../toast.js";
+import {
+  buildProviderHelpDialogOptions,
+  type ProviderHelpType,
+} from "../common/help/providers.js";
 import {
   AppDialogOptions,
   ConfirmationDialogOptions,
@@ -34,6 +41,14 @@ import ShadowClawElement from "../shadow-claw-element.js";
 import { ShadowClawTerminal } from "../shadow-claw-terminal/shadow-claw-terminal.js";
 
 const elementName = "shadow-claw";
+const DEFAULT_SIDEBAR_WIDTH_PX = 250;
+const MIN_SIDEBAR_WIDTH_PX = 200;
+const MAX_SIDEBAR_WIDTH_PX = 560;
+
+type PageHeaderLikeElement = HTMLElement & {
+  isMainCollapsed?: () => boolean;
+  setMainCollapsedOverride?: (collapsed: boolean | null) => void;
+};
 
 export default class ShadowClaw extends ShadowClawElement {
   static componentPath = `components/${elementName}`;
@@ -56,6 +71,7 @@ export default class ShadowClaw extends ShadowClawElement {
   terminalPlacementFrame: number | null = null;
   terminalVisible: boolean = false;
   vmStatusCleanup: (() => void) | null = null;
+  headerMainCollapsedOverride: boolean | null = null;
 
   constructor() {
     super();
@@ -93,6 +109,8 @@ export default class ShadowClaw extends ShadowClawElement {
 
     this.updateTerminalToggle();
     this.scheduleTerminalPlacement();
+    this.syncPageHeaderMainVisibilityOverride();
+    this.updateHeaderMainToggle();
 
     const vmStatusListener = (status: VMStatus) => {
       this.vmStatus = status;
@@ -160,7 +178,11 @@ export default class ShadowClaw extends ShadowClawElement {
 
     this.orchestrator.events.on(
       "provider-help",
-      async (payload: { providerId: string; reason?: string }) => {
+      async (payload: {
+        providerId: string;
+        reason?: string;
+        helpType?: ProviderHelpType;
+      }) => {
         if (payload?.providerId === "llamafile") {
           await this.requestDialog(
             buildLlamafileHelpDialogOptions(payload.reason),
@@ -168,6 +190,14 @@ export default class ShadowClaw extends ShadowClawElement {
         } else if (payload?.providerId === "transformers_js_local") {
           await this.requestDialog(
             buildTransformersJsHelpDialogOptions(payload.reason),
+          );
+        } else if (payload?.providerId && payload.helpType) {
+          await this.requestDialog(
+            buildProviderHelpDialogOptions(
+              payload.providerId,
+              payload.helpType,
+              payload.reason,
+            ),
           );
         }
       },
@@ -334,6 +364,8 @@ export default class ShadowClaw extends ShadowClawElement {
 
       // Listen for changes
       matchMedia.addEventListener("change", handleMediaQuery);
+
+      void this.initSidebarResize(sidebar as HTMLElement);
     }
 
     // Settings button
@@ -341,6 +373,11 @@ export default class ShadowClaw extends ShadowClawElement {
     if (settingsBtn) {
       settingsBtn.addEventListener("click", () => this.showPage("settings"));
     }
+
+    const headerMainToggle = root.querySelector(".header-main-toggle");
+    headerMainToggle?.addEventListener("click", () => {
+      this.togglePageHeaderMainVisibility();
+    });
 
     // Listen for navigate events from the settings component (e.g. "tools" button)
     const settingsEl = root.querySelector("shadow-claw-settings");
@@ -380,6 +417,14 @@ export default class ShadowClaw extends ShadowClawElement {
 
     root.addEventListener("shadow-claw-terminal-slot-ready", () => {
       this.scheduleTerminalPlacement();
+      this.syncPageHeaderMainVisibilityOverride();
+      this.updateHeaderMainToggle();
+    });
+
+    window.addEventListener("resize", () => {
+      if (this.headerMainCollapsedOverride === null) {
+        this.updateHeaderMainToggle();
+      }
     });
 
     // Listen for theme changes to update icons and host class
@@ -393,6 +438,213 @@ export default class ShadowClaw extends ShadowClawElement {
     const currentTheme = themeStore.resolved;
     this.updateThemeIcons(currentTheme);
     this.updateHostTheme(currentTheme);
+  }
+
+  clampSidebarWidth(px: number): number {
+    const appBody = this.shadowRoot?.querySelector(".app-body");
+
+    if (!(appBody instanceof HTMLElement)) {
+      return Math.max(MIN_SIDEBAR_WIDTH_PX, Math.min(MAX_SIDEBAR_WIDTH_PX, px));
+    }
+
+    const maxByContainer = Math.max(
+      MIN_SIDEBAR_WIDTH_PX,
+      appBody.getBoundingClientRect().width - 260,
+    );
+
+    return Math.max(
+      MIN_SIDEBAR_WIDTH_PX,
+      Math.min(Math.min(MAX_SIDEBAR_WIDTH_PX, maxByContainer), px),
+    );
+  }
+
+  setSidebarWidth(px: number): void {
+    const appBody = this.shadowRoot?.querySelector(".app-body");
+
+    if (!(appBody instanceof HTMLElement)) {
+      return;
+    }
+
+    const clamped = this.clampSidebarWidth(px);
+    appBody.style.setProperty("--sidebar-width", `${clamped}px`);
+  }
+
+  async persistSidebarWidth(px: number): Promise<void> {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      await setConfig(this.db, CONFIG_KEYS.SIDEBAR_WIDTH, px);
+    } catch {
+      // Ignore persistence failures so resize remains usable in degraded test/runtime states.
+    }
+  }
+
+  async initSidebarResize(sidebar: HTMLElement): Promise<void> {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const handle = root.querySelector(".sidebar-resize-handle");
+    if (!(handle instanceof HTMLElement)) {
+      return;
+    }
+
+    handle.setAttribute("tabindex", "0");
+    handle.setAttribute("role", "separator");
+    handle.setAttribute("aria-orientation", "vertical");
+    handle.setAttribute("aria-label", "Resize sidebar width");
+
+    const getCurrentWidth = () => {
+      const appBody = root.querySelector(".app-body");
+      if (!(appBody instanceof HTMLElement)) {
+        return DEFAULT_SIDEBAR_WIDTH_PX;
+      }
+
+      const stored = parseFloat(
+        appBody.style.getPropertyValue("--sidebar-width"),
+      );
+      if (Number.isFinite(stored) && stored > 0) {
+        return stored;
+      }
+
+      return sidebar.getBoundingClientRect().width || DEFAULT_SIDEBAR_WIDTH_PX;
+    };
+
+    const updateAria = () => {
+      const current = Math.round(this.clampSidebarWidth(getCurrentWidth()));
+      const max = Math.round(this.clampSidebarWidth(Number.MAX_SAFE_INTEGER));
+      handle.setAttribute("aria-valuemin", String(MIN_SIDEBAR_WIDTH_PX));
+      handle.setAttribute("aria-valuemax", String(max));
+      handle.setAttribute("aria-valuenow", String(current));
+    };
+
+    try {
+      const saved = this.db
+        ? await getConfig(this.db, CONFIG_KEYS.SIDEBAR_WIDTH)
+        : undefined;
+
+      if (typeof saved === "number" && Number.isFinite(saved) && saved > 0) {
+        this.setSidebarWidth(saved);
+      } else {
+        this.setSidebarWidth(DEFAULT_SIDEBAR_WIDTH_PX);
+      }
+    } catch {
+      this.setSidebarWidth(DEFAULT_SIDEBAR_WIDTH_PX);
+    }
+
+    let activePointerId: number | null = null;
+    let startX = 0;
+    let startWidth = 0;
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== activePointerId) {
+        return;
+      }
+
+      const delta = event.clientX - startX;
+      const nextWidth = startWidth + delta;
+      this.setSidebarWidth(nextWidth);
+      updateAria();
+    };
+
+    const stopResize = () => {
+      if (activePointerId === null) {
+        return;
+      }
+
+      activePointerId = null;
+      handle.classList.remove("active");
+      document.removeEventListener("pointermove", onPointerMove);
+
+      const appBody = root.querySelector(".app-body");
+      if (appBody instanceof HTMLElement) {
+        const value = parseFloat(
+          appBody.style.getPropertyValue("--sidebar-width"),
+        );
+        if (Number.isFinite(value) && value > 0) {
+          void this.persistSidebarWidth(value);
+        }
+      }
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.pointerId !== activePointerId) {
+        return;
+      }
+
+      stopResize();
+    };
+
+    handle.addEventListener("pointerdown", (event: PointerEvent) => {
+      if (
+        event.pointerType === "mouse" &&
+        event.button !== 0 &&
+        event.button !== -1
+      ) {
+        return;
+      }
+
+      if (window.innerWidth < 896) {
+        return;
+      }
+
+      event.preventDefault();
+      activePointerId = event.pointerId;
+      startX = event.clientX;
+      startWidth = sidebar.getBoundingClientRect().width;
+      handle.classList.add("active");
+
+      handle.setPointerCapture(event.pointerId);
+      document.addEventListener("pointermove", onPointerMove);
+    });
+
+    handle.addEventListener("pointerup", onPointerUp);
+    handle.addEventListener("pointercancel", stopResize);
+    handle.addEventListener("dblclick", () => {
+      this.setSidebarWidth(DEFAULT_SIDEBAR_WIDTH_PX);
+      void this.persistSidebarWidth(DEFAULT_SIDEBAR_WIDTH_PX);
+      updateAria();
+    });
+
+    handle.addEventListener("keydown", (event: KeyboardEvent) => {
+      if (window.innerWidth < 896) {
+        return;
+      }
+
+      const step = event.shiftKey ? 32 : 12;
+      const current = getCurrentWidth();
+      let next: number | null = null;
+
+      if (event.key === "ArrowRight") {
+        next = current + step;
+      } else if (event.key === "ArrowLeft") {
+        next = current - step;
+      } else if (event.key === "Home") {
+        next = MIN_SIDEBAR_WIDTH_PX;
+      } else if (event.key === "End") {
+        next = this.clampSidebarWidth(Number.MAX_SAFE_INTEGER);
+      }
+
+      if (next === null) {
+        return;
+      }
+
+      event.preventDefault();
+      this.setSidebarWidth(next);
+      updateAria();
+      void this.persistSidebarWidth(this.clampSidebarWidth(getCurrentWidth()));
+    });
+
+    updateAria();
+
+    this.addCleanup(() => {
+      stopResize();
+      handle.removeEventListener("pointerup", onPointerUp);
+      handle.removeEventListener("pointercancel", stopResize);
+    });
   }
 
   /**
@@ -480,6 +732,8 @@ export default class ShadowClaw extends ShadowClawElement {
     }
 
     this.scheduleTerminalPlacement();
+    this.syncPageHeaderMainVisibilityOverride();
+    this.updateHeaderMainToggle();
 
     // Scroll to top
     const activePage = root.querySelector(".page.active");
@@ -610,6 +864,107 @@ export default class ShadowClaw extends ShadowClawElement {
     );
 
     button.setAttribute("aria-pressed", String(this.terminalVisible));
+  }
+
+  getPageHeaderElements(): PageHeaderLikeElement[] {
+    const root = this.shadowRoot;
+    if (!root) {
+      return [];
+    }
+
+    const containerSelectors = [
+      "shadow-claw-chat",
+      "shadow-claw-tasks",
+      "shadow-claw-files",
+      "shadow-claw-settings",
+      "shadow-claw-tools",
+      "shadow-claw-channels",
+    ];
+
+    const headers: PageHeaderLikeElement[] = [];
+
+    for (const selector of containerSelectors) {
+      const container = root.querySelector(selector);
+      if (!(container instanceof HTMLElement)) {
+        continue;
+      }
+
+      const header = container.shadowRoot?.querySelector(
+        "shadow-claw-page-header",
+      );
+      if (header instanceof HTMLElement) {
+        headers.push(header as PageHeaderLikeElement);
+      }
+    }
+
+    return headers;
+  }
+
+  getActivePageHeaderElement(): PageHeaderLikeElement | null {
+    const root = this.shadowRoot;
+    if (!root) {
+      return null;
+    }
+
+    const activePage = root.querySelector(".page.active");
+    if (!(activePage instanceof HTMLElement)) {
+      return null;
+    }
+
+    const pageContainer = activePage.querySelector(
+      "shadow-claw-chat, shadow-claw-tasks, shadow-claw-files, shadow-claw-settings, shadow-claw-tools, shadow-claw-channels",
+    );
+    if (!(pageContainer instanceof HTMLElement)) {
+      return null;
+    }
+
+    const header = pageContainer.shadowRoot?.querySelector(
+      "shadow-claw-page-header",
+    );
+
+    return header instanceof HTMLElement
+      ? (header as PageHeaderLikeElement)
+      : null;
+  }
+
+  syncPageHeaderMainVisibilityOverride() {
+    for (const header of this.getPageHeaderElements()) {
+      header.setMainCollapsedOverride?.(this.headerMainCollapsedOverride);
+    }
+  }
+
+  updateHeaderMainToggle() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const button = root.querySelector(".header-main-toggle");
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    const collapsed =
+      typeof this.headerMainCollapsedOverride === "boolean"
+        ? this.headerMainCollapsedOverride
+        : (this.getActivePageHeaderElement()?.isMainCollapsed?.() ?? false);
+
+    button.setAttribute(
+      "aria-label",
+      collapsed ? "Show page header details" : "Hide page header details",
+    );
+    button.setAttribute("aria-pressed", String(collapsed));
+  }
+
+  togglePageHeaderMainVisibility() {
+    const currentCollapsed =
+      typeof this.headerMainCollapsedOverride === "boolean"
+        ? this.headerMainCollapsedOverride
+        : (this.getActivePageHeaderElement()?.isMainCollapsed?.() ?? false);
+
+    this.headerMainCollapsedOverride = !currentCollapsed;
+    this.syncPageHeaderMainVisibilityOverride();
+    this.updateHeaderMainToggle();
   }
 
   /**

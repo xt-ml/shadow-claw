@@ -850,6 +850,8 @@ export const CONFIG_KEYS = {
   TASK_SYNC_OUTBOX: "task_sync_outbox",
   LAST_ACTIVE_GROUP: "last_active_group",
   CONVERSATIONS_HEIGHT: "conversations_height",
+  SIDEBAR_WIDTH: "sidebar_width",
+  CHAT_INPUT_AREA_HEIGHT: "chat_input_area_height",
   VAPID_SUBJECT: "vapid_subject",
   USE_PROXY: "use_proxy",
   PROXY_URL: "proxy_url",

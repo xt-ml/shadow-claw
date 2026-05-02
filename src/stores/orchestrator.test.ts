@@ -340,6 +340,7 @@ describe("OrchestratorStore", () => {
     expect((store.orchestrator as any).submitMessage).toHaveBeenCalledWith(
       "hello",
       DEFAULT_GROUP_ID,
+      [],
     );
   });
 

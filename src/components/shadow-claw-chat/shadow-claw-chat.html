@@ -74,18 +74,46 @@
       ></div>
       <div class="chat__token-usage" aria-live="polite"></div>
       <div class="chat__context-usage" aria-live="polite"></div>
+      <div class="chat__attachment-capabilities" aria-live="polite"></div>
       <div class="chat__input-area">
+        <div
+          class="chat__input-resize-handle"
+          title="Drag to resize input area"
+        ></div>
+        <div class="chat__pending-attachments" aria-live="polite" hidden></div>
         <div class="chat__input-wrapper">
           <textarea
             class="chat__input"
-            placeholder="Type a message... (Enter to send, Shift+Enter for newline)"
+            placeholder="Type a message... (Shift+Enter for newline)"
             rows="1"
             aria-label="Message input"
           ></textarea>
         </div>
-        <button class="chat__send-btn" data-action="send-message" type="button">
-          Send
-        </button>
+        <div class="chat__input-controls">
+          <button
+            class="chat__attach-btn"
+            data-action="attach-files"
+            type="button"
+            aria-label="Attach files"
+          >
+            + Files
+          </button>
+          <button
+            class="chat__send-btn"
+            data-action="send-message"
+            type="button"
+          >
+            Send
+          </button>
+        </div>
+      </div>
+      <div class="chat__drop-overlay" data-drop-overlay hidden>
+        <div class="chat__drop-overlay-card">
+          <div class="chat__drop-overlay-title">Drop to attach</div>
+          <div class="chat__drop-overlay-subtitle">
+            Files and plain text will be added to this message.
+          </div>
+        </div>
       </div>
     </div>
 
@@ -94,5 +122,6 @@
       type="file"
       accept=".zip,application/zip"
     />
+    <input class="chat__attachment-input" type="file" multiple />
   </section>
 </template>

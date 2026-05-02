@@ -20,6 +20,7 @@ import {
   isPromptApiSupported,
 } from "./prompt-api-provider.js";
 import { isLlamafileResolutionError } from "./components/common/help/llamafile.js";
+import { detectProviderHelpType } from "./components/common/help/providers.js";
 import { isTransformersJsResolutionError } from "./components/common/help/transformers.js";
 
 import {
@@ -76,6 +77,7 @@ import type {
   ChannelType,
   InboundMessage,
   LLMProvider,
+  MessageAttachment,
   ModelDownloadProgressPayload,
   Task,
 } from "./types.js";
@@ -1068,8 +1070,12 @@ export class Orchestrator {
     }
   }
 
-  submitMessage(text: string, groupId = DEFAULT_GROUP_ID): void {
-    this.browserChat.submit(text, groupId);
+  submitMessage(
+    text: string,
+    groupId = DEFAULT_GROUP_ID,
+    attachments: MessageAttachment[] = [],
+  ): void {
+    this.browserChat.submit(text, groupId, attachments);
   }
 
   async newSession(
@@ -1087,9 +1093,17 @@ export class Orchestrator {
   ): Promise<void> {
     const requiresApiKey = this.providerConfig?.requiresApiKey !== false;
     if (requiresApiKey && !this.apiKey) {
+      const reason = "API key not configured. Cannot compact context.";
+
+      this.events.emit("provider-help", {
+        providerId: this.provider,
+        reason,
+        helpType: detectProviderHelpType(this.provider, reason, requiresApiKey),
+      });
+
       this.events.emit("error", {
         groupId,
-        error: "API key not configured. Cannot compact context.",
+        error: reason,
       });
 
       return;
@@ -2014,10 +2028,19 @@ export class Orchestrator {
 
     const requiresApiKey = this.providerConfig?.requiresApiKey !== false;
     if (requiresApiKey && !this.apiKey) {
+      const reason =
+        "API key not configured. Go to Settings to add your API key.";
+
+      this.events.emit("provider-help", {
+        providerId: this.provider,
+        reason,
+        helpType: detectProviderHelpType(this.provider, reason, requiresApiKey),
+      });
+
       const msg = this.messageQueue.shift();
       this.events.emit("error", {
         groupId: msg.groupId,
-        error: "API key not configured. Go to Settings to add your API key.",
+        error: reason,
       });
 
       return;
@@ -2301,6 +2324,7 @@ export class Orchestrator {
         this.clearProviderRequest(groupId);
         this.inFlightTriggerByGroup.delete(groupId);
         let finalError = error;
+        let hasProviderHelp = false;
 
         // Detect context limit/request too large errors (HTTP 413 or specific error codes)
         const isContextError =
@@ -2318,6 +2342,7 @@ export class Orchestrator {
           this.getProvider() === "llamafile" &&
           isLlamafileResolutionError(error)
         ) {
+          hasProviderHelp = true;
           this.events.emit("provider-help", {
             providerId: "llamafile",
             reason: error,
@@ -2328,10 +2353,28 @@ export class Orchestrator {
           this.getProvider() === "transformers_js_local" &&
           isTransformersJsResolutionError(error)
         ) {
+          hasProviderHelp = true;
           this.events.emit("provider-help", {
             providerId: "transformers_js_local",
             reason: error,
           });
+        }
+
+        if (!hasProviderHelp) {
+          const providerId = this.getProvider();
+          const helpType = detectProviderHelpType(
+            providerId,
+            error,
+            this.providerConfig?.requiresApiKey !== false,
+          );
+
+          if (helpType) {
+            this.events.emit("provider-help", {
+              providerId,
+              reason: error,
+              helpType,
+            });
+          }
         }
 
         await this.deliverResponse(db, groupId, `⚠️ Error: ${finalError}`);

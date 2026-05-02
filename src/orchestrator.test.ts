@@ -77,6 +77,74 @@ describe("Orchestrator", () => {
     );
   });
 
+  it("emits provider-help when queue processing lacks an API key", async () => {
+    const o = new Orchestrator();
+    const helpEvents: any[] = [];
+    const errorEvents: any[] = [];
+
+    o.events.on("provider-help", (payload) => helpEvents.push(payload));
+    o.events.on("error", (payload) => errorEvents.push(payload));
+
+    o.messageQueue.push({
+      id: "msg-1",
+      groupId: "br:main",
+      sender: "User",
+      content: "hello",
+      timestamp: Date.now(),
+      channel: "browser",
+    });
+
+    o.apiKey = "";
+    await o.processQueue({} as any);
+
+    expect(helpEvents).toHaveLength(1);
+    expect(helpEvents[0]).toMatchObject({
+      providerId: "openrouter",
+      helpType: "api-key-missing",
+    });
+
+    expect(errorEvents).toHaveLength(1);
+    expect(errorEvents[0].error).toContain("API key not configured");
+  });
+
+  it("emits provider-help for provider auth failures", async () => {
+    const o = new Orchestrator();
+    const helpEvents: any[] = [];
+
+    o.events.on("provider-help", (payload) => helpEvents.push(payload));
+
+    const fakeRequest: any = {
+      onsuccess: null,
+      onerror: null,
+      result: undefined,
+    };
+    const fakeDb: any = {
+      transaction: () => ({
+        objectStore: () => ({
+          put: () => {
+            setTimeout(() => fakeRequest.onsuccess?.(), 0);
+
+            return fakeRequest;
+          },
+        }),
+      }),
+    };
+
+    await o.handleWorkerMessage(fakeDb, {
+      type: "error",
+      payload: {
+        groupId: "br:main",
+        error: "HTTP 401 Unauthorized",
+      },
+    });
+
+    expect(helpEvents).toHaveLength(1);
+    expect(helpEvents[0]).toMatchObject({
+      providerId: "openrouter",
+      helpType: "api-key-invalid",
+    });
+  });
+
   it("emits open-file event from worker message", async () => {
     const o = new Orchestrator();
     const events: any[] = [];

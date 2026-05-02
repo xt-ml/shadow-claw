@@ -139,6 +139,86 @@ describe("providers.js", () => {
       expect(toolMsg.tool_call_id).toBe("tool_123");
     });
 
+    it("should emit native image blocks for OpenAI-compatible multimodal models", () => {
+      modelRegistry.registerModelInfo("openai/gpt-4.1", {
+        contextWindow: 128000,
+        maxOutput: null,
+        supportsImageInput: true,
+      });
+
+      const result = formatRequest(
+        mockProvider,
+        [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "You: What is in this image?" },
+              {
+                type: "attachment",
+                mediaType: "image",
+                fileName: "photo.png",
+                mimeType: "image/png",
+                data: "cG5n",
+              },
+            ],
+          },
+        ],
+        [],
+        {
+          model: "openai/gpt-4.1",
+          maxTokens: 1024,
+          system: "",
+        },
+      );
+
+      expect(result.messages[0]).toEqual({
+        role: "user",
+        content: [
+          { type: "text", text: "You: What is in this image?" },
+          {
+            type: "image_url",
+            image_url: { url: "data:image/png;base64,cG5n" },
+          },
+        ],
+      });
+    });
+
+    it("should fall back to text markers for unsupported binary attachments", () => {
+      const result = formatRequest(
+        mockProvider,
+        [
+          {
+            role: "user",
+            content: [
+              {
+                type: "attachment",
+                mediaType: "audio",
+                fileName: "note.wav",
+                mimeType: "audio/wav",
+                path: "attachments/note.wav",
+              },
+            ],
+          },
+        ],
+        [],
+        {
+          model: "gpt-3.5-turbo",
+          maxTokens: 1024,
+          system: "",
+        },
+      );
+
+      expect(result.messages[0]).toEqual({
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "[Attachment: note.wav (audio/wav) is available in chat history at attachments/note.wav]",
+          },
+        ],
+      });
+    });
+
     it("should parse a tool call response", () => {
       const response: any = {
         choices: [
@@ -522,6 +602,131 @@ describe("providers.js", () => {
 
     it("should return 4k default for completely unknown model", () => {
       expect(getContextLimit("my-custom-model")).toBe(4096);
+    });
+  });
+
+  describe("native audio transport (OpenAI input_audio)", () => {
+    const mockProvider: any = { format: "openai" };
+
+    it("should emit input_audio block when model supports audio", () => {
+      modelRegistry.registerModelInfo("openai/gpt-4o-audio-preview", {
+        contextWindow: 128000,
+        maxOutput: null,
+        supportsAudioInput: true,
+      });
+
+      const result = formatRequest(
+        mockProvider,
+        [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Transcribe this" },
+              {
+                type: "attachment",
+                mediaType: "audio",
+                fileName: "speech.wav",
+                mimeType: "audio/wav",
+                data: "d2F2",
+              },
+            ],
+          },
+        ],
+        [],
+        { model: "openai/gpt-4o-audio-preview", maxTokens: 1024, system: "" },
+      );
+
+      expect(result.messages[0].content[1]).toEqual({
+        type: "input_audio",
+        input_audio: { data: "d2F2", format: "wav" },
+      });
+    });
+
+    it("should fall back to text for audio when model has no audio capability", () => {
+      const result = formatRequest(
+        mockProvider,
+        [
+          {
+            role: "user",
+            content: [
+              {
+                type: "attachment",
+                mediaType: "audio",
+                fileName: "note.mp3",
+                mimeType: "audio/mpeg",
+                data: "bXAz",
+              },
+            ],
+          },
+        ],
+        [],
+        { model: "gpt-3.5-turbo", maxTokens: 1024, system: "" },
+      );
+
+      expect(result.messages[0].content[0].type).toBe("text");
+    });
+  });
+
+  describe("native document transport (Anthropic document block)", () => {
+    const mockProvider: any = { format: "anthropic" };
+
+    it("should emit document block for PDF when Claude 3.5+ model is used", () => {
+      modelRegistry.registerModelInfo("claude-3-5-sonnet-20241022", {
+        contextWindow: 200000,
+        maxOutput: null,
+        supportsImageInput: true,
+        supportsDocumentInput: true,
+      });
+
+      const result = formatRequest(
+        mockProvider,
+        [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Summarise this PDF" },
+              {
+                type: "attachment",
+                mediaType: "document",
+                fileName: "report.pdf",
+                mimeType: "application/pdf",
+                data: "cGRm",
+              },
+            ],
+          },
+        ],
+        [],
+        { model: "claude-3-5-sonnet-20241022", maxTokens: 4096, system: "" },
+      );
+
+      expect(result.messages[0].content[1]).toEqual({
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: "cGRm" },
+      });
+    });
+
+    it("should fall back to text for PDF when model lacks document support", () => {
+      const result = formatRequest(
+        mockProvider,
+        [
+          {
+            role: "user",
+            content: [
+              {
+                type: "attachment",
+                mediaType: "document",
+                fileName: "old.pdf",
+                mimeType: "application/pdf",
+                data: "cGRm",
+              },
+            ],
+          },
+        ],
+        [],
+        { model: "claude-2", maxTokens: 4096, system: "" },
+      );
+
+      expect(result.messages[0].content[0].type).toBe("text");
     });
   });
 

@@ -664,6 +664,10 @@ function extractMessageText(message: any): string {
         return `[tool-result] ${block.content}`;
       }
 
+      if (block?.type === "attachment") {
+        return `[attachment:${block.mediaType}] ${block.fileName} (${block.mimeType})`;
+      }
+
       return "";
     })
     .filter(Boolean)

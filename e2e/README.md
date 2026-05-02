@@ -268,6 +268,8 @@ Behavior notes:
 
 - Chat can show a transient model download progress panel when using Prompt API provider.
 - Assertions around that panel should be state-based (present/hidden) and not rely on fixed timing.
+- **Provider Help Dialogs**: When a provider request fails, the application may display a contextual help dialog. Use `app.navigateToWithOpenDialog()` to test flows that interrupt navigation with dialogs, or verify dialog content via standard locators on the `.app-dialog` component.
+- **Attachment Capabilities**: When testing file attachments, keep in mind that the application dynamically selects native vs. fallback delivery based on model capabilities (`src/attachment-capabilities.ts`).
 
 ### `FilesPage`
 
@@ -342,6 +344,7 @@ export const TIME_MINUTES_ONE = 60000;
 - Feature-gate Prompt API flows when `LanguageModel` is unavailable in the browser build
 - Isolate the application's runtime environment from the Service Worker in tests to prevent intermittent failures caused by background reloads or "controlling" state changes.
 - For Prompt API UI checks, assert API-key input disablement and provider helper text in Settings
+- For Provider Help dialogs, mock provider errors to trigger the dialogs and verify the contextual instructions and links.
 
 ### ❌ DON'T
 

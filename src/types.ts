@@ -23,6 +23,7 @@ declare global {
 export interface ShadowClawGlobal {
   orchestrator: Orchestrator;
   ui: ShadowClaw;
+  requestDialog: (options: AppDialogOptions) => Promise<boolean>;
   requestConfirmation: (options: ConfirmationDialogOptions) => Promise<boolean>;
   showToast: typeof showToast;
   showSuccess: typeof showSuccess;
@@ -38,6 +39,17 @@ export interface ConfirmationDialogOptions {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+}
+
+export interface AppDialogLink {
+  label: string;
+  href: string;
+}
+
+export interface AppDialogOptions extends ConfirmationDialogOptions {
+  mode?: "confirm" | "info";
+  details?: string[];
+  links?: AppDialogLink[];
 }
 
 export type KnownChannelType = "browser" | "telegram" | "imessage";

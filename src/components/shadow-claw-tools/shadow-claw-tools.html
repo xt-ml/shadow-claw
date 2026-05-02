@@ -119,7 +119,10 @@
       </div>
     </div>
 
-    <dialog aria-labelledby="toolsDialogTitle" class="tools__dialog">
+    <shadow-claw-dialog
+      aria-labelledby="toolsDialogTitle"
+      dialog-class="tools__dialog"
+    >
       <div class="tools__dialog-header">
         <h3 class="tools__dialog-title" id="toolsDialogTitle">
           Add Custom Tool
@@ -184,9 +187,12 @@
           <button class="tools__btn-save" type="submit">Add Tool</button>
         </div>
       </form>
-    </dialog>
+    </shadow-claw-dialog>
 
-    <dialog aria-labelledby="cloneDialogTitle" class="tools__clone-dialog">
+    <shadow-claw-dialog
+      aria-labelledby="cloneDialogTitle"
+      dialog-class="tools__clone-dialog"
+    >
       <div class="tools__dialog-header">
         <h3 class="tools__dialog-title" id="cloneDialogTitle">Clone Tool</h3>
         <button
@@ -247,9 +253,12 @@
           <button class="tools__btn-save" type="submit">Clone Tool</button>
         </div>
       </form>
-    </dialog>
+    </shadow-claw-dialog>
 
-    <dialog aria-labelledby="profileDialogTitle" class="tools__profile-dialog">
+    <shadow-claw-dialog
+      aria-labelledby="profileDialogTitle"
+      dialog-class="tools__profile-dialog"
+    >
       <div class="tools__dialog-header">
         <h3 class="tools__dialog-title" id="profileDialogTitle">
           Save Tool Profile
@@ -318,6 +327,6 @@
           <button class="tools__btn-save" type="submit">Save Profile</button>
         </div>
       </form>
-    </dialog>
+    </shadow-claw-dialog>
   </section>
 </template>

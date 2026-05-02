@@ -6,6 +6,7 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 import { effect } from "../../effect.js";
 import { setConfig } from "../../db/setConfig.js";
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
+import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
 const elementName = "shadow-claw-conversations";

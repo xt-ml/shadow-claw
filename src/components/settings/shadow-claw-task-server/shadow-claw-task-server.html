@@ -1,0 +1,35 @@
+<template>
+  <div class="settings-section">
+    <h3>📅 Task Server</h3>
+
+    <div class="form-group">
+      <div class="form-helper">
+        Configure where scheduled task requests are sent. Use a local path when
+        the scheduler backend is hosted alongside the app, or a full URL when
+        the app runs on a static host and scheduling is handled elsewhere.
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="task-server-url">Task Server URL</label>
+      <input
+        class="form-input"
+        data-setting="task-server-url-input"
+        id="task-server-url"
+        placeholder="/schedule"
+        spellcheck="false"
+        type="url"
+      />
+      <div class="form-helper">
+        The schedule API base on this host, like <code>/schedule</code>, or a
+        full URL like <code>http://localhost:8888/schedule</code>. Leave it
+        blank to use the default. Set this when ShadowClaw is hosted on a static
+        site, such as GitHub Pages, and task scheduling runs on a separate
+        backend.
+      </div>
+      <button class="save-btn" data-action="save-task-server-url">
+        💾 Save Task Server URL
+      </button>
+    </div>
+  </div>
+</template>

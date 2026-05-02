@@ -1,10 +1,45 @@
-import { Page } from "@playwright/test";
+import { APIRequestContext, Page } from "@playwright/test";
+
+import { DEFAULT_GROUP_ID } from "../../src/config.js";
 
 export const appUrl = "http://localhost:8888";
 
 export const TIME_SECONDS_ONE = 1000;
 export const TIME_SECONDS_FIVE = 5 * TIME_SECONDS_ONE;
 export const TIME_MINUTES_ONE = 60 * TIME_SECONDS_ONE;
+
+export async function clearScheduledTasksForGroup(
+  request: APIRequestContext,
+  groupId: string = DEFAULT_GROUP_ID,
+): Promise<void> {
+  const response = await request.get(
+    `/schedule/tasks?groupId=${encodeURIComponent(groupId)}`,
+  );
+
+  if (!response.ok()) {
+    throw new Error(
+      `Failed to list scheduled tasks for group ${groupId}: ${response.status()}`,
+    );
+  }
+
+  const tasks = (await response.json()) as Array<{ id?: string }>;
+
+  for (const task of tasks) {
+    if (!task?.id) {
+      continue;
+    }
+
+    const deleteResponse = await request.delete(
+      `/schedule/tasks/${encodeURIComponent(task.id)}`,
+    );
+
+    if (!deleteResponse.ok()) {
+      throw new Error(
+        `Failed to delete scheduled task ${task.id}: ${deleteResponse.status()}`,
+      );
+    }
+  }
+}
 
 export function getRunId(): string {
   const d = new Date();

@@ -42,7 +42,10 @@ const rootPath = isDist ? distPublicPath : srcRootPath;
 
 // Determine project root (one level up from src or dist)
 const projectRoot = isDist ? __dirname : path.join(__dirname, "..");
-const databaseDir = path.join(projectRoot, "database");
+const envDatabaseDir = (env.SHADOWCLAW_DATABASE_DIR || "").trim();
+const databaseDir = envDatabaseDir
+  ? path.resolve(projectRoot, envDatabaseDir)
+  : path.join(projectRoot, "database");
 
 // Ensure database directory exists
 if (!fs.existsSync(databaseDir)) {

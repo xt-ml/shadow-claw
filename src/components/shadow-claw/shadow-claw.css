@@ -264,7 +264,7 @@ shadow-claw-conversations {
   display: flex;
 }
 
-.app-confirm-dialog {
+.app-dialog {
   background: var(--shadow-claw-bg-secondary);
   border: 0.0625rem solid var(--shadow-claw-border-color);
   border-radius: var(--shadow-claw-radius-l);
@@ -274,7 +274,7 @@ shadow-claw-conversations {
   padding: 0;
 }
 
-.app-confirm-dialog::backdrop {
+.app-dialog::backdrop {
   background: color-mix(in srgb, black 50%, transparent);
 }
 
@@ -286,14 +286,40 @@ shadow-claw-conversations {
   padding: 1rem;
 }
 
-.app-confirm-dialog__title {
+.app-dialog__title {
   font-size: 1rem;
   margin: 0;
 }
 
-.app-confirm-dialog__message {
+.app-dialog__message {
   color: var(--shadow-claw-text-secondary);
   margin: 0;
+}
+
+.app-dialog__details {
+  color: var(--shadow-claw-text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.app-dialog__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.app-dialog__link {
+  color: var(--shadow-claw-accent-primary);
+  font-size: 0.9375rem;
+  text-decoration: none;
+}
+
+.app-dialog__link:hover,
+.app-dialog__link:focus-visible {
+  text-decoration: underline;
 }
 
 .app-confirm-dialog__actions {
@@ -302,7 +328,7 @@ shadow-claw-conversations {
   justify-content: flex-end;
 }
 
-.app-confirm-dialog__btn {
+.app-dialog__btn {
   border: 0.0625rem solid var(--shadow-claw-border-color);
   border-radius: var(--shadow-claw-radius-m);
   cursor: pointer;
@@ -310,12 +336,12 @@ shadow-claw-conversations {
   padding: 0.5rem 0.75rem;
 }
 
-.app-confirm-dialog__btn--cancel {
+.app-dialog__btn--cancel {
   background: var(--shadow-claw-bg-primary);
   color: var(--shadow-claw-text-primary);
 }
 
-.app-confirm-dialog__btn--confirm {
+.app-dialog__btn--confirm {
   background: var(--shadow-claw-accent-primary);
   border-color: var(--shadow-claw-accent-primary);
   color: var(--shadow-claw-on-primary);

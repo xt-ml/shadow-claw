@@ -86,4 +86,58 @@ describe("shadow-claw-pdf-viewer", () => {
     firstBytes[0] = 99;
     expect(originalBytes[0]).toBe(1);
   });
+
+  it("pans the canvas container while dragging", async () => {
+    const viewer = new ShadowClawPdfViewer();
+    document.body.appendChild(viewer);
+    await Promise.all([viewer.onTemplateReady, viewer.onStylesReady]);
+
+    viewer.file = {
+      name: "sample.pdf",
+      binaryContent: new Uint8Array([1, 2, 3, 4]),
+    };
+
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const wrap = viewer.shadowRoot?.querySelector(".pdf-canvas-wrap");
+    expect(wrap).toBeInstanceOf(HTMLElement);
+
+    const panWrap = wrap as HTMLElement;
+    panWrap.scrollLeft = 100;
+    panWrap.scrollTop = 120;
+
+    panWrap.dispatchEvent(
+      new MouseEvent("mousedown", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+        clientX: 200,
+        clientY: 180,
+      }),
+    );
+
+    expect(panWrap.classList.contains("is-panning")).toBe(true);
+
+    globalThis.dispatchEvent(
+      new MouseEvent("mousemove", {
+        bubbles: true,
+        cancelable: true,
+        clientX: 160,
+        clientY: 140,
+      }),
+    );
+
+    expect(panWrap.scrollLeft).toBe(140);
+    expect(panWrap.scrollTop).toBe(160);
+
+    globalThis.dispatchEvent(
+      new MouseEvent("mouseup", {
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+
+    expect(panWrap.classList.contains("is-panning")).toBe(false);
+  });
 });

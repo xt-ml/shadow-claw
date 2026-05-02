@@ -7,12 +7,19 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 import { Themes, themeStore } from "../../stores/theme.js";
 import { toolsStore } from "../../stores/tools.js";
 import { showError, showSuccess } from "../../toast.js";
-import { ConfirmationDialogOptions, OpenFilePayload } from "../../types.js";
+import {
+  AppDialogOptions,
+  ConfirmationDialogOptions,
+  OpenFilePayload,
+} from "../../types.js";
 import { VMStatus } from "../../vm.js";
+import { buildLlamafileHelpDialogOptions } from "../common/help/llamafile.js";
+import { buildTransformersJsHelpDialogOptions } from "../common/help/transformers.js";
 
 import "../shadow-claw-chat/shadow-claw-chat.js";
 import "../shadow-claw-channels/shadow-claw-channels.js";
 import "../shadow-claw-conversations/shadow-claw-conversations.js";
+import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-file-viewer/shadow-claw-file-viewer.js";
 import "../shadow-claw-files/shadow-claw-files.js";
 import "../shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.js";
@@ -151,6 +158,21 @@ export default class ShadowClaw extends ShadowClawElement {
       },
     );
 
+    this.orchestrator.events.on(
+      "provider-help",
+      async (payload: { providerId: string; reason?: string }) => {
+        if (payload?.providerId === "llamafile") {
+          await this.requestDialog(
+            buildLlamafileHelpDialogOptions(payload.reason),
+          );
+        } else if (payload?.providerId === "transformers_js_local") {
+          await this.requestDialog(
+            buildTransformersJsHelpDialogOptions(payload.reason),
+          );
+        }
+      },
+    );
+
     // React to store changes using effect()
     this.setupEffects();
 
@@ -172,29 +194,43 @@ export default class ShadowClaw extends ShadowClawElement {
     }
   }
 
-  async requestConfirmation(options: ConfirmationDialogOptions) {
+  async requestDialog(options: AppDialogOptions) {
     const root = this.shadowRoot;
     if (!root) {
       return false;
     }
 
     const dialog = root.querySelector(
-      ".app-confirm-dialog",
+      ".app-dialog",
     ) as HTMLDialogElement | null;
     const titleEl = root.querySelector(
-      ".app-confirm-dialog__title",
+      ".app-dialog__title",
     ) as HTMLElement | null;
     const messageEl = root.querySelector(
-      ".app-confirm-dialog__message",
+      ".app-dialog__message",
     ) as HTMLElement | null;
+    const detailsEl = root.querySelector(
+      ".app-dialog__details",
+    ) as HTMLUListElement | null;
+    const linksEl = root.querySelector(
+      ".app-dialog__links",
+    ) as HTMLDivElement | null;
     const confirmBtn = root.querySelector(
-      ".app-confirm-dialog__btn--confirm",
+      ".app-dialog__btn--confirm",
     ) as HTMLButtonElement | null;
     const cancelBtn = root.querySelector(
-      ".app-confirm-dialog__btn--cancel",
+      ".app-dialog__btn--cancel",
     ) as HTMLButtonElement | null;
 
-    if (!dialog || !titleEl || !messageEl || !confirmBtn || !cancelBtn) {
+    if (
+      !dialog ||
+      !titleEl ||
+      !messageEl ||
+      !detailsEl ||
+      !linksEl ||
+      !confirmBtn ||
+      !cancelBtn
+    ) {
       return false;
     }
 
@@ -204,8 +240,34 @@ export default class ShadowClaw extends ShadowClawElement {
 
     titleEl.textContent = options.title;
     messageEl.textContent = options.message;
-    confirmBtn.textContent = options.confirmLabel || "Confirm";
+    detailsEl.innerHTML = "";
+    linksEl.innerHTML = "";
+
+    const details = Array.isArray(options.details) ? options.details : [];
+    detailsEl.hidden = details.length === 0;
+    for (const detail of details) {
+      const item = document.createElement("li");
+      item.textContent = detail;
+      detailsEl.appendChild(item);
+    }
+
+    const links = Array.isArray(options.links) ? options.links : [];
+    linksEl.hidden = links.length === 0;
+    for (const link of links) {
+      const anchor = document.createElement("a");
+      anchor.className = "app-dialog__link";
+      anchor.href = link.href;
+      anchor.rel = "noreferrer";
+      anchor.target = "_blank";
+      anchor.textContent = link.label;
+      linksEl.appendChild(anchor);
+    }
+
+    const mode = options.mode || "confirm";
+    confirmBtn.textContent =
+      options.confirmLabel || (mode === "info" ? "OK" : "Confirm");
     cancelBtn.textContent = options.cancelLabel || "Cancel";
+    cancelBtn.hidden = mode === "info";
 
     dialog.returnValue = "";
 
@@ -218,6 +280,10 @@ export default class ShadowClaw extends ShadowClawElement {
       dialog.addEventListener("close", onClose);
       dialog.showModal();
     });
+  }
+
+  async requestConfirmation(options: ConfirmationDialogOptions) {
+    return await this.requestDialog({ ...options, mode: "confirm" });
   }
 
   /**

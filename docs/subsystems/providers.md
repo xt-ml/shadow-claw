@@ -31,6 +31,7 @@ All providers are declared in `src/config.ts` under `PROVIDERS`:
 | ---------------------------- | ------------ | --------- | ---------------------- |
 | `openrouter`                 | `openai`     | ✅        | ✅                     |
 | `huggingface`                | `openai`     | ✅        | ✅                     |
+| `transformers_js_local`      | `openai`     | ✅        | ❌                     |
 | `ollama`                     | `openai`     | ✅        | ❌                     |
 | `llamafile`                  | `openai`     | ✅        | ❌                     |
 | `github_models`              | `openai`     | ✅        | ✅                     |
@@ -108,6 +109,13 @@ Browser's experimental Prompt API (`window.LanguageModel`). Runs entirely on-dev
   { "type": "tool_use", "tool_calls": [...] }
   ```
 - `responseConstraint` (JSON schema) may cause Gemini Nano to stall; the provider automatically **retries without the constraint** so the model can generate tool-call JSON freely
+
+## Local provider UX and runtime behavior
+
+- `transformers_js_local` caches runtime metadata and model artifacts under `assets/cache/transformers.js`.
+- `llamafile` CLI discovery expects binaries under `assets/cache/llamafile`.
+- When local runtime resolution fails, orchestrator can emit `provider-help` so UI surfaces contextual setup guidance instead of a generic error toast.
+- `llamafile` requests include `x-shadowclaw-request-id`; cancellation can terminate the active provider request via `/llamafile-proxy/cancel`.
 
 ## Tool Formats by Provider
 

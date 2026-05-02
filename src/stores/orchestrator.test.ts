@@ -157,6 +157,7 @@ describe("OrchestratorStore", () => {
       getUseProxy: () => false,
       getProxyUrl: () => "",
       getGitProxyUrl: () => "",
+      getTaskServerUrl: () => "/schedule",
     };
 
     await store.init({} as any, orch);
@@ -187,6 +188,7 @@ describe("OrchestratorStore", () => {
       getUseProxy: () => false,
       getProxyUrl: () => "",
       getGitProxyUrl: () => "",
+      getTaskServerUrl: () => "/schedule",
     };
 
     mockListGroups.mockResolvedValueOnce([
@@ -228,6 +230,7 @@ describe("OrchestratorStore", () => {
       getUseProxy: () => false,
       getProxyUrl: () => "",
       getGitProxyUrl: () => "",
+      getTaskServerUrl: () => "/schedule",
     };
 
     await store.init({} as any, orch);
@@ -435,9 +438,11 @@ describe("OrchestratorStore", () => {
 
     (global as any).fetch = (jest.fn() as any).mockResolvedValue({ ok: false });
 
-    await store.deleteTask({} as any, "t1");
+    await expect(store.deleteTask({} as any, "t1")).rejects.toThrow(
+      "Failed to delete scheduled task on server; task kept locally.",
+    );
 
-    expect(mockDeleteTask).toHaveBeenCalledWith({} as any, "t1");
+    expect(mockDeleteTask).not.toHaveBeenCalled();
     expect(mockSetConfig).toHaveBeenCalledWith(
       {} as any,
       "task_sync_outbox",
@@ -450,6 +455,44 @@ describe("OrchestratorStore", () => {
     );
   });
 
+  it("allows local delete when server returns 404", async () => {
+    const store: any = new OrchestratorStore();
+    jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
+
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
+      ok: false,
+      status: 404,
+    });
+
+    await store.deleteTask({} as any, "t404");
+
+    expect(mockDeleteTask).toHaveBeenCalledWith({} as any, "t404");
+    expect(mockSetConfig).not.toHaveBeenCalledWith(
+      {} as any,
+      "task_sync_outbox",
+      expect.stringContaining('"id":"t404"'),
+    );
+  });
+
+  it("allows local delete when server returns 405", async () => {
+    const store: any = new OrchestratorStore();
+    jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
+
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
+      ok: false,
+      status: 405,
+    });
+
+    await store.deleteTask({} as any, "t405");
+
+    expect(mockDeleteTask).toHaveBeenCalledWith({} as any, "t405");
+    expect(mockSetConfig).not.toHaveBeenCalledWith(
+      {} as any,
+      "task_sync_outbox",
+      expect.stringContaining('"id":"t405"'),
+    );
+  });
+
   it("replays queued task sync operations during init", async () => {
     const store = new OrchestratorStore();
     const events: any = createEvents();
@@ -458,6 +501,7 @@ describe("OrchestratorStore", () => {
       getUseProxy: () => false,
       getProxyUrl: () => "",
       getGitProxyUrl: () => "",
+      getTaskServerUrl: () => "/schedule",
     };
 
     (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
@@ -500,6 +544,48 @@ describe("OrchestratorStore", () => {
     expect(mockDeleteTask).not.toHaveBeenCalledWith({} as any, "t-other");
 
     expect(loadSpy).toHaveBeenCalled();
+  });
+
+  it("reconciles server-only tasks into local store", async () => {
+    const store = new OrchestratorStore();
+
+    (mockGetAllTasks as any).mockResolvedValueOnce([]);
+
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          id: "task-1",
+          group_id: DEFAULT_GROUP_ID,
+          schedule: "*/5 * * * *",
+          prompt: "Frequent task",
+          is_script: 0,
+          enabled: 1,
+          last_run: null,
+          created_at: 1700000000000,
+        },
+      ],
+    });
+
+    await store.loadTasks({} as any);
+
+    expect(mockSaveTask).toHaveBeenCalledWith(
+      {} as any,
+      expect.objectContaining({
+        id: "task-1",
+        groupId: DEFAULT_GROUP_ID,
+        schedule: "*/5 * * * *",
+        prompt: "Frequent task",
+      }),
+    );
+    expect(store.tasks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "task-1",
+          groupId: DEFAULT_GROUP_ID,
+        }),
+      ]),
+    );
   });
 
   it("restoreTasksFromBackup rewrites ids and group", async () => {
@@ -804,6 +890,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getTaskServerUrl: () => "/schedule",
       };
       jest.spyOn(store, "loadHistory").mockResolvedValue(undefined);
       jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
@@ -851,6 +938,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getTaskServerUrl: () => "/schedule",
       };
 
       await store.init({} as any, orch);
@@ -869,6 +957,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getTaskServerUrl: () => "/schedule",
       };
 
       await store.init({} as any, orch);
@@ -911,6 +1000,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getTaskServerUrl: () => "/schedule",
       };
 
       await store.init({} as any, orch);
@@ -946,6 +1036,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getTaskServerUrl: () => "/schedule",
       };
 
       await store.init({} as any, orch);
@@ -1000,6 +1091,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getTaskServerUrl: () => "/schedule",
       };
 
       await store.init({} as any, orch);
@@ -1019,6 +1111,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getTaskServerUrl: () => "/schedule",
       };
 
       await store.init({} as any, orch);
@@ -1058,6 +1151,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getTaskServerUrl: () => "/schedule",
       };
 
       await store.init({} as any, orch);
@@ -1099,6 +1193,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getTaskServerUrl: () => "/schedule",
       };
 
       jest.spyOn(store, "loadHistory").mockResolvedValue(undefined);
@@ -1250,6 +1345,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: jest.fn().mockReturnValue(false),
         getProxyUrl: jest.fn().mockReturnValue(""),
         getGitProxyUrl: jest.fn().mockReturnValue(""),
+        getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
       };
 
       await store.init({} as any, orch);
@@ -1273,6 +1369,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: jest.fn().mockReturnValue(false),
         getProxyUrl: jest.fn().mockReturnValue(""),
         getGitProxyUrl: jest.fn().mockReturnValue(""),
+        getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
       };
 
       await store.init({} as any, orch);
@@ -1296,6 +1393,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: jest.fn().mockReturnValue(false),
         getProxyUrl: jest.fn().mockReturnValue(""),
         getGitProxyUrl: jest.fn().mockReturnValue(""),
+        getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
       };
 
       jest.spyOn(store, "loadHistory").mockResolvedValue(undefined);
@@ -1326,6 +1424,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: jest.fn().mockReturnValue(false),
         getProxyUrl: jest.fn().mockReturnValue(""),
         getGitProxyUrl: jest.fn().mockReturnValue(""),
+        getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
       };
 
       await store.init({} as any, orch);
@@ -1354,6 +1453,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getTaskServerUrl: () => "/schedule",
       };
 
       jest.spyOn(store, "loadHistory").mockResolvedValue(undefined);

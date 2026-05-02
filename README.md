@@ -22,6 +22,11 @@ For large local models (for example Gemma 4 via Transformers.js), use
 artifacts are cached server-side by Node.js, not in browser Cache API or
 IndexedDB.
 
+Local cache paths:
+
+- `assets/cache/transformers.js` for Transformers.js metadata/artifacts
+- `assets/cache/llamafile` for CLI `.llamafile` binaries
+
 ### Electron Desktop App
 
 ```bash
@@ -49,65 +54,29 @@ The browser chat and iMessage channels auto-trigger the agent on inbound
 messages. Telegram conversations require the assistant mention trigger unless
 the message is one of the built-in helper commands.
 
-### Telegram Setup
+**For detailed setup instructions, see [docs/guides/configuring-messaging-channels.md](docs/guides/configuring-messaging-channels.md)** — includes step-by-step Telegram bot creation, iMessage bridge contract, and troubleshooting.
 
-1. Create a bot with `@BotFather`.
-2. Open Settings → Messaging Channels.
-3. Paste the bot token into `Telegram Bot Token`.
-4. Send `/chatid` to your bot from each chat you want to authorize.
-5. Paste those chat IDs into `Telegram Allowed Chat IDs` and save.
-
-Notes:
-
-- Telegram messages from non-authorized chats are ignored.
-- `/chatid` and `/ping` always work, even before a chat is authorized.
-- The integration uses the Bot API directly from the browser over HTTPS.
-
-### iMessage Setup
-
-ShadowClaw does not talk to iMessage directly. It expects an HTTP bridge that
-exposes browser-safe endpoints.
-
-Required settings:
-
-1. Open Settings → Messaging Channels.
-2. Set `iMessage Bridge URL` to your bridge base URL.
-3. If required by your bridge, set `iMessage Bridge API Key`.
-4. Optionally restrict allowed conversations with `iMessage Allowed Chat IDs`.
-
-Expected bridge contract:
-
-- `GET /messages?cursor=...&timeout=...` returns JSON with `messages` and an
-  optional `nextCursor`.
-- `POST /messages/send` accepts JSON `{ chatId, text }`.
-- `POST /messages/typing` accepts JSON `{ chatId, typing: true }`.
-- When an API key is configured, ShadowClaw sends both `Authorization: Bearer`
-  and `X-API-Key` headers.
-- The bridge must allow CORS from the ShadowClaw origin.
-
-iMessage inbound payloads should include a stable message id or guid, a
-conversation id, sender information, and text content. Attachment-only messages
-are ignored by the channel.
+**Architecture:** See [docs/subsystems/channels.md](docs/subsystems/channels.md) for the channel registry, plugin pattern, and how to add custom channels.
 
 ## Architecture
 
 ```mermaid
 graph TD
-  User["👤 User"] --> UI["shadow-claw Web Component<br>Chat · Files · Tasks · Settings"]
-  UI --> Orchestrator["Orchestrator<br>(main thread, .ts)"]
-  Orchestrator --> MessageQueue["Message Queue<br>FIFO per group"]
-  Orchestrator --> StateFSM["State Machine<br>idle → thinking → responding"]
-  Orchestrator --> TaskScheduler["Task Scheduler<br>cron expressions"]
-  Orchestrator --> Router["Router<br>channel dispatch<br>via ChannelRegistry"]
-  MessageQueue --> Worker["Agent Worker<br>(Web Worker, .ts)"]
-  Worker --> OpenRouter["☁️ Provider API<br>OpenRouter / Bedrock / Copilot / Transformers.js Local Proxy / Prompt API"]
-  Worker --> ToolExec["Tool Execution<br>bash · js · files · fetch · git"]
-  ToolExec --> JSShell["JS Shell Emulator<br>via just-bash AST<br>synced to OPFS"]
-  ToolExec --> WebVM["v86 Alpine Linux VM<br>(optional, WASM)"]
-  Orchestrator --> IndexedDB["IndexedDB<br>messages · sessions<br>tasks · config"]
-  Orchestrator --> OPFS["OPFS / Local Folder<br>per-group workspace<br>MEMORY.md"]
-  UI --> ServiceWorker["Service Worker<br>PWA · offline cache · push (.ts)"]
-  ServiceWorker --> ServerScheduler["Server Task Scheduler<br>SQLite · cron · push triggers"]
+  User["User"] --> UI["Web Component<br>Chat, Files, Tasks"]
+  UI --> Orchestrator["Orchestrator<br>Main Thread"]
+  Orchestrator --> Queue["Message Queue<br>FIFO per group"]
+  Orchestrator --> FSM["State Machine<br>Idle, Thinking, Responding"]
+  Orchestrator --> Scheduler["Task Scheduler<br>Cron Expressions"]
+  Orchestrator --> Router["Router<br>Channel Dispatch"]
+  Queue --> Worker["Agent Worker<br>Web Worker"]
+  Worker --> Provider["Provider API<br>OpenRouter, Bedrock, Copilot"]
+  Worker --> Tools["Tool Execution<br>bash, js, files, fetch, git"]
+  Tools --> Shell["JS Shell<br>just-bash, OPFS"]
+  Tools --> VM["v86 VM<br>Alpine Linux"]
+  Orchestrator --> DB["IndexedDB<br>Messages, Tasks, Config"]
+  Orchestrator --> FS["OPFS<br>Workspace, MEMORY.md"]
+  UI --> SW["Service Worker<br>PWA, Offline, Push"]
+  SW --> ServerScheduler["Server Scheduler<br>SQLite, Cron"]
 ```
 
 ### Message Flow
@@ -191,6 +160,78 @@ automatically support them.
 | `src/git/git.ts`              | Isomorphic-git integration and version control operations                    |
 | `src/notifications/`          | Web Push + server-side task scheduling (SQLite)                              |
 
+## Storage
+
+```mermaid
+graph LR
+  subgraph IndexedDB ["IndexedDB (shadowclaw)"]
+    messages["messages<br>(by group + timestamp)"]
+    sessions["sessions<br>(LLM conversation history)"]
+    tasks["tasks<br>(scheduled cron jobs)"]
+    config["config<br>(API key · provider · model · max iterations)"]
+  end
+  subgraph FileSystem ["File System"]
+    OPFS["OPFS<br>browser-sandboxed<br>shadowclaw/<groupId>/workspace/"]
+    LocalFolder["Local Folder<br>File System Access API<br>user-chosen directory"]
+  end
+  OPFS -->|zip export/import| Downloads["⬇️ Downloads"]
+  config -->|AES-256-GCM encrypted| ApiKey["🔑 API Key"]
+```
+
+Write paths are centralized through `src/storage/writeFileHandle.ts`:
+
+- `writeFileHandle()` supports `createWritable()`, and `createSyncAccessHandle()`.
+- `writeOpfsPathViaWorker()` is the Safari-friendly fallback for OPFS writes when main-thread handles are not writable.
+- `writeGroupFile`, `uploadGroupFile`, and ZIP restore flows all use this shared layer.
+
+## WebVM (`bash` Backend)
+
+`bash` tool calls prefer the worker-owned WebVM.
+
+- If `VM_BOOT_MODE` is `disabled`, commands run in the JavaScript Bash Emulator.
+- If WebVM is enabled but unavailable or still booting, the current command
+  falls back to the JavaScript Bash Emulator, a warning toast is shown, and the
+  next command attempts WebVM again.
+
+`src/worker/worker.ts` eagerly boots WebVM on startup using persisted VM settings:
+
+1. `CONFIG_KEYS.VM_BOOT_MODE` (`disabled` | `auto` | `ext2` | `9p`)
+2. `CONFIG_KEYS.VM_BASH_TIMEOUT_SEC` (default timeout for `bash` tool calls)
+3. `CONFIG_KEYS.VM_BOOT_HOST` (optional HTTP(S) host override for VM assets)
+4. `CONFIG_KEYS.VM_NETWORK_RELAY_URL` (ws/wss relay for VM networking)
+
+When no VM boot host has been configured yet, startup defaults to
+`DEFAULT_VM_BOOT_HOST` `http://localhost:8888`.
+
+The `<shadow-claw-terminal>` component uses orchestrator terminal bridge APIs.
+Interactive terminal sessions and tool-driven `bash` execution are coordinated in
+`vm.ts` so command execution can temporarily suspend terminal output and then resume
+cleanly. In 9p mode, terminal and command activity sync `/workspace` changes back to
+OPFS so the Files view stays up to date.
+
+The Files page also exposes manual sync controls when VM mode is `9p`:
+
+- `Host -> VM`: requests `vm-workspace-sync` (push host workspace into VM `/workspace`)
+- `VM -> Host`: requests `vm-workspace-flush` (pull VM `/workspace` changes back to host)
+
+Terminal-driven 9p auto-sync only flushes when workspace-affecting commands complete,
+and ignores idle background write events.
+
+### VM Assets
+
+VM assets are expected under `/assets/v86.ext2/` and `/assets/v86.9pfs/`.
+
+Serve these files (under `/assets/v86.ext2/`) to enable ext2 boot:
+
+| File                          | Description                  |
+| ----------------------------- | ---------------------------- |
+| `alpine-rootfs.ext2`          | Alpine Linux root filesystem |
+| `bzImage`                     | Linux kernel                 |
+| `initrd`                      | Initial RAM disk             |
+| `v86.wasm`                    | v86 WebAssembly binary       |
+| `libv86.mjs`                  | v86 JavaScript glue          |
+| `seabios.bin` / `vgabios.bin` | Firmware                     |
+
 ## Tools Available to the Agent
 
 | Tool                                                             | What it does                                                                           |
@@ -268,6 +309,8 @@ ShadowClaw supports connecting to external Model Context Protocol (MCP) servers 
 - OAuth-backed connections force-refresh credentials and retry once on HTTP 401 responses.
 - Connections are persisted securely in IndexedDB.
 
+**For detailed architecture and integration patterns, see [docs/subsystems/remote-mcp.md](docs/subsystems/remote-mcp.md)** — covers transport protocols, authentication, tool discovery, and troubleshooting.
+
 ## AWS Bedrock Proxy
 
 The Express server (and Electron in-process server) exposes server-side
@@ -287,18 +330,6 @@ Environment variables:
 
 Model IDs are auto-mapped to cross-region inference profile IDs
 (e.g. `anthropic.claude-sonnet-4-6-v1:0` → `us.anthropic.claude-sonnet-4-6-v1:0`).
-
-## Tool Profiles
-
-Tool profiles allow per-provider/model customization of which tools are
-available and optional system prompt overrides. Managed through Settings
-via `CONFIG_KEYS.TOOL_PROFILES` and `CONFIG_KEYS.ACTIVE_TOOL_PROFILE`.
-
-Each `ToolProfile` specifies:
-
-- `enabledToolNames` — Which tools the LLM sees.
-- `customTools` — Cloned/modified tool definitions.
-- `systemPromptOverride` — Optional prompt replacement.
 
 ## Streaming Responses
 
@@ -368,66 +399,19 @@ inference via Gemini Nano. To maximize performance on constrained local models,
 ShadowClaw uses a **Nano Optimized** tool profile that minimizes system prompt
 overhead and concentrates on core file/shell capabilities.
 
-## Storage
+## Tool Profiles & Fine-Grained Tool Management
 
-```mermaid
-graph LR
-  subgraph IndexedDB ["IndexedDB (shadowclaw)"]
-    messages["messages<br>(by group + timestamp)"]
-    sessions["sessions<br>(LLM conversation history)"]
-    tasks["tasks<br>(scheduled cron jobs)"]
-    config["config<br>(API key · provider · model · max iterations)"]
-  end
-  subgraph FileSystem ["File System"]
-    OPFS["OPFS<br>browser-sandboxed<br>shadowclaw/<groupId>/workspace/"]
-    LocalFolder["Local Folder<br>File System Access API<br>user-chosen directory"]
-  end
-  OPFS -->|zip export/import| Downloads["⬇️ Downloads"]
-  config -->|AES-256-GCM encrypted| ApiKey["🔑 API Key"]
-```
+Tool profiles allow per-provider/model customization of which tools are
+available and optional system prompt overrides. Managed through Settings
+via `CONFIG_KEYS.TOOL_PROFILES` and `CONFIG_KEYS.ACTIVE_TOOL_PROFILE`.
 
-Write paths are centralized through `src/storage/writeFileHandle.ts`:
+Each `ToolProfile` specifies:
 
-- `writeFileHandle()` supports `createWritable()`, and `createSyncAccessHandle()`.
-- `writeOpfsPathViaWorker()` is the Safari-friendly fallback for OPFS writes when main-thread handles are not writable.
-- `writeGroupFile`, `uploadGroupFile`, and ZIP restore flows all use this shared layer.
+- `enabledToolNames` — Which tools the LLM sees.
+- `customTools` — Cloned/modified tool definitions.
+- `systemPromptOverride` — Optional prompt replacement.
 
-## WebVM (`bash` Backend)
-
-`bash` tool calls prefer the worker-owned WebVM.
-
-- If `VM_BOOT_MODE` is `disabled`, commands run in the JavaScript Bash Emulator.
-- If WebVM is enabled but unavailable or still booting, the current command
-  falls back to the JavaScript Bash Emulator, a warning toast is shown, and the
-  next command attempts WebVM again.
-
-`src/worker/worker.ts` eagerly boots WebVM on startup using persisted VM settings:
-
-1. `CONFIG_KEYS.VM_BOOT_MODE` (`disabled` | `auto` | `ext2` | `9p`)
-2. `CONFIG_KEYS.VM_BASH_TIMEOUT_SEC` (default timeout for `bash` tool calls)
-3. `CONFIG_KEYS.VM_BOOT_HOST` (optional HTTP(S) host override for VM assets)
-4. `CONFIG_KEYS.VM_NETWORK_RELAY_URL` (ws/wss relay for VM networking)
-
-When no VM boot host has been configured yet, startup defaults to
-`DEFAULT_VM_BOOT_HOST` `http://localhost:8888`.
-
-The `<shadow-claw-terminal>` component uses orchestrator terminal bridge APIs.
-Interactive terminal sessions and tool-driven `bash` execution are coordinated in
-`vm.ts` so command execution can temporarily suspend terminal output and then resume
-cleanly. In 9p mode, terminal and command activity sync `/workspace` changes back to
-OPFS so the Files view stays up to date.
-
-The Files page also exposes manual sync controls when VM mode is `9p`:
-
-- `Host -> VM`: requests `vm-workspace-sync` (push host workspace into VM `/workspace`)
-- `VM -> Host`: requests `vm-workspace-flush` (pull VM `/workspace` changes back to host)
-
-Terminal-driven 9p auto-sync only flushes when workspace-affecting commands complete,
-and ignores idle background write events.
-
-## Agent-Driven Tool Management
-
-Agents can dynamically manage their own capability surface using `manage_tools`.
+Agents can also dynamically manage their own capability surface:
 
 - **Profiles**: Activate predefined sets of tools (e.g., `git-ops`, `minimal`, `full`)
   tailored for specific tasks or model constraints.
@@ -435,28 +419,6 @@ Agents can dynamically manage their own capability surface using `manage_tools`.
   the context window.
 - **Auto-Activation**: Saved profiles can be linked to specific models (e.g., Gemini
   Nano automatically activates the `Nano Optimized` profile).
-
-## Remote MCP
-
-ShadowClaw integrates with remote Model Context Protocol (MCP) servers via the
-`remote-mcp-client`.
-
-- **Transport**: Supports both `stdio` (via `bash` tool) and `sse` (native browser fetch) transports.
-- **Authentication**: Native support for **Basic** and **Bearer** authentication schemes.
-- **Tool Discovery**: Automatic registration of remote tools into the agent's toolset.
-
-VM assets are expected under `/assets/v86.ext2/` and `/assets/v86.9pfs/`.
-
-Serve these files (under `/assets/v86.ext2/`) to enable ext2 boot:
-
-| File                          | Description                  |
-| ----------------------------- | ---------------------------- |
-| `alpine-rootfs.ext2`          | Alpine Linux root filesystem |
-| `bzImage`                     | Linux kernel                 |
-| `initrd`                      | Initial RAM disk             |
-| `v86.wasm`                    | v86 WebAssembly binary       |
-| `libv86.mjs`                  | v86 JavaScript glue          |
-| `seabios.bin` / `vgabios.bin` | Firmware                     |
 
 ## Reactive UI
 
@@ -512,7 +474,11 @@ push + scheduling infrastructure identically.
 
 ## Dev Server CLI and CORS Modes
 
-`src/server/server.ts` supports host and CORS configuration via CLI and environment variables.
+`src/server/server.ts` supports flexible host, port, and CORS configuration via CLI and environment variables.
+
+**For detailed setup, troubleshooting, and production deployment patterns, see [docs/guides/server-development-configuration.md](docs/guides/server-development-configuration.md)** — includes common scenarios (LAN access, mobile testing, Docker, reverse proxy), environment variables, and diagnostics.
+
+Quick reference:
 
 ```bash
 npm start -- 8888 --host 0.0.0.0 --cors-mode private
@@ -520,11 +486,9 @@ npm start -- --cors-mode all --cors-allow-origin https://example.com
 node dist/server.js --help
 ```
 
-- Host resolution order: CLI (`--host/--ip/--bind-ip`) -> env -> default.
+- Host resolution order: CLI (`--host/--ip/--bind-ip`) → env → default.
 - CORS modes: `localhost` (default), `private`, `all`.
-- Explicit allowlist is supported by repeated `--cors-allow-origin` and
-  `SHADOWCLAW_CORS_ALLOWED_ORIGINS`.
-- Request logs include origin/client/preflight diagnostics to simplify proxy/CORS troubleshooting.
+- Explicit allowlist is supported by repeated `--cors-allow-origin` and `SHADOWCLAW_CORS_ALLOWED_ORIGINS`.
 
 ## Build Metadata
 

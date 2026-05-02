@@ -6,6 +6,7 @@ import { FilesPage } from "./pages/files.page.js";
 import { TasksPage } from "./pages/tasks.page.js";
 import { SettingsPage } from "./pages/settings.page.js";
 import { ConversationsComponent } from "./components/conversations.component.js";
+import { clearScheduledTasksForGroup } from "./shared/index.js";
 
 type MyFixtures = {
   app: AppPage;
@@ -17,7 +18,9 @@ type MyFixtures = {
 };
 
 export const test = base.extend<MyFixtures>({
-  app: async ({ page }, use) => {
+  app: async ({ page, request }, use) => {
+    await clearScheduledTasksForGroup(request);
+
     const app = new AppPage(page);
     await app.open();
     await use(app);

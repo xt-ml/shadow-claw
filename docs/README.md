@@ -27,6 +27,7 @@ Detailed docs for each major subsystem.
 | [WebVM](subsystems/vm.md)                                 | v86 Alpine Linux, boot modes, exclusivity guard, terminal bridge, 9p sync        |
 | [Git Integration](subsystems/git.md)                      | isomorphic-git, LightningFS ↔ OPFS sync, merge conflicts, credentials            |
 | [Channel System](subsystems/channels.md)                  | Channel registry, browser/Telegram/iMessage channels, router, multi-channel flow |
+| [Remote MCP](subsystems/remote-mcp.md)                    | External MCP servers, tool discovery, authentication, JSON-RPC protocol          |
 | [Accounts & Credentials](subsystems/accounts.md)          | Service account management, credential storage, auth bridges                     |
 | [Tools & Profiles](subsystems/tools.md)                   | Tool definitions, execution dispatch, profiles, adding new tools                 |
 | [Notifications & Scheduling](subsystems/notifications.md) | Web Push, VAPID, server-side SQLite scheduler, recursion guards                  |
@@ -39,14 +40,16 @@ Detailed docs for each major subsystem.
 
 Step-by-step instructions for common dev tasks.
 
-| Document                                                            | What it covers                                                |
-| ------------------------------------------------------------------- | ------------------------------------------------------------- |
-| [Adding a Provider](guides/adding-a-provider.md)                    | How to add a new LLM provider end-to-end                      |
-| [Adding a Tool](guides/adding-a-tool.md)                            | How to add a new agent tool                                   |
-| [Adding a Shell Command](guides/adding-a-shell-command.md)          | How to hook into the JS shell emulator                        |
-| [Adding a UI Page](guides/adding-a-page.md)                         | How to add a new Web Component page/section                   |
-| [Adding a Channel](guides/adding-a-channel.md)                      | How to add a new messaging channel                            |
-| [Service Accounts & Credentials](guides/adding-service-accounts.md) | How to manage encrypted credentials for channels and services |
+| Document                                                                       | What it covers                                                |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------- |
+| [Adding a Provider](guides/adding-a-provider.md)                               | How to add a new LLM provider end-to-end                      |
+| [Adding a Tool](guides/adding-a-tool.md)                                       | How to add a new agent tool                                   |
+| [Adding a Shell Command](guides/adding-a-shell-command.md)                     | How to hook into the JS shell emulator                        |
+| [Adding a UI Page](guides/adding-a-page.md)                                    | How to add a new Web Component page/section                   |
+| [Adding a Channel](guides/adding-a-channel.md)                                 | How to add a new messaging channel                            |
+| [Service Accounts & Credentials](guides/adding-service-accounts.md)            | How to manage encrypted credentials for channels and services |
+| [Configuring Messaging Channels](guides/configuring-messaging-channels.md)     | User guide for Telegram and iMessage setup                    |
+| [Server Development Configuration](guides/server-development-configuration.md) | CLI flags, CORS modes, host binding, port configuration       |
 
 ### Decisions
 

@@ -57,12 +57,60 @@ type TaskSyncOutboxOperation =
       queuedAt: number;
     };
 
+interface ServerScheduledTask {
+  id: string;
+  group_id?: string;
+  groupId?: string;
+  schedule: string;
+  prompt: string;
+  is_script?: number;
+  isScript?: boolean;
+  enabled: number | boolean;
+  last_run?: number | null;
+  lastRun?: number | null;
+  created_at?: number;
+  createdAt?: number;
+}
+
+/**
+ * Lazy-cached probe: returns true only when the server's schedule API is
+ * reachable (i.e. not a static-only host like GitHub Pages).
+ * The result is cached per base URL for the lifetime of the page.
+ */
+const _scheduleServerAvailableCache = new Map<string, boolean>();
+async function isScheduleServerAvailable(baseUrl: string): Promise<boolean> {
+  const cached = _scheduleServerAvailableCache.get(baseUrl);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  try {
+    const base = baseUrl.replace(/\/$/, "");
+    const res = await fetch(`${base}/tasks`, { method: "HEAD" });
+    // A 200/405 means the route exists; a redirect or HTML 404 means static host.
+    const available =
+      res.status !== 404 && res.status !== 301 && res.status !== 302;
+    _scheduleServerAvailableCache.set(baseUrl, available);
+
+    return available;
+  } catch {
+    _scheduleServerAvailableCache.set(baseUrl, false);
+
+    return false;
+  }
+}
+
 /**
  * Sync a task to the server-side SQLite store.
  */
-async function syncTaskToServer(task: Task): Promise<boolean> {
+async function syncTaskToServer(task: Task, baseUrl: string): Promise<boolean> {
+  if (!(await isScheduleServerAvailable(baseUrl))) {
+    return true; // Silently succeed on static-only deployments.
+  }
+
   try {
-    const res = await fetch("/schedule/tasks", {
+    const base = baseUrl.replace(/\/$/, "");
+    const res = await fetch(`${base}/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(task),
@@ -74,18 +122,99 @@ async function syncTaskToServer(task: Task): Promise<boolean> {
   }
 }
 
+type DeleteTaskServerResult = "deleted" | "missing" | "failed";
+
 /**
  * Delete a task from the server-side SQLite store.
  */
-async function deleteTaskFromServer(id: string): Promise<boolean> {
+async function deleteTaskFromServer(
+  id: string,
+  baseUrl: string,
+): Promise<DeleteTaskServerResult> {
+  if (!(await isScheduleServerAvailable(baseUrl))) {
+    return "missing"; // No server to delete from on static-only deployments.
+  }
+
   try {
-    const res = await fetch(`/schedule/tasks/${encodeURIComponent(id)}`, {
+    const base = baseUrl.replace(/\/$/, "");
+    const res = await fetch(`${base}/tasks/${encodeURIComponent(id)}`, {
       method: "DELETE",
     });
 
-    return res.ok;
+    if (res.ok) {
+      return "deleted";
+    }
+
+    // "Not found" means there is nothing left to delete on the server.
+    // Some deployments may also reject DELETE on this endpoint with 405.
+    if (res.status === 404 || res.status === 405) {
+      return "missing";
+    }
+
+    return "failed";
   } catch {
-    return false;
+    return "failed";
+  }
+}
+
+async function fetchServerTasksForGroup(
+  groupId: string,
+  baseUrl: string,
+): Promise<Task[] | null> {
+  if (!(await isScheduleServerAvailable(baseUrl))) {
+    return null; // No server on static-only deployments.
+  }
+
+  try {
+    const base = baseUrl.replace(/\/$/, "");
+    const res = await fetch(
+      `${base}/tasks?groupId=${encodeURIComponent(groupId)}`,
+      {
+        method: "GET",
+      },
+    );
+
+    if (!res.ok || typeof (res as any).json !== "function") {
+      return null;
+    }
+
+    const payload = await (res as any).json();
+    if (!Array.isArray(payload)) {
+      return null;
+    }
+
+    return payload
+      .filter((task): task is ServerScheduledTask => {
+        return (
+          !!task &&
+          typeof task === "object" &&
+          typeof (task as any).id === "string" &&
+          typeof (task as any).schedule === "string" &&
+          typeof (task as any).prompt === "string"
+        );
+      })
+      .map((task) => ({
+        id: task.id,
+        groupId: task.group_id || task.groupId || groupId,
+        schedule: task.schedule,
+        prompt: task.prompt,
+        isScript: task.isScript === true || task.is_script === 1,
+        enabled: task.enabled === true || task.enabled === 1,
+        lastRun:
+          typeof task.lastRun === "number"
+            ? task.lastRun
+            : typeof task.last_run === "number"
+              ? task.last_run
+              : null,
+        createdAt:
+          typeof task.createdAt === "number"
+            ? task.createdAt
+            : typeof task.created_at === "number"
+              ? task.created_at
+              : Date.now(),
+      }));
+  } catch {
+    return null;
   }
 }
 
@@ -278,10 +407,11 @@ export class OrchestratorStore {
       const remaining: TaskSyncOutboxOperation[] = [];
 
       for (const op of this._taskSyncOutbox) {
+        const base = this.getTaskServerBaseUrl();
         const ok =
           op.type === "upsert"
-            ? await syncTaskToServer(op.task)
-            : await deleteTaskFromServer(op.id);
+            ? await syncTaskToServer(op.task, base)
+            : await deleteTaskFromServer(op.id, base);
 
         if (!ok) {
           remaining.push(op);
@@ -296,6 +426,11 @@ export class OrchestratorStore {
   }
 
   // --- Getters for reactive state ---
+
+  private getTaskServerBaseUrl(): string {
+    return this.orchestrator?.getTaskServerUrl() ?? "/schedule";
+  }
+
   get messages() {
     return this._messages.get();
   }
@@ -694,10 +829,37 @@ export class OrchestratorStore {
    * Load tasks
    */
   async loadTasks(db: ShadowClawDatabase): Promise<void> {
-    const allTasks = await getAllTasks(db);
-
     const currentGroupId = this._activeGroupId.get();
-    this._tasks.set(allTasks.filter((t) => t.groupId === currentGroupId));
+    const allLocalTasks = await getAllTasks(db);
+    const localGroupTasks = allLocalTasks.filter(
+      (t) => t.groupId === currentGroupId,
+    );
+    this._tasks.set(localGroupTasks);
+
+    // Reconcile server-side scheduled tasks into local IndexedDB so
+    // server tasks become visible in the UI and can be deleted.
+    const serverGroupTasks = await fetchServerTasksForGroup(
+      currentGroupId,
+      this.getTaskServerBaseUrl(),
+    );
+    if (!serverGroupTasks) {
+      return;
+    }
+
+    const localTaskIds = new Set(allLocalTasks.map((task) => task.id));
+    const serverOnlyTasks = serverGroupTasks.filter(
+      (task) => !localTaskIds.has(task.id),
+    );
+
+    if (serverOnlyTasks.length === 0) {
+      return;
+    }
+
+    for (const task of serverOnlyTasks) {
+      await saveTask(db, task);
+    }
+
+    this._tasks.set([...localGroupTasks, ...serverOnlyTasks]);
   }
 
   /**
@@ -712,7 +874,10 @@ export class OrchestratorStore {
     await saveTask(db, updatedTask);
     await this.loadTasks(db);
 
-    const serverOk = await syncTaskToServer(updatedTask);
+    const serverOk = await syncTaskToServer(
+      updatedTask,
+      this.getTaskServerBaseUrl(),
+    );
     if (!serverOk) {
       console.warn("Failed to update task on server — queued for replay.");
 
@@ -740,7 +905,7 @@ export class OrchestratorStore {
       await this.loadTasks(db);
     }
 
-    const serverOk = await syncTaskToServer(task);
+    const serverOk = await syncTaskToServer(task, this.getTaskServerBaseUrl());
     if (!serverOk) {
       console.warn("Failed to sync task to server — queued for replay.");
       await this.queueTaskSyncOutboxOperation(db, {
@@ -756,18 +921,25 @@ export class OrchestratorStore {
    * Delete a task
    */
   async deleteTask(db: ShadowClawDatabase, id: string): Promise<void> {
-    await deleteTask(db, id);
-    await this.loadTasks(db);
-
-    const serverOk = await deleteTaskFromServer(id);
-    if (!serverOk) {
+    const serverResult = await deleteTaskFromServer(
+      id,
+      this.getTaskServerBaseUrl(),
+    );
+    if (serverResult === "failed") {
       console.warn("Failed to delete task from server — queued for replay.");
       await this.queueTaskSyncOutboxOperation(db, {
         type: "delete",
         id,
         queuedAt: Date.now(),
       });
+
+      throw new Error(
+        "Failed to delete scheduled task on server; task kept locally.",
+      );
     }
+
+    await deleteTask(db, id);
+    await this.loadTasks(db);
   }
 
   /**
@@ -779,10 +951,11 @@ export class OrchestratorStore {
     const groupTasks = allTasks.filter((t) => t.groupId === currentGroupId);
 
     for (const task of groupTasks) {
-      await deleteTask(db, task.id);
-
-      const serverOk = await deleteTaskFromServer(task.id);
-      if (!serverOk) {
+      const serverResult = await deleteTaskFromServer(
+        task.id,
+        this.getTaskServerBaseUrl(),
+      );
+      if (serverResult === "failed") {
         console.warn(
           `Failed to delete task "${task.id}" from server — queued for replay.`,
         );
@@ -791,7 +964,11 @@ export class OrchestratorStore {
           id: task.id,
           queuedAt: Date.now(),
         });
+
+        continue;
       }
+
+      await deleteTask(db, task.id);
     }
 
     await this.loadTasks(db);

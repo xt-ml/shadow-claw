@@ -7,6 +7,7 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
 import { showError, showSuccess } from "../../toast.js";
 
+import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.js";
 import type { ShadowClawDatabase } from "../../types.js";
 import { getDb } from "../../db/db.js";

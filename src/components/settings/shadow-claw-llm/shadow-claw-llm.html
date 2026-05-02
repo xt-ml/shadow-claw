@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-section" data-setting="model-settings">
+  <div class="settings-section">
     <h3>👤 Assistant Name</h3>
     <div class="form-group">
       <label class="form-label">Name</label>
@@ -38,7 +38,7 @@
     </button>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" data-setting="model-settings">
     <h3>🤖 Model</h3>
     <div class="form-group">
       <label class="form-label">Select Model</label>
@@ -58,7 +58,15 @@
         Select a model from the list, or choose "Custom Model" to provide your
         own ID.
       </div>
+      <div
+        class="form-helper"
+        data-setting="model-provider-helper"
+        hidden
+      ></div>
     </div>
+    <button class="save-btn" data-action="refresh-models">
+      ↻ Refresh Models
+    </button>
     <button class="save-btn" data-action="save-model">💾 Save Model</button>
   </div>
 

@@ -6,6 +6,7 @@ import { toolsStore } from "../../stores/tools.js";
 import { showError, showInfo, showSuccess } from "../../toast.js";
 import { ulid } from "../../ulid.js";
 
+import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 

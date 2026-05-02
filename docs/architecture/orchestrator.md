@@ -126,7 +126,7 @@ The orchestrator dispatches all worker messages through `handleWorkerMessage(db,
 | `streaming-end`           | Set state `thinking` (tool calls coming)                        |
 | `streaming-done`          | Emit event, set state `idle`                                    |
 | `streaming-error`         | Emit error event                                                |
-| `error`                   | Deliver error response prefixed with "⚠️ Error:"                |
+| `error`                   | Deliver error response prefixed with "⚠️ Error:"; may emit `provider-help` for provider-specific remediation |
 | `typing`                  | Emit typing event to router                                     |
 | `tool-activity`           | Emit event; trigger `file-change` on write_file/bash completion |
 | `task-created`            | Check recursion guard → sync to server → save to DB             |
@@ -162,6 +162,7 @@ Simple event emitter for orchestrator-to-UI communication:
 | `context-compacted`                      | Context summarized              |
 | `task-change`                            | Task created/updated/deleted    |
 | `model-download-progress`                | Prompt API model downloading    |
+| `provider-help`                          | Provider-specific setup/help dialog hint (e.g., local runtimes) |
 
 ## Conversation Isolation
 

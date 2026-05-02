@@ -3,6 +3,26 @@
     <h3>🔀 Git</h3>
 
     <div class="form-group">
+      <label class="form-label">Default Author Name</label>
+      <input
+        class="form-input"
+        data-setting="git-author-name-input"
+        placeholder="ShadowClaw"
+        type="text"
+      />
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Default Author Email</label>
+      <input
+        class="form-input"
+        data-setting="git-author-email-input"
+        placeholder="k9@shadowclaw.local"
+        type="text"
+      />
+    </div>
+
+    <div class="form-group">
       <label class="form-label">CORS Proxy</label>
       <div class="radio-group">
         <label class="radio-item">
@@ -30,7 +50,7 @@
           <div class="radio-label-text">
             <span class="radio-label-title">Public Proxy</span>
             <span class="radio-label-desc"
-              >Uses cors.example.com. Potential credential leak risk.</span
+              >Uses cors-anywhere.com. Potential credential leak risk.</span
             >
           </div>
         </label>
@@ -71,26 +91,6 @@
         configured and are using the Public Proxy. Your tokens will pass through
         a third-party server.
       </div>
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Default Author Name</label>
-      <input
-        class="form-input"
-        data-setting="git-author-name-input"
-        placeholder="ShadowClaw"
-        type="text"
-      />
-    </div>
-
-    <div class="form-group">
-      <label class="form-label">Default Author Email</label>
-      <input
-        class="form-input"
-        data-setting="git-author-email-input"
-        placeholder="k9@shadowclaw.local"
-        type="text"
-      />
     </div>
 
     <button class="save-btn" data-action="save-git-settings">

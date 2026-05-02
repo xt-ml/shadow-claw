@@ -39,6 +39,7 @@ async function initializeApp(): Promise<Orchestrator | undefined> {
     const shadowclaw: ShadowClawGlobal = {
       orchestrator: uiElement.orchestrator,
       ui: uiElement,
+      requestDialog: (options) => uiElement.requestDialog(options),
       requestConfirmation: (options) => uiElement.requestConfirmation(options),
       showToast,
       showSuccess,

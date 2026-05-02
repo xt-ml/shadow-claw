@@ -110,12 +110,16 @@ Browser's experimental Prompt API (`window.LanguageModel`). Runs entirely on-dev
   ```
 - `responseConstraint` (JSON schema) may cause Gemini Nano to stall; the provider automatically **retries without the constraint** so the model can generate tool-call JSON freely
 
-## Local provider UX and runtime behavior
+## Provider Help & UX
 
-- `transformers_js_local` caches runtime metadata and model artifacts under `assets/cache/transformers.js`.
-- `llamafile` CLI discovery expects binaries under `assets/cache/llamafile`.
-- When local runtime resolution fails, orchestrator can emit `provider-help` so UI surfaces contextual setup guidance instead of a generic error toast.
-- `llamafile` requests include `x-shadowclaw-request-id`; cancellation can terminate the active provider request via `/llamafile-proxy/cancel`.
+**Source:** `src/components/common/help/providers.ts`
+
+ShadowClaw includes a contextual help system that intercepts provider errors and surfaces actionable resolution steps.
+
+- **Detection**: `detectProviderHelpType()` parses error messages and status codes to categorize issues (e.g., `api-key-invalid`, `rate-limited`, `provider-unreachable`).
+- **Dialogs**: `buildProviderHelpDialogOptions()` generates a user-friendly dialog with instructions tailored to the provider.
+- **Local Runtimes**: Specific help builders exist for `llamafile` and `transformers_js_local` to guide users through local environment setup failures.
+- **Links**: Dialogs include direct "Settings" links or external documentation links (e.g., HuggingFace token settings).
 
 ## Tool Formats by Provider
 
@@ -156,16 +160,27 @@ For providers that do not emit rate limit headers, users can configure a fixed `
 
 **File:** `src/model-registry.ts`
 
-Dynamic model metadata registry that caches model info:
+The `ModelRegistry` is a dynamic metadata store that caches model information fetched from provider APIs (e.g., OpenRouter's `/v1/models` or HuggingFace Router).
 
-```ts
-getModelInfo(model: string): ModelInfo | undefined
-```
+### Metadata Fields
 
-Returns context window, tool support status, and other capability hints. Used by:
+- `contextWindow`: Total tokens (input + output) allowed.
+- `maxOutput`: Provider-enforced completion token limit.
+- `supportsTools`: Whether the model explicitly supports tool calling.
+- `inputModalities` / `outputModalities`: Modalities supported (text, image, audio, video).
+- `routesByRequestFeatures`: Whether the provider (like `openrouter/free`) adapts routing based on request content.
 
-- `getContextLimit()` to resolve context windows (registry → built-in patterns → fallback)
-- Adapter logic to decide whether to send tools to a model
+### Capability Detection
+
+The registry provides the backbone for:
+
+- **Context Limits**: `getContextLimit()` resolves limits by checking the registry first, then built-in family patterns, then generic fallbacks.
+- **Tooling**: Adapter logic uses registry hints to decide whether to format and send tools.
+- **Multimodal Routing**: The `AttachmentCapabilities` system relies on registry modalities to choose between native and fallback delivery.
+
+### Dynamic Fetching
+
+Registry info is fetched via `fetchModelInfo(provider, apiKey)`. For authenticated providers, the API key is forwarded to ensure access to the full model list.
 
 ## Streaming Gates
 

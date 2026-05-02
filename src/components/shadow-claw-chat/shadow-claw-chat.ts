@@ -1,10 +1,18 @@
 import JSZip from "jszip";
 
+import { CONFIG_KEYS } from "../../config.js";
+import {
+  formatModelAttachmentCapabilitySummary,
+  getAttachmentCategory,
+  getModelAttachmentCapabilities,
+} from "../../attachment-capabilities.js";
 import { effect } from "../../effect.js";
 
 import { getDb } from "../../db/db.js";
 import { exportChatData } from "../../db/exportChatData.js";
 import { importChatData } from "../../db/importChatData.js";
+import { getConfig } from "../../db/getConfig.js";
+import { setConfig } from "../../db/setConfig.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { downloadGroupFile } from "../../storage/downloadGroupFile.js";
 
@@ -12,12 +20,17 @@ import { chatUiStore } from "../../stores/chat-ui.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 
-import { shouldInlineAttachmentInChat } from "../../message-attachments.js";
+import {
+  inferAttachmentMimeType,
+  shouldInlineAttachmentInChat,
+} from "../../message-attachments.js";
 import { renderMarkdown } from "../../markdown.js";
 
 import { showError, showInfo, showSuccess, showWarning } from "../../toast.js";
 import {
+  AppDialogOptions,
   MessageAttachment,
+  MessageAttachmentSource,
   StoredMessage,
   ThinkingLogEntry,
   ToolActivity,
@@ -29,6 +42,25 @@ import "../shadow-claw-page-header/shadow-claw-page-header.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
 const AUTO_SCROLL_THRESHOLD = 80;
+const INLINE_ATTACHMENT_MAX_BYTES = 128 * 1024;
+const INLINE_ATTACHMENT_TOTAL_CHAR_BUDGET = 80_000;
+const DEFAULT_CHAT_INPUT_HEIGHT_PX = 40;
+const MIN_CHAT_INPUT_HEIGHT_PX = 40;
+const MAX_CHAT_INPUT_HEIGHT_PX = 280;
+
+type QueuedAttachment = {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+  source: MessageAttachmentSource;
+};
+
+type MessageDraftPayload = {
+  text: string;
+  attachments: MessageAttachment[];
+};
+
 const elementName = "shadow-claw-chat";
 
 export class ShadowClawChat extends ShadowClawElement {
@@ -42,6 +74,8 @@ export class ShadowClawChat extends ShadowClawElement {
   #suppressScrollTracking: boolean;
   #userScrollEpoch: number;
   #responseAutoFollow: boolean;
+  #dragDepth: number;
+  #queuedAttachments: QueuedAttachment[];
 
   constructor() {
     super();
@@ -53,6 +87,8 @@ export class ShadowClawChat extends ShadowClawElement {
     this.#suppressScrollTracking = false;
     this.#userScrollEpoch = 0;
     this.#responseAutoFollow = true;
+    this.#dragDepth = 0;
+    this.#queuedAttachments = [];
   }
 
   async connectedCallback() {
@@ -64,6 +100,7 @@ export class ShadowClawChat extends ShadowClawElement {
     }
 
     this.#db = await getDb();
+    await this.restoreInputAreaHeight();
 
     this.dispatchTerminalSlotReady();
 
@@ -314,9 +351,37 @@ export class ShadowClawChat extends ShadowClawElement {
       });
     }
 
+    const inputArea = root.querySelector(".chat__input-area");
+    const inputResizeHandle = root.querySelector(".chat__input-resize-handle");
+    if (
+      inputArea instanceof HTMLElement &&
+      inputResizeHandle instanceof HTMLElement
+    ) {
+      this.bindInputResizeEvents(inputArea, inputResizeHandle);
+    }
+
     root
       .querySelector('[data-action="send-message"]')
       ?.addEventListener("click", () => this.sendMessage());
+
+    root
+      .querySelector('[data-action="attach-files"]')
+      ?.addEventListener("click", () => {
+        const attachmentInput = root.querySelector(".chat__attachment-input");
+        if (attachmentInput instanceof HTMLInputElement) {
+          // Clear value first so selecting the same file(s) again still fires change.
+          attachmentInput.value = "";
+          attachmentInput.click();
+        }
+      });
+
+    root
+      .querySelector(".chat__attachment-input")
+      ?.addEventListener("change", (event) => {
+        if (event.target instanceof HTMLInputElement) {
+          void this.queueSelectedFiles(event.target);
+        }
+      });
 
     root
       .querySelector('[data-action="compact-chat"]')
@@ -350,6 +415,678 @@ export class ShadowClawChat extends ShadowClawElement {
           this.restoreChat(e.target);
         }
       });
+
+    const chatBody = root.querySelector(".chat__body");
+    if (chatBody instanceof HTMLElement) {
+      chatBody.addEventListener("dragenter", (event) => {
+        if (!this.hasDroppableData(event.dataTransfer)) {
+          return;
+        }
+
+        event.preventDefault();
+        this.#dragDepth += 1;
+        this.setDropOverlayVisible(true);
+      });
+
+      chatBody.addEventListener("dragover", (event) => {
+        if (!this.hasDroppableData(event.dataTransfer)) {
+          return;
+        }
+
+        event.preventDefault();
+      });
+
+      chatBody.addEventListener("dragleave", (event) => {
+        if (!this.hasDroppableData(event.dataTransfer)) {
+          return;
+        }
+
+        event.preventDefault();
+        this.#dragDepth = Math.max(0, this.#dragDepth - 1);
+
+        if (this.#dragDepth === 0) {
+          this.setDropOverlayVisible(false);
+        }
+      });
+
+      chatBody.addEventListener("drop", (event) => {
+        if (!this.hasDroppableData(event.dataTransfer)) {
+          return;
+        }
+
+        event.preventDefault();
+        this.#dragDepth = 0;
+        this.setDropOverlayVisible(false);
+        void this.queueDroppedData(event.dataTransfer);
+      });
+    }
+  }
+
+  clampInputAreaHeight(px: number): number {
+    const viewportMax = Math.floor(window.innerHeight * 0.45);
+
+    return Math.max(
+      MIN_CHAT_INPUT_HEIGHT_PX,
+      Math.min(Math.max(MIN_CHAT_INPUT_HEIGHT_PX, viewportMax), px),
+    );
+  }
+
+  isCollapsedInputAreaHeight(px: number): boolean {
+    return px <= DEFAULT_CHAT_INPUT_HEIGHT_PX + 1;
+  }
+
+  setInputAreaHeight(inputArea: HTMLElement, px: number): void {
+    const clamped = this.clampInputAreaHeight(px);
+
+    if (this.isCollapsedInputAreaHeight(clamped)) {
+      this.resetInputAreaHeight(inputArea);
+
+      return;
+    }
+
+    inputArea.classList.add("chat__input-area--resized");
+    inputArea.style.setProperty("--chat-input-area-height", `${clamped}px`);
+  }
+
+  resetInputAreaHeight(inputArea: HTMLElement): void {
+    inputArea.classList.remove("chat__input-area--resized");
+    inputArea.style.removeProperty("--chat-input-area-height");
+  }
+
+  async persistInputAreaHeight(px: number): Promise<void> {
+    if (!this.#db) {
+      return;
+    }
+
+    try {
+      await setConfig(this.#db, CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT, px);
+    } catch {
+      // Ignore persistence failures so input remains usable when storage is unavailable.
+    }
+  }
+
+  async restoreInputAreaHeight(): Promise<void> {
+    const inputArea = this.shadowRoot?.querySelector(".chat__input-area");
+    if (!(inputArea instanceof HTMLElement)) {
+      return;
+    }
+
+    try {
+      const saved = this.#db
+        ? await getConfig(this.#db, CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT)
+        : undefined;
+
+      if (typeof saved === "number" && Number.isFinite(saved) && saved > 0) {
+        if (this.isCollapsedInputAreaHeight(saved)) {
+          this.resetInputAreaHeight(inputArea);
+        } else {
+          this.setInputAreaHeight(inputArea, saved);
+        }
+      }
+    } catch {
+      // Keep default input height when config retrieval fails.
+    }
+  }
+
+  bindInputResizeEvents(inputArea: HTMLElement, handle: HTMLElement): void {
+    handle.setAttribute("tabindex", "0");
+    handle.setAttribute("role", "separator");
+    handle.setAttribute("aria-orientation", "horizontal");
+    handle.setAttribute("aria-label", "Resize chat input area");
+
+    const getCurrentHeight = () => {
+      const currentHeight = parseFloat(
+        inputArea.style.getPropertyValue("--chat-input-area-height"),
+      );
+
+      return Number.isFinite(currentHeight) && currentHeight > 0
+        ? currentHeight
+        : DEFAULT_CHAT_INPUT_HEIGHT_PX;
+    };
+
+    const updateAria = () => {
+      const max = this.clampInputAreaHeight(Number.MAX_SAFE_INTEGER);
+      const current = Math.round(this.clampInputAreaHeight(getCurrentHeight()));
+      handle.setAttribute("aria-valuemin", String(MIN_CHAT_INPUT_HEIGHT_PX));
+      handle.setAttribute("aria-valuemax", String(Math.round(max)));
+      handle.setAttribute("aria-valuenow", String(current));
+    };
+
+    let activePointerId: number | null = null;
+    let startY = 0;
+    let startHeight = 0;
+
+    const onPointerMove = (event: PointerEvent) => {
+      if (event.pointerId !== activePointerId) {
+        return;
+      }
+
+      const delta = startY - event.clientY;
+      const nextHeight = startHeight + delta;
+      this.setInputAreaHeight(inputArea, nextHeight);
+      updateAria();
+    };
+
+    const stopResize = () => {
+      if (activePointerId === null) {
+        return;
+      }
+
+      activePointerId = null;
+      handle.classList.remove("active");
+      document.removeEventListener("pointermove", onPointerMove);
+
+      const value = parseFloat(
+        inputArea.style.getPropertyValue("--chat-input-area-height"),
+      );
+      if (Number.isFinite(value) && value > 0) {
+        void this.persistInputAreaHeight(value);
+      } else {
+        void this.persistInputAreaHeight(0);
+      }
+    };
+
+    const onPointerUp = (event: PointerEvent) => {
+      if (event.pointerId !== activePointerId) {
+        return;
+      }
+
+      stopResize();
+    };
+
+    handle.addEventListener("pointerdown", (event: PointerEvent) => {
+      if (
+        event.pointerType === "mouse" &&
+        event.button !== 0 &&
+        event.button !== -1
+      ) {
+        return;
+      }
+
+      const wrapper = inputArea.querySelector(".chat__input-wrapper");
+      if (!(wrapper instanceof HTMLElement)) {
+        return;
+      }
+
+      event.preventDefault();
+      activePointerId = event.pointerId;
+      startY = event.clientY;
+
+      // Ensure class is present before measuring to stabilize layout shifts
+      inputArea.classList.add("chat__input-area--resized");
+
+      const currentHeight = parseFloat(
+        inputArea.style.getPropertyValue("--chat-input-area-height"),
+      );
+      startHeight =
+        Number.isFinite(currentHeight) && currentHeight > 0
+          ? currentHeight
+          : wrapper.getBoundingClientRect().height ||
+            DEFAULT_CHAT_INPUT_HEIGHT_PX;
+
+      handle.classList.add("active");
+      handle.setPointerCapture(event.pointerId);
+      document.addEventListener("pointermove", onPointerMove);
+    });
+
+    handle.addEventListener("pointerup", onPointerUp);
+    handle.addEventListener("pointercancel", stopResize);
+    handle.addEventListener("dblclick", () => {
+      this.resetInputAreaHeight(inputArea);
+      void this.persistInputAreaHeight(0);
+      updateAria();
+      this.scrollMessagesToBottomIfNeeded();
+    });
+
+    handle.addEventListener("keydown", (event: KeyboardEvent) => {
+      const step = event.shiftKey ? 32 : 12;
+      const current = getCurrentHeight();
+      let next: number | null = null;
+
+      if (event.key === "ArrowUp") {
+        next = current + step;
+      } else if (event.key === "ArrowDown") {
+        next = current - step;
+      } else if (event.key === "Home") {
+        next = MIN_CHAT_INPUT_HEIGHT_PX;
+      } else if (event.key === "End") {
+        next = this.clampInputAreaHeight(Number.MAX_SAFE_INTEGER);
+      }
+
+      if (next === null) {
+        return;
+      }
+
+      event.preventDefault();
+      this.setInputAreaHeight(inputArea, next);
+      updateAria();
+      const live = parseFloat(
+        inputArea.style.getPropertyValue("--chat-input-area-height"),
+      );
+      void this.persistInputAreaHeight(
+        Number.isFinite(live) && live > 0 ? this.clampInputAreaHeight(live) : 0,
+      );
+      this.scrollMessagesToBottomIfNeeded();
+    });
+
+    updateAria();
+
+    this.addCleanup(() => {
+      stopResize();
+      handle.removeEventListener("pointerup", onPointerUp);
+      handle.removeEventListener("pointercancel", stopResize);
+    });
+  }
+
+  hasDroppableData(dataTransfer: DataTransfer | null): boolean {
+    if (!dataTransfer) {
+      return false;
+    }
+
+    if (dataTransfer.files.length > 0) {
+      return true;
+    }
+
+    const types = Array.from(dataTransfer.types || []);
+
+    return (
+      types.includes("Files") ||
+      types.includes("application/x-moz-file") ||
+      types.includes("text/plain")
+    );
+  }
+
+  setDropOverlayVisible(visible: boolean) {
+    const overlay = this.shadowRoot?.querySelector("[data-drop-overlay]");
+    if (!(overlay instanceof HTMLElement)) {
+      return;
+    }
+
+    overlay.hidden = !visible;
+  }
+
+  async queueDroppedData(dataTransfer: DataTransfer | null) {
+    if (!dataTransfer) {
+      return;
+    }
+
+    const next = this.buildQueuedAttachmentsFromFiles(
+      Array.from(dataTransfer.files || []),
+    );
+
+    const droppedText = await this.readDroppedPlainText(dataTransfer);
+    if (droppedText) {
+      const normalized = droppedText.trim();
+      if (normalized) {
+        const textBlob = new Blob([normalized], { type: "text/plain" });
+        next.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+          fileName: `dropped-text-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.txt`,
+          mimeType: "text/plain",
+          size: textBlob.size,
+          source: {
+            kind: "local-file",
+            file: textBlob,
+          },
+        });
+      }
+    }
+
+    if (next.length === 0) {
+      return;
+    }
+
+    this.#queuedAttachments = [...this.#queuedAttachments, ...next];
+    this.renderQueuedAttachments();
+    showInfo(
+      `Queued ${next.length} attachment${next.length === 1 ? "" : "s"}.`,
+      2200,
+    );
+  }
+
+  async readDroppedPlainText(dataTransfer: DataTransfer): Promise<string> {
+    const item = Array.from(dataTransfer.items || []).find(
+      (entry) => entry.kind === "string" && entry.type === "text/plain",
+    );
+
+    if (!item) {
+      return "";
+    }
+
+    return await new Promise<string>((resolve) => {
+      item.getAsString((value) => {
+        resolve(value || "");
+      });
+    });
+  }
+
+  buildQueuedAttachmentsFromFiles(files: File[]): QueuedAttachment[] {
+    return files.map((file) => {
+      const fileName = file.name || "attachment.bin";
+
+      return {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+        fileName,
+        mimeType: inferAttachmentMimeType(fileName, file.type || ""),
+        size: file.size,
+        source: {
+          kind: "local-file",
+          file,
+        },
+      };
+    });
+  }
+
+  async queueSelectedFiles(input: HTMLInputElement) {
+    const files = Array.from(input.files || []);
+    if (files.length === 0) {
+      input.value = "";
+
+      return;
+    }
+
+    const next = this.buildQueuedAttachmentsFromFiles(files);
+    this.#queuedAttachments = [...this.#queuedAttachments, ...next];
+    this.renderQueuedAttachments();
+
+    showInfo(
+      `Queued ${next.length} attachment${next.length === 1 ? "" : "s"}.`,
+      2200,
+    );
+
+    input.value = "";
+  }
+
+  renderQueuedAttachments() {
+    const container = this.shadowRoot?.querySelector(
+      ".chat__pending-attachments",
+    );
+    if (!(container instanceof HTMLElement)) {
+      return;
+    }
+
+    if (this.#queuedAttachments.length === 0) {
+      container.hidden = true;
+      container.replaceChildren();
+
+      return;
+    }
+
+    const modelId = (orchestratorStore.orchestrator?.model || "").toLowerCase();
+    const capabilities = getModelAttachmentCapabilities(modelId);
+
+    container.hidden = false;
+    const fragment = document.createDocumentFragment();
+    for (const attachment of this.#queuedAttachments) {
+      const chip = document.createElement("div");
+      chip.className = "chat__pending-attachment";
+
+      const icon = document.createElement("span");
+      icon.className = "chat__attachment-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = this.getAttachmentIcon(attachment.mimeType);
+
+      const meta = document.createElement("div");
+      meta.className = "chat__pending-attachment-meta";
+
+      const name = document.createElement("span");
+      name.className = "chat__pending-attachment-name";
+      name.textContent = attachment.fileName;
+
+      const detail = document.createElement("span");
+      detail.className = "chat__pending-attachment-detail";
+      detail.textContent = `${attachment.mimeType} · ${this.formatAttachmentSize(attachment.size)}`;
+
+      meta.append(name, detail);
+
+      // Transport badge: indicates how this file will reach the model.
+      const transportLabel = this.getAttachmentTransportLabel(
+        attachment.mimeType,
+        attachment.fileName,
+        capabilities,
+      );
+      const badge = document.createElement("span");
+      badge.className = `chat__transport-badge chat__transport-badge--${transportLabel}`;
+      badge.setAttribute("aria-label", `Transport: ${transportLabel}`);
+      badge.textContent = transportLabel;
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "chat__pending-attachment-remove";
+      remove.setAttribute("aria-label", `Remove ${attachment.fileName}`);
+      remove.textContent = "x";
+      remove.addEventListener("click", () => {
+        this.#queuedAttachments = this.#queuedAttachments.filter(
+          (candidate) => candidate.id !== attachment.id,
+        );
+        this.renderQueuedAttachments();
+      });
+
+      chip.append(icon, meta, badge, remove);
+      fragment.appendChild(chip);
+    }
+
+    container.replaceChildren(fragment);
+  }
+
+  /**
+   * Compute how an attachment will be transported to the model:
+   * - "text"     → will be read and inlined as plain text
+   * - "native"   → sent as a native multimodal block (image/audio/document)
+   * - "fallback" → sent as a reference text marker only
+   */
+  getAttachmentTransportLabel(
+    mimeType: string,
+    fileName: string,
+    capabilities: ReturnType<typeof getModelAttachmentCapabilities>,
+  ): "text" | "native" | "fallback" {
+    const category = getAttachmentCategory(mimeType, fileName);
+
+    if (category === "text") {
+      return "text";
+    }
+
+    if (
+      category === "image" &&
+      (capabilities.images || capabilities.routerByFeatures)
+    ) {
+      return "native";
+    }
+
+    if (
+      category === "audio" &&
+      (capabilities.audio || capabilities.routerByFeatures)
+    ) {
+      return "native";
+    }
+
+    if (
+      category === "document" &&
+      (capabilities.documents || capabilities.routerByFeatures)
+    ) {
+      return "native";
+    }
+
+    return "fallback";
+  }
+
+  isInlineTextMimeType(mimeType: string): boolean {
+    const normalized = mimeType.toLowerCase();
+    if (normalized.startsWith("text/")) {
+      return true;
+    }
+
+    return (
+      normalized === "application/json" ||
+      normalized === "application/xml" ||
+      normalized === "application/javascript"
+    );
+  }
+
+  inferAttachmentModelSupport(attachments: MessageAttachment[] = []) {
+    const orchestrator = orchestratorStore.orchestrator;
+    const modelId = orchestrator?.model?.toLowerCase() || "";
+    const capabilities = getModelAttachmentCapabilities(modelId);
+
+    return attachments.every((attachment) => {
+      const mimeType = (attachment.mimeType || "").toLowerCase();
+      if (this.isInlineTextMimeType(mimeType)) {
+        return true;
+      }
+
+      if (mimeType.startsWith("image/")) {
+        return capabilities.images || capabilities.routerByFeatures;
+      }
+
+      if (mimeType.startsWith("audio/")) {
+        return capabilities.audio || capabilities.routerByFeatures;
+      }
+
+      if (mimeType.startsWith("video/")) {
+        return capabilities.video || capabilities.routerByFeatures;
+      }
+
+      return false;
+    });
+  }
+
+  renderAttachmentCapabilitySummary() {
+    const summaryEl = this.shadowRoot?.querySelector(
+      ".chat__attachment-capabilities",
+    );
+    if (!(summaryEl instanceof HTMLElement)) {
+      return;
+    }
+
+    const modelId = orchestratorStore.orchestrator?.model || "";
+    if (!modelId) {
+      summaryEl.textContent = "";
+
+      return;
+    }
+
+    summaryEl.textContent = `Model attachment support: ${formatModelAttachmentCapabilitySummary(modelId)}`;
+  }
+
+  async showAttachmentDialog(options: AppDialogOptions): Promise<boolean> {
+    const requestDialog = globalThis.window?.shadowclaw?.requestDialog;
+    if (typeof requestDialog === "function") {
+      return await requestDialog(options);
+    }
+
+    if ((options.mode || "confirm") === "info") {
+      showWarning(options.message, 4500);
+
+      return true;
+    }
+
+    return confirm(`${options.title}\n\n${options.message}`);
+  }
+
+  async buildMessageDraftPayload(
+    message: string,
+  ): Promise<MessageDraftPayload | null> {
+    const trimmedMessage = message.trim();
+    const attachments: MessageAttachment[] = this.#queuedAttachments.map(
+      (attachment) => {
+        const previewDisposition: "inline" | "file" =
+          attachment.mimeType === "image/png" ? "inline" : "file";
+
+        return {
+          id: attachment.id,
+          fileName: attachment.fileName,
+          mimeType: attachment.mimeType,
+          size: attachment.size,
+          source: attachment.source,
+          previewDisposition,
+        };
+      },
+    );
+
+    if (attachments.length === 0) {
+      return {
+        text: trimmedMessage,
+        attachments,
+      };
+    }
+
+    const binaryCount = attachments.filter(
+      (attachment) => !this.isInlineTextMimeType(attachment.mimeType || ""),
+    ).length;
+
+    if (binaryCount > 0 && !this.inferAttachmentModelSupport(attachments)) {
+      const proceed = await this.showAttachmentDialog({
+        mode: "confirm",
+        title: "Limited Attachment Support",
+        message:
+          "The selected model may not natively read binary attachments (images/audio/video/docs). Files will still be attached to chat history, but responses might be limited.",
+        confirmLabel: "Send Anyway",
+        cancelLabel: "Cancel",
+        details: [
+          "Try a multimodal model for best binary-file results.",
+          "Text files are inlined automatically when they are reasonably small.",
+        ],
+      });
+      if (!proceed) {
+        return null;
+      }
+    }
+
+    const attachmentLines = attachments.map((attachment) => {
+      return `- ${attachment.fileName} (${attachment.mimeType || "application/octet-stream"}, ${this.formatAttachmentSize(attachment.size || 0)})`;
+    });
+
+    const inlineSections: string[] = [];
+    let inlineCharBudget = 0;
+    for (const attachment of this.#queuedAttachments) {
+      if (!this.isInlineTextMimeType(attachment.mimeType)) {
+        continue;
+      }
+
+      if (attachment.size > INLINE_ATTACHMENT_MAX_BYTES) {
+        inlineSections.push(
+          `File: ${attachment.fileName}\nSkipped inline content because the file is larger than ${this.formatAttachmentSize(INLINE_ATTACHMENT_MAX_BYTES)}.`,
+        );
+
+        continue;
+      }
+
+      if (attachment.source.kind !== "local-file") {
+        continue;
+      }
+
+      const text = await attachment.source.file.text();
+      inlineCharBudget += text.length;
+      if (inlineCharBudget > INLINE_ATTACHMENT_TOTAL_CHAR_BUDGET) {
+        await this.showAttachmentDialog({
+          mode: "info",
+          title: "Attachment Context Too Large",
+          message:
+            "The dropped text content exceeds the safe prompt budget. Remove some files or send them in smaller batches.",
+          details: [
+            `Current inline text budget: ${INLINE_ATTACHMENT_TOTAL_CHAR_BUDGET.toLocaleString()} characters`,
+            "Large text blobs can degrade response quality and exhaust context.",
+          ],
+          confirmLabel: "OK",
+        });
+
+        return null;
+      }
+
+      inlineSections.push(`File: ${attachment.fileName}\n${text}`);
+    }
+
+    const prefix = trimmedMessage ? `${trimmedMessage}\n\n` : "";
+    const manifest = `Attached files:\n${attachmentLines.join("\n")}`;
+    const inlineBlock =
+      inlineSections.length > 0
+        ? `\n\nAttached text excerpts:\n\n${inlineSections.join("\n\n---\n\n")}`
+        : "";
+
+    return {
+      text: `${prefix}${manifest}${inlineBlock}`,
+      attachments,
+    };
   }
 
   async handleMessageLinkClick(event: MouseEvent) {
@@ -685,6 +1422,14 @@ export class ShadowClawChat extends ShadowClawElement {
 
     this.addCleanup(
       effect(() => {
+        void orchestratorStore.ready;
+        void orchestratorStore.state;
+        this.renderAttachmentCapabilitySummary();
+      }),
+    );
+
+    this.addCleanup(
+      effect(() => {
         const usage = orchestratorStore.tokenUsage;
         const usageEl = root.querySelector(".chat__token-usage");
 
@@ -923,6 +1668,14 @@ export class ShadowClawChat extends ShadowClawElement {
       const meta = document.createElement("div");
       meta.className = "chat__attachment-meta";
 
+      const identity = document.createElement("div");
+      identity.className = "chat__attachment-identity";
+
+      const icon = document.createElement("span");
+      icon.className = "chat__attachment-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = this.getAttachmentIcon(attachment.mimeType || "");
+
       const title = document.createElement("button");
       title.className = "chat__attachment-title";
       title.type = "button";
@@ -932,7 +1685,8 @@ export class ShadowClawChat extends ShadowClawElement {
         void this.openAttachment(msg.groupId, attachment);
       });
 
-      meta.appendChild(title);
+      identity.append(icon, title);
+      meta.appendChild(identity);
 
       const subtitle = document.createElement("div");
       subtitle.className = "chat__attachment-subtitle";
@@ -1120,6 +1874,35 @@ export class ShadowClawChat extends ShadowClawElement {
     return parts.join(" · ") || "Attachment";
   }
 
+  getAttachmentIcon(mimeType = ""): string {
+    const normalized = mimeType.toLowerCase();
+    if (normalized.startsWith("image/")) {
+      return "IMG";
+    }
+
+    if (normalized.startsWith("video/")) {
+      return "VID";
+    }
+
+    if (normalized.startsWith("audio/")) {
+      return "AUD";
+    }
+
+    if (normalized.includes("pdf")) {
+      return "PDF";
+    }
+
+    if (normalized.startsWith("text/") || normalized.includes("json")) {
+      return "TXT";
+    }
+
+    if (normalized.includes("zip") || normalized.includes("tar")) {
+      return "ZIP";
+    }
+
+    return "BIN";
+  }
+
   formatAttachmentSize(size: number): string {
     if (size < 1024) {
       return `${size} B`;
@@ -1171,7 +1954,7 @@ export class ShadowClawChat extends ShadowClawElement {
 
     const message = input.value.trim();
 
-    if (!message) {
+    if (!message && this.#queuedAttachments.length === 0) {
       return;
     }
 
@@ -1181,14 +1964,21 @@ export class ShadowClawChat extends ShadowClawElement {
       return;
     }
 
-    input.value = "";
-
-    // Resume auto-scroll so the user sees their own message and the response
-    this.#responseAutoFollow = true;
-    chatUiStore.setNearBottom(true);
-
     try {
-      orchestratorStore.sendMessage(message);
+      const payload = await this.buildMessageDraftPayload(message);
+      if (!payload) {
+        return;
+      }
+
+      input.value = "";
+
+      // Resume auto-scroll so the user sees their own message and the response
+      this.#responseAutoFollow = true;
+      chatUiStore.setNearBottom(true);
+
+      orchestratorStore.sendMessage(payload.text, payload.attachments);
+      this.#queuedAttachments = [];
+      this.renderQueuedAttachments();
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError(`Error sending message: ${errorMsg}`, 6000);

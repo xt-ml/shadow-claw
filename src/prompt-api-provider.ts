@@ -330,6 +330,10 @@ function buildPromptTranscript(
             return `[TOOL_RESULT ${block.tool_use_id}] ${String(block.content || "")}`;
           }
 
+          if (block?.type === "attachment") {
+            return `[ATTACHMENT ${block.mediaType}] ${block.fileName} (${block.mimeType})`;
+          }
+
           return "";
         })
         .filter(Boolean)

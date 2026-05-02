@@ -10,6 +10,7 @@ import type {
   ChannelMessageCallback,
   ChannelTypingCallback,
   InboundMessage,
+  MessageAttachment,
 } from "../types.js";
 
 import { DEFAULT_GROUP_ID } from "../config.js";
@@ -42,7 +43,11 @@ export class BrowserChatChannel implements Channel {
   /**
    * Called by the UI when the user submits a message.
    */
-  submit(text: string, groupId?: string) {
+  submit(
+    text: string,
+    groupId?: string,
+    attachments: MessageAttachment[] = [],
+  ) {
     const gid = groupId || this.activeGroupId;
     const msg: InboundMessage = {
       id: ulid(),
@@ -51,6 +56,7 @@ export class BrowserChatChannel implements Channel {
       content: text,
       timestamp: Date.now(),
       channel: "browser",
+      attachments,
     };
 
     this.messageCallback?.(msg);

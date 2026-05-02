@@ -29,6 +29,7 @@ import { getStorageStatus } from "../storage/storage.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
 import { showError } from "../toast.js";
 import type {
+  MessageAttachment,
   ShadowClawDatabase,
   StoredMessage,
   Task,
@@ -745,8 +746,12 @@ export class OrchestratorStore {
   /**
    * Send a message
    */
-  sendMessage(text: string): void {
-    this.orchestrator?.submitMessage?.(text, this._activeGroupId.get());
+  sendMessage(text: string, attachments: MessageAttachment[] = []): void {
+    this.orchestrator?.submitMessage?.(
+      text,
+      this._activeGroupId.get(),
+      attachments,
+    );
   }
 
   /**

@@ -4,6 +4,13 @@ export interface ModelMetadata {
   contextWindow: number;
   maxOutput: number | null;
   supportsTools?: boolean;
+  inputModalities?: string[];
+  outputModalities?: string[];
+  supportsImageInput?: boolean;
+  supportsAudioInput?: boolean;
+  supportsVideoInput?: boolean;
+  supportsDocumentInput?: boolean;
+  routesByRequestFeatures?: boolean;
 }
 
 /**
@@ -77,6 +84,33 @@ class ModelRegistry {
             : typeof model.supportsTools === "boolean"
               ? model.supportsTools
               : undefined;
+        const inputModalities = this.extractModalities(model, "input");
+        const outputModalities = this.extractModalities(model, "output");
+        const supportsImageInput = this.modalitiesInclude(
+          inputModalities,
+          "image",
+          "vision",
+        );
+        const supportsAudioInput = this.modalitiesInclude(
+          inputModalities,
+          "audio",
+          "voice",
+          "hearing",
+        );
+        const supportsVideoInput = this.modalitiesInclude(
+          inputModalities,
+          "video",
+        );
+        const routesByRequestFeatures =
+          model.id === "openrouter/free" ||
+          this.supportedParametersInclude(
+            model,
+            "image",
+            "vision",
+            "audio",
+            "tool",
+            "structured",
+          );
 
         // HuggingFace Router structure nests info inside `providers` array
         if (
@@ -91,6 +125,12 @@ class ModelRegistry {
           contextWindow: contextLength,
           maxOutput,
           ...(supportsTools !== undefined && { supportsTools }),
+          ...(inputModalities.length > 0 && { inputModalities }),
+          ...(outputModalities.length > 0 && { outputModalities }),
+          ...(supportsImageInput !== undefined && { supportsImageInput }),
+          ...(supportsAudioInput !== undefined && { supportsAudioInput }),
+          ...(supportsVideoInput !== undefined && { supportsVideoInput }),
+          ...(routesByRequestFeatures && { routesByRequestFeatures }),
         });
       }
 
@@ -114,6 +154,93 @@ class ModelRegistry {
    */
   registerModelInfo(modelId: string, info: ModelMetadata) {
     this.models.set(modelId.toLowerCase(), info);
+  }
+
+  private extractModalities(
+    model: any,
+    direction: "input" | "output",
+  ): string[] {
+    const direct =
+      direction === "input"
+        ? model.input_modalities || model.inputModalities
+        : model.output_modalities || model.outputModalities;
+
+    const architecture = model.architecture || {};
+    const architectureValue =
+      direction === "input"
+        ? architecture.input_modalities || architecture.inputModalities
+        : architecture.output_modalities || architecture.outputModalities;
+
+    const modalityString =
+      typeof architecture.modality === "string" ? architecture.modality : "";
+    const parsedFromModalityString = this.parseArchitectureModality(
+      modalityString,
+      direction,
+    );
+
+    const merged = [
+      ...this.normalizeStringArray(direct),
+      ...this.normalizeStringArray(architectureValue),
+      ...parsedFromModalityString,
+    ];
+
+    return Array.from(new Set(merged));
+  }
+
+  private parseArchitectureModality(
+    modality: string,
+    direction: "input" | "output",
+  ): string[] {
+    if (!modality) {
+      return [];
+    }
+
+    const [input = "", output = ""] = modality
+      .toLowerCase()
+      .split("->")
+      .map((part) => part.trim());
+    const segment = direction === "input" ? input : output;
+
+    return segment
+      .split(/[+,/\s]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
+  private normalizeStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.toLowerCase());
+  }
+
+  private modalitiesInclude(
+    modalities: string[],
+    ...needles: string[]
+  ): boolean | undefined {
+    if (modalities.length === 0) {
+      return undefined;
+    }
+
+    return needles.some((needle) =>
+      modalities.some((modality) => modality.includes(needle)),
+    );
+  }
+
+  private supportedParametersInclude(
+    model: any,
+    ...needles: string[]
+  ): boolean {
+    const parameters = this.normalizeStringArray(
+      model.supported_parameters || model.supportedParameters,
+    );
+
+    return needles.some((needle) =>
+      parameters.some((parameter) => parameter.includes(needle)),
+    );
   }
 
   /**

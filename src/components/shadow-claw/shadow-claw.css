@@ -98,6 +98,24 @@ a:hover {
   padding: 0.5rem;
 }
 
+.theme-toggle svg {
+  transition: transform 0.2s ease;
+}
+
+.header-main-toggle[aria-pressed="true"] {
+  box-shadow: 0 0 0.5rem
+    color-mix(
+      in srgb,
+      var(--shadow-claw-warning-color, #d97706) 50%,
+      transparent
+    );
+  color: var(--shadow-claw-warning-color, #d97706);
+}
+
+.header-main-toggle[aria-pressed="true"] svg {
+  transform: rotate(180deg);
+}
+
 .webvm-toggle--hidden {
   color: #dc2626;
 }
@@ -124,6 +142,7 @@ a:hover {
 }
 
 .app-body {
+  --sidebar-width: 15.625rem;
   display: flex;
   flex: 1;
   flex-direction: row;
@@ -138,7 +157,46 @@ a:hover {
   flex: none;
   flex-direction: column;
   overflow-y: auto;
-  width: 15.625rem;
+  width: var(--sidebar-width);
+}
+
+.sidebar-resize-handle {
+  background: transparent;
+  cursor: col-resize;
+  flex: none;
+  outline: none;
+  position: relative;
+  touch-action: none;
+  user-select: none;
+  width: 0.5rem;
+}
+
+.sidebar-resize-handle::after {
+  background: var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-pill);
+  content: "";
+  height: 3rem;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition: background-color 0.15s;
+  width: 0.1875rem;
+}
+
+.sidebar-resize-handle:hover::after,
+.sidebar-resize-handle.active::after {
+  background: var(--shadow-claw-accent-primary);
+}
+
+.sidebar-resize-handle:focus-visible::after {
+  background: var(--shadow-claw-accent-primary);
+}
+
+.sidebar-resize-handle:focus-visible {
+  outline: 0.125rem solid
+    color-mix(in srgb, var(--shadow-claw-accent-primary) 60%, transparent);
+  outline-offset: 0.0625rem;
 }
 
 @media (max-width: 55.9375rem) {
@@ -153,7 +211,12 @@ a:hover {
     height: calc(100vh - 4rem);
     height: calc(100dvh - 4rem);
     position: absolute;
+    width: min(85vw, 20rem);
     z-index: 100;
+  }
+
+  .sidebar-resize-handle {
+    display: none;
   }
 }
 

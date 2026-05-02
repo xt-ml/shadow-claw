@@ -12,6 +12,10 @@ export class ShadowClawPageHeader extends ShadowClawElement {
   static template = `${ShadowClawPageHeader.componentPath}/${elementName}.html`;
 
   actionsLayoutCleanup: () => void = () => {};
+  mainVisibilityCleanup: () => void = () => {};
+  mainVisibilityMediaQuery: MediaQueryList | null = null;
+  manualMainCollapsedOverride: boolean | null = null;
+  mainCollapsed: boolean = false;
 
   constructor() {
     super();
@@ -55,6 +59,7 @@ export class ShadowClawPageHeader extends ShadowClawElement {
 
     this.setupActionsContainer(root);
     this.setupResponsiveActionsDisclosure(root);
+    this.setupMainVisibility(root);
   }
 
   /**
@@ -124,8 +129,95 @@ export class ShadowClawPageHeader extends ShadowClawElement {
     };
   }
 
+  setupMainVisibility(root: ShadowRoot) {
+    this.mainVisibilityCleanup();
+
+    const headerMain = root.querySelector(".header__main");
+    if (!(headerMain instanceof HTMLElement)) {
+      this.mainVisibilityMediaQuery = null;
+      this.mainVisibilityCleanup = () => {};
+
+      return;
+    }
+
+    if (typeof globalThis.matchMedia !== "function") {
+      this.mainVisibilityMediaQuery = null;
+      this.applyMainVisibility(root);
+      this.mainVisibilityCleanup = () => {};
+
+      return;
+    }
+
+    const mediaQuery = globalThis.matchMedia(
+      "(min-width: 56rem) and (min-height: 401px)",
+    );
+    this.mainVisibilityMediaQuery = mediaQuery;
+
+    const onChange = () => {
+      this.applyMainVisibility(root);
+    };
+
+    mediaQuery.addEventListener("change", onChange);
+    this.applyMainVisibility(root);
+
+    this.mainVisibilityCleanup = () => {
+      mediaQuery.removeEventListener("change", onChange);
+      this.mainVisibilityMediaQuery = null;
+    };
+  }
+
+  getAutoMainCollapsed() {
+    const mediaQuery = this.mainVisibilityMediaQuery;
+    if (!mediaQuery) {
+      return false;
+    }
+
+    return !mediaQuery.matches;
+  }
+
+  getEffectiveMainCollapsed() {
+    if (typeof this.manualMainCollapsedOverride === "boolean") {
+      return this.manualMainCollapsedOverride;
+    }
+
+    return this.getAutoMainCollapsed();
+  }
+
+  applyMainVisibility(root?: ShadowRoot) {
+    const targetRoot = root || this.shadowRoot;
+    if (!targetRoot) {
+      return;
+    }
+
+    const headerMain = targetRoot.querySelector(".header__main");
+    if (!(headerMain instanceof HTMLElement)) {
+      return;
+    }
+
+    const collapsed = this.getEffectiveMainCollapsed();
+    this.mainCollapsed = collapsed;
+    headerMain.hidden = collapsed;
+  }
+
+  setMainCollapsedOverride(collapsed: boolean | null) {
+    this.manualMainCollapsedOverride =
+      typeof collapsed === "boolean" ? collapsed : null;
+    this.applyMainVisibility();
+  }
+
+  toggleMainCollapsedOverride() {
+    this.setMainCollapsedOverride(!this.isMainCollapsed());
+
+    return this.isMainCollapsed();
+  }
+
+  isMainCollapsed() {
+    return this.mainCollapsed;
+  }
+
   disconnectedCallback() {
     this.actionsLayoutCleanup();
+    this.mainVisibilityCleanup();
   }
 }
 

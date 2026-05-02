@@ -457,6 +457,8 @@ describe("config.js", () => {
         "rate_limit_calls_per_minute",
       );
       expect(CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT).toBe("rate_limit_auto_adapt");
+      expect(CONFIG_KEYS.SIDEBAR_WIDTH).toBe("sidebar_width");
+      expect(CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT).toBe("chat_input_area_height");
     });
 
     it("should include STREAMING_ENABLED config key", () => {

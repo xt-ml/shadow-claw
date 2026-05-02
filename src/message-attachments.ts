@@ -135,8 +135,14 @@ export async function persistMessageAttachments(
 async function readAttachmentSourceAsBlob(
   source: MessageAttachmentSource,
 ): Promise<Blob> {
-  if (source.kind !== "remote-url") {
-    throw new Error(`Unsupported attachment source: ${String(source)}`);
+  if (source.kind === "local-file") {
+    return source.file;
+  }
+
+  if (source.kind === "inline-text") {
+    return new Blob([source.text], {
+      type: source.mimeType || "text/plain",
+    });
   }
 
   const response = await fetch(source.url, {

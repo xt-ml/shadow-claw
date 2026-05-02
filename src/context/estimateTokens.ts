@@ -46,6 +46,13 @@ export function estimateMessageTokens(message: ConversationMessage): number {
         contentTokens += estimateTokens(
           typeof c === "string" ? c : JSON.stringify(c),
         );
+      } else if (block.type === "attachment") {
+        contentTokens += estimateTokens(block.fileName);
+        contentTokens += estimateTokens(block.mimeType);
+        contentTokens += estimateTokens(block.path);
+        // Count raw payload conservatively so large native attachments reduce
+        // the effective context budget instead of silently overflowing it.
+        contentTokens += estimateTokens(block.data);
       }
     }
   }

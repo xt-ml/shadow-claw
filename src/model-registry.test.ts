@@ -56,6 +56,7 @@ describe("ModelRegistry", () => {
       expect(modelRegistry.getModelInfo("openrouter/free")).toEqual({
         contextWindow: 200000,
         maxOutput: 4096,
+        routesByRequestFeatures: true,
       });
 
       expect(modelRegistry.getModelInfo("anthropic/claude-3-sonnet")).toEqual({
@@ -130,6 +131,82 @@ describe("ModelRegistry", () => {
         contextWindow: 65536,
         maxOutput: null,
         supportsTools: false,
+      });
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+    }
+  });
+
+  it("should parse input modalities from architecture metadata when provided", async () => {
+    const mockData: any = {
+      data: [
+        {
+          id: "openai/gpt-4.1",
+          context_length: 128000,
+          architecture: {
+            input_modalities: ["text", "image"],
+            output_modalities: ["text"],
+          },
+        },
+      ],
+    };
+
+    const originalFetch = (globalThis as any).fetch;
+
+    (globalThis as any).fetch = async () => ({
+      ok: true,
+      json: async () => mockData,
+    });
+
+    try {
+      await modelRegistry.fetchModelInfo({
+        id: "openrouter",
+        modelsUrl: "https://openrouter.ai/api/v1/models",
+        headers: {},
+      } as any);
+
+      expect(modelRegistry.getModelInfo("openai/gpt-4.1")).toEqual({
+        contextWindow: 128000,
+        maxOutput: null,
+        inputModalities: ["text", "image"],
+        outputModalities: ["text"],
+        supportsAudioInput: false,
+        supportsImageInput: true,
+        supportsVideoInput: false,
+      });
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+    }
+  });
+
+  it("should mark openrouter/free as routing by request features", async () => {
+    const mockData: any = {
+      data: [
+        {
+          id: "openrouter/free",
+          context_length: 200000,
+        },
+      ],
+    };
+
+    const originalFetch = (globalThis as any).fetch;
+
+    (globalThis as any).fetch = async () => ({
+      ok: true,
+      json: async () => mockData,
+    });
+
+    try {
+      await modelRegistry.fetchModelInfo({
+        id: "openrouter",
+        modelsUrl: "https://openrouter.ai/api/v1/models",
+        headers: {},
+      } as any);
+
+      expect(modelRegistry.getModelInfo("openrouter/free")).toEqual({
+        contextWindow: 200000,
+        maxOutput: null,
+        routesByRequestFeatures: true,
       });
     } finally {
       (globalThis as any).fetch = originalFetch;

@@ -22,6 +22,30 @@ describe("BrowserChatChannel", () => {
     expect(seen[0].channel).toBe("browser");
   });
 
+  it("includes attachments when provided", () => {
+    const ch = new BrowserChatChannel();
+    let payload: any;
+
+    ch.onMessage((m: any) => {
+      payload = m;
+    });
+
+    ch.submit("check", "br:abc", [
+      {
+        fileName: "photo.png",
+        mimeType: "image/png",
+        size: 123,
+      },
+    ] as any);
+
+    expect(Array.isArray(payload.attachments)).toBe(true);
+    expect(payload.attachments[0]).toMatchObject({
+      fileName: "photo.png",
+      mimeType: "image/png",
+      size: 123,
+    });
+  });
+
   it("uses active group when submit groupId is omitted", () => {
     const ch: any = new BrowserChatChannel();
     let payload: any;

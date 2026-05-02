@@ -1,5 +1,6 @@
 import { jest } from "@jest/globals";
 
+import { LLAMAFILE_PROXY_URL } from "./config.js";
 import { Orchestrator } from "./orchestrator.js";
 import { buildSystemPrompt } from "./worker/system-prompt.js";
 import { toolsStore } from "./stores/tools.js";
@@ -204,6 +205,41 @@ describe("Orchestrator", () => {
       type: "vm-workspace-flush",
       payload: { groupId: "g1" },
     });
+  });
+
+  it("sends an explicit llamafile cancel request when stopping", () => {
+    const o = new Orchestrator();
+    const postMessage = jest.fn();
+    const fetchMock = jest
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue({ ok: true } as Response);
+
+    o.agentWorker = { postMessage } as any;
+    o.provider = "llamafile";
+    o.state = "thinking";
+    o.inFlightProviderRequestIds.set("g1", "req-123");
+
+    o.stopCurrentRequest("g1");
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: "cancel",
+      payload: { groupId: "g1" },
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      LLAMAFILE_PROXY_URL.replace("/chat/completions", "/cancel"),
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "Content-Type": "application/json",
+          "x-shadowclaw-request-id": "req-123",
+        }),
+        body: JSON.stringify({ requestId: "req-123" }),
+        keepalive: true,
+      }),
+    );
+    expect(o.inFlightProviderRequestIds.has("g1")).toBe(false);
+
+    fetchMock.mockRestore();
   });
 
   it("tracks vm boot mode preference", () => {

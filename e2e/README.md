@@ -243,7 +243,7 @@ Root application controller. Automatically initialized by `app` fixture.
 - `open()` — Navigate to `/` and wait for app ready
 - `waitForReady()` — Wait for custom element definition + active page
 - `navigateTo(pageId)` — Delegate to `nav.navigateTo()`
-- `navigateToWithOpenDialog(pageId)` — Navigate via app API when a native dialog is open
+- `navigateToWithOpenDialog(pageId)` — Navigate via app API when a dialog is open (including wrapped native `<dialog>` usage)
 - `currentPageId()` — Get active page ID
 - `chatComponent()`, `filesComponent()`, `tasksComponent()`, `toastComponent()` — Component locators
 

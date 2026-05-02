@@ -40,7 +40,10 @@
       <div class="tasks__terminal-slot" data-terminal-slot hidden></div>
       <div aria-live="polite" class="tasks__list" role="list"></div>
     </div>
-    <dialog aria-labelledby="tasksDialogTitle" class="tasks__dialog">
+    <shadow-claw-dialog
+      aria-labelledby="tasksDialogTitle"
+      dialog-class="tasks__dialog"
+    >
       <div class="tasks__dialog-header">
         <h3 class="tasks__dialog-title" id="tasksDialogTitle">Add Task</h3>
         <button
@@ -105,6 +108,6 @@
           </button>
         </div>
       </form>
-    </dialog>
+    </shadow-claw-dialog>
   </section>
 </template>

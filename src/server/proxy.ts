@@ -44,6 +44,7 @@ const __dirname = path.dirname(__filename);
 const LLAMAFILE_EXTENSION = ".llamafile";
 const DEFAULT_LLAMAFILE_HOST = "127.0.0.1";
 const DEFAULT_LLAMAFILE_PORT = 8080;
+const LLAMAFILE_REQUEST_ID_HEADER = "x-shadowclaw-request-id";
 const LLAMAFILE_ALLOWED_LOOPBACK_HOSTS = new Set([
   "localhost",
   "127.0.0.1",
@@ -56,15 +57,15 @@ const TRANSFORMERS_JS_MODULE_ID = "@huggingface/transformers";
 const DEFAULT_TRANSFORMERS_JS_MODEL = "onnx-community/gemma-4-E2B-it-ONNX";
 const TRANSFORMERS_JS_MODELS_CACHE_FILE = path.resolve(
   process.cwd(),
-  "cache/transformers-js-models.json",
+  "assets/cache/transformers.js/models.json",
 );
 const TRANSFORMERS_JS_RUNTIME_CACHE_DIR = path.resolve(
   process.cwd(),
-  "cache/transformers-js",
+  "assets/cache/transformers.js",
 );
 const TRANSFORMERS_JS_DISCOVERY_DOWNLOAD_FILE = path.resolve(
   process.cwd(),
-  "cache/transformers-js-models-discovery.json.part",
+  "assets/cache/transformers.js/models-discovery.json.part",
 );
 const TRANSFORMERS_JS_RUNTIME_IDLE_MS = 10_000;
 const DEFAULT_TRANSFORMERS_JS_REQUEST_TIMEOUT_MS = 300_000;
@@ -85,6 +86,7 @@ const transformersJsRuntimeCleanupTimers = new Map<
   string,
   ReturnType<typeof setTimeout>
 >();
+const activeLlamafileRequests = new Map<string, () => void>();
 
 const TRANSFORMERS_JS_MODELS = [
   {
@@ -1125,6 +1127,41 @@ function normalizeLlamafileOffline(value: unknown): boolean {
   return true;
 }
 
+function getLlamafileRequestId(
+  req: Request,
+  body?: Record<string, any>,
+): string {
+  const headerValue = getFirstHeaderValue(
+    req.headers[LLAMAFILE_REQUEST_ID_HEADER],
+  ).trim();
+  if (headerValue) {
+    return headerValue;
+  }
+
+  if (typeof body?.requestId === "string") {
+    return body.requestId.trim();
+  }
+
+  return "";
+}
+
+function registerLlamafileCancellation(
+  requestId: string,
+  cancel: () => void,
+): () => void {
+  if (!requestId) {
+    return () => {};
+  }
+
+  activeLlamafileRequests.set(requestId, cancel);
+
+  return () => {
+    if (activeLlamafileRequests.get(requestId) === cancel) {
+      activeLlamafileRequests.delete(requestId);
+    }
+  };
+}
+
 function getLlamafileRuntimeOptions(req: Request): {
   mode: LlamafileMode;
   host: string;
@@ -1172,9 +1209,9 @@ async function listLlamafileBinaries(): Promise<
   Array<{ fileName: string; id: string; absolutePath: string }>
 > {
   const candidateDirs = [
-    path.resolve(__dirname, "../../assets/llamafile"),
-    path.resolve(__dirname, "../../../assets/llamafile"),
-    path.resolve(process.cwd(), "assets/llamafile"),
+    path.resolve(__dirname, "../../assets/cache/llamafile"),
+    path.resolve(__dirname, "../../../assets/cache/llamafile"),
+    path.resolve(process.cwd(), "assets/cache/llamafile"),
   ];
 
   let resolvedDir = "";
@@ -1193,7 +1230,7 @@ async function listLlamafileBinaries(): Promise<
 
   if (!resolvedDir) {
     throw new Error(
-      `Could not locate assets/llamafile directory. Tried: ${candidateDirs.join(", ")}`,
+      `Could not locate assets/cache/llamafile directory. Tried: ${candidateDirs.join(", ")}`,
     );
   }
 
@@ -1230,7 +1267,7 @@ async function resolveLlamafileBinary(model: string): Promise<{
 
   if (!match) {
     throw new Error(
-      `Model '${normalizedModel}' not found under assets/llamafile (*.llamafile).`,
+      `Model '${normalizedModel}' not found under assets/cache/llamafile (*.llamafile).`,
     );
   }
 
@@ -1332,6 +1369,7 @@ async function invokeLlamafileCli(
   verbose: boolean,
 ) {
   const { absolutePath } = await resolveLlamafileBinary(opts.model);
+  const requestId = getLlamafileRequestId(req, body);
 
   // Pre-flight check: verify binary exists and is executable
   try {
@@ -1471,6 +1509,7 @@ async function invokeLlamafileCli(
   const cleanupCancellationListeners = () => {
     req.off("aborted", onClientDisconnected);
     req.off("close", onClientDisconnected);
+    req.socket.off("close", onClientDisconnected);
     res.off("close", onClientDisconnected);
   };
 
@@ -1485,7 +1524,13 @@ async function invokeLlamafileCli(
 
   req.once("aborted", onClientDisconnected);
   req.once("close", onClientDisconnected);
+  req.socket.once("close", onClientDisconnected);
   res.once("close", onClientDisconnected);
+
+  const unregisterCancellation = registerLlamafileCancellation(
+    requestId,
+    onClientDisconnected,
+  );
 
   if (wantsStreaming) {
     res.status(200);
@@ -1511,6 +1556,7 @@ async function invokeLlamafileCli(
 
     child.on("close", (code) => {
       cleanupCancellationListeners();
+      unregisterCancellation();
       clearForceKillTimer();
 
       if (requestClosed) {
@@ -1548,6 +1594,7 @@ async function invokeLlamafileCli(
     child.on("error", (error) => {
       hasError = true;
       cleanupCancellationListeners();
+      unregisterCancellation();
       clearForceKillTimer();
 
       if (requestClosed) {
@@ -1585,6 +1632,7 @@ async function invokeLlamafileCli(
 
   const exitCode = await new Promise<number | null>((resolve, reject) => {
     child.on("error", (error) => {
+      unregisterCancellation();
       clearForceKillTimer();
 
       if (requestClosed) {
@@ -1599,6 +1647,7 @@ async function invokeLlamafileCli(
       reject(new Error(fullMessage));
     });
     child.on("close", (code) => {
+      unregisterCancellation();
       clearForceKillTimer();
       resolve(code);
     });
@@ -1664,13 +1713,35 @@ async function invokeLlamafileServer(
     env.LLAMAFILE_SERVER_REQUEST_TIMEOUT_MS,
     120_000,
   );
+  const requestId = getLlamafileRequestId(req, body);
   const requestController = new AbortController();
+  let requestClosed = false;
 
   const abortUpstream = () => {
+    if (requestClosed) {
+      return;
+    }
+
+    requestClosed = true;
     requestController.abort();
   };
 
-  req.on("close", abortUpstream);
+  const cleanupCancellationListeners = () => {
+    req.off("aborted", abortUpstream);
+    req.off("close", abortUpstream);
+    req.socket.off("close", abortUpstream);
+    res.off("close", abortUpstream);
+  };
+
+  req.once("aborted", abortUpstream);
+  req.once("close", abortUpstream);
+  req.socket.once("close", abortUpstream);
+  res.once("close", abortUpstream);
+
+  const unregisterCancellation = registerLlamafileCancellation(
+    requestId,
+    abortUpstream,
+  );
 
   if (verbose) {
     console.log(`[Proxy] Forwarding llamafile SERVER request to ${targetUrl}`);
@@ -1692,13 +1763,26 @@ async function invokeLlamafileServer(
       timeoutMs,
     );
   } catch (error) {
-    req.off("close", abortUpstream);
+    cleanupCancellationListeners();
+    unregisterCancellation();
+
+    if (
+      requestClosed ||
+      (error instanceof Error && error.name === "AbortError")
+    ) {
+      return;
+    }
 
     throw error;
   }
 
   if (!upstream.ok) {
-    req.off("close", abortUpstream);
+    cleanupCancellationListeners();
+    unregisterCancellation();
+    if (requestClosed) {
+      return;
+    }
+
     const errorBody = await upstream.text();
     res.status(upstream.status).json({ error: errorBody });
 
@@ -1706,12 +1790,29 @@ async function invokeLlamafileServer(
   }
 
   if (!wantsStreaming) {
-    req.off("close", abortUpstream);
-    const payload = Buffer.from(await upstream.arrayBuffer());
-    res.status(200);
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Content-Type", "application/json");
-    res.send(payload);
+    try {
+      const payload = Buffer.from(await upstream.arrayBuffer());
+      if (requestClosed) {
+        return;
+      }
+
+      res.status(200);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Content-Type", "application/json");
+      res.send(payload);
+    } catch (error) {
+      if (
+        requestClosed ||
+        (error instanceof Error && error.name === "AbortError")
+      ) {
+        return;
+      }
+
+      throw error;
+    } finally {
+      cleanupCancellationListeners();
+      unregisterCancellation();
+    }
 
     return;
   }
@@ -1724,7 +1825,8 @@ async function invokeLlamafileServer(
   res.flushHeaders();
 
   if (!upstream.body) {
-    req.off("close", abortUpstream);
+    cleanupCancellationListeners();
+    unregisterCancellation();
     res.end();
 
     return;
@@ -1740,9 +1842,23 @@ async function invokeLlamafileServer(
 
       res.write(Buffer.from(value));
     }
+  } catch (error) {
+    if (
+      requestClosed ||
+      (error instanceof Error && error.name === "AbortError")
+    ) {
+      return;
+    }
+
+    throw error;
   } finally {
-    req.off("close", abortUpstream);
+    cleanupCancellationListeners();
+    unregisterCancellation();
     reader.releaseLock();
+  }
+
+  if (requestClosed) {
+    return;
   }
 
   res.end();
@@ -3240,6 +3356,30 @@ export function registerProxyRoutes(
         error: `Failed to list llamafile binaries: ${message}`,
       });
     }
+  });
+
+  app.post("/llamafile-proxy/cancel", (req, res) => {
+    const body =
+      req.body && typeof req.body === "object"
+        ? (req.body as Record<string, any>)
+        : undefined;
+    const requestId = getLlamafileRequestId(req, body);
+
+    if (!requestId) {
+      res.status(400).json({ error: "Missing llamafile request id" });
+
+      return;
+    }
+
+    const cancel = activeLlamafileRequests.get(requestId);
+    if (!cancel) {
+      res.status(200).json({ ok: true, cancelled: false });
+
+      return;
+    }
+
+    cancel();
+    res.status(202).json({ ok: true, cancelled: true });
   });
 
   // ---- Llamafile: chat completions (CLI or SERVER mode) ----

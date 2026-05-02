@@ -17,6 +17,14 @@ const PROVIDERS: any = {
     defaultModel: "model-c",
     requiresApiKey: false,
   },
+  llamafile: {
+    id: "llamafile",
+    name: "Llamafile",
+    defaultModel: "",
+    modelsUrl: "http://localhost:8888/llamafile-proxy/models",
+    requiresApiKey: false,
+    headers: {},
+  },
 };
 
 jest.unstable_mockModule("../../../config.js", () => ({
@@ -277,6 +285,53 @@ describe("shadow-claw-llm", () => {
     );
     expect(showSuccess).toHaveBeenCalledWith("Rate limit settings saved", 3000);
 
+    document.body.removeChild(el);
+  });
+
+  it("opens llamafile help dialog instead of generic toast when model discovery fails", async () => {
+    const orch = createOrchestratorStub({
+      getProvider: jest.fn<any>().mockReturnValue("llamafile"),
+      getModel: jest.fn<any>().mockReturnValue(""),
+      getLlamafileSettings: jest.fn<any>().mockReturnValue({
+        mode: "cli",
+        host: "127.0.0.1",
+        port: 8080,
+        offline: true,
+      }),
+    });
+    (orchestratorStore as any).orchestrator = orch;
+
+    const originalFetch = global.fetch;
+    const fetchMock = jest
+      .fn<any>()
+      .mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/llamafile-proxy/models")) {
+          return Promise.reject(new Error("ENOENT: assets/llamafile missing"));
+        }
+
+        return originalFetch(input as any, init as any);
+      });
+    global.fetch = fetchMock;
+
+    const requestDialog = jest.fn<any>().mockResolvedValue(true);
+    (globalThis as any).shadowclaw = { requestDialog };
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await new Promise((r) => setTimeout(r, 120));
+    await el.render();
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(requestDialog).toHaveBeenCalled();
+    expect(showError).not.toHaveBeenCalledWith(
+      "Could not reach the model server — or proxy configuration is wrong",
+      5000,
+    );
+
+    global.fetch = originalFetch;
+    delete (globalThis as any).shadowclaw;
     document.body.removeChild(el);
   });
 });

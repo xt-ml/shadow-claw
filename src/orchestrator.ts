@@ -5,6 +5,7 @@ import {
   DEFAULT_MAX_ITERATIONS,
   DEFAULT_MAX_TOKENS,
   DEFAULT_PROVIDER,
+  LLAMAFILE_PROXY_URL,
   PROVIDERS,
   buildTriggerPattern,
   getDefaultProvider,
@@ -18,6 +19,8 @@ import {
   invokeWithPromptApi,
   isPromptApiSupported,
 } from "./prompt-api-provider.js";
+import { isLlamafileResolutionError } from "./components/common/help/llamafile.js";
+import { isTransformersJsResolutionError } from "./components/common/help/transformers.js";
 
 import {
   isWebMcpSupported,
@@ -150,6 +153,7 @@ export class Orchestrator {
     ...DEFAULT_DIRECT_TOOL_COMMAND_POLICY,
   };
   gitProxyUrl: string = "/git-proxy";
+  taskServerUrl: string = "/schedule";
   imessage: IMessageChannel = new IMessageChannel();
   imessageApiKey: string = "";
   imessageChatIds: string[] = [];
@@ -169,6 +173,7 @@ export class Orchestrator {
   promptControllers: Map<string, AbortController> = new Map();
   transformersProgressPollers: Map<string, number> = new Map();
   inFlightTriggerByGroup: Map<string, string> = new Map();
+  inFlightProviderRequestIds: Map<string, string> = new Map();
   provider: string = DEFAULT_PROVIDER;
   providerConfig: import("./config.js").ProviderConfig = getDefaultProvider();
   proxyUrl: string = "/proxy";
@@ -347,6 +352,8 @@ export class Orchestrator {
     this.proxyUrl = (await getConfig(db, CONFIG_KEYS.PROXY_URL)) || "/proxy";
     this.gitProxyUrl =
       (await getConfig(db, CONFIG_KEYS.GIT_PROXY_URL)) || "/git-proxy";
+    this.taskServerUrl =
+      (await getConfig(db, CONFIG_KEYS.TASK_SERVER_URL)) || "/schedule";
 
     // Set up channel registry and router
     this.initializeChannelRegistry();
@@ -798,6 +805,15 @@ export class Orchestrator {
     await setConfig(db, CONFIG_KEYS.GIT_PROXY_URL, this.gitProxyUrl);
   }
 
+  getTaskServerUrl(): string {
+    return this.taskServerUrl;
+  }
+
+  async setTaskServerUrl(db: ShadowClawDatabase, url: string): Promise<void> {
+    this.taskServerUrl = url || "/schedule";
+    await setConfig(db, CONFIG_KEYS.TASK_SERVER_URL, this.taskServerUrl);
+  }
+
   /**
    * Sync current proxy settings to the Service Worker interceptor.
    */
@@ -1166,6 +1182,8 @@ export class Orchestrator {
       return;
     }
 
+    const providerRequestId = this.createProviderRequestId(groupId);
+
     this.agentWorker?.postMessage({
       type: "compact",
       payload: {
@@ -1178,7 +1196,10 @@ export class Orchestrator {
         model: this.model,
         provider: this.provider,
         storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
-        providerHeaders: this.getProviderRuntimeHeaders(this.provider),
+        providerHeaders: this.getProviderRuntimeHeaders(
+          this.provider,
+          providerRequestId,
+        ),
         contextCompression: this.contextCompressionEnabled,
         contextLimit: getContextLimit(this.model),
         rateLimitCallsPerMinute: this.rateLimitCallsPerMinute,
@@ -1216,14 +1237,59 @@ export class Orchestrator {
     await setConfig(db, CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK, profile);
   }
 
-  getProviderRuntimeHeaders(providerId: string): Record<string, string> {
+  private createProviderRequestId(groupId: string): string {
+    if (this.provider !== "llamafile") {
+      this.inFlightProviderRequestIds.delete(groupId);
+
+      return "";
+    }
+
+    const requestId = `${groupId}:${Date.now().toString(36)}:${Math.random()
+      .toString(36)
+      .slice(2, 10)}`;
+
+    this.inFlightProviderRequestIds.set(groupId, requestId);
+
+    return requestId;
+  }
+
+  private clearProviderRequest(groupId: string): void {
+    this.inFlightProviderRequestIds.delete(groupId);
+  }
+
+  private async cancelLlamafileRequest(requestId: string): Promise<void> {
+    try {
+      await fetch(LLAMAFILE_PROXY_URL.replace("/chat/completions", "/cancel"), {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-shadowclaw-request-id": requestId,
+        },
+        body: JSON.stringify({ requestId }),
+        keepalive: true,
+      });
+    } catch {
+      // Best-effort cancellation only.
+    }
+  }
+
+  getProviderRuntimeHeaders(
+    providerId: string,
+    requestId = "",
+  ): Record<string, string> {
     if (providerId === "llamafile") {
-      return {
+      const headers: Record<string, string> = {
         "x-llamafile-mode": this.llamafileMode,
         "x-llamafile-host": this.llamafileHost,
         "x-llamafile-port": String(this.llamafilePort),
         "x-llamafile-offline": this.llamafileOffline ? "true" : "false",
       };
+
+      if (requestId) {
+        headers["x-shadowclaw-request-id"] = requestId;
+      }
+
+      return headers;
     }
 
     if (providerId === "bedrock_proxy") {
@@ -1330,11 +1396,18 @@ export class Orchestrator {
     }
 
     this.stopTransformersProgressPolling(groupId);
+    const providerRequestId =
+      this.inFlightProviderRequestIds.get(groupId) || "";
+    this.clearProviderRequest(groupId);
 
     this.agentWorker?.postMessage({
       type: "cancel",
       payload: { groupId },
     });
+
+    if (this.provider === "llamafile" && providerRequestId) {
+      void this.cancelLlamafileRequest(providerRequestId);
+    }
 
     const promptController = this.promptControllers.get(groupId);
     if (promptController) {
@@ -1496,7 +1569,8 @@ export class Orchestrator {
    */
   async _syncTaskToServer(task: Task): Promise<boolean> {
     try {
-      const res = await fetch("/schedule/tasks", {
+      const base = this.taskServerUrl.replace(/\/$/, "");
+      const res = await fetch(`${base}/tasks`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(task),
@@ -1553,7 +1627,8 @@ export class Orchestrator {
    */
   async _deleteTaskFromServer(id: string): Promise<boolean> {
     try {
-      const res = await fetch(`/schedule/tasks/${encodeURIComponent(id)}`, {
+      const base = this.taskServerUrl.replace(/\/$/, "");
+      const res = await fetch(`${base}/tasks/${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
 
@@ -2098,6 +2173,8 @@ export class Orchestrator {
       this.startTransformersProgressPolling(groupId);
     }
 
+    const providerRequestId = this.createProviderRequestId(groupId);
+
     // Send to agent worker
     this.agentWorker?.postMessage({
       type: "invoke",
@@ -2114,7 +2191,10 @@ export class Orchestrator {
         provider: this.provider,
         storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
         enabledTools: activeTools,
-        providerHeaders: this.getProviderRuntimeHeaders(this.provider),
+        providerHeaders: this.getProviderRuntimeHeaders(
+          this.provider,
+          providerRequestId,
+        ),
         streaming: shouldStream,
         contextCompression: this.contextCompressionEnabled,
         contextLimit: getContextLimit(this.model),
@@ -2130,6 +2210,7 @@ export class Orchestrator {
       case "response": {
         const { groupId, text } = msg.payload;
         this.stopTransformersProgressPolling(groupId);
+        this.clearProviderRequest(groupId);
         this.inFlightTriggerByGroup.delete(groupId);
         await this.deliverResponse(db, groupId, text);
 
@@ -2217,6 +2298,7 @@ export class Orchestrator {
       case "error": {
         const { groupId, error } = msg.payload;
         this.stopTransformersProgressPolling(groupId);
+        this.clearProviderRequest(groupId);
         this.inFlightTriggerByGroup.delete(groupId);
         let finalError = error;
 
@@ -2230,6 +2312,26 @@ export class Orchestrator {
         if (isContextError) {
           finalError +=
             "\n\n\u26a0\ufe0f This model has a small context window. Try clicking **'Compact'** in the header to summarize the conversation and reduce token usage.";
+        }
+
+        if (
+          this.getProvider() === "llamafile" &&
+          isLlamafileResolutionError(error)
+        ) {
+          this.events.emit("provider-help", {
+            providerId: "llamafile",
+            reason: error,
+          });
+        }
+
+        if (
+          this.getProvider() === "transformers_js_local" &&
+          isTransformersJsResolutionError(error)
+        ) {
+          this.events.emit("provider-help", {
+            providerId: "transformers_js_local",
+            reason: error,
+          });
         }
 
         await this.deliverResponse(db, groupId, `⚠️ Error: ${finalError}`);
@@ -2274,6 +2376,7 @@ export class Orchestrator {
       }
 
       case "compact-done": {
+        this.clearProviderRequest(msg.payload.groupId);
         await this.handleCompactDone(
           db,
           msg.payload.groupId,

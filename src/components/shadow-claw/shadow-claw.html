@@ -121,27 +121,32 @@
       </div>
     </div>
 
-    <dialog class="app-confirm-dialog" aria-labelledby="appConfirmTitle">
+    <shadow-claw-dialog
+      dialog-class="app-dialog"
+      aria-labelledby="appDialogTitle"
+    >
       <form method="dialog" class="app-confirm-dialog__form">
-        <h2 id="appConfirmTitle" class="app-confirm-dialog__title">Confirm</h2>
-        <p class="app-confirm-dialog__message"></p>
+        <h2 id="appDialogTitle" class="app-dialog__title">Confirm</h2>
+        <p class="app-dialog__message"></p>
+        <ul class="app-dialog__details" hidden></ul>
+        <div class="app-dialog__links" hidden></div>
         <div class="app-confirm-dialog__actions">
           <button
             type="submit"
             value="cancel"
-            class="app-confirm-dialog__btn app-confirm-dialog__btn--cancel"
+            class="app-dialog__btn app-dialog__btn--cancel"
           >
             Cancel
           </button>
           <button
             type="submit"
             value="confirm"
-            class="app-confirm-dialog__btn app-confirm-dialog__btn--confirm"
+            class="app-dialog__btn app-dialog__btn--confirm"
           >
             Confirm
           </button>
         </div>
       </form>
-    </dialog>
+    </shadow-claw-dialog>
   </div>
 </template>

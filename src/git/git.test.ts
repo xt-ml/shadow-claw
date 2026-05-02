@@ -543,7 +543,7 @@ describe("git.js", () => {
   describe("getProxyUrl", () => {
     it("returns public CORS proxy when preference is public", () => {
       const url = mod.getProxyUrl("public");
-      expect(url).toBe("https://cors.example.com");
+      expect(url).toBe("https://www.cors-anywhere.com");
     });
 
     it("returns local proxy URL for local preference", () => {

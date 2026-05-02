@@ -1,8 +1,7 @@
 .cache
 .env
-assets/llamafile*
+assets/cache*
 assets/v86*
-cache
 coverage
 dist
 dist-electron

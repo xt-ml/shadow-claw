@@ -9,6 +9,7 @@ import { escapeHtml } from "../../utils.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
 import "../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
+import "../shadow-claw-dialog/shadow-claw-dialog.js";
 
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 

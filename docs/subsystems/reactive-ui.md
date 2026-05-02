@@ -211,6 +211,7 @@ _profiles (State) ──────────┘
 | PDF Viewer                | `<shadow-claw-pdf-viewer>`       | PDF preview (pdf.js)                                 |
 | Terminal                  | `<shadow-claw-terminal>`         | Interactive WebVM terminal                           |
 | Toast                     | `<shadow-claw-toast>`            | Notification overlay                                 |
+| Dialog Wrapper            | `<shadow-claw-dialog>`           | Shared wrapper around native `<dialog>` semantics    |
 | Page Header               | `<shadow-claw-page-header>`      | Reusable mobile-first header                         |
 | Settings — LLM            | `<shadow-claw-llm>`              | Provider and model settings                          |
 | Settings — Git            | `<shadow-claw-git>`              | Git token and proxy settings                         |

@@ -5,6 +5,7 @@ import "../settings/shadow-claw-mcp-remote/shadow-claw-mcp-remote.js";
 import "../settings/shadow-claw-networking/shadow-claw-networking.js";
 import "../settings/shadow-claw-notifications/shadow-claw-notifications.js";
 import "../settings/shadow-claw-storage/shadow-claw-storage.js";
+import "../settings/shadow-claw-task-server/shadow-claw-task-server.js";
 import "../settings/shadow-claw-webvm/shadow-claw-webvm.js";
 
 import type { Orchestrator } from "../../orchestrator.js";

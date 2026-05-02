@@ -19,5 +19,9 @@ export default defineConfig({
     port: 8888,
     reuseExistingServer: false,
     timeout: 120000,
+    env: {
+      ...process.env,
+      SHADOWCLAW_DATABASE_DIR: ".cache/e2e-database",
+    },
   },
 });

@@ -3,9 +3,17 @@ import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../toast.js";
 import { effect } from "../../../effect.js";
 import { getModelMaxTokens } from "../../../config.js";
+import {
+  buildLlamafileHelpDialogOptions,
+  LLAMAFILE_EXPECTED_DIR,
+} from "../../common/help/llamafile.js";
 
 import type { Orchestrator } from "../../../orchestrator.js";
-import type { LLMProvider, ShadowClawDatabase } from "../../../types.js";
+import type {
+  AppDialogOptions,
+  LLMProvider,
+  ShadowClawDatabase,
+} from "../../../types.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 
@@ -104,12 +112,20 @@ export class ShadowClawLlm extends ShadowClawElement {
 
   db: ShadowClawDatabase | null;
   orchestrator: Orchestrator | null;
+  llamafileDiscoveredModelIds: string[];
+  llamafileModelLoadError: string | null;
+  lastLlamafileHelpKey: string;
+  modelFetchToken: number;
 
   constructor() {
     super();
 
     this.db = null;
     this.orchestrator = null;
+    this.llamafileDiscoveredModelIds = [];
+    this.llamafileModelLoadError = null;
+    this.lastLlamafileHelpKey = "";
+    this.modelFetchToken = 0;
   }
 
   async connectedCallback() {
@@ -160,6 +176,10 @@ export class ShadowClawLlm extends ShadowClawElement {
     root
       .querySelector('[data-action="save-model"]')
       ?.addEventListener("click", () => this.saveModel());
+
+    root
+      .querySelector('[data-action="refresh-models"]')
+      ?.addEventListener("click", () => this.updateModelSelector());
 
     root
       .querySelector('[data-setting="model-select"]')
@@ -264,6 +284,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     this.renderLlamafileSettings();
     this.updateLlamafileModeVisibility();
     this.updateLlamafileModelSectionVisibility();
+    this.updateModelProviderHelperText();
     this.updateBedrockSettingsVisibility(currentProvider);
     this.renderBedrockSettings();
 
@@ -369,6 +390,12 @@ export class ShadowClawLlm extends ShadowClawElement {
     const currentProviderData = providers.find(
       (p: LLMProvider) => p.id === currentProvider,
     ) as LLMProvider | undefined;
+    const selectionToken = ++this.modelFetchToken;
+
+    if (currentProvider !== "llamafile") {
+      this.llamafileDiscoveredModelIds = [];
+      this.llamafileModelLoadError = null;
+    }
 
     let skipModelFetch = false;
     if (currentProvider === "llamafile") {
@@ -387,6 +414,8 @@ export class ShadowClawLlm extends ShadowClawElement {
         skipModelFetch = true;
       }
     }
+
+    this.updateModelProviderHelperText();
 
     const modelSelect = root.querySelector(
       '[data-setting="model-select"]',
@@ -537,11 +566,36 @@ export class ShadowClawLlm extends ShadowClawElement {
       }
 
       if (!Array.isArray(modelItems) || modelItems.length === 0) {
-        console.warn("No models to render", modelItems);
-        modelSelect.innerHTML = `<option value="__custom__">-- Custom Model ID --</option>`;
-        modelSelect.value = "__custom__";
-        customModelInput.value = this.orchestrator?.getModel() || "";
-        customModelInput.style.display = "block";
+        const currentValue = this.orchestrator?.getModel() || "";
+        const emptyMessage =
+          currentProvider === "llamafile"
+            ? `No *.llamafile models found in ${LLAMAFILE_EXPECTED_DIR}`
+            : "No models available";
+
+        modelSelect.innerHTML = [
+          `<option value="" ${currentValue ? "" : "selected"}>${escapeHtml(emptyMessage)}</option>`,
+          `<option value="__custom__">-- Custom Model ID --</option>`,
+        ].join("");
+
+        if (currentValue) {
+          modelSelect.value = "__custom__";
+          customModelInput.value = currentValue;
+          customModelInput.style.display = "block";
+        } else {
+          modelSelect.value = "";
+          customModelInput.value = "";
+          customModelInput.style.display = "none";
+        }
+
+        if (currentProvider === "llamafile" && !currentValue) {
+          void this.showLlamafileHelpDialog(
+            this.llamafileModelLoadError
+              ? `Failed to load *.llamafile models: ${this.llamafileModelLoadError}`
+              : `No *.llamafile files were found in ${LLAMAFILE_EXPECTED_DIR}.`,
+          );
+        }
+
+        this.updateModelProviderHelperText();
 
         return;
       }
@@ -655,6 +709,8 @@ export class ShadowClawLlm extends ShadowClawElement {
         customModelInput.value = currentModel || "";
         customModelInput.style.display = "block";
       }
+
+      this.updateModelProviderHelperText();
     };
 
     // If the provider has a pre-selected list, prioritize it
@@ -670,6 +726,7 @@ export class ShadowClawLlm extends ShadowClawElement {
 
     // Otherwise, if the provider exposes a modelsUrl, fetch models dynamically
     else if (currentProviderData?.modelsUrl && modelSelect) {
+      const fetchToken = selectionToken;
       modelSelect.innerHTML = "<option>Loading models\u2026</option>";
       modelSelect.disabled = true;
 
@@ -710,6 +767,14 @@ export class ShadowClawLlm extends ShadowClawElement {
           return r.json();
         })
         .then((data) => {
+          if (fetchToken !== this.modelFetchToken) {
+            return;
+          }
+
+          if (this.orchestrator?.getProvider?.() !== currentProvider) {
+            return;
+          }
+
           // Robustly handle different API response structures
           let items: any[] = [];
           if (Array.isArray(data)) {
@@ -735,15 +800,43 @@ export class ShadowClawLlm extends ShadowClawElement {
             }
           }
 
+          if (currentProvider === "llamafile") {
+            this.llamafileModelLoadError = null;
+            this.llamafileDiscoveredModelIds = items
+              .map((item) =>
+                typeof item === "string" ? item : String(item?.id || ""),
+              )
+              .filter(Boolean);
+          }
+
           modelSelect.disabled = false;
           renderOptions(items);
         })
         .catch((err) => {
+          if (fetchToken !== this.modelFetchToken) {
+            return;
+          }
+
+          if (this.orchestrator?.getProvider?.() !== currentProvider) {
+            return;
+          }
+
           console.error(
             "[ShadowClaw] Failed to load models from",
             currentProviderData.modelsUrl,
             err,
           );
+          const message = err instanceof Error ? err.message : String(err);
+
+          if (currentProvider === "llamafile") {
+            this.llamafileDiscoveredModelIds = [];
+            this.llamafileModelLoadError = message;
+            modelSelect.disabled = false;
+            renderOptions([]);
+
+            return;
+          }
+
           modelSelect.innerHTML = "<option>Failed to load models</option>";
           showError(
             "Could not reach the model server \u2014 or proxy configuration is wrong",
@@ -783,6 +876,59 @@ export class ShadowClawLlm extends ShadowClawElement {
       keyInput.disabled = noKeyProvider;
       keyInput.placeholder = noKeyProvider ? "No API key required" : "sk-...";
     }
+  }
+
+  updateModelProviderHelperText() {
+    const root = this.shadowRoot;
+    if (!root || !this.orchestrator) {
+      return;
+    }
+
+    const helper = root.querySelector(
+      '[data-setting="model-provider-helper"]',
+    ) as HTMLElement | null;
+    if (!helper) {
+      return;
+    }
+
+    const provider = this.orchestrator.getProvider();
+    const llamafileSettings = this.orchestrator.getLlamafileSettings?.();
+    if (provider !== "llamafile" || llamafileSettings?.mode === "server") {
+      helper.hidden = true;
+      helper.textContent = "";
+
+      return;
+    }
+
+    helper.hidden = false;
+    if (this.llamafileDiscoveredModelIds.length > 0) {
+      helper.textContent = `Discovered ${this.llamafileDiscoveredModelIds.length} *.llamafile model${this.llamafileDiscoveredModelIds.length === 1 ? "" : "s"} in ${LLAMAFILE_EXPECTED_DIR}. Choose Custom Model ID to target a file name that is not listed yet.`;
+
+      return;
+    }
+
+    if (this.llamafileModelLoadError) {
+      helper.textContent = `Could not load llamafile models from ${LLAMAFILE_EXPECTED_DIR}. You can still enter a custom model id, but the file must exist there.`;
+
+      return;
+    }
+
+    helper.textContent = `ShadowClaw looks for *.llamafile binaries in ${LLAMAFILE_EXPECTED_DIR}.`;
+  }
+
+  async requestAppDialog(options: AppDialogOptions): Promise<boolean> {
+    return await (globalThis.shadowclaw?.requestDialog?.(options) ??
+      Promise.resolve(false));
+  }
+
+  async showLlamafileHelpDialog(reason?: string): Promise<void> {
+    const key = `${reason || ""}|${this.orchestrator?.getModel() || ""}`;
+    if (this.lastLlamafileHelpKey === key) {
+      return;
+    }
+
+    this.lastLlamafileHelpKey = key;
+    await this.requestAppDialog(buildLlamafileHelpDialogOptions(reason));
   }
 
   updateLlamafileSettingsVisibility(providerId: string) {
@@ -1089,6 +1235,18 @@ export class ShadowClawLlm extends ShadowClawElement {
     let finalModel = modelSelect.value;
     if (finalModel === "__custom__") {
       finalModel = customModelInput.value.trim();
+    }
+
+    const isLlamafileCli =
+      this.orchestrator.getProvider() === "llamafile" &&
+      this.orchestrator.getLlamafileSettings?.().mode === "cli";
+
+    if (isLlamafileCli && !finalModel) {
+      await this.showLlamafileHelpDialog(
+        `Select a discovered *.llamafile model or enter a custom model id that matches a file in the ${LLAMAFILE_EXPECTED_DIR} folder.`,
+      );
+
+      return;
     }
 
     try {

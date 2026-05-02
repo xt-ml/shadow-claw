@@ -20,9 +20,9 @@
 
   <ul class="conversation-list" role="list"></ul>
 
-  <dialog
+  <shadow-claw-dialog
     aria-label="Create new conversation"
-    class="conversations__dialog conversations__create-dialog"
+    dialog-class="conversations__dialog conversations__create-dialog"
   >
     <form class="conversations__form" method="dialog">
       <label class="conversations__label" for="conversations-create-name">
@@ -41,11 +41,11 @@
         <button class="conversations__ok" type="submit">OK</button>
       </div>
     </form>
-  </dialog>
+  </shadow-claw-dialog>
 
-  <dialog
+  <shadow-claw-dialog
     aria-label="Rename conversation"
-    class="conversations__dialog conversations__rename-dialog"
+    dialog-class="conversations__dialog conversations__rename-dialog"
   >
     <form class="conversations__form" method="dialog">
       <label class="conversations__label" for="conversations-rename-name">
@@ -64,11 +64,11 @@
         <button class="conversations__ok" type="submit">OK</button>
       </div>
     </form>
-  </dialog>
+  </shadow-claw-dialog>
 
-  <dialog
+  <shadow-claw-dialog
     aria-label="Delete conversation"
-    class="conversations__dialog conversations__delete-dialog"
+    dialog-class="conversations__dialog conversations__delete-dialog"
   >
     <form class="conversations__form" method="dialog">
       <p class="conversations__delete-message">
@@ -80,5 +80,5 @@
         <button class="conversations__delete-ok" type="submit">Delete</button>
       </div>
     </form>
-  </dialog>
+  </shadow-claw-dialog>
 </template>

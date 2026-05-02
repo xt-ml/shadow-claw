@@ -171,6 +171,17 @@ Cancellation flows through `AbortController`:
 
 Each `groupId` has its own `AbortController` in `inFlightControllers` Map. Starting a new invocation for the same group automatically aborts the previous one.
 
+### Provider-level cancellation (llamafile)
+
+For local `llamafile` requests, cancellation also propagates to the proxy/runtime layer:
+
+1. Orchestrator creates a per-request ID and injects `x-shadowclaw-request-id` into provider headers.
+2. On stop, the orchestrator still sends the worker `cancel` message.
+3. It also POSTs `/llamafile-proxy/cancel` with the same request ID.
+4. The proxy resolves the active request by ID and aborts the matching CLI process or upstream server fetch.
+
+This keeps UI and worker cancellation behavior consistent while preventing orphaned local inference processes.
+
 ## Tool Execution Dispatch
 
 `executeTool(db, name, input, groupId, options)` in `src/worker/executeTool.ts` is the single dispatcher for all tools.

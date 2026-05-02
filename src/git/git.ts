@@ -30,7 +30,7 @@ let _initPromise: Promise<void> | null = null;
 
 const GIT_NAMESPACE = "shadowclaw-git";
 const GIT_ROOT = "/git";
-const PUBLIC_CORS_PROXY = "https://cors.example.com";
+const PUBLIC_CORS_PROXY = "https://www.cors-anywhere.com";
 const DEFAULT_DEPTH = 20;
 
 /**

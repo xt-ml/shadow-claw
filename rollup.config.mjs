@@ -175,6 +175,19 @@ const configs = [
     onwarn,
     plugins: [...commonPlugins("./tsconfig.agent.worker.json")],
   },
+  // Transformers.js Model Worker
+  {
+    input: "src/worker/transformers-js.worker.ts",
+    output: {
+      dir: "dist/public",
+      entryFileNames: "transformers-js.worker.js",
+      format: "esm",
+      sourcemap: !isProduction,
+      inlineDynamicImports: true,
+    },
+    onwarn,
+    plugins: [...commonPlugins("./tsconfig.transformers-js.worker.json")],
+  },
   // Service Worker Init
   {
     input: "src/service-worker/init.ts",

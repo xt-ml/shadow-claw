@@ -174,6 +174,54 @@
       💾 Save Bedrock Fallback
     </button>
   </div>
+  <div
+    class="settings-section"
+    data-setting="transformers-js-settings"
+    style="display: none"
+  >
+    <h3>✨ Transformers.js Browser</h3>
+    <div class="form-group">
+      <label class="form-label" for="transformers-js-backend"
+        >Hardware Acceleration</label
+      >
+      <select
+        class="form-select"
+        data-setting="transformers-js-backend"
+        id="transformers-js-backend"
+      >
+        <option value="cpu" selected>CPU (Most compatible)</option>
+        <option value="webgpu">WebGPU (High performance)</option>
+        <option value="webnn-gpu">WebNN GPU (Experimental)</option>
+        <option value="webnn-npu">WebNN NPU (Experimental)</option>
+      </select>
+      <div class="form-helper">
+        Select the hardware backend for local model execution. WebGPU is
+        recommended if your browser supports it.
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="transformers-js-dtype-strategy"
+        >Optimization Mode</label
+      >
+      <select
+        class="form-select"
+        data-setting="transformers-js-dtype-strategy"
+        id="transformers-js-dtype-strategy"
+      >
+        <option value="auto" selected>Auto (Recommended)</option>
+        <option value="memory">Memory Saver (Quantized first)</option>
+        <option value="balanced">Balanced</option>
+        <option value="quality">Quality First (May use fp32)</option>
+      </select>
+      <div class="form-helper">
+        Controls dtype preference order for browser inference. Models are not
+        blocked; this only changes which optimization path is attempted first.
+      </div>
+    </div>
+    <button class="save-btn" data-action="save-transformers-js-settings">
+      💾 Save Transformers.js Settings
+    </button>
+  </div>
 
   <div class="settings-section">
     <h3>📏 Max Output Tokens</h3>

@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "out/transformers-js-worker",
+    "rootDir": "src",
+    "lib": [
+      "ESNext",
+      "WebWorker"
+    ]
+  },
+  "include": [
+    "src/worker/transformers-js.worker.ts"
+  ]
+}

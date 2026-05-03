@@ -87,8 +87,10 @@ export class ShadowClawConversations extends ShadowClawElement {
       return;
     }
 
-    const onMouseMove = (e: MouseEvent) => {
-      if (!this._resizing) {
+    let activePointerId: number | null = null;
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (e.pointerId !== activePointerId) {
         return;
       }
 
@@ -107,31 +109,55 @@ export class ShadowClawConversations extends ShadowClawElement {
       this.style.height = `${clamped}px`;
     };
 
-    const onMouseUp = () => {
-      if (!this._resizing) {
+    const stopResize = () => {
+      if (activePointerId === null) {
         return;
       }
 
+      activePointerId = null;
       handle.classList.remove("active");
 
       this._resizing = false;
 
-      document.removeEventListener("mousemove", onMouseMove);
-      document.removeEventListener("mouseup", onMouseUp);
+      document.removeEventListener(
+        "pointermove",
+        onPointerMove as EventListener,
+      );
 
       this._persistHeight();
     };
 
-    handle.addEventListener("mousedown", (e) => {
-      e.preventDefault();
+    const onPointerUp = (e: PointerEvent) => {
+      if (e.pointerId !== activePointerId) {
+        return;
+      }
 
+      stopResize();
+    };
+
+    handle.addEventListener("pointerdown", (e: Event) => {
+      const pointerEvent = e as PointerEvent;
+      if (
+        pointerEvent.pointerType === "mouse" &&
+        pointerEvent.button !== 0 &&
+        pointerEvent.button !== -1
+      ) {
+        return;
+      }
+
+      pointerEvent.preventDefault();
+
+      activePointerId = pointerEvent.pointerId;
       handle.classList.add("active");
 
       this._resizing = true;
 
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("mouseup", onMouseUp);
+      handle.setPointerCapture(pointerEvent.pointerId);
+      document.addEventListener("pointermove", onPointerMove as EventListener);
     });
+
+    handle.addEventListener("pointerup", onPointerUp as EventListener);
+    handle.addEventListener("pointercancel", stopResize);
 
     handle.addEventListener("dblclick", () => {
       this.style.flex = "";
@@ -245,7 +271,16 @@ export class ShadowClawConversations extends ShadowClawElement {
         actionsEl.append(deleteBtn);
       }
 
-      li.append(nameEl, actionsEl);
+      const actionsToggleBtn = document.createElement("button");
+      actionsToggleBtn.className = "conversation-actions-toggle";
+      actionsToggleBtn.setAttribute("title", "More actions");
+      actionsToggleBtn.setAttribute(
+        "aria-label",
+        `More actions for ${group.name}`,
+      );
+      actionsToggleBtn.textContent = "⋮";
+
+      li.append(nameEl, actionsEl, actionsToggleBtn);
 
       li.addEventListener("click", (e) => {
         const target = e.target as HTMLElement;
@@ -259,8 +294,11 @@ export class ShadowClawConversations extends ShadowClawElement {
           this.handleRename(group.groupId, group.name);
         } else if (action === "delete") {
           this.handleDelete(group.groupId, group.name);
+        } else if (target.closest(".conversation-actions-toggle")) {
+          li.classList.toggle("show-actions");
         } else if (!target.closest(".drag-handle")) {
           this.handleSwitch(group.groupId);
+          li.classList.remove("show-actions");
         }
       });
 

@@ -16,29 +16,21 @@
       <h1>
         <slot name="header-title-link"></slot>
         <div class="header-actions">
-          <button aria-label="Toggle theme" class="theme-toggle">
+          <button
+            aria-label="Hide activity log"
+            aria-pressed="false"
+            class="theme-toggle activity-log-toggle"
+            type="button"
+          >
             <svg
-              class="sun-icon hidden"
-              height="1.5rem"
-              fill="currentColor"
-              viewBox="0 -960 960 960"
-              width="1.5rem"
               xmlns="http://www.w3.org/2000/svg"
+              height="24px"
+              viewBox="0 -960 960 960"
+              width="24px"
+              fill="currentColor"
             >
               <path
-                d="M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35zm0 80q-83 0-141.5-58.5T280-480q0-83 58.5-141.5T480-680q83 0 141.5 58.5T680-480q0 83-58.5 141.5T480-280zM200-440H40v-80h160v80zm720 0H760v-80h160v80zM440-760v-160h80v160h-80zm0 720v-160h80v160h-80zM256-650l-101-97 57-59 96 100-52 56zm492 496-97-101 53-55 101 97-57 59zm-98-550 97-101 59 57-101 97-55-53zM158-190l97-101 55 53-101 97-51-49z"
-              />
-            </svg>
-            <svg
-              class="moon-icon hidden"
-              height="1.5rem"
-              fill="currentColor"
-              viewBox="0 -960 960 960"
-              width="1.5rem"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <path
-                d="M480-120q-150 0-255-105T120-480q0-150 105-255t255-105q14 0 27.5 1t26.5 3q-41 29-65.5 75.5T444-660q0 90 63 153t153 63q52 0 99-24.5t75-65.5q2 13 3 26.5t1 27.5q0 150-105 255T480-120zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-74 30-122.5 100T204-480q0 116 82 198t194 82zm-12-274z"
+                d="M80-600v-160q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v160h-80v-160H160v160H80Zm80 360q-33 0-56.5-23.5T80-320v-200h80v200h640v-200h80v200q0 33-23.5 56.5T800-240H160ZM40-120v-80h880v80H40Zm440-420ZM80-520v-80h240q11 0 21 6t15 16l47 93 123-215q5-9 14-14.5t20-5.5q11 0 21 5.5t15 16.5l49 98h235v80H620q-11 0-21-5.5T584-542l-26-53-123 215q-5 10-15 15t-21 5q-11 0-20.5-6T364-382l-69-138H80Z"
               />
             </svg>
           </button>
@@ -76,6 +68,35 @@
             >
               <path
                 d="M320-280 120-480l200-200 56 56-104 104h568v80H272l104 104-56 56Zm320 0-56-56 104-104H120v-80h568L584-624l56-56 200 200-200 200Z"
+              />
+            </svg>
+          </button>
+          <button
+            aria-label="Toggle theme"
+            class="theme-toggle theme-mode-toggle"
+          >
+            <svg
+              class="sun-icon hidden"
+              height="1.5rem"
+              fill="currentColor"
+              viewBox="0 -960 960 960"
+              width="1.5rem"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M480-360q50 0 85-35t35-85q0-50-35-85t-85-35q-50 0-85 35t-35 85q0 50 35 85t85 35zm0 80q-83 0-141.5-58.5T280-480q0-83 58.5-141.5T480-680q83 0 141.5 58.5T680-480q0 83-58.5 141.5T480-280zM200-440H40v-80h160v80zm720 0H760v-80h160v80zM440-760v-160h80v160h-80zm0 720v-160h80v160h-80zM256-650l-101-97 57-59 96 100-52 56zm492 496-97-101 53-55 101 97-57 59zm-98-550 97-101 59 57-101 97-55-53zM158-190l97-101 55 53-101 97-51-49z"
+              />
+            </svg>
+            <svg
+              class="moon-icon hidden"
+              height="1.5rem"
+              fill="currentColor"
+              viewBox="0 -960 960 960"
+              width="1.5rem"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M480-120q-150 0-255-105T120-480q0-150 105-255t255-105q14 0 27.5 1t26.5 3q-41 29-65.5 75.5T444-660q0 90 63 153t153 63q52 0 99-24.5t75-65.5q2 13 3 26.5t1 27.5q0 150-105 255T480-120zm0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-74 30-122.5 100T204-480q0 116 82 198t194 82zm-12-274z"
               />
             </svg>
           </button>

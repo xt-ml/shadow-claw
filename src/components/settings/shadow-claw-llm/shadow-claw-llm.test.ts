@@ -25,6 +25,13 @@ const PROVIDERS: any = {
     requiresApiKey: false,
     headers: {},
   },
+  transformers_js_browser: {
+    id: "transformers_js_browser",
+    name: "Transformers.js (Browser - No Proxy - Experimental)",
+    defaultModel: "Xenova/distilgpt2",
+    models: ["Xenova/distilgpt2"],
+    requiresApiKey: false,
+  },
 };
 
 jest.unstable_mockModule("../../../config.js", () => ({
@@ -91,6 +98,7 @@ const { showSuccess, showWarning, showError } =
 
 function createOrchestratorStub(overrides = {}) {
   return {
+    setProvider: jest.fn<any>().mockResolvedValue(undefined),
     setModel: jest.fn<any>().mockResolvedValue(undefined),
     setAssistantName: jest.fn<any>().mockResolvedValue(undefined),
     setMaxTokens: jest.fn<any>().mockResolvedValue(undefined),
@@ -332,6 +340,44 @@ describe("shadow-claw-llm", () => {
 
     global.fetch = originalFetch;
     delete (globalThis as any).shadowclaw;
+    document.body.removeChild(el);
+  });
+
+  it("shows Transformers.js Browser settings only for transformers_js_browser provider", async () => {
+    const orch = createOrchestratorStub({
+      getProvider: jest.fn<any>().mockReturnValue("transformers_js_browser"),
+      getModel: jest.fn<any>().mockReturnValue("Xenova/distilgpt2"),
+    });
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const section = el.shadowRoot?.querySelector(
+      '[data-setting="transformers-js-settings"]',
+    ) as HTMLElement | null;
+    const providerSelect = el.shadowRoot?.querySelector(
+      '[data-setting="provider-select"]',
+    ) as HTMLSelectElement | null;
+
+    if (!section || !providerSelect) {
+      throw new Error("required settings controls not found");
+    }
+
+    expect(section.style.display).toBe("block");
+
+    providerSelect.value = "provider-a";
+    await el.onProviderChange();
+
+    expect(orch.setProvider).toHaveBeenCalledWith(
+      expect.anything(),
+      "provider-a",
+    );
+    expect(section.style.display).toBe("none");
+
     document.body.removeChild(el);
   });
 });

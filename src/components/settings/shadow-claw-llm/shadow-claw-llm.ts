@@ -7,6 +7,10 @@ import {
   buildLlamafileHelpDialogOptions,
   LLAMAFILE_EXPECTED_DIR,
 } from "../../common/help/llamafile.js";
+import {
+  compareLocalModelCandidates,
+  isLikelyInstructionModelId,
+} from "./model-ranking.js";
 
 import type { Orchestrator } from "../../../orchestrator.js";
 import type {
@@ -240,6 +244,10 @@ export class ShadowClawLlm extends ShadowClawElement {
       ?.addEventListener("click", () => this.saveBedrockSettings());
 
     root
+      .querySelector('[data-action="save-transformers-js-settings"]')
+      ?.addEventListener("click", () => this.saveTransformersJsSettings());
+
+    root
       .querySelector('[data-setting="llamafile-mode"]')
       ?.addEventListener("change", () => {
         this.updateLlamafileModeVisibility();
@@ -287,6 +295,8 @@ export class ShadowClawLlm extends ShadowClawElement {
     this.updateModelProviderHelperText();
     this.updateBedrockSettingsVisibility(currentProvider);
     this.renderBedrockSettings();
+    this.updateTransformersJsSettingsVisibility(currentProvider);
+    this.renderTransformersJsSettings();
 
     // Load assistant name
     const nameInput = root.querySelector(
@@ -426,6 +436,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     const currentModel = this.orchestrator.getModel();
     const localOnlyProviderIds = new Set([
       "transformers_js_local",
+      "transformers_js_browser",
       "ollama",
       "llamafile",
       "prompt_api",
@@ -443,6 +454,10 @@ export class ShadowClawLlm extends ShadowClawElement {
      * Heuristic to determine if a model is "free" or "included" based on provider metadata
      */
     const isFreeModel = (m: any) => {
+      if (localOnlyProviderIds.has(currentProvider)) {
+        return true;
+      }
+
       if (typeof m === "string") {
         return false;
       }
@@ -476,6 +491,11 @@ export class ShadowClawLlm extends ShadowClawElement {
      * Helper to check if a model supports tool calling
      */
     const supportsTools = (m: any): boolean => {
+      const id = typeof m === "string" ? m : m.id;
+      if (localOnlyProviderIds.has(currentProvider)) {
+        return isLikelyInstructionModelId(id);
+      }
+
       if (typeof m === "string") {
         return false;
       }
@@ -499,6 +519,11 @@ export class ShadowClawLlm extends ShadowClawElement {
     };
 
     const getToolsBadge = (m: any): string => {
+      const id = typeof m === "string" ? m : m.id;
+      if (localOnlyProviderIds.has(currentProvider)) {
+        return isLikelyInstructionModelId(id) ? " 🛠️" : " ❔🛠️";
+      }
+
       if (typeof m === "string") {
         return " ❔🛠️";
       }
@@ -616,6 +641,25 @@ export class ShadowClawLlm extends ShadowClawElement {
       }
 
       const modelComparator = (a, b) => {
+        if (localOnlyProviderIds.has(currentProvider)) {
+          const idA = typeof a === "string" ? a : a.id;
+          const idB = typeof b === "string" ? b : b.id;
+
+          return compareLocalModelCandidates(
+            {
+              id: idA,
+              supportsTools: supportsTools(a),
+              contextLength: getContextLength(a),
+            },
+            {
+              id: idB,
+              supportsTools: supportsTools(b),
+              contextLength: getContextLength(b),
+            },
+            currentProvider,
+          );
+        }
+
         // 1. Tools support
         const toolsA = supportsTools(a);
         const toolsB = supportsTools(b);
@@ -716,16 +760,8 @@ export class ShadowClawLlm extends ShadowClawElement {
     // If the provider has a pre-selected list, prioritize it
     if (skipModelFetch) {
       // Server mode: no model list fetch; runtime server decides model.
-    }
-
-    // If the provider has a pre-selected list, prioritize it
-    else if (currentProviderData?.models && modelSelect) {
-      modelSelect.disabled = false;
-      renderOptions(currentProviderData.models);
-    }
-
-    // Otherwise, if the provider exposes a modelsUrl, fetch models dynamically
-    else if (currentProviderData?.modelsUrl && modelSelect) {
+    } else if (currentProviderData?.modelsUrl && modelSelect) {
+      // Fetch models dynamically and merge with static models
       const fetchToken = selectionToken;
       modelSelect.innerHTML = "<option>Loading models\u2026</option>";
       modelSelect.disabled = true;
@@ -800,6 +836,19 @@ export class ShadowClawLlm extends ShadowClawElement {
             }
           }
 
+          // Merge static models if any
+          if (Array.isArray(currentProviderData.models)) {
+            const dynamicIds = new Set(
+              items.map((i) => (typeof i === "string" ? i : i.id)),
+            );
+            const statics = currentProviderData.models.filter((m: any) => {
+              const mId = typeof m === "string" ? m : m.id;
+
+              return !dynamicIds.has(mId);
+            });
+            items = [...statics, ...items];
+          }
+
           if (currentProvider === "llamafile") {
             this.llamafileModelLoadError = null;
             this.llamafileDiscoveredModelIds = items
@@ -838,11 +887,23 @@ export class ShadowClawLlm extends ShadowClawElement {
           }
 
           modelSelect.innerHTML = "<option>Failed to load models</option>";
-          showError(
-            "Could not reach the model server \u2014 or proxy configuration is wrong",
-            5000,
-          );
+
+          if (currentProviderData?.models) {
+            console.warn(
+              "Falling back to statically configured models due to fetch failure.",
+            );
+            modelSelect.disabled = false;
+            renderOptions(currentProviderData.models);
+          } else {
+            showError(
+              "Could not reach the model server \u2014 or proxy configuration is wrong",
+              5000,
+            );
+          }
         });
+    } else if (currentProviderData?.models && modelSelect) {
+      modelSelect.disabled = false;
+      renderOptions(currentProviderData.models);
     } else if (modelSelect) {
       modelSelect.disabled = false;
       renderOptions([]);
@@ -1134,6 +1195,8 @@ export class ShadowClawLlm extends ShadowClawElement {
         this.updateLlamafileModelSectionVisibility();
         this.updateBedrockSettingsVisibility(providerId);
         this.renderBedrockSettings();
+        this.updateTransformersJsSettingsVisibility(providerId);
+        this.renderTransformersJsSettings();
 
         const selectedText =
           providerSelect.selectedOptions[0]?.text || providerId;
@@ -1611,6 +1674,87 @@ export class ShadowClawLlm extends ShadowClawElement {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving Bedrock fallback settings: " + errorMsg, 6000);
     }
+  }
+
+  updateTransformersJsSettingsVisibility(provider: string) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const section = root.querySelector(
+      '[data-setting="transformers-js-settings"]',
+    ) as HTMLElement | null;
+    if (section) {
+      section.style.display =
+        provider === "transformers_js_browser" ? "block" : "none";
+    }
+  }
+
+  async renderTransformersJsSettings() {
+    if (!this.db) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const { getConfig } = await import("../../../db/getConfig.js");
+    const { CONFIG_KEYS } = await import("../../../config.js");
+
+    const backend =
+      (await getConfig(this.db, CONFIG_KEYS.TRANSFORMERS_JS_BACKEND)) || "cpu";
+    const dtypeStrategy =
+      (await getConfig(this.db, CONFIG_KEYS.TRANSFORMERS_JS_DTYPE_STRATEGY)) ||
+      "auto";
+
+    const backendSelect = root.querySelector(
+      '[data-setting="transformers-js-backend"]',
+    ) as HTMLSelectElement | null;
+    if (backendSelect) {
+      backendSelect.value = backend;
+    }
+
+    const dtypeStrategySelect = root.querySelector(
+      '[data-setting="transformers-js-dtype-strategy"]',
+    ) as HTMLSelectElement | null;
+    if (dtypeStrategySelect) {
+      dtypeStrategySelect.value = dtypeStrategy;
+    }
+  }
+
+  async saveTransformersJsSettings() {
+    if (!this.db) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const backendSelect = root.querySelector(
+      '[data-setting="transformers-js-backend"]',
+    ) as HTMLSelectElement | null;
+    const backend = backendSelect?.value || "cpu";
+    const dtypeStrategySelect = root.querySelector(
+      '[data-setting="transformers-js-dtype-strategy"]',
+    ) as HTMLSelectElement | null;
+    const dtypeStrategy = dtypeStrategySelect?.value || "auto";
+
+    const { setConfig } = await import("../../../db/setConfig.js");
+    const { CONFIG_KEYS } = await import("../../../config.js");
+
+    await setConfig(this.db, CONFIG_KEYS.TRANSFORMERS_JS_BACKEND, backend);
+    await setConfig(
+      this.db,
+      CONFIG_KEYS.TRANSFORMERS_JS_DTYPE_STRATEGY,
+      dtypeStrategy,
+    );
+
+    showSuccess("Transformers.js settings saved.");
   }
 }
 

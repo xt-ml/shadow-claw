@@ -72,6 +72,7 @@ export default class ShadowClaw extends ShadowClawElement {
   terminalVisible: boolean = false;
   vmStatusCleanup: (() => void) | null = null;
   headerMainCollapsedOverride: boolean | null = null;
+  activityLogCollapsedOverride: boolean | null = null;
 
   constructor() {
     super();
@@ -379,6 +380,11 @@ export default class ShadowClaw extends ShadowClawElement {
       this.togglePageHeaderMainVisibility();
     });
 
+    const activityLogToggle = root.querySelector(".activity-log-toggle");
+    activityLogToggle?.addEventListener("click", () => {
+      this.toggleActivityLogVisibility();
+    });
+
     // Listen for navigate events from the settings component (e.g. "tools" button)
     const settingsEl = root.querySelector("shadow-claw-settings");
     settingsEl?.addEventListener("navigate", (e: Event) => {
@@ -401,7 +407,7 @@ export default class ShadowClaw extends ShadowClawElement {
     );
 
     // Theme toggle
-    const themeToggle = root.querySelector(".theme-toggle:not(.webvm-toggle)");
+    const themeToggle = root.querySelector(".theme-mode-toggle");
     if (themeToggle) {
       themeToggle.addEventListener("click", () => {
         const { resolved } = themeStore.getTheme();
@@ -965,6 +971,64 @@ export default class ShadowClaw extends ShadowClawElement {
     this.headerMainCollapsedOverride = !currentCollapsed;
     this.syncPageHeaderMainVisibilityOverride();
     this.updateHeaderMainToggle();
+  }
+
+  updateActivityLogToggle() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const button = root.querySelector(".activity-log-toggle");
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    const autoCollapsed =
+      typeof globalThis.matchMedia === "function"
+        ? !globalThis.matchMedia("(min-width: 56rem) and (min-height: 401px)")
+            .matches
+        : false;
+
+    const collapsed =
+      typeof this.activityLogCollapsedOverride === "boolean"
+        ? this.activityLogCollapsedOverride
+        : autoCollapsed;
+
+    button.setAttribute(
+      "aria-label",
+      collapsed ? "Show activity log" : "Hide activity log",
+    );
+    button.setAttribute("aria-pressed", String(collapsed));
+  }
+
+  toggleActivityLogVisibility() {
+    const autoCollapsed =
+      typeof globalThis.matchMedia === "function"
+        ? !globalThis.matchMedia("(min-width: 56rem) and (min-height: 401px)")
+            .matches
+        : false;
+
+    const currentCollapsed =
+      typeof this.activityLogCollapsedOverride === "boolean"
+        ? this.activityLogCollapsedOverride
+        : autoCollapsed;
+
+    this.activityLogCollapsedOverride = !currentCollapsed;
+    this.syncActivityLogVisibilityOverride();
+    this.updateActivityLogToggle();
+  }
+
+  syncActivityLogVisibilityOverride() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const chat = root.querySelector("shadow-claw-chat") as any;
+    if (chat && typeof chat.setActivityLogCollapsedOverride === "function") {
+      chat.setActivityLogCollapsedOverride(this.activityLogCollapsedOverride);
+    }
   }
 
   /**

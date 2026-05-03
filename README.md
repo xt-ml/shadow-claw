@@ -17,13 +17,15 @@ npm start        # Express server → http://localhost:8888
 
 Open Settings, select a provider, and start chatting.
 
-For large local models (for example Gemma 4), use `Transformers.js (Local Proxy)`,
-or `Llamafile (Local Proxy)`, in Settings. Model artifacts are cached server-side
-by Node.js, rather than in browser Cache API or IndexedDB.
+For local inference, ShadowClaw offers multiple options:
 
-Local cache paths:
+- **Transformers.js (Browser - Experimental)**: Runs models entirely in the browser using a background Web Worker. Model artifacts are cached in the browser's Cache API. Optimized for small, instruction-tuned ONNX models.
+- **Transformers.js (Local Proxy)**: Runs large local models (for example Gemma 4) server-side via Node.js proxy. Model artifacts are cached server-side.
+- **Llamafile (Local Proxy)**: Runs `.llamafile` binaries server-side.
 
-- `assets/cache/transformers.js` for Transformers.js metadata/artifacts
+Local proxy cache paths:
+
+- `assets/cache/transformers.js` for Transformers.js proxy metadata/artifacts
 - `assets/cache/llamafile` for CLI `.llamafile` binaries
 
 ### Electron Desktop App
@@ -463,7 +465,7 @@ The UI is organized into modular components and dedicated stores:
   `shadow-claw-page-header`, `shadow-claw-empty-state`,
   `shadow-claw-card`, and `shadow-claw-actions` reduce
   duplicated markup and behavior across pages.
-- **Chat**: Smart auto-scroll with ResizeObserver integration and streaming bubble support.
+- **Chat**: Smart auto-scroll with ResizeObserver integration, streaming bubble support, mobile-friendly touch resizing, and responsive activity log toggles.
 - **File Viewer**: MIME-aware previews for PDF, binary, and text content with syntax highlighting.
 - **Terminal**: Interactive Xterm.js terminal with WebVM bridge.
 

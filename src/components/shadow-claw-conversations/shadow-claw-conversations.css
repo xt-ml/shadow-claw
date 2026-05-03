@@ -33,6 +33,7 @@
   cursor: row-resize;
   flex: none;
   height: 0.25rem;
+  touch-action: none;
   transition: background var(--shadow-claw-duration-min, 150ms);
   user-select: none;
 }
@@ -128,8 +129,36 @@
   margin-left: 0.25rem;
 }
 
-.conversation-item:hover .conversation-actions {
-  display: flex;
+.conversation-actions-toggle {
+  background: none;
+  border: none;
+  border-radius: 0.25rem;
+  color: var(--shadow-claw-text-tertiary);
+  cursor: pointer;
+  display: none;
+  font-size: 1rem;
+  margin-left: 0.25rem;
+  padding: 0.125rem 0.375rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .conversation-item:hover .conversation-actions {
+    display: flex;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .conversation-actions-toggle {
+    display: block;
+  }
+
+  .conversation-item.show-actions .conversation-actions {
+    display: flex;
+  }
+
+  .conversation-item.show-actions .conversation-actions-toggle {
+    display: none;
+  }
 }
 
 .conversation-actions button {
@@ -158,12 +187,16 @@
 }
 
 .drag-handle {
+  align-items: center;
   cursor: grab;
   display: inline-flex;
   flex-shrink: 0;
   font-size: 0.75rem;
-  margin-right: 0.375rem;
+  justify-content: center;
+  margin-left: -0.5rem;
+  margin-right: 0;
   opacity: 0.4;
+  padding: 0.5rem;
   touch-action: none;
   user-select: none;
 }

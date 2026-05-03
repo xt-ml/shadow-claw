@@ -605,15 +605,14 @@ async function fetchDynamicTransformersJsModels(): Promise<
 
   const endpoint =
     env.TRANSFORMERS_JS_MODELS_DISCOVERY_URL ||
-    "https://huggingface.co/api/models?author=onnx-community&search=gemma-4&limit=50";
+    "https://huggingface.co/api/models?author=onnx-community&limit=100";
 
   const data = await downloadTransformersJsDiscoveryRows(endpoint);
   const rows = Array.isArray(data) ? data : [];
 
   const ids = rows
     .map((row: any) => (typeof row?.id === "string" ? row.id : ""))
-    .filter((id: string) => id.startsWith("onnx-community/gemma-4-"))
-    .filter((id: string) => id.toLowerCase().endsWith("-onnx"));
+    .filter((id: string) => id.toLowerCase().includes("onnx"));
 
   const uniqueIds = [...new Set(ids)];
   const baselineIds = TRANSFORMERS_JS_MODELS.map((model) => model.id);

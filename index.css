@@ -387,7 +387,7 @@ shadow-claw:not(:defined) .boot-shell-card {
   margin-left: 0.5rem;
 }
 
-@media (min-width: 26rem) {
+@media (min-width: 30rem) {
   .header-title-logo {
     display: flex;
   }

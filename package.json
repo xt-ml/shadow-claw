@@ -36,7 +36,8 @@
     "tsc:service:worker": "tsc --noEmit -p tsconfig.service.worker.json",
     "tsc:server": "tsc --noEmit -p tsconfig.server.json",
     "tsc:test": "tsc --noEmit -p tsconfig.test.json",
-    "tsc": "npm -s run tsc:app && npm -s run tsc:agent:worker && npm -s run tsc:service:worker && npm -s run tsc:server && npm -s run tsc:test"
+    "tsc:transformers:js:worker": "tsc --noEmit -p tsconfig.transformers-js.worker.json",
+    "tsc": "npm -s run tsc:app && npm -s run tsc:agent:worker && npm -s run tsc:transformers:js:worker && npm -s run tsc:service:worker && npm -s run tsc:server && npm -s run tsc:test"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock": "^3.1041.0",

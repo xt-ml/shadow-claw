@@ -199,6 +199,11 @@
   display: block;
 }
 
+.chat__activity-log--collapsed,
+.chat__activity-log--collapsed.chat__activity-log--active {
+  display: none !important;
+}
+
 .chat__model-progress {
   background-color: var(--shadow-claw-bg-secondary);
   border: 0.0625rem solid var(--shadow-claw-border-color);

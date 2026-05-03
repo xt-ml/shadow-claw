@@ -76,6 +76,9 @@ export class ShadowClawChat extends ShadowClawElement {
   #responseAutoFollow: boolean;
   #dragDepth: number;
   #queuedAttachments: QueuedAttachment[];
+  activityLogCollapsedOverride: boolean | null = null;
+  activityLogVisibilityMediaQuery: MediaQueryList | null = null;
+  activityLogVisibilityCleanup: () => void = () => {};
 
   constructor() {
     super();
@@ -105,10 +108,12 @@ export class ShadowClawChat extends ShadowClawElement {
     this.dispatchTerminalSlotReady();
 
     this.setupEffects();
+    this.setupActivityLogVisibility();
     this.bindEventListeners();
   }
 
   disconnectedCallback() {
+    this.activityLogVisibilityCleanup();
     chatUiStore.revokeAttachmentObjectUrls();
     chatUiStore.resetNearBottom();
     super.disconnectedCallback();
@@ -116,6 +121,63 @@ export class ShadowClawChat extends ShadowClawElement {
 
   revokeAttachmentObjectUrls() {
     chatUiStore.revokeAttachmentObjectUrls();
+  }
+
+  setActivityLogCollapsedOverride(collapsed: boolean | null) {
+    this.activityLogCollapsedOverride = collapsed;
+    this.applyActivityLogVisibility();
+  }
+
+  setupActivityLogVisibility() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    if (typeof globalThis.matchMedia === "function") {
+      this.activityLogVisibilityMediaQuery = globalThis.matchMedia(
+        "(min-width: 56rem) and (min-height: 401px)",
+      );
+
+      const onChange = () => this.applyActivityLogVisibility();
+      this.activityLogVisibilityMediaQuery.addEventListener("change", onChange);
+
+      this.activityLogVisibilityCleanup = () => {
+        this.activityLogVisibilityMediaQuery?.removeEventListener(
+          "change",
+          onChange,
+        );
+      };
+    }
+
+    this.applyActivityLogVisibility();
+  }
+
+  applyActivityLogVisibility() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const logEl = root.querySelector(".chat__activity-log");
+    if (!(logEl instanceof HTMLElement)) {
+      return;
+    }
+
+    const autoCollapsed = this.activityLogVisibilityMediaQuery
+      ? !this.activityLogVisibilityMediaQuery.matches
+      : false;
+
+    const collapsed =
+      typeof this.activityLogCollapsedOverride === "boolean"
+        ? this.activityLogCollapsedOverride
+        : autoCollapsed;
+
+    if (collapsed) {
+      logEl.classList.add("chat__activity-log--collapsed");
+    } else {
+      logEl.classList.remove("chat__activity-log--collapsed");
+    }
   }
 
   dispatchTerminalSlotReady() {
@@ -1535,7 +1597,7 @@ export class ShadowClawChat extends ShadowClawElement {
 
         if (!progress) {
           progressEl.classList.remove("chat__model-progress--active");
-          labelEl.textContent = "Preparing Prompt API model...";
+          labelEl.textContent = "Initializing local model...";
           barEl.style.width = "0%";
 
           return;
@@ -1549,7 +1611,10 @@ export class ShadowClawChat extends ShadowClawElement {
 
         progressEl.classList.add("chat__model-progress--active");
         labelEl.textContent =
-          progress.message || `Downloading Prompt API model... ${percent}%`;
+          progress.message ||
+          (progress.status === "done"
+            ? "Model ready."
+            : `Downloading local model... ${percent}%`);
         barEl.style.width = `${percent}%`;
       }),
     );

@@ -4,6 +4,8 @@ const BYPASS_HOSTS = [
   "unpkg.com",
   "cdn.jsdelivr.net",
   "esm.run",
+  "huggingface.co",
+  "hf.co",
 ];
 
 const BYPASS_PROVIDERS = [

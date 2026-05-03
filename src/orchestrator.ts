@@ -22,6 +22,7 @@ import {
 import { isLlamafileResolutionError } from "./components/common/help/llamafile.js";
 import { detectProviderHelpType } from "./components/common/help/providers.js";
 import { isTransformersJsResolutionError } from "./components/common/help/transformers.js";
+import { invokeWithTransformersJs } from "./transformers-js-provider.js";
 
 import {
   isWebMcpSupported,
@@ -2140,6 +2141,38 @@ export class Orchestrator {
       });
       // Queue compaction after this invocation completes
       queueMicrotask(() => this.compactContext(db, groupId));
+    }
+
+    if (this.provider === "transformers_js_browser") {
+      const controller = new AbortController();
+      this.promptControllers.set(groupId, controller);
+
+      try {
+        await invokeWithTransformersJs(
+          db,
+          groupId,
+          systemPrompt,
+          messages,
+          this.maxTokens,
+          async (msg) => {
+            await this.handleWorkerMessage(db, msg);
+          },
+          controller.signal,
+          activeTools,
+          this.model,
+        );
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+
+        const message = err instanceof Error ? err.message : String(err);
+        await this.deliverResponse(db, groupId, `⚠️ Error: ${message}`);
+      } finally {
+        this.promptControllers.delete(groupId);
+      }
+
+      return;
     }
 
     if (this.provider === "prompt_api") {

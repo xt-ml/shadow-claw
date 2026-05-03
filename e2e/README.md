@@ -266,7 +266,7 @@ Chat interface controller.
 
 Behavior notes:
 
-- Chat can show a transient model download progress panel when using Prompt API provider.
+- Chat can show a transient model download progress panel when using Prompt API or Transformers.js Browser providers.
 - Assertions around that panel should be state-based (present/hidden) and not rely on fixed timing.
 - **Provider Help Dialogs**: When a provider request fails, the application may display a contextual help dialog. Use `app.navigateToWithOpenDialog()` to test flows that interrupt navigation with dialogs, or verify dialog content via standard locators on the `.app-dialog` component.
 - **Attachment Capabilities**: When testing file attachments, keep in mind that the application dynamically selects native vs. fallback delivery based on model capabilities (`src/attachment-capabilities.ts`).

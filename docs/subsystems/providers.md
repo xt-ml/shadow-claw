@@ -32,6 +32,7 @@ All providers are declared in `src/config.ts` under `PROVIDERS`:
 | `openrouter`                 | `openai`     | ✅        | ✅                     |
 | `huggingface`                | `openai`     | ✅        | ✅                     |
 | `transformers_js_local`      | `openai`     | ✅        | ❌                     |
+| `transformers_js_browser`    | `transformers_js`| ❌    | ❌                     |
 | `ollama`                     | `openai`     | ✅        | ❌                     |
 | `llamafile`                  | `openai`     | ✅        | ❌                     |
 | `github_models`              | `openai`     | ✅        | ✅                     |
@@ -210,6 +211,8 @@ the runtime can provide fallback values via request headers (`x-bedrock-region`,
 Models are fetched dynamically via the provider API (e.g., `GET /models`). The model list is loaded in Settings and persisted as `CONFIG_KEYS.MODEL`.
 
 **Context limits** are resolved per model family via `getContextLimit(model)` — see the [Context Management](../architecture/context-management.md#context-limits-by-model) doc.
+
+**Local Model Ranking:** For browser-based local inference (like `transformers_js_browser`), models are ranked and sorted based on specific heuristics. Smaller, instruction-tuned ONNX models (e.g., <4B parameters) and models with explicit tool support are prioritized to ensure the best performance and compatibility within the browser's constrained execution environment.
 
 **Auto-profile activation:** When a model is selected, the orchestrator checks if any saved tool profile specifies that model. If a match is found, the profile is automatically activated (e.g., the `NANO_BUILTIN_PROFILE` activates when Gemini Nano / Prompt API is selected).
 

@@ -897,6 +897,8 @@ export const CONFIG_KEYS = {
   SYSTEM_PROMPT_OVERRIDE: "system_prompt_override",
   TOOL_PROFILES: "tool_profiles",
   ACTIVE_TOOL_PROFILE: "active_tool_profile",
+  WEBMCP_TOOLS_ENABLED: "webmcp_tools_enabled",
+  WEBMCP_MODE: "webmcp_mode",
   STREAMING_ENABLED: "streaming_enabled",
   MAX_ITERATIONS: "max_iterations",
   RATE_LIMIT_CALLS_PER_MINUTE: "rate_limit_calls_per_minute",

@@ -442,6 +442,7 @@ describe("config.js", () => {
       expect(CONFIG_KEYS.VM_NETWORK_RELAY_URL).toBe("vm_network_relay_url");
       expect(CONFIG_KEYS.VM_BASH_TIMEOUT_SEC).toBe("vm_bash_timeout_sec");
       expect(CONFIG_KEYS.REMOTE_MCP_CONNECTIONS).toBe("remote_mcp_connections");
+      expect(CONFIG_KEYS.WEBMCP_TOOLS_ENABLED).toBe("webmcp_tools_enabled");
       expect((CONFIG_KEYS as any).TASK_SYNC_OUTBOX).toBe("task_sync_outbox");
       expect(CONFIG_KEYS.LLAMAFILE_MODE).toBe("llamafile_mode");
       expect(CONFIG_KEYS.LLAMAFILE_HOST).toBe("llamafile_host");

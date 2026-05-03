@@ -25,9 +25,11 @@ import { isTransformersJsResolutionError } from "./components/common/help/transf
 import { invokeWithTransformersJs } from "./transformers-js-provider.js";
 
 import {
-  isWebMcpSupported,
   registerWebMcpTools,
   unregisterWebMcpTools,
+  setWebMcpMode as applyWebMcpMode,
+  getWebMcpMode as readWebMcpMode,
+  type WebMcpMode,
 } from "./webmcp.js";
 
 import { playNotificationChime } from "./audio.js";
@@ -136,6 +138,7 @@ export class Orchestrator {
   _pushSubscriptionWarned: boolean = false;
   _schedulerTriggeredGroups: Set<string> = new Set();
   _webMcpEffectCleanup: (() => void) | null = null;
+  _webMcpRegistrationLock: Promise<void> = Promise.resolve();
 
   agentWorker: Worker | null = null;
   apiKey: string | null = null;
@@ -197,6 +200,7 @@ export class Orchestrator {
     bootAttempted: false,
     error: null,
   };
+  webMcpToolsEnabled: boolean = false;
 
   constructor() {
     this.initializeChannelRegistry();
@@ -332,6 +336,18 @@ export class Orchestrator {
     const storedStreaming = await getConfig(db, CONFIG_KEYS.STREAMING_ENABLED);
     this.streamingEnabled = storedStreaming !== "false";
 
+    const storedWebMcpToolsEnabled = await getConfig(
+      db,
+      CONFIG_KEYS.WEBMCP_TOOLS_ENABLED,
+    );
+    this.webMcpToolsEnabled = storedWebMcpToolsEnabled === "true";
+
+    // Load WebMCP mode preference (default: polyfill)
+    const storedWebMcpMode = await getConfig(db, CONFIG_KEYS.WEBMCP_MODE);
+    if (storedWebMcpMode === "native" || storedWebMcpMode === "polyfill") {
+      applyWebMcpMode(storedWebMcpMode);
+    }
+
     // Load context compression preference (default: false)
     const storedCompression = await getConfig(
       db,
@@ -457,33 +473,7 @@ export class Orchestrator {
     // Load persisted tool configuration before WebMCP registration.
     await toolsStore.load(db);
 
-    if (isWebMcpSupported()) {
-      // Serialize WebMCP registration calls to prevent overlapping unregister/register cycles.
-      let registrationLock = Promise.resolve();
-
-      // Register WebMCP tools and re-register when tool config changes.
-      // This effect runs once immediately to perform the initial registration.
-      this._webMcpEffectCleanup = effect(() => {
-        // Access the computed signal to establish tracking.
-        const tools = toolsStore.enabledTools;
-
-        // Schedule registration asynchronously using the lock to ensure serial execution.
-        registrationLock = registrationLock.then(async () => {
-          unregisterWebMcpTools();
-          // Small delay to allow the browser's ModelContext to process the unregistrations.
-          await new Promise((resolve) => setTimeout(resolve, 0));
-
-          await registerWebMcpTools(
-            this.agentWorker,
-            async (msg) => {
-              await this.handleWorkerMessage(db, msg);
-            },
-            DEFAULT_GROUP_ID,
-            tools,
-          );
-        });
-      });
-    }
+    this.syncWebMcpRegistration(db);
 
     return db;
   }
@@ -745,6 +735,35 @@ export class Orchestrator {
 
   getStreamingEnabled(): boolean {
     return this.streamingEnabled;
+  }
+
+  getWebMcpToolsEnabled(): boolean {
+    return this.webMcpToolsEnabled;
+  }
+
+  getWebMcpMode(): WebMcpMode {
+    return readWebMcpMode();
+  }
+
+  async setWebMcpMode(db: ShadowClawDatabase, mode: WebMcpMode): Promise<void> {
+    // Unregister with old mode, switch, re-register with new mode.
+    unregisterWebMcpTools();
+    applyWebMcpMode(mode);
+    await setConfig(db, CONFIG_KEYS.WEBMCP_MODE, mode);
+    this.syncWebMcpRegistration(db);
+  }
+
+  async setWebMcpToolsEnabled(
+    db: ShadowClawDatabase,
+    enabled: boolean,
+  ): Promise<void> {
+    this.webMcpToolsEnabled = !!enabled;
+    await setConfig(
+      db,
+      CONFIG_KEYS.WEBMCP_TOOLS_ENABLED,
+      this.webMcpToolsEnabled ? "true" : "false",
+    );
+    this.syncWebMcpRegistration(db);
   }
 
   async setStreamingEnabled(
@@ -1678,6 +1697,51 @@ export class Orchestrator {
     }
 
     unregisterWebMcpTools();
+  }
+
+  syncWebMcpRegistration(db: ShadowClawDatabase): void {
+    if (typeof this._webMcpEffectCleanup === "function") {
+      this._webMcpEffectCleanup();
+      this._webMcpEffectCleanup = null;
+    }
+
+    if (!this.webMcpToolsEnabled) {
+      unregisterWebMcpTools();
+
+      return;
+    }
+
+    // Register WebMCP tools and re-register when tool config changes.
+    // This effect runs once immediately to perform the initial registration.
+    // We intentionally do NOT call isWebMcpSupported() here — that accesses
+    // navigator.modelContext which can crash Chrome Canary's early-preview
+    // renderer.  Instead, registerWebMcpTools handles feature detection
+    // internally and skips modelContext access entirely when 0 tools are
+    // passed.
+    this._webMcpEffectCleanup = effect(() => {
+      // Access the computed signal to establish tracking.
+      const tools = toolsStore.enabledTools;
+
+      // Serialize WebMCP registration calls to prevent overlapping unregister/register cycles.
+      this._webMcpRegistrationLock = this._webMcpRegistrationLock
+        .then(async () => {
+          unregisterWebMcpTools();
+          // Small delay to allow the browser's ModelContext to process the unregistrations.
+          await new Promise((resolve) => setTimeout(resolve, 0));
+
+          await registerWebMcpTools(
+            this.agentWorker,
+            async (msg) => {
+              await this.handleWorkerMessage(db, msg);
+            },
+            DEFAULT_GROUP_ID,
+            tools,
+          );
+        })
+        .catch((err) => {
+          console.error("WebMCP registration failed:", err);
+        });
+    });
   }
 
   setState(state: OrchestratorState): void {

@@ -210,7 +210,7 @@ export const git_add: ToolDefinition = {
         description: "Short repo name",
       },
       filepath: {
-        oneOf: [
+        anyOf: [
           { type: "string" },
           { type: "array", items: { type: "string" } },
         ],

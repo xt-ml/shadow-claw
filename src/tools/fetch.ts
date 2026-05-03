@@ -23,6 +23,7 @@ export const fetch_url: ToolDefinition = {
       },
       headers: {
         type: "object",
+        properties: {},
         description: "Request headers as key-value pairs",
       },
       body: {

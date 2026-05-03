@@ -32,6 +32,7 @@ export const remote_mcp_call_tool: ToolDefinition = {
       },
       arguments: {
         type: "object",
+        properties: {},
         description: "Arguments object passed to the remote MCP tool",
       },
     },

@@ -98,6 +98,33 @@
         <div aria-live="polite" class="tools__list" role="list"></div>
       </div>
 
+      <!-- WebMCP -->
+      <div class="tools__section">
+        <h3 class="tools__section-title">WebMCP</h3>
+        <label class="tools__webmcp-optin" for="toolsWebMcpOptIn">
+          <input
+            class="tools__webmcp-toggle"
+            id="toolsWebMcpOptIn"
+            type="checkbox"
+          />
+          Enable WebMCP tool registration
+        </label>
+        <div class="tools__webmcp-mode-row">
+          <label for="toolsWebMcpMode">Mode:</label>
+          <select class="tools__webmcp-mode" id="toolsWebMcpMode">
+            <option value="polyfill">Polyfill (recommended)</option>
+            <option value="native">Native Chrome flag (experimental)</option>
+          </select>
+        </div>
+        <div class="tools__prompt-hint">
+          <strong>Polyfill</strong> uses @mcp-b/webmcp-polyfill — works in all
+          browsers, no flags needed.<br />
+          <strong>Native</strong> uses Chrome's built-in API — requires
+          chrome://flags/#enable-webmcp-testing (may crash in early Canary
+          builds).
+        </div>
+      </div>
+
       <!-- System Prompt Override -->
       <div class="tools__section">
         <h3 class="tools__section-title">System Prompt Override</h3>

@@ -1,10 +1,13 @@
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
 import { getAvailableProviders, getProvider, PROVIDERS } from "../../config.js";
 import { effect } from "../../effect.js";
+import { orchestratorStore } from "../../stores/orchestrator.js";
 import { TOOL_DEFINITIONS } from "../../tools.js";
 import { toolsStore } from "../../stores/tools.js";
 import { showError, showInfo, showSuccess } from "../../toast.js";
 import { ulid } from "../../ulid.js";
+
+import type { Orchestrator } from "../../orchestrator.js";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
@@ -20,6 +23,7 @@ export class ShadowClawTools extends ShadowClawElement {
   static template = `${ShadowClawTools.componentPath}/${elementName}.html`;
 
   cleanup: () => void = () => {};
+  orchestrator: Orchestrator | null = null;
 
   constructor() {
     super();
@@ -27,6 +31,7 @@ export class ShadowClawTools extends ShadowClawElement {
 
   async connectedCallback() {
     const db = await getDb();
+    this.orchestrator = orchestratorStore.orchestrator;
 
     // Reactive re-render on tool store changes
     this.cleanup = effect(() => {
@@ -97,6 +102,80 @@ export class ShadowClawTools extends ShadowClawElement {
         toolsStore.setAllEnabled(db, []);
         showInfo("All tools disabled");
       });
+
+    // WebMCP opt-in toggle
+    const webMcpToggle = root.querySelector(
+      ".tools__webmcp-toggle",
+    ) as HTMLInputElement | null;
+    const webMcpModeSelect = root.querySelector(
+      ".tools__webmcp-mode",
+    ) as HTMLSelectElement | null;
+
+    if (webMcpToggle) {
+      // Sync checked state and mode when orchestrator becomes available
+      effect(() => {
+        if (orchestratorStore.ready) {
+          this.orchestrator = orchestratorStore.orchestrator;
+          webMcpToggle.checked =
+            this.orchestrator?.getWebMcpToolsEnabled?.() === true;
+          if (webMcpModeSelect && this.orchestrator?.getWebMcpMode) {
+            webMcpModeSelect.value =
+              this.orchestrator.getWebMcpMode() || "polyfill";
+          }
+        }
+      });
+
+      webMcpToggle.addEventListener("change", async () => {
+        const orchestrator =
+          this.orchestrator ?? orchestratorStore.orchestrator;
+        if (!orchestrator) {
+          webMcpToggle.checked = false;
+          showError("Orchestrator is not ready");
+
+          return;
+        }
+
+        const next = webMcpToggle.checked;
+        try {
+          await orchestrator.setWebMcpToolsEnabled(db, next);
+          showInfo(
+            next
+              ? "WebMCP tool registration enabled"
+              : "WebMCP tool registration disabled",
+          );
+        } catch (err) {
+          webMcpToggle.checked = !next;
+          showError(
+            `Failed to update WebMCP setting: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
+      });
+    }
+
+    // WebMCP mode selector
+    if (webMcpModeSelect) {
+      webMcpModeSelect.addEventListener("change", async () => {
+        const orchestrator =
+          this.orchestrator ?? orchestratorStore.orchestrator;
+        if (!orchestrator) {
+          return;
+        }
+
+        const mode = webMcpModeSelect.value as "polyfill" | "native";
+        try {
+          await orchestrator.setWebMcpMode(db, mode);
+          showInfo(`WebMCP mode set to ${mode}`);
+        } catch (err) {
+          showError(
+            `Failed to update WebMCP mode: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
+      });
+    }
 
     // Save prompt
     root

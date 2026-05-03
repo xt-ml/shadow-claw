@@ -28,6 +28,7 @@ describe("openDatabase", () => {
   it("creates missing stores and indexes during upgrade", async () => {
     const msgStore: any = { createIndex: jest.fn() };
     const taskStore: any = { createIndex: jest.fn() };
+    const pendingSharesStore: any = { createIndex: jest.fn() };
 
     const database: any = {
       objectStoreNames: { contains: jest.fn(() => false) },
@@ -38,6 +39,10 @@ describe("openDatabase", () => {
 
         if (name === "tasks") {
           return taskStore;
+        }
+
+        if (name === "pendingShares") {
+          return pendingSharesStore;
         }
 
         return { createIndex: jest.fn() };
@@ -86,6 +91,15 @@ describe("openDatabase", () => {
     expect(database.createObjectStore).toHaveBeenCalledWith("config", {
       keyPath: "key",
     });
+
+    expect(database.createObjectStore).toHaveBeenCalledWith("pendingShares", {
+      keyPath: "id",
+    });
+
+    expect(pendingSharesStore.createIndex).toHaveBeenCalledWith(
+      "by-createdAt",
+      "createdAt",
+    );
 
     expect(setDB).toHaveBeenCalledWith(database);
   });

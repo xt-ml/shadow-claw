@@ -80,7 +80,7 @@ describe("config.js", () => {
     });
 
     it("should have valid DB_VERSION", () => {
-      expect(DB_VERSION).toBe(1);
+      expect(DB_VERSION).toBe(2);
     });
 
     it("should have valid OPFS_ROOT", () => {

@@ -10,7 +10,6 @@ import {
 } from "./toast.js";
 
 import ShadowClaw from "./components/shadow-claw/shadow-claw.js";
-console.log("[index] ShadowClaw module imported:", typeof ShadowClaw);
 
 import { Orchestrator } from "./orchestrator.js";
 import { orchestratorStore } from "./stores/orchestrator.js";

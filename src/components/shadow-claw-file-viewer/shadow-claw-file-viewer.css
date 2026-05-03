@@ -103,7 +103,8 @@ pre {
 }
 
 .modal-edit-btn,
-.modal-save-btn {
+.modal-save-btn,
+.modal-share-btn {
   background-color: transparent;
   border: 0.0625rem solid var(--shadow-claw-border-color);
   border-radius: var(--shadow-claw-radius-m);
@@ -117,6 +118,12 @@ pre {
 }
 
 .modal-edit-btn:hover {
+  border-color: var(--shadow-claw-text-primary);
+  box-shadow: var(--shadow-claw-shadow-md);
+  color: var(--shadow-claw-text-primary);
+}
+
+.modal-share-btn:hover {
   border-color: var(--shadow-claw-text-primary);
   box-shadow: var(--shadow-claw-shadow-md);
   color: var(--shadow-claw-text-primary);

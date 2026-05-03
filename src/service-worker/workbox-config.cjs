@@ -31,7 +31,11 @@ module.exports = {
   ],
   swDest: "dist/public/service-worker.js",
   sourcemap: false,
-  importScripts: ["service-worker/fetch-proxy.js", "service-worker/push-handler.js"],
+  importScripts: [
+    "service-worker/fetch-proxy.js",
+    "service-worker/push-handler.js",
+    "service-worker/share-target.js",
+  ],
   // // Force new service worker versions to activate and control pages immediately.
   // skipWaiting: true,
   clientsClaim: true,
@@ -55,9 +59,14 @@ module.exports = {
         const isLoopback =
           url.hostname === "localhost" || url.hostname === "127.0.0.1";
 
+        const isShareTargetPath = url.pathname.endsWith(
+          "/share/share-target.html",
+        );
+
         const isProxyPath =
           url.pathname === "/proxy" ||
           url.pathname.startsWith("/git-proxy/") ||
+          isShareTargetPath ||
           url.pathname.startsWith("/push/") ||
           url.pathname.startsWith("/schedule/") ||
           url.pathname.startsWith("/telegram/");

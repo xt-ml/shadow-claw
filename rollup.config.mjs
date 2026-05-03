@@ -108,6 +108,7 @@ const configs = [
           { src: "index.css", dest: "dist/public" },
           { src: "manifest.json", dest: "dist/public" },
           { src: "404.html", dest: "dist/public" },
+          { src: "share/**/*", dest: "dist/public/share" },
           { src: "service-worker/**/*", dest: "dist/public/service-worker" },
           {
             src: ["src/**/*.css"],
@@ -207,7 +208,7 @@ const configs = [
     output: {
       dir: "dist/public",
       entryFileNames: "service-worker/push-handler.js",
-      format: "esm",
+      format: "iife",
       sourcemap: !isProduction,
       inlineDynamicImports: true,
     },
@@ -220,7 +221,20 @@ const configs = [
     output: {
       dir: "dist/public",
       entryFileNames: "service-worker/fetch-proxy.js",
-      format: "esm",
+      format: "iife",
+      sourcemap: !isProduction,
+      inlineDynamicImports: true,
+    },
+    onwarn,
+    plugins: [...commonPlugins("./tsconfig.service.worker.json")],
+  },
+  // Service Worker Share Target
+  {
+    input: "src/service-worker/share-target.ts",
+    output: {
+      dir: "dist/public",
+      entryFileNames: "service-worker/share-target.js",
+      format: "iife",
       sourcemap: !isProduction,
       inlineDynamicImports: true,
     },

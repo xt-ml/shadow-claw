@@ -134,7 +134,7 @@ export const DEFAULT_VM_BOOT_HOST = "http://localhost:8888";
 export const DB_NAME = "shadowclaw";
 
 /** IndexedDB version */
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 /** OPFS root directory name */
 export const OPFS_ROOT = "shadowclaw";

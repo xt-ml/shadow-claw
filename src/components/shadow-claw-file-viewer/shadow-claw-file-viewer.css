@@ -102,7 +102,7 @@ pre {
   gap: 0.5rem;
 }
 
-.modal-edit-btn,
+.modal-cancel-btn,
 .modal-save-btn,
 .modal-share-btn {
   background-color: transparent;
@@ -115,12 +115,6 @@ pre {
   min-height: 2rem;
   padding: 0.375rem 0.625rem;
   transition: all 0.15s;
-}
-
-.modal-edit-btn:hover {
-  border-color: var(--shadow-claw-text-primary);
-  box-shadow: var(--shadow-claw-shadow-md);
-  color: var(--shadow-claw-text-primary);
 }
 
 .modal-share-btn:hover {
@@ -141,6 +135,16 @@ pre {
   color: var(--shadow-claw-on-primary);
 }
 
+.modal-cancel-btn {
+  border-color: var(--shadow-claw-border-color);
+  color: var(--shadow-claw-text-secondary);
+}
+
+.modal-cancel-btn:hover {
+  border-color: var(--shadow-claw-error, #ef4444);
+  color: var(--shadow-claw-error, #ef4444);
+}
+
 .modal-title {
   color: var(--shadow-claw-text-primary);
   flex: 1;
@@ -152,28 +156,78 @@ pre {
   white-space: nowrap;
 }
 
-.modal-close-btn,
-.modal-preview-btn {
+/* Segmented view-mode group (Edit + Preview) */
+.modal-view-modes {
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-m);
+  display: flex;
+  flex: none;
+  margin-right: 0.5rem;
+  overflow: hidden;
+}
+
+.modal-view-modes .modal-edit-btn,
+.modal-view-modes .modal-preview-btn {
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--shadow-claw-text-secondary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-height: 2rem;
+  padding: 0.375rem 0.625rem;
+  transition: all 0.15s;
+}
+
+.modal-view-modes .modal-edit-btn {
+  border-right: 0.0625rem solid var(--shadow-claw-border-color);
+}
+
+/* When edit button is hidden (binary files), preview gets full rounding */
+.modal-view-modes .modal-edit-btn.hidden + .modal-preview-btn {
+  border-radius: var(--shadow-claw-radius-m);
+}
+
+.modal-view-modes .modal-edit-btn:hover,
+.modal-view-modes .modal-preview-btn:hover {
+  background-color: var(--shadow-claw-bg-secondary);
+  color: var(--shadow-claw-text-primary);
+}
+
+.modal-view-modes .modal-edit-btn[aria-pressed="true"],
+.modal-view-modes .modal-preview-btn[aria-pressed="true"] {
+  background-color: var(--shadow-claw-bg-secondary);
+  color: var(--shadow-claw-text-primary);
+}
+
+.modal-close-btn {
   background-color: var(--shadow-claw-bg-tertiary);
   border: 0.0625rem solid var(--shadow-claw-border-color);
   border-radius: var(--shadow-claw-radius-m);
   color: var(--shadow-claw-text-secondary);
   cursor: pointer;
-  font-size: var(--shadow-claw-font-size-sm);
+  font-size: 1.25rem;
+  line-height: 1;
   min-height: 2rem;
   padding: 0.375rem 0.625rem;
 }
 
-.modal-close-btn {
-  font-size: 1.25rem;
-  line-height: 1;
-}
-
-.modal-close-btn:hover,
-.modal-preview-btn:hover {
+.modal-close-btn:hover {
   background-color: var(--shadow-claw-bg-secondary);
   border-color: var(--shadow-claw-accent-primary);
   color: var(--shadow-claw-text-primary);
+}
+
+/* Mobile: hide text labels, show emoji icons only */
+@media (max-width: 480px) {
+  .btn-label {
+    display: none;
+  }
+
+  .modal-header-actions {
+    gap: 0.25rem;
+  }
 }
 
 .modal-body {

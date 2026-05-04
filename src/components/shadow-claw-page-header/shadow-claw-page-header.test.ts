@@ -42,7 +42,7 @@ describe("shadow-claw-page-header", () => {
     el.remove();
   });
 
-  it("is collapsed by default on small/mobile viewports", async () => {
+  it("is not collapsed by default on small/mobile viewports", async () => {
     const originalMatchMedia = globalThis.matchMedia;
     globalThis.matchMedia =
       originalMatchMedia ||
@@ -63,7 +63,7 @@ describe("shadow-claw-page-header", () => {
     document.body.appendChild(el);
     await el.onTemplateReady;
 
-    expect(el.isMainCollapsed()).toBe(true);
+    expect(el.isMainCollapsed()).toBe(false);
 
     el.remove();
     globalThis.matchMedia = originalMatchMedia;

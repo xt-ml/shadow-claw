@@ -127,6 +127,11 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       await this.updateView();
     });
 
+    const shareBtn = root.querySelector(".modal-share-btn");
+    shareBtn?.addEventListener("click", async () => {
+      await this.handleShareFile();
+    });
+
     const editBtn = root.querySelector(".modal-edit-btn");
     editBtn?.addEventListener("click", async () => {
       this.isFileEditMode = !this.isFileEditMode;
@@ -430,6 +435,13 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     const editorContainer = modal.querySelector(".file-editor-container");
     const editBtn = modal.querySelector(".modal-edit-btn");
     const saveBtn = modal.querySelector(".modal-save-btn");
+    const shareBtn = modal.querySelector(".modal-share-btn");
+
+    if (shareBtn instanceof HTMLButtonElement) {
+      const canShare = this.canShareCurrentFile(file);
+      shareBtn.classList.toggle("hidden", !canShare);
+      shareBtn.disabled = !canShare;
+    }
 
     if (this.isFilePreviewMode) {
       modalBody?.classList.remove("modal-body--editing");
@@ -807,6 +819,86 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         saveBtn.disabled = false;
         saveBtn.textContent = "💾 Save";
       }
+    }
+  }
+
+  isWebShareAvailable() {
+    return (
+      typeof navigator !== "undefined" && typeof navigator.share === "function"
+    );
+  }
+
+  buildWebShareFile(file: any): File | null {
+    const bytes = file?.binaryContent;
+    if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
+      return null;
+    }
+
+    const fileBytes = new Uint8Array(bytes.byteLength);
+    fileBytes.set(bytes);
+
+    return new File([fileBytes], file.name || "shared-file", {
+      type: file?.mimeType || "application/octet-stream",
+    });
+  }
+
+  canShareCurrentFile(file: any) {
+    if (!file || !this.isWebShareAvailable()) {
+      return false;
+    }
+
+    if (file.kind === "text") {
+      return true;
+    }
+
+    const shareFile = this.buildWebShareFile(file);
+    if (!shareFile || typeof navigator.canShare !== "function") {
+      return false;
+    }
+
+    try {
+      return navigator.canShare({ files: [shareFile] });
+    } catch {
+      return false;
+    }
+  }
+
+  async handleShareFile() {
+    const file = fileViewerStore.file;
+    if (!file || !this.canShareCurrentFile(file)) {
+      showError("Sharing is not supported for this file on this device.", 4500);
+
+      return;
+    }
+
+    try {
+      if (file.kind === "text") {
+        await navigator.share({
+          title: file.name,
+          text: file.content || "",
+        });
+      } else {
+        const shareFile = this.buildWebShareFile(file);
+        if (!shareFile || !navigator.canShare?.({ files: [shareFile] })) {
+          showError("File sharing is not supported on this device.", 4500);
+
+          return;
+        }
+
+        await navigator.share({
+          title: file.name,
+          files: [shareFile],
+        });
+      }
+
+      showSuccess(`Shared ${file.name}`);
+    } catch (err) {
+      if (err instanceof DOMException && err.name === "AbortError") {
+        return;
+      }
+
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to share file: ${message}`, 5000);
     }
   }
 

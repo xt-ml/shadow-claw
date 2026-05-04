@@ -206,6 +206,7 @@ Cross-browser writes must go through `src/storage/writeFileHandle.ts`:
 
 - Use `writeFileHandle()` for normal writes (`createWritable` or `createSyncAccessHandle`).
 - Use `writeOpfsPathViaWorker()` when OPFS writes need worker-side sync handles (for example Safari main-thread limitations).
+- Use `writeGroupFileBytes()` (`src/storage/writeGroupFileBytes.ts`) when writing raw binary (`Uint8Array`) content to a group workspace file — it applies the same retry and OPFS worker fallback automatically.
 - Do not add ad-hoc direct `createWritable()` calls in feature code paths.
 
 ### WebVM Assets
@@ -609,6 +610,46 @@ Agents should understand what works and what doesn't to avoid wasting iterations
 2. Import it in `src/components/shadow-claw/shadow-claw.ts`.
 3. Add a nav item and `data-page-id` section in the main component template.
 4. Consider using `<shadow-claw-page-header>` for consistent mobile-first headers.
+
+### Web Share Target
+
+ShadowClaw registers as a PWA [Web Share Target](https://w3c.github.io/web-share-target/)
+so the OS can push files, URLs, and text into the app from any native share sheet.
+
+**Architecture:**
+
+| File                                      | Role                                                                                                                           |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `manifest.json`                           | Declares `share_target` — `POST /share/share-target.html`, `multipart/form-data`, accepts `title`, `text`, `url`, and `file[]` |
+| `share/share-target.html`                 | Real static share-target landing page (in-scope route) that boots `<shadow-claw>`                                              |
+| `src/service-worker/share-target.ts`      | SW fetch handler — reads form data, persists `PendingShareRecord`s to IndexedDB, redirects to `/?share-target=1`               |
+| `src/share-target/pending-shares.ts`      | `consumePendingShares()` — drains and deletes all queued records on startup                                                    |
+| `src/storage/writeGroupFileBytes.ts`      | Writes binary share payloads to the group workspace with OPFS worker fallback                                                  |
+| `src/service-worker/fetch-proxy-rules.ts` | `/share/share-target.html` is excluded from SW caching (bypass list)                                                           |
+
+**How it works:**
+
+1. On install/update, `workbox-config.cjs` injects `service-worker/share-target.js` via `importScripts`.
+2. The SW fetch handler intercepts `POST /share/share-target.html`, serialises each file to an
+   `ArrayBuffer` and stores records in the `pendingShares` IndexedDB object store
+   (version 2, index `by-createdAt`), then issues a `303` redirect to `/?share-target=1`.
+3. `<shadow-claw>` calls `consumePendingShares()` during `connectedCallback` after the
+   DB is open. If records exist:
+   - Binary files → `writeGroupFileBytes()` with a sanitised filename.
+   - Text/URL payloads → `writeGroupFile()` as a Markdown file.
+   - A dated conversation (`Shared Files YYYY-MM-DD`) is created or reused; the app
+     switches to it, navigates to the Files view, and auto-opens the first file.
+   - The `?share-target` query param is removed via `history.replaceState()`.
+4. The service worker uses its own `openShareDb()` helper (mirrors `openDatabase()`)
+   so it can write to IndexedDB without importing browser-side modules — keep the
+   two `pendingShares` schema definitions in sync when changing the store shape.
+
+**Outbound sharing (file viewer):**
+The file viewer (`<shadow-claw-file-viewer>`) exposes a `↗ Share` button that calls
+`navigator.share()`. The button is shown only when `isWebShareAvailable()` is true and
+`canShareCurrentFile()` passes (which uses `navigator.canShare()` for binary files).
+Text files are shared as `{ title, text }`; binary files are wrapped in a `File`
+object and passed as `{ files: [file] }`. Abort errors are swallowed silently.
 
 ### Web Push Notifications
 

@@ -9,7 +9,10 @@ import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { Themes, themeStore } from "../../stores/theme.js";
 import { toolsStore } from "../../stores/tools.js";
+import { consumePendingShares } from "../../share-target/pending-shares.js";
 import { showError, showSuccess } from "../../toast.js";
+import { writeGroupFileBytes } from "../../storage/writeGroupFileBytes.js";
+import { writeGroupFile } from "../../storage/writeGroupFile.js";
 import {
   buildProviderHelpDialogOptions,
   type ProviderHelpType,
@@ -50,7 +53,7 @@ type PageHeaderLikeElement = HTMLElement & {
   setMainCollapsedOverride?: (collapsed: boolean | null) => void;
 };
 
-export default class ShadowClaw extends ShadowClawElement {
+export class ShadowClaw extends ShadowClawElement {
   static componentPath = `components/${elementName}`;
   static styles = `${ShadowClaw.componentPath}/${elementName}.css`;
   static template = `${ShadowClaw.componentPath}/${elementName}.html`;
@@ -95,6 +98,145 @@ export default class ShadowClaw extends ShadowClawElement {
     setDB(this.db);
 
     await this.render();
+
+    await this.processPendingSharedPayloads();
+  }
+
+  private sanitizeSharedFileName(name: string, fallbackBase: string): string {
+    const normalized =
+      name.replace(/\\/g, "/").split("/").filter(Boolean).pop() || "";
+
+    const collapsed = normalized
+      .replace(/\s+/g, "-")
+      .replace(/[^A-Za-z0-9._-]/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+    if (collapsed) {
+      return collapsed;
+    }
+
+    return `${fallbackBase}.txt`;
+  }
+
+  private buildSharedTextPayload(share: {
+    title: string;
+    text: string;
+    url: string;
+  }): string {
+    const lines: string[] = ["# Shared Content", ""];
+
+    if (share.title) {
+      lines.push(`Title: ${share.title}`);
+    }
+
+    if (share.url) {
+      lines.push(`URL: ${share.url}`);
+    }
+
+    if (share.text) {
+      lines.push("", share.text);
+    }
+
+    return lines.join("\n").trim() + "\n";
+  }
+
+  private async resolveSharedFilesConversationId(
+    db: ShadowClawDatabase,
+  ): Promise<string> {
+    const now = new Date();
+    const year = String(now.getFullYear());
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    const isoDate = `${year}-${month}-${day}`;
+    const conversationName = `Shared Files ${isoDate}`;
+    const existing = orchestratorStore.groups.find(
+      (group) => group.name === conversationName,
+    );
+
+    if (existing) {
+      await orchestratorStore.switchConversation(db, existing.groupId);
+
+      return existing.groupId;
+    }
+
+    const group = await orchestratorStore.createConversation(
+      db,
+      conversationName,
+    );
+
+    return group.groupId;
+  }
+
+  private async processPendingSharedPayloads(): Promise<void> {
+    if (!this.db) {
+      return;
+    }
+
+    const pendingShares = await consumePendingShares(this.db);
+    if (pendingShares.length === 0) {
+      return;
+    }
+
+    try {
+      const targetGroupId = await this.resolveSharedFilesConversationId(
+        this.db,
+      );
+      const savedPaths: string[] = [];
+
+      for (let i = 0; i < pendingShares.length; i++) {
+        const share = pendingShares[i];
+        const baseName = `shared-${Date.now()}-${i + 1}`;
+
+        if (share.fileBytes instanceof ArrayBuffer) {
+          const preferredName =
+            share.fileName ||
+            (share.fileType === "application/pdf"
+              ? `${baseName}.pdf`
+              : `${baseName}.bin`);
+          const fileName = this.sanitizeSharedFileName(preferredName, baseName);
+
+          await writeGroupFileBytes(
+            this.db,
+            targetGroupId,
+            fileName,
+            new Uint8Array(share.fileBytes),
+          );
+          savedPaths.push(fileName);
+
+          continue;
+        }
+
+        const textFileName = this.sanitizeSharedFileName(
+          share.fileName || `${baseName}.md`,
+          baseName,
+        );
+        const textPayload = this.buildSharedTextPayload(share);
+        await writeGroupFile(this.db, targetGroupId, textFileName, textPayload);
+        savedPaths.push(textFileName);
+      }
+
+      await orchestratorStore.loadFiles(this.db);
+      this.showPage("files");
+
+      if (savedPaths.length > 0) {
+        await fileViewerStore.openFile(this.db, savedPaths[0], targetGroupId);
+      }
+
+      showSuccess(
+        `Imported ${savedPaths.length} shared item${savedPaths.length === 1 ? "" : "s"}.`,
+      );
+
+      const currentUrl = new URL(window.location.href);
+      if (currentUrl.searchParams.has("share-target")) {
+        currentUrl.searchParams.delete("share-target");
+        const cleaned = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+        window.history.replaceState({}, "", cleaned || "/");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      showError(`Failed to import shared content: ${message}`, 6000);
+    }
   }
 
   async render() {

@@ -303,7 +303,7 @@ function createOrchestratorStub(extra = {}) {
 
 describe("shadow-claw", () => {
   beforeAll(async () => {
-    ShadowClaw = (await import("./shadow-claw.js")).default;
+    ShadowClaw = (await import("./shadow-claw.js")).ShadowClaw;
 
     orchestratorStore = (await import("../../stores/orchestrator.js"))
       .orchestratorStore;

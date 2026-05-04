@@ -27,6 +27,7 @@ e2e/
 │   └── streaming-chat.test.ts # Chat flow with mock SSE streaming + non-streaming
 │   └── task-crud.test.ts       # Task CRUD (create, edit, toggle, delete)
 │   └── file-viewer.test.ts    # File viewer component integration coverage
+│   └── share-target.test.ts   # Web Share Target import flow (pending share queue → file save → conversation switch)
 │   └── orchestrator.test.ts / storage.test.ts  # System integration coverage
 └── README.md           # This file
 ```

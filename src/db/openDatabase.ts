@@ -42,6 +42,14 @@ export function openDatabase(): Promise<ShadowClawDatabase> {
       if (!database.objectStoreNames.contains("config")) {
         database.createObjectStore("config", { keyPath: "key" });
       }
+
+      // Pending Web Share Target payloads
+      if (!database.objectStoreNames.contains("pendingShares")) {
+        const pendingShares = database.createObjectStore("pendingShares", {
+          keyPath: "id",
+        });
+        pendingShares.createIndex("by-createdAt", "createdAt");
+      }
     };
 
     request.onsuccess = () => {

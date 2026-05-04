@@ -33,7 +33,7 @@ const onwarn = (warning, warn) => {
   warn(warning);
 };
 
-const commonPlugins = (tsconfig) => [
+const commonPlugins = (tsconfig, terserOptions = {}) => [
   alias({
     entries: [
       { find: /^node:zlib$/, replacement: "browserify-zlib" },
@@ -85,7 +85,7 @@ const commonPlugins = (tsconfig) => [
     process: "process",
     Buffer: ["buffer", "Buffer"],
   }),
-  isProduction && terser(),
+  isProduction && terser(terserOptions),
 ];
 
 const configs = [
@@ -108,7 +108,6 @@ const configs = [
           { src: "index.css", dest: "dist/public" },
           { src: "manifest.json", dest: "dist/public" },
           { src: "404.html", dest: "dist/public" },
-          { src: "service-worker/**/*", dest: "dist/public/service-worker" },
           {
             src: ["src/**/*.css"],
             dest: "dist/public",
@@ -207,12 +206,14 @@ const configs = [
     output: {
       dir: "dist/public",
       entryFileNames: "service-worker/push-handler.js",
-      format: "esm",
+      format: "iife",
       sourcemap: !isProduction,
       inlineDynamicImports: true,
     },
     onwarn,
-    plugins: [...commonPlugins("./tsconfig.service.worker.json")],
+    plugins: [
+      ...commonPlugins("./tsconfig.service.worker.json"),
+    ],
   },
   // Service Worker Fetch Proxy
   {
@@ -220,12 +221,33 @@ const configs = [
     output: {
       dir: "dist/public",
       entryFileNames: "service-worker/fetch-proxy.js",
-      format: "esm",
+      format: "iife",
       sourcemap: !isProduction,
       inlineDynamicImports: true,
     },
     onwarn,
-    plugins: [...commonPlugins("./tsconfig.service.worker.json")],
+    plugins: [
+      ...commonPlugins("./tsconfig.service.worker.json"),
+    ],
+  },
+  // Service Worker Share Target
+  {
+    input: "src/service-worker/share-target.ts",
+    output: {
+      dir: "dist/public",
+      entryFileNames: "service-worker/share-target.js",
+      format: "iife",
+      sourcemap: !isProduction,
+      inlineDynamicImports: true,
+    },
+    onwarn,
+    plugins: [
+      ...commonPlugins("./tsconfig.service.worker.json"),
+      copy({
+        targets: [{ src: "share/**/*", dest: "dist/public/share" }],
+        copyOnce: true,
+      }),
+    ],
   },
   // Server
   {

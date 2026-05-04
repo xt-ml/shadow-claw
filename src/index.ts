@@ -1,4 +1,3 @@
-import { resumeAudioContext } from "./audio.js";
 import {
   clearAllToasts,
   dismissToast,
@@ -9,14 +8,14 @@ import {
   showWarning,
 } from "./toast.js";
 
-import ShadowClaw from "./components/shadow-claw/shadow-claw.js";
-console.log("[index] ShadowClaw module imported:", typeof ShadowClaw);
-
-import { Orchestrator } from "./orchestrator.js";
 import { orchestratorStore } from "./stores/orchestrator.js";
+import { resumeAudioContext } from "./audio.js";
 
-import "./types.js";
-import { ShadowClawGlobal } from "./types.js";
+import "./components/shadow-claw/shadow-claw.js";
+
+import type { Orchestrator } from "./orchestrator.js";
+import type { ShadowClaw } from "./components/shadow-claw/shadow-claw.js";
+import type { ShadowClawGlobal } from "./types.js";
 
 let isInitializing = false;
 async function initializeApp(): Promise<Orchestrator | undefined> {
@@ -37,10 +36,20 @@ async function initializeApp(): Promise<Orchestrator | undefined> {
 
     // Store orchestrator and UI globally for debugging
     const shadowclaw: ShadowClawGlobal = {
-      orchestrator: uiElement.orchestrator,
+      get orchestrator() {
+        return uiElement.orchestrator;
+      },
       ui: uiElement,
-      requestDialog: (options) => uiElement.requestDialog(options),
-      requestConfirmation: (options) => uiElement.requestConfirmation(options),
+      requestDialog: async (options) => {
+        await customElements.whenDefined("shadow-claw");
+
+        return uiElement.requestDialog(options);
+      },
+      requestConfirmation: async (options) => {
+        await customElements.whenDefined("shadow-claw");
+
+        return uiElement.requestConfirmation(options);
+      },
       showToast,
       showSuccess,
       showError,

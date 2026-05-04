@@ -59,6 +59,12 @@ describe("shadow-claw-file-viewer", () => {
     expect(template).toContain('aria-pressed="false"');
   });
 
+  it("includes share button in template", async () => {
+    const template = await ShadowClawFileViewer.getTemplateSource();
+
+    expect(template).toContain("modal-share-btn");
+  });
+
   it("detects iframe preview file types", () => {
     const component = new ShadowClawFileViewer();
 
@@ -168,6 +174,28 @@ describe("shadow-claw-file-viewer", () => {
         name: "notes.md",
         kind: "text",
         content: "# hello",
+      }),
+    ).toBe(true);
+  });
+
+  it("requires canShare for binary file sharing", () => {
+    const component = new ShadowClawFileViewer();
+
+    Object.defineProperty(globalThis.navigator, "share", {
+      value: jest.fn(),
+      configurable: true,
+    });
+    Object.defineProperty(globalThis.navigator, "canShare", {
+      value: jest.fn(() => true),
+      configurable: true,
+    });
+
+    expect(
+      component.canShareCurrentFile({
+        name: "image.png",
+        kind: "binary",
+        mimeType: "image/png",
+        binaryContent: new Uint8Array([1, 2, 3]),
       }),
     ).toBe(true);
   });

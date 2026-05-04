@@ -252,6 +252,62 @@ describe("shadow-claw-file-viewer", () => {
     });
   });
 
+  it("uses unsaved draft content for raw mode when editor is dirty", async () => {
+    const component = new ShadowClawFileViewer();
+    const modal = document.createElement("div");
+    modal.className = "file-modal";
+
+    const content = document.createElement("div");
+    content.className = "file-content";
+    modal.appendChild(content);
+
+    const previewButton = document.createElement("button");
+    previewButton.className = "modal-preview-btn";
+    modal.appendChild(previewButton);
+
+    const closeButton = document.createElement("button");
+    closeButton.className = "modal-close-btn";
+    modal.appendChild(closeButton);
+
+    const body = document.createElement("div");
+    body.className = "modal-body";
+    modal.appendChild(body);
+
+    const editButton = document.createElement("button");
+    editButton.className = "modal-edit-btn";
+    modal.appendChild(editButton);
+
+    const saveButton = document.createElement("button");
+    saveButton.className = "modal-save-btn";
+    modal.appendChild(saveButton);
+
+    const shareButton = document.createElement("button");
+    shareButton.className = "modal-share-btn";
+    modal.appendChild(shareButton);
+
+    const editorContainer = document.createElement("div");
+    editorContainer.className = "file-editor-container";
+    modal.appendChild(editorContainer);
+
+    component.shadowRoot?.appendChild(modal);
+
+    component.isFilePreviewMode = false;
+    component.isFileEditMode = false;
+    component.isEditorDirty = true;
+    component.editorDraftContent = "# unsaved raw draft";
+    component.viewRenderToken = 1;
+
+    (fileViewerStore as any).file = {
+      name: "notes.md",
+      kind: "text",
+      content: "# saved content",
+    };
+
+    await component.updateView(1);
+
+    expect(content.textContent).toBe("# unsaved raw draft");
+  });
+
   it("sets caret-color on file-editor so cursor is visible over syntax-highlight overlay", async () => {
     const styles = await ShadowClawFileViewer.getStylesSource();
 
@@ -329,6 +385,135 @@ describe("shadow-claw-file-viewer", () => {
     await updatePromise;
 
     expect(content.innerHTML).toBe("");
+  });
+
+  it("keeps the close button enabled while the current draft is unsaved", async () => {
+    const component = new ShadowClawFileViewer();
+    const modal = document.createElement("div");
+    modal.className = "file-modal";
+
+    const content = document.createElement("div");
+    content.className = "file-content";
+    modal.appendChild(content);
+
+    const previewButton = document.createElement("button");
+    previewButton.className = "modal-preview-btn";
+    modal.appendChild(previewButton);
+
+    const closeButton = document.createElement("button");
+    closeButton.className = "modal-close-btn";
+    modal.appendChild(closeButton);
+
+    const body = document.createElement("div");
+    body.className = "modal-body";
+    modal.appendChild(body);
+
+    const editButton = document.createElement("button");
+    editButton.className = "modal-edit-btn";
+    modal.appendChild(editButton);
+
+    const saveButton = document.createElement("button");
+    saveButton.className = "modal-save-btn";
+    modal.appendChild(saveButton);
+
+    const shareButton = document.createElement("button");
+    shareButton.className = "modal-share-btn";
+    modal.appendChild(shareButton);
+
+    const editorContainer = document.createElement("div");
+    editorContainer.className = "file-editor-container";
+    modal.appendChild(editorContainer);
+
+    component.shadowRoot?.appendChild(modal);
+
+    component.isFileEditMode = true;
+    component.isEditorDirty = true;
+    component.editorDraftContent = "dirty draft";
+    component.viewRenderToken = 1;
+
+    (fileViewerStore as any).file = {
+      name: "notes.md",
+      kind: "text",
+      content: "# saved",
+    };
+
+    await component.updateView(1);
+
+    expect(closeButton.disabled).toBe(false);
+    expect(closeButton.getAttribute("aria-label")).toBe(
+      "Close file viewer (unsaved changes)",
+    );
+  });
+
+  it("blocks close actions while the current draft is unsaved", () => {
+    const component = new ShadowClawFileViewer();
+    const modal = document.createElement("dialog");
+    modal.className = "file-modal";
+
+    const closeButton = document.createElement("button");
+    closeButton.className = "modal-close-btn";
+
+    const previewButton = document.createElement("button");
+    previewButton.className = "modal-preview-btn";
+
+    const editButton = document.createElement("button");
+    editButton.className = "modal-edit-btn";
+
+    const saveButton = document.createElement("button");
+    saveButton.className = "modal-save-btn";
+
+    const body = document.createElement("div");
+    body.className = "modal-body";
+
+    const content = document.createElement("div");
+    content.className = "file-content";
+
+    const editorContainer = document.createElement("div");
+    editorContainer.className = "file-editor-container";
+
+    const editor = document.createElement("textarea");
+    editor.className = "file-editor";
+    editorContainer.appendChild(editor);
+
+    component.shadowRoot?.append(
+      modal,
+      closeButton,
+      previewButton,
+      editButton,
+      saveButton,
+      body,
+      content,
+      editorContainer,
+    );
+
+    component.isEditorDirty = true;
+    (fileViewerStore as any).file = {
+      name: "notes.md",
+      kind: "text",
+      content: "# saved",
+    };
+
+    const confirmSpy = jest
+      .spyOn(window, "confirm")
+      .mockImplementation(() => false);
+
+    const closeFileMock = fileViewerStore.closeFile as jest.Mock;
+    closeFileMock.mockReset();
+
+    component.bindEventListeners();
+
+    closeButton.click();
+    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    expect(closeFileMock).not.toHaveBeenCalled();
+
+    const cancelEvent = new Event("cancel", { cancelable: true });
+    modal.dispatchEvent(cancelEvent);
+
+    expect(cancelEvent.defaultPrevented).toBe(true);
+    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    expect(closeFileMock).not.toHaveBeenCalled();
+
+    confirmSpy.mockRestore();
   });
 
   describe("workspace link resolution", () => {

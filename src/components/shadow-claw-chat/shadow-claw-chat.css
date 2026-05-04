@@ -742,29 +742,82 @@
   background: transparent;
   cursor: row-resize;
   flex: none;
-  height: 0.375rem;
+  height: 0.75rem;
   outline: none;
   position: relative;
   touch-action: none;
   user-select: none;
 }
 
+.chat__input-resize-handle::before {
+  background: color-mix(
+    in srgb,
+    var(--shadow-claw-bg-secondary) 72%,
+    var(--shadow-claw-border-color)
+  );
+  border: 0.0625rem solid
+    color-mix(in srgb, var(--shadow-claw-border-color) 80%, transparent);
+  border-radius: var(--shadow-claw-radius-pill);
+  content: "";
+  height: 0.5625rem;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+  width: min(11rem, 76%);
+}
+
 .chat__input-resize-handle::after {
   background: var(--shadow-claw-border-color);
   border-radius: var(--shadow-claw-radius-pill);
   content: "";
-  height: 0.1875rem;
+  height: 0.125rem;
   left: 50%;
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%);
   transition: background-color 0.15s;
-  width: min(9rem, 70%);
+  width: min(7.5rem, 56%);
+}
+
+.chat__input-resize-handle:hover::before,
+.chat__input-resize-handle.active::before {
+  background: color-mix(
+    in srgb,
+    var(--shadow-claw-accent-primary) 16%,
+    var(--shadow-claw-bg-secondary)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--shadow-claw-accent-primary) 40%,
+    transparent
+  );
+  box-shadow: 0 0 0.5rem
+    color-mix(in srgb, var(--shadow-claw-accent-primary) 16%, transparent);
 }
 
 .chat__input-resize-handle:hover::after,
 .chat__input-resize-handle.active::after {
   background: var(--shadow-claw-accent-primary);
+}
+
+.chat__input-resize-handle:focus-visible::before {
+  background: color-mix(
+    in srgb,
+    var(--shadow-claw-accent-primary) 16%,
+    var(--shadow-claw-bg-secondary)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--shadow-claw-accent-primary) 40%,
+    transparent
+  );
+  box-shadow: 0 0 0.5rem
+    color-mix(in srgb, var(--shadow-claw-accent-primary) 16%, transparent);
 }
 
 .chat__input-resize-handle:focus-visible::after {

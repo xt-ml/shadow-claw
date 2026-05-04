@@ -98,6 +98,14 @@ a:hover {
   padding: 0.5rem;
 }
 
+.theme-mode-toggle .sun-icon {
+  display: none;
+}
+
+.theme-mode-toggle .moon-icon {
+  display: block;
+}
+
 .theme-toggle svg {
   transition: transform 0.2s ease;
 }
@@ -173,14 +181,36 @@ a:hover {
   position: relative;
   touch-action: none;
   user-select: none;
-  width: 0.5rem;
+  width: 0.75rem;
+}
+
+.sidebar-resize-handle::before {
+  background: color-mix(
+    in srgb,
+    var(--shadow-claw-bg-secondary) 72%,
+    var(--shadow-claw-border-color)
+  );
+  border: 0.0625rem solid
+    color-mix(in srgb, var(--shadow-claw-border-color) 80%, transparent);
+  border-radius: var(--shadow-claw-radius-pill);
+  content: "";
+  height: 4.25rem;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition:
+    background-color 0.15s,
+    border-color 0.15s,
+    box-shadow 0.15s;
+  width: 0.5625rem;
 }
 
 .sidebar-resize-handle::after {
   background: var(--shadow-claw-border-color);
   border-radius: var(--shadow-claw-radius-pill);
   content: "";
-  height: 3rem;
+  height: 2.75rem;
   left: 50%;
   position: absolute;
   top: 50%;
@@ -189,9 +219,40 @@ a:hover {
   width: 0.1875rem;
 }
 
+.sidebar-resize-handle:hover::before,
+.sidebar-resize-handle.active::before {
+  background: color-mix(
+    in srgb,
+    var(--shadow-claw-accent-primary) 20%,
+    var(--shadow-claw-bg-secondary)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--shadow-claw-accent-primary) 45%,
+    transparent
+  );
+  box-shadow: 0 0 0.5rem
+    color-mix(in srgb, var(--shadow-claw-accent-primary) 18%, transparent);
+}
+
 .sidebar-resize-handle:hover::after,
 .sidebar-resize-handle.active::after {
   background: var(--shadow-claw-accent-primary);
+}
+
+.sidebar-resize-handle:focus-visible::before {
+  background: color-mix(
+    in srgb,
+    var(--shadow-claw-accent-primary) 20%,
+    var(--shadow-claw-bg-secondary)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--shadow-claw-accent-primary) 45%,
+    transparent
+  );
+  box-shadow: 0 0 0.5rem
+    color-mix(in srgb, var(--shadow-claw-accent-primary) 18%, transparent);
 }
 
 .sidebar-resize-handle:focus-visible::after {

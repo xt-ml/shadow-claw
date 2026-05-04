@@ -131,48 +131,13 @@ export class ShadowClawPageHeader extends ShadowClawElement {
 
   setupMainVisibility(root: ShadowRoot) {
     this.mainVisibilityCleanup();
-
-    const headerMain = root.querySelector(".header__main");
-    if (!(headerMain instanceof HTMLElement)) {
-      this.mainVisibilityMediaQuery = null;
-      this.mainVisibilityCleanup = () => {};
-
-      return;
-    }
-
-    if (typeof globalThis.matchMedia !== "function") {
-      this.mainVisibilityMediaQuery = null;
-      this.applyMainVisibility(root);
-      this.mainVisibilityCleanup = () => {};
-
-      return;
-    }
-
-    const mediaQuery = globalThis.matchMedia(
-      "(min-width: 56rem) and (min-height: 401px)",
-    );
-    this.mainVisibilityMediaQuery = mediaQuery;
-
-    const onChange = () => {
-      this.applyMainVisibility(root);
-    };
-
-    mediaQuery.addEventListener("change", onChange);
+    this.mainVisibilityMediaQuery = null;
+    this.mainVisibilityCleanup = () => {};
     this.applyMainVisibility(root);
-
-    this.mainVisibilityCleanup = () => {
-      mediaQuery.removeEventListener("change", onChange);
-      this.mainVisibilityMediaQuery = null;
-    };
   }
 
   getAutoMainCollapsed() {
-    const mediaQuery = this.mainVisibilityMediaQuery;
-    if (!mediaQuery) {
-      return false;
-    }
-
-    return !mediaQuery.matches;
+    return false;
   }
 
   getEffectiveMainCollapsed() {

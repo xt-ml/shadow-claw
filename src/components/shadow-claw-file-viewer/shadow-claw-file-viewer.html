@@ -9,25 +9,42 @@
             class="modal-share-btn hidden"
             type="button"
           >
-            ↗ Share
+            ↗<span class="btn-label"> Share</span>
           </button>
-          <button aria-label="Edit file" class="modal-edit-btn" type="button">
-            ✏️ Edit
+          <div class="modal-view-modes">
+            <button
+              aria-pressed="false"
+              aria-label="Edit file"
+              class="modal-edit-btn"
+              title="Edit"
+              type="button"
+            >
+              ✏️<span class="btn-label"> Edit</span>
+            </button>
+            <button
+              aria-pressed="false"
+              aria-label="Toggle preview mode"
+              class="modal-preview-btn"
+              title="Preview"
+              type="button"
+            >
+              👁️<span class="btn-label"> Preview</span>
+            </button>
+          </div>
+          <button
+            aria-label="Discard changes"
+            class="modal-cancel-btn hidden"
+            title="Discard unsaved changes"
+            type="button"
+          >
+            ✕<span class="btn-label"> Cancel</span>
           </button>
           <button
             aria-label="Save file"
             class="modal-save-btn hidden"
             type="button"
           >
-            💾 Save
-          </button>
-          <button
-            aria-pressed="false"
-            aria-label="Toggle preview mode"
-            class="modal-preview-btn"
-            type="button"
-          >
-            👁️ Preview
+            💾<span class="btn-label"> Save</span>
           </button>
           <button
             aria-label="Close file viewer"

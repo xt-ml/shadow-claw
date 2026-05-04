@@ -211,9 +211,7 @@ const configs = [
       inlineDynamicImports: true,
     },
     onwarn,
-    plugins: [
-      ...commonPlugins("./tsconfig.service.worker.json"),
-    ],
+    plugins: [...commonPlugins("./tsconfig.service.worker.json")],
   },
   // Service Worker Fetch Proxy
   {
@@ -226,8 +224,25 @@ const configs = [
       inlineDynamicImports: true,
     },
     onwarn,
+    plugins: [...commonPlugins("./tsconfig.service.worker.json")],
+  },
+  // Service Worker Share Target
+  {
+    input: "src/service-worker/share-target.ts",
+    output: {
+      dir: "dist/public",
+      entryFileNames: "service-worker/share-target.js",
+      format: "iife",
+      sourcemap: !isProduction,
+      inlineDynamicImports: true,
+    },
+    onwarn,
     plugins: [
       ...commonPlugins("./tsconfig.service.worker.json"),
+      copy({
+        targets: [{ src: "share/**/*", dest: "dist/public/share" }],
+        copyOnce: true,
+      }),
     ],
   },
   // Service Worker Share Target

@@ -353,6 +353,19 @@ describe("ShadowClawConversations", () => {
       document.body.removeChild(el);
     });
 
+    it("resize handle renders a visible grab affordance", async () => {
+      const el = new ShadowClawConversations() as any;
+      document.body.appendChild(el);
+      await el.onTemplateReady;
+      await el.render();
+
+      const style = el.shadowRoot?.querySelector("style");
+      expect(style?.textContent).toContain(".resize-handle::before");
+      expect(style?.textContent).toContain(".resize-handle::after");
+
+      document.body.removeChild(el);
+    });
+
     it("conversation list has scrollable styling", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);

@@ -111,14 +111,19 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
 
     const modal = root.querySelector(".file-modal");
+    modal?.addEventListener("cancel", (event: Event) => {
+      if (!this.canDismissViewer()) {
+        event.preventDefault();
+      }
+    });
     modal?.addEventListener("close", () => {
-      if (fileViewerStore.file) {
+      if (fileViewerStore.file && this.canDismissViewer()) {
         fileViewerStore.closeFile();
       }
     });
 
     const closeBtn = root.querySelector(".modal-close-btn");
-    closeBtn?.addEventListener("click", () => fileViewerStore.closeFile());
+    closeBtn?.addEventListener("click", () => this.requestCloseViewer());
 
     const previewBtn = root.querySelector(".modal-preview-btn");
     previewBtn?.addEventListener("click", async () => {
@@ -146,6 +151,14 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     saveBtn?.addEventListener("click", () => this.handleSave());
 
     const modalBody = root.querySelector(".modal-body");
+
+    const cancelBtn = root.querySelector(".modal-cancel-btn");
+    cancelBtn?.addEventListener("click", async () => {
+      this.isEditorDirty = false;
+      this.editorDraftContent = null;
+      this.isFileEditMode = false;
+      await this.updateView();
+    });
     modalBody?.addEventListener("click", (event: Event) => {
       if (event instanceof MouseEvent) {
         void this.handlePreviewLinkClick(event);
@@ -159,6 +172,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       }
 
       this.isEditorDirty = true;
+      void this.updateView();
     });
 
     if (editor instanceof HTMLTextAreaElement) {
@@ -174,6 +188,34 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       const scrollBody = root.querySelector(".modal-body");
       scrollBody?.addEventListener("scroll", syncHighlight);
     }
+  }
+
+  hasUnsavedChanges() {
+    return this.isEditorDirty;
+  }
+
+  canDismissViewer() {
+    if (!this.hasUnsavedChanges()) {
+      return true;
+    }
+
+    const confirmed = window.confirm(
+      "You have unsaved changes. Discard them and close?",
+    );
+    if (confirmed) {
+      this.isEditorDirty = false;
+      this.editorDraftContent = null;
+    }
+
+    return confirmed;
+  }
+
+  requestCloseViewer() {
+    if (!this.canDismissViewer()) {
+      return;
+    }
+
+    fileViewerStore.closeFile();
   }
 
   async handlePreviewLinkClick(event: MouseEvent) {
@@ -392,10 +434,8 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     });
   }
 
-  isRenderTokenCurrent(renderToken: number, file: any) {
-    return (
-      this.viewRenderToken === renderToken && fileViewerStore.file === file
-    );
+  isRenderTokenCurrent(renderToken: number) {
+    return this.viewRenderToken === renderToken;
   }
 
   async updateView(renderToken: number = this.viewRenderToken) {
@@ -414,8 +454,16 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     const previewBtn = modal.querySelector(".modal-preview-btn");
     const modalBody = modal.querySelector(".modal-body");
 
+    if (!(content instanceof HTMLElement)) {
+      return;
+    }
+
+    content.classList.remove("file-content--iframe");
+
+    const workingFile = this.getWorkingSourceFile(file, modal);
+    const canEdit = file.kind === "text";
+
     if (previewBtn instanceof HTMLButtonElement) {
-      previewBtn.textContent = this.isFilePreviewMode ? "📄 Raw" : "👁️ Preview";
       previewBtn.setAttribute("aria-pressed", String(this.isFilePreviewMode));
       previewBtn.setAttribute(
         "aria-label",
@@ -425,17 +473,13 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       );
     }
 
-    if (!(content instanceof HTMLElement)) {
-      return;
-    }
-
-    content.classList.remove("file-content--iframe");
-
     // Get editor elements
     const editorContainer = modal.querySelector(".file-editor-container");
     const editBtn = modal.querySelector(".modal-edit-btn");
     const saveBtn = modal.querySelector(".modal-save-btn");
     const shareBtn = modal.querySelector(".modal-share-btn");
+    const closeBtn = modal.querySelector(".modal-close-btn");
+    const cancelBtn = modal.querySelector(".modal-cancel-btn");
 
     if (shareBtn instanceof HTMLButtonElement) {
       const canShare = this.canShareCurrentFile(file);
@@ -443,38 +487,57 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       shareBtn.disabled = !canShare;
     }
 
+    if (closeBtn instanceof HTMLButtonElement) {
+      const isDirty = this.hasUnsavedChanges();
+      closeBtn.disabled = false;
+      closeBtn.setAttribute(
+        "aria-label",
+        isDirty ? "Close file viewer (unsaved changes)" : "Close file viewer",
+      );
+      closeBtn.title = isDirty ? "Close (you have unsaved changes)" : "Close";
+    }
+
+    // Save and Cancel are driven purely by dirty state, independent of view mode.
+    const isDirty = this.hasUnsavedChanges();
+    if (saveBtn instanceof HTMLButtonElement) {
+      saveBtn.classList.toggle("hidden", !isDirty);
+    }
+
+    if (cancelBtn instanceof HTMLButtonElement) {
+      cancelBtn.classList.toggle("hidden", !isDirty);
+    }
+
     if (this.isFilePreviewMode) {
       modalBody?.classList.remove("modal-body--editing");
 
-      // Ensure preview is visible and editor is hidden
       content.classList.remove("hidden");
       editorContainer?.classList.remove("active");
 
-      saveBtn?.classList.add("hidden");
       if (editBtn instanceof HTMLButtonElement) {
-        editBtn.textContent = "✏️ Edit";
-        editBtn.classList.toggle("hidden", file.kind === "pdf");
+        editBtn.setAttribute("aria-pressed", "false");
+        editBtn.setAttribute("aria-label", "Edit file");
+        editBtn.classList.toggle("hidden", !canEdit);
       }
 
-      const previewFile = this.getPreviewSourceFile(file, modal);
-      await this.renderPreview(content, previewFile, renderToken);
+      await this.renderPreview(content, workingFile, renderToken);
 
       return;
     }
 
-    if (!this.isRenderTokenCurrent(renderToken, file)) {
+    if (!this.isRenderTokenCurrent(renderToken)) {
       return;
     }
 
-    if (this.isFileEditMode && file.kind === "text") {
+    if (this.isFileEditMode && canEdit) {
       modalBody?.classList.add("modal-body--editing");
 
       content.classList.add("hidden");
       editorContainer?.classList.add("active");
-      saveBtn?.classList.remove("hidden");
 
       if (editBtn instanceof HTMLButtonElement) {
-        editBtn.textContent = "❌ Cancel";
+        editBtn.setAttribute("aria-pressed", "true");
+        editBtn.setAttribute("aria-label", "Switch to raw text view");
+        editBtn.classList.remove("hidden");
       }
 
       const editor = editorContainer?.querySelector(".file-editor");
@@ -490,11 +553,10 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
         if (!this.isEditorDirty) {
           editor.value = file.content || "";
-        } else if (typeof this.editorDraftContent === "string") {
-          editor.value = this.editorDraftContent;
+        } else if (typeof workingFile?.content === "string") {
+          editor.value = workingFile.content;
         }
 
-        // Ensure overlay and caret start fully synchronized when entering edit mode.
         editor.dispatchEvent(new Event("scroll"));
       }
     } else {
@@ -502,10 +564,11 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
       content.classList.remove("hidden");
       editorContainer?.classList.remove("active");
-      saveBtn?.classList.add("hidden");
 
       if (editBtn instanceof HTMLButtonElement) {
-        editBtn.textContent = "✏️ Edit";
+        editBtn.setAttribute("aria-pressed", "false");
+        editBtn.setAttribute("aria-label", "Edit file");
+        editBtn.classList.toggle("hidden", !canEdit);
       }
 
       content.classList.add("file-content--raw");
@@ -514,7 +577,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       if (file.kind === "binary") {
         content.textContent = `Binary file (${file.mimeType || "application/octet-stream"}). Switch to Preview to view.`;
       } else {
-        content.textContent = file.content || "";
+        content.textContent = workingFile.content || "";
       }
     }
   }
@@ -524,7 +587,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     file: any,
     renderToken: number = this.viewRenderToken,
   ) {
-    if (!this.isRenderTokenCurrent(renderToken, file)) {
+    if (!this.isRenderTokenCurrent(renderToken)) {
       return;
     }
 
@@ -582,14 +645,14 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     content.classList.add("file-content--preview");
 
     const previewHtml = await renderMarkdown(this.toPreviewMarkdown(file));
-    if (!this.isRenderTokenCurrent(renderToken, file)) {
+    if (!this.isRenderTokenCurrent(renderToken)) {
       return;
     }
 
     content.innerHTML = previewHtml;
   }
 
-  getPreviewSourceFile(file: any, modal: HTMLElement) {
+  getWorkingSourceFile(file: any, modal: HTMLElement) {
     if (!this.isEditorDirty || file?.kind !== "text") {
       return file;
     }
@@ -610,6 +673,10 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       ...file,
       content: editor.value,
     };
+  }
+
+  getPreviewSourceFile(file: any, modal: HTMLElement) {
+    return this.getWorkingSourceFile(file, modal);
   }
 
   renderBinaryPreview(content: HTMLElement, file: any) {
@@ -701,14 +768,22 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     const previewBtn = modal.querySelector(".modal-preview-btn");
 
     if (previewBtn instanceof HTMLButtonElement) {
-      previewBtn.textContent = "👁️ Preview";
       previewBtn.setAttribute("aria-pressed", "false");
       previewBtn.setAttribute("aria-label", "Switch to preview mode");
     }
 
     const editBtn = modal.querySelector(".modal-edit-btn");
     if (editBtn instanceof HTMLButtonElement) {
-      editBtn.textContent = "✏️ Edit";
+      editBtn.setAttribute("aria-pressed", "false");
+      editBtn.setAttribute("aria-label", "Edit file");
+      editBtn.classList.remove("hidden");
+    }
+
+    const closeBtn = modal.querySelector(".modal-close-btn");
+    if (closeBtn instanceof HTMLButtonElement) {
+      closeBtn.disabled = false;
+      closeBtn.setAttribute("aria-label", "Close file viewer");
+      closeBtn.title = "Close";
     }
 
     const saveBtn = modal.querySelector(".modal-save-btn");
@@ -726,6 +801,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       editor.removeAttribute("language");
     }
 
+    this.isFileEditMode = false;
     this.editorDraftContent = null;
 
     if (!(content instanceof HTMLElement)) {

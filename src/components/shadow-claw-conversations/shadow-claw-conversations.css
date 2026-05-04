@@ -29,17 +29,69 @@
 }
 
 .resize-handle {
-  background: var(--shadow-claw-border-color);
+  background: transparent;
   cursor: row-resize;
   flex: none;
-  height: 0.25rem;
+  height: 0.75rem;
+  position: relative;
   touch-action: none;
   transition: background var(--shadow-claw-duration-min, 150ms);
   user-select: none;
 }
 
-.resize-handle:hover,
-.resize-handle.active {
+.resize-handle::before {
+  background: color-mix(
+    in srgb,
+    var(--shadow-claw-bg-secondary) 72%,
+    var(--shadow-claw-border-color)
+  );
+  border: 0.0625rem solid
+    color-mix(in srgb, var(--shadow-claw-border-color) 80%, transparent);
+  border-radius: var(--shadow-claw-radius-pill);
+  content: "";
+  height: 0.5625rem;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition:
+    background-color var(--shadow-claw-duration-min, 150ms),
+    border-color var(--shadow-claw-duration-min, 150ms),
+    box-shadow var(--shadow-claw-duration-min, 150ms);
+  width: calc(100% - 1rem);
+}
+
+.resize-handle::after {
+  background: var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-pill);
+  content: "";
+  height: 0.125rem;
+  left: 50%;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  transition: background var(--shadow-claw-duration-min, 150ms);
+  width: calc(100% - 2.5rem);
+}
+
+.resize-handle:hover::before,
+.resize-handle.active::before {
+  background: color-mix(
+    in srgb,
+    var(--shadow-claw-accent-primary) 16%,
+    var(--shadow-claw-bg-secondary)
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--shadow-claw-accent-primary) 40%,
+    transparent
+  );
+  box-shadow: 0 0 0.5rem
+    color-mix(in srgb, var(--shadow-claw-accent-primary) 16%, transparent);
+}
+
+.resize-handle:hover::after,
+.resize-handle.active::after {
   background: var(--shadow-claw-accent-primary);
 }
 

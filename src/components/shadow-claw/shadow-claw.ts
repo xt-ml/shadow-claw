@@ -254,6 +254,7 @@ export class ShadowClaw extends ShadowClawElement {
     this.scheduleTerminalPlacement();
     this.syncPageHeaderMainVisibilityOverride();
     this.updateHeaderMainToggle();
+    this.updateActivityLogToggleVisibility();
 
     const vmStatusListener = (status: VMStatus) => {
       this.vmStatus = status;
@@ -882,6 +883,7 @@ export class ShadowClaw extends ShadowClawElement {
     this.scheduleTerminalPlacement();
     this.syncPageHeaderMainVisibilityOverride();
     this.updateHeaderMainToggle();
+    this.updateActivityLogToggleVisibility();
 
     // Scroll to top
     const activePage = root.querySelector(".page.active");
@@ -1010,6 +1012,10 @@ export class ShadowClaw extends ShadowClawElement {
       "aria-label",
       this.terminalVisible ? "Hide WebVM terminal" : "Show WebVM terminal",
     );
+    button.setAttribute(
+      "title",
+      this.terminalVisible ? "Hide WebVM terminal" : "Show WebVM terminal",
+    );
 
     button.setAttribute("aria-pressed", String(this.terminalVisible));
   }
@@ -1099,7 +1105,11 @@ export class ShadowClaw extends ShadowClawElement {
 
     button.setAttribute(
       "aria-label",
-      collapsed ? "Show page header details" : "Hide page header details",
+      collapsed ? "Show action header" : "Hide action header",
+    );
+    button.setAttribute(
+      "title",
+      collapsed ? "Show action header" : "Hide action header",
     );
     button.setAttribute("aria-pressed", String(collapsed));
   }
@@ -1113,6 +1123,20 @@ export class ShadowClaw extends ShadowClawElement {
     this.headerMainCollapsedOverride = !currentCollapsed;
     this.syncPageHeaderMainVisibilityOverride();
     this.updateHeaderMainToggle();
+  }
+
+  updateActivityLogToggleVisibility() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const button = root.querySelector(".activity-log-toggle");
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    button.hidden = this.currentPage !== "chat";
   }
 
   updateActivityLogToggle() {
@@ -1139,6 +1163,10 @@ export class ShadowClaw extends ShadowClawElement {
 
     button.setAttribute(
       "aria-label",
+      collapsed ? "Show activity log" : "Hide activity log",
+    );
+    button.setAttribute(
+      "title",
       collapsed ? "Show activity log" : "Hide activity log",
     );
     button.setAttribute("aria-pressed", String(collapsed));

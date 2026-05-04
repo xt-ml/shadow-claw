@@ -388,6 +388,25 @@ describe("shadow-claw", () => {
     expect(orchestratorStore.init).toHaveBeenCalled();
   });
 
+  it("shows only the moon icon before theme hydration", async () => {
+    const component = new ShadowClaw();
+    component.orchestrator = createOrchestratorStub();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+
+    const sunIcon = component.shadowRoot?.querySelector(".sun-icon");
+    const moonIcon = component.shadowRoot?.querySelector(".moon-icon");
+
+    expect(sunIcon?.hasAttribute("hidden")).toBe(true);
+    expect(moonIcon?.hasAttribute("hidden")).toBe(false);
+
+    const style = component.shadowRoot?.querySelector("style");
+    expect(style?.textContent).toContain(".theme-mode-toggle .sun-icon");
+    expect(style?.textContent).toContain("display: none");
+    expect(style?.textContent).toContain(".theme-mode-toggle .moon-icon");
+    expect(style?.textContent).toContain("display: block");
+  });
+
   it("opens files when orchestrator emits open-file", async () => {
     const originalMatchMedia = globalThis.matchMedia;
     globalThis.matchMedia =

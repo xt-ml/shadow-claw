@@ -18,4 +18,14 @@ describe("shouldBypassFetchProxy", () => {
       false,
     );
   });
+
+  it("bypasses loopback real share target HTML endpoint", () => {
+    const requestUrl = new URL(
+      "http://localhost:8888/shadow-claw/share/share-target.html",
+    );
+
+    expect(shouldBypassFetchProxy(requestUrl, "http://localhost:9999")).toBe(
+      true,
+    );
+  });
 });

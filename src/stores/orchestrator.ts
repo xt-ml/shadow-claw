@@ -75,7 +75,8 @@ interface ServerScheduledTask {
 
 /**
  * Lazy-cached probe: returns true only when the server's schedule API is
- * reachable (i.e. not a static-only host like GitHub Pages).
+ * reachable.
+ *
  * The result is cached per base URL for the lifetime of the page.
  */
 const _scheduleServerAvailableCache = new Map<string, boolean>();

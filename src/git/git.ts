@@ -56,7 +56,7 @@ export function getProxyUrl(
     return `${protocol}//${host}/git-proxy`;
   }
 
-  // If on a remote host (e.g. GitHub Pages), default to local dev server port
+  // If on a remote host, default to local dev server port
 
   return `http://${DEFAULT_DEV_HOST}:${DEFAULT_DEV_PORT}/git-proxy`;
 }

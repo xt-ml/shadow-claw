@@ -138,28 +138,31 @@ automatically support them.
 
 ## Key Files
 
-| File                          | Purpose                                                                      |
-| ----------------------------- | ---------------------------------------------------------------------------- |
-| `src/index.ts`                | App entry — opens IndexedDB, boots orchestrator, registers SW                |
-| `src/worker/worker.ts`        | Agent Web Worker entry — dispatches messages to the worker agent             |
-| `src/orchestrator.ts`         | State machine, message queue, agent invocation, task scheduling              |
-| `src/worker/agent.ts`         | Agent implementation — orchestrates the LLM tool-use loop and message stream |
-| `src/worker/handleInvoke.ts`  | Implements `callWithStreaming` and core agent invocation logic               |
-| `src/worker/executeTool.ts`   | Tool execution logic for the agent worker                                    |
-| `src/worker/handleMessage.ts` | Worker message dispatcher — handles terminal RPC and VM lifecycle            |
-| `src/types.ts`                | TypeScript interfaces and types (full type contract)                         |
-| `src/config.ts`               | All constants, provider definitions, and config keys                         |
-| `rollup.config.mjs`           | Bundles browser app, workers, service worker, server, and Electron entries   |
-| `src/server/server.ts`        | Express dev/prod server source. Compiles to `dist/server.js`.                |
-| `src/shell/shell.ts`          | Runs `just-bash` AST-based shell evaluation engine bridging OPFS storage     |
-| `electron/main.ts`            | Electron main process: Express server, window, power-save blocker            |
-| `src/service-worker/`         | Service worker source (.ts). Bundled via Rollup and Workbox.                 |
-| `src/stores/`                 | Reactive signal-based UI state: orchestrator, tools, file-viewer, theme      |
-| `src/components/`             | Web Components — `<shadow-claw>` (main), `<shadow-claw-chat>`, etc.          |
-| `src/storage/storage.ts`      | OPFS + Local Folder file storage, zip export/import                          |
-| `src/db/db.ts`                | IndexedDB layer — messages, sessions, tasks, config                          |
-| `src/git/git.ts`              | Isomorphic-git integration and version control operations                    |
-| `src/notifications/`          | Web Push + server-side task scheduling (SQLite)                              |
+| File                                 | Purpose                                                                                               |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| `src/index.ts`                       | App entry — opens IndexedDB, boots orchestrator, registers SW                                         |
+| `src/worker/worker.ts`               | Agent Web Worker entry — dispatches messages to the worker agent                                      |
+| `src/orchestrator.ts`                | State machine, message queue, agent invocation, task scheduling                                       |
+| `src/worker/agent.ts`                | Agent implementation — orchestrates the LLM tool-use loop and message stream                          |
+| `src/worker/handleInvoke.ts`         | Implements `callWithStreaming` and core agent invocation logic                                        |
+| `src/worker/executeTool.ts`          | Tool execution logic for the agent worker                                                             |
+| `src/worker/handleMessage.ts`        | Worker message dispatcher — handles terminal RPC and VM lifecycle                                     |
+| `src/types.ts`                       | TypeScript interfaces and types (full type contract)                                                  |
+| `src/config.ts`                      | All constants, provider definitions, and config keys                                                  |
+| `rollup.config.mjs`                  | Bundles browser app, workers, service worker, server, and Electron entries                            |
+| `src/server/server.ts`               | Express dev/prod server source. Compiles to `dist/server.js`.                                         |
+| `src/shell/shell.ts`                 | Runs `just-bash` AST-based shell evaluation engine bridging OPFS storage                              |
+| `electron/main.ts`                   | Electron main process: Express server, window, power-save blocker                                     |
+| `src/service-worker/`                | Service worker source (.ts). Bundled via Rollup and Workbox.                                          |
+| `src/stores/`                        | Reactive signal-based UI state: orchestrator, tools, file-viewer, theme                               |
+| `src/components/`                    | Web Components — `<shadow-claw>` (main), `<shadow-claw-chat>`, etc.                                   |
+| `src/storage/storage.ts`             | OPFS + Local Folder file storage, zip export/import                                                   |
+| `src/db/db.ts`                       | IndexedDB layer — messages, sessions, tasks, config                                                   |
+| `src/git/git.ts`                     | Isomorphic-git integration and version control operations                                             |
+| `src/share-target/pending-shares.ts` | Client-side module to consume pending Web Share Target payloads from IndexedDB                        |
+| `src/service-worker/share-target.ts` | Service worker fetch handler — intercepts `POST /share/share-target.html`, stores payloads, redirects |
+| `src/storage/writeGroupFileBytes.ts` | Write raw binary (`Uint8Array`) to a group workspace file with OPFS worker fallback                   |
+| `src/notifications/`                 | Web Push + server-side task scheduling (SQLite)                                                       |
 
 ## Storage
 
@@ -170,6 +173,7 @@ graph LR
     sessions["sessions<br>(LLM conversation history)"]
     tasks["tasks<br>(scheduled cron jobs)"]
     config["config<br>(API key · provider · model · max iterations)"]
+    pendingShares["pendingShares<br>(Web Share Target queue)"]
   end
   subgraph FileSystem ["File System"]
     OPFS["OPFS<br>browser-sandboxed<br>shadowclaw/<groupId>/workspace/"]
@@ -184,6 +188,7 @@ Write paths are centralized through `src/storage/writeFileHandle.ts`:
 - `writeFileHandle()` supports `createWritable()`, and `createSyncAccessHandle()`.
 - `writeOpfsPathViaWorker()` is the Safari-friendly fallback for OPFS writes when main-thread handles are not writable.
 - `writeGroupFile`, `uploadGroupFile`, and ZIP restore flows all use this shared layer.
+- `writeGroupFileBytes()` (`src/storage/writeGroupFileBytes.ts`) writes raw binary content (`Uint8Array`) and applies the same OPFS worker fallback path for Safari compatibility.
 
 ## WebVM (`bash` Backend)
 
@@ -331,6 +336,34 @@ ShadowClaw supports connecting to external Model Context Protocol (MCP) servers 
 
 **For detailed architecture and integration patterns, see [docs/subsystems/remote-mcp.md](docs/subsystems/remote-mcp.md)** — covers transport protocols, authentication, tool discovery, and troubleshooting.
 
+## Web Share Target
+
+ShadowClaw registers as a PWA share target so the OS can send files, URLs, and
+text directly to the app from any native share sheet.
+
+- `manifest.json` declares a `share_target` entry that accepts `POST /share/share-target.html`
+  with `multipart/form-data` — fields `title`, `text`, `url`, and one or more `file`
+  attachments (any MIME type).
+- `share/share-target.html` is a real static landing page inside app scope
+  that boots `<shadow-claw>` and receives share-target navigations.
+- The service worker (`src/service-worker/share-target.ts`) intercepts the POST,
+  reads the form data, persists each item as a `PendingShareRecord` in the
+  `pendingShares` IndexedDB object store, then issues a `303` redirect to `/?share-target=1`.
+- On startup, `<shadow-claw>` calls `consumePendingShares()` (from
+  `src/share-target/pending-shares.ts`) and processes every queued record:
+  - Binary files are written to the group workspace via `writeGroupFileBytes()`.
+  - Text/URL payloads are written as Markdown `.md` files via `writeGroupFile()`.
+  - The app creates or reuses a **dated** conversation (`Shared Files YYYY-MM-DD`),
+    switches to it, navigates to the Files view, and auto-opens the first imported file.
+  - A success toast summarises the import; the `?share-target` query param is
+    cleaned from the URL via `history.replaceState()`.
+
+The **file viewer** also supports **outbound sharing** via the Web Share API:
+a `↗ Share` button appears in the modal header when `navigator.share` is
+available and the file is shareable (`navigator.canShare()` check for binary
+files). Text files are shared as `title` + `text`; binary files are wrapped
+in a `File` object and passed in the `files` array.
+
 ## AWS Bedrock Proxy
 
 The Express server (and Electron in-process server) exposes server-side
@@ -466,7 +499,7 @@ The UI is organized into modular components and dedicated stores:
   `shadow-claw-card`, and `shadow-claw-actions` reduce
   duplicated markup and behavior across pages.
 - **Chat**: Smart auto-scroll with ResizeObserver integration, streaming bubble support, mobile-friendly touch resizing, and responsive activity log toggles.
-- **File Viewer**: MIME-aware previews for PDF, binary, and text content with syntax highlighting.
+- **File Viewer**: MIME-aware previews for PDF, binary, and text content with syntax highlighting. A `↗ Share` button in the modal header triggers the Web Share API for shareable files; the button is hidden when `navigator.share` is unavailable or `navigator.canShare()` returns false.
 - **Terminal**: Interactive Xterm.js terminal with WebVM bridge.
 
 Recommended component organization:

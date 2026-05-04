@@ -7,6 +7,30 @@
   "short_name": "ShadowClaw",
   "start_url": "http://localhost:8888",
   "theme_color": "#000000",
+  "share_target": {
+    "action": "share/share-target.html",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "title",
+      "text": "text",
+      "url": "url",
+      "files": [
+        {
+          "name": "file",
+          "accept": [
+            "*/*",
+            "application/*",
+            "text/*",
+            "image/*",
+            "audio/*",
+            "video/*",
+            "application/octet-stream"
+          ]
+        }
+      ]
+    }
+  },
   "icons": [
     {
       "purpose": "any",

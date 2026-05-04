@@ -1,4 +1,4 @@
-import type ShadowClaw from "./components/shadow-claw/shadow-claw.js";
+import type { ShadowClaw } from "./components/shadow-claw/shadow-claw.js";
 import type { Orchestrator } from "./orchestrator.js";
 import type { ToastType } from "./stores/toast.js";
 import type { VMBootMode } from "./vm.js";

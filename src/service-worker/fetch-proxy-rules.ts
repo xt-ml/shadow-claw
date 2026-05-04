@@ -34,9 +34,14 @@ export function shouldBypassFetchProxy(
   const isLoopback =
     requestUrl.hostname === "localhost" || requestUrl.hostname === "127.0.0.1";
 
+  const isShareTargetPath = requestUrl.pathname.endsWith(
+    "/share/share-target.html",
+  );
+
   const isProxyPath =
     requestUrl.pathname === "/proxy" ||
-    requestUrl.pathname.startsWith("/git-proxy/");
+    requestUrl.pathname.startsWith("/git-proxy/") ||
+    isShareTargetPath;
 
   return isLoopback && isProxyPath;
 }

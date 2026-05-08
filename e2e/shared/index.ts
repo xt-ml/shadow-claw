@@ -8,13 +8,46 @@ export const TIME_SECONDS_ONE = 1000;
 export const TIME_SECONDS_FIVE = 5 * TIME_SECONDS_ONE;
 export const TIME_MINUTES_ONE = 60 * TIME_SECONDS_ONE;
 
+const SCHEDULE_API_RETRY_ATTEMPTS = 3;
+const SCHEDULE_API_RETRY_DELAY_MS = 250;
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function requestWithRetry(
+  action: () => Promise<unknown>,
+  actionLabel: string,
+): Promise<unknown> {
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= SCHEDULE_API_RETRY_ATTEMPTS; attempt += 1) {
+    try {
+      return await action();
+    } catch (error) {
+      lastError = error;
+
+      if (attempt < SCHEDULE_API_RETRY_ATTEMPTS) {
+        await sleep(SCHEDULE_API_RETRY_DELAY_MS * attempt);
+
+        continue;
+      }
+    }
+  }
+
+  throw new Error(
+    `${actionLabel} failed after ${SCHEDULE_API_RETRY_ATTEMPTS} attempts: ${String(lastError)}`,
+  );
+}
+
 export async function clearScheduledTasksForGroup(
   request: APIRequestContext,
   groupId: string = DEFAULT_GROUP_ID,
 ): Promise<void> {
-  const response = await request.get(
-    `/schedule/tasks?groupId=${encodeURIComponent(groupId)}`,
-  );
+  const response = (await requestWithRetry(
+    () => request.get(`/schedule/tasks?groupId=${encodeURIComponent(groupId)}`),
+    `Listing scheduled tasks for group ${groupId}`,
+  )) as Awaited<ReturnType<APIRequestContext["get"]>>;
 
   if (!response.ok()) {
     throw new Error(
@@ -29,9 +62,10 @@ export async function clearScheduledTasksForGroup(
       continue;
     }
 
-    const deleteResponse = await request.delete(
-      `/schedule/tasks/${encodeURIComponent(task.id)}`,
-    );
+    const deleteResponse = (await requestWithRetry(
+      () => request.delete(`/schedule/tasks/${encodeURIComponent(task.id)}`),
+      `Deleting scheduled task ${task.id}`,
+    )) as Awaited<ReturnType<APIRequestContext["delete"]>>;
 
     if (!deleteResponse.ok()) {
       throw new Error(

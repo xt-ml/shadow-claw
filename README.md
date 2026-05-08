@@ -19,8 +19,8 @@ Open Settings, select a provider, and start chatting.
 
 For local inference, ShadowClaw offers multiple options:
 
-- **Transformers.js (Browser - Experimental)**: Runs models entirely in the browser using a background Web Worker. Model artifacts are cached in the browser's Cache API. Optimized for small, instruction-tuned ONNX models.
-- **Transformers.js (Local Proxy)**: Runs large local models (for example Gemma 4) server-side via Node.js proxy. Model artifacts are cached server-side.
+- **Transformers.js (Browser)**: Runs models entirely in the browser using a background Web Worker. Model artifacts are cached in the browser's Cache API. Optimized for small, instruction-tuned ONNX models. Supports CPU and WebGPU backends with automatic dtype selection.
+- **Transformers.js (Local Proxy)**: Runs larger local models server-side via Node.js proxy. Model artifacts are cached server-side.
 - **Llamafile (Local Proxy)**: Runs `.llamafile` binaries server-side.
 
 Local proxy cache paths:
@@ -162,6 +162,8 @@ automatically support them.
 | `src/share-target/pending-shares.ts` | Client-side module to consume pending Web Share Target payloads from IndexedDB                        |
 | `src/service-worker/share-target.ts` | Service worker fetch handler — intercepts `POST /share/share-target.html`, stores payloads, redirects |
 | `src/storage/writeGroupFileBytes.ts` | Write raw binary (`Uint8Array`) to a group workspace file with OPFS worker fallback                   |
+| `src/storage/renameGroupEntry.ts`    | Rename (copy-and-delete) files or directories in the group workspace                                  |
+| `src/chat-template-sanitizer.ts`     | Utility to strip control tokens and structural markers from local model output                        |
 | `src/notifications/`                 | Web Push + server-side task scheduling (SQLite)                                                       |
 
 ## Storage
@@ -189,6 +191,7 @@ Write paths are centralized through `src/storage/writeFileHandle.ts`:
 - `writeOpfsPathViaWorker()` is the Safari-friendly fallback for OPFS writes when main-thread handles are not writable.
 - `writeGroupFile`, `uploadGroupFile`, and ZIP restore flows all use this shared layer.
 - `writeGroupFileBytes()` (`src/storage/writeGroupFileBytes.ts`) writes raw binary content (`Uint8Array`) and applies the same OPFS worker fallback path for Safari compatibility.
+- `renameGroupEntry()` (`src/storage/renameGroupEntry.ts`) handles file and directory renames within a group's workspace using a recursive copy-and-delete strategy.
 
 ## WebVM (`bash` Backend)
 

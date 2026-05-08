@@ -199,6 +199,45 @@ describe("ShadowClawConversations", () => {
     document.body.removeChild(el);
   });
 
+  it("opens clone dialog and clones only after confirmation", async () => {
+    mockOrchStore.groups = [
+      { groupId: "br:main", name: "Main", createdAt: 0 },
+      { groupId: "br:second", name: "Second", createdAt: 1 },
+    ];
+
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+    el.db = {} as any;
+
+    const cloneDialog = el.shadowRoot?.querySelector(
+      ".conversations__clone-dialog",
+    ) as HTMLDialogElement | null;
+    if (cloneDialog) {
+      (cloneDialog as any).showModal = jest.fn();
+      (cloneDialog as any).close = jest.fn();
+    }
+
+    await el.handleClone("br:main");
+
+    expect(mockOrchStore.cloneConversation).not.toHaveBeenCalled();
+
+    const cloneName = el.shadowRoot?.querySelector(
+      ".conversations__clone-name",
+    );
+    expect(cloneName?.textContent).toBe("Main");
+
+    await el._submitCloneDialog();
+
+    expect(mockOrchStore.cloneConversation).toHaveBeenCalledWith(
+      expect.anything(),
+      "br:main",
+    );
+
+    document.body.removeChild(el);
+  });
+
   it("renders a drag handle on each conversation item", async () => {
     mockOrchStore.groups = [
       { groupId: "br:main", name: "Main", createdAt: 0 },
@@ -511,6 +550,21 @@ describe("ShadowClawConversations", () => {
 
       const dialog = el.shadowRoot?.querySelector(
         ".conversations__delete-dialog",
+      );
+      expect(dialog).toBeTruthy();
+      expect(dialog?.tagName).toBe("DIALOG");
+
+      document.body.removeChild(el);
+    });
+
+    it("has a clone dialog element", async () => {
+      const el = new ShadowClawConversations() as any;
+      document.body.appendChild(el);
+      await el.onTemplateReady;
+      await el.render();
+
+      const dialog = el.shadowRoot?.querySelector(
+        ".conversations__clone-dialog",
       );
       expect(dialog).toBeTruthy();
       expect(dialog?.tagName).toBe("DIALOG");

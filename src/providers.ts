@@ -1,4 +1,5 @@
 import { getModelAttachmentCapabilities } from "./attachment-capabilities.js";
+import { sanitizeModelOutput } from "./chat-template-sanitizer.js";
 import { modelRegistry } from "./model-registry.js";
 import type { ProviderConfig } from "./config.js";
 
@@ -385,7 +386,10 @@ class OpenAIAdapter extends BaseAdapter {
 
     // Text content
     if (typeof message.content === "string" && message.content) {
-      content.push({ type: "text", text: message.content });
+      const cleaned = sanitizeModelOutput(message.content, "openai");
+      if (cleaned) {
+        content.push({ type: "text", text: cleaned });
+      }
     }
 
     // Tool calls (The Fix)
@@ -477,8 +481,27 @@ class AnthropicAdapter extends BaseAdapter {
   parseResponse(response: any): any {
     // Anthropic/Bedrock responses are already in the internal format
 
+    const cleanedContent = Array.isArray(response.content)
+      ? response.content
+          .map((block: any) => {
+            if (block?.type !== "text" || typeof block?.text !== "string") {
+              return block;
+            }
+
+            return {
+              ...block,
+              text: sanitizeModelOutput(block.text, "anthropic"),
+            };
+          })
+          .filter((block: any) =>
+            block?.type === "text"
+              ? typeof block.text === "string" && block.text.length > 0
+              : true,
+          )
+      : [];
+
     return {
-      content: response.content || [],
+      content: cleanedContent,
       stop_reason: response.stop_reason || "end_turn",
       usage: {
         input_tokens: response.usage?.input_tokens || 0,

@@ -42,6 +42,10 @@ jest.unstable_mockModule("../../storage/writeGroupFile.js", () => ({
   writeGroupFile: jest.fn(),
 }));
 
+jest.unstable_mockModule("../../storage/renameGroupEntry.js", () => ({
+  renameGroupEntry: jest.fn(),
+}));
+
 jest.unstable_mockModule("../../effect.js", () => ({
   effect: jest.fn(() => () => {}),
 }));
@@ -81,8 +85,9 @@ jest.unstable_mockModule("../../db/db.js", () => ({
 }));
 
 const { ShadowClawFiles } = await import("./shadow-claw-files.js");
+const { renameGroupEntry } = await import("../../storage/renameGroupEntry.js");
 const { writeGroupFile } = await import("../../storage/writeGroupFile.js");
-const { showSuccess, showWarning } = await import("../../toast.js");
+const { showSuccess, showWarning, showError } = await import("../../toast.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 
 describe("shadow-claw-files", () => {
@@ -102,6 +107,8 @@ describe("shadow-claw-files", () => {
     expect(template).toContain("files__new-btn");
 
     expect(template).toContain("files__new-dialog");
+
+    expect(template).toContain("files__rename-dialog");
 
     expect(template).toContain("files__drop-hint");
 
@@ -207,6 +214,96 @@ describe("shadow-claw-files", () => {
 
     expect(hostBtn).toHaveProperty("hidden", false);
     expect(vmBtn).toHaveProperty("hidden", false);
+    document.body.removeChild(component);
+  });
+
+  it("renames a file from the Rename dialog", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    (component as any)._pendingRenamePath = "notes.txt";
+    (component as any)._pendingRenameName = "notes.txt";
+    (component as any)._pendingRenameIsDirectory = false;
+
+    const input = component.shadowRoot?.querySelector(".files__rename-input");
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Expected rename input");
+    }
+
+    input.value = "notes-renamed.txt";
+    await component.handleRenameEntry({} as any);
+
+    expect(renameGroupEntry).toHaveBeenCalledWith(
+      {} as any,
+      "default",
+      "notes.txt",
+      "notes-renamed.txt",
+    );
+
+    expect(orchestratorStore.loadFiles).toHaveBeenCalledWith({} as any);
+
+    expect(showSuccess).toHaveBeenCalledWith(
+      "Renamed file: notes.txt -> notes-renamed.txt",
+      3200,
+    );
+
+    document.body.removeChild(component);
+  });
+
+  it("rejects path-style names in Rename dialog", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    (component as any)._pendingRenamePath = "notes.txt";
+    (component as any)._pendingRenameName = "notes.txt";
+    (component as any)._pendingRenameIsDirectory = false;
+
+    const input = component.shadowRoot?.querySelector(".files__rename-input");
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Expected rename input");
+    }
+
+    input.value = "folder/notes.txt";
+    await component.handleRenameEntry({} as any);
+
+    expect(renameGroupEntry).not.toHaveBeenCalled();
+    expect(showWarning).toHaveBeenCalledWith(
+      "Use only a name, not a path",
+      3500,
+    );
+
+    document.body.removeChild(component);
+  });
+
+  it("shows a toast when rename fails", async () => {
+    (renameGroupEntry as any).mockRejectedValue(new Error("already exists"));
+
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    (component as any)._pendingRenamePath = "notes.txt";
+    (component as any)._pendingRenameName = "notes.txt";
+    (component as any)._pendingRenameIsDirectory = false;
+
+    const input = component.shadowRoot?.querySelector(".files__rename-input");
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Expected rename input");
+    }
+
+    input.value = "taken.txt";
+    await component.handleRenameEntry({} as any);
+
+    expect(showError).toHaveBeenCalledWith(
+      "Failed to rename notes.txt: already exists",
+      6000,
+    );
+
     document.body.removeChild(component);
   });
 });

@@ -5,6 +5,7 @@ import { createLogMessage } from "./worker/createLogMessage.js";
 import { createToolActivityMessage } from "./worker/createToolActivityMessage.js";
 import { executeTool } from "./worker/executeTool.js";
 import { setPostHandler } from "./worker/post.js";
+import { sanitizeModelOutput } from "./chat-template-sanitizer.js";
 import { NANO_BUILTIN_PROFILE } from "./tools/builtin-profiles.js";
 
 /**
@@ -366,7 +367,7 @@ function parseStructured(raw: string): {
     input?: Record<string, any>;
   }>;
 } | null {
-  const text = String(raw || "").trim();
+  const text = sanitizeModelOutput(String(raw || ""), "prompt_api").trim();
   if (!text) {
     return null;
   }
@@ -590,7 +591,7 @@ export async function invokeWithPromptApi(
             }
           } else {
             // Not JSON (e.g. retry without constraint), stream raw
-            textToStream = rawStr;
+            textToStream = sanitizeModelOutput(rawStr, "prompt_api");
           }
 
           if (textToStream && textToStream.length > lastExtractedLength) {
@@ -725,9 +726,14 @@ export async function invokeWithPromptApi(
         });
       } else {
         // Extract final text for streaming-done
-        let finalText = parsed?.response;
+        let finalText = parsed?.response
+          ? sanitizeModelOutput(parsed.response, "prompt_api")
+          : undefined;
         if (!finalText) {
-          const rawStr = String(raw || "").trim();
+          const rawStr = sanitizeModelOutput(
+            String(raw || "").trim(),
+            "prompt_api",
+          );
           finalText = rawStr.startsWith("{") ? "" : rawStr;
         }
 
@@ -746,9 +752,14 @@ export async function invokeWithPromptApi(
         // If the model returned valid JSON with type=response but no response
         // field, or returned something unparseable, treat the raw output as
         // plain text only if it doesn't look like our JSON envelope.
-        let text = parsed?.response;
+        let text = parsed?.response
+          ? sanitizeModelOutput(parsed.response, "prompt_api")
+          : undefined;
         if (!text) {
-          const rawStr = String(raw || "").trim();
+          const rawStr = sanitizeModelOutput(
+            String(raw || "").trim(),
+            "prompt_api",
+          );
           text = rawStr.startsWith("{") ? "" : rawStr;
         }
 

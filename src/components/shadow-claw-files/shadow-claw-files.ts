@@ -4,6 +4,7 @@ import { deleteGroupFile } from "../../storage/deleteGroupFile.js";
 import { downloadAllGroupFilesAsZip } from "../../storage/downloadAllGroupFilesAsZip.js";
 import { downloadGroupDirectoryAsZip } from "../../storage/downloadGroupDirectoryAsZip.js";
 import { downloadGroupFile } from "../../storage/downloadGroupFile.js";
+import { renameGroupEntry } from "../../storage/renameGroupEntry.js";
 import { restoreAllGroupFilesFromZip } from "../../storage/restoreAllGroupFilesFromZip.js";
 import { uploadGroupFile } from "../../storage/uploadGroupFile.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
@@ -30,6 +31,10 @@ export class ShadowClawFiles extends ShadowClawElement {
   static componentPath = `components/${elementName}`;
   static styles = `${ShadowClawFiles.componentPath}/${elementName}.css`;
   static template = `${ShadowClawFiles.componentPath}/${elementName}.html`;
+
+  private _pendingRenamePath: string | null = null;
+  private _pendingRenameName: string | null = null;
+  private _pendingRenameIsDirectory: boolean = false;
 
   constructor() {
     super();
@@ -154,6 +159,25 @@ export class ShadowClawFiles extends ShadowClawElement {
       event.preventDefault();
 
       await this.handleCreateNewFile(db);
+    });
+
+    // Rename dialog
+    const renameDialog = root.querySelector(".files__rename-dialog");
+    const renameCancelBtn = root.querySelector(".files__rename-cancel");
+    const renameForm = root.querySelector(".files__rename-form");
+
+    renameCancelBtn?.addEventListener("click", () => {
+      if (renameDialog instanceof HTMLDialogElement) {
+        renameDialog.close();
+      }
+
+      this._resetPendingRename();
+    });
+
+    renameForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+
+      await this.handleRenameEntry(db);
     });
 
     // Backup button
@@ -374,9 +398,16 @@ export class ShadowClawFiles extends ShadowClawElement {
       const actionsHtml = `
         <div class="files__actions" aria-label="Actions for ${escapeHtml(name)}">
           <button type="button" class="files__action-btn files__download" title="${downloadTitle}" aria-label="${downloadTitle} ${escapeHtml(name)}">📥</button>
+          <button type="button" class="files__action-btn files__rename" title="Rename" aria-label="Rename ${escapeHtml(name)}">✏️</button>
           <button type="button" class="files__action-btn files__action-btn--delete files__delete" title="Delete" aria-label="Delete ${escapeHtml(name)}">🗑️</button>
         </div>
       `;
+
+      const actionsToggleBtn = document.createElement("button");
+      actionsToggleBtn.className = "files__actions-toggle";
+      actionsToggleBtn.setAttribute("title", "More actions");
+      actionsToggleBtn.setAttribute("aria-label", `More actions for ${name}`);
+      actionsToggleBtn.textContent = "⋮";
 
       item.innerHTML = `
         <button type="button" class="files__item-main" aria-label="${isDir ? "Open folder" : "Open file"} ${escapeHtml(name)}">
@@ -385,10 +416,12 @@ export class ShadowClawFiles extends ShadowClawElement {
         </button>
         ${actionsHtml}
       `;
+      item.appendChild(actionsToggleBtn);
 
       // Click to open file or navigate into folder
       const itemMain = item.querySelector(".files__item-main");
       itemMain?.addEventListener("click", async () => {
+        item.classList.remove("show-actions");
         if (isDir) {
           // Navigate into folder
           await orchestratorStore.navigateIntoFolder(db, file);
@@ -405,11 +438,18 @@ export class ShadowClawFiles extends ShadowClawElement {
         }
       });
 
+      // Toggle actions menu
+      actionsToggleBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        item.classList.toggle("show-actions");
+      });
+
       // Download button (for both files and directories)
       const downloadBtn = item.querySelector(".files__download");
       if (downloadBtn) {
         downloadBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
+          item.classList.remove("show-actions");
           try {
             if (downloadBtn instanceof HTMLButtonElement) {
               downloadBtn.disabled = true;
@@ -454,11 +494,25 @@ export class ShadowClawFiles extends ShadowClawElement {
         });
       }
 
+      const renameBtn = item.querySelector(".files__rename");
+      if (renameBtn) {
+        renameBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          item.classList.remove("show-actions");
+
+          const itemPath =
+            currentPath === "." ? name : `${currentPath}/${name}`;
+
+          this.openRenameDialog(itemPath, name, isDir);
+        });
+      }
+
       // Delete button
       const deleteBtn = item.querySelector(".files__delete");
       if (deleteBtn) {
         deleteBtn.addEventListener("click", async (e) => {
           e.stopPropagation();
+          item.classList.remove("show-actions");
           const action = isDir
             ? "delete this folder and all its contents"
             : "delete this file";
@@ -676,6 +730,103 @@ export class ShadowClawFiles extends ShadowClawElement {
     if (input instanceof HTMLInputElement) {
       input.value = "";
       input.focus();
+    }
+  }
+
+  openRenameDialog(path: string, currentName: string, isDirectory: boolean) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const dialog = root.querySelector(".files__rename-dialog");
+    const input = root.querySelector(".files__rename-input");
+
+    if (!(dialog instanceof HTMLDialogElement)) {
+      return;
+    }
+
+    this._pendingRenamePath = path;
+    this._pendingRenameName = currentName;
+    this._pendingRenameIsDirectory = isDirectory;
+
+    dialog.showModal();
+
+    if (input instanceof HTMLInputElement) {
+      input.value = currentName;
+      input.select();
+      input.focus();
+    }
+  }
+
+  _resetPendingRename() {
+    this._pendingRenamePath = null;
+    this._pendingRenameName = null;
+    this._pendingRenameIsDirectory = false;
+  }
+
+  async handleRenameEntry(db: ShadowClawDatabase) {
+    const root = this.shadowRoot;
+    if (!root || !this._pendingRenamePath || !this._pendingRenameName) {
+      return;
+    }
+
+    const dialog = root.querySelector(".files__rename-dialog");
+    const input = root.querySelector(".files__rename-input");
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const nextName = input.value.trim();
+    const currentName = this._pendingRenameName;
+
+    if (!nextName) {
+      showWarning("Please enter a name", 3000);
+
+      return;
+    }
+
+    if (nextName.includes("/") || nextName.includes("\\")) {
+      showWarning("Use only a name, not a path", 3500);
+
+      return;
+    }
+
+    if (nextName === currentName) {
+      if (dialog instanceof HTMLDialogElement) {
+        dialog.close();
+      }
+
+      this._resetPendingRename();
+
+      return;
+    }
+
+    try {
+      await renameGroupEntry(
+        db,
+        orchestratorStore.activeGroupId,
+        this._pendingRenamePath,
+        nextName,
+      );
+
+      await orchestratorStore.loadFiles(db);
+
+      showSuccess(
+        this._pendingRenameIsDirectory
+          ? `Renamed folder: ${currentName} -> ${nextName}`
+          : `Renamed file: ${currentName} -> ${nextName}`,
+        3200,
+      );
+
+      if (dialog instanceof HTMLDialogElement) {
+        dialog.close();
+      }
+
+      this._resetPendingRename();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to rename ${currentName}: ${message}`, 6000);
     }
   }
 

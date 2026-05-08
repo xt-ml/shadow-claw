@@ -679,6 +679,7 @@ async function callWithStreaming(
   const accumulator = new StreamAccumulator(
     typedProvider.format as StreamFormat,
     {
+      source: typedProvider.id,
       onText: (text) => {
         const now = Date.now();
 

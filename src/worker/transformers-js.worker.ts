@@ -309,14 +309,15 @@ async function generate(
     }
   };
 
-  const streamer = new TextStreamer(tokenizer, {
+  let streamedText = "";
+  const trackingStreamer = new TextStreamer(tokenizer, {
     skip_prompt: true,
-    skip_special_tokens: true, // We strip special tokens natively
+    skip_special_tokens: true,
     callback_function: (text: string) => {
-      // If the model output raw <think> tags, format them for UI
       const cleaned = text
         .replace(/<think>/g, '<div class="think">')
         .replace(/<\/think>/g, "</div>");
+      streamedText += cleaned;
 
       self.postMessage({
         type: "chunk",
@@ -326,25 +327,16 @@ async function generate(
     token_callback_function,
   });
 
-  const outputs = await model.generate({
+  await model.generate({
     ...inputs,
     max_new_tokens: maxTokens,
-    streamer,
+    streamer: trackingStreamer,
     signal: abortSignal,
   });
 
-  // Batch decode but don't skip special tokens if we want to replace <think> manually,
-  // actually streamer already sent chunks, but final text is needed for state.
-  const decoded = tokenizer.batch_decode(outputs, {
-    skip_special_tokens: true,
-  });
-  const finalCleaned = decoded[0]
-    .replace(/<think>/g, '<div class="think">')
-    .replace(/<\/think>/g, "</div>");
-
   self.postMessage({
     type: "done",
-    payload: { groupId, text: finalCleaned },
+    payload: { groupId, text: streamedText },
   });
 }
 

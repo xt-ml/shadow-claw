@@ -5,6 +5,7 @@ import { createToolActivityMessage } from "./worker/createToolActivityMessage.js
 import { executeTool } from "./worker/executeTool.js";
 import { getConfig } from "./db/getConfig.js";
 import { CONFIG_KEYS } from "./config.js";
+import { sanitizeModelOutput } from "./chat-template-sanitizer.js";
 
 class TransformersJsManager {
   private worker: Worker | null = null;
@@ -143,7 +144,7 @@ function buildPromptTranscript(systemPrompt: string, messages: any[]): string {
 }
 
 function parseStructured(raw: string) {
-  const text = String(raw || "").trim();
+  const text = sanitizeModelOutput(String(raw || ""), "transformers_js").trim();
   if (!text) {
     return null;
   }
@@ -248,14 +249,19 @@ export async function invokeWithTransformersJs(
     if (parsed?.type === "tool_use") {
       await emit({ type: "streaming-end", payload: { groupId } });
     } else {
+      const text = parsed?.response
+        ? sanitizeModelOutput(parsed.response, "transformers_js")
+        : sanitizeModelOutput(response, "transformers_js");
       await emit({
         type: "streaming-done",
-        payload: { groupId, text: parsed?.response || response },
+        payload: { groupId, text },
       });
     }
 
     if (!parsed || parsed.type === "response") {
-      const text = parsed?.response || response;
+      const text = parsed?.response
+        ? sanitizeModelOutput(parsed.response, "transformers_js")
+        : sanitizeModelOutput(response, "transformers_js");
       await emit({ type: "response", payload: { groupId, text } });
 
       return;
@@ -265,7 +271,13 @@ export async function invokeWithTransformersJs(
     if (calls.length === 0) {
       await emit({
         type: "response",
-        payload: { groupId, text: parsed.response || response },
+        payload: {
+          groupId,
+          text: sanitizeModelOutput(
+            parsed.response || response,
+            "transformers_js",
+          ),
+        },
       });
 
       return;

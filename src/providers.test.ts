@@ -276,6 +276,24 @@ describe("providers.js", () => {
       expect(result.usage.output_tokens).toBe(50);
     });
 
+    it("should strip leaked chat-template tokens from OpenAI text", () => {
+      const response: any = {
+        choices: [
+          {
+            message: {
+              content: "<|assistant|>Hello there</s>",
+              tool_calls: undefined,
+            },
+            finish_reason: "stop",
+          },
+        ],
+      };
+
+      const result = parseResponse(mockProvider, response);
+      expect(result.content).toHaveLength(1);
+      expect(result.content[0].text).toBe("Hello there");
+    });
+
     it("should parse response with no content", () => {
       const response: any = {
         choices: [
@@ -566,6 +584,26 @@ describe("providers.js", () => {
       );
 
       expect(result.tools).toBeUndefined();
+    });
+  });
+
+  describe("Anthropic response parsing", () => {
+    const mockProvider: any = { format: "anthropic" };
+
+    it("should strip leaked chat-template tokens from text blocks", () => {
+      const response: any = {
+        content: [
+          {
+            type: "text",
+            text: "<|im_start|>assistant\nHi<|im_end|>",
+          },
+        ],
+        stop_reason: "end_turn",
+        usage: { input_tokens: 1, output_tokens: 1 },
+      };
+
+      const result = parseResponse(mockProvider, response);
+      expect(result.content).toEqual([{ type: "text", text: "assistant\nHi" }]);
     });
   });
 

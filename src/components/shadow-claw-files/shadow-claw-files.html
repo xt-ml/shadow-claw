@@ -111,6 +111,26 @@
         </div>
       </form>
     </shadow-claw-dialog>
+    <shadow-claw-dialog
+      dialog-class="files__rename-dialog"
+      aria-label="Rename file or folder"
+    >
+      <form class="files__rename-form" method="dialog">
+        <label class="files__rename-label" for="files-rename-name">Name</label>
+        <input
+          class="files__rename-input"
+          id="files-rename-name"
+          name="files-rename-name"
+          type="text"
+          autocomplete="off"
+          required
+        />
+        <div class="files__rename-actions">
+          <button class="files__rename-cancel" type="button">Cancel</button>
+          <button class="files__rename-ok" type="submit">Rename</button>
+        </div>
+      </form>
+    </shadow-claw-dialog>
     <div class="files__content">
       <div class="files__terminal-slot" data-terminal-slot hidden></div>
       <p class="files__drop-hint">Drop files here to upload</p>

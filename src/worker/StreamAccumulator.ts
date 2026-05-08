@@ -1,4 +1,5 @@
 import { ContentBlock } from "../types.js";
+import { sanitizeModelOutput } from "../chat-template-sanitizer.js";
 
 /**
  * Accumulates streamed SSE chunks into a unified response object.
@@ -16,6 +17,12 @@ export interface StreamCallbacks {
   onToolStart?: (name: string) => void;
   /** Called when final usage data is available. */
   onUsage?: (usage: { input_tokens?: number; output_tokens?: number }) => void;
+  /**
+   * Provider/context label passed to the sanitizer log message so developers
+   * can identify which model is leaking chat-template control tokens.
+   * Defaults to the stream format ("openai" or "anthropic") when not provided.
+   */
+  source?: string;
 }
 
 export type StreamFormat = "openai" | "anthropic";
@@ -52,6 +59,10 @@ export class StreamAccumulator {
   constructor(format: StreamFormat, callbacks: StreamCallbacks = {}) {
     this.format = format;
     this.callbacks = callbacks;
+  }
+
+  private _sanitize(text: string): string {
+    return sanitizeModelOutput(text, this.callbacks.source ?? this.format);
   }
 
   /**
@@ -103,8 +114,11 @@ export class StreamAccumulator {
 
     // Accumulate text content
     if (typeof delta.content === "string") {
-      this._openaiText += delta.content;
-      this.callbacks.onText?.(delta.content);
+      const cleaned = this._sanitize(delta.content);
+      if (cleaned) {
+        this._openaiText += cleaned;
+        this.callbacks.onText?.(cleaned);
+      }
     }
 
     // Accumulate tool calls
@@ -163,7 +177,10 @@ export class StreamAccumulator {
     const content: any[] = [];
 
     if (this._openaiText) {
-      content.push({ type: "text", text: this._openaiText });
+      const cleaned = this._sanitize(this._openaiText);
+      if (cleaned) {
+        content.push({ type: "text", text: cleaned });
+      }
     }
 
     if (this._openaiToolCalls.size > 0) {
@@ -239,8 +256,13 @@ export class StreamAccumulator {
         }
 
         if (delta.type === "text_delta" && typeof delta.text === "string") {
-          block.text = (block.text || "") + delta.text;
-          this.callbacks.onText?.(delta.text);
+          const cleaned = this._sanitize(delta.text);
+          if (!cleaned) {
+            break;
+          }
+
+          block.text = (block.text || "") + cleaned;
+          this.callbacks.onText?.(cleaned);
         }
 
         if (
@@ -292,7 +314,10 @@ export class StreamAccumulator {
       (a, b) => a[0] - b[0],
     )) {
       if (block.type === "text") {
-        content.push({ type: "text", text: block.text || "" });
+        const cleaned = this._sanitize(block.text || "");
+        if (cleaned) {
+          content.push({ type: "text", text: cleaned });
+        }
       } else if (block.type === "tool_use") {
         let input;
         try {

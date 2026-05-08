@@ -245,25 +245,6 @@ const configs = [
       }),
     ],
   },
-  // Service Worker Share Target
-  {
-    input: "src/service-worker/share-target.ts",
-    output: {
-      dir: "dist/public",
-      entryFileNames: "service-worker/share-target.js",
-      format: "iife",
-      sourcemap: !isProduction,
-      inlineDynamicImports: true,
-    },
-    onwarn,
-    plugins: [
-      ...commonPlugins("./tsconfig.service.worker.json"),
-      copy({
-        targets: [{ src: "share/**/*", dest: "dist/public/share" }],
-        copyOnce: true,
-      }),
-    ],
-  },
   // Server
   {
     input: "src/server/server.ts",

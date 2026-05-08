@@ -125,6 +125,17 @@ describe("StreamAccumulator — OpenAI format", () => {
     expect(onText).toHaveBeenCalledWith("B");
   });
 
+  it("strips leaked chat-template tokens from OpenAI text", () => {
+    const onText = jest.fn();
+    const acc = new StreamAccumulator("openai", { onText });
+
+    acc.push({ choices: [{ delta: { content: "<|assistant|>Hello</s>" } }] });
+
+    const result = acc.finalize();
+    expect(onText).toHaveBeenCalledWith("Hello");
+    expect(result.content).toEqual([{ type: "text", text: "Hello" }]);
+  });
+
   it("fires onToolStart when a tool call begins", () => {
     const onToolStart = jest.fn();
     const acc = new StreamAccumulator("openai", { onToolStart });
@@ -342,6 +353,28 @@ describe("StreamAccumulator — Anthropic format", () => {
     expect(onText).toHaveBeenCalledTimes(2);
     expect(onText).toHaveBeenCalledWith("Hi");
     expect(onText).toHaveBeenCalledWith("!");
+  });
+
+  it("strips leaked chat-template tokens from Anthropic text", () => {
+    const acc = new StreamAccumulator("anthropic");
+
+    acc.push({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    });
+    acc.push({
+      type: "content_block_delta",
+      index: 0,
+      delta: {
+        type: "text_delta",
+        text: "<|im_start|>assistant\nHi<|im_end|>",
+      },
+    });
+    acc.push({ type: "content_block_stop", index: 0 });
+
+    const result = acc.finalize();
+    expect(result.content).toEqual([{ type: "text", text: "assistant\nHi" }]);
   });
 
   it("fires onToolStart when a tool_use block starts", () => {

@@ -27,6 +27,7 @@ export class ShadowClawConversations extends ShadowClawElement {
   private _pendingRenameGroupId: string | null = null;
   private _pendingRenameName: string | null = null;
   private _pendingDeleteGroupId: string | null = null;
+  private _pendingCloneGroupId: string | null = null;
 
   getChannelRegistry(): ChannelRegistry | null {
     const current = orchestratorStore.orchestrator?.channelRegistry || null;
@@ -608,7 +609,14 @@ export class ShadowClawConversations extends ShadowClawElement {
       return;
     }
 
-    await orchestratorStore.cloneConversation(this.db, groupId);
+    const groups = orchestratorStore.groups || [];
+    const group = groups.find((g) => g.groupId === groupId);
+    if (!group) {
+      return;
+    }
+
+    this._pendingCloneGroupId = groupId;
+    this.openCloneDialog(group.name);
   }
 
   /**
@@ -730,6 +738,28 @@ export class ShadowClawConversations extends ShadowClawElement {
     dialog.showModal();
   }
 
+  openCloneDialog(name: string) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const dialog = root.querySelector(
+      ".conversations__clone-dialog",
+    ) as HTMLDialogElement | null;
+    const nameSpan = dialog?.querySelector(".conversations__clone-name");
+
+    if (!dialog) {
+      return;
+    }
+
+    if (nameSpan) {
+      nameSpan.textContent = name;
+    }
+
+    dialog.showModal();
+  }
+
   _setupDialogListeners() {
     const root = this.shadowRoot as ShadowRoot;
 
@@ -794,6 +824,27 @@ export class ShadowClawConversations extends ShadowClawElement {
     deleteForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
       await this._submitDeleteDialog();
+    });
+
+    // Clone dialog
+    const cloneDialog = root.querySelector(
+      ".conversations__clone-dialog",
+    ) as HTMLDialogElement | null;
+    const cloneForm = root.querySelector(
+      ".conversations__clone-dialog .conversations__form",
+    ) as HTMLFormElement | null;
+    const cloneCancel = root.querySelector(
+      ".conversations__clone-dialog .conversations__cancel",
+    ) as HTMLButtonElement | null;
+
+    cloneCancel?.addEventListener("click", () => {
+      cloneDialog?.close();
+      this._pendingCloneGroupId = null;
+    });
+
+    cloneForm?.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      await this._submitCloneDialog();
     });
   }
 
@@ -872,6 +923,24 @@ export class ShadowClawConversations extends ShadowClawElement {
     );
     dialog?.close();
     this._pendingDeleteGroupId = null;
+  }
+
+  async _submitCloneDialog() {
+    const root = this.shadowRoot as ShadowRoot;
+    if (!root || !this.db || !this._pendingCloneGroupId) {
+      return;
+    }
+
+    const dialog = root.querySelector(
+      ".conversations__clone-dialog",
+    ) as HTMLDialogElement | null;
+
+    await orchestratorStore.cloneConversation(
+      this.db,
+      this._pendingCloneGroupId,
+    );
+    dialog?.close();
+    this._pendingCloneGroupId = null;
   }
 }
 

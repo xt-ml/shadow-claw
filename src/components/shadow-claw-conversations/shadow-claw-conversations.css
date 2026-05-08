@@ -342,6 +342,11 @@
   font-weight: 600;
 }
 
+.conversations__clone-name {
+  color: var(--shadow-claw-text-primary);
+  font-weight: 600;
+}
+
 .conversations__input {
   background-color: var(--shadow-claw-bg-primary);
   border: 0.0625rem solid var(--shadow-claw-border-color);

@@ -81,4 +81,19 @@
       </div>
     </form>
   </shadow-claw-dialog>
+
+  <shadow-claw-dialog
+    aria-label="Clone conversation"
+    dialog-class="conversations__dialog conversations__clone-dialog"
+  >
+    <form class="conversations__form" method="dialog">
+      <p class="conversations__delete-message">
+        Clone conversation "<span class="conversations__clone-name"></span>"?
+      </p>
+      <div class="conversations__actions">
+        <button class="conversations__cancel" type="button">Cancel</button>
+        <button class="conversations__ok" type="submit">Clone</button>
+      </div>
+    </form>
+  </shadow-claw-dialog>
 </template>

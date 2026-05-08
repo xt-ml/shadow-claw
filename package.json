@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -10,12 +10,13 @@
     "node": ">=24"
   },
   "scripts": {
+    "build:clean": "node bin/rimraf.mjs dist && node bin/rimraf.mjs dist-electron",
+    "build:copy:all:assets": "cross-env COPY_ALL_ASSETS=true npm run build",
     "build:pkg:get:meta": "git rev-parse HEAD",
     "build:pkg:meta": "node -e \"import fs from 'node:fs/promises';const m=process.argv[1],f='dist/public/index.html',s=await fs.readFile(f,'utf8');await fs.writeFile(f,s.replace(/<meta\\s+name=\\\"revision\\\"\\s+content=\\\"[^\\\"]*\\\"\\s*\\/>/,'<meta name=\\\"revision\\\" content=\\\"'+m+'\\\" />'));\"",
-    "build": "bash bin/build.sh",
-    "build:clean": "node bin/rimraf.mjs dist && node bin/rimraf.mjs dist-electron",
     "build:prod": "cross-env NODE_ENV=production npm run build",
     "build:service-worker": "npm run -s clean:service-worker && workbox generateSW src/service-worker/workbox-config.cjs",
+    "build": "node bin/build.mjs",
     "clean:service-worker": "node bin/rimraf.mjs dist/public/workbox-*.js && node bin/rimraf.mjs dist/public/service-worker.js",
     "deploy:gh-pages": "npm run -s build:prod && gh-pages -f -m \"npm run deploy:gh-pages\" -d dist/public -r git@github.com:xt-ml/shadow-claw.git",
     "e2e:install": "npx playwright install",
@@ -31,10 +32,10 @@
     "rollup": "rollup -c",
     "start": "npm run -s build && node dist/server.js",
     "test": "npm run -s tsc && cross-env NODE_OPTIONS=--experimental-vm-modules jest",
-    "tsc:app": "tsc --noEmit -p tsconfig.json",
     "tsc:agent:worker": "tsc --noEmit -p tsconfig.agent.worker.json",
-    "tsc:service:worker": "tsc --noEmit -p tsconfig.service.worker.json",
+    "tsc:app": "tsc --noEmit -p tsconfig.json",
     "tsc:server": "tsc --noEmit -p tsconfig.server.json",
+    "tsc:service:worker": "tsc --noEmit -p tsconfig.service.worker.json",
     "tsc:test": "tsc --noEmit -p tsconfig.test.json",
     "tsc:transformers:js:worker": "tsc --noEmit -p tsconfig.transformers-js.worker.json",
     "tsc": "npm -s run tsc:app && npm -s run tsc:agent:worker && npm -s run tsc:transformers:js:worker && npm -s run tsc:service:worker && npm -s run tsc:server && npm -s run tsc:test"

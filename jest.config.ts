@@ -12,16 +12,6 @@ export default {
         "^.+\\.ts$": "<rootDir>/jest-ts-transform.cjs",
       },
       extensionsToTreatAsEsm: [".ts"],
-      testPathIgnorePatterns: [
-        "/dist/",
-        "/e2e/",
-        "/bin/",
-        "/notifications/push-store.test.ts",
-        "/notifications/push-routes.test.ts",
-        "/notifications/task-schedule-store.test.ts",
-        "/notifications/task-schedule-routes.test.ts",
-        "/notifications/task-scheduler-server.test.ts",
-      ],
       moduleNameMapper: {
         // Signal Polyfill
         "^signal-polyfill$": "<rootDir>/src/__mocks__/signal-polyfill.cjs",
@@ -42,6 +32,23 @@ export default {
         "^node:sqlite$":
           "<rootDir>/src/notifications/__mocks__/node-sqlite.cjs",
       },
+      testPathIgnorePatterns: [
+        "/dist/",
+        "/e2e/",
+        "/bin/",
+        "/server/",
+        "/notifications/",
+      ],
+    },
+    {
+      displayName: "server",
+      testEnvironment: "node",
+      roots: ["<rootDir>/src/server"],
+      resolver: "<rootDir>/jest-ts-resolver.cjs",
+      extensionsToTreatAsEsm: [".ts"],
+      transform: {
+        "^.+\\.ts$": "<rootDir>/jest-ts-transform.cjs",
+      },
     },
     {
       displayName: "notifications",
@@ -55,6 +62,7 @@ export default {
       testMatch: [
         "<rootDir>/src/notifications/push-store.test.ts",
         "<rootDir>/src/notifications/push-routes.test.ts",
+        "<rootDir>/src/notifications/push-client.test.ts",
       ],
       moduleNameMapper: {
         "^node:sqlite$":

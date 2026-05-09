@@ -32,7 +32,7 @@ jest.unstable_mockModule("../../markdown.js", () => ({
 
 jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
   orchestratorStore: {
-    init: jest.fn(async (db, orchestrator) => {}),
+    init: jest.fn(async (_db, _orchestrator) => {}),
     setDb: jest.fn(),
     db: {},
     setReady: jest.fn(),
@@ -219,8 +219,6 @@ jest.unstable_mockModule(
   },
 );
 
-const _mockConversationsInitialize = jest.fn();
-
 jest.unstable_mockModule(
   "../shadow-claw-conversations/shadow-claw-conversations.js",
   () => {
@@ -250,7 +248,6 @@ jest.unstable_mockModule(
 // To work around this we use the orchestratorStore.init mock (which runs after
 // the template has been rendered but before the settings-init check) to patch
 // the initialize spy directly onto the element at the right moment.
-const _mockSettingsInitialize = (jest.fn() as any).mockResolvedValue(undefined);
 
 jest.unstable_mockModule(
   "../shadow-claw-settings/shadow-claw-settings.js",
@@ -271,13 +268,9 @@ jest.unstable_mockModule(
   },
 );
 
-// Child custom elements are already defined in the mocks above.
-
 let ShadowClaw: any;
 let orchestratorStore: any;
 let fileViewerStore: any;
-let themeStore: any;
-let Themes: any;
 
 function createOrchestratorStub(extra = {}) {
   return {
@@ -310,10 +303,6 @@ describe("shadow-claw", () => {
 
     fileViewerStore = (await import("../../stores/file-viewer.js"))
       .fileViewerStore;
-    const themeMod = await import("../../stores/theme.js");
-
-    themeStore = themeMod.themeStore;
-    Themes = themeMod.Themes;
   });
 
   beforeEach(() => {
@@ -336,7 +325,9 @@ describe("shadow-claw", () => {
 
     const component = new ShadowClaw();
     component.orchestrator = createOrchestratorStub();
+
     document.body.appendChild(component);
+
     await component.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -356,32 +347,12 @@ describe("shadow-claw", () => {
         removeEventListener: () => {},
       }));
 
-    async function setupShadowClaw(el: any) {
-      (globalThis as any).__ACTIVE_SHADOW_CLAW__ = el;
-      const db: any = {} as any;
-      const orchestrator = createOrchestratorStub();
-
-      // Ensure dummy elements have at least the methods if they were not upgraded
-      if (el.shadowRoot) {
-        const children = el.shadowRoot.querySelectorAll("*");
-        children.forEach((c: any) => {
-          if (!c.initialize) {
-            c.initialize = jest.fn();
-          }
-
-          if (!c.setupEffects) {
-            c.setupEffects = jest.fn();
-          }
-        });
-      }
-
-      return { db, orchestrator };
-    }
-
     const orchestrator = createOrchestratorStub();
     const component = new ShadowClaw();
     component.orchestrator = orchestrator;
+
     document.body.appendChild(component);
+
     await component.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
 
@@ -391,7 +362,9 @@ describe("shadow-claw", () => {
   it("shows only the moon icon before theme hydration", async () => {
     const component = new ShadowClaw();
     component.orchestrator = createOrchestratorStub();
+
     document.body.appendChild(component);
+
     await component.onTemplateReady;
 
     const sunIcon = component.shadowRoot?.querySelector(".sun-icon");
@@ -609,12 +582,14 @@ describe("shadow-claw", () => {
         removeEventListener: () => {},
       }));
 
-    const db: any = {} as any;
     const orchestrator = createOrchestratorStub();
     const component = new ShadowClaw();
     component.orchestrator = orchestrator;
+
     document.body.appendChild(component);
+
     await component.onTemplateReady;
+
     await new Promise((resolve) => setTimeout(resolve, 50));
     await new Promise((resolve) => setTimeout(resolve, 50));
 

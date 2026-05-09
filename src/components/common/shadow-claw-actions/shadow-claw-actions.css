@@ -26,5 +26,5 @@ button:hover {
 }
 
 button.delete-btn:hover {
-  color: #dc2626;
+  color: var(--shadow-claw-important-color);
 }

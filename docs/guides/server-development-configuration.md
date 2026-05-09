@@ -181,15 +181,28 @@ Example:
 
 Use these logs to debug CORS issues when integrating with external apps.
 
-## Proxy Routes
+## Modular Route Architecture
 
-The server also hosts proxy routes for third-party services:
+The server architecture has been refactored into modular routes and middleware for improved maintainability and security.
 
-- **Bedrock Proxy**: `/bedrock-proxy/models`, `/bedrock-proxy/invoke`
-- **Copilot Azure**: `/copilot-proxy/*`
-- **Git Auth**: Some fetch requests auto-inject Git credentials
+### Core Routes (`src/server/routes/`)
 
-These routes are always enabled (no special flag needed). They respect the same CORS settings.
+- **LLM Proxies**: `bedrock.ts`, `gemini.ts`, `vertex-ai.ts`, `ollama.ts`, `llamafile.ts`, `github-models.ts`
+- **Utility**: `oauth.ts` (OAuth flow), `http-proxy.ts` (generic fetch)
+
+### Services (`src/server/services/`)
+
+Long-running or complex backend logic is encapsulated in services:
+
+- `llamafile-manager.ts`: Manages `.llamafile` binary lifecycles
+- `transformers-runtime.ts`: Backend runtime for Transformers.js models
+
+### Middleware (`src/server/middleware/`)
+
+- `cors.ts`: Dynamic CORS policy enforcement
+- `request-logger.ts`: Detailed diagnostic logging
+- `pna.ts`: Private Network Access compliance
+- `static-files.ts`: SPA-aware static asset delivery
 
 ## Production Deployment
 

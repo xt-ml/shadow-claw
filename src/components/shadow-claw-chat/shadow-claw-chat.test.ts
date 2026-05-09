@@ -84,7 +84,7 @@ describe("shadow-claw-chat clear functionality", () => {
       jest.spyOn(orchestratorStore, "loadHistory").mockResolvedValue(undefined);
 
       // Mock cursor for clearGroupMessages
-      mockIndex.openCursor.mockImplementation((key) => {
+      mockIndex.openCursor.mockImplementation((_key) => {
         const request: any = {};
         const messages = [
           { id: "1", groupId: "default", content: "test1" },
@@ -139,7 +139,7 @@ describe("shadow-claw-chat clear functionality", () => {
       const deletedIds: any = [];
 
       // Mock cursor behavior for clearGroupMessages
-      mockIndex.openCursor.mockImplementation((key) => {
+      mockIndex.openCursor.mockImplementation((_key) => {
         const request: any = {};
 
         // Simulate 3 messages in DB
@@ -286,7 +286,8 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
         () => ({}) as any,
       );
 
-      const { ShadowClawChat } = await import("./shadow-claw-chat.js");
+      const { ShadowClawChat: _ShadowClawChat } =
+        await import("./shadow-claw-chat.js");
 
       const fs = await import("fs");
       const path = await import("path");
@@ -347,7 +348,8 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
       // We verify the template includes the messages container which is the scroll target.
       jest.unstable_mockModule("jszip", () => ({ default: {} }));
 
-      const { ShadowClawChat } = await import("./shadow-claw-chat.js");
+      const { ShadowClawChat: _ShadowClawChat } =
+        await import("./shadow-claw-chat.js");
       const fs = await import("fs");
       const path = await import("path");
       const html = fs.readFileSync(
@@ -667,12 +669,6 @@ describe("auto-scroll on container resize", () => {
     // appear or grow, the flex layout shrinks .chat__messages. Without a
     // ResizeObserver the scroll position doesn't adjust — the bottom of
     // the user's message slides below the viewport.
-    //
-    // A ResizeObserver on the messages container should call
-    // scrollTop = scrollHeight whenever _isNearBottom is true.
-
-    // Simulate a container that was scrolled to bottom
-    const _isNearBottom = true;
     const scrollHeight = 2000;
     const clientHeightBefore = 600;
     const scrollTopBefore = scrollHeight - clientHeightBefore; // 1400

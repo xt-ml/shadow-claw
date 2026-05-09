@@ -269,6 +269,7 @@ describe("handleInvoke.js", () => {
       groupId: "g1",
       messages: [{ role: "user", content: "do it" }],
       provider: "p1",
+      enabledTools: [{ name: "tool1", description: "Tool 1" }],
     };
 
     (mockGetProvider as any).mockReturnValue({
@@ -386,6 +387,9 @@ describe("handleInvoke.js", () => {
       groupId: "g1",
       messages: [{ role: "user", content: "please list tool profiles" }],
       provider: "p1",
+      enabledTools: [
+        { name: "list_tool_profiles", description: "List profiles" },
+      ],
     };
 
     (mockGetProvider as any).mockReturnValue({
@@ -433,6 +437,9 @@ describe("handleInvoke.js", () => {
       groupId: "g1",
       messages: [{ role: "user", content: "please list tool profiles" }],
       provider: "p1",
+      enabledTools: [
+        { name: "list_tool_profiles", description: "List profiles" },
+      ],
     };
 
     (mockGetProvider as any).mockReturnValue({
@@ -480,6 +487,7 @@ describe("handleInvoke.js", () => {
       groupId: "g1",
       provider: "p1",
       messages: [{ role: "user", content: "loop" }],
+      enabledTools: [{ name: "tool1", description: "Tool 1" }],
     };
 
     (mockGetProvider as any).mockReturnValue({
@@ -1037,5 +1045,51 @@ describe("handleInvoke.js", () => {
       [], // Empty tools
       expect.anything(),
     );
+  });
+
+  it("should block tool_use calls for disabled tools", async () => {
+    const payload: any = {
+      groupId: "g1",
+      messages: [{ role: "user", content: "use fetch_url" }],
+      provider: "p1",
+      enabledTools: [],
+    };
+
+    (mockGetProvider as any).mockReturnValue({
+      name: "P1",
+      baseUrl: "http://p1",
+      format: "openai",
+    });
+    (mockFormatRequest as any).mockReturnValue({ body: "req" });
+
+    (mockParseResponse as any).mockReturnValueOnce({
+      stop_reason: "tool_use",
+      content: [
+        {
+          type: "tool_use",
+          id: "t1",
+          name: "fetch_url",
+          input: { url: "https://www.google.com" },
+        },
+      ],
+    });
+
+    (mockParseResponse as any).mockReturnValueOnce({
+      stop_reason: "end_turn",
+      content: [{ type: "text", text: "Cannot run tools right now." }],
+    });
+
+    (global as any).fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: jest.fn().mockResolvedValue({}),
+    });
+
+    await handleInvoke({} as any, payload);
+
+    expect(mockExecuteTool).not.toHaveBeenCalled();
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "response",
+      payload: { groupId: "g1", text: "Cannot run tools right now." },
+    });
   });
 });

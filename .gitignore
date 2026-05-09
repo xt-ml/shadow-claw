@@ -1,8 +1,10 @@
 .cache
 .env
+*.db
 assets/cache*
 assets/v86*
 coverage
+database
 dist
 dist-electron
 e2e-results

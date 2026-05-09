@@ -11,6 +11,7 @@ const {
   callRemoteMcpTool,
   testRemoteMcpConnection,
   clearAllRemoteMcpSessions,
+  McpReauthRequiredError,
 } = await import("./remote-mcp-client.js");
 
 function makeMockResponse(
@@ -980,5 +981,119 @@ describe("testRemoteMcpConnection", () => {
     expect(result.error).toContain("Failed to fetch");
     expect(result.steps[0].status).toBe("ok");
     expect(result.steps[1].status).toBe("error");
+  });
+
+  it("throws McpReauthRequiredError when reauthRequired is true", async () => {
+    mockResolveRemoteMcpConnectionAuth.mockResolvedValue({
+      connection: {
+        id: "conn-1",
+        serverUrl: "https://mcp.example.com/rpc",
+        transport: "streamable_http",
+      },
+      authType: "oauth",
+      headers: {},
+      reauthRequired: true,
+    });
+
+    const err = await listRemoteMcpTools({} as any, "conn-1").catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(McpReauthRequiredError);
+    expect(
+      (err as InstanceType<typeof McpReauthRequiredError>).connectionId,
+    ).toBe("conn-1");
+  });
+
+  it("throws McpReauthRequiredError when force-refresh still needs reauth", async () => {
+    mockResolveRemoteMcpConnectionAuth
+      .mockResolvedValueOnce({
+        connection: {
+          id: "conn-2",
+          serverUrl: "https://mcp.example.com/rpc",
+          transport: "streamable_http",
+        },
+        authType: "oauth",
+        headers: { Authorization: "Bearer stale" },
+        reauthRequired: false,
+      })
+      .mockResolvedValueOnce({
+        connection: {
+          id: "conn-2",
+          serverUrl: "https://mcp.example.com/rpc",
+          transport: "streamable_http",
+        },
+        authType: "oauth",
+        headers: {},
+        reauthRequired: true,
+      });
+
+    ((globalThis as any).fetch as any).mockResolvedValueOnce(
+      makeMockResponse(401, {
+        jsonrpc: "2.0",
+        id: "init-1",
+        error: { code: -32000, message: "Unauthorized" },
+      }),
+    );
+
+    const err = await listRemoteMcpTools({} as any, "conn-2").catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(McpReauthRequiredError);
+    expect(
+      (err as InstanceType<typeof McpReauthRequiredError>).connectionId,
+    ).toBe("conn-2");
+  });
+
+  it("throws McpReauthRequiredError when retry after refresh still returns 401", async () => {
+    mockResolveRemoteMcpConnectionAuth
+      .mockResolvedValueOnce({
+        connection: {
+          id: "conn-3",
+          serverUrl: "https://mcp.example.com/rpc",
+          transport: "streamable_http",
+        },
+        authType: "oauth",
+        headers: { Authorization: "Bearer stale" },
+        reauthRequired: false,
+      })
+      .mockResolvedValueOnce({
+        connection: {
+          id: "conn-3",
+          serverUrl: "https://mcp.example.com/rpc",
+          transport: "streamable_http",
+        },
+        authType: "oauth",
+        headers: { Authorization: "Bearer refreshed-but-still-bad" },
+        reauthRequired: false,
+      });
+
+    ((globalThis as any).fetch as any)
+      // First call — 401
+      .mockResolvedValueOnce(
+        makeMockResponse(401, {
+          jsonrpc: "2.0",
+          id: "init-1",
+          error: { code: -32000, message: "Unauthorized" },
+        }),
+      )
+      // Retry after refresh — still 401
+      .mockResolvedValueOnce(
+        makeMockResponse(401, {
+          jsonrpc: "2.0",
+          id: "init-2",
+          error: { code: -32000, message: "Unauthorized" },
+        }),
+      );
+
+    const err = await listRemoteMcpTools({} as any, "conn-3").catch(
+      (e: unknown) => e,
+    );
+
+    expect(err).toBeInstanceOf(McpReauthRequiredError);
+    expect(
+      (err as InstanceType<typeof McpReauthRequiredError>).connectionId,
+    ).toBe("conn-3");
   });
 });

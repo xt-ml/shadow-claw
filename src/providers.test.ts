@@ -55,7 +55,7 @@ describe("providers.js", () => {
     it("should throw for unknown format", () => {
       const provider: any = { format: "unknown" };
 
-      expect(() => getAdapter(provider)).toThrow("Unknown provider format");
+      expect(() => getAdapter(provider)).toThrow("Unsupported provider format");
     });
   });
 

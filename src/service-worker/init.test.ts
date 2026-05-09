@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import { jest } from "@jest/globals";
 
 const listeners: Record<string, () => void | Promise<void>> = {};
@@ -23,6 +24,8 @@ jest.unstable_mockModule("workbox-window", () => ({
 
 describe("service-worker init", () => {
   let setTimeoutSpy: jest.SpiedFunction<typeof globalThis.setTimeout>;
+  let requestConfirmation: jest.Mock<any>;
+  let querySpy: jest.SpiedFunction<typeof document.querySelector>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -48,13 +51,21 @@ describe("service-worker init", () => {
       configurable: true,
     });
 
-    (globalThis as any).shadowclaw = {
-      requestConfirmation: jest.fn(async () => true),
-    };
+    requestConfirmation = jest.fn(async () => true);
+    querySpy = jest
+      .spyOn(document, "querySelector")
+      .mockImplementation((selector) => {
+        if (selector === "shadow-claw") {
+          return { requestConfirmation } as any;
+        }
+
+        return null;
+      });
   });
 
   afterEach(() => {
     setTimeoutSpy.mockRestore();
+    querySpy.mockRestore();
     jest.resetModules();
   });
 
@@ -66,14 +77,14 @@ describe("service-worker init", () => {
 
     await listeners.waiting?.();
 
-    expect(globalThis.shadowclaw.requestConfirmation).toHaveBeenCalledTimes(1);
+    expect(requestConfirmation).toHaveBeenCalledTimes(1);
     expect(mockMessageSkipWaiting).toHaveBeenCalledTimes(1);
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 3000);
     expect(globalThis.sessionStorage.getItem(UPDATE_INTENT_KEY)).toBeTruthy();
   });
 
   it("does not skip waiting when confirmation is declined", async () => {
-    globalThis.shadowclaw.requestConfirmation = jest.fn(async () => false);
+    requestConfirmation.mockResolvedValue(false);
 
     await import("./init.js");
     await listeners.waiting?.();
@@ -92,7 +103,7 @@ describe("service-worker init", () => {
     await import("./init.js");
     await listeners.waiting?.();
 
-    expect(globalThis.shadowclaw.requestConfirmation).not.toHaveBeenCalled();
+    expect(requestConfirmation).not.toHaveBeenCalled();
     expect(mockMessageSkipWaiting).toHaveBeenCalledTimes(1);
   });
 
@@ -118,11 +129,11 @@ describe("service-worker init", () => {
     expect(globalThis.sessionStorage.getItem(UPDATE_FAILURE_KEY)).toBeTruthy();
 
     mockMessageSkipWaiting.mockClear();
-    globalThis.shadowclaw.requestConfirmation.mockClear();
+    requestConfirmation.mockClear();
 
     await listeners.waiting?.();
 
-    expect(globalThis.shadowclaw.requestConfirmation).not.toHaveBeenCalled();
+    expect(requestConfirmation).not.toHaveBeenCalled();
     expect(mockMessageSkipWaiting).not.toHaveBeenCalled();
   });
 
@@ -136,14 +147,13 @@ describe("service-worker init", () => {
 
     await listeners.waiting?.();
 
-    expect(globalThis.shadowclaw.requestConfirmation).toHaveBeenCalledWith(
+    expect(requestConfirmation).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Update Failed",
       }),
     );
 
-    const callArgs = (globalThis.shadowclaw.requestConfirmation as jest.Mock)
-      .mock.calls[0][0] as {
+    const callArgs = requestConfirmation.mock.calls[0][0] as {
       message?: string;
     };
     expect(callArgs.message).toContain("restarting your browser");

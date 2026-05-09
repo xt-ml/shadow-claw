@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -46,8 +46,10 @@
     "@aws-sdk/credential-providers": "^3.1041.0",
     "@azure-rest/ai-inference": "^1.0.0-beta.6",
     "@azure/core-auth": "^1.10.1",
+    "@google/genai": "^2.0.1",
     "@huggingface/transformers": "^4.2.0",
     "@isomorphic-git/lightning-fs": "^4.6.2",
+    "commander": "^14.0.3",
     "compression": "^1.8.1",
     "cors": "^2.8.6",
     "express": "^5.2.1",

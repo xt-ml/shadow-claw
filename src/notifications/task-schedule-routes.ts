@@ -73,10 +73,11 @@ export function registerTaskScheduleRoutes(app: Express): void {
       groupId: task.group_id,
       schedule: task.schedule,
       prompt: task.prompt,
-      isScript: task.is_script === 1,
       enabled: true,
       lastRun: task.last_run,
       createdAt: task.created_at,
+      channel: task.channel ?? undefined,
+      subscriberId: task.subscriber_id ?? undefined,
     });
 
     res.sendStatus(200);
@@ -95,10 +96,11 @@ export function registerTaskScheduleRoutes(app: Express): void {
       groupId: task.group_id,
       schedule: task.schedule,
       prompt: task.prompt,
-      isScript: task.is_script === 1,
       enabled: false,
       lastRun: task.last_run,
       createdAt: task.created_at,
+      channel: task.channel ?? undefined,
+      subscriberId: task.subscriber_id ?? undefined,
     });
 
     res.sendStatus(200);

@@ -199,9 +199,9 @@ class BaseAdapter {
   }
 
   formatRequest(
-    messages: any[],
-    tools: any[],
-    options: {
+    _messages: any[],
+    _tools: any[],
+    _options: {
       model: string;
       maxTokens: number;
       system: string;
@@ -211,7 +211,7 @@ class BaseAdapter {
     throw new Error("Not implemented");
   }
 
-  parseResponse(response: any): any {
+  parseResponse(_response: any): any {
     throw new Error("Not implemented");
   }
 }
@@ -511,12 +511,181 @@ class AnthropicAdapter extends BaseAdapter {
   }
 }
 
+function mapGoogleContent(content: any[], _model: string): any[] {
+  return content
+    .map((block) => {
+      if (block.type === "text") {
+        return { text: block.text };
+      }
+
+      if (block.type === "image_url") {
+        const url = block.image_url.url;
+        if (url.startsWith("data:")) {
+          const match = url.match(/^data:([^;]+);base64,(.+)$/);
+          if (match) {
+            return {
+              inlineData: {
+                mimeType: match[1],
+                data: match[2],
+              },
+            };
+          }
+        }
+      }
+
+      if (
+        block.type === "document_url" ||
+        block.type === "audio_url" ||
+        block.type === "video_url"
+      ) {
+        const urlKey = block.type;
+        const url = block[urlKey]?.url;
+        if (url?.startsWith("data:")) {
+          const match = url.match(/^data:([^;]+);base64,(.+)$/);
+          if (match) {
+            return {
+              inlineData: {
+                mimeType: match[1],
+                data: match[2],
+              },
+            };
+          }
+        }
+      }
+
+      if (block.type === "tool_use") {
+        return {
+          functionCall: {
+            name: block.name,
+            args: block.input || {},
+          },
+        };
+      }
+
+      if (block.type === "tool_result") {
+        return {
+          functionResponse: {
+            name: block.name,
+            response:
+              typeof block.output === "string"
+                ? { result: block.output }
+                : block.output,
+          },
+        };
+      }
+
+      return { text: "" };
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Adapter for Google Gemini format
+ */
+class GoogleAdapter extends BaseAdapter {
+  formatRequest(
+    messages: any[],
+    tools: any[],
+    options: {
+      model: string;
+      maxTokens: number;
+      system: string;
+      contextCompression?: boolean;
+    },
+  ): any {
+    const { model, maxTokens, system } = options;
+
+    const contents = messages
+      .filter((msg) => msg.role !== "system")
+      .map((msg) => {
+        return {
+          role:
+            msg.role === "assistant"
+              ? "model"
+              : msg.role === "tool"
+                ? "function"
+                : "user",
+          parts: Array.isArray(msg.content)
+            ? mapGoogleContent(msg.content, model)
+            : [{ text: msg.content || "" }],
+        };
+      });
+
+    const googleTools =
+      tools?.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        parameters: tool.input_schema,
+      })) || [];
+
+    return {
+      contents,
+      ...(system && {
+        system_instruction: {
+          parts: [{ text: system }],
+        },
+      }),
+      generationConfig: {
+        maxOutputTokens: maxTokens,
+      },
+      ...(googleTools.length > 0 && {
+        tools: [{ function_declarations: googleTools }],
+      }),
+    };
+  }
+
+  parseResponse(response: any): any {
+    const candidate = response.candidates?.[0];
+    if (!candidate) {
+      throw new Error("No candidates in Gemini response");
+    }
+
+    const content: any[] = [];
+    let stopReason = "end_turn";
+
+    if (candidate.content?.parts) {
+      for (const part of candidate.content.parts) {
+        if (part.text) {
+          const cleaned = sanitizeModelOutput(part.text, "openai");
+          if (cleaned) {
+            content.push({ type: "text", text: cleaned });
+          }
+        }
+
+        if (part.functionCall) {
+          stopReason = "tool_use";
+          content.push({
+            type: "tool_use",
+            id: `call_${Date.now()}_${Math.random()}`,
+            name: part.functionCall.name,
+            input: part.functionCall.args || {},
+          });
+        }
+      }
+    }
+
+    if (candidate.finishReason === "SAFETY") {
+      throw new Error("Gemini response blocked by safety filters");
+    }
+
+    return {
+      content,
+      stop_reason: stopReason,
+      usage: {
+        input_tokens: response.usageMetadata?.promptTokenCount || 0,
+        output_tokens: response.usageMetadata?.candidatesTokenCount || 0,
+      },
+    };
+  }
+}
+
 /**
  * Map of format string to Adapter class
  */
 const ADAPTER_MAP: Record<string, typeof BaseAdapter> = {
   openai: OpenAIAdapter,
   anthropic: AnthropicAdapter,
+  google: GoogleAdapter,
 };
 
 /**
@@ -525,7 +694,7 @@ const ADAPTER_MAP: Record<string, typeof BaseAdapter> = {
 export function getAdapter(provider: ProviderConfig): BaseAdapter {
   const AdapterClass = ADAPTER_MAP[provider.format];
   if (!AdapterClass) {
-    throw new Error(`Unknown provider format: ${provider.format}`);
+    throw new Error(`Unsupported provider format: ${provider.format}`);
   }
 
   return new AdapterClass(provider);
@@ -606,7 +775,15 @@ export function getContextLimit(model: string): number {
     return 4_096;
   }
 
-  // Google
+  // Google Gemini
+  if (m.includes("gemini-1.5") || m.includes("gemini-2.0")) {
+    if (m.includes("pro")) {
+      return 2_000_000;
+    }
+
+    return 1_048_576; // 1M
+  }
+
   if (m.includes("gemini")) {
     return 128_000;
   }

@@ -96,6 +96,15 @@ class HttpRemoteMcpError extends Error {
   }
 }
 
+export class McpReauthRequiredError extends Error {
+  connectionId: string;
+  constructor(connectionId: string) {
+    super("OAuth reconnect required for remote MCP connection");
+    this.name = "McpReauthRequiredError";
+    this.connectionId = connectionId;
+  }
+}
+
 interface HttpLikeResponse {
   ok: boolean;
   status: number;
@@ -422,7 +431,7 @@ async function callRemoteMcp<T>(
   }
 
   if (resolved.reauthRequired) {
-    throw new Error("OAuth reconnect required for remote MCP connection");
+    throw new McpReauthRequiredError(connectionId);
   }
 
   const { connection, authType, headers } = resolved;
@@ -456,16 +465,24 @@ async function callRemoteMcp<T>(
     });
 
     if (!refreshed || refreshed.reauthRequired) {
-      throw new Error("OAuth reconnect required for remote MCP connection");
+      throw new McpReauthRequiredError(connectionId);
     }
 
-    return callRemoteMcpWithSession<T>(
-      connectionId,
-      refreshed.connection.serverUrl,
-      refreshed.headers,
-      method,
-      params,
-    );
+    try {
+      return await callRemoteMcpWithSession<T>(
+        connectionId,
+        refreshed.connection.serverUrl,
+        refreshed.headers,
+        method,
+        params,
+      );
+    } catch (retryErr) {
+      if (retryErr instanceof HttpRemoteMcpError && retryErr.status === 401) {
+        throw new McpReauthRequiredError(connectionId);
+      }
+
+      throw retryErr;
+    }
   }
 }
 

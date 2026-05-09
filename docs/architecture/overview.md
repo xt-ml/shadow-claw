@@ -22,7 +22,7 @@ ShadowClaw is a **browser-native AI assistant** — a fully functional agent run
 | Shell         | `just-bash` POSIX emulator + optional WebVM (v86)                   |
 | Git           | isomorphic-git + LightningFS (in-browser)                           |
 | PWA           | Service Worker (Workbox) + Web Push                                 |
-| Server        | Express (`src/server/server.ts` → `dist/server.js`)                 |
+| Server        | Express (`src/server/` package)                                     |
 | Desktop       | Electron (`electron/main.ts` → `dist/electron/main.cjs`)            |
 | Testing       | Jest (unit, `*.test.ts`) + Playwright (E2E, `e2e/*.test.ts`)        |
 
@@ -52,28 +52,27 @@ graph TD
 
 ### 1. Browser-native first
 
-Everything runs in the browser. The Express server exists only for:
+Everything runs in the browser. The Express server provides a suite of backend services including:
 
-- CORS proxying (Bedrock, Copilot Azure, Git)
-- Web Push notification delivery
-- Server-side task scheduling (fires when no tab is open)
-- Static file serving
-
-Basic chat (direct API calls to OpenRouter) works without the server.
+- CORS proxying for LLM providers (Bedrock, Vertex AI, Gemini, etc.)
+- Web Push notification delivery and VAPID management
+- Server-side task scheduling (SQLite-backed, fires when no tab is open)
+- Static file serving and SPA routing
+- Transformers.js and Llamafile local model runtimes
 
 ### 2. TypeScript everywhere, Rollup for bundling
 
 The entire codebase is TypeScript. Rollup produces six distinct bundles:
 
-| Bundle                     | Input                                | Output                                       | Purpose                |
-| -------------------------- | ------------------------------------ | -------------------------------------------- | ---------------------- |
-| Frontend                   | `src/index.ts`                       | `dist/public/index.js`                       | App bootstrap + all UI |
-| Agent Worker               | `src/worker/worker.ts`               | `dist/public/agent.worker.js`                | Tool-use loop + VM     |
-| Service Worker init        | `src/service-worker/init.ts`         | `dist/public/service-worker/init.js`         | PWA cache registration |
-| Service Worker push        | `src/service-worker/push-handler.ts` | `dist/public/service-worker/push-handler.js` | Push event handler     |
-| Service Worker fetch proxy | `src/service-worker/fetch-proxy.ts`  | `dist/public/service-worker/fetch-proxy.js`  | Fetch interception     |
-| Server                     | `src/server/server.ts`               | `dist/server.js`                             | Express server         |
-| Electron                   | `electron/main.ts`                   | `dist/electron/main.cjs`                     | Desktop app entry      |
+| Bundle                     | Input                                | Output                                       | Purpose                               |
+| -------------------------- | ------------------------------------ | -------------------------------------------- | ------------------------------------- |
+| Frontend                   | `src/index.ts`                       | `dist/public/index.js`                       | App bootstrap + all UI                |
+| Agent Worker               | `src/worker/worker.ts`               | `dist/public/agent.worker.js`                | Tool-use loop + VM                    |
+| Service Worker init        | `src/service-worker/init.ts`         | `dist/public/service-worker/init.js`         | PWA cache registration                |
+| Service Worker push        | `src/service-worker/push-handler.ts` | `dist/public/service-worker/push-handler.js` | Push event handler                    |
+| Service Worker fetch proxy | `src/service-worker/fetch-proxy.ts`  | `dist/public/service-worker/fetch-proxy.js`  | Fetch interception                    |
+| Server                     | `src/server/server.ts`               | `dist/server.js`                             | Express server (modular routes/proxy) |
+| Electron                   | `electron/main.ts`                   | `dist/electron/main.cjs`                     | Desktop app entry                     |
 
 External dependencies are installed via `npm install` and bundled by Rollup — no CDN importmaps.
 

@@ -343,16 +343,15 @@ test.describe("File Viewer Modal", () => {
 
 async function uploadTestFile(page: Page, fileName: string, content: string) {
   await page.waitForFunction(() => {
-    const store = (globalThis as any).orchestratorStore;
-    const db = (globalThis as any).__SHADOWCLAW_DB__;
+    const bridge = (globalThis as any).__SHADOWCLAW_E2E__;
 
-    return !!store?.activeGroupId && !!store?.loadFiles && !!db;
+    return !!bridge?.isReady() && !!bridge?.getActiveGroupId();
   });
 
   const groupId = await page.evaluate(() => {
-    const store = (globalThis as any).orchestratorStore;
+    const bridge = (globalThis as any).__SHADOWCLAW_E2E__;
 
-    return store?.activeGroupId || null;
+    return bridge?.getActiveGroupId() || null;
   });
 
   if (!groupId) {

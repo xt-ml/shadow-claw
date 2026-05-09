@@ -118,6 +118,7 @@ export function getModelAttachmentCapabilities(
     normalizedModelId.includes("claude-3-7") ||
     normalizedModelId.includes("claude-3.7") ||
     normalizedModelId.includes("claude-4") ||
+    normalizedModelId.includes("gemini") ||
     /claude-(?:sonnet|haiku|opus)-\d/.test(normalizedModelId);
 
   if (heuristicMatch) {

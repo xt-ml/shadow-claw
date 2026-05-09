@@ -22,15 +22,43 @@ e2e/
 │   └── index.ts       # DB helpers, constants, wait functions
 ├── fixtures.ts        # Shared test fixtures (app, chat, files, tasks, settings, conversations)
 ├── *.test.ts          # Test suites
+│   └── chat.test.ts           # Chat interface verification
 │   └── conversations.test.ts  # Conversation CRUD (create, rename, switch, delete)
+│   └── files.test.ts          # File browser and upload operations
+│   └── navigation.test.ts     # App-level navigation and page switching
 │   └── settings.test.ts       # Settings persistence (max iterations, streaming, assistant name)
 │   └── streaming-chat.test.ts # Chat flow with mock SSE streaming + non-streaming
-│   └── task-crud.test.ts       # Task CRUD (create, edit, toggle, delete)
+│   └── task-crud.test.ts      # Task CRUD (create, edit, toggle, delete)
+│   └── tasks.test.ts          # Task interface and toggle verification
 │   └── file-viewer.test.ts    # File viewer component integration coverage
-│   └── share-target.test.ts   # Web Share Target import flow (pending share queue → file save → conversation switch)
+│   └── share-target.test.ts   # Web Share Target import flow
 │   └── orchestrator.test.ts / storage.test.ts  # System integration coverage
 └── README.md           # This file
 ```
+
+## Security and Test Bridge
+
+ShadowClaw production builds are hardened against unauthorized access and environment manipulation. To maintain testability without compromising security, the system uses a dedicated **E2E Test Bridge**.
+
+### Global Hardening
+
+Browser APIs like `fetch` and `crypto.subtle` are locked (`non-configurable`, `non-writable`) to prevent monkey-patching.
+
+### The E2E Bridge (`__SHADOWCLAW_E2E__`)
+
+During testing, the build-time flag `E2E_TEST_BRIDGE=true` installs a secure bridge on `window.__SHADOWCLAW_E2E__`. This bridge is the **exclusive** way for tests to interact with internal state.
+
+**Available Bridge Methods:**
+
+- `isReady()`: Returns `store.ready` status.
+- `getDb()`: Returns the live IndexedDB handle.
+- `getActiveGroupId()`: Returns the current conversation ID.
+- `configureProvider(id, key, model, streaming)`: Rapidly configures the orchestrator for testing.
+- `createConversation(name)` / `switchConversation(id)` / `loadTasks()`: High-level store wrappers.
+
+### Testing and Environment Locking
+
+Environment locking is **automatically disabled** during E2E runs to allow Playwright's network interception and mocking. However, tests should still verify that the production security guards are in place where applicable.
 
 ## Core Principles
 
@@ -85,13 +113,13 @@ export class ChatPage {
 
 ### 4. **No Raw `page.evaluate` in Tests**
 
-Tests should **not** contain `page.evaluate()` blocks for DOM queries. Instead:
+Avoid `page.evaluate()` for normal DOM interaction and assertions. Instead:
 
 - ✅ Use page object methods: `chat.messageCount()`
 - ✅ Use component locators: `chat.messages()`
 - ❌ Avoid: `page.evaluate(() => document.querySelector(...))`
 
-**Exception:** Low-level browser API checks (IndexedDB, OPFS) in `storage.test.ts` are acceptable.
+Use `page.evaluate()` only when you need browser-only APIs or app-internal bridge/state access that page objects cannot represent cleanly (for example IndexedDB/OPFS checks, share-target setup, or orchestrator bridge checks).
 
 ## Writing Tests
 
@@ -347,6 +375,7 @@ export const TIME_MINUTES_ONE = 60000;
 - Isolate the application's runtime environment from the Service Worker in tests to prevent intermittent failures caused by background reloads or "controlling" state changes.
 - For Prompt API UI checks, assert API-key input disablement and provider helper text in Settings
 - For Provider Help dialogs, mock provider errors to trigger the dialogs and verify the contextual instructions and links.
+- **Remote MCP Testing**: Verify tool discovery, execution, and automatic OAuth reconnection flows by mocking streamable HTTP responses and OAuth failure modes.
 
 ### ❌ DON'T
 

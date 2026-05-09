@@ -19,6 +19,7 @@ import { listGroupFiles } from "../storage/listGroupFiles.js";
 import { readGroupFile } from "../storage/readGroupFile.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
 import { uploadGroupFile } from "../storage/uploadGroupFile.js";
+import { groupFileExists } from "../storage/groupFileExists.js";
 import { ulid } from "../ulid.js";
 import {
   gitClone,
@@ -58,10 +59,92 @@ import {
   isRetryableFetchError,
   RETRYABLE_STATUS_CODES,
 } from "./withRetry.js";
-import { Task } from "../types.js";
-import { callRemoteMcpTool, listRemoteMcpTools } from "../remote-mcp-client.js";
+import { Task, ShadowClawDatabase } from "../types.js";
+import {
+  callRemoteMcpTool,
+  listRemoteMcpTools,
+  McpReauthRequiredError,
+} from "../remote-mcp-client.js";
 
-async function getGroupTasks(db: any, groupId: string): Promise<Task[]> {
+/** Pending MCP OAuth reauth requests awaiting main-thread result. */
+const pendingReauthRequests = new Map<string, (success: boolean) => void>();
+
+/**
+ * In-flight reauth promises keyed by connectionId.  When multiple tool calls
+ * fail with 401 for the same connection, they share one promise (and one toast)
+ * instead of each independently requesting reauth.
+ */
+const inflightReauthPromises = new Map<string, Promise<boolean>>();
+/** Timeout handles keyed by connectionId. */
+const reauthTimeoutHandles = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Called from handleMessage when the main thread sends `mcp-reauth-result`.
+ */
+export function resolveMcpReauth(connectionId: string, success: boolean): void {
+  const timeoutHandle = reauthTimeoutHandles.get(connectionId);
+  if (timeoutHandle) {
+    clearTimeout(timeoutHandle);
+    reauthTimeoutHandles.delete(connectionId);
+  }
+
+  const resolve = pendingReauthRequests.get(connectionId);
+  if (resolve) {
+    resolve(success);
+    pendingReauthRequests.delete(connectionId);
+  }
+}
+
+/** Timeout for waiting on main-thread OAuth reauth (90 seconds). */
+const REAUTH_TIMEOUT_MS = 90_000;
+
+/**
+ * Post `mcp-reauth-required` and wait for the main thread to complete the
+ * OAuth reconnect flow.  Returns `true` if reconnect succeeded.
+ *
+ * Deduplicates requests: if a reauth is already in-flight for the same
+ * connectionId, subsequent callers share the existing promise rather than
+ * posting additional messages (which would produce duplicate toasts).
+ */
+async function requestMcpReauthAndWait(
+  connectionId: string,
+  groupId: string,
+): Promise<boolean> {
+  const existing = inflightReauthPromises.get(connectionId);
+  if (existing) {
+    return existing;
+  }
+
+  const promise = new Promise<boolean>((resolve) => {
+    pendingReauthRequests.set(connectionId, resolve);
+
+    const handle = setTimeout(() => {
+      reauthTimeoutHandles.delete(connectionId);
+      if (pendingReauthRequests.has(connectionId)) {
+        pendingReauthRequests.delete(connectionId);
+        resolve(false);
+      }
+    }, REAUTH_TIMEOUT_MS);
+    reauthTimeoutHandles.set(connectionId, handle);
+  }).finally(() => {
+    inflightReauthPromises.delete(connectionId);
+    reauthTimeoutHandles.delete(connectionId); // Ensure cleanup if not already done
+  });
+
+  inflightReauthPromises.set(connectionId, promise);
+
+  post({
+    type: "mcp-reauth-required",
+    payload: { connectionId, groupId },
+  });
+
+  return promise;
+}
+
+async function getGroupTasks(
+  db: ShadowClawDatabase,
+  groupId: string,
+): Promise<Task[]> {
   const all = (await getAllTasks(db)) as Task[];
 
   return all.filter((task) => task.groupId === groupId);
@@ -202,7 +285,7 @@ async function waitForVMReady(timeoutMs: number): Promise<boolean> {
  * Execute a command via JS shell emulator.
  */
 async function executeViaShellFallback(
-  db: any,
+  db: ShadowClawDatabase,
   command: string,
   groupId: string,
   timeoutSec: number,
@@ -258,7 +341,7 @@ function isImagePath(path: string): boolean {
  * Execute a tool
  */
 export async function executeTool(
-  db: any,
+  db: ShadowClawDatabase,
   name: string,
   input: Record<string, any>,
   groupId: string,
@@ -375,6 +458,11 @@ export async function executeTool(
       case "open_file": {
         if (!input.path || typeof input.path !== "string") {
           return "Error: open_file requires a valid path string.";
+        }
+
+        const exists = await groupFileExists(db, groupId, input.path);
+        if (!exists) {
+          return `Error: file not found: ${input.path}`;
         }
 
         post({
@@ -650,14 +738,14 @@ export async function executeTool(
                 baseDelayMs: 1000,
                 jitterFactor: 0.5,
                 shouldRetry: (error) => isRetryableFetchError(error),
-                onRetry: (attempt, maxRetries, delayMs, error) => {
+                onRetry: (_attempt, _maxRetries, _delayMs, _error) => {
                   const errMsg =
-                    error instanceof Error ? error.message : String(error);
+                    _error instanceof Error ? _error.message : String(_error);
 
                   post({
                     type: "show-toast",
                     payload: {
-                      message: `fetch_url: Retrying (${attempt}/${maxRetries})… ${errMsg}`,
+                      message: `fetch_url: Retrying (${_attempt}/${_maxRetries})… ${errMsg}`,
                       type: "warning",
                       duration: 4000,
                     },
@@ -1022,17 +1110,42 @@ export async function executeTool(
           return "Error: remote_mcp_list_tools requires connection_id.";
         }
 
-        const tools = await listRemoteMcpTools(db, input.connection_id);
-        if (!tools.length) {
-          return `No tools exposed by remote MCP connection ${input.connection_id}.`;
-        }
+        try {
+          const tools = await listRemoteMcpTools(db, input.connection_id);
+          if (!tools.length) {
+            return `No tools exposed by remote MCP connection ${input.connection_id}.`;
+          }
 
-        return tools
-          .map(
-            (tool) =>
-              `- ${tool.name}${tool.description ? `: ${tool.description}` : ""}`,
-          )
-          .join("\n");
+          return tools
+            .map(
+              (tool) =>
+                `- ${tool.name}${tool.description ? `: ${tool.description}` : ""}`,
+            )
+            .join("\n");
+        } catch (err) {
+          if (err instanceof McpReauthRequiredError) {
+            const reconnected = await requestMcpReauthAndWait(
+              input.connection_id,
+              groupId,
+            );
+
+            if (reconnected) {
+              const tools = await listRemoteMcpTools(db, input.connection_id);
+              if (!tools.length) {
+                return `No tools exposed by remote MCP connection ${input.connection_id}.`;
+              }
+
+              return tools
+                .map(
+                  (tool) =>
+                    `- ${tool.name}${tool.description ? `: ${tool.description}` : ""}`,
+                )
+                .join("\n");
+            }
+          }
+
+          throw err;
+        }
       }
 
       case "remote_mcp_call_tool": {
@@ -1044,16 +1157,40 @@ export async function executeTool(
           return "Error: remote_mcp_call_tool requires tool_name.";
         }
 
-        const result = await callRemoteMcpTool(
-          db,
-          input.connection_id,
-          input.tool_name,
-          input.arguments && typeof input.arguments === "object"
-            ? input.arguments
-            : {},
-        );
+        try {
+          const result = await callRemoteMcpTool(
+            db,
+            input.connection_id,
+            input.tool_name,
+            input.arguments && typeof input.arguments === "object"
+              ? input.arguments
+              : {},
+          );
 
-        return JSON.stringify(result, null, 2);
+          return JSON.stringify(result, null, 2);
+        } catch (err) {
+          if (err instanceof McpReauthRequiredError) {
+            const reconnected = await requestMcpReauthAndWait(
+              input.connection_id,
+              groupId,
+            );
+
+            if (reconnected) {
+              const result = await callRemoteMcpTool(
+                db,
+                input.connection_id,
+                input.tool_name,
+                input.arguments && typeof input.arguments === "object"
+                  ? input.arguments
+                  : {},
+              );
+
+              return JSON.stringify(result, null, 2);
+            }
+          }
+
+          throw err;
+        }
       }
 
       // ── Git tools (isomorphic-git) ───────────────────────────────

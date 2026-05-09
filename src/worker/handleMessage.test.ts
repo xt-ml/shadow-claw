@@ -103,6 +103,7 @@ describe("handleMessage.js", () => {
 
     jest.unstable_mockModule("./executeTool.js", () => ({
       executeTool: mockExecuteTool,
+      resolveMcpReauth: jest.fn(),
     }));
 
     const module = await import("./handleMessage.js");

@@ -3,7 +3,7 @@ import { effect } from "../../effect.js";
 import { renderMarkdown } from "../../markdown.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
-import { showError, showInfo, showSuccess, showWarning } from "../../toast.js";
+import { showError, showInfo, showSuccess } from "../../toast.js";
 import { Task } from "../../types.js";
 import { escapeHtml } from "../../utils.js";
 
@@ -25,8 +25,6 @@ export class ShadowClawTasks extends ShadowClawElement {
 
   constructor() {
     super();
-
-    this.handleScriptLabel = this.handleScriptLabel.bind(this);
   }
 
   async connectedCallback() {
@@ -129,30 +127,18 @@ export class ShadowClawTasks extends ShadowClawElement {
       }
     });
 
-    // Script label toggle
-    const isScriptCheckbox = root.getElementById("isScriptCheckbox");
-    const taskLabel = root.getElementById("taskLabel");
+    // Preview update logic
     const promptTextarea = root.querySelector("textarea[name='prompt']");
     const previewDiv = root.querySelector(".tasks__preview");
 
     const updatePreview = async () => {
       if (
         promptTextarea instanceof HTMLTextAreaElement &&
-        isScriptCheckbox instanceof HTMLInputElement &&
         previewDiv instanceof HTMLElement
       ) {
-        previewDiv.innerHTML = await this.renderPreview(
-          promptTextarea.value,
-          isScriptCheckbox.checked,
-        );
+        previewDiv.innerHTML = await this.renderPreview(promptTextarea.value);
       }
     };
-
-    isScriptCheckbox?.addEventListener("change", (e) => {
-      const target = e.target as HTMLInputElement;
-      this.handleScriptLabel(taskLabel, target.checked);
-      updatePreview();
-    });
 
     promptTextarea?.addEventListener("input", updatePreview);
   }
@@ -207,18 +193,13 @@ export class ShadowClawTasks extends ShadowClawElement {
         ? new Date(task.lastRun).toLocaleString()
         : "Never";
 
-      const previewHtml = await this.renderPreview(
-        task.prompt,
-        !!task.isScript,
-        true,
-      );
+      const previewHtml = await this.renderPreview(task.prompt, true);
 
       item.innerHTML = `
         <div class="tasks__item-header">
           <div class="tasks__item-info">
             <div class="tasks__schedule-row">
               <div class="tasks__schedule">⏰ ${task.schedule}</div>
-              ${task.isScript ? '<span class="tasks__script-badge">JS SCRIPT</span>' : ""}
             </div>
             <div class="tasks__prompt-container">
               ${previewHtml}
@@ -326,9 +307,6 @@ export class ShadowClawTasks extends ShadowClawElement {
       });
     }
 
-    // Reset label
-    this.handleScriptLabel(root.getElementById("taskLabel"), false);
-
     // Show dialog
     dialog?.showModal();
   }
@@ -361,13 +339,9 @@ export class ShadowClawTasks extends ShadowClawElement {
       submitBtn.textContent = "Save Changes";
     }
 
-    // Set initial label state
-    this.handleScriptLabel(root.getElementById("taskLabel"), !!task.isScript);
-
     // Set form values
     const scheduleInput = form.querySelector("input[name='schedule']");
     const promptInput = form.querySelector("textarea[name='prompt']");
-    const isScriptInput = form.querySelector("input[name='isScript']");
     if (scheduleInput instanceof HTMLInputElement) {
       scheduleInput.value = task.schedule;
     }
@@ -376,14 +350,10 @@ export class ShadowClawTasks extends ShadowClawElement {
       promptInput.value = task.prompt;
     }
 
-    if (isScriptInput instanceof HTMLInputElement) {
-      isScriptInput.checked = !!task.isScript;
-    }
-
     // Set initial preview
     const previewDiv = root.querySelector(".tasks__preview");
     if (previewDiv instanceof HTMLElement) {
-      this.renderPreview(task.prompt, !!task.isScript).then((html) => {
+      this.renderPreview(task.prompt).then((html) => {
         previewDiv.innerHTML = html;
       });
     }
@@ -392,14 +362,10 @@ export class ShadowClawTasks extends ShadowClawElement {
     dialog?.showModal();
   }
 
-  /**
-   * Handle form submission (add or edit)
-   */
   async handleEditSubmit(db: ShadowClawDatabase, form: HTMLFormElement) {
     const formData = new FormData(form);
     const schedule = formData.get("schedule");
     const prompt = formData.get("prompt");
-    const isScript = formData.get("isScript") === "on";
 
     if (!schedule || !prompt) {
       showInfo("Please fill in all fields");
@@ -416,7 +382,6 @@ export class ShadowClawTasks extends ShadowClawElement {
           ...this.editingTask,
           schedule: String(schedule),
           prompt: String(prompt),
-          isScript,
         };
       } else {
         // Create new task
@@ -428,7 +393,6 @@ export class ShadowClawTasks extends ShadowClawElement {
           groupId: currentGroupId,
           schedule: String(schedule),
           prompt: String(prompt),
-          isScript,
           enabled: true,
           lastRun: null,
           createdAt: Date.now(),
@@ -449,14 +413,7 @@ export class ShadowClawTasks extends ShadowClawElement {
     }
   }
 
-  /**
-   * Render a preview of the task prompt
-   */
-  async renderPreview(
-    prompt: string,
-    isScript: boolean,
-    allowCollapse = false,
-  ) {
+  async renderPreview(prompt: string, allowCollapse = false) {
     if (!prompt.trim()) {
       return '<span class="tasks__preview-empty">No content</span>';
     }
@@ -464,11 +421,7 @@ export class ShadowClawTasks extends ShadowClawElement {
     const lines = prompt.split("\n");
     const isLong = prompt.length > 120 || lines.length > 1;
 
-    const rendered = isScript
-      ? await renderMarkdown("```javascript\n" + prompt + "\n```", {
-          breaks: true,
-        })
-      : await renderMarkdown(prompt, { breaks: true });
+    const rendered = await renderMarkdown(prompt, { breaks: true });
 
     if (allowCollapse && isLong) {
       const summaryText = prompt.trim();
@@ -579,23 +532,6 @@ export class ShadowClawTasks extends ShadowClawElement {
     }
 
     return parts.join("/");
-  }
-
-  handleScriptLabel(label: HTMLElement | null, on = false) {
-    if (!label) {
-      return;
-    }
-
-    const root = this.shadowRoot;
-    const textarea = root?.querySelector("textarea[name='prompt']");
-
-    if (on) {
-      label.textContent = "JavaScript Code";
-      textarea?.classList.add("tasks__form-textarea--script");
-    } else {
-      label.textContent = "Task Prompt";
-      textarea?.classList.remove("tasks__form-textarea--script");
-    }
   }
 
   /**

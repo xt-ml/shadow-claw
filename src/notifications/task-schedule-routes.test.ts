@@ -1,5 +1,3 @@
-import { jest } from "@jest/globals";
-
 import {
   openTaskScheduleStore,
   closeTaskScheduleStore,
@@ -76,7 +74,7 @@ describe("task-schedule-routes", () => {
     groupId: "br:main",
     schedule: "*/5 * * * *",
     prompt: "Check status",
-    isScript: false,
+
     enabled: true,
     lastRun: null,
     createdAt: Date.now(),

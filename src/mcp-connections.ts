@@ -25,6 +25,7 @@ export interface RemoteMcpConnectionRecord {
   serverUrl: string;
   transport: RemoteMcpTransport;
   enabled: boolean;
+  autoReconnectOAuth: boolean;
   createdAt: number;
   updatedAt: number;
   credentialRef: RemoteMcpCredentialRef | null;
@@ -37,6 +38,7 @@ export interface UpsertRemoteMcpConnectionInput {
   serverUrl: string;
   transport: RemoteMcpTransport;
   enabled?: boolean;
+  autoReconnectOAuth?: boolean;
 }
 
 function isSafeAbsoluteUrl(value: unknown): value is string {
@@ -121,6 +123,7 @@ function normalizeConnection(value: unknown): RemoteMcpConnectionRecord | null {
     serverUrl: raw.serverUrl,
     transport: raw.transport,
     enabled: raw.enabled,
+    autoReconnectOAuth: raw.autoReconnectOAuth === true,
     createdAt: raw.createdAt,
     updatedAt: raw.updatedAt,
     credentialRef: normalizeCredentialRef(raw.credentialRef, raw.serviceType),
@@ -213,6 +216,8 @@ export async function upsertRemoteMcpConnection(
         serverUrl: input.serverUrl,
         transport: input.transport,
         enabled: input.enabled ?? existing.enabled,
+        autoReconnectOAuth:
+          input.autoReconnectOAuth ?? existing.autoReconnectOAuth,
         updatedAt: now,
       };
       all[existingIndex] = updated;
@@ -229,6 +234,7 @@ export async function upsertRemoteMcpConnection(
     serverUrl: input.serverUrl,
     transport: input.transport,
     enabled: input.enabled ?? true,
+    autoReconnectOAuth: input.autoReconnectOAuth ?? false,
     createdAt: now,
     updatedAt: now,
     credentialRef: null,

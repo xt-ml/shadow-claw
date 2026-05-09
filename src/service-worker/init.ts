@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import { Workbox } from "workbox-window";
 
 const RELOAD_FALLBACK_TIMEOUT_MS = 3000;
@@ -35,11 +36,10 @@ async function waitForShadowClawUiBridge(
   const startedAt = Date.now();
 
   while (Date.now() - startedAt < timeoutMs) {
-    const bridge = (globalThis as { shadowclaw?: ShadowClawUiBridge })
-      .shadowclaw;
+    const el = document.querySelector("shadow-claw") as any;
 
-    if (bridge?.requestConfirmation) {
-      return bridge;
+    if (el && typeof el.requestConfirmation === "function") {
+      return el as ShadowClawUiBridge;
     }
 
     await new Promise<void>((resolve) => {

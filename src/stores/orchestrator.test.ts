@@ -344,37 +344,13 @@ describe("OrchestratorStore", () => {
     );
   });
 
-  it("runTask executes scripts and reports script errors", () => {
-    const store: any = new OrchestratorStore();
-    (globalThis as any).__taskRan = false;
-
-    store.runTask({
-      id: "s1",
-      isScript: true,
-      prompt: "globalThis.__taskRan = true;",
-    });
-
-    expect((globalThis as any).__taskRan).toBe(true);
-
-    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
-
-    store.runTask({
-      id: "s2",
-      isScript: true,
-      prompt: "throw new Error('bad script')",
-    });
-
-    expect(mockShowError).toHaveBeenCalledWith("Script Error: bad script");
-    errorSpy.mockRestore();
-  });
-
   it("runTask sends prompt for non-script tasks", () => {
     const store: any = new OrchestratorStore();
     const sendSpy = jest
       .spyOn(store, "sendMessage")
       .mockImplementation(() => {});
 
-    store.runTask({ id: "t1", isScript: false, prompt: "do work" });
+    store.runTask({ id: "t1", prompt: "do work" });
 
     expect(sendSpy).toHaveBeenCalledWith("do work");
   });
@@ -560,7 +536,7 @@ describe("OrchestratorStore", () => {
           group_id: DEFAULT_GROUP_ID,
           schedule: "*/5 * * * *",
           prompt: "Frequent task",
-          is_script: 0,
+
           enabled: 1,
           last_run: null,
           created_at: 1700000000000,

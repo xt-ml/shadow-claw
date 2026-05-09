@@ -4,6 +4,7 @@ import { getConfig } from "../../../db/getConfig.js";
 import { encryptValue } from "../../../crypto.js";
 
 import { testRemoteMcpConnection } from "../../../remote-mcp-client.js";
+import { reconnectMcpOAuth } from "../../../mcp-reconnect.js";
 
 import {
   bindRemoteMcpCredentialRef,
@@ -97,6 +98,20 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
           void this.testConnection(id);
         }
       });
+
+    root
+      .querySelector('[data-region="connection-list"]')
+      ?.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLButtonElement)) {
+          return;
+        }
+
+        const connectionId = target.dataset.reconnectConnection;
+        if (connectionId) {
+          void this.reconnectOAuth(connectionId);
+        }
+      });
   }
 
   async render() {
@@ -168,6 +183,16 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
       actions.setAttribute("item-id", connection.id);
 
       card.append(actions);
+
+      const isOAuth = this.isOAuthConnection(connection);
+      if (isOAuth) {
+        const reconnectBtn = document.createElement("button");
+        reconnectBtn.className = "reconnect-btn";
+        reconnectBtn.textContent = "🔑 Reconnect OAuth";
+        reconnectBtn.setAttribute("data-reconnect-connection", connection.id);
+        card.append(reconnectBtn);
+      }
+
       fragment.append(card);
     });
 
@@ -192,6 +217,34 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
     }
 
     return ref.authType.toUpperCase();
+  }
+
+  isOAuthConnection(connection: RemoteMcpConnectionRecord): boolean {
+    const ref = connection.credentialRef;
+    if (!ref) {
+      return false;
+    }
+
+    return ref.authType === "oauth" && !!(ref.accountId || ref.gitAccountId);
+  }
+
+  async reconnectOAuth(connectionId: string) {
+    if (!this.db) {
+      return;
+    }
+
+    const connection = this.connections.find(
+      (item) => item.id === connectionId,
+    );
+    const label = connection?.label || connectionId;
+
+    const result = await reconnectMcpOAuth(this.db, connectionId);
+
+    if (result.success) {
+      showSuccess(`OAuth reconnected for "${label}"`, 4000);
+    } else {
+      showError(`OAuth reconnect failed: ${result.error}`, 6000);
+    }
   }
 
   getAuthSelectionFromCredentialRef(
@@ -280,6 +333,12 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
         <div class="form-group connection-form-row">
           <input type="checkbox" data-field="connection-enabled"${existing?.enabled === false ? "" : " checked"} />
           <label class="form-label">Enabled</label>
+        </div>
+
+        <div class="form-group connection-form-row" data-region="auto-reconnect-region">
+          <input type="checkbox" data-field="connection-auto-reconnect"${existing?.autoReconnectOAuth ? " checked" : ""} />
+          <label class="form-label">Auto-reconnect OAuth on 401</label>
+          <div class="form-helper" style="margin-left: 0.25rem;">When enabled, a 401 error will automatically open the OAuth popup to re-authenticate.</div>
         </div>
 
         <div class="form-group">
@@ -408,12 +467,17 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
     const customHeaderRegion = slot.querySelector(
       '[data-region="custom-header-region"]',
     );
+    const autoReconnectRegion = slot.querySelector(
+      '[data-region="auto-reconnect-region"]',
+    );
 
     const showService =
       authSelection === "service_pat" || authSelection === "service_oauth";
     const showGit =
       authSelection === "git_pat" || authSelection === "git_oauth";
     const showCustom = authSelection === "custom_header";
+    const showAutoReconnect =
+      authSelection === "service_oauth" || authSelection === "git_oauth";
 
     if (serviceRegion instanceof HTMLElement) {
       serviceRegion.style.display = showService ? "block" : "none";
@@ -425,6 +489,10 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
 
     if (customHeaderRegion instanceof HTMLElement) {
       customHeaderRegion.style.display = showCustom ? "block" : "none";
+    }
+
+    if (autoReconnectRegion instanceof HTMLElement) {
+      autoReconnectRegion.style.display = showAutoReconnect ? "flex" : "none";
     }
   }
 
@@ -459,6 +527,11 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
         '[data-field="connection-enabled"]',
       ) as HTMLInputElement
     )?.checked;
+    const autoReconnectOAuth = (
+      slot.querySelector(
+        '[data-field="connection-auto-reconnect"]',
+      ) as HTMLInputElement
+    )?.checked;
     const authSelection = (
       slot.querySelector('[data-field="auth-selection"]') as HTMLSelectElement
     )?.value as AuthSelection;
@@ -483,6 +556,7 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
         serverUrl,
         transport,
         enabled,
+        autoReconnectOAuth,
       });
 
       const credentialRef = await this.buildCredentialRef(

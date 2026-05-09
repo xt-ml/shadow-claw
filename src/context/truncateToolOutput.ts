@@ -21,8 +21,6 @@ export function truncateToolOutput(
     return content;
   }
 
-  const truncatedChars = content.length - maxChars;
-
   // Try to find a line boundary within the budget
   const slice = content.slice(0, maxChars);
   const lastNewline = slice.lastIndexOf("\n");

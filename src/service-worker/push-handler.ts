@@ -13,7 +13,6 @@ interface PushData {
   taskId?: string;
   groupId?: string;
   prompt?: string;
-  isScript?: boolean;
 }
 
 self.addEventListener("push", (event: PushEvent) => {
@@ -39,7 +38,6 @@ self.addEventListener("push", (event: PushEvent) => {
               taskId: data.taskId,
               groupId: data.groupId,
               prompt: data.prompt,
-              isScript: data.isScript,
             });
           }
 
@@ -56,7 +54,6 @@ self.addEventListener("push", (event: PushEvent) => {
                 taskId: data.taskId,
                 groupId: data.groupId,
                 prompt: data.prompt,
-                isScript: data.isScript,
               },
             },
           );
@@ -96,7 +93,6 @@ self.addEventListener("notificationclick", (event: NotificationEvent) => {
                 taskId: notificationData.taskId,
                 groupId: notificationData.groupId,
                 prompt: notificationData.prompt,
-                isScript: notificationData.isScript,
               });
             }
 

@@ -40,7 +40,7 @@ describe("ServerTaskScheduler", () => {
         group_id: "br:main",
         schedule: "30 10 * * *",
         prompt: "Daily check",
-        is_script: 0,
+
         enabled: 1,
         last_run: null,
         created_at: 1000,
@@ -54,7 +54,6 @@ describe("ServerTaskScheduler", () => {
       id: "t1",
       groupId: "br:main",
       prompt: "Daily check",
-      isScript: false,
     });
   });
 
@@ -68,7 +67,7 @@ describe("ServerTaskScheduler", () => {
         group_id: "br:main",
         schedule: "30 10 * * *",
         prompt: "Daily check",
-        is_script: 0,
+
         enabled: 1,
         last_run: null,
         created_at: 1000,
@@ -92,7 +91,7 @@ describe("ServerTaskScheduler", () => {
         group_id: "br:main",
         schedule: "30 10 * * *",
         prompt: "Daily check",
-        is_script: 0,
+
         enabled: 1,
         last_run: now.getTime(),
         created_at: 1000,
@@ -126,30 +125,6 @@ describe("ServerTaskScheduler", () => {
     expect(scheduler._interval).toBeNull();
   });
 
-  it("broadcasts isScript=true for script tasks", async () => {
-    jest.useFakeTimers();
-    jest.setSystemTime(new Date("2026-03-24T10:30:00"));
-
-    (getEnabledTasks as any).mockReturnValue([
-      {
-        id: "t2",
-        group_id: "br:main",
-        schedule: "30 10 * * *",
-        prompt: "console.log('hi')",
-        is_script: 1,
-        enabled: 1,
-        last_run: null,
-        created_at: 1000,
-      },
-    ]);
-
-    await scheduler.tick();
-
-    expect(broadcastTaskTrigger).toHaveBeenCalledWith(
-      expect.objectContaining({ isScript: true }),
-    );
-  });
-
   it("handles broadcastTaskTrigger failure gracefully", async () => {
     jest.useFakeTimers();
     jest.setSystemTime(new Date("2026-03-24T10:30:00"));
@@ -166,7 +141,7 @@ describe("ServerTaskScheduler", () => {
         group_id: "br:main",
         schedule: "30 10 * * *",
         prompt: "check",
-        is_script: 0,
+
         enabled: 1,
         last_run: null,
         created_at: 1000,
@@ -199,7 +174,7 @@ describe("ServerTaskScheduler", () => {
         group_id: "br:main",
         schedule: "30 10 * * *",
         prompt: "Daily check",
-        is_script: 0,
+
         enabled: 1,
         last_run: null,
         created_at: 1000,

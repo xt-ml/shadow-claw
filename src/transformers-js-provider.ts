@@ -13,6 +13,7 @@ class TransformersJsManager {
   private pendingRejects = new Map<string, (reason: any) => void>();
   private progressCallbacks = new Map<string, (payload: any) => void>();
   private chunkCallbacks = new Map<string, (payload: any) => void>();
+  private thinkingCallbacks = new Map<string, (text: string) => void>();
   private loadResolves = new Map<string, () => void>();
   private loadRejects = new Map<string, (reason: any) => void>();
 
@@ -42,6 +43,10 @@ class TransformersJsManager {
             this.chunkCallbacks.get(groupId)?.(payload);
 
             break;
+          case "thinking-chunk":
+            this.thinkingCallbacks.get(groupId)?.(payload.text);
+
+            break;
           case "done":
             this.pendingResolves.get(groupId)?.(payload.text);
             this.cleanup(groupId);
@@ -67,6 +72,7 @@ class TransformersJsManager {
     this.pendingRejects.delete(groupId);
     this.progressCallbacks.delete(groupId);
     this.chunkCallbacks.delete(groupId);
+    this.thinkingCallbacks.delete(groupId);
   }
 
   async load(
@@ -94,6 +100,7 @@ class TransformersJsManager {
     maxTokens: number,
     groupId: string,
     onChunk: (text: string) => void,
+    onThinking?: (text: string) => void,
   ): Promise<string> {
     const worker = this.getWorker();
 
@@ -101,6 +108,10 @@ class TransformersJsManager {
       this.pendingResolves.set(groupId, resolve);
       this.pendingRejects.set(groupId, reject);
       this.chunkCallbacks.set(groupId, (payload) => onChunk(payload.text));
+      if (onThinking) {
+        this.thinkingCallbacks.set(groupId, onThinking);
+      }
+
       worker.postMessage({
         type: "generate",
         payload: { messages, maxTokens, groupId },
@@ -173,7 +184,7 @@ export async function invokeWithTransformersJs(
   messages: any[],
   maxTokens: number,
   emit: (message: any) => Promise<void> | void,
-  abortSignal: AbortSignal | undefined,
+  _abortSignal: AbortSignal | undefined,
   tools: ToolDefinition[] | undefined,
   modelId: string,
 ) {
@@ -228,6 +239,7 @@ export async function invokeWithTransformersJs(
 
     await emit({ type: "streaming-start", payload: { groupId } });
 
+    let thinkingBuffer = "";
     let accumulated = "";
     const response = await manager.generate(
       [fullPrompt],
@@ -239,6 +251,12 @@ export async function invokeWithTransformersJs(
           type: "streaming-chunk",
           payload: { groupId, text: chunk },
         });
+      },
+      (thinkingChunk) => {
+        thinkingBuffer += thinkingChunk;
+        void emit(
+          createLogMessage(groupId, "text", "Thinking", thinkingBuffer),
+        );
       },
     );
 

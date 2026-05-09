@@ -129,18 +129,14 @@ a:hover {
   transform: rotate(180deg);
 }
 
-.webvm-toggle--hidden {
-  color: #dc2626;
-}
-
 .webvm-toggle--booting,
 .webvm-toggle--ready,
 .webvm-toggle--visible {
-  color: #16a34a;
+  color: var(--shadow-claw-success-color);
 }
 
 .webvm-toggle--error {
-  color: var(--shadow-claw-text-tertiary);
+  color: var(--shadow-claw-error-color);
 }
 
 .app {
@@ -339,7 +335,7 @@ shadow-claw-conversations {
 
 .nav-item:hover {
   background-color: var(--shadow-claw-text-secondary);
-  color: #fff;
+  color: var(--shadow-claw-on-primary);
 }
 
 .nav-item.active {

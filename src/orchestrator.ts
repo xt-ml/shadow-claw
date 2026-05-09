@@ -44,7 +44,6 @@ import { getContextLimit } from "./providers.js";
 import { Router } from "./router.js";
 import { TaskScheduler } from "./task-scheduler.js";
 import { showToast } from "./toast.js";
-import { TOOL_DEFINITIONS, ToolDefinition } from "./tools.js";
 import { ulid } from "./ulid.js";
 import { VMBootMode, VMStatus } from "./vm.js";
 
@@ -74,6 +73,8 @@ import { toolsStore } from "./stores/tools.js";
 import { getCompactionSystemPrompt } from "./worker/getCompactionSystemPrompt.js";
 import { buildSystemPrompt } from "./worker/system-prompt.js";
 import { getPushUrl } from "./notifications/push-client.js";
+import { getRemoteMcpConnection } from "./mcp-connections.js";
+import { reconnectMcpOAuth } from "./mcp-reconnect.js";
 
 import type {
   Channel,
@@ -141,11 +142,14 @@ export class Orchestrator {
   _webMcpRegistrationLock: Promise<void> = Promise.resolve();
 
   agentWorker: Worker | null = null;
-  apiKey: string | null = null;
+  #encryptedApiKey: string | null = null;
+  #apiKeyCache: { value: string; expiresAt: number } | null = null;
+
   assistantName: string = ASSISTANT_NAME;
   browserChat: BrowserChatChannel = new BrowserChatChannel();
   bedrockRegionFallback: string = "";
   bedrockProfileFallback: string = "";
+  bedrockAuthMode: string = "provider_chain";
   channelRegistry: ChannelRegistry = new ChannelRegistry();
   contextCompressionEnabled: boolean = false;
   channelEnabledByType: Record<string, boolean> = {
@@ -231,7 +235,7 @@ export class Orchestrator {
     // Fetch model info for the current provider (passes apiKey for auth).
     await modelRegistry.fetchModelInfo(
       this.providerConfig,
-      this.apiKey || undefined,
+      (await this.getApiKeyForHeaders()) || undefined,
     );
 
     // Load model and max tokens
@@ -320,6 +324,8 @@ export class Orchestrator {
     this.bedrockProfileFallback = (
       (await getConfig(db, CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK)) || ""
     ).trim();
+    this.bedrockAuthMode =
+      (await getConfig(db, CONFIG_KEYS.BEDROCK_AUTH_MODE)) || "provider_chain";
 
     this.applyLlamafileHeaders();
 
@@ -412,48 +418,11 @@ export class Orchestrator {
 
     // Sync proxy config to Service Worker
     this.syncProxyConfigToServiceWorker();
-
     // The worker reads persisted VM boot mode and eagerly boots the VM itself.
 
     // Set up task scheduler
     this.scheduler = new TaskScheduler(async (task) => {
-      if (task.isScript) {
-        try {
-          return new Function(task.prompt).call(globalThis);
-        } catch (err) {
-          console.error(`Failed to execute script for task ${task.id}:`, err);
-
-          return;
-        }
-      }
-
-      // Evaluate template string literals (like ${new Date()}) in prompt
-      let evaluatedPrompt = task.prompt;
-      try {
-        evaluatedPrompt = task.prompt.replace(/\${([^}]+)}/g, (match, expr) => {
-          try {
-            return new Function(`return ${expr}`)();
-          } catch (e) {
-            console.warn(`Failed to evaluate expression: ${expr}`, e);
-
-            return match;
-          }
-        });
-      } catch (err) {
-        console.warn("Error interpolating task prompt:", err);
-      }
-
-      this._schedulerTriggeredGroups.add(task.groupId);
-
-      try {
-        return await this.invokeAgent(
-          db,
-          task.groupId,
-          `[SCHEDULED TASK]\n\n${evaluatedPrompt}`,
-        );
-      } finally {
-        this._schedulerTriggeredGroups.delete(task.groupId);
-      }
+      this.submitMessage(task.prompt, task.groupId);
     });
 
     this.scheduler.start();
@@ -485,23 +454,51 @@ export class Orchestrator {
     return this.state;
   }
 
-  /**
-   * Check if API key is configured
-   */
   isConfigured(): boolean {
-    if (!this.providerConfig?.requiresApiKey) {
-      if (this.provider === "prompt_api") {
-        return isPromptApiSupported();
-      }
+    return this.#encryptedApiKey ? this.#encryptedApiKey.length > 0 : false;
+  }
 
-      return true;
+  async getApiKeyForRequest(): Promise<string> {
+    return (await this.#getApiKey()) || "";
+  }
+
+  async getApiKeyForHeaders(): Promise<string | undefined> {
+    return (await this.#getApiKey()) || undefined;
+  }
+
+  async #getApiKey(): Promise<string | null> {
+    if (!this.#encryptedApiKey) {
+      return null;
     }
 
-    return this.apiKey ? this.apiKey.length > 0 : false;
+    const now = Date.now();
+    if (this.#apiKeyCache && this.#apiKeyCache.expiresAt > now) {
+      return this.#apiKeyCache.value;
+    }
+
+    try {
+      const decrypted = await decryptValue(this.#encryptedApiKey);
+      if (decrypted === null) {
+        return null;
+      }
+
+      this.#apiKeyCache = {
+        value: decrypted,
+        expiresAt: now + 30000, // 30s TTL
+      };
+
+      return decrypted;
+    } catch (e) {
+      console.error("[Orchestrator] Failed to decrypt API key:", e);
+
+      return null;
+    }
   }
 
   async setApiKey(db: ShadowClawDatabase, key: string): Promise<void> {
-    this.apiKey = key;
+    this.#encryptedApiKey = await encryptValue(key);
+    this.#apiKeyCache = null; // Invalidate cache
+
     const encrypted = await encryptValue(key);
 
     if (!encrypted) {
@@ -529,21 +526,19 @@ export class Orchestrator {
     }
 
     if (!storedKey) {
-      this.apiKey = "";
-
-      return;
-    }
-
-    try {
-      this.apiKey = await decryptValue(storedKey);
-    } catch (_) {
-      this.apiKey = "";
-      await setConfig(db, getProviderApiKeyConfigKey(providerId), "");
-
-      if (providerId === "openrouter") {
-        await setConfig(db, CONFIG_KEYS.API_KEY, "");
+      this.#encryptedApiKey = "";
+    } else {
+      try {
+        // We now store the encrypted key directly in the field.
+        // decryptValue is only called on-demand.
+        this.#encryptedApiKey = storedKey;
+      } catch (e) {
+        console.warn("[Orchestrator] Failed to load API key:", e);
+        this.#encryptedApiKey = "";
       }
     }
+
+    this.#apiKeyCache = null; // Invalidate cache
   }
 
   getProvider(): string {
@@ -591,7 +586,10 @@ export class Orchestrator {
     await this.loadApiKeyForProvider(db, providerId);
 
     // Fetch model info for the new provider (passes apiKey for auth).
-    await modelRegistry.fetchModelInfo(newProvider, this.apiKey || undefined);
+    await modelRegistry.fetchModelInfo(
+      newProvider,
+      (await this.getApiKeyForHeaders()) || undefined,
+    );
 
     // Update max tokens based on new info
     this.maxTokens = getModelMaxTokens(this.model);
@@ -1112,7 +1110,8 @@ export class Orchestrator {
     groupId = DEFAULT_GROUP_ID,
   ): Promise<void> {
     const requiresApiKey = this.providerConfig?.requiresApiKey !== false;
-    if (requiresApiKey && !this.apiKey) {
+    const currentApiKey = await this.getApiKeyForRequest();
+    if (requiresApiKey && !currentApiKey) {
       const reason = "API key not configured. Cannot compact context.";
 
       this.events.emit("provider-help", {
@@ -1226,8 +1225,9 @@ export class Orchestrator {
         systemPrompt,
         assistantName: this.assistantName,
         memory,
-        apiKey: this.apiKey,
+        apiKey: await this.getApiKeyForRequest(),
         model: this.model,
+
         provider: this.provider,
         storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
         providerHeaders: this.getProviderRuntimeHeaders(
@@ -1245,10 +1245,12 @@ export class Orchestrator {
   getBedrockSettings(): {
     region: string;
     profile: string;
+    authMode: string;
   } {
     return {
       region: this.bedrockRegionFallback,
       profile: this.bedrockProfileFallback,
+      authMode: this.bedrockAuthMode,
     };
   }
 
@@ -1257,18 +1259,22 @@ export class Orchestrator {
     settings: {
       region: string;
       profile: string;
+      authMode: string;
     },
   ): Promise<void> {
     const region =
       typeof settings.region === "string" ? settings.region.trim() : "";
     const profile =
       typeof settings.profile === "string" ? settings.profile.trim() : "";
+    const authMode = settings.authMode === "sso" ? "sso" : "provider_chain";
 
     this.bedrockRegionFallback = region;
     this.bedrockProfileFallback = profile;
+    this.bedrockAuthMode = authMode;
 
     await setConfig(db, CONFIG_KEYS.BEDROCK_REGION_FALLBACK, region);
     await setConfig(db, CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK, profile);
+    await setConfig(db, CONFIG_KEYS.BEDROCK_AUTH_MODE, authMode);
   }
 
   private createProviderRequestId(groupId: string): string {
@@ -1335,6 +1341,8 @@ export class Orchestrator {
       if (this.bedrockProfileFallback) {
         headers["x-bedrock-profile"] = this.bedrockProfileFallback;
       }
+
+      headers["x-bedrock-auth-mode"] = this.bedrockAuthMode;
 
       return headers;
     }
@@ -1518,7 +1526,7 @@ export class Orchestrator {
    * When the server-side scheduler fires a task, it sends a push notification.
    * The service worker relays it here as a `scheduled-task-trigger` message.
    */
-  _setupPushTaskListener(db: ShadowClawDatabase): void {
+  _setupPushTaskListener(_db: ShadowClawDatabase): void {
     if (typeof navigator === "undefined" || !navigator.serviceWorker) {
       return;
     }
@@ -1536,7 +1544,7 @@ export class Orchestrator {
         return;
       }
 
-      const { taskId, groupId, prompt, isScript } = event.data;
+      const { taskId, groupId, prompt } = event.data;
       if (!groupId || !prompt) {
         return;
       }
@@ -1544,47 +1552,11 @@ export class Orchestrator {
       // Mark this group as scheduler-triggered for recursion prevention
       this._schedulerTriggeredGroups.add(groupId);
 
-      const task = { id: taskId, groupId, prompt, isScript };
+      const task = { id: taskId, groupId, prompt };
 
       // Execute the task via the same path as client-side scheduler
       const runTask = async () => {
-        if (task.isScript) {
-          try {
-            return new Function(task.prompt).call(globalThis);
-          } catch (err) {
-            console.error(
-              `Failed to execute push-triggered script task ${task.id}:`,
-              err,
-            );
-
-            return;
-          }
-        }
-
-        // Evaluate template string literals
-        let evaluatedPrompt = task.prompt;
-        try {
-          evaluatedPrompt = task.prompt.replace(
-            /\${([^}]+)}/g,
-            (match, expr) => {
-              try {
-                return new Function(`return ${expr}`)();
-              } catch (e) {
-                console.warn(`Failed to evaluate expression: ${expr}`, e);
-
-                return match;
-              }
-            },
-          );
-        } catch (err) {
-          console.warn("Error interpolating task prompt:", err);
-        }
-
-        return this.invokeAgent(
-          db,
-          task.groupId,
-          `[SCHEDULED TASK]\n\n${evaluatedPrompt}`,
-        );
+        this.submitMessage(task.prompt, task.groupId);
       };
 
       runTask()
@@ -2092,7 +2064,8 @@ export class Orchestrator {
     }
 
     const requiresApiKey = this.providerConfig?.requiresApiKey !== false;
-    if (requiresApiKey && !this.apiKey) {
+    const currentApiKey = await this.getApiKeyForRequest();
+    if (requiresApiKey && !currentApiKey) {
       const reason =
         "API key not configured. Go to Settings to add your API key.";
 
@@ -2304,7 +2277,8 @@ export class Orchestrator {
         systemPrompt,
         assistantName: this.assistantName,
         memory,
-        apiKey: this.apiKey,
+        apiKey: await this.getApiKeyForRequest(),
+
         model: this.model,
         maxTokens: this.maxTokens,
         maxIterations: this.maxIterations,
@@ -2628,6 +2602,81 @@ export class Orchestrator {
       case "show-toast": {
         const { message, type, duration } = msg.payload;
         showToast(message, { type: type || "info", duration });
+
+        break;
+      }
+
+      case "mcp-reauth-required": {
+        const { connectionId } = msg.payload;
+
+        const connection = await getRemoteMcpConnection(db, connectionId);
+        const label = connection?.label || connectionId;
+
+        if (connection?.autoReconnectOAuth) {
+          showToast(
+            `🔑 MCP connection "${label}" returned 401 — auto-reconnecting OAuth…`,
+            { type: "info", duration: 5000 },
+          );
+
+          const result = await reconnectMcpOAuth(db, connectionId, {
+            silentOnly: true,
+          });
+
+          if (result.success) {
+            showToast(`🔑 OAuth reconnected for "${label}"`, {
+              type: "success",
+              duration: 5000,
+            });
+          } else {
+            showToast(
+              `🔑 OAuth auto-reconnect failed for "${label}": ${result.error}`,
+              {
+                type: "error",
+                duration: 15000,
+                action: {
+                  label: "Reconnect Now",
+                  onClick: async () => {
+                    const popupResult = await reconnectMcpOAuth(
+                      db,
+                      connectionId,
+                    );
+                    if (popupResult.success) {
+                      showToast(`🔑 OAuth reconnected for "${label}"`, {
+                        type: "success",
+                        duration: 5000,
+                      });
+                    } else {
+                      showToast(
+                        `🔑 OAuth reconnect failed for "${label}": ${popupResult.error}`,
+                        { type: "error", duration: 10000 },
+                      );
+                    }
+                  },
+                },
+              },
+            );
+          }
+
+          this.agentWorker?.postMessage({
+            type: "mcp-reauth-result",
+            payload: { connectionId, success: result.success },
+          });
+        } else {
+          showToast(
+            `🔑 MCP connection "${label}" returned 401 — OAuth re-authentication required. Go to Settings → Remote MCP to reconnect.`,
+            { type: "warning", duration: 10000 },
+          );
+
+          this.agentWorker?.postMessage({
+            type: "mcp-reauth-result",
+            payload: { connectionId, success: false },
+          });
+        }
+
+        this.events.emit("mcp-reauth-required", {
+          connectionId,
+          label,
+        });
 
         break;
       }

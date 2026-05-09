@@ -1,5 +1,5 @@
 import { ShadowClawDatabase } from "./db/db.js";
-import { ToolDefinition, ToolProfile } from "./tools.js";
+import { ToolDefinition } from "./tools.js";
 import { TOOL_DEFINITIONS } from "./tools.js";
 import { createLogMessage } from "./worker/createLogMessage.js";
 import { createToolActivityMessage } from "./worker/createToolActivityMessage.js";
@@ -9,10 +9,10 @@ import { sanitizeModelOutput } from "./chat-template-sanitizer.js";
 import { NANO_BUILTIN_PROFILE } from "./tools/builtin-profiles.js";
 
 /**
- * Core tools exposed to the Prompt API (Gemini Nano).
- * Keeping this small prevents the on-device model from being overwhelmed
- * by too many tool definitions. All other tools remain available to
- * cloud-hosted providers.
+ * Core tools exposed to the Prompt API on-device runtime.
+ * Keeping this small prevents constrained local models from being
+ * overwhelmed by too many tool definitions. All other tools remain
+ * available to cloud-hosted providers.
  */
 export { NANO_BUILTIN_PROFILE };
 
@@ -26,7 +26,7 @@ function getLanguageModelApi(): {
   availability: Function;
   create: Function;
 } | null {
-  const candidate = Reflect.get(globalThis, "LanguageModel");
+  const candidate = (globalThis as any).LanguageModel;
   if (!candidate || typeof candidate !== "function") {
     return null;
   }
@@ -125,11 +125,50 @@ async function emitModelDownloadProgress(
   });
 }
 
+async function emitPromptApiDiagnostic(
+  emit: (message: any) => Promise<void> | void,
+  groupId: string,
+  message: string,
+): Promise<void> {
+  await emit(createLogMessage(groupId, "info", "Prompt API", message));
+}
+
+function summarizePromptApiSession(
+  session: any,
+  languageModelApi: any,
+): string {
+  const model =
+    detectPromptApiModelLabel(session, languageModelApi) || "unknown";
+  const summary: Record<string, any> = { model };
+  ["model", "modelId", "modelName", "name", "id"].forEach((key) => {
+    const value = (session as any)[key];
+    if (value !== undefined) {
+      summary[key] = value;
+    }
+  });
+
+  const sessionFields = Object.entries(summary)
+    .map(([key, val]) => `${key}=${val}`)
+    .join(", ");
+  const capabilities = (session as any).capabilities || {};
+  const metadata = (session as any).metadata || {};
+  const capabilityKeys = Object.keys({ ...capabilities, ...metadata });
+
+  return [
+    `resolved model: ${model}`,
+    sessionFields ? `session fields: ${sessionFields}` : "session fields: none",
+    capabilityKeys.length > 0
+      ? `capabilities: ${capabilityKeys.join(", ")}`
+      : "capabilities: none",
+  ].join(" | ");
+}
+
 async function createPromptSessionWithProgress(
   emit: (message: any) => Promise<void> | void,
   groupId: string,
   abortSignal: AbortSignal | undefined,
   initialPrompts: any[] = [],
+  emitErrorOnFailure = true,
 ) {
   const LanguageModelApi = getLanguageModelApi();
   if (!LanguageModelApi) {
@@ -139,6 +178,11 @@ async function createPromptSessionWithProgress(
   }
 
   const availability = await LanguageModelApi.availability(PROMPT_IO_OPTIONS);
+  await emitPromptApiDiagnostic(
+    emit,
+    groupId,
+    `availability() returned: ${availability}`,
+  );
 
   if (availability === "unavailable") {
     throw new Error(
@@ -158,6 +202,11 @@ async function createPromptSessionWithProgress(
 
   let session;
   try {
+    await emitPromptApiDiagnostic(
+      emit,
+      groupId,
+      "Creating Prompt API session...",
+    );
     session = await LanguageModelApi.create({
       ...PROMPT_IO_OPTIONS,
       ...(initialPrompts.length > 0 ? { initialPrompts } : {}),
@@ -171,8 +220,8 @@ async function createPromptSessionWithProgress(
         }
 
         monitorTarget.addEventListener("downloadprogress", (event: any) => {
-          const loaded = Reflect.get(event, "loaded");
-          const total = Reflect.get(event, "total");
+          const loaded = (event as any).loaded;
+          const total = (event as any).total;
           const loadedValue = Number(loaded);
           const totalValue = Number(total);
 
@@ -196,10 +245,24 @@ async function createPromptSessionWithProgress(
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await emitModelDownloadProgress(emit, groupId, "error", null, message);
+    if (emitErrorOnFailure) {
+      await emitModelDownloadProgress(emit, groupId, "error", null, message);
+    }
+
+    await emitPromptApiDiagnostic(
+      emit,
+      groupId,
+      `Session creation failed: ${message}`,
+    );
 
     throw err;
   }
+
+  await emitPromptApiDiagnostic(
+    emit,
+    groupId,
+    summarizePromptApiSession(session, LanguageModelApi),
+  );
 
   await emitModelDownloadProgress(
     emit,
@@ -211,6 +274,82 @@ async function createPromptSessionWithProgress(
 
   return session;
 }
+
+export function isPromptApiMonitorFallbackError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes("monitor option") ||
+    normalized.includes("downloadprogresscallback") ||
+    normalized.includes("dictionary") ||
+    normalized.includes("initialprompts") ||
+    (normalized.includes("not supported") &&
+      (normalized.includes("option") || normalized.includes("monitor")))
+  );
+}
+
+function mapPromptApiModelLabel(raw: string): string {
+  const normalized = raw.toLowerCase();
+  if (normalized.includes("gemma4") || normalized.includes("gemma 4")) {
+    return "Gemma 4";
+  }
+
+  if (
+    normalized.includes("nano_v3") ||
+    normalized.includes("gemini nano") ||
+    normalized.includes("gemini-nano") ||
+    normalized.includes("prompt_api")
+  ) {
+    return "Gemini Nano";
+  }
+
+  return raw;
+}
+
+function detectPromptApiModelLabel(
+  session: any,
+  languageModelApi: any,
+): string | null {
+  const labels = [
+    (session as any).model,
+    (session as any).modelId,
+    (session as any).modelName,
+    (session as any).id,
+    (session as any).name,
+    (languageModelApi as any).model,
+    (languageModelApi as any).modelId,
+    (languageModelApi as any).modelName,
+    (languageModelApi as any).id,
+    (languageModelApi as any).name,
+  ];
+  const label = labels.find((l) => typeof l === "string" && l.trim());
+
+  return label ? mapPromptApiModelLabel(label.trim()) : "Gemini Nano";
+}
+
+/*
+function summarizePromptApiCapabilities(
+  session: any,
+  languageModelApi: any,
+): Record<string, unknown> {
+  const candidates = [
+    (session as any).capabilities,
+    (session as any).metadata,
+    (session as any).info,
+    (languageModelApi as any).capabilities,
+  ];
+
+  for (const obj of candidates) {
+    if (obj && typeof obj === "object") {
+      return obj as Record<string, unknown>;
+    }
+  }
+
+  return {};
+}
+
+*/
 
 async function getOrCreateWarmSession(
   emit: (message: any) => Promise<void> | void,
@@ -243,14 +382,40 @@ async function getOrCreateWarmSession(
     groupId,
     abortSignal,
     initialPrompts,
-  ).catch(async () => {
+    false,
+  ).catch(async (error) => {
     // Fallback to plain creation if monitor-path options fail on this build.
 
-    return LanguageModelApi.create({
-      ...PROMPT_IO_OPTIONS,
-      ...(initialPrompts.length > 0 ? { initialPrompts } : {}),
-      signal: abortSignal,
-    });
+    if (!isPromptApiMonitorFallbackError(error)) {
+      throw error;
+    }
+
+    let fallbackSession;
+    try {
+      fallbackSession = await LanguageModelApi.create({
+        ...PROMPT_IO_OPTIONS,
+        ...(initialPrompts.length > 0 ? { initialPrompts } : {}),
+        signal: abortSignal,
+      });
+    } catch (fallbackError) {
+      const message =
+        fallbackError instanceof Error
+          ? fallbackError.message
+          : String(fallbackError);
+      await emitModelDownloadProgress(emit, groupId, "error", null, message);
+
+      throw fallbackError;
+    }
+
+    await emitModelDownloadProgress(
+      emit,
+      groupId,
+      "done",
+      1,
+      "Prompt API model ready.",
+    );
+
+    return fallbackSession;
   });
 
   warmSessionState.key = promptKey;
@@ -401,12 +566,14 @@ export async function invokeWithPromptApi(
 ) {
   const activeTools = tools || PROMPT_API_TOOLS;
 
+  const LanguageModelApi = getLanguageModelApi();
+
   await emit(
     createLogMessage(
       groupId,
       "info",
       "Starting",
-      `Provider: Prompt API (Gemini Nano) · ${activeTools.length} tools`,
+      `Provider: Prompt API (initializing) · ${activeTools.length} tools`,
     ),
   );
 
@@ -416,6 +583,30 @@ export async function invokeWithPromptApi(
     systemPrompt,
     abortSignal,
   );
+
+  const runtimeModel = detectPromptApiModelLabel(session, LanguageModelApi);
+  const runtimeLabel = runtimeModel || "On-device";
+
+  await emit(
+    createLogMessage(
+      groupId,
+      "info",
+      "Provider",
+      `Provider: Prompt API (${runtimeLabel}) · ${activeTools.length} tools`,
+    ),
+  );
+
+  if (!runtimeModel) {
+    await emit(
+      createLogMessage(
+        groupId,
+        "info",
+        "Model",
+        "Prompt API runtime did not expose an exact model id.",
+      ),
+    );
+  }
+
   try {
     const toolJsonSchema = {
       type: "object",
@@ -554,7 +745,6 @@ export async function invokeWithPromptApi(
         let staleCount = 0;
         const MAX_STALE = 3;
         let chunkCount = 0;
-        let jsonComplete = false;
         let lastExtractedLength = 0;
 
         for await (const chunk of streamOrPromise) {
@@ -611,12 +801,6 @@ export async function invokeWithPromptApi(
           if (trimmedLen <= lastMeaningfulLength) {
             staleCount++;
             if (staleCount >= MAX_STALE) {
-              console.debug(
-                "[prompt-api] stream stale after",
-                chunkCount,
-                "chunks, breaking",
-              );
-
               break;
             }
 
@@ -635,12 +819,7 @@ export async function invokeWithPromptApi(
                 test &&
                 (test.type === "response" || test.type === "tool_use")
               ) {
-                jsonComplete = true;
-                console.debug(
-                  "[prompt-api] complete JSON detected at",
-                  accumulated.length,
-                  "chars, breaking",
-                );
+                // jsonComplete = true;
 
                 break;
               }
@@ -692,9 +871,6 @@ export async function invokeWithPromptApi(
           // If the constrained stream stalled on incomplete JSON (e.g. '{"'),
           // retry without the constraint so the model can freely generate.
           if (!parseStructured(raw)) {
-            console.debug(
-              "[prompt-api] constrained output incomplete, retrying without constraint",
-            );
             raw = await consumeStream(
               session.promptStreaming(prompt, { signal: abortSignal }),
               emit,
@@ -743,11 +919,6 @@ export async function invokeWithPromptApi(
         });
       }
 
-      console.debug("[prompt-api] iteration", i, "raw:", raw?.slice?.(0, 300));
-      console.debug(
-        "[prompt-api] parsed:",
-        JSON.stringify(parsed)?.slice(0, 300),
-      );
       if (!parsed || parsed.type === "response") {
         // If the model returned valid JSON with type=response but no response
         // field, or returned something unparseable, treat the raw output as

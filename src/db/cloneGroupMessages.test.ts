@@ -45,7 +45,7 @@ function createMockDb(sourceMessages: any[]) {
     },
     index() {
       return {
-        openCursor(groupId) {
+        openCursor(_groupId) {
           // simulate async
 
           setTimeout(() => request.onsuccess?.(), 0);

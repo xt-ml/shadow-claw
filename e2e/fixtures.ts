@@ -41,16 +41,15 @@ export const test = base.extend<MyFixtures>({
     ].join(" ");
 
     const groupId = await page.evaluate(async (name: string) => {
-      const store = (window as any).orchestratorStore;
-      const db = (window as any).__SHADOWCLAW_DB__;
+      const bridge = (window as any).__SHADOWCLAW_E2E__;
 
-      if (!store || !db) {
-        throw new Error("Orchestrator store or DB is not ready");
+      if (!bridge) {
+        throw new Error("E2E Bridge is not ready");
       }
 
-      const group = await store.createConversation(db, name);
-      await store.switchConversation(db, group.groupId);
-      await store.loadTasks(db);
+      const group = await bridge.createConversation(name);
+      await bridge.switchConversation(group.groupId);
+      await bridge.loadTasks();
 
       return group.groupId as string;
     }, conversationName);

@@ -20,7 +20,9 @@
     "e2e",
     "node_modules",
     "src/server",
-    "src/service-worker",
-    "src/worker"
+    "src/worker",
+    "src/service-worker/fetch-proxy.ts",
+    "src/service-worker/push-handler.ts",
+    "src/service-worker/share-target.ts"
   ]
 }

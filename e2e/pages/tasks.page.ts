@@ -33,4 +33,11 @@ export class TasksPage {
   taskLikeElements() {
     return this.host.locator('[class*="task"], li, tr');
   }
+
+  async createTask(schedule: string, prompt: string) {
+    await this.host.locator(".tasks__add-btn").click();
+    await this.host.locator("#tasksScheduleInput").fill(schedule);
+    await this.host.locator("#tasksPromptInput").fill(prompt);
+    await this.host.locator(".tasks__btn-save").click();
+  }
 }

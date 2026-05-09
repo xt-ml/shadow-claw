@@ -2,6 +2,36 @@
   display: block;
 }
 
+:host([highlight]) .card {
+  border-color: var(--shadow-claw-accent-primary);
+}
+
+:host([muted]) .card {
+  opacity: 0.75;
+}
+
+::slotted([slot="actions"]) {
+  background: none;
+  border: none;
+  border-radius: 0.25rem;
+  color: var(--shadow-claw-text-secondary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  transition:
+    color 0.15s,
+    background-color 0.15s;
+}
+
+::slotted([slot="actions"]:hover) {
+  background-color: var(--shadow-claw-bg-primary);
+  color: var(--shadow-claw-text-primary);
+}
+
+::slotted([slot="actions"].delete-btn:hover) {
+  color: var(--shadow-claw-important-color);
+}
+
 .card {
   background-color: var(--shadow-claw-bg-secondary);
   border: 0.0625rem solid var(--shadow-claw-border-color);
@@ -42,34 +72,4 @@
 .card__actions {
   display: flex;
   gap: 0.5rem;
-}
-
-::slotted([slot="actions"]) {
-  background: none;
-  border: none;
-  border-radius: 0.25rem;
-  color: var(--shadow-claw-text-secondary);
-  cursor: pointer;
-  font-size: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  transition:
-    color 0.15s,
-    background-color 0.15s;
-}
-
-::slotted([slot="actions"]:hover) {
-  background-color: var(--shadow-claw-bg-primary);
-  color: var(--shadow-claw-text-primary);
-}
-
-::slotted([slot="actions"].delete-btn:hover) {
-  color: #dc2626;
-}
-
-:host([highlight]) .card {
-  border-color: var(--shadow-claw-accent-primary);
-}
-
-:host([muted]) .card {
-  opacity: 0.75;
 }

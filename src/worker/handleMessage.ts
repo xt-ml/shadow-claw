@@ -19,7 +19,7 @@ import { handleCompact } from "./handleCompact.js";
 import { handleInvoke } from "./handleInvoke.js";
 import { pendingTasks } from "./pendingTasks.js";
 import { post } from "./post.js";
-import { executeTool } from "./executeTool.js";
+import { executeTool, resolveMcpReauth } from "./executeTool.js";
 import { setToolState } from "./tool-state.js";
 
 /** In-flight abort controllers for group tasks */
@@ -501,5 +501,12 @@ export async function handleMessage(event: MessageEvent): Promise<void> {
       }
 
       break;
+
+    case "mcp-reauth-result": {
+      const { connectionId, success } = payload;
+      resolveMcpReauth(connectionId, !!success);
+
+      break;
+    }
   }
 }

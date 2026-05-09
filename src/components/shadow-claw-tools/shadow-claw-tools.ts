@@ -1,5 +1,5 @@
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
-import { getAvailableProviders, getProvider, PROVIDERS } from "../../config.js";
+import { getAvailableProviders, getProvider } from "../../config.js";
 import { effect } from "../../effect.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { TOOL_DEFINITIONS } from "../../tools.js";
@@ -22,7 +22,6 @@ export class ShadowClawTools extends ShadowClawElement {
   static styles = `${ShadowClawTools.componentPath}/${elementName}.css`;
   static template = `${ShadowClawTools.componentPath}/${elementName}.html`;
 
-  cleanup: () => void = () => {};
   orchestrator: Orchestrator | null = null;
 
   constructor() {
@@ -30,24 +29,67 @@ export class ShadowClawTools extends ShadowClawElement {
   }
 
   async connectedCallback() {
+    await Promise.all([this.onStylesReady, this.onTemplateReady]);
+
     const db = await getDb();
     this.orchestrator = orchestratorStore.orchestrator;
 
-    // Reactive re-render on tool store changes
-    this.cleanup = effect(() => {
-      toolsStore.enabledToolNames;
-      toolsStore.customTools;
-      toolsStore.systemPromptOverride;
-      toolsStore.profiles;
-      toolsStore.activeProfileId;
-      this.updateToolList(db);
-    });
+    this.setupEffects(db);
+    this.bindEventListeners(db);
+  }
 
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
+  disconnectedCallback() {
+    super.disconnectedCallback();
+  }
 
+  setupEffects(db: ShadowClawDatabase) {
     const root = this.shadowRoot;
     if (!root) {
-      throw new Error("shadowRoot not found");
+      return;
+    }
+
+    // Reactive re-render on tool store changes
+    this.addCleanup(
+      effect(() => {
+        toolsStore.enabledToolNames;
+        toolsStore.customTools;
+        toolsStore.systemPromptOverride;
+        toolsStore.profiles;
+        toolsStore.activeProfileId;
+        this.updateToolList(db);
+      }),
+    );
+
+    // WebMCP opt-in toggle
+    const webMcpToggle = root.querySelector(
+      ".tools__webmcp-toggle",
+    ) as HTMLInputElement | null;
+    const webMcpModeSelect = root.querySelector(
+      ".tools__webmcp-mode",
+    ) as HTMLSelectElement | null;
+
+    if (webMcpToggle) {
+      // Sync checked state and mode when orchestrator becomes available
+      this.addCleanup(
+        effect(() => {
+          if (orchestratorStore.ready) {
+            this.orchestrator = orchestratorStore.orchestrator;
+            webMcpToggle.checked =
+              this.orchestrator?.getWebMcpToolsEnabled?.() === true;
+            if (webMcpModeSelect && this.orchestrator?.getWebMcpMode) {
+              webMcpModeSelect.value =
+                this.orchestrator.getWebMcpMode() || "polyfill";
+            }
+          }
+        }),
+      );
+    }
+  }
+
+  bindEventListeners(db: ShadowClawDatabase) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
     }
 
     // Back button
@@ -103,28 +145,11 @@ export class ShadowClawTools extends ShadowClawElement {
         showInfo("All tools disabled");
       });
 
-    // WebMCP opt-in toggle
+    // WebMCP toggle listener
     const webMcpToggle = root.querySelector(
       ".tools__webmcp-toggle",
     ) as HTMLInputElement | null;
-    const webMcpModeSelect = root.querySelector(
-      ".tools__webmcp-mode",
-    ) as HTMLSelectElement | null;
-
     if (webMcpToggle) {
-      // Sync checked state and mode when orchestrator becomes available
-      effect(() => {
-        if (orchestratorStore.ready) {
-          this.orchestrator = orchestratorStore.orchestrator;
-          webMcpToggle.checked =
-            this.orchestrator?.getWebMcpToolsEnabled?.() === true;
-          if (webMcpModeSelect && this.orchestrator?.getWebMcpMode) {
-            webMcpModeSelect.value =
-              this.orchestrator.getWebMcpMode() || "polyfill";
-          }
-        }
-      });
-
       webMcpToggle.addEventListener("change", async () => {
         const orchestrator =
           this.orchestrator ?? orchestratorStore.orchestrator;
@@ -155,6 +180,9 @@ export class ShadowClawTools extends ShadowClawElement {
     }
 
     // WebMCP mode selector
+    const webMcpModeSelect = root.querySelector(
+      ".tools__webmcp-mode",
+    ) as HTMLSelectElement | null;
     if (webMcpModeSelect) {
       webMcpModeSelect.addEventListener("change", async () => {
         const orchestrator =
@@ -357,10 +385,6 @@ export class ShadowClawTools extends ShadowClawElement {
         await toolsStore.deleteProfile(db, activeId);
         showSuccess("Profile deleted");
       });
-  }
-
-  disconnectedCallback() {
-    this.cleanup();
   }
 
   updateToolList(db: ShadowClawDatabase) {

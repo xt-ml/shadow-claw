@@ -325,7 +325,7 @@ describe("prompt-api-provider", () => {
     setLanguageModelMock(createMock);
 
     jest.unstable_mockModule("./worker/executeTool.js", () => ({
-      executeTool: jest.fn(async (_db, name, input: any, _groupId) => {
+      executeTool: jest.fn(async (_db, _name, input: any, _groupId) => {
         return `toast shown: ${input.message}`;
       }),
     }));
@@ -391,6 +391,104 @@ describe("prompt-api-provider", () => {
     expect(names).toContain("open_file");
     expect(names).toContain("attach_file_to_chat");
   });
+
+  it("emits done download progress when monitor fallback path is used", async () => {
+    const clonePrompt = (jest.fn() as any).mockResolvedValue("summary");
+    const cloneDestroy = (jest.fn() as any).mockResolvedValue(undefined);
+    const baseClone = jest.fn(async () => ({
+      prompt: clonePrompt,
+      destroy: cloneDestroy,
+      modelId: "prompt_api_gemma4",
+    }));
+    const baseDestroy = (jest.fn() as any).mockResolvedValue(undefined);
+
+    const createMock = jest.fn() as any;
+    createMock
+      .mockRejectedValueOnce(new Error("monitor option is not supported"))
+      .mockResolvedValue({
+        clone: baseClone,
+        destroy: baseDestroy,
+      });
+
+    setLanguageModelMock(
+      createMock,
+      (jest.fn() as any).mockResolvedValue("downloadable"),
+    );
+
+    const { compactWithPromptApi } = await import("./prompt-api-provider.js");
+    const emitted: any[] = [];
+
+    await compactWithPromptApi(
+      "System",
+      [{ role: "user", content: "hello" }],
+      null as any,
+      async (msg: any) => {
+        emitted.push(msg);
+      },
+      "g1",
+    );
+
+    const progressEvents = emitted.filter(
+      (m) => m?.type === "model-download-progress",
+    );
+    expect(progressEvents.some((m) => m?.payload?.status === "error")).toBe(
+      false,
+    );
+    expect(progressEvents.some((m) => m?.payload?.status === "done")).toBe(
+      true,
+    );
+  });
+
+  it("logs Gemma 4 in starting message when runtime model id is exposed", async () => {
+    const clonePromptStreaming = jest.fn(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield '{"type":"response","response":"hello"}';
+      },
+    }));
+
+    const createMock = jest.fn(async () => ({
+      clone: jest.fn(async () => ({
+        modelId: "prompt_api_gemma4",
+        promptStreaming: clonePromptStreaming,
+        destroy: jest.fn(),
+      })),
+      destroy: jest.fn(),
+    }));
+    setLanguageModelMock(createMock);
+
+    const { invokeWithPromptApi } = await import("./prompt-api-provider.js");
+
+    const emitted: any[] = [];
+    await invokeWithPromptApi(
+      {} as any,
+      "g1",
+      "system",
+      [{ role: "user", content: "hi" }],
+      1024,
+      async (msg: any) => {
+        emitted.push(msg);
+      },
+      null as any,
+      [],
+    );
+
+    const providerEntry = emitted.find(
+      (m) =>
+        m?.type === "thinking-log" &&
+        m?.payload?.label === "Provider" &&
+        typeof m?.payload?.message === "string",
+    );
+    expect(providerEntry).toBeDefined();
+    expect(providerEntry.payload.message).toContain("Prompt API (Gemma 4)");
+
+    const availabilityEntry = emitted.find(
+      (m) =>
+        m?.type === "thinking-log" &&
+        m?.payload?.label === "Prompt API" &&
+        String(m?.payload?.message || "").includes("availability() returned:"),
+    );
+    expect(availabilityEntry).toBeDefined();
+  });
 });
 
 describe("prompt-api-provider streaming events", () => {
@@ -404,11 +502,6 @@ describe("prompt-api-provider streaming events", () => {
   });
 
   it("emits streaming-start, streaming-chunk, and streaming-done events", async () => {
-    const responseJson = JSON.stringify({
-      type: "response",
-      response: "Hello from Nano",
-    });
-
     const clonePromptStreaming = jest.fn(() => ({
       [Symbol.asyncIterator]: async function* () {
         // Stream the JSON in pieces to verify extraction

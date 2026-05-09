@@ -127,7 +127,7 @@ export function isWebMcpSupported(): boolean {
  */
 export async function registerWebMcpTools(
   agentWorker: Worker | null,
-  emit: (message: any) => Promise<void> | void,
+  _emit: (message: any) => Promise<void> | void,
   groupId: string = DEFAULT_GROUP_ID,
   tools?: ToolDefinition[],
 ): Promise<boolean> {

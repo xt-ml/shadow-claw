@@ -14,6 +14,9 @@ export class AppPage {
   }
 
   async open() {
+    await this.page.addInitScript(() => {
+      (window as any).__SHADOWCLAW_E2E_ENABLE__ = true;
+    });
     await this.page.goto("/");
     await this.waitForReady();
   }
@@ -23,11 +26,10 @@ export class AppPage {
       () => {
         const isDefined = !!customElements.get("shadow-claw");
         const el = document.querySelector("shadow-claw") as any;
-        const store = (window as any).orchestratorStore;
-        const db = (window as any).__SHADOWCLAW_DB__;
+        const bridge = (window as any).__SHADOWCLAW_E2E__;
 
         return (
-          isDefined && !!el && !!el.shadowRoot && !!store && store.ready && !!db
+          isDefined && !!el && !!el.shadowRoot && !!bridge && bridge.isReady()
         );
       },
       { timeout: 45000 },

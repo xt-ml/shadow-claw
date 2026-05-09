@@ -64,8 +64,7 @@ interface ServerScheduledTask {
   groupId?: string;
   schedule: string;
   prompt: string;
-  is_script?: number;
-  isScript?: boolean;
+
   enabled: number | boolean;
   last_run?: number | null;
   lastRun?: number | null;
@@ -200,7 +199,7 @@ async function fetchServerTasksForGroup(
         groupId: task.group_id || task.groupId || groupId,
         schedule: task.schedule,
         prompt: task.prompt,
-        isScript: task.isScript === true || task.is_script === 1,
+
         enabled: task.enabled === true || task.enabled === 1,
         lastRun:
           typeof task.lastRun === "number"
@@ -759,19 +758,6 @@ export class OrchestratorStore {
    * Run a task
    */
   runTask(task: Task): void {
-    if (task.isScript) {
-      try {
-        new Function(task.prompt).call(globalThis);
-      } catch (err) {
-        console.error(`Failed to execute script for task ${task.id}:`, err);
-        showError(
-          `Script Error: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }
-
-      return;
-    }
-
     this.sendMessage(task.prompt);
   }
 

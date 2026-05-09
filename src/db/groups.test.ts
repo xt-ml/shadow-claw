@@ -87,7 +87,7 @@ describe("groups", () => {
 
       (mockGetConfig as any).mockResolvedValue(JSON.stringify(existing));
 
-      const group = await createGroup(db, "Second");
+      await createGroup(db, "Second");
 
       const saved = JSON.parse((mockSetConfig as any).mock.calls[0][2]);
       expect(saved).toHaveLength(2);
@@ -221,7 +221,7 @@ describe("groups", () => {
       // Second call: simulate createGroup reading the now-persisted default
 
       (mockGetConfig as any).mockResolvedValueOnce(JSON.stringify(persisted));
-      const newGroup = await createGroup(db, "Secondary");
+      await createGroup(db, "Secondary");
 
       // The saved data should contain both groups
       const saved = JSON.parse(

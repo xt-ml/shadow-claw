@@ -60,7 +60,6 @@ Object.defineProperty(global, "navigator", {
 });
 
 describe("storage.js", () => {
-  let deleteConfig;
   let getConfig;
   let mockDirHandle;
   let mockFileHandle;
@@ -70,7 +69,7 @@ describe("storage.js", () => {
   beforeEach(async () => {
     jest.resetModules();
 
-    deleteConfig = (await import("../db/deleteConfig.js")).deleteConfig;
+    await import("../db/deleteConfig.js");
     getConfig = (await import("../db/getConfig.js")).getConfig;
     storage = await import("./storage.js");
 

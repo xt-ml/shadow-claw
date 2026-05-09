@@ -16,7 +16,7 @@ import {
   getSubscription,
   getAllSubscriptions,
 } from "./push-store.js";
-import type { Express, Request, Response } from "express";
+import type { Express } from "express";
 
 /**
  * Broadcast a push notification payload to all subscriptions.

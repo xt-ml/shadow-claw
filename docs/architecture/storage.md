@@ -155,6 +155,16 @@ A per-directory variant (`downloadGroupDirectoryAsZip.ts`) is available for expo
 | `requestPersistentStorage()` | Call `navigator.storage.persist()` (user opt-in)        |
 | `requestStorageAccess()`     | `document.requestStorageAccess()` (cross-origin iframe) |
 | `selectStorageDirectory()`   | Open `showDirectoryPicker()` and persist handle         |
+| `getApiKeyForRequest()`      | Decrypt and return transient API key (30s cache)        |
+
+## API Key Protection
+
+ShadowClaw implements a multi-layered security strategy for sensitive API keys:
+
+- **Encrypted-at-Rest**: Keys are stored in IndexedDB encrypted with AES-256-GCM.
+- **Private Fields**: The `Orchestrator` uses TC39 private fields (`#encryptedApiKey`) to ensure keys are inaccessible from the console or debugger.
+- **Transient Cache**: Decrypted keys are stored in a short-lived memory cache (`#apiKeyCache`) with a 30-second TTL. They are never persisted in plaintext.
+- **Environment Hardening**: In production, `window.fetch` and `window.crypto.subtle` are locked to prevent monkey-patching and interception.
 
 ## Stale Handle Workaround
 

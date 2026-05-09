@@ -30,9 +30,11 @@ describe("deleteConfig", () => {
       delete: jest.fn(),
     };
 
-    (txPromise as any).mockImplementation((db, storeName, mode, callback) => {
-      return Promise.resolve(callback(mockStore));
-    });
+    (txPromise as any).mockImplementation(
+      (_db, _storeName, _mode, callback) => {
+        return Promise.resolve(callback(mockStore));
+      },
+    );
 
     await deleteConfig(db, key);
 

@@ -105,7 +105,6 @@ const workspaceFlushTimers: Map<
   ReturnType<typeof setTimeout>
 > = new Map();
 
-let active9pManifest: string | null = null;
 let activeEmulator: any = null; // Track emulator for cleanup on failure
 let activeMode: "ext2" | "9p" | null = null;
 let activeUsage: "command" | "terminal" | null = null;
@@ -355,7 +354,7 @@ export async function shutdownVM(): Promise<void> {
   bootPromise = null;
   lastBootError = null;
   activeMode = null;
-  active9pManifest = null;
+
   workspaceFlushTimers.forEach((timer) => clearTimeout(timer));
   workspaceFlushTimers.clear();
   missingFileDeleteRetryAt.clear();
@@ -732,9 +731,6 @@ async function doBootVM(bootToken: number): Promise<void> {
     if (bootConfig.mode === "ext2" || bootConfig.mode === "9p") {
       activeMode = bootConfig.mode;
     }
-
-    active9pManifest =
-      bootConfig.mode === "9p" ? (bootConfig.basefsUrl ?? null) : null;
 
     console.log(
       `${getVMLogPrefix()} Using ${bootConfig.mode} boot mode (${bootConfig.label}). Loading v86 module...`,

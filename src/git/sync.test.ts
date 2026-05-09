@@ -65,7 +65,7 @@ describe("sync.js", () => {
 
       // Setup LFS to return some files
       mockPfs.readdir.mockResolvedValueOnce([".git", "README.md"]);
-      mockPfs.stat.mockImplementation(async (path) => ({
+      mockPfs.stat.mockImplementation(async (_path) => ({
         isDirectory: () => false,
       }));
 

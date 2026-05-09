@@ -37,7 +37,6 @@ import {
   DEFAULT_DEV_IP,
   DEFAULT_DEV_PORT,
   getModelMaxTokens,
-  MODEL_OUTPUT_LIMITS,
 } from "./config.js";
 import { modelRegistry } from "./model-registry.js";
 
@@ -262,7 +261,7 @@ describe("config.js", () => {
 
     describe("supportsStreaming", () => {
       it("every provider should explicitly declare supportsStreaming", () => {
-        for (const [id, config] of Object.entries(PROVIDERS)) {
+        for (const [_id, config] of Object.entries(PROVIDERS)) {
           expect(typeof config.supportsStreaming).toBe("boolean");
         }
       });
@@ -454,6 +453,7 @@ describe("config.js", () => {
       expect(CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK).toBe(
         "bedrock_profile_fallback",
       );
+      expect(CONFIG_KEYS.BEDROCK_AUTH_MODE).toBe("bedrock_auth_mode");
       expect(CONFIG_KEYS.RATE_LIMIT_CALLS_PER_MINUTE).toBe(
         "rate_limit_calls_per_minute",
       );

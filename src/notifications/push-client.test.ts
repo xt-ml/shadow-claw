@@ -101,7 +101,7 @@ describe("push-client", () => {
         })
         .mockResolvedValueOnce({ ok: true });
 
-      const sub = await subscribeToPush();
+      await subscribeToPush();
       expect(mockPushManager.subscribe).toHaveBeenCalledWith({
         userVisibleOnly: true,
         applicationServerKey: expect.any(Uint8Array),

@@ -1,7 +1,8 @@
 // @ts-nocheck
 import { jest } from "@jest/globals";
 
-let executeTool;
+let executeTool: any;
+let resolveMcpReauth: any;
 
 describe("executeTool.js", () => {
   let mockBootVM;
@@ -12,6 +13,7 @@ describe("executeTool.js", () => {
   let mockGetVMStatus;
   let mockIsVMReady;
   let mockListGroupFiles;
+  let mockGroupFileExists;
   let mockGetAllTasks;
   let mockPost;
   let mockReadGroupFile;
@@ -61,6 +63,7 @@ describe("executeTool.js", () => {
     }));
     mockIsVMReady = jest.fn(() => true);
     mockListGroupFiles = jest.fn();
+    mockGroupFileExists = jest.fn(() => true);
     mockGetAllTasks = (jest.fn() as any).mockResolvedValue([]);
     mockPost = jest.fn();
     mockReadGroupFile = jest.fn();
@@ -174,6 +177,14 @@ describe("executeTool.js", () => {
     jest.unstable_mockModule("../remote-mcp-client.js", () => ({
       listRemoteMcpTools: mockListRemoteMcpTools,
       callRemoteMcpTool: mockCallRemoteMcpTool,
+      McpReauthRequiredError: class McpReauthRequiredError extends Error {
+        connectionId: string;
+        constructor(connectionId: string) {
+          super("OAuth reconnect required for remote MCP connection");
+          this.name = "McpReauthRequiredError";
+          this.connectionId = connectionId;
+        }
+      },
     }));
 
     jest.unstable_mockModule("../vm.js", () => ({
@@ -190,6 +201,9 @@ describe("executeTool.js", () => {
 
     jest.unstable_mockModule("../storage/listGroupFiles.js", () => ({
       listGroupFiles: mockListGroupFiles,
+    }));
+    jest.unstable_mockModule("../storage/groupFileExists.js", () => ({
+      groupFileExists: mockGroupFileExists,
     }));
 
     jest.unstable_mockModule("../storage/readGroupFile.js", () => ({
@@ -233,6 +247,7 @@ describe("executeTool.js", () => {
 
     const module = await import("./executeTool.js");
     executeTool = module.executeTool;
+    resolveMcpReauth = module.resolveMcpReauth;
   });
 
   it("should handle bash tool", async () => {
@@ -572,6 +587,22 @@ describe("executeTool.js", () => {
 
     expect(result).toBe("Error: open_file requires a valid path string.");
 
+    expect(mockPost).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: "open-file" }),
+    );
+  });
+
+  it("should fail open_file if the file does not exist", async () => {
+    mockGroupFileExists.mockResolvedValue(false);
+
+    const result = await executeTool(
+      {} as any,
+      "open_file",
+      { path: "missing.html" },
+      "group1",
+    );
+
+    expect(result).toBe("Error: file not found: missing.html");
     expect(mockPost).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: "open-file" }),
     );
@@ -1789,6 +1820,116 @@ describe("executeTool.js", () => {
         "group1",
       ),
     ).resolves.toContain("requires tool_name");
+  });
+
+  it("should post mcp-reauth-required when remote_mcp_list_tools throws McpReauthRequiredError", async () => {
+    const { McpReauthRequiredError } = await import("../remote-mcp-client.js");
+    (mockListRemoteMcpTools as any).mockRejectedValue(
+      new McpReauthRequiredError("conn-oauth"),
+    );
+
+    // Simulate main thread responding with failed reconnect
+    setTimeout(() => resolveMcpReauth("conn-oauth", false), 10);
+
+    const result = await executeTool(
+      {} as any,
+      "remote_mcp_list_tools",
+      { connection_id: "conn-oauth" },
+      "group1",
+    );
+
+    expect(result).toContain("OAuth reconnect required");
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "mcp-reauth-required",
+      payload: { connectionId: "conn-oauth", groupId: "group1" },
+    });
+  });
+
+  it("should post mcp-reauth-required when remote_mcp_call_tool throws McpReauthRequiredError", async () => {
+    const { McpReauthRequiredError } = await import("../remote-mcp-client.js");
+    (mockCallRemoteMcpTool as any).mockRejectedValue(
+      new McpReauthRequiredError("conn-oauth-2"),
+    );
+
+    // Simulate main thread responding with failed reconnect
+    setTimeout(() => resolveMcpReauth("conn-oauth-2", false), 10);
+
+    const result = await executeTool(
+      {} as any,
+      "remote_mcp_call_tool",
+      { connection_id: "conn-oauth-2", tool_name: "echo", arguments: {} },
+      "group1",
+    );
+
+    expect(result).toContain("OAuth reconnect required");
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "mcp-reauth-required",
+      payload: { connectionId: "conn-oauth-2", groupId: "group1" },
+    });
+  });
+
+  it("should retry remote_mcp_list_tools after successful reauth", async () => {
+    const { McpReauthRequiredError } = await import("../remote-mcp-client.js");
+    let callCount = 0;
+    (mockListRemoteMcpTools as any).mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.reject(new McpReauthRequiredError("conn-retry"));
+      }
+
+      return Promise.resolve([{ name: "tool1", description: "desc" }]);
+    });
+
+    // Simulate main thread responding with successful reconnect
+    setTimeout(() => resolveMcpReauth("conn-retry", true), 10);
+
+    const result = await executeTool(
+      {} as any,
+      "remote_mcp_list_tools",
+      { connection_id: "conn-retry" },
+      "group1",
+    );
+
+    expect(result).toContain("tool1");
+    expect(callCount).toBe(2);
+  });
+
+  it("should deduplicate concurrent reauth requests for the same connectionId", async () => {
+    const { McpReauthRequiredError } = await import("../remote-mcp-client.js");
+    (mockListRemoteMcpTools as any).mockRejectedValue(
+      new McpReauthRequiredError("conn-dedup"),
+    );
+    (mockCallRemoteMcpTool as any).mockRejectedValue(
+      new McpReauthRequiredError("conn-dedup"),
+    );
+
+    // Simulate main thread responding with failed reconnect after a delay
+    setTimeout(() => resolveMcpReauth("conn-dedup", false), 20);
+
+    // Fire two concurrent tool calls that both trigger reauth for the same connection
+    const [result1, result2] = await Promise.all([
+      executeTool(
+        {} as any,
+        "remote_mcp_list_tools",
+        { connection_id: "conn-dedup" },
+        "group1",
+      ),
+      executeTool(
+        {} as any,
+        "remote_mcp_call_tool",
+        { connection_id: "conn-dedup", tool_name: "echo", arguments: {} },
+        "group1",
+      ),
+    ]);
+
+    expect(result1).toContain("OAuth reconnect required");
+    expect(result2).toContain("OAuth reconnect required");
+
+    // Only ONE mcp-reauth-required message should have been posted
+    const reauthMessages = (mockPost as any).mock.calls.filter(
+      (call: any) => call[0]?.type === "mcp-reauth-required",
+    );
+    expect(reauthMessages).toHaveLength(1);
   });
 
   it("should return an error when git_push has no configured token", async () => {

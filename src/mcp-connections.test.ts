@@ -174,4 +174,38 @@ describe("mcp-connections", () => {
       [],
     );
   });
+
+  it("defaults autoReconnectOAuth to false on create", async () => {
+    const db: any = {};
+
+    const result = await upsertRemoteMcpConnection(db, {
+      label: "No Reconnect",
+      serverUrl: "https://mcp.example.com",
+      transport: "streamable_http",
+    });
+
+    expect(result.autoReconnectOAuth).toBe(false);
+  });
+
+  it("persists autoReconnectOAuth when set to true", async () => {
+    const db: any = {};
+
+    const result = await upsertRemoteMcpConnection(db, {
+      label: "Auto Reconnect",
+      serverUrl: "https://mcp.example.com",
+      transport: "streamable_http",
+      autoReconnectOAuth: true,
+    });
+
+    expect(result.autoReconnectOAuth).toBe(true);
+    expect(mockSetConfig).toHaveBeenCalledWith(
+      db,
+      "remote_mcp_connections",
+      expect.arrayContaining([
+        expect.objectContaining({
+          autoReconnectOAuth: true,
+        }),
+      ]),
+    );
+  });
 });

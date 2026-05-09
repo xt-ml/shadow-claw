@@ -491,7 +491,7 @@ export class ShadowClawLlm extends ShadowClawElement {
      * Helper to check if a model supports tool calling
      */
     const supportsTools = (m: any): boolean => {
-      const id = typeof m === "string" ? m : m.id;
+      const id = typeof m === "string" ? m : m.id || m.name;
       if (localOnlyProviderIds.has(currentProvider)) {
         return isLikelyInstructionModelId(id);
       }
@@ -519,7 +519,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     };
 
     const getToolsBadge = (m: any): string => {
-      const id = typeof m === "string" ? m : m.id;
+      const id = typeof m === "string" ? m : m.id || m.name;
       if (localOnlyProviderIds.has(currentProvider)) {
         return isLikelyInstructionModelId(id) ? " 🛠️" : " ❔🛠️";
       }
@@ -642,8 +642,8 @@ export class ShadowClawLlm extends ShadowClawElement {
 
       const modelComparator = (a, b) => {
         if (localOnlyProviderIds.has(currentProvider)) {
-          const idA = typeof a === "string" ? a : a.id;
-          const idB = typeof b === "string" ? b : b.id;
+          const idA = typeof a === "string" ? a : a.id || a.name;
+          const idB = typeof b === "string" ? b : b.id || b.name;
 
           return compareLocalModelCandidates(
             {
@@ -675,8 +675,8 @@ export class ShadowClawLlm extends ShadowClawElement {
         }
 
         // 3. ID
-        const idA = typeof a === "string" ? a : a.id;
-        const idB = typeof b === "string" ? b : b.id;
+        const idA = typeof a === "string" ? a : a.id || a.name;
+        const idB = typeof b === "string" ? b : b.id || b.name;
 
         return idA.localeCompare(idB);
       };
@@ -685,13 +685,15 @@ export class ShadowClawLlm extends ShadowClawElement {
       paidModels.sort(modelComparator);
 
       const toOption = (m) => {
-        const id = typeof m === "string" ? m : m.id;
+        const id = typeof m === "string" ? m : m.id || m.name;
         const displayName =
           typeof m === "string"
             ? id
-            : typeof m.name === "string" && m.name.trim()
-              ? m.name.trim()
-              : id;
+            : typeof m.displayName === "string" && m.displayName.trim()
+              ? m.displayName.trim()
+              : typeof m.name === "string" && m.name.trim()
+                ? m.name.trim()
+                : id;
         const toolsBadge = getToolsBadge(m);
         const ctx = getContextLength(m);
         let ctxStr = "";
@@ -741,7 +743,7 @@ export class ShadowClawLlm extends ShadowClawElement {
 
       // Check if current model exists in the list
       const allModelIds = modelItems.map((m) =>
-        typeof m === "string" ? m : m.id,
+        typeof m === "string" ? m : m.id || m.name,
       );
 
       if (allModelIds.includes(currentModel)) {
@@ -786,121 +788,133 @@ export class ShadowClawLlm extends ShadowClawElement {
         if (bedrockSettings?.profile) {
           headers["x-bedrock-profile"] = bedrockSettings.profile;
         }
+
+        if (bedrockSettings?.authMode) {
+          headers["x-bedrock-auth-mode"] = bedrockSettings.authMode;
+        }
       }
 
-      if (this.orchestrator.apiKey && currentProviderData.apiKeyHeader) {
-        const format = currentProviderData.apiKeyHeaderFormat || "{key}";
-        const authValue = format.replace("{key}", this.orchestrator.apiKey);
-        headers[currentProviderData.apiKeyHeader] = authValue;
-      }
+      this.orchestrator.getApiKeyForHeaders().then((apiKey) => {
+        if (apiKey && currentProviderData.apiKeyHeader) {
+          const format = currentProviderData.apiKeyHeaderFormat || "{key}";
+          const authValue = format.replace("{key}", apiKey);
+          headers[currentProviderData.apiKeyHeader] = authValue;
+        }
 
-      fetch(currentProviderData.modelsUrl, { headers })
-        .then((r) => {
-          if (!r.ok) {
-            throw new Error(`HTTP ${r.status}`);
-          }
+        if (!currentProviderData.modelsUrl) {
+          return;
+        }
 
-          return r.json();
-        })
-        .then((data) => {
-          if (fetchToken !== this.modelFetchToken) {
-            return;
-          }
+        fetch(currentProviderData.modelsUrl, { headers })
+          .then((r) => {
+            if (!r.ok) {
+              throw new Error(`HTTP ${r.status}`);
+            }
 
-          if (this.orchestrator?.getProvider?.() !== currentProvider) {
-            return;
-          }
+            return r.json();
+          })
+          .then((data) => {
+            if (fetchToken !== this.modelFetchToken) {
+              return;
+            }
 
-          // Robustly handle different API response structures
-          let items: any[] = [];
-          if (Array.isArray(data)) {
-            items = data;
-          } else if (data && typeof data === "object") {
-            // Standard wrappers
-            items = data.models || data.data || [];
+            if (this.orchestrator?.getProvider?.() !== currentProvider) {
+              return;
+            }
 
-            // If still empty, scan for any non-empty array in the response (some proxies/routers flatten differently)
-            if (items.length === 0) {
-              for (const key in data) {
-                if (Array.isArray(data[key]) && data[key].length > 0) {
-                  items = data[key];
+            // Robustly handle different API response structures
+            let items: any[] = [];
+            if (Array.isArray(data)) {
+              items = data;
+            } else if (data && typeof data === "object") {
+              // Standard wrappers
+              items = data.models || data.data || [];
 
-                  break;
+              // If still empty, scan for any non-empty array in the response (some proxies/routers flatten differently)
+              if (items.length === 0) {
+                for (const key in data) {
+                  if (Array.isArray(data[key]) && data[key].length > 0) {
+                    items = data[key];
+
+                    break;
+                  }
                 }
+              }
+
+              // If still empty but the object itself looks like a model
+              if (items.length === 0 && data.id) {
+                items = [data];
               }
             }
 
-            // If still empty but the object itself looks like a model
-            if (items.length === 0 && data.id) {
-              items = [data];
+            // Merge static models if any
+            if (Array.isArray(currentProviderData.models)) {
+              const dynamicIds = new Set(
+                items.map((i) => (typeof i === "string" ? i : i.id || i.name)),
+              );
+              const statics = currentProviderData.models.filter((m: any) => {
+                const mId = typeof m === "string" ? m : m.id || m.name;
+
+                return !dynamicIds.has(mId);
+              });
+              items = [...statics, ...items];
             }
-          }
 
-          // Merge static models if any
-          if (Array.isArray(currentProviderData.models)) {
-            const dynamicIds = new Set(
-              items.map((i) => (typeof i === "string" ? i : i.id)),
-            );
-            const statics = currentProviderData.models.filter((m: any) => {
-              const mId = typeof m === "string" ? m : m.id;
+            if (currentProvider === "llamafile") {
+              this.llamafileModelLoadError = null;
+              this.llamafileDiscoveredModelIds = items
+                .map((item) =>
+                  typeof item === "string"
+                    ? item
+                    : String(item?.id || item?.name || ""),
+                )
+                .filter(Boolean);
+            }
 
-              return !dynamicIds.has(mId);
-            });
-            items = [...statics, ...items];
-          }
-
-          if (currentProvider === "llamafile") {
-            this.llamafileModelLoadError = null;
-            this.llamafileDiscoveredModelIds = items
-              .map((item) =>
-                typeof item === "string" ? item : String(item?.id || ""),
-              )
-              .filter(Boolean);
-          }
-
-          modelSelect.disabled = false;
-          renderOptions(items);
-        })
-        .catch((err) => {
-          if (fetchToken !== this.modelFetchToken) {
-            return;
-          }
-
-          if (this.orchestrator?.getProvider?.() !== currentProvider) {
-            return;
-          }
-
-          console.error(
-            "[ShadowClaw] Failed to load models from",
-            currentProviderData.modelsUrl,
-            err,
-          );
-          const message = err instanceof Error ? err.message : String(err);
-
-          if (currentProvider === "llamafile") {
-            this.llamafileDiscoveredModelIds = [];
-            this.llamafileModelLoadError = message;
             modelSelect.disabled = false;
-            renderOptions([]);
+            renderOptions(items);
+          })
+          .catch((err) => {
+            if (fetchToken !== this.modelFetchToken) {
+              return;
+            }
 
-            return;
-          }
+            if (this.orchestrator?.getProvider?.() !== currentProvider) {
+              return;
+            }
 
-          modelSelect.innerHTML = "<option>Failed to load models</option>";
-
-          if (currentProviderData?.models) {
-            console.warn(
-              "Falling back to statically configured models due to fetch failure.",
+            console.error(
+              "[ShadowClaw] Failed to load models from",
+              currentProviderData.modelsUrl,
+              err,
             );
-            modelSelect.disabled = false;
-            renderOptions(currentProviderData.models);
-          } else {
-            showError(
-              "Could not reach the model server \u2014 or proxy configuration is wrong",
-              5000,
-            );
-          }
-        });
+            const message = err instanceof Error ? err.message : String(err);
+
+            if (currentProvider === "llamafile") {
+              this.llamafileDiscoveredModelIds = [];
+              this.llamafileModelLoadError = message;
+              modelSelect.disabled = false;
+              renderOptions([]);
+
+              return;
+            }
+
+            modelSelect.innerHTML = "<option>Failed to load models</option>";
+
+            if (currentProviderData?.models) {
+              console.warn(
+                "Falling back to statically configured models due to fetch failure.",
+              );
+              modelSelect.disabled = false;
+              renderOptions(currentProviderData.models);
+            } else {
+              showError(
+                "Could not reach the model server \u2014 or proxy configuration is wrong",
+                5000,
+              );
+            }
+          });
+      });
     } else if (currentProviderData?.models && modelSelect) {
       modelSelect.disabled = false;
       renderOptions(currentProviderData.models);
@@ -978,8 +992,12 @@ export class ShadowClawLlm extends ShadowClawElement {
   }
 
   async requestAppDialog(options: AppDialogOptions): Promise<boolean> {
-    return await (globalThis.shadowclaw?.requestDialog?.(options) ??
-      Promise.resolve(false));
+    const el = document.querySelector("shadow-claw") as any;
+    if (el && typeof el.requestDialog === "function") {
+      return await el.requestDialog(options);
+    }
+
+    return false;
   }
 
   async showLlamafileHelpDialog(reason?: string): Promise<void> {
@@ -1042,6 +1060,9 @@ export class ShadowClawLlm extends ShadowClawElement {
     const profileInput = root.querySelector(
       '[data-setting="bedrock-profile-input"]',
     ) as HTMLInputElement | null;
+    const authModeSelect = root.querySelector(
+      '[data-setting="bedrock-auth-mode"]',
+    ) as HTMLSelectElement | null;
 
     if (regionInput) {
       regionInput.value = settings?.region || "";
@@ -1049,6 +1070,10 @@ export class ShadowClawLlm extends ShadowClawElement {
 
     if (profileInput) {
       profileInput.value = settings?.profile || "";
+    }
+
+    if (authModeSelect) {
+      authModeSelect.value = settings?.authMode || "provider_chain";
     }
   }
 
@@ -1641,6 +1666,9 @@ export class ShadowClawLlm extends ShadowClawElement {
     const profileInput = root.querySelector(
       '[data-setting="bedrock-profile-input"]',
     ) as HTMLInputElement | null;
+    const authModeSelect = root.querySelector(
+      '[data-setting="bedrock-auth-mode"]',
+    ) as HTMLSelectElement | null;
 
     if (!regionInput || !profileInput) {
       return;
@@ -1648,6 +1676,7 @@ export class ShadowClawLlm extends ShadowClawElement {
 
     const region = regionInput.value.trim();
     const profile = profileInput.value.trim();
+    const authMode = authModeSelect?.value || "provider_chain";
 
     if ((region && !profile) || (!region && profile)) {
       showWarning(
@@ -1665,7 +1694,11 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setBedrockSettings(this.db, { region, profile });
+      await this.orchestrator.setBedrockSettings(this.db, {
+        region,
+        profile,
+        authMode,
+      });
       showSuccess("Bedrock fallback settings saved", 3000);
       if (this.orchestrator.getProvider() === "bedrock_proxy") {
         this.updateModelSelector();

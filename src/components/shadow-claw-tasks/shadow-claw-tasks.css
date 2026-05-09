@@ -472,13 +472,6 @@ dialog::backdrop {
   padding: 1rem;
 }
 
-#isScriptCheckbox {
-  accent-color: var(--shadow-claw-accent-primary);
-  cursor: pointer;
-  height: 1rem;
-  width: 1rem;
-}
-
 .tasks__form-group {
   margin-bottom: 1rem;
 }
@@ -520,11 +513,6 @@ dialog::backdrop {
 .tasks__form-textarea {
   min-height: 6.25rem;
   resize: vertical;
-}
-
-.tasks__form-textarea--script {
-  font-family: var(--shadow-claw-font-mono, monospace);
-  white-space: pre;
 }
 
 .tasks__form-hint {
@@ -586,31 +574,11 @@ dialog::backdrop {
   display: none;
 }
 
-.tasks__form-group-row {
-  align-items: center;
-  display: flex;
-  gap: 0.5rem;
-}
-
-.tasks__form-label-inline {
-  cursor: pointer;
-  margin-bottom: 0;
-}
-
 .tasks__schedule-row {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: 0.375rem;
-}
-
-.tasks__script-badge {
-  background: var(--shadow-claw-accent-primary);
-  border-radius: 0.25rem;
-  color: var(--shadow-claw-on-primary);
-  font-size: 0.5625rem;
-  font-weight: bold;
-  padding: 0.0625rem 0.25rem;
 }
 
 @media (min-width: 40.625rem) {

@@ -45,7 +45,7 @@ function createMockDb(sourceTasks) {
     },
     index() {
       return {
-        openCursor(groupId) {
+        openCursor(_groupId) {
           setTimeout(() => request.onsuccess?.(), 0);
 
           return request;
@@ -73,7 +73,7 @@ describe("cloneGroupTasks", () => {
         groupId: "br:src",
         schedule: "0 9 * * *",
         prompt: "daily standup",
-        isScript: false,
+
         enabled: 1,
         lastRun: null,
         createdAt: 1000,
@@ -83,7 +83,7 @@ describe("cloneGroupTasks", () => {
         groupId: "br:src",
         schedule: "*/5 * * * *",
         prompt: "check status",
-        isScript: true,
+
         enabled: 0,
         lastRun: 500,
         createdAt: 2000,

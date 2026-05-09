@@ -201,7 +201,7 @@ export interface ProviderConfig {
   id: string;
   name: string;
   baseUrl: string;
-  format: string;
+  format: "openai" | "anthropic" | "prompt_api" | "transformers_js" | "google";
   apiKeyHeader: string;
   apiKeyHeaderFormat?: string;
   headers: Record<string, string>;
@@ -675,6 +675,30 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     requiresApiKey: false,
     supportsStreaming: true, // proxy uses InvokeModelWithResponseStreamCommand when stream: true
   },
+  gemini_proxy: {
+    id: "gemini_proxy",
+    name: "Gemini (Local Proxy)",
+    baseUrl: "http://localhost:8888/gemini-proxy/chat/completions",
+    format: "openai", // Proxy returns OpenAI-compatible responses
+    apiKeyHeader: "x-goog-api-key",
+    headers: {},
+    defaultModel: "gemini-2.0-flash",
+    modelsUrl: "http://localhost:8888/gemini-proxy/models",
+    requiresApiKey: true,
+    supportsStreaming: true,
+  },
+  vertex_ai: {
+    id: "vertex_ai",
+    name: "Vertex AI (Local Proxy)",
+    baseUrl: "http://localhost:8888/vertex-ai-proxy/chat/completions",
+    format: "openai",
+    apiKeyHeader: "x-vertex-project",
+    headers: {},
+    defaultModel: "gemini-2.5-flash",
+    modelsUrl: "http://localhost:8888/vertex-ai-proxy/models",
+    requiresApiKey: true,
+    supportsStreaming: true,
+  },
   ollama: {
     id: "ollama",
     name: "Ollama (Local Proxy)",
@@ -777,22 +801,6 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     requiresApiKey: false,
     supportsStreaming: false, // handled via dedicated Prompt API path, not SSE
   },
-  // anthropic: {
-  //   id: "anthropic",
-  //   name: "Anthropic (Claude)",
-  //   baseUrl: "https://api.anthropic.com/v1/messages",
-  //   format: "anthropic", // native Anthropic message format
-  //   apiKeyHeader: "x-api-key",
-  //   headers: {
-  //     "anthropic-version": "2023-06-01",
-  //     "anthropic-dangerous-direct-browser-access": "true",
-  //   },
-  //   defaultModel: "claude-sonnet-4-6",
-  //   supportsStreaming: true,
-  // },
-  // // Future providers can be added here:
-  // local: { ... }, // for local LLM servers (e.g., Ollama, LM Studio)
-  // google: { ... }, // for Google models
 };
 
 /**
@@ -925,6 +933,7 @@ export const CONFIG_KEYS = {
   LLAMAFILE_OFFLINE: "llamafile_offline",
   BEDROCK_REGION_FALLBACK: "bedrock_region_fallback",
   BEDROCK_PROFILE_FALLBACK: "bedrock_profile_fallback",
+  BEDROCK_AUTH_MODE: "bedrock_auth_mode",
   LAST_ACTIVE_PAGE: "last_active_page",
 };
 

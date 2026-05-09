@@ -93,8 +93,11 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
 
 const { orchestratorStore } = await import("../../../stores/orchestrator.js");
 const { ShadowClawLlm } = await import("./shadow-claw-llm.js");
-const { showSuccess, showWarning, showError } =
-  await import("../../../toast.js");
+const {
+  showSuccess,
+  showWarning: _showWarning,
+  showError,
+} = await import("../../../toast.js");
 
 function createOrchestratorStub(overrides = {}) {
   return {
@@ -120,7 +123,9 @@ function createOrchestratorStub(overrides = {}) {
     getRateLimitCallsPerMinute: jest.fn<any>().mockReturnValue(0),
     getRateLimitAutoAdapt: jest.fn<any>().mockReturnValue(true),
     getStreamingEnabled: jest.fn<any>().mockReturnValue(true),
-    getApiKey: jest.fn<any>().mockReturnValue(""),
+    getApiKeyForRequest: jest.fn<any>().mockResolvedValue(""),
+    getApiKeyForHeaders: jest.fn<any>().mockResolvedValue(""),
+
     getUseProxy: jest.fn<any>().mockReturnValue(false),
     getCompressionEnabled: jest.fn<any>().mockReturnValue(false),
     getContextCompressionEnabled: jest.fn<any>().mockReturnValue(false),
@@ -248,6 +253,7 @@ describe("shadow-claw-llm", () => {
     expect(orch.setBedrockSettings).toHaveBeenCalledWith(expect.anything(), {
       region: "us-east-1",
       profile: "default",
+      authMode: "provider_chain",
     });
     expect(showSuccess).toHaveBeenCalledWith(
       "Bedrock fallback settings saved",
@@ -323,7 +329,15 @@ describe("shadow-claw-llm", () => {
     global.fetch = fetchMock;
 
     const requestDialog = jest.fn<any>().mockResolvedValue(true);
-    (globalThis as any).shadowclaw = { requestDialog };
+    const querySpy = jest
+      .spyOn(document, "querySelector")
+      .mockImplementation((selector) => {
+        if (selector === "shadow-claw") {
+          return { requestDialog } as any;
+        }
+
+        return null;
+      });
 
     const el = new ShadowClawLlm();
     document.body.appendChild(el);
@@ -339,7 +353,8 @@ describe("shadow-claw-llm", () => {
     );
 
     global.fetch = originalFetch;
-    delete (globalThis as any).shadowclaw;
+    querySpy.mockRestore();
+
     document.body.removeChild(el);
   });
 

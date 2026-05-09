@@ -399,15 +399,15 @@
 }
 
 .conversations__delete-ok {
-  background-color: #dc2626;
-  border-color: #dc2626;
+  background-color: var(--shadow-claw-important-color);
+  border-color: var(--shadow-claw-important-color);
   color: white;
 }
 
 .conversations__delete-ok:hover,
 .conversations__delete-ok:focus-visible {
-  background-color: #991b1b;
-  border-color: #991b1b;
+  background-color: var(--shadow-claw-important-color);
+  border-color: var(--shadow-claw-important-color);
   outline: none;
 }
 

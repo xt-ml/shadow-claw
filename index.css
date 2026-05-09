@@ -5,22 +5,23 @@
 
   --shadow-claw-accent-hover: #1e293b;
   --shadow-claw-accent-primary: #334155;
-  --shadow-claw-on-primary: #ffffff;
-  --shadow-claw-surface-tint: #334155;
-  --shadow-claw-bg-primary: #f8fafc;
   --shadow-claw-bg-primary-reverse: #0f172a;
+  --shadow-claw-bg-primary: #f8fafc;
   --shadow-claw-bg-secondary: #f1f5f9;
   --shadow-claw-bg-tertiary: #e2e8f0;
   --shadow-claw-border-color: #e2e8f0;
   --shadow-claw-error-color: #ba1a1a;
-  --shadow-claw-link: #1e40af;
+  --shadow-claw-important-color: #ab1515;
   --shadow-claw-link-hover: #1e3a8a;
+  --shadow-claw-link: #1e40af;
   --shadow-claw-on-error: #ffffff;
+  --shadow-claw-on-primary: #ffffff;
   --shadow-claw-success-color: #059669;
-  --shadow-claw-warning-color: #d97706;
+  --shadow-claw-surface-tint: #334155;
   --shadow-claw-text-primary: #0f172a;
   --shadow-claw-text-secondary: #475569;
   --shadow-claw-text-tertiary: #64748b;
+  --shadow-claw-warning-color: #d97706;
 
   --shadow-claw-font-size-lg: 1.5rem;
   --shadow-claw-font-size-md: 1.125rem;

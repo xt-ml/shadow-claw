@@ -1,4 +1,3 @@
-import { ContentBlock } from "../types.js";
 import { sanitizeModelOutput } from "../chat-template-sanitizer.js";
 
 /**

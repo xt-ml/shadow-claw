@@ -341,12 +341,15 @@ export async function handleInvoke(
         ...providerHeaders,
       };
 
+      const url = typedProvider.baseUrl;
+
       let result: any;
 
       if (useStreaming) {
         result = await callWithStreaming(
           providerId,
           typedProvider,
+          url,
           headers,
           body,
           groupId,
@@ -355,9 +358,10 @@ export async function handleInvoke(
           abortSignal,
         );
       } else {
-        result = await callWithoutStreaming(
+        result = await callApi(
           providerId,
           typedProvider,
+          url,
           headers,
           body,
           groupId,
@@ -392,6 +396,14 @@ export async function handleInvoke(
       }
 
       if (result.stop_reason === "tool_use") {
+        const allowedToolNames = new Set(
+          (currentTools as any[])
+            .map((tool: any) =>
+              typeof tool?.name === "string" ? tool.name : "",
+            )
+            .filter(Boolean),
+        );
+
         // If the response includes text alongside tool calls, persist it
         const intermediateText = result.content
           .filter((b: any) => b.type === "text")
@@ -419,6 +431,32 @@ export async function handleInvoke(
         const toolResults: ContentBlock[] = [];
         for (const block of result.content) {
           if (block.type === "tool_use") {
+            const isAllowed = allowedToolNames.has(block.name);
+
+            // Prevent infinite loops by detecting repeated identical tool calls
+            const toolCallSignature = `${block.name}:${JSON.stringify(block.input)}`;
+            const timesCalled = toolCallHistory.filter(
+              (s) => s === toolCallSignature,
+            ).length;
+
+            toolCallHistory.push(toolCallSignature);
+
+            if (!isAllowed) {
+              const blockedMessage =
+                `SYSTEM ERROR: Tool '${block.name}' is disabled or unavailable for this request. ` +
+                "Do not call it again. Try a different approach or ask the user for help.";
+
+              log(groupId, "warning", "Tool blocked", blockedMessage);
+
+              toolResults.push({
+                type: "tool_result",
+                tool_use_id: block.id,
+                content: blockedMessage,
+              });
+
+              continue;
+            }
+
             const inputPreview = JSON.stringify(block.input);
             const inputShort =
               inputPreview.length > 300
@@ -428,14 +466,6 @@ export async function handleInvoke(
             log(groupId, "tool-call", `Tool: ${block.name}`, inputShort);
 
             post(createToolActivityMessage(groupId, block.name, "running"));
-
-            // Prevent infinite loops by detecting repeated identical tool calls
-            const toolCallSignature = `${block.name}:${JSON.stringify(block.input)}`;
-            const timesCalled = toolCallHistory.filter(
-              (s) => s === toolCallSignature,
-            ).length;
-
-            toolCallHistory.push(toolCallSignature);
 
             let output: any;
             if (timesCalled >= 3) {
@@ -548,9 +578,10 @@ export async function handleInvoke(
 /**
  * Make a non-streaming LLM API call with retry.
  */
-async function callWithoutStreaming(
+async function callApi(
   providerId: string,
   typedProvider: ProviderConfig,
+  url: string,
   headers: Record<string, string>,
   body: any,
   groupId: string,
@@ -566,7 +597,7 @@ async function callWithoutStreaming(
         abortSignal,
       );
 
-      const res = await fetch(typedProvider.baseUrl, {
+      const res = await fetch(url, {
         method: "POST",
         headers,
         body: JSON.stringify(body),
@@ -596,20 +627,21 @@ async function callWithoutStreaming(
       jitterFactor: 0.5,
       signal: abortSignal,
       shouldRetry: (error) => isRetryableHttpError(error),
-      onRetry: (attempt, maxRetries, delayMs, error) => {
-        const errMsg = error instanceof Error ? error.message : String(error);
+      onRetry: (_attempt, _maxRetries, _delayMs, _error) => {
+        const errMsg =
+          _error instanceof Error ? _error.message : String(_error);
 
         log(
           groupId,
           "warning",
-          `Retrying API call (${attempt}/${maxRetries})`,
+          `Retrying API call (${_attempt}/${_maxRetries})`,
           errMsg,
         );
 
         post({
           type: "show-toast",
           payload: {
-            message: `LLM API: Retrying (${attempt}/${maxRetries})… ${errMsg.slice(0, 120)}`,
+            message: `LLM API: Retrying (${_attempt}/${_maxRetries})… ${errMsg.slice(0, 120)}`,
             type: "warning",
             duration: 5000,
           },
@@ -625,6 +657,7 @@ async function callWithoutStreaming(
 async function callWithStreaming(
   providerId: string,
   typedProvider: ProviderConfig,
+  url: string,
   headers: Record<string, string>,
   body: any,
   groupId: string,
@@ -644,7 +677,7 @@ async function callWithStreaming(
 
   await waitForRateLimitSlot(providerId, groupId, rateLimitConfig, abortSignal);
 
-  const res = await fetch(typedProvider.baseUrl, {
+  const res = await fetch(url, {
     method: "POST",
     headers,
     body: JSON.stringify(streamBody),

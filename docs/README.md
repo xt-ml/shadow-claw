@@ -27,7 +27,7 @@ Detailed docs for each major subsystem.
 | [WebVM](subsystems/vm.md)                                               | v86 Alpine Linux, boot modes, exclusivity guard, terminal bridge, 9p sync                           |
 | [Git Integration](subsystems/git.md)                                    | isomorphic-git, LightningFS ↔ OPFS sync, merge conflicts, credentials                               |
 | [Channel System](subsystems/channels.md)                                | Channel registry, browser/Telegram/iMessage channels, router, multi-channel flow                    |
-| [Remote MCP](subsystems/remote-mcp.md)                                  | External MCP servers, tool discovery, authentication, JSON-RPC protocol                             |
+| [Remote MCP](subsystems/remote-mcp.md)                                  | External MCP servers, tool discovery, authentication, JSON-RPC protocol, OAuth reconnection         |
 | [Accounts & Credentials](subsystems/accounts.md)                        | Service account management, credential storage, auth bridges                                        |
 | [Tools & Profiles](subsystems/tools.md)                                 | Tool definitions, execution dispatch, profiles, adding new tools                                    |
 | [Notifications & Scheduling](subsystems/notifications.md)               | Web Push, VAPID, server-side SQLite scheduler, recursion guards                                     |
@@ -36,7 +36,6 @@ Detailed docs for each major subsystem.
 | [Reactive UI](subsystems/reactive-ui.md)                                | Signals, `ShadowClawElement`, `reconcileList`, Web Components, stores                               |
 | [Model Registry & Capabilities](subsystems/providers.md#model-registry) | Dynamic model metadata fetching and modality capability detection                                   |
 | [Attachment Capabilities](subsystems/attachment-capabilities.md)        | MIME-aware attachment handling and native vs fallback delivery                                      |
-| [Crypto](subsystems/crypto.md)                                          | AES-256-GCM encryption for API keys at rest                                                         |
 | [Chat Template Sanitizer](subsystems/sanitizer.md)                      | Strip control tokens and structural markers from local model output                                 |
 
 ### Guides

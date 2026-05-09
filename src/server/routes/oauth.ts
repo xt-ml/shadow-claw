@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 
-import { getOAuthProviderDefinition } from "../config.js";
+import { getOAuthProviderDefinition } from "../../config.js";
 
 import type { Express, Request, Response } from "express";
 

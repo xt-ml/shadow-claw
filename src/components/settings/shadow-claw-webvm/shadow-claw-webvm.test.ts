@@ -1,6 +1,4 @@
 import { jest } from "@jest/globals";
-import path from "node:path";
-import fs from "node:fs";
 
 jest.unstable_mockModule("../../../db/setConfig.js", () => ({
   setConfig: jest.fn<any>().mockResolvedValue(undefined),

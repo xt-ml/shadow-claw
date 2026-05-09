@@ -19,7 +19,6 @@ export interface ScheduledTaskRow {
   group_id: string;
   schedule: string;
   prompt: string;
-  is_script: number;
   enabled: number;
   last_run: number | null;
   created_at: number;
@@ -32,7 +31,6 @@ export interface ScheduledTaskInput {
   groupId: string;
   schedule: string;
   prompt: string;
-  isScript?: boolean;
   enabled?: boolean;
   lastRun?: number | null;
   createdAt: number;
@@ -58,7 +56,6 @@ export function openTaskScheduleStore(
       group_id TEXT NOT NULL,
       schedule TEXT NOT NULL,
       prompt TEXT NOT NULL,
-      is_script INTEGER NOT NULL DEFAULT 0,
       enabled INTEGER NOT NULL DEFAULT 1,
       last_run INTEGER,
       created_at INTEGER NOT NULL,
@@ -105,14 +102,13 @@ export function saveScheduledTask(task: ScheduledTaskInput): void {
 
   db.prepare(
     `INSERT OR REPLACE INTO scheduled_tasks
-       (id, group_id, schedule, prompt, is_script, enabled, last_run, created_at, channel, subscriber_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, group_id, schedule, prompt, enabled, last_run, created_at, channel, subscriber_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.groupId,
     task.schedule,
     task.prompt,
-    task.isScript ? 1 : 0,
     task.enabled !== false ? 1 : 0,
     task.lastRun ?? null,
     task.createdAt,
@@ -150,7 +146,6 @@ export function getScheduledTask(id: string): ScheduledTaskRow | undefined {
         group_id: `${result.group_id}`,
         schedule: `${result.schedule}`,
         prompt: `${result.prompt}`,
-        is_script: Number(result.is_script),
         enabled: Number(result.enabled),
         last_run: Number(result.last_run),
         created_at: Number(result.created_at),
@@ -184,12 +179,11 @@ export function getAllScheduledTasks(
           group_id: `${row.group_id}`,
           schedule: `${row.schedule}`,
           prompt: `${row.prompt}`,
-          is_script: Number(row.is_script),
           enabled: Number(row.enabled),
           last_run: Number(row.last_run),
           created_at: Number(row.created_at),
-          channel: `${row.channel}`,
-          subscriber_id: `${row.subscriber_id}`,
+          channel: row.channel ? `${row.channel}` : null,
+          subscriber_id: row.subscriber_id ? `${row.subscriber_id}` : null,
         }))
       : [];
   }
@@ -207,7 +201,6 @@ export function getAllScheduledTasks(
           group_id: `${row.group_id}`,
           schedule: `${row.schedule}`,
           prompt: `${row.prompt}`,
-          is_script: Number(row.is_script),
           enabled: Number(row.enabled),
           last_run: Number(row.last_run),
           created_at: Number(row.created_at),
@@ -230,7 +223,6 @@ export function getAllScheduledTasks(
           group_id: `${row.group_id}`,
           schedule: `${row.schedule}`,
           prompt: `${row.prompt}`,
-          is_script: Number(row.is_script),
           enabled: Number(row.enabled),
           last_run: Number(row.last_run),
           created_at: Number(row.created_at),
@@ -250,12 +242,11 @@ export function getAllScheduledTasks(
         group_id: `${row.group_id}`,
         schedule: `${row.schedule}`,
         prompt: `${row.prompt}`,
-        is_script: Number(row.is_script),
         enabled: Number(row.enabled),
         last_run: Number(row.last_run),
         created_at: Number(row.created_at),
-        channel: `${row.channel}`,
-        subscriber_id: `${row.subscriber_id}`,
+        channel: row.channel ? `${row.channel}` : null,
+        subscriber_id: row.subscriber_id ? `${row.subscriber_id}` : null,
       }))
     : [];
 }
@@ -278,12 +269,11 @@ export function getEnabledScheduledTasks(): ScheduledTaskRow[] {
         group_id: `${row.group_id}`,
         schedule: `${row.schedule}`,
         prompt: `${row.prompt}`,
-        is_script: Number(row.is_script),
         enabled: Number(row.enabled),
         last_run: Number(row.last_run),
         created_at: Number(row.created_at),
-        channel: `${row.channel}`,
-        subscriber_id: `${row.subscriber_id}`,
+        channel: row.channel ? `${row.channel}` : null,
+        subscriber_id: row.subscriber_id ? `${row.subscriber_id}` : null,
       }))
     : [];
 }

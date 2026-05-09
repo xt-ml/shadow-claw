@@ -1,4 +1,3 @@
-import { jest } from "@jest/globals";
 import { TextEncoder, TextDecoder } from "node:util";
 
 // jsdom doesn't expose TextDecoder globally — polyfill before importing the

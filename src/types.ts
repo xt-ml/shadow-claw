@@ -1,8 +1,11 @@
+/*
 import type { ShadowClaw } from "./components/shadow-claw/shadow-claw.js";
 import type { Orchestrator } from "./orchestrator.js";
+*/
 import type { ToastType } from "./stores/toast.js";
 import type { VMBootMode } from "./vm.js";
 
+/*
 import type {
   clearAllToasts,
   dismissToast,
@@ -12,26 +15,16 @@ import type {
   showToast,
   showWarning,
 } from "./toast.js";
+*/
+
+import type { E2eBridge } from "./e2e-bridge.js";
 
 // Extend the actual globalThis interface
 declare global {
   interface Window {
-    shadowclaw: ShadowClawGlobal;
+    __SHADOWCLAW_E2E__?: E2eBridge;
+    __SHADOWCLAW_E2E_ENABLE__?: boolean;
   }
-}
-
-export interface ShadowClawGlobal {
-  orchestrator: Orchestrator;
-  ui: ShadowClaw;
-  requestDialog: (options: AppDialogOptions) => Promise<boolean>;
-  requestConfirmation: (options: ConfirmationDialogOptions) => Promise<boolean>;
-  showToast: typeof showToast;
-  showSuccess: typeof showSuccess;
-  showError: typeof showError;
-  showWarning: typeof showWarning;
-  showInfo: typeof showInfo;
-  dismissToast: typeof dismissToast;
-  clearAllToasts: typeof clearAllToasts;
 }
 
 export interface ConfirmationDialogOptions {
@@ -115,8 +108,8 @@ export interface Task {
   groupId: string;
   schedule: string; // cron expression
   prompt: string;
-  isScript: boolean;
   enabled: boolean;
+
   lastRun: number | null;
   createdAt: number;
 }

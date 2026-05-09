@@ -1,12 +1,26 @@
-import {
-  clearAllToasts,
-  dismissToast,
-  showError,
-  showInfo,
-  showSuccess,
-  showToast,
-  showWarning,
-} from "./toast.js";
+// Lock critical globals early to prevent runtime monkey-patching and interception
+if (typeof window !== "undefined") {
+  // Skip locking in E2E tests to avoid interference with Playwright's network interception
+  if (!(window as any).__SHADOWCLAW_E2E_ENABLE__) {
+    try {
+      Object.defineProperty(window, "fetch", {
+        value: window.fetch,
+        writable: false,
+        configurable: false,
+      });
+
+      if (window.crypto && window.crypto.subtle) {
+        Object.defineProperty(window.crypto, "subtle", {
+          value: window.crypto.subtle,
+          writable: false,
+          configurable: false,
+        });
+      }
+    } catch (e) {
+      console.warn("[ShadowClaw] Security: Failed to lock globals:", e);
+    }
+  }
+}
 
 import { orchestratorStore } from "./stores/orchestrator.js";
 import { resumeAudioContext } from "./audio.js";
@@ -15,7 +29,8 @@ import "./components/shadow-claw/shadow-claw.js";
 
 import type { Orchestrator } from "./orchestrator.js";
 import type { ShadowClaw } from "./components/shadow-claw/shadow-claw.js";
-import type { ShadowClawGlobal } from "./types.js";
+
+import { installE2eBridge, shouldInstallE2eBridge } from "./e2e-bridge.js";
 
 let isInitializing = false;
 async function initializeApp(): Promise<Orchestrator | undefined> {
@@ -34,43 +49,11 @@ async function initializeApp(): Promise<Orchestrator | undefined> {
 
     console.log("✅ ShadowClaw initialized successfully");
 
-    // Store orchestrator and UI globally for debugging
-    const shadowclaw: ShadowClawGlobal = {
-      get orchestrator() {
-        return uiElement.orchestrator;
-      },
-      ui: uiElement,
-      requestDialog: async (options) => {
-        await customElements.whenDefined("shadow-claw");
-
-        return uiElement.requestDialog(options);
-      },
-      requestConfirmation: async (options) => {
-        await customElements.whenDefined("shadow-claw");
-
-        return uiElement.requestConfirmation(options);
-      },
-      showToast,
-      showSuccess,
-      showError,
-      showWarning,
-      showInfo,
-      dismissToast,
-      clearAllToasts,
-    };
-
-    globalThis.shadowclaw = shadowclaw;
-
-    // Expose orchestratorStore and db for e2e tests
-    globalThis.orchestratorStore = orchestratorStore;
-    Object.defineProperty(globalThis, "__SHADOWCLAW_DB__", {
-      get: () => uiElement.db,
-      configurable: true,
-    });
-    Object.defineProperty(globalThis, "SHADOWCLAW_DB", {
-      get: () => uiElement.db,
-      configurable: true,
-    });
+    // Conditionally install E2E bridge for tests
+    if (shouldInstallE2eBridge()) {
+      console.log("🧪 E2E Test Bridge enabled");
+      installE2eBridge(orchestratorStore, uiElement);
+    }
 
     return uiElement.orchestrator;
   } catch (error) {

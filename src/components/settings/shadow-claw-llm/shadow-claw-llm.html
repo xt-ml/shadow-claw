@@ -170,6 +170,22 @@
         not set on the local proxy.
       </div>
     </div>
+    <div class="form-group">
+      <label class="form-label" for="bedrock-auth-mode">Auth Mode</label>
+      <select
+        class="form-input"
+        data-setting="bedrock-auth-mode"
+        id="bedrock-auth-mode"
+      >
+        <option value="provider_chain">Provider Chain (default)</option>
+        <option value="sso">SSO</option>
+      </select>
+      <div class="form-helper">
+        "Provider Chain" uses the full AWS credential resolution chain
+        (environment, SSO, instance profile, etc.). "SSO" uses only AWS SSO
+        credentials for the specified profile.
+      </div>
+    </div>
     <button class="save-btn" data-action="save-bedrock-settings">
       💾 Save Bedrock Fallback
     </button>

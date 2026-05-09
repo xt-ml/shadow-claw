@@ -21,7 +21,6 @@ export class ShadowClawConversations extends ShadowClawElement {
   private _draggedGroupId: string | null = null;
   private _effectCleanup: (() => void) | null = null;
   private _keyboardGrabbedId: string | null = null;
-  private _resizing: boolean = false;
   private _touchDraggedGroupId: string | null = null;
   private _touchId: number | null = null;
   private _pendingRenameGroupId: string | null = null;
@@ -79,6 +78,13 @@ export class ShadowClawConversations extends ShadowClawElement {
     });
   }
 
+  disconnectedCallback() {
+    if (this._effectCleanup) {
+      this._effectCleanup();
+      this._effectCleanup = null;
+    }
+  }
+
   _initResizeHandle() {
     const handle = (this.shadowRoot as ShadowRoot).querySelector(
       ".resize-handle",
@@ -118,8 +124,6 @@ export class ShadowClawConversations extends ShadowClawElement {
       activePointerId = null;
       handle.classList.remove("active");
 
-      this._resizing = false;
-
       document.removeEventListener(
         "pointermove",
         onPointerMove as EventListener,
@@ -150,8 +154,6 @@ export class ShadowClawConversations extends ShadowClawElement {
 
       activePointerId = pointerEvent.pointerId;
       handle.classList.add("active");
-
-      this._resizing = true;
 
       handle.setPointerCapture(pointerEvent.pointerId);
       document.addEventListener("pointermove", onPointerMove as EventListener);

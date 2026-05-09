@@ -9,7 +9,7 @@
 
 Providers are handled via an **adapter pattern** in `src/providers.ts`:
 
-```
+```text
 Provider (config) → Adapter (format-specific) → Request/Response transformation
                       ↓
                   OpenAIAdapter or AnthropicAdapter
@@ -27,18 +27,22 @@ Provider (config) → Adapter (format-specific) → Request/Response transformat
 
 All providers are declared in `src/config.ts` under `PROVIDERS`:
 
-| Provider ID                  | Format       | Streaming | API Key Required       |
-| ---------------------------- | ------------ | --------- | ---------------------- |
-| `openrouter`                 | `openai`     | ✅        | ✅                     |
-| `huggingface`                | `openai`     | ✅        | ✅                     |
-| `transformers_js_local`      | `openai`     | ✅        | ❌                     |
-| `transformers_js_browser`    | `transformers_js`| ❌    | ❌                     |
-| `ollama`                     | `openai`     | ✅        | ❌                     |
-| `llamafile`                  | `openai`     | ✅        | ❌                     |
-| `github_models`              | `openai`     | ✅        | ✅                     |
-| `copilot_azure_openai_proxy` | `openai`     | ✅        | ✅                     |
-| `bedrock_proxy`              | `anthropic`  | ✅        | ❌ (AWS SSO via proxy) |
-| `prompt_api`                 | `prompt_api` | ❌        | ❌                     |
+| Provider ID                  | Format            | Streaming | API Key Required       |
+| ---------------------------- | ----------------- | --------- | ---------------------- |
+| `openrouter`                 | `openai`          | ✅        | ✅                     |
+| `huggingface`                | `openai`          | ✅        | ✅                     |
+| `transformers_js_local`      | `openai`          | ✅        | ❌                     |
+| `transformers_js_browser`    | `transformers_js` | ❌        | ❌                     |
+| `ollama`                     | `openai`          | ✅        | ❌                     |
+| `llamafile`                  | `openai`          | ✅        | ❌                     |
+| `github_models`              | `openai`          | ✅        | ✅                     |
+| `copilot_azure_openai_proxy` | `openai`          | ✅        | ✅                     |
+| `bedrock_proxy`              | `anthropic`       | ✅        | ❌ (AWS SSO via proxy) |
+| `gemini`                     | `openai`          | ✅        | ✅                     |
+| `vertex_ai`                  | `openai`          | ✅        | ✅                     |
+| `prompt_api`                 | `prompt_api`      | ❌        | ❌                     |
+
+> **Llamafile Note:** The local proxy context size for Llamafile defaults to 8192 tokens but can be configured via the `LLAMAFILE_CTX_SIZE` environment variable (e.g., `LLAMAFILE_CTX_SIZE=32768`).
 
 ### Provider shape
 
@@ -96,6 +100,18 @@ Used by AWS Bedrock and direct Anthropic calls.
 
 - Content blocks already in internal format
 - Stop reason and token usage extracted directly
+
+### Google Format (`GoogleAdapter`)
+
+Used by direct Gemini API and Vertex AI.
+
+- **Endpoint**: `${baseUrl}/models/${model}:streamGenerateContent` (streaming) or `generateContent` (non-streaming)
+- **Request transformation**:
+  - Maps ShadowClaw messages to Gemini's `contents` and `parts` array.
+  - Handles native PDF and image attachments.
+  - Maps tool results to `functionResponse` blocks.
+- **Response parsing**:
+  - Extracts text and `functionCall` blocks from the response candidates.
 
 ### Prompt API format (`src/prompt-api-provider.ts`)
 
@@ -205,6 +221,18 @@ The Bedrock provider is configured as `format: "anthropic"` since Bedrock models
 When `BEDROCK_REGION`/`BEDROCK_PROFILE` environment variables are not set,
 the runtime can provide fallback values via request headers (`x-bedrock-region`,
 `x-bedrock-profile`) from Settings.
+
+### Gemini and Vertex AI
+
+ShadowClaw utilizes secure server-side proxy routes for Google Gemini and Vertex AI models. These proxies handle:
+
+- **Security**: API keys and service account credentials (ADC) are managed server-side.
+- **Robustness**: The proxies use the official `@google/genai` and Vertex AI SDKs to provide a stable, streaming-compliant interface.
+- **Tooling**: Comprehensive support for function calling and native multimodal attachments.
+
+### Attachment Support
+
+Gemini models feature **Native PDF Support**. ShadowClaw automatically detects model capabilities and delivers PDFs as native binary blocks instead of falling back to text representations.
 
 ## Model Selection
 

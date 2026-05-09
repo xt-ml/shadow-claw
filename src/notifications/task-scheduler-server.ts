@@ -22,7 +22,6 @@ export interface ServerTaskSchedulerDeps {
     id: string;
     groupId: string;
     prompt: string;
-    isScript: boolean;
   }) => Promise<{ sent: number; failed: number; noSubscribers?: true }>;
 }
 
@@ -35,7 +34,6 @@ export class ServerTaskScheduler {
     id: string;
     groupId: string;
     prompt: string;
-    isScript: boolean;
   }) => Promise<{ sent: number; failed: number; noSubscribers?: true }>;
   private _interval: ReturnType<typeof setInterval> | null;
 
@@ -90,8 +88,8 @@ export class ServerTaskScheduler {
             id: task.id,
             groupId: task.group_id,
             prompt: task.prompt,
-            isScript: task.is_script === 1,
           })
+
             .then((result) => {
               if (result?.noSubscribers) {
                 console.warn(

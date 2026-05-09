@@ -22,7 +22,7 @@ const MOCK_TASK: any = {
   groupId: "br:main",
   schedule: "*/5 * * * *",
   prompt: "Check the weather",
-  isScript: false,
+
   enabled: true,
   lastRun: null,
   createdAt: Date.now(),
@@ -33,7 +33,7 @@ const MOCK_TASK_2: any = {
   groupId: "br:other",
   schedule: "0 9 * * 1",
   prompt: "Weekly report",
-  isScript: false,
+
   enabled: true,
   lastRun: null,
   createdAt: Date.now() + 1,
@@ -64,7 +64,6 @@ describe("task-schedule-store", () => {
       expect(tasks[0].schedule).toBe(MOCK_TASK.schedule);
       expect(tasks[0].prompt).toBe(MOCK_TASK.prompt);
       expect(tasks[0].enabled).toBe(1);
-      expect(tasks[0].is_script).toBe(0);
     });
 
     it("upserts (replaces) task with same ID", () => {
@@ -80,13 +79,6 @@ describe("task-schedule-store", () => {
       const task = getScheduledTask(MOCK_TASK.id);
 
       expect(task!.enabled).toBe(0);
-    });
-
-    it("stores isScript=1 for script tasks", () => {
-      saveScheduledTask({ ...MOCK_TASK, isScript: true });
-      const task = getScheduledTask(MOCK_TASK.id);
-
-      expect(task!.is_script).toBe(1);
     });
   });
 

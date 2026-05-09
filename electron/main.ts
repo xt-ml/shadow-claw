@@ -29,7 +29,7 @@ import {
 } from "../src/notifications/task-schedule-store.js";
 import { ServerTaskScheduler } from "../src/notifications/task-scheduler-server.js";
 
-import { registerOAuthRoutes } from "../src/server/oauth-routes.js";
+import { registerOAuthRoutes } from "../src/server/routes/oauth.js";
 import { registerProxyRoutes } from "../src/server/proxy.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -82,7 +82,6 @@ function startServer(databaseDir: string): Promise<number> {
           taskId: task.id,
           groupId: task.groupId,
           prompt: task.prompt,
-          isScript: task.isScript,
         }),
     });
     serverScheduler.start();

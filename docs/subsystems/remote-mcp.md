@@ -174,14 +174,17 @@ Header Value: my-secret-key
 X-API-Key: my-secret-key
 ```
 
-## OAuth & Token Refresh
+## OAuth & Re-authorization
 
-For OAuth-backed connections:
+Remote MCP connections support OAuth-based authentication with both silent and interactive re-authorization flows:
 
-- Credentials are automatically refreshed using stored refresh tokens
-- **Retry logic**: Failed requests with HTTP 401 trigger a single refresh attempt
-- **Cleanup**: HTTP 410 (Gone) or persistent 401 responses remove the subscription
-- **Logging**: Refresh failures are logged with diagnostics for troubleshooting
+- **Silent Refresh**: Credentials are automatically refreshed using stored refresh tokens when an HTTP 401 response is received.
+- **Interactive Re-authorization**: When silent refresh fails or is not supported, the orchestrator triggers an interactive re-auth flow:
+  - **Auto-reconnect**: If enabled in connection settings, the app automatically attempts to open the OAuth popup.
+  - **Manual Fallback**: If auto-reconnect is disabled or the popup is blocked by the browser, a toast notification surfaces a "Reconnect Now" action.
+  - **Popup Detection**: The system detects blocked popups and alerts the user to click the action button manually to ensure a valid user gesture.
+- **Cleanup**: Persistent 401/410 (Gone) responses that cannot be resolved via re-auth will eventually mark the connection as offline.
+- **Deduplication**: Multiple simultaneous 401s for the same connection are coalesced into a single re-auth request to avoid UI spam.
 
 ## Connection Lifecycle
 
@@ -245,7 +248,13 @@ The Settings panel shows:
 
 ## Adding a Remote MCP Server
 
-See [docs/guides/adding-a-provider.md](../guides/adding-a-provider.md) for step-by-step instructions on creating your own MCP server to connect with ShadowClaw.
+There is currently no dedicated "add remote MCP" guide.
+
+For setup and integration:
+
+- Use this document for transport/auth/tooling architecture and troubleshooting.
+- Configure connections from **Settings → Remote MCP** in the app.
+- If you are implementing credential flows, see [Accounts & Credentials](accounts.md).
 
 ## Troubleshooting
 

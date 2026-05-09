@@ -463,7 +463,7 @@ export class ShadowClaw extends ShadowClawElement {
   /**
    * Bind all event listeners to the component
    */
-  bindEventListeners(db: ShadowClawDatabase): void {
+  bindEventListeners(_db: ShadowClawDatabase): void {
     const root = this.shadowRoot;
     if (!root) {
       return;

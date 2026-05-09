@@ -154,7 +154,9 @@ async function loadModel(
     let targetDevice: any = device;
     if (isWebNN) {
       targetDevice = "webnn";
-    } else if (device === "cpu") {
+    } else if (isWebGPU) {
+      targetDevice = "webgpu";
+    } else {
       targetDevice = "wasm";
     }
 
@@ -277,7 +279,6 @@ async function generate(
     return_dict: true,
   });
 
-  let state = "answering";
   let START_THINKING_TOKEN_ID: number | undefined;
   let END_THINKING_TOKEN_ID: number | undefined;
 
@@ -294,18 +295,25 @@ async function generate(
     // Ignore, model might not support it
   }
 
+  // Track whether we are inside a <think>...</think> reasoning trace.
+  // Flipped by token_callback_function when the model emits the special
+  // thinking boundary tokens (if the model supports them).
+  let phase: "thinking" | "answering" = "answering";
+
   const token_callback_function = (tokens: any) => {
-    if (START_THINKING_TOKEN_ID && tokens && tokens.length) {
-      switch (Number(tokens[0])) {
-        case START_THINKING_TOKEN_ID:
-          state = "thinking";
+    if (START_THINKING_TOKEN_ID === undefined || !tokens?.length) {
+      return;
+    }
 
-          break;
-        case END_THINKING_TOKEN_ID:
-          state = "answering";
+    switch (Number(tokens[0])) {
+      case START_THINKING_TOKEN_ID:
+        phase = "thinking";
 
-          break;
-      }
+        break;
+      case END_THINKING_TOKEN_ID:
+        phase = "answering";
+
+        break;
     }
   };
 
@@ -314,15 +322,20 @@ async function generate(
     skip_prompt: true,
     skip_special_tokens: true,
     callback_function: (text: string) => {
-      const cleaned = text
-        .replace(/<think>/g, '<div class="think">')
-        .replace(/<\/think>/g, "</div>");
-      streamedText += cleaned;
-
-      self.postMessage({
-        type: "chunk",
-        payload: { groupId, text: cleaned },
-      });
+      if (phase === "thinking") {
+        // Route reasoning trace to a separate channel so the provider
+        // can surface it in the activity log instead of the chat stream.
+        self.postMessage({
+          type: "thinking-chunk",
+          payload: { groupId, text },
+        });
+      } else {
+        streamedText += text;
+        self.postMessage({
+          type: "chunk",
+          payload: { groupId, text },
+        });
+      }
     },
     token_callback_function,
   });

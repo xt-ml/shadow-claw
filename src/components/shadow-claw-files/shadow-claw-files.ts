@@ -651,7 +651,7 @@ export class ShadowClawFiles extends ShadowClawElement {
     }
   }
 
-  handleDragEnter(event: DragEvent, content: HTMLElement) {
+  handleDragEnter(event: DragEvent, _content: HTMLElement) {
     if (!this.hasDragFiles(event)) {
       return;
     }
@@ -660,7 +660,7 @@ export class ShadowClawFiles extends ShadowClawElement {
     filesUiStore.setDragActive(true);
   }
 
-  handleDragOver(event: DragEvent, content: HTMLElement) {
+  handleDragOver(event: DragEvent, _content: HTMLElement) {
     if (!this.hasDragFiles(event)) {
       return;
     }
@@ -673,13 +673,13 @@ export class ShadowClawFiles extends ShadowClawElement {
     filesUiStore.setDragActive(true);
   }
 
-  handleDragLeave(event: DragEvent, content: HTMLElement) {
+  handleDragLeave(event: DragEvent, _content: HTMLElement) {
     if (!filesUiStore.isDragActive) {
       return;
     }
 
     const related = event.relatedTarget;
-    if (related instanceof Node && content.contains(related)) {
+    if (related instanceof Node && _content.contains(related)) {
       return;
     }
 
@@ -689,7 +689,7 @@ export class ShadowClawFiles extends ShadowClawElement {
   async handleDrop(
     event: DragEvent,
     db: ShadowClawDatabase,
-    content: HTMLElement,
+    _content: HTMLElement,
   ) {
     if (!this.hasDragFiles(event)) {
       return;

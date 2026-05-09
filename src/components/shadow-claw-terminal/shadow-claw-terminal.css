@@ -42,7 +42,7 @@
   box-shadow:
     inset 0 0.0625rem 0 rgba(255, 255, 255, 0.05),
     0 1.25rem 2.5rem rgba(0, 0, 0, 0.3);
-  color: #ffffff;
+  color: var(--shadow-claw-on-primary);
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
@@ -70,7 +70,7 @@
   background: rgba(222, 51, 65, 0.16);
   border: 0.0625rem solid rgba(222, 51, 65, 0.3);
   border-radius: var(--shadow-claw-radius-pill);
-  color: #e95d68;
+  color: var(--shadow-claw-important-color);
   font-family: var(--shadow-claw-font-mono);
   font-size: 0.75rem;
   letter-spacing: 0.08em;
@@ -79,7 +79,7 @@
 }
 
 .terminal__title {
-  color: #ffffff;
+  color: var(--shadow-claw-on-primary);
   font-size: 0.9375rem;
   font-weight: 600;
 }
@@ -90,15 +90,15 @@
 }
 
 .terminal__status[data-state="ready"] {
-  color: #a3e4be;
+  color: var(--shadow-claw-success-color);
 }
 
 .terminal__status[data-state="booting"] {
-  color: #ffd35a;
+  color: var(--shadow-claw-on-primary);
 }
 
 .terminal__status[data-state="error"] {
-  color: #e95d68;
+  color: var(--shadow-claw-error-color);
 }
 
 .terminal__actions {
@@ -110,7 +110,7 @@
   background: transparent;
   border: 0.0625rem solid rgba(255, 255, 255, 0.15);
   border-radius: var(--shadow-claw-radius-m, 1rem);
-  color: #ffffff;
+  color: var(--shadow-claw-on-primary);
   cursor: pointer;
   font-size: 0.75rem;
   padding: 0.45rem 0.7rem;
@@ -169,7 +169,7 @@
 }
 
 .terminal__prompt {
-  color: #e95d68;
+  color: var(--shadow-claw-important-color);
   font-family: var(--shadow-claw-font-mono);
   font-size: 0.8125rem;
 }
@@ -177,14 +177,14 @@
 .terminal__input {
   background: transparent;
   border: none;
-  color: #ffffff;
+  color: var(--shadow-claw-on-primary);
   font-family: var(--shadow-claw-font-mono);
   font-size: 0.8125rem;
   min-width: 0;
 }
 
 .terminal__input:disabled {
-  color: #949494;
+  color: var(--shadow-claw-text-tertiary);
 }
 
 .terminal__input:focus {
@@ -192,7 +192,7 @@
 }
 
 .terminal__input::placeholder {
-  color: #535353;
+  color: var(--shadow-claw-text-secondary);
 }
 
 .terminal__run {

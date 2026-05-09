@@ -16,7 +16,7 @@ import { CompactPayload } from "../types.js";
  * Handle context compaction
  */
 export async function handleCompact(
-  db: any,
+  _db: any,
   payload: CompactPayload,
   abortSignal?: AbortSignal,
 ): Promise<void> {

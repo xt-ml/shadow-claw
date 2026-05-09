@@ -16,7 +16,7 @@ export async function executeShell(
   command: string,
   groupId: string,
   env: Record<string, string> = {},
-  timeoutSec: number = 30,
+  _timeoutSec: number = 30,
 ): Promise<ShellResult> {
   try {
     const fs = await createFileSystem(db, groupId);

@@ -11,7 +11,6 @@
 import { DEFAULT_DEV_HOST, DEFAULT_DEV_PORT } from "../config.js";
 
 import LightningFS from "@isomorphic-git/lightning-fs";
-import * as zip from "@zip.js/zip.js";
 import git from "isomorphic-git";
 import http from "isomorphic-git/http/web";
 import { Buffer } from "buffer";
@@ -20,8 +19,6 @@ if (!globalThis.Buffer) {
   globalThis.Buffer = Buffer;
 }
 
-/* eslint-disable no-undef */
-/* eslint-disable no-undef */
 let _git: any = null;
 let _http: any = null;
 let _fs: any = null;

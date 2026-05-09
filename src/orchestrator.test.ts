@@ -41,6 +41,32 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Do not use open_file to attach or send files");
     expect(prompt).toContain("explicitly asks to open/view");
   });
+
+  it("states no tools and omits tool strategy when tools are disabled", () => {
+    const prompt = buildSystemPrompt("TestAgent", "", []);
+
+    expect(prompt).toContain("No tools are currently enabled");
+    expect(prompt).not.toContain("Tool usage strategy:");
+    expect(prompt).not.toContain("Shell fallback tips");
+    expect(prompt).not.toContain("Git merge conflict resolution:");
+  });
+
+  it("includes only strategy guidance for enabled tools", () => {
+    const prompt = buildSystemPrompt("TestAgent", "", [
+      {
+        name: "read_file",
+        description: "Read files.",
+        input_schema: { type: "object", properties: {} },
+      },
+    ]);
+
+    expect(prompt).toContain("Tool usage strategy:");
+    expect(prompt).toContain("Prefer read_file over bash");
+    expect(prompt).toContain("Use read_file with paths");
+    expect(prompt).not.toContain("fetch_url");
+    expect(prompt).not.toContain("Shell fallback tips");
+    expect(prompt).not.toContain("Git merge conflict resolution:");
+  });
 });
 
 describe("Orchestrator", () => {
@@ -94,7 +120,6 @@ describe("Orchestrator", () => {
       channel: "browser",
     });
 
-    o.apiKey = "";
     await o.processQueue({} as any);
 
     expect(helpEvents).toHaveLength(1);

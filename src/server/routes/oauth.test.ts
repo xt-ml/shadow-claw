@@ -4,7 +4,7 @@ import {
   buildAuthorizeUrl,
   createPkceChallenge,
   registerOAuthRoutes,
-} from "./oauth-routes.js";
+} from "./oauth.js";
 
 type Handler = (req: any, res: any) => any;
 

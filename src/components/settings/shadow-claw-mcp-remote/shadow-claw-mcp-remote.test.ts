@@ -30,6 +30,12 @@ jest.unstable_mockModule("../../../mcp-connections.js", () => ({
 
 jest.unstable_mockModule("../../../remote-mcp-client.js", () => ({
   testRemoteMcpConnection: mockTestConnection,
+  clearRemoteMcpSession: jest.fn(),
+}));
+
+const mockReconnectMcpOAuth = jest.fn<any>();
+jest.unstable_mockModule("../../../mcp-reconnect.js", () => ({
+  reconnectMcpOAuth: mockReconnectMcpOAuth,
 }));
 
 const { ShadowClawMcpRemote } = await import("./shadow-claw-mcp-remote.js");
@@ -155,6 +161,80 @@ describe("shadow-claw-mcp-remote", () => {
     await Promise.resolve();
 
     expect(mockTestConnection).toHaveBeenCalledWith({}, "conn-1");
+
+    document.body.removeChild(el);
+  });
+
+  it("renders reconnect button for OAuth connections", async () => {
+    mockListConnections.mockResolvedValue([
+      {
+        id: "conn-oauth",
+        label: "OAuth MCP",
+        serviceType: "mcp_remote",
+        serverUrl: "https://mcp.example.com/rpc",
+        transport: "streamable_http",
+        enabled: true,
+        createdAt: 1,
+        updatedAt: 1,
+        credentialRef: {
+          serviceType: "mcp_remote",
+          authType: "oauth",
+          accountId: "acct-1",
+        },
+      },
+      {
+        id: "conn-pat",
+        label: "PAT MCP",
+        serviceType: "mcp_remote",
+        serverUrl: "https://mcp.example.com/rpc2",
+        transport: "streamable_http",
+        enabled: true,
+        createdAt: 2,
+        updatedAt: 2,
+        credentialRef: {
+          serviceType: "mcp_remote",
+          authType: "pat",
+          accountId: "acct-2",
+        },
+      },
+    ]);
+
+    const el = new ShadowClawMcpRemote();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    await el.render();
+
+    const reconnectBtns = el.shadowRoot?.querySelectorAll(".reconnect-btn");
+    expect(reconnectBtns?.length).toBe(1);
+    expect(reconnectBtns?.[0]?.getAttribute("data-reconnect-connection")).toBe(
+      "conn-oauth",
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("does not render reconnect button for non-OAuth connections", async () => {
+    mockListConnections.mockResolvedValue([
+      {
+        id: "conn-none",
+        label: "No Auth MCP",
+        serviceType: "mcp_remote",
+        serverUrl: "https://mcp.example.com/rpc",
+        transport: "streamable_http",
+        enabled: true,
+        createdAt: 1,
+        updatedAt: 1,
+        credentialRef: null,
+      },
+    ]);
+
+    const el = new ShadowClawMcpRemote();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    await el.render();
+
+    const reconnectBtns = el.shadowRoot?.querySelectorAll(".reconnect-btn");
+    expect(reconnectBtns?.length).toBe(0);
 
     document.body.removeChild(el);
   });

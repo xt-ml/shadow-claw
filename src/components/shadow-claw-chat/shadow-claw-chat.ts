@@ -46,7 +46,15 @@ const INLINE_ATTACHMENT_MAX_BYTES = 128 * 1024;
 const INLINE_ATTACHMENT_TOTAL_CHAR_BUDGET = 80_000;
 const DEFAULT_CHAT_INPUT_HEIGHT_PX = 40;
 const MIN_CHAT_INPUT_HEIGHT_PX = 40;
-const MAX_CHAT_INPUT_HEIGHT_PX = 280;
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
 
 type QueuedAttachment = {
   id: string;
@@ -336,14 +344,15 @@ export class ShadowClawChat extends ShadowClawElement {
       }
     }
 
-    const renderedContent = await renderMarkdown(streamingText, {
-      breaks: true,
-    });
+    const renderedContent = escapeHtml(streamingText)
+      .replace(/\n/g, "<br>")
+      .replace(/`([^`]+?)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+?)\*\*/g, "<b>$1</b>");
     if (version !== this.#streamRenderVersion) {
       return;
     }
 
-    // Intentional HTML insertion: markdown renderer output.
+    // Intentional HTML insertion: escaped text for streaming performance and safety.
     contentEl.innerHTML = renderedContent;
 
     const cursorEl = document.createElement("span");
@@ -1031,9 +1040,9 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 
   async showAttachmentDialog(options: AppDialogOptions): Promise<boolean> {
-    const requestDialog = globalThis.window?.shadowclaw?.requestDialog;
-    if (typeof requestDialog === "function") {
-      return await requestDialog(options);
+    const shadowClaw = document.querySelector("shadow-claw") as any;
+    if (shadowClaw && typeof shadowClaw.requestDialog === "function") {
+      return await shadowClaw.requestDialog(options);
     }
 
     if ((options.mode || "confirm") === "info") {

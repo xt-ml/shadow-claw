@@ -55,25 +55,27 @@ test.describe("Chat Flow with Streaming", () => {
       });
     }
 
-    // Wait for the app to initialize and expose globals
+    // Wait for the app to initialize and expose the e2e bridge
     await page.waitForFunction(
-      () =>
-        (globalThis as any).orchestratorStore?.orchestrator &&
-        (globalThis as any).__SHADOWCLAW_DB__,
+      () => (globalThis as any).__SHADOWCLAW_E2E__?.isReady(),
       { timeout: 15000 },
     );
 
-    // Use the exposed globals to configure provider + API key with encryption
+    // Use the bridge to configure provider + API key
     await page.evaluate(
       async ({ streaming }) => {
-        const store = (globalThis as any).orchestratorStore;
-        const db = (globalThis as any).__SHADOWCLAW_DB__;
+        const bridge = (globalThis as any).__SHADOWCLAW_E2E__;
 
-        // Set provider and model via orchestrator directly
-        await store.orchestrator.setProvider(db, "openrouter");
-        await store.orchestrator.setApiKey(db, "fake-test-key-12345");
-        await store.orchestrator.setModel(db, "test/mock-model");
-        await store.orchestrator.setStreamingEnabled(db, streaming);
+        if (!bridge) {
+          throw new Error("E2E Bridge is not ready");
+        }
+
+        await bridge.configureProvider(
+          "openrouter",
+          "fake-test-key-12345",
+          "test/mock-model",
+          streaming,
+        );
       },
       { streaming },
     );

@@ -187,11 +187,11 @@ select.form-input {
 }
 
 .diagnostic-header.diagnostic-ok {
-  color: #16a34a;
+  color: var(--shadow-claw-success-color);
 }
 
 .diagnostic-header.diagnostic-error {
-  color: #dc2626;
+  color: var(--shadow-claw-error-color);
 }
 
 .diagnostic-close {
@@ -228,11 +228,11 @@ select.form-input {
 }
 
 .diagnostic-ok .diagnostic-icon {
-  color: #16a34a;
+  color: var(--shadow-claw-success-color);
 }
 
 .diagnostic-error .diagnostic-icon {
-  color: #dc2626;
+  color: var(--shadow-claw-error-color);
 }
 
 .diagnostic-label {
@@ -262,4 +262,36 @@ select.form-input {
   color: var(--shadow-claw-text-secondary);
   margin: 0.25rem 0 0;
   padding-left: 1.25rem;
+}
+
+/* Reconnect OAuth button */
+.reconnect-btn {
+  background: none;
+  border: 0.0625rem solid var(--shadow-claw-accent-primary);
+  border-radius: 62.5rem;
+  color: var(--shadow-claw-accent-primary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-top: 0.5rem;
+  padding: 0.375rem 0.75rem;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+}
+
+.reconnect-btn:hover {
+  background-color: var(--shadow-claw-accent-primary);
+  color: var(--shadow-claw-on-primary, #fff);
+}
+
+.reconnect-btn:focus-visible {
+  box-shadow: 0 0 0 0.125rem rgba(0, 0, 0, 0.1);
+  outline: 0.125rem solid var(--shadow-claw-accent-primary);
+  outline-offset: 0.125rem;
+}
+
+.reconnect-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }

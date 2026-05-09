@@ -1,4 +1,4 @@
-import { jest, beforeEach, afterEach } from "@jest/globals";
+import { jest, beforeEach } from "@jest/globals";
 
 // Mock web-push
 jest.unstable_mockModule("web-push", () => ({

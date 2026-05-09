@@ -22,6 +22,8 @@ For local inference, ShadowClaw offers multiple options:
 - **Transformers.js (Browser)**: Runs models entirely in the browser using a background Web Worker. Model artifacts are cached in the browser's Cache API. Optimized for small, instruction-tuned ONNX models. Supports CPU and WebGPU backends with automatic dtype selection.
 - **Transformers.js (Local Proxy)**: Runs larger local models server-side via Node.js proxy. Model artifacts are cached server-side.
 - **Llamafile (Local Proxy)**: Runs `.llamafile` binaries server-side.
+- **Gemini**: Supports robust streaming and tool execution via secure server-side proxy routes.
+- **Vertex AI**: Enterprise-grade Google Gemini models via Google Cloud Vertex AI proxy.
 
 Local proxy cache paths:
 
@@ -150,7 +152,7 @@ automatically support them.
 | `src/types.ts`                       | TypeScript interfaces and types (full type contract)                                                  |
 | `src/config.ts`                      | All constants, provider definitions, and config keys                                                  |
 | `rollup.config.mjs`                  | Bundles browser app, workers, service worker, server, and Electron entries                            |
-| `src/server/server.ts`               | Express dev/prod server source. Compiles to `dist/server.js`.                                         |
+| `src/server/`                        | Express server package — modular routes, middleware, and proxy services.                              |
 | `src/shell/shell.ts`                 | Runs `just-bash` AST-based shell evaluation engine bridging OPFS storage                              |
 | `electron/main.ts`                   | Electron main process: Express server, window, power-save blocker                                     |
 | `src/service-worker/`                | Service worker source (.ts). Bundled via Rollup and Workbox.                                          |
@@ -180,10 +182,19 @@ graph LR
   subgraph FileSystem ["File System"]
     OPFS["OPFS<br>browser-sandboxed<br>shadowclaw/<groupId>/workspace/"]
     LocalFolder["Local Folder<br>File System Access API<br>user-chosen directory"]
+    SQLite["SQLite (server-side)<br>scheduled-tasks.db"]
   end
   OPFS -->|zip export/import| Downloads["⬇️ Downloads"]
   config -->|AES-256-GCM encrypted| ApiKey["🔑 API Key"]
+  tasks -->|mirrored| SQLite
 ```
+
+ShadowClaw prioritizes security for your API keys and environment:
+
+- **Encrypted-at-Rest**: API keys are stored encrypted in IndexedDB using AES-256-GCM.
+- **Private Fields**: The `Orchestrator` uses TC39 private fields (`#encryptedApiKey`) to prevent leakage via debuggers or console inspection.
+- **Transient Usage**: Plaintext keys are only held in memory for 30 seconds during active requests before being cleared.
+- **Environment Locking**: Critical browser APIs (`window.fetch`, `window.crypto.subtle`) are locked in production to prevent malicious interception.
 
 Write paths are centralized through `src/storage/writeFileHandle.ts`:
 
@@ -254,10 +265,10 @@ Serve these files (under `/assets/v86.ext2/`) to enable ext2 boot:
 |                                                                  | delivery (including inline image rendering support)                                    |
 | `open_file`                                                      | Opens a workspace file directly in the UI file viewer dialog                           |
 | `fetch_url`                                                      | HTTP requests via browser `fetch()` — CORS applies; `use_git_auth: true` auto-injects  |
-|                                                                  | saved Git credentials (auth format auto-detected per host); login-page responses from  |
-|                                                                  | Git hosts are detected and flagged; response headers are captured and returned.        |
+|                                                                  | saved Git credentials; `use_account_auth: true` auto-injects service account PATs      |
+|                                                                  | (auth format and host mapping auto-detected); response headers are returned.           |
 | `update_memory`                                                  | Write to `MEMORY.md` — loaded as system context every invocation                       |
-| `create_task` / `list_tasks` / `update_task` / `delete_task`     | Scheduled task management (can be JS scripts)                                          |
+| `create_task` / `list_tasks` / `update_task` / `delete_task`     | Scheduled task management (standard agent prompts)                                     |
 | `enable_task` / `disable_task`                                   | Toggle task execution                                                                  |
 | `clear_chat`                                                     | Clears the chat history and starts a new session                                       |
 | `git_*` (`git_clone`, `git_merge`, `git_push`, `git_diff`, etc.) | Isomorphic-git version control: clone (auto-wipes stale state), branch, merge (with    |
@@ -332,9 +343,10 @@ ShadowClaw supports connecting to external Model Context Protocol (MCP) servers 
 
 - Configure connections in **Settings → Remote MCP**.
 - Supports Bearer, Basic, and custom Header authentication via the credential store.
+- **OAuth-backed connections**: Automatically handles silent token refreshes and provides UI flows for full re-authorization when credentials expire or are revoked.
 - The agent can discover and invoke remote tools using the `remote_mcp_list_tools` and `remote_mcp_call_tool` built-in tools.
 - Connections can be referenced by either connection ID or human-readable label.
-- OAuth-backed connections force-refresh credentials and retry once on HTTP 401 responses.
+- **Automatic Reconnection**: The orchestrator tracks connection health and transparently retries tool calls after silent OAuth refreshes or session invalidation.
 - Connections are persisted securely in IndexedDB.
 
 **For detailed architecture and integration patterns, see [docs/subsystems/remote-mcp.md](docs/subsystems/remote-mcp.md)** — covers transport protocols, authentication, tool discovery, and troubleshooting.

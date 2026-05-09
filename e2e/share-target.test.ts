@@ -10,9 +10,10 @@ test.describe("Web Share Target import", () => {
 
     await page.evaluate(
       async ({ fileName, bytes }) => {
-        const db = (globalThis as any).__SHADOWCLAW_DB__ as IDBDatabase | null;
+        const bridge = (globalThis as any).__SHADOWCLAW_E2E__;
+        const db = bridge?.getDb() as IDBDatabase | null;
         if (!db) {
-          throw new Error("ShadowClaw database is not ready");
+          throw new Error("ShadowClaw database is not ready via E2E bridge");
         }
 
         const id =

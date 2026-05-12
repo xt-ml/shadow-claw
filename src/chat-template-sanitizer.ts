@@ -106,6 +106,16 @@ const ALL_PATTERNS: RegExp[] = [
   HARMONY_TOKENS,
 ];
 
+function hasControlTokenPattern(text: string): boolean {
+  for (const pattern of ALL_PATTERNS) {
+    if (pattern.test(text)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
 export function stripChatTemplateControlTokens(text: string): string {
   let cleaned = String(text || "");
 
@@ -137,7 +147,7 @@ export function stripChatTemplateControlTokens(text: string): string {
  */
 export function sanitizeModelOutput(text: string, source: string): string {
   const cleaned = stripChatTemplateControlTokens(text);
-  if (cleaned !== text) {
+  if (cleaned !== text && hasControlTokenPattern(text)) {
     console.info(
       `[ShadowClaw] Chat-template control token(s) detected and stripped from "${source}" output. ` +
         `The provider or model may not be applying its chat template correctly. ` +

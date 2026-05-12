@@ -21,6 +21,7 @@ describe("truncateToolOutput", () => {
       { length: 100 },
       (_, i) => `Line ${i + 1}: some content here`,
     );
+
     const content = lines.join("\n");
     const result = truncateToolOutput(content, 200);
     expect(result).toContain("[...truncated");

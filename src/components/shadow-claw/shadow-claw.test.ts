@@ -632,6 +632,7 @@ describe("shadow-claw", () => {
     const channelsPage = component.shadowRoot?.querySelector(
       '[data-page-id="channels"]',
     );
+
     const settingsPage = component.shadowRoot?.querySelector(
       '[data-page-id="settings"]',
     );

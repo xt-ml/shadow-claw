@@ -278,6 +278,7 @@ describe("prompt-api-provider", () => {
       type: "tool_use",
       tool_calls: [{ name: "show_toast", input: { message: "it works!" } }],
     });
+
     const doneJson = JSON.stringify({
       type: "response",
       response: "Toasted!",

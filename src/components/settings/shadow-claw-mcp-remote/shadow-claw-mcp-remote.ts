@@ -236,6 +236,7 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
     const connection = this.connections.find(
       (item) => item.id === connectionId,
     );
+
     const label = connection?.label || connectionId;
 
     const result = await reconnectMcpOAuth(this.db, connectionId);
@@ -463,10 +464,12 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
     const serviceRegion = slot.querySelector(
       '[data-region="service-account-region"]',
     );
+
     const gitRegion = slot.querySelector('[data-region="git-account-region"]');
     const customHeaderRegion = slot.querySelector(
       '[data-region="custom-header-region"]',
     );
+
     const autoReconnectRegion = slot.querySelector(
       '[data-region="auto-reconnect-region"]',
     );
@@ -707,6 +710,7 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
     const card = root.querySelector(
       `.connection-card[data-connection-id="${connectionId}"]`,
     );
+
     const existingDiag = card?.querySelector(".connection-diagnostic");
     if (existingDiag) {
       existingDiag.remove();

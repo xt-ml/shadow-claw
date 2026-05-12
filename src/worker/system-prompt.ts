@@ -116,6 +116,22 @@ export function buildSystemPrompt(
       );
     }
 
+    if (has("manage_email") && has("email_read_messages")) {
+      strategyLines.push(
+        "- Use manage_email for email setup and inspection only (status, list_connections, connect, configure, enable, disable, delete, test).",
+        "- Use email_read_messages to retrieve email from a configured IMAP connection, and email_send_message to send email.",
+        "- Use manage_email action=download_attachments (with message_uid) to save inbound email attachments to the workspace.",
+        "- For outbound file attachments, use manage_email action=send_message with attachments as workspace paths.",
+        "- If the user asks for recent emails, first identify or configure the IMAP connection with manage_email, then call email_read_messages with the connection_id.",
+      );
+    }
+
+    if (has("manage_email") && !has("email_read_messages")) {
+      strategyLines.push(
+        "- If email_read_messages is not available, use manage_email with action=read_messages to retrieve recent IMAP email, action=send_message (supports attachments), action=download_attachments for inbound files, and action=mark_as_read/mark_as_unread/delete_messages (with message_uids) to manage inbox state.",
+      );
+    }
+
     if (has("read_file") || has("write_file") || has("patch_file")) {
       strategyLines.push(
         "- Minimize API calls: gather context with a few read_file calls, think carefully, then act.",

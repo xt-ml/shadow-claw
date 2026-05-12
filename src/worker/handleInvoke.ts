@@ -64,9 +64,11 @@ function parseToolCodeBlock(
   const printMatch = body.match(
     /^print\s*\(\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*(.*?)\s*\)\s*\)$/s,
   );
+
   const directMatch = body.match(
     /^([a-zA-Z_][a-zA-Z0-9_]*)\s*\(\s*(.*?)\s*\)$/s,
   );
+
   const match = printMatch || directMatch;
   if (!match?.[1]) {
     return { toolBlocks: [], residualText: text };

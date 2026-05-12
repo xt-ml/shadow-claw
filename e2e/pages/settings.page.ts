@@ -21,6 +21,16 @@ export class SettingsPage {
     );
   }
 
+  async expandAiSettings() {
+    const details = this.host.locator(
+      'details:has(summary:has-text("AI Model & Provider"))',
+    );
+    const openAttr = await details.getAttribute("open");
+    if (openAttr === null) {
+      await details.locator("summary").click();
+    }
+  }
+
   llm() {
     return this.host.locator("shadow-claw-llm");
   }

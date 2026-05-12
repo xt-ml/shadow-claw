@@ -408,6 +408,14 @@ describe("config.js", () => {
       expect(figma?.clientAuthMethod).toBe("basic_header");
       expect(figma?.scopeSeparator).toBe("space");
     });
+
+    it("should include Yahoo Mail OAuth endpoints", () => {
+      const yahoo = getOAuthProviderDefinition("yahoo_mail");
+      expect(yahoo).toBeDefined();
+      expect(yahoo?.authorizeUrl).toContain("api.login.yahoo.com");
+      expect(yahoo?.tokenUrl).toContain("api.login.yahoo.com");
+      expect(yahoo?.defaultScopes).toEqual(["mail-r", "mail-w"]);
+    });
   });
 
   describe("CONFIG_KEYS", () => {
@@ -441,6 +449,9 @@ describe("config.js", () => {
       expect(CONFIG_KEYS.VM_NETWORK_RELAY_URL).toBe("vm_network_relay_url");
       expect(CONFIG_KEYS.VM_BASH_TIMEOUT_SEC).toBe("vm_bash_timeout_sec");
       expect(CONFIG_KEYS.REMOTE_MCP_CONNECTIONS).toBe("remote_mcp_connections");
+      expect(CONFIG_KEYS.INTEGRATION_CONNECTIONS).toBe(
+        "integration_connections",
+      );
       expect(CONFIG_KEYS.WEBMCP_TOOLS_ENABLED).toBe("webmcp_tools_enabled");
       expect((CONFIG_KEYS as any).TASK_SYNC_OUTBOX).toBe("task_sync_outbox");
       expect(CONFIG_KEYS.LLAMAFILE_MODE).toBe("llamafile_mode");

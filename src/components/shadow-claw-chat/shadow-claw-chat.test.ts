@@ -449,6 +449,7 @@ describe("message copy button", () => {
       basePath,
       "src/components/shadow-claw-chat/shadow-claw-chat.html",
     );
+
     const cssPath = path.join(
       basePath,
       "src/components/shadow-claw-chat/shadow-claw-chat.css",

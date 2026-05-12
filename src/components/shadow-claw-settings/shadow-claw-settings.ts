@@ -1,5 +1,6 @@
 import "../settings/shadow-claw-accounts/shadow-claw-accounts.js";
 import "../settings/shadow-claw-git/shadow-claw-git.js";
+import "../settings/shadow-claw-integrations/shadow-claw-integrations.js";
 import "../settings/shadow-claw-llm/shadow-claw-llm.js";
 import "../settings/shadow-claw-mcp-remote/shadow-claw-mcp-remote.js";
 import "../settings/shadow-claw-networking/shadow-claw-networking.js";
@@ -156,6 +157,7 @@ export class ShadowClawSettings extends ShadowClawElement {
     const tabButtons = Array.from(
       root.querySelectorAll<HTMLButtonElement>("[data-tab-target]"),
     );
+
     const currentIndex = tabButtons.indexOf(currentButton);
     if (currentIndex < 0) {
       return;

@@ -126,6 +126,7 @@ describe("http-proxy-routes", () => {
     const handler = routes.get(
       "/^\\/telegram\\/((?:bot.*)|(?:file\\/bot.*))$/",
     );
+
     const req = {
       method: "POST",
       params: ["bot123:abc/sendMessage"],

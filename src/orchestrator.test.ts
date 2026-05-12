@@ -27,6 +27,16 @@ describe("buildSystemPrompt", () => {
     expect(prompt).toContain("Settings → Accounts");
   });
 
+  it("routes email retrieval through email_read_messages", () => {
+    const prompt = buildSystemPrompt("TestAgent", "");
+
+    expect(prompt).toContain("email_read_messages");
+    expect(prompt).toContain(
+      "Use manage_email for email setup and inspection only",
+    );
+    expect(prompt).toContain("first identify or configure the IMAP connection");
+  });
+
   it("prefers markdown file references for attachments", () => {
     const prompt = buildSystemPrompt("TestAgent", "");
 

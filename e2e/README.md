@@ -332,6 +332,7 @@ Settings panel controller.
 
 - `open()` — Navigate to settings page
 - `llm()` — LLM settings sub-component locator
+- `integrations()` — Integrations settings sub-component locator
 - `maxIterationsInput()` — Max iterations number input
 - `saveMaxIterationsButton()` — Save max iterations button
 - `streamingToggle()` — Streaming toggle checkbox

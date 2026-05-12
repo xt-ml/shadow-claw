@@ -72,6 +72,7 @@ describe("github-models-routes", () => {
     const handler = routes.get(
       "POST /github-models-proxy/inference/chat/completions",
     );
+
     const req = {
       method: "POST",
       body: { model: "gpt-4o", messages: [], stream: false },
@@ -98,6 +99,7 @@ describe("github-models-routes", () => {
     const handler = routes.get(
       "POST /copilot-proxy/azure-openai/chat/completions",
     );
+
     const req = {
       method: "POST",
       body: { model: "gpt-4o", messages: [], stream: true },

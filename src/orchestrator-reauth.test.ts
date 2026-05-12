@@ -1,11 +1,13 @@
 import { jest } from "@jest/globals";
 
 const mockGetRemoteMcpConnection = jest.fn() as any;
+const mockListRemoteMcpConnections = jest.fn() as any;
 const mockReconnectMcpOAuth = jest.fn() as any;
 const mockShowToast = jest.fn() as any;
 
 jest.unstable_mockModule("./mcp-connections.js", () => ({
   getRemoteMcpConnection: mockGetRemoteMcpConnection,
+  listRemoteMcpConnections: mockListRemoteMcpConnections,
 }));
 jest.unstable_mockModule("./mcp-reconnect.js", () => ({
   reconnectMcpOAuth: mockReconnectMcpOAuth,

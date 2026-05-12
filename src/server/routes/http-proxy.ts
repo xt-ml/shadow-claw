@@ -60,6 +60,7 @@ export function registerHttpProxyRoutes(
       req.body.headers &&
       typeof req.body.headers === "object"
     );
+
     const incomingHeaders =
       (headersFromBody ? req.body.headers : req.headers) || {};
 

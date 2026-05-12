@@ -17,10 +17,12 @@ describe("executeTool.js", () => {
   let mockGetAllTasks;
   let mockPost;
   let mockReadGroupFile;
+  let mockReadGroupFileBytes;
   let mockSandboxedEval;
   let mockStripHtml;
   let mockUlid;
   let mockWriteGroupFile;
+  let mockWriteGroupFileBytes;
   let mockGetConfig;
   let mockGitAdd;
   let mockGitBranch;
@@ -40,6 +42,7 @@ describe("executeTool.js", () => {
   let mockGetProxyUrl;
   let mockGetRemoteUrl;
   let mockDecryptValue;
+  let mockEncryptValue;
   let mockResolveGitCredentials;
   let mockResolveServiceCredentials;
   let mockSyncLfsToOpfs;
@@ -67,10 +70,12 @@ describe("executeTool.js", () => {
     mockGetAllTasks = (jest.fn() as any).mockResolvedValue([]);
     mockPost = jest.fn();
     mockReadGroupFile = jest.fn();
+    mockReadGroupFileBytes = jest.fn();
     mockSandboxedEval = jest.fn();
     mockStripHtml = jest.fn((html) => html.replace(/<[^>]*>/g, ""));
     mockUlid = jest.fn(() => "mock-ulid");
     mockWriteGroupFile = jest.fn();
+    mockWriteGroupFileBytes = jest.fn();
     mockGetConfig = jest.fn();
     mockGitAdd = jest.fn();
     mockGitBranch = jest.fn();
@@ -90,6 +95,7 @@ describe("executeTool.js", () => {
     mockGetProxyUrl = jest.fn(() => "https://proxy.local");
     mockGetRemoteUrl = (jest.fn() as any).mockResolvedValue(undefined);
     mockDecryptValue = jest.fn();
+    mockEncryptValue = jest.fn(async (value) => `enc:${value}`);
     mockResolveGitCredentials = (jest.fn() as any).mockResolvedValue({
       token: undefined,
       username: undefined,
@@ -132,6 +138,7 @@ describe("executeTool.js", () => {
 
     jest.unstable_mockModule("../crypto.js", () => ({
       decryptValue: mockDecryptValue,
+      encryptValue: mockEncryptValue,
     }));
 
     jest.unstable_mockModule("../git/git.js", () => ({
@@ -210,8 +217,16 @@ describe("executeTool.js", () => {
       readGroupFile: mockReadGroupFile,
     }));
 
+    jest.unstable_mockModule("../storage/readGroupFileBytes.js", () => ({
+      readGroupFileBytes: mockReadGroupFileBytes,
+    }));
+
     jest.unstable_mockModule("../storage/writeGroupFile.js", () => ({
       writeGroupFile: mockWriteGroupFile,
+    }));
+
+    jest.unstable_mockModule("../storage/writeGroupFileBytes.js", () => ({
+      writeGroupFileBytes: mockWriteGroupFileBytes,
     }));
 
     jest.unstable_mockModule("../ulid.js", () => ({
@@ -2476,6 +2491,227 @@ describe("executeTool.js", () => {
         groupId: "group1",
       },
     });
+  });
+
+  it("should handle manage_email read_messages action", async () => {
+    (mockGetConfig as any).mockResolvedValue([]);
+
+    const connection = {
+      id: "conn-1",
+      label: "Mail",
+      pluginId: "imap",
+      enabled: true,
+      config: {
+        host: "imap.example.com",
+        port: 993,
+        secure: true,
+        mailboxPath: "INBOX",
+      },
+      credentialRef: {
+        serviceType: "http_api",
+        authType: "basic_userpass",
+        username: "user@example.com",
+        encryptedSecret: "enc:secret",
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    (mockGetConfig as any).mockResolvedValueOnce([connection]);
+    (mockDecryptValue as any).mockResolvedValueOnce("secret");
+
+    const mockResponse: any = {
+      ok: true,
+      json: (jest.fn() as any).mockResolvedValue({ messages: [{ id: 1 }] }),
+      status: 200,
+      statusText: "OK",
+    };
+
+    const fetchMock = jest.fn().mockResolvedValue(mockResponse);
+    (global as any).fetch = fetchMock;
+
+    const result = await executeTool(
+      {},
+      "manage_email",
+      { action: "read_messages", connection_id: "conn-1", limit: 10 },
+      "group1",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/integrations/email/read",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(result).toContain('"messages"');
+  });
+
+  it("should infer the single enabled IMAP connection for manage_email read_messages", async () => {
+    const connection = {
+      id: "conn-2",
+      label: "Mail",
+      pluginId: "imap",
+      enabled: true,
+      config: {
+        host: "imap.example.com",
+        port: 993,
+        secure: true,
+        mailboxPath: "INBOX",
+      },
+      credentialRef: {
+        serviceType: "http_api",
+        authType: "basic_userpass",
+        username: "user@example.com",
+        encryptedSecret: "enc:secret",
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    (mockGetConfig as any).mockResolvedValueOnce([connection]);
+    (mockDecryptValue as any).mockResolvedValueOnce("secret");
+
+    const mockResponse: any = {
+      ok: true,
+      json: (jest.fn() as any).mockResolvedValue({ messages: [{ id: 1 }] }),
+      status: 200,
+      statusText: "OK",
+    };
+
+    const fetchMock = jest.fn().mockResolvedValue(mockResponse);
+    (global as any).fetch = fetchMock;
+
+    const result = await executeTool(
+      {},
+      "manage_email",
+      { action: "read_messages", limit: 10 },
+      "group1",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/integrations/email/read",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(result).toContain('"messages"');
+  });
+
+  it("should handle manage_email mark_as_read action", async () => {
+    const connection = {
+      id: "conn-3",
+      label: "Mail",
+      pluginId: "imap",
+      enabled: true,
+      config: {
+        host: "imap.example.com",
+        port: 993,
+        secure: true,
+        mailboxPath: "INBOX",
+      },
+      credentialRef: {
+        serviceType: "http_api",
+        authType: "basic_userpass",
+        username: "user@example.com",
+        encryptedSecret: "enc:secret",
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    (mockGetConfig as any).mockResolvedValueOnce([connection]);
+    (mockDecryptValue as any).mockResolvedValueOnce("secret");
+
+    const mockResponse: any = {
+      ok: true,
+      json: (jest.fn() as any).mockResolvedValue({
+        action: "mark_as_read",
+        count: 2,
+      }),
+      status: 200,
+      statusText: "OK",
+    };
+
+    const fetchMock = jest.fn().mockResolvedValue(mockResponse);
+    (global as any).fetch = fetchMock;
+
+    const result = await executeTool(
+      {},
+      "manage_email",
+      {
+        action: "mark_as_read",
+        connection_id: "conn-3",
+        message_uids: [123, 124],
+      },
+      "group1",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/integrations/email/modify",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(result).toContain('"mark_as_read"');
+  });
+
+  it("should send attachments via manage_email send_message", async () => {
+    const connection = {
+      id: "conn-attach",
+      label: "Mail",
+      pluginId: "imap",
+      enabled: true,
+      config: {
+        host: "imap.example.com",
+        smtpHost: "smtp.example.com",
+        smtpPort: 587,
+        smtpSecure: false,
+      },
+      credentialRef: {
+        serviceType: "http_api",
+        authType: "basic_userpass",
+        username: "user@example.com",
+        encryptedSecret: "enc:secret",
+      },
+      createdAt: 1,
+      updatedAt: 1,
+    };
+
+    (mockGetConfig as any).mockResolvedValueOnce([connection]);
+    (mockDecryptValue as any).mockResolvedValueOnce("secret");
+    (mockReadGroupFileBytes as any).mockResolvedValueOnce(
+      new Uint8Array([1, 2, 3, 4]),
+    );
+
+    const mockResponse: any = {
+      ok: true,
+      json: (jest.fn() as any).mockResolvedValue({ messageId: "mid-1" }),
+      status: 200,
+      statusText: "OK",
+    };
+    const fetchMock = jest.fn().mockResolvedValue(mockResponse);
+    (global as any).fetch = fetchMock;
+
+    const result = await executeTool(
+      {},
+      "manage_email",
+      {
+        action: "send_message",
+        connection_id: "conn-attach",
+        to: ["a@example.com"],
+        subject: "Hello",
+        body: "Body",
+        attachments: ["repos/demo/file.png"],
+      },
+      "group1",
+    );
+
+    expect(mockReadGroupFileBytes).toHaveBeenCalledWith(
+      {},
+      "group1",
+      "repos/demo/file.png",
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/integrations/email/send",
+      expect.objectContaining({
+        method: "POST",
+      }),
+    );
+    expect(result).toContain("messageId");
   });
 
   it("should handle list_tool_profiles tool (pre-parsed array)", async () => {

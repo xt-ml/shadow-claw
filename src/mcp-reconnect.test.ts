@@ -3,6 +3,7 @@ import { jest } from "@jest/globals";
 const mockGetConfig = jest.fn<any>();
 const mockSetConfig = jest.fn<any>();
 const mockGetRemoteMcpConnection = jest.fn<any>();
+const mockListRemoteMcpConnections = jest.fn<any>();
 const mockClearRemoteMcpSession = jest.fn();
 const mockEncryptValue = jest.fn<any>();
 const mockDecryptValue = jest.fn<any>();
@@ -17,6 +18,7 @@ jest.unstable_mockModule("./db/setConfig.js", () => ({
 
 jest.unstable_mockModule("./mcp-connections.js", () => ({
   getRemoteMcpConnection: mockGetRemoteMcpConnection,
+  listRemoteMcpConnections: mockListRemoteMcpConnections,
 }));
 
 jest.unstable_mockModule("./remote-mcp-client.js", () => ({

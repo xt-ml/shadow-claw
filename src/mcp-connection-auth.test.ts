@@ -1,6 +1,7 @@
 import { jest } from "@jest/globals";
 
 const mockGetRemoteMcpConnection = jest.fn() as any;
+const mockListRemoteMcpConnections = jest.fn() as any;
 const mockDecryptValue = jest.fn() as any;
 const mockResolveServiceCredentials = jest.fn() as any;
 const mockResolveGitCredentials = jest.fn() as any;
@@ -8,6 +9,7 @@ const mockBuildAuthHeaders = jest.fn() as any;
 
 jest.unstable_mockModule("./mcp-connections.js", () => ({
   getRemoteMcpConnection: mockGetRemoteMcpConnection,
+  listRemoteMcpConnections: mockListRemoteMcpConnections,
 }));
 
 jest.unstable_mockModule("./crypto.js", () => ({

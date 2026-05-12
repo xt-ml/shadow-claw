@@ -281,6 +281,8 @@ Serve these files (under `/assets/v86.ext2/`) to enable ext2 boot:
 |                                                                  | `grep`, `sed`, `awk`, `cat`, etc., fully synced to OPFS workspace storage.             |
 | `remote_mcp_*`                                                   | Remote MCP integration tools (`remote_mcp_list_tools`, `remote_mcp_call_tool`) to      |
 |                                                                  | dynamically discover and execute tools from configured external MCP servers.           |
+| `manage_email` / `email_read_messages` / `email_send_message`    | Email integration tools to manage IMAP/SMTP connections, read inbox messages, send     |
+|                                                                  | emails with attachments, mark messages, and download attachments.                      |
 
 When the browser WebMCP API is available (`navigator.modelContext`), these
 tools can also be registered through `src/webmcp.ts` so browser-side model
@@ -350,6 +352,17 @@ ShadowClaw supports connecting to external Model Context Protocol (MCP) servers 
 - Connections are persisted securely in IndexedDB.
 
 **For detailed architecture and integration patterns, see [docs/subsystems/remote-mcp.md](docs/subsystems/remote-mcp.md)** — covers transport protocols, authentication, tool discovery, and troubleshooting.
+
+## Protocol-Agnostic Integrations
+
+ShadowClaw includes a plugin architecture for external integrations (IMAP, SMTP, RSS, Mastodon, etc.) that avoids one-off protocol-specific wiring.
+
+- Configure protocol connections in **Settings → Integrations**.
+- The registry enforces typed actions without bleeding transport details into core logic.
+- Agent tools (like `manage_email`, `email_read_messages`, and `email_send_message`) use these plugins to safely interact with external services.
+- Supports encrypted credential storage for account secrets.
+
+**Architecture:** See [docs/guides/protocol-agnostic-integrations.md](docs/guides/protocol-agnostic-integrations.md) for the plugin contract and how to onboard new protocols.
 
 ## Web Share Target
 

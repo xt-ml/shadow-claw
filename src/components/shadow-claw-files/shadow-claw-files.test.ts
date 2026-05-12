@@ -184,6 +184,7 @@ describe("shadow-claw-files", () => {
     const hostBtn = component.shadowRoot?.querySelector(
       ".files__sync-host-btn",
     );
+
     const vmBtn = component.shadowRoot?.querySelector(".files__sync-vm-btn");
 
     expect(hostBtn).toHaveProperty("hidden", true);
@@ -210,6 +211,7 @@ describe("shadow-claw-files", () => {
     const hostBtn = component.shadowRoot?.querySelector(
       ".files__sync-host-btn",
     );
+
     const vmBtn = component.shadowRoot?.querySelector(".files__sync-vm-btn");
 
     expect(hostBtn).toHaveProperty("hidden", false);

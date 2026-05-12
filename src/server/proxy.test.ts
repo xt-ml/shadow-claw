@@ -681,6 +681,7 @@ describe("Llamafile proxy cancellation", () => {
       },
       socket: new EventEmitter(),
     });
+
     const invokeRes = Object.assign(new EventEmitter(), {
       headersSent: false,
       writableEnded: false,
@@ -705,6 +706,7 @@ describe("Llamafile proxy cancellation", () => {
       headers: {},
       socket: new EventEmitter(),
     });
+
     const cancelRes = Object.assign(new EventEmitter(), {
       status: jest.fn().mockReturnThis(),
       json: jest.fn().mockReturnThis(),

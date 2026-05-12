@@ -32,24 +32,42 @@ class ModelRegistry {
    * {data: [{id, context_length, top_provider: {max_completion_tokens}}]}
    * as well as HuggingFace Router's identical response shape.
    */
-  async fetchModelInfo(provider: ProviderConfig, apiKey?: string) {
+  async fetchModelInfo(
+    provider: ProviderConfig,
+    apiKey?: string,
+    extraHeaders?: Record<string, string>,
+  ) {
     if (!provider.modelsUrl) {
       return;
     }
 
     this.loading = true;
     try {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
+      const headers = new Headers();
+      headers.set("Content-Type", "application/json");
+
+      // add extra headers
+      if (provider.headers) {
+        for (const [key, value] of Object.entries(provider.headers)) {
+          headers.set(key, value);
+        }
+      }
+
+      // add extra headers
+      if (extraHeaders) {
+        for (const [key, value] of Object.entries(extraHeaders)) {
+          headers.set(key, value);
+        }
+      }
 
       // Forward the API key so authenticated endpoints (e.g. HuggingFace)
       // return the full model list rather than a 401.
       if (apiKey && provider.apiKeyHeader) {
         const fmt = provider.apiKeyHeaderFormat;
-        headers[provider.apiKeyHeader] = fmt
-          ? fmt.replace("{key}", apiKey)
-          : apiKey;
+        headers.set(
+          provider.apiKeyHeader,
+          fmt ? fmt.replace("{key}", apiKey) : apiKey,
+        );
       }
 
       const response = await fetch(provider.modelsUrl, { headers });

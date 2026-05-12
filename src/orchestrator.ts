@@ -232,10 +232,24 @@ export class Orchestrator {
     // providers that require authentication (e.g. HuggingFace).
     await this.loadApiKeyForProvider(db, this.provider);
 
+    // load config settings
+    this.bedrockRegionFallback = (
+      (await getConfig(db, CONFIG_KEYS.BEDROCK_REGION_FALLBACK)) || ""
+    ).trim();
+
+    this.bedrockProfileFallback = (
+      (await getConfig(db, CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK)) || ""
+    ).trim();
+
+    this.bedrockAuthMode = (
+      (await getConfig(db, CONFIG_KEYS.BEDROCK_AUTH_MODE)) || "provider_chain"
+    ).trim();
+
     // Fetch model info for the current provider (passes apiKey for auth).
     await modelRegistry.fetchModelInfo(
       this.providerConfig,
       (await this.getApiKeyForHeaders()) || undefined,
+      this.getProviderRuntimeHeaders(this.provider),
     );
 
     // Load model and max tokens
@@ -317,15 +331,6 @@ export class Orchestrator {
     if (storedLlamafileOffline === "false") {
       this.llamafileOffline = false;
     }
-
-    this.bedrockRegionFallback = (
-      (await getConfig(db, CONFIG_KEYS.BEDROCK_REGION_FALLBACK)) || ""
-    ).trim();
-    this.bedrockProfileFallback = (
-      (await getConfig(db, CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK)) || ""
-    ).trim();
-    this.bedrockAuthMode =
-      (await getConfig(db, CONFIG_KEYS.BEDROCK_AUTH_MODE)) || "provider_chain";
 
     this.applyLlamafileHeaders();
 
@@ -589,6 +594,7 @@ export class Orchestrator {
     await modelRegistry.fetchModelInfo(
       newProvider,
       (await this.getApiKeyForHeaders()) || undefined,
+      this.getProviderRuntimeHeaders(providerId),
     );
 
     // Update max tokens based on new info
@@ -1752,9 +1758,11 @@ export class Orchestrator {
       db,
       CONFIG_KEYS.TELEGRAM_BOT_TOKEN,
     );
+
     const telegramChatIds = parseStoredStringList(
       await getConfig(db, CONFIG_KEYS.TELEGRAM_CHAT_IDS),
     );
+
     const telegramUseProxy =
       (await getConfig(db, CONFIG_KEYS.TELEGRAM_USE_PROXY)) === "true";
     this.telegramBotToken = telegramToken;
@@ -1795,6 +1803,7 @@ export class Orchestrator {
       db,
       CONFIG_KEYS.IMESSAGE_API_KEY,
     );
+
     const imessageChatIds = parseStoredStringList(
       await getConfig(db, CONFIG_KEYS.IMESSAGE_CHAT_IDS),
     );
@@ -2155,6 +2164,7 @@ export class Orchestrator {
       maxOutputTokens: this.maxTokens,
       skimTop: this.contextCompressionEnabled,
     });
+
     const messages = dynamicContext.messages;
 
     // Emit context usage for UI display

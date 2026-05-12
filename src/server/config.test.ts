@@ -81,6 +81,7 @@ describe("config", () => {
       corsMode: "all",
       corsAllowOrigin: ["http://example.com"],
     });
+
     const { parseConfig } = await import("./config.js");
     const config = parseConfig();
 

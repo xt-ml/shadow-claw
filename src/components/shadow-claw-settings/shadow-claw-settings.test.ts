@@ -55,6 +55,24 @@ jest.unstable_mockModule(
 );
 
 jest.unstable_mockModule(
+  "../settings/shadow-claw-integrations/shadow-claw-integrations.js",
+  () => {
+    class MockIntegrations extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: "open" });
+      }
+
+      render = jest.fn();
+    }
+
+    customElements.define("shadow-claw-integrations", MockIntegrations);
+
+    return { ShadowClawIntegrations: MockIntegrations };
+  },
+);
+
+jest.unstable_mockModule(
   "../settings/shadow-claw-storage/shadow-claw-storage.js",
   () => {
     class MockStorage extends HTMLElement {
@@ -162,6 +180,10 @@ describe("shadow-claw-settings", () => {
     await el.render();
 
     const accounts = el.shadowRoot?.querySelector("shadow-claw-accounts");
+    const integrations = el.shadowRoot?.querySelector(
+      "shadow-claw-integrations",
+    );
+
     const remoteMcp = el.shadowRoot?.querySelector("shadow-claw-mcp-remote");
     const llm = el.shadowRoot?.querySelector("shadow-claw-llm");
     const networking = el.shadowRoot?.querySelector("shadow-claw-networking");
@@ -170,6 +192,7 @@ describe("shadow-claw-settings", () => {
     const storage = el.shadowRoot?.querySelector("shadow-claw-storage");
 
     expect(accounts).not.toBeNull();
+    expect(integrations).not.toBeNull();
     expect(remoteMcp).not.toBeNull();
     expect(llm).not.toBeNull();
     expect(networking).not.toBeNull();
@@ -208,6 +231,7 @@ describe("shadow-claw-settings", () => {
     const envTab = el.shadowRoot?.querySelector(
       '[data-tab-target="environment"]',
     );
+
     const aiPanel = el.shadowRoot?.querySelector('[data-tab-panel="ai"]');
     const envPanel = el.shadowRoot?.querySelector(
       '[data-tab-panel="environment"]',
@@ -231,9 +255,43 @@ describe("shadow-claw-settings", () => {
     const envPanel = el.shadowRoot?.querySelector(
       '[data-tab-panel="environment"]',
     );
-    expect(envPanel?.firstElementChild?.tagName.toLowerCase()).toBe(
-      "shadow-claw-networking",
+
+    const envSections = envPanel?.querySelectorAll(
+      "details.settings-collapsible",
     );
+    expect(envSections?.length).toBeGreaterThan(0);
+
+    const firstSummary =
+      envSections?.[0]?.querySelector("summary")?.textContent;
+    expect(firstSummary).toContain("Networking");
+
+    document.body.removeChild(el);
+  });
+
+  it("renders all tab panels with collapsible sections collapsed by default", async () => {
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+
+    const aiPanel = el.shadowRoot?.querySelector('[data-tab-panel="ai"]');
+    const envPanel = el.shadowRoot?.querySelector(
+      '[data-tab-panel="environment"]',
+    );
+
+    const integrationsPanel = el.shadowRoot?.querySelector(
+      '[data-tab-panel="integrations"]',
+    );
+
+    for (const panel of [aiPanel, envPanel, integrationsPanel]) {
+      const sections = panel?.querySelectorAll("details.settings-collapsible");
+      expect(sections?.length).toBeGreaterThan(0);
+
+      sections?.forEach((section) => {
+        const details = section as HTMLDetailsElement;
+        expect(details.open).toBe(false);
+      });
+    }
 
     document.body.removeChild(el);
   });
@@ -247,9 +305,11 @@ describe("shadow-claw-settings", () => {
     const aiTab = el.shadowRoot?.querySelector<HTMLButtonElement>(
       '[data-tab-target="ai"]',
     );
+
     const envTab = el.shadowRoot?.querySelector<HTMLButtonElement>(
       '[data-tab-target="environment"]',
     );
+
     const envPanel = el.shadowRoot?.querySelector(
       '[data-tab-panel="environment"]',
     );

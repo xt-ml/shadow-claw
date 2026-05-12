@@ -26,6 +26,27 @@ describe("TOOL_DEFINITIONS", () => {
     expect(names.has("write_file")).toBe(true);
 
     expect(names.has("patch_file")).toBe(true);
+
+    expect(names.has("manage_email")).toBe(true);
+
+    expect(names.has("email_read_messages")).toBe(true);
+
+    expect(names.has("email_send_message")).toBe(true);
+
+    const manageIntegration: any = TOOL_DEFINITIONS.find(
+      (d) => d.name === "manage_email",
+    );
+
+    expect(manageIntegration.input_schema.properties.action.enum).toEqual(
+      expect.arrayContaining([
+        "read_messages",
+        "send_message",
+        "mark_as_read",
+        "mark_as_unread",
+        "delete_messages",
+        "download_attachments",
+      ]),
+    );
   });
 
   it("read_file accepts both path (string) and paths (array)", () => {

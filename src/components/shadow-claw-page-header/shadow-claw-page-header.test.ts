@@ -34,6 +34,7 @@ describe("shadow-claw-page-header", () => {
     const disclosure = el.shadowRoot?.querySelector(
       ".header__actions-disclosure",
     );
+
     const summary = el.shadowRoot?.querySelector(".header__actions-toggle");
 
     expect(disclosure).toBeTruthy();

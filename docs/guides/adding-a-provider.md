@@ -86,6 +86,7 @@ case "my_provider": {
   const res = await fetch(`${provider.baseUrl}/models`, {
     headers: { Authorization: `Bearer ${apiKey}` },
   });
+
   const json = await res.json();
   return json.data.map((m: any) => m.id);
 }

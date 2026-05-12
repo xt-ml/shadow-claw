@@ -8,6 +8,11 @@ import type { ToolDefinition } from "./types.js";
 
 import { bash } from "./bash.js";
 import { clear_chat } from "./chat.js";
+import {
+  manage_email,
+  email_read_messages,
+  email_send_message,
+} from "./email.js";
 import { fetch_url } from "./fetch.js";
 import { javascript } from "./javascript.js";
 import { remote_mcp_call_tool, remote_mcp_list_tools } from "./mcp.js";
@@ -60,6 +65,8 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   delete_task,
   disable_task,
   enable_task,
+  email_read_messages,
+  email_send_message,
   fetch_url,
   git_add,
   git_branch,
@@ -79,6 +86,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   git_sync,
   javascript,
   list_files,
+  manage_email,
   list_tasks,
   list_tool_profiles,
   manage_tools,

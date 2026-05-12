@@ -723,6 +723,7 @@ describe("buildAuthHeaders", () => {
       password: "azpass",
       provider: "azure-devops",
     });
+
     const expected = btoa("azuser:azpass");
     expect(headers).toEqual({
       Authorization: `Basic ${expected}`,
@@ -736,6 +737,7 @@ describe("buildAuthHeaders", () => {
       password: "azpass",
       provider: "azure-devops",
     });
+
     const expected = btoa(":azure-fake");
     expect(headers).toEqual({
       Authorization: `Basic ${expected}`,
@@ -780,6 +782,7 @@ describe("buildAuthHeaders", () => {
       token: "pat123",
       hostPattern: "dev.azure.com",
     });
+
     const expected = btoa(":pat123");
     expect(headers).toEqual({
       Authorization: `Basic ${expected}`,

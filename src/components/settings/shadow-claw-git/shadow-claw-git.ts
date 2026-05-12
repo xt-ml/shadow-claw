@@ -317,6 +317,7 @@ export class ShadowClawGit extends ShadowClawElement {
       : mapDetectedProviderToOAuthProviderId(
           detectProvider(existing?.hostPattern || ""),
         );
+
     const oauthProviderId =
       inferredProviderId && OAUTH_PROVIDER_DEFINITIONS[inferredProviderId]
         ? inferredProviderId
@@ -1111,6 +1112,7 @@ export class ShadowClawGit extends ShadowClawElement {
     const customRadio: HTMLInputElement | null = root.querySelector(
       '[data-setting="git-proxy-custom"]',
     );
+
     const field: HTMLElement | null = root.querySelector(
       '[data-region="git-custom-proxy-field"]',
     );

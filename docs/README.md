@@ -49,6 +49,7 @@ Step-by-step instructions for common dev tasks.
 | [Adding a Shell Command](guides/adding-a-shell-command.md)                     | How to hook into the JS shell emulator                        |
 | [Adding a UI Page](guides/adding-a-page.md)                                    | How to add a new Web Component page/section                   |
 | [Adding a Channel](guides/adding-a-channel.md)                                 | How to add a new messaging channel                            |
+| [Protocol-Agnostic Integrations](guides/protocol-agnostic-integrations.md)     | Plugin architecture and onboarding for external integrations  |
 | [Service Accounts & Credentials](guides/adding-service-accounts.md)            | How to manage encrypted credentials for channels and services |
 | [Configuring Messaging Channels](guides/configuring-messaging-channels.md)     | User guide for Telegram and iMessage setup                    |
 | [Server Development Configuration](guides/server-development-configuration.md) | CLI flags, CORS modes, host binding, port configuration       |

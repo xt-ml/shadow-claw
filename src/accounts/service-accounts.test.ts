@@ -666,6 +666,7 @@ describe("resolveServiceCredentials", () => {
     await resolveServiceCredentials({}, "https://api.github.com/user", {
       authMode: "oauth",
     });
+
     const third = await resolveServiceCredentials(
       {},
       "https://api.github.com/user",

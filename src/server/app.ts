@@ -6,6 +6,7 @@ import type { Express } from "express";
 
 import { registerProxyRoutes } from "./proxy.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
+import { registerActivityLogRoutes } from "./routes/activity-log.js";
 
 import { openPushStore } from "../notifications/push-store.js";
 import {
@@ -64,6 +65,11 @@ export function createApp(config: ServerConfig): {
 
   // ---------------- OAUTH ROUTES ----------------
   registerOAuthRoutes(app);
+
+  // ---------------- ACTIVITY LOG ROUTES ----------------
+  registerActivityLogRoutes(app, {
+    logsDir: path.resolve(config.databaseDir, "..", ".cache", "logs"),
+  });
 
   // ---------------- DATABASE & PUSH / TASKS ----------------
   if (!fs.existsSync(config.databaseDir)) {

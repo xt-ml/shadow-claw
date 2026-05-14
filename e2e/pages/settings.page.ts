@@ -22,9 +22,25 @@ export class SettingsPage {
   }
 
   async expandAiSettings() {
-    const details = this.host.locator(
-      'details:has(summary:has-text("AI Model & Provider"))',
-    );
+    const aiTab = this.host.locator('[data-tab-target="ai"]');
+    await aiTab.click();
+
+    const details = this.host
+      .locator('[data-tab-panel="ai"] details.settings-collapsible')
+      .first();
+    const openAttr = await details.getAttribute("open");
+    if (openAttr === null) {
+      await details.locator("summary").click();
+    }
+  }
+
+  async expandModelProviderSettings() {
+    const aiTab = this.host.locator('[data-tab-target="ai"]');
+    await aiTab.click();
+
+    const details = this.host
+      .locator('[data-tab-panel="ai"] details.settings-collapsible')
+      .nth(1);
     const openAttr = await details.getAttribute("open");
     if (openAttr === null) {
       await details.locator("summary").click();
@@ -32,7 +48,11 @@ export class SettingsPage {
   }
 
   llm() {
-    return this.host.locator("shadow-claw-llm");
+    return this.host.locator('shadow-claw-llm[data-view="model-provider"]');
+  }
+
+  aiLlm() {
+    return this.host.locator('shadow-claw-llm[data-view="ai"]');
   }
 
   maxIterationsInput() {
@@ -64,10 +84,10 @@ export class SettingsPage {
   }
 
   assistantNameInput() {
-    return this.llm().locator('[data-setting="assistant-name-input"]');
+    return this.aiLlm().locator('[data-setting="assistant-name-input"]');
   }
 
   saveAssistantNameButton() {
-    return this.llm().locator('[data-action="save-assistant-name"]');
+    return this.aiLlm().locator('[data-action="save-assistant-name"]');
   }
 }

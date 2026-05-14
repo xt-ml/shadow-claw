@@ -3,6 +3,8 @@ import { Signal } from "signal-polyfill";
 import { DEFAULT_GROUP_ID, CONFIG_KEYS } from "../config.js";
 
 import { deleteTask } from "../db/deleteTask.js";
+import { deleteMessage } from "../db/deleteMessage.js";
+
 import { getAllTasks } from "../db/getAllTasks.js";
 import { getRecentMessages } from "../db/getRecentMessages.js";
 import { saveTask } from "../db/saveTask.js";
@@ -70,6 +72,24 @@ interface ServerScheduledTask {
   lastRun?: number | null;
   created_at?: number;
   createdAt?: number;
+}
+
+function isConfigEnabled(value: unknown): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+
+    return normalized === "true" || normalized === "1";
+  }
+
+  if (typeof value === "number") {
+    return value === 1;
+  }
+
+  return false;
 }
 
 /**
@@ -261,6 +281,7 @@ export class OrchestratorStore {
   public _activePage: Signal.State<string>;
   public orchestrator: Orchestrator | null;
   private _db: ShadowClawDatabase | null;
+  private _activityLogSessionStartedAtByGroup: Map<string, string>;
   private _taskSyncOutbox: TaskSyncOutboxOperation[];
   private _replayingTaskSyncOutbox: boolean;
   private _onlineReplayHandler: (() => void) | null;
@@ -334,6 +355,7 @@ export class OrchestratorStore {
     this._activePage = new Signal.State("chat");
     this.orchestrator = null;
     this._db = null;
+    this._activityLogSessionStartedAtByGroup = new Map();
     this._taskSyncOutbox = [];
     this._replayingTaskSyncOutbox = false;
     this._onlineReplayHandler = null;
@@ -430,6 +452,69 @@ export class OrchestratorStore {
 
   private getTaskServerBaseUrl(): string {
     return this.orchestrator?.getTaskServerUrl() ?? "/schedule";
+  }
+
+  private getActivityLogSessionStartedAt(groupId: string): string {
+    const existing = this._activityLogSessionStartedAtByGroup.get(groupId);
+    if (existing) {
+      return existing;
+    }
+
+    const startedAt = new Date().toISOString();
+    this._activityLogSessionStartedAtByGroup.set(groupId, startedAt);
+
+    return startedAt;
+  }
+
+  private async forwardActivityLogEntryToServer(
+    entry: ThinkingLogEntry,
+  ): Promise<void> {
+    if (!this._db) {
+      return;
+    }
+
+    const enabled = isConfigEnabled(
+      await getConfig(this._db, CONFIG_KEYS.ACTIVITY_LOG_DISK_LOGGING_ENABLED),
+    );
+
+    if (!enabled) {
+      return;
+    }
+
+    const groupId =
+      typeof entry.groupId === "string" && entry.groupId
+        ? entry.groupId
+        : this._activeGroupId.get();
+
+    if (!groupId) {
+      return;
+    }
+
+    if (entry.level === "info" && entry.label === "Starting") {
+      this._activityLogSessionStartedAtByGroup.set(
+        groupId,
+        new Date().toISOString(),
+      );
+    }
+
+    const sessionStartedAt = this.getActivityLogSessionStartedAt(groupId);
+
+    try {
+      await fetch("/activity-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupId,
+          level: entry.level,
+          label: entry.label,
+          message: entry.message,
+          timestamp: new Date().toISOString(),
+          sessionStartedAt,
+        }),
+      });
+    } catch (error) {
+      console.warn("Failed to persist activity log entry to server:", error);
+    }
   }
 
   get messages() {
@@ -616,6 +701,8 @@ export class OrchestratorStore {
       } else {
         this._activityLog.set([...this._activityLog.get(), entry]);
       }
+
+      void this.forwardActivityLogEntryToServer(entry);
     });
 
     orch.events.on("state-change", (state) => {
@@ -1129,6 +1216,20 @@ export class OrchestratorStore {
     this.loadHistory();
     this.loadTasks(db);
     this.loadFiles(db);
+  }
+
+  /**
+   * Delete a message
+   */
+  async deleteMessage(db: ShadowClawDatabase, id: string): Promise<void> {
+    await deleteMessage(db, id);
+    await this.loadHistory();
+    if (this.orchestrator?.refreshContextUsage) {
+      await this.orchestrator.refreshContextUsage(
+        db,
+        this._activeGroupId.get(),
+      );
+    }
   }
 
   /**

@@ -30,6 +30,7 @@ import {
 import { ServerTaskScheduler } from "../src/notifications/task-scheduler-server.js";
 
 import { registerOAuthRoutes } from "../src/server/routes/oauth.js";
+import { registerActivityLogRoutes } from "../src/server/routes/activity-log.js";
 import { registerProxyRoutes } from "../src/server/proxy.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -64,6 +65,11 @@ function startServer(databaseDir: string): Promise<number> {
 
     // OAuth callback + token exchange routes
     registerOAuthRoutes(srv);
+
+    // Activity log persistence routes
+    registerActivityLogRoutes(srv, {
+      logsDir: path.resolve(databaseDir, "..", ".cache", "logs"),
+    });
 
     // Push notification routes
     openPushStore(path.join(databaseDir, "push-subscriptions.db"));

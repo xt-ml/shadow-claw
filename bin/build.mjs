@@ -51,11 +51,11 @@ async function main() {
     }
   }
 
-  // npm run -s rollup
-  await run("npm run -s rollup");
-
   // npm run -s tsc
   await run("npm run -s tsc");
+
+  // npm run -s rollup
+  await run("npm run -s rollup");
 
   if (isProduction) {
     // Production only replacements

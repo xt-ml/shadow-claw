@@ -45,9 +45,16 @@
         aria-labelledby="settings-tab-ai"
       >
         <details class="settings-collapsible">
-          <summary>🤖 AI Model & Provider</summary>
+          <summary>🤖 AI</summary>
           <div class="settings-collapsible-content">
-            <shadow-claw-llm></shadow-claw-llm>
+            <shadow-claw-llm data-view="ai"></shadow-claw-llm>
+          </div>
+        </details>
+
+        <details class="settings-collapsible">
+          <summary>🔑 Model Provider</summary>
+          <div class="settings-collapsible-content">
+            <shadow-claw-llm data-view="model-provider"></shadow-claw-llm>
           </div>
         </details>
 

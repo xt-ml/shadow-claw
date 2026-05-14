@@ -312,7 +312,8 @@ File browser controller.
 **Methods:**
 
 - `open()` — Navigate to files page
-- `fileList()`, `uploadButton()`, `breadcrumbs()` — Delegate to browser component
+- `fileList()`, `uploadButton()`, `fileInput()`, `breadcrumbs()` — Delegate to browser component
+- `allButtons()` — Return all file-page buttons
 
 ### `TasksPage`
 
@@ -323,6 +324,7 @@ Task scheduler controller.
 - `open()` — Navigate to tasks page
 - `allButtons()`, `textInputs()`, `toggles()` — Locator helpers
 - `taskLikeElements()` — Query task-related DOM nodes
+- `createTask(schedule, prompt)` — Create a task via the add-task dialog
 
 ### `SettingsPage`
 
@@ -331,8 +333,10 @@ Settings panel controller.
 **Methods:**
 
 - `open()` — Navigate to settings page
+- `expandAiSettings()` — Expand AI section when collapsed
+- `expandModelProviderSettings()` — Expand Model Provider section when collapsed
 - `llm()` — LLM settings sub-component locator
-- `integrations()` — Integrations settings sub-component locator
+- `aiLlm()` — AI settings sub-component locator
 - `maxIterationsInput()` — Max iterations number input
 - `saveMaxIterationsButton()` — Save max iterations button
 - `streamingToggle()` — Streaming toggle checkbox

@@ -102,6 +102,10 @@ export class ShadowClawChat extends ShadowClawElement {
     this.#queuedAttachments = [];
   }
 
+  get db() {
+    return this.#db;
+  }
+
   async connectedCallback() {
     await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
@@ -1291,6 +1295,60 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 
   /**
+   * Inject a delete button into a message article that removes the message
+   * from the database and updates the UI.
+   */
+  injectMessageDeleteButton(article: HTMLElement, messageId: string) {
+    if (article.querySelector(".chat__msg-delete-btn")) {
+      return;
+    }
+
+    const content = article.querySelector(".chat__message-content");
+    if (!content) {
+      return;
+    }
+
+    const btn = document.createElement("button");
+    btn.className = "chat__msg-delete-btn";
+    btn.type = "button";
+    btn.setAttribute("aria-label", "Delete message");
+
+    const svgNs = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(svgNs, "svg");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke-width", "1.5");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("viewBox", "0 0 24 24");
+
+    const path = document.createElementNS(svgNs, "path");
+    path.setAttribute(
+      "d",
+      "M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0",
+    );
+    path.setAttribute("stroke-linecap", "round");
+    path.setAttribute("stroke-linejoin", "round");
+
+    svg.append(path);
+    btn.append(svg);
+
+    btn.addEventListener("click", async () => {
+      const confirmed = window.confirm(
+        "Delete this message? This action cannot be undone.",
+      );
+
+      if (!confirmed) {
+        return;
+      }
+
+      if (this.db) {
+        await orchestratorStore.deleteMessage(this.db, messageId);
+      }
+    });
+
+    content.appendChild(btn);
+  }
+
+  /**
    * Inject a "Copy" button into every <pre> block inside the given container.
    * Each button copies the text content of the sibling <code> element.
    */
@@ -1441,8 +1499,9 @@ export class ShadowClawChat extends ShadowClawElement {
               this.persistGroupScrollState(container);
             }
 
-            if (msg.content) {
+            if (msg.content && msg.id) {
               this.injectMessageCopyButton(msgDiv, msg.content);
+              this.injectMessageDeleteButton(msgDiv, msg.id);
             }
 
             if (contentEl instanceof HTMLElement && msg.content) {
@@ -1639,15 +1698,86 @@ export class ShadowClawChat extends ShadowClawElement {
 
         if (log.length > 0) {
           logEl.classList.add("chat__activity-log--active");
-          const fragment = document.createDocumentFragment();
+
+          // Build raw text for clipboard
+          const rawText = log
+            .map(
+              (entry) =>
+                `[${entry.level}] ${entry.label || ""}: ${entry.message}`,
+            )
+            .join("\n");
+
+          // Create header with copy button
+          const headerEl = document.createElement("div");
+          headerEl.className = "chat__activity-log__header";
+
+          const labelEl = document.createElement("span");
+          labelEl.className = "chat__activity-log__label";
+          labelEl.textContent = "Activity Log";
+
+          const copyBtn = document.createElement("button");
+          copyBtn.className = "chat__activity-log__copy-btn";
+          copyBtn.type = "button";
+          copyBtn.setAttribute("aria-label", "Copy activity log to clipboard");
+
+          const svgNs = "http://www.w3.org/2000/svg";
+          const svg = document.createElementNS(svgNs, "svg");
+          svg.setAttribute("fill", "none");
+          svg.setAttribute("stroke-width", "1.5");
+          svg.setAttribute("stroke", "currentColor");
+          svg.setAttribute("viewBox", "0 0 24 24");
+
+          const path = document.createElementNS(svgNs, "path");
+          path.setAttribute(
+            "d",
+            "M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 0 1-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 0 1 1.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 0 0-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 0 1-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5a1.125 1.125 0 0 1-1.125-1.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H9.75",
+          );
+          path.setAttribute("stroke-linecap", "round");
+          path.setAttribute("stroke-linejoin", "round");
+
+          svg.append(path);
+          copyBtn.append(svg);
+
+          copyBtn.addEventListener("click", async () => {
+            try {
+              await navigator.clipboard.writeText(rawText);
+              copyBtn.classList.add("chat__activity-log__copy-btn--copied");
+              copyBtn.setAttribute("aria-label", "Copied!");
+
+              setTimeout(() => {
+                copyBtn.classList.remove(
+                  "chat__activity-log__copy-btn--copied",
+                );
+                copyBtn.setAttribute(
+                  "aria-label",
+                  "Copy activity log to clipboard",
+                );
+              }, 1500);
+            } catch {
+              copyBtn.setAttribute("aria-label", "Copy failed");
+              setTimeout(() => {
+                copyBtn.setAttribute(
+                  "aria-label",
+                  "Copy activity log to clipboard",
+                );
+              }, 1500);
+            }
+          });
+
+          headerEl.append(labelEl, copyBtn);
+
+          // Create entries container
+          const entriesEl = document.createElement("div");
+          entriesEl.className = "chat__activity-log__entries";
+
           log.forEach((entry) => {
             const entryEl = document.createElement("div");
             entryEl.textContent = `[${entry.level}] ${entry.label || ""}: ${entry.message}`;
-            fragment.append(entryEl);
+            entriesEl.append(entryEl);
           });
-          logEl.replaceChildren(fragment);
 
-          logEl.scrollTop = logEl.scrollHeight;
+          logEl.replaceChildren(headerEl, entriesEl);
+          entriesEl.scrollTop = entriesEl.scrollHeight;
         } else {
           logEl.classList.remove("chat__activity-log--active");
           logEl.replaceChildren();

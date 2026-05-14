@@ -957,6 +957,7 @@ export const CONFIG_KEYS = {
   BEDROCK_PROFILE_FALLBACK: "bedrock_profile_fallback",
   BEDROCK_AUTH_MODE: "bedrock_auth_mode",
   LAST_ACTIVE_PAGE: "last_active_page",
+  ACTIVITY_LOG_DISK_LOGGING_ENABLED: "activity_log_disk_logging_enabled",
 };
 
 /** Default dev server host */

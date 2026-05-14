@@ -155,11 +155,12 @@ export async function executeFetchUrlTool(
           token: string;
         }
       | undefined;
+    const fetchImpl = deps.fetchImpl.bind(globalThis);
 
     const runFetchWithRetry = async () =>
       deps.withRetry(
         async () => {
-          const fetchRes = await deps.fetchImpl(input.url, {
+          const fetchRes = await fetchImpl(input.url, {
             method: input.method || "GET",
             headers: fetchHeaders,
             body: input.body,

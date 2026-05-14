@@ -191,6 +191,27 @@ describe("shadow-claw-llm", () => {
     document.body.removeChild(el);
   });
 
+  it("keeps model settings hidden in AI view", async () => {
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    el.setAttribute("data-view", "ai");
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const modelSection = el.shadowRoot?.querySelector(
+      '[data-setting="model-settings"]',
+    ) as HTMLElement | null;
+
+    expect(modelSection).not.toBeNull();
+    expect(modelSection?.hidden).toBe(true);
+
+    document.body.removeChild(el);
+  });
+
   it("saves max tokens from settings", async () => {
     const orch = createOrchestratorStub();
     (orchestratorStore as any).orchestrator = orch;

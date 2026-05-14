@@ -8,6 +8,14 @@
   display: block;
 }
 
+:host([data-view="ai"]) [data-section="model-provider-only"] {
+  display: none;
+}
+
+:host([data-view="model-provider"]) [data-section="ai-only"] {
+  display: none;
+}
+
 .settings-section {
   margin-bottom: 1.75rem;
 }

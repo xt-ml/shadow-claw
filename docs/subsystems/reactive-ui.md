@@ -199,29 +199,29 @@ _profiles (State) ──────────┘
 
 ### Component inventory
 
-| Component                 | Element                          | Purpose                                              |
-| ------------------------- | -------------------------------- | ---------------------------------------------------- |
-| Main app                  | `<shadow-claw>`                  | Shell, navigation, page routing                      |
-| Chat                      | `<shadow-claw-chat>`             | Message display, smart auto-scroll, streaming bubble |
-| Files                     | `<shadow-claw-files>`            | File browser for group workspace                     |
-| Tasks                     | `<shadow-claw-tasks>`            | Task list with cron scheduling                       |
-| Settings                  | `<shadow-claw-settings>`         | Provider config, tool profiles                       |
-| Conversations             | `<shadow-claw-conversations>`    | Sidebar list with CRUD, drag-and-drop                |
-| File Viewer               | `<shadow-claw-file-viewer>`      | Code editor + MIME-aware preview                     |
-| PDF Viewer                | `<shadow-claw-pdf-viewer>`       | PDF preview (pdf.js)                                 |
-| Terminal                  | `<shadow-claw-terminal>`         | Interactive WebVM terminal                           |
-| Toast                     | `<shadow-claw-toast>`            | Notification overlay                                 |
-| Dialog Wrapper            | `<shadow-claw-dialog>`           | Shared wrapper around native `<dialog>` semantics    |
-| Page Header               | `<shadow-claw-page-header>`      | Reusable mobile-first header                         |
-| Settings — LLM            | `<shadow-claw-llm>`              | Provider and model settings                          |
-| Settings — Git            | `<shadow-claw-git>`              | Git token and proxy settings                         |
-| Settings — Storage        | `<shadow-claw-storage>`          | Storage backend and quota                            |
-| Settings — WebVM          | `<shadow-claw-webvm>`            | VM boot mode and configuration                       |
-| Settings — Notifications  | `<shadow-claw-notifications>`    | Push notification management                         |
-| Tools                     | `<shadow-claw-tools>`            | Tool management and profiles UI                      |
-| Empty State (common)      | `<shadow-claw-empty-state>`      | Reusable empty/placeholder messaging block           |
-| Card (common)             | `<shadow-claw-card>`             | Reusable settings item card layout                   |
-| Actions (common)          | `<shadow-claw-actions>`          | Reusable settings action button group                |
+| Component                | Element                       | Purpose                                                                   |
+| ------------------------ | ----------------------------- | ------------------------------------------------------------------------- |
+| Main app                 | `<shadow-claw>`               | Shell, navigation, page routing                                           |
+| Chat                     | `<shadow-claw-chat>`          | Message display, smart auto-scroll, streaming bubble, copy/delete actions |
+| Files                    | `<shadow-claw-files>`         | File browser for group workspace                                          |
+| Tasks                    | `<shadow-claw-tasks>`         | Task list with cron scheduling                                            |
+| Settings                 | `<shadow-claw-settings>`      | Provider config, tool profiles                                            |
+| Conversations            | `<shadow-claw-conversations>` | Sidebar list with CRUD, drag-and-drop                                     |
+| File Viewer              | `<shadow-claw-file-viewer>`   | Code editor + MIME-aware preview                                          |
+| PDF Viewer               | `<shadow-claw-pdf-viewer>`    | PDF preview (pdf.js)                                                      |
+| Terminal                 | `<shadow-claw-terminal>`      | Interactive WebVM terminal                                                |
+| Toast                    | `<shadow-claw-toast>`         | Notification overlay                                                      |
+| Dialog Wrapper           | `<shadow-claw-dialog>`        | Shared wrapper around native `<dialog>` semantics                         |
+| Page Header              | `<shadow-claw-page-header>`   | Reusable mobile-first header                                              |
+| Settings — LLM           | `<shadow-claw-llm>`           | Provider and model settings                                               |
+| Settings — Git           | `<shadow-claw-git>`           | Git token and proxy settings                                              |
+| Settings — Storage       | `<shadow-claw-storage>`       | Storage backend and quota                                                 |
+| Settings — WebVM         | `<shadow-claw-webvm>`         | VM boot mode and configuration                                            |
+| Settings — Notifications | `<shadow-claw-notifications>` | Push notification management                                              |
+| Tools                    | `<shadow-claw-tools>`         | Tool management and profiles UI                                           |
+| Empty State (common)     | `<shadow-claw-empty-state>`   | Reusable empty/placeholder messaging block                                |
+| Card (common)            | `<shadow-claw-card>`          | Reusable settings item card layout                                        |
+| Actions (common)         | `<shadow-claw-actions>`       | Reusable settings action button group                                     |
 
 ### Rendering strategy
 
@@ -246,6 +246,17 @@ The chat component tracks scroll position relative to the bottom:
 - When user scrolls up to read, DOM rebuilds restore scroll position
 - Sending a new message resets auto-scroll
 - `ResizeObserver` re-scrolls when sibling elements appear/resize
+
+### Chat interaction controls
+
+The chat UI includes additional message and activity controls:
+
+- Per-message copy button for assistant/user text payloads
+- Per-message delete button that removes a message from IndexedDB and reloads history
+- Activity log panel header with one-click clipboard copy of rendered log entries
+
+When activity-log disk logging is enabled from Settings, server-side log entries
+are persisted under `.cache/logs` in the app data directory.
 
 ### Markdown rendering
 

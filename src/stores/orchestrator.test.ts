@@ -22,6 +22,7 @@ const mockSetConfig = jest.fn() as any;
 const mockReadGroupFile = jest.fn() as any;
 const mockWriteGroupFile = jest.fn() as any;
 const mockCopyGroupDirectory = jest.fn() as any;
+const mockDeleteMessage = jest.fn() as any;
 
 jest.unstable_mockModule("../db/deleteTask.js", () => ({
   deleteTask: mockDeleteTask,
@@ -97,6 +98,10 @@ jest.unstable_mockModule("../storage/writeGroupFile.js", () => ({
 
 jest.unstable_mockModule("../storage/copyGroupDirectory.js", () => ({
   copyGroupDirectory: mockCopyGroupDirectory,
+}));
+
+jest.unstable_mockModule("../db/deleteMessage.js", () => ({
+  deleteMessage: mockDeleteMessage,
 }));
 
 const { OrchestratorStore } = await import("./orchestrator.js");
@@ -330,6 +335,93 @@ describe("OrchestratorStore", () => {
     expect(store.state).toBe("idle");
   });
 
+  it("forwards thinking-log entries to server when activity disk logging is enabled", async () => {
+    const store = new OrchestratorStore();
+    const events: any = createEvents();
+    const orch: any = {
+      events,
+      getUseProxy: () => false,
+      getProxyUrl: () => "",
+      getGitProxyUrl: () => "",
+      getTaskServerUrl: () => "/schedule",
+    };
+
+    (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "activity_log_disk_logging_enabled") {
+        return "true";
+      }
+
+      return undefined;
+    });
+
+    await store.init({} as any, orch);
+    const fetchMock = (global as any).fetch as jest.Mock;
+    fetchMock.mockClear();
+
+    events.emit("thinking-log", {
+      groupId: DEFAULT_GROUP_ID,
+      level: "debug",
+      label: "Tool",
+      message: "read_file started",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/activity-log",
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+
+    const forwarded = JSON.parse(
+      (fetchMock.mock.calls[0][1] as any).body as string,
+    );
+    expect(forwarded.groupId).toBe(DEFAULT_GROUP_ID);
+    expect(forwarded.sessionStartedAt).toMatch(
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/,
+    );
+  });
+
+  it("does not forward thinking-log entries when activity disk logging is disabled", async () => {
+    const store = new OrchestratorStore();
+    const events: any = createEvents();
+    const orch: any = {
+      events,
+      getUseProxy: () => false,
+      getProxyUrl: () => "",
+      getGitProxyUrl: () => "",
+      getTaskServerUrl: () => "/schedule",
+    };
+
+    (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "activity_log_disk_logging_enabled") {
+        return "false";
+      }
+
+      return undefined;
+    });
+
+    await store.init({} as any, orch);
+    const fetchMock = (global as any).fetch as jest.Mock;
+    fetchMock.mockClear();
+
+    events.emit("thinking-log", {
+      groupId: DEFAULT_GROUP_ID,
+      level: "debug",
+      label: "Tool",
+      message: "read_file started",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/activity-log",
+      expect.any(Object),
+    );
+  });
+
   it("sendMessage uses active group", () => {
     const store = new OrchestratorStore();
 
@@ -407,6 +499,24 @@ describe("OrchestratorStore", () => {
     expect(mockDeleteTask).toHaveBeenCalledWith({} as any, "t1");
 
     expect(loadSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("deleteMessage deletes from DB, reloads history, and refreshes context usage", async () => {
+    const store: any = new OrchestratorStore();
+    const loadSpy = jest
+      .spyOn(store, "loadHistory")
+      .mockResolvedValue(undefined);
+    const refreshContextUsage = jest.fn<any>().mockResolvedValue(undefined);
+    store.orchestrator = { refreshContextUsage } as any;
+
+    await store.deleteMessage({} as any, "m1");
+
+    expect(mockDeleteMessage).toHaveBeenCalledWith({} as any, "m1");
+    expect(loadSpy).toHaveBeenCalled();
+    expect(refreshContextUsage).toHaveBeenCalledWith(
+      {} as any,
+      DEFAULT_GROUP_ID,
+    );
   });
 
   it("queues failed delete sync for replay", async () => {

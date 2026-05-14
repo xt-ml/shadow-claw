@@ -228,6 +228,14 @@ export class ShadowClawLlm extends ShadowClawElement {
       ?.addEventListener("click", () => this.saveRateLimitSettings());
 
     root
+      .querySelector('[data-setting="activity-log-disk-logging-toggle"]')
+      ?.addEventListener("change", (e) => {
+        if (e.target instanceof HTMLInputElement) {
+          this.onActivityLogDiskLoggingToggle(e.target.checked);
+        }
+      });
+
+    root
       .querySelector('[data-action="save-max-tokens"]')
       ?.addEventListener("click", () => this.saveMaxTokens());
 
@@ -257,6 +265,36 @@ export class ShadowClawLlm extends ShadowClawElement {
   }
 
   /**
+   * Enforce section visibility based on host data-view attribute.
+   * This complements CSS scoping and prevents UI drift when templates are edited.
+   */
+  applyViewSectionVisibility() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const view = this.getAttribute("data-view");
+    const aiOnlySections = root.querySelectorAll<HTMLElement>(
+      '[data-section="ai-only"]',
+    );
+    const modelProviderOnlySections = root.querySelectorAll<HTMLElement>(
+      '[data-section="model-provider-only"]',
+    );
+
+    const showAiOnly = view === "ai";
+    const showModelProviderOnly = view === "model-provider";
+
+    aiOnlySections.forEach((section) => {
+      section.hidden = !showAiOnly;
+    });
+
+    modelProviderOnlySections.forEach((section) => {
+      section.hidden = !showModelProviderOnly;
+    });
+  }
+
+  /**
    * Load and populate all settings fields.
    */
   async render() {
@@ -268,6 +306,8 @@ export class ShadowClawLlm extends ShadowClawElement {
     if (!root) {
       return;
     }
+
+    this.applyViewSectionVisibility();
 
     // Populate provider selector
     const providers = this.orchestrator.getAvailableProviders();
@@ -347,7 +387,31 @@ export class ShadowClawLlm extends ShadowClawElement {
         this.orchestrator.getRateLimitAutoAdapt?.() !== false;
     }
 
+    // Load activity log disk logging toggle
+    const { getConfig } = await import("../../../db/getConfig.js");
+    const { CONFIG_KEYS } = await import("../../../config.js");
+
+    const rawActivityLogDiskLoggingEnabled = (await getConfig(
+      this.db,
+      CONFIG_KEYS.ACTIVITY_LOG_DISK_LOGGING_ENABLED,
+    )) as unknown;
+    const activityLogDiskLoggingEnabled =
+      rawActivityLogDiskLoggingEnabled === true ||
+      rawActivityLogDiskLoggingEnabled === "true" ||
+      rawActivityLogDiskLoggingEnabled === 1 ||
+      rawActivityLogDiskLoggingEnabled === "1";
+
+    const activityLogToggle = root.querySelector(
+      '[data-setting="activity-log-disk-logging-toggle"]',
+    ) as HTMLInputElement | null;
+    if (activityLogToggle) {
+      activityLogToggle.checked = activityLogDiskLoggingEnabled;
+    }
+
     this.updateMaxTokensUI();
+
+    // Re-apply section scoping after provider/model visibility updates.
+    this.applyViewSectionVisibility();
   }
 
   updateMaxTokensUI() {
@@ -1433,6 +1497,39 @@ export class ShadowClawLlm extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving context compression setting: " + errorMsg, 6000);
+    }
+  }
+
+  /**
+   * Handle activity log disk logging toggle change.
+   */
+  async onActivityLogDiskLoggingToggle(enabled: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../../../db/setConfig.js");
+      const { CONFIG_KEYS } = await import("../../../config.js");
+
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.ACTIVITY_LOG_DISK_LOGGING_ENABLED,
+        enabled ? "true" : "false",
+      );
+
+      showSuccess(
+        enabled
+          ? "Activity log disk logging enabled"
+          : "Activity log disk logging disabled",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(
+        "Error saving activity log disk logging setting: " + errorMsg,
+        6000,
+      );
     }
   }
 

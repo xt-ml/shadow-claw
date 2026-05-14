@@ -1248,6 +1248,48 @@ export class Orchestrator {
     });
   }
 
+  /**
+   * Recompute and emit context usage for the given conversation.
+   * Useful after message mutation operations (for example delete) so the
+   * context bar updates without waiting for the next model invocation.
+   */
+  async refreshContextUsage(
+    db: ShadowClawDatabase,
+    groupId = DEFAULT_GROUP_ID,
+  ): Promise<void> {
+    let memory = "";
+    try {
+      memory = await readGroupFile(db, groupId, "MEMORY.md");
+    } catch {
+      // No memory file yet.
+    }
+
+    const activeTools = toolsStore.enabledTools;
+    const systemPrompt = buildSystemPrompt(
+      this.assistantName,
+      memory,
+      activeTools,
+      toolsStore.systemPromptOverride,
+    );
+
+    const contextLimit = getContextLimit(this.model);
+    const systemPromptTokens = estimateTokens(systemPrompt);
+    const allMessages = await buildConversationMessages(groupId, 200);
+    const dynamicContext = buildDynamicContext(allMessages, {
+      contextLimit,
+      systemPromptTokens,
+      maxOutputTokens: this.maxTokens,
+      skimTop: this.contextCompressionEnabled,
+    });
+
+    this.events.emit("context-usage", {
+      estimatedTokens: dynamicContext.estimatedTokens + systemPromptTokens,
+      contextLimit,
+      usagePercent: dynamicContext.usagePercent,
+      truncatedCount: dynamicContext.truncatedCount,
+    });
+  }
+
   getBedrockSettings(): {
     region: string;
     profile: string;

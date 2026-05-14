@@ -1,5 +1,5 @@
 <template>
-  <div class="settings-section">
+  <div class="settings-section" data-section="ai-only">
     <h3>👤 Assistant Name</h3>
     <div class="form-group">
       <label class="form-label">Name</label>
@@ -19,7 +19,28 @@
     </button>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" data-section="ai-only">
+    <h3>📝 Activity Log</h3>
+    <div class="form-group">
+      <div class="form-toggle">
+        <input
+          data-setting="activity-log-disk-logging-toggle"
+          id="activity-log-disk-logging-toggle"
+          type="checkbox"
+        />
+        <label class="form-label" for="activity-log-disk-logging-toggle">
+          Log activity details to disk
+        </label>
+      </div>
+      <div class="form-helper">
+        When enabled, activity log entries are automatically written to a plain
+        text file under .cache/logs in the app data directory. Default:
+        disabled.
+      </div>
+    </div>
+  </div>
+
+  <div class="settings-section" data-section="model-provider-only">
     <h3>🔑 LLM Provider</h3>
     <div class="form-group">
       <label class="form-label">Provider</label>
@@ -38,7 +59,11 @@
     </button>
   </div>
 
-  <div class="settings-section" data-setting="model-settings">
+  <div
+    class="settings-section"
+    data-section="model-provider-only"
+    data-setting="model-settings"
+  >
     <h3>🤖 Model</h3>
     <div class="form-group">
       <label class="form-label">Select Model</label>
@@ -72,6 +97,7 @@
 
   <div
     class="settings-section"
+    data-section="model-provider-only"
     data-setting="llamafile-settings"
     style="display: none"
   >
@@ -142,6 +168,7 @@
 
   <div
     class="settings-section"
+    data-section="model-provider-only"
     data-setting="bedrock-settings"
     style="display: none"
   >
@@ -192,6 +219,7 @@
   </div>
   <div
     class="settings-section"
+    data-section="model-provider-only"
     data-setting="transformers-js-settings"
     style="display: none"
   >
@@ -239,7 +267,7 @@
     </button>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" data-section="model-provider-only">
     <h3>📏 Max Output Tokens</h3>
     <div class="form-group">
       <label class="form-label">Maximum completion length</label>
@@ -262,7 +290,7 @@
     </button>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" data-section="model-provider-only">
     <h3>⚡ Streaming Responses</h3>
     <div class="form-group">
       <div class="form-toggle">
@@ -283,7 +311,7 @@
     </div>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" data-section="model-provider-only">
     <h3>🗜️ Context Compression</h3>
     <div class="form-group">
       <div class="form-toggle">
@@ -305,7 +333,7 @@
     </div>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" data-section="model-provider-only">
     <h3>🔄 Max Iterations</h3>
     <div class="form-group">
       <label class="form-label">Tool-use iterations per invocation</label>
@@ -327,7 +355,7 @@
     </button>
   </div>
 
-  <div class="settings-section">
+  <div class="settings-section" data-section="model-provider-only">
     <h3>🚦 Request Rate Limit</h3>
     <div class="form-group">
       <label class="form-label"

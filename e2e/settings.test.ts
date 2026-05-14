@@ -17,7 +17,7 @@ test.describe("Settings Persistence", () => {
     settings,
   }) => {
     await settings.open();
-    await settings.expandAiSettings();
+    await settings.expandModelProviderSettings();
 
     const input = settings.maxIterationsInput();
     await expect(input).toBeVisible({ timeout: 10000 });
@@ -35,7 +35,7 @@ test.describe("Settings Persistence", () => {
 
     // Navigate back to settings
     await settings.open();
-    await settings.expandAiSettings();
+    await settings.expandModelProviderSettings();
 
     // Verify the value persisted
     await expect(settings.maxIterationsInput()).toHaveValue("75", {
@@ -49,7 +49,7 @@ test.describe("Settings Persistence", () => {
     settings,
   }) => {
     await settings.open();
-    await settings.expandAiSettings();
+    await settings.expandModelProviderSettings();
 
     const toggle = settings.streamingToggle();
     await expect(toggle).toBeVisible({ timeout: 10000 });
@@ -76,7 +76,7 @@ test.describe("Settings Persistence", () => {
 
     // Navigate back to settings
     await settings.open();
-    await settings.expandAiSettings();
+    await settings.expandModelProviderSettings();
 
     // Verify the state persisted (opposite of original)
     if (wasChecked) {

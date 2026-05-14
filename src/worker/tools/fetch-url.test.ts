@@ -50,6 +50,32 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
 }
 
 describe("worker/tools/fetch-url", () => {
+  it("invokes fetchImpl with global context to avoid illegal invocation", async () => {
+    const deps = makeDeps({
+      fetchImpl: jest.fn(async function (this: unknown) {
+        if (this !== globalThis) {
+          throw new TypeError("Illegal invocation");
+        }
+
+        return createResponse({
+          status: 200,
+          statusText: "OK",
+          contentType: "text/plain",
+          body: "ok",
+        });
+      }),
+    });
+
+    const result = await executeFetchUrlTool(
+      {} as any,
+      { url: "https://x.test" },
+      "group-1",
+      deps,
+    );
+
+    expect(result).toContain("[HTTP 200 OK]");
+  });
+
   it("handles GET html responses and strips markup", async () => {
     const deps = makeDeps({
       fetchImpl: jest.fn(async () =>

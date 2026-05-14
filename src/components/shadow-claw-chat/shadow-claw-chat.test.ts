@@ -262,6 +262,7 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
           activeGroupId: "test-group",
           sendMessage: jest.fn(),
           stopCurrentRequest: jest.fn(),
+          deleteMessage: jest.fn(),
         },
       }));
 
@@ -419,6 +420,7 @@ describe("message copy button", () => {
         activeGroupId: "test-group",
         sendMessage: jest.fn(),
         stopCurrentRequest: jest.fn(),
+        deleteMessage: jest.fn(),
       },
     }));
 
@@ -557,6 +559,94 @@ describe("message copy button", () => {
       expect(btn!.classList.contains("chat__msg-copy-btn--copied")).toBe(true);
 
       expect(btn!.getAttribute("aria-label")).toBe("Copied!");
+    });
+  });
+
+  describe("injectMessageDeleteButton", () => {
+    /* @type InstanceType<typeof ShadowClawChat> */
+    let instance;
+
+    beforeEach(() => {
+      instance = Object.create(ShadowClawChat.prototype);
+    });
+
+    it("should add a delete button to a message article", () => {
+      const article = document.createElement("article");
+      article.className = "chat__message";
+      const content = document.createElement("div");
+      content.className = "chat__message-content";
+      article.appendChild(content);
+
+      // Mock db property to avoid private field access in test instance
+      Object.defineProperty(instance, "db", {
+        value: { transaction: jest.fn() },
+      });
+
+      instance.injectMessageDeleteButton(article, "msg-123");
+
+      const btn = article.querySelector(".chat__msg-delete-btn");
+      expect(btn).not.toBeNull();
+      expect(btn!.getAttribute("aria-label")).toBe("Delete message");
+    });
+
+    it("should call orchestratorStore.deleteMessage on click after confirmation", async () => {
+      const { orchestratorStore: mockedStore } =
+        await import("../../stores/orchestrator.js");
+      const deleteSpy = jest
+        .spyOn(mockedStore, "deleteMessage")
+        .mockResolvedValue(undefined);
+      const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(true);
+
+      const article = document.createElement("article");
+      article.className = "chat__message";
+      const content = document.createElement("div");
+      content.className = "chat__message-content";
+      article.appendChild(content);
+
+      const mockDb = { transaction: jest.fn() } as any;
+      // Mock db property to avoid private field access in test instance
+      Object.defineProperty(instance, "db", { value: mockDb });
+
+      instance.injectMessageDeleteButton(article, "msg-123");
+      const btn = article.querySelector(".chat__msg-delete-btn") as HTMLElement;
+
+      btn.click();
+
+      expect(confirmSpy).toHaveBeenCalledWith(
+        "Delete this message? This action cannot be undone.",
+      );
+      expect(deleteSpy).toHaveBeenCalledWith(mockDb, "msg-123");
+      confirmSpy.mockRestore();
+      deleteSpy.mockRestore();
+    });
+
+    it("should not call delete when confirmation is cancelled", async () => {
+      const { orchestratorStore: mockedStore } =
+        await import("../../stores/orchestrator.js");
+      const deleteSpy = jest
+        .spyOn(mockedStore, "deleteMessage")
+        .mockResolvedValue(undefined);
+      const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(false);
+
+      const article = document.createElement("article");
+      article.className = "chat__message";
+      const content = document.createElement("div");
+      content.className = "chat__message-content";
+      article.appendChild(content);
+
+      const mockDb = { transaction: jest.fn() } as any;
+      Object.defineProperty(instance, "db", { value: mockDb });
+
+      instance.injectMessageDeleteButton(article, "msg-123");
+      const btn = article.querySelector(".chat__msg-delete-btn") as HTMLElement;
+
+      btn.click();
+
+      expect(confirmSpy).toHaveBeenCalled();
+      expect(deleteSpy).not.toHaveBeenCalled();
+
+      confirmSpy.mockRestore();
+      deleteSpy.mockRestore();
     });
   });
 });

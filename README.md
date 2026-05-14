@@ -521,14 +521,18 @@ and event subscriptions are consistently released when components unmount.
 The UI is organized into modular components and dedicated stores:
 
 - **Settings**: Refactored into specialized cards (`shadow-claw-card`) for
-  LLM, Accounts, Git, and MCP configuration.
+  LLM, Accounts, Git, and MCP configuration, including an activity-log
+  disk logging toggle in LLM settings.
 - **Common primitives**: Reusable components such as
   `shadow-claw-page-header`, `shadow-claw-empty-state`,
   `shadow-claw-card`, and `shadow-claw-actions` reduce
   duplicated markup and behavior across pages.
-- **Chat**: Smart auto-scroll with ResizeObserver integration, streaming bubble support, mobile-friendly touch resizing, and responsive activity log toggles.
+- **Chat**: Smart auto-scroll with ResizeObserver integration, streaming bubble support, mobile-friendly touch resizing, per-message delete controls, and activity log copy/toggle controls.
 - **File Viewer**: MIME-aware previews for PDF, binary, and text content with syntax highlighting. A `↗ Share` button in the modal header triggers the Web Share API for shareable files; the button is hidden when `navigator.share` is unavailable or `navigator.canShare()` returns false.
 - **Terminal**: Interactive Xterm.js terminal with WebVM bridge.
+
+When activity-log disk logging is enabled, entries are written to `.cache/logs`
+in the app data directory (server and Electron), not the conversation workspace.
 
 Recommended component organization:
 

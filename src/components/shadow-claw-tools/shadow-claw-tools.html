@@ -1,34 +1,31 @@
 <template>
   <section aria-label="Tool Configuration" class="tools">
     <shadow-claw-page-header icon="🛠️" title="Tool Configuration">
-      <button
-        class="tools__back-btn tools__header-btn"
+      <shadow-claw-page-header-action-button
+        class="tools__back-btn"
         slot="actions"
-        type="button"
       >
         ← Back to Settings
-      </button>
-      <button
-        class="tools__add-btn tools__header-btn"
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
+        class="tools__add-btn"
         slot="actions"
-        type="button"
+        variant="primary"
       >
         + Add Tool
-      </button>
-      <button
-        class="tools__backup-btn tools__header-btn"
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
+        class="tools__backup-btn"
         slot="actions"
-        type="button"
       >
         💾 Backup
-      </button>
-      <button
-        class="tools__restore-btn tools__header-btn"
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
+        class="tools__restore-btn"
         slot="actions"
-        type="button"
       >
         ♻️ Restore
-      </button>
+      </shadow-claw-page-header-action-button>
     </shadow-claw-page-header>
 
     <input
@@ -165,9 +162,9 @@
       <form class="tools__dialog-form">
         <div class="tools__dialog-body">
           <div class="tools__form-group">
-            <label class="tools__form-label" for="toolNameInput"
-              >Tool Name</label
-            >
+            <label class="tools__form-label" for="toolNameInput">
+              Tool Name
+            </label>
             <input
               class="tools__form-input"
               id="toolNameInput"
@@ -182,9 +179,9 @@
             </div>
           </div>
           <div class="tools__form-group">
-            <label class="tools__form-label" for="toolDescInput"
-              >Description</label
-            >
+            <label class="tools__form-label" for="toolDescInput">
+              Description
+            </label>
             <textarea
               class="tools__form-textarea"
               id="toolDescInput"
@@ -194,9 +191,9 @@
             ></textarea>
           </div>
           <div class="tools__form-group">
-            <label class="tools__form-label" for="toolSchemaInput"
-              >Input Schema (JSON)</label
-            >
+            <label class="tools__form-label" for="toolSchemaInput">
+              Input Schema (JSON)
+            </label>
             <textarea
               class="tools__form-textarea"
               id="toolSchemaInput"
@@ -210,7 +207,7 @@
           </div>
         </div>
         <div class="tools__dialog-footer">
-          <button type="button">Cancel</button>
+          <button class="tools__btn-cancel" type="button">Cancel</button>
           <button class="tools__btn-save" type="submit">Add Tool</button>
         </div>
       </form>
@@ -242,9 +239,9 @@
             />
           </div>
           <div class="tools__form-group">
-            <label class="tools__form-label" for="cloneNameInput"
-              >New Tool Name</label
-            >
+            <label class="tools__form-label" for="cloneNameInput">
+              New Tool Name
+            </label>
             <input
               class="tools__form-input"
               id="cloneNameInput"
@@ -259,9 +256,9 @@
             </div>
           </div>
           <div class="tools__form-group">
-            <label class="tools__form-label" for="cloneDescInput"
-              >Description (optional)</label
-            >
+            <label class="tools__form-label" for="cloneDescInput">
+              Description (optional)
+            </label>
             <textarea
               class="tools__form-textarea"
               id="cloneDescInput"
@@ -301,9 +298,9 @@
       <form class="tools__profile-dialog-form">
         <div class="tools__dialog-body">
           <div class="tools__form-group">
-            <label class="tools__form-label" for="profileNameInput"
-              >Profile Name</label
-            >
+            <label class="tools__form-label" for="profileNameInput">
+              Profile Name
+            </label>
             <input
               class="tools__form-input"
               id="profileNameInput"
@@ -314,9 +311,9 @@
             />
           </div>
           <div class="tools__form-group">
-            <label class="tools__form-label" for="profileProviderSelect"
-              >Provider (optional)</label
-            >
+            <label class="tools__form-label" for="profileProviderSelect">
+              Provider (optional)
+            </label>
             <select
               class="tools__form-input"
               id="profileProviderSelect"
@@ -329,9 +326,9 @@
             </div>
           </div>
           <div class="tools__form-group">
-            <label class="tools__form-label" for="profileModelInput"
-              >Model (optional)</label
-            >
+            <label class="tools__form-label" for="profileModelInput">
+              Model (optional)
+            </label>
             <input
               class="tools__form-input"
               id="profileModelInput"

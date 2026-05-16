@@ -254,6 +254,8 @@ The chat UI includes additional message and activity controls:
 - Per-message copy button for assistant/user text payloads
 - Per-message delete button that removes a message from IndexedDB and reloads history
 - Activity log panel header with one-click clipboard copy of rendered log entries
+- ChatGPT-style inline action buttons for file attachments (+) and message sending (arrow)
+- Responsive input wrapper that maintains inline layout across all viewport sizes
 
 When activity-log disk logging is enabled from Settings, server-side log entries
 are persisted under `.cache/logs` in the app data directory.

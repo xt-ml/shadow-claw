@@ -348,8 +348,9 @@ Each conversation has a `groupId` (prefixed by channel type), a `name`, and
 a `createdAt` timestamp. The `OrchestratorStore` exposes CRUD operations:
 `loadGroups`, `createConversation`, `renameConversation`, `deleteConversation`,
 `switchConversation` (which persists the selection via `LAST_ACTIVE_GROUP`),
-`cloneConversation` (duplicates metadata + messages + tasks + `MEMORY.md`), and
-`reorderConversations` (persists a custom sort order).
+`cloneConversation` (duplicates metadata + messages + tasks + `MEMORY.md`),
+`reorderConversations` (persists a custom sort order), and
+`updateConversationToolTags` (pins a set of tool names to a conversation).
 
 On first launch (empty DB), `listGroups()` creates and **persists** a default
 "Main" conversation (`DEFAULT_GROUP_ID`). This ensures the default group
@@ -373,14 +374,23 @@ the store adds the `groupId` to `_unreadGroupIds` (a `Signal.State<Set<string>>`
 The conversations sidebar applies an `unread` CSS class that triggers a pulsing
 highlight animation. Switching to a conversation clears its unread flag.
 
+**Per-conversation tool tags:** Each conversation can carry an optional
+`toolTags: string[]` field in its `GroupMeta`. When non-empty, agent invocation
+intersects the user's globally enabled tools with the tagged set — only tools in
+both lists are passed to the LLM. The `updateGroupToolTags` DB function and
+`updateConversationToolTags` store method persist and apply changes. Conversations
+with active tags display a `🔧` badge in the sidebar.
+
 The `<shadow-claw-conversations>` component renders the sidebar conversation
 list and wires user actions to the store. It supports **accessible drag-and-drop
 reordering** (mouse, keyboard, and touch) with ARIA live-region announcements,
-a **clone** button to duplicate conversations, and a **resizable list** with a
-drag handle at the bottom — the list fills all available sidebar space by default,
-and the user can drag the handle to resize. Double-clicking the handle resets
-to auto-fill. The resize preference is persisted via `CONFIG_KEYS.CONVERSATIONS_HEIGHT`
-in IndexedDB. The list is scrollable via `overflow-y: auto`.
+a **clone** button to duplicate conversations, a **conversation details dialog**
+(expanded rename dialog) with a chip-based tool picker for per-conversation tool
+tagging, and a **resizable list** with a drag handle at the bottom — the list
+fills all available sidebar space by default, and the user can drag the handle to
+resize. Double-clicking the handle resets to auto-fill. The resize preference is
+persisted via `CONFIG_KEYS.CONVERSATIONS_HEIGHT` in IndexedDB. The list is
+scrollable via `overflow-y: auto`.
 
 ### Config Keys
 
@@ -439,10 +449,13 @@ When a user manually toggles individual tools (via `setToolEnabled` or
 manual selection takes effect without restriction. The user can re-activate
 a profile from the dropdown or save their current selection as a new profile.
 
-The orchestrator passes `toolsStore.enabledTools` directly to the provider —
-there is no additional tool filtering. The Nano built-in profile already
-constrains its tool set to a small-model-safe subset; manual selections
-are trusted as-is.
+The orchestrator passes `toolsStore.enabledTools` to the provider after applying
+one additional filter: if the active conversation has non-empty `toolTags`,
+the enabled tools are intersected with that set — only tools present in both
+lists reach the LLM. This means a tool disabled globally stays disabled even
+if it appears in a conversation's tags. The Nano built-in profile already
+constrains its tool set to a small-model-safe subset; manual selections and
+conversation tags are both applied on top of that baseline.
 
 ### Electron Desktop App
 

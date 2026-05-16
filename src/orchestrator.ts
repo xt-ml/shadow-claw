@@ -58,6 +58,7 @@ import { openDatabase } from "./db/openDatabase.js";
 import { saveMessage } from "./db/saveMessage.js";
 import { saveTask } from "./db/saveTask.js";
 import { setConfig } from "./db/setConfig.js";
+import { listGroups } from "./db/groups.js";
 
 import { buildDynamicContext } from "./context/buildDynamicContext.js";
 import { estimateTokens } from "./context/estimateTokens.js";
@@ -70,6 +71,7 @@ import { TelegramChannel } from "./channels/telegram.js";
 import { readGroupFile } from "./storage/readGroupFile.js";
 import { readGroupFileBytes } from "./storage/readGroupFileBytes.js";
 import { toolsStore } from "./stores/tools.js";
+import { orchestratorStore } from "./stores/orchestrator.js";
 import { getCompactionSystemPrompt } from "./worker/getCompactionSystemPrompt.js";
 import { buildSystemPrompt } from "./worker/system-prompt.js";
 import { getPushUrl } from "./notifications/push-client.js";
@@ -1739,8 +1741,17 @@ export class Orchestrator {
     // internally and skips modelContext access entirely when 0 tools are
     // passed.
     this._webMcpEffectCleanup = effect(() => {
-      // Access the computed signal to establish tracking.
-      const tools = toolsStore.enabledTools;
+      // Access signals to establish tracking.
+      const globalTools = toolsStore.enabledTools;
+      const allTools = toolsStore.allTools;
+      const activeGroupId = orchestratorStore.activeGroupId;
+      const groups = orchestratorStore.groups;
+
+      const group = groups.find((g) => g.groupId === activeGroupId);
+      const tools =
+        group?.toolTags && group.toolTags.length > 0
+          ? allTools.filter((t) => group.toolTags!.includes(t.name))
+          : globalTools;
 
       // Serialize WebMCP registration calls to prevent overlapping unregister/register cycles.
       this._webMcpRegistrationLock = this._webMcpRegistrationLock
@@ -1754,7 +1765,7 @@ export class Orchestrator {
             async (msg) => {
               await this.handleWorkerMessage(db, msg);
             },
-            DEFAULT_GROUP_ID,
+            activeGroupId,
             tools,
           );
         })
@@ -2186,8 +2197,15 @@ export class Orchestrator {
       memory = await readGroupFile(db, groupId, "MEMORY.md");
     } catch {}
 
-    // Use whatever tools the user has enabled (via profile or manual selection).
-    const activeTools = toolsStore.enabledTools;
+    // Load group metadata to check for conversation-specific pinned tools
+    const groups = await listGroups(db);
+    const group = groups.find((g) => g.groupId === groupId);
+
+    // Use pinned tools if set; otherwise fallback to global enabled tools.
+    const activeTools =
+      group?.toolTags && group.toolTags.length > 0
+        ? toolsStore.allTools.filter((t) => group.toolTags!.includes(t.name))
+        : toolsStore.enabledTools;
 
     const systemPrompt = buildSystemPrompt(
       this.assistantName,

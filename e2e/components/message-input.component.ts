@@ -15,12 +15,20 @@ export class MessageInputComponent {
     return this.host.locator(".chat__send-btn").first();
   }
 
+  attachButton(): Locator {
+    return this.host.locator(".chat__attach-btn").first();
+  }
+
   async fill(text: string): Promise<void> {
     await this.textarea().fill(text);
   }
 
   async send(): Promise<void> {
     await this.sendButton().click();
+  }
+
+  async attach(): Promise<void> {
+    await this.attachButton().click();
   }
 
   async fillAndSend(text: string): Promise<void> {

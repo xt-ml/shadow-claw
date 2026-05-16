@@ -21,6 +21,18 @@ describe("chat-template-sanitizer", () => {
     expect(stripChatTemplateControlTokens(raw)).toBe(raw);
   });
 
+  it("preserves single space chunk (streaming)", () => {
+    const raw = " ";
+
+    expect(stripChatTemplateControlTokens(raw)).toBe(raw);
+  });
+
+  it("preserves chunk with leading space (streaming)", () => {
+    const raw = " doing";
+
+    expect(stripChatTemplateControlTokens(raw)).toBe(raw);
+  });
+
   // ── Unambiguous special-token patterns ──────────────────────────────────
 
   it.each([

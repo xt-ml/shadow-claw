@@ -8,8 +8,9 @@
     </button>
   </div>
   <span class="sr-only" id="reorder-instructions">
-    Press Space to grab. Use Arrow Up and Down to move. Press Space or Enter to
-    drop. Press Escape to cancel.
+    Press Enter or Space to select. Use Arrow Keys to move focus. Press M to
+    grab for reordering. When grabbed, use Arrow Up and Down to move. Press
+    Space or Enter to drop. Press Escape to cancel.
   </span>
   <div
     aria-live="assertive"
@@ -44,24 +45,48 @@
   </shadow-claw-dialog>
 
   <shadow-claw-dialog
-    aria-label="Rename conversation"
-    dialog-class="conversations__dialog conversations__rename-dialog"
+    aria-label="Conversation Details"
+    dialog-class="conversations__dialog conversations__details-dialog"
   >
     <form class="conversations__form" method="dialog">
-      <label class="conversations__label" for="conversations-rename-name">
-        Rename conversation
+      <label class="conversations__label" for="conversations-details-name">
+        Conversation name
       </label>
       <input
         autocomplete="off"
         class="conversations__input"
-        id="conversations-rename-name"
-        name="conversations-rename-name"
+        id="conversations-details-name"
+        name="conversations-details-name"
         required
         type="text"
       />
+      <label class="conversations__label conversations__label--tools">
+        Pinned Tools
+      </label>
+      <div class="conversations__tool-input-row">
+        <input
+          type="text"
+          list="conversations-available-tools"
+          id="conversations-tool-input"
+          class="conversations__input conversations__tool-input"
+          placeholder="Add a tool..."
+        />
+        <datalist id="conversations-available-tools"></datalist>
+        <button
+          type="button"
+          class="conversations__tool-add-btn"
+          id="conversations-add-tool-btn"
+        >
+          Add
+        </button>
+      </div>
+      <div
+        class="conversations__tool-tags"
+        id="conversations-details-tools"
+      ></div>
       <div class="conversations__actions">
         <button class="conversations__cancel" type="button">Cancel</button>
-        <button class="conversations__ok" type="submit">OK</button>
+        <button class="conversations__ok" type="submit">Save</button>
       </div>
     </form>
   </shadow-claw-dialog>

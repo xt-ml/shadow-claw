@@ -1,0 +1,71 @@
+:host {
+  display: block;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  font-family: var(--shadow-claw-font-sans);
+}
+
+.action-btn {
+  background-color: transparent;
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-m);
+  color: var(--shadow-claw-text-secondary);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  transition: all 0.15s;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.action-btn:hover {
+  border-color: var(--shadow-claw-text-primary);
+  box-shadow: var(--shadow-claw-shadow-md);
+  color: var(--shadow-claw-text-primary);
+}
+
+.action-btn:focus-visible {
+  outline: 0.125rem solid var(--shadow-claw-accent-primary);
+  outline-offset: 0.0625rem;
+}
+
+.action-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+/* Primary variant - Call-to-action (solid bg) */
+.action-btn--primary {
+  background-color: var(--shadow-claw-text-primary);
+  border-color: var(--shadow-claw-text-primary);
+  color: var(--shadow-claw-bg-primary);
+  font-weight: 600;
+}
+
+.action-btn--primary:hover {
+  background-color: var(--shadow-claw-accent-primary);
+  border-color: var(--shadow-claw-accent-primary);
+  color: var(--shadow-claw-on-primary);
+}
+
+/* Danger variant - Destructive action (red) */
+.action-btn--danger {
+  border-color: var(--shadow-claw-error-color);
+  color: var(--shadow-claw-error-color);
+}
+
+.action-btn--danger:hover {
+  background-color: var(--shadow-claw-error-color);
+  border-color: var(--shadow-claw-error-color);
+  color: var(--shadow-claw-on-primary);
+}
+
+@media (min-width: 40.625rem) {
+  .action-btn {
+    width: auto;
+  }
+}

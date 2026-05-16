@@ -29,6 +29,7 @@ Detailed docs for each major subsystem.
 | [Channel System](subsystems/channels.md)                                | Channel registry, browser/Telegram/iMessage channels, router, multi-channel flow                    |
 | [Remote MCP](subsystems/remote-mcp.md)                                  | External MCP servers, tool discovery, authentication, JSON-RPC protocol, OAuth reconnection         |
 | [Accounts & Credentials](subsystems/accounts.md)                        | Service account management, credential storage, auth bridges                                        |
+| [Crypto & Secrets](subsystems/crypto.md)                                | AES-256-GCM key storage, runtime key handling, environment hardening                                |
 | [Tools & Profiles](subsystems/tools.md)                                 | Tool definitions, execution dispatch, profiles, adding new tools                                    |
 | [Notifications & Scheduling](subsystems/notifications.md)               | Web Push, VAPID, server-side SQLite scheduler, recursion guards                                     |
 | [Providers & Rate Limiting](subsystems/providers.md)                    | LLM provider registry, adapter pattern, Transformers.js (local), adaptive rate limiting, Prompt API |

@@ -10,12 +10,55 @@ import DOMPurify from "dompurify";
 import hljs from "highlight.js";
 import { marked } from "marked";
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function sanitizeLanguageClass(lang?: string): string {
+  if (typeof lang !== "string" || lang.length === 0) {
+    return "plaintext";
+  }
+
+  const cleaned = lang
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_+-]/g, "");
+
+  return cleaned || "plaintext";
+}
+
+function extractCodeAndLang(
+  codeOrToken: string | { text?: string; lang?: string },
+  maybeLang?: string,
+): { text: string; lang?: string } {
+  if (typeof codeOrToken === "string") {
+    return {
+      text: codeOrToken,
+      lang: typeof maybeLang === "string" ? maybeLang : undefined,
+    };
+  }
+
+  return {
+    text: typeof codeOrToken?.text === "string" ? codeOrToken.text : "",
+    lang: typeof codeOrToken?.lang === "string" ? codeOrToken.lang : undefined,
+  };
+}
+
 // Configure marked with a custom renderer for code blocks (compatible with marked v17+)
 marked.use({
   renderer: {
-    code({ text, lang }: { text: string; lang?: string }) {
-      const language = lang || "plaintext";
-      let highlighted = text;
+    code(
+      codeOrToken: string | { text?: string; lang?: string },
+      maybeLang?: string,
+    ) {
+      const { text, lang } = extractCodeAndLang(codeOrToken, maybeLang);
+      const language = sanitizeLanguageClass(lang);
+      let highlighted = escapeHtml(text);
 
       try {
         // Handle various hljs import patterns defensively
@@ -50,7 +93,10 @@ export async function renderMarkdown(
 ): Promise<string> {
   try {
     // Parse markdown to HTML
-    const html = await marked.parse(src, { breaks: options?.breaks ?? false });
+    const html = await marked.parse(src, {
+      gfm: true,
+      breaks: options?.breaks ?? false,
+    });
 
     // Sanitize with DOMPurify to remove any dangerous content
     const safe = DOMPurify.sanitize(html, {

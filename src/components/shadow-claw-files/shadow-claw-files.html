@@ -1,54 +1,49 @@
 <template>
   <section class="files" aria-label="Files">
     <shadow-claw-page-header icon="&#128193;" title="Files">
-      <button
+      <shadow-claw-page-header-action-button
         slot="actions"
-        type="button"
         title="Refresh file list"
-        class="files__refresh-btn files__header-btn"
+        class="files__refresh-btn"
       >
         &#128260; Refresh
-      </button>
-      <button
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
         slot="actions"
-        type="button"
         title="Upload files to workspace"
-        class="files__upload-btn files__header-btn"
+        class="files__upload-btn"
       >
         &#128228; Upload
-      </button>
-      <button
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
         slot="actions"
-        type="button"
         title="Create a new file"
-        class="files__new-btn files__header-btn"
+        class="files__new-btn"
       >
         &#10133; New
-      </button>
-      <button
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
         slot="actions"
-        type="button"
         title="Backup workspace files"
-        class="files__backup-btn files__header-btn"
+        class="files__backup-btn"
       >
         &#128190; Backup
-      </button>
-      <button
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
         slot="actions"
-        type="button"
         title="Restore workspace from backup"
-        class="files__restore-btn files__header-btn"
+        class="files__restore-btn"
       >
         &#9851;&#65039; Restore
-      </button>
-      <button
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
         slot="actions"
-        type="button"
         title="Delete all workspace files"
-        class="files__clear-btn files__header-btn files__header-btn--danger"
+        class="files__clear-btn"
+        variant="danger"
       >
         &#128465;&#65039; Clear All
-      </button>
+      </shadow-claw-page-header-action-button>
       <nav
         slot="breadcrumbs"
         class="files__breadcrumbs"

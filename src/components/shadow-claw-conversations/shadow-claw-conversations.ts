@@ -2,6 +2,7 @@ import { ChannelRegistry } from "../../channels/channel-registry.js";
 import { CONFIG_KEYS } from "../../config.js";
 import { getConfig } from "../../db/getConfig.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
+import { TOOL_DEFINITIONS } from "../../tools.js";
 
 import { effect } from "../../effect.js";
 import { setConfig } from "../../db/setConfig.js";
@@ -25,6 +26,7 @@ export class ShadowClawConversations extends ShadowClawElement {
   private _touchId: number | null = null;
   private _pendingRenameGroupId: string | null = null;
   private _pendingRenameName: string | null = null;
+  private _pendingDetailsToolTags: string[] | null = null;
   private _pendingDeleteGroupId: string | null = null;
   private _pendingCloneGroupId: string | null = null;
 
@@ -244,6 +246,14 @@ export class ShadowClawConversations extends ShadowClawElement {
         li.append(badgeEl);
       }
 
+      if (group.toolTags && group.toolTags.length > 0) {
+        const toolBadgeEl = document.createElement("span");
+        toolBadgeEl.className = "tool-badge";
+        toolBadgeEl.textContent = "🔧";
+        toolBadgeEl.title = `Pinned Tools: ${group.toolTags.join(", ")}`;
+        li.append(toolBadgeEl);
+      }
+
       const nameEl = document.createElement("span");
       nameEl.className = "conversation-name";
       nameEl.textContent = group.name;
@@ -257,13 +267,13 @@ export class ShadowClawConversations extends ShadowClawElement {
       cloneBtn.setAttribute("aria-label", `Clone ${group.name}`);
       cloneBtn.textContent = "📋";
 
-      const renameBtn = document.createElement("button");
-      renameBtn.setAttribute("data-action", "rename");
-      renameBtn.setAttribute("title", "Rename");
-      renameBtn.setAttribute("aria-label", `Rename ${group.name}`);
-      renameBtn.textContent = "✏️";
+      const detailsBtn = document.createElement("button");
+      detailsBtn.setAttribute("data-action", "details");
+      detailsBtn.setAttribute("title", "Details");
+      detailsBtn.setAttribute("aria-label", `Details for ${group.name}`);
+      detailsBtn.textContent = "⚙️";
 
-      actionsEl.append(cloneBtn, renameBtn);
+      actionsEl.append(cloneBtn, detailsBtn);
 
       if (canDelete) {
         const deleteBtn = document.createElement("button");
@@ -293,8 +303,8 @@ export class ShadowClawConversations extends ShadowClawElement {
 
         if (action === "clone") {
           this.handleClone(group.groupId);
-        } else if (action === "rename") {
-          this.handleRename(group.groupId, group.name);
+        } else if (action === "details") {
+          this.handleDetails(group.groupId, group.name);
         } else if (action === "delete") {
           this.handleDelete(group.groupId, group.name);
         } else if (target.closest(".conversation-actions-toggle")) {
@@ -306,7 +316,7 @@ export class ShadowClawConversations extends ShadowClawElement {
       });
 
       li.addEventListener("keydown", (e) => {
-        this._handleKeyboardReorder(e, group.groupId, group.name);
+        this._handleKeyboard(e, group.groupId, group.name);
       });
 
       handle.addEventListener("dragstart", (e) => {
@@ -501,24 +511,64 @@ export class ShadowClawConversations extends ShadowClawElement {
   }
 
   /**
-   * Handle keyboard-based reorder on a conversation item.
-   * Space = grab/drop, Arrow Up/Down = move, Escape = cancel.
+   * Handle keyboard-based navigation, selection, and reordering.
+   * Enter/Space = select, Arrow Down/Right = focus next, Arrow Up/Left = focus prev.
+   * M = grab/drop for reorder (when grabbed, Arrows move, Space/Enter drop).
    */
-  _handleKeyboardReorder(e: KeyboardEvent, groupId: string, name: string) {
+  _handleKeyboard(e: KeyboardEvent, groupId: string, name: string) {
     const groups = orchestratorStore.groups || [];
     const ids = groups.map((g) => g.groupId);
     const total = ids.length;
 
     if (this._keyboardGrabbedId === null) {
-      // Not grabbed — Space grabs
-      if (e.key === " " || e.key === "Spacebar") {
+      // Navigation & Selection
+      if (e.key === "ArrowDown") {
         e.preventDefault();
+        this._focusNextItem(e.target as HTMLElement);
 
+        return;
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        this._focusPrevItem(e.target as HTMLElement);
+
+        return;
+      }
+
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        this._focusNext(e.target as HTMLElement);
+
+        return;
+      }
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        this._focusPrev(e.target as HTMLElement);
+
+        return;
+      }
+
+      if (e.key === " " || e.key === "Spacebar" || e.key === "Enter") {
+        // If we are on the LI itself, select it
+        if ((e.target as HTMLElement).classList.contains("conversation-item")) {
+          e.preventDefault();
+          this.handleSwitch(groupId);
+        }
+
+        // If on a button, the default button behavior handles it (click event)
+        return;
+      }
+
+      // Grab for reorder
+      if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
         this._keyboardGrabbedId = groupId;
-
         const pos = ids.indexOf(groupId) + 1;
-
-        this._announce(`${name} grabbed. Current position ${pos} of ${total}.`);
+        this._announce(
+          `${name} grabbed. Current position ${pos} of ${total}. Use Arrow Up and Down to move, Space or Enter to drop.`,
+        );
         this.render();
       }
 
@@ -528,13 +578,10 @@ export class ShadowClawConversations extends ShadowClawElement {
     // Currently grabbed
     if (e.key === "Escape") {
       e.preventDefault();
-
       this._announce(
         `Reorder cancelled. ${name} returned to original position.`,
       );
-
       this._keyboardGrabbedId = null;
-
       this.render();
 
       return;
@@ -543,18 +590,13 @@ export class ShadowClawConversations extends ShadowClawElement {
     if (e.key === " " || e.key === "Spacebar" || e.key === "Enter") {
       // Drop
       e.preventDefault();
-
       const pos = ids.indexOf(this._keyboardGrabbedId) + 1;
-
       const droppedName =
         groups.find((g) => g.groupId === this._keyboardGrabbedId)?.name || "";
-
       this._announce(
         `${droppedName} dropped at position ${pos} of ${total}. Reordering complete.`,
       );
-
       this._keyboardGrabbedId = null;
-
       this.render();
 
       return;
@@ -562,10 +604,8 @@ export class ShadowClawConversations extends ShadowClawElement {
 
     if (e.key === "ArrowUp" || e.key === "ArrowDown") {
       e.preventDefault();
-
       const currentIdx = ids.indexOf(this._keyboardGrabbedId);
       const newIdx = e.key === "ArrowUp" ? currentIdx - 1 : currentIdx + 1;
-
       if (newIdx < 0 || newIdx >= total) {
         return;
       }
@@ -573,9 +613,70 @@ export class ShadowClawConversations extends ShadowClawElement {
       // Swap
       ids.splice(currentIdx, 1);
       ids.splice(newIdx, 0, this._keyboardGrabbedId);
-
       this._announce(`Moved to position ${newIdx + 1} of ${total}.`);
       this.handleReorder(this._keyboardGrabbedId, ids[currentIdx], ids);
+    }
+  }
+
+  _focusNext(current: HTMLElement) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const focusables = Array.from(
+      root.querySelectorAll('li[tabindex="0"], button:not([disabled])'),
+    ) as HTMLElement[];
+    const idx = focusables.indexOf(current);
+    if (idx !== -1 && idx < focusables.length - 1) {
+      focusables[idx + 1].focus();
+    }
+  }
+
+  _focusPrev(current: HTMLElement) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const focusables = Array.from(
+      root.querySelectorAll('li[tabindex="0"], button:not([disabled])'),
+    ) as HTMLElement[];
+    const idx = focusables.indexOf(current);
+    if (idx > 0) {
+      focusables[idx - 1].focus();
+    }
+  }
+
+  _focusNextItem(current: HTMLElement) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const items = Array.from(
+      root.querySelectorAll(".conversation-item"),
+    ) as HTMLElement[];
+    const currentItem = current.closest(".conversation-item") as HTMLElement;
+    const idx = items.indexOf(currentItem);
+    if (idx !== -1 && idx < items.length - 1) {
+      items[idx + 1].focus();
+    }
+  }
+
+  _focusPrevItem(current: HTMLElement) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const items = Array.from(
+      root.querySelectorAll(".conversation-item"),
+    ) as HTMLElement[];
+    const currentItem = current.closest(".conversation-item") as HTMLElement;
+    const idx = items.indexOf(currentItem);
+    if (idx > 0) {
+      items[idx - 1].focus();
     }
   }
 
@@ -587,14 +688,20 @@ export class ShadowClawConversations extends ShadowClawElement {
     this.openCreateDialog();
   }
 
-  async handleRename(groupId: string, currentName: string) {
+  async handleDetails(groupId: string, currentName: string) {
     if (!this.db) {
       return;
     }
 
     this._pendingRenameGroupId = groupId;
     this._pendingRenameName = currentName;
-    this.openRenameDialog(currentName);
+
+    const groups = orchestratorStore.groups || [];
+    const group = groups.find((g) => g.groupId === groupId);
+    const currentTags = group?.toolTags || [];
+
+    this._pendingDetailsToolTags = [...currentTags];
+    this.openDetailsDialog(currentName);
   }
 
   async handleDelete(groupId: string, name: string) {
@@ -692,24 +799,135 @@ export class ShadowClawConversations extends ShadowClawElement {
     }
   }
 
-  openRenameDialog(currentName: string) {
+  openDetailsDialog(currentName: string) {
     const root = this.shadowRoot;
     if (!root) {
       return;
     }
 
     const dialog = root.querySelector(
-      ".conversations__rename-dialog",
+      ".conversations__details-dialog",
     ) as HTMLDialogElement | null;
     const input = root.querySelector(
-      ".conversations__rename-dialog .conversations__input",
+      ".conversations__details-dialog .conversations__input",
     ) as HTMLInputElement | null;
+    const toolsContainer = root.querySelector(
+      "#conversations-details-tools",
+    ) as HTMLElement | null;
+    const toolInput = root.querySelector(
+      "#conversations-tool-input",
+    ) as HTMLInputElement | null;
+    const toolAddBtn = root.querySelector(
+      "#conversations-add-tool-btn",
+    ) as HTMLButtonElement | null;
+    const datalist = root.querySelector(
+      "#conversations-available-tools",
+    ) as HTMLDataListElement | null;
 
     if (!dialog) {
       return;
     }
 
     dialog.showModal();
+
+    const updateDatalist = () => {
+      if (!datalist) {
+        return;
+      }
+
+      const pinned = new Set(this._pendingDetailsToolTags || []);
+      datalist.replaceChildren();
+      for (const tool of TOOL_DEFINITIONS) {
+        if (pinned.has(tool.name)) {
+          continue;
+        }
+
+        const option = document.createElement("option");
+        option.value = tool.name;
+        datalist.appendChild(option);
+      }
+    };
+
+    const renderChips = () => {
+      if (!toolsContainer) {
+        return;
+      }
+
+      toolsContainer.replaceChildren();
+
+      const tags = this._pendingDetailsToolTags || [];
+      for (const tagName of tags) {
+        const tool = TOOL_DEFINITIONS.find((t) => t.name === tagName);
+        const chip = document.createElement("span");
+        chip.className = "conversations__tool-chip";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = tagName;
+        if (tool) {
+          nameSpan.title = tool.description;
+        }
+
+        chip.appendChild(nameSpan);
+
+        const removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "conversations__tool-chip-remove";
+        removeBtn.innerHTML = "&times;";
+        removeBtn.setAttribute("aria-label", `Remove tool ${tagName}`);
+
+        removeBtn.addEventListener("click", () => {
+          if (!this._pendingDetailsToolTags) {
+            return;
+          }
+
+          this._pendingDetailsToolTags = this._pendingDetailsToolTags.filter(
+            (t) => t !== tagName,
+          );
+          renderChips();
+        });
+
+        chip.appendChild(removeBtn);
+        toolsContainer.appendChild(chip);
+      }
+
+      updateDatalist();
+    };
+
+    if (toolAddBtn && toolInput) {
+      toolAddBtn.onclick = () => {
+        const val = toolInput.value.trim();
+        if (!val) {
+          return;
+        }
+
+        const tool = TOOL_DEFINITIONS.find((t) => t.name === val);
+        if (!tool) {
+          toolInput.value = "";
+
+          return;
+        }
+
+        if (!this._pendingDetailsToolTags) {
+          this._pendingDetailsToolTags = [];
+        }
+
+        if (!this._pendingDetailsToolTags.includes(val)) {
+          this._pendingDetailsToolTags.push(val);
+          renderChips();
+        }
+
+        toolInput.value = "";
+      };
+
+      toolInput.onkeydown = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          toolAddBtn.click();
+        }
+      };
+    }
+
+    renderChips();
 
     if (input) {
       input.value = currentName;
@@ -785,26 +1003,27 @@ export class ShadowClawConversations extends ShadowClawElement {
       await this._submitCreateDialog();
     });
 
-    // Rename dialog
-    const renameDialog = root.querySelector(
-      ".conversations__rename-dialog",
+    // Details dialog
+    const detailsDialog = root.querySelector(
+      ".conversations__details-dialog",
     ) as HTMLDialogElement | null;
-    const renameForm = root.querySelector(
-      ".conversations__rename-dialog .conversations__form",
+    const detailsForm = root.querySelector(
+      ".conversations__details-dialog .conversations__form",
     ) as HTMLFormElement | null;
-    const renameCancel = root.querySelector(
-      ".conversations__rename-dialog .conversations__cancel",
+    const detailsCancel = root.querySelector(
+      ".conversations__details-dialog .conversations__cancel",
     ) as HTMLButtonElement | null;
 
-    renameCancel?.addEventListener("click", () => {
-      renameDialog?.close();
+    detailsCancel?.addEventListener("click", () => {
+      detailsDialog?.close();
       this._pendingRenameGroupId = null;
       this._pendingRenameName = null;
+      this._pendingDetailsToolTags = null;
     });
 
-    renameForm?.addEventListener("submit", async (e) => {
+    detailsForm?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      await this._submitRenameDialog();
+      await this._submitDetailsDialog();
     });
 
     // Delete dialog
@@ -872,7 +1091,7 @@ export class ShadowClawConversations extends ShadowClawElement {
     dialog?.close();
   }
 
-  async _submitRenameDialog() {
+  async _submitDetailsDialog() {
     const root = this.shadowRoot as ShadowRoot;
     if (
       !root ||
@@ -884,29 +1103,34 @@ export class ShadowClawConversations extends ShadowClawElement {
     }
 
     const input = root.querySelector(
-      ".conversations__rename-dialog .conversations__input",
+      ".conversations__details-dialog .conversations__input",
     ) as HTMLInputElement | null;
     const dialog = root.querySelector(
-      ".conversations__rename-dialog",
+      ".conversations__details-dialog",
     ) as HTMLDialogElement | null;
 
     const name = input?.value.trim();
-    if (!name || name === this._pendingRenameName) {
-      dialog?.close();
-      this._pendingRenameGroupId = null;
-      this._pendingRenameName = null;
 
-      return;
+    if (name && name !== this._pendingRenameName) {
+      await orchestratorStore.renameConversation(
+        this.db,
+        this._pendingRenameGroupId,
+        name,
+      );
     }
 
-    await orchestratorStore.renameConversation(
-      this.db,
-      this._pendingRenameGroupId,
-      name,
-    );
+    if (this._pendingDetailsToolTags) {
+      await orchestratorStore.updateConversationToolTags(
+        this.db,
+        this._pendingRenameGroupId,
+        this._pendingDetailsToolTags,
+      );
+    }
+
     dialog?.close();
     this._pendingRenameGroupId = null;
     this._pendingRenameName = null;
+    this._pendingDetailsToolTags = null;
   }
 
   async _submitDeleteDialog() {

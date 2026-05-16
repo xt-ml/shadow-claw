@@ -107,7 +107,8 @@
   outline: none;
 }
 
-::slotted(button) {
+::slotted(button),
+::slotted(shadow-claw-page-header-action-button) {
   flex: 1 1 100% !important;
   min-width: 0 !important;
   width: 100% !important;
@@ -144,7 +145,8 @@
     width: auto;
   }
 
-  ::slotted(button) {
+  ::slotted(button),
+  ::slotted(shadow-claw-page-header-action-button) {
     flex: 0 1 auto !important;
     min-width: fit-content !important;
     width: auto !important;

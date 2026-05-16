@@ -20,6 +20,7 @@ const {
   listGroups,
   reorderGroups,
   cloneGroup,
+  updateGroupToolTags,
 } = await import("./groups.js");
 
 const db: any = {} as any;
@@ -122,6 +123,35 @@ describe("groups", () => {
       const saved = JSON.parse((mockSetConfig as any).mock.calls[0][2]);
       expect(saved).toHaveLength(1);
       expect(saved[0].name).toBe("Main");
+    });
+  });
+
+  describe("updateGroupToolTags", () => {
+    it("updates toolTags for an existing group", async () => {
+      const existing = [
+        { groupId: "br:main", name: "Main", createdAt: 1000 },
+        { groupId: "br:abc", name: "Tagged", createdAt: 2000 },
+      ];
+
+      (mockGetConfig as any).mockResolvedValue(JSON.stringify(existing));
+
+      await updateGroupToolTags(db, "br:abc", ["get_weather", "search_web"]);
+
+      const saved = JSON.parse((mockSetConfig as any).mock.calls[0][2]);
+      expect(saved[1].toolTags).toEqual(["get_weather", "search_web"]);
+      expect(saved[0].toolTags).toBeUndefined();
+    });
+
+    it("does nothing if group not found", async () => {
+      const existing = [{ groupId: "br:main", name: "Main", createdAt: 1000 }];
+
+      (mockGetConfig as any).mockResolvedValue(JSON.stringify(existing));
+
+      await updateGroupToolTags(db, "br:nonexistent", ["get_weather"]);
+
+      const saved = JSON.parse((mockSetConfig as any).mock.calls[0][2]);
+      expect(saved).toHaveLength(1);
+      expect(saved[0].toolTags).toBeUndefined();
     });
   });
 

@@ -5,52 +5,44 @@
         <span class="chat__status-indicator" aria-hidden="true">&#9679;</span>
         <span class="chat__status-text">Ready</span>
       </div>
-      <button
+      <shadow-claw-page-header-action-button
         slot="actions"
-        class="chat__action-btn"
         data-action="download-chat"
         title="Backup chat history"
-        type="button"
       >
         &#128190; Backup
-      </button>
-      <button
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
         slot="actions"
-        class="chat__action-btn"
         data-action="restore-chat"
         title="Restore chat from backup"
-        type="button"
       >
         &#9851;&#65039; Restore
-      </button>
-      <button
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
         slot="actions"
-        class="chat__action-btn"
         data-action="compact-chat"
         title="Compact conversation history to save context"
-        type="button"
       >
         &#128230; Compact
-      </button>
-      <button
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
         slot="actions"
-        class="chat__action-btn chat__action-btn--stop"
         data-action="stop-chat"
         title="Stop the current response"
-        type="button"
+        variant="danger"
         disabled
       >
         &#9209;&#65039; Stop Chat
-      </button>
-      <button
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
         slot="actions"
-        class="chat__action-btn"
         data-action="clear-chat"
         title="Clear all chat messages"
-        type="button"
+        variant="danger"
       >
         &#128465;&#65039; Clear Chat
-      </button>
+      </shadow-claw-page-header-action-button>
     </shadow-claw-page-header>
 
     <div class="chat__body">
@@ -63,9 +55,9 @@
         aria-live="polite"
         aria-label="Model download progress"
       >
-        <span class="chat__model-progress-label"
-          >Preparing Prompt API model...</span
-        >
+        <span class="chat__model-progress-label">
+          Preparing Prompt API model...
+        </span>
         <div class="chat__model-progress-track">
           <div class="chat__model-progress-bar"></div>
         </div>
@@ -87,28 +79,40 @@
         ></div>
         <div class="chat__pending-attachments" aria-live="polite" hidden></div>
         <div class="chat__input-wrapper">
-          <textarea
-            class="chat__input"
-            placeholder="Type a message... (Shift+Enter for newline)"
-            rows="1"
-            aria-label="Message input"
-          ></textarea>
-        </div>
-        <div class="chat__input-controls">
           <button
             class="chat__attach-btn"
             data-action="attach-files"
             type="button"
             aria-label="Attach files"
           >
-            + Files
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <line x1="12" y1="5" x2="12" y2="19"></line>
+              <line x1="5" y1="12" x2="19" y2="12"></line>
+            </svg>
           </button>
+          <textarea
+            class="chat__input"
+            placeholder="Type a message... (Shift+Enter for newline)"
+            rows="1"
+            aria-label="Message input"
+          ></textarea>
           <button
             class="chat__send-btn"
             data-action="send-message"
             type="button"
+            aria-label="Send message"
           >
-            Send
+            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path>
+            </svg>
           </button>
         </div>
       </div>

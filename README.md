@@ -21,9 +21,11 @@ For local inference, ShadowClaw offers multiple options:
 
 - **Transformers.js (Browser)**: Runs models entirely in the browser using a background Web Worker. Model artifacts are cached in the browser's Cache API. Optimized for small, instruction-tuned ONNX models. Supports CPU and WebGPU backends with automatic dtype selection.
 - **Transformers.js (Local Proxy)**: Runs larger local models server-side via Node.js proxy. Model artifacts are cached server-side.
+- **Ollama (Local Proxy)**: Routes local Ollama models through the same server-side provider interface used by cloud models.
 - **Llamafile (Local Proxy)**: Runs `.llamafile` binaries server-side.
 - **Gemini**: Supports robust streaming and tool execution via secure server-side proxy routes.
 - **Vertex AI**: Enterprise-grade Google Gemini models via Google Cloud Vertex AI proxy.
+- **Web Prompt API (Experimental)**: Keyless browser-native local inference through `window.LanguageModel` when available.
 
 Local proxy cache paths:
 
@@ -40,7 +42,8 @@ npm run electron:build:mac    # Build for macOS (ZIP)
 ```
 
 The Electron app runs the same Express server + proxy in-process, so all
-providers (including the Bedrock, Copilot, and Transformers.js local proxy)
+providers (including Bedrock, Copilot/GitHub Models, Gemini, Vertex AI,
+Ollama, and Transformers.js local proxy)
 work identically.
 A power-save blocker keeps the machine awake so scheduled tasks fire on
 time.
@@ -72,7 +75,7 @@ graph TD
   Orchestrator --> Scheduler["Task Scheduler<br>Cron Expressions"]
   Orchestrator --> Router["Router<br>Channel Dispatch"]
   Queue --> Worker["Agent Worker<br>Web Worker"]
-  Worker --> Provider["Provider API<br>OpenRouter, Bedrock, Copilot"]
+  Worker --> Provider["Provider API<br>OpenRouter, Gemini, Bedrock, Vertex, Copilot, Local"]
   Worker --> Tools["Tool Execution<br>bash, js, files, fetch, git"]
   Tools --> Shell["JS Shell<br>just-bash, OPFS"]
   Tools --> VM["v86 VM<br>Alpine Linux"]
@@ -111,7 +114,8 @@ sequenceDiagram
 Users can maintain multiple independent conversations, each with its own
 chat history, file workspace, scheduled tasks, and `MEMORY.md`. Conversations
 are managed through a sidebar component (`<shadow-claw-conversations>`) with
-create, rename, delete, switch, clone, and reorder actions. The last-active conversation is
+create, rename, delete, switch, clone, and reorder actions, with a conversation
+details dialog for per-conversation tool tagging. The last-active conversation is
 persisted and restored on reload. On first launch, a default "Main"
 conversation is automatically created and persisted to IndexedDB.
 
@@ -130,6 +134,12 @@ a drag handle at the bottom and fills all available sidebar space by default;
 double-clicking the handle resets to auto-fill. The resize preference is persisted.
 Conversations with **unread messages** display a pulsing highlight animation;
 the indicator clears when the conversation is selected.
+
+Conversations support **per-conversation tool tagging**: each conversation can
+pin a set of tool names via a chip-based picker in the conversation details
+dialog. When tags are set, agent invocation intersects them with the globally
+enabled tools — only tools present in both lists reach the LLM. Conversations
+with active tags display a `🔧` badge in the sidebar.
 
 The channel system is built on a generic **ChannelRegistry** that maps groupId
 prefixes to channel implementations. Built-in registrations include `br:`
@@ -527,7 +537,7 @@ The UI is organized into modular components and dedicated stores:
   `shadow-claw-page-header`, `shadow-claw-empty-state`,
   `shadow-claw-card`, and `shadow-claw-actions` reduce
   duplicated markup and behavior across pages.
-- **Chat**: Smart auto-scroll with ResizeObserver integration, streaming bubble support, mobile-friendly touch resizing, per-message delete controls, and activity log copy/toggle controls.
+- **Chat**: Smart auto-scroll with ResizeObserver integration, streaming bubble support, mobile-friendly touch resizing, per-message delete controls, activity log copy/toggle controls, and modern ChatGPT-style inline action buttons with SVG icons.
 - **File Viewer**: MIME-aware previews for PDF, binary, and text content with syntax highlighting. A `↗ Share` button in the modal header triggers the Web Share API for shareable files; the button is hidden when `navigator.share` is unavailable or `navigator.canShare()` returns false.
 - **Terminal**: Interactive Xterm.js terminal with WebVM bridge.
 

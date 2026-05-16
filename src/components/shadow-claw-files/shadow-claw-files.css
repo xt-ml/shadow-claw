@@ -103,34 +103,6 @@
   color: var(--shadow-claw-text-tertiary);
 }
 
-.files__header-btn {
-  background-color: transparent;
-  border: 0.0625rem solid var(--shadow-claw-border-color);
-  border-radius: var(--shadow-claw-radius-m);
-  color: var(--shadow-claw-text-secondary);
-  cursor: pointer;
-  font-size: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
-
-.files__header-btn:hover {
-  border-color: var(--shadow-claw-text-primary);
-  box-shadow: var(--shadow-claw-shadow-md);
-  color: var(--shadow-claw-text-primary);
-}
-
-.files__header-btn:focus-visible {
-  outline: 0.125rem solid var(--shadow-claw-accent-primary);
-  outline-offset: 0.0625rem;
-}
-
-.files__header-btn--danger {
-  border-color: var(--shadow-claw-error-color);
-  color: var(--shadow-claw-error-color);
-}
-
 .files__content {
   border-radius: var(--shadow-claw-radius-m);
   flex: 1;

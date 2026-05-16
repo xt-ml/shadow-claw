@@ -29,6 +29,7 @@ graph TD
     Push["push-routes.ts<br>+ push-store.ts"]
     Tasks["task-schedule-routes.ts<br>+ task-schedule-store.ts"]
     Scheduler["ServerTaskScheduler<br>60s cron ticks"]
+    AL["Activity Log<br>/activity-log persistence"]
     PSB["powerSaveBlocker<br>prevent-app-suspension"]
   end
 
@@ -56,8 +57,9 @@ The Electron main process:
 3. **Opens push store** — SQLite database for VAPID keys + push subscriptions
 4. **Opens task store** — SQLite database for scheduled tasks
 5. **Starts server scheduler** — 60-second cron ticks for scheduled tasks
-6. **Creates BrowserWindow** — loads `http://127.0.0.1:<port>`
-7. **Enables power-save blocker** — prevents OS from suspending the app
+6. **Registers activity log routes** — persistence under `.cache/logs`
+7. **Creates BrowserWindow** — loads `http://127.0.0.1:<port>`
+8. **Enables power-save blocker** — prevents OS from suspending the app
 
 ## Window Configuration
 
@@ -81,6 +83,7 @@ The Electron app runs the **exact same server stack** as `src/server/server.ts`:
 | Bedrock + Azure proxy | `src/server/proxy.ts` → `registerProxyRoutes()` |
 | Push notifications    | `src/notifications/push-routes.ts`              |
 | Task scheduling       | `src/notifications/task-schedule-routes.ts`     |
+| Activity logging      | `src/server/routes/activity-log.ts`             |
 | Server-side scheduler | `src/notifications/task-scheduler-server.ts`    |
 
 Both entry points call the same functions from shared modules — no code duplication between dev server and desktop app.

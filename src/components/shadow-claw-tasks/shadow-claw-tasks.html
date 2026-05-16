@@ -1,38 +1,36 @@
 <template>
   <section aria-label="Tasks" class="tasks">
     <shadow-claw-page-header icon="✓" title="Tasks">
-      <button
-        class="tasks__add-btn tasks__header-btn"
+      <shadow-claw-page-header-action-button
+        class="tasks__add-btn"
         slot="actions"
         title="Add a new scheduled task"
-        type="button"
+        variant="primary"
       >
         + Add Task
-      </button>
-      <button
-        class="tasks__backup-btn tasks__header-btn"
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
+        class="tasks__backup-btn"
         slot="actions"
         title="Backup tasks to file"
-        type="button"
       >
         💾 Backup
-      </button>
-      <button
-        class="tasks__restore-btn tasks__header-btn"
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
+        class="tasks__restore-btn"
         slot="actions"
         title="Restore tasks from backup"
-        type="button"
       >
         ♻️ Restore
-      </button>
-      <button
-        class="tasks__clear-btn tasks__header-btn"
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
+        class="tasks__clear-btn"
         slot="actions"
         title="Delete all tasks"
-        type="button"
+        variant="danger"
       >
         🗑️ Clear All
-      </button>
+      </shadow-claw-page-header-action-button>
     </shadow-claw-page-header>
     <input
       accept=".json,application/json"
@@ -61,9 +59,9 @@
       <form class="tasks__dialog-form">
         <div class="tasks__dialog-body">
           <div class="tasks__form-group">
-            <label class="tasks__form-label" for="tasksScheduleInput"
-              >Schedule (Cron Expression)</label
-            >
+            <label class="tasks__form-label" for="tasksScheduleInput">
+              Schedule (Cron Expression)
+            </label>
             <input
               aria-describedby="tasksScheduleHint"
               class="tasks__form-input"
@@ -82,8 +80,9 @@
               class="tasks__form-label"
               id="taskLabel"
               for="tasksPromptInput"
-              >Task Prompt</label
             >
+              Task Prompt
+            </label>
             <textarea
               class="tasks__form-textarea"
               id="tasksPromptInput"

@@ -14,6 +14,7 @@ jest.unstable_mockModule("./mcp-reconnect.js", () => ({
 }));
 jest.unstable_mockModule("./toast.js", () => ({
   showToast: mockShowToast,
+  showError: jest.fn(),
 }));
 
 const { Orchestrator } = await import("./orchestrator.js");

@@ -118,15 +118,19 @@ function hasControlTokenPattern(text: string): boolean {
 
 export function stripChatTemplateControlTokens(text: string): string {
   let cleaned = String(text || "");
+  const original = cleaned;
 
   for (const pattern of ALL_PATTERNS) {
     cleaned = cleaned.replace(pattern, "");
   }
 
-  // Collapse whitespace-only lines left behind by stripped tokens,
-  // and compress runs of 3+ blank lines to 2.
-  cleaned = cleaned.replace(/^[ \t]+$/gm, "");
-  cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+  // Only collapse whitespace-only lines and blank lines if we actually
+  // stripped a control token. This prevents us from accidentally destroying
+  // valid single-space chunks (" ") during SSE streaming.
+  if (cleaned !== original) {
+    cleaned = cleaned.replace(/^[ \t]+$/gm, "");
+    cleaned = cleaned.replace(/\n{3,}/g, "\n\n");
+  }
 
   return cleaned;
 }

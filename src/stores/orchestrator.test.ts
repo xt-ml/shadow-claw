@@ -49,6 +49,7 @@ jest.unstable_mockModule("../storage/requestStorageAccess.js", () => ({
 }));
 
 const mockSaveGroupMetadata = jest.fn() as any;
+const mockUpdateGroupToolTags = jest.fn() as any;
 
 jest.unstable_mockModule("../storage/storage.js", () => ({
   getStorageStatus: mockGetStorageStatus,
@@ -66,6 +67,7 @@ jest.unstable_mockModule("../db/groups.js", () => ({
   reorderGroups: mockReorderGroups,
   cloneGroup: mockCloneGroup,
   saveGroupMetadata: mockSaveGroupMetadata,
+  updateGroupToolTags: mockUpdateGroupToolTags,
 }));
 
 jest.unstable_mockModule("../db/clearGroupMessages.js", () => ({

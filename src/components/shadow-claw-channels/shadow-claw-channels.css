@@ -41,24 +41,6 @@
   width: 100%;
 }
 
-.channels__header-btn {
-  background-color: var(--shadow-claw-bg-secondary);
-  border: 0.0625rem solid var(--shadow-claw-border-color);
-  border-radius: var(--shadow-claw-radius-m);
-  color: var(--shadow-claw-text-secondary);
-  cursor: pointer;
-  font-size: 0.75rem;
-  padding: 0.5rem 0.75rem;
-  transition: all 0.15s;
-  white-space: nowrap;
-}
-
-.channels__header-btn:hover {
-  border-color: var(--shadow-claw-text-primary);
-  box-shadow: var(--shadow-claw-shadow-md);
-  color: var(--shadow-claw-text-primary);
-}
-
 .channels__content {
   flex: 1;
   min-height: 0;

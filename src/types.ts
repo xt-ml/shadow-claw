@@ -170,6 +170,7 @@ export interface GroupMeta {
   groupId: string;
   name: string;
   createdAt: number;
+  toolTags?: string[];
 }
 
 export type ChannelMessageCallback = (msg: InboundMessage) => void;

@@ -45,4 +45,25 @@ describe("renderMarkdown", () => {
     expect(html).toContain("paragraph one");
     expect(html).toContain("paragraph two");
   });
+
+  it("renders html inside fenced code blocks as escaped literal text", async () => {
+    const html = await renderMarkdown(
+      [
+        "```",
+        "<h1>Useful Resources</h1>",
+        '<li><a href="https://www.wikipedia.org">Wikipedia</a></li>',
+        "```",
+      ].join("\n"),
+    );
+
+    expect(html).toContain("<pre><code");
+    expect(html).toContain("&lt;h1&gt;Useful Resources&lt;/h1&gt;");
+    expect(html).toContain(
+      "&lt;li&gt;&lt;a href=&quot;https://www.wikipedia.org&quot;&gt;Wikipedia&lt;/a&gt;&lt;/li&gt;",
+    );
+    expect(html).not.toContain("<h1>Useful Resources</h1>");
+    expect(html).not.toContain(
+      '<li><a href="https://www.wikipedia.org">Wikipedia</a></li>',
+    );
+  });
 });

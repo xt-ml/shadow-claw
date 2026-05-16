@@ -162,10 +162,46 @@ jest.unstable_mockModule(
   },
 );
 
+jest.unstable_mockModule(
+  "../settings/shadow-claw-task-server/shadow-claw-task-server.js",
+  () => {
+    class MockTaskServer extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: "open" });
+      }
+
+      render = jest.fn();
+    }
+
+    customElements.define("shadow-claw-task-server", MockTaskServer);
+
+    return { ShadowClawTaskServer: MockTaskServer };
+  },
+);
+
 jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue({} as any),
 }));
 
+jest.unstable_mockModule("../../db/getConfig.js", () => ({
+  getConfig: jest.fn<any>().mockImplementation((_db: unknown, key: string) => {
+    if (key === "assistant_name") {
+      return Promise.resolve("k9");
+    }
+
+    return Promise.resolve("true");
+  }),
+}));
+
+(globalThis as any)._mockSetConfig = jest
+  .fn<any>()
+  .mockResolvedValue(undefined);
+jest.unstable_mockModule("../../db/setConfig.js", () => ({
+  setConfig: (...args: any[]) => (globalThis as any)._mockSetConfig(...args),
+}));
+
+const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { ShadowClawSettings } = await import("./shadow-claw-settings.js");
 
 describe("shadow-claw-settings", () => {
@@ -199,6 +235,47 @@ describe("shadow-claw-settings", () => {
     expect(webvm).not.toBeNull();
     expect(git).not.toBeNull();
     expect(storage).not.toBeNull();
+
+    document.body.removeChild(el);
+  });
+
+  it("renders backup, restore, and clear actions in header", async () => {
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+
+    const backupBtn = el.shadowRoot?.querySelector(
+      '[data-action="backup-settings"]',
+    );
+
+    const restoreBtn = el.shadowRoot?.querySelector(
+      '[data-action="restore-settings"]',
+    );
+
+    const clearBtn = el.shadowRoot?.querySelector(
+      '[data-action="clear-settings"]',
+    );
+
+    expect(backupBtn).not.toBeNull();
+    expect(restoreBtn).not.toBeNull();
+    expect(clearBtn).not.toBeNull();
+
+    document.body.removeChild(el);
+  });
+
+  it("renders backup dialog plaintext password toggle unchecked by default", async () => {
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+
+    const includePlaintext = el.shadowRoot?.querySelector(
+      '[data-setting="include-plaintext-passwords"]',
+    );
+
+    expect(includePlaintext instanceof HTMLInputElement).toBe(true);
+    expect((includePlaintext as HTMLInputElement).checked).toBe(false);
 
     document.body.removeChild(el);
   });
@@ -385,5 +462,109 @@ describe("shadow-claw-settings", () => {
 
     document.body.removeChild(el);
     document.head.removeChild(meta);
+  });
+
+  it("populates and saves assistant name", async () => {
+    const setAssistantName = jest.fn();
+    const orchestrator = {
+      getAssistantName: jest.fn().mockReturnValue("k9"),
+      setAssistantName,
+    };
+    (orchestratorStore as any).orchestrator = orchestrator;
+    const el = new ShadowClawSettings();
+    (el as any).orchestrator = orchestrator;
+    (el as any).db = {} as any;
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+
+    const nameInput = el.shadowRoot?.querySelector<HTMLInputElement>(
+      '[data-setting="assistant-name-input"]',
+    );
+    expect(nameInput?.value).toBe("k9");
+
+    if (nameInput) {
+      nameInput.value = "new-name";
+    }
+
+    await new Promise((r) => setTimeout(r, 0));
+    const saveBtn = el.shadowRoot?.querySelector(
+      '[data-action="save-assistant-name"]',
+    );
+    saveBtn?.dispatchEvent(new Event("click"));
+
+    expect(setAssistantName).toHaveBeenCalledWith(
+      expect.anything(),
+      "new-name",
+    );
+    document.body.removeChild(el);
+  });
+
+  it("populates and toggles activity log disk logging", async () => {
+    await import("../../db/setConfig.js");
+    const orchestrator = {
+      getAssistantName: jest.fn(),
+    };
+    const el = new ShadowClawSettings();
+    (el as any).orchestrator = orchestrator;
+    (el as any).db = {} as any;
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    (orchestratorStore as any).orchestrator = orchestrator;
+    await el.render();
+
+    const toggle = el.shadowRoot?.querySelector<HTMLInputElement>(
+      '[data-setting="activity-log-disk-logging-toggle"]',
+    );
+    expect(toggle).not.toBeNull();
+
+    await new Promise((r) => setTimeout(r, 0));
+    if (toggle) {
+      toggle.checked = true;
+      toggle.dispatchEvent(new Event("change"));
+    }
+
+    await new Promise((r) => setTimeout(r, 100));
+
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "activity_log_disk_logging_enabled",
+      "true",
+    );
+    document.body.removeChild(el);
+  });
+
+  it("saves assistant name via config when orchestrator is unavailable", async () => {
+    (orchestratorStore as any).orchestrator = null;
+    (globalThis as any)._mockSetConfig.mockClear();
+
+    const el = new ShadowClawSettings();
+    (el as any).orchestrator = null;
+    (el as any).db = {} as any;
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+
+    const nameInput = el.shadowRoot?.querySelector<HTMLInputElement>(
+      '[data-setting="assistant-name-input"]',
+    );
+    if (nameInput) {
+      nameInput.value = "fallback-name";
+    }
+
+    const saveBtn = el.shadowRoot?.querySelector(
+      '[data-action="save-assistant-name"]',
+    );
+    saveBtn?.dispatchEvent(new Event("click"));
+
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "assistant_name",
+      "fallback-name",
+    );
+
+    document.body.removeChild(el);
   });
 });

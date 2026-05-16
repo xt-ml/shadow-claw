@@ -11,6 +11,7 @@ import type { Orchestrator } from "../../orchestrator.js";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
+import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
 /** Built-in tool names (non-deletable). */

@@ -9,6 +9,7 @@ import { escapeHtml } from "../../utils.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
 import "../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
+import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
@@ -550,9 +551,7 @@ export class ShadowClawTasks extends ShadowClawElement {
   async handleBackup() {
     try {
       const btn = this.shadowRoot?.querySelector(".tasks__backup-btn");
-      if (btn instanceof HTMLButtonElement) {
-        btn.disabled = true;
-      }
+      btn?.toggleAttribute("disabled", true);
 
       if (btn) {
         btn.textContent = "⏳";
@@ -576,9 +575,7 @@ export class ShadowClawTasks extends ShadowClawElement {
       console.error("Backup error:", err);
     } finally {
       const btn = this.shadowRoot?.querySelector(".tasks__backup-btn");
-      if (btn instanceof HTMLButtonElement) {
-        btn.disabled = false;
-      }
+      btn?.toggleAttribute("disabled", false);
 
       if (btn) {
         btn.textContent = "💾 Backup";
@@ -612,9 +609,7 @@ export class ShadowClawTasks extends ShadowClawElement {
 
     try {
       const btn = this.shadowRoot?.querySelector(".tasks__restore-btn");
-      if (btn instanceof HTMLButtonElement) {
-        btn.disabled = true;
-      }
+      btn?.toggleAttribute("disabled", true);
 
       if (btn) {
         btn.textContent = "⏳";
@@ -636,9 +631,7 @@ export class ShadowClawTasks extends ShadowClawElement {
       console.error("Restore error:", err);
     } finally {
       const btn = this.shadowRoot?.querySelector(".tasks__restore-btn");
-      if (btn instanceof HTMLButtonElement) {
-        btn.disabled = false;
-      }
+      btn?.toggleAttribute("disabled", false);
 
       if (btn) {
         btn.textContent = "♻️ Restore";
@@ -656,9 +649,7 @@ export class ShadowClawTasks extends ShadowClawElement {
 
     try {
       const btn = this.shadowRoot?.querySelector(".tasks__clear-btn");
-      if (btn instanceof HTMLButtonElement) {
-        btn.disabled = true;
-      }
+      btn?.toggleAttribute("disabled", true);
 
       if (btn) {
         btn.textContent = "⏳";
@@ -671,9 +662,7 @@ export class ShadowClawTasks extends ShadowClawElement {
       console.error("Clear error:", err);
     } finally {
       const btn = this.shadowRoot?.querySelector(".tasks__clear-btn");
-      if (btn instanceof HTMLButtonElement) {
-        btn.disabled = false;
-      }
+      btn?.toggleAttribute("disabled", false);
 
       if (btn) {
         btn.textContent = "🗑️ Clear All";

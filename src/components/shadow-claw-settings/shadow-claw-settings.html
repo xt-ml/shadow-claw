@@ -1,5 +1,115 @@
 <template>
-  <div class="settings-header"><h2>⚙️ Settings</h2></div>
+  <shadow-claw-page-header icon="⚙️" title="Settings">
+    <shadow-claw-page-header-action-button
+      slot="actions"
+      data-action="backup-settings"
+      title="Backup settings"
+    >
+      💾 Backup
+    </shadow-claw-page-header-action-button>
+    <shadow-claw-page-header-action-button
+      slot="actions"
+      data-action="restore-settings"
+      title="Restore settings"
+    >
+      ♻️ Restore
+    </shadow-claw-page-header-action-button>
+    <shadow-claw-page-header-action-button
+      slot="actions"
+      data-action="clear-settings"
+      title="Clear all settings"
+      variant="danger"
+    >
+      🗑️ Clear
+    </shadow-claw-page-header-action-button>
+  </shadow-claw-page-header>
+
+  <input
+    class="settings__restore-input"
+    type="file"
+    accept=".json,application/json"
+    aria-label="Restore settings from JSON backup"
+    hidden
+  />
+
+  <shadow-claw-dialog
+    dialog-class="settings__confirm-dialog settings__backup-dialog"
+    aria-label="Backup settings"
+  >
+    <form class="settings__confirm-form" method="dialog">
+      <h3 class="settings__confirm-title">Backup Settings</h3>
+      <p class="settings__confirm-message">
+        Create a backup of all saved settings, accounts, integrations, and
+        profiles.
+      </p>
+      <label class="settings__confirm-checkbox-row">
+        <input type="checkbox" data-setting="include-plaintext-passwords" />
+        <span>Include passwords in plaintext</span>
+      </label>
+      <p class="settings__confirm-note">
+        Default is off. When disabled, password fields are excluded from the
+        backup.
+      </p>
+      <div class="settings__confirm-actions">
+        <button type="button" data-action="cancel-backup-settings">
+          Cancel
+        </button>
+        <button type="button" data-action="confirm-backup-settings">
+          Backup
+        </button>
+      </div>
+    </form>
+  </shadow-claw-dialog>
+
+  <shadow-claw-dialog
+    dialog-class="settings__confirm-dialog settings__restore-dialog"
+    aria-label="Restore settings"
+  >
+    <form class="settings__confirm-form" method="dialog">
+      <h3 class="settings__confirm-title">Restore Settings</h3>
+      <p class="settings__confirm-message">
+        Restoring will replace all current settings, accounts, integrations, and
+        profiles.
+      </p>
+      <p class="settings__confirm-note" data-info="restore-filename">
+        No file selected.
+      </p>
+      <div class="settings__confirm-actions">
+        <button type="button" data-action="cancel-restore-settings">
+          Cancel
+        </button>
+        <button type="button" data-action="confirm-restore-settings">
+          Restore
+        </button>
+      </div>
+    </form>
+  </shadow-claw-dialog>
+
+  <shadow-claw-dialog
+    dialog-class="settings__confirm-dialog settings__clear-dialog"
+    aria-label="Clear settings"
+  >
+    <form class="settings__confirm-form" method="dialog">
+      <h3 class="settings__confirm-title">Clear Settings</h3>
+      <p class="settings__confirm-message">
+        This will permanently remove all settings, accounts, integrations, and
+        profiles.
+      </p>
+      <div class="settings__confirm-actions">
+        <button type="button" data-action="cancel-clear-settings">
+          Cancel
+        </button>
+        <button
+          type="button"
+          data-action="confirm-clear-settings"
+          class="settings__danger-btn"
+        >
+          Clear
+        </button>
+      </div>
+    </form>
+  </shadow-claw-dialog>
+
   <div class="settings-page">
     <div
       class="settings-tab-nav"
@@ -47,14 +157,56 @@
         <details class="settings-collapsible">
           <summary>🤖 AI</summary>
           <div class="settings-collapsible-content">
-            <shadow-claw-llm data-view="ai"></shadow-claw-llm>
+            <div class="settings-section">
+              <h3>👤 Assistant</h3>
+              <div class="form-group">
+                <label class="form-label">Name</label>
+                <input
+                  class="form-input"
+                  data-setting="assistant-name-input"
+                  placeholder="k9"
+                  type="text"
+                  value="k9"
+                />
+                <div class="form-helper">
+                  Used to mention the assistant in chat (@name)
+                </div>
+              </div>
+              <button class="save-btn" data-action="save-assistant-name">
+                💾 Save Name
+              </button>
+            </div>
+
+            <div class="settings-section">
+              <h3>📝 Activity Log</h3>
+              <div class="form-group">
+                <div class="form-toggle">
+                  <input
+                    data-setting="activity-log-disk-logging-toggle"
+                    id="activity-log-disk-logging-toggle"
+                    type="checkbox"
+                  />
+                  <label
+                    class="form-label"
+                    for="activity-log-disk-logging-toggle"
+                  >
+                    Log activity details to disk
+                  </label>
+                </div>
+                <div class="form-helper">
+                  When enabled, activity log entries are automatically written
+                  to a plain text file under .cache/logs in the app data
+                  directory. Default: disabled.
+                </div>
+              </div>
+            </div>
           </div>
         </details>
 
         <details class="settings-collapsible">
           <summary>🔑 Model Provider</summary>
           <div class="settings-collapsible-content">
-            <shadow-claw-llm data-view="model-provider"></shadow-claw-llm>
+            <shadow-claw-llm></shadow-claw-llm>
           </div>
         </details>
 

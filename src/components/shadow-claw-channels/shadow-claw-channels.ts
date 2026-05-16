@@ -1,4 +1,5 @@
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
+import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../settings/shadow-claw-channel-config/shadow-claw-channel-config.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";

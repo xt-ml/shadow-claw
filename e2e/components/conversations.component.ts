@@ -55,24 +55,24 @@ export class ConversationsComponent {
     );
   }
 
-  /** Rename button inside a conversation item (visible on hover) */
-  renameButton(itemLocator: Locator): Locator {
-    return itemLocator.locator('[data-action="rename"]');
+  /** Details button inside a conversation item (visible on hover) */
+  detailsButton(itemLocator: Locator): Locator {
+    return itemLocator.locator('[data-action="details"]');
   }
 
-  renameDialog(): Locator {
-    return this.host().locator(".conversations__rename-dialog");
+  detailsDialog(): Locator {
+    return this.host().locator(".conversations__details-dialog");
   }
 
-  renameInput(): Locator {
+  detailsInput(): Locator {
     return this.host().locator(
-      ".conversations__rename-dialog .conversations__input",
+      ".conversations__details-dialog input#conversations-details-name",
     );
   }
 
-  renameOkButton(): Locator {
+  detailsOkButton(): Locator {
     return this.host().locator(
-      ".conversations__rename-dialog .conversations__ok",
+      ".conversations__details-dialog .conversations__ok",
     );
   }
 
@@ -121,12 +121,12 @@ export class ConversationsComponent {
     await this.createOkButton().click();
   }
 
-  async renameConversation(itemLocator: Locator, name: string) {
+  async editConversationDetails(itemLocator: Locator, name: string) {
     await itemLocator.hover();
-    await this.renameButton(itemLocator).click();
-    await expect(this.renameDialog()).toHaveJSProperty("open", true);
-    await this.renameInput().fill(name);
-    await this.renameOkButton().click();
+    await this.detailsButton(itemLocator).click();
+    await expect(this.detailsDialog()).toHaveJSProperty("open", true);
+    await this.detailsInput().fill(name);
+    await this.detailsOkButton().click();
   }
 
   async deleteConversation(itemLocator: Locator, confirmDelete: boolean) {

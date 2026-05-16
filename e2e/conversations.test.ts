@@ -33,7 +33,7 @@ test.describe("Conversation CRUD", () => {
     // Find the conversation item with "Original Name"
     const item = conversations.items().filter({ hasText: "Original Name" });
 
-    await conversations.renameConversation(item, "Renamed Convo");
+    await conversations.editConversationDetails(item, "Renamed Convo");
 
     // Verify the name changed
     await expect(

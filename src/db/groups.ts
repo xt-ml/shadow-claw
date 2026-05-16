@@ -77,6 +77,23 @@ export async function renameGroup(
 }
 
 /**
+ * Update the tool tags pinned to an existing group.
+ */
+export async function updateGroupToolTags(
+  db: ShadowClawDatabase,
+  groupId: string,
+  tags: string[],
+): Promise<void> {
+  const groups = await getGroupMetadata(db);
+  const group = groups.find((g) => g.groupId === groupId);
+  if (group) {
+    group.toolTags = tags;
+  }
+
+  await saveGroupMetadata(db, groups);
+}
+
+/**
  * Delete a group from metadata.
  */
 export async function deleteGroupMetadata(

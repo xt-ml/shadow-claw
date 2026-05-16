@@ -46,7 +46,15 @@ Browser APIs like `fetch` and `crypto.subtle` are locked (`non-configurable`, `n
 
 ### The E2E Bridge (`__SHADOWCLAW_E2E__`)
 
-During testing, the build-time flag `E2E_TEST_BRIDGE=true` installs a secure bridge on `window.__SHADOWCLAW_E2E__`. This bridge is the **exclusive** way for tests to interact with internal state.
+During testing, Playwright enables the bridge by setting `window.__SHADOWCLAW_E2E_ENABLE__ = true` with `page.addInitScript(...)` before app bootstrap. When enabled, the app installs a secure bridge on `window.__SHADOWCLAW_E2E__`. This bridge is the **exclusive** way for tests to interact with internal state.
+
+Example setup:
+
+```js
+await page.addInitScript(() => {
+  window.__SHADOWCLAW_E2E_ENABLE__ = true;
+});
+```
 
 **Available Bridge Methods:**
 
@@ -188,15 +196,16 @@ Handles app-level navigation and page switching.
 
 ### `MessageInputComponent`
 
-Manages chat message input and send button.
+Manages chat message input, attachment button, and send button.
 
 **Methods:**
 
 - `fill(text)` — Type into textarea
 - `send()` — Click send button
+- `attach()` — Click file attachment button
 - `fillAndSend(text)` — Combined fill + send
 - `placeholder()` — Get placeholder text
-- `expectVisible()` — Assert textarea and button are visible
+- `expectVisible()` — Assert textarea and buttons are visible
 - `expectSendEnabled()` / `expectSendDisabled()` — Assert button state
 
 ### `ChatActionsComponent`
@@ -336,14 +345,13 @@ Settings panel controller.
 - `expandAiSettings()` — Expand AI section when collapsed
 - `expandModelProviderSettings()` — Expand Model Provider section when collapsed
 - `llm()` — LLM settings sub-component locator
-- `aiLlm()` — AI settings sub-component locator
 - `maxIterationsInput()` — Max iterations number input
 - `saveMaxIterationsButton()` — Save max iterations button
 - `streamingToggle()` — Streaming toggle checkbox
 - `providerSelect()` — Provider select dropdown
 - `modelSelect()` — Model select dropdown
 - `apiKeyInput()` — API key input
-- `saveApiKeyButton()` — Save API key button
+- `saveApiKeyButton()` — Save provider / API key button
 - `assistantNameInput()` — Assistant name input
 - `saveAssistantNameButton()` — Save assistant name button
 

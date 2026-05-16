@@ -48,11 +48,7 @@ export class SettingsPage {
   }
 
   llm() {
-    return this.host.locator('shadow-claw-llm[data-view="model-provider"]');
-  }
-
-  aiLlm() {
-    return this.host.locator('shadow-claw-llm[data-view="ai"]');
+    return this.host.locator("shadow-claw-llm");
   }
 
   maxIterationsInput() {
@@ -80,14 +76,14 @@ export class SettingsPage {
   }
 
   saveApiKeyButton() {
-    return this.llm().locator('[data-action="save-api-key"]');
+    return this.llm().locator('[data-action="save-llm-provider"]');
   }
 
   assistantNameInput() {
-    return this.aiLlm().locator('[data-setting="assistant-name-input"]');
+    return this.host.locator('[data-setting="assistant-name-input"]');
   }
 
   saveAssistantNameButton() {
-    return this.aiLlm().locator('[data-action="save-assistant-name"]');
+    return this.host.locator('[data-action="save-assistant-name"]');
   }
 }

@@ -38,6 +38,7 @@ import {
 import type { ShadowClawDatabase } from "../../types.js";
 import { formatDateForFilename, formatTimestamp } from "../../utils.js";
 
+import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
@@ -1829,6 +1830,8 @@ export class ShadowClawChat extends ShadowClawElement {
 
         if (stopButton instanceof HTMLButtonElement) {
           stopButton.disabled = !isProcessing;
+        } else {
+          stopButton?.toggleAttribute("disabled", !isProcessing);
         }
       }),
     );

@@ -21,6 +21,7 @@ import {
   reorderGroups,
   cloneGroup,
   saveGroupMetadata,
+  updateGroupToolTags,
 } from "../db/groups.js";
 
 import { listGroupFiles } from "../storage/listGroupFiles.js";
@@ -1271,6 +1272,18 @@ export class OrchestratorStore {
     newName: string,
   ): Promise<void> {
     await renameGroup(db, groupId, newName);
+    await this.loadGroups(db);
+  }
+
+  /**
+   * Update the tool tags pinned to an existing conversation
+   */
+  async updateConversationToolTags(
+    db: ShadowClawDatabase,
+    groupId: string,
+    tags: string[],
+  ): Promise<void> {
+    await updateGroupToolTags(db, groupId, tags);
     await this.loadGroups(db);
   }
 

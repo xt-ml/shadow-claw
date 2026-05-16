@@ -45,7 +45,13 @@ async function collectAndStripPasswordData(
       continue;
     }
 
-    if (key === CONFIG_KEYS.GIT_PASSWORD) {
+    if (
+      key === CONFIG_KEYS.GIT_PASSWORD ||
+      key === CONFIG_KEYS.API_KEY ||
+      key.startsWith("api_key:") ||
+      key === CONFIG_KEYS.IMESSAGE_API_KEY ||
+      key === CONFIG_KEYS.TELEGRAM_BOT_TOKEN
+    ) {
       if (includePlaintextPasswords && typeof entry.value === "string") {
         const decrypted = await decryptValue(entry.value);
         if (decrypted) {

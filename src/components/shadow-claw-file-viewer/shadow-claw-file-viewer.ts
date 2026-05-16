@@ -239,8 +239,31 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     const current = fileViewerStore.file;
     const basePath = current?.path || current?.name || "";
-    event.preventDefault();
     const href = link.getAttribute("href") || "";
+    const resolved = this.resolveWorkspaceLinkPath(href, basePath);
+
+    if (!resolved) {
+      const trimmed = href.trim();
+      if (trimmed && !trimmed.startsWith("#") && !trimmed.startsWith("javascript:")) {
+        try {
+          const parsed = new URL(trimmed, window.location.href);
+          const isExternal = parsed.host !== window.location.host;
+          if (isExternal) {
+            event.preventDefault();
+            window.open(trimmed, "_blank", "noopener,noreferrer");
+          }
+        } catch {
+          if (/^[a-zA-Z][a-zA-Z\d+.-]*:/u.test(trimmed)) {
+            event.preventDefault();
+            window.open(trimmed, "_blank", "noopener,noreferrer");
+          }
+        }
+      }
+
+      return;
+    }
+
+    event.preventDefault();
     await this.openWorkspaceLink(href, basePath);
   }
 
@@ -1002,6 +1025,9 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       "var a=t.closest('a');if(!(a instanceof HTMLAnchorElement))return;" +
       "if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;" +
       "var href=a.getAttribute('href')||'';if(!href)return;" +
+      "if(href.startsWith('#')||href.startsWith('javascript:'))return;" +
+      "var isExt=false;try{var u=new URL(href,window.location.href);if(u.protocol==='http:'||u.protocol==='https:'){isExt=true;}}catch(err){isExt=true;}" +
+      "if(isExt)return;" +
       "e.preventDefault();" +
       "window.parent.postMessage({type:'shadow-claw-file-viewer-link',href:href},'*');" +
       "});" +

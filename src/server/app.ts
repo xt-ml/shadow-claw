@@ -26,6 +26,7 @@ import { createLogger } from "./logger.js";
 import { createRequestLoggerMiddleware } from "./middleware/request-logger.js";
 import { createPnaMiddleware } from "./middleware/pna.js";
 import { createCorsMiddleware } from "./middleware/cors.js";
+import { createCspReportOnlyMiddleware } from "./middleware/csp.js";
 import { registerStaticFilesMiddleware } from "./middleware/static-files.js";
 
 export function createApp(config: ServerConfig): {
@@ -44,6 +45,9 @@ export function createApp(config: ServerConfig): {
 
   // ---------------- CORS ----------------
   app.use(createCorsMiddleware(config, logger, verbose));
+
+  // ---------------- SECURITY HEADERS (REPORT-ONLY) ----------------
+  app.use(createCspReportOnlyMiddleware());
 
   // ---------------- PARSERS & COMPRESSION ----------------
   app.use(

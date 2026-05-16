@@ -76,6 +76,9 @@ describe("app", () => {
     jest.unstable_mockModule("./middleware/cors.js", () => ({
       createCorsMiddleware: jest.fn(() => () => {}),
     }));
+    jest.unstable_mockModule("./middleware/csp.js", () => ({
+      createCspReportOnlyMiddleware: jest.fn(() => () => {}),
+    }));
     jest.unstable_mockModule("./middleware/static-files.js", () => ({
       registerStaticFilesMiddleware: jest.fn(),
     }));
@@ -86,6 +89,8 @@ describe("app", () => {
     const { registerProxyRoutes } = await import("./proxy.js");
     const { registerOAuthRoutes } = await import("./routes/oauth.js");
     const { openPushStore } = await import("../notifications/push-store.js");
+    const { createCspReportOnlyMiddleware } =
+      await import("./middleware/csp.js");
     const { registerStaticFilesMiddleware } =
       await import("./middleware/static-files.js");
 
@@ -98,6 +103,7 @@ describe("app", () => {
       verbose: false,
     });
     expect(registerOAuthRoutes).toHaveBeenCalledWith(appMock);
+    expect(createCspReportOnlyMiddleware).toHaveBeenCalledTimes(1);
     expect(openPushStore).toHaveBeenCalledWith(
       expect.stringContaining("push-subscriptions.db"),
     );

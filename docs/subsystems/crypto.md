@@ -102,3 +102,10 @@ Decode UTF-8 → plaintext
 - **Non-extractable key** — Even if an attacker gains JavaScript execution context, they cannot extract the raw key material.
 - **Per-encryption IV** — Every `encryptValue()` call generates a fresh random IV, ensuring identical plaintexts produce different ciphertexts.
 - **No plaintext storage** — API keys are always encrypted before writing to IndexedDB. `crypto.ts` is the only path for reading/writing sensitive config values.
+
+## Settings Backup & Restore
+
+To facilitate configuration portability while preserving security, settings export/import logic is encapsulated in `src/settings-backup.ts`:
+
+- **Backup Encryption**: When exporting settings, standard configuration values remain in plaintext, but any encrypted keys (API keys, git tokens, etc.) are decrypted via `crypto.ts` and re-encrypted using a user-provided password.
+- **Restore Decryption**: When importing settings, the module prompts for the password to decrypt the sensitive values, which are then securely re-encrypted with the local environment's browser-specific `CryptoKey` and saved back into IndexedDB.

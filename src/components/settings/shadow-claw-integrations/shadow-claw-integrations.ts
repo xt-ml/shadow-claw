@@ -15,9 +15,10 @@ import {
   type EmailConnectionRecord,
   type EmailCredentialRef,
 } from "../../../email/connections.js";
-import { decryptValue, encryptValue } from "../../../crypto.js";
+import { encryptValue } from "../../../crypto.js";
 import { showError, showSuccess } from "../../../toast.js";
 import { ulid } from "../../../ulid.js";
+import { resolveConnectionTestAuth } from "./connection-test-auth.js";
 
 import type { ShadowClawDatabase } from "../../../types.js";
 import type { ServiceAccount } from "../../../accounts/service-accounts.js";
@@ -562,53 +563,53 @@ export class ShadowClawIntegrations extends ShadowClawElement {
         : null;
 
       if (authMode === "oauth") {
-        authType = "oauth";
         const providerId = (
           slot.querySelector("#int-oauth-provider") as HTMLSelectElement | null
         )?.value;
-
-        if (
+        const pendingOauthAccessToken =
           this.pendingOauthResult?.accessToken &&
           (!providerId || this.pendingOauthResult.providerId === providerId)
-        ) {
-          accessToken = this.pendingOauthResult.accessToken;
-        } else if (existing?.credentialRef?.accountId) {
-          const linkedAccount = this.accounts.find(
-            (account) => account.id === existing.credentialRef?.accountId,
-          );
-          if (linkedAccount?.token) {
-            accessToken =
-              (await decryptValue(linkedAccount.token)) || undefined;
-          }
-        }
+            ? this.pendingOauthResult.accessToken
+            : "";
 
-        if (!accessToken) {
-          showError(
-            "OAuth access token is missing. Click Connect OAuth first (or save and reconnect).",
-            6000,
-          );
+        const result = resolveConnectionTestAuth({
+          authMode,
+          pendingOauthAccessToken,
+          hasStoredOauthCredential: Boolean(existing?.credentialRef?.accountId),
+        });
+
+        if ("error" in result) {
+          showError(result.error, 6000);
 
           return;
+        }
+
+        authType = result.authType;
+        if (result.authType === "oauth") {
+          accessToken = result.accessToken;
         }
       } else {
-        const passwordRaw = (
+        const passwordInput = (
           slot.querySelector("#int-password") as HTMLInputElement | null
-        )?.value.trim();
-        if (passwordRaw) {
-          password = passwordRaw;
-        } else if (existing?.credentialRef?.encryptedSecret) {
-          password =
-            (await decryptValue(existing.credentialRef.encryptedSecret)) ||
-            undefined;
-        }
+        )?.value;
 
-        if (!password) {
-          showError(
-            "Password/app password is missing. Enter it, or save an existing credential first.",
-            6000,
-          );
+        const result = resolveConnectionTestAuth({
+          authMode,
+          passwordInput,
+          hasStoredPasswordCredential: Boolean(
+            existing?.credentialRef?.encryptedSecret,
+          ),
+        });
+
+        if ("error" in result) {
+          showError(result.error, 6000);
 
           return;
+        }
+
+        authType = result.authType;
+        if (result.authType === "basic_userpass") {
+          password = result.password;
         }
       }
 

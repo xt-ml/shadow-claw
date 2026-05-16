@@ -203,6 +203,7 @@ Long-running or complex backend logic is encapsulated in services:
 - `request-logger.ts`: Detailed diagnostic logging
 - `pna.ts`: Private Network Access compliance
 - `static-files.ts`: SPA-aware static asset delivery
+- `csp.ts`: Content Security Policy (CSP) report-only compliance
 
 ## Production Deployment
 

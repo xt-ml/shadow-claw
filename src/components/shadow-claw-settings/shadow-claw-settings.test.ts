@@ -201,6 +201,25 @@ jest.unstable_mockModule("../../db/setConfig.js", () => ({
   setConfig: (...args: any[]) => (globalThis as any)._mockSetConfig(...args),
 }));
 
+(globalThis as any)._mockCreateSettingsBackupBlob = jest
+  .fn<any>()
+  .mockResolvedValue(new Blob(["{}"], { type: "application/json" }));
+(globalThis as any)._mockWriteSettingsBackupToFileHandle = jest
+  .fn<any>()
+  .mockResolvedValue(undefined);
+(globalThis as any)._mockParseSettingsBackupPayload = jest.fn<any>();
+(globalThis as any)._mockReapplyPlaintextPasswords = jest.fn<any>();
+jest.unstable_mockModule("../../settings-backup.js", () => ({
+  createSettingsBackupBlob: (...args: any[]) =>
+    (globalThis as any)._mockCreateSettingsBackupBlob(...args),
+  writeSettingsBackupToFileHandle: (...args: any[]) =>
+    (globalThis as any)._mockWriteSettingsBackupToFileHandle(...args),
+  parseSettingsBackupPayload: (...args: any[]) =>
+    (globalThis as any)._mockParseSettingsBackupPayload(...args),
+  reapplyPlaintextPasswords: (...args: any[]) =>
+    (globalThis as any)._mockReapplyPlaintextPasswords(...args),
+}));
+
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { ShadowClawSettings } = await import("./shadow-claw-settings.js");
 
@@ -277,6 +296,64 @@ describe("shadow-claw-settings", () => {
     expect(includePlaintext instanceof HTMLInputElement).toBe(true);
     expect((includePlaintext as HTMLInputElement).checked).toBe(false);
 
+    document.body.removeChild(el);
+  });
+
+  it("uses a native save picker for plaintext settings backup", async () => {
+    const showSaveFilePicker = jest.fn<any>().mockResolvedValue({
+      name: "shadowclaw-settings-backup.json",
+    });
+    (globalThis as any).showSaveFilePicker = showSaveFilePicker;
+    (globalThis as any)._mockWriteSettingsBackupToFileHandle.mockClear();
+
+    const el = new ShadowClawSettings();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    (el as any).db = {
+      transaction: () => ({
+        objectStore: () => ({
+          getAll: () => {
+            const request: any = {
+              result: [{ key: "assistant_name", value: "k9" }],
+            };
+
+            setTimeout(() => {
+              request.onsuccess?.();
+            }, 0);
+
+            return request;
+          },
+        }),
+      }),
+    };
+
+    const includePlaintext = el.shadowRoot?.querySelector<HTMLInputElement>(
+      '[data-setting="include-plaintext-passwords"]',
+    );
+    const confirmBtn = el.shadowRoot?.querySelector<HTMLButtonElement>(
+      '[data-action="confirm-backup-settings"]',
+    );
+
+    if (includePlaintext) {
+      includePlaintext.checked = true;
+    }
+
+    confirmBtn?.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(showSaveFilePicker).toHaveBeenCalledTimes(1);
+    expect(
+      (globalThis as any)._mockWriteSettingsBackupToFileHandle,
+    ).toHaveBeenCalledWith(
+      { name: "shadowclaw-settings-backup.json" },
+      expect.any(Array),
+      true,
+    );
+
+    delete (globalThis as any).showSaveFilePicker;
     document.body.removeChild(el);
   });
 

@@ -15,31 +15,19 @@ import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-
 import { ASSISTANT_NAME, CONFIG_KEYS } from "../../config.js";
 import type { Orchestrator } from "../../orchestrator.js";
 import type { ShadowClawDatabase } from "../../types.js";
-import { decryptValue, encryptValue } from "../../crypto.js";
 import { getDb } from "../../db/db.js";
+import {
+  createSettingsBackupBlob,
+  parseSettingsBackupPayload,
+  reapplyPlaintextPasswords,
+  type ConfigEntryRecord,
+} from "../../settings-backup.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { showError, showInfo, showSuccess } from "../../toast.js";
+import { formatDateForFilename } from "../../utils.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
 const elementName = "shadow-claw-settings";
-
-type ConfigEntryRecord = { key: string; value: unknown };
-type PasswordPathSegment = string | number;
-
-interface PlaintextPasswordEntry {
-  key: string;
-  path: PasswordPathSegment[];
-  value: string;
-}
-
-interface SettingsBackupPayload {
-  kind: "shadowclaw-settings-backup";
-  version: 1;
-  exportedAt: number;
-  includePlaintextPasswords: boolean;
-  configEntries: ConfigEntryRecord[];
-  plaintextPasswords?: PlaintextPasswordEntry[];
-}
 
 /**
  * Parent settings component that composes the dedicated sub-components:
@@ -88,7 +76,6 @@ export class ShadowClawSettings extends ShadowClawElement {
       return;
     }
 
-    // Bind the channels config button
     const showChannelsConfigButton = root.querySelector(
       '[data-action="show-channels-config"]',
     );
@@ -102,7 +89,6 @@ export class ShadowClawSettings extends ShadowClawElement {
       );
     });
 
-    // Bind the tools config button
     const showToolsConfigButton = root.querySelector(
       '[data-action="show-tools-config"]',
     );
@@ -116,7 +102,6 @@ export class ShadowClawSettings extends ShadowClawElement {
       );
     });
 
-    // Bind tab controls
     const tabButtons =
       root.querySelectorAll<HTMLButtonElement>("[data-tab-target]");
     tabButtons.forEach((tabButton) => {
@@ -132,7 +117,6 @@ export class ShadowClawSettings extends ShadowClawElement {
 
     this.bindSettingsActions();
 
-    // Set the deployed revision
     const revisionEl = root.querySelector('[data-info="deployed-revision"]');
     if (revisionEl) {
       const revision =
@@ -143,7 +127,6 @@ export class ShadowClawSettings extends ShadowClawElement {
       revisionEl.textContent = `Deployed revision: ${revision || "unknown"}`;
     }
 
-    // Populate Assistant settings
     await this.populateAssistantSettings();
   }
 
@@ -153,7 +136,6 @@ export class ShadowClawSettings extends ShadowClawElement {
       return;
     }
 
-    // Load assistant name
     const nameInput = root.querySelector(
       '[data-setting="assistant-name-input"]',
     ) as HTMLInputElement | null;
@@ -173,7 +155,6 @@ export class ShadowClawSettings extends ShadowClawElement {
         ASSISTANT_NAME;
     }
 
-    // Load activity log disk logging toggle
     const { getConfig } = await import("../../db/getConfig.js");
     const rawActivityLogDiskLoggingEnabled = (await getConfig(
       this.db,
@@ -272,7 +253,6 @@ export class ShadowClawSettings extends ShadowClawElement {
         void this.confirmClear();
       });
 
-    // Assistant settings
     root
       .querySelector('[data-action="save-assistant-name"]')
       ?.addEventListener("click", () => this.saveAssistantName());
@@ -285,6 +265,39 @@ export class ShadowClawSettings extends ShadowClawElement {
           void this.onActivityLogDiskLoggingToggle(target.checked);
         }
       });
+  }
+
+  async promptForPlaintextBackupHandle(): Promise<FileSystemFileHandle | null> {
+    const pickerMaybe = Reflect.get(globalThis, "showSaveFilePicker");
+    const picker =
+      typeof pickerMaybe === "function" ? pickerMaybe.bind(globalThis) : null;
+
+    if (!picker) {
+      throw new Error(
+        "Plaintext settings backup requires the File System Access API.",
+      );
+    }
+
+    try {
+      return await picker({
+        id: "shadowclaw-settings-backup",
+        suggestedName: `shadowclaw-settings-backup-${formatDateForFilename()}.json`,
+        types: [
+          {
+            description: "JSON Files",
+            accept: {
+              "application/json": [".json"],
+            },
+          },
+        ],
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return null;
+      }
+
+      throw error;
+    }
   }
 
   getDialog(selector: string): HTMLDialogElement | null {
@@ -413,207 +426,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     });
   }
 
-  cloneConfigValue(value: unknown): unknown {
-    try {
-      return JSON.parse(JSON.stringify(value));
-    } catch {
-      return null;
-    }
-  }
-
-  async collectAndStripPasswordData(
-    entries: ConfigEntryRecord[],
-    includePlaintextPasswords: boolean,
-  ): Promise<{
-    configEntries: ConfigEntryRecord[];
-    plaintextPasswords: PlaintextPasswordEntry[];
-  }> {
-    const nextEntries: ConfigEntryRecord[] = [];
-    const plaintextPasswords: PlaintextPasswordEntry[] = [];
-
-    for (const entry of entries) {
-      const key = entry.key;
-
-      if (key === CONFIG_KEYS.STORAGE_HANDLE) {
-        continue;
-      }
-
-      if (key === CONFIG_KEYS.GIT_PASSWORD) {
-        if (includePlaintextPasswords && typeof entry.value === "string") {
-          const decrypted = await decryptValue(entry.value);
-          if (decrypted) {
-            plaintextPasswords.push({ key, path: [], value: decrypted });
-          }
-        }
-
-        continue;
-      }
-
-      const value = this.cloneConfigValue(entry.value);
-
-      if (key === CONFIG_KEYS.GIT_ACCOUNTS && Array.isArray(value)) {
-        for (let i = 0; i < value.length; i += 1) {
-          const account = value[i] as Record<string, unknown>;
-          if (!account || typeof account !== "object") {
-            continue;
-          }
-
-          const encryptedPassword = account.password;
-          if (typeof encryptedPassword === "string" && encryptedPassword) {
-            if (includePlaintextPasswords) {
-              const decrypted = await decryptValue(encryptedPassword);
-              if (decrypted) {
-                plaintextPasswords.push({
-                  key,
-                  path: [i, "password"],
-                  value: decrypted,
-                });
-              }
-            }
-
-            delete account.password;
-          }
-        }
-      }
-
-      if (key === CONFIG_KEYS.INTEGRATION_CONNECTIONS && Array.isArray(value)) {
-        for (let i = 0; i < value.length; i += 1) {
-          const record = value[i] as Record<string, unknown>;
-          const credentialRef = record?.credentialRef as
-            | Record<string, unknown>
-            | undefined;
-
-          const encryptedSecret = credentialRef?.encryptedSecret;
-          if (typeof encryptedSecret === "string" && encryptedSecret) {
-            if (includePlaintextPasswords) {
-              const decrypted = await decryptValue(encryptedSecret);
-              if (decrypted) {
-                plaintextPasswords.push({
-                  key,
-                  path: [i, "credentialRef", "encryptedSecret"],
-                  value: decrypted,
-                });
-              }
-            }
-
-            delete credentialRef.encryptedSecret;
-          }
-        }
-      }
-
-      if (key === CONFIG_KEYS.REMOTE_MCP_CONNECTIONS && Array.isArray(value)) {
-        for (let i = 0; i < value.length; i += 1) {
-          const record = value[i] as Record<string, unknown>;
-          const credentialRef = record?.credentialRef as
-            | Record<string, unknown>
-            | undefined;
-
-          const encryptedValue = credentialRef?.encryptedValue;
-          if (typeof encryptedValue === "string" && encryptedValue) {
-            if (includePlaintextPasswords) {
-              const decrypted = await decryptValue(encryptedValue);
-              if (decrypted) {
-                plaintextPasswords.push({
-                  key,
-                  path: [i, "credentialRef", "encryptedValue"],
-                  value: decrypted,
-                });
-              }
-            }
-
-            delete credentialRef.encryptedValue;
-          }
-        }
-      }
-
-      nextEntries.push({ key, value });
-    }
-
-    return { configEntries: nextEntries, plaintextPasswords };
-  }
-
-  applyPathValue(
-    rootValue: unknown,
-    path: PasswordPathSegment[],
-    nextValue: string,
-  ): unknown {
-    if (path.length === 0) {
-      return nextValue;
-    }
-
-    let current = rootValue as Record<string, unknown> | unknown[] | null;
-
-    for (let i = 0; i < path.length - 1; i += 1) {
-      const segment = path[i];
-      if (typeof segment === "number") {
-        if (!Array.isArray(current) || !current[segment]) {
-          return rootValue;
-        }
-
-        current = current[segment] as Record<string, unknown>;
-      } else {
-        if (!current || typeof current !== "object") {
-          return rootValue;
-        }
-
-        const next = (current as Record<string, unknown>)[segment];
-        if (!next || typeof next !== "object") {
-          return rootValue;
-        }
-
-        current = next as Record<string, unknown>;
-      }
-    }
-
-    const leaf = path[path.length - 1];
-    if (typeof leaf === "number") {
-      if (!Array.isArray(current)) {
-        return rootValue;
-      }
-
-      current[leaf] = nextValue;
-    } else {
-      if (!current || typeof current !== "object") {
-        return rootValue;
-      }
-
-      (current as Record<string, unknown>)[leaf] = nextValue;
-    }
-
-    return rootValue;
-  }
-
-  async reapplyPlaintextPasswords(
-    entries: ConfigEntryRecord[],
-    plaintextPasswords: PlaintextPasswordEntry[],
-  ): Promise<ConfigEntryRecord[]> {
-    if (!plaintextPasswords.length) {
-      return entries;
-    }
-
-    const byKey = new Map(entries.map((entry) => [entry.key, entry]));
-
-    for (const secret of plaintextPasswords) {
-      const encrypted = await encryptValue(secret.value);
-      if (!encrypted) {
-        continue;
-      }
-
-      const existing = byKey.get(secret.key);
-      if (existing) {
-        existing.value = this.applyPathValue(
-          existing.value,
-          secret.path,
-          encrypted,
-        );
-      } else if (secret.path.length === 0) {
-        byKey.set(secret.key, { key: secret.key, value: encrypted });
-      }
-    }
-
-    return Array.from(byKey.values());
-  }
-
   async confirmBackup() {
     if (!this.db) {
       showError("Settings database is unavailable", 5000);
@@ -632,26 +444,33 @@ export class ShadowClawSettings extends ShadowClawElement {
         : false;
 
     try {
+      if (includePlaintextPasswords) {
+        const fileHandle = await this.promptForPlaintextBackupHandle();
+        if (!fileHandle) {
+          return;
+        }
+
+        const entries = await this.getAllConfigEntries();
+        const { writeSettingsBackupToFileHandle } =
+          await import("../../settings-backup.js");
+
+        await writeSettingsBackupToFileHandle(
+          fileHandle,
+          entries,
+          includePlaintextPasswords,
+        );
+
+        this.closeDialog(".settings__backup-dialog");
+        showSuccess("Settings backup saved", 3000);
+
+        return;
+      }
+
       const entries = await this.getAllConfigEntries();
-      const transformed = await this.collectAndStripPasswordData(
+      const blob = await createSettingsBackupBlob(
         entries,
         includePlaintextPasswords,
       );
-
-      const payload: SettingsBackupPayload = {
-        kind: "shadowclaw-settings-backup",
-        version: 1,
-        exportedAt: Date.now(),
-        includePlaintextPasswords,
-        configEntries: transformed.configEntries,
-        plaintextPasswords: includePlaintextPasswords
-          ? transformed.plaintextPasswords
-          : undefined,
-      };
-
-      const blob = new Blob([JSON.stringify(payload, null, 2)], {
-        type: "application/json",
-      });
 
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
@@ -670,41 +489,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
-  parseBackupPayload(raw: string): SettingsBackupPayload {
-    const parsed = JSON.parse(raw) as Partial<SettingsBackupPayload>;
-
-    if (
-      parsed?.kind !== "shadowclaw-settings-backup" ||
-      parsed.version !== 1 ||
-      !Array.isArray(parsed.configEntries)
-    ) {
-      throw new Error("Invalid settings backup file");
-    }
-
-    const plaintextPasswords = Array.isArray(parsed.plaintextPasswords)
-      ? parsed.plaintextPasswords.filter((entry) => {
-          return (
-            entry &&
-            typeof entry.key === "string" &&
-            Array.isArray(entry.path) &&
-            typeof entry.value === "string"
-          );
-        })
-      : [];
-
-    return {
-      kind: "shadowclaw-settings-backup",
-      version: 1,
-      exportedAt:
-        typeof parsed.exportedAt === "number" ? parsed.exportedAt : Date.now(),
-      includePlaintextPasswords: !!parsed.includePlaintextPasswords,
-      configEntries: parsed.configEntries
-        .filter((entry) => entry && typeof entry.key === "string")
-        .map((entry) => ({ key: entry.key, value: entry.value })),
-      plaintextPasswords,
-    };
-  }
-
   async confirmRestore() {
     if (!this.db) {
       showError("Settings database is unavailable", 5000);
@@ -721,8 +505,8 @@ export class ShadowClawSettings extends ShadowClawElement {
 
     try {
       const text = await file.text();
-      const backup = this.parseBackupPayload(text);
-      const mergedEntries = await this.reapplyPlaintextPasswords(
+      const backup = parseSettingsBackupPayload(text);
+      const mergedEntries = await reapplyPlaintextPasswords(
         backup.configEntries,
         backup.plaintextPasswords || [],
       );

@@ -136,8 +136,16 @@ describe("settings-backup", () => {
     expect(payload.includePlaintextPasswords).toBe(true);
     expect(payload.plaintextPasswords).toEqual([
       { key: "git_password", path: [], value: "plain:enc-git-password" },
-      { key: "api_key:openrouter", path: [], value: "plain:enc-openrouter-key" },
-      { key: "telegram_bot_token", path: [], value: "plain:enc-telegram-token" },
+      {
+        key: "api_key:openrouter",
+        path: [],
+        value: "plain:enc-openrouter-key",
+      },
+      {
+        key: "telegram_bot_token",
+        path: [],
+        value: "plain:enc-telegram-token",
+      },
       { key: "imessage_api_key", path: [], value: "plain:enc-imessage-key" },
       { key: "api_key", path: [], value: "plain:enc-legacy-api-key" },
       { key: "git_accounts", path: [0, "password"], value: "plain:enc-a" },

@@ -591,13 +591,16 @@ describe("message copy button", () => {
       expect(btn!.getAttribute("aria-label")).toBe("Delete message");
     });
 
-    it("should call orchestratorStore.deleteMessage on click after confirmation", async () => {
+    it("should call orchestratorStore.deleteMessage on click after app-dialog confirmation", async () => {
       const { orchestratorStore: mockedStore } =
         await import("../../stores/orchestrator.js");
       const deleteSpy = jest
         .spyOn(mockedStore, "deleteMessage")
         .mockResolvedValue(undefined);
-      const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(true);
+
+      const appHost = document.createElement("shadow-claw") as any;
+      appHost.requestDialog = jest.fn(async () => true);
+      document.body.appendChild(appHost);
 
       const article = document.createElement("article");
       article.className = "chat__message";
@@ -613,22 +616,30 @@ describe("message copy button", () => {
       const btn = article.querySelector(".chat__msg-delete-btn") as HTMLElement;
 
       btn.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(confirmSpy).toHaveBeenCalledWith(
-        "Delete this message? This action cannot be undone.",
+      expect(appHost.requestDialog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mode: "confirm",
+          title: "Delete Message",
+          confirmLabel: "Delete",
+        }),
       );
       expect(deleteSpy).toHaveBeenCalledWith(mockDb, "msg-123");
-      confirmSpy.mockRestore();
       deleteSpy.mockRestore();
+      document.body.removeChild(appHost);
     });
 
-    it("should not call delete when confirmation is cancelled", async () => {
+    it("should not call delete when app-dialog confirmation is cancelled", async () => {
       const { orchestratorStore: mockedStore } =
         await import("../../stores/orchestrator.js");
       const deleteSpy = jest
         .spyOn(mockedStore, "deleteMessage")
         .mockResolvedValue(undefined);
-      const confirmSpy = jest.spyOn(window, "confirm").mockReturnValue(false);
+
+      const appHost = document.createElement("shadow-claw") as any;
+      appHost.requestDialog = jest.fn(async () => false);
+      document.body.appendChild(appHost);
 
       const article = document.createElement("article");
       article.className = "chat__message";
@@ -643,12 +654,13 @@ describe("message copy button", () => {
       const btn = article.querySelector(".chat__msg-delete-btn") as HTMLElement;
 
       btn.click();
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
-      expect(confirmSpy).toHaveBeenCalled();
+      expect(appHost.requestDialog).toHaveBeenCalled();
       expect(deleteSpy).not.toHaveBeenCalled();
 
-      confirmSpy.mockRestore();
       deleteSpy.mockRestore();
+      document.body.removeChild(appHost);
     });
   });
 });

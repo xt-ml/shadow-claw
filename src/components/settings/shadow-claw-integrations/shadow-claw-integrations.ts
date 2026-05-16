@@ -191,6 +191,20 @@ export class ShadowClawIntegrations extends ShadowClawElement {
     await this.reload();
   }
 
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
+    }
+
+    return false;
+  }
+
   bindEventListeners() {
     const root = this.shadowRoot;
     if (!root) {
@@ -1406,7 +1420,14 @@ export class ShadowClawIntegrations extends ShadowClawElement {
       return;
     }
 
-    if (!confirm(`Delete email connection \"${record.label}\"?`)) {
+    const confirmed = await this.requestConfirmation({
+      title: "Delete Email Connection",
+      message: `Delete email connection \"${record.label}\"?`,
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
       return;
     }
 

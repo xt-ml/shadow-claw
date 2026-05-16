@@ -504,7 +504,7 @@ describe("shadow-claw-file-viewer", () => {
     );
   });
 
-  it("blocks close actions while the current draft is unsaved", () => {
+  it("blocks close actions while the current draft is unsaved", async () => {
     const component = new ShadowClawFileViewer();
     const modal = document.createElement("dialog");
     modal.className = "file-modal";
@@ -552,9 +552,9 @@ describe("shadow-claw-file-viewer", () => {
       content: "# saved",
     };
 
-    const confirmSpy = jest
-      .spyOn(window, "confirm")
-      .mockImplementation(() => false);
+    const appHost = document.createElement("shadow-claw") as any;
+    appHost.requestDialog = jest.fn(async () => false);
+    document.body.appendChild(appHost);
 
     const closeFileMock = fileViewerStore.closeFile as jest.Mock;
     closeFileMock.mockReset();
@@ -562,17 +562,18 @@ describe("shadow-claw-file-viewer", () => {
     component.bindEventListeners();
 
     closeButton.click();
-    expect(confirmSpy).toHaveBeenCalledTimes(1);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(appHost.requestDialog).toHaveBeenCalledTimes(1);
     expect(closeFileMock).not.toHaveBeenCalled();
 
     const cancelEvent = new Event("cancel", { cancelable: true });
     modal.dispatchEvent(cancelEvent);
 
     expect(cancelEvent.defaultPrevented).toBe(true);
-    expect(confirmSpy).toHaveBeenCalledTimes(2);
+    expect(appHost.requestDialog).toHaveBeenCalledTimes(2);
     expect(closeFileMock).not.toHaveBeenCalled();
 
-    confirmSpy.mockRestore();
+    document.body.removeChild(appHost);
   });
 
   describe("workspace link resolution", () => {

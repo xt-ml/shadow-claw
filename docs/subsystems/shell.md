@@ -56,7 +56,11 @@ export async function executeShell(
 ShadowClaw uses a custom `ShadowClawFileSystem` (`src/shell/fs.ts`) that extends `just-bash`'s `InMemoryFs`. This bridge ensures modifications to the virtual filesystem are synchronized back to persistent OPFS storage.
 
 - **Read strategy:** On initialization, `createFileSystem` traverses the workspace and prepares file handles. Files are loaded into memory lazily when first accessed.
-- **Write strategy:** Mutating methods like `writeFile`, `appendFile`, `rm`, `cp`, and `mv` are hooked. Whenever a file is modified in memory, the bridge flushes the change to the storage backend.
+- **Write strategy:** Mutating methods like `writeFile`, `appendFile`, `mkdir`, `rm`, `cp`, and `mv` are hooked. Whenever a file is modified in memory, or a directory is created, the bridge flushes the change to the storage backend.
+
+### Directory persistence (`mkdir`)
+
+`ShadowClawFileSystem.mkdir()` mirrors `just-bash` directory creation into workspace storage when the target path resolves under `/home/user`. This keeps JS-shell-created folders visible in the Files page without requiring a separate sync step.
 
 ## Supported Commands
 

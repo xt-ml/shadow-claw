@@ -946,6 +946,9 @@ export class ShadowClawConversations extends ShadowClawElement {
       ".conversations__delete-dialog",
     ) as HTMLDialogElement | null;
     const nameSpan = dialog?.querySelector(".conversations__delete-name");
+    const cancelBtn = dialog?.querySelector(
+      ".conversations__cancel",
+    ) as HTMLButtonElement | null;
 
     if (!dialog) {
       return;
@@ -956,6 +959,7 @@ export class ShadowClawConversations extends ShadowClawElement {
     }
 
     dialog.showModal();
+    cancelBtn?.focus();
   }
 
   openCloneDialog(name: string) {

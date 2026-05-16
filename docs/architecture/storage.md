@@ -109,12 +109,22 @@ When OPFS main-thread writes fail (`"Writable file streams are not supported"`):
 4. **Two-attempt retry** — on first `InvalidStateError` (stale handle), re-acquire handle and retry
 5. On failure (OPFS only) — retry via worker: `writeOpfsPathViaWorker(pathSegments, content)`
 
+## Directory Creation Flow
+
+`createGroupDirectory(db, groupId, dirPath)` in `src/storage/createGroupDirectory.ts`:
+
+1. Normalize path separators and trim leading/trailing workspace markers
+2. Reject empty paths early
+3. Create nested directory handles with `{ create: true }`
+4. **Two-attempt retry** — on first stale-handle error, invalidate cached storage root and retry
+
 ## File Operations
 
 | Operation   | Function                 | Notes                                                 |
 | ----------- | ------------------------ | ----------------------------------------------------- |
 | Read file   | `readGroupFile()`        | Sync handle preferred for freshness                   |
 | Read bytes  | `readGroupFileBytes()`   | Raw `Uint8Array` for binary files (PDFs, images)      |
+| Create dir  | `createGroupDirectory()` | Creates nested directories with stale-handle retry    |
 | Write file  | `writeGroupFile()`       | Auto-creates directories, two-attempt retry           |
 | List files  | `listGroupFiles()`       | Returns `name` (files) or `name/` (directories)       |
 | Delete file | `deleteGroupFile()`      | `dir.removeEntry(filename)`                           |

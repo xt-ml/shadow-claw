@@ -47,7 +47,7 @@ test.describe("Task CRUD", () => {
     await expect(taskList).toContainText("Run daily check");
   });
 
-  test("should delete a task after confirming", async ({ page, tasks }) => {
+  test("should delete a task after confirming", async ({ tasks }) => {
     await tasks.open();
 
     // Create a task first
@@ -62,14 +62,13 @@ test.describe("Task CRUD", () => {
       timeout: 5000,
     });
 
-    // Set up the confirm dialog handler
-    page.once("dialog", async (dialog) => {
-      expect(dialog.type()).toBe("confirm");
-      await dialog.accept();
-    });
-
     // Click delete on the task
     await taskList.locator(".tasks__delete-btn").first().click();
+
+    // Confirm using the app shell dialog.
+    const confirmDialog = tasks.app.root.locator(".app-dialog");
+    await expect(confirmDialog).toBeVisible({ timeout: 5000 });
+    await tasks.app.root.locator(".app-dialog__btn--confirm").click();
 
     // Task should be removed
     await expect(taskList.locator(".tasks__item")).toHaveCount(0, {
@@ -83,7 +82,6 @@ test.describe("Task CRUD", () => {
   });
 
   test("should cancel delete when dismissing confirm dialog", async ({
-    page,
     tasks,
   }) => {
     await tasks.open();
@@ -100,12 +98,11 @@ test.describe("Task CRUD", () => {
       timeout: 5000,
     });
 
-    // Dismiss the confirm dialog
-    page.once("dialog", async (dialog) => {
-      await dialog.dismiss();
-    });
-
     await taskList.locator(".tasks__delete-btn").first().click();
+
+    const confirmDialog = tasks.app.root.locator(".app-dialog");
+    await expect(confirmDialog).toBeVisible({ timeout: 5000 });
+    await tasks.app.root.locator(".app-dialog__btn--cancel").click();
 
     // Task should still exist
     await expect(taskList.locator(".tasks__item")).toHaveCount(1);

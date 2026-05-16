@@ -257,6 +257,10 @@ The chat UI includes additional message and activity controls:
 - ChatGPT-style inline action buttons for file attachments (+) and message sending (arrow)
 - Responsive input wrapper that maintains inline layout across all viewport sizes
 
+Destructive actions (for example message delete, compact, file/task clear, and unsaved editor close)
+use app-level confirm dialogs via the root app shell (`shadow-claw.requestDialog`) rather than
+native `window.confirm()`. This keeps confirmation UX and keyboard behavior consistent across pages.
+
 When activity-log disk logging is enabled from Settings, server-side log entries
 are persisted under `.cache/logs` in the app data directory.
 

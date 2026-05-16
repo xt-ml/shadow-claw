@@ -161,6 +161,22 @@ export class ShadowClawTasks extends ShadowClawElement {
     );
   }
 
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
+    }
+
+    showInfo(options.message, 4000);
+
+    return false;
+  }
+
   async updateTaskList(db: ShadowClawDatabase) {
     const root = this.shadowRoot;
     if (!root) {
@@ -262,7 +278,14 @@ export class ShadowClawTasks extends ShadowClawElement {
    * Delete a task
    */
   async handleDelete(db: ShadowClawDatabase, id: string) {
-    if (!confirm("Are you sure you want to delete this scheduled task?")) {
+    const confirmed = await this.requestConfirmation({
+      title: "Delete Scheduled Task",
+      message: "Are you sure you want to delete this scheduled task?",
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
       return;
     }
 
@@ -603,9 +626,14 @@ export class ShadowClawTasks extends ShadowClawElement {
       return;
     }
 
-    if (
-      !confirm("Restore from backup will replace all current tasks. Continue?")
-    ) {
+    const confirmed = await this.requestConfirmation({
+      title: "Restore Tasks",
+      message: "Restore from backup will replace all current tasks. Continue?",
+      confirmLabel: "Restore",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
       input.value = "";
 
       return;
@@ -647,7 +675,14 @@ export class ShadowClawTasks extends ShadowClawElement {
    * Handle clear all (delete all tasks)
    */
   async handleClearAll(db: ShadowClawDatabase) {
-    if (!confirm("Delete ALL tasks? This cannot be undone!")) {
+    const confirmed = await this.requestConfirmation({
+      title: "Clear All Tasks",
+      message: "Delete ALL tasks? This cannot be undone!",
+      confirmLabel: "Delete All",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
       return;
     }
 

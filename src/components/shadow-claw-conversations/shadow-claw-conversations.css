@@ -488,8 +488,16 @@
 
 .conversations__delete-ok:hover,
 .conversations__delete-ok:focus-visible {
-  background-color: var(--shadow-claw-important-color);
-  border-color: var(--shadow-claw-important-color);
+  background-color: var(
+    --shadow-claw-important-color-hover,
+    color-mix(in srgb, var(--shadow-claw-important-color) 82%, black)
+  );
+  border-color: var(
+    --shadow-claw-important-color-hover,
+    color-mix(in srgb, var(--shadow-claw-important-color) 82%, black)
+  );
+  box-shadow: 0 0 0 0.125rem
+    color-mix(in srgb, var(--shadow-claw-important-color) 24%, transparent);
   outline: none;
 }
 

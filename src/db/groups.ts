@@ -177,6 +177,7 @@ export async function cloneGroup(
     groupId: `${prefix}${ulid()}`,
     name: `${source.name} (copy)`,
     createdAt: Date.now(),
+    toolTags: source.toolTags ? [...source.toolTags] : undefined,
   };
   groups.push(clone);
   await saveGroupMetadata(db, groups);

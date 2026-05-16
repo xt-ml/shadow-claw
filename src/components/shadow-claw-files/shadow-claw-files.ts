@@ -1,6 +1,7 @@
 import { deleteAllGroupFiles } from "../../storage/deleteAllGroupFiles.js";
 import { deleteGroupDirectory } from "../../storage/deleteGroupDirectory.js";
 import { deleteGroupFile } from "../../storage/deleteGroupFile.js";
+import { createGroupDirectory } from "../../storage/createGroupDirectory.js";
 import { downloadAllGroupFilesAsZip } from "../../storage/downloadAllGroupFilesAsZip.js";
 import { downloadGroupDirectoryAsZip } from "../../storage/downloadGroupDirectoryAsZip.js";
 import { downloadGroupFile } from "../../storage/downloadGroupFile.js";
@@ -36,6 +37,8 @@ export class ShadowClawFiles extends ShadowClawElement {
   private _pendingRenamePath: string | null = null;
   private _pendingRenameName: string | null = null;
   private _pendingRenameIsDirectory: boolean = false;
+  private _isCreatingNewItem: boolean = false;
+  private _isRenamingEntry: boolean = false;
 
   constructor() {
     super();
@@ -150,7 +153,17 @@ export class ShadowClawFiles extends ShadowClawElement {
 
     newBtn?.addEventListener("click", () => this.openNewFileDialog());
 
+    newDialog?.addEventListener("cancel", (event) => {
+      if (this._isCreatingNewItem) {
+        event.preventDefault();
+      }
+    });
+
     newCancelBtn?.addEventListener("click", () => {
+      if (this._isCreatingNewItem) {
+        return;
+      }
+
       if (newDialog instanceof HTMLDialogElement) {
         newDialog.close();
       }
@@ -167,7 +180,17 @@ export class ShadowClawFiles extends ShadowClawElement {
     const renameCancelBtn = root.querySelector(".files__rename-cancel");
     const renameForm = root.querySelector(".files__rename-form");
 
+    renameDialog?.addEventListener("cancel", (event) => {
+      if (this._isRenamingEntry) {
+        event.preventDefault();
+      }
+    });
+
     renameCancelBtn?.addEventListener("click", () => {
+      if (this._isRenamingEntry) {
+        return;
+      }
+
       if (renameDialog instanceof HTMLDialogElement) {
         renameDialog.close();
       }
@@ -222,6 +245,22 @@ export class ShadowClawFiles extends ShadowClawElement {
         composed: true,
       }),
     );
+  }
+
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
+    }
+
+    showWarning(options.message, 4500);
+
+    return false;
   }
 
   updateSyncButtonsVisibility() {
@@ -518,37 +557,46 @@ export class ShadowClawFiles extends ShadowClawElement {
             ? "delete this folder and all its contents"
             : "delete this file";
 
-          if (confirm(`Are you sure you want to ${action}?\n\n${name}`)) {
-            try {
-              const itemPath =
-                currentPath === "." ? file : `${currentPath}/${file}`;
-              if (isDir) {
-                await deleteGroupDirectory(
-                  db,
-                  orchestratorStore.activeGroupId,
-                  itemPath,
-                );
-              } else {
-                await deleteGroupFile(
-                  db,
-                  orchestratorStore.activeGroupId,
-                  itemPath,
-                );
-              }
+          const confirmed = await this.requestConfirmation({
+            title: isDir ? "Delete Folder" : "Delete File",
+            message: `Are you sure you want to ${action}?\n\n${name}`,
+            confirmLabel: "Delete",
+            cancelLabel: "Cancel",
+          });
 
-              await orchestratorStore.loadFiles(db);
+          if (!confirmed) {
+            return;
+          }
 
-              showSuccess(
-                isDir ? `Deleted folder: ${name}` : `Deleted file: ${name}`,
-                3000,
+          try {
+            const itemPath =
+              currentPath === "." ? file : `${currentPath}/${file}`;
+            if (isDir) {
+              await deleteGroupDirectory(
+                db,
+                orchestratorStore.activeGroupId,
+                itemPath,
               );
-            } catch (err) {
-              const message = err instanceof Error ? err.message : String(err);
-
-              showError(`Failed to delete ${name}: ${message}`, 6000);
-
-              console.error("Delete error:", err);
+            } else {
+              await deleteGroupFile(
+                db,
+                orchestratorStore.activeGroupId,
+                itemPath,
+              );
             }
+
+            await orchestratorStore.loadFiles(db);
+
+            showSuccess(
+              isDir ? `Deleted folder: ${name}` : `Deleted file: ${name}`,
+              3000,
+            );
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+
+            showError(`Failed to delete ${name}: ${message}`, 6000);
+
+            console.error("Delete error:", err);
           }
         });
       }
@@ -721,16 +769,23 @@ export class ShadowClawFiles extends ShadowClawElement {
 
     const dialog = root.querySelector(".files__new-dialog");
     const input = root.querySelector(".files__new-input");
+    const isFolderInput = root.querySelector(".files__new-is-folder");
 
     if (!(dialog instanceof HTMLDialogElement)) {
       return;
     }
+
+    this.setNewDialogBusy(false);
 
     dialog.showModal();
 
     if (input instanceof HTMLInputElement) {
       input.value = "";
       input.focus();
+    }
+
+    if (isFolderInput instanceof HTMLInputElement) {
+      isFolderInput.checked = false;
     }
   }
 
@@ -746,6 +801,8 @@ export class ShadowClawFiles extends ShadowClawElement {
     if (!(dialog instanceof HTMLDialogElement)) {
       return;
     }
+
+    this.setRenameDialogBusy(false);
 
     this._pendingRenamePath = path;
     this._pendingRenameName = currentName;
@@ -769,6 +826,10 @@ export class ShadowClawFiles extends ShadowClawElement {
   async handleRenameEntry(db: ShadowClawDatabase) {
     const root = this.shadowRoot;
     if (!root || !this._pendingRenamePath || !this._pendingRenameName) {
+      return;
+    }
+
+    if (this._isRenamingEntry) {
       return;
     }
 
@@ -804,6 +865,8 @@ export class ShadowClawFiles extends ShadowClawElement {
     }
 
     try {
+      this.setRenameDialogBusy(true);
+
       await renameGroupEntry(
         db,
         orchestratorStore.activeGroupId,
@@ -828,6 +891,8 @@ export class ShadowClawFiles extends ShadowClawElement {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       showError(`Failed to rename ${currentName}: ${message}`, 6000);
+    } finally {
+      this.setRenameDialogBusy(false);
     }
   }
 
@@ -837,21 +902,30 @@ export class ShadowClawFiles extends ShadowClawElement {
       return;
     }
 
+    if (this._isCreatingNewItem) {
+      return;
+    }
+
     const dialog = root.querySelector(".files__new-dialog");
     const input = root.querySelector(".files__new-input");
+    const isFolderInput = root.querySelector(".files__new-is-folder");
     if (!(input instanceof HTMLInputElement)) {
       return;
     }
 
+    const isFolder =
+      isFolderInput instanceof HTMLInputElement && isFolderInput.checked;
+    const itemType = isFolder ? "folder" : "file";
+
     const fileName = input.value.trim();
     if (!fileName) {
-      showWarning("Please enter a file name", 3000);
+      showWarning(`Please enter a ${itemType} name`, 3000);
 
       return;
     }
 
     if (fileName.includes("/") || fileName.includes("\\")) {
-      showWarning("Use only a file name, not a path", 3500);
+      showWarning(`Use only a ${itemType} name, not a path`, 3500);
 
       return;
     }
@@ -862,17 +936,85 @@ export class ShadowClawFiles extends ShadowClawElement {
         : `${orchestratorStore.currentPath}/${fileName}`;
 
     try {
-      await writeGroupFile(db, orchestratorStore.activeGroupId, filePath, "");
+      this.setNewDialogBusy(true);
+
+      if (isFolder) {
+        await createGroupDirectory(
+          db,
+          orchestratorStore.activeGroupId,
+          filePath,
+        );
+      } else {
+        await writeGroupFile(db, orchestratorStore.activeGroupId, filePath, "");
+      }
+
       await orchestratorStore.loadFiles(db);
 
-      showSuccess(`Created file: ${fileName}`, 3000);
+      showSuccess(`Created ${itemType}: ${fileName}`, 3000);
 
       if (dialog instanceof HTMLDialogElement) {
         dialog.close();
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to create file: ${message}`, 6000);
+      showError(`Failed to create ${itemType}: ${message}`, 6000);
+    } finally {
+      this.setNewDialogBusy(false);
+    }
+  }
+
+  setNewDialogBusy(isBusy: boolean) {
+    this._isCreatingNewItem = isBusy;
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const cancelBtn = root.querySelector(".files__new-cancel");
+    const okBtn = root.querySelector(".files__new-ok");
+    const input = root.querySelector(".files__new-input");
+    const isFolderInput = root.querySelector(".files__new-is-folder");
+
+    if (cancelBtn instanceof HTMLButtonElement) {
+      cancelBtn.disabled = isBusy;
+    }
+
+    if (okBtn instanceof HTMLButtonElement) {
+      okBtn.disabled = isBusy;
+    }
+
+    if (input instanceof HTMLInputElement) {
+      input.disabled = isBusy;
+    }
+
+    if (isFolderInput instanceof HTMLInputElement) {
+      isFolderInput.disabled = isBusy;
+    }
+  }
+
+  setRenameDialogBusy(isBusy: boolean) {
+    this._isRenamingEntry = isBusy;
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const cancelBtn = root.querySelector(".files__rename-cancel");
+    const okBtn = root.querySelector(".files__rename-ok");
+    const input = root.querySelector(".files__rename-input");
+
+    if (cancelBtn instanceof HTMLButtonElement) {
+      cancelBtn.disabled = isBusy;
+    }
+
+    if (okBtn instanceof HTMLButtonElement) {
+      okBtn.disabled = isBusy;
+    }
+
+    if (input instanceof HTMLInputElement) {
+      input.disabled = isBusy;
     }
   }
 
@@ -927,9 +1069,14 @@ export class ShadowClawFiles extends ShadowClawElement {
 
     const groupId = orchestratorStore.activeGroupId;
 
-    if (
-      !confirm("Restore from backup will replace all current files. Continue?")
-    ) {
+    const confirmed = await this.requestConfirmation({
+      title: "Restore Files",
+      message: "Restore from backup will replace all current files. Continue?",
+      confirmLabel: "Restore",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
       input.value = "";
 
       return;
@@ -971,7 +1118,14 @@ export class ShadowClawFiles extends ShadowClawElement {
    * Handle clear all (delete all files)
    */
   async handleClearAll(db: ShadowClawDatabase) {
-    if (!confirm("Delete ALL files? This cannot be undone!")) {
+    const confirmed = await this.requestConfirmation({
+      title: "Clear All Files",
+      message: "Delete ALL files? This cannot be undone!",
+      confirmLabel: "Delete All",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
       return;
     }
 

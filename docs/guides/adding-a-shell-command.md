@@ -12,6 +12,10 @@ JavaScript implementations that write to an in-memory virtual filesystem.
 ShadowClaw wraps `just-bash` with a `ShadowClawFileSystem` bridge (`src/shell/fs.ts`)
 that syncs changes back to persistent OPFS storage.
 
+Directory creation through `mkdir` is also persisted through this bridge via
+`createGroupDirectory()`, so folders created from the JS shell appear immediately
+in the Files page.
+
 ## What Already Exists
 
 Before adding anything, check the `just-bash` built-ins:

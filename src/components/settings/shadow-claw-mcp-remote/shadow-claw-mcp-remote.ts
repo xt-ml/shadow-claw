@@ -13,6 +13,7 @@ import {
   upsertRemoteMcpConnection,
 } from "../../../mcp-connections.js";
 
+import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import { showError, showSuccess } from "../../../toast.js";
 import { escapeHtml } from "../../../utils.js";
 
@@ -292,7 +293,9 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
       return;
     }
 
-    slot.innerHTML = `
+    setSanitizedHtml(
+      slot,
+      `
       <div class="connection-form">
         <h4>${isNew ? "Add Remote MCP Connection" : "Edit Remote MCP Connection"}</h4>
 
@@ -399,7 +402,8 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
           <button class="cancel-btn" data-action="cancel-connection-form">Cancel</button>
         </div>
       </div>
-    `;
+    `,
+    );
 
     slot
       .querySelector('[data-action="save-connection"]')
@@ -450,7 +454,7 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
 
     const slot = root.querySelector('[data-region="connection-form-slot"]');
     if (slot) {
-      slot.innerHTML = "";
+      slot.replaceChildren();
     }
 
     this.editingConnectionId = null;
@@ -718,7 +722,10 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
 
     const diagEl = document.createElement("div");
     diagEl.className = "connection-diagnostic";
-    diagEl.innerHTML = `<div class="diagnostic-loading">Testing connection\u2026</div>`;
+    const loadingEl = document.createElement("div");
+    loadingEl.className = "diagnostic-loading";
+    loadingEl.textContent = "Testing connection…";
+    diagEl.appendChild(loadingEl);
     card?.appendChild(diagEl);
 
     const result = await testRemoteMcpConnection(this.db, connectionId);
@@ -750,14 +757,17 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
         ? `<details class="diagnostic-tools"><summary>${result.toolCount} tool${result.toolCount === 1 ? "" : "s"} available</summary><ul>${result.toolNames.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul></details>`
         : "";
 
-    container.innerHTML = `
+    setSanitizedHtml(
+      container,
+      `
       <div class="diagnostic-header diagnostic-${result.success ? "ok" : "error"}">
         ${result.success ? "\u2713 Connection OK" : "\u2717 Connection Failed"}
         <button class="diagnostic-close" data-action="close-diagnostic" title="Dismiss">\u00d7</button>
       </div>
       <div class="diagnostic-steps">${stepsHtml}</div>
       ${toolsHtml}
-    `;
+      `,
+    );
 
     container
       .querySelector('[data-action="close-diagnostic"]')

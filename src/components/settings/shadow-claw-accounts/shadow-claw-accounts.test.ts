@@ -42,9 +42,18 @@ jest.unstable_mockModule("../../../ulid.js", () => ({
   ulid: jest.fn(() => "acct-1"),
 }));
 
+jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
+  setSanitizedHtml: jest.fn((element: Element, html: string) => {
+    element.innerHTML = html;
+
+    return html;
+  }),
+}));
+
 const { setConfig } = await import("../../../db/setConfig.js");
 const { getConfig } = await import("../../../db/getConfig.js");
 const { showSuccess, showError } = await import("../../../toast.js");
+const { setSanitizedHtml } = await import("../../../security/trusted-types.js");
 const { ShadowClawAccounts } = await import("./shadow-claw-accounts.js");
 
 describe("shadow-claw-accounts", () => {
@@ -357,6 +366,29 @@ describe("shadow-claw-accounts", () => {
       '[data-field="acct-auth-mode"]',
     ) as HTMLSelectElement;
     expect(modeSelect.value).toBe("oauth");
+
+    document.body.removeChild(el);
+  });
+
+  it("routes showAccountForm innerHTML through the Trusted Types helper", async () => {
+    const el = new ShadowClawAccounts();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.render();
+
+    (setSanitizedHtml as jest.Mock).mockClear();
+
+    el.showAccountForm("new");
+
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="account-form-slot"]',
+    ) as HTMLElement;
+
+    expect(setSanitizedHtml).toHaveBeenCalledWith(
+      slot,
+      expect.stringContaining("Add Account"),
+    );
 
     document.body.removeChild(el);
   });

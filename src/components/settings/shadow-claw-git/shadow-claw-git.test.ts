@@ -133,9 +133,18 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
   }),
 }));
 
+jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
+  setSanitizedHtml: jest.fn((element: Element, html: string) => {
+    element.innerHTML = html;
+
+    return html;
+  }),
+}));
+
 const { setConfig } = await import("../../../db/setConfig.js");
 const { getConfig } = await import("../../../db/getConfig.js");
 const { showError } = await import("../../../toast.js");
+const { setSanitizedHtml } = await import("../../../security/trusted-types.js");
 const { ShadowClawGit } = await import("./shadow-claw-git.js");
 const { showSuccess } = await import("../../../toast.js");
 
@@ -350,6 +359,29 @@ describe("shadow-claw-git", () => {
       '[data-field="acct-auth-mode"]',
     ) as HTMLSelectElement;
     expect(modeSelect.value).toBe("oauth");
+
+    document.body.removeChild(el);
+  });
+
+  it("routes showAccountForm innerHTML through the Trusted Types helper", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.render();
+
+    (setSanitizedHtml as jest.Mock).mockClear();
+
+    el.showAccountForm("new");
+
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="account-form-slot"]',
+    ) as HTMLElement;
+
+    expect(setSanitizedHtml).toHaveBeenCalledWith(
+      slot,
+      expect.stringContaining("Add Git Account"),
+    );
 
     document.body.removeChild(el);
   });

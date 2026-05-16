@@ -2,6 +2,10 @@ import HighlightedCode from "highlighted-code";
 
 import { effect } from "../../effect.js";
 import { renderMarkdown } from "../../markdown.js";
+import {
+  sanitizeSrcdocHtml,
+  setSanitizedHtml,
+} from "../../security/trusted-types.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
@@ -244,18 +248,30 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     if (!resolved) {
       const trimmed = href.trim();
-      if (trimmed && !trimmed.startsWith("#") && !trimmed.startsWith("javascript:")) {
+      if (
+        trimmed &&
+        !trimmed.startsWith("#") &&
+        !trimmed.startsWith("javascript:")
+      ) {
+        const targetAttr = link.getAttribute("target") || "_blank";
+        const safeTarget =
+          targetAttr === "_self" ||
+          targetAttr === "_top" ||
+          targetAttr === "_parent"
+            ? "_blank"
+            : targetAttr;
+
         try {
           const parsed = new URL(trimmed, window.location.href);
           const isExternal = parsed.host !== window.location.host;
           if (isExternal) {
             event.preventDefault();
-            window.open(trimmed, "_blank", "noopener,noreferrer");
+            window.open(trimmed, safeTarget, "noopener,noreferrer");
           }
         } catch {
           if (/^[a-zA-Z][a-zA-Z\d+.-]*:/u.test(trimmed)) {
             event.preventDefault();
-            window.open(trimmed, "_blank", "noopener,noreferrer");
+            window.open(trimmed, safeTarget, "noopener,noreferrer");
           }
         }
       }
@@ -672,7 +688,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return;
     }
 
-    content.innerHTML = previewHtml;
+    setSanitizedHtml(content, previewHtml);
   }
 
   getWorkingSourceFile(file: any, modal: HTMLElement) {
@@ -1013,33 +1029,32 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     return "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox";
   }
 
+  getIframeBridgeScriptUrl() {
+    return "/assets/file-viewer-preview-bridge.js";
+  }
+
   buildIframePreviewSrcdoc(file: any) {
     if (/\.svg$/i.test(file.name)) {
       return file.content;
     }
 
-    const linkBridgeScript =
-      "<script>(function(){" +
-      "document.addEventListener('click',function(e){" +
-      "var t=e.target;if(!(t instanceof Element))return;" +
-      "var a=t.closest('a');if(!(a instanceof HTMLAnchorElement))return;" +
-      "if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;" +
-      "var href=a.getAttribute('href')||'';if(!href)return;" +
-      "if(href.startsWith('#')||href.startsWith('javascript:'))return;" +
-      "var isExt=false;try{var u=new URL(href,window.location.href);if(u.protocol==='http:'||u.protocol==='https:'){isExt=true;}}catch(err){isExt=true;}" +
-      "if(isExt)return;" +
-      "e.preventDefault();" +
-      "window.parent.postMessage({type:'shadow-claw-file-viewer-link',href:href},'*');" +
-      "});" +
-      "})();<\/script>";
+    const safeContent = sanitizeSrcdocHtml(file.content || "");
+
+    // A per-render nonce restricts script execution inside the sandboxed iframe
+    // to only the reviewed same-origin bridge script. Inline scripts and any
+    // other external scripts are blocked even though allow-scripts is required
+    // for the bridge to run at all (sandbox cannot be removed without losing
+    // link interception).
+    const nonce = crypto.randomUUID().replace(/-/g, "");
 
     return (
       "<!doctype html>" +
       '<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
+      `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">` +
       '<base target="_blank">' +
-      linkBridgeScript +
+      `<script src="${this.getIframeBridgeScriptUrl()}" nonce="${nonce}"><\/script>` +
       "</head><body>" +
-      file.content +
+      safeContent +
       "</body></html>"
     );
   }

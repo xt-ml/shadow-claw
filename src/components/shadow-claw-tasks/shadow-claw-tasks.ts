@@ -1,6 +1,7 @@
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
 import { effect } from "../../effect.js";
 import { renderMarkdown } from "../../markdown.js";
+import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { showError, showInfo, showSuccess } from "../../toast.js";
@@ -137,7 +138,10 @@ export class ShadowClawTasks extends ShadowClawElement {
         promptTextarea instanceof HTMLTextAreaElement &&
         previewDiv instanceof HTMLElement
       ) {
-        previewDiv.innerHTML = await this.renderPreview(promptTextarea.value);
+        setSanitizedHtml(
+          previewDiv,
+          await this.renderPreview(promptTextarea.value),
+        );
       }
     };
 
@@ -304,7 +308,7 @@ export class ShadowClawTasks extends ShadowClawElement {
     const previewDiv = root.querySelector(".tasks__preview");
     if (previewDiv instanceof HTMLElement) {
       this.renderPreview("", false).then((html) => {
-        previewDiv.innerHTML = html;
+        setSanitizedHtml(previewDiv, html);
       });
     }
 
@@ -355,7 +359,7 @@ export class ShadowClawTasks extends ShadowClawElement {
     const previewDiv = root.querySelector(".tasks__preview");
     if (previewDiv instanceof HTMLElement) {
       this.renderPreview(task.prompt).then((html) => {
-        previewDiv.innerHTML = html;
+        setSanitizedHtml(previewDiv, html);
       });
     }
 

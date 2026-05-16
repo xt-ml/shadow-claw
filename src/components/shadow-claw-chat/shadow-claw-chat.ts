@@ -25,6 +25,7 @@ import {
   shouldInlineAttachmentInChat,
 } from "../../message-attachments.js";
 import { renderMarkdown } from "../../markdown.js";
+import { setSanitizedHtml } from "../../security/trusted-types.js";
 
 import { showError, showInfo, showSuccess, showWarning } from "../../toast.js";
 import {
@@ -358,7 +359,7 @@ export class ShadowClawChat extends ShadowClawElement {
     }
 
     // Intentional HTML insertion: escaped text for streaming performance and safety.
-    contentEl.innerHTML = renderedContent;
+    setSanitizedHtml(contentEl, renderedContent);
 
     const cursorEl = document.createElement("span");
     cursorEl.setAttribute("aria-hidden", "true");
@@ -1479,7 +1480,7 @@ export class ShadowClawChat extends ShadowClawElement {
             contentEl.className = "chat__message-content";
             if (msg.content) {
               // Intentional HTML insertion: markdown renderer output.
-              contentEl.innerHTML = renderedContent;
+              setSanitizedHtml(contentEl, renderedContent);
               await this.resolveImagePaths(msg.groupId, contentEl);
               if (!this.isLatestRender(renderVersion)) {
                 return false;

@@ -19,6 +19,7 @@ import { encryptValue } from "../../../crypto.js";
 import { showError, showSuccess } from "../../../toast.js";
 import { ulid } from "../../../ulid.js";
 import { resolveConnectionTestAuth } from "./connection-test-auth.js";
+import { setSanitizedHtml } from "../../../security/trusted-types.js";
 
 import type { ShadowClawDatabase } from "../../../types.js";
 import type { ServiceAccount } from "../../../accounts/service-accounts.js";
@@ -258,7 +259,9 @@ export class ShadowClawIntegrations extends ShadowClawElement {
         (connection.credentialRef?.authType === "oauth" &&
           !!connection.credentialRef?.accountId);
 
-      card.innerHTML = `
+      setSanitizedHtml(
+        card,
+        `
         <header>
           <div>
             <div class="connection-title">${this.escapeHtml(connection.label)}</div>
@@ -276,7 +279,8 @@ export class ShadowClawIntegrations extends ShadowClawElement {
           <button class="btn secondary" data-action="toggle" data-id="${this.escapeHtml(connection.id)}">${connection.enabled ? "Disable" : "Enable"}</button>
           <button class="btn secondary" data-action="delete" data-id="${this.escapeHtml(connection.id)}">Delete</button>
         </div>
-      `;
+      `,
+      );
 
       card
         .querySelectorAll<HTMLButtonElement>("button[data-action]")
@@ -358,7 +362,9 @@ export class ShadowClawIntegrations extends ShadowClawElement {
         : "Not connected";
 
     const isImapPlugin = pluginId === "imap";
-    slot.innerHTML = `
+    setSanitizedHtml(
+      slot,
+      `
       <h4>${existing ? "Edit Email Connection" : "Add Email Connection"}</h4>
       <div class="form-row">
         <label for="int-label">Label</label>
@@ -461,7 +467,8 @@ export class ShadowClawIntegrations extends ShadowClawElement {
         <button class="btn secondary" data-action="test-connection">Test Connection</button>
         <button class="btn" data-action="save">Save</button>
       </div>
-    `;
+    `,
+    );
 
     const formNode = slot as HTMLElement;
     formNode.hidden = false;

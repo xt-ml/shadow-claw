@@ -5,6 +5,17 @@ jest.unstable_mockModule("../../markdown.js", () => ({
   renderMarkdown: jest.fn((value) => String(value)),
 }));
 
+jest.unstable_mockModule("../../security/trusted-types.js", () => ({
+  sanitizeSrcdocHtml: jest.fn((html: string) =>
+    html.replace(/<script[\s\S]*?<\/script>/gi, ""),
+  ),
+  setSanitizedHtml: jest.fn((element: Element, html: string) => {
+    element.innerHTML = html;
+
+    return html;
+  }),
+}));
+
 jest.unstable_mockModule("../../stores/file-viewer.js", () => ({
   fileViewerStore: {
     file: null,
@@ -36,6 +47,7 @@ const { ShadowClawFileViewer } = await import("./shadow-claw-file-viewer.js");
 const { fileViewerStore } = await import("../../stores/file-viewer.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { renderMarkdown } = await import("../../markdown.js");
+const { setSanitizedHtml } = await import("../../security/trusted-types.js");
 
 describe("shadow-claw-file-viewer", () => {
   beforeEach(() => {
@@ -91,15 +103,26 @@ describe("shadow-claw-file-viewer", () => {
     expect(srcdoc).toContain("<main>Hello</main>");
   });
 
-  it("injects link interception bridge into html iframe srcdoc", () => {
+  it("loads the reviewed link bridge from a same-origin script file", () => {
     const component = new ShadowClawFileViewer();
     const srcdoc = component.buildIframePreviewSrcdoc({
       name: "index.html",
       content: '<a href="docs/guide">Guide</a>',
     });
 
-    expect(srcdoc).toContain("shadow-claw-file-viewer-link");
-    expect(srcdoc).toContain("window.parent.postMessage");
+    expect(srcdoc).toContain("/assets/file-viewer-preview-bridge.js");
+    expect(srcdoc).not.toContain("window.parent.postMessage");
+  });
+
+  it("sanitizes active script content out of html iframe srcdoc bodies", () => {
+    const component = new ShadowClawFileViewer();
+    const srcdoc = component.buildIframePreviewSrcdoc({
+      name: "index.html",
+      content: "<script>alert(1)</script><main>Hello</main>",
+    });
+
+    expect(srcdoc).toContain("<main>Hello</main>");
+    expect(srcdoc).not.toContain("alert(1)");
   });
 
   it("returns raw svg content for iframe srcdoc", () => {
@@ -112,6 +135,28 @@ describe("shadow-claw-file-viewer", () => {
         content: svg,
       }),
     ).toBe(svg);
+  });
+
+  it("adds a nonce-based CSP meta tag to the html iframe srcdoc", () => {
+    const component = new ShadowClawFileViewer();
+    const srcdoc = component.buildIframePreviewSrcdoc({
+      name: "index.html",
+      content: "<p>content</p>",
+    });
+
+    const cspMatch = srcdoc.match(
+      /http-equiv="Content-Security-Policy"\s+content="([^"]+)"/,
+    );
+    expect(cspMatch).not.toBeNull();
+    const cspValue = cspMatch![1];
+    expect(cspValue).toContain("script-src");
+
+    const nonceMatch = cspValue.match(/nonce-([a-zA-Z0-9+/=]+)/);
+    expect(nonceMatch).not.toBeNull();
+    const nonce = nonceMatch![1];
+
+    expect(srcdoc).toContain(`nonce="${nonce}"`);
+    expect(srcdoc).toContain("/assets/file-viewer-preview-bridge.js");
   });
 
   it("includes allow-modals in iframe sandbox permissions", () => {
@@ -176,6 +221,20 @@ describe("shadow-claw-file-viewer", () => {
         content: "# hello",
       }),
     ).toBe(true);
+  });
+
+  it("routes markdown preview HTML through the Trusted Types helper", async () => {
+    const component = new ShadowClawFileViewer();
+    const content = document.createElement("div");
+
+    await component.renderPreview(content, {
+      name: "notes.md",
+      kind: "text",
+      content: "# hello",
+    });
+
+    expect(setSanitizedHtml).toHaveBeenCalledWith(content, "# hello");
+    expect(content.innerHTML).toBe("# hello");
   });
 
   it("requires canShare for binary file sharing", () => {

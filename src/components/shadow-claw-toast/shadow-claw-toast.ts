@@ -1,6 +1,5 @@
 import { effect } from "../../effect.js";
 import { toastStore, type Toast, type ToastType } from "../../stores/toast.js";
-import { escapeHtml } from "../../utils.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
 
@@ -57,7 +56,7 @@ export class ShadowClawToast extends ShadowClawElement {
     }
 
     const toasts: Toast[] = toastStore.toasts;
-    container.innerHTML = "";
+    container.replaceChildren();
 
     toasts.forEach((toast) => {
       const toastEl = document.createElement("article");
@@ -69,21 +68,34 @@ export class ShadowClawToast extends ShadowClawElement {
         toast.type === "error" ? "assertive" : "polite",
       );
 
-      const icon = this.iconForType(toast.type);
-      toastEl.innerHTML = `
-        <div class="toast-icon" aria-hidden="true">${icon}</div>
-        <div class="toast-message">${escapeHtml(toast.message)}</div>
-        <button class="toast-close" aria-label="Dismiss notification" type="button">&times;</button>
-      `;
+      const iconEl = document.createElement("div");
+      iconEl.className = "toast-icon";
+      iconEl.setAttribute("aria-hidden", "true");
+      iconEl.textContent = this.iconForType(toast.type);
+
+      const messageEl = document.createElement("div");
+      messageEl.className = "toast-message";
+      messageEl.textContent = toast.message;
+
+      const closeBtn = document.createElement("button");
+      closeBtn.className = "toast-close";
+      closeBtn.setAttribute("aria-label", "Dismiss notification");
+      closeBtn.type = "button";
+      closeBtn.textContent = "×";
+
+      toastEl.append(iconEl, messageEl, closeBtn);
 
       if (toast.action) {
         const actions = document.createElement("div");
         actions.className = "toast-actions";
-        actions.innerHTML = `<button type="button" class="toast-action">${escapeHtml(toast.action.label)}</button>`;
+        const actionButton = document.createElement("button");
+        actionButton.type = "button";
+        actionButton.className = "toast-action";
+        actionButton.textContent = toast.action.label;
+        actions.appendChild(actionButton);
         toastEl.appendChild(actions);
 
-        const actionButton = actions.querySelector(".toast-action");
-        actionButton?.addEventListener("click", async () => {
+        actionButton.addEventListener("click", async () => {
           try {
             await toastStore.runAction(toast.id);
           } finally {
@@ -92,8 +104,7 @@ export class ShadowClawToast extends ShadowClawElement {
         });
       }
 
-      const closeBtn = toastEl.querySelector(".toast-close");
-      closeBtn?.addEventListener("click", () =>
+      closeBtn.addEventListener("click", () =>
         this.dismissWithAnimation(toast.id),
       );
 

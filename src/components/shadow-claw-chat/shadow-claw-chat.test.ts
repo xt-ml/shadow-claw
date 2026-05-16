@@ -272,6 +272,7 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
           id.replace(/[^a-zA-Z0-9-]/g, "-"),
         ),
         escapeHtml: jest.fn((text: string) => text.replace(/</g, "&lt;")),
+        sanitizeHtml: jest.fn((html: string) => html),
         formatDateForFilename: jest.fn((date: Date) => date.toISOString()),
       }));
 
@@ -430,6 +431,7 @@ describe("message copy button", () => {
         id.replace(/[^a-zA-Z0-9-]/g, "-"),
       ),
       escapeHtml: jest.fn((text: string) => text.replace(/</g, "&lt;")),
+      sanitizeHtml: jest.fn((html: string) => html),
     }));
 
     jest.unstable_mockModule("../../toast.js", () => ({
@@ -852,6 +854,7 @@ describe("chat workspace link resolution", () => {
         id.replace(/[^a-zA-Z0-9-]/g, "-"),
       ),
       escapeHtml: jest.fn((text: string) => text.replace(/</g, "&lt;")),
+      sanitizeHtml: jest.fn((html: string) => html),
       formatDateForFilename: jest.fn((date: Date) => date.toISOString()),
     }));
 
@@ -949,6 +952,7 @@ describe("chat attachment helpers", () => {
     jest.unstable_mockModule("../../utils.js", () => ({
       formatTimestamp: jest.fn((ts: number) => new Date(ts).toISOString()),
       escapeHtml: jest.fn((text: string) => text.replace(/</g, "&lt;")),
+      sanitizeHtml: jest.fn((html: string) => html),
       formatDateForFilename: jest.fn((date: Date) => date.toISOString()),
     }));
     jest.unstable_mockModule("../../toast.js", () => ({

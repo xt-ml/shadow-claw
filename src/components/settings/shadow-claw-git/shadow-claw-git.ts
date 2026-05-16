@@ -2,6 +2,7 @@ import { CONFIG_KEYS, OAUTH_PROVIDER_DEFINITIONS } from "../../../config.js";
 import { getConfig } from "../../../db/getConfig.js";
 import { showError, showSuccess } from "../../../toast.js";
 import { escapeHtml } from "../../../utils.js";
+import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import {
   resolveStoredCredentialAuthMode,
   type PendingOAuthResult,
@@ -338,7 +339,9 @@ export class ShadowClawGit extends ShadowClawElement {
       return;
     }
 
-    slot.innerHTML = `
+    setSanitizedHtml(
+      slot,
+      `
       <div class="account-form">
         <h4>${isNew ? "Add Git Account" : "Edit Account"}</h4>
 
@@ -448,7 +451,8 @@ export class ShadowClawGit extends ShadowClawElement {
           </button>
           <button class="cancel-btn" data-action="cancel-account-form">Cancel</button>
         </div>
-      </div>`;
+      </div>`,
+    );
 
     slot
       .querySelector('[data-action="save-account"]')
@@ -477,7 +481,7 @@ export class ShadowClawGit extends ShadowClawElement {
 
     const slot = root.querySelector('[data-region="account-form-slot"]');
     if (slot) {
-      slot.innerHTML = "";
+      slot.replaceChildren();
     }
 
     this.editingAccountId = null;

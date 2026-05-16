@@ -1,3 +1,5 @@
+import { getTrustedTypesPolicyName } from "./trusted-types.js";
+
 const REPORT_ONLY_CSP_DIRECTIVES = [
   "default-src 'self'",
   "base-uri 'none'",
@@ -9,7 +11,7 @@ const REPORT_ONLY_CSP_DIRECTIVES = [
   "script-src 'self'",
   "worker-src 'self' blob:",
   "connect-src 'self' https: wss: ws: data:",
-  "trusted-types default",
+  `trusted-types ${getTrustedTypesPolicyName()} dompurify default`,
   "require-trusted-types-for 'script'",
 ].join("; ");
 

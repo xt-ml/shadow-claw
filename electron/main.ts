@@ -32,6 +32,7 @@ import { ServerTaskScheduler } from "../src/notifications/task-scheduler-server.
 import { registerOAuthRoutes } from "../src/server/routes/oauth.js";
 import { registerActivityLogRoutes } from "../src/server/routes/activity-log.js";
 import { registerProxyRoutes } from "../src/server/proxy.js";
+import { createCspReportOnlyMiddleware } from "../src/server/middleware/csp.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -59,6 +60,9 @@ function startServer(databaseDir: string): Promise<number> {
 
     // JSON body parser (large limit for proxy payloads)
     srv.use(express.json({ limit: "1000mb" }));
+
+    // Report-only CSP parity with the dev server.
+    srv.use(createCspReportOnlyMiddleware());
 
     // Proxy routes shared with serve.js
     registerProxyRoutes(srv);

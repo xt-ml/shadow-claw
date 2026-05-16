@@ -34,6 +34,8 @@ graph LR
     groups["db/groups.ts<br>conversation metadata"]
     storage["storage/storage.ts<br>OPFS + local folder"]
     crypto["crypto.ts<br>AES-256-GCM"]
+    backup["settings-backup.ts<br>backup export/import"]
+    csp["security/csp.ts<br>CSP headers builder"]
     accounts["accounts/<br>service accounts + credentials"]
     registry["channels/channel-registry.ts<br>prefix → channel map"]
     router["router.ts<br>channel dispatch"]
@@ -404,6 +406,14 @@ await getConfig(CONFIG_KEYS.API_KEY);
 
 Build metadata also writes the deployed Git revision into `<meta name="revision">` in
 `index.html`; Settings reads this value at runtime.
+
+### Settings Backup & Security Parity
+
+To prevent configuration loss and ensure environment parity between the development server and Electron:
+
+- **Settings Backup/Restore (`src/settings-backup.ts`)**: Sensitive configuration items (like API keys, Git tokens) must be password-encrypted when exported. Plaintext secrets are decrypted, re-encrypted via a user-defined password, and written to a JSON blob. On restoration, the module decrypts the payload via password and re-encrypts the secrets using the target environment's local `CryptoKey` before writing back to IndexedDB.
+- **CSP report-only parity (`src/security/csp.ts`)**: Parity between development (Express dev server) and desktop (Electron) is maintained via a unified report-only Content Security Policy middleware (`src/server/middleware/csp.ts`). Any modifications to CSP or allowed resources should be coordinated inside `src/security/csp.ts`.
+- **Connection Test Auth (`connection-test-auth.ts`)**: Authentication resolution logic is extracted into a standalone helper co-located inside the integrations component directory under `src/components/settings/shadow-claw-integrations/`. Keep authentication mode resolution modular and testable here.
 
 ### Agent Iteration Limit
 
@@ -785,6 +795,33 @@ request to a Git hosting service (without it, many servers return a login page
 that confuses the agent).
 Keep this section up to date when adding new tools so the agent actually uses
 them instead of falling back to fragile `bash`/`sed` workarounds.
+
+### Email Tools & IMAP/SMTP Connection
+
+ShadowClaw includes full IMAP/SMTP capabilities through modular server-side routes and corresponding agent tools:
+
+- **Source:** `src/tools/email.ts` (agent schemas), `src/worker/executeTool.ts` (worker-side logic).
+- **Tools**:
+  - `manage_email` — Actions: `status`, `connect`, `configure`, `enable`, `disable`, `delete`, `test`, `download_attachments`, and metadata query.
+  - `email_read_messages` — Reads recent messages from configured IMAP connection.
+  - `email_send_message` — Sends SMTP email with attachment support.
+- **Credential Storage**: Credentials for email connections go through the encrypted crypto module (`crypto.ts`) and are persisted safely in IndexedDB.
+
+### Local Transformers.js & Local Model Backends
+
+To support browser-native inference without external API keys:
+
+- **Transformers.js Integration**: Run local models directly in-browser using Transformers.js via a dedicated Web Worker to keep the UI responsive.
+- **Backend/Dtype Strategy**: Supports switching between CPU and WebGPU execution backends, alongside automated precision dtype selection based on environment capability.
+- **Llamafile Context size**: Dev server Llamafile context sizes can be controlled via the environment variable `LLAMAFILE_CTX_SIZE`.
+
+### Activity Log System & Disk Persistence
+
+Activity logging is supported at both client and server levels:
+
+- **Toggle Logging**: Users can enable/disable disk persistence via **Settings → Activity Logging**.
+- **Copy logs**: An inline control in the chat UI allows copying the conversation's active log block in one click.
+- **History controls**: Supports per-message deletion with localized database sync and dynamic chat list updates.
 
 ## What to Avoid
 

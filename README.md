@@ -176,6 +176,8 @@ automatically support them.
 | `src/storage/writeGroupFileBytes.ts` | Write raw binary (`Uint8Array`) to a group workspace file with OPFS worker fallback                   |
 | `src/storage/renameGroupEntry.ts`    | Rename (copy-and-delete) files or directories in the group workspace                                  |
 | `src/chat-template-sanitizer.ts`     | Utility to strip control tokens and structural markers from local model output                        |
+| `src/settings-backup.ts`             | Settings export/import — serialises all config entries, strips/re-encrypts passwords                  |
+| `src/security/csp.ts`                | Builds the `Content-Security-Policy-Report-Only` header value                                         |
 | `src/notifications/`                 | Web Push + server-side task scheduling (SQLite)                                                       |
 
 ## Storage

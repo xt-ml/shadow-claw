@@ -3,6 +3,7 @@ import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
 import { getConfig } from "../../../db/getConfig.js";
 import { showError, showSuccess } from "../../../toast.js";
 import { escapeHtml } from "../../../utils.js";
+import { setSanitizedHtml } from "../../../security/trusted-types.js";
 
 import type { ServiceAccount } from "../../../accounts/service-accounts.js";
 
@@ -225,7 +226,9 @@ export class ShadowClawAccounts extends ShadowClawElement {
       return;
     }
 
-    slot.innerHTML = `
+    setSanitizedHtml(
+      slot,
+      `
       <div class="account-form">
         <h4>${isNew ? "Add Account" : "Edit Account"}</h4>
 
@@ -333,7 +336,8 @@ export class ShadowClawAccounts extends ShadowClawElement {
           </button>
           <button class="cancel-btn" data-action="cancel-account-form">Cancel</button>
         </div>
-      </div>`;
+      </div>`,
+    );
 
     slot
       .querySelector('[data-action="save-account"]')
@@ -365,11 +369,8 @@ export class ShadowClawAccounts extends ShadowClawElement {
 
     const slot = root.querySelector('[data-region="account-form-slot"]');
     if (slot) {
-      slot.innerHTML = "";
+      slot.replaceChildren();
     }
-
-    this.editingAccountId = null;
-    this.pendingOauthResult = null;
   }
 
   updateAuthModeVisibility(slot: Element) {

@@ -33,12 +33,21 @@ jest.unstable_mockModule("../../../remote-mcp-client.js", () => ({
   clearRemoteMcpSession: jest.fn(),
 }));
 
+jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
+  setSanitizedHtml: jest.fn((element: Element, html: string) => {
+    element.innerHTML = html;
+
+    return html;
+  }),
+}));
+
 const mockReconnectMcpOAuth = jest.fn<any>();
 jest.unstable_mockModule("../../../mcp-reconnect.js", () => ({
   reconnectMcpOAuth: mockReconnectMcpOAuth,
 }));
 
 const { ShadowClawMcpRemote } = await import("./shadow-claw-mcp-remote.js");
+const { setSanitizedHtml } = await import("../../../security/trusted-types.js");
 
 describe("shadow-claw-mcp-remote", () => {
   beforeEach(() => {
@@ -122,6 +131,26 @@ describe("shadow-claw-mcp-remote", () => {
     document.body.removeChild(el);
   });
 
+  it("routes the connection form shell through the Trusted Types helper", async () => {
+    const el = new ShadowClawMcpRemote();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    await el.render();
+
+    el.showConnectionForm("new");
+
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="connection-form-slot"]',
+    ) as HTMLElement;
+
+    expect(setSanitizedHtml).toHaveBeenCalledWith(
+      slot,
+      expect.stringContaining("Add Remote MCP Connection"),
+    );
+
+    document.body.removeChild(el);
+  });
+
   it("tests a configured connection", async () => {
     mockListConnections.mockResolvedValue([
       {
@@ -163,6 +192,24 @@ describe("shadow-claw-mcp-remote", () => {
     expect(mockTestConnection).toHaveBeenCalledWith({}, "conn-1");
 
     document.body.removeChild(el);
+  });
+
+  it("routes diagnostic markup through the Trusted Types helper", async () => {
+    const el = new ShadowClawMcpRemote();
+    const container = document.createElement("div");
+
+    el.renderDiagnostic(container, {
+      success: true,
+      error: null,
+      toolCount: 1,
+      toolNames: ["read_file"],
+      steps: [{ step: "Connected", status: "ok", detail: "done" }],
+    });
+
+    expect(setSanitizedHtml).toHaveBeenCalledWith(
+      container,
+      expect.stringContaining("Connection OK"),
+    );
   });
 
   it("renders reconnect button for OAuth connections", async () => {

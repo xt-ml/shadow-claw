@@ -1,6 +1,7 @@
 import { describe, expect, it, jest } from "@jest/globals";
 
 import { applyCspReportOnlyHeader, buildCspReportOnlyValue } from "./csp.js";
+import { getTrustedTypesPolicyName } from "./trusted-types.js";
 
 describe("csp", () => {
   it("builds a report-only CSP value with trusted-types directives", () => {
@@ -10,7 +11,8 @@ describe("csp", () => {
     expect(value).toContain("object-src 'none'");
     expect(value).toContain("base-uri 'none'");
     expect(value).toContain("frame-ancestors 'none'");
-    expect(value).toContain("trusted-types default");
+    expect(value).toContain(`trusted-types ${getTrustedTypesPolicyName()}`);
+    expect(value).toContain("dompurify");
     expect(value).toContain("require-trusted-types-for 'script'");
   });
 

@@ -34,6 +34,10 @@ describe("settings-backup", () => {
       [
         { key: "storage_handle", value: { kind: "dir" } },
         { key: "git_password", value: "enc-git-password" },
+        { key: "api_key", value: "enc-legacy-api-key" },
+        { key: "api_key:openrouter", value: "enc-openrouter-key" },
+        { key: "telegram_bot_token", value: "enc-telegram-token" },
+        { key: "imessage_api_key", value: "enc-imessage-key" },
         {
           key: "git_accounts",
           value: [{ id: "git-1", username: "alice", password: "enc-a" }],
@@ -110,6 +114,10 @@ describe("settings-backup", () => {
       fileHandle,
       [
         { key: "git_password", value: "enc-git-password" },
+        { key: "api_key:openrouter", value: "enc-openrouter-key" },
+        { key: "telegram_bot_token", value: "enc-telegram-token" },
+        { key: "imessage_api_key", value: "enc-imessage-key" },
+        { key: "api_key", value: "enc-legacy-api-key" },
         {
           key: "git_accounts",
           value: [{ id: "git-1", password: "enc-a" }],
@@ -128,6 +136,10 @@ describe("settings-backup", () => {
     expect(payload.includePlaintextPasswords).toBe(true);
     expect(payload.plaintextPasswords).toEqual([
       { key: "git_password", path: [], value: "plain:enc-git-password" },
+      { key: "api_key:openrouter", path: [], value: "plain:enc-openrouter-key" },
+      { key: "telegram_bot_token", path: [], value: "plain:enc-telegram-token" },
+      { key: "imessage_api_key", path: [], value: "plain:enc-imessage-key" },
+      { key: "api_key", path: [], value: "plain:enc-legacy-api-key" },
       { key: "git_accounts", path: [0, "password"], value: "plain:enc-a" },
     ]);
   });
@@ -144,6 +156,10 @@ describe("settings-backup", () => {
       ],
       [
         { key: "git_password", path: [], value: "plain-git-password" },
+        { key: "api_key:openrouter", path: [], value: "plain-openrouter-key" },
+        { key: "telegram_bot_token", path: [], value: "plain-telegram-token" },
+        { key: "imessage_api_key", path: [], value: "plain-imessage-key" },
+        { key: "api_key", path: [], value: "plain-legacy-api-key" },
         {
           key: "git_accounts",
           path: [0, "password"],
@@ -159,6 +175,10 @@ describe("settings-backup", () => {
         value: [{ id: "git-1", password: "enc:plain-account-password" }],
       },
       { key: "git_password", value: "enc:plain-git-password" },
+      { key: "api_key:openrouter", value: "enc:plain-openrouter-key" },
+      { key: "telegram_bot_token", value: "enc:plain-telegram-token" },
+      { key: "imessage_api_key", value: "enc:plain-imessage-key" },
+      { key: "api_key", value: "enc:plain-legacy-api-key" },
     ]);
   });
 });

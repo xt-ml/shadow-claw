@@ -42,6 +42,10 @@ jest.unstable_mockModule("../../storage/writeGroupFile.js", () => ({
   writeGroupFile: jest.fn(),
 }));
 
+jest.unstable_mockModule("../../storage/createGroupDirectory.js", () => ({
+  createGroupDirectory: jest.fn(),
+}));
+
 jest.unstable_mockModule("../../storage/renameGroupEntry.js", () => ({
   renameGroupEntry: jest.fn(),
 }));
@@ -87,6 +91,8 @@ jest.unstable_mockModule("../../db/db.js", () => ({
 const { ShadowClawFiles } = await import("./shadow-claw-files.js");
 const { renameGroupEntry } = await import("../../storage/renameGroupEntry.js");
 const { writeGroupFile } = await import("../../storage/writeGroupFile.js");
+const { createGroupDirectory } =
+  await import("../../storage/createGroupDirectory.js");
 const { showSuccess, showWarning, showError } = await import("../../toast.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 
@@ -107,6 +113,7 @@ describe("shadow-claw-files", () => {
     expect(template).toContain("files__new-btn");
 
     expect(template).toContain("files__new-dialog");
+    expect(template).toContain("files__new-is-folder");
 
     expect(template).toContain("files__rename-dialog");
 
@@ -139,6 +146,43 @@ describe("shadow-claw-files", () => {
     expect(orchestratorStore.loadFiles).toHaveBeenCalledWith({} as any);
 
     expect(showSuccess).toHaveBeenCalledWith("Created file: notes.txt", 3000);
+    document.body.removeChild(component);
+  });
+
+  it("creates a folder from New dialog when folder checkbox is enabled", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    const input = component.shadowRoot?.querySelector(".files__new-input");
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Expected new item input");
+    }
+
+    const isFolder = component.shadowRoot?.querySelector(
+      ".files__new-is-folder",
+    );
+    if (!(isFolder instanceof HTMLInputElement)) {
+      throw new Error("Expected new folder checkbox");
+    }
+
+    input.value = "it works";
+    isFolder.checked = true;
+
+    await component.handleCreateNewFile({} as any);
+
+    expect(createGroupDirectory).toHaveBeenCalledWith(
+      {} as any,
+      "default",
+      "it works",
+    );
+
+    expect(writeGroupFile).not.toHaveBeenCalled();
+
+    expect(orchestratorStore.loadFiles).toHaveBeenCalledWith({} as any);
+
+    expect(showSuccess).toHaveBeenCalledWith("Created folder: it works", 3000);
     document.body.removeChild(component);
   });
 
@@ -305,6 +349,185 @@ describe("shadow-claw-files", () => {
       "Failed to rename notes.txt: already exists",
       6000,
     );
+
+    document.body.removeChild(component);
+  });
+
+  it("disables Rename dialog action buttons while rename is in progress", async () => {
+    let resolveRename: (() => void) | undefined;
+    (renameGroupEntry as any).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRename = resolve;
+        }),
+    );
+
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    (component as any)._pendingRenamePath = "docs";
+    (component as any)._pendingRenameName = "docs";
+    (component as any)._pendingRenameIsDirectory = true;
+
+    const input = component.shadowRoot?.querySelector(".files__rename-input");
+    const cancelBtn = component.shadowRoot?.querySelector(
+      ".files__rename-cancel",
+    );
+    const okBtn = component.shadowRoot?.querySelector(".files__rename-ok");
+
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Expected rename input");
+    }
+
+    if (!(cancelBtn instanceof HTMLButtonElement)) {
+      throw new Error("Expected rename cancel button");
+    }
+
+    if (!(okBtn instanceof HTMLButtonElement)) {
+      throw new Error("Expected rename ok button");
+    }
+
+    input.value = "docs-archive";
+
+    const pending = component.handleRenameEntry({} as any);
+
+    expect(cancelBtn.disabled).toBe(true);
+    expect(okBtn.disabled).toBe(true);
+    expect(input.disabled).toBe(true);
+
+    resolveRename?.();
+    await pending;
+
+    expect(cancelBtn.disabled).toBe(false);
+    expect(okBtn.disabled).toBe(false);
+    expect(input.disabled).toBe(false);
+
+    document.body.removeChild(component);
+  });
+
+  it("ignores duplicate Rename submissions while rename is in progress", async () => {
+    let resolveRename: (() => void) | undefined;
+    (renameGroupEntry as any).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveRename = resolve;
+        }),
+    );
+
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    (component as any)._pendingRenamePath = "big-dir";
+    (component as any)._pendingRenameName = "big-dir";
+    (component as any)._pendingRenameIsDirectory = true;
+
+    const input = component.shadowRoot?.querySelector(".files__rename-input");
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Expected rename input");
+    }
+
+    input.value = "big-dir-renamed";
+
+    const first = component.handleRenameEntry({} as any);
+    const second = component.handleRenameEntry({} as any);
+
+    expect(renameGroupEntry).toHaveBeenCalledTimes(1);
+
+    resolveRename?.();
+    await Promise.all([first, second]);
+
+    document.body.removeChild(component);
+  });
+
+  it("disables New dialog action buttons while create is in progress", async () => {
+    let resolveWrite: (() => void) | undefined;
+    (writeGroupFile as any).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveWrite = resolve;
+        }),
+    );
+
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    const input = component.shadowRoot?.querySelector(".files__new-input");
+    const isFolderInput = component.shadowRoot?.querySelector(
+      ".files__new-is-folder",
+    );
+    const cancelBtn = component.shadowRoot?.querySelector(".files__new-cancel");
+    const okBtn = component.shadowRoot?.querySelector(".files__new-ok");
+
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Expected new input");
+    }
+
+    if (!(isFolderInput instanceof HTMLInputElement)) {
+      throw new Error("Expected new folder checkbox");
+    }
+
+    if (!(cancelBtn instanceof HTMLButtonElement)) {
+      throw new Error("Expected new cancel button");
+    }
+
+    if (!(okBtn instanceof HTMLButtonElement)) {
+      throw new Error("Expected new ok button");
+    }
+
+    input.value = "long-create.txt";
+
+    const pending = component.handleCreateNewFile({} as any);
+
+    expect(cancelBtn.disabled).toBe(true);
+    expect(okBtn.disabled).toBe(true);
+    expect(input.disabled).toBe(true);
+    expect(isFolderInput.disabled).toBe(true);
+
+    resolveWrite?.();
+    await pending;
+
+    expect(cancelBtn.disabled).toBe(false);
+    expect(okBtn.disabled).toBe(false);
+    expect(input.disabled).toBe(false);
+    expect(isFolderInput.disabled).toBe(false);
+
+    document.body.removeChild(component);
+  });
+
+  it("ignores duplicate New submissions while create is in progress", async () => {
+    let resolveWrite: (() => void) | undefined;
+    (writeGroupFile as any).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveWrite = resolve;
+        }),
+    );
+
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    const input = component.shadowRoot?.querySelector(".files__new-input");
+    if (!(input instanceof HTMLInputElement)) {
+      throw new Error("Expected new input");
+    }
+
+    input.value = "long-create.txt";
+
+    const first = component.handleCreateNewFile({} as any);
+    const second = component.handleCreateNewFile({} as any);
+
+    expect(writeGroupFile).toHaveBeenCalledTimes(1);
+
+    resolveWrite?.();
+    await Promise.all([first, second]);
 
     document.body.removeChild(component);
   });

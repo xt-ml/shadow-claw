@@ -238,6 +238,50 @@ describe("ShadowClawConversations", () => {
     document.body.removeChild(el);
   });
 
+  it("focuses delete dialog cancel button when opened", async () => {
+    mockOrchStore.groups = [
+      { groupId: "br:main", name: "Main", createdAt: 0 },
+      { groupId: "br:second", name: "Second", createdAt: 1 },
+    ];
+
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+
+    const deleteDialog = el.shadowRoot?.querySelector(
+      ".conversations__delete-dialog",
+    ) as HTMLDialogElement | null;
+    if (deleteDialog) {
+      (deleteDialog as any).showModal = jest.fn();
+    }
+
+    el.openDeleteDialog("Second");
+
+    const cancelButton = el.shadowRoot?.querySelector(
+      ".conversations__delete-dialog .conversations__cancel",
+    ) as HTMLButtonElement | null;
+    expect(cancelButton).not.toBeNull();
+    expect(el.shadowRoot?.activeElement).toBe(cancelButton);
+
+    document.body.removeChild(el);
+  });
+
+  it("styles delete action with distinct hover/focus colors", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+
+    const style = el.shadowRoot?.querySelector("style");
+    expect(style?.textContent).toContain("--shadow-claw-important-color-hover");
+    expect(style?.textContent).toContain(
+      ".conversations__delete-ok:focus-visible",
+    );
+
+    document.body.removeChild(el);
+  });
+
   it("renders a drag handle on each conversation item", async () => {
     mockOrchStore.groups = [
       { groupId: "br:main", name: "Main", createdAt: 0 },

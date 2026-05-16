@@ -1324,6 +1324,7 @@ describe("OrchestratorStore", () => {
         groupId: "br:clone1",
         name: "Main (copy)",
         createdAt: 5000,
+        toolTags: ["bash", "fetch_url"],
       };
 
       (mockCloneGroup as any).mockResolvedValue(clonedGroup);

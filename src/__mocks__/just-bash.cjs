@@ -15,6 +15,7 @@ class InMemoryFs {
 
   async appendFile() {}
   async cp() {}
+  async mkdir() {}
   async mv() {}
   async rm() {}
 

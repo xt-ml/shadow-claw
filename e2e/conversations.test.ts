@@ -116,4 +116,34 @@ test.describe("Conversation CRUD", () => {
     // Conversation should still exist
     await conversations.expectCount(countBefore);
   });
+
+  test("delete dialog is keyboard accessible with visible focus progression", async ({
+    conversations,
+  }) => {
+    await conversations.createConversation("Keyboard Delete");
+
+    const item = conversations.items().filter({ hasText: "Keyboard Delete" });
+    await item.hover();
+    await conversations.deleteButton(item).click();
+
+    await expect(conversations.deleteDialog()).toHaveJSProperty("open", true);
+    await expect(conversations.deleteCancelButton()).toBeFocused();
+
+    const baseShadow = await conversations.deleteOkButton().evaluate((el) => {
+      return getComputedStyle(el as HTMLElement).boxShadow;
+    });
+
+    await conversations.deleteCancelButton().press("Tab");
+    await expect(conversations.deleteOkButton()).toBeFocused();
+
+    const focusedShadow = await conversations
+      .deleteOkButton()
+      .evaluate((el) => {
+        return getComputedStyle(el as HTMLElement).boxShadow;
+      });
+
+    expect(focusedShadow).not.toBe(baseShadow);
+
+    await conversations.deleteCancelButton().click();
+  });
 });

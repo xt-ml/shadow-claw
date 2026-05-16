@@ -116,18 +116,17 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     const modal = root.querySelector(".file-modal");
     modal?.addEventListener("cancel", (event: Event) => {
-      if (!this.canDismissViewer()) {
-        event.preventDefault();
-      }
+      event.preventDefault();
+      void this.requestCloseViewer();
     });
     modal?.addEventListener("close", () => {
-      if (fileViewerStore.file && this.canDismissViewer()) {
+      if (fileViewerStore.file) {
         fileViewerStore.closeFile();
       }
     });
 
     const closeBtn = root.querySelector(".modal-close-btn");
-    closeBtn?.addEventListener("click", () => this.requestCloseViewer());
+    closeBtn?.addEventListener("click", () => void this.requestCloseViewer());
 
     const previewBtn = root.querySelector(".modal-preview-btn");
     previewBtn?.addEventListener("click", async () => {
@@ -198,14 +197,32 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     return this.isEditorDirty;
   }
 
-  canDismissViewer() {
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
+    }
+
+    return false;
+  }
+
+  async canDismissViewer() {
     if (!this.hasUnsavedChanges()) {
       return true;
     }
 
-    const confirmed = window.confirm(
-      "You have unsaved changes. Discard them and close?",
-    );
+    const confirmed = await this.requestConfirmation({
+      title: "Discard Unsaved Changes",
+      message: "You have unsaved changes. Discard them and close?",
+      confirmLabel: "Discard",
+      cancelLabel: "Keep Editing",
+    });
+
     if (confirmed) {
       this.isEditorDirty = false;
       this.editorDraftContent = null;
@@ -214,8 +231,8 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     return confirmed;
   }
 
-  requestCloseViewer() {
-    if (!this.canDismissViewer()) {
+  async requestCloseViewer() {
+    if (!(await this.canDismissViewer())) {
       return;
     }
 

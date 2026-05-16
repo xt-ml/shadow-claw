@@ -375,6 +375,20 @@
   padding: 0.375rem 0.5rem;
 }
 
+.files__new-kind {
+  align-items: center;
+  color: var(--shadow-claw-text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: var(--shadow-claw-font-size-sm);
+  gap: 0.5rem;
+  width: fit-content;
+}
+
+.files__new-is-folder {
+  accent-color: var(--shadow-claw-accent-primary);
+}
+
 .files__new-input:focus,
 .files__rename-input:focus {
   border-color: var(--shadow-claw-accent-primary);
@@ -429,4 +443,12 @@
   border-color: var(--shadow-claw-text-primary);
   box-shadow: var(--shadow-claw-shadow-md);
   outline: none;
+}
+
+.files__new-ok:disabled,
+.files__new-cancel:disabled,
+.files__rename-ok:disabled,
+.files__rename-cancel:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }

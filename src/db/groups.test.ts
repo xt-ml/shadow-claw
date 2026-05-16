@@ -319,7 +319,14 @@ describe("groups", () => {
 
   describe("cloneGroup", () => {
     it("creates a new group with cloned name and returns it", async () => {
-      const existing = [{ groupId: "br:main", name: "Main", createdAt: 1000 }];
+      const existing = [
+        {
+          groupId: "br:main",
+          name: "Main",
+          createdAt: 1000,
+          toolTags: ["bash", "fetch_url"],
+        },
+      ];
 
       (mockGetConfig as any).mockResolvedValue(JSON.stringify(existing));
 
@@ -333,9 +340,27 @@ describe("groups", () => {
 
       expect(clone!.createdAt).toBeGreaterThan(0);
 
+      expect(clone!.toolTags).toEqual(["bash", "fetch_url"]);
+
+      expect(clone!.toolTags).not.toBe(existing[0].toolTags);
+
       const saved = JSON.parse((mockSetConfig as any).mock.calls[0][2]);
       expect(saved).toHaveLength(2);
       expect(saved[1].name).toBe("Main (copy)");
+      expect(saved[1].toolTags).toEqual(["bash", "fetch_url"]);
+    });
+
+    it("leaves toolTags undefined when source group has no tags", async () => {
+      const existing = [{ groupId: "br:main", name: "Main", createdAt: 1000 }];
+
+      (mockGetConfig as any).mockResolvedValue(JSON.stringify(existing));
+
+      const clone = await cloneGroup(db, "br:main");
+
+      expect(clone!.toolTags).toBeUndefined();
+
+      const saved = JSON.parse((mockSetConfig as any).mock.calls[0][2]);
+      expect(saved[1].toolTags).toBeUndefined();
     });
 
     it("returns null if source group not found", async () => {

@@ -131,6 +131,10 @@ or closed. The editor uses `highlighted-code` (a `<textarea>` with a syntax-high
 overlay); an explicit `caret-color !important` overrides the library's inline style
 so the text cursor remains visible over the overlay in both light and dark mode.
 
+Destructive confirmations in UI components (chat delete/compact, files/tasks/integrations/storage
+destructive actions, and file-viewer unsaved-close prompts) should go through the app-shell
+dialog API (`shadow-claw.requestDialog`) rather than direct `window.confirm()` usage.
+
 The chat component (`<shadow-claw-chat>`) uses **smart auto-scroll**: it tracks
 whether the user is near the bottom of the message container and only auto-scrolls
 when they are. When the user scrolls up to read earlier messages, DOM rebuilds
@@ -208,6 +212,7 @@ Cross-browser writes must go through `src/storage/writeFileHandle.ts`:
 
 - Use `writeFileHandle()` for normal writes (`createWritable` or `createSyncAccessHandle`).
 - Use `writeOpfsPathViaWorker()` when OPFS writes need worker-side sync handles (for example Safari main-thread limitations).
+- Use `createGroupDirectory()` (`src/storage/createGroupDirectory.ts`) to create nested workspace directories with the same stale-handle retry behavior as file writes.
 - Use `writeGroupFileBytes()` (`src/storage/writeGroupFileBytes.ts`) when writing raw binary (`Uint8Array`) content to a group workspace file — it applies the same retry and OPFS worker fallback automatically.
 - Do not add ad-hoc direct `createWritable()` calls in feature code paths.
 
@@ -350,7 +355,7 @@ Each conversation has a `groupId` (prefixed by channel type), a `name`, and
 a `createdAt` timestamp. The `OrchestratorStore` exposes CRUD operations:
 `loadGroups`, `createConversation`, `renameConversation`, `deleteConversation`,
 `switchConversation` (which persists the selection via `LAST_ACTIVE_GROUP`),
-`cloneConversation` (duplicates metadata + messages + tasks + `MEMORY.md`),
+`cloneConversation` (duplicates metadata + messages + tasks + `MEMORY.md`, including `toolTags`),
 `reorderConversations` (persists a custom sort order), and
 `updateConversationToolTags` (pins a set of tool names to a conversation).
 
@@ -616,6 +621,7 @@ Agents should understand what works and what doesn't to avoid wasting iterations
 - `grep -r` — Recursive directory search.
 - `sed -i` — In-place file editing. Reads the file, applies expressions, writes the result back.
 - File redirects: `cmd > file`, `cmd >> file` write output to workspace files.
+- `mkdir` persistence: directories created under `/home/user` are mirrored into workspace storage via `ShadowClawFileSystem`.
 - `find` — Recursive file search.
 - `jq` — Rich JSON processing (if supported by the command environment or explicitly aliased).
 - Variable expansion: `$VAR` and `${VAR}` are expanded safely outside single quotes.

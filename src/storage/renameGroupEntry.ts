@@ -1,7 +1,12 @@
+import { OPFS_ROOT } from "../config.js";
 import { getGroupDir } from "./getGroupDir.js";
 import { parsePath } from "./parsePath.js";
-import { invalidateStorageRoot, isStaleHandleError } from "./storage.js";
-import { writeFileHandle } from "./writeFileHandle.js";
+import {
+  getStorageStatus,
+  invalidateStorageRoot,
+  isStaleHandleError,
+} from "./storage.js";
+import { writeFileHandle, writeOpfsPathViaWorker } from "./writeFileHandle.js";
 import type { ShadowClawDatabase } from "../types.js";
 
 /**
@@ -63,7 +68,28 @@ export async function renameGroupEntry(
           create: true,
         });
 
-        await writeFileHandle(targetFile, file);
+        try {
+          await writeFileHandle(targetFile, file);
+        } catch (writeErr) {
+          const message =
+            writeErr instanceof Error ? writeErr.message : String(writeErr);
+          const needsOpfsWorkerFallback =
+            message.includes("Writable file streams are not supported") &&
+            (await getStorageStatus(db)).type === "opfs";
+
+          if (!needsOpfsWorkerFallback) {
+            // Clean up the empty target file so retries don't see "Target already exists".
+            await parentDir.removeEntry(trimmedName).catch(() => undefined);
+            throw writeErr;
+          }
+
+          const safeId = groupId.replace(/:/g, "-");
+          await writeOpfsPathViaWorker(
+            [OPFS_ROOT, "groups", safeId, ...dirs, trimmedName],
+            file,
+          );
+        }
+
         await parentDir.removeEntry(currentName);
 
         return;

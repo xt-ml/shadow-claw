@@ -300,6 +300,22 @@ export class ShadowClawStorage extends ShadowClawElement {
     }
   }
 
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
+    }
+
+    showWarning(options.message, 4500);
+
+    return false;
+  }
+
   /**
    * Handle resetting storage directory.
    */
@@ -308,7 +324,14 @@ export class ShadowClawStorage extends ShadowClawElement {
       return;
     }
 
-    if (!confirm("Revert storage to browser-internal (OPFS)?")) {
+    const confirmed = await this.requestConfirmation({
+      title: "Reset Storage Location",
+      message: "Revert storage to browser-internal (OPFS)?",
+      confirmLabel: "Revert",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
       return;
     }
 

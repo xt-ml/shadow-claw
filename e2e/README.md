@@ -23,8 +23,8 @@ e2e/
 ├── fixtures.ts        # Shared test fixtures (app, chat, files, tasks, settings, conversations)
 ├── *.test.ts          # Test suites
 │   └── chat.test.ts           # Chat interface verification
-│   └── conversations.test.ts  # Conversation CRUD (create, rename, switch, delete)
-│   └── files.test.ts          # File browser and upload operations
+│   └── conversations.test.ts  # Conversation CRUD + delete-dialog keyboard accessibility
+│   └── files.test.ts          # File browser upload + file/folder creation operations
 │   └── navigation.test.ts     # App-level navigation and page switching
 │   └── settings.test.ts       # Settings persistence (max iterations, streaming, assistant name)
 │   └── streaming-chat.test.ts # Chat flow with mock SSE streaming + non-streaming
@@ -262,6 +262,7 @@ Handles file list, breadcrumbs, and upload UI.
 Behavior notes:
 
 - Files view supports drag-and-drop uploads and shows an in-panel upload progress bar.
+- New-item dialog supports creating either a file or a folder via the `Create as folder` toggle.
 - `Host -> VM` and `VM -> Host` sync buttons are mode-gated; they render only when VM mode is `9p`.
 
 ## Page Object Guide
@@ -309,6 +310,7 @@ Behavior notes:
 - **Transformers.js Testing**: Verify model download progress, local inference, and chat-template sanitization when using local models.
 - **Provider Help Dialogs**: When a provider request fails, the application may display a contextual help dialog. Use `app.navigateToWithOpenDialog()` to test flows that interrupt navigation with dialogs, or verify dialog content via standard locators on the `.app-dialog` component.
 - **Attachment Capabilities**: When testing file attachments, keep in mind that the application dynamically selects native vs. fallback delivery based on model capabilities (`src/attachment-capabilities.ts`).
+- **Confirmation Flows**: Destructive chat actions (for example message delete and compact) use app-level dialogs, so tests should assert dialog behavior rather than native `window.confirm()`.
 
 ### `FilesPage`
 

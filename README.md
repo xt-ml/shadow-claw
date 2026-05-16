@@ -129,7 +129,8 @@ loads guard against stale results when the user switches mid-query.
 The conversation list supports **accessible drag-and-drop reordering** (mouse,
 keyboard, and touch) with ARIA live-region announcements. Custom reorder is
 persisted and survives page reloads. A **clone** button duplicates a
-conversation's metadata, full message history, scheduled tasks, and `MEMORY.md`. The list is **resizable** via
+conversation's metadata (including per-conversation `toolTags`), full message history,
+scheduled tasks, and `MEMORY.md`. The list is **resizable** via
 a drag handle at the bottom and fills all available sidebar space by default;
 double-clicking the handle resets to auto-fill. The resize preference is persisted.
 Conversations with **unread messages** display a pulsing highlight animation;
@@ -213,6 +214,7 @@ Write paths are centralized through `src/storage/writeFileHandle.ts`:
 - `writeFileHandle()` supports `createWritable()`, and `createSyncAccessHandle()`.
 - `writeOpfsPathViaWorker()` is the Safari-friendly fallback for OPFS writes when main-thread handles are not writable.
 - `writeGroupFile`, `uploadGroupFile`, and ZIP restore flows all use this shared layer.
+- `createGroupDirectory()` (`src/storage/createGroupDirectory.ts`) creates nested directories with stale-handle retry behavior.
 - `writeGroupFileBytes()` (`src/storage/writeGroupFileBytes.ts`) writes raw binary content (`Uint8Array`) and applies the same OPFS worker fallback path for Safari compatibility.
 - `renameGroupEntry()` (`src/storage/renameGroupEntry.ts`) handles file and directory renames within a group's workspace using a recursive copy-and-delete strategy.
 
@@ -540,8 +542,13 @@ The UI is organized into modular components and dedicated stores:
   `shadow-claw-card`, and `shadow-claw-actions` reduce
   duplicated markup and behavior across pages.
 - **Chat**: Smart auto-scroll with ResizeObserver integration, streaming bubble support, mobile-friendly touch resizing, per-message delete controls, activity log copy/toggle controls, and modern ChatGPT-style inline action buttons with SVG icons.
+- **Files**: File browser supports file upload, file/folder creation from the New dialog, and mode-gated VM sync controls.
 - **File Viewer**: MIME-aware previews for PDF, binary, and text content with syntax highlighting. A `↗ Share` button in the modal header triggers the Web Share API for shareable files; the button is hidden when `navigator.share` is unavailable or `navigator.canShare()` returns false.
 - **Terminal**: Interactive Xterm.js terminal with WebVM bridge.
+
+Destructive actions in major UI surfaces (chat compact/delete, files/tasks clear and delete,
+integration/storage destructive actions, and unsaved file-viewer close) are routed through
+the shared app dialog API for consistent confirmation UX and keyboard behavior.
 
 When activity-log disk logging is enabled, entries are written to `.cache/logs`
 in the app data directory (server and Electron), not the conversation workspace.

@@ -17,7 +17,7 @@
       </shadow-claw-page-header-action-button>
       <shadow-claw-page-header-action-button
         slot="actions"
-        title="Create a new file"
+        title="Create a new file or folder"
         class="files__new-btn"
       >
         &#10133; New
@@ -88,10 +88,10 @@
     />
     <shadow-claw-dialog
       dialog-class="files__new-dialog"
-      aria-label="Create new file"
+      aria-label="Create new item"
     >
       <form class="files__new-form" method="dialog">
-        <label class="files__new-label" for="files-new-name">File name</label>
+        <label class="files__new-label" for="files-new-name">Name</label>
         <input
           class="files__new-input"
           id="files-new-name"
@@ -100,6 +100,15 @@
           autocomplete="off"
           required
         />
+        <label class="files__new-kind">
+          <input
+            class="files__new-is-folder"
+            id="files-new-is-folder"
+            name="files-new-is-folder"
+            type="checkbox"
+          />
+          Create as folder
+        </label>
         <div class="files__new-actions">
           <button class="files__new-cancel" type="button">Cancel</button>
           <button class="files__new-ok" type="submit">OK</button>

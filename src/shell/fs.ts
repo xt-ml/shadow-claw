@@ -3,6 +3,7 @@ import { readGroupFile } from "../storage/readGroupFile.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
 import { deleteGroupFile } from "../storage/deleteGroupFile.js";
 import { listGroupFiles } from "../storage/listGroupFiles.js";
+import { createGroupDirectory } from "../storage/createGroupDirectory.js";
 import type { ShadowClawDatabase } from "../types.js";
 
 export class ShadowClawFileSystem extends InMemoryFs {
@@ -78,6 +79,15 @@ export class ShadowClawFileSystem extends InMemoryFs {
       } catch {
         // Ignore if it was a directory or didn't exist
       }
+    }
+  }
+
+  override async mkdir(path: string, options?: any): Promise<void> {
+    await super.mkdir(path, options);
+
+    const dbPath = this._toDbPath(path);
+    if (dbPath !== null && dbPath !== "") {
+      await createGroupDirectory(this.db, this.groupId, dbPath);
     }
   }
 

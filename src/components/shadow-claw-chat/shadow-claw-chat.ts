@@ -1057,7 +1057,9 @@ export class ShadowClawChat extends ShadowClawElement {
       return true;
     }
 
-    return confirm(`${options.title}\n\n${options.message}`);
+    showWarning(`${options.title}: ${options.message}`, 5000);
+
+    return false;
   }
 
   async buildMessageDraftPayload(
@@ -1334,9 +1336,13 @@ export class ShadowClawChat extends ShadowClawElement {
     btn.append(svg);
 
     btn.addEventListener("click", async () => {
-      const confirmed = window.confirm(
-        "Delete this message? This action cannot be undone.",
-      );
+      const confirmed = await this.showAttachmentDialog({
+        mode: "confirm",
+        title: "Delete Message",
+        message: "Delete this message? This action cannot be undone.",
+        confirmLabel: "Delete",
+        cancelLabel: "Cancel",
+      });
 
       if (!confirmed) {
         return;
@@ -2198,11 +2204,16 @@ export class ShadowClawChat extends ShadowClawElement {
       return;
     }
 
-    if (
-      !confirm(
+    const confirmed = await this.showAttachmentDialog({
+      mode: "confirm",
+      title: "Compact Conversation",
+      message:
         "This will summarize the conversation to reduce token usage. The summary replaces the current history. Continue?",
-      )
-    ) {
+      confirmLabel: "Compact",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
       return;
     }
 

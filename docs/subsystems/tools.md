@@ -46,6 +46,7 @@ Tool definitions live in modular files under `src/tools/` and are assembled in `
 | `git.ts`           | `git_clone`, `git_sync`, `git_checkout`, `git_branch`, `git_status`, `git_add`, `git_log`, `git_diff`, `git_branches`, `git_list_repos`, `git_delete_repo`, `git_commit`, `git_pull`, `git_push`, `git_merge`, `git_reset` |
 | `manage_tools.ts`  | `manage_tools`, `list_tool_profiles`                                                                                                                                                                                       |
 | `mcp.ts`           | `remote_mcp_list_tools`, `remote_mcp_call_tool`                                                                                                                                                                            |
+| `email.ts`         | `manage_email`, `email_read_messages`, `email_send_message`                                                                                                                                                                |
 
 All are re-exported from `src/tools/index.ts` as the `TOOL_DEFINITIONS` array.
 

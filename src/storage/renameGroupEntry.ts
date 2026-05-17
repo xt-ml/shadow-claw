@@ -80,6 +80,7 @@ export async function renameGroupEntry(
           if (!needsOpfsWorkerFallback) {
             // Clean up the empty target file so retries don't see "Target already exists".
             await parentDir.removeEntry(trimmedName).catch(() => undefined);
+
             throw writeErr;
           }
 

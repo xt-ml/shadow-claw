@@ -11,19 +11,19 @@ All communication uses `postMessage()` with typed payloads defined in `src/types
 
 ### Main → Worker
 
-| Type                 | Payload                                  | Purpose                                  |
-| -------------------- | ---------------------------------------- | ---------------------------------------- |
-| `invoke`             | `InvokePayload`                          | Start agent invocation (LLM + tool loop) |
-| `compact`            | `CompactPayload`                         | Summarize conversation context           |
-| `cancel`             | `{ groupId }`                            | Abort in-flight task                     |
-| `set-storage`        | `{ storageHandle }`                      | Set OPFS root directory handle           |
-| `set-vm-mode`        | `{ mode?, bootHost?, networkRelayUrl? }` | Change VM configuration                  |
+| Type                 | Payload                                           | Purpose                                           |
+| -------------------- | ------------------------------------------------- | ------------------------------------------------- |
+| `invoke`             | `InvokePayload`                                   | Start agent invocation (LLM + tool loop)          |
+| `compact`            | `CompactPayload`                                  | Summarize conversation context                    |
+| `cancel`             | `{ groupId }`                                     | Abort in-flight task                              |
+| `set-storage`        | `{ storageHandle }`                               | Set OPFS root directory handle                    |
+| `set-vm-mode`        | `{ mode?, bootHost?, networkRelayUrl? }`          | Change VM configuration                           |
 | `update-tools`       | `{ groupId, enabledTools, systemPromptOverride }` | Refresh worker-side tool state for a conversation |
-| `vm-terminal-open`   | `{ groupId?: string }`                   | Open interactive terminal session        |
-| `vm-terminal-input`  | `{ data: string }`                       | Send stdin bytes to terminal             |
-| `vm-terminal-close`  | `{ groupId?: string }`                   | Close terminal session                   |
-| `vm-workspace-sync`  | `{ groupId?: string }`                   | Push host workspace into VM              |
-| `vm-workspace-flush` | `{ groupId?: string }`                   | Pull VM workspace back to host           |
+| `vm-terminal-open`   | `{ groupId?: string }`                            | Open interactive terminal session                 |
+| `vm-terminal-input`  | `{ data: string }`                                | Send stdin bytes to terminal                      |
+| `vm-terminal-close`  | `{ groupId?: string }`                            | Close terminal session                            |
+| `vm-workspace-sync`  | `{ groupId?: string }`                            | Push host workspace into VM                       |
+| `vm-workspace-flush` | `{ groupId?: string }`                            | Pull VM workspace back to host                    |
 
 ### Invoke and compact payload fields
 
@@ -73,7 +73,7 @@ All communication uses `postMessage()` with typed payloads defined in `src/types
 
 When the worker initializes (`src/worker/worker.ts`):
 
-1. Import message handler from `src/worker/handleMessage.ts`
+1. Import message handler from `src/worker/agent.ts`
 2. Subscribe to VM status changes → forward as `vm-status` messages
 3. **Eager VM boot** — if persisted mode is `ext2` or `9p`:
    - Load boot host, network relay URL from config

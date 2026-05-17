@@ -6,8 +6,9 @@ export const javascript: ToolDefinition = {
     "Execute JavaScript code in a sandboxed Worker and return the result. " +
     "Lighter than bash — no VM boot required. Use for calculations, " +
     "data transformations, JSON processing, string analysis, etc. " +
-    "Runs in strict mode. No access to DOM, network, fetch, eval(), Function(), " +
+    "Runs in strict mode. No access to DOM, eval(), Function(), " +
     "self, postMessage, importScripts, navigator, or indexedDB — these are all undefined. " +
+    "fetch availability is controlled by Tool Configuration -> Internet Access (shared with bash). " +
     "setTimeout is available but setInterval is blocked. " +
     "Write plain JavaScript expressions and statements — the return value of the " +
     "last expression is captured as the result.",

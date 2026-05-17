@@ -27,6 +27,7 @@ describe("worker and worker/agent.js", () => {
         VM_BOOT_HOST: "vm_boot_host",
         VM_NETWORK_RELAY_URL: "vm_network_relay_url",
         VM_BASH_TIMEOUT_SEC: "vm_bash_timeout_sec",
+        VM_BASH_FULL_INTERNET_ACCESS: "vm_bash_full_internet_access",
       },
       DEFAULT_GROUP_ID: "br:main",
       DEFAULT_MAX_ITERATIONS: 50,
@@ -44,8 +45,11 @@ describe("worker and worker/agent.js", () => {
       OPFS_ROOT: "shadowclaw",
     }));
 
-    jest.unstable_mockModule("../db/setConfig.js", () => ({
+    jest.unstable_mockModule("../db/getConfig.js", () => ({
       getConfig: jest.fn(),
+    }));
+
+    jest.unstable_mockModule("../db/setConfig.js", () => ({
       setConfig: jest.fn(),
     }));
 
@@ -114,7 +118,7 @@ describe("worker and worker/agent.js", () => {
 
     jest.unstable_mockModule("../types.js", () => ({}) as any);
 
-    jest.unstable_mockModule("../worker/sandboxedEval.js", () => ({
+    jest.unstable_mockModule("./sandboxedEval.js", () => ({
       sandboxedEval: mockSandboxedEval,
     }));
 
@@ -175,7 +179,11 @@ describe("worker and worker/agent.js", () => {
           { code: "1 + 1" },
           "group",
         );
-        expect(mockSandboxedEval).toHaveBeenCalledWith("1 + 1");
+        expect(mockSandboxedEval).toHaveBeenCalledWith(
+          "1 + 1",
+          undefined,
+          false,
+        );
         expect(result).toBe("2");
       });
 
@@ -193,6 +201,8 @@ describe("worker and worker/agent.js", () => {
         );
         expect(mockSandboxedEval).toHaveBeenCalledWith(
           "throw new Error('fail')",
+          undefined,
+          false,
         );
         expect(result).toContain("JavaScript error: fail");
       });

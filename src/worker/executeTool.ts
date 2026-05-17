@@ -109,10 +109,45 @@ async function executeViaShellFallback(
   command: string,
   groupId: string,
   timeoutSec: number,
+  allowFullInternetAccess: boolean,
 ): Promise<string> {
-  const shellResult = await executeShell(db, command, groupId, {}, timeoutSec);
+  const shellResult = await executeShell(
+    db,
+    command,
+    groupId,
+    {},
+    timeoutSec,
+    allowFullInternetAccess,
+  );
 
   return formatShellOutput(shellResult);
+}
+
+function parseBooleanConfig(value: string | null | undefined): boolean | null {
+  if (value == null) {
+    return null;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "off"].includes(normalized)) {
+    return false;
+  }
+
+  return null;
+}
+
+async function getAllowFullInternetAccess(
+  db: ShadowClawDatabase,
+): Promise<boolean> {
+  const configuredInternetAccess = parseBooleanConfig(
+    await getConfig(db, CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS),
+  );
+
+  return configuredInternetAccess ?? false;
 }
 
 function normalizeWorkspacePath(inputPath: string): string {
@@ -181,6 +216,8 @@ export async function executeTool(
           ? Math.min(Math.max(requestedTimeout, 1), BASH_MAX_TIMEOUT_SEC)
           : defaultTimeoutSec;
 
+        const allowFullInternetAccess = await getAllowFullInternetAccess(db);
+
         // Explicit disabled mode means "always use JS shell emulator".
         if (getVMBootModePreference() === "disabled") {
           return await executeViaShellFallback(
@@ -188,6 +225,7 @@ export async function executeTool(
             input.command,
             groupId,
             timeoutSec,
+            allowFullInternetAccess,
           );
         }
 
@@ -228,6 +266,7 @@ export async function executeTool(
           input.command,
           groupId,
           timeoutSec,
+          allowFullInternetAccess,
         );
       }
 
@@ -435,7 +474,12 @@ export async function executeTool(
 
       case "javascript": {
         const code = input.code;
-        const result = (await sandboxedEval(code)) as any;
+        const allowFullInternetAccess = await getAllowFullInternetAccess(db);
+        const result = (await sandboxedEval(
+          code,
+          undefined,
+          allowFullInternetAccess,
+        )) as any;
 
         if (!result.ok) {
           return `JavaScript error: ${result.error}`;

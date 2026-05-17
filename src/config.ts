@@ -921,6 +921,7 @@ export const CONFIG_KEYS = {
   VM_BOOT_HOST: "vm_boot_host",
   VM_NETWORK_RELAY_URL: "vm_network_relay_url",
   VM_BASH_TIMEOUT_SEC: "vm_bash_timeout_sec",
+  VM_BASH_FULL_INTERNET_ACCESS: "vm_bash_full_internet_access",
   ENABLED_TOOLS: "enabled_tools",
   CUSTOM_TOOLS: "custom_tools",
   SYSTEM_PROMPT_OVERRIDE: "system_prompt_override",

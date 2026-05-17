@@ -279,6 +279,7 @@ export class OrchestratorStore {
   public _useProxy: Signal.State<boolean>;
   public _proxyUrl: Signal.State<string>;
   public _gitProxyUrl: Signal.State<string>;
+  public _vmBashFullInternetAccess: Signal.State<boolean>;
   public _activePage: Signal.State<string>;
   public orchestrator: Orchestrator | null;
   private _db: ShadowClawDatabase | null;
@@ -353,6 +354,7 @@ export class OrchestratorStore {
     this._useProxy = new Signal.State(false);
     this._proxyUrl = new Signal.State("/proxy");
     this._gitProxyUrl = new Signal.State("/git-proxy");
+    this._vmBashFullInternetAccess = new Signal.State(false);
     this._activePage = new Signal.State("chat");
     this.orchestrator = null;
     this._db = null;
@@ -615,6 +617,10 @@ export class OrchestratorStore {
     return this._gitProxyUrl.get();
   }
 
+  get vmBashFullInternetAccess() {
+    return this._vmBashFullInternetAccess.get();
+  }
+
   setReady(ready: boolean = true): void {
     this._ready.set(ready);
   }
@@ -822,6 +828,9 @@ export class OrchestratorStore {
       this._useProxy.set(this.orchestrator.getUseProxy());
       this._proxyUrl.set(this.orchestrator.getProxyUrl());
       this._gitProxyUrl.set(this.orchestrator.getGitProxyUrl());
+      this._vmBashFullInternetAccess.set(
+        this.orchestrator.getVMBashFullInternetAccess(),
+      );
     }
 
     await Promise.all([
@@ -1421,6 +1430,21 @@ export class OrchestratorStore {
     if (this.orchestrator) {
       await this.orchestrator.setGitProxyUrl(db, url);
       this._gitProxyUrl.set(this.orchestrator.getGitProxyUrl());
+    }
+  }
+
+  /**
+   * Toggle shared full internet access for shell/javascript tools.
+   */
+  async setVMBashFullInternetAccess(
+    db: ShadowClawDatabase,
+    enabled: boolean,
+  ): Promise<void> {
+    if (this.orchestrator) {
+      await this.orchestrator.setVMBashFullInternetAccess(db, enabled);
+      this._vmBashFullInternetAccess.set(
+        this.orchestrator.getVMBashFullInternetAccess(),
+      );
     }
   }
 }

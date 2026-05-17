@@ -265,6 +265,14 @@ Behavior notes:
 - New-item dialog supports creating either a file or a folder via the `Create as folder` toggle.
 - `Host -> VM` and `VM -> Host` sync buttons are mode-gated; they render only when VM mode is `9p`.
 
+### Tools Configuration Elements
+
+The `<shadow-claw-tools>` component includes interactive controls for managing tool configuration:
+
+- **Internet Access Toggle** (`.tools__internet-access-toggle` / `#toolsInternetAccessOptIn`): A checkbox to toggle the shared full public internet access setting (`vm_bash_full_internet_access`) for both `bash` and `javascript` tools.
+- **WebMCP Toggle** (`.tools__webmcp-toggle`): Toggles integration with browser's Model Context Protocol.
+- **WebMCP Mode selector** (`.tools__webmcp-mode`): Selects the WebMCP execution mode.
+
 ## Page Object Guide
 
 ### `AppPage`
@@ -284,7 +292,7 @@ Root application controller. Automatically initialized by `app` fixture.
 - `navigateTo(pageId)` — Delegate to `nav.navigateTo()`
 - `navigateToWithOpenDialog(pageId)` — Navigate via app API when a dialog is open (including wrapped native `<dialog>` usage)
 - `currentPageId()` — Get active page ID
-- `chatComponent()`, `filesComponent()`, `tasksComponent()`, `toastComponent()` — Component locators
+- `chatComponent()`, `filesComponent()`, `tasksComponent()`, `toolsComponent()`, `toastComponent()` — Component locators
 
 ### `ChatPage`
 

@@ -12,6 +12,7 @@ describe("csp", () => {
     expect(value).toContain("base-uri 'none'");
     expect(value).toContain("frame-ancestors 'none'");
     expect(value).toContain(`trusted-types ${getTrustedTypesPolicyName()}`);
+    expect(value).toContain("shadowclaw-sandbox");
     expect(value).toContain("dompurify");
     expect(value).toContain("require-trusted-types-for 'script'");
   });

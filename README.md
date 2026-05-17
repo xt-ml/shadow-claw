@@ -231,6 +231,7 @@ Create model-specific or task-specific tool profiles to optimize the context win
 - Override system prompt per profile
 - Auto-activate profiles by model
 - Save custom selections
+- **Shared internet access control** — Toggles public internet access (`fetch` and shell networking) globally for the `bash` and `javascript` tools
 
 **Full guide**: [docs/subsystems/tools.md](docs/subsystems/tools.md#tool-profiles)
 

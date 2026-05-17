@@ -164,6 +164,7 @@ describe("OrchestratorStore", () => {
       getUseProxy: () => false,
       getProxyUrl: () => "",
       getGitProxyUrl: () => "",
+      getVMBashFullInternetAccess: () => false,
       getTaskServerUrl: () => "/schedule",
     };
 
@@ -195,6 +196,7 @@ describe("OrchestratorStore", () => {
       getUseProxy: () => false,
       getProxyUrl: () => "",
       getGitProxyUrl: () => "",
+      getVMBashFullInternetAccess: () => false,
       getTaskServerUrl: () => "/schedule",
     };
 
@@ -237,6 +239,7 @@ describe("OrchestratorStore", () => {
       getUseProxy: () => false,
       getProxyUrl: () => "",
       getGitProxyUrl: () => "",
+      getVMBashFullInternetAccess: () => false,
       getTaskServerUrl: () => "/schedule",
     };
 
@@ -345,6 +348,7 @@ describe("OrchestratorStore", () => {
       getUseProxy: () => false,
       getProxyUrl: () => "",
       getGitProxyUrl: () => "",
+      getVMBashFullInternetAccess: () => false,
       getTaskServerUrl: () => "/schedule",
     };
 
@@ -394,6 +398,7 @@ describe("OrchestratorStore", () => {
       getUseProxy: () => false,
       getProxyUrl: () => "",
       getGitProxyUrl: () => "",
+      getVMBashFullInternetAccess: () => false,
       getTaskServerUrl: () => "/schedule",
     };
 
@@ -590,6 +595,7 @@ describe("OrchestratorStore", () => {
       getUseProxy: () => false,
       getProxyUrl: () => "",
       getGitProxyUrl: () => "",
+      getVMBashFullInternetAccess: () => false,
       getTaskServerUrl: () => "/schedule",
     };
 
@@ -979,6 +985,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
       };
       jest.spyOn(store, "loadHistory").mockResolvedValue(undefined);
@@ -1027,6 +1034,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
       };
 
@@ -1046,6 +1054,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
       };
 
@@ -1089,6 +1098,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
       };
 
@@ -1125,6 +1135,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
       };
 
@@ -1180,6 +1191,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
       };
 
@@ -1200,6 +1212,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
       };
 
@@ -1240,6 +1253,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
       };
 
@@ -1282,6 +1296,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
       };
 
@@ -1435,6 +1450,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: jest.fn().mockReturnValue(false),
         getProxyUrl: jest.fn().mockReturnValue(""),
         getGitProxyUrl: jest.fn().mockReturnValue(""),
+        getVMBashFullInternetAccess: jest.fn().mockReturnValue(false),
         getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
       };
 
@@ -1459,6 +1475,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: jest.fn().mockReturnValue(false),
         getProxyUrl: jest.fn().mockReturnValue(""),
         getGitProxyUrl: jest.fn().mockReturnValue(""),
+        getVMBashFullInternetAccess: jest.fn().mockReturnValue(false),
         getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
       };
 
@@ -1483,6 +1500,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: jest.fn().mockReturnValue(false),
         getProxyUrl: jest.fn().mockReturnValue(""),
         getGitProxyUrl: jest.fn().mockReturnValue(""),
+        getVMBashFullInternetAccess: jest.fn().mockReturnValue(false),
         getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
       };
 
@@ -1514,6 +1532,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: jest.fn().mockReturnValue(false),
         getProxyUrl: jest.fn().mockReturnValue(""),
         getGitProxyUrl: jest.fn().mockReturnValue(""),
+        getVMBashFullInternetAccess: jest.fn().mockReturnValue(false),
         getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
       };
 
@@ -1543,6 +1562,7 @@ describe("OrchestratorStore", () => {
         getUseProxy: () => false,
         getProxyUrl: () => "",
         getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
       };
 

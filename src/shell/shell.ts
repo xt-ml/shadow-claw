@@ -17,13 +17,18 @@ export async function executeShell(
   groupId: string,
   env: Record<string, string> = {},
   _timeoutSec: number = 30,
+  allowFullInternetAccess: boolean = false,
 ): Promise<ShellResult> {
   try {
     const fs = await createFileSystem(db, groupId);
     const bash = new Bash({
       fs,
       // https://github.com/vercel-labs/just-bash?tab=readme-ov-file#network-access
-      network: { dangerouslyAllowFullInternetAccess: true },
+      network: {
+        dangerouslyAllowFullInternetAccess: allowFullInternetAccess,
+        // Explicitly control this so true/false behaves deterministically in browser bundles.
+        denyPrivateRanges: !allowFullInternetAccess,
+      },
     });
 
     // Enforce timeout using AbortController if supported by just-bash,

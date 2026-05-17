@@ -41,7 +41,7 @@ A fully-functional agent runtime that runs entirely in the browser—no AI proce
 - **Web Share Target** — Receive files/URLs directly from OS share sheet
 - **Scheduled tasks** — Cron expressions with server-side persistence and Web Push
 - **Git integration** — Clone, branch, merge (with conflict reports), push/pull
-- **File viewer** — Syntax highlighting, PDF preview, media playback, Web Share
+- **File viewer** — Syntax highlighting, PDF preview, media playback, Web Share, native/fallback fullscreen, and relative image workspace resolving
 
 ## Architecture
 

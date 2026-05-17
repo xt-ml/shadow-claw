@@ -37,6 +37,10 @@ jest.unstable_mockModule("../../storage/writeGroupFile.js", () => ({
   writeGroupFile: jest.fn(),
 }));
 
+jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
+  readGroupFileBytes: jest.fn(),
+}));
+
 jest.unstable_mockModule("../../toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
@@ -48,6 +52,8 @@ const { fileViewerStore } = await import("../../stores/file-viewer.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { renderMarkdown } = await import("../../markdown.js");
 const { setSanitizedHtml } = await import("../../security/trusted-types.js");
+const { readGroupFileBytes } =
+  await import("../../storage/readGroupFileBytes.js");
 
 describe("shadow-claw-file-viewer", () => {
   beforeEach(() => {
@@ -71,10 +77,209 @@ describe("shadow-claw-file-viewer", () => {
     expect(template).toContain('aria-pressed="false"');
   });
 
+  it("includes fullscreen toggle in template", async () => {
+    const template = await ShadowClawFileViewer.getTemplateSource();
+
+    expect(template).toContain("modal-fullscreen-btn");
+    expect(template).toContain("Fullscreen");
+  });
+
   it("includes share button in template", async () => {
     const template = await ShadowClawFileViewer.getTemplateSource();
 
     expect(template).toContain("modal-share-btn");
+  });
+
+  it("toggles fullscreen mode from the view mode button", () => {
+    const component = new ShadowClawFileViewer();
+    const modal = document.createElement("div");
+    modal.className = "file-modal";
+
+    const modalContent = document.createElement("div");
+    modalContent.className = "modal-content";
+    modal.appendChild(modalContent);
+
+    const fullscreenButton = document.createElement("button");
+    fullscreenButton.className = "modal-fullscreen-btn";
+    modal.appendChild(fullscreenButton);
+
+    component.shadowRoot?.appendChild(modal);
+    component.bindEventListeners();
+
+    expect(component.isFullscreenMode).toBe(false);
+
+    fullscreenButton.click();
+
+    expect(component.isFullscreenMode).toBe(true);
+    expect(modalContent.classList.contains("modal-content--fullscreen")).toBe(
+      true,
+    );
+    expect(fullscreenButton.getAttribute("aria-pressed")).toBe("true");
+
+    fullscreenButton.click();
+
+    expect(component.isFullscreenMode).toBe(false);
+    expect(modalContent.classList.contains("modal-content--fullscreen")).toBe(
+      false,
+    );
+    expect(fullscreenButton.getAttribute("aria-pressed")).toBe("false");
+  });
+
+  it("uses native Fullscreen API when available", async () => {
+    const component = new ShadowClawFileViewer();
+    const modal = document.createElement("div");
+    modal.className = "file-modal";
+
+    const modalContent = document.createElement("div");
+    modalContent.className = "modal-content";
+    modal.appendChild(modalContent);
+
+    const fullscreenButton = document.createElement("button");
+    fullscreenButton.className = "modal-fullscreen-btn";
+    modal.appendChild(fullscreenButton);
+
+    const originalFullscreenEnabled = document.fullscreenEnabled;
+    const originalFullscreenElement = document.fullscreenElement;
+    const originalExitFullscreen = document.exitFullscreen;
+
+    const requestFullscreen = jest.fn(async () => {
+      Object.defineProperty(document, "fullscreenElement", {
+        configurable: true,
+        value: modalContent,
+      });
+    });
+    const exitFullscreen = jest.fn(async () => {
+      Object.defineProperty(document, "fullscreenElement", {
+        configurable: true,
+        value: null,
+      });
+    });
+
+    Object.defineProperty(document, "fullscreenEnabled", {
+      configurable: true,
+      value: true,
+    });
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      value: null,
+    });
+    Object.defineProperty(document, "exitFullscreen", {
+      configurable: true,
+      value: exitFullscreen,
+    });
+    (modalContent as any).requestFullscreen = requestFullscreen;
+
+    await component.toggleFullscreenMode(modal);
+
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+    expect(component.isFullscreenMode).toBe(true);
+
+    await component.toggleFullscreenMode(modal);
+
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
+    expect(component.isFullscreenMode).toBe(false);
+
+    Object.defineProperty(document, "fullscreenEnabled", {
+      configurable: true,
+      value: originalFullscreenEnabled,
+    });
+    Object.defineProperty(document, "fullscreenElement", {
+      configurable: true,
+      value: originalFullscreenElement,
+    });
+    Object.defineProperty(document, "exitFullscreen", {
+      configurable: true,
+      value: originalExitFullscreen,
+    });
+  });
+
+  it("exits native fullscreen when current fullscreen element is an ancestor", async () => {
+    const component = new ShadowClawFileViewer();
+    const modal = document.createElement("div");
+    modal.className = "file-modal";
+
+    const modalContent = document.createElement("div");
+    modalContent.className = "modal-content";
+    modal.appendChild(modalContent);
+
+    const fullscreenButton = document.createElement("button");
+    fullscreenButton.className = "modal-fullscreen-btn";
+    modal.appendChild(fullscreenButton);
+
+    const isTargetInFullscreenSpy = jest
+      .spyOn(component, "isTargetInFullscreen")
+      .mockReturnValue(true);
+    const canUseNativeFullscreenSpy = jest
+      .spyOn(component, "canUseNativeFullscreen")
+      .mockReturnValue(true as any);
+    const requestNativeFullscreenSpy = jest
+      .spyOn(component, "requestNativeFullscreen")
+      .mockResolvedValue(undefined);
+    const exitNativeFullscreenSpy = jest
+      .spyOn(component, "exitNativeFullscreen")
+      .mockResolvedValue(undefined);
+
+    await component.toggleFullscreenMode(modal);
+
+    expect(exitNativeFullscreenSpy).toHaveBeenCalledTimes(1);
+    expect(requestNativeFullscreenSpy).not.toHaveBeenCalled();
+    exitNativeFullscreenSpy.mockRestore();
+    requestNativeFullscreenSpy.mockRestore();
+    canUseNativeFullscreenSpy.mockRestore();
+    isTargetInFullscreenSpy.mockRestore();
+  });
+
+  it("detects fullscreen when fullscreen element is the shadow host", () => {
+    const component = new ShadowClawFileViewer();
+    const modal = document.createElement("div");
+    modal.className = "file-modal";
+
+    const modalContent = document.createElement("div");
+    modalContent.className = "modal-content";
+    modal.appendChild(modalContent);
+
+    component.shadowRoot?.appendChild(modal);
+
+    const getCurrentFullscreenElementSpy = jest
+      .spyOn(component, "getCurrentFullscreenElement")
+      .mockReturnValue(component);
+
+    expect(component.isTargetInFullscreen(modalContent)).toBe(true);
+
+    getCurrentFullscreenElementSpy.mockRestore();
+  });
+
+  it("exits fullscreen before closing viewer", async () => {
+    const component = new ShadowClawFileViewer();
+    const modal = document.createElement("div");
+    modal.className = "file-modal";
+
+    const modalContent = document.createElement("div");
+    modalContent.className = "modal-content";
+    modal.appendChild(modalContent);
+
+    component.shadowRoot?.appendChild(modal);
+
+    const exitNativeFullscreenSpy = jest
+      .spyOn(component, "exitNativeFullscreen")
+      .mockResolvedValue(undefined);
+    const isTargetInFullscreenSpy = jest
+      .spyOn(component, "isTargetInFullscreen")
+      .mockReturnValue(true);
+
+    const closeFileMock = fileViewerStore.closeFile as jest.Mock;
+    closeFileMock.mockReset();
+
+    await component.requestCloseViewer();
+
+    expect(exitNativeFullscreenSpy).toHaveBeenCalledTimes(1);
+    expect(closeFileMock).toHaveBeenCalledTimes(1);
+    expect(exitNativeFullscreenSpy.mock.invocationCallOrder[0]).toBeLessThan(
+      closeFileMock.mock.invocationCallOrder[0],
+    );
+
+    isTargetInFullscreenSpy.mockRestore();
+    exitNativeFullscreenSpy.mockRestore();
   });
 
   it("detects iframe preview file types", () => {
@@ -89,9 +294,9 @@ describe("shadow-claw-file-viewer", () => {
     expect(component.isIframePreviewFile("notes.md")).toBe(false);
   });
 
-  it("builds iframe srcdoc for html files", () => {
+  it("builds iframe srcdoc for html files", async () => {
     const component = new ShadowClawFileViewer();
-    const srcdoc = component.buildIframePreviewSrcdoc({
+    const srcdoc = await component.buildIframePreviewSrcdoc({
       name: "index.html",
       content: "<main>Hello</main>",
     });
@@ -103,9 +308,9 @@ describe("shadow-claw-file-viewer", () => {
     expect(srcdoc).toContain("<main>Hello</main>");
   });
 
-  it("loads the reviewed link bridge from a same-origin script file", () => {
+  it("loads the reviewed link bridge from a same-origin script file", async () => {
     const component = new ShadowClawFileViewer();
-    const srcdoc = component.buildIframePreviewSrcdoc({
+    const srcdoc = await component.buildIframePreviewSrcdoc({
       name: "index.html",
       content: '<a href="docs/guide">Guide</a>',
     });
@@ -114,9 +319,9 @@ describe("shadow-claw-file-viewer", () => {
     expect(srcdoc).not.toContain("window.parent.postMessage");
   });
 
-  it("sanitizes active script content out of html iframe srcdoc bodies", () => {
+  it("sanitizes active script content out of html iframe srcdoc bodies", async () => {
     const component = new ShadowClawFileViewer();
-    const srcdoc = component.buildIframePreviewSrcdoc({
+    const srcdoc = await component.buildIframePreviewSrcdoc({
       name: "index.html",
       content: "<script>alert(1)</script><main>Hello</main>",
     });
@@ -125,21 +330,21 @@ describe("shadow-claw-file-viewer", () => {
     expect(srcdoc).not.toContain("alert(1)");
   });
 
-  it("returns raw svg content for iframe srcdoc", () => {
+  it("returns raw svg content for iframe srcdoc", async () => {
     const component = new ShadowClawFileViewer();
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"></svg>';
 
     expect(
-      component.buildIframePreviewSrcdoc({
+      await component.buildIframePreviewSrcdoc({
         name: "diagram.svg",
         content: svg,
       }),
     ).toBe(svg);
   });
 
-  it("adds a nonce-based CSP meta tag to the html iframe srcdoc", () => {
+  it("adds a nonce-based CSP meta tag to the html iframe srcdoc", async () => {
     const component = new ShadowClawFileViewer();
-    const srcdoc = component.buildIframePreviewSrcdoc({
+    const srcdoc = await component.buildIframePreviewSrcdoc({
       name: "index.html",
       content: "<p>content</p>",
     });
@@ -157,6 +362,34 @@ describe("shadow-claw-file-viewer", () => {
 
     expect(srcdoc).toContain(`nonce="${nonce}"`);
     expect(srcdoc).toContain("/assets/file-viewer-preview-bridge.js");
+  });
+
+  it("replaces relative image src with blob URLs in html iframe srcdoc", async () => {
+    const component = new ShadowClawFileViewer();
+    component.db = {} as any;
+
+    URL.createObjectURL = jest.fn(() => "blob:fake-html");
+    URL.revokeObjectURL = jest.fn();
+
+    const pngBytes = new Uint8Array([137, 80, 78, 71]);
+    (
+      readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
+    ).mockResolvedValue(pngBytes);
+
+    const srcdoc = await component.buildIframePreviewSrcdoc({
+      name: "index.html",
+      path: "docs/index.html",
+      content: '<img src="assets/banner.png" alt="banner">',
+    });
+
+    expect(readGroupFileBytes).toHaveBeenCalledWith(
+      component.db,
+      "test-group",
+      "docs/assets/banner.png",
+    );
+    expect(srcdoc).toContain("blob:fake-html");
+    expect(srcdoc).not.toContain('src="assets/banner.png"');
+    expect(component.currentImageObjectUrls).toContain("blob:fake-html");
   });
 
   it("includes allow-modals in iframe sandbox permissions", () => {
@@ -233,8 +466,58 @@ describe("shadow-claw-file-viewer", () => {
       content: "# hello",
     });
 
-    expect(setSanitizedHtml).toHaveBeenCalledWith(content, "# hello");
+    expect(setSanitizedHtml).toHaveBeenCalledWith(
+      content,
+      "# hello",
+      expect.objectContaining({
+        ALLOWED_URI_REGEXP: expect.any(RegExp),
+      }),
+    );
     expect(content.innerHTML).toBe("# hello");
+  });
+
+  it("replaces markdown relative image src before inserting preview HTML", async () => {
+    const component = new ShadowClawFileViewer();
+    component.db = {} as any;
+
+    URL.createObjectURL = jest.fn(() => "blob:md-preview");
+    const pngBytes = new Uint8Array([137, 80, 78, 71]);
+    (
+      readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
+    ).mockResolvedValue(pngBytes);
+
+    const renderMarkdownMock = renderMarkdown as jest.MockedFunction<any>;
+    renderMarkdownMock.mockResolvedValueOnce(
+      '<p><img src="assets/image.jpg" alt="Why no worky"></p>',
+    );
+
+    const content = document.createElement("div");
+    (fileViewerStore as any).file = {
+      name: "notes.md",
+      path: "docs/notes.md",
+      kind: "text",
+      content: "![Why no worky](assets/image.jpg)",
+    };
+
+    await component.renderPreview(content, {
+      name: "notes.md",
+      path: "docs/notes.md",
+      kind: "text",
+      content: "![Why no worky](assets/image.jpg)",
+    });
+
+    expect(readGroupFileBytes).toHaveBeenCalledWith(
+      component.db,
+      "test-group",
+      "docs/assets/image.jpg",
+    );
+    expect(setSanitizedHtml).toHaveBeenCalledWith(
+      content,
+      '<p><img src="blob:md-preview" alt="Why no worky"></p>',
+      expect.objectContaining({
+        ALLOWED_URI_REGEXP: expect.any(RegExp),
+      }),
+    );
   });
 
   it("requires canShare for binary file sharing", () => {
@@ -378,6 +661,14 @@ describe("shadow-claw-file-viewer", () => {
 
     expect(styles).toMatch(
       /\.file-editor\s*\{[^}]*caret-color\s*:[^;]*!important/,
+    );
+  });
+
+  it("hides cancel/save text labels on compact screens", async () => {
+    const styles = await ShadowClawFileViewer.getStylesSource();
+
+    expect(styles).toMatch(
+      /@media \(max-width: 640px\)[\s\S]*\.modal-cancel-btn \.btn-label,[\s\S]*\.modal-save-btn \.btn-label[\s\S]*display:\s*none/,
     );
   });
 
@@ -713,6 +1004,89 @@ describe("shadow-claw-file-viewer", () => {
       expect(openFileMock).toHaveBeenCalledTimes(1);
       expect(orchestratorStore.setCurrentPath).not.toHaveBeenCalled();
       expect(closeFileMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("resolveMarkdownImages", () => {
+    beforeEach(() => {
+      (readGroupFileBytes as jest.Mock).mockReset();
+      URL.createObjectURL = jest.fn(() => "blob:fake");
+      URL.revokeObjectURL = jest.fn();
+    });
+
+    it("replaces relative image src with an object URL loaded from OPFS", async () => {
+      const component = new ShadowClawFileViewer();
+      component.db = {} as any;
+
+      const pngBytes = new Uint8Array([137, 80, 78, 71]);
+      (
+        readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
+      ).mockResolvedValue(pngBytes);
+
+      const container = document.createElement("div");
+      const img = document.createElement("img");
+      img.src = "assets/image.png";
+      container.appendChild(img);
+
+      await component.resolveMarkdownImages(container, "docs/notes.md");
+
+      expect(readGroupFileBytes).toHaveBeenCalledWith(
+        component.db,
+        "test-group",
+        "docs/assets/image.png",
+      );
+      expect(img.src).toBe("blob:fake");
+      expect(component.currentImageObjectUrls).toContain("blob:fake");
+    });
+
+    it("leaves absolute and data URIs unchanged", async () => {
+      const component = new ShadowClawFileViewer();
+      component.db = {} as any;
+
+      const container = document.createElement("div");
+
+      const absImg = document.createElement("img");
+      absImg.setAttribute("src", "https://example.com/logo.png");
+      container.appendChild(absImg);
+
+      const dataImg = document.createElement("img");
+      dataImg.setAttribute("src", "data:image/png;base64,abc");
+      container.appendChild(dataImg);
+
+      await component.resolveMarkdownImages(container, "notes.md");
+
+      expect(readGroupFileBytes).not.toHaveBeenCalled();
+    });
+
+    it("silently skips images whose file cannot be found", async () => {
+      const component = new ShadowClawFileViewer();
+      component.db = {} as any;
+
+      (
+        readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
+      ).mockRejectedValue(new DOMException("not found", "NotFoundError"));
+
+      const container = document.createElement("div");
+      const img = document.createElement("img");
+      img.setAttribute("src", "missing.jpg");
+      container.appendChild(img);
+
+      await expect(
+        component.resolveMarkdownImages(container, "notes.md"),
+      ).resolves.toBeUndefined();
+
+      expect(img.getAttribute("src")).toBe("missing.jpg");
+    });
+
+    it("revokes all image object URLs when revokeObjectUrl is called", () => {
+      const component = new ShadowClawFileViewer();
+      component.currentImageObjectUrls = ["blob:a", "blob:b"];
+
+      component.revokeObjectUrl();
+
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:a");
+      expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:b");
+      expect(component.currentImageObjectUrls).toHaveLength(0);
     });
   });
 });

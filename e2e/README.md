@@ -1,6 +1,6 @@
 # ShadowClaw E2E Test Architecture
 
-Professional end-to-end test suite for ShadowClaw using Playwright with the Page Object Model pattern.
+End-to-end test suite for ShadowClaw using Playwright with the Page Object Model pattern.
 
 ## Architecture Overview
 

@@ -42,7 +42,10 @@ function getTrustedTypesPolicy(): TrustedTypesPolicyLike | null {
 
   try {
     cachedPolicy = factory.createPolicy(APP_TRUSTED_TYPES_POLICY_NAME, {
-      createHTML: (input: string) => sanitizeHtml(input),
+      // Input is already sanitized by sanitizeToTrustedHtml before policy use.
+      // Keep this an identity transform so caller-provided sanitize options
+      // (for example blob URL allowlists) are not lost.
+      createHTML: (input: string) => input,
     });
   } catch {
     cachedPolicy = null;
@@ -73,8 +76,8 @@ export function escapeToTrustedHtml(text: string): TrustedMarkup {
   return sanitizeToTrustedHtml(escapeHtml(text));
 }
 
-export function sanitizeSrcdocHtml(html: string): string {
-  return sanitizeHtml(html);
+export function sanitizeSrcdocHtml(html: string, options: Config = {}): string {
+  return sanitizeHtml(html, options);
 }
 
 export function setSanitizedHtml(

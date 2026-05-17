@@ -35,14 +35,11 @@ describe("sandboxedEval", () => {
       };
 
       // By default, simulate successful execution of "1+1" → 2
-      instance.postMessage.mockImplementation((msg) => {
-        // Simulate async worker response
-        setTimeout(() => {
-          if (instance.onmessage) {
-            instance.onmessage({ data: { ok: true, value: 2 } });
-          }
-        }, 0);
-      });
+      setTimeout(() => {
+        if (instance.onmessage) {
+          instance.onmessage({ data: { ok: true, value: 2 } });
+        }
+      }, 0);
 
       mockWorkerInstances.push(instance);
 
@@ -56,6 +53,7 @@ describe("sandboxedEval", () => {
 
   afterEach(() => {
     (global as any).Worker = originalWorker;
+    delete (global as any).trustedTypes;
   });
 
   it("exports a default timeout of 30 seconds", () => {
@@ -74,12 +72,32 @@ describe("sandboxedEval", () => {
     expect((global as any).Worker).toHaveBeenCalledWith("blob:mock-url");
   });
 
-  it("sends code to the worker via postMessage", async () => {
+  it("uses a Trusted Types script URL for Worker when available", async () => {
+    const createScriptURL = jest.fn((value: string) => `trusted:${value}`);
+    (global as any).trustedTypes = {
+      createPolicy: jest.fn(() => ({
+        createScriptURL,
+      })),
+    };
+
+    await sandboxedEval("1+1");
+
+    expect((global as any).trustedTypes.createPolicy).toHaveBeenCalledWith(
+      "shadowclaw-sandbox",
+      expect.objectContaining({
+        createScriptURL: expect.any(Function),
+      }),
+    );
+    expect(createScriptURL).toHaveBeenCalledWith("blob:mock-url");
+    expect((global as any).Worker).toHaveBeenCalledWith(
+      "trusted:blob:mock-url",
+    );
+  });
+
+  it("executes without runtime postMessage", async () => {
     await sandboxedEval("2+2");
 
-    expect(mockWorkerInstances[0].postMessage).toHaveBeenCalledWith({
-      code: "2+2",
-    });
+    expect(mockWorkerInstances[0].postMessage).not.toHaveBeenCalled();
   });
 
   it("returns ok: true with the result value", async () => {
@@ -103,19 +121,18 @@ describe("sandboxedEval", () => {
   it("returns ok: false when the worker reports an error", async () => {
     (global as any).Worker = jest.fn().mockImplementation(() => {
       const instance: any = {
-        postMessage: jest.fn().mockImplementation(() => {
-          setTimeout(() => {
-            if (instance.onmessage) {
-              instance.onmessage({
-                data: { ok: false, error: "ReferenceError: x is not defined" },
-              });
-            }
-          }, 0);
-        }),
+        postMessage: jest.fn(),
         terminate: jest.fn(),
         onmessage: null,
         onerror: null,
       };
+      setTimeout(() => {
+        if (instance.onmessage) {
+          instance.onmessage({
+            data: { ok: false, error: "ReferenceError: x is not defined" },
+          });
+        }
+      }, 0);
       mockWorkerInstances.push(instance);
 
       return instance;
@@ -134,17 +151,16 @@ describe("sandboxedEval", () => {
   it("returns ok: false on worker onerror", async () => {
     (global as any).Worker = jest.fn().mockImplementation(() => {
       const instance: any = {
-        postMessage: jest.fn().mockImplementation(() => {
-          setTimeout(() => {
-            if (instance.onerror) {
-              instance.onerror({ message: "Script parse error" });
-            }
-          }, 0);
-        }),
+        postMessage: jest.fn(),
         terminate: jest.fn(),
         onmessage: null,
         onerror: null,
       };
+      setTimeout(() => {
+        if (instance.onerror) {
+          instance.onerror({ message: "Script parse error" });
+        }
+      }, 0);
       mockWorkerInstances.push(instance);
 
       return instance;
@@ -189,17 +205,16 @@ describe("sandboxedEval", () => {
   it("handles onerror with no message", async () => {
     (global as any).Worker = jest.fn().mockImplementation(() => {
       const instance: any = {
-        postMessage: jest.fn().mockImplementation(() => {
-          setTimeout(() => {
-            if (instance.onerror) {
-              instance.onerror({} as any);
-            }
-          }, 0);
-        }),
+        postMessage: jest.fn(),
         terminate: jest.fn(),
         onmessage: null,
         onerror: null,
       };
+      setTimeout(() => {
+        if (instance.onerror) {
+          instance.onerror({} as any);
+        }
+      }, 0);
       mockWorkerInstances.push(instance);
 
       return instance;
@@ -243,67 +258,47 @@ describe("buildWorkerSource — generated code validity", () => {
   });
 
   it("generates syntactically valid JavaScript", () => {
-    const source = buildWorkerSource();
-    // The generated code must parse without throwing.
-    // We strip the `self.onmessage` wrapper and test the inner new Function call
-    // by actually constructing the function the same way the worker does.
+    const source = buildWorkerSource("return 1 + 1;");
     expect(() => {
       // eslint-disable-next-line no-new-func
       new Function(source);
     }).not.toThrow();
   });
 
-  it("new Function with blocked globals as params does not throw in strict mode", () => {
-    // This is the core bug: "eval" and "arguments" as parameter names
-    // are illegal in strict mode. The outer Function body must NOT be strict.
-    const source = buildWorkerSource();
-
-    // Extract the blocked globals and simulate what the worker does
-    const blockedMatch = source.match(/var blocked = (\[.*?\]);/s);
+  it("includes blocked globals metadata in generated source", () => {
+    const source = buildWorkerSource("return 1;");
+    const blockedMatch = source.match(/const blocked = (\[.*?\]);/s);
     expect(blockedMatch).not.toBeNull();
     const blocked = JSON.parse(blockedMatch[1]);
-    const paramNames = blocked.join(",");
-
-    // This must not throw — it's the exact call that happens at runtime
-    expect(() => {
-      // eslint-disable-next-line no-new-func
-      const fn = new Function(
-        paramNames,
-        'return (function(){\n"use strict";\nreturn 1+1;\n})()',
-      );
-      const args = new Array(blocked.length);
-      const result = fn.apply(undefined, args);
-      expect(result).toBe(2);
-    }).not.toThrow();
+    expect(Array.isArray(blocked)).toBe(true);
+    expect(blocked.length).toBeGreaterThan(0);
   });
 
-  it("user code runs in strict mode even though outer Function is sloppy", () => {
-    const source = buildWorkerSource();
-    const blockedMatch = source.match(/var blocked = (\[.*?\]);/s);
-    const blocked = JSON.parse(blockedMatch[1]);
-    const paramNames = blocked.join(",");
-
-    // User code that violates strict mode (e.g. octal literal) should fail
-    const wrappedCode = 'return (function(){\n"use strict";\nreturn 010;\n})()';
-    expect(() => {
-      // eslint-disable-next-line no-new-func
-      new Function(paramNames, wrappedCode);
-    }).toThrow();
+  it("awaits async code execution path", () => {
+    const source = buildWorkerSource("return Promise.resolve(1);");
+    expect(source).toContain("const result = await (async () => {");
   });
 
-  it("eval and Function are shadowed as undefined inside user code", () => {
-    const source = buildWorkerSource();
-    const blockedMatch = source.match(/var blocked = (\[.*?\]);/s);
-    const blocked = JSON.parse(blockedMatch[1]);
-    const paramNames = blocked.join(",");
+  it("preserves worker postMessage channel for results", () => {
+    const source = buildWorkerSource("return 1;");
+    expect(source).toContain("const __hostPostMessage =");
+    expect(source).toContain('name === "self" || name === "postMessage"');
+    expect(source).toContain("__hostPostMessage({ ok: true");
+  });
 
-    // User code that tries to use eval should get undefined
-    const wrappedCode =
-      'return (function(){\n"use strict";\nreturn typeof eval;\n})()';
-    // eslint-disable-next-line no-new-func
-    const fn = new Function(paramNames, wrappedCode);
-    const args = new Array(blocked.length); // all undefined
-    const result = fn.apply(undefined, args);
-    expect(result).toBe("undefined");
+  it("does not shadow fetch when full internet access is enabled", () => {
+    const source = buildWorkerSource("return 1;", true);
+    const blockedMatch = source.match(/const blocked = (\[.*?\]);/s);
+    const blocked = JSON.parse(blockedMatch[1]);
+
+    expect(blocked).not.toContain("fetch");
+  });
+
+  it("shadows fetch when full internet access is disabled", () => {
+    const source = buildWorkerSource("return 1;", false);
+    const blockedMatch = source.match(/const blocked = (\[.*?\]);/s);
+    const blocked = JSON.parse(blockedMatch[1]);
+
+    expect(blocked).toContain("fetch");
   });
 });

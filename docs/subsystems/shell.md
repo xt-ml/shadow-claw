@@ -32,11 +32,15 @@ export async function executeShell(
   groupId: string,
   env: Record<string, string> = {},
   timeoutSec = 30,
+  allowFullInternetAccess = false,
 ): Promise<ShellResult> {
   const fs = await createFileSystem(db, groupId);
   const bash = new Bash({
     fs,
-    network: { dangerouslyAllowFullInternetAccess: true },
+    network: {
+      dangerouslyAllowFullInternetAccess: allowFullInternetAccess,
+      denyPrivateRanges: !allowFullInternetAccess,
+    },
   });
 
   const result = await bash.exec(command, {
@@ -104,6 +108,14 @@ Real AST POSIX parsing with loops (`for`, `while`), string manipulations, and co
 ## Timeout
 
 Commands are constrained by `timeoutSec` (default 30 seconds). For long-running operations via WebVM, the `VM_BASH_TIMEOUT_SEC` config key controls the timeout (default 900s / 15 minutes).
+
+## Network Access Control
+
+Network connectivity for the POSIX shell environment is managed dynamically:
+
+- **Toggle State:** Controlled via the shared **Internet Access** option in the Tools configuration panel (`VM_BASH_FULL_INTERNET_ACCESS`).
+- **Enabled:** `just-bash` network property has `dangerouslyAllowFullInternetAccess: true` and `denyPrivateRanges: false`.
+- **Disabled:** Public ranges are blocked (`denyPrivateRanges: true`), preventing outgoing internet access while retaining local sandboxed operations.
 
 ## Adding a Shell Command
 

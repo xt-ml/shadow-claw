@@ -122,6 +122,7 @@ describe("executeTool.js", () => {
         GIT_AUTHOR_NAME: "git-author-name",
         GIT_AUTHOR_EMAIL: "git-author-email",
         VM_BASH_TIMEOUT_SEC: "vm-bash-timeout-sec",
+        VM_BASH_FULL_INTERNET_ACCESS: "vm-bash-full-internet-access",
         TOOL_PROFILES: "tool_profiles",
       },
       DEFAULT_DEV_HOST: "localhost",
@@ -402,6 +403,7 @@ describe("executeTool.js", () => {
       "group1",
       {},
       1,
+      false,
     );
     expect(mockFormatShellOutput).toHaveBeenCalledWith({
       stdout: "shell fallback output",
@@ -445,6 +447,7 @@ describe("executeTool.js", () => {
       "group1",
       {},
       1,
+      false,
     );
     expect(mockPost).toHaveBeenCalledWith({
       type: "show-toast",
@@ -495,6 +498,70 @@ describe("executeTool.js", () => {
       db: {},
       groupId: "group1",
     });
+  });
+
+  it("passes false to shell when vm_bash_full_internet_access is false", async () => {
+    (mockGetVMBootModePreference as any).mockReturnValue("disabled");
+    (mockGetConfig as any).mockImplementation((_: any, key: string) => {
+      if (key === "vm-bash-full-internet-access") {
+        return "false";
+      }
+
+      return undefined;
+    });
+    (mockExecuteShell as any).mockResolvedValue({
+      stdout: "shell fallback output",
+      stderr: "",
+      exitCode: 0,
+    });
+
+    await executeTool(
+      {},
+      "bash",
+      { command: "curl https://example.com" },
+      "group1",
+    );
+
+    expect(mockExecuteShell).toHaveBeenCalledWith(
+      {} as any,
+      "curl https://example.com",
+      "group1",
+      {},
+      120,
+      false,
+    );
+  });
+
+  it("passes true to shell when vm_bash_full_internet_access is true", async () => {
+    (mockGetVMBootModePreference as any).mockReturnValue("disabled");
+    (mockGetConfig as any).mockImplementation((_: any, key: string) => {
+      if (key === "vm-bash-full-internet-access") {
+        return "true";
+      }
+
+      return undefined;
+    });
+    (mockExecuteShell as any).mockResolvedValue({
+      stdout: "shell fallback output",
+      stderr: "",
+      exitCode: 0,
+    });
+
+    await executeTool(
+      {},
+      "bash",
+      { command: "curl https://example.com" },
+      "group1",
+    );
+
+    expect(mockExecuteShell).toHaveBeenCalledWith(
+      {} as any,
+      "curl https://example.com",
+      "group1",
+      {},
+      120,
+      true,
+    );
   });
 
   it("should handle read_file tool", async () => {
@@ -1518,7 +1585,7 @@ describe("executeTool.js", () => {
       "group1",
     );
 
-    expect(mockSandboxedEval).toHaveBeenCalledWith("1+1");
+    expect(mockSandboxedEval).toHaveBeenCalledWith("1+1", undefined, false);
     expect(result).toBe("2");
   });
 
@@ -1537,7 +1604,11 @@ describe("executeTool.js", () => {
 
     expect(result).toContain("(no return value)");
     expect(result).toContain("Hint:");
-    expect(mockSandboxedEval).toHaveBeenCalledWith("undefined");
+    expect(mockSandboxedEval).toHaveBeenCalledWith(
+      "undefined",
+      undefined,
+      false,
+    );
 
     (mockSandboxedEval as any).mockResolvedValue({ ok: true, value: null });
 
@@ -1545,7 +1616,7 @@ describe("executeTool.js", () => {
       executeTool({} as any, "javascript", { code: "null" }, "group1"),
     ).resolves.toBe("null");
 
-    expect(mockSandboxedEval).toHaveBeenCalledWith("null");
+    expect(mockSandboxedEval).toHaveBeenCalledWith("null", undefined, false);
   });
 
   it("should handle javascript tool errors via sandboxedEval", async () => {
@@ -1561,8 +1632,23 @@ describe("executeTool.js", () => {
       "group1",
     );
 
-    expect(mockSandboxedEval).toHaveBeenCalledWith("x");
+    expect(mockSandboxedEval).toHaveBeenCalledWith("x", undefined, false);
     expect(result).toBe("JavaScript error: x is not defined");
+  });
+
+  it("should disable javascript fetch when shared internet config is false", async () => {
+    (mockGetConfig as any).mockImplementation((_: any, key: string) => {
+      if (key === "vm-bash-full-internet-access") {
+        return "false";
+      }
+
+      return undefined;
+    });
+    (mockSandboxedEval as any).mockResolvedValue({ ok: true, value: 2 });
+
+    await executeTool({}, "javascript", { code: "1+1" }, "group1");
+
+    expect(mockSandboxedEval).toHaveBeenCalledWith("1+1", undefined, false);
   });
 
   it("should handle list_tasks tool", async () => {

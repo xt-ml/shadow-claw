@@ -11,7 +11,7 @@ const REPORT_ONLY_CSP_DIRECTIVES = [
   "script-src 'self'",
   "worker-src 'self' blob:",
   "connect-src 'self' https: wss: ws: data:",
-  `trusted-types ${getTrustedTypesPolicyName()} dompurify default`,
+  `trusted-types ${getTrustedTypesPolicyName()} shadowclaw-sandbox dompurify default`,
   "require-trusted-types-for 'script'",
 ].join("; ");
 

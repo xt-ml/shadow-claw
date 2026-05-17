@@ -448,6 +448,9 @@ describe("config.js", () => {
       expect(CONFIG_KEYS.VM_BOOT_HOST).toBe("vm_boot_host");
       expect(CONFIG_KEYS.VM_NETWORK_RELAY_URL).toBe("vm_network_relay_url");
       expect(CONFIG_KEYS.VM_BASH_TIMEOUT_SEC).toBe("vm_bash_timeout_sec");
+      expect(CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS).toBe(
+        "vm_bash_full_internet_access",
+      );
       expect(CONFIG_KEYS.REMOTE_MCP_CONNECTIONS).toBe("remote_mcp_connections");
       expect(CONFIG_KEYS.INTEGRATION_CONNECTIONS).toBe(
         "integration_connections",

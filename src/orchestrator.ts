@@ -199,6 +199,7 @@ export class Orchestrator {
   telegramUseProxy: boolean = false;
   triggerPattern: RegExp = buildTriggerPattern(ASSISTANT_NAME);
   useProxy: boolean = false;
+  vmBashFullInternetAccess: boolean = false;
   vmBootMode: VMBootMode = "disabled";
   vmStatus: VMStatus = {
     ready: false,
@@ -354,6 +355,12 @@ export class Orchestrator {
       CONFIG_KEYS.WEBMCP_TOOLS_ENABLED,
     );
     this.webMcpToolsEnabled = storedWebMcpToolsEnabled === "true";
+
+    const storedBashFullInternetAccess = await getConfig(
+      db,
+      CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS,
+    );
+    this.vmBashFullInternetAccess = storedBashFullInternetAccess === "true";
 
     // Load WebMCP mode preference (default: polyfill)
     const storedWebMcpMode = await getConfig(db, CONFIG_KEYS.WEBMCP_MODE);
@@ -905,6 +912,22 @@ export class Orchestrator {
     const normalized = Math.min(Math.max(Math.floor(timeoutSec), 1), 1800);
 
     await setConfig(db, CONFIG_KEYS.VM_BASH_TIMEOUT_SEC, String(normalized));
+  }
+
+  getVMBashFullInternetAccess(): boolean {
+    return this.vmBashFullInternetAccess;
+  }
+
+  async setVMBashFullInternetAccess(
+    db: ShadowClawDatabase,
+    enabled: boolean,
+  ): Promise<void> {
+    this.vmBashFullInternetAccess = !!enabled;
+    await setConfig(
+      db,
+      CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS,
+      this.vmBashFullInternetAccess ? "true" : "false",
+    );
   }
 
   getVMStatus(): VMStatus {

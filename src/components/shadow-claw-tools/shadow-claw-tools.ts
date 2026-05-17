@@ -65,6 +65,9 @@ export class ShadowClawTools extends ShadowClawElement {
     const webMcpToggle = root.querySelector(
       ".tools__webmcp-toggle",
     ) as HTMLInputElement | null;
+    const internetAccessToggle = root.querySelector(
+      ".tools__internet-access-toggle",
+    ) as HTMLInputElement | null;
     const webMcpModeSelect = root.querySelector(
       ".tools__webmcp-mode",
     ) as HTMLSelectElement | null;
@@ -82,6 +85,15 @@ export class ShadowClawTools extends ShadowClawElement {
                 this.orchestrator.getWebMcpMode() || "polyfill";
             }
           }
+        }),
+      );
+    }
+
+    if (internetAccessToggle) {
+      this.addCleanup(
+        effect(() => {
+          internetAccessToggle.checked =
+            orchestratorStore.vmBashFullInternetAccess;
         }),
       );
     }
@@ -173,6 +185,31 @@ export class ShadowClawTools extends ShadowClawElement {
           webMcpToggle.checked = !next;
           showError(
             `Failed to update WebMCP setting: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
+      });
+    }
+
+    // Shared full internet access toggle listener
+    const internetAccessToggle = root.querySelector(
+      ".tools__internet-access-toggle",
+    ) as HTMLInputElement | null;
+    if (internetAccessToggle) {
+      internetAccessToggle.addEventListener("change", async () => {
+        const next = internetAccessToggle.checked;
+        try {
+          await orchestratorStore.setVMBashFullInternetAccess(db, next);
+          showInfo(
+            next
+              ? "Full internet access enabled for Bash and JavaScript tools"
+              : "Full internet access disabled for Bash and JavaScript tools",
+          );
+        } catch (err) {
+          internetAccessToggle.checked = !next;
+          showError(
+            `Failed to update internet access setting: ${
               err instanceof Error ? err.message : String(err)
             }`,
           );

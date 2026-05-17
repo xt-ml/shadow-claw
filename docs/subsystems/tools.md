@@ -97,7 +97,7 @@ Saved profiles can specify a `providerId`. When the orchestrator switches to a m
 ### Execution tools
 
 - **`bash`** — Prefers WebVM, falls back to JS shell (see [WebVM](vm.md) and [Shell](shell.md))
-- **`javascript`** — Sandboxed strict-mode via `sandboxedEval()` (`src/worker/sandboxedEval.ts`). Code **must use `return`** to produce output. No DOM, network, `eval`, or `Function`.
+- **`javascript`** — Sandboxed strict-mode via `sandboxedEval()` (`src/worker/sandboxedEval.ts`). Code **must use `return`** to produce output. No DOM, `eval`, or `Function`. Network `fetch` is enabled/disabled by the shared Tool Configuration -> Internet Access toggle.
 
 ### Web tools
 

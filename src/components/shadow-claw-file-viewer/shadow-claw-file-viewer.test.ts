@@ -14,6 +14,7 @@ jest.unstable_mockModule("../../security/trusted-types.js", () => ({
 
     return html;
   }),
+  toTrustedScriptUrl: jest.fn((url: string) => url),
 }));
 
 jest.unstable_mockModule("../../stores/file-viewer.js", () => ({

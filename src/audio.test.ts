@@ -44,23 +44,22 @@ describe("audio", () => {
     }
   });
 
-  it("creates AudioContext eagerly on module load", async () => {
+  it("creates AudioContext lazily on first access", async () => {
     const ctx = createMockAudioContext();
     const CtxCtor = jest.fn(() => ctx);
 
     (window as any).AudioContext = CtxCtor;
 
-    // Importing the module triggers eager construction in the new audio.ts
     const { getAudioContext } = await import("./audio.js");
 
-    expect(CtxCtor).toHaveBeenCalledTimes(1);
+    expect(CtxCtor).not.toHaveBeenCalled();
 
     const a = getAudioContext();
     const b = getAudioContext();
 
     expect(a).toBe(ctx);
     expect(b).toBe(ctx);
-    expect(CtxCtor).toHaveBeenCalledTimes(1); // Memoized/Eager already happened
+    expect(CtxCtor).toHaveBeenCalledTimes(1);
   });
 
   it("plays two oscillators for notification chime", async () => {
@@ -78,7 +77,7 @@ describe("audio", () => {
     expect(ctx.createGain).toHaveBeenCalledTimes(2);
   });
 
-  it("does not play audio before user unlock (even if context exists)", async () => {
+  it("does not create or play audio before user unlock", async () => {
     const ctx = createMockAudioContext("running");
     const CtxCtor = jest.fn(() => ctx);
 
@@ -86,9 +85,9 @@ describe("audio", () => {
 
     const { playNotificationChime } = await import("./audio.js");
 
-    // Context was created by import, but chime should be blocked by audioUnlocked flag
     playNotificationChime();
 
+    expect(CtxCtor).not.toHaveBeenCalled();
     expect(ctx.createOscillator).not.toHaveBeenCalled();
     expect(ctx.createGain).not.toHaveBeenCalled();
   });
@@ -100,7 +99,6 @@ describe("audio", () => {
 
     const { getAudioContext, resumeAudioContext } = await import("./audio.js");
 
-    // Context created on import
     const a = getAudioContext();
     expect(a.state).toBe("suspended");
 

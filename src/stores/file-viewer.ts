@@ -2,6 +2,7 @@ import { Signal } from "signal-polyfill";
 
 import { readGroupFile } from "../storage/readGroupFile.js";
 import { readGroupFileBytes } from "../storage/readGroupFileBytes.js";
+import { getGroupFile } from "../storage/getGroupFile.js";
 import { DEFAULT_GROUP_ID } from "../config.js";
 import type { ShadowClawDatabase } from "../types.js";
 
@@ -11,6 +12,7 @@ export interface FileInfo {
   content: string;
   kind: "text" | "pdf" | "binary";
   binaryContent: Uint8Array | null;
+  nativeFile?: File | null;
   mimeType: string;
 }
 
@@ -64,14 +66,15 @@ export class FileViewerStore {
       }
 
       if (binaryMimeType) {
-        const binaryContent = await readGroupFileBytes(db, groupId, path);
+        const nativeFile = await getGroupFile(db, groupId, path);
 
         this._file.set({
           name,
           path,
           content: "",
           kind: "binary",
-          binaryContent,
+          binaryContent: null,
+          nativeFile,
           mimeType: binaryMimeType,
         });
 
@@ -123,6 +126,8 @@ export class FileViewerStore {
       jpeg: "image/jpeg",
       jpg: "image/jpeg",
       m4a: "audio/mp4",
+      mkv: "video/x-matroska",
+      mov: "video/mp4",
       mp3: "audio/mpeg",
       mp4: "video/mp4",
       oga: "audio/ogg",

@@ -80,4 +80,36 @@ describe("trusted-types helpers", () => {
     expect(element.innerHTML).toContain("<p>ok</p>");
     expect(element.innerHTML).not.toContain("<script>");
   });
+
+  it("creates a trusted script URL when Trusted Types are supported", async () => {
+    const createPolicy = jest.fn(
+      (_: string, rules: { createScriptURL?: (input: string) => string }) => ({
+        createScriptURL: (input: string) => ({
+          __trustedScriptUrl: rules.createScriptURL?.(input) ?? input,
+        }),
+      }),
+    );
+
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: {
+        createPolicy,
+      },
+    });
+
+    const { getTrustedTypesPolicyName, toTrustedScriptUrl } =
+      await import("./trusted-types.js");
+
+    const url = toTrustedScriptUrl("blob:test") as {
+      __trustedScriptUrl: string;
+    };
+
+    expect(createPolicy).toHaveBeenCalledWith(
+      getTrustedTypesPolicyName(),
+      expect.objectContaining({
+        createScriptURL: expect.any(Function),
+      }),
+    );
+    expect(url.__trustedScriptUrl).toBe("blob:test");
+  });
 });

@@ -6,7 +6,11 @@ import {
   invalidateStorageRoot,
   isStaleHandleError,
 } from "./storage.js";
-import { writeFileHandle, writeOpfsPathViaWorker } from "./writeFileHandle.js";
+import {
+  writeFileHandle,
+  writeOpfsPathViaWorker,
+  type WriteContent,
+} from "./writeFileHandle.js";
 import type { ShadowClawDatabase } from "../types.js";
 
 /**
@@ -17,7 +21,7 @@ export async function writeGroupFile(
   db: ShadowClawDatabase,
   groupId: string,
   filePath: string,
-  content: string,
+  content: WriteContent,
 ): Promise<void> {
   const { dirs, filename } = parsePath(filePath);
 

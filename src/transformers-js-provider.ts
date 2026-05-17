@@ -6,6 +6,7 @@ import { executeTool } from "./worker/executeTool.js";
 import { getConfig } from "./db/getConfig.js";
 import { CONFIG_KEYS } from "./config.js";
 import { sanitizeModelOutput } from "./chat-template-sanitizer.js";
+import { toTrustedScriptUrl } from "./security/trusted-types.js";
 
 class TransformersJsManager {
   private worker: Worker | null = null;
@@ -20,7 +21,9 @@ class TransformersJsManager {
   private getWorker() {
     if (!this.worker) {
       this.worker = new Worker(
-        new URL("./transformers-js.worker.js", import.meta.url),
+        toTrustedScriptUrl(
+          new URL("./transformers-js.worker.js", import.meta.url).href,
+        ) as string,
         {
           type: "module",
         },

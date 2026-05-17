@@ -493,6 +493,12 @@ export class OrchestratorStore {
       return;
     }
 
+    const message =
+      typeof entry.message === "string" ? entry.message.trim() : "";
+    if (!message) {
+      return;
+    }
+
     if (entry.level === "info" && entry.label === "Starting") {
       this._activityLogSessionStartedAtByGroup.set(
         groupId,
@@ -510,7 +516,7 @@ export class OrchestratorStore {
           groupId,
           level: entry.level,
           label: entry.label,
-          message: entry.message,
+          message,
           timestamp: new Date().toISOString(),
           sessionStartedAt,
         }),

@@ -35,6 +35,7 @@ function installGetOrInsertComputedPolyfill() {
 installGetOrInsertComputedPolyfill();
 
 // Keep worker source aligned with the local bundled worker.
+// pdf.js validates this as a primitive string and throws for object-like values.
 GlobalWorkerOptions.workerSrc = "./pdf.worker.js";
 
 export interface PdfFile {

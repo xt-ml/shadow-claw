@@ -1,5 +1,11 @@
 import { Signal } from "signal-polyfill";
 
+export interface ClipboardItem {
+  sourcePath: string;
+  type: "cut" | "copy";
+  isDirectory: boolean;
+}
+
 /**
  * UI-only state for the Files page.
  */
@@ -7,11 +13,13 @@ export class FilesUiStore {
   private _isDragActive: Signal.State<boolean>;
   private _uploadCompleted: Signal.State<number>;
   private _uploadTotal: Signal.State<number>;
+  private _clipboard: Signal.State<ClipboardItem | null>;
 
   constructor() {
     this._isDragActive = new Signal.State(false);
     this._uploadCompleted = new Signal.State(0);
     this._uploadTotal = new Signal.State(0);
+    this._clipboard = new Signal.State<ClipboardItem | null>(null);
   }
 
   get isDragActive(): boolean {
@@ -24,6 +32,10 @@ export class FilesUiStore {
 
   get uploadTotal(): number {
     return this._uploadTotal.get();
+  }
+
+  get clipboard(): ClipboardItem | null {
+    return this._clipboard.get();
   }
 
   setDragActive(active: boolean): void {
@@ -42,6 +54,18 @@ export class FilesUiStore {
   resetUpload(): void {
     this._uploadTotal.set(0);
     this._uploadCompleted.set(0);
+  }
+
+  setClipboard(
+    sourcePath: string,
+    type: "cut" | "copy",
+    isDirectory: boolean,
+  ): void {
+    this._clipboard.set({ sourcePath, type, isDirectory });
+  }
+
+  clearClipboard(): void {
+    this._clipboard.set(null);
   }
 }
 

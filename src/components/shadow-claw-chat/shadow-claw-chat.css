@@ -660,6 +660,12 @@
   outline: none;
 }
 
+.chat__usage-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
 .chat__token-usage {
   align-items: center;
   color: var(--shadow-claw-text-tertiary);

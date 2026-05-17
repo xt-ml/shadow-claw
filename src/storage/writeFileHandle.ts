@@ -1,3 +1,5 @@
+import { toTrustedScriptUrl } from "../security/trusted-types.js";
+
 export type WriteContent = string | Blob | ArrayBuffer | Uint8Array;
 
 /**
@@ -97,7 +99,7 @@ export async function writeOpfsPathViaWorker(
       blobUrl = URL.createObjectURL(
         new Blob([src], { type: "text/javascript" }),
       );
-      worker = new Worker(blobUrl);
+      worker = new Worker(toTrustedScriptUrl(blobUrl) as string);
     } catch {
       if (blobUrl) {
         URL.revokeObjectURL(blobUrl);

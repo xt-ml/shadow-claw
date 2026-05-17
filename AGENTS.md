@@ -86,3 +86,4 @@ When `git_merge` encounters conflicts, it returns a **structured conflict report
 - **Do not** store API keys in plaintext — always go through `src/crypto.ts`.
 - **Do not** import Electron modules from browser-side `.ts` files — Electron is desktop-only.
 - **Do not** commit `dist-electron/`, `push-subscriptions.db`, or `scheduled-tasks.db` — they are git-ignored.
+- **Do not** allow file-browser copy/move flows to target the same folder or any descendant folder; enforce the guard in both UI and storage paths and cover it with tests.

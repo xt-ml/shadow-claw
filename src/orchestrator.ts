@@ -33,6 +33,7 @@ import {
 } from "./webmcp.js";
 
 import { playNotificationChime } from "./audio.js";
+import { toTrustedScriptUrl } from "./security/trusted-types.js";
 import { decryptValue, encryptValue } from "./crypto.js";
 import { effect } from "./effect.js";
 import { modelRegistry } from "./model-registry.js";
@@ -408,7 +409,9 @@ export class Orchestrator {
     this.applyAllChannelRunningStates();
 
     this.agentWorker = new Worker(
-      new URL("./agent.worker.js", import.meta.url),
+      toTrustedScriptUrl(
+        new URL("./agent.worker.js", import.meta.url).href,
+      ) as string,
       {
         type: "module",
       },

@@ -1,5 +1,5 @@
 import { InMemoryFs } from "just-bash";
-import { readGroupFile } from "../storage/readGroupFile.js";
+import { readGroupFileBytes } from "../storage/readGroupFileBytes.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
 import { deleteGroupFile } from "../storage/deleteGroupFile.js";
 import { listGroupFiles } from "../storage/listGroupFiles.js";
@@ -36,6 +36,37 @@ export class ShadowClawFileSystem extends InMemoryFs {
     return null;
   }
 
+  private _basename(path: string): string {
+    const parts = path.split("/").filter(Boolean);
+
+    return parts[parts.length - 1] || "";
+  }
+
+  private _joinPath(dir: string, name: string): string {
+    const normalizedDir = dir.replace(/\/+$/, "");
+    if (!normalizedDir) {
+      return `/${name}`;
+    }
+
+    return `${normalizedDir}/${name}`;
+  }
+
+  private _isDirectoryStat(stat: any): boolean {
+    if (stat && typeof stat.isDirectory === "function") {
+      return !!stat.isDirectory();
+    }
+
+    return !!stat?.isDirectory;
+  }
+
+  private async _readPathContent(path: string): Promise<Uint8Array | string> {
+    try {
+      return await super.readFileBuffer(path);
+    } catch {
+      return await super.readFile(path);
+    }
+  }
+
   // Hook all methods that mutate file system
 
   override async writeFile(
@@ -48,7 +79,7 @@ export class ShadowClawFileSystem extends InMemoryFs {
     // Read final state from in-memory and write back to DB
     const dbPath = this._toDbPath(path);
     if (dbPath !== null) {
-      const finalContent = await super.readFile(path);
+      const finalContent = await this._readPathContent(path);
       await writeGroupFile(this.db, this.groupId, dbPath, finalContent);
     }
   }
@@ -61,7 +92,7 @@ export class ShadowClawFileSystem extends InMemoryFs {
 
     const dbPath = this._toDbPath(path);
     if (dbPath !== null) {
-      const finalContent = await super.readFile(path);
+      const finalContent = await this._readPathContent(path);
       await writeGroupFile(this.db, this.groupId, dbPath, finalContent);
     }
   }
@@ -102,8 +133,8 @@ export class ShadowClawFileSystem extends InMemoryFs {
     if (dbDest !== null) {
       try {
         const stats = await super.stat(dest);
-        if (!stats.isDirectory) {
-          const finalContent = await super.readFile(dest);
+        if (!this._isDirectoryStat(stats)) {
+          const finalContent = await this._readPathContent(dest);
           await writeGroupFile(this.db, this.groupId, dbDest, finalContent);
         }
       } catch {}
@@ -113,13 +144,33 @@ export class ShadowClawFileSystem extends InMemoryFs {
   override async mv(src: string, dest: string): Promise<void> {
     await super.mv(src, dest);
 
+    let persistedDestInWorkspace = false;
+    let resolvedDestPath = dest;
+
     const dbDest = this._toDbPath(dest);
     if (dbDest !== null) {
       try {
-        const stats = await super.stat(dest);
-        if (!stats.isDirectory) {
-          const finalContent = await super.readFile(dest);
-          await writeGroupFile(this.db, this.groupId, dbDest, finalContent);
+        const destStats = await super.stat(dest);
+        if (this._isDirectoryStat(destStats)) {
+          const sourceName = this._basename(src);
+          if (sourceName) {
+            resolvedDestPath = this._joinPath(dest, sourceName);
+          }
+        }
+
+        const finalStats = await super.stat(resolvedDestPath);
+        if (!this._isDirectoryStat(finalStats)) {
+          const dbResolvedDest = this._toDbPath(resolvedDestPath);
+          if (dbResolvedDest !== null) {
+            const finalContent = await this._readPathContent(resolvedDestPath);
+            await writeGroupFile(
+              this.db,
+              this.groupId,
+              dbResolvedDest,
+              finalContent,
+            );
+            persistedDestInWorkspace = true;
+          }
         }
       } catch {}
     }
@@ -127,7 +178,9 @@ export class ShadowClawFileSystem extends InMemoryFs {
     const dbSrc = this._toDbPath(src);
     if (dbSrc !== null) {
       try {
-        await deleteGroupFile(this.db, this.groupId, dbSrc);
+        if (dbDest === null || persistedDestInWorkspace) {
+          await deleteGroupFile(this.db, this.groupId, dbSrc);
+        }
       } catch {}
     }
   }
@@ -141,6 +194,7 @@ export async function createFileSystem(
   groupId: string,
 ): Promise<ShadowClawFileSystem> {
   const files = {};
+  const directories = new Set<string>();
   const workspacePrefix = "/home/user";
 
   async function traverse(dirPath: string): Promise<void> {
@@ -149,13 +203,14 @@ export async function createFileSystem(
       if (entry.endsWith("/")) {
         const dirName = entry.slice(0, -1);
         const childPath = dirPath === "." ? dirName : `${dirPath}/${dirName}`;
+        directories.add(childPath);
         await traverse(childPath);
       } else {
         const filePath = dirPath === "." ? entry : `${dirPath}/${entry}`;
         const fsPath = `${workspacePrefix}/${filePath}`;
         files[fsPath] = async () => {
           try {
-            return await readGroupFile(db, groupId, filePath);
+            return await readGroupFileBytes(db, groupId, filePath);
           } catch {
             return "";
           }
@@ -165,6 +220,18 @@ export async function createFileSystem(
   }
 
   await traverse(".");
+  const fs = new ShadowClawFileSystem(db, groupId, files, workspacePrefix);
 
-  return new ShadowClawFileSystem(db, groupId, files, workspacePrefix);
+  // Ensure empty directories are visible to shell commands (ls/cd/mv destination checks).
+  for (const dirPath of [...directories].sort(
+    (a, b) => a.split("/").length - b.split("/").length,
+  )) {
+    try {
+      fs.mkdirSync(`${workspacePrefix}/${dirPath}`, { recursive: true });
+    } catch {
+      // Ignore directory re-creation races or malformed entries.
+    }
+  }
+
+  return fs;
 }

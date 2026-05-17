@@ -286,6 +286,8 @@ The file viewer component (`<shadow-claw-file-viewer>`) provides dual-mode code 
 
 - **Sanitized Iframe Previews:** Previews render HTML and SVG within a sandboxed `<iframe>` using a per-render nonce CSP header. Custom DOMPurify options (`previewSanitizeOptions`) are applied to configure the `ALLOWED_URI_REGEXP` to specifically allow local `blob:` URLs.
 - **Identity Transform Policy:** In `src/security/trusted-types.ts`, the Trusted Types policy `createHTML` callback acts as an identity transform `(input) => input`. Because the input is pre-sanitized by `sanitizeToTrustedHtml` _before_ hitting the policy, keeping the callback as an identity transform ensures that customized DOMPurify options (such as allowing local blob URLs) are not stripped.
+- **Trusted Script URLs:** The shared Trusted Types helper also exposes a `TrustedScriptURL` path for worker and PDF.js bootstrap URLs so report-only TT policies do not spam the console while still keeping the policy in place.
+- **Blob Media Previews:** Audio and video previews use local blob URLs, so the report-only CSP allows `media-src 'self' data: blob:` in addition to image blob URLs.
 
 #### Workspace Asset Resolution
 

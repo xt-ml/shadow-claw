@@ -9,6 +9,8 @@ import { renameGroupEntry } from "../../storage/renameGroupEntry.js";
 import { restoreAllGroupFilesFromZip } from "../../storage/restoreAllGroupFilesFromZip.js";
 import { uploadGroupFile } from "../../storage/uploadGroupFile.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
+import { copyGroupEntry } from "../../storage/copyGroupEntry.js";
+import { moveGroupEntry } from "../../storage/moveGroupEntry.js";
 
 import { effect } from "../../effect.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
@@ -39,6 +41,7 @@ export class ShadowClawFiles extends ShadowClawElement {
   private _pendingRenameIsDirectory: boolean = false;
   private _isCreatingNewItem: boolean = false;
   private _isRenamingEntry: boolean = false;
+  private _isPastingEntry: boolean = false;
 
   constructor() {
     super();
@@ -58,16 +61,27 @@ export class ShadowClawFiles extends ShadowClawElement {
 
     const content = root.querySelector(".files__content");
 
-    // Re-render when files or path change
+    // Re-render when files, path, or clipboard change
     this.addCleanup(
       effect(() => {
         orchestratorStore.files;
         orchestratorStore.currentPath;
+        filesUiStore.clipboard;
 
         this.updateBreadcrumbs(db);
         this.updateFileList(db);
       }),
     );
+
+    // Keep Paste button visibility/state in sync with clipboard signal.
+    this.addCleanup(
+      effect(() => {
+        filesUiStore.clipboard;
+        this.updatePasteButtonVisibility();
+      }),
+    );
+
+    this.updatePasteButtonVisibility();
 
     // Keep upload progress UI in sync with signal state.
     this.addCleanup(
@@ -232,6 +246,42 @@ export class ShadowClawFiles extends ShadowClawElement {
 
     const syncVmBtn = root.querySelector(".files__sync-vm-btn");
     syncVmBtn?.addEventListener("click", () => this.handleSyncVMToHost(db));
+
+    // Paste button
+    const pasteBtn = root.querySelector(".files__paste-btn");
+    pasteBtn?.addEventListener("click", () => {
+      if (pasteBtn.hasAttribute("disabled")) {
+        return;
+      }
+
+      this.openPasteDialog();
+    });
+
+    // Paste dialog listeners
+    const pasteDialog = root.querySelector(".files__paste-dialog");
+    const pasteCancelBtn = root.querySelector(".files__paste-cancel");
+    const pasteForm = root.querySelector(".files__paste-form");
+
+    pasteDialog?.addEventListener("cancel", (event) => {
+      if (this._isPastingEntry) {
+        event.preventDefault();
+      }
+    });
+
+    pasteCancelBtn?.addEventListener("click", () => {
+      if (this._isPastingEntry) {
+        return;
+      }
+
+      if (pasteDialog instanceof HTMLDialogElement) {
+        pasteDialog.close();
+      }
+    });
+
+    pasteForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await this.handlePasteEntry(db);
+    });
   }
 
   disconnectedCallback() {
@@ -434,14 +484,17 @@ export class ShadowClawFiles extends ShadowClawElement {
       item.setAttribute("role", "listitem");
       item.setAttribute("data-file-name", name);
 
+      const itemPath = currentPath === "." ? file : `${currentPath}/${file}`;
+      const clipboard = filesUiStore.clipboard;
+      if (
+        clipboard &&
+        clipboard.type === "cut" &&
+        clipboard.sourcePath === itemPath
+      ) {
+        item.classList.add("files__item--cut");
+      }
+
       const downloadTitle = isDir ? "Download as ZIP" : "Download";
-      const actionsHtml = `
-        <div class="files__actions" aria-label="Actions for ${escapeHtml(name)}">
-          <button type="button" class="files__action-btn files__download" title="${downloadTitle}" aria-label="${downloadTitle} ${escapeHtml(name)}">📥</button>
-          <button type="button" class="files__action-btn files__rename" title="Rename" aria-label="Rename ${escapeHtml(name)}">✏️</button>
-          <button type="button" class="files__action-btn files__action-btn--delete files__delete" title="Delete" aria-label="Delete ${escapeHtml(name)}">🗑️</button>
-        </div>
-      `;
 
       const actionsToggleBtn = document.createElement("button");
       actionsToggleBtn.className = "files__actions-toggle";
@@ -454,9 +507,23 @@ export class ShadowClawFiles extends ShadowClawElement {
           <div class="files__icon" aria-hidden="true">${isDir ? "📁" : "📄"}</div>
           <div class="files__name">${escapeHtml(name)}</div>
         </button>
-        ${actionsHtml}
       `;
       item.appendChild(actionsToggleBtn);
+
+      const actionsContainer = document.createElement("div");
+      actionsContainer.className = "files__actions";
+      actionsContainer.setAttribute(
+        "aria-label",
+        `Actions for ${escapeHtml(name)}`,
+      );
+      actionsContainer.innerHTML = `
+        <button type="button" class="files__action-btn files__cut" title="Cut" aria-label="Cut ${escapeHtml(name)}">✂️</button>
+        <button type="button" class="files__action-btn files__copy" title="Copy" aria-label="Copy ${escapeHtml(name)}">📋</button>
+        <button type="button" class="files__action-btn files__download" title="${downloadTitle}" aria-label="${downloadTitle} ${escapeHtml(name)}">📥</button>
+        <button type="button" class="files__action-btn files__rename" title="Rename" aria-label="Rename ${escapeHtml(name)}">✏️</button>
+        <button type="button" class="files__action-btn files__action-btn--delete files__delete" title="Delete" aria-label="Delete ${escapeHtml(name)}">🗑️</button>
+      `;
+      item.appendChild(actionsContainer);
 
       // Click to open file or navigate into folder
       const itemMain = item.querySelector(".files__item-main");
@@ -482,6 +549,28 @@ export class ShadowClawFiles extends ShadowClawElement {
       actionsToggleBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         item.classList.toggle("show-actions");
+      });
+
+      // Cut button
+      const cutBtn = item.querySelector(".files__cut");
+      cutBtn?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        item.classList.remove("show-actions");
+
+        const itemPath = currentPath === "." ? file : `${currentPath}/${file}`;
+        filesUiStore.setClipboard(itemPath, "cut", isDir);
+        showSuccess(`Cut ${name} (ready to move)`, 2500);
+      });
+
+      // Copy button
+      const copyBtn = item.querySelector(".files__copy");
+      copyBtn?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        item.classList.remove("show-actions");
+
+        const itemPath = currentPath === "." ? file : `${currentPath}/${file}`;
+        filesUiStore.setClipboard(itemPath, "copy", isDir);
+        showSuccess(`Copied ${name} to clipboard`, 2500);
       });
 
       // Download button (for both files and directories)
@@ -1158,6 +1247,181 @@ export class ShadowClawFiles extends ShadowClawElement {
       if (btn) {
         btn.textContent = "🗑️ Clear All";
       }
+    }
+  }
+
+  openPasteDialog() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const dialog = root.querySelector(".files__paste-dialog");
+    const messageEl = root.querySelector(".files__paste-message");
+
+    if (!(dialog instanceof HTMLDialogElement)) {
+      return;
+    }
+
+    const clipboard = filesUiStore.clipboard;
+    if (!clipboard) {
+      showWarning("Nothing in clipboard to paste", 3000);
+
+      return;
+    }
+
+    if (
+      this.isInvalidFolderPasteTarget(clipboard, orchestratorStore.currentPath)
+    ) {
+      showWarning(
+        "Cannot paste a folder into itself or one of its subfolders",
+        4500,
+      );
+
+      return;
+    }
+
+    this.setPasteDialogBusy(false);
+
+    // Get name of the file/folder being pasted
+    const sourcePath = clipboard.sourcePath.replace(/\/$/, "");
+    const parts = sourcePath.split("/");
+    const name = parts[parts.length - 1];
+
+    const targetDirName =
+      orchestratorStore.currentPath === "."
+        ? "Root"
+        : orchestratorStore.currentPath;
+
+    if (messageEl instanceof HTMLElement) {
+      const operation = clipboard.type === "cut" ? "move" : "copy";
+      messageEl.textContent = `Are you sure you want to ${operation} "${name}" into "${targetDirName}"?`;
+    }
+
+    dialog.showModal();
+  }
+
+  isInvalidFolderPasteTarget(
+    clipboard: { sourcePath: string; isDirectory: boolean },
+    destinationDir: string,
+  ): boolean {
+    if (!clipboard.isDirectory) {
+      return false;
+    }
+
+    if (destinationDir === ".") {
+      return false;
+    }
+
+    const sourceDir = clipboard.sourcePath.replace(/\/+$/, "");
+
+    return (
+      destinationDir === sourceDir || destinationDir.startsWith(`${sourceDir}/`)
+    );
+  }
+
+  setPasteDialogBusy(isBusy: boolean) {
+    this._isPastingEntry = isBusy;
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const cancelBtn = root.querySelector(".files__paste-cancel");
+    const okBtn = root.querySelector(".files__paste-ok");
+
+    if (cancelBtn instanceof HTMLButtonElement) {
+      cancelBtn.disabled = isBusy;
+    }
+
+    if (okBtn instanceof HTMLButtonElement) {
+      okBtn.disabled = isBusy;
+    }
+  }
+
+  updatePasteButtonVisibility() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const clipboard = filesUiStore.clipboard;
+    const pasteBtn = root.querySelector(".files__paste-btn");
+    if (!(pasteBtn instanceof HTMLElement)) {
+      return;
+    }
+
+    const hasClipboardEntry = Boolean(clipboard);
+    pasteBtn.toggleAttribute("hidden", !hasClipboardEntry);
+    pasteBtn.toggleAttribute("disabled", !hasClipboardEntry);
+  }
+
+  async handlePasteEntry(db: ShadowClawDatabase) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    if (this._isPastingEntry) {
+      return;
+    }
+
+    const clipboard = filesUiStore.clipboard;
+    if (!clipboard) {
+      return;
+    }
+
+    const dialog = root.querySelector(".files__paste-dialog");
+    const sourcePath = clipboard.sourcePath;
+    const currentPath = orchestratorStore.currentPath;
+
+    if (this.isInvalidFolderPasteTarget(clipboard, currentPath)) {
+      showWarning(
+        "Cannot paste a folder into itself or one of its subfolders",
+        4500,
+      );
+
+      return;
+    }
+
+    // Compute target path
+    const isDir = clipboard.isDirectory;
+    const sourcePathNoSlash = sourcePath.replace(/\/$/, "");
+    const parts = sourcePathNoSlash.split("/");
+    const name = parts[parts.length - 1];
+
+    // Maintain trailing slash if is directory
+    const fileNameWithSlash = isDir ? `${name}/` : name;
+    const targetPath =
+      currentPath === "."
+        ? fileNameWithSlash
+        : `${currentPath}/${fileNameWithSlash}`;
+
+    try {
+      this.setPasteDialogBusy(true);
+
+      const activeGroupId = orchestratorStore.activeGroupId;
+
+      if (clipboard.type === "copy") {
+        await copyGroupEntry(db, activeGroupId, sourcePath, targetPath);
+        showSuccess(`Copied "${name}" successfully`, 3000);
+      } else {
+        await moveGroupEntry(db, activeGroupId, sourcePath, targetPath);
+        showSuccess(`Moved "${name}" successfully`, 3000);
+        filesUiStore.clearClipboard(); // Clear clipboard after successful move
+      }
+
+      await orchestratorStore.loadFiles(db);
+
+      if (dialog instanceof HTMLDialogElement) {
+        dialog.close();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to paste: ${message}`, 6000);
+    } finally {
+      this.setPasteDialogBusy(false);
     }
   }
 }

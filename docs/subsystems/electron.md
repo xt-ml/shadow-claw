@@ -54,7 +54,7 @@ The Electron main process:
 
 1. **Starts Express server** — same static serving + routes as `src/server/server.ts`
 2. **Registers proxy routes** — Bedrock + Azure OpenAI pass-through
-3. **Applies CSP report-only middleware** — `Content-Security-Policy-Report-Only` header parity with the dev server
+3. **Applies CSP report-only middleware** — `Content-Security-Policy-Report-Only` parity with the dev server plus `/__cspreport` logging
 4. **Opens push store** — SQLite database for VAPID keys + push subscriptions
 5. **Opens task store** — SQLite database for scheduled tasks
 6. **Starts server scheduler** — 60-second cron ticks for scheduled tasks
@@ -78,15 +78,15 @@ The Electron main process:
 
 The Electron app runs the **exact same server stack** as `src/server/server.ts`:
 
-| Feature               | Module                                                             |
-| --------------------- | ------------------------------------------------------------------ |
-| Static file serving   | `express.static()`                                                 |
-| Bedrock + Azure proxy | `src/server/proxy.ts` → `registerProxyRoutes()`                    |
-| CSP report-only       | `src/server/middleware/csp.ts` → `createCspReportOnlyMiddleware()` |
-| Push notifications    | `src/notifications/push-routes.ts`                                 |
-| Task scheduling       | `src/notifications/task-schedule-routes.ts`                        |
-| Activity logging      | `src/server/routes/activity-log.ts`                                |
-| Server-side scheduler | `src/notifications/task-scheduler-server.ts`                       |
+| Feature               | Module                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------ |
+| Static file serving   | `express.static()`                                                                                     |
+| Bedrock + Azure proxy | `src/server/proxy.ts` → `registerProxyRoutes()`                                                        |
+| CSP report-only       | `src/server/middleware/csp.ts` → `createCspReportOnlyMiddleware()` + `src/server/routes/csp-report.ts` |
+| Push notifications    | `src/notifications/push-routes.ts`                                                                     |
+| Task scheduling       | `src/notifications/task-schedule-routes.ts`                                                            |
+| Activity logging      | `src/server/routes/activity-log.ts`                                                                    |
+| Server-side scheduler | `src/notifications/task-scheduler-server.ts`                                                           |
 
 Both entry points call the same functions from shared modules — no code duplication between dev server and desktop app.
 

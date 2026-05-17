@@ -1,4 +1,3 @@
-import HighlightedCode from "highlighted-code";
 import type { Config } from "dompurify";
 
 import { effect } from "../../effect.js";
@@ -63,9 +62,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
 
     this.db = await getDb();
-
-    // Ensure highlighted-code theme is initialized once.
-    HighlightedCode.useTheme("atom-one-dark");
 
     // Apply highlight.js theme to markdown preview output in this shadow root.
     const hjsCss = await fetch(
@@ -1069,22 +1065,27 @@ export class ShadowClawFileViewer extends ShadowClawElement {
   }
 
   renderBinaryPreview(content: HTMLElement, file: any) {
-    const bytes = file.binaryContent;
-    if (!(bytes instanceof Uint8Array) || bytes.length === 0) {
-      content.classList.remove("file-content--raw", "file-content--iframe");
-      content.classList.add("file-content--preview");
-      content.textContent = "Binary content unavailable.";
-
-      return;
-    }
-
     const mimeType = file.mimeType || "application/octet-stream";
-    // Copy into a plain ArrayBuffer-backed view so BlobPart typing is stable in checkJs.
-    const blobBytes = new Uint8Array(bytes.byteLength);
-    blobBytes.set(bytes);
 
-    const blob = new Blob([blobBytes], { type: mimeType });
-    this.currentObjectUrl = URL.createObjectURL(blob);
+    if (file.nativeFile instanceof File) {
+      this.currentObjectUrl = URL.createObjectURL(file.nativeFile);
+    } else {
+      const bytes = file.binaryContent;
+      if (!(bytes instanceof Uint8Array) || bytes.length === 0) {
+        content.classList.remove("file-content--raw", "file-content--iframe");
+        content.classList.add("file-content--preview");
+        content.textContent = "Binary content unavailable.";
+
+        return;
+      }
+
+      // Copy into a plain ArrayBuffer-backed view so BlobPart typing is stable in checkJs.
+      const blobBytes = new Uint8Array(bytes.byteLength);
+      blobBytes.set(bytes);
+
+      const blob = new Blob([blobBytes], { type: mimeType });
+      this.currentObjectUrl = URL.createObjectURL(blob);
+    }
 
     content.classList.remove("file-content--raw", "file-content--preview");
     content.classList.add("file-content--iframe");
@@ -1310,8 +1311,12 @@ export class ShadowClawFileViewer extends ShadowClawElement {
   }
 
   buildWebShareFile(file: any): File | null {
+    if (file?.nativeFile instanceof File) {
+      return file.nativeFile;
+    }
+
     const bytes = file?.binaryContent;
-    if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) {
+    if (!(bytes instanceof Uint8Array) || bytes.length === 0) {
       return null;
     }
 

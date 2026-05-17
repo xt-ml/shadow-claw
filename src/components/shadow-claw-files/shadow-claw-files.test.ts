@@ -50,6 +50,14 @@ jest.unstable_mockModule("../../storage/renameGroupEntry.js", () => ({
   renameGroupEntry: jest.fn(),
 }));
 
+jest.unstable_mockModule("../../storage/copyGroupEntry.js", () => ({
+  copyGroupEntry: jest.fn(),
+}));
+
+jest.unstable_mockModule("../../storage/moveGroupEntry.js", () => ({
+  moveGroupEntry: jest.fn(),
+}));
+
 jest.unstable_mockModule("../../effect.js", () => ({
   effect: jest.fn(() => () => {}),
 }));
@@ -68,6 +76,7 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
   orchestratorStore: {
     activeGroupId: "default",
     currentPath: ".",
+    files: [] as string[],
     loadFiles: jest.fn(),
     db: {},
     triggerFilesRefresh: jest.fn(),
@@ -93,12 +102,16 @@ const { renameGroupEntry } = await import("../../storage/renameGroupEntry.js");
 const { writeGroupFile } = await import("../../storage/writeGroupFile.js");
 const { createGroupDirectory } =
   await import("../../storage/createGroupDirectory.js");
+const { copyGroupEntry } = await import("../../storage/copyGroupEntry.js");
+const { moveGroupEntry } = await import("../../storage/moveGroupEntry.js");
 const { showSuccess, showWarning, showError } = await import("../../toast.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
+const { filesUiStore } = await import("../../stores/files-ui.js");
 
 describe("shadow-claw-files", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    filesUiStore.clearClipboard();
   });
 
   it("registers custom element", () => {
@@ -528,6 +541,314 @@ describe("shadow-claw-files", () => {
 
     resolveWrite?.();
     await Promise.all([first, second]);
+
+    document.body.removeChild(component);
+  });
+
+  it("updates clipboard state on Cut or Copy click", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    // Mock orchestrator files to render list items
+    (orchestratorStore as any).files = ["test-file.txt"];
+    component.updateFileList({} as any);
+
+    const list = component.shadowRoot?.querySelector(".files__list");
+    const item = list?.querySelector(".files__item");
+    const cutBtn = item?.querySelector(".files__cut");
+    const copyBtn = item?.querySelector(".files__copy");
+
+    if (
+      !(cutBtn instanceof HTMLButtonElement) ||
+      !(copyBtn instanceof HTMLButtonElement)
+    ) {
+      throw new Error("Expected Cut and Copy buttons");
+    }
+
+    cutBtn.click();
+    expect(filesUiStore.clipboard).toEqual({
+      sourcePath: "test-file.txt",
+      type: "cut",
+      isDirectory: false,
+    });
+    expect(showSuccess).toHaveBeenCalledWith(
+      "Cut test-file.txt (ready to move)",
+      2500,
+    );
+
+    copyBtn.click();
+    expect(filesUiStore.clipboard).toEqual({
+      sourcePath: "test-file.txt",
+      type: "copy",
+      isDirectory: false,
+    });
+    expect(showSuccess).toHaveBeenCalledWith(
+      "Copied test-file.txt to clipboard",
+      2500,
+    );
+
+    document.body.removeChild(component);
+  });
+
+  it("hides and disables Paste button when clipboard is empty", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    filesUiStore.clearClipboard();
+    component.updatePasteButtonVisibility();
+
+    const pasteBtn = component.shadowRoot?.querySelector(".files__paste-btn");
+    if (!(pasteBtn instanceof HTMLElement)) {
+      throw new Error("Expected Paste button");
+    }
+
+    expect(pasteBtn.hasAttribute("hidden")).toBe(true);
+    expect(pasteBtn.hasAttribute("disabled")).toBe(true);
+
+    document.body.removeChild(component);
+  });
+
+  it("shows and enables Paste button when clipboard has an entry", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    filesUiStore.setClipboard("test-file.txt", "copy", false);
+    component.updatePasteButtonVisibility();
+
+    const pasteBtn = component.shadowRoot?.querySelector(".files__paste-btn");
+    if (!(pasteBtn instanceof HTMLElement)) {
+      throw new Error("Expected Paste button");
+    }
+
+    expect(pasteBtn.hasAttribute("hidden")).toBe(false);
+    expect(pasteBtn.hasAttribute("disabled")).toBe(false);
+
+    document.body.removeChild(component);
+  });
+
+  it("renders more actions toggle before actions container in the DOM to ensure correct tab focus order", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    // Mock orchestrator files to render list items
+    (orchestratorStore as any).files = ["test-file.txt"];
+    component.updateFileList({} as any);
+
+    const list = component.shadowRoot?.querySelector(".files__list");
+    const item = list?.querySelector(".files__item");
+    expect(item).toBeDefined();
+
+    // Find indices of toggle button and actions container in parent children list
+    const children = Array.from(item!.children);
+    const toggleIndex = children.findIndex((el) =>
+      el.classList.contains("files__actions-toggle"),
+    );
+    const actionsIndex = children.findIndex((el) =>
+      el.classList.contains("files__actions"),
+    );
+
+    expect(toggleIndex).toBeGreaterThan(-1);
+    expect(actionsIndex).toBeGreaterThan(-1);
+    // Toggle button MUST come before actions container for correct tab focus flow
+    expect(toggleIndex).toBeLessThan(actionsIndex);
+
+    document.body.removeChild(component);
+  });
+
+  it("opens paste confirmation dialog and triggers handlePasteEntry on submit for copy type", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    filesUiStore.setClipboard("test-file.txt", "copy", false);
+
+    const pasteDialog = component.shadowRoot?.querySelector(
+      ".files__paste-dialog",
+    );
+    const pasteMsg = component.shadowRoot?.querySelector(
+      ".files__paste-message",
+    );
+
+    if (!(pasteDialog as any)) {
+      throw new Error("Expected paste dialog");
+    }
+
+    // Stub native showModal on mock dialog
+    (pasteDialog as any).showModal = jest.fn();
+    (pasteDialog as any).close = jest.fn();
+
+    component.openPasteDialog();
+
+    expect((pasteDialog as any).showModal).toHaveBeenCalled();
+    expect(pasteMsg?.textContent).toContain(
+      'Are you sure you want to copy "test-file.txt"',
+    );
+
+    // Trigger form submit or handlePasteEntry
+    await component.handlePasteEntry({} as any);
+
+    expect(copyGroupEntry).toHaveBeenCalledWith(
+      {} as any,
+      "default",
+      "test-file.txt",
+      "test-file.txt",
+    );
+    expect(showSuccess).toHaveBeenCalledWith(
+      'Copied "test-file.txt" successfully',
+      3000,
+    );
+    expect((pasteDialog as any).close).toHaveBeenCalled();
+
+    document.body.removeChild(component);
+  });
+
+  it("opens paste confirmation dialog and triggers handlePasteEntry on submit for cut type", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    filesUiStore.setClipboard("test-folder/", "cut", true);
+
+    const pasteDialog = component.shadowRoot?.querySelector(
+      ".files__paste-dialog",
+    );
+    const pasteMsg = component.shadowRoot?.querySelector(
+      ".files__paste-message",
+    );
+
+    if (!(pasteDialog as any)) {
+      throw new Error("Expected paste dialog");
+    }
+
+    // Stub native showModal on mock dialog
+    (pasteDialog as any).showModal = jest.fn();
+    (pasteDialog as any).close = jest.fn();
+
+    component.openPasteDialog();
+
+    expect((pasteDialog as any).showModal).toHaveBeenCalled();
+    expect(pasteMsg?.textContent).toContain(
+      'Are you sure you want to move "test-folder"',
+    );
+
+    // Trigger form submit or handlePasteEntry
+    await component.handlePasteEntry({} as any);
+
+    expect(moveGroupEntry).toHaveBeenCalledWith(
+      {} as any,
+      "default",
+      "test-folder/",
+      "test-folder/",
+    );
+    expect(showSuccess).toHaveBeenCalledWith(
+      'Moved "test-folder" successfully',
+      3000,
+    );
+    expect(filesUiStore.clipboard).toBeNull();
+    expect((pasteDialog as any).close).toHaveBeenCalled();
+
+    document.body.removeChild(component);
+  });
+
+  it("disables dialog buttons during Paste execution", async () => {
+    let resolvePaste: (() => void) | undefined;
+    (copyGroupEntry as any).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolvePaste = resolve;
+        }),
+    );
+
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    filesUiStore.setClipboard("test.txt", "copy", false);
+
+    const cancelBtn = component.shadowRoot?.querySelector(
+      ".files__paste-cancel",
+    );
+    const okBtn = component.shadowRoot?.querySelector(".files__paste-ok");
+
+    if (
+      !(cancelBtn instanceof HTMLButtonElement) ||
+      !(okBtn instanceof HTMLButtonElement)
+    ) {
+      throw new Error("Expected paste action buttons");
+    }
+
+    const pending = component.handlePasteEntry({} as any);
+
+    expect(cancelBtn.disabled).toBe(true);
+    expect(okBtn.disabled).toBe(true);
+
+    resolvePaste?.();
+    await pending;
+
+    expect(cancelBtn.disabled).toBe(false);
+    expect(okBtn.disabled).toBe(false);
+
+    document.body.removeChild(component);
+  });
+
+  it("does not open paste dialog when target folder is the clipboard source folder", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    (orchestratorStore as any).currentPath = "project";
+    filesUiStore.setClipboard("project/", "copy", true);
+
+    const pasteDialog = component.shadowRoot?.querySelector(
+      ".files__paste-dialog",
+    );
+
+    if (!(pasteDialog as any)) {
+      throw new Error("Expected paste dialog");
+    }
+
+    (pasteDialog as any).showModal = jest.fn();
+
+    component.openPasteDialog();
+
+    expect((pasteDialog as any).showModal).not.toHaveBeenCalled();
+    expect(showWarning).toHaveBeenCalledWith(
+      "Cannot paste a folder into itself or one of its subfolders",
+      4500,
+    );
+
+    document.body.removeChild(component);
+  });
+
+  it("blocks paste execution when target folder is inside source folder", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await component.render();
+
+    (orchestratorStore as any).currentPath = "project/nested";
+    filesUiStore.setClipboard("project/", "cut", true);
+
+    await component.handlePasteEntry({} as any);
+
+    expect(moveGroupEntry).not.toHaveBeenCalled();
+    expect(copyGroupEntry).not.toHaveBeenCalled();
+    expect(showWarning).toHaveBeenCalledWith(
+      "Cannot paste a folder into itself or one of its subfolders",
+      4500,
+    );
 
     document.body.removeChild(component);
   });

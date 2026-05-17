@@ -1,29 +1,45 @@
 import { getTrustedTypesPolicyName } from "./trusted-types.js";
 
-const REPORT_ONLY_CSP_DIRECTIVES = [
-  "default-src 'self'",
-  "base-uri 'none'",
-  "frame-ancestors 'none'",
-  "object-src 'none'",
-  "img-src 'self' data: blob:",
-  "font-src 'self' data:",
-  "style-src 'self' 'unsafe-inline'",
-  "script-src 'self'",
-  "worker-src 'self' blob:",
-  "connect-src 'self' https: wss: ws: data:",
-  `trusted-types ${getTrustedTypesPolicyName()} shadowclaw-sandbox dompurify default`,
-  "require-trusted-types-for 'script'",
-].join("; ");
+type CspOptions = {
+  includeTrustedTypes?: boolean;
+};
 
-export function buildCspReportOnlyValue(): string {
-  return REPORT_ONLY_CSP_DIRECTIVES;
+export function buildCspReportOnlyValue(options: CspOptions = {}): string {
+  const includeTrustedTypes = options.includeTrustedTypes ?? true;
+
+  const directives = [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+    "object-src 'none'",
+    "img-src 'self' data: blob:",
+    "media-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "style-src 'self' 'unsafe-inline'",
+    "script-src 'self'",
+    "worker-src 'self' blob:",
+    "connect-src 'self' https: wss: ws: data:",
+    "report-uri /__cspreport",
+  ];
+
+  if (includeTrustedTypes) {
+    directives.push(
+      `trusted-types ${getTrustedTypesPolicyName()} shadowclaw-sandbox dompurify default`,
+      "require-trusted-types-for 'script'",
+    );
+  }
+
+  return directives.join("; ");
 }
 
-export function applyCspReportOnlyHeader(res: {
-  setHeader: (name: string, value: string) => unknown;
-}): void {
+export function applyCspReportOnlyHeader(
+  res: {
+    setHeader: (name: string, value: string) => unknown;
+  },
+  options: CspOptions = {},
+): void {
   res.setHeader(
     "Content-Security-Policy-Report-Only",
-    buildCspReportOnlyValue(),
+    buildCspReportOnlyValue(options),
   );
 }

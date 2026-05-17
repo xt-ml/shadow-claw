@@ -218,10 +218,12 @@
 
 .files__actions {
   display: none;
+  flex-wrap: wrap;
   gap: 0.25rem;
   position: absolute;
   right: 2.75rem;
   top: 0.25rem;
+  width: 6rem;
   z-index: 10;
 }
 
@@ -236,7 +238,7 @@
   color: var(--shadow-claw-text-primary);
   cursor: pointer;
   font-size: 0.6875rem;
-  padding: 0.25rem 0.375rem;
+  padding: 0.25rem 0.75rem;
   position: absolute;
   right: 0.25rem;
   top: 0.25rem;
@@ -449,6 +451,104 @@
 .files__new-cancel:disabled,
 .files__rename-ok:disabled,
 .files__rename-cancel:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.files__item--cut {
+  border-style: dashed;
+  opacity: 0.5;
+}
+
+.files__paste-dialog {
+  background-color: var(--shadow-claw-bg-primary);
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-l, 1.5rem);
+  color: var(--shadow-claw-text-primary);
+  max-width: 26rem;
+  padding: 0;
+  width: calc(100vw - 2rem);
+}
+
+.files__paste-dialog::backdrop {
+  background-color: rgba(0, 0, 0, 0.35);
+}
+
+.files__paste-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.files__paste-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.files__paste-message {
+  color: var(--shadow-claw-text-secondary);
+  font-size: var(--shadow-claw-font-size-sm);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.files__paste-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+.files__paste-cancel,
+.files__paste-continue,
+.files__paste-apply,
+.files__paste-ok {
+  background-color: transparent;
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-pill);
+  color: var(--shadow-claw-text-primary);
+  cursor: pointer;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  min-height: 2rem;
+  min-width: 4.5rem;
+  padding: 0.375rem 0.625rem;
+  transition: all 0.15s ease;
+}
+
+.files__paste-continue,
+.files__paste-apply,
+.files__paste-ok {
+  background-color: var(--shadow-claw-text-primary);
+  border-color: var(--shadow-claw-text-primary);
+  color: var(--shadow-claw-bg-primary);
+}
+
+.files__paste-continue:hover,
+.files__paste-continue:focus-visible,
+.files__paste-apply:hover,
+.files__paste-apply:focus-visible,
+.files__paste-ok:hover,
+.files__paste-ok:focus-visible {
+  background-color: var(--shadow-claw-accent-primary);
+  border-color: var(--shadow-claw-accent-primary);
+  color: var(--shadow-claw-on-primary);
+  outline: none;
+}
+
+.files__paste-cancel:hover,
+.files__paste-cancel:focus-visible {
+  border-color: var(--shadow-claw-text-primary);
+  box-shadow: var(--shadow-claw-shadow-md);
+  outline: none;
+}
+
+.files__paste-cancel:disabled,
+.files__paste-continue:disabled,
+.files__paste-apply:disabled,
+.files__paste-ok:disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }

@@ -1,4 +1,4 @@
-let audioCtx = new AudioContext();
+let audioCtx: AudioContext | null = null;
 let audioUnlocked = false;
 
 /**
@@ -6,7 +6,10 @@ let audioUnlocked = false;
  */
 export function getAudioContext(): AudioContext {
   if (!audioCtx) {
-    audioCtx = new (window.AudioContext || window["webkitAudioContext"])();
+    const AudioContextCtor =
+      window.AudioContext || window["webkitAudioContext"];
+
+    audioCtx = new AudioContextCtor();
   }
 
   return audioCtx;

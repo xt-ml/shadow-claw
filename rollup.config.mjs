@@ -106,6 +106,7 @@ const configs = [
         targets: [
           { src: "index.html", dest: "dist/public" },
           { src: "index.css", dest: "dist/public" },
+          { src: "theme-init.js", dest: "dist/public" },
           { src: "manifest.json", dest: "dist/public" },
           { src: "404.html", dest: "dist/public" },
           {

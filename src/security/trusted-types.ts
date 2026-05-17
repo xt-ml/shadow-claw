@@ -6,12 +6,16 @@ type TrustedMarkup = string | { toString: () => string };
 
 type TrustedTypesPolicyLike = {
   createHTML: (input: string) => TrustedMarkup;
+  createScriptURL?: (input: string) => TrustedMarkup;
 };
 
 type TrustedTypesFactoryLike = {
   createPolicy: (
     name: string,
-    rules: { createHTML?: (input: string) => string },
+    rules: {
+      createHTML?: (input: string) => string;
+      createScriptURL?: (input: string) => string;
+    },
   ) => TrustedTypesPolicyLike;
 };
 
@@ -46,6 +50,7 @@ function getTrustedTypesPolicy(): TrustedTypesPolicyLike | null {
       // Keep this an identity transform so caller-provided sanitize options
       // (for example blob URL allowlists) are not lost.
       createHTML: (input: string) => input,
+      createScriptURL: (input: string) => input,
     });
   } catch {
     cachedPolicy = null;
@@ -98,4 +103,14 @@ export function setEscapedHtml(element: Element, text: string): TrustedMarkup {
   element.innerHTML = trustedHtml as string;
 
   return trustedHtml;
+}
+
+export function toTrustedScriptUrl(url: string): TrustedMarkup {
+  const policy = getTrustedTypesPolicy();
+
+  if (!policy || typeof policy.createScriptURL !== "function") {
+    return url;
+  }
+
+  return policy.createScriptURL(url);
 }

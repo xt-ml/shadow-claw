@@ -8,9 +8,14 @@ jest.unstable_mockModule("../storage/readGroupFileBytes.js", () => ({
   readGroupFileBytes: jest.fn(),
 }));
 
+jest.unstable_mockModule("../storage/getGroupFile.js", () => ({
+  getGroupFile: jest.fn(),
+}));
+
 const { FileViewerStore } = await import("./file-viewer.js");
 const { readGroupFile } = await import("../storage/readGroupFile.js");
 const { readGroupFileBytes } = await import("../storage/readGroupFileBytes.js");
+const { getGroupFile } = await import("../storage/getGroupFile.js");
 
 describe("FileViewerStore", () => {
   beforeEach(() => {
@@ -90,26 +95,25 @@ describe("FileViewerStore", () => {
     });
   });
 
-  it("openFile reads browser-previewable binaries as bytes", async () => {
-    const pngBytes = new Uint8Array([137, 80, 78, 71]);
+  it("openFile reads browser-previewable binaries as native files for media", async () => {
+    const pngFile = new File([new Uint8Array([137, 80, 78, 71])], "logo.png", {
+      type: "image/png",
+    });
 
-    (readGroupFileBytes as any).mockResolvedValue(pngBytes);
+    (getGroupFile as any).mockResolvedValue(pngFile);
     const s = new FileViewerStore();
 
     await s.openFile({} as any, "images/logo.png", "g1");
 
-    expect(readGroupFileBytes).toHaveBeenCalledWith(
-      {},
-      "g1",
-      "images/logo.png",
-    );
+    expect(getGroupFile).toHaveBeenCalledWith({}, "g1", "images/logo.png");
     expect(readGroupFile).not.toHaveBeenCalled();
     expect(s.file).toEqual({
       name: "logo.png",
       path: "images/logo.png",
       content: "",
       kind: "binary",
-      binaryContent: pngBytes,
+      binaryContent: null,
+      nativeFile: pngFile,
       mimeType: "image/png",
     });
   });

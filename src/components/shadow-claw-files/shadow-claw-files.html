@@ -24,6 +24,15 @@
       </shadow-claw-page-header-action-button>
       <shadow-claw-page-header-action-button
         slot="actions"
+        title="Paste clipboard file or folder"
+        class="files__paste-btn"
+        hidden
+        disabled
+      >
+        &#128203; Paste
+      </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
+        slot="actions"
         title="Backup workspace files"
         class="files__backup-btn"
       >
@@ -132,6 +141,19 @@
         <div class="files__rename-actions">
           <button class="files__rename-cancel" type="button">Cancel</button>
           <button class="files__rename-ok" type="submit">Rename</button>
+        </div>
+      </form>
+    </shadow-claw-dialog>
+    <shadow-claw-dialog
+      dialog-class="files__paste-dialog"
+      aria-label="Paste file or folder"
+    >
+      <form class="files__paste-form" method="dialog">
+        <h3 class="files__paste-title">Confirm Paste</h3>
+        <p class="files__paste-message"></p>
+        <div class="files__paste-actions">
+          <button class="files__paste-cancel" type="button">Cancel</button>
+          <button class="files__paste-ok" type="submit">OK</button>
         </div>
       </form>
     </shadow-claw-dialog>

@@ -16,11 +16,16 @@ class InMemoryFs {
   async appendFile() {}
   async cp() {}
   async mkdir() {}
+  mkdirSync() {}
   async mv() {}
   async rm() {}
 
   async readFile() {
     return "";
+  }
+
+  async readFileBuffer() {
+    return new Uint8Array();
   }
 
   async stat() {

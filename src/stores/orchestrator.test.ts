@@ -429,6 +429,45 @@ describe("OrchestratorStore", () => {
     );
   });
 
+  it("does not forward empty thinking-log messages when disk logging is enabled", async () => {
+    const store = new OrchestratorStore();
+    const events: any = createEvents();
+    const orch: any = {
+      events,
+      getUseProxy: () => false,
+      getProxyUrl: () => "",
+      getGitProxyUrl: () => "",
+      getVMBashFullInternetAccess: () => false,
+      getTaskServerUrl: () => "/schedule",
+    };
+
+    (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "activity_log_disk_logging_enabled") {
+        return "true";
+      }
+
+      return undefined;
+    });
+
+    await store.init({} as any, orch);
+    const fetchMock = (global as any).fetch as jest.Mock;
+    fetchMock.mockClear();
+
+    events.emit("thinking-log", {
+      groupId: DEFAULT_GROUP_ID,
+      level: "tool",
+      label: "Tool result",
+      message: "",
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/activity-log",
+      expect.any(Object),
+    );
+  });
+
   it("sendMessage uses active group", () => {
     const store = new OrchestratorStore();
 

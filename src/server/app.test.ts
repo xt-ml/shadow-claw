@@ -20,6 +20,7 @@ describe("app", () => {
     fsMock = {
       existsSync: jest.fn(() => true),
       mkdirSync: jest.fn(),
+      appendFileSync: jest.fn(),
     };
 
     config = {
@@ -41,6 +42,9 @@ describe("app", () => {
     }));
     jest.unstable_mockModule("./routes/oauth.js", () => ({
       registerOAuthRoutes: jest.fn(),
+    }));
+    jest.unstable_mockModule("./routes/csp-report.js", () => ({
+      registerCspReportRoutes: jest.fn(),
     }));
     jest.unstable_mockModule("../notifications/push-store.js", () => ({
       openPushStore: jest.fn(),
@@ -88,6 +92,7 @@ describe("app", () => {
     const { createApp } = await import("./app.js");
     const { registerProxyRoutes } = await import("./proxy.js");
     const { registerOAuthRoutes } = await import("./routes/oauth.js");
+    const { registerCspReportRoutes } = await import("./routes/csp-report.js");
     const { openPushStore } = await import("../notifications/push-store.js");
     const { createCspReportOnlyMiddleware } =
       await import("./middleware/csp.js");
@@ -103,6 +108,7 @@ describe("app", () => {
       verbose: false,
     });
     expect(registerOAuthRoutes).toHaveBeenCalledWith(appMock);
+    expect(registerCspReportRoutes).toHaveBeenCalledTimes(1);
     expect(createCspReportOnlyMiddleware).toHaveBeenCalledTimes(1);
     expect(openPushStore).toHaveBeenCalledWith(
       expect.stringContaining("push-subscriptions.db"),

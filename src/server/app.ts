@@ -1,33 +1,36 @@
+import compression from "compression";
+import express from "express";
 import fs from "node:fs";
 import path from "node:path";
-import express from "express";
-import compression from "compression";
-import type { Express } from "express";
 
-import { registerProxyRoutes } from "./proxy.js";
-import { registerOAuthRoutes } from "./routes/oauth.js";
-import { registerActivityLogRoutes } from "./routes/activity-log.js";
-
-import { openPushStore } from "../notifications/push-store.js";
 import {
   broadcastPush,
   registerPushRoutes,
 } from "../notifications/push-routes.js";
+import { openPushStore } from "../notifications/push-store.js";
+
+import { registerTaskScheduleRoutes } from "../notifications/task-schedule-routes.js";
 import {
   getEnabledScheduledTasks,
   openTaskScheduleStore,
   updateScheduledTaskLastRun,
 } from "../notifications/task-schedule-store.js";
-import { registerTaskScheduleRoutes } from "../notifications/task-schedule-routes.js";
 import { ServerTaskScheduler } from "../notifications/task-scheduler-server.js";
 
-import type { ServerConfig } from "./config.js";
 import { createLogger } from "./logger.js";
-import { createRequestLoggerMiddleware } from "./middleware/request-logger.js";
-import { createPnaMiddleware } from "./middleware/pna.js";
 import { createCorsMiddleware } from "./middleware/cors.js";
 import { createCspReportOnlyMiddleware } from "./middleware/csp.js";
+import { createPnaMiddleware } from "./middleware/pna.js";
+import { createRequestLoggerMiddleware } from "./middleware/request-logger.js";
+
 import { registerStaticFilesMiddleware } from "./middleware/static-files.js";
+import { registerProxyRoutes } from "./proxy.js";
+import { registerActivityLogRoutes } from "./routes/activity-log.js";
+import { registerCspReportRoutes } from "./routes/csp-report.js";
+import { registerOAuthRoutes } from "./routes/oauth.js";
+
+import type { Express } from "express";
+import type { ServerConfig } from "./config.js";
 
 export function createApp(config: ServerConfig): {
   app: Express;
@@ -73,6 +76,12 @@ export function createApp(config: ServerConfig): {
   // ---------------- ACTIVITY LOG ROUTES ----------------
   registerActivityLogRoutes(app, {
     logsDir: path.resolve(config.databaseDir, "..", ".cache", "logs"),
+  });
+
+  // ---------------- CSP REPORT ROUTES ----------------
+  registerCspReportRoutes(app, {
+    logsDir: path.resolve(config.databaseDir, "..", ".cache", "logs"),
+    logger,
   });
 
   // ---------------- DATABASE & PUSH / TASKS ----------------

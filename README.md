@@ -42,6 +42,7 @@ A fully-functional agent runtime that runs entirely in the browser—no AI proce
 - **Scheduled tasks** — Cron expressions with server-side persistence and Web Push
 - **Git integration** — Clone, branch, merge (with conflict reports), push/pull
 - **File viewer** — Syntax highlighting, PDF preview, media playback, Web Share, native/fallback fullscreen, and relative image workspace resolving
+- **Files browser** — Clipboard-driven Cut/Copy/Paste actions, hidden Paste button when empty, and folder self-paste protection
 
 ## Architecture
 
@@ -176,6 +177,7 @@ ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and 
 - **Local Folder** — user-selected directory via File System Access API
 - **Centralized write paths** — cross-browser fallback for Safari compatibility
 - **Zip export/import** — for conversation backup/restore
+- **Copy/move safety** — folder copy/move operations reject identical targets and prevent pasting a folder into itself or one of its descendants
 
 **Full details**: [docs/architecture/storage.md](docs/architecture/storage.md) | [docs/subsystems/crypto.md](docs/subsystems/crypto.md)
 

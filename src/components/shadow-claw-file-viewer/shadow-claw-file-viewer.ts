@@ -1,4 +1,5 @@
 import HighlightedCode from "highlighted-code";
+import type { Config } from "dompurify";
 
 import { effect } from "../../effect.js";
 import { renderMarkdown } from "../../markdown.js";
@@ -8,6 +9,7 @@ import {
 } from "../../security/trusted-types.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
+import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
 import { showError, showSuccess } from "../../toast.js";
 
@@ -19,6 +21,12 @@ import { getDb } from "../../db/db.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
 const elementName = "shadow-claw-file-viewer";
+
+const previewSanitizeOptions: Config = {
+  // Allow blob URLs for locally resolved OPFS preview assets.
+  ALLOWED_URI_REGEXP:
+    /^(?:(?:https?|mailto|ftp|tel|file|blob|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+};
 
 /**
  * ShadowClawFileViewer - component for viewing and editing files
@@ -32,12 +40,14 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
   isFilePreviewMode: boolean = false;
   isFileEditMode: boolean = false;
+  isFullscreenMode: boolean = false;
   isEditorDirty: boolean = false;
   editorDraftContent: string | null = null;
 
   lastOpenedFileName: string = "";
   viewRenderToken: number = 0;
   currentObjectUrl: string | null = null;
+  currentImageObjectUrls: string[] = [];
   previewFrameWindow: Window | null = null;
 
   constructor() {
@@ -76,6 +86,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
 
     window.addEventListener("message", this.handleIframeMessage);
+    document.addEventListener("fullscreenchange", this.handleFullscreenChange);
 
     this.setupEffects();
     this.bindEventListeners();
@@ -83,8 +94,28 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
   disconnectedCallback() {
     window.removeEventListener("message", this.handleIframeMessage);
+    document.removeEventListener(
+      "fullscreenchange",
+      this.handleFullscreenChange,
+    );
     this.revokeObjectUrl();
   }
+
+  handleFullscreenChange = () => {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const modal = root.querySelector(".file-modal");
+    if (!(modal instanceof HTMLElement)) {
+      return;
+    }
+
+    const fullscreenTarget = this.getFullscreenTarget(modal);
+    this.isFullscreenMode = this.isTargetInFullscreen(fullscreenTarget);
+    this.applyFullscreenMode(modal);
+  };
 
   handleIframeMessage = (event: MessageEvent) => {
     if (!this.db || !event.data || typeof event.data !== "object") {
@@ -133,6 +164,13 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       this.isFilePreviewMode = !this.isFilePreviewMode;
       this.isFileEditMode = false;
       await this.updateView();
+    });
+
+    const fullscreenBtn = root.querySelector(".modal-fullscreen-btn");
+    fullscreenBtn?.addEventListener("click", () => {
+      if (modal) {
+        void this.toggleFullscreenMode(modal);
+      }
     });
 
     const shareBtn = root.querySelector(".modal-share-btn");
@@ -235,6 +273,8 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     if (!(await this.canDismissViewer())) {
       return;
     }
+
+    await this.exitFullscreenIfActive();
 
     fileViewerStore.closeFile();
   }
@@ -494,6 +534,172 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     return this.viewRenderToken === renderToken;
   }
 
+  getFullscreenTarget(modal: Element): HTMLElement | null {
+    const modalContent = modal.querySelector(".modal-content");
+    if (!(modalContent instanceof HTMLElement)) {
+      return null;
+    }
+
+    return modalContent;
+  }
+
+  canUseNativeFullscreen(target: HTMLElement): target is HTMLElement & {
+    requestFullscreen: () => Promise<void>;
+  } {
+    return (
+      document.fullscreenEnabled === true &&
+      (typeof (target as any).requestFullscreen === "function" ||
+        typeof (target as any).webkitRequestFullscreen === "function") &&
+      (typeof document.exitFullscreen === "function" ||
+        typeof (document as any).webkitExitFullscreen === "function")
+    );
+  }
+
+  getCurrentFullscreenElement(): Element | null {
+    return (
+      document.fullscreenElement ||
+      (document as any).webkitFullscreenElement ||
+      null
+    );
+  }
+
+  isNodeInComposedTree(node: Node | null, ancestor: Node): boolean {
+    let current: Node | null = node;
+
+    while (current) {
+      if (current === ancestor) {
+        return true;
+      }
+
+      if (current.parentNode) {
+        current = current.parentNode;
+
+        continue;
+      }
+
+      const root = current.getRootNode?.();
+      if (root instanceof ShadowRoot && root.host) {
+        current = root.host;
+
+        continue;
+      }
+
+      current = null;
+    }
+
+    return false;
+  }
+
+  isTargetInFullscreen(target: HTMLElement | null): boolean {
+    if (!target) {
+      return false;
+    }
+
+    const current = this.getCurrentFullscreenElement();
+    if (!current) {
+      return false;
+    }
+
+    return (
+      current === target ||
+      this.isNodeInComposedTree(target, current) ||
+      this.isNodeInComposedTree(current, target)
+    );
+  }
+
+  async requestNativeFullscreen(target: HTMLElement): Promise<void> {
+    const request =
+      (target as any).requestFullscreen ||
+      (target as any).webkitRequestFullscreen;
+    if (typeof request !== "function") {
+      throw new Error("Native fullscreen unavailable");
+    }
+
+    await Promise.resolve(request.call(target));
+  }
+
+  async exitNativeFullscreen(): Promise<void> {
+    const exit =
+      document.exitFullscreen || (document as any).webkitExitFullscreen;
+    if (typeof exit !== "function") {
+      throw new Error("Native fullscreen exit unavailable");
+    }
+
+    await Promise.resolve(exit.call(document));
+  }
+
+  async exitFullscreenIfActive(modal?: Element): Promise<void> {
+    const root = this.shadowRoot;
+    const activeModal = modal || root?.querySelector(".file-modal");
+    if (!activeModal) {
+      return;
+    }
+
+    const fullscreenTarget = this.getFullscreenTarget(activeModal);
+    if (!fullscreenTarget || !this.isTargetInFullscreen(fullscreenTarget)) {
+      return;
+    }
+
+    try {
+      await this.exitNativeFullscreen();
+    } catch {
+      // Native fullscreen exit can fail if browser blocks it.
+    }
+  }
+
+  async toggleFullscreenMode(modal: Element) {
+    const fullscreenTarget = this.getFullscreenTarget(modal);
+    if (!fullscreenTarget) {
+      return;
+    }
+
+    if (this.canUseNativeFullscreen(fullscreenTarget)) {
+      const isAlreadyFullscreen = this.isTargetInFullscreen(fullscreenTarget);
+
+      try {
+        if (isAlreadyFullscreen) {
+          await this.exitNativeFullscreen();
+          this.isFullscreenMode = false;
+        } else {
+          await this.requestNativeFullscreen(fullscreenTarget);
+          this.isFullscreenMode = true;
+        }
+      } catch {
+        // If native fullscreen fails (permission/user gesture), keep fallback UX.
+        this.isFullscreenMode = !this.isFullscreenMode;
+      }
+
+      this.applyFullscreenMode(modal);
+
+      return;
+    }
+
+    this.isFullscreenMode = !this.isFullscreenMode;
+    this.applyFullscreenMode(modal);
+  }
+
+  applyFullscreenMode(modal: Element) {
+    const modalContent = modal.querySelector(".modal-content");
+    if (modalContent instanceof HTMLElement) {
+      modalContent.classList.toggle(
+        "modal-content--fullscreen",
+        this.isFullscreenMode,
+      );
+    }
+
+    const fullscreenBtn = modal.querySelector(".modal-fullscreen-btn");
+    if (fullscreenBtn instanceof HTMLButtonElement) {
+      fullscreenBtn.setAttribute("aria-pressed", String(this.isFullscreenMode));
+      fullscreenBtn.setAttribute(
+        "aria-label",
+        this.isFullscreenMode ? "Exit fullscreen" : "Enter fullscreen",
+      );
+      fullscreenBtn.title = this.isFullscreenMode
+        ? "Exit fullscreen"
+        : "Fullscreen";
+    }
+  }
+
   async updateView(renderToken: number = this.viewRenderToken) {
     const file = fileViewerStore.file;
     const root = this.shadowRoot;
@@ -505,6 +711,8 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     if (!(modal instanceof HTMLElement)) {
       return;
     }
+
+    this.applyFullscreenMode(modal);
 
     const content = modal.querySelector(".file-content");
     const previewBtn = modal.querySelector(".modal-preview-btn");
@@ -687,7 +895,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       );
 
       iframe.setAttribute("referrerpolicy", "no-referrer");
-      iframe.srcdoc = this.buildIframePreviewSrcdoc(file);
+      iframe.srcdoc = await this.buildIframePreviewSrcdoc(file);
       iframe.addEventListener("load", () => {
         this.previewFrameWindow = iframe.contentWindow;
       });
@@ -705,7 +913,132 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return;
     }
 
-    setSanitizedHtml(content, previewHtml);
+    const currentFile = fileViewerStore.file;
+    const basePath = currentFile?.path || currentFile?.name || "";
+    const resolvedPreviewHtml = await this.resolveRelativeImagesInHtml(
+      previewHtml,
+      basePath,
+    );
+
+    if (!this.isRenderTokenCurrent(renderToken)) {
+      return;
+    }
+
+    setSanitizedHtml(content, resolvedPreviewHtml, previewSanitizeOptions);
+  }
+
+  async resolveRelativeImagesInHtml(html: string, filePath: string) {
+    if (!this.db || !html) {
+      return html;
+    }
+
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const images = Array.from(parsed.querySelectorAll("img"));
+    if (images.length === 0) {
+      return html;
+    }
+
+    const groupId = orchestratorStore.activeGroupId;
+
+    await Promise.all(
+      images.map(async (img) => {
+        const src = img.getAttribute("src") || "";
+        if (
+          !src ||
+          /^(?:[a-zA-Z][a-zA-Z\d+.-]*:|blob:|data:|#|\/\/)/u.test(src)
+        ) {
+          return;
+        }
+
+        const resolved = this.resolveWorkspaceLinkPath(src, filePath);
+        if (!resolved) {
+          return;
+        }
+
+        try {
+          const bytes = await readGroupFileBytes(this.db!, groupId, resolved);
+          const ext = resolved.split(".").pop()?.toLowerCase() || "";
+          const mimeType = this.mimeTypeForImageExt(ext);
+
+          const blobBytes = new Uint8Array(bytes.byteLength);
+          blobBytes.set(bytes);
+          const objectUrl = URL.createObjectURL(
+            new Blob([blobBytes], { type: mimeType }),
+          );
+          this.currentImageObjectUrls.push(objectUrl);
+          img.setAttribute("src", objectUrl);
+        } catch {
+          // File not found or unreadable — leave src as-is.
+        }
+      }),
+    );
+
+    return parsed.body.innerHTML;
+  }
+
+  /**
+   * Resolves relative image src attributes in rendered markdown by loading the
+   * corresponding files from OPFS and replacing the src with an object URL.
+   */
+  async resolveMarkdownImages(content: HTMLElement, filePath: string) {
+    if (!this.db) {
+      return;
+    }
+
+    const images = Array.from(content.querySelectorAll("img"));
+    if (images.length === 0) {
+      return;
+    }
+
+    const groupId = orchestratorStore.activeGroupId;
+
+    await Promise.all(
+      images.map(async (img) => {
+        const src = img.getAttribute("src") || "";
+        if (
+          !src ||
+          /^(?:[a-zA-Z][a-zA-Z\d+.-]*:|blob:|data:|#|\/\/)/u.test(src)
+        ) {
+          return;
+        }
+
+        const resolved = this.resolveWorkspaceLinkPath(src, filePath);
+        if (!resolved) {
+          return;
+        }
+
+        try {
+          const bytes = await readGroupFileBytes(this.db!, groupId, resolved);
+          const ext = resolved.split(".").pop()?.toLowerCase() || "";
+          const mimeType = this.mimeTypeForImageExt(ext);
+
+          const blobBytes = new Uint8Array(bytes.byteLength);
+          blobBytes.set(bytes);
+          const objectUrl = URL.createObjectURL(
+            new Blob([blobBytes], { type: mimeType }),
+          );
+          this.currentImageObjectUrls.push(objectUrl);
+          img.src = objectUrl;
+        } catch {
+          // File not found or unreadable — leave src as-is.
+        }
+      }),
+    );
+  }
+
+  mimeTypeForImageExt(ext: string): string {
+    const map: Record<string, string> = {
+      apng: "image/apng",
+      avif: "image/avif",
+      gif: "image/gif",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      svg: "image/svg+xml",
+      webp: "image/webp",
+    };
+
+    return map[ext] ?? "image/jpeg";
   }
 
   getWorkingSourceFile(file: any, modal: HTMLElement) {
@@ -820,6 +1153,16 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return;
     }
 
+    const fullscreenTarget = this.getFullscreenTarget(modal);
+    if (fullscreenTarget && this.isTargetInFullscreen(fullscreenTarget)) {
+      void this.exitNativeFullscreen().catch(() => {
+        // noop
+      });
+    }
+
+    this.isFullscreenMode = false;
+    this.applyFullscreenMode(modal);
+
     const content = modal.querySelector(".file-content");
     const previewBtn = modal.querySelector(".modal-preview-btn");
 
@@ -879,6 +1222,12 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       URL.revokeObjectURL(this.currentObjectUrl);
       this.currentObjectUrl = null;
     }
+
+    for (const url of this.currentImageObjectUrls) {
+      URL.revokeObjectURL(url);
+    }
+
+    this.currentImageObjectUrls = [];
   }
 
   shouldAutoPreview(file: any) {
@@ -1050,12 +1399,18 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     return "/assets/file-viewer-preview-bridge.js";
   }
 
-  buildIframePreviewSrcdoc(file: any) {
+  async buildIframePreviewSrcdoc(file: any) {
     if (/\.svg$/i.test(file.name)) {
       return file.content;
     }
 
-    const safeContent = sanitizeSrcdocHtml(file.content || "");
+    const filePath = file.path || file.name || "";
+    const htmlContent = await this.resolveRelativeImagesInHtml(
+      file.content || "",
+      filePath,
+    );
+
+    const safeContent = sanitizeSrcdocHtml(htmlContent, previewSanitizeOptions);
 
     // A per-render nonce restricts script execution inside the sandboxed iframe
     // to only the reviewed same-origin bridge script. Inline scripts and any

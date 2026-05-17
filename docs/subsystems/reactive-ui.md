@@ -277,3 +277,22 @@ are persisted under `.cache/logs` in the app data directory.
 - Single newlines → `<br>` tags
 - Double newlines → `<p>` paragraphs
 - DOMPurify sanitizes all HTML output
+
+### File Viewer & Sandboxed Previews
+
+The file viewer component (`<shadow-claw-file-viewer>`) provides dual-mode code editing and secure, media-rich previews.
+
+#### Sandbox Safety & Trusted Types
+
+- **Sanitized Iframe Previews:** Previews render HTML and SVG within a sandboxed `<iframe>` using a per-render nonce CSP header. Custom DOMPurify options (`previewSanitizeOptions`) are applied to configure the `ALLOWED_URI_REGEXP` to specifically allow local `blob:` URLs.
+- **Identity Transform Policy:** In `src/security/trusted-types.ts`, the Trusted Types policy `createHTML` callback acts as an identity transform `(input) => input`. Because the input is pre-sanitized by `sanitizeToTrustedHtml` _before_ hitting the policy, keeping the callback as an identity transform ensures that customized DOMPurify options (such as allowing local blob URLs) are not stripped.
+
+#### Workspace Asset Resolution
+
+- **Relative Image Loading:** Relative `<img>` tags in Markdown and HTML preview templates are parsed, resolved relative to the file's workspace directory, and loaded asynchronously from OPFS storage (via `readGroupFileBytes`).
+- **Object URL Tracking:** Loaded assets are converted to local blob object URLs. To completely prevent memory leaks, these object URLs are tracked in `currentImageObjectUrls` and synchronously revoked on component unmount (`disconnectedCallback()`) or view resets.
+
+#### Adaptive Fullscreen Mode
+
+- **Native Fullscreen & Fallback:** The modal supports a fullscreen mode that utilizes the native browser Fullscreen API (handling prefixes like `webkit`). If native fullscreen is blocked by security context, lacks permission, or is not initiated by a user gesture, the component falls back to a CSS-based modal class (`modal-content--fullscreen`) that expands to fill the entire viewport.
+- **Responsive Layout:** On compact screens (viewport width under 640px), the Cancel and Save button labels automatically hide, displaying only the action icon to prevent modal header button overflow while editing.

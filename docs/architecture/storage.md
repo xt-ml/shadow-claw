@@ -82,7 +82,7 @@ syncHandle.close();
 
 Only available for OPFS handles in workers; not on main thread (Safari limitation).
 
-### 3. Worker Fallback (`writeOpfsPathViaWorker.ts`)
+### 3. Worker Fallback (via `writeFileHandle.ts`)
 
 When OPFS main-thread writes fail (`"Writable file streams are not supported"`):
 

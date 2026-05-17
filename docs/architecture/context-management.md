@@ -33,23 +33,30 @@ export function estimateTokens(text: string): number {
   return Math.ceil(text.length / CHARS_PER_TOKEN);
 }
 
-export function estimateMessageTokens(message: StoredMessage): number {
+export function estimateMessageTokens(message: ConversationMessage): number {
   let contentTokens = 0;
 
   if (typeof message.content === "string") {
     contentTokens = estimateTokens(message.content);
   } else if (Array.isArray(message.content)) {
     for (const block of message.content) {
-      if (block.type === "text") contentTokens += estimateTokens(block.text);
-      else if (block.type === "tool_use") {
+      if (block.type === "text" && block.text) {
+        contentTokens += estimateTokens(block.text);
+      } else if (block.type === "tool_use") {
         contentTokens += estimateTokens(block.name);
         contentTokens += estimateTokens(JSON.stringify(block.input));
       } else if (block.type === "tool_result") {
+        const c = block.content;
         contentTokens += estimateTokens(
-          typeof block.content === "string"
-            ? block.content
-            : JSON.stringify(block.content),
+          typeof c === "string" ? c : JSON.stringify(c),
         );
+      } else if (block.type === "attachment") {
+        contentTokens += estimateTokens(block.fileName);
+        contentTokens += estimateTokens(block.mimeType);
+        contentTokens += estimateTokens(block.path);
+        // Count raw payload conservatively so large native attachments reduce
+        // the effective context budget instead of silently overflowing it.
+        contentTokens += estimateTokens(block.data);
       }
     }
   }
@@ -68,20 +75,26 @@ Truncates large tool outputs at **line boundaries** (not mid-line):
 const TOOL_OUTPUT_MAX_CHARS = 25_000; // ~6K tokens
 
 export function truncateToolOutput(
-  content: string,
-  maxChars = TOOL_OUTPUT_MAX_CHARS,
+  content: string | null | undefined,
+  maxChars: number,
 ): string {
-  if (content.length <= maxChars) return content;
+  if (!content) {
+    return "";
+  }
 
+  if (content.length <= maxChars) {
+    return content;
+  }
+
+  // Try to find a line boundary within the budget
   const slice = content.slice(0, maxChars);
   const lastNewline = slice.lastIndexOf("\n");
 
-  // Prefer clean line boundary if it's past 50% of budget
   const cutPoint = lastNewline > maxChars * 0.5 ? lastNewline : maxChars;
   const kept = content.slice(0, cutPoint);
-  const truncated = content.length - cutPoint;
+  const actualTruncated = content.length - cutPoint;
 
-  return `${kept}\n[...truncated ${truncated} chars]`;
+  return `${kept}\n[...truncated ${actualTruncated} chars]`;
 }
 ```
 

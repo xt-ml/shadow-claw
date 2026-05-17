@@ -199,29 +199,35 @@ _profiles (State) ──────────┘
 
 ### Component inventory
 
-| Component                | Element                       | Purpose                                                                   |
-| ------------------------ | ----------------------------- | ------------------------------------------------------------------------- |
-| Main app                 | `<shadow-claw>`               | Shell, navigation, page routing                                           |
-| Chat                     | `<shadow-claw-chat>`          | Message display, smart auto-scroll, streaming bubble, copy/delete actions |
-| Files                    | `<shadow-claw-files>`         | File browser for group workspace                                          |
-| Tasks                    | `<shadow-claw-tasks>`         | Task list with cron scheduling                                            |
-| Settings                 | `<shadow-claw-settings>`      | Provider config, tool profiles                                            |
-| Conversations            | `<shadow-claw-conversations>` | Sidebar list with CRUD, drag-and-drop                                     |
-| File Viewer              | `<shadow-claw-file-viewer>`   | Code editor + MIME-aware preview                                          |
-| PDF Viewer               | `<shadow-claw-pdf-viewer>`    | PDF preview (pdf.js)                                                      |
-| Terminal                 | `<shadow-claw-terminal>`      | Interactive WebVM terminal                                                |
-| Toast                    | `<shadow-claw-toast>`         | Notification overlay                                                      |
-| Dialog Wrapper           | `<shadow-claw-dialog>`        | Shared wrapper around native `<dialog>` semantics                         |
-| Page Header              | `<shadow-claw-page-header>`   | Reusable mobile-first header                                              |
-| Settings — LLM           | `<shadow-claw-llm>`           | Provider and model settings                                               |
-| Settings — Git           | `<shadow-claw-git>`           | Git token and proxy settings                                              |
-| Settings — Storage       | `<shadow-claw-storage>`       | Storage backend and quota                                                 |
-| Settings — WebVM         | `<shadow-claw-webvm>`         | VM boot mode and configuration                                            |
-| Settings — Notifications | `<shadow-claw-notifications>` | Push notification management                                              |
-| Tools                    | `<shadow-claw-tools>`         | Tool management and profiles UI                                           |
-| Empty State (common)     | `<shadow-claw-empty-state>`   | Reusable empty/placeholder messaging block                                |
-| Card (common)            | `<shadow-claw-card>`          | Reusable settings item card layout                                        |
-| Actions (common)         | `<shadow-claw-actions>`       | Reusable settings action button group                                     |
+| Component                | Element                        | Purpose                                                                   |
+| ------------------------ | ------------------------------ | ------------------------------------------------------------------------- |
+| Main app                 | `<shadow-claw>`                | Shell, navigation, page routing                                           |
+| Chat                     | `<shadow-claw-chat>`           | Message display, smart auto-scroll, streaming bubble, copy/delete actions |
+| Files                    | `<shadow-claw-files>`          | File browser for group workspace                                          |
+| Tasks                    | `<shadow-claw-tasks>`          | Task list with cron scheduling                                            |
+| Settings                 | `<shadow-claw-settings>`       | Main settings navigation and layout                                       |
+| Conversations            | `<shadow-claw-conversations>`  | Sidebar list with CRUD, drag-and-drop                                     |
+| File Viewer              | `<shadow-claw-file-viewer>`    | Code editor + MIME-aware preview                                          |
+| PDF Viewer               | `<shadow-claw-pdf-viewer>`     | PDF preview (pdf.js)                                                      |
+| Terminal                 | `<shadow-claw-terminal>`       | Interactive WebVM terminal                                                |
+| Toast                    | `<shadow-claw-toast>`          | Notification overlay                                                      |
+| Dialog Wrapper           | `<shadow-claw-dialog>`         | Shared wrapper around native `<dialog>` semantics                         |
+| Page Header              | `<shadow-claw-page-header>`    | Reusable mobile-first header                                              |
+| Settings — Accounts      | `<shadow-claw-accounts>`       | General account connection and OAuth flows                                |
+| Settings — Channels      | `<shadow-claw-channel-config>` | Third-party messaging channels configuration                              |
+| Settings — Git           | `<shadow-claw-git>`            | Git token and proxy settings                                              |
+| Settings — Integrations  | `<shadow-claw-integrations>`   | Special API integrations and Web Search                                   |
+| Settings — LLM           | `<shadow-claw-llm>`            | Provider and model settings                                               |
+| Settings — MCP           | `<shadow-claw-mcp-remote>`     | Remote Model Context Protocol server configuration                        |
+| Settings — Networking    | `<shadow-claw-networking>`     | Networking proxy settings                                                 |
+| Settings — Notifications | `<shadow-claw-notifications>`  | Push notification management                                              |
+| Settings — Storage       | `<shadow-claw-storage>`        | Storage backend and quota                                                 |
+| Settings — Task Server   | `<shadow-claw-task-server>`    | Server-side scheduling configuration                                      |
+| Settings — WebVM         | `<shadow-claw-webvm>`          | VM boot mode and configuration                                            |
+| Tools                    | `<shadow-claw-tools>`          | Tool management and profiles UI                                           |
+| Empty State (common)     | `<shadow-claw-empty-state>`    | Reusable empty/placeholder messaging block                                |
+| Card (common)            | `<shadow-claw-card>`           | Reusable settings item card layout                                        |
+| Actions (common)         | `<shadow-claw-actions>`        | Reusable settings action button group                                     |
 
 ### Rendering strategy
 

@@ -38,7 +38,7 @@ All providers are declared in `src/config.ts` under `PROVIDERS`:
 | `github_models`              | `openai`          | ✅        | ✅                     |
 | `copilot_azure_openai_proxy` | `openai`          | ✅        | ✅                     |
 | `bedrock_proxy`              | `anthropic`       | ✅        | ❌ (AWS SSO via proxy) |
-| `gemini`                     | `openai`          | ✅        | ✅                     |
+| `gemini_proxy`               | `openai`          | ✅        | ✅                     |
 | `vertex_ai`                  | `openai`          | ✅        | ✅                     |
 | `prompt_api`                 | `prompt_api`      | ❌        | ❌                     |
 
@@ -103,7 +103,7 @@ Used by AWS Bedrock and direct Anthropic calls.
 
 ### Google Format (`GoogleAdapter`)
 
-Used by direct Gemini API and Vertex AI.
+Used by direct Google Gemini API integrations (`format: "google"`). Note that the local proxies `gemini_proxy` and `vertex_ai` are currently configured with `format: "openai"` for standard endpoint compatibility over the local proxies, while the underlying proxy handlers handle any Google API specific mapping.
 
 - **Endpoint**: `${baseUrl}/models/${model}:streamGenerateContent` (streaming) or `generateContent` (non-streaming)
 - **Request transformation**:

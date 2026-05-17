@@ -175,6 +175,7 @@ describe("renameGroupEntry", () => {
 
           if (name === "new.txt" && options?.create) {
             createdFiles.push(name);
+
             return { id: "target" };
           }
 

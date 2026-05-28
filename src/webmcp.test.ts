@@ -3,6 +3,7 @@ import { jest } from "@jest/globals";
 describe("webmcp integration", () => {
   let isWebMcpSupported: any;
   let registerWebMcpTools: any;
+  let setWebMcpMode: any;
   let unregisterWebMcpTools: any;
   let mockExecuteTool: any;
   let mockOpenDatabase: any;
@@ -54,11 +55,13 @@ describe("webmcp integration", () => {
     const module = await import("./webmcp.js");
     isWebMcpSupported = module.isWebMcpSupported;
     registerWebMcpTools = module.registerWebMcpTools;
+    setWebMcpMode = module.setWebMcpMode;
     unregisterWebMcpTools = module.unregisterWebMcpTools;
   });
 
   afterEach(() => {
     delete ((globalThis as any).navigator as any).modelContext;
+    delete ((globalThis as any).document as any).modelContext;
   });
 
   it("feature-detects WebMCP support", () => {
@@ -94,6 +97,52 @@ describe("webmcp integration", () => {
   it("supports accessor-backed modelContext", () => {
     // The polyfill mock already installed modelContext, verify it works
     expect(isWebMcpSupported()).toBe(true);
+  });
+
+  it("prefers document.modelContext over navigator.modelContext", async () => {
+    setWebMcpMode("native");
+
+    const documentRegisterTool = jest.fn();
+    const navigatorRegisterTool = jest.fn();
+
+    Object.defineProperty((globalThis as any).document, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: documentRegisterTool,
+      },
+    });
+
+    Object.defineProperty((globalThis as any).navigator, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: navigatorRegisterTool,
+      },
+    });
+
+    const registered = await registerWebMcpTools(null, jest.fn());
+
+    expect(registered).toBe(true);
+    expect(documentRegisterTool).toHaveBeenCalled();
+    expect(navigatorRegisterTool).not.toHaveBeenCalled();
+
+    delete ((globalThis as any).document as any).modelContext;
+  });
+
+  it("falls back to navigator.modelContext in native mode", async () => {
+    setWebMcpMode("native");
+
+    const navigatorRegisterTool = jest.fn();
+    Object.defineProperty((globalThis as any).navigator, "modelContext", {
+      configurable: true,
+      value: {
+        registerTool: navigatorRegisterTool,
+      },
+    });
+
+    const registered = await registerWebMcpTools(null, jest.fn());
+
+    expect(registered).toBe(true);
+    expect(navigatorRegisterTool).toHaveBeenCalled();
   });
 
   it("registers tools and delegates execute through postMessage", async () => {

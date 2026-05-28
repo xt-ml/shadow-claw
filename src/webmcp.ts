@@ -16,7 +16,8 @@ let polyfillInstalled = false;
  *
  * - `"polyfill"` (default): Uses `@mcp-b/webmcp-polyfill` for a pure-JS
  *   `navigator.modelContext` that works in all browsers.
- * - `"native"`: Uses Chrome's native `navigator.modelContext` from
+ * - `"native"`: Uses Chrome's native `document.modelContext` (with
+ *   `navigator.modelContext` fallback) from
  *   `chrome://flags/#enable-webmcp-testing`.  Requires the flag to be
  *   enabled.  May crash in early Canary builds.
  */
@@ -70,7 +71,8 @@ function ensurePolyfill(): void {
  * Access the WebMCP ModelContext API.
  *
  * In polyfill mode: installs the `@mcp-b/webmcp-polyfill`.
- * In native mode: uses Chrome's native `navigator.modelContext`.
+ * In native mode: uses Chrome's native `document.modelContext` with
+ * `navigator.modelContext` fallback.
  */
 function getModelContextApi(): any {
   if (typeof navigator === "undefined") {
@@ -82,7 +84,23 @@ function getModelContextApi(): any {
   }
 
   try {
-    const modelContext: unknown = Reflect.get(navigator, "modelContext");
+    const documentModelContext: unknown =
+      typeof document !== "undefined"
+        ? Reflect.get(document as any, "modelContext")
+        : undefined;
+    const navigatorModelContext: unknown = Reflect.get(
+      navigator,
+      "modelContext",
+    );
+
+    // In native mode, prefer the modern document.modelContext API and keep
+    // navigator.modelContext as a backward-compatible fallback.
+    // In polyfill mode, prefer navigator.modelContext so the JS polyfill
+    // remains the primary source when both are present.
+    const modelContext: unknown =
+      currentMode === "native"
+        ? documentModelContext || navigatorModelContext
+        : navigatorModelContext || documentModelContext;
 
     if (!modelContext || typeof modelContext !== "object") {
       return null;

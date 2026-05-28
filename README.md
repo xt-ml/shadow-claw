@@ -133,7 +133,7 @@ The agent has access to **30+ tools** including:
 | **Remote**  | `remote_mcp_list_tools`, `remote_mcp_call_tool` (external MCP servers)                    |
 | **Email**   | `manage_email`, `email_read_messages`, `email_send_message`                               |
 
-**WebMCP integration**: When `navigator.modelContext` is available, tools are also registered through the browser's Model Context Protocol.
+**WebMCP integration**: When `document.modelContext` is available (with `navigator.modelContext` fallback), tools are also registered through the browser's Model Context Protocol.
 
 **Full reference**: [docs/subsystems/tools.md](docs/subsystems/tools.md)
 

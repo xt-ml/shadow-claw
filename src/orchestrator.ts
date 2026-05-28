@@ -1762,8 +1762,8 @@ export class Orchestrator {
     // Register WebMCP tools and re-register when tool config changes.
     // This effect runs once immediately to perform the initial registration.
     // We intentionally do NOT call isWebMcpSupported() here — that accesses
-    // navigator.modelContext which can crash Chrome Canary's early-preview
-    // renderer.  Instead, registerWebMcpTools handles feature detection
+    // the browser's modelContext API which can crash Chrome Canary's
+    // early-preview renderer. Instead, registerWebMcpTools handles feature detection
     // internally and skips modelContext access entirely when 0 tools are
     // passed.
     this._webMcpEffectCleanup = effect(() => {

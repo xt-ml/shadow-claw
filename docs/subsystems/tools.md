@@ -159,7 +159,7 @@ When a user manually toggles individual tools:
 
 ### WebMCP integration
 
-When the browser WebMCP API is available (`navigator.modelContext`), tools are also registered via `src/webmcp.ts` so browser-side model contexts can invoke the same tool surface through `registerWebMcpTools()`.
+When the browser WebMCP API is available (`document.modelContext`, with `navigator.modelContext` fallback), tools are also registered via `src/webmcp.ts` so browser-side model contexts can invoke the same tool surface through `registerWebMcpTools()`.
 
 ShadowClaw registers tools with explicit annotations for current WebMCP implementations:
 

@@ -466,7 +466,7 @@ Some runtime paths are browser-capability dependent and should be handled simila
 to storage feature gates.
 
 - Prompt API provider depends on `globalThis.LanguageModel` support.
-- WebMCP integration depends on `navigator.modelContext` support.
+- WebMCP integration depends on `document.modelContext` support (with `navigator.modelContext` fallback).
 - In unsupported browsers, tests should verify graceful fallback/error messaging,
   not hard-fail on unavailable platform features.
 

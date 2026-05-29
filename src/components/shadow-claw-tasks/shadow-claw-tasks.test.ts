@@ -18,6 +18,7 @@ jest.unstable_mockModule("../../security/trusted-types.js", () => ({
 
     return html;
   }),
+  toTrustedHtmlPresanitized: jest.fn((html: string) => html),
 }));
 
 jest.unstable_mockModule("../../stores/file-viewer.js", () => ({

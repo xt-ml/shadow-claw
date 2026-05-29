@@ -4,8 +4,13 @@ jest.unstable_mockModule("../db/setConfig.js", () => ({
   setConfig: (jest.fn() as any).mockResolvedValue(undefined),
 }));
 
+jest.unstable_mockModule("./ensureMainGroupReadme.js", () => ({
+  ensureMainGroupReadme: (jest.fn() as any).mockResolvedValue(true),
+}));
+
 const { selectStorageDirectory } = await import("./selectStorageDirectory.js");
 const { setConfig } = await import("../db/setConfig.js");
+const { ensureMainGroupReadme } = await import("./ensureMainGroupReadme.js");
 
 describe("selectStorageDirectory", () => {
   it("stores selected directory handle", async () => {
@@ -18,6 +23,7 @@ describe("selectStorageDirectory", () => {
     await expect(selectStorageDirectory({} as any)).resolves.toBe(true);
 
     expect(setConfig).toHaveBeenCalled();
+    expect(ensureMainGroupReadme).toHaveBeenCalledWith({} as any);
   });
 
   it("returns false when user aborts picker", async () => {

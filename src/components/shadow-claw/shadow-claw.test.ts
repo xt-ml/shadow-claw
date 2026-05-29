@@ -26,6 +26,16 @@ jest.unstable_mockModule("../../orchestrator.js", () => ({
 jest.unstable_mockModule("../../effect.js", () => ({
   effect: jest.fn(() => () => {}),
 }));
+const mockGetConfigByKey = new Map<string, unknown>();
+jest.unstable_mockModule("../../db/getConfig.js", () => ({
+  getConfig: jest.fn(async (_db: unknown, key: string) => {
+    if (mockGetConfigByKey.has(key)) {
+      return mockGetConfigByKey.get(key);
+    }
+
+    return null;
+  }),
+}));
 jest.unstable_mockModule("../../markdown.js", () => ({
   renderMarkdown: jest.fn((value) => String(value)),
 }));
@@ -35,6 +45,9 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
     init: jest.fn(async (_db, _orchestrator) => {}),
     setDb: jest.fn(),
     db: {},
+    activePage: "pages",
+    sidebarDefaultPage: "chat",
+    pages: [],
     setReady: jest.fn(),
     setActivePage: (jest.fn() as any).mockResolvedValue(undefined),
     loadFiles: (jest.fn() as any).mockResolvedValue(undefined),
@@ -307,6 +320,7 @@ describe("shadow-claw", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockGetConfigByKey.clear();
   });
 
   it("registers custom element", () => {
@@ -492,6 +506,8 @@ describe("shadow-claw", () => {
     await component.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
 
+    component.showPage("chat");
+
     const chatSlot = component.shadowRoot
       ?.querySelector("shadow-claw-chat")
       ?.shadowRoot?.querySelector("[data-terminal-slot]");
@@ -649,6 +665,84 @@ describe("shadow-claw", () => {
 
     expect(settingsPage?.classList.contains("active")).toBe(true);
     expect(channelsPage?.classList.contains("active")).toBe(false);
+
+    HTMLElement.prototype.scrollTo = originalScrollTo;
+    globalThis.matchMedia = originalMatchMedia;
+  });
+
+  it("hides Pages sidebar item and defaults to Chat when Pages is hidden", async () => {
+    const originalMatchMedia = globalThis.matchMedia;
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+    HTMLElement.prototype.scrollTo = jest.fn();
+
+    mockGetConfigByKey.set("sidebar_pages_hidden", "true");
+
+    const component = new ShadowClaw();
+    component.orchestrator = createOrchestratorStub();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const pagesNavItem = component.shadowRoot?.querySelector(
+      '.nav-item[data-page="pages"]',
+    );
+    const pagesPage = component.shadowRoot?.querySelector(
+      '[data-page-id="pages"]',
+    );
+    const chatPage = component.shadowRoot?.querySelector(
+      '[data-page-id="chat"]',
+    );
+
+    expect(pagesNavItem?.hasAttribute("hidden")).toBe(true);
+    expect(pagesPage?.classList.contains("active")).toBe(false);
+    expect(chatPage?.classList.contains("active")).toBe(true);
+
+    HTMLElement.prototype.scrollTo = originalScrollTo;
+    globalThis.matchMedia = originalMatchMedia;
+  });
+
+  it("keeps Pages active when active page is Pages and no pages exist", async () => {
+    const originalMatchMedia = globalThis.matchMedia;
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+    HTMLElement.prototype.scrollTo = jest.fn();
+
+    const component = new ShadowClaw();
+    component.orchestrator = createOrchestratorStub();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const pagesPage = component.shadowRoot?.querySelector(
+      '[data-page-id="pages"]',
+    );
+    const chatPage = component.shadowRoot?.querySelector(
+      '[data-page-id="chat"]',
+    );
+    const pagesNavItem = component.shadowRoot?.querySelector(
+      '.nav-item[data-page="pages"]',
+    );
+    const chatNavItem = component.shadowRoot?.querySelector(
+      '.nav-item[data-page="chat"]',
+    );
+
+    expect(pagesPage?.classList.contains("active")).toBe(true);
+    expect(pagesNavItem?.classList.contains("active")).toBe(true);
+    expect(chatPage?.classList.contains("active")).toBe(false);
+    expect(chatNavItem?.classList.contains("active")).toBe(false);
 
     HTMLElement.prototype.scrollTo = originalScrollTo;
     globalThis.matchMedia = originalMatchMedia;

@@ -25,6 +25,7 @@ async function run(command, options = {}) {
 async function main() {
   const isProduction = env.NODE_ENV === "production";
   const copyAllAssets = env.COPY_ALL_ASSETS === "true";
+  const prerenderMainReadme = env.PRERENDER_MAIN_README !== "false";
 
   // npm run -s build:clean
   await run("npm run -s build:clean");
@@ -56,6 +57,17 @@ async function main() {
 
   // npm run -s rollup
   await run("npm run -s rollup");
+
+  // Render static DSD shell into index.html for no-JS and first paint.
+  // Pages content seeding from main/ is enabled by default.
+  // Disable with: PRERENDER_MAIN_README=false
+  if (prerenderMainReadme) {
+    await run("node bin/prerender-dsd-shell.mjs dist/public/index.html main");
+  } else {
+    await run(
+      "node bin/prerender-dsd-shell.mjs dist/public/index.html --no-seed",
+    );
+  }
 
   if (isProduction) {
     // Production only replacements

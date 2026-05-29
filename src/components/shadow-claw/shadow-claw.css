@@ -436,3 +436,55 @@ shadow-claw-conversations {
 .chat-page {
   flex-direction: column;
 }
+
+:host([data-prerender-no-seed="true"]) .nav-item,
+:host([data-prerender-no-seed="true"]) shadow-claw-conversations,
+:host([data-prerender-no-seed="true"]) .sidebar-footer,
+:host([data-prerender-no-seed="true"]) .page.active,
+:host([data-prerender-no-seed="true"]) shadow-claw-file-viewer,
+:host([data-prerender-no-seed="true"]) shadow-claw-toast {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity var(--shadow-claw-duration-min) var(--shadow-claw-ease-out),
+    transform var(--shadow-claw-duration-min) var(--shadow-claw-ease-out);
+}
+
+:host([data-prerender-no-seed="true"][data-hydration-pending="true"]) .nav-item,
+:host([data-prerender-no-seed="true"][data-hydration-pending="true"])
+  shadow-claw-conversations,
+:host([data-prerender-no-seed="true"][data-hydration-pending="true"])
+  .sidebar-footer,
+:host([data-prerender-no-seed="true"][data-hydration-pending="true"])
+  .page.active,
+:host([data-prerender-no-seed="true"][data-hydration-pending="true"])
+  shadow-claw-file-viewer,
+:host([data-prerender-no-seed="true"][data-hydration-pending="true"])
+  shadow-claw-toast,
+:host([data-prerender-no-seed="true"][data-js-boot-pending="true"]) .nav-item,
+:host([data-prerender-no-seed="true"][data-js-boot-pending="true"])
+  shadow-claw-conversations,
+:host([data-prerender-no-seed="true"][data-js-boot-pending="true"])
+  .sidebar-footer,
+:host([data-prerender-no-seed="true"][data-js-boot-pending="true"])
+  .page.active,
+:host([data-prerender-no-seed="true"][data-js-boot-pending="true"])
+  shadow-claw-file-viewer,
+:host([data-prerender-no-seed="true"][data-js-boot-pending="true"])
+  shadow-claw-toast {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(0.25rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :host([data-prerender-no-seed="true"]) .nav-item,
+  :host([data-prerender-no-seed="true"]) shadow-claw-conversations,
+  :host([data-prerender-no-seed="true"]) .sidebar-footer,
+  :host([data-prerender-no-seed="true"]) .page.active,
+  :host([data-prerender-no-seed="true"]) shadow-claw-file-viewer,
+  :host([data-prerender-no-seed="true"]) shadow-claw-toast {
+    transform: none;
+    transition: none;
+  }
+}

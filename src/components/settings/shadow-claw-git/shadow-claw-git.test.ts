@@ -139,6 +139,7 @@ jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
 
     return html;
   }),
+  toTrustedHtmlPresanitized: jest.fn((html: string) => html),
 }));
 
 const { setConfig } = await import("../../../db/setConfig.js");

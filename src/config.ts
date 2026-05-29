@@ -935,6 +935,8 @@ export const CONFIG_KEYS = {
   RATE_LIMIT_AUTO_ADAPT: "rate_limit_auto_adapt",
   TASK_SYNC_OUTBOX: "task_sync_outbox",
   LAST_ACTIVE_GROUP: "last_active_group",
+  SIDEBAR_DEFAULT_PAGE: "sidebar_default_page",
+  SIDEBAR_PAGES_HIDDEN: "sidebar_pages_hidden",
   CONVERSATIONS_HEIGHT: "conversations_height",
   SIDEBAR_WIDTH: "sidebar_width",
   CHAT_INPUT_AREA_HEIGHT: "chat_input_area_height",
@@ -958,6 +960,8 @@ export const CONFIG_KEYS = {
   BEDROCK_PROFILE_FALLBACK: "bedrock_profile_fallback",
   BEDROCK_AUTH_MODE: "bedrock_auth_mode",
   LAST_ACTIVE_PAGE: "last_active_page",
+  PAGES_LIST: "pages_list",
+  MAIN_GROUP_README_SUPPRESSED: "main_group_readme_suppressed",
   ACTIVITY_LOG_DISK_LOGGING_ENABLED: "activity_log_disk_logging_enabled",
 };
 

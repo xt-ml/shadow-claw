@@ -15,6 +15,7 @@ import { showError, showSuccess, showWarning } from "../../../toast.js";
 import type { ShadowClawDatabase } from "../../../types.js";
 import { getDb } from "../../../db/db.js";
 import ShadowClawElement from "../../shadow-claw-element.js";
+import { setSanitizedHtml } from "../../../security/trusted-types.js";
 
 const elementName = "shadow-claw-storage";
 
@@ -222,19 +223,25 @@ export class ShadowClawStorage extends ShadowClawElement {
       );
 
       if (helpGeneralEl) {
-        helpGeneralEl.innerHTML = handle
-          ? `Persistent storage protects your <b>chat history, tasks, and settings</b> in the browser database.
+        setSanitizedHtml(
+          helpGeneralEl,
+          handle
+            ? `Persistent storage protects your <b>chat history, tasks, and settings</b> in the browser database.
             Without it, the browser might clear this data if your disk is almost full.`
-          : `Persistent storage protects your <b>files, chat history, and settings</b> in the browser.
-            Without it, the browser might clear your data if your disk is almost full.`;
+            : `Persistent storage protects your <b>files, chat history, and settings</b> in the browser.
+            Without it, the browser might clear your data if your disk is almost full.`,
+        );
       }
 
       if (helpLocalEl) {
-        helpLocalEl.innerHTML = handle
-          ? `ShadowClaw is currently <b>connected to a local folder</b>. Your files are safe on your disk,
+        setSanitizedHtml(
+          helpLocalEl,
+          handle
+            ? `ShadowClaw is currently <b>connected to a local folder</b>. Your files are safe on your disk,
             but browser persistence is still recommended for your chat history.`
-          : `You can use a local folder on your computer for storage. This makes files directly accessible
-            on your disk and independent of browser storage limits.`;
+            : `You can use a local folder on your computer for storage. This makes files directly accessible
+            on your disk and independent of browser storage limits.`,
+        );
       }
 
       // Disable persistent button if already persistent

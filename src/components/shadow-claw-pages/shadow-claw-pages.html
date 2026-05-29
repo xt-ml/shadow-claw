@@ -1,0 +1,23 @@
+<template>
+  <section class="pages" aria-label="Pages">
+    <header class="pages__header">
+      <div class="pages__header-main">
+        <h2 class="pages__title">📚 Pages</h2>
+        <div class="pages__status" data-pages-status></div>
+      </div>
+    </header>
+
+    <div class="pages__content">
+      <aside class="pages__sidebar" aria-label="Saved pages">
+        <div class="pages__list" data-pages-list role="list"></div>
+      </aside>
+
+      <article class="pages__viewer" aria-label="Page preview">
+        <div class="pages__empty" data-pages-empty>
+          No pages yet. In Files, use "Set as Page" on a markdown or HTML file.
+        </div>
+        <div class="pages__rendered" data-pages-rendered hidden></div>
+      </article>
+    </div>
+  </section>
+</template>

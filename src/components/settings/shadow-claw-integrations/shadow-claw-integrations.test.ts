@@ -56,6 +56,7 @@ jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
 
     return html;
   }),
+  toTrustedHtmlPresanitized: jest.fn((html: string) => html),
 }));
 
 const { setSanitizedHtml } = await import("../../../security/trusted-types.js");

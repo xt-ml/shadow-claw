@@ -20,6 +20,7 @@ import type {
 } from "../../../types.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
+import { setSanitizedHtml } from "../../../security/trusted-types.js";
 
 const elementName = "shadow-claw-llm";
 
@@ -276,12 +277,15 @@ export class ShadowClawLlm extends ShadowClawElement {
     ) as HTMLSelectElement | null;
 
     if (providerSelect) {
-      providerSelect.innerHTML = providers
-        .map(
-          (p: LLMProvider) =>
-            `<option value="${p.id}" ${p.id === currentProvider ? "selected" : ""}>${p.name}</option>`,
-        )
-        .join("");
+      setSanitizedHtml(
+        providerSelect,
+        providers
+          .map(
+            (p: LLMProvider) =>
+              `<option value="${p.id}" ${p.id === currentProvider ? "selected" : ""}>${p.name}</option>`,
+          )
+          .join(""),
+      );
     }
 
     // Populate model selector
@@ -407,8 +411,10 @@ export class ShadowClawLlm extends ShadowClawElement {
         ) as HTMLSelectElement | null;
 
         if (modelSelect) {
-          modelSelect.innerHTML =
-            '<option value="">Model is served by local llamafile server</option>';
+          setSanitizedHtml(
+            modelSelect,
+            '<option value="">Model is served by local llamafile server</option>',
+          );
           modelSelect.disabled = true;
         }
 
@@ -588,10 +594,13 @@ export class ShadowClawLlm extends ShadowClawElement {
             ? `No *.llamafile models found in ${LLAMAFILE_EXPECTED_DIR}`
             : "No models available";
 
-        modelSelect.innerHTML = [
-          `<option value="" ${currentValue ? "" : "selected"}>${escapeHtml(emptyMessage)}</option>`,
-          `<option value="__custom__">-- Custom Model ID --</option>`,
-        ].join("");
+        setSanitizedHtml(
+          modelSelect,
+          [
+            `<option value="" ${currentValue ? "" : "selected"}>${escapeHtml(emptyMessage)}</option>`,
+            `<option value="__custom__">-- Custom Model ID --</option>`,
+          ].join(""),
+        );
 
         if (currentValue) {
           modelSelect.value = "__custom__";
@@ -730,7 +739,7 @@ export class ShadowClawLlm extends ShadowClawElement {
       }
 
       html += `<option value="__custom__">-- Custom Model ID --</option>`;
-      modelSelect.innerHTML = html;
+      setSanitizedHtml(modelSelect, html);
 
       // Check if current model exists in the list
       const allModelIds = modelItems.map((m) =>
@@ -756,7 +765,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     } else if (currentProviderData?.modelsUrl && modelSelect) {
       // Fetch models dynamically and merge with static models
       const fetchToken = selectionToken;
-      modelSelect.innerHTML = "<option>Loading models\u2026</option>";
+      setSanitizedHtml(modelSelect, "<option>Loading models…</option>");
       modelSelect.disabled = true;
 
       const headers = { ...currentProviderData.headers };
@@ -890,7 +899,10 @@ export class ShadowClawLlm extends ShadowClawElement {
               return;
             }
 
-            modelSelect.innerHTML = "<option>Failed to load models</option>";
+            setSanitizedHtml(
+              modelSelect,
+              "<option>Failed to load models</option>",
+            );
 
             if (currentProviderData?.models) {
               console.warn(

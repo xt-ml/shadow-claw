@@ -26,6 +26,12 @@ import {
 
 import { listGroupFiles } from "../storage/listGroupFiles.js";
 import { copyGroupDirectory } from "../storage/copyGroupDirectory.js";
+import {
+  DEFAULT_MAIN_GROUP_README_PATH,
+  ensureMainGroupReadme,
+  isMainGroupReadmeSuppressed,
+  setMainGroupReadmeSuppressed,
+} from "../storage/ensureMainGroupReadme.js";
 import { readGroupFile } from "../storage/readGroupFile.js";
 import { requestStorageAccess } from "../storage/requestStorageAccess.js";
 import { getStorageStatus } from "../storage/storage.js";
@@ -42,6 +48,7 @@ import type {
   ToolActivity,
   ContextUsage,
   GroupMeta,
+  SavedPageRef,
 } from "../types.js";
 import type { Orchestrator } from "../orchestrator.js";
 import type { StorageStatus } from "../storage/storage.js";
@@ -248,6 +255,7 @@ export interface OrchestratorStoreState {
   contextUsage: ContextUsage | null;
   files: string[];
   activeGroupId: string;
+  pages: SavedPageRef[];
   currentPath: string;
   error: string | null;
   activityLog: ThinkingLogEntry[];
@@ -258,6 +266,8 @@ export interface OrchestratorStoreState {
 }
 
 export class OrchestratorStore {
+  private static readonly DEFAULT_PAGE_PATH = "MEMORY.md";
+
   public _messages: Signal.State<StoredMessage[]>;
   public _isTyping: Signal.State<boolean>;
   public _storageStatus: Signal.State<StorageStatus | null>;
@@ -281,6 +291,11 @@ export class OrchestratorStore {
   public _gitProxyUrl: Signal.State<string>;
   public _vmBashFullInternetAccess: Signal.State<boolean>;
   public _activePage: Signal.State<string>;
+  public _sidebarDefaultPage: Signal.State<"chat" | "tasks" | "files">;
+  public _pages: Signal.State<SavedPageRef[]>;
+  private _hadPersistedActivePage: boolean;
+  private _initResolve: (() => void) | null;
+  private _whenInitialized: Promise<void>;
   public orchestrator: Orchestrator | null;
   private _db: ShadowClawDatabase | null;
   private _activityLogSessionStartedAtByGroup: Map<string, string>;
@@ -302,6 +317,26 @@ export class OrchestratorStore {
     }
 
     return "Conversation";
+  }
+
+  private normalizeSidebarDefaultPage(
+    value: unknown,
+  ): "chat" | "tasks" | "files" {
+    if (value === "chat" || value === "tasks" || value === "files") {
+      return value;
+    }
+
+    return "chat";
+  }
+
+  private resolveSidebarDefaultPageForActivePage(
+    page: string,
+  ): "chat" | "tasks" | "files" {
+    if (page === "chat" || page === "tasks" || page === "files") {
+      return page;
+    }
+
+    return this._sidebarDefaultPage.get();
   }
 
   private async ensureGroupExists(
@@ -356,6 +391,13 @@ export class OrchestratorStore {
     this._gitProxyUrl = new Signal.State("/git-proxy");
     this._vmBashFullInternetAccess = new Signal.State(false);
     this._activePage = new Signal.State("chat");
+    this._sidebarDefaultPage = new Signal.State("chat");
+    this._pages = new Signal.State([]);
+    this._hadPersistedActivePage = false;
+    this._initResolve = null;
+    this._whenInitialized = new Promise<void>((resolve) => {
+      this._initResolve = resolve;
+    });
     this.orchestrator = null;
     this._db = null;
     this._activityLogSessionStartedAtByGroup = new Map();
@@ -408,6 +450,116 @@ export class OrchestratorStore {
       CONFIG_KEYS.TASK_SYNC_OUTBOX,
       JSON.stringify(this._taskSyncOutbox),
     );
+  }
+
+  private parsePagesList(raw: string | null | undefined): SavedPageRef[] {
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed
+        .map((entry) => {
+          if (typeof entry === "string") {
+            return {
+              groupId: DEFAULT_GROUP_ID,
+              path: this.normalizePagePath(entry),
+            } satisfies SavedPageRef;
+          }
+
+          if (!entry || typeof entry !== "object") {
+            return null;
+          }
+
+          const page = entry as Partial<SavedPageRef>;
+          if (typeof page.path !== "string") {
+            return null;
+          }
+
+          const normalizedGroupId =
+            typeof page.groupId === "string" && page.groupId.trim().length > 0
+              ? page.groupId
+              : DEFAULT_GROUP_ID;
+
+          const normalizedPath =
+            normalizedGroupId === DEFAULT_GROUP_ID
+              ? this.normalizePagePath(page.path)
+              : page.path.trim();
+
+          if (!normalizedPath) {
+            return null;
+          }
+
+          return {
+            groupId: normalizedGroupId,
+            path: normalizedPath,
+          } satisfies SavedPageRef;
+        })
+        .filter((entry): entry is SavedPageRef => !!entry)
+        .filter((entry, index, arr) => {
+          const key = `${entry.groupId}\u0000${entry.path}`;
+
+          return (
+            index ===
+            arr.findIndex((candidate) => {
+              return `${candidate.groupId}\u0000${candidate.path}` === key;
+            })
+          );
+        });
+    } catch {
+      return [];
+    }
+  }
+
+  private normalizePagePath(path: string): string {
+    const normalized = path.trim().replace(/^\/+/, "").replace(/\/+/g, "/");
+
+    // Migrate legacy default page paths into the current default page.
+    if (
+      normalized === "main/README.md" ||
+      normalized === "main/MEMORY.md" ||
+      normalized === "README.md"
+    ) {
+      return OrchestratorStore.DEFAULT_PAGE_PATH;
+    }
+
+    return normalized;
+  }
+
+  private async persistPages(db: ShadowClawDatabase): Promise<void> {
+    await setConfig(
+      db,
+      CONFIG_KEYS.PAGES_LIST,
+      JSON.stringify(this._pages.get()),
+    );
+  }
+
+  private async ensureDefaultPage(db: ShadowClawDatabase): Promise<void> {
+    if (await isMainGroupReadmeSuppressed(db)) {
+      return;
+    }
+
+    const hasWorkspaceReadme = await ensureMainGroupReadme(
+      db,
+      DEFAULT_GROUP_ID,
+    );
+
+    if (!hasWorkspaceReadme || this._pages.get().length > 0) {
+      return;
+    }
+
+    this._pages.set([
+      {
+        groupId: DEFAULT_GROUP_ID,
+        path: OrchestratorStore.DEFAULT_PAGE_PATH,
+      },
+    ]);
+    await this.persistPages(db);
   }
 
   private async queueTaskSyncOutboxOperation(
@@ -564,6 +716,22 @@ export class OrchestratorStore {
 
   get activePage() {
     return this._activePage.get();
+  }
+
+  get hadPersistedActivePage() {
+    return this._hadPersistedActivePage;
+  }
+
+  get whenInitialized(): Promise<void> {
+    return this._whenInitialized;
+  }
+
+  get sidebarDefaultPage() {
+    return this._sidebarDefaultPage.get();
+  }
+
+  get pages() {
+    return this._pages.get();
   }
 
   get ready() {
@@ -827,7 +995,21 @@ export class OrchestratorStore {
       | null;
     if (lastPage) {
       this._activePage.set(lastPage);
+      this._hadPersistedActivePage = true;
     }
+
+    const sidebarDefaultPageRaw = await getConfig(
+      db,
+      CONFIG_KEYS.SIDEBAR_DEFAULT_PAGE,
+    );
+    this._sidebarDefaultPage.set(
+      this.normalizeSidebarDefaultPage(sidebarDefaultPageRaw),
+    );
+
+    this._pages.set(
+      this.parsePagesList(await getConfig(db, CONFIG_KEYS.PAGES_LIST)),
+    );
+    await this.ensureDefaultPage(db);
 
     // Initialize proxy values from orchestrator
     if (this.orchestrator) {
@@ -844,6 +1026,8 @@ export class OrchestratorStore {
       this.loadTasks(db),
       this.loadFiles(db),
     ]);
+
+    this._initResolve?.();
   }
 
   /**
@@ -1254,6 +1438,109 @@ export class OrchestratorStore {
   async setActivePage(db: ShadowClawDatabase, page: string) {
     this._activePage.set(page);
     await setConfig(db, CONFIG_KEYS.LAST_ACTIVE_PAGE, page);
+
+    const nextSidebarDefaultPage =
+      this.resolveSidebarDefaultPageForActivePage(page);
+    if (nextSidebarDefaultPage !== this._sidebarDefaultPage.get()) {
+      this._sidebarDefaultPage.set(nextSidebarDefaultPage);
+      await setConfig(
+        db,
+        CONFIG_KEYS.SIDEBAR_DEFAULT_PAGE,
+        nextSidebarDefaultPage,
+      );
+    }
+  }
+
+  async addPage(
+    db: ShadowClawDatabase,
+    path: string,
+    groupId: string = this._activeGroupId.get(),
+  ): Promise<void> {
+    const normalized =
+      groupId === DEFAULT_GROUP_ID ? this.normalizePagePath(path) : path.trim();
+    if (!normalized) {
+      return;
+    }
+
+    const pages = this._pages.get();
+    if (
+      pages.some(
+        (entry) => entry.path === normalized && entry.groupId === groupId,
+      )
+    ) {
+      return;
+    }
+
+    this._pages.set([
+      ...pages,
+      {
+        groupId,
+        path: normalized,
+      },
+    ]);
+
+    if (
+      groupId === DEFAULT_GROUP_ID &&
+      normalized === DEFAULT_MAIN_GROUP_README_PATH
+    ) {
+      await setMainGroupReadmeSuppressed(db, false);
+    }
+
+    await this.persistPages(db);
+  }
+
+  async removePage(
+    db: ShadowClawDatabase,
+    path: string,
+    groupId: string = this._activeGroupId.get(),
+  ): Promise<void> {
+    const normalized = this.normalizePagePath(path);
+    if (!normalized) {
+      return;
+    }
+
+    const pages = this._pages.get();
+    if (
+      !pages.some(
+        (entry) => entry.path === normalized && entry.groupId === groupId,
+      )
+    ) {
+      return;
+    }
+
+    const remainingPages = pages.filter(
+      (entry) => !(entry.path === normalized && entry.groupId === groupId),
+    );
+
+    const removingMainMemoryPage =
+      groupId === DEFAULT_GROUP_ID &&
+      normalized === DEFAULT_MAIN_GROUP_README_PATH;
+
+    if (removingMainMemoryPage) {
+      await setMainGroupReadmeSuppressed(db, true);
+    }
+
+    const mainMemorySuppressed =
+      removingMainMemoryPage || (await isMainGroupReadmeSuppressed(db));
+
+    if (remainingPages.length === 0 && !mainMemorySuppressed) {
+      const hasWorkspaceReadme = await ensureMainGroupReadme(
+        db,
+        DEFAULT_GROUP_ID,
+      );
+
+      if (hasWorkspaceReadme) {
+        remainingPages.push({
+          groupId: DEFAULT_GROUP_ID,
+          path: OrchestratorStore.DEFAULT_PAGE_PATH,
+        });
+      } else {
+        return;
+      }
+    }
+
+    this._pages.set(remainingPages);
+    await this.persistPages(db);
   }
 
   /**
@@ -1399,6 +1686,7 @@ export class OrchestratorStore {
       modelDownloadProgress: this.modelDownloadProgress,
       error: this.error,
       activeGroupId: this.activeGroupId,
+      pages: this.pages,
       ready: this.ready,
       files: this.files,
       currentPath: this.currentPath,

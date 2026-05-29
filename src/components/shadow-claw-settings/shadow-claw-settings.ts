@@ -172,6 +172,23 @@ export class ShadowClawSettings extends ShadowClawElement {
     if (activityLogToggle) {
       activityLogToggle.checked = activityLogDiskLoggingEnabled;
     }
+
+    const rawSidebarPagesHidden = (await getConfig(
+      this.db,
+      CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN,
+    )) as unknown;
+    const sidebarPagesHidden =
+      rawSidebarPagesHidden === true ||
+      rawSidebarPagesHidden === "true" ||
+      rawSidebarPagesHidden === 1 ||
+      rawSidebarPagesHidden === "1";
+
+    const sidebarHidePagesToggle = root.querySelector(
+      '[data-setting="sidebar-hide-pages-toggle"]',
+    ) as HTMLInputElement | null;
+    if (sidebarHidePagesToggle) {
+      sidebarHidePagesToggle.checked = sidebarPagesHidden;
+    }
   }
 
   bindSettingsActions() {
@@ -263,6 +280,15 @@ export class ShadowClawSettings extends ShadowClawElement {
         const target = e.target as HTMLInputElement;
         if (target) {
           void this.onActivityLogDiskLoggingToggle(target.checked);
+        }
+      });
+
+    root
+      .querySelector('[data-setting="sidebar-hide-pages-toggle"]')
+      ?.addEventListener("change", (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        if (target) {
+          void this.onSidebarHidePagesToggle(target.checked);
         }
       });
   }
@@ -614,6 +640,37 @@ export class ShadowClawSettings extends ShadowClawElement {
         "Error saving activity log disk logging setting: " + errorMsg,
         6000,
       );
+    }
+  }
+
+  async onSidebarHidePagesToggle(hidden: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../../db/setConfig.js");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN,
+        hidden ? "true" : "false",
+      );
+
+      this.dispatchEvent(
+        new CustomEvent("sidebar-pages-visibility-change", {
+          detail: { hidden },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+
+      showSuccess(
+        hidden ? "Pages hidden in sidebar" : "Pages shown in sidebar",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving sidebar Pages visibility: " + errorMsg, 6000);
     }
   }
 

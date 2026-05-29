@@ -1,5 +1,8 @@
 import { jest } from "@jest/globals";
 
+const mockAddPage = jest.fn();
+const mockRemovePage = jest.fn();
+
 jest.unstable_mockModule("../../storage/deleteAllGroupFiles.js", () => ({
   deleteAllGroupFiles: jest.fn(),
 }));
@@ -77,6 +80,9 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
     activeGroupId: "default",
     currentPath: ".",
     files: [] as string[],
+    pages: [] as Array<{ groupId: string; path: string }>,
+    addPage: mockAddPage,
+    removePage: mockRemovePage,
     loadFiles: jest.fn(),
     db: {},
     triggerFilesRefresh: jest.fn(),
@@ -98,6 +104,7 @@ jest.unstable_mockModule("../../db/db.js", () => ({
 }));
 
 const { ShadowClawFiles } = await import("./shadow-claw-files.js");
+const { deleteGroupFile } = await import("../../storage/deleteGroupFile.js");
 const { renameGroupEntry } = await import("../../storage/renameGroupEntry.js");
 const { writeGroupFile } = await import("../../storage/writeGroupFile.js");
 const { createGroupDirectory } =
@@ -112,6 +119,10 @@ describe("shadow-claw-files", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     filesUiStore.clearClipboard();
+    (orchestratorStore as any).pages = [];
+    (orchestratorStore as any).files = [];
+    (mockAddPage as any).mockResolvedValue(undefined);
+    (mockRemovePage as any).mockResolvedValue(undefined);
   });
 
   it("registers custom element", () => {
@@ -541,6 +552,68 @@ describe("shadow-claw-files", () => {
 
     resolveWrite?.();
     await Promise.all([first, second]);
+
+    document.body.removeChild(component);
+  });
+
+  it("adds markdown files to Pages from file actions", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+
+    (orchestratorStore as any).files = ["README.md"];
+    (orchestratorStore as any).currentPath = ".";
+    component.updateFileList({} as any);
+
+    const setPageBtn = component.shadowRoot?.querySelector(
+      ".files__page-toggle",
+    );
+    if (!(setPageBtn instanceof HTMLButtonElement)) {
+      throw new Error("Expected Set as Page action button");
+    }
+
+    setPageBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mockAddPage).toHaveBeenCalledWith({} as any, "README.md", "default");
+    expect(showSuccess).toHaveBeenCalledWith("Added README.md to Pages", 2600);
+    document.body.removeChild(component);
+  });
+
+  it("removes a file from Pages before deleting it", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+
+    jest.spyOn(component, "requestConfirmation").mockResolvedValue(true);
+    (orchestratorStore as any).files = ["README.md"];
+    (orchestratorStore as any).pages = [
+      { groupId: "default", path: "README.md" },
+    ];
+
+    component.updateFileList({} as any);
+
+    const deleteBtn = component.shadowRoot?.querySelector(".files__delete");
+    if (!(deleteBtn instanceof HTMLButtonElement)) {
+      throw new Error("Expected delete action button");
+    }
+
+    deleteBtn.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(mockRemovePage).toHaveBeenCalledWith(
+      {} as any,
+      "README.md",
+      "default",
+    );
+    expect(deleteGroupFile).toHaveBeenCalledWith(
+      {} as any,
+      "default",
+      "README.md",
+    );
+    expect((mockRemovePage as any).mock.invocationCallOrder[0]).toBeLessThan(
+      (deleteGroupFile as any).mock.invocationCallOrder[0],
+    );
 
     document.body.removeChild(component);
   });

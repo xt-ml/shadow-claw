@@ -85,6 +85,16 @@ export function sanitizeSrcdocHtml(html: string, options: Config = {}): string {
   return sanitizeHtml(html, options);
 }
 
+export function toTrustedHtmlPresanitized(html: string): TrustedMarkup {
+  const policy = getTrustedTypesPolicy();
+
+  if (!policy) {
+    return html;
+  }
+
+  return policy.createHTML(html);
+}
+
 export function setSanitizedHtml(
   element: Element,
   dirty: string | Node = "",
@@ -101,6 +111,29 @@ export function setEscapedHtml(element: Element, text: string): TrustedMarkup {
   const trustedHtml = escapeToTrustedHtml(text);
 
   element.innerHTML = trustedHtml as string;
+
+  return trustedHtml;
+}
+
+export function setSanitizedSrcdoc(
+  iframe: HTMLIFrameElement,
+  dirty: string,
+  options: Config = {},
+): TrustedMarkup {
+  const trustedHtml = sanitizeToTrustedHtml(dirty, options);
+
+  iframe.srcdoc = trustedHtml as string;
+
+  return trustedHtml;
+}
+
+export function setTrustedSrcdoc(
+  iframe: HTMLIFrameElement,
+  html: string,
+): TrustedMarkup {
+  const trustedHtml = toTrustedHtmlPresanitized(html);
+
+  iframe.srcdoc = trustedHtml as string;
 
   return trustedHtml;
 }

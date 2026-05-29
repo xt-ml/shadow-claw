@@ -173,6 +173,11 @@ export interface GroupMeta {
   toolTags?: string[];
 }
 
+export interface SavedPageRef {
+  groupId: string;
+  path: string;
+}
+
 export type ChannelMessageCallback = (msg: InboundMessage) => void;
 
 export type ChannelTypingCallback = (groupId: string, typing: boolean) => void;

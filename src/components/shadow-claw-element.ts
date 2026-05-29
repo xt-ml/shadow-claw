@@ -1,3 +1,5 @@
+import { toTrustedHtmlPresanitized } from "../security/trusted-types.js";
+
 export default class ShadowClawElement extends HTMLElement {
   static readonly component: string;
   static readonly styles: URL | string;
@@ -13,7 +15,11 @@ export default class ShadowClawElement extends HTMLElement {
     return fetch(template)
       .then((r) => r.text())
       .then((html) => {
-        const doc = new DOMParser().parseFromString(html, "text/html");
+        const trustedTemplateHtml = toTrustedHtmlPresanitized(html);
+        const doc = new DOMParser().parseFromString(
+          trustedTemplateHtml as string,
+          "text/html",
+        );
         const templateEl = doc.querySelector("template");
 
         if (templateEl) {
@@ -79,20 +85,25 @@ export default class ShadowClawElement extends HTMLElement {
     super();
 
     const { template, styles } = this.constructor as typeof ShadowClawElement;
+    const existingShadowRoot = this.shadowRoot;
 
-    this.attachShadow({ mode: "open" });
+    if (!existingShadowRoot) {
+      this.attachShadow({ mode: "open" });
 
-    this.onTemplateReady = ShadowClawElement.getTemplate(template).then(
-      (el: Element[]) => {
-        if (this.shadowRoot) {
-          ShadowClawElement.setTemplate(this.shadowRoot, el);
+      this.onTemplateReady = ShadowClawElement.getTemplate(template).then(
+        (el: Element[]) => {
+          if (this.shadowRoot) {
+            ShadowClawElement.setTemplate(this.shadowRoot, el);
 
-          return Promise.resolve();
-        }
+            return Promise.resolve();
+          }
 
-        return Promise.reject("Failed to load Shadow DOM");
-      },
-    );
+          return Promise.reject("Failed to load Shadow DOM");
+        },
+      );
+    } else {
+      this.onTemplateReady = Promise.resolve();
+    }
 
     this.onStylesReady = ShadowClawElement.getStyles(styles).then(
       (sheet: CSSStyleSheet) => {

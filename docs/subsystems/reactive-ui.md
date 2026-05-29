@@ -298,3 +298,28 @@ The file viewer component (`<shadow-claw-file-viewer>`) provides dual-mode code 
 
 - **Native Fullscreen & Fallback:** The modal supports a fullscreen mode that utilizes the native browser Fullscreen API (handling prefixes like `webkit`). If native fullscreen is blocked by security context, lacks permission, or is not initiated by a user gesture, the component falls back to a CSS-based modal class (`modal-content--fullscreen`) that expands to fill the entire viewport.
 - **Responsive Layout:** On compact screens (viewport width under 640px), the Cancel and Save button labels automatically hide, displaying only the action icon to prevent modal header button overflow while editing.
+
+### Pages Component
+
+The pages component (`<shadow-claw-pages>`) renders markdown and HTML files as navigable workspace pages.
+
+#### Architecture
+
+- **Page references** stored in `SavedPageRef` (groupId + path)
+- **Markdown rendering** via `renderMarkdown` with DOMPurify sanitization
+- **HTML rendering** in sandboxed `<iframe>` with per-render nonce CSP
+- **Link resolution** parses relative links and resolves them within workspace
+- **Sidebar navigation** lists saved pages with visual indicators
+
+#### Rendering & Sandbox
+
+- **Markdown pages**: Converted to HTML via `renderMarkdown`, sanitized with custom DOMPurify options to allow `blob:` URLs for local asset references
+- **HTML pages**: Wrapped in a complete HTML document with CSP `script-src 'none'`, rendered inside a sandboxed iframe
+- **Workspace asset resolution**: Images and media in pages are resolved relative to the file's workspace directory, loaded from OPFS, and converted to blob object URLs
+- **Link handling**: Non-modifier clicks on links navigate within the pages sidebar (unless the link is external or uses explicit target attributes)
+
+#### Configuration
+
+- **Sidebar visibility**: Configurable via `SIDEBAR_PAGES_HIDDEN` setting; when hidden, Pages sidebar is excluded from navigation
+- **Default page**: Configurable starting page via `SIDEBAR_DEFAULT_PAGE`; persists across reloads
+- **Page list**: All saved pages stored in `PAGES_LIST` config key

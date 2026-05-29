@@ -35,55 +35,55 @@
     {
       "purpose": "any",
       "sizes": "48x48",
-      "src": "https://xt-ml.github.io/shadow-claw/assets/icons/48.png",
+      "src": "assets/icons/48.png",
       "type": "image/png"
     },
     {
       "purpose": "any",
       "sizes": "72x72",
-      "src": "https://xt-ml.github.io/shadow-claw/assets/icons/72.png",
+      "src": "assets/icons/72.png",
       "type": "image/png"
     },
     {
       "purpose": "any",
       "sizes": "96x96",
-      "src": "https://xt-ml.github.io/shadow-claw/assets/icons/96.png",
+      "src": "assets/icons/96.png",
       "type": "image/png"
     },
     {
       "purpose": "any",
       "sizes": "128x128",
-      "src": "https://xt-ml.github.io/shadow-claw/assets/icons/128.png",
+      "src": "assets/icons/128.png",
       "type": "image/png"
     },
     {
       "purpose": "any",
       "sizes": "152x152",
-      "src": "https://xt-ml.github.io/shadow-claw/assets/icons/152.png",
+      "src": "assets/icons/152.png",
       "type": "image/png"
     },
     {
       "purpose": "any",
       "sizes": "192x192",
-      "src": "https://xt-ml.github.io/shadow-claw/assets/icons/192.png",
+      "src": "assets/icons/192.png",
       "type": "image/png"
     },
     {
       "purpose": "any",
       "sizes": "512x512",
-      "src": "https://xt-ml.github.io/shadow-claw/assets/icons/512.png",
+      "src": "assets/icons/512.png",
       "type": "image/png"
     },
     {
       "purpose": "any",
       "sizes": "1024x1024",
-      "src": "https://xt-ml.github.io/shadow-claw/assets/icons/1024.png",
+      "src": "assets/icons/1024.png",
       "type": "image/png"
     },
     {
       "purpose": "maskable",
       "sizes": "1024x1024",
-      "src": "https://xt-ml.github.io/shadow-claw/assets/icons/1024.png",
+      "src": "assets/icons/1024.png",
       "type": "image/png"
     }
   ],
@@ -92,14 +92,14 @@
       "form_factor": "wide",
       "label": "shadow-claw",
       "sizes": "1920x1050",
-      "src": "https://xt-ml.github.io/shadow-claw/assets/screenshots/shadow-claw-screenshot-1920x1050.png",
+      "src": "assets/screenshots/shadow-claw-screenshot-1920x1050.png",
       "type": "image/png"
     },
     {
       "form_factor": "narrow",
       "label": "shadow-claw",
       "sizes": "731x1045",
-      "src": "https://xt-ml.github.io/shadow-claw/assets/screenshots/shadow-claw-screenshot-731x1045.png",
+      "src": "assets/screenshots/shadow-claw-screenshot-731x1045.png",
       "type": "image/png"
     }
   ]

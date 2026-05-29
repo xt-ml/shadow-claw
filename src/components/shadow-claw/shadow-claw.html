@@ -115,7 +115,8 @@
       <!-- Sidebar -->
       <aside class="sidebar">
         <nav class="nav-menu">
-          <li class="nav-item active" data-page="chat">💬 Chat</li>
+          <li class="nav-item active" data-page="pages">📚 Pages</li>
+          <li class="nav-item" data-page="chat">💬 Chat</li>
           <li class="nav-item" data-page="tasks">&nbsp;✓&nbsp;&nbsp;Tasks</li>
           <li class="nav-item" data-page="files">📁 Files</li>
         </nav>
@@ -132,7 +133,7 @@
       <!-- Main Content -->
       <div class="main-content">
         <!-- Chat Page -->
-        <div class="page chat-page active" data-page-id="chat">
+        <div class="page chat-page" data-page-id="chat">
           <shadow-claw-chat></shadow-claw-chat>
         </div>
 
@@ -144,6 +145,11 @@
         <!-- Files Page -->
         <div class="page" data-page-id="files">
           <shadow-claw-files></shadow-claw-files>
+        </div>
+
+        <!-- Pages Page -->
+        <div class="page active" data-page-id="pages">
+          <shadow-claw-pages></shadow-claw-pages>
         </div>
 
         <!-- Settings Page (delegated to sub-components) -->

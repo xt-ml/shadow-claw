@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.7.6",
+  "version": "1.8.0",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -18,7 +18,7 @@
     "build:service-worker": "npm run -s clean:service-worker && workbox generateSW src/service-worker/workbox-config.cjs",
     "build": "node bin/build.mjs",
     "clean:service-worker": "node bin/rimraf.mjs dist/public/workbox-*.js && node bin/rimraf.mjs dist/public/service-worker.js",
-    "deploy:gh-pages": "npm run -s build:prod && gh-pages -f -m \"npm run deploy:gh-pages\" -d dist/public -r git@github.com:xt-ml/shadow-claw.git",
+    "deploy:gh-pages": "PRERENDER_MAIN_README=false npm run -s build:prod && gh-pages -f -m \"npm run deploy:gh-pages\" -d dist/public -r git@github.com:xt-ml/shadow-claw.git",
     "e2e:install": "npx playwright install",
     "e2e": "node bin/rimraf.mjs .cache/e2e-database && npx playwright test",
     "electron:build:mac": "npm run build && npm run build:service-worker && electron-builder --mac",

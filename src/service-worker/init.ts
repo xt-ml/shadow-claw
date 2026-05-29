@@ -273,7 +273,56 @@ async function applyPendingUpdate(wb: Workbox) {
   await scheduleReloadFallback();
 }
 
+export function shouldReloadAfterControllerChange(): boolean {
+  return hasActiveUpdateIntent();
+}
+
+function handleServiceWorkerControllerChange() {
+  const shouldReload = shouldReloadAfterControllerChange();
+
+  clearUpdateIntent();
+  clearUpdateFailure();
+
+  // Avoid reloading on first install takeover; only reload when this tab
+  // explicitly initiated an update flow.
+  if (shouldReload) {
+    reloadCurrentPage();
+  }
+}
+
 if ("serviceWorker" in navigator) {
+  // Workbox Window calls navigator.serviceWorker.register() with a plain string.
+  // In browsers that enforce (or report) Trusted Types, that is a TrustedScriptURL
+  // sink. Register a "default" policy that permits same-origin relative paths and
+  // blob: URLs (used for dynamically-created workers) before Workbox runs.
+  const _trustedTypes = Reflect.get(globalThis, "trustedTypes") as
+    | {
+        createPolicy?: (
+          name: string,
+          rules: { createScriptURL?: (input: string) => string },
+        ) => unknown;
+      }
+    | undefined;
+
+  if (typeof _trustedTypes?.createPolicy === "function") {
+    try {
+      _trustedTypes.createPolicy("default", {
+        createScriptURL: (input: string): string => {
+          // Allow relative paths (same-origin) and blob: URLs only.
+          if (input.startsWith("blob:") || !/^(?:https?:)?\/\//i.test(input)) {
+            return input;
+          }
+
+          throw new Error(
+            `[ShadowClaw] Blocked unexpected script URL: ${input}`,
+          );
+        },
+      });
+    } catch {
+      // Default policy already registered by another module; ignore.
+    }
+  }
+
   const wb = new Workbox("service-worker.js");
 
   wb.addEventListener("waiting", async () => {
@@ -294,15 +343,11 @@ if ("serviceWorker" in navigator) {
   });
 
   wb.addEventListener("controlling", () => {
-    clearUpdateIntent();
-    clearUpdateFailure();
-    reloadCurrentPage();
+    handleServiceWorkerControllerChange();
   });
 
   navigator.serviceWorker.addEventListener("controllerchange", () => {
-    clearUpdateIntent();
-    clearUpdateFailure();
-    reloadCurrentPage();
+    handleServiceWorkerControllerChange();
   });
 
   wb.register();

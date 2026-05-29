@@ -114,6 +114,22 @@ describe("service-worker init", () => {
     expect(serviceWorkerListeners.controllerchange).toBeDefined();
   });
 
+  it("does not request a reload when no update intent exists", async () => {
+    const mod = await import("./init.js");
+
+    expect(mod.shouldReloadAfterControllerChange()).toBe(false);
+  });
+
+  it("requests a reload only when a fresh update intent exists", async () => {
+    globalThis.sessionStorage.setItem(
+      UPDATE_INTENT_KEY,
+      JSON.stringify({ startedAt: Date.now(), fallbackReloadAttempts: 0 }),
+    );
+    const mod = await import("./init.js");
+
+    expect(mod.shouldReloadAfterControllerChange()).toBe(true);
+  });
+
   it("suppresses repeated update prompts after fallback reload attempts are exhausted", async () => {
     globalThis.sessionStorage.setItem(
       UPDATE_INTENT_KEY,

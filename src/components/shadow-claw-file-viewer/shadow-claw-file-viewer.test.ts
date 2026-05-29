@@ -14,7 +14,13 @@ jest.unstable_mockModule("../../security/trusted-types.js", () => ({
 
     return html;
   }),
+  setTrustedSrcdoc: jest.fn((iframe: HTMLIFrameElement, html: string) => {
+    iframe.srcdoc = html;
+
+    return html;
+  }),
   toTrustedScriptUrl: jest.fn((url: string) => url),
+  toTrustedHtmlPresanitized: jest.fn((html: string) => html),
 }));
 
 jest.unstable_mockModule("../../stores/file-viewer.js", () => ({
@@ -52,7 +58,8 @@ const { ShadowClawFileViewer } = await import("./shadow-claw-file-viewer.js");
 const { fileViewerStore } = await import("../../stores/file-viewer.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { renderMarkdown } = await import("../../markdown.js");
-const { setSanitizedHtml } = await import("../../security/trusted-types.js");
+const { setSanitizedHtml, toTrustedHtmlPresanitized } =
+  await import("../../security/trusted-types.js");
 const { readGroupFileBytes } =
   await import("../../storage/readGroupFileBytes.js");
 
@@ -1088,6 +1095,32 @@ describe("shadow-claw-file-viewer", () => {
       expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:a");
       expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:b");
       expect(component.currentImageObjectUrls).toHaveLength(0);
+    });
+  });
+
+  describe("resolveRelativeImagesInHtml", () => {
+    beforeEach(() => {
+      (readGroupFileBytes as jest.Mock).mockReset();
+      (toTrustedHtmlPresanitized as jest.Mock).mockClear();
+      URL.createObjectURL = jest.fn(() => "blob:fake-html");
+    });
+
+    it("routes parser input through Trusted Types helper", async () => {
+      const component = new ShadowClawFileViewer();
+      component.db = {} as any;
+
+      (
+        readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
+      ).mockResolvedValue(new Uint8Array([137, 80, 78, 71]));
+
+      const html = '<main><img src="assets/banner.png"></main>';
+      const resolved = await component.resolveRelativeImagesInHtml(
+        html,
+        "docs/page.html",
+      );
+
+      expect(toTrustedHtmlPresanitized).toHaveBeenCalledWith(html);
+      expect(resolved).toContain("blob:fake-html");
     });
   });
 });

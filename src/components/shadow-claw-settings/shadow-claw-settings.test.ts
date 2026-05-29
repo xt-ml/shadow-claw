@@ -611,6 +611,46 @@ describe("shadow-claw-settings", () => {
     document.body.removeChild(el);
   });
 
+  it("populates and toggles sidebar pages visibility", async () => {
+    (globalThis as any)._mockSetConfig.mockClear();
+
+    const el = new ShadowClawSettings();
+    (el as any).db = {} as any;
+    document.body.appendChild(el);
+    await el.onTemplateReady;
+    await el.render();
+
+    const toggle = el.shadowRoot?.querySelector<HTMLInputElement>(
+      '[data-setting="sidebar-hide-pages-toggle"]',
+    );
+    expect(toggle).not.toBeNull();
+    expect(toggle?.checked).toBe(true);
+
+    const visibilityEvents: Array<{ hidden: boolean }> = [];
+    el.addEventListener("sidebar-pages-visibility-change", (event) => {
+      visibilityEvents.push((event as CustomEvent).detail);
+    });
+
+    if (toggle) {
+      toggle.checked = false;
+      toggle.dispatchEvent(new Event("change"));
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "sidebar_pages_hidden",
+      "false",
+    );
+    expect(visibilityEvents.length).toBeGreaterThanOrEqual(1);
+    expect(visibilityEvents.every((entry) => entry.hidden === false)).toBe(
+      true,
+    );
+
+    document.body.removeChild(el);
+  });
+
   it("saves assistant name via config when orchestrator is unavailable", async () => {
     (orchestratorStore as any).orchestrator = null;
     (globalThis as any)._mockSetConfig.mockClear();

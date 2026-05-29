@@ -44,6 +44,41 @@ function mockFetchFailOnce() {
 // ---------------------------------------------------------------------------
 describe("ShadowClawElement static helpers", () => {
   describe("getTemplate", () => {
+    it("routes DOMParser input through the Trusted Types policy when available", async () => {
+      const originalTrustedTypes = (
+        globalThis as typeof globalThis & {
+          trustedTypes?: unknown;
+        }
+      ).trustedTypes;
+      const createHTML = jest.fn((input: string) => input);
+      const createPolicy = jest.fn(() => ({ createHTML }));
+
+      Object.defineProperty(globalThis, "trustedTypes", {
+        configurable: true,
+        value: { createPolicy },
+      });
+
+      try {
+        mockFetchOnce("<template><div class='foo'></div></template>");
+        await ShadowClawElement.getTemplate("fake.html");
+
+        expect(createPolicy).toHaveBeenCalledTimes(1);
+        expect(createHTML).toHaveBeenCalledWith(
+          "<template><div class='foo'></div></template>",
+        );
+      } finally {
+        if (originalTrustedTypes === undefined) {
+          delete (globalThis as typeof globalThis & { trustedTypes?: unknown })
+            .trustedTypes;
+        } else {
+          Object.defineProperty(globalThis, "trustedTypes", {
+            configurable: true,
+            value: originalTrustedTypes,
+          });
+        }
+      }
+    });
+
     it("parses a <template>-wrapped HTML file and returns its content children", async () => {
       mockFetchOnce("<template><div class='foo'></div><p>bar</p></template>");
       const children = await ShadowClawElement.getTemplate("fake.html");

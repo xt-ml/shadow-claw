@@ -32,6 +32,21 @@ import type { ShadowClaw } from "./components/shadow-claw/shadow-claw.js";
 
 import { installE2eBridge, shouldInstallE2eBridge } from "./e2e-bridge.js";
 
+const BOOT_PENDING_CLASS = "sc-js-boot-pending";
+const BOOT_PENDING_ATTR = "data-js-boot-pending";
+const HYDRATION_PENDING_ATTR = "data-hydration-pending";
+
+function clearBootPendingClass(): void {
+  if (typeof document === "undefined") {
+    return;
+  }
+
+  document.documentElement.classList.remove(BOOT_PENDING_CLASS);
+  const host = document.querySelector("shadow-claw");
+  host?.removeAttribute(BOOT_PENDING_ATTR);
+  host?.removeAttribute(HYDRATION_PENDING_ATTR);
+}
+
 let isInitializing = false;
 async function initializeApp(): Promise<Orchestrator | undefined> {
   if (isInitializing) {
@@ -55,11 +70,15 @@ async function initializeApp(): Promise<Orchestrator | undefined> {
       installE2eBridge(orchestratorStore, uiElement);
     }
 
+    await orchestratorStore.whenInitialized;
+
     return uiElement.orchestrator;
   } catch (error) {
     console.error("❌ Failed to initialize ShadowClaw:", error);
 
     throw error;
+  } finally {
+    clearBootPendingClass();
   }
 }
 

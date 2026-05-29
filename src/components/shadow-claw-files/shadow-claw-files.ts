@@ -21,6 +21,7 @@ import { showError, showSuccess, showWarning } from "../../toast.js";
 import { getDb } from "../../db/db.js";
 
 import { escapeHtml } from "../../utils.js";
+import { setSanitizedHtml } from "../../security/trusted-types.js";
 import "../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
@@ -61,11 +62,13 @@ export class ShadowClawFiles extends ShadowClawElement {
 
     const content = root.querySelector(".files__content");
 
-    // Re-render when files, path, or clipboard change
+    // Re-render when files, path, clipboard, pages, or active group changes
     this.addCleanup(
       effect(() => {
         orchestratorStore.files;
         orchestratorStore.currentPath;
+        orchestratorStore.pages;
+        orchestratorStore.activeGroupId;
         filesUiStore.clipboard;
 
         this.updateBreadcrumbs(db);
@@ -313,6 +316,22 @@ export class ShadowClawFiles extends ShadowClawElement {
     return false;
   }
 
+  async removePageAssignmentIfNeeded(
+    db: ShadowClawDatabase,
+    filePath: string,
+  ): Promise<void> {
+    const groupId = orchestratorStore.activeGroupId;
+    const isSavedPage = orchestratorStore.pages.some((page) => {
+      return page.groupId === groupId && page.path === filePath;
+    });
+
+    if (!isSavedPage) {
+      return;
+    }
+
+    await orchestratorStore.removePage(db, filePath, groupId);
+  }
+
   updateSyncButtonsVisibility() {
     const root = this.shadowRoot;
     if (!root) {
@@ -352,7 +371,7 @@ export class ShadowClawFiles extends ShadowClawElement {
     }
 
     const currentPath = orchestratorStore.currentPath;
-    breadcrumbs.innerHTML = "";
+    breadcrumbs.replaceChildren();
 
     // Root button
     const rootBtn = document.createElement("button");
@@ -463,28 +482,38 @@ export class ShadowClawFiles extends ShadowClawElement {
     const currentPath = orchestratorStore.currentPath;
 
     if (files.length === 0) {
-      list.innerHTML = `
-          <shadow-claw-empty-state
-            class="files__empty"
-            message="No files in this folder."
-            hint="Ask the agent to create some files!"
-          ></shadow-claw-empty-state>
-      `;
+      setSanitizedHtml(
+        list,
+        `<shadow-claw-empty-state
+          class="files__empty"
+          message="No files in this folder."
+          hint="Ask the agent to create some files!"
+        ></shadow-claw-empty-state>`,
+      );
 
       return;
     }
 
-    list.innerHTML = "";
+    list.replaceChildren();
     files.forEach((file) => {
       const isDir = file.endsWith("/");
       const name = isDir ? file.slice(0, -1) : file;
+      const itemPath = currentPath === "." ? name : `${currentPath}/${name}`;
+      const isPageCandidate = this.isPageCandidateFile(name, isDir);
+      const isSavedPage =
+        isPageCandidate &&
+        orchestratorStore.pages.some((page) => {
+          return (
+            page.groupId === orchestratorStore.activeGroupId &&
+            page.path === itemPath
+          );
+        });
 
       const item = document.createElement("div");
       item.className = "files__item";
       item.setAttribute("role", "listitem");
       item.setAttribute("data-file-name", name);
 
-      const itemPath = currentPath === "." ? file : `${currentPath}/${file}`;
       const clipboard = filesUiStore.clipboard;
       if (
         clipboard &&
@@ -502,13 +531,18 @@ export class ShadowClawFiles extends ShadowClawElement {
       actionsToggleBtn.setAttribute("aria-label", `More actions for ${name}`);
       actionsToggleBtn.textContent = "⋮";
 
-      item.innerHTML = `
-        <button type="button" class="files__item-main" aria-label="${isDir ? "Open folder" : "Open file"} ${escapeHtml(name)}">
+      setSanitizedHtml(
+        item,
+        `<button type="button" class="files__item-main" aria-label="${isDir ? "Open folder" : "Open file"} ${escapeHtml(name)}">
           <div class="files__icon" aria-hidden="true">${isDir ? "📁" : "📄"}</div>
           <div class="files__name">${escapeHtml(name)}</div>
-        </button>
-      `;
+        </button>`,
+      );
       item.appendChild(actionsToggleBtn);
+
+      const pageActionHtml = isPageCandidate
+        ? `<button type="button" class="files__action-btn files__page-toggle" title="${isSavedPage ? "Remove from Pages" : "Set as Page"}" aria-label="${isSavedPage ? "Remove" : "Set"} ${escapeHtml(name)} as page">${isSavedPage ? "📕" : "📘"}</button>`
+        : "";
 
       const actionsContainer = document.createElement("div");
       actionsContainer.className = "files__actions";
@@ -516,13 +550,15 @@ export class ShadowClawFiles extends ShadowClawElement {
         "aria-label",
         `Actions for ${escapeHtml(name)}`,
       );
-      actionsContainer.innerHTML = `
-        <button type="button" class="files__action-btn files__cut" title="Cut" aria-label="Cut ${escapeHtml(name)}">✂️</button>
+      setSanitizedHtml(
+        actionsContainer,
+        `<button type="button" class="files__action-btn files__cut" title="Cut" aria-label="Cut ${escapeHtml(name)}">✂️</button>
         <button type="button" class="files__action-btn files__copy" title="Copy" aria-label="Copy ${escapeHtml(name)}">📋</button>
-        <button type="button" class="files__action-btn files__download" title="${downloadTitle}" aria-label="${downloadTitle} ${escapeHtml(name)}">📥</button>
+        ${pageActionHtml}
+        <button type="button" class="files__action-btn files__download" title="${escapeHtml(downloadTitle)}" aria-label="${escapeHtml(downloadTitle)} ${escapeHtml(name)}">📥</button>
         <button type="button" class="files__action-btn files__rename" title="Rename" aria-label="Rename ${escapeHtml(name)}">✏️</button>
-        <button type="button" class="files__action-btn files__action-btn--delete files__delete" title="Delete" aria-label="Delete ${escapeHtml(name)}">🗑️</button>
-      `;
+        <button type="button" class="files__action-btn files__action-btn--delete files__delete" title="Delete" aria-label="Delete ${escapeHtml(name)}">🗑️</button>`,
+      );
       item.appendChild(actionsContainer);
 
       // Click to open file or navigate into folder
@@ -571,6 +607,41 @@ export class ShadowClawFiles extends ShadowClawElement {
         const itemPath = currentPath === "." ? file : `${currentPath}/${file}`;
         filesUiStore.setClipboard(itemPath, "copy", isDir);
         showSuccess(`Copied ${name} to clipboard`, 2500);
+      });
+
+      // Set/remove page button
+      const pageToggleBtn = item.querySelector(".files__page-toggle");
+      pageToggleBtn?.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        item.classList.remove("show-actions");
+
+        try {
+          if (isSavedPage) {
+            await orchestratorStore.removePage(
+              db,
+              itemPath,
+              orchestratorStore.activeGroupId,
+            );
+            showSuccess(`Removed ${name} from Pages`, 2600);
+
+            return;
+          }
+
+          await orchestratorStore.addPage(
+            db,
+            itemPath,
+            orchestratorStore.activeGroupId,
+          );
+          showSuccess(`Added ${name} to Pages`, 2600);
+
+          const appShell = document.querySelector("shadow-claw") as any;
+          if (appShell && typeof appShell.showPage === "function") {
+            appShell.showPage("pages");
+          }
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          showError(`Failed to update Pages: ${message}`, 5000);
+        }
       });
 
       // Download button (for both files and directories)
@@ -667,6 +738,7 @@ export class ShadowClawFiles extends ShadowClawElement {
                 itemPath,
               );
             } else {
+              await this.removePageAssignmentIfNeeded(db, itemPath);
               await deleteGroupFile(
                 db,
                 orchestratorStore.activeGroupId,
@@ -848,6 +920,14 @@ export class ShadowClawFiles extends ShadowClawElement {
     const types = event.dataTransfer?.types;
 
     return Boolean(types && Array.from(types).includes("Files"));
+  }
+
+  isPageCandidateFile(path: string, isDirectory: boolean): boolean {
+    if (isDirectory) {
+      return false;
+    }
+
+    return /\.(md|markdown|html?|xhtml)$/iu.test(path);
   }
 
   openNewFileDialog() {

@@ -5,6 +5,8 @@ import { renderMarkdown } from "../../markdown.js";
 import {
   sanitizeSrcdocHtml,
   setSanitizedHtml,
+  setTrustedSrcdoc,
+  toTrustedHtmlPresanitized,
 } from "../../security/trusted-types.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
@@ -891,7 +893,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       );
 
       iframe.setAttribute("referrerpolicy", "no-referrer");
-      iframe.srcdoc = await this.buildIframePreviewSrcdoc(file);
+      setTrustedSrcdoc(iframe, await this.buildIframePreviewSrcdoc(file));
       iframe.addEventListener("load", () => {
         this.previewFrameWindow = iframe.contentWindow;
       });
@@ -928,7 +930,11 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return html;
     }
 
-    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const trustedHtml = toTrustedHtmlPresanitized(html);
+    const parsed = new DOMParser().parseFromString(
+      trustedHtml as string,
+      "text/html",
+    );
     const images = Array.from(parsed.querySelectorAll("img"));
     if (images.length === 0) {
       return html;

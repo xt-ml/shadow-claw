@@ -33,6 +33,7 @@ import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-file-viewer/shadow-claw-file-viewer.js";
 import "../shadow-claw-files/shadow-claw-files.js";
 import "../shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.js";
+import "../shadow-claw-pages/shadow-claw-pages.js";
 import "../shadow-claw-settings/shadow-claw-settings.js";
 import "../shadow-claw-tasks/shadow-claw-tasks.js";
 import "../shadow-claw-terminal/shadow-claw-terminal.js";
@@ -67,12 +68,13 @@ export class ShadowClaw extends ShadowClawElement {
     error: null,
   };
 
-  currentPage: string = "chat";
+  currentPage: string = orchestratorStore.sidebarDefaultPage;
   orchestrator: Orchestrator = new Orchestrator();
   previousOrchestratorState: OrchestratorState = "idle";
   terminalElement: ShadowClawTerminal | null = null;
   terminalPlacementFrame: number | null = null;
   terminalVisible: boolean = false;
+  pagesSidebarHidden: boolean = false;
   vmStatusCleanup: (() => void) | null = null;
   headerMainCollapsedOverride: boolean | null = null;
   activityLogCollapsedOverride: boolean | null = null;
@@ -98,6 +100,16 @@ export class ShadowClaw extends ShadowClawElement {
     setDB(this.db);
 
     await this.render();
+
+    // Ensure initial route state matches persisted store state even when prerender
+    // markup starts on a different page. On a fresh install (no persisted page),
+    // trust the pre-rendered content instead of forcing to Chat — unless the
+    // Pages sidebar is hidden, in which case we must redirect away from it.
+    if (orchestratorStore.hadPersistedActivePage) {
+      this.showPage(orchestratorStore.activePage, false);
+    } else if (this.pagesSidebarHidden) {
+      this.showPage(this.getDefaultSidebarPage(), false);
+    }
 
     await this.processPendingSharedPayloads();
   }
@@ -242,6 +254,8 @@ export class ShadowClaw extends ShadowClawElement {
   async render() {
     // Bind event listeners
     this.bindEventListeners(this.db);
+
+    await this.loadPagesSidebarVisibilityPreference();
 
     this.terminalElement = document.createElement(
       "shadow-claw-terminal",
@@ -414,8 +428,8 @@ export class ShadowClaw extends ShadowClawElement {
 
     titleEl.textContent = options.title;
     messageEl.textContent = options.message;
-    detailsEl.innerHTML = "";
-    linksEl.innerHTML = "";
+    detailsEl.replaceChildren();
+    linksEl.replaceChildren();
 
     const details = Array.isArray(options.details) ? options.details : [];
     detailsEl.hidden = details.length === 0;
@@ -472,7 +486,9 @@ export class ShadowClaw extends ShadowClawElement {
     // Navigation items
     root.querySelectorAll(".nav-item[data-page]").forEach((item: Element) => {
       (item as HTMLLIElement).addEventListener("click", () =>
-        this.showPage((item as HTMLLIElement).dataset.page || "chat"),
+        this.showPage(
+          (item as HTMLLIElement).dataset.page || this.getDefaultSidebarPage(),
+        ),
       );
     });
 
@@ -536,6 +552,13 @@ export class ShadowClaw extends ShadowClawElement {
         this.showPage(page);
       }
     });
+    settingsEl?.addEventListener(
+      "sidebar-pages-visibility-change",
+      (event: Event) => {
+        const hidden = Boolean((event as CustomEvent).detail?.hidden);
+        this.setPagesSidebarHidden(hidden);
+      },
+    );
 
     // Tools page "Back to Settings" navigation
     const toolsPage = root.querySelector("shadow-claw-tools");
@@ -851,6 +874,8 @@ export class ShadowClaw extends ShadowClawElement {
       return;
     }
 
+    const resolvedPage = this.resolvePageForVisibility(page);
+
     // Hide all pages
     root.querySelectorAll(".page").forEach((p) => {
       const el = p;
@@ -863,21 +888,23 @@ export class ShadowClaw extends ShadowClawElement {
     });
 
     // Show selected page
-    const pageEl = root.querySelector(`[data-page-id="${page}"]`);
+    const pageEl = root.querySelector(`[data-page-id="${resolvedPage}"]`);
     if (pageEl) {
       const el = pageEl;
       el.classList.add("active");
     }
 
-    const navEl = root.querySelector(`[data-page="${page}"]`);
+    const navEl = root.querySelector(`[data-page="${resolvedPage}"]`);
     if (navEl) {
       const el = navEl;
       el.classList.add("active");
     }
 
-    this.currentPage = page;
+    this.currentPage = resolvedPage;
     if (persist && this.db) {
-      orchestratorStore.setActivePage(this.db, page).catch(console.error);
+      orchestratorStore
+        .setActivePage(this.db, resolvedPage)
+        .catch(console.error);
     }
 
     this.scheduleTerminalPlacement();
@@ -889,12 +916,91 @@ export class ShadowClaw extends ShadowClawElement {
     const activePage = root.querySelector(".page.active");
     if (activePage) {
       const el = activePage;
-      el.scrollTo(0, 0);
+      if (typeof el.scrollTo === "function") {
+        el.scrollTo(0, 0);
+      }
     }
 
     // Auto-refresh files if switching to the files tab
-    if (page === "files" && this.db) {
+    if (resolvedPage === "files" && this.db) {
       orchestratorStore.loadFiles(this.db).catch(console.error);
+    }
+  }
+
+  private resolvePageForVisibility(page: string): string {
+    if (this.pagesSidebarHidden && page === "pages") {
+      return this.getDefaultSidebarPage();
+    }
+
+    return page;
+  }
+
+  private getDefaultSidebarPage(): "chat" | "tasks" | "files" {
+    const page = orchestratorStore.sidebarDefaultPage;
+    if (page === "chat" || page === "tasks" || page === "files") {
+      return page;
+    }
+
+    return "chat";
+  }
+
+  private parseConfigBoolean(value: unknown): boolean {
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    if (typeof value === "number") {
+      return value === 1;
+    }
+
+    if (typeof value === "string") {
+      const normalized = value.trim().toLowerCase();
+
+      return normalized === "true" || normalized === "1";
+    }
+
+    return false;
+  }
+
+  private applyPagesSidebarVisibility() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const pagesNavItem = root.querySelector(
+      '.nav-item[data-page="pages"]',
+    ) as HTMLElement | null;
+
+    if (!pagesNavItem) {
+      return;
+    }
+
+    pagesNavItem.hidden = this.pagesSidebarHidden;
+    pagesNavItem.setAttribute("aria-hidden", String(this.pagesSidebarHidden));
+  }
+
+  private setPagesSidebarHidden(hidden: boolean) {
+    this.pagesSidebarHidden = hidden;
+    this.applyPagesSidebarVisibility();
+
+    if (hidden && this.currentPage === "pages") {
+      this.showPage(this.getDefaultSidebarPage());
+    }
+  }
+
+  private async loadPagesSidebarVisibilityPreference(): Promise<void> {
+    if (!this.db) {
+      this.setPagesSidebarHidden(false);
+
+      return;
+    }
+
+    try {
+      const raw = await getConfig(this.db, CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN);
+      this.setPagesSidebarHidden(this.parseConfigBoolean(raw));
+    } catch {
+      this.setPagesSidebarHidden(false);
     }
   }
 

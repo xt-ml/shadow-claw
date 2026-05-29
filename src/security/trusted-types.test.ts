@@ -81,6 +81,16 @@ describe("trusted-types helpers", () => {
     expect(element.innerHTML).not.toContain("<script>");
   });
 
+  it("sets sanitized iframe srcdoc through the wrapper helper", async () => {
+    const { setSanitizedSrcdoc } = await import("./trusted-types.js");
+    const iframe = document.createElement("iframe");
+
+    setSanitizedSrcdoc(iframe, "<p>ok</p><script>alert(1)</script>");
+
+    expect(iframe.srcdoc).toContain("<p>ok</p>");
+    expect(iframe.srcdoc).not.toContain("<script>");
+  });
+
   it("creates a trusted script URL when Trusted Types are supported", async () => {
     const createPolicy = jest.fn(
       (_: string, rules: { createScriptURL?: (input: string) => string }) => ({

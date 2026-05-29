@@ -191,13 +191,14 @@ export class ShadowClawTasks extends ShadowClawElement {
     const tasks = orchestratorStore.tasks;
 
     if (tasks.length === 0) {
-      list.innerHTML = `
-        <shadow-claw-empty-state
+      setSanitizedHtml(
+        list,
+        `<shadow-claw-empty-state
           class="tasks__empty"
           message="No scheduled tasks for this group."
           hint="Ask the agent to create one using 'create_task'."
-        ></shadow-claw-empty-state>
-      `;
+        ></shadow-claw-empty-state>`,
+      );
 
       return;
     }
@@ -216,28 +217,29 @@ export class ShadowClawTasks extends ShadowClawElement {
 
       const previewHtml = await this.renderPreview(task.prompt, true);
 
-      item.innerHTML = `
-        <div class="tasks__item-header">
+      setSanitizedHtml(
+        item,
+        `<div class="tasks__item-header">
           <div class="tasks__item-info">
             <div class="tasks__schedule-row">
-              <div class="tasks__schedule">⏰ ${task.schedule}</div>
+              <div class="tasks__schedule">⏰ ${escapeHtml(task.schedule)}</div>
             </div>
             <div class="tasks__prompt-container">
               ${previewHtml}
             </div>
-            <div class="tasks__last-run">Last run: ${lastRunStr}</div>
+            <div class="tasks__last-run">Last run: ${escapeHtml(lastRunStr)}</div>
           </div>
           <div class="tasks__actions">
             <label class="tasks__toggle">
-              <input type="checkbox" ${task.enabled ? "checked" : ""} data-id="${task.id}" class="tasks__toggle-input" aria-label="${task.enabled ? "Disable" : "Enable"} task scheduled ${escapeHtml(task.schedule)}">
+              <input type="checkbox" ${task.enabled ? "checked" : ""} data-id="${escapeHtml(task.id)}" class="tasks__toggle-input" aria-label="${task.enabled ? "Disable" : "Enable"} task scheduled ${escapeHtml(task.schedule)}">
               ${task.enabled ? "Enabled" : "Disabled"}
             </label>
-            <button type="button" class="tasks__run-btn" data-id="${task.id}" aria-label="Run task scheduled ${escapeHtml(task.schedule)}">Run</button>
-            <button type="button" class="tasks__edit-btn" data-id="${task.id}" aria-label="Edit task scheduled ${escapeHtml(task.schedule)}">✎ Edit</button>
-            <button type="button" class="tasks__delete-btn" data-id="${task.id}" aria-label="Delete task scheduled ${escapeHtml(task.schedule)}">Delete</button>
+            <button type="button" class="tasks__run-btn" data-id="${escapeHtml(task.id)}" aria-label="Run task scheduled ${escapeHtml(task.schedule)}">Run</button>
+            <button type="button" class="tasks__edit-btn" data-id="${escapeHtml(task.id)}" aria-label="Edit task scheduled ${escapeHtml(task.schedule)}">✎ Edit</button>
+            <button type="button" class="tasks__delete-btn" data-id="${escapeHtml(task.id)}" aria-label="Delete task scheduled ${escapeHtml(task.schedule)}">Delete</button>
           </div>
-        </div>
-      `;
+        </div>`,
+      );
 
       // Bind events
       const toggle = item.querySelector(
@@ -263,7 +265,7 @@ export class ShadowClawTasks extends ShadowClawElement {
       fragment.appendChild(item);
     }
 
-    list.innerHTML = "";
+    list.replaceChildren();
     list.appendChild(fragment);
   }
 

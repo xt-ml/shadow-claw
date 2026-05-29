@@ -872,7 +872,7 @@ export class ShadowClawConversations extends ShadowClawElement {
         const removeBtn = document.createElement("button");
         removeBtn.type = "button";
         removeBtn.className = "conversations__tool-chip-remove";
-        removeBtn.innerHTML = "&times;";
+        removeBtn.textContent = "×";
         removeBtn.setAttribute("aria-label", `Remove tool ${tagName}`);
 
         removeBtn.addEventListener("click", () => {

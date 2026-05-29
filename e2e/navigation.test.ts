@@ -13,7 +13,7 @@ test.describe("Navigation & Routing", () => {
   }) => {
     const defaultPage = await app.currentPageId();
 
-    expect(defaultPage).toBe("chat");
+    expect(defaultPage).toBe("pages");
 
     await app.navigateTo("files");
     let currentPage = await app.currentPageId();

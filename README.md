@@ -149,6 +149,18 @@ Each channel creates isolated conversations with their own message history and w
 
 **Setup & architecture**: [docs/guides/configuring-messaging-channels.md](docs/guides/configuring-messaging-channels.md) (setup) | [docs/subsystems/channels.md](docs/subsystems/channels.md) (architecture + custom channels)
 
+## Pages System
+
+ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace content.
+
+- **Render markdown & HTML** — Save any markdown or HTML file as a page for structured preview
+- **Workspace-relative links** — Links and images in pages resolve relative to the workspace
+- **Page sidebar** — Persistent list of saved pages with optional toggle to hide the entire sidebar
+- **Default page** — Configurable starting page shown on app launch
+- **Navigation** — Click to view any saved page; page state persists across sessions
+
+Pages complement the **main group README** (auto-created as `MEMORY.md` on first setup) which serves as a workspace-scoped system context for the agent.
+
 ## WebVM (Optional Alpine Linux)
 
 For advanced `bash` operations, ShadowClaw includes an optional **WebVM** (`v86` Alpine Linux) that runs in the Web Worker.

@@ -1,4 +1,36 @@
 (function () {
+  const root = document.documentElement;
+  root.classList.add("sc-js-enabled", "sc-js-boot-pending");
+  const BOOT_PENDING_ATTR = "data-js-boot-pending";
+  const HYDRATION_PENDING_ATTR = "data-hydration-pending";
+
+  const markBootPendingHost = () => {
+    const host = document.querySelector(
+      'shadow-claw[data-prerender-no-seed="true"]',
+    );
+    if (!host) {
+      return false;
+    }
+
+    host.setAttribute(BOOT_PENDING_ATTR, "true");
+    host.setAttribute(HYDRATION_PENDING_ATTR, "true");
+
+    return true;
+  };
+
+  if (!markBootPendingHost()) {
+    const observer = new MutationObserver(() => {
+      if (markBootPendingHost()) {
+        observer.disconnect();
+      }
+    });
+
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+    });
+  }
+
   const themeKey = "shadow-claw-theme";
   const storedTheme = localStorage.getItem(themeKey) || "system";
   const prefersDark =

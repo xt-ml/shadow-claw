@@ -1,6 +1,6 @@
 import { CONFIG_KEYS } from "../config.js";
 import { setConfig } from "../db/setConfig.js";
-import { ensureMainGroupReadme } from "./ensureMainGroupReadme.js";
+import { ensureMainGroupMemory } from "./ensureMainGroupMemory.js";
 import type { ShadowClawDatabase } from "../types.js";
 
 /**
@@ -28,7 +28,7 @@ export async function selectStorageDirectory(
     // Verify it's not the same as OPFS or something restricted
     // (Most browsers handle this, but good to have a handle)
     await setConfig(db, CONFIG_KEYS.STORAGE_HANDLE, handle);
-    await ensureMainGroupReadme(db);
+    await ensureMainGroupMemory(db);
 
     return true;
   } catch (err) {

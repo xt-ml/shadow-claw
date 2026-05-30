@@ -159,7 +159,7 @@ ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace con
 - **Default page** — Configurable starting page shown on app launch
 - **Navigation** — Click to view any saved page; page state persists across sessions
 
-Pages complement the **main group README** (auto-created as `MEMORY.md` on first setup) which serves as a workspace-scoped system context for the agent.
+Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first setup) which serves as a workspace-scoped system context for the agent.
 
 ## WebVM (Optional Alpine Linux)
 

@@ -76,19 +76,6 @@ function sortPagePaths(paths) {
       return 1;
     }
 
-    const leftIsReadme = /^readme\.(md|markdown)$/iu.test(path.basename(left));
-    const rightIsReadme = /^readme\.(md|markdown)$/iu.test(
-      path.basename(right),
-    );
-
-    if (leftIsReadme && !rightIsReadme) {
-      return -1;
-    }
-
-    if (!leftIsReadme && rightIsReadme) {
-      return 1;
-    }
-
     return left.localeCompare(right, undefined, { sensitivity: "base" });
   });
 }

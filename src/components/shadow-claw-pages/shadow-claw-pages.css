@@ -16,35 +16,15 @@
   min-height: 0;
 }
 
-.pages__header {
-  border-bottom: 0.0625rem solid var(--shadow-claw-border-color);
-  padding: 0.625rem 0.75rem;
-}
-
-.pages__header-main {
-  align-items: center;
-  display: flex;
-  gap: 0.625rem;
-  justify-content: space-between;
-}
-
-.pages__title {
-  font-size: var(--shadow-claw-font-size-md);
-  margin: 0;
-}
-
 .pages__content {
-  display: grid;
+  display: flex;
   flex: 1;
-  gap: 0;
-  grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr);
+  flex-direction: column;
   min-height: 0;
 }
 
 .pages__sidebar {
-  border-right: 0.0625rem solid var(--shadow-claw-border-color);
-  min-height: 0;
-  overflow: auto;
+  display: none;
 }
 
 .pages__list {
@@ -83,10 +63,12 @@
 }
 
 .pages__select {
+  align-items: center;
   background: transparent;
   border: none;
   color: inherit;
   cursor: pointer;
+  display: flex;
   flex: 1;
   font: inherit;
   min-width: 0;
@@ -104,9 +86,11 @@
 }
 
 .pages__list-path {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  width: 100%;
 }
 
 .pages__remove {
@@ -125,6 +109,7 @@
 }
 
 .pages__viewer {
+  height: 100%;
   min-height: 0;
   overflow: auto;
   padding: 0.75rem;
@@ -137,6 +122,15 @@
 
 .pages__rendered :is(pre) {
   overflow: auto;
+}
+
+.pages__rendered img {
+  max-height: 100%;
+  max-width: 100%;
+}
+
+.pages__rendered a {
+  color: var(--shadow-claw-accent-primary);
 }
 
 .pages__iframe {
@@ -158,19 +152,105 @@
   font-size: var(--shadow-claw-font-size-sm);
 }
 
-@media (max-width: 55.9375rem) {
+/* Premium Dropdown Styles for smaller breakpoints */
+.pages__dropdown-container {
+  display: block;
+  margin-bottom: 1rem;
+  position: relative;
+  width: 100%;
+}
+
+.pages__dropdown {
+  background: var(--shadow-claw-bg-secondary);
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-m);
+  box-shadow: var(--shadow-claw-shadow-sm);
+  color: var(--shadow-claw-text-primary);
+  display: block;
+  transition: border-color var(--shadow-claw-duration-min)
+    var(--shadow-claw-ease-out);
+  width: 100%;
+}
+
+.pages__dropdown:hover {
+  border-color: var(--shadow-claw-accent-primary);
+}
+
+.pages__dropdown-summary {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  font-size: var(--shadow-claw-font-size-sm);
+  font-weight: 600;
+  gap: 0.5rem;
+  justify-content: space-between;
+  list-style: none;
+  padding: 0.625rem 1rem;
+  user-select: none;
+}
+
+.pages__dropdown-summary::-webkit-details-marker {
+  display: none;
+}
+
+.pages__dropdown-selected {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pages__dropdown-arrow {
+  color: var(--shadow-claw-text-secondary);
+  font-size: 0.75rem;
+  transition: transform var(--shadow-claw-duration-min)
+    var(--shadow-claw-ease-out);
+}
+
+.pages__dropdown[open] .pages__dropdown-arrow {
+  transform: rotate(180deg);
+}
+
+.pages__dropdown-menu {
+  backdrop-filter: blur(10px);
+  background: var(--shadow-claw-bg-secondary);
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-m);
+  box-shadow: var(--shadow-claw-shadow-lg);
+  left: 0;
+  margin-top: 0.375rem;
+  max-height: 20rem;
+  overflow-y: auto;
+  position: absolute;
+  right: 0;
+  z-index: 100;
+}
+
+.pages__dropdown-menu .pages__list {
+  padding: 0.375rem;
+}
+
+@media (max-width: 74.9375rem) {
+  .pages__iframe {
+    height: 50vh;
+  }
+}
+
+/* Desktop breakpoint: show pages column side-by-side */
+@media (min-width: 75rem) {
   .pages__content {
-    grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: auto minmax(0, 1fr);
+    display: grid;
+    grid-template-columns: minmax(14rem, 20rem) minmax(0, 1fr);
   }
 
   .pages__sidebar {
-    border-bottom: 0.0625rem solid var(--shadow-claw-border-color);
-    border-right: none;
-    max-height: 11rem;
+    border-right: 0.0625rem solid var(--shadow-claw-border-color);
+    display: block;
+    min-height: 0;
+    overflow: auto;
   }
 
-  .pages__iframe {
-    height: 50vh;
+  .pages__dropdown-container {
+    display: none;
   }
 }

@@ -127,15 +127,15 @@ export function buildProviderHelpDialogOptions(
     title = `${providerLabel} API Key Required`;
     message = `${providerLabel} needs an API key before requests can run.`;
     details.push(
-      "Open Settings > LLM and enter an API key for the active provider.",
+      "Open Settings > AI > Model Provider and enter an API key as required.",
     );
-    details.push("Click Save API Key, then retry your message.");
+    details.push("Click Save Provider, then retry your message.");
   } else if (helpType === "api-key-invalid") {
     title = `${providerLabel} Authentication Failed`;
     message = `${providerLabel} rejected the current API key.`;
     details.push("Generate or copy a fresh API key for this provider.");
     details.push(
-      "Open Settings > LLM, replace the key, click Save API Key, then retry.",
+      "Open Settings > AI > Model Provider, replace the key, click Save Provider, then retry.",
     );
   } else if (helpType === "provider-unreachable") {
     title = `${providerLabel} Not Reachable`;

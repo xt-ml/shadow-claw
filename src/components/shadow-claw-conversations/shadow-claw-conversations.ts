@@ -701,7 +701,7 @@ export class ShadowClawConversations extends ShadowClawElement {
     const currentTags = group?.toolTags || [];
 
     this._pendingDetailsToolTags = [...currentTags];
-    this.openDetailsDialog(currentName);
+    this.openDetailsDialog(currentName, groupId);
   }
 
   async handleDelete(groupId: string, name: string) {
@@ -799,7 +799,7 @@ export class ShadowClawConversations extends ShadowClawElement {
     }
   }
 
-  openDetailsDialog(currentName: string) {
+  openDetailsDialog(currentName: string, groupId?: string) {
     const root = this.shadowRoot;
     if (!root) {
       return;
@@ -811,6 +811,12 @@ export class ShadowClawConversations extends ShadowClawElement {
     const input = root.querySelector(
       ".conversations__details-dialog .conversations__input",
     ) as HTMLInputElement | null;
+    const groupIdInput = root.querySelector(
+      "#conversations-details-group-id",
+    ) as HTMLInputElement | null;
+    const copyBtn = root.querySelector(
+      "#conversations-group-id-copy-btn",
+    ) as HTMLButtonElement | null;
     const toolsContainer = root.querySelector(
       "#conversations-details-tools",
     ) as HTMLElement | null;
@@ -823,6 +829,44 @@ export class ShadowClawConversations extends ShadowClawElement {
     const datalist = root.querySelector(
       "#conversations-available-tools",
     ) as HTMLDataListElement | null;
+
+    // Populate Group ID field
+    if (groupIdInput) {
+      groupIdInput.value = groupId?.replace(":", "-") || "";
+    }
+
+    // Wire up copy button
+    if (copyBtn && groupIdInput) {
+      // Clone to remove previous listeners
+      const freshCopyBtn = copyBtn.cloneNode(true) as HTMLButtonElement;
+      copyBtn.replaceWith(freshCopyBtn);
+
+      freshCopyBtn.addEventListener("click", async () => {
+        const val = groupIdInput.value;
+        if (!val) {
+          return;
+        }
+
+        try {
+          await navigator.clipboard.writeText(val);
+          // Swap to a checkmark briefly
+          const originalInner = freshCopyBtn.innerHTML;
+          freshCopyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="1em" width="1em" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/></svg>`;
+          freshCopyBtn.classList.add(
+            "conversations__group-id-copy-btn--copied",
+          );
+          setTimeout(() => {
+            freshCopyBtn.innerHTML = originalInner;
+            freshCopyBtn.classList.remove(
+              "conversations__group-id-copy-btn--copied",
+            );
+          }, 1500);
+        } catch {
+          // Fallback: select the text
+          groupIdInput.select();
+        }
+      });
+    }
 
     if (!dialog) {
       return;

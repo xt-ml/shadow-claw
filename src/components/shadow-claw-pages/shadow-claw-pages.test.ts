@@ -25,15 +25,31 @@ jest.unstable_mockModule("../../security/trusted-types.js", () => ({
   toTrustedHtmlPresanitized: jest.fn((html: string) => html),
 }));
 
-jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
-  orchestratorStore: {
-    whenInitialized: Promise.resolve(),
-    pages: [],
-    groups: [],
-    activeGroupId: "group-1",
-    removePage: jest.fn(),
-  },
-}));
+jest.unstable_mockModule("../../stores/orchestrator.js", () => {
+  let mockActivePinnedPage: any = null;
+  const mockSetState = jest.fn((val: any) => {
+    mockActivePinnedPage = val;
+  });
+
+  return {
+    orchestratorStore: {
+      whenInitialized: Promise.resolve(),
+      pages: [],
+      groups: [],
+      activeGroupId: "group-1",
+      removePage: jest.fn(),
+      get activePinnedPage() {
+        return mockActivePinnedPage;
+      },
+      _activePinnedPage: {
+        set: mockSetState,
+      },
+      setActivePinnedPage: jest.fn(async (_db: any, val: any) => {
+        mockActivePinnedPage = val;
+      }),
+    },
+  };
+});
 
 jest.unstable_mockModule("../../storage/readGroupFile.js", () => ({
   readGroupFile: jest.fn(),

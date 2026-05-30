@@ -316,7 +316,16 @@ The pages component (`<shadow-claw-pages>`) renders markdown and HTML files as n
 - **Markdown pages**: Converted to HTML via `renderMarkdown`, sanitized with custom DOMPurify options to allow `blob:` URLs for local asset references
 - **HTML pages**: Wrapped in a complete HTML document with CSP `script-src 'none'`, rendered inside a sandboxed iframe
 - **Workspace asset resolution**: Images and media in pages are resolved relative to the file's workspace directory, loaded from OPFS, and converted to blob object URLs
-- **Link handling**: Non-modifier clicks on links navigate within the pages sidebar (unless the link is external or uses explicit target attributes)
+- **Link handling**: Non-modifier clicks on links navigate within the pages sidebar (unless the link is external or uses explicit target attributes). This is powered by the unified routing event (`shadow-claw-navigate`).
+
+### Unified Navigation & Routing
+
+ShadowClaw uses a centralized frontend routing system based on the `shadow-claw-navigate` CustomEvent. This system handles cross-component navigation, group switching, and special links without requiring a traditional framework router.
+
+- **Special Links**: Links starting with `/#` (e.g., `/#Chat`, `/#Files?groupId=xyz&path=doc.md`) are intercepted by the `handleSpecialLinkNavigation` utility and dispatched as navigation events.
+- **Cross-Conversation Linking**: Query parameters (`groupId`, `path`, `anchor`) allow linking directly to a specific file or page within a different conversation group.
+- **Anchor Scrolling & Highlighting**: When navigating to a file with an anchor (e.g., `#L10-L20` or `#heading-id`), the File Viewer and Pages components automatically scroll the target into view and highlight the relevant lines.
+- **Link Interception**: `ShadowClawFileViewer` and `ShadowClawPages` use a shared bridge script (`file-viewer-preview-bridge.js`) inside their sandboxed iframes to intercept link clicks and post them to the parent window for workspace-relative routing.
 
 #### Configuration
 

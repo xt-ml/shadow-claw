@@ -271,7 +271,8 @@ shadow-claw:not(:defined) {
   display: flex;
   flex-direction: row;
   height: 2.5rem;
-  justify-content: start;
+  justify-content: center;
+  width: 2.5rem;
 }
 
 .header-actions-logo-link svg {

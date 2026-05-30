@@ -21,9 +21,9 @@ const mockGetConfig = jest.fn() as any;
 const mockSetConfig = jest.fn() as any;
 const mockReadGroupFile = jest.fn() as any;
 const mockWriteGroupFile = jest.fn() as any;
-const mockEnsureMainGroupReadme = jest.fn() as any;
-const mockIsMainGroupReadmeSuppressed = jest.fn() as any;
-const mockSetMainGroupReadmeSuppressed = jest.fn() as any;
+const mockEnsureMainGroupMemory = jest.fn() as any;
+const mockIsMainGroupMemorySuppressed = jest.fn() as any;
+const mockSetMainGroupMemorySuppressed = jest.fn() as any;
 const mockCopyGroupDirectory = jest.fn() as any;
 const mockDeleteMessage = jest.fn() as any;
 
@@ -101,11 +101,11 @@ jest.unstable_mockModule("../storage/writeGroupFile.js", () => ({
   writeGroupFile: mockWriteGroupFile,
 }));
 
-jest.unstable_mockModule("../storage/ensureMainGroupReadme.js", () => ({
-  ensureMainGroupReadme: mockEnsureMainGroupReadme,
-  DEFAULT_MAIN_GROUP_README_PATH: "MEMORY.md",
-  isMainGroupReadmeSuppressed: mockIsMainGroupReadmeSuppressed,
-  setMainGroupReadmeSuppressed: mockSetMainGroupReadmeSuppressed,
+jest.unstable_mockModule("../storage/ensureMainGroupMemory.js", () => ({
+  ensureMainGroupMemory: mockEnsureMainGroupMemory,
+  DEFAULT_MAIN_GROUP_MEMORY_PATH: "MEMORY.md",
+  isMainGroupMemorySuppressed: mockIsMainGroupMemorySuppressed,
+  setMainGroupMemorySuppressed: mockSetMainGroupMemorySuppressed,
 }));
 
 jest.unstable_mockModule("../storage/copyGroupDirectory.js", () => ({
@@ -139,9 +139,9 @@ describe("OrchestratorStore", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (mockSaveGroupMetadata as any).mockResolvedValue(undefined);
-    (mockEnsureMainGroupReadme as any).mockResolvedValue(true);
-    (mockIsMainGroupReadmeSuppressed as any).mockResolvedValue(false);
-    (mockSetMainGroupReadmeSuppressed as any).mockResolvedValue(undefined);
+    (mockEnsureMainGroupMemory as any).mockResolvedValue(true);
+    (mockIsMainGroupMemorySuppressed as any).mockResolvedValue(false);
+    (mockSetMainGroupMemorySuppressed as any).mockResolvedValue(undefined);
 
     // Mock fetch for server-side task sync (syncTaskToServer / deleteTaskFromServer)
 
@@ -1256,7 +1256,7 @@ describe("OrchestratorStore", () => {
       await store.init({} as any, orch);
 
       expect(store.pages).toEqual([
-        { groupId: "br:main", path: "MEMORY.md" },
+        { groupId: "br:main", path: "README.md" },
         { groupId: "br:test", path: "docs/guide.md" },
       ]);
     });
@@ -1270,7 +1270,7 @@ describe("OrchestratorStore", () => {
       await store.addPage({} as any, "README.md", "br:test");
 
       expect(store.pages).toEqual([
-        { groupId: "br:main", path: "MEMORY.md" },
+        { groupId: "br:main", path: "README.md" },
         { groupId: "br:main", path: "docs/guide.md" },
         { groupId: "br:test", path: "README.md" },
       ]);
@@ -1278,7 +1278,7 @@ describe("OrchestratorStore", () => {
         {} as any,
         "pages_list",
         JSON.stringify([
-          { groupId: "br:main", path: "MEMORY.md" },
+          { groupId: "br:main", path: "README.md" },
           { groupId: "br:main", path: "docs/guide.md" },
           { groupId: "br:test", path: "README.md" },
         ]),
@@ -1290,7 +1290,7 @@ describe("OrchestratorStore", () => {
 
       await store.addPage({} as any, "MEMORY.md", "br:main");
 
-      expect(mockSetMainGroupReadmeSuppressed).toHaveBeenCalledWith(
+      expect(mockSetMainGroupMemorySuppressed).toHaveBeenCalledWith(
         {} as any,
         false,
       );
@@ -1325,11 +1325,11 @@ describe("OrchestratorStore", () => {
       await store.addPage({} as any, "MEMORY.md", "br:main");
       await store.removePage({} as any, "MEMORY.md", "br:main");
 
-      expect(mockSetMainGroupReadmeSuppressed).toHaveBeenCalledWith(
+      expect(mockSetMainGroupMemorySuppressed).toHaveBeenCalledWith(
         {} as any,
         true,
       );
-      expect(mockEnsureMainGroupReadme).not.toHaveBeenCalled();
+      expect(mockEnsureMainGroupMemory).not.toHaveBeenCalled();
       expect(store.pages).toEqual([]);
       expect(mockSetConfig).toHaveBeenLastCalledWith(
         {} as any,
@@ -1340,7 +1340,7 @@ describe("OrchestratorStore", () => {
 
     it("removePage keeps existing last non-default page when MEMORY reseed fails", async () => {
       const store = new OrchestratorStore();
-      (mockEnsureMainGroupReadme as any).mockResolvedValue(false);
+      (mockEnsureMainGroupMemory as any).mockResolvedValue(false);
 
       await store.addPage({} as any, "docs/guide.md", "br:main");
       await store.removePage({} as any, "docs/guide.md", "br:main");
@@ -1375,7 +1375,7 @@ describe("OrchestratorStore", () => {
 
       await store.init({} as any, orch);
 
-      expect(mockEnsureMainGroupReadme).toHaveBeenCalledWith(
+      expect(mockEnsureMainGroupMemory).toHaveBeenCalledWith(
         {} as any,
         DEFAULT_GROUP_ID,
       );
@@ -1397,7 +1397,7 @@ describe("OrchestratorStore", () => {
           return undefined;
         },
       );
-      (mockIsMainGroupReadmeSuppressed as any).mockResolvedValue(true);
+      (mockIsMainGroupMemorySuppressed as any).mockResolvedValue(true);
 
       const store = new OrchestratorStore();
       const events = createEvents();
@@ -1412,7 +1412,7 @@ describe("OrchestratorStore", () => {
 
       await store.init({} as any, orch);
 
-      expect(mockEnsureMainGroupReadme).not.toHaveBeenCalled();
+      expect(mockEnsureMainGroupMemory).not.toHaveBeenCalled();
       expect(store.pages).toEqual([]);
       expect(mockSetConfig).not.toHaveBeenCalledWith(
         {} as any,
@@ -1450,7 +1450,7 @@ describe("OrchestratorStore", () => {
       expect(store.pages).toEqual([
         { groupId: "br:main", path: "docs/guide.md" },
       ]);
-      expect(mockEnsureMainGroupReadme).toHaveBeenCalledWith(
+      expect(mockEnsureMainGroupMemory).toHaveBeenCalledWith(
         {} as any,
         DEFAULT_GROUP_ID,
       );
@@ -1481,7 +1481,7 @@ describe("OrchestratorStore", () => {
       await store.init({} as any, orch);
 
       expect(store.pages).toEqual([
-        { groupId: "br:main", path: "MEMORY.md" },
+        { groupId: "br:main", path: "README.md" },
         { groupId: "br:main", path: "docs/guide.md" },
       ]);
     });
@@ -1930,6 +1930,59 @@ describe("OrchestratorStore", () => {
 
       store.setActiveGroup({} as any, "br:other1");
       expect(store.unreadGroupIds).toEqual(new Set(["br:other2"]));
+    });
+  });
+
+  describe("activePinnedPage", () => {
+    it("persists activePinnedPage when set", async () => {
+      const store = new OrchestratorStore();
+      const mockPage = { groupId: "br:main", path: "MEMORY.md" };
+
+      await store.setActivePinnedPage({} as any, mockPage);
+
+      expect(store.activePinnedPage).toEqual(mockPage);
+      expect(mockSetConfig).toHaveBeenCalledWith(
+        {} as any,
+        "last_selected_pinned_page",
+        JSON.stringify(mockPage),
+      );
+
+      await store.setActivePinnedPage({} as any, null);
+      expect(store.activePinnedPage).toBeNull();
+      expect(mockSetConfig).toHaveBeenLastCalledWith(
+        {} as any,
+        "last_selected_pinned_page",
+        null,
+      );
+    });
+
+    it("restores activePinnedPage on initialization", async () => {
+      const store = new OrchestratorStore();
+      const mockPage = { groupId: "br:main", path: "MEMORY.md" };
+
+      (mockGetConfig as any).mockImplementation(
+        async (_db: any, key: string) => {
+          if (key === "last_selected_pinned_page") {
+            return JSON.stringify(mockPage);
+          }
+
+          return undefined;
+        },
+      );
+
+      const events = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+      };
+
+      await store.init({} as any, orch);
+
+      expect(store.activePinnedPage).toEqual(mockPage);
     });
   });
 });

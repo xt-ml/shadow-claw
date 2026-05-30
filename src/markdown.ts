@@ -81,6 +81,58 @@ marked.use({
 
       return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
     },
+
+    heading(
+      this: any,
+      token: { text: string; depth: number; tokens?: any[] } | string,
+      level?: number,
+    ) {
+      // Normalize across different marked versions
+      const rawText =
+        typeof token === "object" && "text" in token
+          ? token.text
+          : String(token);
+      const depth =
+        typeof token === "object" && "depth" in token
+          ? token.depth
+          : (level ?? 1);
+
+      // Parse the tokens to get the proper HTML string (e.g. for links inside headings)
+      let innerHTML = rawText;
+      if (
+        typeof token === "object" &&
+        "tokens" in token &&
+        token.tokens &&
+        this.parser
+      ) {
+        innerHTML = this.parser.parseInline(token.tokens);
+      }
+
+      // Generate a GitHub-style slug from the parsed text: strip HTML tags and entities, lowercase, replace non-alphanumeric with hyphens
+      const plainText = innerHTML
+        .replace(/<[^>]+>/g, "") // Strip HTML tags
+        .replace(/&(?:[a-z\d]+|#\d+|#x[a-f\d]+);/gi, ""); // Strip HTML entities
+
+      const baseSlug = plainText
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s-]/gu, "")
+        .replace(/[\s_]+/gu, "-")
+        .replace(/-+/gu, "-")
+        .replace(/^-|-$/gu, "");
+
+      let slug = baseSlug;
+      const counts = this.options?.headingCounts;
+      if (counts instanceof Map) {
+        const count = counts.get(baseSlug) || 0;
+        counts.set(baseSlug, count + 1);
+        if (count > 0) {
+          slug = `${baseSlug}-${count}`;
+        }
+      }
+
+      return `<h${depth} id="${slug}">${innerHTML}</h${depth}>\n`;
+    },
   },
 });
 
@@ -93,10 +145,12 @@ export async function renderMarkdown(
 ): Promise<string> {
   try {
     // Parse markdown to HTML
+    const headingCounts = new Map<string, number>();
     const html = await marked.parse(src, {
       gfm: true,
       breaks: options?.breaks ?? false,
-    });
+      headingCounts,
+    } as any);
 
     // Sanitize with DOMPurify to remove any dangerous content
     const safe = DOMPurify.sanitize(html, {

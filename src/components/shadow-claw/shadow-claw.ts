@@ -1,5 +1,6 @@
 import { effect } from "../../effect.js";
-import { CONFIG_KEYS } from "../../config.js";
+import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../config.js";
+import { ShadowClawNavigateDetail } from "../../utils.js";
 
 import { ShadowClawDatabase, setDB } from "../../db/db.js";
 import { getConfig } from "../../db/getConfig.js";
@@ -109,6 +110,8 @@ export class ShadowClaw extends ShadowClawElement {
       this.showPage(orchestratorStore.activePage, false);
     } else if (this.pagesSidebarHidden) {
       this.showPage(this.getDefaultSidebarPage(), false);
+    } else {
+      this.showPage(orchestratorStore.activePage, false);
     }
 
     await this.processPendingSharedPayloads();
@@ -380,7 +383,132 @@ export class ShadowClaw extends ShadowClawElement {
       cancelAnimationFrame(this.terminalPlacementFrame);
       this.terminalPlacementFrame = null;
     }
+
+    document.removeEventListener(
+      "shadow-claw-navigate",
+      this.handleShadowClawNavigate,
+    );
   }
+
+  handleShadowClawNavigate = async (event: Event) => {
+    const customEvent = event as CustomEvent<ShadowClawNavigateDetail>;
+    const detail = customEvent.detail;
+    if (!detail) {
+      return;
+    }
+
+    const { page, groupId, path, anchor } = detail;
+    if (!this.db) {
+      return;
+    }
+
+    const resolvedPage = page ? String(page).toLowerCase() : "";
+
+    // 1. Dismiss/close the file viewer if we are navigating away from the current file.
+    if (resolvedPage && fileViewerStore.file) {
+      const targetIsSameFile =
+        resolvedPage === "files" &&
+        path &&
+        path === fileViewerStore.file.path &&
+        (!groupId || groupId === orchestratorStore.activeGroupId);
+
+      if (!targetIsSameFile) {
+        const viewer = this.shadowRoot?.querySelector(
+          "shadow-claw-file-viewer",
+        ) as any;
+        if (viewer && typeof viewer.requestCloseViewer === "function") {
+          const closed = await viewer.requestCloseViewer();
+          if (!closed) {
+            // Cancel navigation if user aborts closing
+
+            return;
+          }
+        } else {
+          fileViewerStore.closeFile();
+        }
+      }
+    }
+
+    // 2. Switch conversation group if groupId is specified and different.
+    if (groupId && groupId !== orchestratorStore.activeGroupId) {
+      await orchestratorStore.switchConversation(this.db, groupId);
+    }
+
+    // 3. Switch page view if page is specified.
+    if (resolvedPage) {
+      this.showPage(resolvedPage);
+    }
+
+    // 3. Handle folder/file target on the files view.
+    if (resolvedPage === "files" && path) {
+      const hasExtension = /\.[^./]+$/u.test(path);
+      if (hasExtension) {
+        try {
+          await fileViewerStore.openFile(
+            this.db,
+            path,
+            groupId || orchestratorStore.activeGroupId,
+          );
+          if (anchor) {
+            const tryAnchor = (attemptsLeft: number) => {
+              const viewer = this.shadowRoot?.querySelector(
+                "shadow-claw-file-viewer",
+              ) as any;
+              if (
+                viewer &&
+                typeof viewer.handleAnchorNavigation === "function"
+              ) {
+                const found = viewer.handleAnchorNavigation(anchor);
+                if (!found && attemptsLeft > 0) {
+                  setTimeout(() => tryAnchor(attemptsLeft - 1), 200);
+                }
+              } else if (attemptsLeft > 0) {
+                setTimeout(() => tryAnchor(attemptsLeft - 1), 200);
+              }
+            };
+            setTimeout(() => tryAnchor(5), 200);
+          }
+        } catch (err) {
+          console.error("Failed to open file via navigate event:", path, err);
+        }
+      } else {
+        try {
+          await orchestratorStore.setCurrentPath(this.db, path);
+          fileViewerStore.closeFile();
+        } catch (err) {
+          console.error("Failed to open folder via navigate event:", path, err);
+        }
+      }
+    }
+
+    // 4. Handle target page on the pages view.
+    if (resolvedPage === "pages" && path) {
+      const pagesComp = this.shadowRoot?.querySelector(
+        "shadow-claw-pages",
+      ) as any;
+      if (pagesComp) {
+        pagesComp.selectedPage = {
+          groupId:
+            groupId || orchestratorStore.activeGroupId || DEFAULT_GROUP_ID,
+          path: path,
+        };
+        await pagesComp.renderSelectedPage();
+        if (anchor) {
+          const tryAnchor = (attemptsLeft: number) => {
+            if (typeof pagesComp.handleAnchorNavigation === "function") {
+              const found = pagesComp.handleAnchorNavigation(anchor);
+              if (!found && attemptsLeft > 0) {
+                setTimeout(() => tryAnchor(attemptsLeft - 1), 200);
+              }
+            } else if (attemptsLeft > 0) {
+              setTimeout(() => tryAnchor(attemptsLeft - 1), 200);
+            }
+          };
+          setTimeout(() => tryAnchor(5), 200);
+        }
+      }
+    }
+  };
 
   async requestDialog(options: AppDialogOptions) {
     const root = this.shadowRoot;
@@ -485,11 +613,17 @@ export class ShadowClaw extends ShadowClawElement {
 
     // Navigation items
     root.querySelectorAll(".nav-item[data-page]").forEach((item: Element) => {
-      (item as HTMLLIElement).addEventListener("click", () =>
-        this.showPage(
-          (item as HTMLLIElement).dataset.page || this.getDefaultSidebarPage(),
-        ),
-      );
+      (item as HTMLLIElement).addEventListener("click", () => {
+        const page =
+          (item as HTMLLIElement).dataset.page || this.getDefaultSidebarPage();
+        document.dispatchEvent(
+          new CustomEvent("shadow-claw-navigate", {
+            detail: { page },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      });
     });
 
     // Menu toggle logic
@@ -531,7 +665,15 @@ export class ShadowClaw extends ShadowClawElement {
     // Settings button
     const settingsBtn = root.querySelector('[data-action="show-settings"]');
     if (settingsBtn) {
-      settingsBtn.addEventListener("click", () => this.showPage("settings"));
+      settingsBtn.addEventListener("click", () => {
+        document.dispatchEvent(
+          new CustomEvent("shadow-claw-navigate", {
+            detail: { page: "settings" },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      });
     }
 
     const headerMainToggle = root.querySelector(".header-main-toggle");
@@ -549,7 +691,13 @@ export class ShadowClaw extends ShadowClawElement {
     settingsEl?.addEventListener("navigate", (e: Event) => {
       const page = (e as CustomEvent).detail?.page;
       if (page) {
-        this.showPage(page);
+        document.dispatchEvent(
+          new CustomEvent("shadow-claw-navigate", {
+            detail: { page },
+            bubbles: true,
+            composed: true,
+          }),
+        );
       }
     });
     settingsEl?.addEventListener(
@@ -563,13 +711,25 @@ export class ShadowClaw extends ShadowClawElement {
     // Tools page "Back to Settings" navigation
     const toolsPage = root.querySelector("shadow-claw-tools");
     toolsPage?.addEventListener("navigate-back", () =>
-      this.showPage("settings"),
+      document.dispatchEvent(
+        new CustomEvent("shadow-claw-navigate", {
+          detail: { page: "settings" },
+          bubbles: true,
+          composed: true,
+        }),
+      ),
     );
 
     // Channels page "Back to Settings" navigation
     const channelsPage = root.querySelector("shadow-claw-channels");
     channelsPage?.addEventListener("navigate-back", () =>
-      this.showPage("settings"),
+      document.dispatchEvent(
+        new CustomEvent("shadow-claw-navigate", {
+          detail: { page: "settings" },
+          bubbles: true,
+          composed: true,
+        }),
+      ),
     );
 
     // Theme toggle
@@ -598,6 +758,11 @@ export class ShadowClaw extends ShadowClawElement {
         this.updateHeaderMainToggle();
       }
     });
+
+    document.addEventListener(
+      "shadow-claw-navigate",
+      this.handleShadowClawNavigate,
+    );
 
     // Listen for theme changes to update icons and host class
     window.addEventListener("shadow-claw-theme-change", (e: Event) => {
@@ -911,6 +1076,7 @@ export class ShadowClaw extends ShadowClawElement {
     this.syncPageHeaderMainVisibilityOverride();
     this.updateHeaderMainToggle();
     this.updateActivityLogToggleVisibility();
+    this.updateTerminalToggle();
 
     // Scroll to top
     const activePage = root.querySelector(".page.active");
@@ -1086,7 +1252,8 @@ export class ShadowClaw extends ShadowClawElement {
       return;
     }
 
-    const available = !this.vmStatus.error;
+    const available =
+      this.currentPage === "chat" || this.currentPage === "files";
 
     button.hidden = !available;
     button.classList.toggle("hidden", !available);
@@ -1136,6 +1303,7 @@ export class ShadowClaw extends ShadowClawElement {
       "shadow-claw-chat",
       "shadow-claw-tasks",
       "shadow-claw-files",
+      "shadow-claw-pages",
       "shadow-claw-settings",
       "shadow-claw-tools",
       "shadow-claw-channels",
@@ -1172,7 +1340,7 @@ export class ShadowClaw extends ShadowClawElement {
     }
 
     const pageContainer = activePage.querySelector(
-      "shadow-claw-chat, shadow-claw-tasks, shadow-claw-files, shadow-claw-settings, shadow-claw-tools, shadow-claw-channels",
+      "shadow-claw-chat, shadow-claw-tasks, shadow-claw-files, shadow-claw-pages, shadow-claw-settings, shadow-claw-tools, shadow-claw-channels",
     );
     if (!(pageContainer instanceof HTMLElement)) {
       return null;
@@ -1242,7 +1410,8 @@ export class ShadowClaw extends ShadowClawElement {
       return;
     }
 
-    button.hidden = this.currentPage !== "chat";
+    button.hidden =
+      this.currentPage !== "chat" || orchestratorStore.activityLog.length === 0;
   }
 
   updateActivityLogToggle() {
@@ -1337,6 +1506,12 @@ export class ShadowClaw extends ShadowClawElement {
       if (page !== this.currentPage) {
         this.showPage(page, false);
       }
+    });
+
+    // React to activityLog changes to show/hide the activity-log-toggle button.
+    effect(() => {
+      void orchestratorStore.activityLog; // track signal read
+      this.updateActivityLogToggleVisibility();
     });
   }
 }

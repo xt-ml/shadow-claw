@@ -40,6 +40,9 @@ jest.unstable_mockModule("../../markdown.js", () => ({
   renderMarkdown: jest.fn((value) => String(value)),
 }));
 
+// Mutable activityLog so individual tests can override it.
+const mockActivityLog: { entries: unknown[] } = { entries: [] };
+
 jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
   orchestratorStore: {
     init: jest.fn(async (_db, _orchestrator) => {}),
@@ -51,12 +54,30 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
     setReady: jest.fn(),
     setActivePage: (jest.fn() as any).mockResolvedValue(undefined),
     loadFiles: (jest.fn() as any).mockResolvedValue(undefined),
+    get activityLog() {
+      return mockActivityLog.entries;
+    },
   },
 }));
 
-jest.unstable_mockModule("../../stores/file-viewer.js", () => ({
-  fileViewerStore: { openFile: jest.fn() },
-}));
+jest.unstable_mockModule("../../stores/file-viewer.js", () => {
+  let fileVal: any = null;
+
+  return {
+    fileViewerStore: {
+      openFile: jest.fn(),
+      closeFile: jest.fn(() => {
+        fileVal = null;
+      }),
+      get file() {
+        return fileVal;
+      },
+      set file(val) {
+        fileVal = val;
+      },
+    },
+  };
+});
 
 jest.unstable_mockModule("../../stores/theme.js", () => ({
   Themes: { Light: "light", Dark: "dark", System: "system" },
@@ -187,7 +208,10 @@ jest.unstable_mockModule("highlighted-code", () => ({
 jest.unstable_mockModule(
   "../shadow-claw-file-viewer/shadow-claw-file-viewer.js",
   () => {
-    class MockFileViewer extends HTMLElement {}
+    class MockFileViewer extends HTMLElement {
+      requestCloseViewer = jest.fn(() => Promise.resolve(true));
+    }
+
     if (!customElements.get("shadow-claw-file-viewer")) {
       customElements.define("shadow-claw-file-viewer", MockFileViewer);
     }
@@ -321,6 +345,7 @@ describe("shadow-claw", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetConfigByKey.clear();
+    mockActivityLog.entries = [];
   });
 
   it("registers custom element", () => {
@@ -743,6 +768,207 @@ describe("shadow-claw", () => {
     expect(pagesNavItem?.classList.contains("active")).toBe(true);
     expect(chatPage?.classList.contains("active")).toBe(false);
     expect(chatNavItem?.classList.contains("active")).toBe(false);
+
+    HTMLElement.prototype.scrollTo = originalScrollTo;
+    globalThis.matchMedia = originalMatchMedia;
+  });
+
+  it("hides activity-log-toggle on non-chat pages", async () => {
+    const originalMatchMedia = globalThis.matchMedia;
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+    HTMLElement.prototype.scrollTo = jest.fn();
+
+    // Populate the activity log so the only reason the button hides is the page.
+    mockActivityLog.entries = [{ label: "Starting" }];
+
+    const component = new ShadowClaw();
+    component.orchestrator = createOrchestratorStub();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    component.showPage("files");
+
+    const button = component.shadowRoot?.querySelector(".activity-log-toggle");
+    expect(
+      button?.hasAttribute("hidden") || (button as HTMLElement)?.hidden,
+    ).toBe(true);
+
+    HTMLElement.prototype.scrollTo = originalScrollTo;
+    globalThis.matchMedia = originalMatchMedia;
+  });
+
+  it("hides activity-log-toggle on chat page when activity log is empty", async () => {
+    const originalMatchMedia = globalThis.matchMedia;
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+    HTMLElement.prototype.scrollTo = jest.fn();
+
+    mockActivityLog.entries = [];
+
+    const component = new ShadowClaw();
+    component.orchestrator = createOrchestratorStub();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    component.showPage("chat");
+
+    const button = component.shadowRoot?.querySelector(".activity-log-toggle");
+    expect(
+      button?.hasAttribute("hidden") || (button as HTMLElement)?.hidden,
+    ).toBe(true);
+
+    HTMLElement.prototype.scrollTo = originalScrollTo;
+    globalThis.matchMedia = originalMatchMedia;
+  });
+
+  it("shows activity-log-toggle on chat page when activity log has entries", async () => {
+    const originalMatchMedia = globalThis.matchMedia;
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+    HTMLElement.prototype.scrollTo = jest.fn();
+
+    mockActivityLog.entries = [{ label: "Starting" }, { label: "Done" }];
+
+    const component = new ShadowClaw();
+    component.orchestrator = createOrchestratorStub();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    component.showPage("chat");
+
+    const button = component.shadowRoot?.querySelector(
+      ".activity-log-toggle",
+    ) as HTMLElement | null;
+    expect(button?.hidden).toBe(false);
+
+    HTMLElement.prototype.scrollTo = originalScrollTo;
+    globalThis.matchMedia = originalMatchMedia;
+  });
+
+  it("hides webvm-toggle on settings page even when VM is available", async () => {
+    const originalMatchMedia = globalThis.matchMedia;
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+    HTMLElement.prototype.scrollTo = jest.fn();
+
+    const component = new ShadowClaw();
+    component.orchestrator = createOrchestratorStub();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // VM is available (no error) but page is settings
+    component.vmStatus = {
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    };
+    component.showPage("settings");
+
+    const button = component.shadowRoot?.querySelector(
+      ".webvm-toggle",
+    ) as HTMLElement | null;
+    expect(button?.hidden).toBe(true);
+
+    HTMLElement.prototype.scrollTo = originalScrollTo;
+    globalThis.matchMedia = originalMatchMedia;
+  });
+
+  it("shows webvm-toggle on files page regardless of vmStatus.error", async () => {
+    const originalMatchMedia = globalThis.matchMedia;
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+    HTMLElement.prototype.scrollTo = jest.fn();
+
+    const component = new ShadowClaw();
+    component.orchestrator = createOrchestratorStub();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // VM is disabled (has error string) — button should still show on files page
+    component.vmStatus = {
+      ready: false,
+      booting: false,
+      bootAttempted: false,
+      error: "WebVM is disabled. Enable it in Settings to use WebVM.",
+    };
+    component.showPage("files");
+
+    const button = component.shadowRoot?.querySelector(
+      ".webvm-toggle",
+    ) as HTMLElement | null;
+    expect(button?.hidden).toBe(false);
+
+    HTMLElement.prototype.scrollTo = originalScrollTo;
+    globalThis.matchMedia = originalMatchMedia;
+  });
+
+  it("shows webvm-toggle on chat page regardless of vmStatus.error", async () => {
+    const originalMatchMedia = globalThis.matchMedia;
+    const originalScrollTo = HTMLElement.prototype.scrollTo;
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+    HTMLElement.prototype.scrollTo = jest.fn();
+
+    const component = new ShadowClaw();
+    component.orchestrator = createOrchestratorStub();
+    document.body.appendChild(component);
+    await component.onTemplateReady;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    component.vmStatus = {
+      ready: false,
+      booting: false,
+      bootAttempted: false,
+      error: "WebVM is disabled. Enable it in Settings to use WebVM.",
+    };
+    component.showPage("chat");
+
+    const button = component.shadowRoot?.querySelector(
+      ".webvm-toggle",
+    ) as HTMLElement | null;
+    expect(button?.hidden).toBe(false);
 
     HTMLElement.prototype.scrollTo = originalScrollTo;
     globalThis.matchMedia = originalMatchMedia;

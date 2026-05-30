@@ -10,6 +10,7 @@ import {
 } from "../../security/trusted-types.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
+import { themeStore } from "../../stores/theme.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
 import { showError, showSuccess } from "../../toast.js";
@@ -18,8 +19,12 @@ import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.js";
 import type { ShadowClawDatabase } from "../../types.js";
 import { getDb } from "../../db/db.js";
+import { handleSpecialLinkNavigation } from "../../utils.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
+
+// @ts-ignore
+import HighlightedCode from "highlighted-code";
 
 const elementName = "shadow-claw-file-viewer";
 
@@ -64,6 +69,9 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
 
     this.db = await getDb();
+
+    // @ts-ignore
+    HighlightedCode.useTheme("atom-one-dark");
 
     // Apply highlight.js theme to markdown preview output in this shadow root.
     const hjsCss = await fetch(
@@ -267,14 +275,16 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     return confirmed;
   }
 
-  async requestCloseViewer() {
+  async requestCloseViewer(): Promise<boolean> {
     if (!(await this.canDismissViewer())) {
-      return;
+      return false;
     }
 
     await this.exitFullscreenIfActive();
 
     fileViewerStore.closeFile();
+
+    return true;
   }
 
   async handlePreviewLinkClick(event: MouseEvent) {
@@ -299,43 +309,43 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     const current = fileViewerStore.file;
     const basePath = current?.path || current?.name || "";
     const href = link.getAttribute("href") || "";
-    const resolved = this.resolveWorkspaceLinkPath(href, basePath);
+    const currentGroupId = orchestratorStore.activeGroupId;
 
-    if (!resolved) {
-      const trimmed = href.trim();
-      if (
-        trimmed &&
-        !trimmed.startsWith("#") &&
-        !trimmed.startsWith("javascript:")
-      ) {
-        const targetAttr = link.getAttribute("target") || "_blank";
-        const safeTarget =
-          targetAttr === "_self" ||
-          targetAttr === "_top" ||
-          targetAttr === "_parent"
-            ? "_blank"
-            : targetAttr;
-
-        try {
-          const parsed = new URL(trimmed, window.location.href);
-          const isExternal = parsed.host !== window.location.host;
-          if (isExternal) {
-            event.preventDefault();
-            window.open(trimmed, safeTarget, "noopener,noreferrer");
-          }
-        } catch {
-          if (/^[a-zA-Z][a-zA-Z\d+.-]*:/u.test(trimmed)) {
-            event.preventDefault();
-            window.open(trimmed, safeTarget, "noopener,noreferrer");
-          }
-        }
-      }
+    const handled = handleSpecialLinkNavigation(href, basePath, currentGroupId);
+    if (handled) {
+      event.preventDefault();
 
       return;
     }
 
-    event.preventDefault();
-    await this.openWorkspaceLink(href, basePath);
+    const trimmed = href.trim();
+    if (
+      trimmed &&
+      !trimmed.startsWith("#") &&
+      !trimmed.startsWith("javascript:")
+    ) {
+      const targetAttr = link.getAttribute("target") || "_blank";
+      const safeTarget =
+        targetAttr === "_self" ||
+        targetAttr === "_top" ||
+        targetAttr === "_parent"
+          ? "_blank"
+          : targetAttr;
+
+      try {
+        const parsed = new URL(trimmed, window.location.href);
+        const isExternal = parsed.host !== window.location.host;
+        if (isExternal) {
+          event.preventDefault();
+          window.open(trimmed, safeTarget, "noopener,noreferrer");
+        }
+      } catch {
+        if (/^[a-zA-Z][a-zA-Z\d+.-]*:/u.test(trimmed)) {
+          event.preventDefault();
+          window.open(trimmed, safeTarget, "noopener,noreferrer");
+        }
+      }
+    }
   }
 
   async openWorkspaceLink(href: string, basePath: string) {
@@ -923,6 +933,85 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
 
     setSanitizedHtml(content, resolvedPreviewHtml, previewSanitizeOptions);
+    this.wrapCodeLines(content);
+  }
+
+  wrapCodeLines(content: HTMLElement) {
+    const codeBlocks = content.querySelectorAll("pre code");
+    codeBlocks.forEach((codeEl) => {
+      const htmlContent = codeEl.innerHTML;
+      const lines = htmlContent.split(/\r?\n/u);
+
+      if (lines.length > 1 && lines[lines.length - 1] === "") {
+        lines.pop();
+      }
+
+      codeEl.innerHTML = lines
+        .map((line, idx) => {
+          const lineNum = idx + 1;
+
+          return `<span class="code-line" data-line="${lineNum}">${line || "&nbsp;"}</span>`;
+        })
+        .join("\n");
+    });
+  }
+
+  handleAnchorNavigation(anchor: string): boolean {
+    const root = this.shadowRoot;
+    if (!root) {
+      return false;
+    }
+
+    const content = root.querySelector(".file-content") as HTMLElement;
+    if (!content) {
+      return false;
+    }
+
+    // Clear any existing highlighted lines
+    content.querySelectorAll(".code-line.highlighted").forEach((el) => {
+      el.classList.remove("highlighted");
+    });
+
+    const lineMatch = anchor.match(/^#?L(\d+)(?:-L?(\d+))?$/i);
+    if (lineMatch) {
+      const startLine = parseInt(lineMatch[1], 10);
+      const endLine = lineMatch[2] ? parseInt(lineMatch[2], 10) : startLine;
+
+      let firstHighlightedEl: HTMLElement | null = null;
+      const codeLines = content.querySelectorAll(".code-line");
+      codeLines.forEach((el) => {
+        const lineNum = parseInt(el.getAttribute("data-line") || "0", 10);
+        if (lineNum >= startLine && lineNum <= endLine) {
+          el.classList.add("highlighted");
+          if (!firstHighlightedEl) {
+            firstHighlightedEl = el as HTMLElement;
+          }
+        }
+      });
+
+      if (firstHighlightedEl) {
+        (firstHighlightedEl as HTMLElement).scrollIntoView({
+          behavior: "smooth",
+          block: "center",
+        });
+
+        return true;
+      }
+
+      return false;
+    } else {
+      const id = anchor.replace(/^#/, "");
+      const targetEl =
+        content.querySelector(`[id="${id}"]`) ||
+        content.querySelector(`a[name="${id}"]`);
+      if (targetEl) {
+        targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+
+        return true;
+      }
+
+      return false;
+    }
   }
 
   async resolveRelativeImagesInHtml(html: string, filePath: string) {
@@ -1403,7 +1492,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return "allow-modals allow-popups allow-popups-to-escape-sandbox";
     }
 
-    return "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox";
+    return "allow-same-origin allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox";
   }
 
   getIframeBridgeScriptUrl() {
@@ -1436,6 +1525,12 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">` +
       '<base target="_blank">' +
       `<script src="${this.getIframeBridgeScriptUrl()}" nonce="${nonce}"><\/script>` +
+      "<style>" +
+      `  :root { color-scheme: ${themeStore.resolved}; }` +
+      "  body { font-family: system-ui, -apple-system, sans-serif; color: CanvasText; background-color: Canvas; }" +
+      "  a { color: LinkText; }" +
+      "  img { max-width: 100%; max-height: 100%; }" +
+      "</style>" +
       "</head><body>" +
       safeContent +
       "</body></html>"
@@ -1462,7 +1557,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       bash: "bash",
       cjs: "javascript",
       css: "css",
-      html: "html",
+      html: "xml",
       java: "java",
       javascript: "javascript",
       js: "javascript",

@@ -15,6 +15,10 @@ const THEME_KEY = "shadow-claw-theme";
  * Get the system theme preference
  */
 function getSystemTheme(): ResolvedTheme {
+  if (typeof window.matchMedia !== "function") {
+    return "light";
+  }
+
   return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
@@ -105,14 +109,16 @@ export class ThemeStore {
    */
   init(): void {
     // Listen for system theme changes — always override current choice
-    const mql = window.matchMedia("(prefers-color-scheme: dark)");
-    mql.addEventListener("change", () => {
-      const resolved = getSystemTheme();
-      localStorage.setItem(THEME_KEY, "system");
-      applyTheme(resolved);
-      this._theme.set("system");
-      this._resolved.set(resolved);
-    });
+    if (typeof window.matchMedia === "function") {
+      const mql = window.matchMedia("(prefers-color-scheme: dark)");
+      mql.addEventListener("change", () => {
+        const resolved = getSystemTheme();
+        localStorage.setItem(THEME_KEY, "system");
+        applyTheme(resolved);
+        this._theme.set("system");
+        this._resolved.set(resolved);
+      });
+    }
 
     // Listen for storage changes (tab sync)
     window.addEventListener("storage", (e) => {

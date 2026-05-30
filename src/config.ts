@@ -960,6 +960,7 @@ export const CONFIG_KEYS = {
   BEDROCK_PROFILE_FALLBACK: "bedrock_profile_fallback",
   BEDROCK_AUTH_MODE: "bedrock_auth_mode",
   LAST_ACTIVE_PAGE: "last_active_page",
+  LAST_SELECTED_PINNED_PAGE: "last_selected_pinned_page",
   PAGES_LIST: "pages_list",
   MAIN_GROUP_README_SUPPRESSED: "main_group_readme_suppressed",
   ACTIVITY_LOG_DISK_LOGGING_ENABLED: "activity_log_disk_logging_enabled",

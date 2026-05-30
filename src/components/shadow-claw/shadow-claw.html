@@ -89,8 +89,7 @@
             aria-label="Hide WebVM terminal"
             title="Hide WebVM terminal"
             aria-pressed="true"
-            class="theme-toggle webvm-toggle hidden"
-            hidden
+            class="theme-toggle webvm-toggle"
             type="button"
           >
             <svg
@@ -114,6 +113,21 @@
     <div class="app-body">
       <!-- Sidebar -->
       <aside class="sidebar">
+        <div class="sidebar-boot-skeleton" aria-hidden="true">
+          <div class="skeleton-nav-wrapper">
+            <div class="skeleton-item skeleton-nav"></div>
+            <div class="skeleton-item skeleton-nav"></div>
+            <div class="skeleton-item skeleton-nav"></div>
+            <div class="skeleton-item skeleton-nav"></div>
+          </div>
+          <div class="skeleton-divider"></div>
+          <div class="skeleton-convo-wrapper">
+            <div class="skeleton-item skeleton-convo"></div>
+            <div class="skeleton-item skeleton-convo"></div>
+            <div class="skeleton-item skeleton-convo"></div>
+          </div>
+        </div>
+
         <nav class="nav-menu">
           <li class="nav-item active" data-page="pages">📚 Pages</li>
           <li class="nav-item" data-page="chat">💬 Chat</li>
@@ -132,6 +146,67 @@
 
       <!-- Main Content -->
       <div class="main-content">
+        <div class="main-content-boot-skeleton" aria-hidden="true">
+          <svg
+            class="boot-loading-svg"
+            viewBox="0 0 44 44"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <g
+              fill="none"
+              fill-rule="evenodd"
+              stroke-width="2"
+              stroke="currentColor"
+            >
+              <circle cx="22" cy="22" r="1">
+                <animate
+                  attributeName="r"
+                  begin="0s"
+                  dur="1.8s"
+                  values="1; 20"
+                  calcMode="spline"
+                  keyTimes="0; 1"
+                  keySplines="0.165, 0.84, 0.44, 1"
+                  repeatCount="indefinite"
+                />
+                <animate
+                  attributeName="stroke-opacity"
+                  begin="0s"
+                  dur="1.8s"
+                  values="1; 0"
+                  calcMode="spline"
+                  keyTimes="0; 1"
+                  keySplines="0.3, 0.61, 0.355, 1"
+                  repeatCount="indefinite"
+                />
+              </circle>
+              <circle cx="22" cy="22" r="1">
+                <animate
+                  attributeName="r"
+                  begin="-0.9s"
+                  dur="1.8s"
+                  values="1; 20"
+                  calcMode="spline"
+                  keyTimes="0; 1"
+                  keySplines="0.165, 0.84, 0.44, 1"
+                  repeatCount="indefinite"
+                />
+                <animate
+                  attributeName="stroke-opacity"
+                  begin="-0.9s"
+                  dur="1.8s"
+                  values="1; 0"
+                  calcMode="spline"
+                  keyTimes="0; 1"
+                  keySplines="0.3, 0.61, 0.355, 1"
+                  repeatCount="indefinite"
+                />
+              </circle>
+            </g>
+          </svg>
+          <div class="boot-loading-text">Preparing workspace...</div>
+        </div>
+
         <!-- Chat Page -->
         <div class="page chat-page" data-page-id="chat">
           <shadow-claw-chat></shadow-claw-chat>

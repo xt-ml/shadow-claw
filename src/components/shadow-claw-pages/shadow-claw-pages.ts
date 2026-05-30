@@ -4,10 +4,13 @@ import {
   sanitizeSrcdocHtml,
   setSanitizedHtml,
   setTrustedSrcdoc,
+  toTrustedHtmlPresanitized,
 } from "../../security/trusted-types.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { readGroupFile } from "../../storage/readGroupFile.js";
+import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { showError, showSuccess } from "../../toast.js";
+import type { Config } from "dompurify";
 import type {
   GroupMeta,
   SavedPageRef,
@@ -15,7 +18,15 @@ import type {
 } from "../../types.js";
 
 import { getDb } from "../../db/db.js";
+import { handleSpecialLinkNavigation } from "../../utils.js";
 import ShadowClawElement from "../shadow-claw-element.js";
+import "../shadow-claw-page-header/shadow-claw-page-header.js";
+
+const previewSanitizeOptions: Config = {
+  // Allow blob URLs for locally resolved OPFS preview assets.
+  ALLOWED_URI_REGEXP:
+    /^(?:(?:https?|mailto|ftp|tel|file|blob|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+};
 
 const elementName = "shadow-claw-pages";
 
@@ -25,22 +36,161 @@ export class ShadowClawPages extends ShadowClawElement {
   static template = `${ShadowClawPages.componentPath}/${elementName}.html`;
 
   db: ShadowClawDatabase | null = null;
-  selectedPage: SavedPageRef | null = null;
-  renderToken: number = 0;
+  get selectedPage(): SavedPageRef | null {
+    return orchestratorStore.activePinnedPage;
+  }
 
-  buildHtmlPageSrcdoc(content: string): string {
-    const safeContent = sanitizeSrcdocHtml(content);
+  set selectedPage(val: SavedPageRef | null) {
+    if (this.pageRefKey(val) === this.pageRefKey(this.selectedPage)) {
+      return;
+    }
+
+    if (this.db) {
+      void orchestratorStore.setActivePinnedPage(this.db, val);
+    } else {
+      orchestratorStore._activePinnedPage.set(val);
+    }
+
+    this.renderPageList(orchestratorStore.pages, orchestratorStore.groups);
+    void this.renderSelectedPage();
+  }
+
+  renderToken: number = 0;
+  previewFrameWindow: Window | null = null;
+
+  async buildHtmlPageSrcdoc(
+    content: string,
+    filePath: string,
+  ): Promise<string> {
+    const resolvedHtml = this.db
+      ? await this.resolveRelativeImagesInHtml(content, filePath)
+      : content;
+
+    const safeContent = sanitizeSrcdocHtml(
+      resolvedHtml,
+      previewSanitizeOptions,
+    );
+
+    // Nonce-gated CSP: only the bridge script (served same-origin) may run.
+    // Inline scripts and other external scripts are blocked.
+    const nonce = crypto.randomUUID().replace(/-/g, "");
+    const bridgeScriptUrl = "/assets/file-viewer-preview-bridge.js";
 
     return [
       "<!doctype html>",
       '<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
-      '<meta http-equiv="Content-Security-Policy" content="script-src \'none\'">',
+      `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">`,
       '<base target="_blank">',
+      `<script src="${bridgeScriptUrl}" nonce="${nonce}"><\/script>`,
+      "<style>",
+      "  img { max-width: 100%; max-height: 100%; }",
+      "</style>",
       "</head><body>",
       safeContent,
       "</body></html>",
     ].join("");
   }
+
+  /**
+   * Resolves relative image src attributes in HTML by loading files from OPFS
+   * and replacing the src with a blob URL.
+   */
+  async resolveRelativeImagesInHtml(
+    html: string,
+    filePath: string,
+  ): Promise<string> {
+    if (!this.db || !html) {
+      return html;
+    }
+
+    const trustedHtml = toTrustedHtmlPresanitized(html);
+    const parsed = new DOMParser().parseFromString(
+      trustedHtml as string,
+      "text/html",
+    );
+    const images = Array.from(parsed.querySelectorAll("img"));
+    if (images.length === 0) {
+      return html;
+    }
+
+    const groupId =
+      this.selectedPage?.groupId || orchestratorStore.activeGroupId;
+
+    await Promise.all(
+      images.map(async (img) => {
+        const src = img.getAttribute("src") || "";
+        if (
+          !src ||
+          /^(?:[a-zA-Z][a-zA-Z\d+.-]*:|blob:|data:|#|\/\/)/u.test(src)
+        ) {
+          return;
+        }
+
+        const resolved = this.resolveWorkspaceLinkPath(src, filePath);
+        if (!resolved) {
+          return;
+        }
+
+        try {
+          const bytes = await readGroupFileBytes(this.db!, groupId, resolved);
+          const ext = resolved.split(".").pop()?.toLowerCase() || "";
+          const mimeTypeMap: Record<string, string> = {
+            apng: "image/apng",
+            avif: "image/avif",
+            gif: "image/gif",
+            jpg: "image/jpeg",
+            jpeg: "image/jpeg",
+            png: "image/png",
+            svg: "image/svg+xml",
+            webp: "image/webp",
+          };
+          const mimeType = mimeTypeMap[ext] ?? "image/jpeg";
+          const blobBytes = new Uint8Array(bytes.byteLength);
+          blobBytes.set(bytes);
+          const objectUrl = URL.createObjectURL(
+            new Blob([blobBytes], { type: mimeType }),
+          );
+          img.setAttribute("src", objectUrl);
+        } catch {
+          // File not found or unreadable — leave src as-is.
+        }
+      }),
+    );
+
+    return parsed.body.innerHTML;
+  }
+
+  handleIframeMessage = (event: MessageEvent) => {
+    if (!this.db || !event.data || typeof event.data !== "object") {
+      return;
+    }
+
+    const payload = event.data as { type?: unknown; href?: unknown };
+    if (
+      payload.type !== "shadow-claw-file-viewer-link" ||
+      typeof payload.href !== "string"
+    ) {
+      return;
+    }
+
+    if (this.previewFrameWindow && event.source !== this.previewFrameWindow) {
+      return;
+    }
+
+    const basePath = this.selectedPage?.path || "";
+    const currentGroupId =
+      this.selectedPage?.groupId || orchestratorStore.activeGroupId;
+
+    const href = payload.href;
+    const handled = handleSpecialLinkNavigation(href, basePath, currentGroupId);
+    if (!handled) {
+      // Try to resolve as a workspace-relative path within pages
+      const resolvedPath = this.resolveWorkspaceLinkPath(href, basePath);
+      if (resolvedPath) {
+        void this.openWorkspaceLink(resolvedPath);
+      }
+    }
+  };
 
   constructor() {
     super();
@@ -58,6 +208,8 @@ export class ShadowClawPages extends ShadowClawElement {
 
     await orchestratorStore.whenInitialized;
 
+    window.addEventListener("message", this.handleIframeMessage);
+
     const rendered = root.querySelector("[data-pages-rendered]");
     rendered?.addEventListener("click", (event: Event) => {
       if (event instanceof MouseEvent) {
@@ -65,7 +217,23 @@ export class ShadowClawPages extends ShadowClawElement {
       }
     });
 
+    root.addEventListener("click", (event: Event) => {
+      const dropdown = root.querySelector("[data-pages-dropdown]");
+      if (dropdown instanceof HTMLDetailsElement && dropdown.open) {
+        const target = event.target as HTMLElement;
+        if (!dropdown.contains(target)) {
+          dropdown.removeAttribute("open");
+        }
+      }
+    });
+
     this.setupEffects();
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener("message", this.handleIframeMessage);
+    this.previewFrameWindow = null;
+    super.disconnectedCallback?.();
   }
 
   async handleRenderedLinkClick(event: MouseEvent) {
@@ -89,14 +257,37 @@ export class ShadowClawPages extends ShadowClawElement {
 
     const href = link.getAttribute("href") || "";
     const basePath = this.selectedPage?.path || "";
-    const resolved = this.resolveWorkspaceLinkPath(href, basePath);
+    const currentGroupId =
+      this.selectedPage?.groupId || orchestratorStore.activeGroupId;
 
-    if (!resolved) {
-      return;
+    const handled = handleSpecialLinkNavigation(href, basePath, currentGroupId);
+    if (handled) {
+      event.preventDefault();
+    }
+  }
+
+  handleAnchorNavigation(anchor: string): boolean {
+    const root = this.shadowRoot;
+    if (!root) {
+      return false;
     }
 
-    event.preventDefault();
-    await this.openWorkspaceLink(resolved);
+    const rendered = root.querySelector("[data-pages-rendered]") as HTMLElement;
+    if (!rendered || rendered.hidden) {
+      return false;
+    }
+
+    const id = anchor.replace(/^#/, "");
+    const target =
+      rendered.querySelector(`[id="${id}"]`) ||
+      rendered.querySelector(`a[name="${id}"]`);
+    if (target) {
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+
+      return true;
+    }
+
+    return false;
   }
 
   async openWorkspaceLink(path: string) {
@@ -112,7 +303,11 @@ export class ShadowClawPages extends ShadowClawElement {
     await this.renderSelectedPage();
   }
 
-  private pageRefKey(page: SavedPageRef): string {
+  private pageRefKey(page: SavedPageRef | null): string {
+    if (!page) {
+      return "";
+    }
+
     return `${page.groupId}\u0000${page.path}`;
   }
 
@@ -186,15 +381,18 @@ export class ShadowClawPages extends ShadowClawElement {
         const pages = orchestratorStore.pages;
         const groups = orchestratorStore.groups;
         const activeGroupId = orchestratorStore.activeGroupId;
+        const activePinnedPage = orchestratorStore.activePinnedPage;
         this.renderPageList(pages, groups);
 
         if (pages.length === 0) {
-          this.selectedPage = null;
+          if (activePinnedPage !== null) {
+            this.selectedPage = null;
+          }
         } else if (
-          !this.selectedPage ||
+          !activePinnedPage ||
           !pages.some(
             (page) =>
-              this.pageRefKey(page) === this.pageRefKey(this.selectedPage!),
+              this.pageRefKey(page) === this.pageRefKey(activePinnedPage),
           )
         ) {
           const activeGroupPage = pages.find(
@@ -228,8 +426,14 @@ export class ShadowClawPages extends ShadowClawElement {
     const iframe = document.createElement("iframe");
     iframe.className = "pages__iframe";
     iframe.setAttribute("data-pages-iframe", "");
-    iframe.setAttribute("sandbox", "allow-same-origin");
+    iframe.setAttribute(
+      "sandbox",
+      "allow-same-origin allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox",
+    );
     iframe.hidden = true;
+    iframe.addEventListener("load", () => {
+      this.previewFrameWindow = iframe.contentWindow;
+    });
     rendered.before(iframe);
 
     return iframe;
@@ -257,12 +461,27 @@ export class ShadowClawPages extends ShadowClawElement {
         pages.length === 1 ? "1 saved page" : `${pages.length} saved pages`;
     }
 
-    const list = root.querySelector("[data-pages-list]");
-    if (!(list instanceof HTMLElement)) {
+    const dropdownSelected = root.querySelector(
+      "[data-pages-dropdown-selected]",
+    );
+    if (dropdownSelected instanceof HTMLElement) {
+      if (this.selectedPage) {
+        dropdownSelected.textContent = this.selectedPage.path;
+      } else {
+        dropdownSelected.textContent = "Select a page...";
+      }
+    }
+
+    const lists = root.querySelectorAll("[data-pages-list]");
+    if (lists.length === 0) {
       return;
     }
 
-    list.replaceChildren();
+    lists.forEach((list) => {
+      if (list instanceof HTMLElement) {
+        list.replaceChildren();
+      }
+    });
 
     if (pages.length === 0) {
       return;
@@ -279,74 +498,85 @@ export class ShadowClawPages extends ShadowClawElement {
       pagesByGroup.set(page.groupId, groupPages);
     });
 
-    for (const [groupId, groupPages] of pagesByGroup) {
-      const groupLabel = document.createElement("div");
-      groupLabel.className = "pages__group-label";
-      groupLabel.textContent = groupNameById.get(groupId) || groupId;
-      list.appendChild(groupLabel);
+    lists.forEach((list) => {
+      if (!(list instanceof HTMLElement)) {
+        return;
+      }
 
-      groupPages.forEach((page) => {
-        const path = page.path;
-        const row = document.createElement("div");
-        row.className = "pages__list-item";
-        if (
-          this.selectedPage &&
-          this.pageRefKey(page) === this.pageRefKey(this.selectedPage)
-        ) {
-          row.classList.add("active");
-        }
+      for (const [groupId, groupPages] of pagesByGroup) {
+        const groupLabel = document.createElement("div");
+        groupLabel.className = "pages__group-label";
+        groupLabel.textContent = groupNameById.get(groupId) || groupId;
+        list.appendChild(groupLabel);
 
-        const selectBtn = document.createElement("button");
-        selectBtn.type = "button";
-        selectBtn.className = "pages__select";
-        selectBtn.title = `Open ${path}`;
+        groupPages.forEach((page) => {
+          const path = page.path;
+          const row = document.createElement("div");
+          row.className = "pages__list-item";
+          if (
+            this.selectedPage &&
+            this.pageRefKey(page) === this.pageRefKey(this.selectedPage)
+          ) {
+            row.classList.add("active");
+          }
 
-        const pathSpan = document.createElement("span");
-        pathSpan.className = "pages__list-path";
-        pathSpan.textContent = path;
-        selectBtn.appendChild(pathSpan);
+          const selectBtn = document.createElement("button");
+          selectBtn.type = "button";
+          selectBtn.className = "pages__select";
+          selectBtn.title = `Open ${path}`;
 
-        const removeBtn = document.createElement("button");
-        removeBtn.className = "pages__remove";
-        removeBtn.type = "button";
-        removeBtn.title = "Remove from Pages";
-        removeBtn.setAttribute(
-          "aria-label",
-          `Remove ${path} from Pages in ${(groupNameById.get(groupId) || groupId) as string}`,
-        );
-        removeBtn.textContent = "✕";
+          const pathSpan = document.createElement("span");
+          pathSpan.className = "pages__list-path";
+          pathSpan.textContent = path;
+          selectBtn.appendChild(pathSpan);
 
-        selectBtn.addEventListener("click", () => {
-          this.selectedPage = page;
-          this.renderPageList(
-            orchestratorStore.pages,
-            orchestratorStore.groups,
+          const removeBtn = document.createElement("button");
+          removeBtn.className = "pages__remove";
+          removeBtn.type = "button";
+          removeBtn.title = "Remove from Pages";
+          removeBtn.setAttribute(
+            "aria-label",
+            `Remove ${path} from Pages in ${(groupNameById.get(groupId) || groupId) as string}`,
           );
-          void this.renderSelectedPage();
+          removeBtn.textContent = "✕";
+
+          selectBtn.addEventListener("click", () => {
+            this.selectedPage = page;
+            this.renderPageList(
+              orchestratorStore.pages,
+              orchestratorStore.groups,
+            );
+            void this.renderSelectedPage();
+
+            const details = list.closest("details");
+            if (details) {
+              details.removeAttribute("open");
+            }
+          });
+
+          removeBtn.addEventListener("click", async (event) => {
+            event.stopPropagation();
+
+            if (!this.db) {
+              return;
+            }
+
+            try {
+              await orchestratorStore.removePage(this.db, path, groupId);
+              showSuccess(`Removed ${path} from Pages`, 2400);
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              showError(`Failed to remove page: ${message}`, 4500);
+            }
+          });
+
+          row.appendChild(selectBtn);
+          row.appendChild(removeBtn);
+          list.appendChild(row);
         });
-
-        removeBtn.addEventListener("click", async (event) => {
-          event.stopPropagation();
-
-          if (!this.db) {
-            return;
-          }
-
-          try {
-            await orchestratorStore.removePage(this.db, path, groupId);
-            showSuccess(`Removed ${path} from Pages`, 2400);
-          } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            showError(`Failed to remove page: ${message}`, 4500);
-          }
-        });
-
-        row.appendChild(selectBtn);
-        row.appendChild(removeBtn);
-        list.appendChild(row);
-      });
-    }
+      }
+    });
   }
 
   async renderSelectedPage() {
@@ -390,7 +620,11 @@ export class ShadowClawPages extends ShadowClawElement {
         rendered.hidden = true;
         const iframe = this.ensurePreviewIframe(root, rendered);
         iframe.hidden = false;
-        setTrustedSrcdoc(iframe, this.buildHtmlPageSrcdoc(content));
+        this.previewFrameWindow = null;
+        setTrustedSrcdoc(
+          iframe,
+          await this.buildHtmlPageSrcdoc(content, selectedPage.path),
+        );
 
         return;
       }
@@ -404,7 +638,15 @@ export class ShadowClawPages extends ShadowClawElement {
           return;
         }
 
-        setSanitizedHtml(rendered, html);
+        const resolvedHtml = await this.resolveRelativeImagesInHtml(
+          html,
+          selectedPage.path,
+        );
+        if (token !== this.renderToken) {
+          return;
+        }
+
+        setSanitizedHtml(rendered, resolvedHtml, previewSanitizeOptions);
 
         return;
       }

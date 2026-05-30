@@ -37,7 +37,11 @@ import {
   ToolActivity,
 } from "../../types.js";
 import type { ShadowClawDatabase } from "../../types.js";
-import { formatDateForFilename, formatTimestamp } from "../../utils.js";
+import {
+  formatDateForFilename,
+  formatTimestamp,
+  handleSpecialLinkNavigation,
+} from "../../utils.js";
 
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
@@ -1188,22 +1192,11 @@ export class ShadowClawChat extends ShadowClawElement {
     }
 
     const href = link.getAttribute("href") || "";
-    const filePath = this.resolveWorkspaceLinkPath(href);
-    if (!filePath || !this.#db) {
-      return;
-    }
+    const activeGroupId = orchestratorStore.activeGroupId;
 
-    event.preventDefault();
-
-    try {
-      await fileViewerStore.openFile(
-        this.#db,
-        filePath,
-        orchestratorStore.activeGroupId,
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to open linked file: ${message}`, 5000);
+    const handled = handleSpecialLinkNavigation(href, "", activeGroupId);
+    if (handled) {
+      event.preventDefault();
     }
   }
 

@@ -157,6 +157,10 @@ const configs = [
             dest: "dist/public",
             rename: "pdf.worker.js",
           },
+          {
+            src: "src/file-viewer-preview-bridge.js",
+            dest: "dist/public/assets",
+          },
         ],
         copyOnce: true,
       }),

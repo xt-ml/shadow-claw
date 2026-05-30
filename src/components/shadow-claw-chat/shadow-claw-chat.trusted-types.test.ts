@@ -87,6 +87,7 @@ jest.unstable_mockModule("../../toast.js", () => ({
 jest.unstable_mockModule("../../utils.js", () => ({
   formatDateForFilename: jest.fn(),
   formatTimestamp: jest.fn(() => "now"),
+  handleSpecialLinkNavigation: jest.fn(() => false),
 }));
 jest.unstable_mockModule(
   "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js",

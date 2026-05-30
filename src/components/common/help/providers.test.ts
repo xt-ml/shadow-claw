@@ -44,7 +44,9 @@ describe("provider help", () => {
     expect(dialog.mode).toBe("info");
     expect(dialog.title).toContain("API Key Required");
     expect(
-      dialog.details?.some((line) => line.includes("Settings > LLM")),
+      dialog.details?.some((line) =>
+        line.includes("Settings > AI > Model Provider"),
+      ),
     ).toBe(true);
     expect(dialog.links?.[0]?.href).toBe("https://openrouter.ai/keys");
   });

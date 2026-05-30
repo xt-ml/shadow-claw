@@ -27,11 +27,11 @@ import {
 import { listGroupFiles } from "../storage/listGroupFiles.js";
 import { copyGroupDirectory } from "../storage/copyGroupDirectory.js";
 import {
-  DEFAULT_MAIN_GROUP_README_PATH,
-  ensureMainGroupReadme,
-  isMainGroupReadmeSuppressed,
-  setMainGroupReadmeSuppressed,
-} from "../storage/ensureMainGroupReadme.js";
+  DEFAULT_MAIN_GROUP_MEMORY_PATH,
+  ensureMainGroupMemory,
+  isMainGroupMemorySuppressed,
+  setMainGroupMemorySuppressed,
+} from "../storage/ensureMainGroupMemory.js";
 import { readGroupFile } from "../storage/readGroupFile.js";
 import { requestStorageAccess } from "../storage/requestStorageAccess.js";
 import { getStorageStatus } from "../storage/storage.js";
@@ -293,6 +293,7 @@ export class OrchestratorStore {
   public _activePage: Signal.State<string>;
   public _sidebarDefaultPage: Signal.State<"chat" | "tasks" | "files">;
   public _pages: Signal.State<SavedPageRef[]>;
+  public _activePinnedPage: Signal.State<SavedPageRef | null>;
   private _hadPersistedActivePage: boolean;
   private _initResolve: (() => void) | null;
   private _whenInitialized: Promise<void>;
@@ -390,9 +391,10 @@ export class OrchestratorStore {
     this._proxyUrl = new Signal.State("/proxy");
     this._gitProxyUrl = new Signal.State("/git-proxy");
     this._vmBashFullInternetAccess = new Signal.State(false);
-    this._activePage = new Signal.State("chat");
+    this._activePage = new Signal.State("pages");
     this._sidebarDefaultPage = new Signal.State("chat");
     this._pages = new Signal.State([]);
+    this._activePinnedPage = new Signal.State(null);
     this._hadPersistedActivePage = false;
     this._initResolve = null;
     this._whenInitialized = new Promise<void>((resolve) => {
@@ -520,11 +522,7 @@ export class OrchestratorStore {
     const normalized = path.trim().replace(/^\/+/, "").replace(/\/+/g, "/");
 
     // Migrate legacy default page paths into the current default page.
-    if (
-      normalized === "main/README.md" ||
-      normalized === "main/MEMORY.md" ||
-      normalized === "README.md"
-    ) {
+    if (normalized === "main/MEMORY.md") {
       return OrchestratorStore.DEFAULT_PAGE_PATH;
     }
 
@@ -540,11 +538,11 @@ export class OrchestratorStore {
   }
 
   private async ensureDefaultPage(db: ShadowClawDatabase): Promise<void> {
-    if (await isMainGroupReadmeSuppressed(db)) {
+    if (await isMainGroupMemorySuppressed(db)) {
       return;
     }
 
-    const hasWorkspaceReadme = await ensureMainGroupReadme(
+    const hasWorkspaceReadme = await ensureMainGroupMemory(
       db,
       DEFAULT_GROUP_ID,
     );
@@ -732,6 +730,26 @@ export class OrchestratorStore {
 
   get pages() {
     return this._pages.get();
+  }
+
+  get activePinnedPage() {
+    return this._activePinnedPage.get();
+  }
+
+  async setActivePinnedPage(
+    db: ShadowClawDatabase,
+    page: SavedPageRef | null,
+  ): Promise<void> {
+    this._activePinnedPage.set(page);
+    if (page) {
+      await setConfig(
+        db,
+        CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE,
+        JSON.stringify(page),
+      );
+    } else {
+      await setConfig(db, CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE, null);
+    }
   }
 
   get ready() {
@@ -1010,6 +1028,23 @@ export class OrchestratorStore {
       this.parsePagesList(await getConfig(db, CONFIG_KEYS.PAGES_LIST)),
     );
     await this.ensureDefaultPage(db);
+
+    const lastPinnedPageRaw = await getConfig(
+      db,
+      CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE,
+    );
+    if (lastPinnedPageRaw) {
+      try {
+        const parsed = JSON.parse(lastPinnedPageRaw as string);
+        if (
+          parsed &&
+          typeof parsed.path === "string" &&
+          typeof parsed.groupId === "string"
+        ) {
+          this._activePinnedPage.set(parsed);
+        }
+      } catch {}
+    }
 
     // Initialize proxy values from orchestrator
     if (this.orchestrator) {
@@ -1481,9 +1516,9 @@ export class OrchestratorStore {
 
     if (
       groupId === DEFAULT_GROUP_ID &&
-      normalized === DEFAULT_MAIN_GROUP_README_PATH
+      normalized === DEFAULT_MAIN_GROUP_MEMORY_PATH
     ) {
-      await setMainGroupReadmeSuppressed(db, false);
+      await setMainGroupMemorySuppressed(db, false);
     }
 
     await this.persistPages(db);
@@ -1514,17 +1549,17 @@ export class OrchestratorStore {
 
     const removingMainMemoryPage =
       groupId === DEFAULT_GROUP_ID &&
-      normalized === DEFAULT_MAIN_GROUP_README_PATH;
+      normalized === DEFAULT_MAIN_GROUP_MEMORY_PATH;
 
     if (removingMainMemoryPage) {
-      await setMainGroupReadmeSuppressed(db, true);
+      await setMainGroupMemorySuppressed(db, true);
     }
 
     const mainMemorySuppressed =
-      removingMainMemoryPage || (await isMainGroupReadmeSuppressed(db));
+      removingMainMemoryPage || (await isMainGroupMemorySuppressed(db));
 
     if (remainingPages.length === 0 && !mainMemorySuppressed) {
-      const hasWorkspaceReadme = await ensureMainGroupReadme(
+      const hasWorkspaceReadme = await ensureMainGroupMemory(
         db,
         DEFAULT_GROUP_ID,
       );

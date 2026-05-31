@@ -38,6 +38,7 @@ Detailed docs for each major subsystem.
 | [Model Registry & Capabilities](subsystems/providers.md#model-registry) | Dynamic model metadata fetching and modality capability detection                                                       |
 | [Attachment Capabilities](subsystems/attachment-capabilities.md)        | MIME-aware attachment handling and native vs fallback delivery                                                          |
 | [Chat Template Sanitizer](subsystems/sanitizer.md)                      | Strip control tokens and structural markers from local model output                                                     |
+| [Trusted Types Tinyfill](subsystems/trusted-types-tinyfill.md)          | Polyfill for Trusted Types API, browser compatibility, security rationale                                               |
 
 ### Guides
 

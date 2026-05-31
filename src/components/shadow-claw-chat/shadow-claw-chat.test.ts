@@ -924,6 +924,29 @@ describe("chat workspace link resolution", () => {
       null,
     );
   });
+
+  it("defers relative image src loading until workspace resolution", () => {
+    const instance = Object.create(ShadowClawChat.prototype);
+    const html =
+      '<p>Here is the image:</p><img src="./images/explorers.jpg" alt="explorers">';
+
+    const result = instance.deferWorkspaceImageLoads(html);
+
+    expect(result).toContain(
+      'data-inline-workspace-src="images/explorers.jpg"',
+    );
+    expect(result).not.toContain('src="./images/explorers.jpg"');
+  });
+
+  it("keeps external image src values unchanged", () => {
+    const instance = Object.create(ShadowClawChat.prototype);
+    const html = '<img src="https://example.com/explorers.jpg" alt="remote">';
+
+    const result = instance.deferWorkspaceImageLoads(html);
+
+    expect(result).toContain('src="https://example.com/explorers.jpg"');
+    expect(result).not.toContain("data-inline-workspace-src");
+  });
 });
 
 describe("chat attachment helpers", () => {

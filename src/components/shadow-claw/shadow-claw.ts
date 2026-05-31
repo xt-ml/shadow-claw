@@ -431,7 +431,11 @@ export class ShadowClaw extends ShadowClawElement {
 
     // 2. Switch conversation group if groupId is specified and different.
     if (groupId && groupId !== orchestratorStore.activeGroupId) {
-      await orchestratorStore.switchConversation(this.db, groupId);
+      await orchestratorStore.switchConversation(
+        this.db,
+        groupId,
+        resolvedPage === "chat",
+      );
     }
 
     // 3. Switch page view if page is specified.

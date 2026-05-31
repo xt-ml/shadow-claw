@@ -14,6 +14,7 @@ type TrustedTypesFactoryLike = {
     },
   ) => unknown;
   getPolicy?: (name: string) => TrustedTypesPolicyLike | null;
+  getPolicyNames?: () => string[];
 };
 
 type DefaultTrustedTypesPolicyState = {
@@ -23,6 +24,8 @@ type DefaultTrustedTypesPolicyState = {
 
 const DEFAULT_TRUSTED_TYPES_POLICY_STATE_KEY =
   "__shadowClawDefaultTrustedTypesPolicyState";
+const DEFAULT_POLICY_NAME = "default";
+const FALLBACK_SCRIPT_URL_POLICY_NAME = "shadowclaw-sandbox";
 
 function getDefaultTrustedTypesPolicyState(): DefaultTrustedTypesPolicyState {
   const globalObject = globalThis as typeof globalThis & {
@@ -57,7 +60,7 @@ export function ensureDefaultTrustedTypesPolicy(): void {
 
   try {
     if (typeof factory.getPolicy === "function") {
-      const existing = factory.getPolicy("default");
+      const existing = factory.getPolicy(DEFAULT_POLICY_NAME);
       if (existing) {
         state.policy = existing;
 
@@ -65,14 +68,49 @@ export function ensureDefaultTrustedTypesPolicy(): void {
       }
     }
 
-    const created = factory.createPolicy("default", {
+    let defaultPolicyExists = false;
+    if (typeof factory.getPolicyNames === "function") {
+      const existingNames = factory.getPolicyNames();
+      if (
+        Array.isArray(existingNames) &&
+        existingNames.includes(DEFAULT_POLICY_NAME)
+      ) {
+        defaultPolicyExists = true;
+      }
+    }
+
+    if (defaultPolicyExists) {
+      if (typeof factory.getPolicy === "function") {
+        const existingFallback = factory.getPolicy(
+          FALLBACK_SCRIPT_URL_POLICY_NAME,
+        );
+        if (existingFallback) {
+          state.policy = existingFallback;
+
+          return;
+        }
+      }
+
+      const fallback = factory.createPolicy(FALLBACK_SCRIPT_URL_POLICY_NAME, {
+        createHTML: (input: string): string => input,
+        createScriptURL: (input: string): string => input,
+      });
+      state.policy = fallback as TrustedTypesPolicyLike;
+
+      return;
+    }
+
+    const created = factory.createPolicy(DEFAULT_POLICY_NAME, {
       createHTML: (input: string): string => input,
       createScriptURL: (input: string): string => input,
     });
     state.policy = created as TrustedTypesPolicyLike;
   } catch {
     if (typeof factory.getPolicy === "function") {
-      state.policy = factory.getPolicy("default") ?? null;
+      state.policy =
+        factory.getPolicy(DEFAULT_POLICY_NAME) ??
+        factory.getPolicy(FALLBACK_SCRIPT_URL_POLICY_NAME) ??
+        null;
     }
 
     // Ignore failures when policy already exists or browser rejects creation.

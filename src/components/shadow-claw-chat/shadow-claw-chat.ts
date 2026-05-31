@@ -1230,6 +1230,29 @@ export class ShadowClawChat extends ShadowClawElement {
     return parts.join("/");
   }
 
+  deferWorkspaceImageLoads(html: string): string {
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const images = Array.from(container.querySelectorAll("img[src]"));
+    for (const img of images) {
+      const src = img.getAttribute("src");
+      if (!src) {
+        continue;
+      }
+
+      const workspacePath = this.resolveWorkspaceLinkPath(src);
+      if (!workspacePath) {
+        continue;
+      }
+
+      img.setAttribute("data-inline-workspace-src", workspacePath);
+      img.removeAttribute("src");
+    }
+
+    return container.innerHTML;
+  }
+
   /**
    * Inject a clipboard button into a message article that copies the raw
    * message text (plain text / markdown source) to the clipboard.
@@ -1478,8 +1501,10 @@ export class ShadowClawChat extends ShadowClawElement {
             const contentEl = document.createElement("div");
             contentEl.className = "chat__message-content";
             if (msg.content) {
+              const preparedContent =
+                this.deferWorkspaceImageLoads(renderedContent);
               // Intentional HTML insertion: markdown renderer output.
-              setSanitizedHtml(contentEl, renderedContent);
+              setSanitizedHtml(contentEl, preparedContent);
               await this.resolveImagePaths(msg.groupId, contentEl);
               if (!this.isLatestRender(renderVersion)) {
                 return false;
@@ -1985,19 +2010,20 @@ export class ShadowClawChat extends ShadowClawElement {
 
     const imgs = Array.from(container.querySelectorAll("img"));
     for (const img of imgs) {
-      const src = img.getAttribute("src");
-      if (
-        src &&
-        !src.startsWith("http") &&
-        !src.startsWith("data:") &&
-        !src.startsWith("blob:")
-      ) {
+      const deferredSrc = img.getAttribute("data-inline-workspace-src");
+      const src = deferredSrc || img.getAttribute("src") || "";
+      const workspacePath = this.resolveWorkspaceLinkPath(src);
+      if (workspacePath) {
         try {
-          const bytes = await readGroupFileBytes(this.#db, groupId, src);
+          const bytes = await readGroupFileBytes(
+            this.#db,
+            groupId,
+            workspacePath,
+          );
           const blobBytes = new Uint8Array(bytes.byteLength);
           blobBytes.set(bytes);
 
-          const lowerSrc = src.toLowerCase();
+          const lowerSrc = workspacePath.toLowerCase();
 
           if (lowerSrc.endsWith(".pdf")) {
             const viewer = document.createElement(
@@ -2005,7 +2031,7 @@ export class ShadowClawChat extends ShadowClawElement {
             ) as any;
 
             viewer.file = {
-              name: src.split("/").pop() || "document.pdf",
+              name: workspacePath.split("/").pop() || "document.pdf",
               binaryContent: blobBytes,
             };
 
@@ -2032,10 +2058,11 @@ export class ShadowClawChat extends ShadowClawElement {
               () => this.scrollMessagesToBottomIfNeeded(),
               { once: true },
             );
+            img.removeAttribute("data-inline-workspace-src");
             img.src = objectUrl;
           }
         } catch (e) {
-          console.warn(`Failed to load inline image: ${src}`, e);
+          console.warn(`Failed to load inline image: ${workspacePath}`, e);
         }
       }
     }

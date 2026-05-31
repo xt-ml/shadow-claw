@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.8.2",
+  "version": "1.8.3",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -96,7 +96,6 @@
     "fake-indexeddb": "^6.2.5",
     "gh-pages": "^6.3.0",
     "highlight.js": "^11.11.1",
-    "highlighted-code": "^0.3.7",
     "htmlnano": "^3.2.1",
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",

@@ -1431,7 +1431,11 @@ export class OrchestratorStore {
   /**
    * Set active group
    */
-  setActiveGroup(db: ShadowClawDatabase, groupId: string) {
+  setActiveGroup(
+    db: ShadowClawDatabase,
+    groupId: string,
+    clearUnread = this._activePage.get() === "chat",
+  ) {
     this._activeGroupId.set(groupId);
     this._messages.set([]);
     this._activityLog.set([]);
@@ -1443,9 +1447,11 @@ export class OrchestratorStore {
     this._currentPath.set(".");
 
     // Clear unread indicator for the group being viewed
-    const unread = new Set(this._unreadGroupIds.get());
-    if (unread.delete(groupId)) {
-      this._unreadGroupIds.set(unread);
+    if (clearUnread) {
+      const unread = new Set(this._unreadGroupIds.get());
+      if (unread.delete(groupId)) {
+        this._unreadGroupIds.set(unread);
+      }
     }
 
     this.loadHistory();
@@ -1654,8 +1660,13 @@ export class OrchestratorStore {
   async switchConversation(
     db: ShadowClawDatabase,
     groupId: string,
+    clearUnread?: boolean,
   ): Promise<void> {
-    this.setActiveGroup(db, groupId);
+    this.setActiveGroup(
+      db,
+      groupId,
+      clearUnread ?? this._activePage.get() === "chat",
+    );
     await setConfig(db, CONFIG_KEYS.LAST_ACTIVE_GROUP, groupId);
   }
 

@@ -67,10 +67,13 @@
       <div class="modal-body">
         <div class="file-content file-content--raw"></div>
         <div class="file-editor-container">
+          <pre
+            class="file-editor-overlay"
+            aria-hidden="true"
+          ><code class="hljs"></code></pre>
           <textarea
             aria-label="File editor"
             class="file-editor"
-            is="highlighted-code"
             spellcheck="false"
           ></textarea>
         </div>

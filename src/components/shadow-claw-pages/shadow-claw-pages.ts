@@ -142,10 +142,15 @@ export class ShadowClawPages extends ShadowClawElement {
           const mimeType = mimeTypeMap[ext] ?? "image/jpeg";
           const blobBytes = new Uint8Array(bytes.byteLength);
           blobBytes.set(bytes);
-          const objectUrl = URL.createObjectURL(
-            new Blob([blobBytes], { type: mimeType }),
-          );
-          img.setAttribute("src", objectUrl);
+
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(new Blob([blobBytes], { type: mimeType }));
+          });
+
+          img.setAttribute("src", dataUrl);
         } catch {
           // File not found or unreadable — leave src as-is.
         }
@@ -423,7 +428,7 @@ export class ShadowClawPages extends ShadowClawElement {
     iframe.setAttribute("data-pages-iframe", "");
     iframe.setAttribute(
       "sandbox",
-      "allow-same-origin allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox",
+      "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox",
     );
     iframe.hidden = true;
     iframe.addEventListener("load", () => {

@@ -202,9 +202,6 @@ jest.unstable_mockModule("../shadow-claw-tasks/shadow-claw-tasks.js", () => {
   return {};
 });
 
-jest.unstable_mockModule("highlighted-code", () => ({
-  default: { useTheme: jest.fn() },
-}));
 jest.unstable_mockModule(
   "../shadow-claw-file-viewer/shadow-claw-file-viewer.js",
   () => {

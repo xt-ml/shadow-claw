@@ -41,7 +41,7 @@ A fully-functional agent runtime that runs entirely in the browser—no AI proce
 - **Web Share Target** — Receive files/URLs directly from OS share sheet
 - **Scheduled tasks** — Cron expressions with server-side persistence and Web Push
 - **Git integration** — Clone, branch, merge (with conflict reports), push/pull
-- **File viewer** — Syntax highlighting, PDF preview, media playback, Web Share, native/fallback fullscreen, and relative image workspace resolving
+- **File viewer** — Syntax highlighting (locally bundled CSS, no CDN), PDF preview, media playback, Web Share, native/fallback fullscreen, and relative image workspace resolving; iframe sandbox hardened (no `allow-same-origin`)
 - **Files browser** — Clipboard-driven Cut/Copy/Paste actions, hidden Paste button when empty, and folder self-paste protection
 
 ## Architecture
@@ -113,6 +113,7 @@ ShadowClaw supports multiple LLM providers with a unified adapter pattern:
 - Dynamic model registry with capability metadata (context, modalities, tool support)
 - Multi-format support (OpenAI, Anthropic, Prompt API)
 - Provider-specific error handling with help dialogs
+- Prompt API session retry loop — automatically retries `LanguageModel.create()` while the model is still downloading, with availability rechecks between attempts
 
 **Setup & details**: [docs/guides/adding-a-provider.md](docs/guides/adding-a-provider.md) | [docs/subsystems/providers.md](docs/subsystems/providers.md)
 
@@ -133,7 +134,7 @@ The agent has access to **30+ tools** including:
 | **Remote**  | `remote_mcp_list_tools`, `remote_mcp_call_tool` (external MCP servers)                    |
 | **Email**   | `manage_email`, `email_read_messages`, `email_send_message`                               |
 
-**WebMCP integration**: When `document.modelContext` is available (with `navigator.modelContext` fallback), tools are also registered through the browser's Model Context Protocol.
+**WebMCP integration**: When `document.modelContext` is available (with `navigator.modelContext` fallback), tools are also registered through the browser's Model Context Protocol (`@mcp-b/webmcp-polyfill` v3).
 
 **Full reference**: [docs/subsystems/tools.md](docs/subsystems/tools.md)
 
@@ -182,6 +183,7 @@ ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and 
 - **TC39 private fields** to prevent accidental leakage via console
 - **30-second key expiry** for plaintext operations
 - **No plaintext secrets on disk** — encrypted before storage
+- **Trusted Types enforcement** — idempotent `"default"` policy (`src/security/default-trusted-types-policy.ts`) registered at boot via `theme-init.ts`; `getPolicy()` fallback prevents duplicate-creation errors on module reload
 
 **File I/O:**
 

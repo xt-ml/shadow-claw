@@ -8,10 +8,13 @@ const UPDATE_FAILURE_KEY = "shadowclaw-sw-update-failure";
 
 const mockMessageSkipWaiting = jest.fn();
 const mockRegister = jest.fn();
+const workboxScriptUrls: unknown[] = [];
 
 jest.unstable_mockModule("workbox-window", () => ({
   Workbox: class {
-    constructor(_scriptUrl: string) {}
+    constructor(scriptUrl: string) {
+      workboxScriptUrls.push(scriptUrl);
+    }
 
     addEventListener(event: string, handler: () => void | Promise<void>) {
       listeners[event] = handler;
@@ -29,6 +32,7 @@ describe("service-worker init", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    workboxScriptUrls.length = 0;
     for (const key of Object.keys(listeners)) {
       delete listeners[key];
     }
@@ -67,6 +71,37 @@ describe("service-worker init", () => {
     setTimeoutSpy.mockRestore();
     querySpy.mockRestore();
     jest.resetModules();
+
+    delete (globalThis as typeof globalThis & { trustedTypes?: unknown })
+      .trustedTypes;
+  });
+
+  it("registers service worker with TrustedScriptURL when getPolicy is unavailable", async () => {
+    const trustedScriptUrl = {
+      toString: () => "trusted:service-worker.js",
+    };
+    const createPolicy = jest.fn(() => ({
+      createHTML: (input: string) => input,
+      createScriptURL: () => trustedScriptUrl,
+    }));
+
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: {
+        createPolicy,
+      },
+    });
+
+    await import("./init.js");
+
+    expect(createPolicy).toHaveBeenCalledWith(
+      "default",
+      expect.objectContaining({
+        createHTML: expect.any(Function),
+        createScriptURL: expect.any(Function),
+      }),
+    );
+    expect(workboxScriptUrls[0]).toBe(trustedScriptUrl);
   });
 
   it("prompts via ShadowClaw confirmation and skips waiting when accepted", async () => {

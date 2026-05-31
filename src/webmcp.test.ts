@@ -9,6 +9,7 @@ describe("webmcp integration", () => {
   let mockOpenDatabase: any;
   let mockSetPostHandler: any;
   let mockRegisterTool: any;
+  let mockUnregisterTool: any;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -26,15 +27,17 @@ describe("webmcp integration", () => {
     mockOpenDatabase = jest.fn(async () => ({ mock: "db" }));
     mockSetPostHandler = jest.fn();
     mockRegisterTool = jest.fn(() => undefined);
+    mockUnregisterTool = jest.fn(() => undefined);
 
     // Mock the polyfill module so initializeWebMCPPolyfill installs our
-    // test mock onto navigator.modelContext instead of the real polyfill.
+    // test mock onto document.modelContext instead of the real polyfill.
     jest.unstable_mockModule("@mcp-b/webmcp-polyfill", () => ({
       initializeWebMCPPolyfill: jest.fn(() => {
-        Object.defineProperty((globalThis as any).navigator, "modelContext", {
+        Object.defineProperty((globalThis as any).document, "modelContext", {
           configurable: true,
           value: {
             registerTool: mockRegisterTool,
+            unregisterTool: mockUnregisterTool,
           },
         });
       }),
@@ -60,7 +63,6 @@ describe("webmcp integration", () => {
   });
 
   afterEach(() => {
-    delete ((globalThis as any).navigator as any).modelContext;
     delete ((globalThis as any).document as any).modelContext;
   });
 
@@ -70,7 +72,7 @@ describe("webmcp integration", () => {
 
   it("returns false when WebMCP API is unavailable", async () => {
     // Remove polyfilled modelContext and prevent re-install
-    delete ((globalThis as any).navigator as any).modelContext;
+    delete ((globalThis as any).document as any).modelContext;
 
     // Re-mock the polyfill to be a no-op (simulates polyfill failure)
     jest.resetModules();
@@ -99,11 +101,10 @@ describe("webmcp integration", () => {
     expect(isWebMcpSupported()).toBe(true);
   });
 
-  it("prefers document.modelContext over navigator.modelContext", async () => {
+  it("uses document.modelContext in native mode", async () => {
     setWebMcpMode("native");
 
     const documentRegisterTool = jest.fn();
-    const navigatorRegisterTool = jest.fn();
 
     Object.defineProperty((globalThis as any).document, "modelContext", {
       configurable: true,
@@ -112,24 +113,18 @@ describe("webmcp integration", () => {
       },
     });
 
-    Object.defineProperty((globalThis as any).navigator, "modelContext", {
-      configurable: true,
-      value: {
-        registerTool: navigatorRegisterTool,
-      },
-    });
-
     const registered = await registerWebMcpTools(null, jest.fn());
 
     expect(registered).toBe(true);
     expect(documentRegisterTool).toHaveBeenCalled();
-    expect(navigatorRegisterTool).not.toHaveBeenCalled();
 
     delete ((globalThis as any).document as any).modelContext;
   });
 
-  it("falls back to navigator.modelContext in native mode", async () => {
+  it("falls back to navigator.modelContext when document.modelContext is missing", async () => {
     setWebMcpMode("native");
+
+    delete ((globalThis as any).document as any).modelContext;
 
     const navigatorRegisterTool = jest.fn();
     Object.defineProperty((globalThis as any).navigator, "modelContext", {
@@ -237,9 +232,7 @@ describe("webmcp integration", () => {
 
     expect(registeredNames.length).toBeGreaterThan(0);
 
-    // In polyfill mode, unregisterWebMcpTools calls modelContext.unregisterTool(name)
-    const mockUnregisterTool = jest.fn();
-    Object.defineProperty((globalThis as any).navigator, "modelContext", {
+    Object.defineProperty((globalThis as any).document, "modelContext", {
       configurable: true,
       value: {
         registerTool: mockRegisterTool,
@@ -260,8 +253,7 @@ describe("webmcp integration", () => {
 
     expect(registeredNames.length).toBeGreaterThan(0);
 
-    const mockUnregisterTool = jest.fn();
-    Object.defineProperty((globalThis as any).navigator, "modelContext", {
+    Object.defineProperty((globalThis as any).document, "modelContext", {
       configurable: true,
       value: {
         registerTool: mockRegisterTool,

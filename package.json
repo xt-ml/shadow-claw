@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -63,8 +63,8 @@
     "web-push": "^3.6.7"
   },
   "devDependencies": {
-    "@mcp-b/webmcp-polyfill": "^2.2.0",
-    "@mcp-b/webmcp-types": "^2.2.0",
+    "@mcp-b/webmcp-polyfill": "^3.0.0",
+    "@mcp-b/webmcp-types": "^3.0.0",
     "@playwright/test": "^1.59.1",
     "@rollup/plugin-alias": "^6.0.0",
     "@rollup/plugin-commonjs": "^29.0.2",

@@ -7,6 +7,7 @@ import { TOOL_DEFINITIONS } from "../../tools.js";
 import { effect } from "../../effect.js";
 import { setConfig } from "../../db/setConfig.js";
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
+import { setSanitizedHtml } from "../../security/trusted-types.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
@@ -851,12 +852,15 @@ export class ShadowClawConversations extends ShadowClawElement {
           await navigator.clipboard.writeText(val);
           // Swap to a checkmark briefly
           const originalInner = freshCopyBtn.innerHTML;
-          freshCopyBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="1em" width="1em" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/></svg>`;
+          setSanitizedHtml(
+            freshCopyBtn,
+            `<svg xmlns="http://www.w3.org/2000/svg" height="1em" width="1em" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/></svg>`,
+          );
           freshCopyBtn.classList.add(
             "conversations__group-id-copy-btn--copied",
           );
           setTimeout(() => {
-            freshCopyBtn.innerHTML = originalInner;
+            setSanitizedHtml(freshCopyBtn, originalInner);
             freshCopyBtn.classList.remove(
               "conversations__group-id-copy-btn--copied",
             );

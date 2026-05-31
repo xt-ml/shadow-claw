@@ -2,7 +2,7 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "outDir": "out/service-worker",
-    "rootDir": "src/service-worker",
+    "rootDir": "src",
     "lib": [
       "ESNext",
       "WebWorker"

@@ -6,7 +6,6 @@ import {
   sanitizeSrcdocHtml,
   setSanitizedHtml,
   setTrustedSrcdoc,
-  toTrustedHtmlPresanitized,
 } from "../../security/trusted-types.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
@@ -27,6 +26,7 @@ import ShadowClawElement from "../shadow-claw-element.js";
 import HighlightedCode from "highlighted-code";
 
 const elementName = "shadow-claw-file-viewer";
+const highlightThemePath = `components/${elementName}/highlightjs-atom-one-dark.min.css`;
 
 const previewSanitizeOptions: Config = {
   // Allow blob URLs for locally resolved OPFS preview assets.
@@ -71,12 +71,10 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     this.db = await getDb();
 
     // @ts-ignore
-    HighlightedCode.useTheme("atom-one-dark");
+    HighlightedCode.useTheme(highlightThemePath);
 
     // Apply highlight.js theme to markdown preview output in this shadow root.
-    const hjsCss = await fetch(
-      "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css",
-    ).then((r) => r.text());
+    const hjsCss = await fetch(highlightThemePath).then((r) => r.text());
 
     const sheet = new CSSStyleSheet();
     sheet.replaceSync(hjsCss);
@@ -946,13 +944,14 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         lines.pop();
       }
 
-      codeEl.innerHTML = lines
+      const wrappedHtml = lines
         .map((line, idx) => {
           const lineNum = idx + 1;
 
           return `<span class="code-line" data-line="${lineNum}">${line || "&nbsp;"}</span>`;
         })
         .join("\n");
+      setSanitizedHtml(codeEl, wrappedHtml);
     });
   }
 
@@ -1019,11 +1018,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return html;
     }
 
-    const trustedHtml = toTrustedHtmlPresanitized(html);
-    const parsed = new DOMParser().parseFromString(
-      trustedHtml as string,
-      "text/html",
-    );
+    const parsed = new DOMParser().parseFromString(html, "text/html");
     const images = Array.from(parsed.querySelectorAll("img"));
     if (images.length === 0) {
       return html;
@@ -1492,7 +1487,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return "allow-modals allow-popups allow-popups-to-escape-sandbox";
     }
 
-    return "allow-same-origin allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox";
+    return "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox";
   }
 
   getIframeBridgeScriptUrl() {

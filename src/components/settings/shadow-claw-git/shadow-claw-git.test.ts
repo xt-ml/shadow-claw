@@ -134,6 +134,7 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
 }));
 
 jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
+  sanitizeToTrustedHtml: jest.fn((html: string) => html),
   setSanitizedHtml: jest.fn((element: Element, html: string) => {
     element.innerHTML = html;
 

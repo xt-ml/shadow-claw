@@ -53,9 +53,17 @@ jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn(async () => ({})),
 }));
 
-jest.unstable_mockModule("highlighted-code", () => ({
+jest.unstable_mockModule("highlight.js", () => ({
   default: {
-    useTheme: jest.fn(),
+    highlight: jest.fn(() => ({
+      value: '<span class="hljs-keyword">const</span>',
+    })),
+    highlightAuto: jest.fn(() => ({
+      value: '<span class="hljs-keyword">const</span>',
+    })),
+    getLanguage: jest.fn((lang: string) =>
+      lang === "js" || lang === "ts" ? {} : null,
+    ),
   },
 }));
 
@@ -69,8 +77,8 @@ const { ShadowClawFileViewer } = await import("./shadow-claw-file-viewer.js");
 const { fileViewerStore } = await import("../../stores/file-viewer.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { renderMarkdown } = await import("../../markdown.js");
-const { setSanitizedHtml } = await import("../../security/trusted-types.js");
-const { default: HighlightedCode } = await import("highlighted-code");
+const { setSanitizedHtml, toTrustedHtmlPresanitized } =
+  await import("../../security/trusted-types.js");
 const { readGroupFileBytes } =
   await import("../../storage/readGroupFileBytes.js");
 
@@ -109,17 +117,99 @@ describe("shadow-claw-file-viewer", () => {
     expect(template).toContain("modal-share-btn");
   });
 
-  it("uses local highlight theme css for edit-mode syntax highlighting", async () => {
+  it("uses local highlight theme css for editor syntax highlighting", async () => {
     const component = new ShadowClawFileViewer();
 
     await component.connectedCallback();
 
-    expect((HighlightedCode as any).useTheme).toHaveBeenCalledWith(
-      "components/shadow-claw-file-viewer/highlightjs-atom-one-dark.min.css",
-    );
     expect(fetch).toHaveBeenCalledWith(
       "components/shadow-claw-file-viewer/highlightjs-atom-one-dark.min.css",
     );
+  });
+
+  it("uses toTrustedHtmlPresanitized for editor syntax highlight overlay", async () => {
+    const component = new ShadowClawFileViewer();
+    const shadowRoot = component.shadowRoot!;
+
+    const editorContainer = document.createElement("div");
+    editorContainer.className = "file-editor-container";
+
+    const pre = document.createElement("pre");
+    pre.className = "file-editor-overlay";
+    const code = document.createElement("code");
+    code.className = "hljs";
+    pre.appendChild(code);
+    editorContainer.appendChild(pre);
+
+    const textarea = document.createElement("textarea");
+    textarea.className = "file-editor";
+    editorContainer.appendChild(textarea);
+
+    const modal = document.createElement("div");
+    modal.className = "file-modal";
+    const modalBody = document.createElement("div");
+    modalBody.className = "modal-body";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.className = "modal-cancel-btn";
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "modal-save-btn";
+    const shareBtn = document.createElement("button");
+    shareBtn.className = "modal-share-btn";
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "modal-close-btn";
+    const editBtn = document.createElement("button");
+    editBtn.className = "modal-edit-btn";
+    const previewBtn = document.createElement("button");
+    previewBtn.className = "modal-preview-btn";
+    modal.append(
+      modalBody,
+      cancelBtn,
+      saveBtn,
+      shareBtn,
+      closeBtn,
+      editBtn,
+      previewBtn,
+      editorContainer,
+    );
+    shadowRoot.appendChild(modal);
+
+    (fileViewerStore as any).file = {
+      name: "main.ts",
+      kind: "text",
+      content: "const x = 1;",
+    };
+
+    component.bindEventListeners();
+
+    textarea.value = "const x = 1;";
+    textarea.dispatchEvent(new Event("input"));
+
+    expect(toTrustedHtmlPresanitized).toHaveBeenCalled();
+  });
+
+  it("applies markdown highlight styles when adoptedStyleSheets getter returns a copy", async () => {
+    const component = new ShadowClawFileViewer();
+    const root = component.shadowRoot;
+    if (!root) {
+      throw new Error("shadowRoot not found");
+    }
+
+    let storedSheets: CSSStyleSheet[] = [];
+    Object.defineProperty(root, "adoptedStyleSheets", {
+      configurable: true,
+      get() {
+        // Safari-like behavior: reads return a copy, so mutating via push() is ignored.
+
+        return [...storedSheets];
+      },
+      set(value: CSSStyleSheet[]) {
+        storedSheets = [...value];
+      },
+    });
+
+    await component.connectedCallback();
+
+    expect(storedSheets.length).toBeGreaterThanOrEqual(2);
   });
 
   it("toggles fullscreen mode from the view mode button", () => {
@@ -396,12 +486,9 @@ describe("shadow-claw-file-viewer", () => {
     expect(srcdoc).toContain("/assets/file-viewer-preview-bridge.js");
   });
 
-  it("replaces relative image src with blob URLs in html iframe srcdoc", async () => {
+  it("replaces relative image src with data URLs in html iframe srcdoc", async () => {
     const component = new ShadowClawFileViewer();
     component.db = {} as any;
-
-    URL.createObjectURL = jest.fn(() => "blob:fake-html");
-    URL.revokeObjectURL = jest.fn();
 
     const pngBytes = new Uint8Array([137, 80, 78, 71]);
     (
@@ -419,9 +506,8 @@ describe("shadow-claw-file-viewer", () => {
       "test-group",
       "docs/assets/banner.png",
     );
-    expect(srcdoc).toContain("blob:fake-html");
+    expect(srcdoc).toContain("data:image/png;base64,iVBORw==");
     expect(srcdoc).not.toContain('src="assets/banner.png"');
-    expect(component.currentImageObjectUrls).toContain("blob:fake-html");
   });
 
   it("includes allow-modals in iframe sandbox permissions", () => {
@@ -433,6 +519,13 @@ describe("shadow-claw-file-viewer", () => {
 
     expect(component.getIframeSandboxPermissions("diagram.svg")).toContain(
       "allow-modals",
+    );
+  });
+
+  it("does not include allow-same-origin for html iframe previews", () => {
+    const viewer = new ShadowClawFileViewer();
+    expect(viewer.getIframeSandboxPermissions("test.html")).not.toContain(
+      "allow-same-origin",
     );
   });
 
@@ -512,7 +605,6 @@ describe("shadow-claw-file-viewer", () => {
     const component = new ShadowClawFileViewer();
     component.db = {} as any;
 
-    URL.createObjectURL = jest.fn(() => "blob:md-preview");
     const pngBytes = new Uint8Array([137, 80, 78, 71]);
     (
       readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
@@ -520,7 +612,7 @@ describe("shadow-claw-file-viewer", () => {
 
     const renderMarkdownMock = renderMarkdown as jest.MockedFunction<any>;
     renderMarkdownMock.mockResolvedValueOnce(
-      '<p><img src="assets/image.jpg" alt="Why no worky"></p>',
+      '<p><img src="assets/image.jpg" alt="example"></p>',
     );
 
     const content = document.createElement("div");
@@ -528,14 +620,14 @@ describe("shadow-claw-file-viewer", () => {
       name: "notes.md",
       path: "docs/notes.md",
       kind: "text",
-      content: "![Why no worky](assets/image.jpg)",
+      content: "![example](assets/image.jpg)",
     };
 
     await component.renderPreview(content, {
       name: "notes.md",
       path: "docs/notes.md",
       kind: "text",
-      content: "![Why no worky](assets/image.jpg)",
+      content: "![example](assets/image.jpg)",
     });
 
     expect(readGroupFileBytes).toHaveBeenCalledWith(
@@ -545,7 +637,7 @@ describe("shadow-claw-file-viewer", () => {
     );
     expect(setSanitizedHtml).toHaveBeenCalledWith(
       content,
-      '<p><img src="blob:md-preview" alt="Why no worky"></p>',
+      '<p><img src="data:image/jpeg;base64,iVBORw==" alt="example"></p>',
       expect.objectContaining({
         ALLOWED_URI_REGEXP: expect.any(RegExp),
       }),
@@ -688,7 +780,7 @@ describe("shadow-claw-file-viewer", () => {
     expect(styles).toMatch(/\.file-editor\s*\{[^}]*caret-color\s*:/);
   });
 
-  it("uses !important on caret-color to override highlighted-code inline style in dark mode", async () => {
+  it("uses !important on caret-color so cursor remains light over the dark hljs overlay", async () => {
     const styles = await ShadowClawFileViewer.getStylesSource();
 
     expect(styles).toMatch(
@@ -900,6 +992,122 @@ describe("shadow-claw-file-viewer", () => {
   });
 
   describe("workspace link resolution", () => {
+    it("opens same-folder markdown links via workspace resolution", async () => {
+      const component = new ShadowClawFileViewer();
+      component.db = {} as any;
+
+      (fileViewerStore as any).file = {
+        path: "docs/index.md",
+        name: "index.md",
+        kind: "text",
+        content: "# index",
+      };
+
+      const openWorkspaceLinkSpy = jest
+        .spyOn(component, "openWorkspaceLink")
+        .mockResolvedValue(undefined);
+
+      const body = document.createElement("div");
+      const link = document.createElement("a");
+      link.setAttribute("href", "test.md");
+      body.appendChild(link);
+
+      const event = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      });
+      Object.defineProperty(event, "target", {
+        configurable: true,
+        value: link,
+      });
+
+      await component.handlePreviewLinkClick(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(openWorkspaceLinkSpy).toHaveBeenCalledWith(
+        "test.md",
+        "docs/index.md",
+      );
+
+      openWorkspaceLinkSpy.mockRestore();
+    });
+
+    it("opens sibling-folder markdown links via workspace resolution", async () => {
+      const component = new ShadowClawFileViewer();
+      component.db = {} as any;
+
+      (fileViewerStore as any).file = {
+        path: "docs/index.md",
+        name: "index.md",
+        kind: "text",
+        content: "# index",
+      };
+
+      const openWorkspaceLinkSpy = jest
+        .spyOn(component, "openWorkspaceLink")
+        .mockResolvedValue(undefined);
+
+      const body = document.createElement("div");
+      const link = document.createElement("a");
+      link.setAttribute("href", "./folder1/test2.md");
+      body.appendChild(link);
+
+      const event = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      });
+      Object.defineProperty(event, "target", {
+        configurable: true,
+        value: link,
+      });
+
+      await component.handlePreviewLinkClick(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(openWorkspaceLinkSpy).toHaveBeenCalledWith(
+        "./folder1/test2.md",
+        "docs/index.md",
+      );
+
+      openWorkspaceLinkSpy.mockRestore();
+    });
+
+    it("keeps special hash-link navigation handling", async () => {
+      const component = new ShadowClawFileViewer();
+      component.db = {} as any;
+
+      const openWorkspaceLinkSpy = jest
+        .spyOn(component, "openWorkspaceLink")
+        .mockResolvedValue(undefined);
+      const dispatchSpy = jest.spyOn(document, "dispatchEvent");
+
+      const body = document.createElement("div");
+      const link = document.createElement("a");
+      link.setAttribute("href", "/#Pages?path=docs/linked.md");
+      body.appendChild(link);
+
+      const event = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      });
+      Object.defineProperty(event, "target", {
+        configurable: true,
+        value: link,
+      });
+
+      await component.handlePreviewLinkClick(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(openWorkspaceLinkSpy).not.toHaveBeenCalled();
+      expect(dispatchSpy).toHaveBeenCalled();
+
+      dispatchSpy.mockRestore();
+      openWorkspaceLinkSpy.mockRestore();
+    });
+
     it("resolves relative links against the opened file directory", () => {
       const component = new ShadowClawFileViewer();
 
@@ -1046,7 +1254,7 @@ describe("shadow-claw-file-viewer", () => {
       URL.revokeObjectURL = jest.fn();
     });
 
-    it("replaces relative image src with an object URL loaded from OPFS", async () => {
+    it("replaces relative image src with a data URL loaded from OPFS", async () => {
       const component = new ShadowClawFileViewer();
       component.db = {} as any;
 
@@ -1067,8 +1275,7 @@ describe("shadow-claw-file-viewer", () => {
         "test-group",
         "docs/assets/image.png",
       );
-      expect(img.src).toBe("blob:fake");
-      expect(component.currentImageObjectUrls).toContain("blob:fake");
+      expect(img.src).toBe("data:image/png;base64,iVBORw==");
     });
 
     it("leaves absolute and data URIs unchanged", async () => {
@@ -1144,7 +1351,7 @@ describe("shadow-claw-file-viewer", () => {
 
       // DOMParser parsing is an inert read/transform step; sinks are sanitized elsewhere.
       expect(setSanitizedHtml).not.toHaveBeenCalled();
-      expect(resolved).toContain("blob:fake-html");
+      expect(resolved).toContain("data:image/png;base64,iVBORw==");
     });
   });
 });

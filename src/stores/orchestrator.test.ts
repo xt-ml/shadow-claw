@@ -871,6 +871,8 @@ describe("OrchestratorStore", () => {
       .spyOn(store, "loadFiles")
       .mockResolvedValue(undefined);
 
+    store._activePage.set("chat");
+
     store.setActiveGroup({} as any, "group-2");
 
     expect(store.activeGroupId).toBe("group-2");
@@ -892,6 +894,17 @@ describe("OrchestratorStore", () => {
     expect(taskSpy).toHaveBeenCalledWith({} as any) as any;
 
     expect(filesSpy).toHaveBeenCalledWith({} as any) as any;
+  });
+
+  it("setActiveGroup preserves unread when not viewing chat", () => {
+    const store: any = new OrchestratorStore();
+
+    store._activePage.set("files");
+    store._unreadGroupIds.set(new Set(["group-2"]));
+
+    store.setActiveGroup({} as any, "group-2");
+
+    expect(store.unreadGroupIds).toEqual(new Set(["group-2"]));
   });
 
   it("returns a snapshot via getState and tasks backup", () => {
@@ -1218,7 +1231,7 @@ describe("OrchestratorStore", () => {
       jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
       jest.spyOn(store, "loadFiles").mockResolvedValue(undefined);
 
-      await store.switchConversation({} as any, "br:other");
+      await store.switchConversation({} as any, "br:other", true);
 
       expect(store.activeGroupId).toBe("br:other");
       expect(mockSetConfig).toHaveBeenCalledWith(
@@ -1226,6 +1239,20 @@ describe("OrchestratorStore", () => {
         "last_active_group",
         "br:other",
       );
+    });
+
+    it("switchConversation can preserve unread when requested", async () => {
+      const store = new OrchestratorStore();
+      jest.spyOn(store, "loadHistory").mockResolvedValue(undefined);
+      jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
+      jest.spyOn(store, "loadFiles").mockResolvedValue(undefined);
+
+      store._activePage.set("files");
+      store._unreadGroupIds.set(new Set(["br:other"]));
+
+      await store.switchConversation({} as any, "br:other", false);
+
+      expect(store.unreadGroupIds).toEqual(new Set(["br:other"]));
     });
 
     it("init restores persisted pages list", async () => {
@@ -1835,7 +1862,7 @@ describe("OrchestratorStore", () => {
       expect(store.unreadGroupIds).toEqual(new Set());
     });
 
-    it("clears unread when switching to that conversation", async () => {
+    it("clears unread when switching to that conversation in chat", async () => {
       const store = new OrchestratorStore();
       const events = createEvents();
       const orch: any = {
@@ -1853,6 +1880,8 @@ describe("OrchestratorStore", () => {
 
       await store.init({} as any, orch);
 
+      store._activePage.set("chat");
+
       // Mark br:other as unread
       events.emit("message", {
         id: "m-other",
@@ -1865,6 +1894,38 @@ describe("OrchestratorStore", () => {
       // Switch to br:other
       store.setActiveGroup({} as any, "br:other");
       expect(store.unreadGroupIds).toEqual(new Set());
+    });
+
+    it("preserves unread when switching conversations outside chat", async () => {
+      const store = new OrchestratorStore();
+      const events = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: jest.fn().mockReturnValue(false),
+        getProxyUrl: jest.fn().mockReturnValue(""),
+        getGitProxyUrl: jest.fn().mockReturnValue(""),
+        getVMBashFullInternetAccess: jest.fn().mockReturnValue(false),
+        getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
+      };
+
+      jest.spyOn(store, "loadHistory").mockResolvedValue(undefined);
+      jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
+      jest.spyOn(store, "loadFiles").mockResolvedValue(undefined);
+
+      await store.init({} as any, orch);
+
+      store._activePage.set("files");
+
+      events.emit("message", {
+        id: "m-other",
+        groupId: "br:other",
+        role: "assistant",
+        isFromMe: false,
+      });
+      expect(store.unreadGroupIds).toEqual(new Set(["br:other"]));
+
+      store.setActiveGroup({} as any, "br:other");
+      expect(store.unreadGroupIds).toEqual(new Set(["br:other"]));
     });
 
     it("tracks multiple unread groups", async () => {
@@ -1914,6 +1975,8 @@ describe("OrchestratorStore", () => {
       jest.spyOn(store, "loadFiles").mockResolvedValue(undefined);
 
       await store.init({} as any, orch);
+
+      store._activePage.set("chat");
 
       events.emit("message", {
         id: "m1",

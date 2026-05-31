@@ -1,6 +1,10 @@
+import { initializeTrustedTypesTinyfill } from "./security/trusted-types-tinyfill.js";
 import { ensureDefaultTrustedTypesPolicy } from "./security/default-trusted-types-policy.js";
 
 (function initializeThemeAndBootState() {
+  // Install Trusted Types tinyfill first (no-op if browser already supports it)
+  initializeTrustedTypesTinyfill();
+
   ensureDefaultTrustedTypesPolicy();
 
   const root = document.documentElement;

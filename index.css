@@ -67,6 +67,8 @@
   --shadow-claw-icon-eye-shine: #ffffff;
   --shadow-claw-icon-eye: #171d1e;
 
+  --shadow-claw-hljs-background-color: rgb(40, 44, 52);
+
   display: contents;
 }
 

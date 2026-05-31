@@ -26,7 +26,6 @@ export default {
         "^dompurify$": "<rootDir>/src/__mocks__/dompurify.cjs",
         "^marked$": "<rootDir>/src/__mocks__/marked.cjs",
         "^highlight\\.js$": "<rootDir>/src/__mocks__/highlightjs.cjs",
-        "^highlighted-code$": "<rootDir>/src/__mocks__/highlighted-code.cjs",
         "^pdfjs-dist$": "<rootDir>/src/__mocks__/pdfjs-dist.cjs",
         "^just-bash$": "<rootDir>/src/__mocks__/just-bash.cjs",
         "^node:sqlite$":

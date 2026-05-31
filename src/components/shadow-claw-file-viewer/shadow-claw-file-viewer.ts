@@ -6,6 +6,7 @@ import {
   sanitizeSrcdocHtml,
   setSanitizedHtml,
   setTrustedSrcdoc,
+  toTrustedHtmlPresanitized,
 } from "../../security/trusted-types.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
@@ -22,11 +23,12 @@ import { handleSpecialLinkNavigation } from "../../utils.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
 
-// @ts-ignore
-import HighlightedCode from "highlighted-code";
+import hljs from "highlight.js";
 
 const elementName = "shadow-claw-file-viewer";
 const highlightThemePath = `components/${elementName}/highlightjs-atom-one-dark.min.css`;
+const highlightFontOverrideCss =
+  "pre code.hljs, code.hljs, .hljs { font-family: var(--shadow-claw-font-mono) !important; }";
 
 const previewSanitizeOptions: Config = {
   // Allow blob URLs for locally resolved OPFS preview assets.
@@ -70,24 +72,9 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     this.db = await getDb();
 
-    // @ts-ignore
-    HighlightedCode.useTheme(highlightThemePath);
-
     // Apply highlight.js theme to markdown preview output in this shadow root.
     const hjsCss = await fetch(highlightThemePath).then((r) => r.text());
-
-    const sheet = new CSSStyleSheet();
-    sheet.replaceSync(hjsCss);
-
-    // Override highlight.js theme font so it matches our mono font.
-    const fontSheet = new CSSStyleSheet();
-    fontSheet.replaceSync(
-      `pre code.hljs, code.hljs, .hljs { font-family: var(--shadow-claw-font-mono) !important; }`,
-    );
-
-    if (this.shadowRoot?.adoptedStyleSheets) {
-      this.shadowRoot.adoptedStyleSheets.push(sheet, fontSheet);
-    }
+    this.applyHighlightStyles(hjsCss);
 
     window.addEventListener("message", this.handleIframeMessage);
     document.addEventListener("fullscreenchange", this.handleFullscreenChange);
@@ -103,6 +90,41 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       this.handleFullscreenChange,
     );
     this.revokeObjectUrl();
+  }
+
+  applyHighlightStyles(hjsCss: string) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const supportsConstructedSheet =
+      typeof CSSStyleSheet !== "undefined" &&
+      typeof CSSStyleSheet.prototype.replaceSync === "function";
+
+    if (supportsConstructedSheet && "adoptedStyleSheets" in root) {
+      try {
+        const themeSheet = new CSSStyleSheet();
+        themeSheet.replaceSync(hjsCss);
+
+        const fontSheet = new CSSStyleSheet();
+        fontSheet.replaceSync(highlightFontOverrideCss);
+
+        const existingSheets = root.adoptedStyleSheets
+          ? Array.from(root.adoptedStyleSheets)
+          : [];
+        root.adoptedStyleSheets = [...existingSheets, themeSheet, fontSheet];
+
+        return;
+      } catch {
+        // Some engines expose pieces of the API but fail at runtime.
+      }
+    }
+
+    const style = document.createElement("style");
+    style.setAttribute("data-shadow-claw-highlight-theme", "true");
+    style.textContent = `${hjsCss}\n${highlightFontOverrideCss}`;
+    root.appendChild(style);
   }
 
   handleFullscreenChange = () => {
@@ -211,9 +233,11 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     });
 
     const editor = root.querySelector(".file-editor");
+
     editor?.addEventListener("input", () => {
       if (editor instanceof HTMLTextAreaElement) {
         this.editorDraftContent = editor.value;
+        this.updateEditorHighlight(editor.value);
       }
 
       this.isEditorDirty = true;
@@ -222,9 +246,14 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     if (editor instanceof HTMLTextAreaElement) {
       const syncHighlight = () => {
-        editor.dispatchEvent(new Event("scroll"));
+        const highlightPre = root.querySelector(".file-editor-overlay");
+        if (highlightPre) {
+          highlightPre.scrollTop = editor.scrollTop;
+          highlightPre.scrollLeft = editor.scrollLeft;
+        }
       };
 
+      editor.addEventListener("scroll", syncHighlight);
       editor.addEventListener("focus", syncHighlight);
       editor.addEventListener("click", syncHighlight);
       editor.addEventListener("keyup", syncHighlight);
@@ -233,6 +262,44 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       const scrollBody = root.querySelector(".modal-body");
       scrollBody?.addEventListener("scroll", syncHighlight);
     }
+  }
+
+  updateEditorHighlight(value: string) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const highlightCode = root.querySelector(".file-editor-overlay code");
+    if (!highlightCode) {
+      return;
+    }
+
+    const file = fileViewerStore.file;
+    const language = this.getLanguageFromFilename(file?.name || "");
+    let highlighted = "";
+
+    try {
+      if (language && hljs.getLanguage(language)) {
+        highlighted = hljs.highlight(value, { language }).value;
+      } else {
+        highlighted = hljs.highlightAuto(value).value;
+      }
+    } catch {
+      highlighted = value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    highlightCode.className = language ? `hljs language-${language}` : "hljs";
+    // hljs output is pre-sanitized: user content is entity-escaped and
+    // only generated <span class="hljs-*"> tags are added. Use
+    // toTrustedHtmlPresanitized to satisfy Trusted Types without
+    // running DOMPurify (which would strip the hljs span tokens).
+    highlightCode.innerHTML = toTrustedHtmlPresanitized(
+      highlighted + "<br>",
+    ) as string;
   }
 
   hasUnsavedChanges() {
@@ -308,6 +375,14 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     const basePath = current?.path || current?.name || "";
     const href = link.getAttribute("href") || "";
     const currentGroupId = orchestratorStore.activeGroupId;
+
+    const resolved = this.resolveWorkspaceLinkPath(href, basePath);
+    if (resolved) {
+      event.preventDefault();
+      await this.openWorkspaceLink(href, basePath);
+
+      return;
+    }
 
     const handled = handleSpecialLinkNavigation(href, basePath, currentGroupId);
     if (handled) {
@@ -822,9 +897,18 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         }
 
         if (!this.isEditorDirty) {
-          editor.value = file.content || "";
+          const targetValue = file.content || "";
+          if (editor.value !== targetValue) {
+            editor.value = targetValue;
+          }
+
+          this.updateEditorHighlight(editor.value);
         } else if (typeof workingFile?.content === "string") {
-          editor.value = workingFile.content;
+          if (editor.value !== workingFile.content) {
+            editor.value = workingFile.content;
+          }
+
+          this.updateEditorHighlight(editor.value);
         }
 
         editor.dispatchEvent(new Event("scroll"));
@@ -1048,11 +1132,15 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
           const blobBytes = new Uint8Array(bytes.byteLength);
           blobBytes.set(bytes);
-          const objectUrl = URL.createObjectURL(
-            new Blob([blobBytes], { type: mimeType }),
-          );
-          this.currentImageObjectUrls.push(objectUrl);
-          img.setAttribute("src", objectUrl);
+
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(new Blob([blobBytes], { type: mimeType }));
+          });
+
+          img.setAttribute("src", dataUrl);
         } catch {
           // File not found or unreadable — leave src as-is.
         }
@@ -1100,11 +1188,15 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
           const blobBytes = new Uint8Array(bytes.byteLength);
           blobBytes.set(bytes);
-          const objectUrl = URL.createObjectURL(
-            new Blob([blobBytes], { type: mimeType }),
-          );
-          this.currentImageObjectUrls.push(objectUrl);
-          img.src = objectUrl;
+
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(new Blob([blobBytes], { type: mimeType }));
+          });
+
+          img.src = dataUrl;
         } catch {
           // File not found or unreadable — leave src as-is.
         }
@@ -1289,6 +1381,12 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     if (editor instanceof HTMLTextAreaElement) {
       editor.value = "";
       editor.removeAttribute("language");
+    }
+
+    const highlightCode = modal.querySelector(".file-editor-overlay code");
+    if (highlightCode) {
+      highlightCode.innerHTML = "";
+      highlightCode.className = "hljs";
     }
 
     this.isFileEditMode = false;
@@ -1486,6 +1584,9 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     if (/\.svg$/i.test(fileName)) {
       return "allow-modals allow-popups allow-popups-to-escape-sandbox";
     }
+
+    // We use data: URLs for relative OPFS images, so allow-same-origin
+    // is no longer required and we can avoid sandbox escape warnings.
 
     return "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox";
   }

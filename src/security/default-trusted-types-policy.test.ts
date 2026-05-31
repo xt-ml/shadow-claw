@@ -67,6 +67,41 @@ describe("ensureDefaultTrustedTypesPolicy", () => {
     expect(createPolicy).not.toHaveBeenCalled();
   });
 
+  it("creates a fallback policy when default exists but cannot be retrieved", () => {
+    const trustedScriptUrl = {
+      toString: () => "trusted:service-worker.js",
+    };
+    const createScriptURL = jest.fn((_url: string) => trustedScriptUrl);
+    const createPolicy = jest.fn((_name: string, _rules: object) => ({
+      createHTML: (input: string) => input,
+      createScriptURL,
+    }));
+    const getPolicyNames = jest.fn(() => ["default", "shadowclaw"]);
+
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: {
+        createPolicy,
+        getPolicyNames,
+      },
+    });
+
+    const url = toDefaultTrustedScriptUrl("service-worker.js") as {
+      toString: () => string;
+    };
+
+    expect(getPolicyNames).toHaveBeenCalledTimes(1);
+    expect(createPolicy).toHaveBeenCalledWith(
+      "shadowclaw-sandbox",
+      expect.objectContaining({
+        createHTML: expect.any(Function),
+        createScriptURL: expect.any(Function),
+      }),
+    );
+    expect(createScriptURL).toHaveBeenCalledWith("service-worker.js");
+    expect(url.toString()).toBe("trusted:service-worker.js");
+  });
+
   it("swallows policy creation errors", () => {
     const createPolicy = jest.fn(() => {
       throw new Error("already exists");

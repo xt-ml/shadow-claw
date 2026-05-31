@@ -233,7 +233,6 @@ pre {
   color: var(--shadow-claw-text-primary);
 }
 
-/* Compact action buttons earlier to avoid header overflow while editing */
 @media (max-width: 640px) {
   .modal-cancel-btn .btn-label,
   .modal-save-btn .btn-label {
@@ -241,7 +240,6 @@ pre {
   }
 }
 
-/* Mobile: hide text labels, show emoji icons only */
 @media (max-width: 480px) {
   .btn-label {
     display: none;
@@ -279,7 +277,6 @@ pre {
   word-break: break-all;
 }
 
-/* Allow text selection in markdown preview */
 .file-content--preview {
   font-family: var(--shadow-claw-font-sans);
   font-size: var(--shadow-claw-font-size-sm);
@@ -392,59 +389,76 @@ pre {
 }
 
 .file-editor-container {
+  background-color: var(--shadow-claw-hljs-background-color, rgb(40, 44, 52));
   display: none;
   flex: 1;
-  flex-direction: column;
   margin: 0.75rem;
   min-height: 0;
+  min-width: 0;
   position: relative;
 }
 
 .file-editor-container.active {
-  display: flex;
+  display: block;
 }
 
 .file-editor {
-  background-color: var(--shadow-claw-bg-primary);
+  background-color: transparent;
   border: 0.0625rem solid var(--shadow-claw-border-color);
   border-radius: var(--shadow-claw-radius-s);
-  caret-color: var(--shadow-claw-text-primary) !important;
-  color: var(--shadow-claw-text-primary);
-  flex: 1;
+  caret-color: #abb2bf !important;
+  color: transparent;
   font-family: var(--shadow-claw-font-mono), monospace !important;
   font-size: 1rem !important;
   font-variant-ligatures: none !important;
+  height: 100%;
+  left: 0;
   line-height: 1.5 !important;
-  min-height: 0;
   overflow: auto;
   padding: 0.625rem;
+  position: absolute;
   resize: none;
   tab-size: 2;
+  top: 0;
   white-space: pre;
+  width: 100%;
+  z-index: 1;
 }
 
-.file-editor-container pre.highlighted-code {
+.file-editor-container pre.file-editor-overlay {
   border: 0.0625rem solid transparent !important;
   border-radius: var(--shadow-claw-radius-s);
   box-sizing: border-box !important;
   font-family: var(--shadow-claw-font-mono), monospace !important;
   font-size: 1rem !important;
   font-variant-ligatures: none !important;
+  height: 100% !important;
   left: 0 !important;
   line-height: 1.5 !important;
   margin: 0 !important;
+  overflow: hidden !important;
   padding: 0.625rem !important;
   pointer-events: none;
+  position: absolute !important;
   tab-size: 2 !important;
   top: 0 !important;
   white-space: pre !important;
+  width: 100% !important;
+  z-index: 0;
 }
 
-.file-editor-container pre.highlighted-code code,
-.file-editor-container pre.highlighted-code code.hljs {
+.file-editor-container pre.file-editor-overlay code,
+.file-editor-container pre.file-editor-overlay code.hljs {
+  display: block !important;
   font-family: inherit !important;
   font-size: inherit !important;
   font-variant-ligatures: none !important;
+  /* hljs CSS injects overflow-x:auto on pre code.hljs via a constructed stylesheet.
+  Inside the overlay (pointer-events:none) this would create an unclickable ghost scrollbar.
+  Use overflow:visible so the code content extends into the pre's scroll area.
+  The pre (overflow:hidden) handles visual clipping; JS sync scrolls the pre.
+  visible never generates a scrollbar, so no ghost scrollbar appears. */
+  overflow: visible !important;
   line-height: inherit !important;
   margin: 0 !important;
   padding: 0 !important;
@@ -459,7 +473,6 @@ pre {
   outline: none;
 }
 
-/* Premium targeted code line highlighting */
 .code-line {
   border-left: 0.1875rem solid transparent;
   display: block;

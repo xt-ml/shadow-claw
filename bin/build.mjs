@@ -96,6 +96,10 @@ async function main() {
   // build the service worker (all environments)
   await run("npm run -s build:service-worker");
 
+  // Post-process the generated service worker so its importScripts calls use
+  // TrustedScriptURL values in Trusted Types report-only environments.
+  await run("node bin/patch-service-worker-trusted-types.mjs");
+
   console.log("Build completed successfully.");
 }
 

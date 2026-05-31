@@ -21,23 +21,23 @@ How the core pieces fit together.
 
 Detailed docs for each major subsystem.
 
-| Document                                                                | What it covers                                                                                      |
-| ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| [Shell Emulator](subsystems/shell.md)                                   | JS shell via `just-bash` AST evaluation, OPFS bridge, supported commands                            |
-| [WebVM](subsystems/vm.md)                                               | v86 Alpine Linux, boot modes, exclusivity guard, terminal bridge, 9p sync                           |
-| [Git Integration](subsystems/git.md)                                    | isomorphic-git, LightningFS ↔ OPFS sync, merge conflicts, credentials                               |
-| [Channel System](subsystems/channels.md)                                | Channel registry, browser/Telegram/iMessage channels, router, multi-channel flow                    |
-| [Remote MCP](subsystems/remote-mcp.md)                                  | External MCP servers, tool discovery, authentication, JSON-RPC protocol, OAuth reconnection         |
-| [Accounts & Credentials](subsystems/accounts.md)                        | Service account management, credential storage, auth bridges                                        |
-| [Crypto & Secrets](subsystems/crypto.md)                                | AES-256-GCM key storage, runtime key handling, environment hardening                                |
-| [Tools & Profiles](subsystems/tools.md)                                 | Tool definitions, execution dispatch, profiles, adding new tools                                    |
-| [Notifications & Scheduling](subsystems/notifications.md)               | Web Push, VAPID, server-side SQLite scheduler, recursion guards                                     |
-| [Providers & Rate Limiting](subsystems/providers.md)                    | LLM provider registry, adapter pattern, Transformers.js (local), adaptive rate limiting, Prompt API |
-| [Electron Desktop](subsystems/electron.md)                              | Desktop app architecture, in-process server, power management                                       |
-| [Reactive UI](subsystems/reactive-ui.md)                                | Signals, `ShadowClawElement`, `reconcileList`, Web Components, stores                               |
-| [Model Registry & Capabilities](subsystems/providers.md#model-registry) | Dynamic model metadata fetching and modality capability detection                                   |
-| [Attachment Capabilities](subsystems/attachment-capabilities.md)        | MIME-aware attachment handling and native vs fallback delivery                                      |
-| [Chat Template Sanitizer](subsystems/sanitizer.md)                      | Strip control tokens and structural markers from local model output                                 |
+| Document                                                                | What it covers                                                                                                          |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| [Shell Emulator](subsystems/shell.md)                                   | JS shell via `just-bash` AST evaluation, OPFS bridge, supported commands                                                |
+| [WebVM](subsystems/vm.md)                                               | v86 Alpine Linux, boot modes, exclusivity guard, terminal bridge, 9p sync                                               |
+| [Git Integration](subsystems/git.md)                                    | isomorphic-git, LightningFS ↔ OPFS sync, merge conflicts, credentials                                                   |
+| [Channel System](subsystems/channels.md)                                | Channel registry, browser/Telegram/iMessage channels, router, multi-channel flow                                        |
+| [Remote MCP](subsystems/remote-mcp.md)                                  | External MCP servers, tool discovery, authentication, JSON-RPC protocol, OAuth reconnection                             |
+| [Accounts & Credentials](subsystems/accounts.md)                        | Service account management, credential storage, auth bridges                                                            |
+| [Crypto & Secrets](subsystems/crypto.md)                                | AES-256-GCM key storage, runtime key handling, environment hardening; idempotent default Trusted Types policy           |
+| [Tools & Profiles](subsystems/tools.md)                                 | Tool definitions, execution dispatch, profiles, adding new tools                                                        |
+| [Notifications & Scheduling](subsystems/notifications.md)               | Web Push, VAPID, server-side SQLite scheduler, recursion guards                                                         |
+| [Providers & Rate Limiting](subsystems/providers.md)                    | LLM provider registry, adapter pattern, Transformers.js (local), adaptive rate limiting, Prompt API; session retry loop |
+| [Electron Desktop](subsystems/electron.md)                              | Desktop app architecture, in-process server, power management                                                           |
+| [Reactive UI](subsystems/reactive-ui.md)                                | Signals, `ShadowClawElement`, `reconcileList`, Web Components, stores                                                   |
+| [Model Registry & Capabilities](subsystems/providers.md#model-registry) | Dynamic model metadata fetching and modality capability detection                                                       |
+| [Attachment Capabilities](subsystems/attachment-capabilities.md)        | MIME-aware attachment handling and native vs fallback delivery                                                          |
+| [Chat Template Sanitizer](subsystems/sanitizer.md)                      | Strip control tokens and structural markers from local model output                                                     |
 
 ### Guides
 

@@ -1,6 +1,11 @@
 /// <reference lib="dom" />
 import { Workbox } from "workbox-window";
 
+import {
+  ensureDefaultTrustedTypesPolicy,
+  toDefaultTrustedScriptUrl,
+} from "../security/default-trusted-types-policy.js";
+
 const RELOAD_FALLBACK_TIMEOUT_MS = 3000;
 const UPDATE_INTENT_KEY = "shadowclaw-sw-update-intent";
 const UPDATE_INTENT_MAX_AGE_MS = 30000;
@@ -291,39 +296,13 @@ function handleServiceWorkerControllerChange() {
 }
 
 if ("serviceWorker" in navigator) {
-  // Workbox Window calls navigator.serviceWorker.register() with a plain string.
-  // In browsers that enforce (or report) Trusted Types, that is a TrustedScriptURL
-  // sink. Register a "default" policy that permits same-origin relative paths and
-  // blob: URLs (used for dynamically-created workers) before Workbox runs.
-  const _trustedTypes = Reflect.get(globalThis, "trustedTypes") as
-    | {
-        createPolicy?: (
-          name: string,
-          rules: { createScriptURL?: (input: string) => string },
-        ) => unknown;
-      }
-    | undefined;
+  // Workbox registers the service worker from script URL sinks.
+  // Ensure a default Trusted Types policy exists before Workbox executes.
+  ensureDefaultTrustedTypesPolicy();
 
-  if (typeof _trustedTypes?.createPolicy === "function") {
-    try {
-      _trustedTypes.createPolicy("default", {
-        createScriptURL: (input: string): string => {
-          // Allow relative paths (same-origin) and blob: URLs only.
-          if (input.startsWith("blob:") || !/^(?:https?:)?\/\//i.test(input)) {
-            return input;
-          }
-
-          throw new Error(
-            `[ShadowClaw] Blocked unexpected script URL: ${input}`,
-          );
-        },
-      });
-    } catch {
-      // Default policy already registered by another module; ignore.
-    }
-  }
-
-  const wb = new Workbox("service-worker.js");
+  const wb = new Workbox(
+    toDefaultTrustedScriptUrl("service-worker.js") as string,
+  );
 
   wb.addEventListener("waiting", async () => {
     if (hasRecentUpdateFailure()) {

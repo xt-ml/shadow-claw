@@ -60,6 +60,10 @@ const PROMPT_IO_OPTIONS = {
   expectedOutputs: [{ type: "text", languages: ["en"] }],
 };
 
+const logPromptApiEvents = false;
+const PROMPT_API_CREATE_RETRY_MAX_ATTEMPTS = 4;
+const PROMPT_API_CREATE_RETRY_DELAY_MS = 500;
+
 // Keep the warm session window short to avoid prolonged CPU/GPU activity
 // on constrained machines after a response is finished.
 const WARM_SESSION_IDLE_MS = 10_000;
@@ -133,6 +137,32 @@ async function emitPromptApiDiagnostic(
   await emit(createLogMessage(groupId, "info", "Prompt API", message));
 }
 
+function isPromptApiCreateNotReadyError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || "");
+  const normalized = message.toLowerCase();
+
+  return (
+    normalized.includes("unable to create a session") &&
+    (normalized.includes("availability()") ||
+      normalized.includes("availability") ||
+      normalized.includes("check the result"))
+  );
+}
+
+async function waitForPromptApiCreateRetry(
+  abortSignal: AbortSignal | undefined,
+): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(() => {
+      resolve();
+    }, PROMPT_API_CREATE_RETRY_DELAY_MS);
+  });
+
+  if (abortSignal?.aborted) {
+    throw new Error("Prompt API session creation aborted.");
+  }
+}
+
 function summarizePromptApiSession(
   session: any,
   languageModelApi: any,
@@ -201,48 +231,147 @@ async function createPromptSessionWithProgress(
   }
 
   let session;
+  let latestAvailability = availability;
   try {
-    await emitPromptApiDiagnostic(
-      emit,
-      groupId,
-      "Creating Prompt API session...",
-    );
-    session = await LanguageModelApi.create({
-      ...PROMPT_IO_OPTIONS,
-      ...(initialPrompts.length > 0 ? { initialPrompts } : {}),
-      signal: abortSignal,
-      monitor(monitorTarget: any) {
+    for (
+      let attempt = 1;
+      attempt <= PROMPT_API_CREATE_RETRY_MAX_ATTEMPTS;
+      attempt++
+    ) {
+      await emitPromptApiDiagnostic(
+        emit,
+        groupId,
+        `Creating Prompt API session... (attempt ${attempt}/${PROMPT_API_CREATE_RETRY_MAX_ATTEMPTS})`,
+      );
+
+      try {
+        session = await LanguageModelApi.create({
+          ...PROMPT_IO_OPTIONS,
+          ...(initialPrompts.length > 0 ? { initialPrompts } : {}),
+          signal: abortSignal,
+          monitor(monitorTarget: any) {
+            if (logPromptApiEvents) {
+              console.log(
+                "[PromptAPI] monitor() called, monitorTarget:",
+                monitorTarget,
+              );
+            }
+
+            if (
+              !monitorTarget ||
+              typeof monitorTarget.addEventListener !== "function"
+            ) {
+              if (logPromptApiEvents) {
+                console.warn(
+                  "[PromptAPI] monitorTarget is invalid or missing addEventListener",
+                );
+              }
+
+              return;
+            }
+
+            if (logPromptApiEvents) {
+              console.log(
+                "[PromptAPI] Registering downloadprogress listener on monitorTarget",
+              );
+            }
+
+            monitorTarget.addEventListener("downloadprogress", (event: any) => {
+              const loaded = (event as any).loaded;
+              const total = (event as any).total;
+              const loadedValue = Number(loaded);
+              const totalValue = Number(total);
+
+              if (logPromptApiEvents) {
+                console.log("[PromptAPI] downloadprogress event:", {
+                  loaded,
+                  total,
+                  loadedValue,
+                  totalValue,
+                  lengthComputable: (event as any).lengthComputable,
+                  type: event?.type,
+                });
+              }
+
+              if (!Number.isFinite(loadedValue)) {
+                if (logPromptApiEvents) {
+                  console.warn(
+                    "[PromptAPI] downloadprogress: loadedValue is not finite, skipping.",
+                  );
+                }
+
+                return;
+              }
+
+              const normalized =
+                Number.isFinite(totalValue) && totalValue > 0
+                  ? Math.max(0, Math.min(1, loadedValue / totalValue))
+                  : Math.max(0, Math.min(1, loadedValue));
+
+              if (logPromptApiEvents) {
+                console.log(
+                  "[PromptAPI] downloadprogress normalized:",
+                  normalized,
+                  `(${Math.round(normalized * 100)}%)`,
+                );
+              }
+
+              void emitModelDownloadProgress(
+                emit,
+                groupId,
+                "running",
+                normalized,
+                `Downloading Prompt API model... ${Math.round(normalized * 100)}%`,
+              );
+            });
+          },
+        });
+
+        break;
+      } catch (createErr) {
+        const stillDownloading =
+          latestAvailability === "downloadable" ||
+          latestAvailability === "downloading";
+        const canRetryForDownloading =
+          stillDownloading && isPromptApiCreateNotReadyError(createErr);
+
         if (
-          !monitorTarget ||
-          typeof monitorTarget.addEventListener !== "function"
+          !canRetryForDownloading ||
+          attempt >= PROMPT_API_CREATE_RETRY_MAX_ATTEMPTS
         ) {
-          return;
+          throw createErr;
         }
 
-        monitorTarget.addEventListener("downloadprogress", (event: any) => {
-          const loaded = (event as any).loaded;
-          const total = (event as any).total;
-          const loadedValue = Number(loaded);
-          const totalValue = Number(total);
+        await emitPromptApiDiagnostic(
+          emit,
+          groupId,
+          "Session creation failed while model is still downloading; retrying shortly...",
+        );
 
-          if (!Number.isFinite(loadedValue)) {
-            return;
-          }
+        latestAvailability =
+          await LanguageModelApi.availability(PROMPT_IO_OPTIONS);
+        await emitPromptApiDiagnostic(
+          emit,
+          groupId,
+          `availability() recheck returned: ${latestAvailability}`,
+        );
 
-          const normalized =
-            Number.isFinite(totalValue) && totalValue > 0
-              ? Math.max(0, Math.min(1, loadedValue / totalValue))
-              : Math.max(0, Math.min(1, loadedValue));
-          void emitModelDownloadProgress(
+        if (
+          latestAvailability === "downloadable" ||
+          latestAvailability === "downloading"
+        ) {
+          await emitModelDownloadProgress(
             emit,
             groupId,
             "running",
-            normalized,
-            `Downloading Prompt API model... ${Math.round(normalized * 100)}%`,
+            latestAvailability === "downloadable" ? 0 : null,
+            "Downloading Prompt API model...",
           );
-        });
-      },
-    });
+        }
+
+        await waitForPromptApiCreateRetry(abortSignal);
+      }
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (emitErrorOnFailure) {
@@ -738,8 +867,6 @@ export async function invokeWithPromptApi(
           payload: { groupId },
         });
 
-        // promptStreaming may return cumulative chunks (full text so far) or
-
         let accumulated = "";
         let lastMeaningfulLength = 0;
         let staleCount = 0;
@@ -771,9 +898,7 @@ export async function invokeWithPromptApi(
           if (rawStr.startsWith("{")) {
             // Heuristic for {"type":"response","response":"..."}
             // We look for the "response" field specifically
-            const match = rawStr.match(
-              /\"response\"\s*:\s*\"((?:[^\"\\]|\\.)*)/,
-            );
+            const match = rawStr.match(/"response"\s*:\s*"((?:[^"\\]|\\.)*)/);
             if (match) {
               textToStream = match[1]
                 .replace(/\\"/g, '"')
@@ -819,8 +944,6 @@ export async function invokeWithPromptApi(
                 test &&
                 (test.type === "response" || test.type === "tool_use")
               ) {
-                // jsonComplete = true;
-
                 break;
               }
             } catch {
@@ -857,39 +980,65 @@ export async function invokeWithPromptApi(
         return accumulated;
       }
 
-      if (supportsPromptConstraintOptions()) {
+      // Defensive: catch 'session has been destroyed' and log session object in Edge
+      async function tryPromptStreamingWithSession(
+        sessionObj: any,
+        prompt: string,
+        options: any,
+      ) {
         try {
-          raw = await consumeStream(
-            session.promptStreaming(prompt, {
-              signal: abortSignal,
-              responseConstraint: toolJsonSchema,
-              omitResponseConstraintInput: true,
-            }),
+          return await consumeStream(
+            sessionObj.promptStreaming(prompt, options),
             emit,
             groupId,
           );
+        } catch (err: any) {
+          if (
+            err instanceof Error &&
+            err.message &&
+            err.message.toLowerCase().includes("session has been destroyed")
+          ) {
+            // Log the session object to DevTools for debugging
+            // eslint-disable-next-line no-console
+            console.warn(
+              "[PromptAPI] Session was destroyed. Session object:",
+              sessionObj,
+            );
+            // Optionally, log more context
+            // eslint-disable-next-line no-console
+            console.warn(
+              "[PromptAPI] Session fields:",
+              Object.keys(sessionObj || {}),
+            );
+          }
+
+          throw err;
+        }
+      }
+
+      if (supportsPromptConstraintOptions()) {
+        try {
+          raw = await tryPromptStreamingWithSession(session, prompt, {
+            signal: abortSignal,
+            responseConstraint: toolJsonSchema,
+            omitResponseConstraintInput: true,
+          });
           // If the constrained stream stalled on incomplete JSON (e.g. '{"'),
           // retry without the constraint so the model can freely generate.
           if (!parseStructured(raw)) {
-            raw = await consumeStream(
-              session.promptStreaming(prompt, { signal: abortSignal }),
-              emit,
-              groupId,
-            );
+            raw = await tryPromptStreamingWithSession(session, prompt, {
+              signal: abortSignal,
+            });
           }
         } catch {
-          raw = await consumeStream(
-            session.promptStreaming(prompt, { signal: abortSignal }),
-            emit,
-            groupId,
-          );
+          raw = await tryPromptStreamingWithSession(session, prompt, {
+            signal: abortSignal,
+          });
         }
       } else {
-        raw = await consumeStream(
-          session.promptStreaming(prompt, { signal: abortSignal }),
-          emit,
-          groupId,
-        );
+        raw = await tryPromptStreamingWithSession(session, prompt, {
+          signal: abortSignal,
+        });
       }
 
       const parsed = parseStructured(raw);

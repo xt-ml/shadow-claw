@@ -9,6 +9,7 @@ jest.unstable_mockModule("../../markdown.js", () => ({
 }));
 
 jest.unstable_mockModule("../../security/trusted-types.js", () => ({
+  sanitizeToTrustedHtml: jest.fn((html: string) => html),
   sanitizeSrcdocHtml: jest.fn((html: string) =>
     html.replace(/<script[\s\S]*?<\/script>/gi, ""),
   ),

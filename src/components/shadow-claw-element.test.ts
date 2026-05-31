@@ -44,7 +44,7 @@ function mockFetchFailOnce() {
 // ---------------------------------------------------------------------------
 describe("ShadowClawElement static helpers", () => {
   describe("getTemplate", () => {
-    it("routes DOMParser input through the Trusted Types policy when available", async () => {
+    it("parses template content correctly when Trusted Types is available", async () => {
       const originalTrustedTypes = (
         globalThis as typeof globalThis & {
           trustedTypes?: unknown;
@@ -60,12 +60,12 @@ describe("ShadowClawElement static helpers", () => {
 
       try {
         mockFetchOnce("<template><div class='foo'></div></template>");
-        await ShadowClawElement.getTemplate("fake.html");
+        const children = await ShadowClawElement.getTemplate("fake.html");
 
-        expect(createPolicy).toHaveBeenCalledTimes(1);
-        expect(createHTML).toHaveBeenCalledWith(
-          "<template><div class='foo'></div></template>",
-        );
+        expect(children).toHaveLength(1);
+        expect((children[0] as Element).className).toBe("foo");
+        expect(createPolicy).not.toHaveBeenCalled();
+        expect(createHTML).not.toHaveBeenCalled();
       } finally {
         if (originalTrustedTypes === undefined) {
           delete (globalThis as typeof globalThis & { trustedTypes?: unknown })

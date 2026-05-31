@@ -71,6 +71,33 @@ describe("trusted-types helpers", () => {
     expect(html.__trustedHtml).toContain("<p>safe</p>");
   });
 
+  it("reuses an existing named policy when createPolicy throws", async () => {
+    const existingPolicy = {
+      createHTML: (input: string) => ({ __trustedHtml: input }),
+      createScriptURL: (input: string) => ({ __trustedScriptUrl: input }),
+    };
+
+    Object.defineProperty(globalThis, "trustedTypes", {
+      configurable: true,
+      value: {
+        createPolicy: jest.fn(() => {
+          throw new Error("Policy already exists");
+        }),
+        getPolicy: jest.fn((name: string) =>
+          name === "shadowclaw" ? existingPolicy : null,
+        ),
+      },
+    });
+
+    const { sanitizeToTrustedHtml } = await import("./trusted-types.js");
+
+    const html = sanitizeToTrustedHtml("<p>safe</p>") as {
+      __trustedHtml: string;
+    };
+
+    expect(html.__trustedHtml).toContain("<p>safe</p>");
+  });
+
   it("sets sanitized HTML through the wrapper helper", async () => {
     const { setSanitizedHtml } = await import("./trusted-types.js");
     const element = document.createElement("div");

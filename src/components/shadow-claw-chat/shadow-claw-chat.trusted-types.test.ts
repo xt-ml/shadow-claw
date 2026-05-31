@@ -38,6 +38,7 @@ jest.unstable_mockModule("../../markdown.js", () => ({
   renderMarkdown: jest.fn((value: string) => `<p>${value}</p>`),
 }));
 jest.unstable_mockModule("../../security/trusted-types.js", () => ({
+  sanitizeToTrustedHtml: jest.fn((html: string) => html),
   setSanitizedHtml: jest.fn((element: Element, html: string) => {
     element.innerHTML = html;
 

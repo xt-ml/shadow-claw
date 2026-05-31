@@ -6,6 +6,7 @@ jest.unstable_mockModule("../../markdown.js", () => ({
 }));
 
 jest.unstable_mockModule("../../security/trusted-types.js", () => ({
+  sanitizeToTrustedHtml: jest.fn((html: string) => html),
   sanitizeSrcdocHtml: jest.fn((html: string) =>
     html.replace(/<script[\s\S]*?<\/script>/gi, ""),
   ),
@@ -48,6 +49,16 @@ jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
   readGroupFileBytes: jest.fn(),
 }));
 
+jest.unstable_mockModule("../../db/db.js", () => ({
+  getDb: jest.fn(async () => ({})),
+}));
+
+jest.unstable_mockModule("highlighted-code", () => ({
+  default: {
+    useTheme: jest.fn(),
+  },
+}));
+
 jest.unstable_mockModule("../../toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
@@ -58,8 +69,8 @@ const { ShadowClawFileViewer } = await import("./shadow-claw-file-viewer.js");
 const { fileViewerStore } = await import("../../stores/file-viewer.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { renderMarkdown } = await import("../../markdown.js");
-const { setSanitizedHtml, toTrustedHtmlPresanitized } =
-  await import("../../security/trusted-types.js");
+const { setSanitizedHtml } = await import("../../security/trusted-types.js");
+const { default: HighlightedCode } = await import("highlighted-code");
 const { readGroupFileBytes } =
   await import("../../storage/readGroupFileBytes.js");
 
@@ -96,6 +107,19 @@ describe("shadow-claw-file-viewer", () => {
     const template = await ShadowClawFileViewer.getTemplateSource();
 
     expect(template).toContain("modal-share-btn");
+  });
+
+  it("uses local highlight theme css for edit-mode syntax highlighting", async () => {
+    const component = new ShadowClawFileViewer();
+
+    await component.connectedCallback();
+
+    expect((HighlightedCode as any).useTheme).toHaveBeenCalledWith(
+      "components/shadow-claw-file-viewer/highlightjs-atom-one-dark.min.css",
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      "components/shadow-claw-file-viewer/highlightjs-atom-one-dark.min.css",
+    );
   });
 
   it("toggles fullscreen mode from the view mode button", () => {
@@ -1101,11 +1125,10 @@ describe("shadow-claw-file-viewer", () => {
   describe("resolveRelativeImagesInHtml", () => {
     beforeEach(() => {
       (readGroupFileBytes as jest.Mock).mockReset();
-      (toTrustedHtmlPresanitized as jest.Mock).mockClear();
       URL.createObjectURL = jest.fn(() => "blob:fake-html");
     });
 
-    it("routes parser input through Trusted Types helper", async () => {
+    it("parses html for image resolution without using trusted sink helpers", async () => {
       const component = new ShadowClawFileViewer();
       component.db = {} as any;
 
@@ -1119,7 +1142,8 @@ describe("shadow-claw-file-viewer", () => {
         "docs/page.html",
       );
 
-      expect(toTrustedHtmlPresanitized).toHaveBeenCalledWith(html);
+      // DOMParser parsing is an inert read/transform step; sinks are sanitized elsewhere.
+      expect(setSanitizedHtml).not.toHaveBeenCalled();
       expect(resolved).toContain("blob:fake-html");
     });
   });

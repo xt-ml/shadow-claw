@@ -48,7 +48,6 @@ export class ShadowClawDialog extends HTMLElement {
     }
 
     this.style.display = "contents";
-
     const dialog = document.createElement("dialog");
     this._dialog = dialog;
     this.syncDialogAttributes();

@@ -4,7 +4,6 @@ import {
   sanitizeSrcdocHtml,
   setSanitizedHtml,
   setTrustedSrcdoc,
-  toTrustedHtmlPresanitized,
 } from "../../security/trusted-types.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { readGroupFile } from "../../storage/readGroupFile.js";
@@ -103,11 +102,7 @@ export class ShadowClawPages extends ShadowClawElement {
       return html;
     }
 
-    const trustedHtml = toTrustedHtmlPresanitized(html);
-    const parsed = new DOMParser().parseFromString(
-      trustedHtml as string,
-      "text/html",
-    );
+    const parsed = new DOMParser().parseFromString(html, "text/html");
     const images = Array.from(parsed.querySelectorAll("img"));
     if (images.length === 0) {
       return html;

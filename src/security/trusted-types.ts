@@ -17,6 +17,7 @@ type TrustedTypesFactoryLike = {
       createScriptURL?: (input: string) => string;
     },
   ) => TrustedTypesPolicyLike;
+  getPolicy?: (name: string) => TrustedTypesPolicyLike | null;
 };
 
 const APP_TRUSTED_TYPES_POLICY_NAME = "shadowclaw";
@@ -44,6 +45,15 @@ function getTrustedTypesPolicy(): TrustedTypesPolicyLike | null {
     return cachedPolicy;
   }
 
+  if (typeof factory.getPolicy === "function") {
+    const existingPolicy = factory.getPolicy(APP_TRUSTED_TYPES_POLICY_NAME);
+    if (existingPolicy) {
+      cachedPolicy = existingPolicy;
+
+      return cachedPolicy;
+    }
+  }
+
   try {
     cachedPolicy = factory.createPolicy(APP_TRUSTED_TYPES_POLICY_NAME, {
       // Input is already sanitized by sanitizeToTrustedHtml before policy use.
@@ -53,7 +63,11 @@ function getTrustedTypesPolicy(): TrustedTypesPolicyLike | null {
       createScriptURL: (input: string) => input,
     });
   } catch {
-    cachedPolicy = null;
+    if (typeof factory.getPolicy === "function") {
+      cachedPolicy = factory.getPolicy(APP_TRUSTED_TYPES_POLICY_NAME) ?? null;
+    } else {
+      cachedPolicy = null;
+    }
   }
 
   return cachedPolicy;

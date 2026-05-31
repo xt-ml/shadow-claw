@@ -41,24 +41,6 @@ function ensurePolyfill(): void {
     return;
   }
 
-  // If Chrome's native (crashy) modelContext exists, remove it so the
-  // polyfill can install its own safe JS implementation.
-  try {
-    if (
-      typeof navigator !== "undefined" &&
-      "modelContext" in navigator &&
-      navigator.modelContext
-    ) {
-      Object.defineProperty(navigator, "modelContext", {
-        value: undefined,
-        writable: true,
-        configurable: true,
-      });
-    }
-  } catch {
-    // Ignore — the polyfill will handle it.
-  }
-
   try {
     initializeWebMCPPolyfill();
     polyfillInstalled = true;
@@ -75,7 +57,7 @@ function ensurePolyfill(): void {
  * `navigator.modelContext` fallback.
  */
 function getModelContextApi(): any {
-  if (typeof navigator === "undefined") {
+  if (typeof document === "undefined" && typeof navigator === "undefined") {
     return null;
   }
 
@@ -84,23 +66,12 @@ function getModelContextApi(): any {
   }
 
   try {
-    const documentModelContext: unknown =
-      typeof document !== "undefined"
-        ? Reflect.get(document as any, "modelContext")
-        : undefined;
-    const navigatorModelContext: unknown = Reflect.get(
-      navigator,
-      "modelContext",
-    );
-
-    // In native mode, prefer the modern document.modelContext API and keep
-    // navigator.modelContext as a backward-compatible fallback.
-    // In polyfill mode, prefer navigator.modelContext so the JS polyfill
-    // remains the primary source when both are present.
     const modelContext: unknown =
-      currentMode === "native"
-        ? documentModelContext || navigatorModelContext
-        : navigatorModelContext || documentModelContext;
+      typeof document.modelContext !== "undefined"
+        ? Reflect.get(document, "modelContext")
+        : typeof navigator.modelContext !== "undefined"
+          ? Reflect.get(navigator, "modelContext")
+          : undefined;
 
     if (!modelContext || typeof modelContext !== "object") {
       return null;

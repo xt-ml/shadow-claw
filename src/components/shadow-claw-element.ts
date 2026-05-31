@@ -1,5 +1,3 @@
-import { toTrustedHtmlPresanitized } from "../security/trusted-types.js";
-
 export default class ShadowClawElement extends HTMLElement {
   static readonly component: string;
   static readonly styles: URL | string;
@@ -15,11 +13,7 @@ export default class ShadowClawElement extends HTMLElement {
     return fetch(template)
       .then((r) => r.text())
       .then((html) => {
-        const trustedTemplateHtml = toTrustedHtmlPresanitized(html);
-        const doc = new DOMParser().parseFromString(
-          trustedTemplateHtml as string,
-          "text/html",
-        );
+        const doc = new DOMParser().parseFromString(html, "text/html");
         const templateEl = doc.querySelector("template");
 
         if (templateEl) {

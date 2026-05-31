@@ -440,6 +440,67 @@ describe("prompt-api-provider", () => {
     );
   });
 
+  it("retries session creation when availability is downloading", async () => {
+    jest.useFakeTimers();
+    try {
+      const clonePrompt = (jest.fn() as any).mockResolvedValue("summary");
+      const cloneDestroy = (jest.fn() as any).mockResolvedValue(undefined);
+      const baseClone = jest.fn(async () => ({
+        prompt: clonePrompt,
+        destroy: cloneDestroy,
+      }));
+      const baseDestroy = (jest.fn() as any).mockResolvedValue(undefined);
+
+      const createMock = jest.fn() as any;
+      createMock
+        .mockRejectedValueOnce(
+          new Error(
+            "The device is unable to create a session to run the model. Please check the result of availability() first.",
+          ),
+        )
+        .mockResolvedValue({
+          clone: baseClone,
+          destroy: baseDestroy,
+        });
+
+      const availabilityMock = (jest.fn() as any)
+        .mockResolvedValueOnce("downloading")
+        .mockResolvedValueOnce("available");
+      setLanguageModelMock(createMock, availabilityMock);
+
+      const { compactWithPromptApi } = await import("./prompt-api-provider.js");
+      const emitted: any[] = [];
+
+      const summaryPromise = compactWithPromptApi(
+        "System",
+        [{ role: "user", content: "hello" }],
+        null as any,
+        async (msg: any) => {
+          emitted.push(msg);
+        },
+        "g1",
+      );
+
+      await jest.advanceTimersByTimeAsync(2_000);
+      const summary = await summaryPromise;
+
+      expect(summary).toBe("summary");
+      expect(createMock).toHaveBeenCalledTimes(2);
+
+      const progressEvents = emitted.filter(
+        (m) => m?.type === "model-download-progress",
+      );
+      expect(progressEvents.some((m) => m?.payload?.status === "error")).toBe(
+        false,
+      );
+      expect(progressEvents.some((m) => m?.payload?.status === "done")).toBe(
+        true,
+      );
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it("logs Gemma 4 in starting message when runtime model id is exposed", async () => {
     const clonePromptStreaming = jest.fn(() => ({
       [Symbol.asyncIterator]: async function* () {

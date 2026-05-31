@@ -89,6 +89,19 @@ const commonPlugins = (tsconfig, terserOptions = {}) => [
 ];
 
 const configs = [
+  // Early Bootstrap Script (classic script, loaded before modules)
+  {
+    input: "src/theme-init.ts",
+    output: {
+      file: "dist/public/theme-init.js",
+      format: "iife",
+      sourcemap: !isProduction,
+      inlineDynamicImports: true,
+      name: "ShadowClawThemeInit",
+    },
+    onwarn,
+    plugins: [...commonPlugins("./tsconfig.json")],
+  },
   // Frontend
   {
     input: "src/index.ts",
@@ -106,7 +119,6 @@ const configs = [
         targets: [
           { src: "index.html", dest: "dist/public" },
           { src: "index.css", dest: "dist/public" },
-          { src: "theme-init.js", dest: "dist/public" },
           { src: "manifest.json", dest: "dist/public" },
           { src: "404.html", dest: "dist/public" },
           {

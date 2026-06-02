@@ -1,4 +1,8 @@
+import { beforeAll, describe, expect, it } from "@jest/globals";
+
 type WorkboxConfigShape = {
+  navigateFallback?: string;
+  navigateFallbackAllowlist?: RegExp[];
   runtimeCaching: Array<{
     urlPattern: (ctx: { url: URL }) => boolean;
   }>;
@@ -15,6 +19,35 @@ beforeAll(async () => {
 });
 
 describe("workbox runtime caching rules", () => {
+  it("uses index.html as the navigation fallback", () => {
+    expect(workboxConfig.navigateFallback).toBe("/index.html");
+  });
+
+  it("allows SPA navigation fallback for app routes", () => {
+    const allowlist = workboxConfig.navigateFallbackAllowlist ?? [];
+
+    expect(allowlist.some((pattern) => pattern.test("/"))).toBe(true);
+    expect(
+      allowlist.some((pattern) => pattern.test("/files/br-main/README.md")),
+    ).toBe(true);
+    expect(
+      allowlist.some((pattern) => pattern.test("/pages/br-main/index.md")),
+    ).toBe(true);
+    expect(allowlist.some((pattern) => pattern.test("/settings"))).toBe(true);
+    expect(allowlist.some((pattern) => pattern.test("/chat/br-main/"))).toBe(
+      true,
+    );
+  });
+
+  it("does not allow SPA navigation fallback for non-app routes", () => {
+    const allowlist = workboxConfig.navigateFallbackAllowlist ?? [];
+
+    expect(allowlist.some((pattern) => pattern.test("/proxy"))).toBe(false);
+    expect(allowlist.some((pattern) => pattern.test("/assets/icon.png"))).toBe(
+      false,
+    );
+  });
+
   it("does not cache same-origin telegram proxy requests", () => {
     const matcher = workboxConfig.runtimeCaching[0]?.urlPattern;
 

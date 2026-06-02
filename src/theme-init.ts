@@ -1,6 +1,23 @@
 import { initializeTrustedTypesTinyfill } from "./security/trusted-types-tinyfill.js";
 import { ensureDefaultTrustedTypesPolicy } from "./security/default-trusted-types-policy.js";
 
+(function handleGithubPages404Redirects() {
+  const redirect = sessionStorage.getItem(
+    "shadow-claw-github-pages-404-redirect",
+  );
+
+  if (redirect) {
+    sessionStorage.removeItem("shadow-claw-github-pages-404-redirect");
+  }
+
+  if (
+    redirect &&
+    redirect !== location.pathname + location.search + location.hash
+  ) {
+    history.replaceState(null, "", redirect);
+  }
+})();
+
 (function initializeThemeAndBootState() {
   // Install Trusted Types tinyfill first (no-op if browser already supports it)
   initializeTrustedTypesTinyfill();

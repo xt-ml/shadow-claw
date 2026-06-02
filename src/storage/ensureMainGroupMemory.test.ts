@@ -1,5 +1,7 @@
 import { jest } from "@jest/globals";
 
+import { DEFAULT_MAIN_GROUP_README_CONTENT } from "./defaultReadmeContent.mjs";
+
 const mockGroupFileExists = jest.fn() as any;
 const mockReadGroupFile = jest.fn() as any;
 const mockWriteGroupFile = jest.fn() as any;
@@ -48,7 +50,7 @@ describe("ensureMainGroupMemory", () => {
     );
   });
 
-  it("creates MEMORY.md when missing, using content that matches main/MEMORY.md", async () => {
+  it("creates MEMORY.md when missing, using content that matches br-main/MEMORY.md", async () => {
     (mockGroupFileExists as any).mockResolvedValue(false);
     (mockWriteGroupFile as any).mockResolvedValue(undefined);
 
@@ -61,7 +63,7 @@ describe("ensureMainGroupMemory", () => {
       DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
     );
 
-    // Fallback content must match what static build renders from main/MEMORY.md
+    // Fallback content must match what static build renders from br-main/MEMORY.md
     expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).toContain(
       "# Welcome to ShadowClaw Pages",
     );
@@ -82,12 +84,8 @@ describe("ensureMainGroupMemory", () => {
     expect(mockWriteGroupFile).not.toHaveBeenCalled();
   });
 
-  it("uses static main/MEMORY.md template when available", async () => {
+  it("uses static br-main/MEMORY.md template when available", async () => {
     (mockGroupFileExists as any).mockResolvedValue(false);
-    (globalThis as any).fetch = (jest.fn() as any).mockResolvedValue({
-      ok: true,
-      text: async () => "# Static Template\n",
-    });
 
     await expect(ensureMainGroupMemory({} as any)).resolves.toBe(true);
 
@@ -95,7 +93,7 @@ describe("ensureMainGroupMemory", () => {
       {} as any,
       DEFAULT_GROUP_ID,
       DEFAULT_MAIN_GROUP_MEMORY_PATH,
-      "# Static Template\n",
+      DEFAULT_MAIN_GROUP_README_CONTENT,
     );
   });
 

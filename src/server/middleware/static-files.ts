@@ -4,6 +4,47 @@ import express from "express";
 import expressUrlrewrite from "express-urlrewrite";
 import type { Request, Response, NextFunction, Express } from "express";
 
+const SPA_ROUTE_PREFIXES = new Set([
+  "chat",
+  "files",
+  "pages",
+  "tasks",
+  "settings",
+  "tools",
+  "channels",
+]);
+
+function isSpaShellRequest(req: Request, pathname: string): boolean {
+  const method = (req.method || "GET").toUpperCase();
+  if (method !== "GET" && method !== "HEAD") {
+    return false;
+  }
+
+  const fetchDest = String(req.headers["sec-fetch-dest"] || "").toLowerCase();
+  if (fetchDest && fetchDest !== "document") {
+    return false;
+  }
+
+  const fetchMode = String(req.headers["sec-fetch-mode"] || "").toLowerCase();
+  const fetchUser = String(req.headers["sec-fetch-user"] || "").toLowerCase();
+  const isNavigationFetch =
+    fetchDest === "document" || fetchMode === "navigate" || fetchUser === "?1";
+
+  const accept = String(req.headers.accept || "");
+  if (!isNavigationFetch && !accept.includes("text/html")) {
+    return false;
+  }
+
+  const normalized = pathname.replace(/^\/+|\/+$/g, "");
+  if (!normalized) {
+    return false;
+  }
+
+  const firstSegment = normalized.split("/", 1)[0] || "";
+
+  return SPA_ROUTE_PREFIXES.has(firstSegment);
+}
+
 export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
   app.use(expressUrlrewrite(/^(.+)\/index\.html$/, "$1/"));
 
@@ -22,7 +63,15 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
     const filePath = path.join(rootPath, req.url);
     fs.stat(filePath, (err, stats) => {
       if (err || !stats) {
-        return next();
+        if (isSpaShellRequest(req, requestPath)) {
+          res.sendFile(path.join(rootPath, "index.html"));
+
+          return;
+        }
+
+        next();
+
+        return;
       }
 
       if (stats.isDirectory()) {

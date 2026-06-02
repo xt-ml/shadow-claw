@@ -5,12 +5,26 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="shadow-claw - redirect service" />
-    <meta
-      http-equiv="refresh"
-      content="0;url=https://xt-ml.github.io/shadow-claw/"
-    />
+    <meta name="robots" content="noindex" />
     <script>
-      location.replace("https://xt-ml.github.io/shadow-claw/");
+      (function () {
+        const l = window.location;
+        const isLocalhost =
+          l.hostname === "localhost" ||
+          l.hostname === "127.0.0.1" ||
+          l.hostname === "0.0.0.0";
+
+        if (isLocalhost) return;
+
+        // store the full path + query + hash
+        sessionStorage.setItem(
+          "shadow-claw-github-pages-404-redirect",
+          l.pathname + l.search + l.hash,
+        );
+
+        // redirect to entry point
+        l.replace("/shadow-claw/");
+      })();
     </script>
   </head>
   <body></body>

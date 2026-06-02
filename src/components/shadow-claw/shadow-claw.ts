@@ -1,4 +1,10 @@
 import { effect } from "../../effect.js";
+import {
+  buildRoutePath,
+  parseRouteFromUrl,
+  applyBasePath,
+  type ShadowClawAppRoute,
+} from "../../app-routes.js";
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../config.js";
 import { ShadowClawNavigateDetail } from "../../utils.js";
 
@@ -55,6 +61,21 @@ type PageHeaderLikeElement = HTMLElement & {
   setMainCollapsedOverride?: (collapsed: boolean | null) => void;
 };
 
+function historyState(finalPath: string, options) {
+  const finalPathWithSlash =
+    options.useTrailingSlash && !finalPath.includes("#")
+      ? finalPath.endsWith("/")
+        ? finalPath
+        : finalPath + "/"
+      : finalPath;
+
+  if (options.replace) {
+    window.history.replaceState({}, "", finalPathWithSlash);
+  } else {
+    window.history.pushState({}, "", finalPathWithSlash);
+  }
+}
+
 export class ShadowClaw extends ShadowClawElement {
   static componentPath = `components/${elementName}`;
   static styles = `${ShadowClaw.componentPath}/${elementName}.css`;
@@ -79,6 +100,9 @@ export class ShadowClaw extends ShadowClawElement {
   vmStatusCleanup: (() => void) | null = null;
   headerMainCollapsedOverride: boolean | null = null;
   activityLogCollapsedOverride: boolean | null = null;
+  popstateListener: (() => void) | null = null;
+  fallbackClickListenerAttached: boolean = false;
+  navigationListenerAttached: boolean = false;
 
   constructor() {
     super();
@@ -113,6 +137,8 @@ export class ShadowClaw extends ShadowClawElement {
     } else {
       this.showPage(orchestratorStore.activePage, false);
     }
+
+    await this.applyRouteFromCurrentLocation();
 
     await this.processPendingSharedPayloads();
   }
@@ -388,23 +414,215 @@ export class ShadowClaw extends ShadowClawElement {
       "shadow-claw-navigate",
       this.handleShadowClawNavigate,
     );
+
+    if (this.popstateListener) {
+      window.removeEventListener("popstate", this.popstateListener);
+      this.popstateListener = null;
+    }
+
+    if (this.fallbackClickListenerAttached) {
+      document.removeEventListener("click", this.fallbackClickListener);
+      this.fallbackClickListenerAttached = false;
+    }
+
+    if (this.navigationListenerAttached) {
+      const nav = (window as any).navigation;
+      if (nav && typeof nav.removeEventListener === "function") {
+        nav.removeEventListener("navigate", this.handleNavigationApiNavigate);
+      }
+
+      this.navigationListenerAttached = false;
+    }
   }
 
-  handleShadowClawNavigate = async (event: Event) => {
-    const customEvent = event as CustomEvent<ShadowClawNavigateDetail>;
-    const detail = customEvent.detail;
-    if (!detail) {
+  private supportsNavigationApi(): boolean {
+    const nav = (window as any).navigation;
+
+    return !!(
+      nav &&
+      typeof nav.addEventListener === "function" &&
+      typeof nav.navigate === "function"
+    );
+  }
+
+  private fallbackClickListener = (event: MouseEvent) => {
+    if (
+      event.defaultPrevented ||
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey
+    ) {
       return;
     }
 
-    const { page, groupId, path, anchor } = detail;
+    const path = event.composedPath();
+    let link: HTMLAnchorElement | null = null;
+    for (const el of path) {
+      if (el instanceof HTMLAnchorElement) {
+        link = el;
+
+        break;
+      }
+    }
+
+    if (!link) {
+      return;
+    }
+
+    const href = link.getAttribute("href") || "";
+    if (
+      !href ||
+      href.startsWith("javascript:") ||
+      href.startsWith("mailto:") ||
+      href.startsWith("tel:")
+    ) {
+      return;
+    }
+
+    if (link.target && link.target !== "_self") {
+      return;
+    }
+
+    if (link.origin !== window.location.origin) {
+      return;
+    }
+
+    if (
+      link.pathname === window.location.pathname &&
+      link.search === window.location.search &&
+      link.hash !== window.location.hash
+    ) {
+      return;
+    }
+
+    event.preventDefault();
+    const targetPath = `${link.pathname}${link.search}${link.hash}`;
+
+    historyState(targetPath, { replace: false, useTrailingSlash: false });
+    void this.applyRouteFromCurrentLocation();
+  };
+
+  private async applyRouteFromCurrentLocation(): Promise<void> {
+    const parsed = parseRouteFromUrl(
+      new URL(window.location.href),
+      orchestratorStore.activeGroupId,
+    );
+    if (!parsed) {
+      return;
+    }
+
+    await this.applyRoute(parsed);
+  }
+
+  private normalizePageRoute(page: string): ShadowClawAppRoute["page"] {
+    const normalized = String(page || "chat").toLowerCase();
+
+    if (
+      normalized === "chat" ||
+      normalized === "files" ||
+      normalized === "tasks" ||
+      normalized === "pages" ||
+      normalized === "settings" ||
+      normalized === "tools" ||
+      normalized === "channels"
+    ) {
+      return normalized;
+    }
+
+    return "chat";
+  }
+
+  private async navigateToRoute(
+    route: ShadowClawAppRoute,
+    options: { replace?: boolean } = { replace: true },
+  ): Promise<void> {
+    const targetPath = buildRoutePath(route);
+    const finalPath = applyBasePath(targetPath);
+
+    if (this.supportsNavigationApi()) {
+      const nav = (window as any).navigation;
+
+      nav.navigate(finalPath, {
+        history: options.replace ? "replace" : "auto",
+      });
+
+      historyState(finalPath, options);
+
+      return;
+    }
+
+    // historyState(finalPath, { replace: true });
+
+    await this.applyRoute(route, options);
+  }
+
+  private async applyAnchorWithRetry(
+    apply: () => boolean,
+    maxAttempts = 3,
+  ): Promise<void> {
+    for (let i = 0; i < maxAttempts; i++) {
+      if (apply()) {
+        return;
+      }
+
+      await new Promise<void>((resolve) => {
+        requestAnimationFrame(() => resolve());
+      });
+    }
+  }
+
+  handleNavigationApiNavigate = (event: Event) => {
+    if (!this.db) {
+      return;
+    }
+
+    const navigateEvent = event as any;
+    const destinationUrl = navigateEvent?.destination?.url;
+    if (typeof destinationUrl !== "string") {
+      return;
+    }
+
+    const parsedUrl = new URL(destinationUrl);
+    if (parsedUrl.origin !== window.location.origin) {
+      return;
+    }
+
+    const route = parseRouteFromUrl(parsedUrl, orchestratorStore.activeGroupId);
+    if (!route) {
+      return;
+    }
+
+    if (typeof navigateEvent.intercept === "function") {
+      navigateEvent.intercept({
+        handler: async () => {
+          await this.applyRoute(route, { replace: true });
+        },
+      });
+    }
+  };
+
+  applyRoute = async (
+    route: ShadowClawAppRoute,
+    options: { replace?: boolean } = { replace: false },
+  ) => {
+    if (options.replace) {
+      const targetPath = buildRoutePath(route);
+      const finalPath = applyBasePath(targetPath);
+
+      if (finalPath !== window.location.pathname) {
+        historyState(finalPath, { ...options, useTrailingSlash: false });
+      }
+    }
+
+    const { page, groupId, path, anchor } = route;
     if (!this.db) {
       return;
     }
 
     const resolvedPage = page ? String(page).toLowerCase() : "";
 
-    // 1. Dismiss/close the file viewer if we are navigating away from the current file.
     if (resolvedPage && fileViewerStore.file) {
       const targetIsSameFile =
         resolvedPage === "files" &&
@@ -419,8 +637,6 @@ export class ShadowClaw extends ShadowClawElement {
         if (viewer && typeof viewer.requestCloseViewer === "function") {
           const closed = await viewer.requestCloseViewer();
           if (!closed) {
-            // Cancel navigation if user aborts closing
-
             return;
           }
         } else {
@@ -429,21 +645,27 @@ export class ShadowClaw extends ShadowClawElement {
       }
     }
 
-    // 2. Switch conversation group if groupId is specified and different.
     if (groupId && groupId !== orchestratorStore.activeGroupId) {
       await orchestratorStore.switchConversation(
         this.db,
         groupId,
         resolvedPage === "chat",
       );
+    } else if (groupId) {
+      // groupId matches the currently active group (restored from last session),
+      // but content may not have loaded yet — ensure it is present.
+      void orchestratorStore.loadHistory();
+      if (resolvedPage === "tasks" || resolvedPage === "files") {
+        if (this.db) {
+          void orchestratorStore.loadFiles(this.db);
+        }
+      }
     }
 
-    // 3. Switch page view if page is specified.
     if (resolvedPage) {
       this.showPage(resolvedPage);
     }
 
-    // 3. Handle folder/file target on the files view.
     if (resolvedPage === "files" && path) {
       const hasExtension = /\.[^./]+$/u.test(path);
       if (hasExtension) {
@@ -454,7 +676,7 @@ export class ShadowClaw extends ShadowClawElement {
             groupId || orchestratorStore.activeGroupId,
           );
           if (anchor) {
-            const tryAnchor = (attemptsLeft: number) => {
+            await this.applyAnchorWithRetry(() => {
               const viewer = this.shadowRoot?.querySelector(
                 "shadow-claw-file-viewer",
               ) as any;
@@ -462,30 +684,29 @@ export class ShadowClaw extends ShadowClawElement {
                 viewer &&
                 typeof viewer.handleAnchorNavigation === "function"
               ) {
-                const found = viewer.handleAnchorNavigation(anchor);
-                if (!found && attemptsLeft > 0) {
-                  setTimeout(() => tryAnchor(attemptsLeft - 1), 200);
-                }
-              } else if (attemptsLeft > 0) {
-                setTimeout(() => tryAnchor(attemptsLeft - 1), 200);
+                return !!viewer.handleAnchorNavigation(anchor);
               }
-            };
-            setTimeout(() => tryAnchor(5), 200);
+
+              return false;
+            });
           }
         } catch (err) {
-          console.error("Failed to open file via navigate event:", path, err);
+          console.error("Failed to open file via route navigation:", path, err);
         }
       } else {
         try {
           await orchestratorStore.setCurrentPath(this.db, path);
           fileViewerStore.closeFile();
         } catch (err) {
-          console.error("Failed to open folder via navigate event:", path, err);
+          console.error(
+            "Failed to open folder via route navigation:",
+            path,
+            err,
+          );
         }
       }
     }
 
-    // 4. Handle target page on the pages view.
     if (resolvedPage === "pages" && path) {
       const pagesComp = this.shadowRoot?.querySelector(
         "shadow-claw-pages",
@@ -498,20 +719,31 @@ export class ShadowClaw extends ShadowClawElement {
         };
         await pagesComp.renderSelectedPage();
         if (anchor) {
-          const tryAnchor = (attemptsLeft: number) => {
+          await this.applyAnchorWithRetry(() => {
             if (typeof pagesComp.handleAnchorNavigation === "function") {
-              const found = pagesComp.handleAnchorNavigation(anchor);
-              if (!found && attemptsLeft > 0) {
-                setTimeout(() => tryAnchor(attemptsLeft - 1), 200);
-              }
-            } else if (attemptsLeft > 0) {
-              setTimeout(() => tryAnchor(attemptsLeft - 1), 200);
+              return !!pagesComp.handleAnchorNavigation(anchor);
             }
-          };
-          setTimeout(() => tryAnchor(5), 200);
+
+            return false;
+          });
         }
       }
     }
+  };
+
+  handleShadowClawNavigate = async (event: Event) => {
+    const customEvent = event as CustomEvent<ShadowClawNavigateDetail>;
+    const detail = customEvent.detail;
+    if (!detail) {
+      return;
+    }
+
+    await this.navigateToRoute({
+      page: this.normalizePageRoute(String(detail.page || "chat")),
+      groupId: detail.groupId,
+      path: detail.path,
+      anchor: detail.anchor,
+    });
   };
 
   async requestDialog(options: AppDialogOptions) {
@@ -767,6 +999,20 @@ export class ShadowClaw extends ShadowClawElement {
       "shadow-claw-navigate",
       this.handleShadowClawNavigate,
     );
+
+    if (this.supportsNavigationApi()) {
+      const nav = (window as any).navigation;
+      nav.addEventListener("navigate", this.handleNavigationApiNavigate);
+      this.navigationListenerAttached = true;
+    } else {
+      this.popstateListener = () => {
+        void this.applyRouteFromCurrentLocation();
+      };
+      window.addEventListener("popstate", this.popstateListener);
+
+      document.addEventListener("click", this.fallbackClickListener);
+      this.fallbackClickListenerAttached = true;
+    }
 
     // Listen for theme changes to update icons and host class
     window.addEventListener("shadow-claw-theme-change", (e: Event) => {

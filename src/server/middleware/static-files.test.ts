@@ -124,4 +124,135 @@ describe("static-files-middleware", () => {
       expect.stringContaining("/root/index.html"),
     );
   });
+
+  it("serves SPA shell index for all first-load app route paths", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const appPaths = [
+      "/chat",
+      "/chat/br%3Amain/",
+      "/files",
+      "/files/group-1/docs/notes.md",
+      "/files/group-1/folder-of-files",
+      "/pages",
+      "/pages/example.html",
+      "/tasks",
+      "/tasks/group-1/",
+      "/settings",
+      "/settings/tool-configuration",
+    ];
+
+    for (const appPath of appPaths) {
+      const req = {
+        method: "GET",
+        headers: { accept: "text/html" },
+        originalUrl: appPath,
+        url: appPath,
+      };
+      const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+      const next = jest.fn();
+
+      fsMock.stat.mockImplementation((_path: string, cb: any) =>
+        cb(new Error()),
+      );
+
+      middleware(req, res, next);
+
+      expect(res.sendFile).toHaveBeenCalledWith(
+        expect.stringContaining("/root/index.html"),
+      );
+      expect(next).not.toHaveBeenCalled();
+    }
+  });
+
+  it("does not serve SPA shell for non-HTML missing requests", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const req = {
+      method: "GET",
+      headers: { accept: "application/json" },
+      originalUrl: "/tasks",
+      url: "/tasks",
+    };
+    const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+    const next = jest.fn();
+
+    fsMock.stat.mockImplementation((_path: string, cb: any) => cb(new Error()));
+
+    middleware(req, res, next);
+
+    expect(res.sendFile).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalled();
+  });
+
+  it("serves SPA shell for navigation requests even without text/html accept", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const req = {
+      method: "GET",
+      headers: {
+        accept: "*/*",
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-user": "?1",
+      },
+      originalUrl: "/files/br-main/README.md",
+      url: "/files/br-main/README.md",
+    };
+    const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+    const next = jest.fn();
+
+    fsMock.stat.mockImplementation((_path: string, cb: any) => cb(new Error()));
+
+    middleware(req, res, next);
+
+    expect(res.sendFile).toHaveBeenCalledWith(
+      expect.stringContaining("/root/index.html"),
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("does not serve SPA shell for missing image-like /files requests", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const req = {
+      method: "GET",
+      headers: { accept: "image/avif,image/webp,image/*,*/*;q=0.8" },
+      originalUrl: "/files/group-1/docs/pic.jpg",
+      url: "/files/group-1/docs/pic.jpg",
+    };
+    const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+    const next = jest.fn();
+
+    fsMock.stat.mockImplementation((_path: string, cb: any) => cb(new Error()));
+
+    middleware(req, res, next);
+
+    expect(res.sendFile).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalled();
+  });
+
+  it("does not serve SPA shell for missing non-app paths", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const req = {
+      method: "GET",
+      headers: { accept: "text/html" },
+      originalUrl: "/proxy",
+      url: "/proxy",
+    };
+    const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+    const next = jest.fn();
+
+    fsMock.stat.mockImplementation((_path: string, cb: any) => cb(new Error()));
+
+    middleware(req, res, next);
+
+    expect(res.sendFile).not.toHaveBeenCalled();
+    expect(next).toHaveBeenCalled();
+  });
 });

@@ -1,4 +1,10 @@
 import { effect } from "../../effect.js";
+import {
+  getFileRouteDirPath,
+  getWorkspaceRouteRequestPath,
+  resolveHrefAgainstRoute,
+  applyBasePath,
+} from "../../app-routes.js";
 import { renderMarkdown } from "../../markdown.js";
 import {
   sanitizeSrcdocHtml,
@@ -6,7 +12,6 @@ import {
   setTrustedSrcdoc,
 } from "../../security/trusted-types.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
-import { fileViewerStore } from "../../stores/file-viewer.js";
 import { readGroupFile } from "../../storage/readGroupFile.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { showError, showSuccess } from "../../toast.js";
@@ -18,7 +23,6 @@ import type {
 } from "../../types.js";
 
 import { getDb } from "../../db/db.js";
-import { handleSpecialLinkNavigation } from "../../utils.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
@@ -62,14 +66,16 @@ export class ShadowClawPages extends ShadowClawElement {
     content: string,
     filePath: string,
   ): Promise<string> {
-    const resolvedHtml = this.db
-      ? await this.resolveRelativeImagesInHtml(content, filePath)
-      : content;
-
-    const safeContent = sanitizeSrcdocHtml(
+    const resolvedHtml = this.rewriteWorkspacePreviewHtml(content, filePath);
+    const groupId =
+      this.selectedPage?.groupId || orchestratorStore.activeGroupId;
+    const inlinedHtml = await this.resolveRelativeImagesInHtml(
       resolvedHtml,
-      previewSanitizeOptions,
+      filePath,
+      groupId,
     );
+
+    const safeContent = sanitizeSrcdocHtml(inlinedHtml, previewSanitizeOptions);
 
     // Nonce-gated CSP: only the bridge script (served same-origin) may run.
     // Inline scripts and other external scripts are blocked.
@@ -80,7 +86,7 @@ export class ShadowClawPages extends ShadowClawElement {
       "<!doctype html>",
       '<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
       `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">`,
-      '<base target="_blank">',
+      `<base href="${this.getPageRouteDirectory(filePath)}" target="_blank">`,
       `<script src="${bridgeScriptUrl}" nonce="${nonce}"><\/script>`,
       "<style>",
       "  img { max-width: 100%; max-height: 100%; }",
@@ -89,76 +95,6 @@ export class ShadowClawPages extends ShadowClawElement {
       safeContent,
       "</body></html>",
     ].join("");
-  }
-
-  /**
-   * Resolves relative image src attributes in HTML by loading files from OPFS
-   * and replacing the src with a blob URL.
-   */
-  async resolveRelativeImagesInHtml(
-    html: string,
-    filePath: string,
-  ): Promise<string> {
-    if (!this.db || !html) {
-      return html;
-    }
-
-    const parsed = new DOMParser().parseFromString(html, "text/html");
-    const images = Array.from(parsed.querySelectorAll("img"));
-    if (images.length === 0) {
-      return html;
-    }
-
-    const groupId =
-      this.selectedPage?.groupId || orchestratorStore.activeGroupId;
-
-    await Promise.all(
-      images.map(async (img) => {
-        const src = img.getAttribute("src") || "";
-        if (
-          !src ||
-          /^(?:[a-zA-Z][a-zA-Z\d+.-]*:|blob:|data:|#|\/\/)/u.test(src)
-        ) {
-          return;
-        }
-
-        const resolved = this.resolveWorkspaceLinkPath(src, filePath);
-        if (!resolved) {
-          return;
-        }
-
-        try {
-          const bytes = await readGroupFileBytes(this.db!, groupId, resolved);
-          const ext = resolved.split(".").pop()?.toLowerCase() || "";
-          const mimeTypeMap: Record<string, string> = {
-            apng: "image/apng",
-            avif: "image/avif",
-            gif: "image/gif",
-            jpg: "image/jpeg",
-            jpeg: "image/jpeg",
-            png: "image/png",
-            svg: "image/svg+xml",
-            webp: "image/webp",
-          };
-          const mimeType = mimeTypeMap[ext] ?? "image/jpeg";
-          const blobBytes = new Uint8Array(bytes.byteLength);
-          blobBytes.set(bytes);
-
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(new Blob([blobBytes], { type: mimeType }));
-          });
-
-          img.setAttribute("src", dataUrl);
-        } catch {
-          // File not found or unreadable — leave src as-is.
-        }
-      }),
-    );
-
-    return parsed.body.innerHTML;
   }
 
   handleIframeMessage = (event: MessageEvent) => {
@@ -179,18 +115,32 @@ export class ShadowClawPages extends ShadowClawElement {
     }
 
     const basePath = this.selectedPage?.path || "";
-    const currentGroupId =
-      this.selectedPage?.groupId || orchestratorStore.activeGroupId;
-
-    const href = payload.href;
-    const handled = handleSpecialLinkNavigation(href, basePath, currentGroupId);
-    if (!handled) {
-      // Try to resolve as a workspace-relative path within pages
-      const resolvedPath = this.resolveWorkspaceLinkPath(href, basePath);
-      if (resolvedPath) {
-        void this.openWorkspaceLink(resolvedPath);
-      }
+    const routeDir = this.getPageRouteDirectory(basePath);
+    const resolved = resolveHrefAgainstRoute(
+      payload.href,
+      routeDir,
+      window.location.origin,
+    );
+    if (!resolved) {
+      return;
     }
+
+    if (resolved.origin !== window.location.origin) {
+      window.open(resolved.href, "_blank", "noopener,noreferrer");
+
+      return;
+    }
+
+    const targetPath = `${resolved.pathname}${resolved.search}${resolved.hash}`;
+    const nav = (window as any).navigation;
+    if (nav && typeof nav.navigate === "function") {
+      nav.navigate(targetPath);
+
+      return;
+    }
+
+    window.history.pushState({}, "", targetPath);
+    window.dispatchEvent(new PopStateEvent("popstate"));
   };
 
   constructor() {
@@ -211,13 +161,6 @@ export class ShadowClawPages extends ShadowClawElement {
 
     window.addEventListener("message", this.handleIframeMessage);
 
-    const rendered = root.querySelector("[data-pages-rendered]");
-    rendered?.addEventListener("click", (event: Event) => {
-      if (event instanceof MouseEvent) {
-        void this.handleRenderedLinkClick(event);
-      }
-    });
-
     root.addEventListener("click", (event: Event) => {
       const dropdown = root.querySelector("[data-pages-dropdown]");
       if (dropdown instanceof HTMLDetailsElement && dropdown.open) {
@@ -235,44 +178,6 @@ export class ShadowClawPages extends ShadowClawElement {
     window.removeEventListener("message", this.handleIframeMessage);
     this.previewFrameWindow = null;
     super.disconnectedCallback?.();
-  }
-
-  async handleRenderedLinkClick(event: MouseEvent) {
-    if (event.defaultPrevented || event.button !== 0) {
-      return;
-    }
-
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-      return;
-    }
-
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      return;
-    }
-
-    const link = target.closest("a");
-    if (!(link instanceof HTMLAnchorElement)) {
-      return;
-    }
-
-    const href = link.getAttribute("href") || "";
-    const basePath = this.selectedPage?.path || "";
-    const currentGroupId =
-      this.selectedPage?.groupId || orchestratorStore.activeGroupId;
-
-    const resolvedPath = this.resolveWorkspaceLinkPath(href, basePath);
-    if (resolvedPath) {
-      event.preventDefault();
-      await this.openWorkspaceLink(resolvedPath);
-
-      return;
-    }
-
-    const handled = handleSpecialLinkNavigation(href, basePath, currentGroupId);
-    if (handled) {
-      event.preventDefault();
-    }
   }
 
   handleAnchorNavigation(anchor: string): boolean {
@@ -299,105 +204,12 @@ export class ShadowClawPages extends ShadowClawElement {
     return false;
   }
 
-  async openWorkspaceLink(path: string) {
-    if (!this.selectedPage) {
-      return;
-    }
-
-    const groupId = this.selectedPage.groupId;
-    const isPinned = orchestratorStore.pages.some(
-      (p) => p.groupId === groupId && p.path === path,
-    );
-
-    if (isPinned) {
-      this.selectedPage = {
-        groupId,
-        path,
-      };
-      this.renderPageList(orchestratorStore.pages, orchestratorStore.groups);
-      await this.renderSelectedPage();
-    } else {
-      if (this.db) {
-        try {
-          await fileViewerStore.openFile(this.db, path, groupId);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          showError(`Failed to open linked file: ${message}`, 5000);
-        }
-      }
-    }
-  }
-
   private pageRefKey(page: SavedPageRef | null): string {
     if (!page) {
       return "";
     }
 
     return `${page.groupId}\u0000${page.path}`;
-  }
-
-  resolveWorkspaceLinkPath(href: string, basePath: string = ""): string | null {
-    const trimmed = href.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      return null;
-    }
-
-    let candidate = trimmed;
-    const hasScheme = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed);
-
-    if (hasScheme || trimmed.startsWith("//")) {
-      let parsed: URL;
-      try {
-        parsed = new URL(trimmed, window.location.href);
-      } catch {
-        return null;
-      }
-
-      const isHttp =
-        parsed.protocol === "http:" || parsed.protocol === "https:";
-      if (!isHttp || parsed.host !== window.location.host) {
-        return null;
-      }
-
-      candidate = `${parsed.pathname}${parsed.search}${parsed.hash}`;
-    }
-
-    let normalized = candidate.split(/[?#]/, 1)[0].replace(/\\/g, "/");
-    const isAbsolute = normalized.startsWith("/");
-    normalized = normalized.replace(/^\/+/, "");
-
-    if (!normalized) {
-      return null;
-    }
-
-    const stack: string[] = [];
-
-    if (!isAbsolute) {
-      const baseNormalized = basePath.replace(/\\/g, "/").replace(/^\/+/, "");
-      const baseParts = baseNormalized.split("/").filter(Boolean);
-      baseParts.pop();
-      stack.push(...baseParts);
-    }
-
-    for (const part of normalized.split("/")) {
-      if (!part || part === ".") {
-        continue;
-      }
-
-      if (part === "..") {
-        if (stack.length === 0) {
-          return null;
-        }
-
-        stack.pop();
-
-        continue;
-      }
-
-      stack.push(part);
-    }
-
-    return stack.length > 0 ? stack.join("/") : null;
   }
 
   setupEffects() {
@@ -663,7 +475,7 @@ export class ShadowClawPages extends ShadowClawElement {
           return;
         }
 
-        const resolvedHtml = await this.resolveRelativeImagesInHtml(
+        const resolvedHtml = this.rewriteWorkspacePreviewHtml(
           html,
           selectedPage.path,
         );
@@ -672,6 +484,11 @@ export class ShadowClawPages extends ShadowClawElement {
         }
 
         setSanitizedHtml(rendered, resolvedHtml, previewSanitizeOptions);
+        await this.resolveMarkdownImages(
+          rendered,
+          selectedPage.groupId,
+          selectedPage.path,
+        );
 
         return;
       }
@@ -685,6 +502,337 @@ export class ShadowClawPages extends ShadowClawElement {
       const message = error instanceof Error ? error.message : String(error);
       showError(`Failed to load page ${selectedPage.path}: ${message}`, 5000);
     }
+  }
+
+  getPageRouteDirectory(filePath: string): string {
+    const groupId =
+      this.selectedPage?.groupId || orchestratorStore.activeGroupId;
+
+    return applyBasePath(getFileRouteDirPath(groupId, filePath));
+  }
+
+  rewriteWorkspacePreviewHtml(html: string, filePath: string): string {
+    if (!html) {
+      return html;
+    }
+
+    const routeDir = this.getPageRouteDirectory(filePath);
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+
+    const rewrite = (selector: string, attribute: "href" | "src") => {
+      const nodes = Array.from(parsed.querySelectorAll(selector));
+      for (const node of nodes) {
+        const currentValue = node.getAttribute(attribute) || "";
+        const trimmed = currentValue.trim();
+        if (
+          !trimmed ||
+          trimmed.startsWith("#") ||
+          trimmed.startsWith("javascript:")
+        ) {
+          continue;
+        }
+
+        const resolved = resolveHrefAgainstRoute(
+          trimmed,
+          routeDir,
+          window.location.origin,
+        );
+        if (!resolved || resolved.origin !== window.location.origin) {
+          continue;
+        }
+
+        node.setAttribute(
+          attribute,
+          `${resolved.pathname}${resolved.search}${resolved.hash}`,
+        );
+      }
+    };
+
+    rewrite("a[href]", "href");
+    rewrite("img[src]", "src");
+    rewrite("audio[src]", "src");
+    rewrite("video[src]", "src");
+    rewrite("source[src]", "src");
+
+    return parsed.body.innerHTML;
+  }
+
+  resolveWorkspaceLinkPath(
+    href: string,
+    filePath: string,
+    groupId: string,
+  ): string | null {
+    const trimmed = href.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      return null;
+    }
+
+    const rawPath = trimmed.split(/[?#]/, 1)[0];
+    const normalizedRoutePath = rawPath.replace(/^(?:\.\/)+/u, "");
+    const routeCandidates: string[] = [];
+
+    if (normalizedRoutePath.startsWith("files/")) {
+      routeCandidates.push(`/${normalizedRoutePath}`);
+    }
+
+    if (rawPath.startsWith("/")) {
+      const nestedFilesIndex = rawPath.lastIndexOf("/files/");
+      if (nestedFilesIndex > 0) {
+        routeCandidates.push(rawPath.slice(nestedFilesIndex));
+      }
+
+      routeCandidates.push(rawPath);
+    }
+
+    for (const candidate of routeCandidates) {
+      const route = getWorkspaceRouteRequestPath(candidate);
+      if (route && this.routeGroupMatches(route.groupId, groupId)) {
+        return route.path;
+      }
+    }
+
+    const routeDir = getFileRouteDirPath(groupId, filePath);
+    const resolved = resolveHrefAgainstRoute(
+      trimmed,
+      routeDir,
+      window.location.origin,
+    );
+    if (!resolved || resolved.origin !== window.location.origin) {
+      return null;
+    }
+
+    const route = getWorkspaceRouteRequestPath(resolved.pathname);
+    if (!route || !this.routeGroupMatches(route.groupId, groupId)) {
+      return null;
+    }
+
+    return route.path;
+  }
+
+  resolveWorkspaceFileTarget(
+    href: string,
+    filePath: string,
+    groupId: string,
+  ): { groupId: string; path: string } | null {
+    const trimmed = href.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      return null;
+    }
+
+    const routeCandidates: string[] = [];
+    let rawPath = trimmed.split(/[?#]/, 1)[0];
+
+    if (/^[a-zA-Z][a-zA-Z\d+.-]*:/u.test(rawPath) || rawPath.startsWith("//")) {
+      let parsed: URL;
+      try {
+        parsed = new URL(rawPath, window.location.href);
+      } catch {
+        return null;
+      }
+
+      if (parsed.origin !== window.location.origin) {
+        return null;
+      }
+
+      rawPath = parsed.pathname;
+    }
+
+    const normalizedRoutePath = rawPath.replace(/^(?:\.\/)+/u, "");
+    if (normalizedRoutePath.startsWith("files/")) {
+      routeCandidates.push(`/${normalizedRoutePath}`);
+    }
+
+    if (rawPath.startsWith("/")) {
+      const nestedFilesIndex = rawPath.lastIndexOf("/files/");
+      if (nestedFilesIndex > 0) {
+        routeCandidates.push(rawPath.slice(nestedFilesIndex));
+      }
+
+      routeCandidates.push(rawPath);
+    }
+
+    for (const candidate of routeCandidates) {
+      const route = getWorkspaceRouteRequestPath(candidate);
+      if (!route) {
+        continue;
+      }
+
+      const resolvedGroupId = this.resolveRouteGroupId(route.groupId, groupId);
+      if (!resolvedGroupId) {
+        continue;
+      }
+
+      return { groupId: resolvedGroupId, path: route.path };
+    }
+
+    const path = this.resolveWorkspaceLinkPath(trimmed, filePath, groupId);
+    if (!path) {
+      return null;
+    }
+
+    return { groupId, path };
+  }
+
+  resolveRouteGroupId(
+    routeGroupId: string,
+    expectedGroupId: string,
+  ): string | null {
+    if (
+      routeGroupId === expectedGroupId ||
+      this.routeGroupMatches(routeGroupId, expectedGroupId)
+    ) {
+      return expectedGroupId;
+    }
+
+    const groups = Array.isArray(orchestratorStore.groups)
+      ? orchestratorStore.groups
+      : [];
+    const exact = groups.find((group) => group.groupId === routeGroupId);
+    if (exact) {
+      return exact.groupId;
+    }
+
+    const alias = groups.find((group) =>
+      this.routeGroupMatches(routeGroupId, group.groupId),
+    );
+    if (alias) {
+      return alias.groupId;
+    }
+
+    return routeGroupId || null;
+  }
+
+  routeGroupMatches(routeGroupId: string, expectedGroupId: string): boolean {
+    if (routeGroupId === expectedGroupId) {
+      return true;
+    }
+
+    if (!routeGroupId.includes(":") && !expectedGroupId.includes(":")) {
+      return false;
+    }
+
+    const normalize = (value: string) => value.trim().replace(/:/g, "-");
+
+    return normalize(routeGroupId) === normalize(expectedGroupId);
+  }
+
+  mimeTypeForImageExt(ext: string): string {
+    const map: Record<string, string> = {
+      apng: "image/apng",
+      avif: "image/avif",
+      gif: "image/gif",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      svg: "image/svg+xml",
+      webp: "image/webp",
+    };
+
+    return map[ext] ?? "image/jpeg";
+  }
+
+  async readImageAsDataUrl(
+    groupId: string,
+    workspacePath: string,
+  ): Promise<string | null> {
+    if (!this.db) {
+      return null;
+    }
+
+    try {
+      const bytes = await readGroupFileBytes(this.db, groupId, workspacePath);
+      const ext = workspacePath.split(".").pop()?.toLowerCase() || "";
+      const mimeType = this.mimeTypeForImageExt(ext);
+
+      const blobBytes = new Uint8Array(bytes.byteLength);
+      blobBytes.set(bytes);
+
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(new Blob([blobBytes], { type: mimeType }));
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  async resolveRelativeImagesInHtml(
+    html: string,
+    filePath: string,
+    groupId: string,
+  ): Promise<string> {
+    if (!html) {
+      return html;
+    }
+
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const images = Array.from(parsed.querySelectorAll("img[src]"));
+    if (images.length === 0) {
+      return html;
+    }
+
+    await Promise.all(
+      images.map(async (img) => {
+        const src = img.getAttribute("src") || "";
+        if (!src || /^(?:blob:|data:|#)/u.test(src)) {
+          return;
+        }
+
+        const target = this.resolveWorkspaceFileTarget(src, filePath, groupId);
+        if (!target) {
+          return;
+        }
+
+        const dataUrl = await this.readImageAsDataUrl(
+          target.groupId,
+          target.path,
+        );
+        if (!dataUrl) {
+          return;
+        }
+
+        img.setAttribute("src", dataUrl);
+      }),
+    );
+
+    return parsed.body.innerHTML;
+  }
+
+  async resolveMarkdownImages(
+    content: HTMLElement,
+    groupId: string,
+    filePath: string,
+  ): Promise<void> {
+    const images = Array.from(content.querySelectorAll("img[src]"));
+    if (images.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      images.map(async (img) => {
+        const src = img.getAttribute("src") || "";
+        if (!src || /^(?:blob:|data:|#)/u.test(src)) {
+          return;
+        }
+
+        const target = this.resolveWorkspaceFileTarget(src, filePath, groupId);
+        if (!target) {
+          return;
+        }
+
+        const dataUrl = await this.readImageAsDataUrl(
+          target.groupId,
+          target.path,
+        );
+        if (!dataUrl) {
+          return;
+        }
+
+        img.setAttribute("src", dataUrl);
+      }),
+    );
   }
 }
 

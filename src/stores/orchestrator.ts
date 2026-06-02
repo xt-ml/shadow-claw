@@ -522,7 +522,7 @@ export class OrchestratorStore {
     const normalized = path.trim().replace(/^\/+/, "").replace(/\/+/g, "/");
 
     // Migrate legacy default page paths into the current default page.
-    if (normalized === "main/MEMORY.md") {
+    if (normalized === "br-main/memory.md") {
       return OrchestratorStore.DEFAULT_PAGE_PATH;
     }
 

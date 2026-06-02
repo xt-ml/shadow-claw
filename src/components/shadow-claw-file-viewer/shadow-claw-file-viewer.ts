@@ -1,6 +1,12 @@
 import type { Config } from "dompurify";
 
 import { effect } from "../../effect.js";
+import {
+  getFileRouteDirPath,
+  getWorkspaceRouteRequestPath,
+  resolveHrefAgainstRoute,
+  applyBasePath,
+} from "../../app-routes.js";
 import { renderMarkdown } from "../../markdown.js";
 import {
   sanitizeSrcdocHtml,
@@ -19,7 +25,6 @@ import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.js";
 import type { ShadowClawDatabase } from "../../types.js";
 import { getDb } from "../../db/db.js";
-import { handleSpecialLinkNavigation } from "../../utils.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
 
@@ -161,8 +166,36 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
 
     const current = fileViewerStore.file;
-    const basePath = current?.path || current?.name || "";
-    void this.openWorkspaceLink(payload.href, basePath);
+    const filePath = current?.path || current?.name || "";
+    const routeDir = getFileRouteDirPath(
+      orchestratorStore.activeGroupId,
+      filePath,
+    );
+    const resolved = resolveHrefAgainstRoute(
+      payload.href,
+      routeDir,
+      window.location.origin,
+    );
+    if (!resolved) {
+      return;
+    }
+
+    if (resolved.origin !== window.location.origin) {
+      window.open(resolved.href, "_blank", "noopener,noreferrer");
+
+      return;
+    }
+
+    const targetPath = `${resolved.pathname}${resolved.search}${resolved.hash}`;
+    const nav = (window as any).navigation;
+    if (nav && typeof nav.navigate === "function") {
+      nav.navigate(targetPath);
+
+      return;
+    }
+
+    window.history.pushState({}, "", targetPath);
+    window.dispatchEvent(new PopStateEvent("popstate"));
   };
 
   bindEventListeners() {
@@ -217,8 +250,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     const saveBtn = root.querySelector(".modal-save-btn");
     saveBtn?.addEventListener("click", () => this.handleSave());
 
-    const modalBody = root.querySelector(".modal-body");
-
     const cancelBtn = root.querySelector(".modal-cancel-btn");
     cancelBtn?.addEventListener("click", async () => {
       this.isEditorDirty = false;
@@ -226,12 +257,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       this.isFileEditMode = false;
       await this.updateView();
     });
-    modalBody?.addEventListener("click", (event: Event) => {
-      if (event instanceof MouseEvent) {
-        void this.handlePreviewLinkClick(event);
-      }
-    });
-
     const editor = root.querySelector(".file-editor");
 
     editor?.addEventListener("input", () => {
@@ -374,19 +399,26 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     const current = fileViewerStore.file;
     const basePath = current?.path || current?.name || "";
     const href = link.getAttribute("href") || "";
-    const currentGroupId = orchestratorStore.activeGroupId;
+    const routeDir = getFileRouteDirPath(
+      orchestratorStore.activeGroupId,
+      basePath,
+    );
+    const resolved = resolveHrefAgainstRoute(
+      href,
+      routeDir,
+      window.location.origin,
+    );
 
-    const resolved = this.resolveWorkspaceLinkPath(href, basePath);
-    if (resolved) {
+    if (resolved && resolved.origin === window.location.origin) {
       event.preventDefault();
-      await this.openWorkspaceLink(href, basePath);
-
-      return;
-    }
-
-    const handled = handleSpecialLinkNavigation(href, basePath, currentGroupId);
-    if (handled) {
-      event.preventDefault();
+      const targetPath = `${resolved.pathname}${resolved.search}${resolved.hash}`;
+      const nav = (window as any).navigation;
+      if (nav && typeof nav.navigate === "function") {
+        nav.navigate(targetPath);
+      } else {
+        window.history.pushState({}, "", targetPath);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }
 
       return;
     }
@@ -524,6 +556,11 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       candidate = `${parsed.pathname}${parsed.search}${parsed.hash}`;
     }
 
+    const workspaceRouteTarget = this.getWorkspaceRouteTarget(candidate);
+    if (workspaceRouteTarget) {
+      return workspaceRouteTarget.path;
+    }
+
     let normalized = candidate.split(/[?#]/, 1)[0].replace(/\\/g, "/");
     const isAbsolute = normalized.startsWith("/");
     normalized = normalized.replace(/^\/+/, "");
@@ -560,6 +597,116 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
 
     return stack.length > 0 ? stack.join("/") : null;
+  }
+
+  getWorkspaceRouteTarget(
+    value: string,
+    options: { allowCrossGroup?: boolean } = {},
+  ): { groupId: string; path: string } | null {
+    const { allowCrossGroup = false } = options;
+
+    let pathOnly = value.split(/[?#]/, 1)[0].trim();
+    if (!pathOnly) {
+      return null;
+    }
+
+    if (
+      /^[a-zA-Z][a-zA-Z\d+.-]*:/u.test(pathOnly) ||
+      pathOnly.startsWith("//")
+    ) {
+      let parsed: URL;
+      try {
+        parsed = new URL(pathOnly, window.location.href);
+      } catch {
+        return null;
+      }
+
+      if (parsed.origin !== window.location.origin) {
+        return null;
+      }
+
+      pathOnly = parsed.pathname;
+    }
+
+    const dotPrefixedFilesPath = pathOnly.replace(/^(?:\.\/)+/u, "");
+    const candidates: string[] = [];
+
+    if (dotPrefixedFilesPath.startsWith("files/")) {
+      candidates.push(`/${dotPrefixedFilesPath}`);
+    }
+
+    if (pathOnly.startsWith("/")) {
+      const nestedFilesIndex = pathOnly.lastIndexOf("/files/");
+      if (nestedFilesIndex > 0) {
+        candidates.push(pathOnly.slice(nestedFilesIndex));
+      }
+
+      candidates.push(pathOnly);
+    }
+
+    for (const candidate of candidates) {
+      const route = getWorkspaceRouteRequestPath(candidate);
+      if (!route) {
+        continue;
+      }
+
+      const resolvedGroupId = this.resolveRouteGroupId(route.groupId);
+      if (!resolvedGroupId) {
+        continue;
+      }
+
+      if (
+        !allowCrossGroup &&
+        resolvedGroupId !== orchestratorStore.activeGroupId
+      ) {
+        continue;
+      }
+
+      return { groupId: resolvedGroupId, path: route.path };
+    }
+
+    return null;
+  }
+
+  resolveRouteGroupId(routeGroupId: string): string | null {
+    const expectedGroupId = orchestratorStore.activeGroupId;
+    if (
+      routeGroupId === expectedGroupId ||
+      this.routeGroupMatches(routeGroupId, expectedGroupId)
+    ) {
+      return expectedGroupId;
+    }
+
+    const groups = Array.isArray(orchestratorStore.groups)
+      ? orchestratorStore.groups
+      : [];
+    const exact = groups.find((group) => group.groupId === routeGroupId);
+    if (exact) {
+      return exact.groupId;
+    }
+
+    const alias = groups.find((group) =>
+      this.routeGroupMatches(routeGroupId, group.groupId),
+    );
+    if (alias) {
+      return alias.groupId;
+    }
+
+    return routeGroupId || null;
+  }
+
+  routeGroupMatches(routeGroupId: string, expectedGroupId: string): boolean {
+    if (routeGroupId === expectedGroupId) {
+      return true;
+    }
+
+    if (!routeGroupId.includes(":") && !expectedGroupId.includes(":")) {
+      return false;
+    }
+
+    const normalize = (value: string) => value.trim().replace(/:/g, "-");
+
+    return normalize(routeGroupId) === normalize(expectedGroupId);
   }
 
   setupEffects() {
@@ -1005,7 +1152,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     const currentFile = fileViewerStore.file;
     const basePath = currentFile?.path || currentFile?.name || "";
-    const resolvedPreviewHtml = await this.resolveRelativeImagesInHtml(
+    const resolvedPreviewHtml = this.rewriteWorkspacePreviewHtml(
       previewHtml,
       basePath,
     );
@@ -1016,6 +1163,63 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     setSanitizedHtml(content, resolvedPreviewHtml, previewSanitizeOptions);
     this.wrapCodeLines(content);
+    await this.resolveMarkdownImages(content, basePath);
+  }
+
+  rewriteWorkspacePreviewHtml(html: string, filePath: string): string {
+    if (!html) {
+      return html;
+    }
+
+    const routeDir = getFileRouteDirPath(
+      orchestratorStore.activeGroupId,
+      filePath,
+    );
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+
+    const rewriteUrlAttribute = (
+      selector: string,
+      attribute: "href" | "src",
+    ) => {
+      const nodes = Array.from(parsed.querySelectorAll(selector));
+      for (const node of nodes) {
+        const currentValue = node.getAttribute(attribute) || "";
+        const trimmed = currentValue.trim();
+        if (
+          !trimmed ||
+          trimmed.startsWith("#") ||
+          trimmed.startsWith("javascript:")
+        ) {
+          continue;
+        }
+
+        const resolved = resolveHrefAgainstRoute(
+          trimmed,
+          routeDir,
+          window.location.origin,
+        );
+        if (!resolved) {
+          continue;
+        }
+
+        if (resolved.origin !== window.location.origin) {
+          continue;
+        }
+
+        node.setAttribute(
+          attribute,
+          `${resolved.pathname}${resolved.search}${resolved.hash}`,
+        );
+      }
+    };
+
+    rewriteUrlAttribute("a[href]", "href");
+    rewriteUrlAttribute("img[src]", "src");
+    rewriteUrlAttribute("audio[src]", "src");
+    rewriteUrlAttribute("video[src]", "src");
+    rewriteUrlAttribute("source[src]", "src");
+
+    return parsed.body.innerHTML;
   }
 
   wrapCodeLines(content: HTMLElement) {
@@ -1108,26 +1312,41 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return html;
     }
 
-    const groupId = orchestratorStore.activeGroupId;
-
     await Promise.all(
       images.map(async (img) => {
         const src = img.getAttribute("src") || "";
-        if (
-          !src ||
-          /^(?:[a-zA-Z][a-zA-Z\d+.-]*:|blob:|data:|#|\/\/)/u.test(src)
-        ) {
+        if (!src || /^(?:blob:|data:|#)/u.test(src)) {
           return;
         }
 
-        const resolved = this.resolveWorkspaceLinkPath(src, filePath);
-        if (!resolved) {
+        const routeTarget = this.getWorkspaceRouteTarget(src, {
+          allowCrossGroup: true,
+        });
+        const target =
+          routeTarget ||
+          (() => {
+            const path = this.resolveWorkspaceLinkPath(src, filePath);
+            if (!path) {
+              return null;
+            }
+
+            return {
+              groupId: orchestratorStore.activeGroupId,
+              path,
+            };
+          })();
+
+        if (!target) {
           return;
         }
 
         try {
-          const bytes = await readGroupFileBytes(this.db!, groupId, resolved);
-          const ext = resolved.split(".").pop()?.toLowerCase() || "";
+          const bytes = await readGroupFileBytes(
+            this.db!,
+            target.groupId,
+            target.path,
+          );
+          const ext = target.path.split(".").pop()?.toLowerCase() || "";
           const mimeType = this.mimeTypeForImageExt(ext);
 
           const blobBytes = new Uint8Array(bytes.byteLength);
@@ -1164,26 +1383,41 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return;
     }
 
-    const groupId = orchestratorStore.activeGroupId;
-
     await Promise.all(
       images.map(async (img) => {
         const src = img.getAttribute("src") || "";
-        if (
-          !src ||
-          /^(?:[a-zA-Z][a-zA-Z\d+.-]*:|blob:|data:|#|\/\/)/u.test(src)
-        ) {
+        if (!src || /^(?:blob:|data:|#)/u.test(src)) {
           return;
         }
 
-        const resolved = this.resolveWorkspaceLinkPath(src, filePath);
-        if (!resolved) {
+        const routeTarget = this.getWorkspaceRouteTarget(src, {
+          allowCrossGroup: true,
+        });
+        const target =
+          routeTarget ||
+          (() => {
+            const path = this.resolveWorkspaceLinkPath(src, filePath);
+            if (!path) {
+              return null;
+            }
+
+            return {
+              groupId: orchestratorStore.activeGroupId,
+              path,
+            };
+          })();
+
+        if (!target) {
           return;
         }
 
         try {
-          const bytes = await readGroupFileBytes(this.db!, groupId, resolved);
-          const ext = resolved.split(".").pop()?.toLowerCase() || "";
+          const bytes = await readGroupFileBytes(
+            this.db!,
+            target.groupId,
+            target.path,
+          );
+          const ext = target.path.split(".").pop()?.toLowerCase() || "";
           const mimeType = this.mimeTypeForImageExt(ext);
 
           const blobBytes = new Uint8Array(bytes.byteLength);
@@ -1601,8 +1835,12 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
 
     const filePath = file.path || file.name || "";
-    const htmlContent = await this.resolveRelativeImagesInHtml(
+    const resolvedHtml = this.rewriteWorkspacePreviewHtml(
       file.content || "",
+      filePath,
+    );
+    const htmlContent = await this.resolveRelativeImagesInHtml(
+      resolvedHtml,
       filePath,
     );
 
@@ -1619,7 +1857,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       "<!doctype html>" +
       '<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
       `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">` +
-      '<base target="_blank">' +
+      `<base href="${applyBasePath(getFileRouteDirPath(orchestratorStore.activeGroupId, filePath))}" target="_blank">` +
       `<script src="${this.getIframeBridgeScriptUrl()}" nonce="${nonce}"><\/script>` +
       "<style>" +
       `  :root { color-scheme: ${themeStore.resolved}; }` +

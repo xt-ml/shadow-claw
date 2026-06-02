@@ -764,15 +764,26 @@ export class ShadowClawConversations extends ShadowClawElement {
   }
 
   async handleSwitch(groupId: string) {
-    if (!this.db) {
-      return;
-    }
-
     if (groupId === orchestratorStore.activeGroupId) {
       return;
     }
 
-    await orchestratorStore.switchConversation(this.db, groupId);
+    // Derive the appropriate sidebar page from the current active page.
+    const rawPage = orchestratorStore.activePage;
+    const page =
+      rawPage === "chat" || rawPage === "tasks" || rawPage === "files"
+        ? rawPage
+        : (orchestratorStore.sidebarDefaultPage ?? "chat");
+
+    // Dispatch a navigate event so the URL updates to /page/groupId and
+    // the router calls applyRoute, which handles switchConversation.
+    document.dispatchEvent(
+      new CustomEvent("shadow-claw-navigate", {
+        detail: { page, groupId },
+        bubbles: true,
+        composed: true,
+      }),
+    );
   }
 
   openCreateDialog() {

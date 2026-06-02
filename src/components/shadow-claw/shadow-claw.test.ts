@@ -693,6 +693,8 @@ describe("shadow-claw", () => {
   });
 
   it("hides Pages sidebar item and defaults to Chat when Pages is hidden", async () => {
+    window.history.replaceState({}, "", "/");
+
     const originalMatchMedia = globalThis.matchMedia;
     const originalScrollTo = HTMLElement.prototype.scrollTo;
     globalThis.matchMedia =
@@ -731,6 +733,8 @@ describe("shadow-claw", () => {
   });
 
   it("keeps Pages active when active page is Pages and no pages exist", async () => {
+    window.history.replaceState({}, "", "/");
+
     const originalMatchMedia = globalThis.matchMedia;
     const originalScrollTo = HTMLElement.prototype.scrollTo;
     globalThis.matchMedia =

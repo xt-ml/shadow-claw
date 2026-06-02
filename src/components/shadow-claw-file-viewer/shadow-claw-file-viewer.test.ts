@@ -425,9 +425,33 @@ describe("shadow-claw-file-viewer", () => {
 
     expect(srcdoc).toContain("<!doctype html>");
 
-    expect(srcdoc).toContain('<base target="_blank">');
+    expect(srcdoc).toContain(
+      '<base href="/files/test-group/" target="_blank">',
+    );
 
     expect(srcdoc).toContain("<main>Hello</main>");
+  });
+
+  it("inlines relative html preview images as data URLs", async () => {
+    const component = new ShadowClawFileViewer();
+    (component as any).db = {};
+
+    (
+      readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
+    ).mockResolvedValueOnce(new Uint8Array([255, 216, 255, 217]));
+
+    const srcdoc = await component.buildIframePreviewSrcdoc({
+      name: "index.html",
+      path: "docs/index.html",
+      content: '<main><img src="pic.jpg" /></main>',
+    });
+
+    expect(srcdoc).toContain('src="data:image/jpeg;base64,');
+    expect(readGroupFileBytes).toHaveBeenCalledWith(
+      {},
+      "test-group",
+      "docs/pic.jpg",
+    );
   });
 
   it("loads the reviewed link bridge from a same-origin script file", async () => {
@@ -450,6 +474,32 @@ describe("shadow-claw-file-viewer", () => {
 
     expect(srcdoc).toContain("<main>Hello</main>");
     expect(srcdoc).not.toContain("alert(1)");
+  });
+
+  it("inlines relative markdown preview images as data URLs", async () => {
+    const component = new ShadowClawFileViewer();
+    (component as any).db = {};
+
+    const content = document.createElement("div");
+    (
+      renderMarkdown as jest.MockedFunction<typeof renderMarkdown>
+    ).mockResolvedValueOnce('<p><img src="pic.jpg" /></p>');
+    (
+      readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
+    ).mockResolvedValueOnce(new Uint8Array([137, 80, 78, 71]));
+
+    await component.renderPreview(content, {
+      kind: "text",
+      name: "MEMORY.md",
+      path: "docs/MEMORY.md",
+      content: "![pic](pic.jpg)",
+    });
+
+    const img = content.querySelector("img");
+    expect(img).toBeInstanceOf(HTMLImageElement);
+    expect((img as HTMLImageElement).getAttribute("src")).toMatch(
+      /^data:image\/jpeg;base64,/u,
+    );
   });
 
   it("returns raw svg content for iframe srcdoc", async () => {
@@ -486,14 +536,13 @@ describe("shadow-claw-file-viewer", () => {
     expect(srcdoc).toContain("/assets/file-viewer-preview-bridge.js");
   });
 
-  it("replaces relative image src with data URLs in html iframe srcdoc", async () => {
+  it("rewrites relative image src to /files routes in html iframe srcdoc", async () => {
     const component = new ShadowClawFileViewer();
     component.db = {} as any;
 
-    const pngBytes = new Uint8Array([137, 80, 78, 71]);
     (
       readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
-    ).mockResolvedValue(pngBytes);
+    ).mockResolvedValueOnce(new Uint8Array([255, 216, 255, 217]));
 
     const srcdoc = await component.buildIframePreviewSrcdoc({
       name: "index.html",
@@ -502,12 +551,11 @@ describe("shadow-claw-file-viewer", () => {
     });
 
     expect(readGroupFileBytes).toHaveBeenCalledWith(
-      component.db,
+      {},
       "test-group",
       "docs/assets/banner.png",
     );
-    expect(srcdoc).toContain("data:image/png;base64,iVBORw==");
-    expect(srcdoc).not.toContain('src="assets/banner.png"');
+    expect(srcdoc).toContain('src="data:image/png;base64,');
   });
 
   it("includes allow-modals in iframe sandbox permissions", () => {
@@ -601,19 +649,17 @@ describe("shadow-claw-file-viewer", () => {
     expect(content.innerHTML).toBe("# hello");
   });
 
-  it("replaces markdown relative image src before inserting preview HTML", async () => {
+  it("rewrites markdown relative image src before inserting preview HTML", async () => {
     const component = new ShadowClawFileViewer();
     component.db = {} as any;
-
-    const pngBytes = new Uint8Array([137, 80, 78, 71]);
-    (
-      readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
-    ).mockResolvedValue(pngBytes);
 
     const renderMarkdownMock = renderMarkdown as jest.MockedFunction<any>;
     renderMarkdownMock.mockResolvedValueOnce(
       '<p><img src="assets/image.jpg" alt="example"></p>',
     );
+    (
+      readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
+    ).mockResolvedValueOnce(new Uint8Array([255, 216, 255, 217]));
 
     const content = document.createElement("div");
     (fileViewerStore as any).file = {
@@ -631,17 +677,20 @@ describe("shadow-claw-file-viewer", () => {
     });
 
     expect(readGroupFileBytes).toHaveBeenCalledWith(
-      component.db,
+      {},
       "test-group",
       "docs/assets/image.jpg",
     );
     expect(setSanitizedHtml).toHaveBeenCalledWith(
       content,
-      '<p><img src="data:image/jpeg;base64,iVBORw==" alt="example"></p>',
+      '<p><img src="/files/test-group/docs/assets/image.jpg" alt="example"></p>',
       expect.objectContaining({
         ALLOWED_URI_REGEXP: expect.any(RegExp),
       }),
     );
+    expect(
+      (content.querySelector("img") as HTMLImageElement).getAttribute("src"),
+    ).toMatch(/^data:image\/jpeg;base64,/u);
   });
 
   it("requires canShare for binary file sharing", () => {
@@ -992,9 +1041,15 @@ describe("shadow-claw-file-viewer", () => {
   });
 
   describe("workspace link resolution", () => {
-    it("opens same-folder markdown links via workspace resolution", async () => {
+    it("navigates same-folder markdown links via route URL", async () => {
       const component = new ShadowClawFileViewer();
       component.db = {} as any;
+
+      const navigate = jest.fn();
+      Object.defineProperty(window as any, "navigation", {
+        configurable: true,
+        value: { navigate },
+      });
 
       (fileViewerStore as any).file = {
         path: "docs/index.md",
@@ -1002,10 +1057,6 @@ describe("shadow-claw-file-viewer", () => {
         kind: "text",
         content: "# index",
       };
-
-      const openWorkspaceLinkSpy = jest
-        .spyOn(component, "openWorkspaceLink")
-        .mockResolvedValue(undefined);
 
       const body = document.createElement("div");
       const link = document.createElement("a");
@@ -1025,17 +1076,18 @@ describe("shadow-claw-file-viewer", () => {
       await component.handlePreviewLinkClick(event);
 
       expect(event.defaultPrevented).toBe(true);
-      expect(openWorkspaceLinkSpy).toHaveBeenCalledWith(
-        "test.md",
-        "docs/index.md",
-      );
-
-      openWorkspaceLinkSpy.mockRestore();
+      expect(navigate).toHaveBeenCalledWith("/files/test-group/docs/test.md");
     });
 
-    it("opens sibling-folder markdown links via workspace resolution", async () => {
+    it("navigates sibling-folder markdown links via route URL", async () => {
       const component = new ShadowClawFileViewer();
       component.db = {} as any;
+
+      const navigate = jest.fn();
+      Object.defineProperty(window as any, "navigation", {
+        configurable: true,
+        value: { navigate },
+      });
 
       (fileViewerStore as any).file = {
         path: "docs/index.md",
@@ -1043,10 +1095,6 @@ describe("shadow-claw-file-viewer", () => {
         kind: "text",
         content: "# index",
       };
-
-      const openWorkspaceLinkSpy = jest
-        .spyOn(component, "openWorkspaceLink")
-        .mockResolvedValue(undefined);
 
       const body = document.createElement("div");
       const link = document.createElement("a");
@@ -1066,22 +1114,20 @@ describe("shadow-claw-file-viewer", () => {
       await component.handlePreviewLinkClick(event);
 
       expect(event.defaultPrevented).toBe(true);
-      expect(openWorkspaceLinkSpy).toHaveBeenCalledWith(
-        "./folder1/test2.md",
-        "docs/index.md",
+      expect(navigate).toHaveBeenCalledWith(
+        "/files/test-group/docs/folder1/test2.md",
       );
-
-      openWorkspaceLinkSpy.mockRestore();
     });
 
-    it("keeps special hash-link navigation handling", async () => {
+    it("navigates legacy hash links through the browser route", async () => {
       const component = new ShadowClawFileViewer();
       component.db = {} as any;
 
-      const openWorkspaceLinkSpy = jest
-        .spyOn(component, "openWorkspaceLink")
-        .mockResolvedValue(undefined);
-      const dispatchSpy = jest.spyOn(document, "dispatchEvent");
+      const navigate = jest.fn();
+      Object.defineProperty(window as any, "navigation", {
+        configurable: true,
+        value: { navigate },
+      });
 
       const body = document.createElement("div");
       const link = document.createElement("a");
@@ -1101,11 +1147,7 @@ describe("shadow-claw-file-viewer", () => {
       await component.handlePreviewLinkClick(event);
 
       expect(event.defaultPrevented).toBe(true);
-      expect(openWorkspaceLinkSpy).not.toHaveBeenCalled();
-      expect(dispatchSpy).toHaveBeenCalled();
-
-      dispatchSpy.mockRestore();
-      openWorkspaceLinkSpy.mockRestore();
+      expect(navigate).toHaveBeenCalledWith("/#Pages?path=docs/linked.md");
     });
 
     it("resolves relative links against the opened file directory", () => {
@@ -1315,6 +1357,130 @@ describe("shadow-claw-file-viewer", () => {
       ).resolves.toBeUndefined();
 
       expect(img.getAttribute("src")).toBe("missing.jpg");
+    });
+
+    it("resolves workspace-route markdown image variants", async () => {
+      const component = new ShadowClawFileViewer();
+      component.db = {} as any;
+
+      (
+        readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
+      ).mockResolvedValue(new Uint8Array([255, 216, 255, 217]));
+
+      const container = document.createElement("div");
+      const aImg = document.createElement("img");
+      aImg.setAttribute("src", "/files/test-group/pic.jpg");
+      const dImg = document.createElement("img");
+      dImg.setAttribute("src", "./files/test-group/pic.jpg");
+      const eImg = document.createElement("img");
+      eImg.setAttribute("src", "files/test-group/pic.jpg");
+      container.append(aImg, dImg, eImg);
+
+      await component.resolveMarkdownImages(container, "docs/notes.md");
+
+      expect(readGroupFileBytes).toHaveBeenNthCalledWith(
+        1,
+        component.db,
+        "test-group",
+        "pic.jpg",
+      );
+      expect(readGroupFileBytes).toHaveBeenNthCalledWith(
+        2,
+        component.db,
+        "test-group",
+        "pic.jpg",
+      );
+      expect(readGroupFileBytes).toHaveBeenNthCalledWith(
+        3,
+        component.db,
+        "test-group",
+        "pic.jpg",
+      );
+      expect(aImg.getAttribute("src")).toMatch(/^data:image\/jpeg;base64,/u);
+      expect(dImg.getAttribute("src")).toMatch(/^data:image\/jpeg;base64,/u);
+      expect(eImg.getAttribute("src")).toMatch(/^data:image\/jpeg;base64,/u);
+    });
+
+    it("resolves workspace-route aliases for colon-form active group ids", async () => {
+      const component = new ShadowClawFileViewer();
+      component.db = {} as any;
+
+      const previousGroupId = (orchestratorStore as any).activeGroupId;
+      (orchestratorStore as any).activeGroupId = "br:main";
+
+      (
+        readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
+      ).mockResolvedValue(new Uint8Array([255, 216, 255, 217]));
+
+      const container = document.createElement("div");
+      const aImg = document.createElement("img");
+      aImg.setAttribute("src", "/files/br-main/pic.jpg");
+      const dImg = document.createElement("img");
+      dImg.setAttribute("src", "./files/br-main/pic.jpg");
+      const eImg = document.createElement("img");
+      eImg.setAttribute("src", "files/br-main/pic.jpg");
+      container.append(aImg, dImg, eImg);
+
+      await component.resolveMarkdownImages(container, "docs/notes.md");
+
+      expect(readGroupFileBytes).toHaveBeenNthCalledWith(
+        1,
+        component.db,
+        "br:main",
+        "pic.jpg",
+      );
+      expect(readGroupFileBytes).toHaveBeenNthCalledWith(
+        2,
+        component.db,
+        "br:main",
+        "pic.jpg",
+      );
+      expect(readGroupFileBytes).toHaveBeenNthCalledWith(
+        3,
+        component.db,
+        "br:main",
+        "pic.jpg",
+      );
+
+      (orchestratorStore as any).activeGroupId = previousGroupId;
+    });
+
+    it("resolves nested cross-group /files route image targets", async () => {
+      const component = new ShadowClawFileViewer();
+      component.db = {} as any;
+
+      const previousGroupId = (orchestratorStore as any).activeGroupId;
+      const previousGroups = (orchestratorStore as any).groups;
+      (orchestratorStore as any).activeGroupId =
+        "br:01KT4NGEM3T94M0FGHJYVNGS7M";
+      (orchestratorStore as any).groups = [
+        { groupId: "br:01KT4NGEM3T94M0FGHJYVNGS7M" },
+        { groupId: "br:main" },
+      ];
+
+      (
+        readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
+      ).mockResolvedValue(new Uint8Array([255, 216, 255, 217]));
+
+      const container = document.createElement("div");
+      const img = document.createElement("img");
+      const origin = window.location.origin;
+      img.setAttribute(
+        "src",
+        `${origin}/files/br%3A01KT4NGEM3T94M0FGHJYVNGS7M/files/br-main/pic.jpg`,
+      );
+      container.appendChild(img);
+
+      await component.resolveMarkdownImages(container, "docs/notes.md");
+
+      expect(readGroupFileBytes).toHaveBeenCalledWith(
+        component.db,
+        "br:main",
+        "pic.jpg",
+      );
+
+      (orchestratorStore as any).activeGroupId = previousGroupId;
+      (orchestratorStore as any).groups = previousGroups;
     });
 
     it("revokes all image object URLs when revokeObjectUrl is called", () => {

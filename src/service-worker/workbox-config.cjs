@@ -39,6 +39,11 @@ module.exports = {
   // // Force new service worker versions to activate and control pages immediately.
   // skipWaiting: true,
   clientsClaim: true,
+  navigateFallback: "/index.html",
+  navigateFallbackAllowlist: [
+    /^\/$/,
+    /^\/(chat|files|pages|tasks|settings)(?:\/.*)?$/,
+  ],
   // cleanupOutdatedCaches: true,
   // https://developer.chrome.com/docs/workbox/modules/workbox-build#property-BasePartial-maximumFileSizeToCacheInBytes
   // maximumFileSizeToCacheInBytes: 1024 * 1024 * 6, // 6MB

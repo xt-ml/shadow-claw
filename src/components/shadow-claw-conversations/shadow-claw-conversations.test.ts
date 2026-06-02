@@ -28,6 +28,8 @@ const mockOrchStore: any = {
   groups: [{ groupId: "br:main", name: "Main", createdAt: 0 }],
   activeGroupId: "br:main",
   unreadGroupIds: new Set(),
+  activePage: "chat",
+  sidebarDefaultPage: "chat",
   _groups: { get: () => mockOrchStore.groups },
   _activeGroupId: { get: () => mockOrchStore.activeGroupId },
   _unreadGroupIds: { get: () => mockOrchStore.unreadGroupIds },
@@ -728,25 +730,34 @@ describe("ShadowClawConversations", () => {
       const items = el.shadowRoot?.querySelectorAll(".conversation-item");
       const secondItem = items[1] as HTMLElement;
 
+      const navigateEvents: CustomEvent[] = [];
+      const captureNavigate = (e: Event) =>
+        navigateEvents.push(e as CustomEvent);
+      document.addEventListener("shadow-claw-navigate", captureNavigate);
+
       // Press Enter
       secondItem.dispatchEvent(
         new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
       );
-      expect(mockOrchStore.switchConversation).toHaveBeenCalledWith(
-        expect.anything(),
-        "br:second",
-      );
+      expect(navigateEvents).toHaveLength(1);
+      expect(navigateEvents[0].detail).toMatchObject({
+        page: "chat",
+        groupId: "br:second",
+      });
 
-      jest.clearAllMocks();
+      navigateEvents.length = 0;
 
       // Press Space
       secondItem.dispatchEvent(
         new KeyboardEvent("keydown", { key: " ", bubbles: true }),
       );
-      expect(mockOrchStore.switchConversation).toHaveBeenCalledWith(
-        expect.anything(),
-        "br:second",
-      );
+      expect(navigateEvents).toHaveLength(1);
+      expect(navigateEvents[0].detail).toMatchObject({
+        page: "chat",
+        groupId: "br:second",
+      });
+
+      document.removeEventListener("shadow-claw-navigate", captureNavigate);
 
       document.body.removeChild(el);
     });

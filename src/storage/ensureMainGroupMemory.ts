@@ -1,15 +1,16 @@
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config.js";
 import { getConfig } from "../db/getConfig.js";
-import { groupFileExists } from "./groupFileExists.js";
-import type { ShadowClawDatabase } from "../types.js";
 import { setConfig } from "../db/setConfig.js";
-import { writeGroupFile } from "./writeGroupFile.js";
 import { DEFAULT_MAIN_GROUP_README_CONTENT } from "./defaultReadmeContent.mjs";
+import { groupFileExists } from "./groupFileExists.js";
+import { writeGroupFile } from "./writeGroupFile.js";
+
+import type { ShadowClawDatabase } from "../types.js";
 
 export { DEFAULT_MAIN_GROUP_README_CONTENT as DEFAULT_MAIN_GROUP_MEMORY_CONTENT };
 
 export const DEFAULT_MAIN_GROUP_MEMORY_PATH = "MEMORY.md";
-export const STATIC_MAIN_GROUP_MEMORY_PATH = "main/MEMORY.md";
+export const STATIC_MAIN_GROUP_MEMORY_PATH = "br-main/memory.md";
 
 export function resolveStaticMainGroupMemoryUrl(): string {
   const fallback = `/${STATIC_MAIN_GROUP_MEMORY_PATH}`;
@@ -68,20 +69,12 @@ export async function ensureMainGroupMemory(
       return false;
     }
 
-    let content = DEFAULT_MAIN_GROUP_README_CONTENT;
-    try {
-      const response = await fetch(resolveStaticMainGroupMemoryUrl());
-      if (response.ok) {
-        const templateContent = await response.text();
-        if (templateContent.trim().length > 0) {
-          content = templateContent;
-        }
-      }
-    } catch {
-      // Fallback to embedded default content.
-    }
-
-    await writeGroupFile(db, groupId, DEFAULT_MAIN_GROUP_MEMORY_PATH, content);
+    await writeGroupFile(
+      db,
+      groupId,
+      DEFAULT_MAIN_GROUP_MEMORY_PATH,
+      DEFAULT_MAIN_GROUP_README_CONTENT,
+    );
 
     return true;
   } catch (error) {

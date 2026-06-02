@@ -26,6 +26,12 @@ jest.unstable_mockModule("../../security/trusted-types.js", () => ({
   toTrustedHtmlPresanitized: jest.fn((html: string) => html),
 }));
 
+jest.unstable_mockModule("../../stores/file-viewer.js", () => ({
+  fileViewerStore: {
+    openFile: jest.fn(),
+  },
+}));
+
 jest.unstable_mockModule("../../stores/orchestrator.js", () => {
   let mockActivePinnedPage: any = null;
   const mockSetState = jest.fn((val: any) => {
@@ -138,5 +144,98 @@ describe("shadow-claw-pages", () => {
     expect(root.querySelector("[data-pages-iframe]")).toBeNull();
     expect(renderMarkdown).toHaveBeenCalledWith("# Title");
     expect(setSanitizedHtml).toHaveBeenCalledTimes(1);
+  });
+
+  describe("rendered link click handling", () => {
+    it("intercepts and navigates simple relative links in pinned pages", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      // Simulate MEMORY.md pinned at root
+      component.selectedPage = { groupId: "group-1", path: "MEMORY.md" };
+
+      const openWorkspaceLinkSpy = jest
+        .spyOn(component, "openWorkspaceLink")
+        .mockResolvedValue(undefined);
+
+      const link = document.createElement("a");
+      link.setAttribute("href", "foo/test.md");
+
+      const event = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      });
+      Object.defineProperty(event, "target", {
+        configurable: true,
+        value: link,
+      });
+
+      await component.handleRenderedLinkClick(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(openWorkspaceLinkSpy).toHaveBeenCalledWith("foo/test.md");
+
+      openWorkspaceLinkSpy.mockRestore();
+    });
+
+    it("intercepts relative links when page is in a subdirectory", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      // Simulate docs/index.md pinned
+      component.selectedPage = { groupId: "group-1", path: "docs/index.md" };
+
+      const openWorkspaceLinkSpy = jest
+        .spyOn(component, "openWorkspaceLink")
+        .mockResolvedValue(undefined);
+
+      const link = document.createElement("a");
+      link.setAttribute("href", "guide.md");
+
+      const event = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      });
+      Object.defineProperty(event, "target", {
+        configurable: true,
+        value: link,
+      });
+
+      await component.handleRenderedLinkClick(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(openWorkspaceLinkSpy).toHaveBeenCalledWith("docs/guide.md");
+
+      openWorkspaceLinkSpy.mockRestore();
+    });
+
+    it("does not intercept external links in pinned pages", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      component.selectedPage = { groupId: "group-1", path: "MEMORY.md" };
+
+      const openWorkspaceLinkSpy = jest
+        .spyOn(component, "openWorkspaceLink")
+        .mockResolvedValue(undefined);
+
+      const link = document.createElement("a");
+      link.setAttribute("href", "https://example.com/page");
+
+      const event = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      });
+      Object.defineProperty(event, "target", {
+        configurable: true,
+        value: link,
+      });
+
+      await component.handleRenderedLinkClick(event);
+
+      expect(openWorkspaceLinkSpy).not.toHaveBeenCalled();
+
+      openWorkspaceLinkSpy.mockRestore();
+    });
   });
 });

@@ -6,6 +6,7 @@ import {
   setTrustedSrcdoc,
 } from "../../security/trusted-types.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
+import { fileViewerStore } from "../../stores/file-viewer.js";
 import { readGroupFile } from "../../storage/readGroupFile.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { showError, showSuccess } from "../../toast.js";
@@ -260,6 +261,14 @@ export class ShadowClawPages extends ShadowClawElement {
     const currentGroupId =
       this.selectedPage?.groupId || orchestratorStore.activeGroupId;
 
+    const resolvedPath = this.resolveWorkspaceLinkPath(href, basePath);
+    if (resolvedPath) {
+      event.preventDefault();
+      await this.openWorkspaceLink(resolvedPath);
+
+      return;
+    }
+
     const handled = handleSpecialLinkNavigation(href, basePath, currentGroupId);
     if (handled) {
       event.preventDefault();
@@ -295,12 +304,28 @@ export class ShadowClawPages extends ShadowClawElement {
       return;
     }
 
-    this.selectedPage = {
-      groupId: this.selectedPage.groupId,
-      path,
-    };
-    this.renderPageList(orchestratorStore.pages, orchestratorStore.groups);
-    await this.renderSelectedPage();
+    const groupId = this.selectedPage.groupId;
+    const isPinned = orchestratorStore.pages.some(
+      (p) => p.groupId === groupId && p.path === path,
+    );
+
+    if (isPinned) {
+      this.selectedPage = {
+        groupId,
+        path,
+      };
+      this.renderPageList(orchestratorStore.pages, orchestratorStore.groups);
+      await this.renderSelectedPage();
+    } else {
+      if (this.db) {
+        try {
+          await fileViewerStore.openFile(this.db, path, groupId);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          showError(`Failed to open linked file: ${message}`, 5000);
+        }
+      }
+    }
   }
 
   private pageRefKey(page: SavedPageRef | null): string {

@@ -62,7 +62,13 @@ export function getAppBasePath(): string {
     VALID_PAGES.has(part.toLowerCase()),
   );
 
-  if (pageIndex > 0) {
+  if (pageIndex >= 0) {
+    if (pageIndex === 0) {
+      cachedBasePath = "/";
+
+      return cachedBasePath;
+    }
+
     cachedBasePath = "/" + parts.slice(0, pageIndex).join("/") + "/";
 
     return cachedBasePath;

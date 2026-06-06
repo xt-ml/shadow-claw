@@ -24,6 +24,7 @@ const mockWriteGroupFile = jest.fn() as any;
 const mockEnsureMainGroupMemory = jest.fn() as any;
 const mockIsMainGroupMemorySuppressed = jest.fn() as any;
 const mockSetMainGroupMemorySuppressed = jest.fn() as any;
+const mockEnsureMainGroupIndex = jest.fn() as any;
 const mockCopyGroupDirectory = jest.fn() as any;
 const mockDeleteMessage = jest.fn() as any;
 
@@ -108,6 +109,10 @@ jest.unstable_mockModule("../storage/ensureMainGroupMemory.js", () => ({
   setMainGroupMemorySuppressed: mockSetMainGroupMemorySuppressed,
 }));
 
+jest.unstable_mockModule("../storage/ensureMainGroupIndex.js", () => ({
+  ensureMainGroupIndex: mockEnsureMainGroupIndex,
+}));
+
 jest.unstable_mockModule("../storage/copyGroupDirectory.js", () => ({
   copyGroupDirectory: mockCopyGroupDirectory,
 }));
@@ -140,6 +145,7 @@ describe("OrchestratorStore", () => {
     jest.clearAllMocks();
     (mockSaveGroupMetadata as any).mockResolvedValue(undefined);
     (mockEnsureMainGroupMemory as any).mockResolvedValue(true);
+    (mockEnsureMainGroupIndex as any).mockResolvedValue(true);
     (mockIsMainGroupMemorySuppressed as any).mockResolvedValue(false);
     (mockSetMainGroupMemorySuppressed as any).mockResolvedValue(undefined);
 

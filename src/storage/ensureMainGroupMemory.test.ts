@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-import { DEFAULT_MAIN_GROUP_README_CONTENT } from "./defaultReadmeContent.mjs";
+import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "./defaultMemoryContent.mjs";
 
 const mockGroupFileExists = jest.fn() as any;
 const mockReadGroupFile = jest.fn() as any;
@@ -27,7 +27,6 @@ jest.unstable_mockModule("../db/setConfig.js", () => ({
 const {
   ensureMainGroupMemory,
   DEFAULT_MAIN_GROUP_MEMORY_PATH,
-  DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
   STATIC_MAIN_GROUP_MEMORY_PATH,
   resolveStaticMainGroupMemoryUrl,
   isMainGroupMemorySuppressed,
@@ -67,7 +66,7 @@ describe("ensureMainGroupMemory", () => {
     expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).toContain(
       "# Welcome to ShadowClaw Pages",
     );
-    expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).toContain("## Getting Started");
+    expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).toContain("## Getting started");
     expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).toContain(
       "## What is MEMORY.md?",
     );
@@ -93,7 +92,7 @@ describe("ensureMainGroupMemory", () => {
       {} as any,
       DEFAULT_GROUP_ID,
       DEFAULT_MAIN_GROUP_MEMORY_PATH,
-      DEFAULT_MAIN_GROUP_README_CONTENT,
+      DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
     );
   });
 

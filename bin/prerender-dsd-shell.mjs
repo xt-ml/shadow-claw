@@ -3,7 +3,7 @@
 import { readFile, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { marked } from "marked";
-import { DEFAULT_MAIN_GROUP_README_CONTENT } from "../src/storage/defaultReadmeContent.mjs";
+import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "../src/storage/defaultMemoryContent.mjs";
 
 const SHADOW_CLAW_TEMPLATE_START =
   '<template shadowrootmode="open" data-shadow-claw-dsd="true">';
@@ -20,7 +20,7 @@ function buildDefaultPageSource() {
   return {
     absolutePath: null,
     displayPath: "MEMORY.md",
-    inlineContent: DEFAULT_MAIN_GROUP_README_CONTENT,
+    inlineContent: DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
   };
 }
 

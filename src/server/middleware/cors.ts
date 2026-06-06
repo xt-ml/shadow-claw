@@ -21,9 +21,12 @@ export function createCorsMiddleware(
 ) {
   return cors({
     origin(origin, callback) {
-      if (!origin) {
+      if (!origin || origin === "null") {
         if (verbose) {
-          logger.log("VERBOSE", `[CORS] Allowed (No Origin header)`);
+          logger.log(
+            "VERBOSE",
+            `[CORS] Allowed (No Origin header or null origin)`,
+          );
         }
 
         return callback(null, true);

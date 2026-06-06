@@ -32,6 +32,7 @@ import {
   isMainGroupMemorySuppressed,
   setMainGroupMemorySuppressed,
 } from "../storage/ensureMainGroupMemory.js";
+import { ensureMainGroupIndex } from "../storage/ensureMainGroupIndex.js";
 import { readGroupFile } from "../storage/readGroupFile.js";
 import { requestStorageAccess } from "../storage/requestStorageAccess.js";
 import { getStorageStatus } from "../storage/storage.js";
@@ -546,6 +547,8 @@ export class OrchestratorStore {
       db,
       DEFAULT_GROUP_ID,
     );
+
+    await ensureMainGroupIndex(db, DEFAULT_GROUP_ID);
 
     if (!hasWorkspaceReadme || this._pages.get().length > 0) {
       return;

@@ -963,6 +963,7 @@ export const CONFIG_KEYS = {
   LAST_SELECTED_PINNED_PAGE: "last_selected_pinned_page",
   PAGES_LIST: "pages_list",
   MAIN_GROUP_README_SUPPRESSED: "main_group_readme_suppressed",
+  MAIN_GROUP_INDEX_SUPPRESSED: "main_group_index_suppressed",
   ACTIVITY_LOG_DISK_LOGGING_ENABLED: "activity_log_disk_logging_enabled",
 };
 

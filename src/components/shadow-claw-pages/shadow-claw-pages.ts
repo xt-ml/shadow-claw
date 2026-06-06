@@ -80,7 +80,9 @@ export class ShadowClawPages extends ShadowClawElement {
     // Nonce-gated CSP: only the bridge script (served same-origin) may run.
     // Inline scripts and other external scripts are blocked.
     const nonce = crypto.randomUUID().replace(/-/g, "");
-    const bridgeScriptUrl = "/assets/file-viewer-preview-bridge.js";
+    const bridgeScriptUrl = applyBasePath(
+      "/assets/file-viewer-preview-bridge.js",
+    );
 
     return [
       "<!doctype html>",

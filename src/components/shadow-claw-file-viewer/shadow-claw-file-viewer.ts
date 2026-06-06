@@ -1826,7 +1826,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
   }
 
   getIframeBridgeScriptUrl() {
-    return "/assets/file-viewer-preview-bridge.js";
+    return applyBasePath("/assets/file-viewer-preview-bridge.js");
   }
 
   async buildIframePreviewSrcdoc(file: any) {

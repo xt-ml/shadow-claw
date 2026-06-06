@@ -8,9 +8,14 @@ jest.unstable_mockModule("./ensureMainGroupMemory.js", () => ({
   ensureMainGroupMemory: (jest.fn() as any).mockResolvedValue(true),
 }));
 
+jest.unstable_mockModule("./ensureMainGroupIndex.js", () => ({
+  ensureMainGroupIndex: (jest.fn() as any).mockResolvedValue(true),
+}));
+
 const { selectStorageDirectory } = await import("./selectStorageDirectory.js");
 const { setConfig } = await import("../db/setConfig.js");
 const { ensureMainGroupMemory } = await import("./ensureMainGroupMemory.js");
+const { ensureMainGroupIndex } = await import("./ensureMainGroupIndex.js");
 
 describe("selectStorageDirectory", () => {
   it("stores selected directory handle", async () => {
@@ -24,6 +29,7 @@ describe("selectStorageDirectory", () => {
 
     expect(setConfig).toHaveBeenCalled();
     expect(ensureMainGroupMemory).toHaveBeenCalledWith({} as any);
+    expect(ensureMainGroupIndex).toHaveBeenCalledWith({} as any);
   });
 
   it("returns false when user aborts picker", async () => {

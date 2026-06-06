@@ -1,6 +1,7 @@
 import { CONFIG_KEYS } from "../config.js";
 import { setConfig } from "../db/setConfig.js";
 import { ensureMainGroupMemory } from "./ensureMainGroupMemory.js";
+import { ensureMainGroupIndex } from "./ensureMainGroupIndex.js";
 import type { ShadowClawDatabase } from "../types.js";
 
 /**
@@ -29,6 +30,7 @@ export async function selectStorageDirectory(
     // (Most browsers handle this, but good to have a handle)
     await setConfig(db, CONFIG_KEYS.STORAGE_HANDLE, handle);
     await ensureMainGroupMemory(db);
+    await ensureMainGroupIndex(db);
 
     return true;
   } catch (err) {

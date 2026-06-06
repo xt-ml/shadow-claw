@@ -1,70 +1,65 @@
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config.js";
 import { getConfig } from "../db/getConfig.js";
 import { setConfig } from "../db/setConfig.js";
-import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "./defaultMemoryContent.mjs";
+import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "./defaultIndexContent.mjs";
 import { groupFileExists } from "./groupFileExists.js";
 import { writeGroupFile } from "./writeGroupFile.js";
 
 import type { ShadowClawDatabase } from "../types.js";
 
-export { DEFAULT_MAIN_GROUP_MEMORY_CONTENT as DEFAULT_MAIN_GROUP_MEMORY_CONTENT };
+export const DEFAULT_MAIN_GROUP_INDEX_PATH = "index.html";
+export const STATIC_MAIN_GROUP_INDEX_PATH = "br-main/index.html";
 
-export const DEFAULT_MAIN_GROUP_MEMORY_PATH = "MEMORY.md";
-export const STATIC_MAIN_GROUP_MEMORY_PATH = "br-main/memory.md";
-
-export function resolveStaticMainGroupMemoryUrl(): string {
-  const fallback = `/${STATIC_MAIN_GROUP_MEMORY_PATH}`;
+export function resolveStaticMainGroupIndexUrl(): string {
+  const fallback = `/${STATIC_MAIN_GROUP_INDEX_PATH}`;
 
   if (typeof document === "undefined" || !document.baseURI) {
     return fallback;
   }
 
   try {
-    return new URL(STATIC_MAIN_GROUP_MEMORY_PATH, document.baseURI).toString();
+    return new URL(STATIC_MAIN_GROUP_INDEX_PATH, document.baseURI).toString();
   } catch {
     return fallback;
   }
 }
 
-export async function isMainGroupMemorySuppressed(
+export async function isMainGroupIndexSuppressed(
   db: ShadowClawDatabase,
 ): Promise<boolean> {
   const raw = (await getConfig(
     db,
-    CONFIG_KEYS.MAIN_GROUP_README_SUPPRESSED,
+    CONFIG_KEYS.MAIN_GROUP_INDEX_SUPPRESSED,
   )) as unknown;
 
   return raw === true || raw === "true";
 }
 
-export async function setMainGroupMemorySuppressed(
+export async function setMainGroupIndexSuppressed(
   db: ShadowClawDatabase,
   suppressed: boolean,
 ): Promise<void> {
-  await setConfig(db, CONFIG_KEYS.MAIN_GROUP_README_SUPPRESSED, suppressed);
+  await setConfig(db, CONFIG_KEYS.MAIN_GROUP_INDEX_SUPPRESSED, suppressed);
 }
 
 /**
- * Ensure the main MEMORY.md exists in the workspace file store.
+ * Ensure the main index.html exists in the workspace file store.
  * Returns true if the file exists after this call (already existed or was created).
  */
-export async function ensureMainGroupMemory(
+export async function ensureMainGroupIndex(
   db: ShadowClawDatabase,
   groupId: string = DEFAULT_GROUP_ID,
 ): Promise<boolean> {
   try {
-    const exists = await groupFileExists(
-      db,
-      groupId,
-      DEFAULT_MAIN_GROUP_MEMORY_PATH,
-    );
+    const exists = await groupFileExists(db, groupId, "index.html");
+
     if (exists) {
       return true;
     }
 
     if (
       groupId === DEFAULT_GROUP_ID &&
-      (await isMainGroupMemorySuppressed(db))
+      (await isMainGroupIndexSuppressed(db))
     ) {
       return false;
     }
@@ -72,8 +67,8 @@ export async function ensureMainGroupMemory(
     await writeGroupFile(
       db,
       groupId,
-      DEFAULT_MAIN_GROUP_MEMORY_PATH,
-      DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
+      "index.html",
+      DEFAULT_MAIN_GROUP_INDEX_CONTENT,
     );
 
     return true;

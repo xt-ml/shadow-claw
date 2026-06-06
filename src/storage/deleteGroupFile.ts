@@ -1,5 +1,8 @@
 import { getGroupDir } from "./getGroupDir.js";
 import { parsePath } from "./parsePath.js";
+import { setMainGroupMemorySuppressed } from "./ensureMainGroupMemory.js";
+import { setMainGroupIndexSuppressed } from "./ensureMainGroupIndex.js";
+import { DEFAULT_GROUP_ID } from "../config.js";
 import type { ShadowClawDatabase } from "../types.js";
 
 /**
@@ -19,4 +22,12 @@ export async function deleteGroupFile(
   }
 
   await dir.removeEntry(filename);
+
+  if (groupId === DEFAULT_GROUP_ID && dirs.length === 0) {
+    if (filename === "MEMORY.md") {
+      await setMainGroupMemorySuppressed(db, true);
+    } else if (filename === "index.html") {
+      await setMainGroupIndexSuppressed(db, true);
+    }
+  }
 }

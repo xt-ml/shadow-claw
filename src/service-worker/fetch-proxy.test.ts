@@ -32,45 +32,50 @@ describe("service-worker fetch proxy workspace routes", () => {
   class TestResponse {
     readonly status: number;
     readonly headers: TestHeaders;
-    private readonly body: Uint8Array;
-    private readonly textBody: string | null;
+    private readonly _bodySource: any;
 
-    constructor(body?: ArrayBuffer | Uint8Array | string | null, init?: any) {
+    constructor(body?: any, init?: any) {
       this.status = init?.status ?? 200;
       this.headers =
         init?.headers instanceof TestHeaders
           ? init.headers
           : new TestHeaders(init?.headers);
-
-      if (typeof body === "string") {
-        this.textBody = body;
-        this.body = new Uint8Array(
-          Array.from(body).map((char) => char.charCodeAt(0) & 0xff),
-        );
-      } else if (body instanceof Uint8Array) {
-        this.textBody = null;
-        this.body = body;
-      } else if (body instanceof ArrayBuffer) {
-        this.textBody = null;
-        this.body = new Uint8Array(body);
-      } else {
-        this.textBody = null;
-        this.body = new Uint8Array();
-      }
+      this._bodySource = body;
     }
 
     async arrayBuffer(): Promise<ArrayBuffer> {
-      const copy = new Uint8Array(this.body);
+      if (
+        this._bodySource &&
+        typeof this._bodySource.arrayBuffer === "function"
+      ) {
+        return await this._bodySource.arrayBuffer();
+      }
 
-      return copy.buffer;
+      if (this._bodySource instanceof Uint8Array) {
+        return (this._bodySource.buffer as ArrayBuffer).slice(0);
+      }
+
+      if (this._bodySource instanceof ArrayBuffer) {
+        return this._bodySource.slice(0);
+      }
+
+      if (typeof this._bodySource === "string") {
+        return new Uint8Array(
+          Array.from(this._bodySource).map((char) => char.charCodeAt(0) & 0xff),
+        ).buffer;
+      }
+
+      return new ArrayBuffer(0);
     }
 
     async text(): Promise<string> {
-      if (this.textBody !== null) {
-        return this.textBody;
+      if (typeof this._bodySource === "string") {
+        return this._bodySource;
       }
 
-      return String.fromCharCode(...this.body);
+      const buffer = await this.arrayBuffer();
+
+      return String.fromCharCode(...new Uint8Array(buffer));
     }
   }
 

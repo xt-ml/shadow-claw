@@ -570,9 +570,9 @@ describe("shadow-claw-file-viewer", () => {
     );
   });
 
-  it("does not include allow-same-origin for html iframe previews", () => {
+  it("includes allow-same-origin for html iframe previews", () => {
     const viewer = new ShadowClawFileViewer();
-    expect(viewer.getIframeSandboxPermissions("test.html")).not.toContain(
+    expect(viewer.getIframeSandboxPermissions("test.html")).toContain(
       "allow-same-origin",
     );
   });

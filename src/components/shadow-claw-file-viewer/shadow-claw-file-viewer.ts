@@ -1819,10 +1819,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return "allow-modals allow-popups allow-popups-to-escape-sandbox";
     }
 
-    // We use data: URLs for relative OPFS images, so allow-same-origin
-    // is no longer required and we can avoid sandbox escape warnings.
-
-    return "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox";
+    return "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox allow-same-origin";
   }
 
   getIframeBridgeScriptUrl() {

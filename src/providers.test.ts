@@ -612,8 +612,8 @@ describe("providers.js", () => {
       expect(getContextLimit("claude-3-sonnet")).toBe(200000);
     });
 
-    it("should return 200k for claude-sonnet-4", () => {
-      expect(getContextLimit("claude-sonnet-4")).toBe(200000);
+    it("should return 1M for claude-sonnet-4", () => {
+      expect(getContextLimit("claude-sonnet-4")).toBe(1_000_000);
     });
 
     it("should return 8k for llama-3-70b", () => {
@@ -624,8 +624,10 @@ describe("providers.js", () => {
       expect(getContextLimit("gpt-3.5-turbo")).toBe(16385);
     });
 
-    it("should return 128k for Bedrock model IDs", () => {
-      expect(getContextLimit("anthropic.claude-sonnet-4-6-v1:0")).toBe(200000);
+    it("should return 1M for Bedrock model IDs", () => {
+      expect(getContextLimit("anthropic.claude-sonnet-4-6-v1:0")).toBe(
+        1_000_000,
+      );
     });
 
     it("should return 128k for gpt-4o", () => {
@@ -633,9 +635,33 @@ describe("providers.js", () => {
       expect(getContextLimit("gpt-4o-mini")).toBe(128000);
     });
 
-    it("should return 32k for gemma family models", () => {
-      expect(getContextLimit("onnx-community/gemma-4-E2B-it-ONNX")).toBe(32000);
-      expect(getContextLimit("google/gemma-2-9b-it")).toBe(32000);
+    it("should return 128k for Gemma 4 E2B / E4B models", () => {
+      expect(getContextLimit("onnx-community/gemma-4-E2B-it-ONNX")).toBe(
+        128_000,
+      );
+      expect(
+        getContextLimit("onnx-community/gemma-4-E4B-it-qat-mobile-ONNX"),
+      ).toBe(128_000);
+    });
+
+    it("should return 256k for Gemma 4 12B / E9B / E27B models", () => {
+      expect(getContextLimit("onnx-community/gemma-4-12B-it-ONNX")).toBe(
+        256_000,
+      );
+      expect(getContextLimit("onnx-community/gemma-4-E9B-it-ONNX")).toBe(
+        256_000,
+      );
+      expect(getContextLimit("onnx-community/gemma-4-E27B-it-ONNX")).toBe(
+        256_000,
+      );
+    });
+
+    it("should return 8k for Gemma 2 models", () => {
+      expect(getContextLimit("google/gemma-2-9b-it")).toBe(8192);
+    });
+
+    it("should return 32k for Gemma 3 1B models", () => {
+      expect(getContextLimit("onnx-community/gemma-3-1b-it-ONNX")).toBe(32000);
     });
 
     it("should return 4k default for completely unknown model", () => {

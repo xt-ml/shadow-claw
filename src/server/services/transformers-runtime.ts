@@ -76,28 +76,70 @@ const STATIC_MODELS: TransformersModelMetadata[] = [
   {
     id: DEFAULT_TRANSFORMERS_JS_MODEL,
     name: "Gemma 4 E2B (ONNX)",
-    context_length: 32000,
-    max_completion_tokens: 4096,
+    context_length: 128_000,
+    max_completion_tokens: 8192,
     supports_tools: true,
   },
   {
     id: "onnx-community/gemma-4-E4B-it-ONNX",
     name: "Gemma 4 E4B (ONNX)",
-    context_length: 32000,
-    max_completion_tokens: 4096,
+    context_length: 128_000,
+    max_completion_tokens: 8192,
     supports_tools: true,
   },
   {
     id: "onnx-community/gemma-4-E9B-it-ONNX",
     name: "Gemma 4 E9B (ONNX)",
-    context_length: 32000,
-    max_completion_tokens: 4096,
+    context_length: 256_000,
+    max_completion_tokens: 8192,
     supports_tools: true,
   },
   {
     id: "onnx-community/gemma-4-E27B-it-ONNX",
     name: "Gemma 4 E27B (ONNX)",
-    context_length: 32000,
+    context_length: 256_000,
+    max_completion_tokens: 8192,
+    supports_tools: true,
+  },
+  {
+    id: "onnx-community/gemma-4-12B-it-ONNX",
+    name: "Gemma 4 12B (ONNX)",
+    context_length: 256_000,
+    max_completion_tokens: 8192,
+    supports_tools: true,
+  },
+  {
+    id: "onnx-community/gemma-4-E2B-it-qat-mobile-ONNX",
+    name: "Gemma 4 E2B QAT Mobile (ONNX)",
+    context_length: 128_000,
+    max_completion_tokens: 8192,
+    supports_tools: true,
+  },
+  {
+    id: "onnx-community/gemma-4-E4B-it-qat-mobile-ONNX",
+    name: "Gemma 4 E4B QAT Mobile (ONNX)",
+    context_length: 128_000,
+    max_completion_tokens: 8192,
+    supports_tools: true,
+  },
+  {
+    id: "onnx-community/gemma-4-12B-it-qat-mobile-ONNX",
+    name: "Gemma 4 12B QAT Mobile (ONNX)",
+    context_length: 256_000,
+    max_completion_tokens: 8192,
+    supports_tools: true,
+  },
+  {
+    id: "onnx-community/gemma-3-1b-it-ONNX",
+    name: "Gemma 3 1B (ONNX)",
+    context_length: 32_000,
+    max_completion_tokens: 4096,
+    supports_tools: true,
+  },
+  {
+    id: "onnx-community/gemma-3-1b-it-ONNX-GQA",
+    name: "Gemma 3 1B GQA (ONNX)",
+    context_length: 32_000,
     max_completion_tokens: 4096,
     supports_tools: true,
   },
@@ -663,11 +705,26 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
       ? `Gemma 4 ${gemmaMatch[1].toUpperCase()} (ONNX)`
       : shortId;
 
+    // Assign context length based on Gemma 4 tier
+    const lower = modelId.toLowerCase();
+    let contextLength = 32_000;
+    if (
+      lower.includes("gemma-4-12b") ||
+      lower.includes("gemma-4-26b") ||
+      lower.includes("gemma-4-31b") ||
+      lower.includes("gemma-4-e9b") ||
+      lower.includes("gemma-4-e27b")
+    ) {
+      contextLength = 256_000;
+    } else if (lower.includes("gemma-4")) {
+      contextLength = 128_000;
+    }
+
     return {
       id: modelId,
       name,
-      context_length: 32000,
-      max_completion_tokens: 4096,
+      context_length: contextLength,
+      max_completion_tokens: 8192,
       supports_tools: true,
     };
   }

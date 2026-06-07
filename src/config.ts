@@ -47,8 +47,12 @@ export const MODEL_OUTPUT_LIMITS: Array<{
   { pattern: "claude-3-5", maxTokens: 8192 },
   // Anthropic Claude 3 family — 4096 max output
   { pattern: "claude-3", maxTokens: 4096 },
+  // OpenAI GPT-5 variants — 128k max output
+  { pattern: "gpt-5", maxTokens: 128000 },
   // OpenAI GPT-4o variants — 16384 max output
   { pattern: "gpt-4o", maxTokens: 16384 },
+  // OpenAI GPT-4 Turbo — 4096 max output
+  { pattern: "gpt-4-turbo", maxTokens: 4096 },
   // OpenAI GPT-4 (non-4o) — 8192 max output
   { pattern: "gpt-4", maxTokens: 8192 },
   // OpenAI GPT-3.5 — 4096 max output
@@ -635,9 +639,9 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     id: "openrouter",
     name: "OpenRouter",
     baseUrl: "https://openrouter.ai/api/v1/chat/completions",
-    format: "openai", // uses OpenAI message format
+    format: "openai",
     apiKeyHeader: "Authorization",
-    apiKeyHeaderFormat: "Bearer {key}", // {key} will be replaced with actual key
+    apiKeyHeaderFormat: "Bearer {key}",
     headers: {
       "HTTP-Referer": "https://xt-ml.github.io/shadow-claw/",
       "X-OpenRouter-Title": "ShadowClaw",
@@ -682,7 +686,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     defaultModel: "gpt-4o-mini",
     modelsUrl: "http://localhost:8888/copilot-proxy/azure-openai/models",
     requiresApiKey: true,
-    supportsStreaming: true, // proxy pipes upstream SSE stream when stream: true
+    supportsStreaming: true,
   },
   bedrock_proxy: {
     id: "bedrock_proxy",
@@ -694,13 +698,13 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     defaultModel: "anthropic.claude-sonnet-4-6-v1:0",
     modelsUrl: BEDROCK_PROXY_MODELS_URL,
     requiresApiKey: false,
-    supportsStreaming: true, // proxy uses InvokeModelWithResponseStreamCommand when stream: true
+    supportsStreaming: true,
   },
   gemini_proxy: {
     id: "gemini_proxy",
     name: "Gemini (Local Proxy)",
     baseUrl: "http://localhost:8888/gemini-proxy/chat/completions",
-    format: "openai", // Proxy returns OpenAI-compatible responses
+    format: "openai",
     apiKeyHeader: "x-goog-api-key",
     headers: {},
     defaultModel: "gemini-2.0-flash",
@@ -760,6 +764,10 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
       "onnx-community/gemma-4-E4B-it-ONNX",
       "onnx-community/gemma-4-E9B-it-ONNX",
       "onnx-community/gemma-4-E27B-it-ONNX",
+      "onnx-community/gemma-4-12B-it-ONNX",
+      "onnx-community/gemma-4-E2B-it-qat-mobile-ONNX",
+      "onnx-community/gemma-4-E4B-it-qat-mobile-ONNX",
+      "onnx-community/gemma-4-12B-it-qat-mobile-ONNX",
       "onnx-community/Phi-3.5-mini-instruct-onnx-web",
       "onnx-community/Phi-4-mini-instruct-ONNX",
       "onnx-community/Llama-3.2-1B-Instruct-ONNX",
@@ -779,7 +787,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
   },
   transformers_js_browser: {
     id: "transformers_js_browser",
-    name: "Transformers.js (Browser - No Proxy - Experimental)",
+    name: "Transformers.js (Browser)",
     baseUrl: "local://transformers-js",
     format: "transformers_js",
     apiKeyHeader: "Authorization",
@@ -793,6 +801,10 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
       "onnx-community/gemma-4-E4B-it-ONNX",
       "onnx-community/gemma-4-E9B-it-ONNX",
       "onnx-community/gemma-4-E27B-it-ONNX",
+      "onnx-community/gemma-4-12B-it-ONNX",
+      "onnx-community/gemma-4-E2B-it-qat-mobile-ONNX",
+      "onnx-community/gemma-4-E4B-it-qat-mobile-ONNX",
+      "onnx-community/gemma-4-12B-it-qat-mobile-ONNX",
       "onnx-community/Phi-3.5-mini-instruct-onnx-web",
       "onnx-community/Phi-4-mini-instruct-ONNX",
       "onnx-community/Llama-3.2-1B-Instruct-ONNX",
@@ -808,19 +820,34 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
       "onnx-community/Qwen3.5-4B-ONNX-OPT",
     ],
     requiresApiKey: false,
-    supportsStreaming: false, // Handled via dedicated path
+    supportsStreaming: false,
+  },
+  litert_lm_browser: {
+    id: "litert_lm_browser",
+    name: "LiteRT-LM (Browser)",
+    baseUrl: "local://litert-lm",
+    format: "transformers_js",
+    apiKeyHeader: "Authorization",
+    headers: {},
+    defaultModel: "litert-community/gemma-4-E2B-it-litert-lm",
+    models: [
+      "litert-community/gemma-4-E2B-it-litert-lm",
+      "litert-community/gemma-4-E4B-it-litert-lm",
+    ],
+    requiresApiKey: false,
+    supportsStreaming: false,
   },
   prompt_api: {
     id: "prompt_api",
-    name: "Web Prompt API (Experimental)",
+    name: "Web Prompt API (Browser - Experimental)",
     baseUrl: "builtin://language-model",
     format: "prompt_api",
     apiKeyHeader: "Authorization",
     headers: {},
     defaultModel: "browser-built-in",
-    models: ["browser-built-in", "gemini-nano", "phi-4-mini"],
+    models: ["browser-built-in", "gemini-nano", "phi-4-mini", "gemma-4"],
     requiresApiKey: false,
-    supportsStreaming: false, // handled via dedicated Prompt API path, not SSE
+    supportsStreaming: false,
   },
 };
 

@@ -23,6 +23,10 @@ import { isLlamafileResolutionError } from "./components/common/help/llamafile.j
 import { detectProviderHelpType } from "./components/common/help/providers.js";
 import { isTransformersJsResolutionError } from "./components/common/help/transformers.js";
 import { invokeWithTransformersJs } from "./transformers-js-provider.js";
+import {
+  invokeWithLiteRtLm,
+  isLiteRtLmSupported,
+} from "./litert-lm-provider.js";
 
 import {
   registerWebMcpTools,
@@ -2334,6 +2338,47 @@ export class Orchestrator {
           },
           controller.signal,
           activeTools,
+        );
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+          return;
+        }
+
+        const message = err instanceof Error ? err.message : String(err);
+        await this.deliverResponse(db, groupId, `⚠️ Error: ${message}`);
+      } finally {
+        this.promptControllers.delete(groupId);
+      }
+
+      return;
+    }
+
+    if (this.provider === "litert_lm_browser") {
+      if (!isLiteRtLmSupported()) {
+        await this.deliverResponse(
+          db,
+          groupId,
+          "⚠️ Error: LiteRT-LM requires WebGPU, which is not available in this browser. Try Chrome or Edge on a desktop with GPU support.",
+        );
+
+        return;
+      }
+
+      const controller = new AbortController();
+      this.promptControllers.set(groupId, controller);
+
+      try {
+        await invokeWithLiteRtLm(
+          db,
+          groupId,
+          systemPrompt,
+          messages,
+          this.maxTokens,
+          async (msg) => {
+            await this.handleWorkerMessage(db, msg);
+          },
+          controller.signal,
+          this.model,
         );
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {

@@ -615,8 +615,11 @@ describe("config.js", () => {
       expect(getModelMaxTokens("gpt-4o-mini")).toBe(16384);
     });
 
+    it("should return 4096 for GPT-4-turbo models", () => {
+      expect(getModelMaxTokens("gpt-4-turbo")).toBe(4096);
+    });
+
     it("should return 8192 for GPT-4 models", () => {
-      expect(getModelMaxTokens("gpt-4-turbo")).toBe(8192);
       expect(getModelMaxTokens("gpt-4")).toBe(8192);
     });
 

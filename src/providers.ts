@@ -1,6 +1,7 @@
 import { getModelAttachmentCapabilities } from "./attachment-capabilities.js";
-import { sanitizeModelOutput } from "./chat-template-sanitizer.js";
 import { modelRegistry } from "./model-registry.js";
+import { sanitizeModelOutput } from "./chat-template-sanitizer.js";
+
 import type { ProviderConfig } from "./config.js";
 
 function formatAttachmentFallbackText(block: any): string {
@@ -728,7 +729,6 @@ export function parseResponse(provider: ProviderConfig, response: any): any {
  * Get context limit for a model
  */
 export function getContextLimit(model: string): number {
-  // Check dynamic registry first
   const info = modelRegistry.getModelInfo(model);
   if (info?.contextWindow) {
     return info.contextWindow;
@@ -736,12 +736,15 @@ export function getContextLimit(model: string): number {
 
   const m = model.toLowerCase();
 
-  // Anthropic / AWS Bedrock (e.g. "anthropic.claude-sonnet-4-6-v1:0", "claude-sonnet-4-6")
-  if (m.includes("claude")) {
-    return 200_000;
+  // OpenAI / Azure OpenAI
+  if (m.includes("gpt-4.1")) {
+    return 1_047_576;
   }
 
-  // OpenAI / Azure OpenAI
+  if (m.includes("gpt-5")) {
+    return 400_000;
+  }
+
   if (m.includes("gpt-4o")) {
     return 128_000;
   }
@@ -750,7 +753,7 @@ export function getContextLimit(model: string): number {
     return 128_000;
   }
 
-  if (m.includes("gpt-4")) {
+  if (m === "gpt-4" || m.startsWith("gpt-4-")) {
     return 8_192;
   }
 
@@ -762,7 +765,45 @@ export function getContextLimit(model: string): number {
     return 4_096;
   }
 
-  // Meta Llama (OpenRouter)
+  if (m.includes("o1") || m.includes("o3") || m.includes("o4")) {
+    return 200_000;
+  }
+
+  // Anthropic / Bedrock
+  if (m.includes("claude-opus-4") || m.includes("claude-sonnet-4")) {
+    return 1_000_000;
+  }
+
+  if (m.includes("claude")) {
+    return 200_000;
+  }
+
+  // Google Gemini
+  if (m.includes("gemini-nano")) {
+    return 4_096;
+  }
+
+  if (m.includes("gemini-1.5-pro")) {
+    return 2_097_152;
+  }
+
+  if (
+    m.includes("gemini-2.5") ||
+    m.includes("gemini-2.0") ||
+    m.includes("gemini-1.5")
+  ) {
+    return 1_048_576;
+  }
+
+  if (m.includes("gemini-1.0") || m.includes("gemini-pro")) {
+    return 32_768;
+  }
+
+  if (m.includes("gemini")) {
+    return 1_048_576;
+  }
+
+  // Meta Llama
   if (m.includes("llama-3.1") || m.includes("llama-3-1")) {
     return 128_000;
   }
@@ -775,25 +816,46 @@ export function getContextLimit(model: string): number {
     return 4_096;
   }
 
-  // Google Gemini
-  if (m.includes("gemini-1.5") || m.includes("gemini-2.0")) {
-    if (m.includes("pro")) {
-      return 2_000_000;
-    }
-
-    return 1_048_576; // 1M
+  // Gemma family
+  if (
+    m.includes("gemma-4-12b") ||
+    m.includes("gemma-4-26b") ||
+    m.includes("gemma-4-31b") ||
+    m.includes("gemma-4-e9b") ||
+    m.includes("gemma-4-e27b")
+  ) {
+    return 256_000;
   }
 
-  if (m.includes("gemini")) {
+  if (m.includes("gemma-4") || m.includes("gemma 4")) {
     return 128_000;
   }
 
-  // Gemma family (for example local Transformers.js Gemma 4 variants)
-  if (m.includes("gemma-4") || m.includes("gemma 4") || m.includes("gemma")) {
+  if (
+    m.includes("gemma-3-4b") ||
+    m.includes("gemma-3-12b") ||
+    m.includes("gemma-3-27b")
+  ) {
+    return 128_000;
+  }
+
+  if (m.includes("gemma-3") || m.includes("gemma 3")) {
     return 32_000;
   }
 
-  // Mistral (Bedrock or OpenRouter)
+  if (
+    m.includes("gemma-2") ||
+    m.includes("gemma-7b") ||
+    m.includes("gemma-2b")
+  ) {
+    return 8_192;
+  }
+
+  if (m.includes("gemma")) {
+    return 8_192;
+  }
+
+  // Mistral
   if (m.includes("mistral-large")) {
     return 128_000;
   }
@@ -802,13 +864,21 @@ export function getContextLimit(model: string): number {
     return 32_000;
   }
 
-  // Amazon Bedrock native models
+  // Bedrock native
   if (m.includes("amazon.titan")) {
     return 8_192;
   }
 
-  if (m.includes("amazon.nova")) {
+  if (m.includes("amazon.nova-micro") || m.includes("nova-micro")) {
     return 128_000;
+  }
+
+  if (
+    m.includes("amazon.nova") ||
+    m.includes("nova-pro") ||
+    m.includes("nova-lite")
+  ) {
+    return 300_000;
   }
 
   if (m.includes("ai21")) {
@@ -819,12 +889,22 @@ export function getContextLimit(model: string): number {
     return 128_000;
   }
 
-  // Browser built-in / small models
-  if (m.includes("phi-4") || m.includes("gemini-nano")) {
-    return 4_096;
+  // Smaller local models
+  if (m.includes("phi-4-mini")) {
+    return 128_000;
   }
 
-  // Default fallback
+  if (m.includes("phi-4")) {
+    return 16_384;
+  }
+
+  if (m.includes("phi-3.5") || m.includes("128k")) {
+    return 128_000;
+  }
+
+  if (m.includes("phi-3")) {
+    return 4_096;
+  }
 
   return 4_096;
 }

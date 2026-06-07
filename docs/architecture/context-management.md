@@ -182,16 +182,30 @@ Context limits are resolved per model family via `getContextLimit(model)` in `sr
 
 | Model Pattern                     | Context Limit    |
 | --------------------------------- | ---------------- |
-| `claude` (all)                    | 200,000 tokens   |
-| `gemini-1.5-pro`, `gemini-2`      | 1,048,576 tokens |
-| `gemini` (other)                  | 32,768 tokens    |
-| `gpt-4o`, `o1`, `o3`, `o4`        | 128,000 tokens   |
-| `gpt-4-turbo`                     | 128,000 tokens   |
+| `claude-opus-4`, `claude-sonnet-4`| 1,000,000 tokens |
+| `claude` (other)                  | 200,000 tokens   |
+| `gpt-5`                           | 400,000 tokens   |
+| `gpt-4.1`                         | 1,047,576 tokens |
+| `o1`, `o3`, `o4`                  | 200,000 tokens   |
+| `gemini-1.5-pro`                  | 2,097,152 tokens |
+| `gemini` (other)                  | 1,048,576 tokens |
+| `gemini-1.0`, `gemini-pro`        | 32,768 tokens    |
+| `gpt-4o`, `gpt-4-turbo`           | 128,000 tokens   |
 | `gpt-4`                           | 8,192 tokens     |
 | `gpt-3.5-turbo`                   | 16,385 tokens    |
 | `llama-3.1-405b`                  | 131,072 tokens   |
 | `llama`                           | 131,072 tokens   |
 | `amazon.nova`                     | 300,000 tokens   |
+| `amazon.nova.micro`               | 128,000 tokens   |
 | `mistral-large`, `command-r-plus` | 128,000 tokens   |
-| `phi-4`, `gemini-nano`            | 4,096 tokens     |
+| `gemma-4` (large variants)        | 256,000 tokens   |
+| `gemma-4` (base variants)         | 128,000 tokens   |
+| `gemma-3-4b`, `gemma-3-12b`, `gemma-3-27b` | 128,000 tokens |
+| `gemma-3` (other)                 | 32,000 tokens    |
+| `gemma-2`, `gemma`                | 8,192 tokens     |
+| `phi-4-mini`                      | 128,000 tokens   |
+| `phi-4`                           | 16,384 tokens    |
+| `phi-3.5`                         | 128,000 tokens   |
+| `phi-3`                           | 4,096 tokens     |
+| `gemini-nano`                     | 4,096 tokens     |
 | Default fallback                  | 4,096 tokens     |

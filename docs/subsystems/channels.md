@@ -7,12 +7,12 @@
 
 ## Built-in Channels
 
-| Channel  | Type       | Prefix   | Source                      | Purpose                             |
-| -------- | ---------- | -------- | --------------------------- | ----------------------------------- |
-| Browser  | `browser`  | `br:`    | `src/channels/browser-chat` | In-browser chat UI                  |
-| Telegram | `telegram` | `tg:`    | `src/channels/telegram.ts`  | Telegram Bot API integration        |
-| iMessage | `imessage` | `im:`    | `src/channels/imessage.ts`  | iMessage bridge via HTTP service    |
-| PeerJS   | `peerjs`   | `peer:`  | `src/channels/peerjs.ts`    | WebRTC P2P via PeerJS data channels |
+| Channel  | Type       | Prefix  | Source                      | Purpose                             |
+| -------- | ---------- | ------- | --------------------------- | ----------------------------------- |
+| Browser  | `browser`  | `br:`   | `src/channels/browser-chat` | In-browser chat UI                  |
+| PeerJS   | `peerjs`   | `peer:` | `src/channels/peerjs.ts`    | WebRTC P2P via PeerJS data channels |
+| Telegram | `telegram` | `tg:`   | `src/channels/telegram.ts`  | Telegram Bot API integration        |
+| iMessage | `imessage` | `im:`   | `src/channels/imessage.ts`  | iMessage bridge via HTTP service    |
 
 ## Architecture
 

@@ -45,6 +45,7 @@ const mockOrchStore: any = {
       getBadge: (groupId: string) =>
         groupId.startsWith("tg:") ? "Telegram" : "Browser",
     },
+    getAvailableProviders: jest.fn(() => []),
   },
 };
 

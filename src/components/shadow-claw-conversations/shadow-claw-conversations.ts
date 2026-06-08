@@ -28,6 +28,8 @@ export class ShadowClawConversations extends ShadowClawElement {
   private _pendingRenameGroupId: string | null = null;
   private _pendingRenameName: string | null = null;
   private _pendingDetailsToolTags: string[] | null = null;
+  private _pendingDetailsPinnedProvider: string | null = null;
+  private _pendingDetailsPinnedModel: string | null = null;
   private _pendingDeleteGroupId: string | null = null;
   private _pendingCloneGroupId: string | null = null;
 
@@ -702,6 +704,8 @@ export class ShadowClawConversations extends ShadowClawElement {
     const currentTags = group?.toolTags || [];
 
     this._pendingDetailsToolTags = [...currentTags];
+    this._pendingDetailsPinnedProvider = group?.pinnedProvider || null;
+    this._pendingDetailsPinnedModel = group?.pinnedModel || null;
     this.openDetailsDialog(currentName, groupId);
   }
 
@@ -841,6 +845,15 @@ export class ShadowClawConversations extends ShadowClawElement {
     const datalist = root.querySelector(
       "#conversations-available-tools",
     ) as HTMLDataListElement | null;
+    const providerSelect = root.querySelector(
+      "#conversations-details-provider",
+    ) as HTMLSelectElement | null;
+    const modelContainer = root.querySelector(
+      "#conversations-details-model-container",
+    ) as HTMLElement | null;
+    const modelSelect = root.querySelector(
+      "#conversations-details-model",
+    ) as HTMLSelectElement | null;
 
     // Populate Group ID field
     if (groupIdInput) {
@@ -988,6 +1001,69 @@ export class ShadowClawConversations extends ShadowClawElement {
 
     renderChips();
 
+    if (providerSelect && modelSelect && modelContainer) {
+      const providers =
+        orchestratorStore.orchestrator?.getAvailableProviders() || [];
+
+      const renderModels = (providerId: string | null) => {
+        modelSelect.replaceChildren();
+        const defaultOption = document.createElement("option");
+        defaultOption.value = "";
+        defaultOption.textContent = "Default Model";
+        modelSelect.appendChild(defaultOption);
+
+        if (!providerId) {
+          modelContainer.style.display = "none";
+
+          return;
+        }
+
+        const selectedProvider = providers.find((p) => p.id === providerId);
+        if (selectedProvider && selectedProvider.models) {
+          modelContainer.style.display = "block";
+          for (const m of selectedProvider.models) {
+            const option = document.createElement("option");
+            option.value = m;
+            option.textContent = m;
+            modelSelect.appendChild(option);
+          }
+        } else {
+          modelContainer.style.display = "none";
+        }
+      };
+
+      // Populate Providers
+      providerSelect.replaceChildren();
+      const defaultProvOption = document.createElement("option");
+      defaultProvOption.value = "";
+      defaultProvOption.textContent = "Default (Global)";
+      providerSelect.appendChild(defaultProvOption);
+
+      for (const p of providers) {
+        const option = document.createElement("option");
+        option.value = p.id;
+        option.textContent = p.name;
+        providerSelect.appendChild(option);
+      }
+
+      providerSelect.value = this._pendingDetailsPinnedProvider || "";
+      renderModels(providerSelect.value);
+      modelSelect.value = this._pendingDetailsPinnedModel || "";
+
+      providerSelect.onchange = () => {
+        const val = providerSelect.value;
+        this._pendingDetailsPinnedProvider = val || null;
+        renderModels(val);
+        this._pendingDetailsPinnedModel = null;
+        modelSelect.value = "";
+      };
+
+      modelSelect.onchange = () => {
+        const val = modelSelect.value;
+        this._pendingDetailsPinnedModel = val || null;
+      };
+    }
+
     if (input) {
       input.value = currentName;
       input.select();
@@ -1082,6 +1158,8 @@ export class ShadowClawConversations extends ShadowClawElement {
       this._pendingRenameGroupId = null;
       this._pendingRenameName = null;
       this._pendingDetailsToolTags = null;
+      this._pendingDetailsPinnedProvider = null;
+      this._pendingDetailsPinnedModel = null;
     });
 
     detailsForm?.addEventListener("submit", async (e) => {
@@ -1190,10 +1268,19 @@ export class ShadowClawConversations extends ShadowClawElement {
       );
     }
 
+    await orchestratorStore.updateConversationPinnedProvider(
+      this.db,
+      this._pendingRenameGroupId,
+      this._pendingDetailsPinnedProvider || undefined,
+      this._pendingDetailsPinnedModel || undefined,
+    );
+
     dialog?.close();
     this._pendingRenameGroupId = null;
     this._pendingRenameName = null;
     this._pendingDetailsToolTags = null;
+    this._pendingDetailsPinnedProvider = null;
+    this._pendingDetailsPinnedModel = null;
   }
 
   async _submitDeleteDialog() {

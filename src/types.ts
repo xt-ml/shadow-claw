@@ -171,6 +171,8 @@ export interface GroupMeta {
   name: string;
   createdAt: number;
   toolTags?: string[];
+  pinnedProvider?: string;
+  pinnedModel?: string;
 }
 
 export interface SavedPageRef {

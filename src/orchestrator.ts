@@ -193,6 +193,10 @@ export class Orchestrator {
   transformersProgressPollers: Map<string, number> = new Map();
   inFlightTriggerByGroup: Map<string, string> = new Map();
   inFlightProviderRequestIds: Map<string, string> = new Map();
+  inFlightEffectiveProviderByGroup: Map<
+    string,
+    { providerId: string; providerConfig: import("./config.js").ProviderConfig }
+  > = new Map();
   provider: string = DEFAULT_PROVIDER;
   providerConfig: import("./config.js").ProviderConfig = getDefaultProvider();
   proxyUrl: string = "/proxy";
@@ -569,6 +573,34 @@ export class Orchestrator {
     }
 
     this.#apiKeyCache = null; // Invalidate cache
+  }
+
+  async #getApiKeyForSpecificProvider(
+    db: ShadowClawDatabase,
+    providerId: string,
+  ): Promise<string> {
+    let storedKey = await getConfig(db, getProviderApiKeyConfigKey(providerId));
+
+    if (!storedKey && providerId === "openrouter") {
+      const legacyKey = await getConfig(db, CONFIG_KEYS.API_KEY);
+      if (legacyKey) {
+        storedKey = legacyKey;
+      }
+    }
+
+    if (!storedKey) {
+      return "";
+    }
+
+    try {
+      const decrypted = await decryptValue(storedKey);
+
+      return decrypted || "";
+    } catch (e) {
+      console.error("[Orchestrator] Failed to decrypt API key:", e);
+
+      return "";
+    }
   }
 
   getProvider(): string {
@@ -1631,6 +1663,7 @@ export class Orchestrator {
     }
 
     this.inFlightTriggerByGroup.delete(groupId);
+    this.inFlightEffectiveProviderByGroup.delete(groupId);
 
     this.events.emit("typing", { groupId, typing: false });
     this.router?.setTyping(groupId, false);
@@ -2355,16 +2388,53 @@ export class Orchestrator {
       return;
     }
 
-    const requiresApiKey = this.providerConfig?.requiresApiKey !== false;
-    const currentApiKey = await this.getApiKeyForRequest();
-    if (requiresApiKey && !currentApiKey) {
+    // Look up the effective provider for the next message's group
+    const nextMsg = this.messageQueue[0];
+    const nextGroupId = nextMsg?.groupId;
+    let effectiveProviderConfig = this.providerConfig;
+    let effectiveProviderId = this.provider;
+
+    if (nextGroupId) {
+      try {
+        const groups = await listGroups(db);
+        const grp = groups.find((g) => g.groupId === nextGroupId);
+        if (grp?.pinnedProvider) {
+          const pinned = getProvider(grp.pinnedProvider);
+          if (pinned) {
+            effectiveProviderConfig = pinned;
+            effectiveProviderId = grp.pinnedProvider;
+          }
+        }
+      } catch {
+        // best-effort
+      }
+    }
+
+    const requiresApiKey = effectiveProviderConfig?.requiresApiKey !== false;
+    let apiKeyPresent = true;
+    if (requiresApiKey) {
+      if (effectiveProviderId === this.provider) {
+        apiKeyPresent = !!(await this.getApiKeyForRequest());
+      } else {
+        apiKeyPresent = !!(await this.#getApiKeyForSpecificProvider(
+          db,
+          effectiveProviderId,
+        ));
+      }
+    }
+
+    if (requiresApiKey && !apiKeyPresent) {
       const reason =
         "API key not configured. Go to Settings to add your API key.";
 
       this.events.emit("provider-help", {
-        providerId: this.provider,
+        providerId: effectiveProviderId,
         reason,
-        helpType: detectProviderHelpType(this.provider, reason, requiresApiKey),
+        helpType: detectProviderHelpType(
+          effectiveProviderId,
+          reason,
+          requiresApiKey,
+        ),
       });
 
       const msg = this.messageQueue.shift();
@@ -2431,6 +2501,23 @@ export class Orchestrator {
     const groups = await listGroups(db);
     const group = groups.find((g) => g.groupId === groupId);
 
+    const effectiveProviderId = group?.pinnedProvider ?? this.provider;
+    // When a provider is pinned but no specific model is pinned, default to that provider's own defaultModel
+    const effectiveModel =
+      group?.pinnedModel ??
+      (group?.pinnedProvider
+        ? (getProvider(group.pinnedProvider)?.defaultModel ?? this.model)
+        : this.model);
+    const effectiveProviderConfig =
+      getProvider(effectiveProviderId) ?? this.providerConfig;
+
+    // Track the effective provider for this group so the error handler
+    // can show the right help UI and avoid showing the wrong provider's error.
+    this.inFlightEffectiveProviderByGroup.set(groupId, {
+      providerId: effectiveProviderId,
+      providerConfig: effectiveProviderConfig,
+    });
+
     // Use pinned tools if set; otherwise fallback to global enabled tools.
     const activeTools =
       group?.toolTags && group.toolTags.length > 0
@@ -2445,7 +2532,7 @@ export class Orchestrator {
     );
 
     // Build conversation context with dynamic token-aware windowing
-    const contextLimit = getContextLimit(this.model);
+    const contextLimit = getContextLimit(effectiveModel);
     const systemPromptTokens = estimateTokens(systemPrompt);
     const allMessages = await buildConversationMessages(groupId, 200);
     const dynamicContext = buildDynamicContext(allMessages, {
@@ -2480,7 +2567,7 @@ export class Orchestrator {
       queueMicrotask(() => this.compactContext(db, groupId));
     }
 
-    if (this.provider === "transformers_js_browser") {
+    if (effectiveProviderId === "transformers_js_browser") {
       const controller = new AbortController();
       this.promptControllers.set(groupId, controller);
 
@@ -2496,7 +2583,7 @@ export class Orchestrator {
           },
           controller.signal,
           activeTools,
-          this.model,
+          effectiveModel,
         );
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
@@ -2512,7 +2599,7 @@ export class Orchestrator {
       return;
     }
 
-    if (this.provider === "prompt_api") {
+    if (effectiveProviderId === "prompt_api") {
       if (!isPromptApiSupported()) {
         await this.deliverResponse(
           db,
@@ -2553,7 +2640,7 @@ export class Orchestrator {
       return;
     }
 
-    if (this.provider === "litert_lm_browser") {
+    if (effectiveProviderId === "litert_lm_browser") {
       if (!isLiteRtLmSupported()) {
         await this.deliverResponse(
           db,
@@ -2578,7 +2665,7 @@ export class Orchestrator {
             await this.handleWorkerMessage(db, msg);
           },
           controller.signal,
-          this.model,
+          effectiveModel,
         );
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
@@ -2599,11 +2686,11 @@ export class Orchestrator {
     // InvokeModelCommand and cannot return SSE streams).
     const shouldStream =
       this.streamingEnabled &&
-      this.providerConfig.supportsStreaming === true &&
-      (this.providerConfig.format === "openai" ||
-        this.providerConfig.format === "anthropic");
+      effectiveProviderConfig.supportsStreaming === true &&
+      (effectiveProviderConfig.format === "openai" ||
+        effectiveProviderConfig.format === "anthropic");
 
-    if (this.provider === "transformers_js_local") {
+    if (effectiveProviderId === "transformers_js_local") {
       this.startTransformersProgressPolling(groupId);
     }
 
@@ -2618,21 +2705,24 @@ export class Orchestrator {
         systemPrompt,
         assistantName: this.assistantName,
         memory,
-        apiKey: await this.getApiKeyForRequest(),
+        apiKey:
+          effectiveProviderId === this.provider
+            ? await this.getApiKeyForRequest()
+            : await this.#getApiKeyForSpecificProvider(db, effectiveProviderId),
 
-        model: this.model,
+        model: effectiveModel,
         maxTokens: this.maxTokens,
         maxIterations: this.maxIterations,
-        provider: this.provider,
+        provider: effectiveProviderId,
         storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
         enabledTools: activeTools,
         providerHeaders: this.getProviderRuntimeHeaders(
-          this.provider,
+          effectiveProviderId,
           providerRequestId,
         ),
         streaming: shouldStream,
         contextCompression: this.contextCompressionEnabled,
-        contextLimit: getContextLimit(this.model),
+        contextLimit: getContextLimit(effectiveModel),
         rateLimitCallsPerMinute: this.rateLimitCallsPerMinute,
         rateLimitAutoAdapt: this.rateLimitAutoAdapt,
         isScheduledTask: this._schedulerTriggeredGroups.has(groupId),
@@ -2647,6 +2737,7 @@ export class Orchestrator {
         this.stopTransformersProgressPolling(groupId);
         this.clearProviderRequest(groupId);
         this.inFlightTriggerByGroup.delete(groupId);
+        this.inFlightEffectiveProviderByGroup.delete(groupId);
         await this.deliverResponse(db, groupId, text);
 
         break;
@@ -2738,6 +2829,15 @@ export class Orchestrator {
         let finalError = error;
         let hasProviderHelp = false;
 
+        // Use the effective provider that was active when this invocation started
+        const inFlightProvider =
+          this.inFlightEffectiveProviderByGroup.get(groupId);
+        this.inFlightEffectiveProviderByGroup.delete(groupId);
+        const errorProviderId =
+          inFlightProvider?.providerId ?? this.getProvider();
+        const errorProviderConfig =
+          inFlightProvider?.providerConfig ?? this.providerConfig;
+
         // Detect context limit/request too large errors (HTTP 413 or specific error codes)
         const isContextError =
           error.includes("413") ||
@@ -2751,7 +2851,7 @@ export class Orchestrator {
         }
 
         if (
-          this.getProvider() === "llamafile" &&
+          errorProviderId === "llamafile" &&
           isLlamafileResolutionError(error)
         ) {
           hasProviderHelp = true;
@@ -2762,7 +2862,7 @@ export class Orchestrator {
         }
 
         if (
-          this.getProvider() === "transformers_js_local" &&
+          errorProviderId === "transformers_js_local" &&
           isTransformersJsResolutionError(error)
         ) {
           hasProviderHelp = true;
@@ -2773,16 +2873,15 @@ export class Orchestrator {
         }
 
         if (!hasProviderHelp) {
-          const providerId = this.getProvider();
           const helpType = detectProviderHelpType(
-            providerId,
+            errorProviderId,
             error,
-            this.providerConfig?.requiresApiKey !== false,
+            errorProviderConfig?.requiresApiKey !== false,
           );
 
           if (helpType) {
             this.events.emit("provider-help", {
-              providerId,
+              providerId: errorProviderId,
               reason: error,
               helpType,
             });

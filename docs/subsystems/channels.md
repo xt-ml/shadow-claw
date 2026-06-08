@@ -3,15 +3,16 @@
 > A pluggable registry pattern that maps conversation group IDs to channel
 > implementations, enabling multi-channel support.
 
-**Source:** `src/channels/channel-registry.ts` · `src/channels/browser-chat.ts` · `src/channels/telegram.ts` · `src/channels/imessage.ts` · `src/router.ts`
+**Source:** `src/channels/channel-registry.ts` · `src/channels/browser-chat.ts` · `src/channels/telegram.ts` · `src/channels/imessage.ts` · `src/channels/peerjs.ts` · `src/router.ts`
 
 ## Built-in Channels
 
-| Channel  | Type       | Prefix | Source                      | Purpose                          |
-| -------- | ---------- | ------ | --------------------------- | -------------------------------- |
-| Browser  | `browser`  | `br:`  | `src/channels/browser-chat` | In-browser chat UI               |
-| Telegram | `telegram` | `tg:`  | `src/channels/telegram.ts`  | Telegram Bot API integration     |
-| iMessage | `imessage` | `im:`  | `src/channels/imessage.ts`  | iMessage bridge via HTTP service |
+| Channel  | Type       | Prefix   | Source                      | Purpose                             |
+| -------- | ---------- | -------- | --------------------------- | ----------------------------------- |
+| Browser  | `browser`  | `br:`    | `src/channels/browser-chat` | In-browser chat UI                  |
+| Telegram | `telegram` | `tg:`    | `src/channels/telegram.ts`  | Telegram Bot API integration        |
+| iMessage | `imessage` | `im:`    | `src/channels/imessage.ts`  | iMessage bridge via HTTP service    |
+| PeerJS   | `peerjs`   | `peer:`  | `src/channels/peerjs.ts`    | WebRTC P2P via PeerJS data channels |
 
 ## Architecture
 

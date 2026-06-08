@@ -65,7 +65,11 @@ export class BrowserChatChannel implements Channel {
   /**
    * Send a response to the browser chat UI for display.
    */
-  async send(groupId: string, text: string) {
+  async send(
+    groupId: string,
+    text: string,
+    _attachments?: MessageAttachment[],
+  ) {
     this.displayCallback?.(groupId, text, true);
   }
 

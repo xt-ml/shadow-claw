@@ -2,6 +2,7 @@ import type {
   Channel,
   ChannelMessageCallback,
   InboundMessage,
+  MessageAttachment,
 } from "../types.js";
 
 import {
@@ -56,11 +57,16 @@ export class IMessageChannel implements Channel {
     this.abortController = null;
   }
 
-  async send(groupId: string, text: string): Promise<void> {
+  async send(
+    groupId: string,
+    text: string,
+    _providedAttachments?: MessageAttachment[],
+  ): Promise<void> {
     const chatId = groupId.replace(/^im:/, "");
-    const { remainingText, attachments } = extractMarkdownAttachments(text);
+    const { remainingText, attachments: markdownAttachments } =
+      extractMarkdownAttachments(text);
 
-    for (const attachment of attachments) {
+    for (const attachment of markdownAttachments) {
       if (!this.fileReader) {
         await this.sendText(
           chatId,

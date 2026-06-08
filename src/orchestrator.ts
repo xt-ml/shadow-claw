@@ -71,6 +71,7 @@ import { estimateTokens } from "./context/estimateTokens.js";
 import { BrowserChatChannel } from "./channels/browser-chat.js";
 import { ChannelRegistry } from "./channels/channel-registry.js";
 import { IMessageChannel } from "./channels/imessage.js";
+import { PeerJsChannel } from "./channels/peerjs.js";
 import { TelegramChannel } from "./channels/telegram.js";
 
 import { readGroupFile } from "./storage/readGroupFile.js";
@@ -161,8 +162,9 @@ export class Orchestrator {
   contextCompressionEnabled: boolean = false;
   channelEnabledByType: Record<string, boolean> = {
     browser: true,
-    telegram: true,
-    imessage: true,
+    peerjs: false,
+    telegram: false,
+    imessage: false,
   };
   db: ShadowClawDatabase | null = null;
   events: EventBus = new EventBus();
@@ -202,6 +204,13 @@ export class Orchestrator {
   telegramBotToken: string = "";
   telegramChatIds: string[] = [];
   telegramUseProxy: boolean = false;
+  peerjs: PeerJsChannel = new PeerJsChannel();
+  peerjsMyPeerId: string = "";
+  peerjsTrustedPeerIds: string[] = [];
+  peerjsServerHost: string = "";
+  peerjsServerPort: number = 0;
+  peerjsServerPath: string = "";
+  peerjsServerSecure: boolean = true;
   triggerPattern: RegExp = buildTriggerPattern(ASSISTANT_NAME);
   useProxy: boolean = false;
   vmBashFullInternetAccess: boolean = false;
@@ -1126,6 +1135,90 @@ export class Orchestrator {
     }
   }
 
+  getPeerJsConfig(): {
+    myPeerId: string;
+    trustedPeerIds: string[];
+    serverHost: string;
+    serverPort: number;
+    serverPath: string;
+    serverSecure: boolean;
+    enabled: boolean;
+  } {
+    return {
+      myPeerId: this.peerjsMyPeerId,
+      trustedPeerIds: [...this.peerjsTrustedPeerIds],
+      serverHost: this.peerjsServerHost,
+      serverPort: this.peerjsServerPort,
+      serverPath: this.peerjsServerPath,
+      serverSecure: this.peerjsServerSecure,
+      enabled: this.getChannelEnabled("peerjs"),
+    };
+  }
+
+  async configurePeerJs(
+    db: ShadowClawDatabase,
+    myPeerId: string,
+    trustedPeerIds: string[],
+    serverHost = "",
+    serverPort = 0,
+    serverPath = "",
+    serverSecure = true,
+  ): Promise<void> {
+    const normalizedMyPeerId = myPeerId.trim();
+    const normalizedTrustedPeerIds = normalizeStringList(trustedPeerIds);
+    const normalizedServerHost = serverHost.trim();
+    const normalizedServerPort = Number.isFinite(serverPort)
+      ? Math.max(0, Math.floor(serverPort))
+      : 0;
+    const normalizedServerPath = serverPath.trim();
+    const normalizedServerSecure = !!serverSecure;
+
+    this.peerjsMyPeerId = normalizedMyPeerId;
+    this.peerjsTrustedPeerIds = normalizedTrustedPeerIds;
+    this.peerjsServerHost = normalizedServerHost;
+    this.peerjsServerPort = normalizedServerPort;
+    this.peerjsServerPath = normalizedServerPath;
+    this.peerjsServerSecure = normalizedServerSecure;
+
+    await setConfig(db, CONFIG_KEYS.PEERJS_MY_PEER_ID, normalizedMyPeerId);
+    await setConfig(
+      db,
+      CONFIG_KEYS.PEERJS_TRUSTED_PEER_IDS,
+      JSON.stringify(normalizedTrustedPeerIds),
+    );
+    await setConfig(db, CONFIG_KEYS.PEERJS_SERVER_HOST, normalizedServerHost);
+    await setConfig(
+      db,
+      CONFIG_KEYS.PEERJS_SERVER_PORT,
+      normalizedServerPort ? String(normalizedServerPort) : "",
+    );
+    await setConfig(db, CONFIG_KEYS.PEERJS_SERVER_PATH, normalizedServerPath);
+    await setConfig(
+      db,
+      CONFIG_KEYS.PEERJS_SERVER_SECURE,
+      normalizedServerSecure ? "true" : "false",
+    );
+
+    const serverConfig = normalizedServerHost
+      ? {
+          host: normalizedServerHost,
+          port: normalizedServerPort || undefined,
+          path: normalizedServerPath || undefined,
+          secure: normalizedServerSecure,
+        }
+      : {};
+
+    this.peerjs.stop();
+    this.peerjs.configure(
+      normalizedMyPeerId,
+      normalizedTrustedPeerIds,
+      serverConfig,
+    );
+    if (normalizedMyPeerId && this.getChannelEnabled("peerjs")) {
+      this.peerjs.start();
+    }
+  }
+
   submitMessage(
     text: string,
     groupId = DEFAULT_GROUP_ID,
@@ -1824,6 +1917,10 @@ export class Orchestrator {
       badge: "iMessage",
       autoTrigger: true,
     });
+    this.channelRegistry.register("peer:", this.peerjs, {
+      badge: "PeerJS",
+      autoTrigger: false,
+    });
     this.router = new Router(this.channelRegistry);
   }
 
@@ -1894,6 +1991,61 @@ export class Orchestrator {
     this.imessageApiKey = imessageApiKey;
     this.imessageChatIds = imessageChatIds;
     this.imessage.configure(imessageServerUrl, imessageApiKey, imessageChatIds);
+
+    // ---- PeerJS ----
+    this.channelEnabledByType.peerjs = await this.loadChannelEnabled(
+      db,
+      "peerjs",
+    );
+
+    const peerjsMyPeerId = (
+      (await getConfig(db, CONFIG_KEYS.PEERJS_MY_PEER_ID)) || ""
+    ).trim();
+
+    const peerjsTrustedPeerIds = parseStoredStringList(
+      await getConfig(db, CONFIG_KEYS.PEERJS_TRUSTED_PEER_IDS),
+    );
+
+    const peerjsServerHost = (
+      (await getConfig(db, CONFIG_KEYS.PEERJS_SERVER_HOST)) || ""
+    ).trim();
+    const peerjsServerPortRaw = await getConfig(
+      db,
+      CONFIG_KEYS.PEERJS_SERVER_PORT,
+    );
+    const peerjsServerPort = peerjsServerPortRaw
+      ? parseInt(peerjsServerPortRaw, 10) || 0
+      : 0;
+    const peerjsServerPath = (
+      (await getConfig(db, CONFIG_KEYS.PEERJS_SERVER_PATH)) || ""
+    ).trim();
+    const peerjsServerSecureRaw = await getConfig(
+      db,
+      CONFIG_KEYS.PEERJS_SERVER_SECURE,
+    );
+    const peerjsServerSecure = peerjsServerSecureRaw !== "false";
+
+    this.peerjsMyPeerId = peerjsMyPeerId;
+    this.peerjsTrustedPeerIds = peerjsTrustedPeerIds;
+    this.peerjsServerHost = peerjsServerHost;
+    this.peerjsServerPort = peerjsServerPort;
+    this.peerjsServerPath = peerjsServerPath;
+    this.peerjsServerSecure = peerjsServerSecure;
+
+    const peerjsServerConfig = peerjsServerHost
+      ? {
+          host: peerjsServerHost,
+          port: peerjsServerPort || undefined,
+          path: peerjsServerPath || undefined,
+          secure: peerjsServerSecure,
+        }
+      : {};
+
+    this.peerjs.configure(
+      peerjsMyPeerId,
+      peerjsTrustedPeerIds,
+      peerjsServerConfig,
+    );
   }
 
   getChannelEnabledConfigKey(channelType: ChannelType): string {
@@ -1908,8 +2060,9 @@ export class Orchestrator {
       db,
       this.getChannelEnabledConfigKey(channelType),
     );
+
     if (!stored) {
-      return true;
+      return false;
     }
 
     return stored !== "false";
@@ -1923,6 +2076,8 @@ export class Orchestrator {
         return this.telegram;
       case "imessage":
         return this.imessage;
+      case "peerjs":
+        return this.peerjs;
       default:
         return null;
     }
@@ -1942,6 +2097,8 @@ export class Orchestrator {
         return this.telegramBotToken.length > 0;
       case "imessage":
         return this.imessageServerUrl.length > 0;
+      case "peerjs":
+        return this.peerjsMyPeerId.length > 0;
       default:
         return true;
     }
@@ -1966,6 +2123,7 @@ export class Orchestrator {
     this.applyChannelRunningState("browser");
     this.applyChannelRunningState("telegram");
     this.applyChannelRunningState("imessage");
+    this.applyChannelRunningState("peerjs");
   }
 
   async loadSecretConfig(db: ShadowClawDatabase, key: string): Promise<string> {
@@ -2107,8 +2265,44 @@ export class Orchestrator {
     const directToolCommand = this.parseDirectToolCommand(msg);
     const isFromBrowser = msg.channel === "browser"; // Messages submitted in ShadowClaw UI
     const autoTrigger = this.channelRegistry.shouldAutoTrigger(msg.groupId);
-    const hasTrigger = this.triggerPattern.test(msg.content.trim());
+    let hasTrigger = false;
+    if (msg.channel === "browser") {
+      hasTrigger = this.triggerPattern.test(msg.content.trim());
+    }
+
     const isDirectToolCommand = !!directToolCommand;
+
+    // Check for explicit peer ID mention (works for both local and remote)
+    if (
+      !hasTrigger &&
+      this.peerjsMyPeerId &&
+      msg.content.includes(`@${this.peerjsMyPeerId}`)
+    ) {
+      hasTrigger = true;
+    }
+
+    // Always trigger the agent for scheduled tasks
+    if (msg.content.trim().startsWith("[SCHEDULED TASK]")) {
+      hasTrigger = true;
+    }
+
+    let isTrigger = false;
+    if (isDirectToolCommand) {
+      isTrigger = true;
+    } else if (hasTrigger) {
+      isTrigger = true;
+    } else if (isFromBrowser) {
+      // Messages from the local UI trigger the agent by default,
+      // EXCEPT in P2P channels where we just want to chat with the peer.
+      if (msg.groupId.startsWith("peer:")) {
+        isTrigger = false;
+      } else {
+        isTrigger = true;
+      }
+    } else {
+      isTrigger = autoTrigger;
+    }
+
     const attachments = await persistMessageAttachments(
       db,
       msg.groupId,
@@ -2119,16 +2313,22 @@ export class Orchestrator {
       ...msg,
       attachments,
       isFromMe: false,
-      isTrigger:
-        isFromBrowser || autoTrigger || hasTrigger || isDirectToolCommand,
+      isTrigger,
     };
 
-    if ((isFromBrowser || autoTrigger || hasTrigger) && !isDirectToolCommand) {
+    if (isTrigger && !isDirectToolCommand) {
       this.messageQueue.push(msg);
     }
 
     await saveMessage(db, stored);
     this.events.emit("message", stored);
+
+    // Forward browser messages to the P2P channel so users can chat directly
+    if (isFromBrowser && msg.groupId.startsWith("peer:")) {
+      this.router?.send(msg.groupId, msg.content, attachments).catch((err) => {
+        console.error("Failed to route browser message to peer:", err);
+      });
+    }
 
     if (directToolCommand && this.agentWorker) {
       this.agentWorker.postMessage({

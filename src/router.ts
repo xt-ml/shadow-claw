@@ -15,7 +15,11 @@ export class Router {
   /**
    * Send a message to the correct channel
    */
-  async send(groupId: string, text: string): Promise<void> {
+  async send(
+    groupId: string,
+    text: string,
+    attachments?: import("./types.js").MessageAttachment[],
+  ): Promise<void> {
     const channel = this.findChannel(groupId);
     if (!channel) {
       console.warn(`No channel for groupId: ${groupId}`);
@@ -23,7 +27,7 @@ export class Router {
       return;
     }
 
-    await channel.send(groupId, text);
+    await channel.send(groupId, text, attachments);
   }
 
   /**

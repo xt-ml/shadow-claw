@@ -2,6 +2,17 @@ import { jest } from "@jest/globals";
 
 import "fake-indexeddb/auto";
 
+jest.unstable_mockModule("peerjs", () => ({
+  Peer: jest.fn().mockImplementation(() => {
+    return {
+      on: jest.fn(),
+      emit: jest.fn(),
+      connect: jest.fn(),
+      destroy: jest.fn(),
+    };
+  }),
+}));
+
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import {

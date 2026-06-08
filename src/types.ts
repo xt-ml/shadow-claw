@@ -45,7 +45,7 @@ export interface AppDialogOptions extends ConfirmationDialogOptions {
   links?: AppDialogLink[];
 }
 
-export type KnownChannelType = "browser" | "telegram" | "imessage";
+export type KnownChannelType = "browser" | "telegram" | "imessage" | "peerjs";
 
 export type ChannelType = KnownChannelType | (string & {});
 
@@ -197,7 +197,11 @@ export interface Channel {
   type: ChannelType;
   start(): void;
   stop(): void;
-  send(groupId: string, text: string): Promise<void>;
+  send(
+    groupId: string,
+    text: string,
+    attachments?: MessageAttachment[],
+  ): Promise<void>;
   setTyping(groupId: string, typing: boolean): void;
   onMessage(callback: ChannelMessageCallback): void;
 }

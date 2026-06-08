@@ -164,6 +164,18 @@ export const IMESSAGE_POLL_TIMEOUT = 25;
 /** iMessage bridge request timeout in milliseconds */
 export const IMESSAGE_REQUEST_TIMEOUT_MS = 15000;
 
+/** PeerJS public cloud signaling server host (default, no self-hosted server required) */
+export const PEERJS_DEFAULT_HOST = "0.peerjs.com";
+
+/** PeerJS public cloud signaling server port */
+export const PEERJS_DEFAULT_PORT = 443;
+
+/** PeerJS public cloud signaling server path */
+export const PEERJS_DEFAULT_PATH = "/";
+
+/** Whether to use TLS for PeerJS signaling (true for the public cloud) */
+export const PEERJS_DEFAULT_SECURE = true;
+
 /** Bedrock proxy endpoint (models fetched dynamically) */
 export const BEDROCK_PROXY_URL = "http://localhost:8888/bedrock-proxy/invoke";
 
@@ -927,6 +939,12 @@ export const CONFIG_KEYS = {
   IMESSAGE_SERVER_URL: "imessage_server_url",
   IMESSAGE_API_KEY: "imessage_api_key",
   IMESSAGE_CHAT_IDS: "imessage_chat_ids",
+  PEERJS_MY_PEER_ID: "peerjs_my_peer_id",
+  PEERJS_TRUSTED_PEER_IDS: "peerjs_trusted_peer_ids",
+  PEERJS_SERVER_HOST: "peerjs_server_host",
+  PEERJS_SERVER_PORT: "peerjs_server_port",
+  PEERJS_SERVER_PATH: "peerjs_server_path",
+  PEERJS_SERVER_SECURE: "peerjs_server_secure",
   TRIGGER_PATTERN: "trigger_pattern",
   MODEL: "model",
   MAX_TOKENS: "max_tokens",

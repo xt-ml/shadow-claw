@@ -4,6 +4,7 @@ import { jest } from "@jest/globals";
 jest.unstable_mockModule("./crypto.js", () => ({
   encryptValue: jest.fn(async (val: string) => `enc:${val}`),
   decryptValue: jest.fn(async (val: string) => val.replace("enc:", "")),
+  computeSha256: jest.fn(async (_: ArrayBuffer) => "mock-hash"),
 }));
 
 jest.unstable_mockModule("./db/setConfig.js", () => ({

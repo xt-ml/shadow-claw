@@ -71,13 +71,18 @@ export class TelegramChannel implements Channel {
     this.abortController = null;
   }
 
-  async send(groupId: string, text: string): Promise<void> {
+  async send(
+    groupId: string,
+    text: string,
+    _providedAttachments?: MessageAttachment[],
+  ): Promise<void> {
     const chatId = groupId.replace(/^tg:/, "");
 
     // Extract and send inline images and documents as Telegram attachments
-    const { remainingText, attachments } = extractMarkdownAttachments(text);
+    const { remainingText, attachments: markdownAttachments } =
+      extractMarkdownAttachments(text);
 
-    for (const att of attachments) {
+    for (const att of markdownAttachments) {
       if (this.fileReader) {
         try {
           const blob = await this.fileReader(groupId, att.path);

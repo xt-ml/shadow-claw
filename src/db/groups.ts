@@ -184,3 +184,31 @@ export async function cloneGroup(
 
   return clone;
 }
+
+/**
+ * Update the pinned provider and model for an existing group.
+ */
+export async function updateGroupPinnedProvider(
+  db: ShadowClawDatabase,
+  groupId: string,
+  providerId?: string,
+  modelId?: string,
+): Promise<void> {
+  const groups = await getGroupMetadata(db);
+  const group = groups.find((g) => g.groupId === groupId);
+  if (group) {
+    if (providerId) {
+      group.pinnedProvider = providerId;
+    } else {
+      delete group.pinnedProvider;
+    }
+
+    if (modelId) {
+      group.pinnedModel = modelId;
+    } else {
+      delete group.pinnedModel;
+    }
+  }
+
+  await saveGroupMetadata(db, groups);
+}

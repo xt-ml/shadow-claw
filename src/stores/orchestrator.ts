@@ -22,6 +22,7 @@ import {
   cloneGroup,
   saveGroupMetadata,
   updateGroupToolTags,
+  updateGroupPinnedProvider,
 } from "../db/groups.js";
 
 import { listGroupFiles } from "../storage/listGroupFiles.js";
@@ -1654,6 +1655,19 @@ export class OrchestratorStore {
     tags: string[],
   ): Promise<void> {
     await updateGroupToolTags(db, groupId, tags);
+    await this.loadGroups(db);
+  }
+
+  /**
+   * Update the pinned provider and model to an existing conversation
+   */
+  async updateConversationPinnedProvider(
+    db: ShadowClawDatabase,
+    groupId: string,
+    providerId?: string,
+    modelId?: string,
+  ): Promise<void> {
+    await updateGroupPinnedProvider(db, groupId, providerId, modelId);
     await this.loadGroups(db);
   }
 

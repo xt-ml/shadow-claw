@@ -72,6 +72,7 @@ jest.unstable_mockModule("../db/groups.js", () => ({
   cloneGroup: mockCloneGroup,
   saveGroupMetadata: mockSaveGroupMetadata,
   updateGroupToolTags: mockUpdateGroupToolTags,
+  updateGroupPinnedProvider: jest.fn(),
 }));
 
 jest.unstable_mockModule("../db/clearGroupMessages.js", () => ({

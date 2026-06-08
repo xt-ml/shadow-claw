@@ -40,7 +40,20 @@ function createOrchestratorStub() {
     })),
     configureTelegram: jest.fn<any>().mockResolvedValue(undefined),
     configureIMessage: jest.fn<any>().mockResolvedValue(undefined),
+    configurePeerJs: jest.fn<any>().mockResolvedValue(undefined),
     setChannelEnabled: jest.fn<any>().mockResolvedValue(undefined),
+    getPeerJsConfig: jest.fn(() => ({
+      myPeerId: "test-peer-id",
+      trustedPeerIds: ["trust-1"],
+      serverHost: "127.0.0.1",
+      serverPort: 9000,
+      serverPath: "/myapp",
+      serverSecure: false,
+      enabled: true,
+    })),
+    peerjs: {
+      connections: new Map(),
+    },
   };
 }
 

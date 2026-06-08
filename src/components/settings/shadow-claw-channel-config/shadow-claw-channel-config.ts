@@ -1,3 +1,4 @@
+import "../shadow-claw-peerjs/shadow-claw-peerjs.js";
 import { getDb } from "../../../db/db.js";
 import { effect } from "../../../effect.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";

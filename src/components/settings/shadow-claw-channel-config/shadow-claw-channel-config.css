@@ -4,6 +4,10 @@
   font-family: var(--shadow-claw-font-sans);
 }
 
+hr {
+  margin: 2rem;
+}
+
 .hidden,
 [hidden] {
   display: none !important;
@@ -76,6 +80,7 @@
   color: var(--shadow-claw-text-secondary);
   font-size: 0.75rem;
   font-weight: 500;
+  margin-bottom: 0.4rem;
   margin-top: 0.4rem;
 }
 

@@ -18,6 +18,7 @@ import { Themes, themeStore } from "../../stores/theme.js";
 import { toolsStore } from "../../stores/tools.js";
 import { consumePendingShares } from "../../share-target/pending-shares.js";
 import { showError, showSuccess } from "../../toast.js";
+import { ulid } from "../../ulid.js";
 import { writeGroupFileBytes } from "../../storage/writeGroupFileBytes.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
 import {
@@ -139,6 +140,8 @@ export class ShadowClaw extends ShadowClawElement {
     }
 
     await this.applyRouteFromCurrentLocation();
+
+    await this.processPeerQueryParam();
 
     await this.processPendingSharedPayloads();
   }
@@ -277,6 +280,71 @@ export class ShadowClaw extends ShadowClawElement {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       showError(`Failed to import shared content: ${message}`, 6000);
+    }
+  }
+
+  private async processPeerQueryParam(): Promise<void> {
+    if (!this.db) {
+      return;
+    }
+
+    const currentUrl = new URL(window.location.href);
+    const peerParam = currentUrl.searchParams.get("peer");
+    if (!peerParam) {
+      return;
+    }
+
+    const remotePeerId = peerParam.trim();
+    if (!remotePeerId) {
+      return;
+    }
+
+    try {
+      // 1. Ensure PeerJS channel is enabled and configured
+      const cfg = this.orchestrator.getPeerJsConfig();
+      let myPeerId = cfg.myPeerId;
+      if (!myPeerId) {
+        myPeerId = ulid().toLowerCase();
+      }
+
+      // Automatically trust the remote peer we are connecting to
+      const trusted = new Set(cfg.trustedPeerIds);
+      trusted.add(remotePeerId);
+
+      // Save/configure
+      await this.orchestrator.configurePeerJs(
+        this.db,
+        myPeerId,
+        Array.from(trusted),
+        cfg.serverHost,
+        cfg.serverPort,
+        cfg.serverPath,
+        cfg.serverSecure,
+      );
+
+      if (!cfg.enabled) {
+        await this.orchestrator.setChannelEnabled(this.db, "peerjs", true);
+      }
+
+      // 2. Ensure peer conversation exists in the list
+      const targetGroupId = await orchestratorStore.ensurePeerConversation(
+        this.db,
+        remotePeerId,
+      );
+
+      // 3. Switch conversation and navigate to chat
+      await orchestratorStore.switchConversation(this.db, targetGroupId);
+      this.showPage("chat");
+
+      // 4. Remove 'peer' from URL params to prevent re-triggering
+      currentUrl.searchParams.delete("peer");
+      const cleaned = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+      window.history.replaceState({}, "", cleaned || "/");
+
+      showSuccess(`Connected to Peer: ${remotePeerId.substring(0, 8)}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      showError(`Failed to process peer parameter: ${message}`, 6000);
     }
   }
 
@@ -1019,6 +1087,25 @@ export class ShadowClaw extends ShadowClawElement {
       const theme = (e as CustomEvent).detail.theme;
       this.updateThemeIcons(theme);
       this.updateHostTheme(theme);
+    });
+
+    // Listen for PeerJS connection errors
+    window.addEventListener("shadow-claw-peer-error", (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      const remotePeerId = detail.remotePeerId;
+      const errorMessage = detail.error;
+
+      const title = "Peer Connection Error";
+      const message = remotePeerId
+        ? `Failed to communicate with peer ${remotePeerId}: ${errorMessage}`
+        : `PeerJS error: ${errorMessage}`;
+
+      void this.requestDialog({
+        mode: "info",
+        title,
+        message,
+        confirmLabel: "Dismiss",
+      });
     });
 
     // Initial state

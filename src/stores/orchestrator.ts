@@ -1610,6 +1610,30 @@ export class OrchestratorStore {
   }
 
   /**
+   * Ensure a PeerJS conversation exists. If not, create it.
+   */
+  async ensurePeerConversation(
+    db: ShadowClawDatabase,
+    remotePeerId: string,
+  ): Promise<string> {
+    const groupId = `peer:${remotePeerId}`;
+    const groups = await listGroups(db);
+    const existing = groups.find((g) => g.groupId === groupId);
+    if (!existing) {
+      const metadata = [...groups];
+      metadata.push({
+        groupId,
+        name: `Peer: ${remotePeerId.substring(0, 8)}`,
+        createdAt: Date.now(),
+      });
+      await saveGroupMetadata(db, metadata);
+      await this.loadGroups(db);
+    }
+
+    return groupId;
+  }
+
+  /**
    * Rename a conversation
    */
   async renameConversation(

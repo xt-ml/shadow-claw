@@ -24,7 +24,7 @@ describe("Router", () => {
     await router.send("br:main", "hello");
     router.setTyping("br:main", true);
 
-    expect(channel.send).toHaveBeenCalledWith("br:main", "hello");
+    expect(channel.send).toHaveBeenCalledWith("br:main", "hello", undefined);
 
     expect(channel.setTyping).toHaveBeenCalledWith("br:main", true);
   });
@@ -43,6 +43,7 @@ describe("Router", () => {
     expect(externalChannel.send).toHaveBeenCalledWith(
       "ext:C12345",
       "hello external",
+      undefined,
     );
     expect(externalChannel.setTyping).toHaveBeenCalledWith("ext:C12345", true);
 
@@ -64,6 +65,7 @@ describe("Router", () => {
     expect(browserChannel.send).toHaveBeenCalledWith(
       "br:main",
       "hello browser",
+      undefined,
     );
     expect(externalChannel.send).not.toHaveBeenCalled();
   });

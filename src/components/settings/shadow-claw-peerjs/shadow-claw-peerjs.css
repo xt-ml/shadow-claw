@@ -1,0 +1,211 @@
+.peerjs-id-row {
+  align-items: center;
+  display: flex;
+  gap: 0.375rem;
+}
+
+.peerjs-id-row .form-input {
+  flex: 1;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+  min-width: 0;
+}
+
+.peerjs-icon-btn {
+  background: var(--surface-2, #2a2a2a);
+  border: 1px solid var(--border-color, #444);
+  border-radius: 6px;
+  color: var(--text-primary, #e0e0e0);
+  cursor: pointer;
+  flex-shrink: 0;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0.4rem 0.5rem;
+  transition:
+    background 0.15s ease,
+    transform 0.1s ease;
+}
+
+.peerjs-icon-btn:hover {
+  background: var(--surface-3, #333);
+  transform: scale(1.05);
+}
+
+.peerjs-icon-btn:active {
+  transform: scale(0.95);
+}
+
+.peerjs-qr-group {
+  align-items: flex-start;
+}
+
+.peerjs-qr-wrapper {
+  background: #fff;
+  border-radius: 8px;
+  display: inline-block;
+  margin: 0.5rem 0;
+  padding: 0.5rem;
+}
+
+.peerjs-qr-canvas {
+  display: block;
+  height: 180px !important;
+  width: 180px !important;
+}
+
+.peerjs-advanced {
+  border: 1px solid var(--border-color, #444);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+}
+
+.peerjs-advanced > summary {
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 600;
+  list-style: none;
+  padding: 0.6rem 0.875rem;
+  user-select: none;
+}
+
+.peerjs-advanced > summary::-webkit-details-marker {
+  display: none;
+}
+
+.peerjs-advanced > summary::before {
+  content: "▶ ";
+  font-size: 0.6rem;
+  vertical-align: middle;
+}
+
+.peerjs-advanced[open] > summary::before {
+  content: "▼ ";
+}
+
+.peerjs-advanced-content {
+  border-top: 1px solid var(--border-color, #444);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0.75rem 0.875rem;
+}
+
+.peerjs-row {
+  display: flex;
+  gap: 1rem;
+}
+
+.peerjs-row .form-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.peerjs-connection-status {
+  margin-top: 0.25rem;
+}
+
+.form-group {
+  margin-bottom: 1rem;
+}
+
+.form-label {
+  color: var(--shadow-claw-text-primary);
+  display: block;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  margin-bottom: 0.375rem;
+}
+
+.form-input,
+.form-select {
+  background-color: var(--shadow-claw-bg-primary);
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-s, 0.625rem);
+  box-sizing: border-box;
+  color: var(--shadow-claw-text-primary);
+  font-family: var(--shadow-claw-font-sans);
+  font-size: var(--shadow-claw-font-size-sm);
+  padding: 0.625rem 0.75rem;
+  transition: border-color 0.15s;
+  width: 100%;
+}
+
+.form-input:focus,
+.form-select:focus {
+  border-color: var(--shadow-claw-accent-primary);
+  box-shadow: 0 0 0 0.125rem rgba(0, 0, 0, 0.06);
+  outline: none;
+}
+
+.form-toggle {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.form-toggle input[type="checkbox"] {
+  accent-color: var(--shadow-claw-accent-primary);
+  cursor: pointer;
+  height: 1.125rem;
+  width: 1.125rem;
+}
+
+.form-toggle .form-label {
+  cursor: pointer;
+  display: inline;
+  margin-bottom: 0;
+}
+
+.form-helper {
+  color: var(--shadow-claw-text-tertiary);
+  font-size: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.form-status {
+  color: var(--shadow-claw-text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  margin-bottom: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+.save-btn {
+  background-color: var(--shadow-claw-text-primary);
+  border: none;
+  border-radius: 62.5rem;
+  color: var(--shadow-claw-bg-primary);
+  cursor: pointer;
+  font-size: var(--shadow-claw-font-size-sm);
+  font-weight: 600;
+  padding: 0.625rem 1.5rem;
+  transition: background-color 150ms cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.save-btn:hover {
+  background-color: var(--shadow-claw-accent-primary);
+  color: var(--shadow-claw-on-primary);
+}
+
+.save-btn--inline {
+  margin-top: 0.625rem;
+}
+
+.save-btn--secondary {
+  background-color: var(--shadow-claw-bg-secondary);
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  color: var(--shadow-claw-text-secondary);
+  margin-left: 0.5rem;
+}
+
+.save-btn--secondary:hover {
+  background-color: var(--shadow-claw-bg-tertiary);
+  border-color: var(--shadow-claw-text-primary);
+  color: var(--shadow-claw-text-primary);
+}
+
+.save-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}

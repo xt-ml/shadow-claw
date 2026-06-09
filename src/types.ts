@@ -206,6 +206,7 @@ export interface Channel {
   ): Promise<void>;
   setTyping(groupId: string, typing: boolean): void;
   onMessage(callback: ChannelMessageCallback): void;
+  onTyping?(callback: ChannelTypingCallback): void;
 }
 
 export interface InvokePayload {

@@ -1,12 +1,6 @@
-import { Peer } from "peerjs";
 import type { DataConnection, PeerError } from "peerjs";
+import { Peer } from "peerjs";
 import { Signal } from "signal-polyfill";
-
-import type {
-  Channel,
-  ChannelMessageCallback,
-  MessageAttachment,
-} from "../types.js";
 
 import {
   PEERJS_DEFAULT_HOST,
@@ -15,11 +9,29 @@ import {
   PEERJS_DEFAULT_SECURE,
 } from "../config.js";
 
+import { computeSha256 } from "../crypto.js";
 import { getDb } from "../db/db.js";
 import { readGroupFileBytes } from "../storage/readGroupFileBytes.js";
 import { writeGroupFileBytes } from "../storage/writeGroupFileBytes.js";
-import { computeSha256 } from "../crypto.js";
+
+import type {
+  Channel,
+  ChannelMessageCallback,
+  ChannelTypingCallback,
+  MessageAttachment,
+} from "../types.js";
+
 import { ulid } from "../ulid.js";
+
+/**
+ * Module-level singleton so the chat UI can import and subscribe to it
+ * directly without going through the non-reactive orchestratorStore.orchestrator chain.
+ */
+export const transferProgressSignal = new Signal.State<{
+  count: number;
+  total: number;
+  direction: "send" | "receive";
+} | null>(null);
 
 export interface PeerJsServerConfig {
   host?: string;
@@ -47,6 +59,7 @@ export class PeerJsChannel implements Channel {
 
   running = false;
   messageCallback: ChannelMessageCallback | null = null;
+  typingCallback: ChannelTypingCallback | null = null;
 
   /** Active data connections keyed by remote peer ID */
   connections: Map<string, DataConnection> = new Map();
@@ -54,7 +67,78 @@ export class PeerJsChannel implements Channel {
   /** Signal of connected remote peer IDs */
   connectedPeersSignal = new Signal.State<string[]>([]);
 
+  /** Delegate to the module-level singleton for reactivity across components */
+  readonly transferProgressSignal = transferProgressSignal;
+
   private peer: InstanceType<typeof Peer> | null = null;
+
+  constructor() {
+    if (typeof globalThis.addEventListener === "function") {
+      globalThis.addEventListener("peerjs-dc-handle-chunk", (e: any) => {
+        if (e?.detail?.chunkInfo) {
+          // PeerJS dispatches `count` BEFORE incrementing it (0-indexed pre-increment),
+          // so the actual number of received chunks is count + 1.
+          const { count: rawCount, total } = e.detail.chunkInfo;
+          const received = rawCount + 1;
+          transferProgressSignal.set({
+            count: received,
+            total,
+            direction: "receive",
+          });
+
+          if (received >= total) {
+            setTimeout(() => transferProgressSignal.set(null), 1500);
+          }
+        }
+      });
+    }
+  }
+
+  /**
+   * Track outbound send progress by polling RTCDataChannel.bufferedAmount.
+   * Resolves when all queued data has been flushed to the network.
+   */
+  private _trackSendProgress(
+    conn: DataConnection,
+    totalBytes: number,
+  ): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const rawDc = (conn as any)._dc as RTCDataChannel | undefined;
+      if (!rawDc || totalBytes === 0) {
+        this.transferProgressSignal.set(null);
+        resolve();
+
+        return;
+      }
+
+      this.transferProgressSignal.set({
+        count: 0,
+        total: totalBytes,
+        direction: "send",
+      });
+
+      const poll = setInterval(() => {
+        const buffered = rawDc.bufferedAmount;
+        const sent = Math.max(0, totalBytes - buffered);
+        this.transferProgressSignal.set({
+          count: sent,
+          total: totalBytes,
+          direction: "send",
+        });
+
+        if (buffered === 0) {
+          clearInterval(poll);
+          this.transferProgressSignal.set({
+            count: totalBytes,
+            total: totalBytes,
+            direction: "send",
+          });
+          setTimeout(() => this.transferProgressSignal.set(null), 1500);
+          resolve();
+        }
+      }, 80);
+    });
+  }
 
   private _updateConnectedPeersSignal(): void {
     this.connectedPeersSignal.set(Array.from(this.connections.keys()));
@@ -132,8 +216,6 @@ export class PeerJsChannel implements Channel {
     await this._waitForOpen(conn);
 
     try {
-      const db = await getDb();
-
       // Extract markdown local links from the outgoing text
       const { attachments: markdownAttachments } =
         extractMarkdownAttachments(text);
@@ -154,34 +236,58 @@ export class PeerJsChannel implements Channel {
       const pathRemap = new Map<string, string>();
       const fileParts: any[] = [];
 
-      for (const att of allAttachments) {
-        if (!att.path) {
-          continue;
-        }
-
-        try {
-          const bytes = await readGroupFileBytes(db, groupId, att.path);
-          const hash = await computeSha256(bytes.buffer as ArrayBuffer);
-          const basename = att.path.split("/").pop() || "attachment";
-          const canonicalName = `${hash}_${basename}`;
-
-          // Rename the file in the sender's workspace to the canonical name
-          // so the sender's own markdown links remain valid.
-          if (!pathRemap.has(att.path)) {
-            await writeGroupFileBytes(db, groupId, canonicalName, bytes);
-            pathRemap.set(att.path, canonicalName);
+      try {
+        const db = await getDb();
+        for (const att of allAttachments) {
+          if (!att.path) {
+            continue;
           }
 
-          fileParts.push({
-            kind: "file",
-            // Use the canonical name so the receiver knows the exact filename
-            name: canonicalName,
-            mimeType: (att as any).mimeType || "application/octet-stream",
-            data: await bytesToBase64(bytes),
-          });
-        } catch (err) {
-          console.warn(`PeerJsChannel: failed to read file ${att.path}:`, err);
+          try {
+            const bytes = await readGroupFileBytes(db, groupId, att.path);
+            const hash = await computeSha256(bytes.buffer as ArrayBuffer);
+            const basename = att.path.split("/").pop() || "attachment";
+            const canonicalName = `${hash}_${basename}`;
+
+            if (!pathRemap.has(att.path)) {
+              await writeGroupFileBytes(db, groupId, canonicalName, bytes);
+              pathRemap.set(att.path, canonicalName);
+            }
+
+            const mimeType =
+              (att as any).mimeType || "application/octet-stream";
+
+            // Send the header
+            conn.send({
+              type: "__file_header",
+              name: canonicalName,
+              mimeType,
+              size: bytes.length,
+            });
+
+            // Send the raw binary buffer so PeerJS chunks it natively.
+            // We start tracking progress before the send call so the UI
+            // shows immediately rather than after the first chunk.
+            const trackPromise = this._trackSendProgress(conn, bytes.length);
+            conn.send(bytes.buffer);
+            await trackPromise;
+
+            // Prepare the metadata part for the A2A envelope
+            fileParts.push({
+              kind: "file",
+              name: canonicalName,
+              mimeType,
+              size: bytes.length,
+            });
+          } catch (err) {
+            console.warn(
+              `PeerJsChannel: failed to process file ${att.path}:`,
+              err,
+            );
+          }
         }
+      } catch (err) {
+        console.error("PeerJsChannel: failed to access DB", err);
       }
 
       // Rewrite the outgoing text so links point to the canonical names
@@ -239,6 +345,10 @@ export class PeerJsChannel implements Channel {
 
   onMessage(callback: ChannelMessageCallback): void {
     this.messageCallback = callback;
+  }
+
+  onTyping(callback: ChannelTypingCallback): void {
+    this.typingCallback = callback;
   }
 
   // ---------------------------------------------------------------------------
@@ -389,12 +499,57 @@ export class PeerJsChannel implements Channel {
     });
   }
 
+  private _pendingInboundFile: {
+    name: string;
+    mimeType: string;
+    size: number;
+  } | null = null;
+
   private _handleInboundData(remotePeerId: string, data: unknown): void {
+    if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
+      if (this._pendingInboundFile) {
+        const canonicalName = this._pendingInboundFile.name;
+        const groupId = `peer:${remotePeerId}`;
+        const bytes = new Uint8Array(data as ArrayBuffer);
+
+        getDb().then((db) => {
+          writeGroupFileBytes(db, groupId, canonicalName, bytes).catch(
+            (err) => {
+              console.error(
+                "PeerJsChannel: failed to write inbound file bytes",
+                err,
+              );
+            },
+          );
+        });
+
+        this._pendingInboundFile = null;
+      }
+
+      return;
+    }
+
     if (!data || typeof data !== "object") {
       return;
     }
 
     const msg = data as Record<string, unknown>;
+
+    if (msg.type === "__file_header") {
+      this._pendingInboundFile = {
+        name: msg.name as string,
+        mimeType: msg.mimeType as string,
+        size: msg.size as number,
+      };
+
+      return;
+    }
+
+    if (msg.type === "typing") {
+      this.typingCallback?.(`peer:${remotePeerId}`, !!msg.typing);
+
+      return;
+    }
 
     // Support legacy { type: "chat", text }
     if (msg.type === "chat") {
@@ -435,41 +590,26 @@ export class PeerJsChannel implements Channel {
     parts: any[],
   ): Promise<void> {
     const groupId = `peer:${remotePeerId}`;
-    const db = await getDb();
 
     let text = "";
     const inboundAttachments: MessageAttachment[] = [];
 
-    // Process file parts first (they should arrive first in the envelope),
-    // then text. The sender has already:
-    //   1. Computed the canonical `<hash>_<basename>` filename
-    //   2. Saved the file under that canonical name in its own workspace
-    //   3. Rewritten its markdown links to use the canonical name
-    // So all we need to do here is save the file under `part.name` (the
-    // canonical name) and the incoming text will already link to it correctly.
+    // The sender has already transmitted the raw binary buffers sequentially and
+    // saved them into OPFS in `_handleInboundData`. Here we just compile the metadata
+    // for the chat UI.
     for (const part of parts) {
       if (part.kind === "text" && typeof part.text === "string") {
         text += part.text;
-      } else if (part.kind === "file" && part.data) {
-        try {
-          const bytes = await base64ToBytes(part.data);
+      } else if (part.kind === "file") {
+        const canonicalName =
+          (part.name || "attachment").split("/").pop() || "attachment";
 
-          // part.name is already the canonical `<hash>_<basename>` string;
-          // save it flat in the workspace root so markdown links resolve.
-          const canonicalName =
-            (part.name || "attachment").split("/").pop() || "attachment";
-
-          await writeGroupFileBytes(db, groupId, canonicalName, bytes);
-
-          inboundAttachments.push({
-            fileName: canonicalName,
-            mimeType: part.mimeType,
-            path: canonicalName,
-            size: bytes.length,
-          });
-        } catch (err) {
-          console.warn(`PeerJsChannel: failed to save inbound file part`, err);
-        }
+        inboundAttachments.push({
+          fileName: canonicalName,
+          mimeType: part.mimeType,
+          path: canonicalName,
+          size: part.size || 0,
+        });
       }
     }
 
@@ -507,7 +647,7 @@ export class PeerJsChannel implements Channel {
     try {
       const conn = this.peer.connect(remotePeerId, {
         reliable: true,
-        serialization: "json",
+        serialization: "binary",
       });
 
       this._handleIncomingConnection(conn);
@@ -600,23 +740,4 @@ function normalizeAttachmentPath(path: string): string | null {
   }
 
   return segments.join("/");
-}
-
-async function bytesToBase64(bytes: Uint8Array): Promise<string> {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const dataUrl = reader.result as string;
-      const base64 = dataUrl.split(",")[1];
-      resolve(base64);
-    };
-    reader.readAsDataURL(new Blob([bytes as any]));
-  });
-}
-
-async function base64ToBytes(base64: string): Promise<Uint8Array> {
-  const res = await fetch(`data:application/octet-stream;base64,${base64}`);
-  const buf = await res.arrayBuffer();
-
-  return new Uint8Array(buf);
 }

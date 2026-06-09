@@ -66,6 +66,26 @@ export const attach_file_to_chat: ToolDefinition = {
   },
 };
 
+export const send_file: ToolDefinition = {
+  name: "send_file",
+  description:
+    "Send a workspace file directly to the current peer over the P2P (PeerJS/WebRTC) data channel. " +
+    "Use this when the user is in a peer conversation and explicitly asks to send or transfer a file to their peer. " +
+    "Do NOT use this for local-browser or non-peer conversations — it only works when the active conversation " +
+    "is a peer: group. The file is read from the current group workspace and transferred in binary chunks " +
+    "so there is no size limit.",
+  input_schema: {
+    type: "object",
+    properties: {
+      path: {
+        type: "string",
+        description: "File path relative to the group workspace root",
+      },
+    },
+    required: ["path"],
+  },
+};
+
 export const write_file: ToolDefinition = {
   name: "write_file",
   description:

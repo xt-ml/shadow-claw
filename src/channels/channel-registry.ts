@@ -132,4 +132,15 @@ export class ChannelRegistry {
       entry.channel.onMessage(handler);
     }
   }
+
+  /**
+   * Register a typing handler on all channels.
+   */
+  onTyping(handler: (groupId: string, typing: boolean) => void) {
+    for (const entry of this._entries) {
+      if (entry.channel.onTyping) {
+        entry.channel.onTyping(handler);
+      }
+    }
+  }
 }

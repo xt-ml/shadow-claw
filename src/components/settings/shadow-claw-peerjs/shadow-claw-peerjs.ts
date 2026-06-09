@@ -162,9 +162,35 @@ export class ShadowClawPeerJs extends ShadowClawElement {
       '[data-info="peerjs-trusted-ids-status"]',
     );
     if (trustedStatus) {
-      trustedStatus.textContent = cfg.trustedPeerIds.length
-        ? `Trusted peers: ${cfg.trustedPeerIds.join(", ")}`
-        : "Accepting connections from any peer.";
+      trustedStatus.innerHTML = "";
+      if (cfg.trustedPeerIds.length) {
+        trustedStatus.appendChild(
+          document.createTextNode("Connect to Trusted Peers: "),
+        );
+        cfg.trustedPeerIds.forEach((id) => {
+          const btn = document.createElement("button");
+          btn.className = "save-btn save-btn--secondary";
+          btn.style.padding = "0.25rem 0.5rem";
+          btn.style.fontSize = "0.75rem";
+          btn.style.margin = "0.25rem 0.25rem 0.25rem 0";
+          btn.textContent = id;
+          btn.addEventListener("click", () => {
+            document.dispatchEvent(
+              new CustomEvent("shadow-claw-navigate", {
+                detail: {
+                  page: "chat",
+                  groupId: `peer:${id}`,
+                },
+                bubbles: true,
+                composed: true,
+              }),
+            );
+          });
+          trustedStatus.appendChild(btn);
+        });
+      } else {
+        trustedStatus.textContent = "Accepting connections from any peer.";
+      }
     }
 
     // Custom signaling server

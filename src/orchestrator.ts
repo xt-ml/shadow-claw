@@ -415,11 +415,14 @@ export class Orchestrator {
     // Set up channel registry and router
     this.initializeChannelRegistry();
 
-    // Wire inbound messages from all channels
     this.channelRegistry.onMessage((msg: InboundMessage) => {
       this.enqueue(db, msg).catch((error) => {
         console.error("Failed to enqueue inbound message:", error);
       });
+    });
+
+    this.channelRegistry.onTyping((groupId: string, typing: boolean) => {
+      this.events.emit("typing", { groupId, typing });
     });
 
     await this.loadChannelConfigurations(db);
@@ -3211,6 +3214,37 @@ export class Orchestrator {
 
       case "open-file": {
         this.events.emit("open-file", msg.payload);
+
+        break;
+      }
+
+      case "send-file": {
+        const { groupId: sfGroupId, path: sfPath } = msg.payload;
+        // Fire-and-forget so we don't block the agent loop.
+        // The file is sent as an attachment over the PeerJS channel.
+        (async () => {
+          // Signal to the remote peer that we are doing something
+          this.router?.setTyping(sfGroupId, true);
+          try {
+            await this.router?.send(sfGroupId, "", [
+              {
+                path: sfPath,
+                fileName: sfPath.split("/").pop() || sfPath,
+                mimeType: "application/octet-stream",
+                size: 0,
+              },
+            ]);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            console.error("send-file: delivery failed:", err);
+            showToast(`Failed to send file to peer: ${msg}`, {
+              type: "error",
+              duration: 6000,
+            });
+          } finally {
+            this.router?.setTyping(sfGroupId, false);
+          }
+        })();
 
         break;
       }

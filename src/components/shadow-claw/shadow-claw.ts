@@ -948,6 +948,22 @@ export class ShadowClaw extends ShadowClawElement {
         });
       });
 
+      // Close sidebar when clicking outside of it (mobile only).
+      // Use composedPath() instead of e.target because Shadow DOM event
+      // retargeting makes e.target the host element at the document level,
+      // so contains() checks on shadow-root children always return false.
+      document.addEventListener("click", (e: MouseEvent) => {
+        const path = e.composedPath();
+        if (
+          window.innerWidth < 896 &&
+          sidebar.classList.contains("open") &&
+          !path.includes(sidebar) &&
+          !path.includes(menuButton)
+        ) {
+          sidebar.classList.remove("open");
+        }
+      });
+
       // Responsive matchMedia handler for orientation/resizing
       const matchMedia = globalThis.matchMedia("(min-width: 56rem)");
 

@@ -26,6 +26,7 @@ import {
   open_file,
   patch_file,
   read_file,
+  send_file,
   write_file,
 } from "./files.js";
 
@@ -96,6 +97,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   remote_mcp_call_tool,
   remote_mcp_list_tools,
   send_notification,
+  send_file,
   show_toast,
   update_memory,
   update_task,

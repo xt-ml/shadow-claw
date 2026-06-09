@@ -74,6 +74,12 @@ export function buildSystemPrompt(
       );
     }
 
+    if (has("send_file")) {
+      strategyLines.push(
+        "- Use send_file to transfer a workspace file directly to the connected peer over the P2P data channel. Only use it when the conversation groupId starts with 'peer:'. It is non-blocking — you can continue responding while the file transfers in the background. Do NOT use send_file in browser-local or other non-peer conversations.",
+      );
+    }
+
     if (has("open_file")) {
       strategyLines.push(
         "- Do not use open_file to attach or send files in chat. Use open_file only when the user explicitly asks to open/view a file in the ShadowClaw file viewer.",

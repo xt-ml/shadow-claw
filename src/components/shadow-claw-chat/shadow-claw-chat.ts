@@ -15,6 +15,7 @@ import { getConfig } from "../../db/getConfig.js";
 import { setConfig } from "../../db/setConfig.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { downloadGroupFile } from "../../storage/downloadGroupFile.js";
+import { transferProgressSignal } from "../../channels/peerjs.js";
 
 import { chatUiStore } from "../../stores/chat-ui.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
@@ -1709,6 +1710,42 @@ export class ShadowClawChat extends ShadowClawElement {
           (progress.status === "done"
             ? "Model ready."
             : `Downloading local model... ${percent}%`);
+        barEl.style.width = `${percent}%`;
+      }),
+    );
+
+    this.addCleanup(
+      effect(() => {
+        const progress = transferProgressSignal.get();
+        const progressEl = root.querySelector(".chat__transfer-progress");
+        const labelEl = root.querySelector(".chat__transfer-progress-label");
+        const barEl = root.querySelector(".chat__transfer-progress-bar");
+
+        if (
+          !(progressEl instanceof HTMLElement) ||
+          !(labelEl instanceof HTMLElement) ||
+          !(barEl instanceof HTMLElement)
+        ) {
+          return;
+        }
+
+        if (!progress || progress.total === 0) {
+          progressEl.classList.remove("chat__transfer-progress--active");
+          labelEl.textContent = "";
+          barEl.style.width = "0%";
+
+          return;
+        }
+
+        const normalized = Math.max(
+          0,
+          Math.min(1, progress.count / progress.total),
+        );
+        const percent = Math.round(normalized * 100);
+        const verb = progress.direction === "send" ? "Sending" : "Receiving";
+
+        progressEl.classList.add("chat__transfer-progress--active");
+        labelEl.textContent = `${verb} file… ${percent}%`;
         barEl.style.width = `${percent}%`;
       }),
     );

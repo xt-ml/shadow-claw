@@ -104,24 +104,18 @@ describe("service-worker fetch proxy workspace routes", () => {
 
     const fileHandle = {
       getFile: jest.fn(async () => ({
+        arrayBuffer: async () => new Uint8Array(imageBytes).buffer,
+        size: imageBytes.length,
         type: "image/jpeg",
-        arrayBuffer: async () => imageBytes.buffer.slice(0),
       })),
     };
-    const workspaceDir = {
-      getDirectoryHandle: jest.fn(),
+    const groupDir = {
+      getDirectoryHandle: jest.fn(async () => {
+        throw new DOMException("NotFound", "NotFoundError");
+      }),
       getFileHandle: jest.fn(async (name: string) => {
         if (name === "image.jpg") {
           return fileHandle;
-        }
-
-        throw new DOMException("NotFound", "NotFoundError");
-      }),
-    };
-    const groupDir = {
-      getDirectoryHandle: jest.fn(async (name: string) => {
-        if (name === "workspace") {
-          return workspaceDir;
         }
 
         throw new DOMException("NotFound", "NotFoundError");

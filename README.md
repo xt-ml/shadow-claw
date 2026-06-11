@@ -25,7 +25,7 @@ A fully-functional agent runtime that runs entirely in the browser—no AI proce
 - **Persistent storage**: IndexedDB for messages/config, OPFS for files
 - **Agent tools**: File I/O, shell (with optional WebVM), Git, HTTP, JavaScript execution
 - **Multi-conversation support**: Each conversation has isolated chat history, file workspace, and scheduled tasks
-- **Messaging channels**: Browser chat, Telegram Bot API, iMessage bridge (configurable)
+- **Messaging channels**: Browser chat, PeerJS, Telegram Bot API, iMessage bridge (configurable)
 - **PWA + offline**: Service Worker, Web Push notifications, scheduled task execution even when closed
 - **Desktop app**: Electron wrapper with full parity to the web version
 
@@ -37,6 +37,7 @@ A fully-functional agent runtime that runs entirely in the browser—no AI proce
 - **Model registry** — Dynamic metadata fetch (context window, modality support)
 - **Attachment capabilities** — Native multimodal delivery with automatic text fallback
 - **Remote MCP** — Discover and execute tools from external MCP servers
+- **A2UI interactive surfaces** — Render responsive UI components (Text, Button, TextField, Row/Column layouts) from agents via PeerJS WebRTC with two-way data binding
 - **Email integration** — IMAP/SMTP support with encrypted credentials
 - **Web Share Target** — Receive files/URLs directly from OS share sheet
 - **Scheduled tasks** — Cron expressions with server-side persistence and Web Push
@@ -289,17 +290,19 @@ E2E test architecture: [`e2e/README.md`](e2e/README.md)
 ## Development
 
 ```bash
-npm start                   # Express server
-npm test                    # Jest (*.test.ts files live next to source)
-npm run e2e                 # Playwright E2E tests (e2e/*.test.ts)
-npm run e2e:install         # Install Playwright browser binaries
-npm run tsc                 # TypeScript type-check
-npm run build               # Bundle application via Rollup + generate service worker
-npm run format              # Prettier
-npm run electron            # Launch Electron desktop app
-npm run electron:build      # Build Electron distributable
-npm run electron:build:win  # Build Electron for Windows
-npm run electron:build:mac  # Build Electron for macOS
+npm start                    # Express server
+npm test                     # Jest (*.test.ts files live next to source)
+npm run e2e                  # Playwright E2E tests (e2e/*.test.ts)
+npm run e2e:install          # Install Playwright browser binaries
+npm run tsc                  # TypeScript type-check
+npm run build                # Bundle application via Rollup + generate service worker
+npm run build:service-worker # Generate the Workbox service worker
+npm run build:prod           # Production bundle build
+npm run format               # Prettier
+npm run electron             # Launch Electron desktop app
+npm run electron:build       # Build Electron distributable
+npm run electron:build:win   # Build Electron for Windows
+npm run electron:build:mac   # Build Electron for macOS
 ```
 
 ## License

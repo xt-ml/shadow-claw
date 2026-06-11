@@ -65,6 +65,8 @@ import {
 } from "./tools/remote-mcp.js";
 import { executeFetchUrlTool } from "./tools/fetch-url.js";
 import { executeGitTool } from "./tools/git.js";
+import { A2UI_MINIMAL_CATALOG_ID, MINIMAL_CATALOG_REFERENCE } from "../a2ui.js";
+import type { A2UIEnvelope } from "../a2ui.js";
 
 export { resolveMcpReauth } from "./tools/remote-mcp.js";
 
@@ -739,6 +741,90 @@ export async function executeTool(
             GIT_AUTHOR_EMAIL: CONFIG_KEYS.GIT_AUTHOR_EMAIL,
           },
         });
+      }
+
+      case "list_components": {
+        return MINIMAL_CATALOG_REFERENCE;
+      }
+
+      case "render_component": {
+        const { action, surfaceId } = input;
+
+        if (!surfaceId || typeof surfaceId !== "string") {
+          return "Error: render_component requires a surfaceId string.";
+        }
+
+        let envelope: A2UIEnvelope;
+
+        switch (action) {
+          case "createSurface": {
+            if (!input.rootComponentId) {
+              return "Error: createSurface requires rootComponentId.";
+            }
+
+            if (!input.components || typeof input.components !== "object") {
+              return "Error: createSurface requires a components map.";
+            }
+
+            envelope = {
+              type: "createSurface",
+              surfaceId,
+              catalogId: A2UI_MINIMAL_CATALOG_ID,
+              rootComponentId: input.rootComponentId,
+              components: input.components,
+              dataModel: input.dataModel,
+            };
+
+            break;
+          }
+
+          case "updateComponents": {
+            if (!input.components || typeof input.components !== "object") {
+              return "Error: updateComponents requires a components map.";
+            }
+
+            envelope = {
+              type: "updateComponents",
+              surfaceId,
+              components: input.components,
+            };
+
+            break;
+          }
+
+          case "updateDataModel": {
+            if (!input.patches || typeof input.patches !== "object") {
+              return "Error: updateDataModel requires a patches object (JSON Pointer map).";
+            }
+
+            envelope = {
+              type: "updateDataModel",
+              surfaceId,
+              patches: input.patches,
+            };
+
+            break;
+          }
+
+          case "deleteSurface": {
+            envelope = {
+              type: "deleteSurface",
+              surfaceId,
+            };
+
+            break;
+          }
+
+          default:
+            return `Error: Unknown render_component action "${action}". Valid: createSurface, updateComponents, updateDataModel, deleteSurface.`;
+        }
+
+        post({
+          type: "render-component",
+          payload: { groupId, envelope },
+        });
+
+        return `A2UI surface "${surfaceId}" rendered (action: ${action}).`;
       }
 
       default:

@@ -19,6 +19,7 @@ import { remote_mcp_call_tool, remote_mcp_list_tools } from "./mcp.js";
 import { list_tool_profiles, manage_tools } from "./manage_tools.js";
 import { update_memory } from "./memory.js";
 import { send_notification, show_toast } from "./notifications.js";
+import { list_components, render_component } from "./a2ui.js";
 
 import {
   attach_file_to_chat,
@@ -86,6 +87,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   git_status,
   git_sync,
   javascript,
+  list_components,
   list_files,
   manage_email,
   list_tasks,
@@ -96,6 +98,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   read_file,
   remote_mcp_call_tool,
   remote_mcp_list_tools,
+  render_component,
   send_notification,
   send_file,
   show_toast,

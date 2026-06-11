@@ -14,7 +14,7 @@ export function buildCspReportOnlyValue(options: CspOptions = {}): string {
     "object-src 'none'",
     "img-src 'self' data: blob: https: http:",
     "media-src 'self' data: blob: https: http:",
-    "font-src 'self' data:",
+    "font-src 'self' data: https://fonts.googleapis.com https://fonts.gstatic.com",
     "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
     "script-src 'self'",
     "worker-src 'self' blob:",

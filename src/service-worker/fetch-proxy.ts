@@ -97,37 +97,41 @@ async function openWorkspaceRouteFile(
     return null;
   }
 
-  const root = await storage.getDirectory();
-  const appRoot = await root.getDirectoryHandle(OPFS_ROOT, { create: true });
-  const groupsDir = await appRoot.getDirectoryHandle("groups", {
-    create: true,
-  });
-  const safeGroupId = groupId.replace(/:/g, "-");
-  const groupDir = await groupsDir.getDirectoryHandle(safeGroupId, {
-    create: false,
-  });
-  const workspaceDir = await groupDir.getDirectoryHandle("workspace", {
-    create: false,
-  });
+  try {
+    const root = await storage.getDirectory();
+    const appRoot = await root.getDirectoryHandle(OPFS_ROOT, { create: true });
+    const groupsDir = await appRoot.getDirectoryHandle("groups", {
+      create: true,
+    });
+    const safeGroupId = groupId.replace(/:/g, "-");
+    const groupDir = await groupsDir.getDirectoryHandle(safeGroupId, {
+      create: false,
+    });
 
-  const parts = workspacePath.split("/").filter(Boolean);
-  if (parts.length === 0) {
+    // Files are stored directly in the group directory (no workspace/ subdir)
+    const parts = workspacePath.split("/").filter(Boolean);
+    if (parts.length === 0) {
+      return null;
+    }
+
+    const fileName = parts.pop();
+    if (!fileName) {
+      return null;
+    }
+
+    let current = groupDir;
+    for (const part of parts) {
+      current = await current.getDirectoryHandle(part, { create: false });
+    }
+
+    const fileHandle = await current.getFileHandle(fileName, {
+      create: false,
+    });
+
+    return await fileHandle.getFile();
+  } catch {
     return null;
   }
-
-  const fileName = parts.pop();
-  if (!fileName) {
-    return null;
-  }
-
-  let current = workspaceDir;
-  for (const part of parts) {
-    current = await current.getDirectoryHandle(part, { create: false });
-  }
-
-  const fileHandle = await current.getFileHandle(fileName, { create: false });
-
-  return await fileHandle.getFile();
 }
 
 async function respondWithWorkspaceRouteFile(
@@ -153,7 +157,9 @@ async function respondWithWorkspaceRouteFile(
       status: 200,
       headers: {
         "Content-Type": file.type || mimeTypeFromPath(target.path),
+        "Content-Length": String(file.size),
         "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
       },
     });
   } catch {

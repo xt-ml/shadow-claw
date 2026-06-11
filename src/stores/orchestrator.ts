@@ -13,6 +13,8 @@ import { cloneGroupMessages } from "../db/cloneGroupMessages.js";
 import { cloneGroupTasks } from "../db/cloneGroupTasks.js";
 import { getConfig } from "../db/getConfig.js";
 import { setConfig } from "../db/setConfig.js";
+import { saveMessage } from "../db/saveMessage.js";
+import { ulid } from "../ulid.js";
 import {
   listGroups,
   createGroup,
@@ -51,6 +53,7 @@ import type {
   ContextUsage,
   GroupMeta,
   SavedPageRef,
+  A2UIAction,
 } from "../types.js";
 import type { Orchestrator } from "../orchestrator.js";
 import type { StorageStatus } from "../storage/storage.js";
@@ -296,6 +299,10 @@ export class OrchestratorStore {
   public _sidebarDefaultPage: Signal.State<"chat" | "tasks" | "files">;
   public _pages: Signal.State<SavedPageRef[]>;
   public _activePinnedPage: Signal.State<SavedPageRef | null>;
+  public _remoteAgentStatusByGroup: Signal.State<
+    Map<string, OrchestratorState>
+  >;
+  public _remoteAgentTypingByGroup: Signal.State<Map<string, boolean>>;
   private _hadPersistedActivePage: boolean;
   private _initResolve: (() => void) | null;
   private _whenInitialized: Promise<void>;
@@ -397,6 +404,8 @@ export class OrchestratorStore {
     this._sidebarDefaultPage = new Signal.State("chat");
     this._pages = new Signal.State([]);
     this._activePinnedPage = new Signal.State(null);
+    this._remoteAgentStatusByGroup = new Signal.State(new Map());
+    this._remoteAgentTypingByGroup = new Signal.State(new Map());
     this._hadPersistedActivePage = false;
     this._initResolve = null;
     this._whenInitialized = new Promise<void>((resolve) => {
@@ -817,6 +826,50 @@ export class OrchestratorStore {
     return this._vmBashFullInternetAccess.get();
   }
 
+  /**
+   * Get the remote agent status for a specific group.
+   * Returns "idle" if no remote status is set.
+   */
+  getRemoteAgentStatus(groupId: string): OrchestratorState {
+    const statusMap = this._remoteAgentStatusByGroup.get();
+
+    return statusMap.get(groupId) || "idle";
+  }
+
+  /**
+   * Set the remote agent status for a specific group.
+   */
+  setRemoteAgentStatus(groupId: string, status: OrchestratorState): void {
+    const statusMap = this._remoteAgentStatusByGroup.get();
+    const newMap = new Map(statusMap);
+    newMap.set(groupId, status);
+    this._remoteAgentStatusByGroup.set(newMap);
+  }
+
+  /**
+   * Get the remote agent typing status for a specific group.
+   */
+  isRemoteAgentTyping(groupId: string): boolean {
+    const typingMap = this._remoteAgentTypingByGroup.get();
+
+    return typingMap.get(groupId) || false;
+  }
+
+  /**
+   * Set the remote agent typing status for a specific group.
+   */
+  setRemoteAgentTyping(groupId: string, typing: boolean): void {
+    const typingMap = this._remoteAgentTypingByGroup.get();
+    const newMap = new Map(typingMap);
+    if (typing) {
+      newMap.set(groupId, true);
+    } else {
+      newMap.delete(groupId);
+    }
+
+    this._remoteAgentTypingByGroup.set(newMap);
+  }
+
   setReady(ready: boolean = true): void {
     this._ready.set(ready);
   }
@@ -845,6 +898,53 @@ export class OrchestratorStore {
     }
 
     // Subscribe to orchestrator events
+    orch.events.on("a2ui-surface", async ({ groupId, envelope }) => {
+      if (groupId) {
+        void this.ensureGroupExists(db, groupId);
+      }
+
+      const messages = this._messages.get();
+      const existingMsgIndex = messages.findIndex((m) =>
+        m.a2uiEnvelopes?.some((e) => e.surfaceId === envelope.surfaceId),
+      );
+
+      if (existingMsgIndex !== -1) {
+        const existingMsg = messages[existingMsgIndex];
+        const updatedEnvelopes = [
+          ...(existingMsg.a2uiEnvelopes || []),
+          envelope,
+        ];
+        const updatedMsg = {
+          ...existingMsg,
+          a2uiEnvelopes: updatedEnvelopes,
+        };
+        const updatedMessages = [...messages];
+        updatedMessages[existingMsgIndex] = updatedMsg;
+        this._messages.set(updatedMessages);
+
+        await saveMessage(db, updatedMsg);
+      } else {
+        const isFromMe = !groupId.startsWith("peer:");
+        const newMsg: StoredMessage = {
+          id: ulid(),
+          groupId,
+          sender: isFromMe ? "agent" : groupId.replace(/^peer:/, ""),
+          content: "",
+          timestamp: Date.now(),
+          channel: groupId.startsWith("peer:") ? "peerjs" : "browser",
+          isFromMe,
+          isTrigger: false,
+          a2uiEnvelopes: [envelope],
+        };
+
+        if (groupId === this._activeGroupId.get()) {
+          this._messages.set([...messages, newMsg]);
+        }
+
+        await saveMessage(db, newMsg);
+      }
+    });
+
     orch.events.on("message", (msg) => {
       if (msg.groupId) {
         void this.ensureGroupExists(db, msg.groupId, msg.timestamp);
@@ -1072,12 +1172,25 @@ export class OrchestratorStore {
   /**
    * Send a message
    */
-  sendMessage(text: string, attachments: MessageAttachment[] = []): void {
-    this.orchestrator?.submitMessage?.(
-      text,
-      this._activeGroupId.get(),
-      attachments,
-    );
+  sendMessage(
+    text: string,
+    attachments: MessageAttachment[] = [],
+    a2uiAction?: A2UIAction,
+  ): void {
+    if (a2uiAction !== undefined) {
+      this.orchestrator?.submitMessage?.(
+        text,
+        this._activeGroupId.get(),
+        attachments,
+        a2uiAction,
+      );
+    } else {
+      this.orchestrator?.submitMessage?.(
+        text,
+        this._activeGroupId.get(),
+        attachments,
+      );
+    }
   }
 
   /**

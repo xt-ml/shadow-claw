@@ -92,6 +92,7 @@ import type {
   MessageAttachment,
   ModelDownloadProgressPayload,
   Task,
+  A2UIAction,
 } from "./types.js";
 
 /**
@@ -423,6 +424,10 @@ export class Orchestrator {
 
     this.channelRegistry.onTyping((groupId: string, typing: boolean) => {
       this.events.emit("typing", { groupId, typing });
+      // Update remote agent typing status for peer channels
+      if (groupId.startsWith("peer:")) {
+        orchestratorStore.setRemoteAgentTyping(groupId, typing);
+      }
     });
 
     await this.loadChannelConfigurations(db);
@@ -1258,8 +1263,9 @@ export class Orchestrator {
     text: string,
     groupId = DEFAULT_GROUP_ID,
     attachments: MessageAttachment[] = [],
+    a2uiAction?: A2UIAction,
   ): void {
-    this.browserChat.submit(text, groupId, attachments);
+    this.browserChat.submit(text, groupId, attachments, a2uiAction);
   }
 
   async newSession(
@@ -2297,7 +2303,44 @@ export class Orchestrator {
     }
   }
 
+  private clearPeerJsTypingState(groupId: string): void {
+    orchestratorStore.setRemoteAgentTyping(groupId, false);
+  }
+
   async enqueue(db: ShadowClawDatabase, msg: InboundMessage): Promise<void> {
+    // ── A2UI inbound dispatch ────────────────────────────────────────────────
+    // Surface envelopes and actions arrive via the peer channel. Emit them so
+    // the UI layer can render/update surfaces, then fall through to persist the
+    // message normally (so the conversation history is complete).
+    if (msg.a2uiEnvelopes && msg.a2uiEnvelopes.length > 0) {
+      for (const envelope of msg.a2uiEnvelopes) {
+        this.events.emit("a2ui-surface", {
+          groupId: msg.groupId,
+          envelope,
+        });
+      }
+    }
+
+    if (msg.a2uiAction) {
+      this.events.emit("a2ui-action", {
+        groupId: msg.groupId,
+        action: msg.a2uiAction,
+      });
+    }
+
+    // If there's nothing else in the message (no text, no attachments, only
+    // A2UI parts), skip the rest of the enqueue flow.
+    const hasTextContent = !!msg.content;
+    const hasAttachments = (msg.attachments?.length ?? 0) > 0;
+    if (
+      !hasTextContent &&
+      !hasAttachments &&
+      (msg.a2uiEnvelopes?.length ?? 0) > 0
+    ) {
+      return;
+    }
+
+    // ── Normal message handling ──────────────────────────────────────────────
     const directToolCommand = this.parseDirectToolCommand(msg);
     const isFromBrowser = msg.channel === "browser"; // Messages submitted in ShadowClaw UI
     const autoTrigger = this.channelRegistry.shouldAutoTrigger(msg.groupId);
@@ -2358,6 +2401,13 @@ export class Orchestrator {
 
     await saveMessage(db, stored);
     this.events.emit("message", stored);
+
+    // Keep peer typing state in sync, but do not treat every P2P chat message
+    // as an agent response. Normal peer messages should not force the remote
+    // peer into a temporary "responding" state.
+    if (msg.channel === "peerjs") {
+      this.clearPeerJsTypingState(msg.groupId);
+    }
 
     // Forward browser messages to the P2P channel so users can chat directly
     if (isFromBrowser && msg.groupId.startsWith("peer:")) {
@@ -3245,6 +3295,27 @@ export class Orchestrator {
             this.router?.setTyping(sfGroupId, false);
           }
         })();
+
+        break;
+      }
+
+      case "render-component": {
+        const { groupId: rcGroupId, envelope } = msg.payload;
+
+        // Always emit locally so the local UI renderer can display the surface.
+        this.events.emit("a2ui-surface", { groupId: rcGroupId, envelope });
+
+        // Forward over the WebRTC channel when targeting a peer conversation.
+        if (rcGroupId.startsWith("peer:")) {
+          const channel = this.router?.findChannel(rcGroupId);
+          if (channel && "sendA2UI" in channel) {
+            (channel as any)
+              .sendA2UI(rcGroupId, envelope)
+              .catch((err: unknown) =>
+                console.error("render-component: peer delivery failed:", err),
+              );
+          }
+        }
 
         break;
       }

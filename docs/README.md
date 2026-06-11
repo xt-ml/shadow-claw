@@ -38,6 +38,7 @@ Detailed docs for each major subsystem.
 | [Model Registry & Capabilities](subsystems/providers.md#model-registry) | Dynamic model metadata fetching and modality capability detection                                                       |
 | [Attachment Capabilities](subsystems/attachment-capabilities.md)        | MIME-aware attachment handling and native vs fallback delivery                                                          |
 | [Chat Template Sanitizer](subsystems/sanitizer.md)                      | Strip control tokens and structural markers from local model output                                                     |
+| [A2UI Interactive Surfaces](subsystems/a2ui.md)                         | A2UI v1.0 catalog renderer, component rendering, PeerJS surface delivery, data binding                                  |
 | [Trusted Types Tinyfill](subsystems/trusted-types-tinyfill.md)          | Polyfill for Trusted Types API, browser compatibility, security rationale                                               |
 
 ### Guides
@@ -91,4 +92,5 @@ The _why_ behind key choices.
 - Decision docs describe _why decisions were made_ and are append-only (supersede, don't edit).
 - For UI documentation, keep component organization guidance aligned with `src/components/common/` for shared primitives and `src/components/settings/` for settings feature components.
 - Keep references in this index in sync with actual files under `docs/`, plus root-level `README.md` and `e2e/README.md` when behavior changes cross boundaries.
+- When adding or renaming docs pages, update `docs/README.md` and verify the relevant references in `AGENTS.md`.
 - Use Mermaid diagrams generously — they render on GitHub and in most editors.

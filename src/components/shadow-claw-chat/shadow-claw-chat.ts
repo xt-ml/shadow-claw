@@ -20,6 +20,7 @@ import { transferProgressSignal } from "../../channels/peerjs.js";
 import { chatUiStore } from "../../stores/chat-ui.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
+import type { OrchestratorState } from "../../stores/orchestrator.js";
 
 import {
   inferAttachmentMimeType,
@@ -46,6 +47,7 @@ import {
 
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
+import "../shadow-claw-a2ui/shadow-claw-a2ui.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
 const AUTO_SCROLL_THRESHOLD = 80;
@@ -75,6 +77,15 @@ type MessageDraftPayload = {
   text: string;
   attachments: MessageAttachment[];
 };
+
+export function getPeerChatDisplayStatus(
+  remoteStatus: OrchestratorState,
+  isRemoteTyping: boolean,
+): OrchestratorState {
+  return remoteStatus === "idle" && isRemoteTyping
+    ? "responding"
+    : remoteStatus;
+}
 
 const elementName = "shadow-claw-chat";
 
@@ -405,6 +416,27 @@ export class ShadowClawChat extends ShadowClawElement {
       messagesEl.addEventListener("click", (event) => {
         void this.handleMessageLinkClick(event);
       });
+
+      messagesEl.addEventListener(
+        "shadow-claw-a2ui-action",
+        async (event: Event) => {
+          const customEvent = event as CustomEvent;
+          const { groupId, action } = customEvent.detail;
+
+          // Route the action back to the PeerJS channel if targeting a peer conversation.
+          if (groupId.startsWith("peer:")) {
+            const router = orchestratorStore.orchestrator?.router;
+            const channel = router?.findChannel(groupId);
+            if (channel && "sendA2UIAction" in channel) {
+              await (channel as any).sendA2UIAction(groupId, action);
+            }
+          }
+
+          // Format and submit the action to our local or remote agent context.
+          const textContent = `[A2UI ACTION] surfaceId: "${action.surfaceId}", actionId: "${action.actionId}", dataModel: ${JSON.stringify(action.dataModel)}`;
+          orchestratorStore.sendMessage(textContent, [], action);
+        },
+      );
 
       const resizeObserver = new ResizeObserver(() => {
         if (this.shouldAutoFollow(messagesEl)) {
@@ -1517,6 +1549,16 @@ export class ShadowClawChat extends ShadowClawElement {
               contentEl.appendChild(attachmentsEl);
             }
 
+            if (msg.a2uiEnvelopes && msg.a2uiEnvelopes.length > 0) {
+              const a2uiEl = document.createElement("shadow-claw-a2ui");
+              (a2uiEl as any).groupId = msg.groupId;
+              for (const envelope of msg.a2uiEnvelopes) {
+                (a2uiEl as any).applyEnvelope(envelope);
+              }
+
+              contentEl.appendChild(a2uiEl);
+            }
+
             msgDiv.appendChild(contentEl);
 
             container.appendChild(msgDiv);
@@ -1851,15 +1893,29 @@ export class ShadowClawChat extends ShadowClawElement {
     this.addCleanup(
       effect(() => {
         const state = orchestratorStore.state;
+        const activeGroupId = orchestratorStore.activeGroupId;
         const statusText = root.querySelector(".chat__status-text");
         const statusIndicator = root.querySelector(".chat__status-indicator");
+        const typingIndicator = root.querySelector(".chat__typing-indicator");
 
         if (
           !(statusText instanceof HTMLElement) ||
-          !(statusIndicator instanceof HTMLElement)
+          !(statusIndicator instanceof HTMLElement) ||
+          !(typingIndicator instanceof HTMLElement)
         ) {
           return;
         }
+
+        // Determine the display status: use remote agent status for peer channels, local state otherwise
+        const isPeerChannel = activeGroupId.startsWith("peer:");
+        const isRemoteTyping =
+          isPeerChannel && orchestratorStore.isRemoteAgentTyping(activeGroupId);
+        const displayStatus = isPeerChannel
+          ? getPeerChatDisplayStatus(
+              orchestratorStore.getRemoteAgentStatus(activeGroupId),
+              isRemoteTyping,
+            )
+          : state;
 
         statusIndicator.classList.remove(
           "chat__status-indicator--thinking",
@@ -1867,15 +1923,19 @@ export class ShadowClawChat extends ShadowClawElement {
           "chat__status-indicator--error",
         );
 
-        if (state === "thinking" || state === "responding") {
-          statusIndicator.classList.add(`chat__status-indicator--${state}`);
+        if (displayStatus === "thinking" || displayStatus === "responding") {
+          statusIndicator.classList.add(
+            `chat__status-indicator--${displayStatus}`,
+          );
         }
 
-        if (state === "error") {
+        if (displayStatus === "error") {
           statusIndicator.classList.add("chat__status-indicator--error");
         }
 
-        statusText.textContent = state.charAt(0).toUpperCase() + state.slice(1);
+        statusText.textContent =
+          displayStatus.charAt(0).toUpperCase() + displayStatus.slice(1);
+        typingIndicator.toggleAttribute("hidden", !isRemoteTyping);
       }),
     );
 

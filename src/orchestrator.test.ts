@@ -3,6 +3,7 @@ import { jest } from "@jest/globals";
 import { LLAMAFILE_PROXY_URL } from "./config.js";
 import { Orchestrator } from "./orchestrator.js";
 import { buildSystemPrompt } from "./worker/system-prompt.js";
+import { orchestratorStore } from "./stores/orchestrator.js";
 import { toolsStore } from "./stores/tools.js";
 
 describe("buildSystemPrompt", () => {
@@ -192,6 +193,17 @@ describe("Orchestrator", () => {
     });
 
     expect(events).toEqual([{ groupId: "g1", path: "a.txt" }]);
+  });
+
+  it("does not set remote agent responding status for inbound peer messages", () => {
+    const o = new Orchestrator();
+    const statusSpy = jest.spyOn(orchestratorStore, "setRemoteAgentStatus");
+    const typingSpy = jest.spyOn(orchestratorStore, "setRemoteAgentTyping");
+
+    (o as any).clearPeerJsTypingState?.("peer:remote-peer");
+
+    expect(statusSpy).not.toHaveBeenCalled();
+    expect(typingSpy).toHaveBeenCalledWith("peer:remote-peer", false);
   });
 
   it("tracks vm status from worker messages", async () => {

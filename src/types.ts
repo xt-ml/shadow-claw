@@ -4,6 +4,10 @@ import type { Orchestrator } from "./orchestrator.js";
 */
 import type { ToastType } from "./stores/toast.js";
 import type { VMBootMode } from "./vm.js";
+import type { A2UIEnvelope, A2UIAction } from "./a2ui.js";
+
+// Re-export so callers can import from types.ts
+export type { A2UIEnvelope, A2UIAction };
 
 /*
 import type {
@@ -89,6 +93,10 @@ export interface InboundMessage {
   timestamp: number; // epoch ms
   channel: ChannelType;
   attachments?: MessageAttachment[];
+  /** A2UI surface envelopes received in this message (peer channel only) */
+  a2uiEnvelopes?: A2UIEnvelope[];
+  /** A2UI action dispatched by the remote peer's UI (peer channel only) */
+  a2uiAction?: A2UIAction;
 }
 
 export interface StoredMessage {
@@ -101,6 +109,8 @@ export interface StoredMessage {
   isFromMe: boolean;
   isTrigger: boolean;
   attachments?: MessageAttachment[];
+  a2uiEnvelopes?: A2UIEnvelope[];
+  a2uiAction?: A2UIAction;
 }
 
 export interface Task {
@@ -368,7 +378,14 @@ export type WorkerOutbound =
         duration?: number;
       };
     }
-  | { type: "manage-tools"; payload: ManageToolsPayload };
+  | { type: "manage-tools"; payload: ManageToolsPayload }
+  | {
+      type: "render-component";
+      payload: {
+        groupId: string;
+        envelope: A2UIEnvelope;
+      };
+    };
 
 export type WorkerInbound =
   | { type: "invoke"; payload: InvokePayload }

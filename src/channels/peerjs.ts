@@ -21,6 +21,8 @@ import type {
   MessageAttachment,
 } from "../types.js";
 
+import type { A2UIEnvelope, A2UIAction } from "../a2ui.js";
+
 import { ulid } from "../ulid.js";
 
 /**
@@ -343,6 +345,80 @@ export class PeerJsChannel implements Channel {
     }
   }
 
+  /**
+   * Send an A2UI surface envelope to a peer as a `kind: "a2ui"` A2A part.
+   */
+  async sendA2UI(groupId: string, envelope: A2UIEnvelope): Promise<void> {
+    const remotePeerId = groupId.replace(/^peer:/, "");
+    const conn = this._getOrOpenConnection(remotePeerId);
+
+    if (!conn) {
+      console.warn(
+        `PeerJsChannel.sendA2UI: no connection available for ${remotePeerId}`,
+      );
+
+      return;
+    }
+
+    await this._waitForOpen(conn);
+
+    try {
+      const a2uiEnvelopeObj = {
+        jsonrpc: "2.0",
+        method: "message/send",
+        id: ulid(),
+        params: {
+          message: {
+            role: "agent",
+            parts: [{ kind: "a2ui", envelope }],
+          },
+        },
+      };
+      conn.send(a2uiEnvelopeObj);
+    } catch (err) {
+      console.error(`PeerJsChannel.sendA2UI: failed for ${remotePeerId}:`, err);
+    }
+  }
+
+  /**
+   * Send an A2UI action back to the peer (fired when the local user interacts
+   * with a rendered surface — e.g. clicks a Button).
+   */
+  async sendA2UIAction(groupId: string, action: A2UIAction): Promise<void> {
+    const remotePeerId = groupId.replace(/^peer:/, "");
+    const conn = this._getOrOpenConnection(remotePeerId);
+
+    if (!conn) {
+      console.warn(
+        `PeerJsChannel.sendA2UIAction: no connection available for ${remotePeerId}`,
+      );
+
+      return;
+    }
+
+    await this._waitForOpen(conn);
+
+    try {
+      const actionEnvelope = {
+        jsonrpc: "2.0",
+        method: "message/send",
+        id: ulid(),
+        params: {
+          message: {
+            role: "user",
+            parts: [{ kind: "a2ui-action", action }],
+          },
+        },
+      };
+      conn.send(actionEnvelope);
+    } catch (err) {
+      console.error(
+        `PeerJsChannel.sendA2UIAction: failed for ${remotePeerId}:`,
+        err,
+      );
+    }
+  }
+
   onMessage(callback: ChannelMessageCallback): void {
     this.messageCallback = callback;
   }
@@ -593,6 +669,8 @@ export class PeerJsChannel implements Channel {
 
     let text = "";
     const inboundAttachments: MessageAttachment[] = [];
+    const a2uiEnvelopes: A2UIEnvelope[] = [];
+    let a2uiAction: A2UIAction | undefined;
 
     // The sender has already transmitted the raw binary buffers sequentially and
     // saved them into OPFS in `_handleInboundData`. Here we just compile the metadata
@@ -610,11 +688,22 @@ export class PeerJsChannel implements Channel {
           path: canonicalName,
           size: part.size || 0,
         });
+      } else if (part.kind === "a2ui" && part.envelope) {
+        a2uiEnvelopes.push(part.envelope as A2UIEnvelope);
+      } else if (part.kind === "a2ui-action" && part.action) {
+        a2uiAction = part.action as A2UIAction;
       }
     }
 
     text = text.trim();
-    if (!text && inboundAttachments.length === 0) {
+
+    // Only suppress the callback if there is truly nothing to deliver.
+    if (
+      !text &&
+      inboundAttachments.length === 0 &&
+      a2uiEnvelopes.length === 0 &&
+      !a2uiAction
+    ) {
       return;
     }
 
@@ -627,6 +716,8 @@ export class PeerJsChannel implements Channel {
       channel: "peerjs",
       attachments:
         inboundAttachments.length > 0 ? inboundAttachments : undefined,
+      a2uiEnvelopes: a2uiEnvelopes.length > 0 ? a2uiEnvelopes : undefined,
+      a2uiAction,
     });
   }
 

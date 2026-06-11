@@ -23,6 +23,10 @@ const __dirname = dirname(__filename);
 const isProduction = process.env.NODE_ENV === "production";
 
 const onwarn = (warning, warn) => {
+  if (warning.code === "THIS_IS_UNDEFINED") {
+    return;
+  }
+
   if (
     warning.code === "CIRCULAR_DEPENDENCY" &&
     warning.message.includes("node_modules")

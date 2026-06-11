@@ -4,6 +4,15 @@
       <div slot="status" class="chat__status" aria-live="polite">
         <span class="chat__status-indicator" aria-hidden="true">&#9679;</span>
         <span class="chat__status-text">Ready</span>
+        <span
+          class="chat__typing-indicator"
+          aria-label="Remote agent typing"
+          hidden
+        >
+          <span class="chat__typing-dot"></span
+          ><span class="chat__typing-dot"></span
+          ><span class="chat__typing-dot"></span>
+        </span>
       </div>
       <shadow-claw-page-header-action-button
         slot="actions"

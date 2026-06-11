@@ -11,6 +11,7 @@ import type {
   ChannelTypingCallback,
   InboundMessage,
   MessageAttachment,
+  A2UIAction,
 } from "../types.js";
 
 import { DEFAULT_GROUP_ID } from "../config.js";
@@ -47,6 +48,7 @@ export class BrowserChatChannel implements Channel {
     text: string,
     groupId?: string,
     attachments: MessageAttachment[] = [],
+    a2uiAction?: A2UIAction,
   ) {
     const gid = groupId || this.activeGroupId;
     const msg: InboundMessage = {
@@ -57,6 +59,7 @@ export class BrowserChatChannel implements Channel {
       timestamp: Date.now(),
       channel: "browser",
       attachments,
+      a2uiAction,
     };
 
     this.messageCallback?.(msg);

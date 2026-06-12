@@ -75,6 +75,7 @@ export const render_component: ToolDefinition = {
           "Flat map of componentId → component spec (required for createSurface/updateComponents). " +
           "Each value must have a 'component' field: Text | Row | Column | Button | TextField | Image | Icon | Video | AudioPlayer | " +
           "List | Card | Tabs | Modal | Divider | CheckBox | ChoicePicker | Slider | DateTimeInput. " +
+          "DO NOT NEST properties under a 'properties' key; put them directly at the top-level of the spec alongside 'component'. " +
           "Children arrays contain other component IDs (strings), not nested specs.",
         additionalProperties: true,
       },

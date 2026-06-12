@@ -27,7 +27,14 @@ export function renderChoicePicker(
     }
   }
 
-  spec.options.forEach((option) => {
+  (spec.options || []).forEach((rawOption) => {
+    // LLMs sometimes pass arrays of strings/numbers instead of the full ChoicePickerOption object
+    const isPrimitive =
+      typeof rawOption === "string" || typeof rawOption === "number";
+    const option = isPrimitive
+      ? { label: String(rawOption), value: String(rawOption) }
+      : rawOption;
+
     const id = `a2ui-choice-${surface.surfaceId}-${spec.id}-${option.value}`;
     const item = document.createElement("label");
     item.className = "a2ui__choice-item";

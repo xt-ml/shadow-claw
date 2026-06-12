@@ -750,6 +750,21 @@ export async function executeTool(
       case "render_component": {
         const { action, surfaceId } = input;
 
+        if (input.components && typeof input.components === "object") {
+          for (const key of Object.keys(input.components)) {
+            const spec = input.components[key];
+            if (
+              spec &&
+              typeof spec === "object" &&
+              "properties" in spec &&
+              typeof spec.properties === "object"
+            ) {
+              input.components[key] = { ...spec, ...(spec.properties as any) };
+              delete input.components[key].properties;
+            }
+          }
+        }
+
         if (!surfaceId || typeof surfaceId !== "string") {
           return "Error: render_component requires a surfaceId string.";
         }

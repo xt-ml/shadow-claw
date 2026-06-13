@@ -62,10 +62,6 @@ describe("MINIMAL_CATALOG_REFERENCE", () => {
     expect(MINIMAL_CATALOG_REFERENCE).toContain("TextField");
   });
 
-  it("mentions DynamicString / $dataModel syntax", () => {
-    expect(MINIMAL_CATALOG_REFERENCE).toContain("$dataModel");
-  });
-
   it("includes the catalog ID", () => {
     expect(MINIMAL_CATALOG_REFERENCE).toContain(A2UI_MINIMAL_CATALOG_ID);
   });

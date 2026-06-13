@@ -48,6 +48,7 @@ import {
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 import "../shadow-claw-a2ui/shadow-claw-a2ui.js";
+import "../shadow-claw-a2ui-interceptor/shadow-claw-a2ui-interceptor.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
 const AUTO_SCROLL_THRESHOLD = 80;
@@ -1550,13 +1551,17 @@ export class ShadowClawChat extends ShadowClawElement {
             }
 
             if (msg.a2uiEnvelopes && msg.a2uiEnvelopes.length > 0) {
+              const interceptorEl = document.createElement(
+                "shadow-claw-a2ui-interceptor",
+              );
               const a2uiEl = document.createElement("shadow-claw-a2ui");
               (a2uiEl as any).groupId = msg.groupId;
               for (const envelope of msg.a2uiEnvelopes) {
                 (a2uiEl as any).applyEnvelope(envelope);
               }
 
-              contentEl.appendChild(a2uiEl);
+              interceptorEl.appendChild(a2uiEl);
+              contentEl.appendChild(interceptorEl);
             }
 
             msgDiv.appendChild(contentEl);

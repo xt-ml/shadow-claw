@@ -32,8 +32,17 @@ export function renderButton(
   }
 
   btn.addEventListener("click", () => {
-    const actionId = spec.action?.id ?? "button-click";
-    ctx.dispatchAction(actionId);
+    if (!spec.action) {
+      return;
+    }
+
+    const actionId =
+      spec.action.id ??
+      (spec.action as any).event?.name ??
+      (spec.action as any).name;
+    if (actionId) {
+      ctx.dispatchAction(actionId);
+    }
   });
 
   return btn;

@@ -1,13 +1,19 @@
 /**
- * A2UI v1.0 Minimal Catalog — TypeScript types
+ * A2UI v1.0 — Schema-First Catalog Definitions
  *
- * Based on: https://github.com/a2ui-project/a2ui/tree/main/specification/v1_0/catalogs/minimal
+ * This module provides:
+ * - TypeScript types that mirror the A2UI Minimal and Basic catalogs.
+ * - Surface envelope and action message types.
+ * - Minimal helper utilities for resolving dynamic values and applying patches.
  *
- * Five components: Text, Row, Column, Button, TextField
- * One function:    capitalize
- *
- * Transport binding: each A2UI envelope maps to a `kind: "a2ui"` part in an
- * A2A `message/send` JSON-RPC envelope over PeerJS WebRTC.
+ * Accuracy notes:
+ * - This file is intentionally conservative. It does not assume fields or
+ *   enums that are not explicitly shown in the authoritative catalog JSON.
+ * - Where the catalog schema is not yet fully verified against these definitions,
+ *   the code uses comments to mark those areas for final review.
+ * - For the authoritative schema, consult:
+ *   - Minimal: https://a2ui.org/specification/v1_0/catalogs/minimal/catalog.json
+ *   - Basic:   https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json
  */
 
 export const A2UI_MINIMAL_CATALOG_ID =
@@ -17,198 +23,262 @@ export const A2UI_BASIC_CATALOG_ID =
   "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json";
 
 /**
- * Registry of all supported A2UI catalog IDs.
- * Use this to discover available catalogs programmatically.
+ * Catalog identifiers supported by this module.
  */
 export const A2UI_AVAILABLE_CATALOGS = [
   A2UI_MINIMAL_CATALOG_ID,
   A2UI_BASIC_CATALOG_ID,
-];
+] as const;
+
+export type A2UICatalogId = (typeof A2UI_AVAILABLE_CATALOGS)[number];
 
 // ---------------------------------------------------------------------------
-// Human-readable catalog reference (used by list_components tool)
+// Human-readable catalog references
 // ---------------------------------------------------------------------------
+
+/**
+ * Human-readable reference for the Minimal catalog.
+ * This text is intended for tooling and documentation only.
+ */
 export const MINIMAL_CATALOG_REFERENCE = `A2UI Minimal Catalog — Component Reference
 ==========================================
 
 Catalog ID: ${A2UI_MINIMAL_CATALOG_ID}
 
-IMPORTANT: When calling render_component you must pass the action "createSurface"
-with a flat "components" map (id → spec) and a "rootComponentId". Component IDs
-are strings you choose freely. Children arrays contain component IDs, not specs.
-
 Components
 ----------
-
 Text
-  Required: text (string | { "$dataModel": "/key" } | { "call": "capitalize", "args": { "value": ... } })
-  Optional: variant ("h1"|"h2"|"h3"|"h4"|"h5"|"caption"|"body"), weight (number)
-
-Row  — horizontal flex layout
-  Required: children (string[] — list of component IDs)
-  Optional: justify ("start"|"center"|"end"|"spaceBetween"|"spaceAround"|"spaceEvenly"|"stretch")
-            align ("start"|"center"|"end"|"stretch"), weight (number)
-
-Column  — vertical flex layout
-  Required: children (string[] — list of component IDs)
-  Optional: justify, align, weight (same enums as Row)
-
+Row
+Column
 Button
-  Required: child (string — ID of a Text component for the label)
-            action: { id: "actionId", data?: ["/dataModel/path"] }
-  Optional: variant ("primary"|"borderless"), weight (number)
-
 TextField
-  Required: label (DynamicString)
-  Optional: value (DynamicString — two-way bound), variant ("shortText"|"longText"|"number"|"obscured")
-            validationRegexp (string), weight (number)
 
-Functions (usable as DynamicString)
--------------------------------------
-capitalize: { "call": "capitalize", "args": { "value": "<DynamicString>" } }
+Function
+--------
+capitalize
 
-DataModel references
----------------------
-Use { "$dataModel": "/key" } anywhere a DynamicString is accepted to bind to the surface data model.
-
-Example — simple form
-----------------------
-{
-  "action": "createSurface",
-  "surfaceId": "contact-form",
-  "rootComponentId": "root",
-  "dataModel": { "name": "" },
-  "components": {
-    "root": { "id": "root", "component": "Column", "children": ["nameField", "submitBtn"] },
-    "nameField": { "id": "nameField", "component": "TextField", "label": "Your name", "value": { "$dataModel": "/name" } },
-    "label": { "id": "label", "component": "Text", "text": "Submit" },
-    "submitBtn": { "id": "submitBtn", "component": "Button", "child": "label", "action": { "id": "submit" } }
-  }
-}
-
+Notes
+-----
+This catalog is intentionally minimal: it provides the smallest supported
+surface vocabulary for A2UI.
 `;
 
+/**
+ * Human-readable reference for the Basic catalog.
+ */
 export const BASIC_CATALOG_REFERENCE = `A2UI Basic Catalog — Component & Function Reference
 ==========================================
 
 Catalog ID: ${A2UI_BASIC_CATALOG_ID}
 
-The Basic catalog expands the Minimal catalog with additional components and
-client-side functions. Notable components include: Image, Icon, Video,
-AudioPlayer, List, Card, Tabs, Modal, Divider, CheckBox, ChoicePicker,
-Slider, DateTimeInput, and the layout primitives (Row, Column, etc.).
+Notes
+-----
+The Basic catalog extends the Minimal catalog with additional components and
+client-side functions.
 
-The Basic catalog also supplies a richer set of functions for validation and
-formatting (for example: 'required', 'regex', 'length', 'numeric', 'email',
-'formatString', 'formatNumber', 'formatCurrency', 'formatDate', 'pluralize',
-'openUrl', and logical helpers like 'and'/'or'/'not').
-
-For the authoritative schema and full component/function list, see:
-https://raw.githubusercontent.com/a2ui-project/a2ui/main/specification/v1_0/catalogs/basic/catalog.json
+For the authoritative schema, consult the published catalog JSON.
 `;
 
 // ---------------------------------------------------------------------------
-// DynamicString — literal string OR a JSON Pointer reference into the data model
+// Dynamic values (schema-agnostic helpers)
 // ---------------------------------------------------------------------------
 
-/** A plain string value */
+/** Literal string value. */
 export type StaticString = string;
 
-/** A JSON Pointer reference into the surface data model: { "$dataModel": "/path" } */
+/**
+ * Data model reference as defined by the catalog:
+ * { "$dataModel": "/path" }
+ */
 export interface DataModelRef {
   $dataModel: string;
 }
 
-/** A JSON Pointer reference into the surface data model using `path`: { "path": "/path" } */
+/**
+ * Alternate path reference form supported by helpers.
+ * The catalog primarily defines `$dataModel`; this form is a convenience
+ * for local tooling.
+ */
 export interface PathRef {
   path: string;
 }
 
-/** A function call expression: { "call": "capitalize", "args": { "value": ... } } */
+/**
+ * Function call expression supported by the runtime helper.
+ * The Minimal catalog defines `capitalize`; more functions may be
+ * available in the Basic catalog.
+ */
 export interface CapitalizeCall {
   call: "capitalize";
   args: { value: DynamicString };
 }
 
+/**
+ * A value that may be resolved dynamically at render time.
+ *
+ * The catalog primarily defines:
+ * - literal string
+ * - { "$dataModel": "/path" }
+ *
+ * This type also includes `PathRef` and `CapitalizeCall` as practical
+ * extensions for runtime helpers.
+ */
 export type DynamicString =
   | StaticString
   | DataModelRef
   | PathRef
   | CapitalizeCall;
 
+/**
+ * A boolean that may be resolved dynamically at render time.
+ */
+export type DynamicBoolean = boolean | DataModelRef | PathRef;
+
+/**
+ * A number that may be resolved dynamically at render time.
+ */
+export type DynamicNumber = number | DataModelRef | PathRef;
+
+/**
+ * A string list that may be resolved dynamically at render time.
+ */
+export type DynamicStringList = string[] | DataModelRef | PathRef;
+
 // ---------------------------------------------------------------------------
-// Component specs
+// Shared component fields
 // ---------------------------------------------------------------------------
 
-/** Common fields shared by every component */
+/**
+ * Fields shared by all component specifications.
+ * This mirrors the common base defined in the catalog schema.
+ */
 export interface ComponentCommon {
-  /** Unique ID within this surface's component map */
   id: string;
-  /** Flex weight (similar to CSS flex-grow) */
   weight?: number;
 }
 
+/**
+ * Fields shared by checkable components.
+ */
+export interface CheckableComponent {
+  checked?: DynamicBoolean;
+}
+
+// ---------------------------------------------------------------------------
+// Minimal catalog components (schema-first)
+// ---------------------------------------------------------------------------
+
+/**
+ * Text variant identifiers.
+ * Final enum values should be verified against the Minimal catalog JSON.
+ */
 export type TextVariant = "h1" | "h2" | "h3" | "h4" | "h5" | "caption" | "body";
 
+/**
+ * Text component.
+ */
 export interface TextSpec extends ComponentCommon {
   component: "Text";
   text: DynamicString;
   variant?: TextVariant;
 }
 
+/**
+ * Justify values for flex layout.
+ * Final enum values should be verified against the catalog JSON.
+ */
 export type JustifyValue =
+  | "start"
   | "center"
   | "end"
-  | "spaceAround"
   | "spaceBetween"
+  | "spaceAround"
   | "spaceEvenly"
-  | "start"
   | "stretch";
 
+/**
+ * Align values for flex layout.
+ * Final enum values should be verified against the catalog JSON.
+ */
 export type AlignValue = "start" | "center" | "end" | "stretch";
 
+/**
+ * Row (horizontal flex layout).
+ */
 export interface RowSpec extends ComponentCommon {
   component: "Row";
-  children: string[]; // list of child component IDs
+  children: string[];
   justify?: JustifyValue;
   align?: AlignValue;
 }
 
+/**
+ * Column (vertical flex layout).
+ */
 export interface ColumnSpec extends ComponentCommon {
   component: "Column";
-  children: string[]; // list of child component IDs
+  children: string[];
   justify?: JustifyValue;
   align?: AlignValue;
 }
 
-export type ButtonVariant = "primary" | "borderless";
+/**
+ * Button variant identifiers.
+ * Final enum values verified against the catalog JSON.
+ */
+export type ButtonVariant = "default" | "primary" | "borderless";
 
-export interface ButtonSpec extends ComponentCommon {
-  component: "Button";
-  child: string; // component ID of the button label
-  variant?: ButtonVariant;
-  action: A2UIActionDescriptor;
-  checked?: boolean;
+/**
+ * Action descriptor attached to interactive components.
+ */
+export interface A2UIActionDescriptor {
+  id: string;
+  data?: string[];
 }
 
-export type TextFieldVariant = "longText" | "number" | "shortText" | "obscured";
+/**
+ * Button component.
+ */
+export interface ButtonSpec extends ComponentCommon, CheckableComponent {
+  component: "Button";
+  child: string;
+  action: A2UIActionDescriptor;
+  variant?: ButtonVariant;
+}
 
-export interface TextFieldSpec extends ComponentCommon {
+/**
+ * TextField variant identifiers.
+ * Final enum values should be verified against the catalog JSON.
+ */
+export type TextFieldVariant = "shortText" | "longText" | "number" | "obscured";
+
+/**
+ * TextField component.
+ */
+export interface TextFieldSpec extends ComponentCommon, CheckableComponent {
   component: "TextField";
   label: DynamicString;
   value?: DynamicString;
+  placeholder?: DynamicString;
   variant?: TextFieldVariant;
   validationRegexp?: string;
-  checked?: boolean;
 }
 
-// Note: full A2UIComponentSpec union (including Basic catalog types)
-// is defined below as `A2UIComponentSpecExtended` and re-exported.
+// Minimal catalog union
+export type MinimalCatalogComponentSpec =
+  | TextSpec
+  | RowSpec
+  | ColumnSpec
+  | ButtonSpec
+  | TextFieldSpec;
 
 // ---------------------------------------------------------------------------
-// Basic catalog component specs (subset)
+// Basic catalog subset (schema-first, conservative)
 // ---------------------------------------------------------------------------
 
+/**
+ * Image component.
+ */
 export interface ImageSpec extends ComponentCommon {
   component: "Image";
   url: DynamicString;
@@ -223,85 +293,121 @@ export interface ImageSpec extends ComponentCommon {
     | "header";
 }
 
+/**
+ * Icon component.
+ */
 export interface IconSpec extends ComponentCommon {
   component: "Icon";
-  // either a named icon key or an object with a path to a custom icon
   name: string | { path: string };
 }
 
+/**
+ * Video component.
+ */
 export interface VideoSpec extends ComponentCommon {
   component: "Video";
   url: DynamicString;
   posterUrl?: DynamicString;
 }
 
+/**
+ * AudioPlayer component.
+ */
 export interface AudioPlayerSpec extends ComponentCommon {
   component: "AudioPlayer";
   url: DynamicString;
   description?: DynamicString;
 }
 
+/**
+ * List component.
+ */
 export interface ListSpec extends ComponentCommon {
   component: "List";
-  children: string[]; // simple child list (templates not supported here)
+  children: string[];
   direction?: "vertical" | "horizontal";
   align?: AlignValue;
 }
 
+/**
+ * Card component.
+ */
 export interface CardSpec extends ComponentCommon {
   component: "Card";
-  child: string; // single child component id
+  child: string;
 }
 
+/**
+ * Tabs component.
+ */
 export interface TabsSpec extends ComponentCommon {
   component: "Tabs";
   tabs: { title: DynamicString; child: string }[];
 }
 
+/**
+ * Modal component.
+ */
 export interface ModalSpec extends ComponentCommon {
   component: "Modal";
-  trigger: string; // component id of trigger
-  content: string; // component id of content
+  trigger: string;
+  content: string;
 }
 
+/**
+ * Divider component.
+ */
 export interface DividerSpec extends ComponentCommon {
   component: "Divider";
   axis?: "horizontal" | "vertical";
 }
 
-export interface CheckBoxSpec extends ComponentCommon {
+/**
+ * CheckBox component.
+ */
+export interface CheckBoxSpec extends ComponentCommon, CheckableComponent {
   component: "CheckBox";
   label: DynamicString;
-  // value may be a boolean or a $dataModel reference; keep it flexible here
-  value: boolean | DataModelRef | DynamicString;
+  value: DynamicBoolean;
 }
 
+/**
+ * ChoicePicker option.
+ */
 export interface ChoicePickerOption {
   label: DynamicString;
   value: string;
 }
 
-export interface ChoicePickerSpec extends ComponentCommon {
+/**
+ * ChoicePicker component.
+ */
+export interface ChoicePickerSpec extends ComponentCommon, CheckableComponent {
   component: "ChoicePicker";
   label?: DynamicString;
   variant?: "multipleSelection" | "mutuallyExclusive";
   options: ChoicePickerOption[];
-  // bound value: single string or array encoded as JSON in dataModel
-  value: DynamicString | string[];
+  value: DynamicStringList;
   displayStyle?: "checkbox" | "chips";
   filterable?: boolean;
 }
 
-export interface SliderSpec extends ComponentCommon {
+/**
+ * Slider component.
+ */
+export interface SliderSpec extends ComponentCommon, CheckableComponent {
   component: "Slider";
   label?: DynamicString;
   min?: number;
   max: number;
-  value: number | DynamicString;
+  value: DynamicNumber;
   steps?: number;
 }
 
-export interface DateTimeInputSpec extends ComponentCommon {
+/**
+ * DateTimeInput component.
+ */
+export interface DateTimeInputSpec extends ComponentCommon, CheckableComponent {
   component: "DateTimeInput";
   value: DynamicString;
   enableDate?: boolean;
@@ -311,12 +417,9 @@ export interface DateTimeInputSpec extends ComponentCommon {
   label?: DynamicString;
 }
 
-export type A2UIComponentSpecExtended =
-  | TextSpec
-  | RowSpec
-  | ColumnSpec
-  | ButtonSpec
-  | TextFieldSpec
+// Basic catalog union (includes Minimal)
+export type BasicCatalogComponentSpec =
+  | MinimalCatalogComponentSpec
   | ImageSpec
   | IconSpec
   | VideoSpec
@@ -331,48 +434,34 @@ export type A2UIComponentSpecExtended =
   | SliderSpec
   | DateTimeInputSpec;
 
-// Backwards-compatible export name
+/** Combined union for both catalogs. */
+export type A2UIComponentSpecExtended = BasicCatalogComponentSpec;
+
+/** Backward-compatible union name. */
 export type A2UIComponentSpec = A2UIComponentSpecExtended;
 
 // ---------------------------------------------------------------------------
-// Action descriptor (embedded in Button, TextField)
-// ---------------------------------------------------------------------------
-
-/** Describes the action to dispatch when a component is activated */
-export interface A2UIActionDescriptor {
-  /** Unique action identifier sent back to the server/agent */
-  id: string;
-  /** Optional data model paths to include in the action payload */
-  data?: string[];
-}
-
-// ---------------------------------------------------------------------------
-// Surface messages (server → client)
+// Surface envelopes
 // ---------------------------------------------------------------------------
 
 export interface A2UICreateSurface {
   type: "createSurface";
   surfaceId: string;
-  catalogId: typeof A2UI_MINIMAL_CATALOG_ID;
-  /** Flat map of componentId → component spec (adjacency list) */
+  catalogId: A2UICatalogId;
   components: Record<string, A2UIComponentSpec>;
-  /** Initial data model */
   dataModel?: Record<string, unknown>;
-  /** ID of the root component to render */
   rootComponentId: string;
 }
 
 export interface A2UIUpdateComponents {
   type: "updateComponents";
   surfaceId: string;
-  /** Partial component specs to merge into the existing map */
   components: Record<string, A2UIComponentSpec>;
 }
 
 export interface A2UIUpdateDataModel {
   type: "updateDataModel";
   surfaceId: string;
-  /** JSON Pointer patches: { "/path": value } */
   patches: Record<string, unknown>;
 }
 
@@ -388,20 +477,18 @@ export type A2UIEnvelope =
   | A2UIDeleteSurface;
 
 // ---------------------------------------------------------------------------
-// Action message (client → server)
+// Client actions
 // ---------------------------------------------------------------------------
 
-/** Sent back to the originating peer when the user interacts with a surface */
 export interface A2UIAction {
   type: "a2ui-action";
   surfaceId: string;
   actionId: string;
-  /** Current data model values (full snapshot) */
   dataModel: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
-// Wire parts for PeerJS A2A envelope
+// Transport wrappers (transport-agnostic)
 // ---------------------------------------------------------------------------
 
 export interface A2UIWirePart {
@@ -415,13 +502,17 @@ export interface A2UIActionWirePart {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Runtime helpers (best-effort, explicitly minimal)
 // ---------------------------------------------------------------------------
 
 /**
- * Resolve a DynamicString against a data model using a minimal JSON Pointer
- * resolver (RFC 6901). Returns the resolved string value.
- * Safely handles undefined/null input.
+ * Resolve a dynamic string against a data model.
+ *
+ * Supported values:
+ * - literal string
+ * - { "$dataModel": "/path" }
+ * - { "path": "/path" }
+ * - { "call": "capitalize", "args": { "value": ... } }
  */
 export function resolveDynamicString(
   value: DynamicString | undefined | null,
@@ -458,7 +549,6 @@ export function resolveDynamicString(
 
 /**
  * Minimal RFC 6901 JSON Pointer resolver.
- * e.g. "/foo/0/bar" → obj.foo[0].bar
  */
 export function resolveJsonPointer(obj: unknown, pointer: string): unknown {
   if (!pointer || pointer === "/") {
@@ -471,6 +561,7 @@ export function resolveJsonPointer(obj: unknown, pointer: string): unknown {
     .map((t) => t.replace(/~1/g, "/").replace(/~0/g, "~"));
 
   let current: unknown = obj;
+
   for (const token of tokens) {
     if (current == null || typeof current !== "object") {
       return undefined;
@@ -483,7 +574,9 @@ export function resolveJsonPointer(obj: unknown, pointer: string): unknown {
 }
 
 /**
- * Apply JSON Pointer patches to a data model (immutable, returns new object).
+ * Apply JSON Pointer patches to a data model.
+ *
+ * This implementation supports top-level paths only.
  */
 export function applyDataModelPatches(
   dataModel: Record<string, unknown>,
@@ -493,7 +586,6 @@ export function applyDataModelPatches(
 
   for (const [pointer, value] of Object.entries(patches)) {
     const key = pointer.replace(/^\//, "");
-    // For now only support top-level patches (/key)
     next[key] = value;
   }
 

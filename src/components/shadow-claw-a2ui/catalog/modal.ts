@@ -30,26 +30,43 @@ export function renderModal(
   const content = document.createElement("div");
   content.className = "a2ui__modal-content";
 
-  const close = document.createElement("button");
-  close.type = "button";
-  close.className = "a2ui__modal-close";
-  close.textContent = "Close";
-  close.addEventListener("click", () => {
+  const closeOverlay = () => {
     overlay.style.display = "none";
     content.replaceChildren();
-  });
+  };
 
-  overlay.append(close, content);
-
-  triggerEl.addEventListener("click", () => {
-    content.replaceChildren();
-    const childEl = ctx.renderComponent(spec.content);
-    if (childEl) {
-      content.appendChild(childEl);
+  overlay.addEventListener("click", (e) => {
+    if (e.target === overlay) {
+      closeOverlay();
     }
-
-    overlay.style.display = "block";
   });
+
+  overlay.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      closeOverlay();
+    }
+  });
+
+  overlay.append(content);
+
+  triggerEl.addEventListener(
+    "click",
+    (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      content.replaceChildren();
+      const childEl = ctx.renderComponent(spec.content);
+      if (childEl) {
+        content.appendChild(childEl);
+      }
+
+      overlay.style.display = "block";
+      overlay.tabIndex = -1;
+      overlay.focus();
+    },
+    { capture: true },
+  );
 
   if (ctx.attachModalOverlay) {
     ctx.attachModalOverlay(overlay);

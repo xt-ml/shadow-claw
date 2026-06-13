@@ -305,6 +305,47 @@ export class ShadowClawA2UI extends ShadowClawElement {
   // ---------------------------------------------------------------------------
 
   #dispatchAction(actionId: string, surface: SurfaceState): void {
+    // Intercept media playback actions to control local audio/video elements
+    if (actionId === "playTrack" || actionId === "play") {
+      const mediaElements = this.shadowRoot?.querySelectorAll(
+        "audio, video",
+      ) as NodeListOf<HTMLMediaElement> | undefined;
+      mediaElements?.forEach((media) => media.play().catch(console.error));
+
+      return; // Handled locally
+    }
+
+    if (actionId === "pauseTrack" || actionId === "pause") {
+      const mediaElements = this.shadowRoot?.querySelectorAll(
+        "audio, video",
+      ) as NodeListOf<HTMLMediaElement> | undefined;
+      mediaElements?.forEach((media) => media.pause());
+
+      return; // Handled locally
+    }
+
+    // Intercept modal close actions to close open modals locally
+    if (actionId === "closeModal" || actionId === "close") {
+      const overlays = this.shadowRoot?.querySelectorAll(
+        ".a2ui__modal-overlay",
+      ) as NodeListOf<HTMLElement> | undefined;
+      let handled = false;
+      overlays?.forEach((overlay) => {
+        if (overlay.style.display !== "none") {
+          overlay.style.display = "none";
+          const content = overlay.querySelector(".a2ui__modal-content");
+          if (content) {
+            content.replaceChildren();
+          }
+
+          handled = true;
+        }
+      });
+      if (handled) {
+        return; // Handled locally;
+      }
+    }
+
     // Use this.#surface (current state) not surface param (may be stale)
     // to ensure form data updates are captured
     const currentSurface = this.#surface ?? surface;
@@ -315,7 +356,7 @@ export class ShadowClawA2UI extends ShadowClawElement {
       dataModel: { ...currentSurface.dataModel },
     };
 
-    // Bubble up to shadow-claw-chat so it can route back to the peer
+    // Bubble up to shadow-claw-chat
     this.dispatchEvent(
       new CustomEvent("shadow-claw-a2ui-action", {
         bubbles: true,

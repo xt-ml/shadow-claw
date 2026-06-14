@@ -9,10 +9,10 @@ import {
   PEERJS_DEFAULT_SECURE,
 } from "../config.js";
 
-import { computeSha256 } from "../crypto.js";
 import { getDb } from "../db/db.js";
 import { readGroupFileBytes } from "../storage/readGroupFileBytes.js";
 import { writeGroupFileBytes } from "../storage/writeGroupFileBytes.js";
+import { groupFileExists } from "../storage/groupFileExists.js";
 
 import type {
   Channel,
@@ -23,7 +23,7 @@ import type {
 
 import type { A2UIEnvelope, A2UIAction } from "../a2ui.js";
 
-import { ulid } from "../ulid.js";
+import { ulid } from "../utils/ulid.js";
 
 /**
  * Module-level singleton so the chat UI can import and subscribe to it
@@ -68,6 +68,9 @@ export class PeerJsChannel implements Channel {
 
   /** Signal of connected remote peer IDs */
   connectedPeersSignal = new Signal.State<string[]>([]);
+
+  /** Maps inbound original canonical filenames to their locally renamed final filenames */
+  private _inboundRemap = new Map<string, string>();
 
   /** Delegate to the module-level singleton for reactivity across components */
   readonly transferProgressSignal = transferProgressSignal;
@@ -247,12 +250,9 @@ export class PeerJsChannel implements Channel {
 
           try {
             const bytes = await readGroupFileBytes(db, groupId, att.path);
-            const hash = await computeSha256(bytes.buffer as ArrayBuffer);
-            const basename = att.path.split("/").pop() || "attachment";
-            const canonicalName = `${hash}_${basename}`;
+            const canonicalName = att.path;
 
             if (!pathRemap.has(att.path)) {
-              await writeGroupFileBytes(db, groupId, canonicalName, bytes);
               pathRemap.set(att.path, canonicalName);
             }
 
@@ -588,15 +588,36 @@ export class PeerJsChannel implements Channel {
         const groupId = `peer:${remotePeerId}`;
         const bytes = new Uint8Array(data as ArrayBuffer);
 
-        getDb().then((db) => {
-          writeGroupFileBytes(db, groupId, canonicalName, bytes).catch(
-            (err) => {
-              console.error(
-                "PeerJsChannel: failed to write inbound file bytes",
-                err,
-              );
-            },
-          );
+        getDb().then(async (db) => {
+          let finalName = canonicalName;
+          let counter = 1;
+
+          while (await groupFileExists(db, groupId, finalName)) {
+            const lastDotIndex = canonicalName.lastIndexOf(".");
+            const hasExt =
+              lastDotIndex > 0 && lastDotIndex < canonicalName.length - 1;
+
+            if (hasExt) {
+              const base = canonicalName.substring(0, lastDotIndex);
+              const ext = canonicalName.substring(lastDotIndex);
+              finalName = `${base} (${counter})${ext}`;
+            } else {
+              finalName = `${canonicalName} (${counter})`;
+            }
+
+            counter++;
+          }
+
+          if (finalName !== canonicalName) {
+            this._inboundRemap.set(canonicalName, finalName);
+          }
+
+          writeGroupFileBytes(db, groupId, finalName, bytes).catch((err) => {
+            console.error(
+              "PeerJsChannel: failed to write inbound file bytes",
+              err,
+            );
+          });
         });
 
         this._pendingInboundFile = null;
@@ -679,13 +700,28 @@ export class PeerJsChannel implements Channel {
       if (part.kind === "text" && typeof part.text === "string") {
         text += part.text;
       } else if (part.kind === "file") {
-        const canonicalName =
-          (part.name || "attachment").split("/").pop() || "attachment";
+        let rawPath = part.name || "attachment";
+
+        if (this._inboundRemap.has(rawPath)) {
+          const remappedName = this._inboundRemap.get(rawPath)!;
+
+          // Rewrite the text to use the remapped name
+          const escapedOld = rawPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          text = text.replace(
+            new RegExp(`(!?\\[.*?\\])\\(${escapedOld}\\)`, "g"),
+            `$1(${remappedName})`,
+          );
+
+          this._inboundRemap.delete(rawPath);
+          rawPath = remappedName;
+        }
+
+        const fileName = rawPath.split("/").pop() || "attachment";
 
         inboundAttachments.push({
-          fileName: canonicalName,
+          fileName,
           mimeType: part.mimeType,
-          path: canonicalName,
+          path: rawPath,
           size: part.size || 0,
         });
       } else if (part.kind === "a2ui" && part.envelope) {

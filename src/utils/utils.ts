@@ -1,5 +1,7 @@
 import DOMPurify, { Config } from "dompurify";
 
+export type HashInput = File | Blob | ArrayBuffer | ArrayBufferView;
+
 /**
  * Format a date for use in a filename: yyyy-mm-dd_hh-mm-ss
  */
@@ -214,4 +216,42 @@ export function handleSpecialLinkNavigation(
   }
 
   return false;
+}
+
+/**
+ * Convert various input types to an ArrayBuffer for hashing.
+ */
+export function toArrayBuffer(input: HashInput): Promise<ArrayBuffer> {
+  if (input instanceof Blob) {
+    return input.arrayBuffer();
+  }
+
+  if (input instanceof ArrayBuffer) {
+    return Promise.resolve(input.slice(0) as ArrayBuffer);
+  }
+
+  const { buffer, byteOffset, byteLength } = input;
+
+  return Promise.resolve(
+    buffer.slice(byteOffset, byteOffset + byteLength) as ArrayBuffer,
+  );
+}
+
+/**
+ * Convert an ArrayBuffer to a hex string.
+ */
+export function bufferToHex(buffer: ArrayBuffer): string {
+  return Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/**
+ * Compute the SHA-256 hash and return it as a hex string.
+ */
+export async function computeSha256(input: HashInput): Promise<string> {
+  const data = await toArrayBuffer(input);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+
+  return bufferToHex(hashBuffer);
 }

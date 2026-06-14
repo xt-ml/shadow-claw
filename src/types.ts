@@ -113,11 +113,21 @@ export interface StoredMessage {
   a2uiAction?: A2UIAction;
 }
 
+export interface TaskToolCall {
+  name: string;
+  input: Record<string, any>;
+  suppressOutput?: boolean;
+}
+
 export interface Task {
   id: string;
   groupId: string;
   schedule: string; // cron expression
+
+  type?: "prompt" | "tools";
   prompt: string;
+  tools?: TaskToolCall[];
+
   enabled: boolean;
 
   lastRun: number | null;
@@ -403,4 +413,12 @@ export type WorkerInbound =
   | { type: "vm-terminal-input"; payload: { data: string } }
   | { type: "vm-terminal-close"; payload?: { groupId?: string } }
   | { type: "vm-workspace-sync"; payload?: { groupId?: string } }
-  | { type: "vm-workspace-flush"; payload?: { groupId?: string } };
+  | { type: "vm-workspace-flush"; payload?: { groupId?: string } }
+  | {
+      type: "execute-direct-tool";
+      payload: { groupId: string; name: string; input: Record<string, any> };
+    }
+  | {
+      type: "execute-task-tools";
+      payload: { groupId: string; tools: TaskToolCall[] };
+    };

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { jest } from "@jest/globals";
 
 let executeTool: any;
@@ -56,7 +55,9 @@ describe("executeTool.js", () => {
     mockBootVM = jest.fn();
     mockExecuteInVM = jest.fn();
     mockExecuteShell = jest.fn();
-    mockFormatShellOutput = jest.fn((shellResult) => shellResult.stdout || "");
+    mockFormatShellOutput = jest.fn(
+      (shellResult: any) => shellResult.stdout || "",
+    );
     mockGetVMBootModePreference = jest.fn(() => "auto");
     mockGetVMStatus = jest.fn(() => ({
       ready: false,
@@ -72,7 +73,7 @@ describe("executeTool.js", () => {
     mockReadGroupFile = jest.fn();
     mockReadGroupFileBytes = jest.fn();
     mockSandboxedEval = jest.fn();
-    mockStripHtml = jest.fn((html) => html.replace(/<[^>]*>/g, ""));
+    mockStripHtml = jest.fn((html: any) => html.replace(/<[^>]*>/g, ""));
     mockUlid = jest.fn(() => "mock-ulid");
     mockWriteGroupFile = jest.fn();
     mockWriteGroupFileBytes = jest.fn();
@@ -173,7 +174,7 @@ describe("executeTool.js", () => {
 
     jest.unstable_mockModule("../git/credentials.js", () => ({
       resolveGitCredentials: mockResolveGitCredentials,
-      buildAuthHeaders: jest.fn((creds) => {
+      buildAuthHeaders: jest.fn((creds: any) => {
         if (creds.token) {
           return { Authorization: `token ${creds.token}` };
         }
@@ -230,7 +231,7 @@ describe("executeTool.js", () => {
       writeGroupFileBytes: mockWriteGroupFileBytes,
     }));
 
-    jest.unstable_mockModule("../ulid.js", () => ({
+    jest.unstable_mockModule("../utils/ulid.js", () => ({
       ulid: mockUlid,
     }));
 
@@ -253,7 +254,7 @@ describe("executeTool.js", () => {
     // Mock withRetry to pass through the function call without actual retries.
     // This keeps executeTool tests focused; retry logic is tested in withRetry.test.mjs.
     jest.unstable_mockModule("./withRetry.js", () => ({
-      withRetry: jest.fn(async (fn) => fn()),
+      withRetry: jest.fn(async (fn: any) => fn()),
       isRetryableFetchError: jest.fn(() => false),
       isRetryableHttpError: jest.fn(() => false),
       RETRYABLE_STATUS_CODES: new Set([408, 429, 500, 502, 503, 504]),
@@ -629,7 +630,7 @@ describe("executeTool.js", () => {
   it("should handle read_file with paths preferring paths over path", async () => {
     (mockReadGroupFile as any).mockResolvedValue("multi content");
 
-    const result = await executeTool(
+    await executeTool(
       {},
       "read_file",
       { path: "ignored.js", paths: ["used.js"] },
@@ -930,7 +931,7 @@ describe("executeTool.js", () => {
     };
 
     let capturedOptions: any;
-    (global as any).fetch = jest.fn((url: string, opts: any) => {
+    (global as any).fetch = jest.fn((_: string, opts: any) => {
       capturedOptions = opts;
 
       return Promise.resolve(mockResponse);
@@ -1023,8 +1024,7 @@ describe("executeTool.js", () => {
       statusText: "OK",
     };
 
-    const fetchMock = jest
-      .fn()
+    const fetchMock = (jest.fn() as any)
       .mockResolvedValueOnce(first401)
       .mockResolvedValueOnce(second200);
 
@@ -1104,8 +1104,7 @@ describe("executeTool.js", () => {
       statusText: "OK",
     };
 
-    const fetchMock = jest
-      .fn()
+    const fetchMock = (jest.fn() as any)
       .mockResolvedValueOnce(first403)
       .mockResolvedValueOnce(second200);
 
@@ -1278,8 +1277,7 @@ describe("executeTool.js", () => {
       statusText: "OK",
     };
 
-    const fetchMock = jest
-      .fn()
+    const fetchMock = (jest.fn() as any)
       .mockResolvedValueOnce(first401)
       .mockResolvedValueOnce(second200);
     (global as any).fetch = fetchMock;
@@ -1372,9 +1370,9 @@ describe("executeTool.js", () => {
   });
 
   it("should handle fetch_url network error", async () => {
-    (global as any).fetch = jest
-      .fn()
-      .mockRejectedValue(new Error("connection reset"));
+    (global as any).fetch = (jest.fn() as any).mockRejectedValue(
+      new Error("connection reset"),
+    );
 
     const result = await executeTool(
       {},
@@ -1664,7 +1662,9 @@ describe("executeTool.js", () => {
     ]);
 
     const result = await executeTool({} as any, "list_tasks", {}, "group1");
-    expect(result).toContain("[ID: 1] Schedule: *, Prompt: p, Enabled: true");
+    expect(result).toContain(
+      "[ID: 1] Schedule: *, Type: prompt, Enabled: true",
+    );
     expect(result).not.toContain("ID: 2");
   });
 
@@ -2480,7 +2480,7 @@ describe("executeTool.js", () => {
     const conflictErr = new Error(
       "Automatic merge failed with one or more merge conflicts in the following files: src/app.js",
     );
-    conflictErr.data = { filepaths: ["src/app.js"] };
+    (conflictErr as any).data = { filepaths: ["src/app.js"] };
     (mockGitMerge as any).mockRejectedValue(conflictErr);
 
     const conflictedContent = [
@@ -2513,7 +2513,7 @@ describe("executeTool.js", () => {
 
   it("should use error.data.filepaths when available for conflict paths", async () => {
     const conflictErr = new Error("MergeConflictError");
-    conflictErr.data = { filepaths: ["x.js", "y.js"] };
+    (conflictErr as any).data = { filepaths: ["x.js", "y.js"] };
     (mockGitMerge as any).mockRejectedValue(conflictErr);
 
     (mockReadGroupFile as any).mockResolvedValue("no conflict markers");
@@ -2613,7 +2613,7 @@ describe("executeTool.js", () => {
       statusText: "OK",
     };
 
-    const fetchMock = jest.fn().mockResolvedValue(mockResponse);
+    const fetchMock = (jest.fn() as any).mockResolvedValue(mockResponse);
     (global as any).fetch = fetchMock;
 
     const result = await executeTool(
@@ -2662,7 +2662,7 @@ describe("executeTool.js", () => {
       statusText: "OK",
     };
 
-    const fetchMock = jest.fn().mockResolvedValue(mockResponse);
+    const fetchMock = (jest.fn() as any).mockResolvedValue(mockResponse);
     (global as any).fetch = fetchMock;
 
     const result = await executeTool(
@@ -2714,7 +2714,7 @@ describe("executeTool.js", () => {
       statusText: "OK",
     };
 
-    const fetchMock = jest.fn().mockResolvedValue(mockResponse);
+    const fetchMock = (jest.fn() as any).mockResolvedValue(mockResponse);
     (global as any).fetch = fetchMock;
 
     const result = await executeTool(
@@ -2769,7 +2769,9 @@ describe("executeTool.js", () => {
       status: 200,
       statusText: "OK",
     };
-    const fetchMock = jest.fn().mockResolvedValue(mockResponse);
+
+    const fetchMock = (jest.fn() as any).mockResolvedValue(mockResponse);
+
     (global as any).fetch = fetchMock;
 
     const result = await executeTool(

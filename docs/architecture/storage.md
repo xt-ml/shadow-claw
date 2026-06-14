@@ -120,20 +120,20 @@ When OPFS main-thread writes fail (`"Writable file streams are not supported"`):
 
 ## File Operations
 
-| Operation   | Function                 | Notes                                                                    |
-| ----------- | ------------------------ | ------------------------------------------------------------------------ |
-| Read file   | `readGroupFile()`        | Sync handle preferred for freshness                                      |
-| Read bytes  | `readGroupFileBytes()`   | Raw `Uint8Array` for binary files (PDFs, images)                         |
-| Create dir  | `createGroupDirectory()` | Creates nested directories with stale-handle retry                       |
-| Write file  | `writeGroupFile()`       | Auto-creates directories, two-attempt retry                              |
-| List files  | `listGroupFiles()`       | Returns `name` (files) or `name/` (directories)                          |
-| Copy entry  | `copyGroupEntry()`       | Copies files or folders; rejects identical source/target paths           |
-| Move entry  | `moveGroupEntry()`       | Copy-then-delete move; callers must avoid folder self/descendant targets |
-| Delete file | `deleteGroupFile()`      | `dir.removeEntry(filename)`                                              |
-| Delete dir  | `deleteGroupDirectory()` | Recursive removal                                                        |
-| Delete all  | `deleteAllGroupFiles()`  | Complete workspace wipe (for restore ops)                                |
-| Upload file | `uploadGroupFile()`      | Accepts `File` from `<input>`, reads as text or bytes                    |
-| File exists | `groupFileExists()`      | Non-throwing existence check                                             |
+| Operation   | Function                 | Notes                                                                                               |
+| ----------- | ------------------------ | --------------------------------------------------------------------------------------------------- |
+| Read file   | `readGroupFile()`        | Sync handle preferred for freshness                                                                 |
+| Read bytes  | `readGroupFileBytes()`   | Raw `Uint8Array` for binary files (PDFs, images)                                                    |
+| Create dir  | `createGroupDirectory()` | Creates nested directories with stale-handle retry                                                  |
+| Write file  | `writeGroupFile()`       | Auto-creates directories, two-attempt retry                                                         |
+| List files  | `listGroupFiles()`       | Returns `name` (files) or `name/` (directories)                                                     |
+| Copy entry  | `copyGroupEntry()`       | Copies files or folders; supports inter-group copy; rejects identical source/target paths           |
+| Move entry  | `moveGroupEntry()`       | Copy-then-delete move; supports inter-group move; callers must avoid folder self/descendant targets |
+| Delete file | `deleteGroupFile()`      | `dir.removeEntry(filename)`                                                                         |
+| Delete dir  | `deleteGroupDirectory()` | Recursive removal                                                                                   |
+| Delete all  | `deleteAllGroupFiles()`  | Complete workspace wipe (for restore ops)                                                           |
+| Upload file | `uploadGroupFile()`      | Accepts `File` from `<input>`, reads as text or bytes                                               |
+| File exists | `groupFileExists()`      | Non-throwing existence check                                                                        |
 
 ## Zip Export/Import
 

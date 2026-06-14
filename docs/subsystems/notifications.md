@@ -128,7 +128,9 @@ Tasks are stored in IndexedDB via `src/db/`:
 | `id`             | string (ULID) | Unique identifier                |
 | `groupId`        | string        | Owning conversation              |
 | `name`           | string        | Task display name                |
+| `type`           | string        | `"prompt"` or `"tools"`          |
 | `prompt`         | string        | Instruction sent to the agent    |
+| `tools`          | string        | JSON serialized tool sequence    |
 | `cronExpression` | string        | 5-field cron schedule            |
 | `enabled`        | boolean       | Active/paused                    |
 | `lastRun`        | number        | Unix timestamp of last execution |

@@ -14,14 +14,15 @@ import type { ShadowClawDatabase } from "../types.js";
  */
 export async function copyGroupEntry(
   db: ShadowClawDatabase,
-  groupId: string,
+  sourceGroupId: string,
+  targetGroupId: string,
   sourcePath: string,
   targetPath: string,
 ): Promise<void> {
   const normSource = sourcePath.replace(/\/$/, "");
   const normTarget = targetPath.replace(/\/$/, "");
 
-  if (normSource === normTarget) {
+  if (sourceGroupId === targetGroupId && normSource === normTarget) {
     throw new Error("Source and target paths are identical");
   }
 
@@ -34,16 +35,17 @@ export async function copyGroupEntry(
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      const groupDir = await getGroupDir(db, groupId);
+      const srcGroupDir = await getGroupDir(db, sourceGroupId);
+      const tgtGroupDir = await getGroupDir(db, targetGroupId);
 
       // Resolve source parent
-      let srcParent = groupDir;
+      let srcParent = srcGroupDir;
       for (const seg of srcDirs) {
         srcParent = await srcParent.getDirectoryHandle(seg);
       }
 
       // Resolve target parent
-      let tgtParent = groupDir;
+      let tgtParent = tgtGroupDir;
       for (const seg of tgtDirs) {
         tgtParent = await tgtParent.getDirectoryHandle(seg, { create: true });
       }
@@ -91,7 +93,7 @@ export async function copyGroupEntry(
             throw writeErr;
           }
 
-          const safeId = groupId.replace(/:/g, "-");
+          const safeId = targetGroupId.replace(/:/g, "-");
           await writeOpfsPathViaWorker(
             [OPFS_ROOT, "groups", safeId, ...tgtDirs, tgtName],
             file,

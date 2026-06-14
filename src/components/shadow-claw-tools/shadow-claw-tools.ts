@@ -5,7 +5,7 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 import { TOOL_DEFINITIONS } from "../../tools.js";
 import { toolsStore } from "../../stores/tools.js";
 import { showError, showInfo, showSuccess } from "../../toast.js";
-import { ulid } from "../../ulid.js";
+import { ulid } from "../../utils/ulid.js";
 
 import type { Orchestrator } from "../../orchestrator.js";
 

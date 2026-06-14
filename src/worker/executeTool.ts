@@ -20,7 +20,7 @@ import { readGroupFile } from "../storage/readGroupFile.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
 import { uploadGroupFile } from "../storage/uploadGroupFile.js";
 import { groupFileExists } from "../storage/groupFileExists.js";
-import { ulid } from "../ulid.js";
+import { ulid } from "../utils/ulid.js";
 import {
   gitClone,
   getProxyUrl,
@@ -65,7 +65,12 @@ import {
 } from "./tools/remote-mcp.js";
 import { executeFetchUrlTool } from "./tools/fetch-url.js";
 import { executeGitTool } from "./tools/git.js";
-import { A2UI_MINIMAL_CATALOG_ID, MINIMAL_CATALOG_REFERENCE } from "../a2ui.js";
+import {
+  A2UI_MINIMAL_CATALOG_ID,
+  A2UI_BASIC_CATALOG_ID,
+  MINIMAL_CATALOG_REFERENCE,
+  BASIC_CATALOG_REFERENCE,
+} from "../a2ui.js";
 import type { A2UIEnvelope } from "../a2ui.js";
 
 export { resolveMcpReauth } from "./tools/remote-mcp.js";
@@ -486,15 +491,21 @@ export async function executeTool(
           return "Error: Missing or invalid 'schedule' (cron expression) for create_task.";
         }
 
-        if (!input.prompt || typeof input.prompt !== "string") {
-          return "Error: Missing or invalid 'prompt' for create_task.";
+        const taskType = input.type === "tools" ? "tools" : "prompt";
+        if (
+          taskType === "prompt" &&
+          (!input.prompt || typeof input.prompt !== "string")
+        ) {
+          return "Error: Missing or invalid 'prompt' for create_task with type 'prompt'.";
         }
 
         const taskData = {
           id: ulid(),
           groupId,
           schedule: input.schedule.trim(),
-          prompt: input.prompt.trim(),
+          type: taskType,
+          prompt: input.prompt ? input.prompt.trim() : "",
+          tools: Array.isArray(input.tools) ? input.tools : [],
           enabled: true,
           lastRun: null,
           createdAt: Date.now(),
@@ -502,7 +513,7 @@ export async function executeTool(
 
         post({ type: "task-created", payload: { task: taskData } });
 
-        return `Task created successfully.\nSchedule: ${taskData.schedule}\nPrompt: ${taskData.prompt}`;
+        return `Task created successfully.\nID: ${taskData.id}\nSchedule: ${taskData.schedule}\nType: ${taskData.type}`;
       }
 
       case "javascript": {
@@ -548,7 +559,7 @@ export async function executeTool(
         return tasks
           .map(
             (t) =>
-              `[ID: ${t.id}] Schedule: ${t.schedule}, Prompt: ${t.prompt}, Enabled: ${t.enabled}`,
+              `[ID: ${t.id}] Schedule: ${t.schedule}, Type: ${t.type || "prompt"}, Enabled: ${t.enabled}`,
           )
           .join("\n");
       }
@@ -566,8 +577,16 @@ export async function executeTool(
           task.schedule = input.schedule;
         }
 
+        if (input.type === "prompt" || input.type === "tools") {
+          task.type = input.type;
+        }
+
         if (input.prompt) {
           task.prompt = input.prompt;
+        }
+
+        if (Array.isArray(input.tools)) {
+          task.tools = input.tools;
         }
 
         if (input.enabled !== undefined) {
@@ -744,7 +763,7 @@ export async function executeTool(
       }
 
       case "list_components": {
-        return MINIMAL_CATALOG_REFERENCE;
+        return MINIMAL_CATALOG_REFERENCE + "\n" + BASIC_CATALOG_REFERENCE;
       }
 
       case "render_component": {
@@ -781,10 +800,17 @@ export async function executeTool(
               return "Error: createSurface requires a components map.";
             }
 
+            // Honor agent-supplied catalogId; default to Minimal
+            const resolvedCatalogId =
+              input.catalogId === A2UI_BASIC_CATALOG_ID ||
+              String(input.catalogId ?? "").toLowerCase() === "basic"
+                ? A2UI_BASIC_CATALOG_ID
+                : A2UI_MINIMAL_CATALOG_ID;
+
             envelope = {
               type: "createSurface",
               surfaceId,
-              catalogId: A2UI_MINIMAL_CATALOG_ID,
+              catalogId: resolvedCatalogId,
               rootComponentId: input.rootComponentId,
               components: input.components,
               dataModel: input.dataModel,

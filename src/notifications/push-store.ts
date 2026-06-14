@@ -9,7 +9,7 @@
 import { DatabaseSync } from "node:sqlite";
 import webpush from "web-push";
 
-const DEFAULT_VAPID_SUBJECT = "mailto:admin@shadowclaw.app";
+const DEFAULT_VAPID_SUBJECT = "mailto:admin@creativeindustrial.com";
 
 let db: DatabaseSync | null = null;
 

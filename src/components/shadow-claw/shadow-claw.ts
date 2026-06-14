@@ -6,7 +6,7 @@ import {
   type ShadowClawAppRoute,
 } from "../../app-routes.js";
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../config.js";
-import { ShadowClawNavigateDetail } from "../../utils.js";
+import { ShadowClawNavigateDetail } from "../../utils/utils.js";
 
 import { ShadowClawDatabase, setDB } from "../../db/db.js";
 import { getConfig } from "../../db/getConfig.js";
@@ -18,7 +18,7 @@ import { Themes, themeStore } from "../../stores/theme.js";
 import { toolsStore } from "../../stores/tools.js";
 import { consumePendingShares } from "../../share-target/pending-shares.js";
 import { showError, showSuccess } from "../../toast.js";
-import { ulid } from "../../ulid.js";
+import { ulid } from "../../utils/ulid.js";
 import { writeGroupFileBytes } from "../../storage/writeGroupFileBytes.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
 import {

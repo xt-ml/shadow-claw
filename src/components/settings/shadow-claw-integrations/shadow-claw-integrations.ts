@@ -17,7 +17,7 @@ import {
 } from "../../../email/connections.js";
 import { encryptValue } from "../../../crypto.js";
 import { showError, showSuccess } from "../../../toast.js";
-import { ulid } from "../../../ulid.js";
+import { ulid } from "../../../utils/ulid.js";
 import { resolveConnectionTestAuth } from "./connection-test-auth.js";
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
 

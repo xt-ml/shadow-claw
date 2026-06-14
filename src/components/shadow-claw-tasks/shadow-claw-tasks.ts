@@ -6,7 +6,7 @@ import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { showError, showInfo, showSuccess } from "../../toast.js";
 import { Task } from "../../types.js";
-import { escapeHtml } from "../../utils.js";
+import { escapeHtml } from "../../utils/utils.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
 import "../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
@@ -24,6 +24,7 @@ export class ShadowClawTasks extends ShadowClawElement {
   tasks: any[] = [];
   cleanup: () => void = () => {};
   editingTask: any | null = null;
+  editingTools: any[] = [];
 
   constructor() {
     super();
@@ -132,20 +133,54 @@ export class ShadowClawTasks extends ShadowClawElement {
     // Preview update logic
     const promptTextarea = root.querySelector("textarea[name='prompt']");
     const previewDiv = root.querySelector(".tasks__preview");
+    const typeRadios = root.querySelectorAll("input[name='taskType']");
+    const promptGroup = root.querySelector(".tasks__prompt-group");
+    const toolsGroup = root.querySelector(".tasks__tools-group");
+    const addToolBtn = root.querySelector(".tasks__add-tool-btn");
 
     const updatePreview = async () => {
-      if (
-        promptTextarea instanceof HTMLTextAreaElement &&
-        previewDiv instanceof HTMLElement
-      ) {
-        setSanitizedHtml(
-          previewDiv,
-          await this.renderPreview(promptTextarea.value),
-        );
+      if (previewDiv instanceof HTMLElement) {
+        const type =
+          Array.from(typeRadios)
+            .find((r: any) => r.checked)
+            ?.getAttribute("value") || "prompt";
+        if (type === "tools") {
+          setSanitizedHtml(
+            previewDiv,
+            this.renderToolsPreview(this.editingTools),
+          );
+        } else if (promptTextarea instanceof HTMLTextAreaElement) {
+          setSanitizedHtml(
+            previewDiv,
+            await this.renderPreview(promptTextarea.value),
+          );
+        }
       }
     };
 
     promptTextarea?.addEventListener("input", updatePreview);
+
+    typeRadios.forEach((radio) => {
+      radio.addEventListener("change", (e) => {
+        const val = (e.target as HTMLInputElement).value;
+        if (val === "tools") {
+          promptGroup?.setAttribute("style", "display: none;");
+          toolsGroup?.removeAttribute("style");
+          promptTextarea?.removeAttribute("required");
+        } else {
+          toolsGroup?.setAttribute("style", "display: none;");
+          promptGroup?.removeAttribute("style");
+        }
+
+        updatePreview();
+      });
+    });
+
+    addToolBtn?.addEventListener("click", () => {
+      this.editingTools.push({ name: "", input: {} });
+      this.renderToolsEditor();
+      updatePreview();
+    });
   }
 
   disconnectedCallback() {
@@ -215,14 +250,17 @@ export class ShadowClawTasks extends ShadowClawElement {
         ? new Date(task.lastRun).toLocaleString()
         : "Never";
 
-      const previewHtml = await this.renderPreview(task.prompt, true);
+      const isTools = task.type === "tools";
+      const previewHtml = isTools
+        ? this.renderToolsPreview(task.tools || [], true)
+        : await this.renderPreview(task.prompt, true);
 
       setSanitizedHtml(
         item,
         `<div class="tasks__item-header">
           <div class="tasks__item-info">
             <div class="tasks__schedule-row">
-              <div class="tasks__schedule">⏰ ${escapeHtml(task.schedule)}</div>
+              <div class="tasks__schedule">⏰ ${escapeHtml(task.schedule)} <span class="tasks__type-badge">(${isTools ? "Tools" : "Prompt"})</span></div>
             </div>
             <div class="tasks__prompt-container">
               ${previewHtml}
@@ -303,6 +341,7 @@ export class ShadowClawTasks extends ShadowClawElement {
    */
   handleAdd() {
     this.editingTask = null;
+    this.editingTools = [];
     const root = this.shadowRoot;
     if (!root) {
       return;
@@ -329,6 +368,17 @@ export class ShadowClawTasks extends ShadowClawElement {
     // Clear form
     form.reset();
 
+    // Reset type toggle
+    const promptRadio = form.querySelector(
+      "input[name='taskType'][value='prompt']",
+    ) as HTMLInputElement;
+    if (promptRadio) {
+      promptRadio.checked = true;
+      promptRadio.dispatchEvent(new Event("change"));
+    }
+
+    this.renderToolsEditor();
+
     // Reset preview
     const previewDiv = root.querySelector(".tasks__preview");
     if (previewDiv instanceof HTMLElement) {
@@ -346,6 +396,7 @@ export class ShadowClawTasks extends ShadowClawElement {
    */
   handleEdit(task: Task) {
     this.editingTask = task;
+    this.editingTools = JSON.parse(JSON.stringify(task.tools || []));
     const root = this.shadowRoot;
     if (!root) {
       return;
@@ -377,15 +428,32 @@ export class ShadowClawTasks extends ShadowClawElement {
     }
 
     if (promptInput instanceof HTMLTextAreaElement) {
-      promptInput.value = task.prompt;
+      promptInput.value = task.prompt || "";
     }
+
+    const typeRadio = form.querySelector(
+      `input[name='taskType'][value='${task.type || "prompt"}']`,
+    ) as HTMLInputElement;
+    if (typeRadio) {
+      typeRadio.checked = true;
+      typeRadio.dispatchEvent(new Event("change"));
+    }
+
+    this.renderToolsEditor();
 
     // Set initial preview
     const previewDiv = root.querySelector(".tasks__preview");
     if (previewDiv instanceof HTMLElement) {
-      this.renderPreview(task.prompt).then((html) => {
-        setSanitizedHtml(previewDiv, html);
-      });
+      if (task.type === "tools") {
+        setSanitizedHtml(
+          previewDiv,
+          this.renderToolsPreview(this.editingTools),
+        );
+      } else {
+        this.renderPreview(task.prompt).then((html) => {
+          setSanitizedHtml(previewDiv, html);
+        });
+      }
     }
 
     // Show dialog
@@ -396,9 +464,16 @@ export class ShadowClawTasks extends ShadowClawElement {
     const formData = new FormData(form);
     const schedule = formData.get("schedule");
     const prompt = formData.get("prompt");
+    const type = (formData.get("taskType") as "prompt" | "tools") || "prompt";
 
-    if (!schedule || !prompt) {
-      showInfo("Please fill in all fields");
+    if (!schedule) {
+      showInfo("Please provide a schedule.");
+
+      return;
+    }
+
+    if (type === "prompt" && !prompt) {
+      showInfo("Please provide a task prompt.");
 
       return;
     }
@@ -411,7 +486,9 @@ export class ShadowClawTasks extends ShadowClawElement {
         taskToSave = {
           ...this.editingTask,
           schedule: String(schedule),
-          prompt: String(prompt),
+          type,
+          prompt: String(prompt || ""),
+          tools: JSON.parse(JSON.stringify(this.editingTools)),
         };
       } else {
         // Create new task
@@ -422,7 +499,9 @@ export class ShadowClawTasks extends ShadowClawElement {
             : `task-${Date.now()}-${Math.random()}`,
           groupId: currentGroupId,
           schedule: String(schedule),
-          prompt: String(prompt),
+          type,
+          prompt: String(prompt || ""),
+          tools: JSON.parse(JSON.stringify(this.editingTools)),
           enabled: true,
           lastRun: null,
           createdAt: Date.now(),
@@ -709,6 +788,161 @@ export class ShadowClawTasks extends ShadowClawElement {
         btn.textContent = "🗑️ Clear All";
       }
     }
+  }
+
+  renderToolsPreview(tools: any[], allowCollapse = false) {
+    if (!tools || tools.length === 0) {
+      return '<span class="tasks__preview-empty">No tools configured</span>';
+    }
+
+    const html = tools
+      .map((t, i) => {
+        let params = "{}";
+        try {
+          params = JSON.stringify(t.input, null, 2);
+        } catch (e) {
+          params = "Invalid JSON";
+        }
+
+        return `<div><strong>${i + 1}. ${escapeHtml(t.name || "Unnamed Tool")}</strong><pre><code>${escapeHtml(params)}</code></pre></div>`;
+      })
+      .join("");
+
+    if (allowCollapse && tools.length > 2) {
+      return `
+        <details class="tasks__content-details">
+          <summary class="tasks__content-summary">
+            <span class="tasks__summary-text">${tools.length} Tools configured</span>
+            <span class="tasks__summary-label">(View more)</span>
+          </summary>
+          <div class="tasks__prompt">${html}</div>
+        </details>
+      `;
+    }
+
+    return `<div class="tasks__prompt">${html}</div>`;
+  }
+
+  renderToolsEditor() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const list = root.querySelector(".tasks__tools-list");
+    if (!list) {
+      return;
+    }
+
+    list.innerHTML = "";
+
+    this.editingTools.forEach((tool, index) => {
+      const item = document.createElement("div");
+      item.className = "tasks__tool-item";
+
+      const header = document.createElement("div");
+      header.className = "tasks__tool-header";
+
+      const title = document.createElement("div");
+      title.className = "tasks__tool-title";
+      title.textContent = `Tool ${index + 1}`;
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "tasks__tool-remove-btn";
+      removeBtn.textContent = "Remove";
+      removeBtn.addEventListener("click", () => {
+        this.editingTools.splice(index, 1);
+        this.renderToolsEditor();
+        const previewDiv = root.querySelector(".tasks__preview");
+        if (previewDiv) {
+          setSanitizedHtml(
+            previewDiv,
+            this.renderToolsPreview(this.editingTools),
+          );
+        }
+      });
+
+      header.appendChild(title);
+      header.appendChild(removeBtn);
+
+      const nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.className = "tasks__form-input";
+      nameInput.placeholder = "Tool Name (e.g. show_toast)";
+      nameInput.value = tool.name || "";
+      nameInput.addEventListener("input", (e) => {
+        tool.name = (e.target as HTMLInputElement).value;
+        const previewDiv = root.querySelector(".tasks__preview");
+        if (previewDiv) {
+          setSanitizedHtml(
+            previewDiv,
+            this.renderToolsPreview(this.editingTools),
+          );
+        }
+      });
+
+      const paramsInput = document.createElement("textarea");
+      paramsInput.className = "tasks__form-textarea";
+      paramsInput.placeholder = '{\n  "key": "value"\n}';
+      try {
+        paramsInput.value =
+          tool.input && Object.keys(tool.input).length
+            ? JSON.stringify(tool.input, null, 2)
+            : "";
+      } catch (e) {
+        paramsInput.value = "";
+      }
+
+      paramsInput.addEventListener("change", (e) => {
+        const val = (e.target as HTMLTextAreaElement).value;
+        if (!val.trim()) {
+          tool.input = {};
+        } else {
+          try {
+            tool.input = JSON.parse(val);
+            (e.target as HTMLTextAreaElement).style.borderColor = "";
+          } catch (err) {
+            (e.target as HTMLTextAreaElement).style.borderColor =
+              "var(--shadow-claw-error-color)";
+          }
+        }
+
+        const previewDiv = root.querySelector(".tasks__preview");
+        if (previewDiv) {
+          setSanitizedHtml(
+            previewDiv,
+            this.renderToolsPreview(this.editingTools),
+          );
+        }
+      });
+
+      const suppressLabel = document.createElement("label");
+      suppressLabel.className = "tasks__tool-suppress";
+
+      const suppressInput = document.createElement("input");
+      suppressInput.type = "checkbox";
+      suppressInput.checked = !!tool.suppressOutput;
+      suppressInput.addEventListener("change", (e) => {
+        tool.suppressOutput = (e.target as HTMLInputElement).checked;
+        const previewDiv = root.querySelector(".tasks__preview");
+        if (previewDiv) {
+          setSanitizedHtml(
+            previewDiv,
+            this.renderToolsPreview(this.editingTools),
+          );
+        }
+      });
+
+      suppressLabel.appendChild(suppressInput);
+      suppressLabel.appendChild(document.createTextNode(" Suppress Output"));
+
+      item.appendChild(header);
+      item.appendChild(nameInput);
+      item.appendChild(paramsInput);
+      item.appendChild(suppressLabel);
+      list.appendChild(item);
+    });
   }
 }
 

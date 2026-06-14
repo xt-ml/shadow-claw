@@ -43,7 +43,7 @@ A fully-functional agent runtime that runs entirely in the browser—no AI proce
 - **Scheduled tasks** — Cron expressions with server-side persistence and Web Push
 - **Git integration** — Clone, branch, merge (with conflict reports), push/pull
 - **File viewer** — Syntax highlighting (locally bundled CSS, no CDN), PDF preview, media playback, Web Share, native/fallback fullscreen, and relative image workspace resolving; iframe sandbox hardened (no `allow-same-origin`)
-- **Files browser** — Clipboard-driven Cut/Copy/Paste actions, hidden Paste button when empty, and folder self-paste protection
+- **Files browser** — Clipboard-driven Cut/Copy/Paste actions, hidden Paste button when empty, folder self-paste protection, inter-group transfers, and conflict resolution (rename/overwrite)
 
 ## Architecture
 
@@ -192,7 +192,7 @@ ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and 
 - **Local Folder** — user-selected directory via File System Access API
 - **Centralized write paths** — cross-browser fallback for Safari compatibility
 - **Zip export/import** — for conversation backup/restore
-- **Copy/move safety** — folder copy/move operations reject identical targets and prevent pasting a folder into itself or one of its descendants
+- **Copy/move safety** — folder copy/move operations prevent pasting a folder into itself or one of its descendants, and support inter-group operations with conflict resolution
 
 **Full details**: [docs/architecture/storage.md](docs/architecture/storage.md) | [docs/subsystems/crypto.md](docs/subsystems/crypto.md)
 
@@ -201,6 +201,7 @@ ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and 
 ShadowClaw supports **cron-based scheduled tasks** with Web Push notifications. Tasks fire even when the app is closed.
 
 - Task expressions use standard **5-field cron syntax**
+- **Task sequences** — Execute a single text prompt, or sequentially run a list of agent tools
 - **Server-side persistence** — SQLite database ensures reliable firing
 - **Web Push integration** — OS-level notifications when tasks trigger
 - **Recursion guard** — prevents infinite task → notification → task loops

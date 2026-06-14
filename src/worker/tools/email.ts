@@ -16,7 +16,7 @@ import { resolveServiceCredentials } from "../../accounts/service-accounts.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { writeGroupFileBytes } from "../../storage/writeGroupFileBytes.js";
 import { groupFileExists } from "../../storage/groupFileExists.js";
-import { ulid } from "../../ulid.js";
+import { ulid } from "../../utils/ulid.js";
 import type { ShadowClawDatabase } from "../../types.js";
 
 interface ResolvedIntegrationEmailAuth {

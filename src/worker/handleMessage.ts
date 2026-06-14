@@ -219,6 +219,65 @@ export async function handleMessage(event: MessageEvent): Promise<void> {
       break;
     }
 
+    case "execute-task-tools": {
+      const groupId = payload?.groupId;
+      const tools = Array.isArray(payload?.tools) ? payload.tools : [];
+
+      if (!groupId || tools.length === 0) {
+        post({
+          type: "error",
+          payload: {
+            groupId: groupId || DEFAULT_GROUP_ID,
+            error: "Invalid execute-task-tools payload.",
+          },
+        });
+
+        break;
+      }
+
+      const results: string[] = [];
+      for (const tool of tools) {
+        try {
+          post({
+            type: "show-toast",
+            payload: {
+              message: `Running task tool: ${tool.name}...`,
+              duration: 3000,
+            },
+          });
+
+          const output = await executeTool(
+            db,
+            tool.name,
+            tool.input || {},
+            groupId,
+            { isScheduledTask: true },
+          );
+          if (!tool.suppressOutput) {
+            results.push(`**Tool \`${tool.name}\`**: ${output}`);
+          }
+        } catch (err: any) {
+          if (!tool.suppressOutput) {
+            results.push(
+              `**Tool \`${tool.name}\` failed**: ${err.message || String(err)}`,
+            );
+          }
+        }
+      }
+
+      if (results.length > 0) {
+        post({
+          type: "response",
+          payload: {
+            groupId,
+            text: results.join("\n\n"),
+          },
+        });
+      }
+
+      break;
+    }
+
     case "set-storage":
       if (payload.storageHandle) {
         setStorageRoot(payload.storageHandle);

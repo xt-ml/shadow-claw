@@ -15,10 +15,29 @@ export const create_task: ToolDefinition = {
       },
       prompt: {
         type: "string",
-        description: "The prompt/instruction to execute on each run",
+        description:
+          "The prompt/instruction to execute on each run (used if type is 'prompt')",
+      },
+      type: {
+        type: "string",
+        enum: ["prompt", "tools"],
+        description: "The type of task to create. Defaults to 'prompt'.",
+      },
+      tools: {
+        type: "array",
+        description:
+          "A list of tools to execute sequentially (used if type is 'tools')",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            input: { type: "object" },
+          },
+          required: ["name", "input"],
+        },
       },
     },
-    required: ["schedule", "prompt"],
+    required: ["schedule"],
   },
 };
 
@@ -50,6 +69,23 @@ export const update_task: ToolDefinition = {
       prompt: {
         type: "string",
         description: "New prompt/instruction (optional)",
+      },
+      type: {
+        type: "string",
+        enum: ["prompt", "tools"],
+        description: "New task type (optional)",
+      },
+      tools: {
+        type: "array",
+        description: "New list of tools (optional)",
+        items: {
+          type: "object",
+          properties: {
+            name: { type: "string" },
+            input: { type: "object" },
+          },
+          required: ["name", "input"],
+        },
       },
       enabled: {
         type: "boolean",

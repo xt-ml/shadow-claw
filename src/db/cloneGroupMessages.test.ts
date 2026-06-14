@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../ulid.js", () => {
+jest.unstable_mockModule("../utils/ulid.js", () => {
   let counter = 0;
 
   return { ulid: jest.fn(() => `CLONE${++counter}`) };

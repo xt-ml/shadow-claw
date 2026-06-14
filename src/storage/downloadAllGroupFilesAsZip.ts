@@ -1,5 +1,5 @@
 import * as zip from "@zip.js/zip.js";
-import { formatDateForFilename } from "../utils.js";
+import { formatDateForFilename } from "../utils/utils.js";
 import { addDirToZip } from "./addDirToZip.js";
 import { getGroupDir } from "./getGroupDir.js";
 import type { ShadowClawDatabase } from "../types.js";

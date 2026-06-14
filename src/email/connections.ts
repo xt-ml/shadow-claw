@@ -1,7 +1,7 @@
 import { CONFIG_KEYS, type AuthType, type ServiceType } from "../config.js";
 import { getConfig } from "../db/getConfig.js";
 import { setConfig } from "../db/setConfig.js";
-import { ulid } from "../ulid.js";
+import { ulid } from "../utils/ulid.js";
 
 import { getEmailPluginManifest } from "./catalog.js";
 

@@ -32,7 +32,7 @@ describe("email connections", () => {
       setConfig: mockSetConfig,
     }));
 
-    jest.unstable_mockModule("../ulid.js", () => ({
+    jest.unstable_mockModule("../utils/ulid.js", () => ({
       ulid: jest.fn(() => "conn-1"),
     }));
 

@@ -1,6 +1,6 @@
 import type { Config } from "dompurify";
 
-import { escapeHtml, sanitizeHtml } from "../utils.js";
+import { escapeHtml, sanitizeHtml } from "../utils/utils.js";
 
 type TrustedMarkup = string | { toString: () => string };
 

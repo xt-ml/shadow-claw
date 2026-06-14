@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { jest } from "@jest/globals";
 
 let executeManageEmailTool: any;
@@ -97,14 +96,14 @@ describe("worker/tools/email", () => {
       groupFileExists: mockGroupFileExists,
     }));
 
-    jest.unstable_mockModule("../../ulid.js", () => ({
+    jest.unstable_mockModule("../../utils/ulid.js", () => ({
       ulid: mockUlid,
     }));
 
     const module = await import("./email.js");
     executeManageEmailTool = module.executeManageEmailTool;
 
-    global.fetch = jest.fn();
+    global.fetch = jest.fn() as any;
   });
 
   it("returns validation error when action is missing", async () => {

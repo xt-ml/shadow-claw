@@ -645,6 +645,7 @@ describe("shadow-claw-files", () => {
       sourcePath: "test-file.txt",
       type: "cut",
       isDirectory: false,
+      sourceGroupId: "default",
     });
     expect(showSuccess).toHaveBeenCalledWith(
       "Cut test-file.txt (ready to move)",
@@ -656,6 +657,7 @@ describe("shadow-claw-files", () => {
       sourcePath: "test-file.txt",
       type: "copy",
       isDirectory: false,
+      sourceGroupId: "default",
     });
     expect(showSuccess).toHaveBeenCalledWith(
       "Copied test-file.txt to clipboard",
@@ -691,7 +693,7 @@ describe("shadow-claw-files", () => {
     await component.onTemplateReady;
     await component.render();
 
-    filesUiStore.setClipboard("test-file.txt", "copy", false);
+    filesUiStore.setClipboard("test-file.txt", "copy", false, "default");
     component.updatePasteButtonVisibility();
 
     const pasteBtn = component.shadowRoot?.querySelector(".files__paste-btn");
@@ -742,7 +744,7 @@ describe("shadow-claw-files", () => {
     await component.onTemplateReady;
     await component.render();
 
-    filesUiStore.setClipboard("test-file.txt", "copy", false);
+    filesUiStore.setClipboard("test-file.txt", "copy", false, "default");
 
     const pasteDialog = component.shadowRoot?.querySelector(
       ".files__paste-dialog",
@@ -767,10 +769,11 @@ describe("shadow-claw-files", () => {
     );
 
     // Trigger form submit or handlePasteEntry
-    await component.handlePasteEntry({} as any);
+    await component.handlePasteEntry({} as any, false);
 
     expect(copyGroupEntry).toHaveBeenCalledWith(
       {} as any,
+      "default",
       "default",
       "test-file.txt",
       "test-file.txt",
@@ -790,7 +793,7 @@ describe("shadow-claw-files", () => {
     await component.onTemplateReady;
     await component.render();
 
-    filesUiStore.setClipboard("test-folder/", "cut", true);
+    filesUiStore.setClipboard("test-folder/", "cut", true, "default");
 
     const pasteDialog = component.shadowRoot?.querySelector(
       ".files__paste-dialog",
@@ -815,10 +818,11 @@ describe("shadow-claw-files", () => {
     );
 
     // Trigger form submit or handlePasteEntry
-    await component.handlePasteEntry({} as any);
+    await component.handlePasteEntry({} as any, false);
 
     expect(moveGroupEntry).toHaveBeenCalledWith(
       {} as any,
+      "default",
       "default",
       "test-folder/",
       "test-folder/",
@@ -847,7 +851,7 @@ describe("shadow-claw-files", () => {
     await component.onTemplateReady;
     await component.render();
 
-    filesUiStore.setClipboard("test.txt", "copy", false);
+    filesUiStore.setClipboard("test.txt", "copy", false, "default");
 
     const cancelBtn = component.shadowRoot?.querySelector(
       ".files__paste-cancel",
@@ -861,7 +865,7 @@ describe("shadow-claw-files", () => {
       throw new Error("Expected paste action buttons");
     }
 
-    const pending = component.handlePasteEntry({} as any);
+    const pending = component.handlePasteEntry({} as any, false);
 
     expect(cancelBtn.disabled).toBe(true);
     expect(okBtn.disabled).toBe(true);
@@ -882,7 +886,7 @@ describe("shadow-claw-files", () => {
     await component.render();
 
     (orchestratorStore as any).currentPath = "project";
-    filesUiStore.setClipboard("project/", "copy", true);
+    filesUiStore.setClipboard("project/", "copy", true, "default");
 
     const pasteDialog = component.shadowRoot?.querySelector(
       ".files__paste-dialog",
@@ -912,9 +916,9 @@ describe("shadow-claw-files", () => {
     await component.render();
 
     (orchestratorStore as any).currentPath = "project/nested";
-    filesUiStore.setClipboard("project/", "cut", true);
+    filesUiStore.setClipboard("project/", "cut", true, "default");
 
-    await component.handlePasteEntry({} as any);
+    await component.handlePasteEntry({} as any, false);
 
     expect(moveGroupEntry).not.toHaveBeenCalled();
     expect(copyGroupEntry).not.toHaveBeenCalled();

@@ -38,7 +38,7 @@ jest.unstable_mockModule("../../../crypto.js", () => ({
   encryptValue: jest.fn<any>().mockResolvedValue("encrypted-token"),
 }));
 
-jest.unstable_mockModule("../../../ulid.js", () => ({
+jest.unstable_mockModule("../../../utils/ulid.js", () => ({
   ulid: jest.fn(() => "acct-1"),
 }));
 

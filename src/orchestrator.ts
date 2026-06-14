@@ -49,7 +49,7 @@ import { getContextLimit } from "./providers.js";
 import { Router } from "./router.js";
 import { TaskScheduler } from "./task-scheduler.js";
 import { showToast } from "./toast.js";
-import { ulid } from "./ulid.js";
+import { ulid } from "./utils/ulid.js";
 import { VMBootMode, VMStatus } from "./vm.js";
 
 import { type ShadowClawDatabase } from "./db/db.js";
@@ -464,7 +464,7 @@ export class Orchestrator {
 
     // Set up task scheduler
     this.scheduler = new TaskScheduler(async (task) => {
-      this.submitMessage(task.prompt, task.groupId);
+      orchestratorStore.runTask(task);
     });
 
     this.scheduler.start();
@@ -1760,21 +1760,25 @@ export class Orchestrator {
       }
 
       const { taskId, groupId, prompt } = event.data;
-      if (!groupId || !prompt) {
+      if (!groupId) {
         return;
       }
 
       // Mark this group as scheduler-triggered for recursion prevention
       this._schedulerTriggeredGroups.add(groupId);
 
-      const task = { id: taskId, groupId, prompt };
-
       // Execute the task via the same path as client-side scheduler
-      const runTask = async () => {
-        this.submitMessage(task.prompt, task.groupId);
+      const runTaskHandler = async () => {
+        const fullTask = orchestratorStore.tasks.find((t) => t.id === taskId);
+        if (fullTask) {
+          orchestratorStore.runTask(fullTask);
+        } else if (prompt) {
+          // Fallback if not found in local store
+          this.submitMessage(prompt, groupId);
+        }
       };
 
-      runTask()
+      runTaskHandler()
         .catch((err) =>
           console.error(`Push-triggered task ${taskId} failed:`, err),
         )

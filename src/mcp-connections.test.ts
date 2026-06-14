@@ -17,7 +17,7 @@ jest.unstable_mockModule("./config.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("./ulid.js", () => ({
+jest.unstable_mockModule("./utils/ulid.js", () => ({
   ulid: () => "01TESTREMOTE0000000000000000",
 }));
 

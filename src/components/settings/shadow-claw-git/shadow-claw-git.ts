@@ -1,7 +1,7 @@
 import { CONFIG_KEYS, OAUTH_PROVIDER_DEFINITIONS } from "../../../config.js";
 import { getConfig } from "../../../db/getConfig.js";
 import { showError, showSuccess } from "../../../toast.js";
-import { escapeHtml } from "../../../utils.js";
+import { escapeHtml } from "../../../utils/utils.js";
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import {
   resolveStoredCredentialAuthMode,
@@ -879,7 +879,7 @@ export class ShadowClawGit extends ShadowClawElement {
       }
 
       if (isNew) {
-        const { ulid } = await import("../../../ulid.js");
+        const { ulid } = await import("../../../utils/ulid.js");
         const acct: GitAccount = {
           id: ulid(),
           label,

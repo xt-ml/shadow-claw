@@ -103,10 +103,11 @@ jest.unstable_mockModule("../../toast.js", () => ({
   showWarning: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../utils.js", () => ({
+jest.unstable_mockModule("../../utils/utils.js", () => ({
   formatDateForFilename: jest.fn(),
   formatTimestamp: jest.fn(() => "now"),
   handleSpecialLinkNavigation: jest.fn(() => false),
+  computeSha256: jest.fn(async (_: ArrayBuffer) => "mock-hash"),
 }));
 
 jest.unstable_mockModule(

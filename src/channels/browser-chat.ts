@@ -15,7 +15,7 @@ import type {
 } from "../types.js";
 
 import { DEFAULT_GROUP_ID } from "../config.js";
-import { ulid } from "../ulid.js";
+import { ulid } from "../utils/ulid.js";
 
 export class BrowserChatChannel implements Channel {
   type: Channel["type"];

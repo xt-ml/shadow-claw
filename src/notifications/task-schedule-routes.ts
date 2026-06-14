@@ -25,9 +25,20 @@ export function registerTaskScheduleRoutes(app: Express): void {
   app.post("/schedule/tasks", (req, res) => {
     const task = req.body;
 
-    if (!task?.id || !task?.groupId || !task?.schedule || !task?.prompt) {
+    if (!task?.id || !task?.groupId || !task?.schedule) {
       return res.status(400).json({
-        error: "Missing required fields: id, groupId, schedule, prompt",
+        error: "Missing required fields: id, groupId, schedule",
+      });
+    }
+
+    if (task?.type === "tools" && (!task.tools || task.tools.length === 0)) {
+      return res.status(400).json({
+        error:
+          "Missing required fields: tools array cannot be empty for WebMCP Tools task",
+      });
+    } else if (task?.type !== "tools" && !task?.prompt) {
+      return res.status(400).json({
+        error: "Missing required fields: prompt is required for Prompt tasks",
       });
     }
 
@@ -72,7 +83,9 @@ export function registerTaskScheduleRoutes(app: Express): void {
       id: task.id,
       groupId: task.group_id,
       schedule: task.schedule,
+      type: task.type as any,
       prompt: task.prompt,
+      tools: task.tools ? JSON.parse(task.tools) : undefined,
       enabled: true,
       lastRun: task.last_run,
       createdAt: task.created_at,
@@ -95,7 +108,9 @@ export function registerTaskScheduleRoutes(app: Express): void {
       id: task.id,
       groupId: task.group_id,
       schedule: task.schedule,
+      type: task.type as any,
       prompt: task.prompt,
+      tools: task.tools ? JSON.parse(task.tools) : undefined,
       enabled: false,
       lastRun: task.last_run,
       createdAt: task.created_at,

@@ -91,5 +91,5 @@ When `git_merge` encounters conflicts, it returns a **structured conflict report
 - **Do not** rely on `navigator.modelContext` alone for WebMCP detection; prefer `document.modelContext` with `navigator.modelContext` fallback for compatibility.
 - **Do not** commit `dist-electron/`, `push-subscriptions.db`, or `scheduled-tasks.db` — they are git-ignored.
 - **Do not** add new docs pages without updating `docs/README.md` and verifying references in `AGENTS.md`.
-- **Do not** allow file-browser copy/move flows to target the same folder or any descendant folder; enforce the guard in both UI and storage paths and cover it with tests.
+- **Do not** allow file-browser copy/move flows to target the same folder or any descendant folder; enforce the guard in both UI and storage paths and cover it with tests. Always specify both `sourceGroupId` and `targetGroupId` when invoking storage moves/copies.
 - **Do not** use raw `window.location.href` or traditional link anchors for internal navigation. Always dispatch a `shadow-claw-navigate` custom event (or use the `handleSpecialLinkNavigation` utility) to switch pages, open files, or scroll to anchors seamlessly.

@@ -97,7 +97,7 @@ jest.unstable_mockModule("../storage/writeGroupFileBytes.js", () => ({
   writeGroupFileBytes: jest.fn(async () => {}),
 }));
 
-jest.unstable_mockModule("../crypto.js", () => ({
+jest.unstable_mockModule("../utils/utils.js", () => ({
   computeSha256: jest.fn(async () => "mock-hash"),
 }));
 

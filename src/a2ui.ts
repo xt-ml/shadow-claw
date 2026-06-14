@@ -45,22 +45,48 @@ export const MINIMAL_CATALOG_REFERENCE = `A2UI Minimal Catalog — Component Ref
 
 Catalog ID: ${A2UI_MINIMAL_CATALOG_ID}
 
+CRITICAL AUTHORING RULES
+-------------------------
+1. Put ALL properties at the TOP LEVEL of the component spec alongside "component".
+   WRONG:  {"component":"Text","properties":{"text":"Hello"}}
+   RIGHT:  {"component":"Text","text":"Hello"}
+
+2. To make a property UPDATABLE later via the "updateDataModel" action, you MUST
+   bind it using {"$dataModel": "/your_key"} and initialize that key in the dataModel.
+   If you use a plain string literal, the property is STATIC and cannot be updated!
+   STATIC (never changes): {"component":"Text", "text":"Result will appear here"}
+   DYNAMIC (updatable):    {"component":"Text", "text":{"$dataModel":"/result"}}
+
+3. "children" and "child" contain COMPONENT ID STRINGS, not nested specs.
+   WRONG:  {"component":"Column","children":[{"component":"Text","text":"Hi"}]}
+   RIGHT:  {"component":"Column","children":["my_text"]}  +  "my_text":{"component":"Text","text":"Hi"}
+
+4. Button "child" must be the ID of a Text component in the same components map.
+   Button "action" must be {"id":"myActionId"} — a plain object with an id string.
+
 Components
 ----------
-Text
-Row
-Column
-Button
-TextField
+Text        — text (string, required), variant? ("h1"-"h5"|"caption"|"body")
+Row         — children (string[], required), justify?, align?
+Column      — children (string[], required), justify?, align?
+Button      — child (string, required — ID of a Text component for the label),
+              action ({id: string, data?: string[]}, required), variant?
+TextField   — label (string, required), value? (string), placeholder?,
+              variant? ("shortText"|"longText"|"number"|"obscured")
 
 Function
 --------
-capitalize
+capitalize  — {"call":"capitalize","args":{"value":"some string"}}
 
-Notes
------
-This catalog is intentionally minimal: it provides the smallest supported
-surface vocabulary for A2UI.
+Example (correct)
+-----------------
+components: {
+  "root":    {"component":"Column","children":["title","btn"]},
+  "title":   {"component":"Text","text":"Hello World","variant":"h2"},
+  "btn_lbl": {"component":"Text","text":"Click Me"},
+  "btn":     {"component":"Button","child":"btn_lbl","action":{"id":"submit"},"variant":"primary"}
+}
+
 `;
 
 /**
@@ -73,10 +99,45 @@ Catalog ID: ${A2UI_BASIC_CATALOG_ID}
 
 Notes
 -----
-The Basic catalog extends the Minimal catalog with additional components and
-client-side functions.
+The Basic catalog includes ALL Minimal components (Text, Row, Column, Button,
+TextField) PLUS the following. To use any of these, set catalogId to
+"${A2UI_BASIC_CATALOG_ID}" (or the shorthand "Basic") in render_component.
 
-For the authoritative schema, consult the published catalog JSON.
+Additional Components
+---------------------
+Image         — url (required), description?, fit?, variant?
+Icon          — name (required; string or {path})
+Video         — url (required), posterUrl?
+AudioPlayer   — url (required), description?
+List          — children[] (required), direction?, align?
+Card          — child (required; component ID string)
+Tabs          — tabs[] (each: {title, child})
+Modal         — trigger (component ID), content (component ID)
+Divider       — axis? ("horizontal"|"vertical")
+CheckBox      — label (required), value (DynamicBoolean)
+ChoicePicker  — label?, variant? ("mutuallyExclusive"|"multipleSelection"),
+                options[] (each: {label, value}), value (DynamicStringList),
+                displayStyle? ("checkbox"|"chips"), filterable?
+Slider        — max (required), value (DynamicNumber), label?, min?, steps?
+DateTimeInput — value (required; DynamicString), enableDate?, enableTime?,
+                min?, max?, label?
+
+Example — ChoicePicker (correct)
+----------------------------------
+"cmd_picker": {
+  "component": "ChoicePicker",
+  "label": "Select Command",
+  "variant": "mutuallyExclusive",
+  "options": [
+    {"label": "List files", "value": "ls -la"},
+    {"label": "Date",       "value": "date"},
+    {"label": "Who am I",   "value": "whoami"}
+  ],
+  "value": "ls -la"
+}
+
+Remember: set catalogId to "${A2UI_BASIC_CATALOG_ID}" (or "Basic") when using any
+Basic component. All other authoring rules from the Minimal catalog apply here too.
 `;
 
 // ---------------------------------------------------------------------------

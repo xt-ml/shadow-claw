@@ -24,7 +24,7 @@ import {
 } from "../../settings-backup.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { showError, showInfo, showSuccess } from "../../toast.js";
-import { formatDateForFilename } from "../../utils.js";
+import { formatDateForFilename } from "../../utils/utils.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
 const elementName = "shadow-claw-settings";

@@ -120,7 +120,20 @@ class MockDatabaseSync {
     } else if (table === "scheduled_tasks") {
       const isReplace = /OR\s+REPLACE/i.test(sql);
       const existing = rows.findIndex((r) => r.id === params[0]);
-      const row = { id: params[0], group_id: params[1], schedule: params[2], prompt: params[3], enabled: params[4], last_run: params[5], created_at: params[6], channel: params[7] ?? null, subscriber_id: params[8] ?? null };
+      // Column order: id, group_id, schedule, type, prompt, tools, enabled, last_run, created_at, channel, subscriber_id
+      const row = {
+        id: params[0],
+        group_id: params[1],
+        schedule: params[2],
+        type: params[3] ?? null,
+        prompt: params[4] ?? null,
+        tools: params[5] ?? null,
+        enabled: params[6],
+        last_run: params[7] ?? null,
+        created_at: params[8],
+        channel: params[9] ?? null,
+        subscriber_id: params[10] ?? null,
+      };
       if (isReplace && existing >= 0) {
         rows[existing] = row;
       } else if (existing < 0) {

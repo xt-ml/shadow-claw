@@ -2,7 +2,7 @@ import { CONFIG_KEYS, OAUTH_PROVIDER_DEFINITIONS } from "../../../config.js";
 import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
 import { getConfig } from "../../../db/getConfig.js";
 import { showError, showSuccess } from "../../../toast.js";
-import { escapeHtml } from "../../../utils.js";
+import { escapeHtml } from "../../../utils/utils.js";
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
 
 import type { ServiceAccount } from "../../../accounts/service-accounts.js";
@@ -835,7 +835,7 @@ export class ShadowClawAccounts extends ShadowClawElement {
       }
 
       if (isNew) {
-        const { ulid } = await import("../../../ulid.js");
+        const { ulid } = await import("../../../utils/ulid.js");
         const account: ServiceAccount = {
           id: ulid(),
           label,

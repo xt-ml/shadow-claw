@@ -151,8 +151,23 @@
       <form class="files__paste-form" method="dialog">
         <h3 class="files__paste-title">Confirm Paste</h3>
         <p class="files__paste-message"></p>
+        <div class="files__paste-rename-container" hidden>
+          <label class="files__paste-rename-label" for="files-paste-name"
+            >New Name</label
+          >
+          <input
+            class="files__paste-rename-input"
+            id="files-paste-name"
+            name="files-paste-name"
+            type="text"
+            autocomplete="off"
+          />
+        </div>
         <div class="files__paste-actions">
           <button class="files__paste-cancel" type="button">Cancel</button>
+          <button class="files__paste-overwrite" type="button" hidden>
+            Overwrite
+          </button>
           <button class="files__paste-ok" type="submit">OK</button>
         </div>
       </form>

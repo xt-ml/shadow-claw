@@ -43,7 +43,7 @@ import {
   formatDateForFilename,
   formatTimestamp,
   handleSpecialLinkNavigation,
-} from "../../utils.js";
+} from "../../utils/utils.js";
 
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
@@ -434,7 +434,18 @@ export class ShadowClawChat extends ShadowClawElement {
           }
 
           // Format and submit the action to our local or remote agent context.
-          const textContent = `[A2UI ACTION] surfaceId: "${action.surfaceId}", actionId: "${action.actionId}", dataModel: ${JSON.stringify(action.dataModel)}`;
+          const dataModelJson = JSON.stringify(action.dataModel, null, 2);
+          const textContent =
+            `[A2UI ACTION]\n` +
+            `surfaceId: "${action.surfaceId}"\n` +
+            `actionId: "${action.actionId}"\n` +
+            `dataModel:\n${dataModelJson}\n\n` +
+            `Instructions: The user triggered the "${action.actionId}" action on surface "${action.surfaceId}". ` +
+            `The dataModel above contains the current form values. ` +
+            `Use the appropriate tool(s) to fulfill the action based on the actionId and dataModel values. ` +
+            `After you have a result, call render_component with action "updateDataModel" on surfaceId "${action.surfaceId}" ` +
+            `to update the surface (e.g. patch the output field with the result). ` +
+            `Do NOT respond with plain text only — always update the surface via render_component.`;
           orchestratorStore.sendMessage(textContent, [], action);
         },
       );
@@ -1501,6 +1512,13 @@ export class ShadowClawChat extends ShadowClawElement {
           for (const msg of messages) {
             if (!this.isLatestRender(renderVersion)) {
               return false;
+            }
+
+            if (
+              msg.a2uiAction ||
+              (msg.content && msg.content.startsWith("[A2UI ACTION]"))
+            ) {
+              continue;
             }
 
             const messageType = msg.isFromMe ? "assistant" : "user";

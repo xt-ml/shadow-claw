@@ -112,7 +112,7 @@ describe("worker and worker/agent.js", () => {
       TOOL_DEFINITIONS: [],
     }));
 
-    jest.unstable_mockModule("../ulid.js", () => ({
+    jest.unstable_mockModule("../utils/ulid.js", () => ({
       ulid: jest.fn(() => "01AN4Z07BY79KA1307SR9X4MV3"),
     }));
 

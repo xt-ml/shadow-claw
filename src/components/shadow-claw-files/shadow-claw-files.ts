@@ -1,16 +1,16 @@
+import { copyGroupEntry } from "../../storage/copyGroupEntry.js";
+import { createGroupDirectory } from "../../storage/createGroupDirectory.js";
 import { deleteAllGroupFiles } from "../../storage/deleteAllGroupFiles.js";
 import { deleteGroupDirectory } from "../../storage/deleteGroupDirectory.js";
 import { deleteGroupFile } from "../../storage/deleteGroupFile.js";
-import { createGroupDirectory } from "../../storage/createGroupDirectory.js";
 import { downloadAllGroupFilesAsZip } from "../../storage/downloadAllGroupFilesAsZip.js";
 import { downloadGroupDirectoryAsZip } from "../../storage/downloadGroupDirectoryAsZip.js";
 import { downloadGroupFile } from "../../storage/downloadGroupFile.js";
+import { moveGroupEntry } from "../../storage/moveGroupEntry.js";
 import { renameGroupEntry } from "../../storage/renameGroupEntry.js";
 import { restoreAllGroupFilesFromZip } from "../../storage/restoreAllGroupFilesFromZip.js";
 import { uploadGroupFile } from "../../storage/uploadGroupFile.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
-import { copyGroupEntry } from "../../storage/copyGroupEntry.js";
-import { moveGroupEntry } from "../../storage/moveGroupEntry.js";
 
 import { effect } from "../../effect.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
@@ -20,8 +20,10 @@ import { showError, showSuccess, showWarning } from "../../toast.js";
 
 import { getDb } from "../../db/db.js";
 
-import { escapeHtml } from "../../utils.js";
 import { setSanitizedHtml } from "../../security/trusted-types.js";
+import { ulid } from "../../utils/ulid.js";
+import { escapeHtml } from "../../utils/utils.js";
+
 import "../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
@@ -265,6 +267,8 @@ export class ShadowClawFiles extends ShadowClawElement {
     const pasteCancelBtn = root.querySelector(".files__paste-cancel");
     const pasteForm = root.querySelector(".files__paste-form");
 
+    const pasteOverwriteBtn = root.querySelector(".files__paste-overwrite");
+
     pasteDialog?.addEventListener("cancel", (event) => {
       if (this._isPastingEntry) {
         event.preventDefault();
@@ -283,7 +287,12 @@ export class ShadowClawFiles extends ShadowClawElement {
 
     pasteForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
-      await this.handlePasteEntry(db);
+      await this.handlePasteEntry(db, false);
+    });
+
+    pasteOverwriteBtn?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      await this.handlePasteEntry(db, true);
     });
   }
 
@@ -594,7 +603,12 @@ export class ShadowClawFiles extends ShadowClawElement {
         item.classList.remove("show-actions");
 
         const itemPath = currentPath === "." ? file : `${currentPath}/${file}`;
-        filesUiStore.setClipboard(itemPath, "cut", isDir);
+        filesUiStore.setClipboard(
+          itemPath,
+          "cut",
+          isDir,
+          orchestratorStore.activeGroupId,
+        );
         showSuccess(`Cut ${name} (ready to move)`, 2500);
       });
 
@@ -605,7 +619,12 @@ export class ShadowClawFiles extends ShadowClawElement {
         item.classList.remove("show-actions");
 
         const itemPath = currentPath === "." ? file : `${currentPath}/${file}`;
-        filesUiStore.setClipboard(itemPath, "copy", isDir);
+        filesUiStore.setClipboard(
+          itemPath,
+          "copy",
+          isDir,
+          orchestratorStore.activeGroupId,
+        );
         showSuccess(`Copied ${name} to clipboard`, 2500);
       });
 
@@ -805,7 +824,9 @@ export class ShadowClawFiles extends ShadowClawElement {
       for (let i = 0; i < count; i++) {
         const file = fileList[i];
         const filename =
-          currentPath === "." ? file.name : `${currentPath}/${file.name}`;
+          currentPath === "."
+            ? `${ulid()}-${file.name}`
+            : `${currentPath}/${ulid()}-${file.name}`;
 
         await uploadGroupFile(db, groupId, filename, file);
         filesUiStore.setUploadCompleted(i + 1);
@@ -1338,6 +1359,11 @@ export class ShadowClawFiles extends ShadowClawElement {
 
     const dialog = root.querySelector(".files__paste-dialog");
     const messageEl = root.querySelector(".files__paste-message");
+    const renameContainer = root.querySelector(
+      ".files__paste-rename-container",
+    );
+    const renameInput = root.querySelector(".files__paste-rename-input");
+    const overwriteBtn = root.querySelector(".files__paste-overwrite");
 
     if (!(dialog instanceof HTMLDialogElement)) {
       return;
@@ -1367,18 +1393,43 @@ export class ShadowClawFiles extends ShadowClawElement {
     const sourcePath = clipboard.sourcePath.replace(/\/$/, "");
     const parts = sourcePath.split("/");
     const name = parts[parts.length - 1];
+    const isDir = clipboard.isDirectory;
+    const fileNameWithSlash = isDir ? `${name}/` : name;
 
     const targetDirName =
       orchestratorStore.currentPath === "."
         ? "Root"
         : orchestratorStore.currentPath;
 
+    const alreadyExists = orchestratorStore.files.includes(fileNameWithSlash);
+
     if (messageEl instanceof HTMLElement) {
       const operation = clipboard.type === "cut" ? "move" : "copy";
-      messageEl.textContent = `Are you sure you want to ${operation} "${name}" into "${targetDirName}"?`;
+      if (alreadyExists) {
+        messageEl.textContent = `"${name}" already exists in "${targetDirName}". Please rename or choose to overwrite.`;
+      } else {
+        messageEl.textContent = `Are you sure you want to ${operation} "${name}" into "${targetDirName}"?`;
+      }
+    }
+
+    if (renameContainer instanceof HTMLElement) {
+      renameContainer.hidden = !alreadyExists;
+    }
+
+    if (overwriteBtn instanceof HTMLElement) {
+      overwriteBtn.hidden = !alreadyExists;
+    }
+
+    if (renameInput instanceof HTMLInputElement) {
+      renameInput.value = name;
     }
 
     dialog.showModal();
+
+    if (alreadyExists && renameInput instanceof HTMLInputElement) {
+      renameInput.select();
+      renameInput.focus();
+    }
   }
 
   isInvalidFolderPasteTarget(
@@ -1437,7 +1488,7 @@ export class ShadowClawFiles extends ShadowClawElement {
     pasteBtn.toggleAttribute("disabled", !hasClipboardEntry);
   }
 
-  async handlePasteEntry(db: ShadowClawDatabase) {
+  async handlePasteEntry(db: ShadowClawDatabase, overwrite: boolean) {
     const root = this.shadowRoot;
     if (!root) {
       return;
@@ -1469,7 +1520,32 @@ export class ShadowClawFiles extends ShadowClawElement {
     const isDir = clipboard.isDirectory;
     const sourcePathNoSlash = sourcePath.replace(/\/$/, "");
     const parts = sourcePathNoSlash.split("/");
-    const name = parts[parts.length - 1];
+    const originalName = parts[parts.length - 1];
+
+    let name = originalName;
+
+    if (!overwrite) {
+      const renameContainer = root.querySelector(
+        ".files__paste-rename-container",
+      );
+      const renameInput = root.querySelector(".files__paste-rename-input");
+      if (renameContainer && !renameContainer.hasAttribute("hidden")) {
+        if (renameInput instanceof HTMLInputElement) {
+          name = renameInput.value.trim();
+          if (!name) {
+            showWarning("Please enter a name", 3000);
+
+            return;
+          }
+
+          if (name.includes("/") || name.includes("\\")) {
+            showWarning("Use only a name, not a path", 3500);
+
+            return;
+          }
+        }
+      }
+    }
 
     // Maintain trailing slash if is directory
     const fileNameWithSlash = isDir ? `${name}/` : name;
@@ -1478,16 +1554,54 @@ export class ShadowClawFiles extends ShadowClawElement {
         ? fileNameWithSlash
         : `${currentPath}/${fileNameWithSlash}`;
 
+    if (!overwrite) {
+      const alreadyExists = orchestratorStore.files.includes(fileNameWithSlash);
+      if (alreadyExists) {
+        showWarning(
+          `"${name}" already exists. Please choose a different name.`,
+          4000,
+        );
+
+        return;
+      }
+    }
+
     try {
       this.setPasteDialogBusy(true);
 
-      const activeGroupId = orchestratorStore.activeGroupId;
+      const sourceGroupId = clipboard.sourceGroupId;
+      const targetGroupId = orchestratorStore.activeGroupId;
+
+      if (overwrite) {
+        if (isDir) {
+          await deleteGroupDirectory(db, targetGroupId, targetPath).catch(
+            () => undefined,
+          );
+        } else {
+          await this.removePageAssignmentIfNeeded(db, targetPath);
+          await deleteGroupFile(db, targetGroupId, targetPath).catch(
+            () => undefined,
+          );
+        }
+      }
 
       if (clipboard.type === "copy") {
-        await copyGroupEntry(db, activeGroupId, sourcePath, targetPath);
+        await copyGroupEntry(
+          db,
+          sourceGroupId,
+          targetGroupId,
+          sourcePath,
+          targetPath,
+        );
         showSuccess(`Copied "${name}" successfully`, 3000);
       } else {
-        await moveGroupEntry(db, activeGroupId, sourcePath, targetPath);
+        await moveGroupEntry(
+          db,
+          sourceGroupId,
+          targetGroupId,
+          sourcePath,
+          targetPath,
+        );
         showSuccess(`Moved "${name}" successfully`, 3000);
         filesUiStore.clearClipboard(); // Clear clipboard after successful move
       }

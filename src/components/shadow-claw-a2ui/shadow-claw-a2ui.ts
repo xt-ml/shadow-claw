@@ -162,12 +162,15 @@ export class ShadowClawA2UI extends ShadowClawElement {
   }
 
   #renderComponent(id: string, surface: SurfaceState): HTMLElement | null {
-    const spec = surface.components[id];
-    if (!spec) {
+    const rawSpec = surface.components[id];
+    if (!rawSpec) {
       console.warn(`[shadow-claw-a2ui] Unknown component id: "${id}"`);
 
       return null;
     }
+
+    // Stamp the map key as spec.id — agents typically omit this field.
+    const spec = rawSpec.id ? rawSpec : { ...rawSpec, id };
 
     switch (spec.component) {
       case "Text":

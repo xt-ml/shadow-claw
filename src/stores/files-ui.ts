@@ -1,6 +1,7 @@
 import { Signal } from "signal-polyfill";
 
 export interface ClipboardItem {
+  sourceGroupId: string;
   sourcePath: string;
   type: "cut" | "copy";
   isDirectory: boolean;
@@ -60,8 +61,9 @@ export class FilesUiStore {
     sourcePath: string,
     type: "cut" | "copy",
     isDirectory: boolean,
+    sourceGroupId: string,
   ): void {
-    this._clipboard.set({ sourcePath, type, isDirectory });
+    this._clipboard.set({ sourcePath, type, isDirectory, sourceGroupId });
   }
 
   clearClipboard(): void {

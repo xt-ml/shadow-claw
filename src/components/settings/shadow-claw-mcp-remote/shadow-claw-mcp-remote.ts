@@ -15,7 +15,7 @@ import {
 
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import { showError, showSuccess } from "../../../toast.js";
-import { escapeHtml } from "../../../utils.js";
+import { escapeHtml } from "../../../utils/utils.js";
 
 import type { ServiceAccount } from "../../../accounts/service-accounts.js";
 import type { GitAccount } from "../../../git/credentials.js";

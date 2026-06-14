@@ -76,6 +76,20 @@
             </div>
           </div>
           <div class="tasks__form-group">
+            <label class="tasks__form-label">Task Type</label>
+            <div class="tasks__type-options">
+              <label>
+                <input type="radio" name="taskType" value="prompt" checked />
+                Prompt
+              </label>
+              <label>
+                <input type="radio" name="taskType" value="tools" /> WebMCP
+                Tools
+              </label>
+            </div>
+          </div>
+
+          <div class="tasks__form-group tasks__prompt-group">
             <label
               class="tasks__form-label"
               id="taskLabel"
@@ -88,8 +102,18 @@
               id="tasksPromptInput"
               name="prompt"
               placeholder="Enter the task prompt..."
-              required
             ></textarea>
+          </div>
+
+          <div
+            class="tasks__form-group tasks__tools-group"
+            style="display: none"
+          >
+            <label class="tasks__form-label">WebMCP Tools List</label>
+            <div class="tasks__tools-list"></div>
+            <button type="button" class="tasks__add-tool-btn">
+              + Add Tool
+            </button>
           </div>
 
           <div class="tasks__form-group tasks__preview-container">

@@ -4,7 +4,7 @@ import { getDb } from "../../../db/db.js";
 import { effect } from "../../../effect.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess } from "../../../toast.js";
-import { ulid } from "../../../ulid.js";
+import { ulid } from "../../../utils/ulid.js";
 
 import type { Orchestrator } from "../../../orchestrator.js";
 import type { ShadowClawDatabase } from "../../../types.js";

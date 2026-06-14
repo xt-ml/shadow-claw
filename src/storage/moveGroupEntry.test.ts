@@ -42,10 +42,11 @@ describe("moveGroupEntry", () => {
     mockParsePath.mockReturnValue({ dirs: ["src"], filename: "old.txt" });
     mockCopyGroupEntry.mockResolvedValue(undefined);
 
-    await moveGroupEntry({} as any, "g", "src/old.txt", "tgt/new.txt");
+    await moveGroupEntry({} as any, "g", "g", "src/old.txt", "tgt/new.txt");
 
     expect(mockCopyGroupEntry).toHaveBeenCalledWith(
       {} as any,
+      "g",
       "g",
       "src/old.txt",
       "tgt/new.txt",

@@ -96,7 +96,7 @@ describe("copyGroupEntry", () => {
       return { dirs: [], filename: "" };
     });
 
-    await copyGroupEntry({} as any, "g", "src/old.txt", "tgt/new.txt");
+    await copyGroupEntry({} as any, "g", "g", "src/old.txt", "tgt/new.txt");
 
     expect(rootDir.getDirectoryHandle).toHaveBeenCalledWith("src");
     expect(rootDir.getDirectoryHandle).toHaveBeenCalledWith("tgt", {

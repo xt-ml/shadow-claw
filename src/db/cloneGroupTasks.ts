@@ -1,4 +1,4 @@
-import { ulid } from "../ulid.js";
+import { ulid } from "../utils/ulid.js";
 import type { ShadowClawDatabase } from "../types.js";
 
 /**

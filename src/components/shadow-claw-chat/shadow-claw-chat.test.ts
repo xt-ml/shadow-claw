@@ -285,7 +285,7 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
         },
       }));
 
-      jest.unstable_mockModule("../../utils.js", () => ({
+      jest.unstable_mockModule("../../utils/utils.js", () => ({
         formatTimestamp: jest.fn((ts: number) => new Date(ts).toISOString()),
         sanitizeGroupId: jest.fn((id: string) =>
           id.replace(/[^a-zA-Z0-9-]/g, "-"),
@@ -448,7 +448,7 @@ describe("message copy button", () => {
       orchestratorStore: mockOrchestratorStore,
     }));
 
-    jest.unstable_mockModule("../../utils.js", () => ({
+    jest.unstable_mockModule("../../utils/utils.js", () => ({
       formatTimestamp: jest.fn((ts: number) => new Date(ts).toISOString()),
       sanitizeGroupId: jest.fn((id: string) =>
         id.replace(/[^a-zA-Z0-9-]/g, "-"),
@@ -892,7 +892,7 @@ describe("chat workspace link resolution", () => {
       },
     }));
 
-    jest.unstable_mockModule("../../utils.js", () => ({
+    jest.unstable_mockModule("../../utils/utils.js", () => ({
       formatTimestamp: jest.fn((ts: number) => new Date(ts).toISOString()),
       sanitizeGroupId: jest.fn((id: string) =>
         id.replace(/[^a-zA-Z0-9-]/g, "-"),
@@ -1017,7 +1017,7 @@ describe("chat attachment helpers", () => {
     jest.unstable_mockModule("../../storage/downloadGroupFile.js", () => ({
       downloadGroupFile: jest.fn(),
     }));
-    jest.unstable_mockModule("../../utils.js", () => ({
+    jest.unstable_mockModule("../../utils/utils.js", () => ({
       formatTimestamp: jest.fn((ts: number) => new Date(ts).toISOString()),
       escapeHtml: jest.fn((text: string) => text.replace(/</g, "&lt;")),
       sanitizeHtml: jest.fn((html: string) => html),

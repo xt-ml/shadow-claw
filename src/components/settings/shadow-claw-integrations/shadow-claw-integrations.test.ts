@@ -40,7 +40,7 @@ jest.unstable_mockModule("../../../toast.js", () => ({
   showError: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../../ulid.js", () => ({
+jest.unstable_mockModule("../../../utils/ulid.js", () => ({
   ulid: jest.fn(() => "test-id"),
 }));
 

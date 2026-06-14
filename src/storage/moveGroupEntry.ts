@@ -8,19 +8,26 @@ import type { ShadowClawDatabase } from "../types.js";
  */
 export async function moveGroupEntry(
   db: ShadowClawDatabase,
-  groupId: string,
+  sourceGroupId: string,
+  targetGroupId: string,
   sourcePath: string,
   targetPath: string,
 ): Promise<void> {
   const normSource = sourcePath.replace(/\/$/, "");
   const normTarget = targetPath.replace(/\/$/, "");
 
-  if (normSource === normTarget) {
+  if (sourceGroupId === targetGroupId && normSource === normTarget) {
     return; // No-op
   }
 
   // 1. Copy source to target
-  await copyGroupEntry(db, groupId, normSource, normTarget);
+  await copyGroupEntry(
+    db,
+    sourceGroupId,
+    targetGroupId,
+    normSource,
+    normTarget,
+  );
 
   // 2. Remove source
   const { dirs, filename } = parsePath(normSource);
@@ -28,7 +35,7 @@ export async function moveGroupEntry(
     throw new Error("Invalid source path");
   }
 
-  const groupDir = await getGroupDir(db, groupId);
+  const groupDir = await getGroupDir(db, sourceGroupId);
   let parentDir = groupDir;
   for (const seg of dirs) {
     parentDir = await parentDir.getDirectoryHandle(seg);

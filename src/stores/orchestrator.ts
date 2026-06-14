@@ -14,7 +14,7 @@ import { cloneGroupTasks } from "../db/cloneGroupTasks.js";
 import { getConfig } from "../db/getConfig.js";
 import { setConfig } from "../db/setConfig.js";
 import { saveMessage } from "../db/saveMessage.js";
-import { ulid } from "../ulid.js";
+import { ulid } from "../utils/ulid.js";
 import {
   listGroups,
   createGroup,
@@ -1197,7 +1197,25 @@ export class OrchestratorStore {
    * Run a task
    */
   runTask(task: Task): void {
-    this.sendMessage(task.prompt);
+    if (
+      task.type === "tools" &&
+      Array.isArray(task.tools) &&
+      task.tools.length > 0
+    ) {
+      if (this.orchestrator?.agentWorker) {
+        this.orchestrator.agentWorker.postMessage({
+          type: "execute-task-tools",
+          payload: {
+            groupId: task.groupId,
+            tools: task.tools,
+          },
+        });
+      } else {
+        console.error("Agent worker not available to execute tool task.");
+      }
+    } else {
+      this.sendMessage(task.prompt);
+    }
   }
 
   /**

@@ -18,7 +18,9 @@ export interface ScheduledTaskRow {
   id: string;
   group_id: string;
   schedule: string;
+  type: string | null;
   prompt: string;
+  tools: string | null;
   enabled: number;
   last_run: number | null;
   created_at: number;
@@ -30,7 +32,9 @@ export interface ScheduledTaskInput {
   id: string;
   groupId: string;
   schedule: string;
+  type?: "prompt" | "tools";
   prompt: string;
+  tools?: any[];
   enabled?: boolean;
   lastRun?: number | null;
   createdAt: number;
@@ -55,7 +59,9 @@ export function openTaskScheduleStore(
       id TEXT PRIMARY KEY,
       group_id TEXT NOT NULL,
       schedule TEXT NOT NULL,
+      type TEXT,
       prompt TEXT NOT NULL,
+      tools TEXT,
       enabled INTEGER NOT NULL DEFAULT 1,
       last_run INTEGER,
       created_at INTEGER NOT NULL,
@@ -65,6 +71,18 @@ export function openTaskScheduleStore(
   `);
 
   // Add new columns if missing
+  try {
+    db.exec("ALTER TABLE scheduled_tasks ADD COLUMN type TEXT");
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.exec("ALTER TABLE scheduled_tasks ADD COLUMN tools TEXT");
+  } catch {
+    // column already exists
+  }
+
   try {
     db.exec("ALTER TABLE scheduled_tasks ADD COLUMN channel TEXT");
   } catch {
@@ -102,13 +120,15 @@ export function saveScheduledTask(task: ScheduledTaskInput): void {
 
   db.prepare(
     `INSERT OR REPLACE INTO scheduled_tasks
-       (id, group_id, schedule, prompt, enabled, last_run, created_at, channel, subscriber_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, group_id, schedule, type, prompt, tools, enabled, last_run, created_at, channel, subscriber_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.groupId,
     task.schedule,
+    task.type ?? null,
     task.prompt,
+    task.tools ? JSON.stringify(task.tools) : null,
     task.enabled !== false ? 1 : 0,
     task.lastRun ?? null,
     task.createdAt,
@@ -145,7 +165,9 @@ export function getScheduledTask(id: string): ScheduledTaskRow | undefined {
         id: `${result.id}`,
         group_id: `${result.group_id}`,
         schedule: `${result.schedule}`,
+        type: result.type ? `${result.type}` : null,
         prompt: `${result.prompt}`,
+        tools: result.tools ? `${result.tools}` : null,
         enabled: Number(result.enabled),
         last_run: Number(result.last_run),
         created_at: Number(result.created_at),
@@ -178,7 +200,9 @@ export function getAllScheduledTasks(
           id: `${row.id}`,
           group_id: `${row.group_id}`,
           schedule: `${row.schedule}`,
+          type: row.type ? `${row.type}` : null,
           prompt: `${row.prompt}`,
+          tools: row.tools ? `${row.tools}` : null,
           enabled: Number(row.enabled),
           last_run: Number(row.last_run),
           created_at: Number(row.created_at),
@@ -200,7 +224,9 @@ export function getAllScheduledTasks(
           id: `${row.id}`,
           group_id: `${row.group_id}`,
           schedule: `${row.schedule}`,
+          type: row.type ? `${row.type}` : null,
           prompt: `${row.prompt}`,
+          tools: row.tools ? `${row.tools}` : null,
           enabled: Number(row.enabled),
           last_run: Number(row.last_run),
           created_at: Number(row.created_at),
@@ -222,7 +248,9 @@ export function getAllScheduledTasks(
           id: `${row.id}`,
           group_id: `${row.group_id}`,
           schedule: `${row.schedule}`,
+          type: row.type ? `${row.type}` : null,
           prompt: `${row.prompt}`,
+          tools: row.tools ? `${row.tools}` : null,
           enabled: Number(row.enabled),
           last_run: Number(row.last_run),
           created_at: Number(row.created_at),
@@ -241,7 +269,9 @@ export function getAllScheduledTasks(
         id: `${row.id}`,
         group_id: `${row.group_id}`,
         schedule: `${row.schedule}`,
+        type: row.type ? `${row.type}` : null,
         prompt: `${row.prompt}`,
+        tools: row.tools ? `${row.tools}` : null,
         enabled: Number(row.enabled),
         last_run: Number(row.last_run),
         created_at: Number(row.created_at),
@@ -268,7 +298,9 @@ export function getEnabledScheduledTasks(): ScheduledTaskRow[] {
         id: `${row.id}`,
         group_id: `${row.group_id}`,
         schedule: `${row.schedule}`,
+        type: row.type ? `${row.type}` : null,
         prompt: `${row.prompt}`,
+        tools: row.tools ? `${row.tools}` : null,
         enabled: Number(row.enabled),
         last_run: Number(row.last_run),
         created_at: Number(row.created_at),

@@ -13,7 +13,7 @@ import {
   email_read_messages,
   email_send_message,
 } from "./email.js";
-import { fetch_url } from "./fetch.js";
+import { fetch_file, fetch_url } from "./fetch.js";
 import { javascript } from "./javascript.js";
 import { remote_mcp_call_tool, remote_mcp_list_tools } from "./mcp.js";
 import { list_tool_profiles, manage_tools } from "./manage_tools.js";
@@ -69,6 +69,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   enable_task,
   email_read_messages,
   email_send_message,
+  fetch_file,
   fetch_url,
   git_add,
   git_branch,

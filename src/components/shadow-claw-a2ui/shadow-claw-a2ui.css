@@ -103,8 +103,11 @@
 
 /* ── Text ──────────────────────────────────────────────────────────────── */
 .a2ui__text {
+  display: block;
+  font-family: monospace;
   margin: 0;
   padding: 0;
+  white-space: pre;
 }
 
 .a2ui__text--h1 {

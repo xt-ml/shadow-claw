@@ -63,6 +63,7 @@ import {
   executeRemoteMcpCallTool,
   executeRemoteMcpListTools,
 } from "./tools/remote-mcp.js";
+import { executeFetchFileTool } from "./tools/fetch-file.js";
 import { executeFetchUrlTool } from "./tools/fetch-url.js";
 import { executeGitTool } from "./tools/git.js";
 import {
@@ -478,6 +479,21 @@ export async function executeTool(
           uploadGroupFile,
           post,
           fetchMaxResponse: FETCH_MAX_RESPONSE,
+        });
+      }
+
+      case "fetch_file": {
+        return await executeFetchFileTool(db, input, groupId, {
+          fetchImpl: fetch,
+          resolveGitCredentials,
+          buildAuthHeaders,
+          resolveServiceCredentials,
+          withRetry,
+          isRetryableFetchError,
+          retryableStatusCodes: RETRYABLE_STATUS_CODES,
+          post,
+          writeGroupFile,
+          uploadGroupFile,
         });
       }
 

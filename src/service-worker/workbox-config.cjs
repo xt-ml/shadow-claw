@@ -1,12 +1,12 @@
 module.exports = {
   globDirectory: "dist/public/",
   globPatterns: [
-    "**/**.css",
-    "**/**.html",
-    "**/**.ico",
-    "**/**.json",
-    "**/**.js",
-    "**/**.png",
+    "**/*.css",
+    "**/*.html",
+    "**/*.ico",
+    "**/*.json",
+    "**/*.js",
+    "**/*.png",
   ],
   globIgnores: [
     "**/bin/**",

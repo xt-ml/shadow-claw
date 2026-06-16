@@ -475,7 +475,7 @@ pre {
 
 .code-line {
   border-left: 0.1875rem solid transparent;
-  display: block;
+  display: inline-block;
   padding-left: 0.5rem;
   transition:
     background-color 0.2s ease,

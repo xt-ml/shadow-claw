@@ -106,6 +106,7 @@
   display: block;
   font-family: monospace;
   margin: 0;
+  overflow: auto;
   padding: 0;
   white-space: pre;
 }

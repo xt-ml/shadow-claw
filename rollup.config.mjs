@@ -104,7 +104,7 @@ const configs = [
       name: "ShadowClawThemeInit",
     },
     onwarn,
-    plugins: [...commonPlugins("./tsconfig.json")],
+    plugins: [...commonPlugins("./tsconfig.agent.worker.json")],
   },
   // Frontend
   {
@@ -193,7 +193,48 @@ const configs = [
       inlineDynamicImports: true,
     },
     onwarn,
-    plugins: [...commonPlugins("./tsconfig.agent.worker.json")],
+    plugins: [
+      // Web Workers lack `document`. Force Turndown's Node.js build (using domino)
+      // to avoid 'document is not defined' errors during HTML-to-Markdown conversion.
+      {
+        name: "alias-turndown-for-worker",
+        resolveId(source) {
+          if (source === "turndown") {
+            return resolve(
+              __dirname,
+              "node_modules/turndown/lib/turndown.es.js",
+            );
+          }
+
+          if (source === "@mixmark-io/domino") {
+            return resolve(
+              __dirname,
+              "node_modules/@mixmark-io/domino/lib/index.js",
+            );
+          }
+
+          return null;
+        },
+        transform(code, id) {
+          // turndown.es.js uses a CommonJS require() for domino.
+          // This transform hoists it to a top-level ESM import so Rollup can bundle it.
+          if (id.includes("turndown") && id.endsWith("turndown.es.js")) {
+            return {
+              code:
+                "import _domino_import from '@mixmark-io/domino';\n" +
+                code.replace(
+                  "var domino = require('@mixmark-io/domino');",
+                  "var domino = _domino_import;",
+                ),
+              map: null,
+            };
+          }
+
+          return null;
+        },
+      },
+      ...commonPlugins("./tsconfig.agent.worker.json"),
+    ],
   },
   // Transformers.js Model Worker
   {

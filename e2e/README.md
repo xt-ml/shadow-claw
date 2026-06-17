@@ -32,7 +32,8 @@ e2e/
 │   └── tasks.test.ts          # Task interface and toggle verification
 │   └── file-viewer.test.ts    # File viewer component integration coverage
 │   └── share-target.test.ts   # Web Share Target import flow
-│   └── orchestrator.test.ts / storage.test.ts  # System integration coverage
+│   └── orchestrator.test.ts   # System integration coverage
+│   └── storage.test.ts        # System integration coverage
 └── README.md           # This file
 ```
 

@@ -105,7 +105,7 @@ ShadowClaw supports multiple LLM providers with a unified adapter pattern:
 | **Cloud**          | OpenRouter, OpenAI, Anthropic, Google Gemini, AWS Bedrock, Vertex AI | API key required                   |
 | **GitHub/Copilot** | GitHub Models, Copilot Azure                                         | Server-side proxy                  |
 | **Local**          | Ollama, Llamafile, Transformers.js                                   | Runs on local server or in-browser |
-| **Browser**        | Prompt API (`window.LanguageModel`)                                  | Experimental, keyless, Gemini Nano |
+| **Browser**        | Prompt API (`window.LanguageModel`), LiteRT                          | Experimental, keyless, Gemini Nano |
 
 **Features:**
 
@@ -129,7 +129,7 @@ The agent has access to **30+ tools** including:
 | **Git**     | `git_clone`, `git_merge`, `git_push`, `git_diff`, `git_reset`, etc.                       |
 | **Web**     | `fetch_url` (with optional Git or service account auth)                                   |
 | **Compute** | `javascript` (sandboxed)                                                                  |
-| **Tasks**   | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`                  |
+| **Tasks**   | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`  |
 | **UI**      | `show_toast`, `send_notification`, `clear_chat`                                           |
 | **Context** | `update_memory` (edits `MEMORY.md`)                                                       |
 | **Remote**  | `remote_mcp_list_tools`, `remote_mcp_call_tool` (external MCP servers)                    |
@@ -141,11 +141,12 @@ The agent has access to **30+ tools** including:
 
 ## Conversations & Messaging Channels
 
-ShadowClaw supports **three messaging channels** by default:
+ShadowClaw supports **four messaging channels** by default:
 
 - `br:` — In-browser chat
-- `tg:` — Telegram Bot API
 - `im:` — iMessage bridge
+- `peer:` — PeerJS WebRTC
+- `tg:` — Telegram Bot API
 
 Each channel creates isolated conversations with their own message history and workspace.
 

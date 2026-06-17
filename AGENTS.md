@@ -29,13 +29,17 @@ ShadowClaw has been significantly deduplicated. Instead of a massive `AGENTS.md`
 | Chat Template Sanitizer       | [docs/subsystems/sanitizer.md](docs/subsystems/sanitizer.md)                             |
 | Cryptography & Secrets        | [docs/subsystems/crypto.md](docs/subsystems/crypto.md)                                   |
 | Electron Desktop App          | [docs/subsystems/electron.md](docs/subsystems/electron.md)                               |
+| Email Integration             | [docs/subsystems/email.md](docs/subsystems/email.md)                                     |
 | Git Integration               | [docs/subsystems/git.md](docs/subsystems/git.md)                                         |
 | Notifications & Tasks         | [docs/subsystems/notifications.md](docs/subsystems/notifications.md)                     |
+| Pages System                  | [docs/subsystems/pages.md](docs/subsystems/pages.md)                                     |
 | Providers (OpenAI, Anthropic) | [docs/subsystems/providers.md](docs/subsystems/providers.md)                             |
 | Remote MCP                    | [docs/subsystems/remote-mcp.md](docs/subsystems/remote-mcp.md)                           |
 | Shell Emulator / Bash Tool    | [docs/subsystems/shell.md](docs/subsystems/shell.md)                                     |
 | Tools & Execution             | [docs/subsystems/tools.md](docs/subsystems/tools.md)                                     |
+| Trusted Types Tinyfill        | [docs/subsystems/trusted-types-tinyfill.md](docs/subsystems/trusted-types-tinyfill.md)   |
 | UI & Signals (Web Components) | [docs/subsystems/reactive-ui.md](docs/subsystems/reactive-ui.md)                         |
+| WebMCP Integration            | [docs/subsystems/webmcp.md](docs/subsystems/webmcp.md)                                   |
 | WebVM (v86 Alpine)            | [docs/subsystems/vm.md](docs/subsystems/vm.md)                                           |
 
 ## Conventions & Guardrails

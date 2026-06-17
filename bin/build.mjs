@@ -52,6 +52,12 @@ async function main() {
     }
   }
 
+  // publish documentation
+  await cp("docs", "dist/public/docs", { recursive: true });
+  await cp("e2e/README.md", "dist/public/e2e/README.md");
+  await cp("README.md", "dist/public/README.md");
+  await cp("AGENTS.md", "dist/public/AGENTS.md");
+
   // npm run -s tsc
   await run("npm run -s tsc");
 

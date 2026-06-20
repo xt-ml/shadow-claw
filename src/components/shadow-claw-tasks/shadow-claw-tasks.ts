@@ -255,12 +255,23 @@ export class ShadowClawTasks extends ShadowClawElement {
         ? this.renderToolsPreview(task.tools || [], true)
         : await this.renderPreview(task.prompt, true);
 
+      const scheduleDisplay = task.schedule
+        ? `⏰ ${escapeHtml(task.schedule)}`
+        : "⏸ Unscheduled";
+      const toggleHtml = task.schedule
+        ? `
+            <label class="tasks__toggle">
+              <input type="checkbox" ${task.enabled ? "checked" : ""} data-id="${escapeHtml(task.id)}" class="tasks__toggle-input" aria-label="${task.enabled ? "Disable" : "Enable"} task scheduled ${escapeHtml(task.schedule)}">
+              ${task.enabled ? "Enabled" : "Disabled"}
+            </label>`
+        : "";
+
       setSanitizedHtml(
         item,
         `<div class="tasks__item-header">
           <div class="tasks__item-info">
             <div class="tasks__schedule-row">
-              <div class="tasks__schedule">⏰ ${escapeHtml(task.schedule)} <span class="tasks__type-badge">(${isTools ? "Tools" : "Prompt"})</span></div>
+              <div class="tasks__schedule">${scheduleDisplay} <span class="tasks__type-badge">(${isTools ? "Tools" : "Prompt"})</span></div>
             </div>
             <div class="tasks__prompt-container">
               ${previewHtml}
@@ -268,13 +279,13 @@ export class ShadowClawTasks extends ShadowClawElement {
             <div class="tasks__last-run">Last run: ${escapeHtml(lastRunStr)}</div>
           </div>
           <div class="tasks__actions">
-            <label class="tasks__toggle">
-              <input type="checkbox" ${task.enabled ? "checked" : ""} data-id="${escapeHtml(task.id)}" class="tasks__toggle-input" aria-label="${task.enabled ? "Disable" : "Enable"} task scheduled ${escapeHtml(task.schedule)}">
-              ${task.enabled ? "Enabled" : "Disabled"}
-            </label>
-            <button type="button" class="tasks__run-btn" data-id="${escapeHtml(task.id)}" aria-label="Run task scheduled ${escapeHtml(task.schedule)}">Run</button>
-            <button type="button" class="tasks__edit-btn" data-id="${escapeHtml(task.id)}" aria-label="Edit task scheduled ${escapeHtml(task.schedule)}">✎ Edit</button>
-            <button type="button" class="tasks__delete-btn" data-id="${escapeHtml(task.id)}" aria-label="Delete task scheduled ${escapeHtml(task.schedule)}">Delete</button>
+            ${toggleHtml}
+            <button type="button" class="tasks__copy-id-btn" data-id="${escapeHtml(task.id)}" aria-label="Copy task ID" title="Copy task ID">
+              <svg xmlns="http://www.w3.org/2000/svg" height="1em" width="1em" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true" style="vertical-align: middle; margin-right: 0.125rem; margin-top: -0.125rem;"><path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z"/></svg> Copy ID
+            </button>
+            <button type="button" class="tasks__run-btn" data-id="${escapeHtml(task.id)}" aria-label="Run task">Run</button>
+            <button type="button" class="tasks__edit-btn" data-id="${escapeHtml(task.id)}" aria-label="Edit task">✎ Edit</button>
+            <button type="button" class="tasks__delete-btn" data-id="${escapeHtml(task.id)}" aria-label="Delete task">Delete</button>
           </div>
         </div>`,
       );
@@ -288,6 +299,9 @@ export class ShadowClawTasks extends ShadowClawElement {
         const target = e.target as HTMLInputElement;
         orchestratorStore.toggleTask(db, task, target.checked);
       });
+
+      const copyIdBtn = item.querySelector(".tasks__copy-id-btn");
+      copyIdBtn?.addEventListener("click", () => this.handleCopyId(task.id));
 
       const runBtn = item.querySelector(".tasks__run-btn");
       runBtn?.addEventListener("click", () => this.handleRun(task));
@@ -308,10 +322,22 @@ export class ShadowClawTasks extends ShadowClawElement {
   }
 
   /**
+   * Copy a task's ID to the clipboard
+   */
+  async handleCopyId(id: string) {
+    try {
+      await navigator.clipboard.writeText(id);
+      showSuccess("Task ID copied to clipboard!");
+    } catch (err) {
+      showError("Failed to copy task ID.");
+    }
+  }
+
+  /**
    * Run a task
    */
   handleRun(task: Task) {
-    orchestratorStore.runTask(task);
+    orchestratorStore.runTask(task, true);
   }
 
   /**
@@ -424,7 +450,7 @@ export class ShadowClawTasks extends ShadowClawElement {
     const scheduleInput = form.querySelector("input[name='schedule']");
     const promptInput = form.querySelector("textarea[name='prompt']");
     if (scheduleInput instanceof HTMLInputElement) {
-      scheduleInput.value = task.schedule;
+      scheduleInput.value = task.schedule || "";
     }
 
     if (promptInput instanceof HTMLTextAreaElement) {
@@ -466,11 +492,7 @@ export class ShadowClawTasks extends ShadowClawElement {
     const prompt = formData.get("prompt");
     const type = (formData.get("taskType") as "prompt" | "tools") || "prompt";
 
-    if (!schedule) {
-      showInfo("Please provide a schedule.");
-
-      return;
-    }
+    const scheduleStr = schedule ? String(schedule).trim() : "";
 
     if (type === "prompt" && !prompt) {
       showInfo("Please provide a task prompt.");
@@ -485,7 +507,7 @@ export class ShadowClawTasks extends ShadowClawElement {
         // Update existing task
         taskToSave = {
           ...this.editingTask,
-          schedule: String(schedule),
+          schedule: scheduleStr,
           type,
           prompt: String(prompt || ""),
           tools: JSON.parse(JSON.stringify(this.editingTools)),
@@ -498,7 +520,7 @@ export class ShadowClawTasks extends ShadowClawElement {
             ? crypto.randomUUID()
             : `task-${Date.now()}-${Math.random()}`,
           groupId: currentGroupId,
-          schedule: String(schedule),
+          schedule: scheduleStr,
           type,
           prompt: String(prompt || ""),
           tools: JSON.parse(JSON.stringify(this.editingTools)),

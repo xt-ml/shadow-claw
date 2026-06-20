@@ -140,6 +140,20 @@ describe("webmcp integration", () => {
     expect(navigatorRegisterTool).toHaveBeenCalled();
   });
 
+  it("always passes AbortController signal when registering tools", async () => {
+    await registerWebMcpTools(null, jest.fn(), "group-webmcp");
+
+    expect(mockRegisterTool).toHaveBeenCalled();
+
+    // Every registerTool call must include { signal } — this is required for
+    // correct unregistration on both the polyfill and the native Chrome API.
+    for (const call of mockRegisterTool.mock.calls) {
+      const options = call[1] as any;
+      expect(options).toBeDefined();
+      expect(options.signal).toBeInstanceOf(AbortSignal);
+    }
+  });
+
   it("registers tools and delegates execute through postMessage", async () => {
     const emit = jest.fn();
 
@@ -224,45 +238,43 @@ describe("webmcp integration", () => {
     expect(mockRegisterTool.mock.calls.length).toBe(firstCount);
   });
 
-  it("unregisters all previously registered tools", async () => {
+  it("unregisters all previously registered tools by aborting their signals", async () => {
     await registerWebMcpTools(null, jest.fn(), "group-webmcp");
-    const registeredNames = mockRegisterTool.mock.calls.map(
-      (args: any[]) => args[0].name,
+
+    const registeredCount = mockRegisterTool.mock.calls.length;
+    expect(registeredCount).toBeGreaterThan(0);
+
+    // Capture the AbortSignals passed during registration.
+    const signals: AbortSignal[] = mockRegisterTool.mock.calls.map(
+      (args: any[]) => (args[1] as any)?.signal,
     );
 
-    expect(registeredNames.length).toBeGreaterThan(0);
-
-    Object.defineProperty((globalThis as any).document, "modelContext", {
-      configurable: true,
-      value: {
-        registerTool: mockRegisterTool,
-        unregisterTool: mockUnregisterTool,
-      },
-    });
+    // None aborted yet.
+    for (const signal of signals) {
+      expect(signal.aborted).toBe(false);
+    }
 
     unregisterWebMcpTools();
 
-    expect(mockUnregisterTool).toHaveBeenCalledTimes(registeredNames.length);
+    // All signals must be aborted after unregister.
+    for (const signal of signals) {
+      expect(signal.aborted).toBe(true);
+    }
+
+    // unregisterTool(name) must NOT be called — it is absent from the native
+    // Chrome API and calling it would fail silently, leaving tools registered.
+    expect(mockUnregisterTool).not.toHaveBeenCalled();
   });
 
-  it("unregisters successfully when aborting registration signals", async () => {
+  it("allows re-registration after unregistering", async () => {
     await registerWebMcpTools(null, jest.fn(), "group-webmcp");
-    const registeredNames = mockRegisterTool.mock.calls.map(
-      (args: any[]) => args[0].name,
-    );
-
-    expect(registeredNames.length).toBeGreaterThan(0);
-
-    Object.defineProperty((globalThis as any).document, "modelContext", {
-      configurable: true,
-      value: {
-        registerTool: mockRegisterTool,
-        unregisterTool: mockUnregisterTool,
-      },
-    });
+    const firstCount = mockRegisterTool.mock.calls.length;
 
     unregisterWebMcpTools();
 
-    expect(mockUnregisterTool).toHaveBeenCalledTimes(registeredNames.length);
+    // After unregister the internal name-set is cleared, so a fresh call
+    // should register all tools again.
+    await registerWebMcpTools(null, jest.fn(), "group-webmcp");
+    expect(mockRegisterTool.mock.calls.length).toBe(firstCount * 2);
   });
 });

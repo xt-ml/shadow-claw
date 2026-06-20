@@ -122,20 +122,55 @@ ShadowClaw supports multiple LLM providers with a unified adapter pattern:
 
 The agent has access to **30+ tools** including:
 
-| Category    | Tools                                                                                     |
-| ----------- | ----------------------------------------------------------------------------------------- |
-| **Files**   | `read_file`, `write_file`, `patch_file`, `list_files`, `open_file`, `attach_file_to_chat` |
-| **Shell**   | `bash` (WebVM or just-bash emulator)                                                      |
-| **Git**     | `git_clone`, `git_merge`, `git_push`, `git_diff`, `git_reset`, etc.                       |
-| **Web**     | `fetch_url` (with optional Git or service account auth)                                   |
-| **Compute** | `javascript` (sandboxed)                                                                  |
-| **Tasks**   | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`  |
-| **UI**      | `show_toast`, `send_notification`, `clear_chat`                                           |
-| **Context** | `update_memory` (edits `MEMORY.md`)                                                       |
-| **Remote**  | `remote_mcp_list_tools`, `remote_mcp_call_tool` (external MCP servers)                    |
-| **Email**   | `manage_email`, `email_read_messages`, `email_send_message`                               |
+| Category    | Tools                                                                                                |
+| ----------- | ---------------------------------------------------------------------------------------------------- |
+| **Files**   | `read_file`, `write_file`, `patch_file`, `list_files`, `open_file`, `attach_file_to_chat`            |
+| **Shell**   | `bash` (WebVM or just-bash emulator)                                                                 |
+| **Git**     | `git_clone`, `git_merge`, `git_push`, `git_diff`, `git_reset`, etc.                                  |
+| **Web**     | `fetch_url` (with optional Git or service account auth)                                              |
+| **Compute** | `javascript` (sandboxed)                                                                             |
+| **Tasks**   | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`, `run_task` |
+| **UI**      | `show_toast`, `send_notification`, `clear_chat`                                                      |
+| **Context** | `update_memory` (edits `MEMORY.md`)                                                                  |
+| **Remote**  | `remote_mcp_list_tools`, `remote_mcp_call_tool` (external MCP servers)                               |
+| **Email**   | `manage_email`, `email_read_messages`, `email_send_message`                                          |
+
+### Testing WebMCP Integration
 
 **WebMCP integration**: When `document.modelContext` is available (with `navigator.modelContext` fallback), tools are also registered through the browser's Model Context Protocol (`@mcp-b/webmcp-polyfill` v3).
+
+```ts
+// get available tools
+var tools = await document.modelContext.getTools();
+
+// format the tool list
+var formattedToolsJSON = JSON.stringify(
+  tools.map(
+    ({ annotations, description, inputSchema, name, origin, title }) => ({
+      annotations,
+      description,
+      inputSchema,
+      name,
+      origin,
+      title,
+    }),
+  ),
+  null,
+  2,
+);
+
+// list available tools
+console.log(formattedToolsJSON);
+
+// get the toast tool
+var [toastTool] = tools.filter((v) => v.description.includes("Show a toast"));
+
+// run the toast tool
+await document.modelContext.executeTool(
+  toastTool,
+  '{ "message": "Hello from 🦞 Shadow Claw!"}',
+);
+```
 
 **Full reference**: [docs/subsystems/tools.md](docs/subsystems/tools.md)
 

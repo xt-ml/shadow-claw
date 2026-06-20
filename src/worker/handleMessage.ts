@@ -251,7 +251,7 @@ export async function handleMessage(event: MessageEvent): Promise<void> {
             tool.name,
             tool.input || {},
             groupId,
-            { isScheduledTask: true },
+            { isScheduledTask: !payload.isManual, isTaskExecution: true },
           );
           if (!tool.suppressOutput) {
             results.push(`**Tool \`${tool.name}\`**: ${output}`);

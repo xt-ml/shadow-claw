@@ -56,6 +56,7 @@ import {
   disable_task,
   enable_task,
   list_tasks,
+  run_task,
   update_task,
 } from "./tasks.js";
 
@@ -100,6 +101,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   remote_mcp_call_tool,
   remote_mcp_list_tools,
   render_component,
+  run_task,
   send_notification,
   send_file,
   show_toast,

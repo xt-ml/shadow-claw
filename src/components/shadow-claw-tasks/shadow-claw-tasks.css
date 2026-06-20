@@ -213,7 +213,8 @@
 }
 
 .tasks__delete-btn,
-.tasks__edit-btn {
+.tasks__edit-btn,
+.tasks__copy-id-btn {
   background: transparent;
   border: 0.0625rem solid;
   border-radius: var(--shadow-claw-radius-m);
@@ -308,13 +309,16 @@
   color: var(--shadow-claw-on-error);
 }
 
-.tasks__edit-btn {
+.tasks__edit-btn,
+.tasks__copy-id-btn {
   border-color: var(--shadow-claw-border-color);
   color: var(--shadow-claw-text-secondary);
 }
 
 .tasks__edit-btn:hover,
-.tasks__edit-btn:focus-visible {
+.tasks__edit-btn:focus-visible,
+.tasks__copy-id-btn:hover,
+.tasks__copy-id-btn:focus-visible {
   border-color: var(--shadow-claw-text-primary);
   box-shadow: var(--shadow-claw-shadow-md);
   color: var(--shadow-claw-text-primary);
@@ -373,7 +377,8 @@
   }
 
   .tasks__delete-btn,
-  .tasks__edit-btn {
+  .tasks__edit-btn,
+  .tasks__copy-id-btn {
     flex: 1 1 auto;
     min-width: 4.375rem;
   }

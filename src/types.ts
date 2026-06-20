@@ -122,7 +122,7 @@ export interface TaskToolCall {
 export interface Task {
   id: string;
   groupId: string;
-  schedule: string; // cron expression
+  schedule?: string; // cron expression, optional for unscheduled tasks
 
   type?: "prompt" | "tools";
   prompt: string;

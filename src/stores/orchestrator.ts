@@ -1196,7 +1196,7 @@ export class OrchestratorStore {
   /**
    * Run a task
    */
-  runTask(task: Task): void {
+  runTask(task: Task, isManual: boolean = false): void {
     if (
       task.type === "tools" &&
       Array.isArray(task.tools) &&
@@ -1208,6 +1208,7 @@ export class OrchestratorStore {
           payload: {
             groupId: task.groupId,
             tools: task.tools,
+            isManual,
           },
         });
       } else {

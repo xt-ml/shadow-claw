@@ -78,6 +78,13 @@ When `git_merge` encounters conflicts, it returns a **structured conflict report
 3. Use `write_file` to overwrite the file with the **complete resolved content** (no conflict markers remaining).
    **Important:** Always use `read_file` + `write_file` for conflict resolution. Do **not** use `bash`, `sed`, or `awk` — these are fragile with conflict markers and waste iterations.
 
+### Task Recursion Guard
+
+To prevent infinite execution loops, the system enforces a strict recursion guard during task execution.
+
+- Tools that manage tasks (`create_task`, `update_task`, `delete_task`, `enable_task`, `disable_task`) and notifications (`send_notification`) are blocked during scheduled task execution.
+- The `run_task` tool is explicitly blocked within **any** task execution context (scheduled or manual) to prevent runaway self-triggering loops.
+
 ### HTML Sanitization & Trusted Types
 
 - **Explicit Pre-Sanitization:** All dynamically rendered HTML, inline SVGs, or iframe `srcdoc` values must be sanitized using DOMPurify (e.g., `sanitizeToTrustedHtml` or `sanitizeSrcdocHtml`) **before** being passed to the Trusted Types policy.

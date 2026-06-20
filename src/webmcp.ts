@@ -9,7 +9,6 @@ const registeredToolControllers: Map<string, AbortController> = new Map();
 const registeredToolNames: Set<string> = new Set();
 
 let currentMode: WebMcpMode = "polyfill";
-let polyfillInstalled = false;
 
 /**
  * Set the WebMCP mode (polyfill vs native).
@@ -30,20 +29,16 @@ export function getWebMcpMode(): WebMcpMode {
 }
 
 /**
- * Install the `@mcp-b/webmcp-polyfill` onto `navigator.modelContext`.
+ * Install the `@mcp-b/webmcp-polyfill` onto `document.modelContext`.
  *
- * Chrome Canary's native implementation can crash the renderer, so the
- * polyfill provides a safe pure-JS alternative.  When switching TO polyfill
- * mode, we override any existing native `modelContext`.
+ * The polyfill itself bails out when Chrome's native `document.modelContext`
+ * is already present — it does NOT override the native API. We call it
+ * unconditionally; if the polyfill is already installed it will detect the
+ * existing install via its own `installState` guard and return quickly.
  */
 function ensurePolyfill(): void {
-  if (polyfillInstalled) {
-    return;
-  }
-
   try {
     initializeWebMCPPolyfill();
-    polyfillInstalled = true;
   } catch (err) {
     console.warn("WebMCP polyfill initialization failed:", err);
   }
@@ -108,11 +103,17 @@ export function isWebMcpSupported(): boolean {
 /**
  * Register ShadowClaw tools with the WebMCP ModelContext API.
  *
- * Supports two modes:
- * - `"polyfill"`: Uses `@mcp-b/webmcp-polyfill` (safe, works everywhere).
- *   Unregistration uses `unregisterTool(name)`.
- * - `"native"`: Uses Chrome's native API (requires flag).
- *   Unregistration uses `AbortController` signals.
+ * Both the `@mcp-b/webmcp-polyfill` and Chrome's native API support
+ * `registerTool(tool, { signal })`. We always use AbortController signals so
+ * that unregistration works identically regardless of which implementation is
+ * actually active.
+ *
+ * Key correctness detail: `initializeWebMCPPolyfill()` is a no-op when
+ * Chrome's native `document.modelContext` already exists — it does NOT
+ * override the native API. In that situation we are talking to the native
+ * Chrome API even in "polyfill" mode. The native Chrome API only supports
+ * signal-based unregistration, so using AbortController signals everywhere
+ * prevents "Duplicate tool name" errors when tools are re-configured.
  */
 export async function registerWebMcpTools(
   agentWorker: Worker | null,
@@ -193,13 +194,9 @@ export async function registerWebMcpTools(
         },
       };
 
-      if (currentMode === "native") {
-        // Native Chrome API uses AbortController signals for unregistration.
-        modelContext.registerTool(toolDef, { signal: controller.signal });
-      } else {
-        // Polyfill: simple registerTool, unregister via unregisterTool(name).
-        modelContext.registerTool(toolDef);
-      }
+      // Always use AbortController signals — both the polyfill and the native
+      // Chrome API honour { signal } for lifecycle management.
+      modelContext.registerTool(toolDef, { signal: controller.signal });
 
       // Yield to the event loop between registrations.
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -207,9 +204,15 @@ export async function registerWebMcpTools(
       registeredToolControllers.delete(def.name);
       registeredToolNames.delete(def.name);
 
-      if (
-        !(err instanceof Error && err.message.includes("already registered"))
-      ) {
+      // Treat duplicate-registration errors as a no-op. The polyfill throws
+      // "Tool already registered: <name>" and the native Chrome API throws
+      // "Duplicate tool name" — both mean the tool is already present.
+      const isDuplicate =
+        err instanceof Error &&
+        (err.message.includes("already registered") ||
+          err.message.includes("Duplicate tool name"));
+
+      if (!isDuplicate) {
         console.error(`Failed to register tool ${def.name}:`, err);
 
         throw err;
@@ -223,34 +226,19 @@ export async function registerWebMcpTools(
 /**
  * Unregister previously registered ShadowClaw WebMCP tools.
  *
- * - Polyfill mode: calls `unregisterTool(name)` for each tool.
- * - Native mode: aborts the `AbortController` signal for each tool.
+ * Aborts every AbortController associated with a registered tool. This works
+ * for both the polyfill (which listens for the `abort` event on the signal it
+ * was given) and Chrome's native API (which also uses signal-based lifecycle).
+ * The deprecated `unregisterTool(name)` is intentionally NOT called here
+ * because it is absent from the native Chrome API and causes silent failures
+ * that prevent proper cleanup.
  */
 export function unregisterWebMcpTools() {
-  if (currentMode === "polyfill") {
-    // Polyfill supports unregisterTool(name).
+  for (const controller of registeredToolControllers.values()) {
     try {
-      const modelContext = getModelContextApi();
-      if (modelContext && typeof modelContext.unregisterTool === "function") {
-        for (const name of registeredToolNames) {
-          try {
-            modelContext.unregisterTool(name);
-          } catch {
-            // Ignore — tool may already be unregistered.
-          }
-        }
-      }
+      controller.abort();
     } catch {
-      // Ignore errors during cleanup.
-    }
-  } else {
-    // Native Chrome API: abort all controllers.
-    for (const controller of registeredToolControllers.values()) {
-      try {
-        controller.abort();
-      } catch {
-        // Ignore unregister errors in experimental API contexts.
-      }
+      // Ignore unregister errors in experimental API contexts.
     }
   }
 

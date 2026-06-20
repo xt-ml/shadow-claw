@@ -37,7 +37,7 @@ export const create_task: ToolDefinition = {
         },
       },
     },
-    required: ["schedule"],
+    required: ["prompt", "type"],
   },
 };
 
@@ -64,7 +64,8 @@ export const update_task: ToolDefinition = {
       },
       schedule: {
         type: "string",
-        description: "New cron expression (optional)",
+        description:
+          "Standard cron expression (e.g. '0 9 * * *'). Leave empty for an unscheduled task.",
       },
       prompt: {
         type: "string",
@@ -135,6 +136,24 @@ export const disable_task: ToolDefinition = {
       id: {
         type: "string",
         description: "The unique ID of the task to disable",
+      },
+    },
+    required: ["id"],
+  },
+};
+
+export const run_task: ToolDefinition = {
+  name: "run_task",
+  description:
+    "Immediately trigger a scheduled task by its ID, outside of its normal cron schedule. " +
+    "Use this to manually fire a task on demand. " +
+    "Use list_tasks to find the task ID first.",
+  input_schema: {
+    type: "object",
+    properties: {
+      id: {
+        type: "string",
+        description: "The unique ID of the task to run immediately",
       },
     },
     required: ["id"],

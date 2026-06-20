@@ -2882,6 +2882,46 @@ describe("executeTool.js", () => {
       });
     }
 
+    it("blocks run_task when isScheduledTask is true", async () => {
+      const result = await executeTool({}, "run_task", { id: "t1" }, "group1", {
+        isScheduledTask: true,
+      });
+
+      expect(result).toMatch(/cannot be called|not allowed|loop/i);
+    });
+
+    it("blocks run_task when isTaskExecution is true (manual task context)", async () => {
+      const result = await executeTool({}, "run_task", { id: "t1" }, "group1", {
+        isScheduledTask: false,
+        isTaskExecution: true,
+      });
+
+      expect(result).toMatch(/cannot be called|not allowed|loop/i);
+    });
+
+    it("allows run_task from normal agent conversation context", async () => {
+      (mockGetAllTasks as any).mockResolvedValue([
+        {
+          id: "t1",
+          groupId: "group1",
+          schedule: "* * * * *",
+          prompt: "ping",
+          enabled: true,
+          type: "prompt",
+        },
+      ]);
+
+      const result = await executeTool(
+        {},
+        "run_task",
+        { id: "t1" },
+        "group1",
+        // No isTaskExecution or isScheduledTask — normal chat context
+      );
+
+      expect(result).toContain("triggered successfully");
+    });
+
     it("allows create_task when isScheduledTask is false", async () => {
       const result = await executeTool(
         {},

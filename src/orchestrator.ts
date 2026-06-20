@@ -226,7 +226,7 @@ export class Orchestrator {
     bootAttempted: false,
     error: null,
   };
-  webMcpToolsEnabled: boolean = false;
+  webMcpToolsEnabled: boolean = true;
 
   constructor() {
     this.initializeChannelRegistry();
@@ -373,7 +373,7 @@ export class Orchestrator {
       db,
       CONFIG_KEYS.WEBMCP_TOOLS_ENABLED,
     );
-    this.webMcpToolsEnabled = storedWebMcpToolsEnabled === "true";
+    this.webMcpToolsEnabled = storedWebMcpToolsEnabled !== "false";
 
     const storedBashFullInternetAccess = await getConfig(
       db,
@@ -2841,6 +2841,13 @@ export class Orchestrator {
       case "streaming-error": {
         const { groupId, error } = msg.payload;
         this.events.emit("streaming-error", { groupId, error });
+
+        break;
+      }
+
+      case "run-task": {
+        const { task } = msg.payload;
+        orchestratorStore.runTask(task, true);
 
         break;
       }

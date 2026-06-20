@@ -1,5 +1,6 @@
 .cache
 .env
+.vscode
 *.db
 assets/cache*
 assets/v86*

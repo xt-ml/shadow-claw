@@ -61,7 +61,12 @@ export class TaskScheduler {
       const now = new Date();
 
       for (const task of tasks) {
-        if (matchesCron(task.schedule, now) && !this.ranThisMinute(task, now)) {
+        const taskSchedule = task.schedule || "";
+        if (
+          taskSchedule !== "" &&
+          matchesCron(taskSchedule, now) &&
+          !this.ranThisMinute(task, now)
+        ) {
           // Mark as run immediately to prevent double-firing
           await updateTaskLastRun(task.id, now.getTime());
 

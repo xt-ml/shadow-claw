@@ -189,9 +189,18 @@ export async function executeTool(
   name: string,
   input: Record<string, any>,
   groupId: string,
-  options: { isScheduledTask?: boolean } = {},
+  options: { isScheduledTask?: boolean; isTaskExecution?: boolean } = {},
 ): Promise<string> {
   try {
+    // Block run_task in any task execution context (scheduled OR manual) to
+    // prevent runaway self-triggering loops. run_task is only safe from the
+    // top-level agent conversation, not from within a task itself.
+    if (options.isScheduledTask || options.isTaskExecution) {
+      if (name === "run_task") {
+        return `Tool "run_task" cannot be called from within a task execution to prevent infinite loops.`;
+      }
+    }
+
     // Block task-mutation and notification tools during scheduled task execution
     // to prevent infinite recursion (task → notification → task loops).
     if (options.isScheduledTask) {
@@ -652,6 +661,19 @@ export async function executeTool(
         post({ type: "delete-task", payload: { id: input.id, groupId } });
 
         return `Task ${input.id} deleted successfully.`;
+      }
+
+      case "run_task": {
+        const tasks = await getGroupTasks(db, groupId);
+        const task = tasks.find((t: any) => t.id === input.id);
+
+        if (!task) {
+          return `Error: Task with ID ${input.id} not found.`;
+        }
+
+        post({ type: "run-task", payload: { task } });
+
+        return `Task ${input.id} triggered successfully.`;
       }
 
       case "clear_chat": {

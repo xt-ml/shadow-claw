@@ -203,15 +203,32 @@ To ensure safety and prevent infinite execution loops (e.g., task → notificati
 - `create_task`, `update_task`, `delete_task`, `enable_task`, `disable_task`
 - `send_notification`
 
+Additionally, the `run_task` tool is explicitly blocked from within **any** task execution context (whether scheduled or triggered manually) to prevent runaway self-triggering loops.
+
 This means while an _agent_ can create a task of composed WebMCP tools, a _task_ itself cannot spawn further tasks.
 
 ---
 
 ## Polyfill vs Native
 
-|                    | Polyfill                 | Native                                                       |
-| ------------------ | ------------------------ | ------------------------------------------------------------ |
-| **Stability**      | Stable                   | Experimental (may crash Canary)                              |
-| **Unregistration** | `unregisterTool(name)`   | `AbortController.abort()`                                    |
-| **API location**   | `navigator.modelContext` | `document.modelContext` (fallback: `navigator.modelContext`) |
-| **Requirement**    | None                     | `chrome://flags/#enable-webmcp-testing`                      |
+|                    | Polyfill                  | Native                                                       |
+| ------------------ | ------------------------- | ------------------------------------------------------------ |
+| **Stability**      | Stable                    | Experimental (may crash Canary)                              |
+| **Unregistration** | `AbortController.abort()` | `AbortController.abort()`                                    |
+| **API location**   | `navigator.modelContext`  | `document.modelContext` (fallback: `navigator.modelContext`) |
+| **Requirement**    | None                      | `chrome://flags/#enable-webmcp-testing`                      |
+
+---
+
+## Origin Trial Features (Tool Consumption)
+
+With the introduction of the Chrome WebMCP Origin Trial (Chrome 149+), the API expanded to include new features:
+
+- **Listing tools:** `document.modelContext.getTools()`
+- **Executing tools:** `document.modelContext.executeTool(tool, input)`
+- **Permissions Policy / Cross-origin iframes:** Support for WebMCP inside iframes via `allow="webmcp *"`.
+
+**ShadowClaw's Role:**
+ShadowClaw currently acts exclusively as a **Tool Provider**. Our integration focuses on `registerTool()` to expose ShadowClaw's built-in tools (Bash, Git, etc.) to the browser's context so they can be consumed by external AI agents (like Chrome's Built-in AI or MCP-B).
+
+ShadowClaw's internal LLM does not currently act as a **Tool Consumer** via WebMCP (i.e., we do not dynamically poll `getTools()` to expose external page-provided tools to our agent). However, because we utilize `@mcp-b/webmcp-polyfill`, the polyfill already gracefully supports these consumer APIs should we choose to bridge them to the LLM in the future.

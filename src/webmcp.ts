@@ -62,6 +62,7 @@ function getModelContextApi(): any {
 
   try {
     const modelContext: unknown =
+      // @ts-ignore
       typeof document.modelContext !== "undefined"
         ? Reflect.get(document, "modelContext")
         : typeof navigator.modelContext !== "undefined"

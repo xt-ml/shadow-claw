@@ -14,6 +14,7 @@ export interface ServerConfig {
   corsMode: "localhost" | "private" | "all";
   allowedOrigins: Set<string>;
   verbose: boolean;
+  peerjs: boolean;
   rootPath: string;
   databaseDir: string;
 }
@@ -41,7 +42,8 @@ export function parseConfig(): ServerConfig {
         return previous.concat(value.split(",").map((s) => s.trim()));
       },
       [],
-    );
+    )
+    .option("--peerjs", "Enable built-in PeerJS signaling server", false);
 
   program.parse();
 
@@ -120,12 +122,20 @@ export function parseConfig(): ServerConfig {
     ...options.corsAllowOrigin,
   ];
 
+  // PeerJS signaling server
+  const peerjs =
+    options.peerjs ||
+    ["1", "true", "yes"].includes(
+      (env.SHADOWCLAW_PEERJS || "").toLowerCase().trim(),
+    );
+
   return {
     port,
     bindHost,
     corsMode: corsMode as "localhost" | "private" | "all",
     allowedOrigins: new Set(configuredAllowedOrigins),
     verbose: options.verbose || false,
+    peerjs,
     rootPath,
     databaseDir,
   };

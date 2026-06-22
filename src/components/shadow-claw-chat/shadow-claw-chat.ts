@@ -424,6 +424,20 @@ export class ShadowClawChat extends ShadowClawElement {
           const customEvent = event as CustomEvent;
           const { groupId, action } = customEvent.detail;
 
+          // Shared multi-party room surfaces are owner-authoritative: route the
+          // action through the orchestrator, which either processes it locally
+          // (if we own the surface) or broadcasts it to the owning peer's agent.
+          // Every member's surface is then synchronized by the owner's
+          // subsequent `updateDataModel` broadcast.
+          if (groupId.startsWith("room:")) {
+            await orchestratorStore.orchestrator?.routeRoomA2UIAction(
+              groupId,
+              action,
+            );
+
+            return;
+          }
+
           // Route the action back to the PeerJS channel if targeting a peer conversation.
           if (groupId.startsWith("peer:")) {
             const router = orchestratorStore.orchestrator?.router;
@@ -1724,13 +1738,21 @@ export class ShadowClawChat extends ShadowClawElement {
     this.addCleanup(
       effect(() => {
         const activity = orchestratorStore.toolActivity as ToolActivity | null;
+        const aguiEvt = orchestratorStore.aguiEvent;
         const toolEl = root.querySelector(".chat__tool-activity");
 
         if (!(toolEl instanceof HTMLElement)) {
           return;
         }
 
-        if (activity) {
+        // Prefer AG-UI event for tool call visibility when available
+        if (
+          aguiEvt?.event?.type === "TOOL_CALL_START" &&
+          aguiEvt.event.toolCallName
+        ) {
+          toolEl.classList.add("chat__tool-activity--active");
+          toolEl.textContent = `⚙️ Using ${aguiEvt.event.toolCallName}...`;
+        } else if (activity) {
           toolEl.classList.add("chat__tool-activity--active");
           toolEl.textContent = `⚙️ Using ${activity.tool}...`;
         } else {

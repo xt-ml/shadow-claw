@@ -48,6 +48,11 @@ import { post } from "./post.js";
 import { sandboxedEval } from "./sandboxedEval.js";
 import { stripHtml } from "./stripHtml.js";
 import {
+  getRoomMetadata,
+  roomIdFromGroupId,
+  ROOM_PREFIX,
+} from "../db/rooms.js";
+import {
   withRetry,
   isRetryableFetchError,
   RETRYABLE_STATUS_CODES,
@@ -211,6 +216,9 @@ export async function executeTool(
         "enable_task",
         "disable_task",
         "send_notification",
+        "create_room",
+        "invite_to_room",
+        "leave_room",
       ]);
       if (BLOCKED_TOOLS.has(name)) {
         return `Tool "${name}" is not allowed during scheduled task execution to prevent recursion.`;
@@ -706,6 +714,93 @@ export async function executeTool(
         });
 
         return `Push notification sent: ${input.body}`;
+      }
+
+      case "create_room": {
+        const name = String(input.name || "").trim();
+
+        if (!name) {
+          return "Error: a room name is required.";
+        }
+
+        post({
+          type: "room-action",
+          payload: { action: "create", name },
+        });
+
+        return `Creating room "${name}". You will be the host; once it is ready you can invite peers with invite_to_room.`;
+      }
+
+      case "invite_to_room": {
+        const peerId = String(input.peer_id || "").trim();
+        const roomId =
+          String(input.room_id || "").trim() ||
+          (groupId.startsWith(ROOM_PREFIX) ? roomIdFromGroupId(groupId) : "");
+
+        if (!peerId) {
+          return "Error: peer_id is required to invite a participant.";
+        }
+
+        if (!roomId) {
+          return "Error: no room_id provided and the current conversation is not a room.";
+        }
+
+        post({
+          type: "room-action",
+          payload: { action: "invite", roomId, peerId },
+        });
+
+        return `Invited peer ${peerId} to room ${roomId}.`;
+      }
+
+      case "leave_room": {
+        const roomId =
+          String(input.room_id || "").trim() ||
+          (groupId.startsWith(ROOM_PREFIX) ? roomIdFromGroupId(groupId) : "");
+
+        if (!roomId) {
+          return "Error: no room_id provided and the current conversation is not a room.";
+        }
+
+        post({
+          type: "room-action",
+          payload: { action: "leave", roomId },
+        });
+
+        return `Leaving room ${roomId}.`;
+      }
+
+      case "list_room_members": {
+        const roomId =
+          String(input.room_id || "").trim() ||
+          (groupId.startsWith(ROOM_PREFIX) ? roomIdFromGroupId(groupId) : "");
+
+        if (!roomId) {
+          return "Error: no room_id provided and the current conversation is not a room.";
+        }
+
+        const rooms = await getRoomMetadata(db);
+        const room = rooms.find((r) => r.roomId === roomId);
+
+        if (!room) {
+          return `Error: room ${roomId} was not found.`;
+        }
+
+        if (!room.members.length) {
+          return `Room "${room.name}" (${roomId}) has no members yet.`;
+        }
+
+        const lines = room.members.map((m) => {
+          const label =
+            m.kind === "agent"
+              ? `agent${m.agentName ? ` (@${m.agentName})` : ""}`
+              : "human";
+          const host = m.peerId === room.hostPeerId ? " [host]" : "";
+
+          return `- ${m.alias || m.peerId} — ${label}${host} (peer: ${m.peerId})`;
+        });
+
+        return `Room "${room.name}" (${roomId}) members:\n${lines.join("\n")}`;
       }
 
       case "manage_email":

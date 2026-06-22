@@ -39,6 +39,7 @@ Detailed docs for each major subsystem.
 | [Attachment Capabilities](subsystems/attachment-capabilities.md)        | MIME-aware attachment handling and native vs fallback delivery                                                          |
 | [Chat Template Sanitizer](subsystems/sanitizer.md)                      | Strip control tokens and structural markers from local model output                                                     |
 | [A2UI Interactive Surfaces](subsystems/a2ui.md)                         | A2UI v1.0 catalog renderer, component rendering, PeerJS surface delivery, data binding                                  |
+| [AGUI Events & Adapter](subsystems/agui.md)                             | Translates orchestrator EventBus events to standardized AG-UI protocol events for UI visibility                         |
 | [Trusted Types Tinyfill](subsystems/trusted-types-tinyfill.md)          | Polyfill for Trusted Types API, browser compatibility, security rationale                                               |
 | [Email Integration](subsystems/email.md)                                | IMAP/SMTP support with encrypted credentials                                                                            |
 | [WebMCP](subsystems/webmcp.md)                                          | Browser's Model Context Protocol integration and tool execution                                                         |

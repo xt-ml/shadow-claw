@@ -25,6 +25,38 @@ import type { A2UIEnvelope, A2UIAction } from "../a2ui.js";
 
 import { ulid } from "../utils/ulid.js";
 
+// A2A Protocol imports
+import type {
+  AgentCard,
+  A2AJsonRpcRequest,
+  A2AJsonRpcResponse,
+  A2AJsonRpcNotification,
+  SendMessageRequest,
+  AGUIEvent,
+  TaskStatusUpdateEvent,
+} from "./peer-protocol.js";
+
+import {
+  A2A_METHOD,
+  AGUI_METHOD,
+  A2A_STREAM_METHOD,
+  A2A_ERROR_CODE,
+  Role,
+  TERMINAL_STATES,
+  isJsonRpcRequest,
+  isJsonRpcResponse,
+} from "./peer-protocol.js";
+
+import {
+  buildAgentCard,
+  createGetAgentCardRequest,
+  createGetAgentCardResponse,
+  parseAgentCardResponse,
+  PeerCardStore,
+} from "./peer-agent-card.js";
+
+import { PeerTaskManager } from "./peer-task-manager.js";
+
 /**
  * Module-level singleton so the chat UI can import and subscribe to it
  * directly without going through the non-reactive orchestratorStore.orchestrator chain.
@@ -40,6 +72,7 @@ export interface PeerJsServerConfig {
   port?: number;
   path?: string;
   secure?: boolean;
+  iceServers?: RTCIceServer[];
 }
 
 /**
@@ -76,6 +109,36 @@ export class PeerJsChannel implements Channel {
   readonly transferProgressSignal = transferProgressSignal;
 
   private peer: InstanceType<typeof Peer> | null = null;
+
+  // A2A Protocol state
+  /** Remote agent cards keyed by peer ID */
+  readonly peerCards = new PeerCardStore();
+  /** Local agent card (constructed on start) */
+  private _localCard: AgentCard | null = null;
+  /** Per-connection task managers keyed by remote peer ID */
+  private _taskManagers = new Map<string, PeerTaskManager>();
+  /** Pending JSON-RPC response callbacks keyed by request ID */
+  private _pendingRequests = new Map<
+    string,
+    {
+      resolve: (resp: A2AJsonRpcResponse) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
+
+  // Reconnection backoff state
+  private _reconnectAttempts = 0;
+  private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private static readonly _RECONNECT_BASE_MS = 1000;
+  private static readonly _RECONNECT_MAX_MS = 60_000;
+
+  /** Callback invoked when a remote peer signals task completion */
+  private _onTaskCompleteCallback: ((groupId: string) => void) | null = null;
+
+  /** Handler for inbound multi-party room notifications (`room/*`). */
+  private _roomNotificationHandler:
+    | ((fromPeerId: string, method: string, params: unknown) => void)
+    | null = null;
 
   constructor() {
     if (typeof globalThis.addEventListener === "function") {
@@ -175,11 +238,23 @@ export class PeerJsChannel implements Channel {
     }
 
     this.running = true;
+    this._localCard = buildAgentCard({
+      peerId: this.myPeerId,
+      name: this.myPeerId,
+      description: "ShadowClaw AI assistant",
+      streaming: true,
+    });
     this._initPeer();
   }
 
   stop(): void {
     this.running = false;
+    if (this._reconnectTimer !== null) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+
+    this._reconnectAttempts = 0;
     this.connections.forEach((conn) => {
       try {
         conn.close();
@@ -188,6 +263,10 @@ export class PeerJsChannel implements Channel {
       }
     });
     this.connections.clear();
+    this.peerCards.clear();
+    this._taskManagers.clear();
+    this._pendingRequests.forEach(({ timer }) => clearTimeout(timer));
+    this._pendingRequests.clear();
     this._updateConnectedPeersSignal();
 
     if (this.peer) {
@@ -217,10 +296,10 @@ export class PeerJsChannel implements Channel {
       return;
     }
 
-    // Wait for connection to be open if it just was created
-    await this._waitForOpen(conn);
-
     try {
+      // Wait for connection to be open if it just was created
+      await this._waitForOpen(conn);
+
       // Extract markdown local links from the outgoing text
       const { attachments: markdownAttachments } =
         extractMarkdownAttachments(text);
@@ -305,19 +384,29 @@ export class PeerJsChannel implements Channel {
       // File parts go first so the receiver processes them before text
       const parts = [...fileParts, { kind: "text", text: outText }];
 
-      const envelope = {
+      // Use A2A SendMessage (JSON-RPC request with id) so the remote peer's
+      // task manager tracks the conversation lifecycle and can signal completion.
+      const requestId = ulid();
+      const envelope: A2AJsonRpcRequest = {
         jsonrpc: "2.0",
-        method: "message/send",
-        id: ulid(),
+        id: requestId,
+        method: A2A_METHOD.SEND_MESSAGE,
         params: {
           message: {
-            role: "agent",
+            messageId: ulid(),
+            role: Role.AGENT,
             parts,
           },
-        },
+        } satisfies SendMessageRequest,
       };
 
       conn.send(envelope);
+
+      // Register pending request so we can process the task response
+      this._registerPendingRequest(requestId, (_response) => {
+        // Response contains the task state — no action needed here,
+        // the remote peer's task manager handles lifecycle.
+      });
     } catch (err) {
       console.error(`PeerJsChannel: send failed for ${remotePeerId}:`, err);
       window.dispatchEvent(
@@ -360,9 +449,9 @@ export class PeerJsChannel implements Channel {
       return;
     }
 
-    await this._waitForOpen(conn);
-
     try {
+      await this._waitForOpen(conn);
+
       const a2uiEnvelopeObj = {
         jsonrpc: "2.0",
         method: "message/send",
@@ -396,9 +485,9 @@ export class PeerJsChannel implements Channel {
       return;
     }
 
-    await this._waitForOpen(conn);
-
     try {
+      await this._waitForOpen(conn);
+
       const actionEnvelope = {
         jsonrpc: "2.0",
         method: "message/send",
@@ -427,6 +516,87 @@ export class PeerJsChannel implements Channel {
     this.typingCallback = callback;
   }
 
+  /**
+   * Register a callback invoked when a remote peer sends a terminal
+   * task status update (COMPLETED, FAILED, CANCELED). This allows the
+   * orchestrator to suppress further auto-triggers for that conversation.
+   */
+  onTaskComplete(callback: (groupId: string) => void): void {
+    this._onTaskCompleteCallback = callback;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Multi-party room transport
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Register the handler for inbound `room/*` JSON-RPC notifications. The
+   * {@link RoomManager} uses this to receive join/roster/leave/message/invite/
+   * relay traffic carried over the existing DataChannel.
+   */
+  setRoomNotificationHandler(
+    handler: (fromPeerId: string, method: string, params: unknown) => void,
+  ): void {
+    this._roomNotificationHandler = handler;
+  }
+
+  /** Whether a direct, open DataConnection to the peer currently exists. */
+  isPeerConnected(peerId: string): boolean {
+    const conn = this.connections.get(peerId);
+
+    return !!conn && !!(conn as any).open;
+  }
+
+  /** Best-effort: ensure an outbound connection to the peer is opened. */
+  connectPeer(peerId: string): void {
+    this._getOrOpenConnection(peerId);
+  }
+
+  /**
+   * Send a JSON-RPC notification object to a single peer. If the connection is
+   * still opening, the send is deferred until it opens. Returns true when the
+   * send was dispatched or queued, false when no connection could be created.
+   */
+  sendRoomNotification(peerId: string, notification: unknown): boolean {
+    const conn = this._getOrOpenConnection(peerId);
+    if (!conn) {
+      return false;
+    }
+
+    if ((conn as any).open) {
+      try {
+        conn.send(notification);
+
+        return true;
+      } catch (err) {
+        console.error(
+          `PeerJsChannel: failed to send room notification to ${peerId}:`,
+          err,
+        );
+
+        return false;
+      }
+    }
+
+    // Connection still opening — flush once it is ready.
+    this._waitForOpen(conn)
+      .then(() => {
+        try {
+          conn.send(notification);
+        } catch (err) {
+          console.error(
+            `PeerJsChannel: failed to flush room notification to ${peerId}:`,
+            err,
+          );
+        }
+      })
+      .catch(() => {
+        // Connection failed to open; nothing more to do.
+      });
+
+    return true;
+  }
+
   // ---------------------------------------------------------------------------
   // Private helpers
   // ---------------------------------------------------------------------------
@@ -444,6 +614,14 @@ export class PeerJsChannel implements Channel {
     opts.port = port;
     opts.path = path;
     opts.secure = secure;
+    opts.debug = 3; // Verbose PeerJS logging for connection diagnostics
+
+    // ICE servers for WebRTC connectivity (STUN for NAT traversal)
+    const iceServers: RTCIceServer[] = this.serverConfig.iceServers ?? [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+    ];
+    opts.config = { iceServers };
 
     this.peer = new Peer(this.myPeerId, opts);
 
@@ -451,6 +629,8 @@ export class PeerJsChannel implements Channel {
       console.log(
         `PeerJsChannel: connected to signaling server, peer ID: ${id}`,
       );
+      // Reset backoff on successful connection
+      this._reconnectAttempts = 0;
     });
 
     this.peer.on("connection", (conn: DataConnection) => {
@@ -489,20 +669,48 @@ export class PeerJsChannel implements Channel {
 
     this.peer.on("disconnected", () => {
       if (this.running) {
-        console.log(
-          "PeerJsChannel: disconnected from signaling server, reconnecting...",
-        );
-        try {
-          (this.peer as any)?.reconnect?.();
-        } catch {
-          // ignore
-        }
+        this._scheduleReconnect();
       }
     });
 
     this.peer.on("close", () => {
       console.log("PeerJsChannel: peer closed");
     });
+  }
+
+  /**
+   * Schedule a reconnection attempt with exponential backoff.
+   * Delay doubles each attempt: 1s, 2s, 4s, 8s, ... up to 60s max.
+   */
+  private _scheduleReconnect(): void {
+    if (this._reconnectTimer !== null) {
+      return; // Already scheduled
+    }
+
+    const delay = Math.min(
+      PeerJsChannel._RECONNECT_BASE_MS * Math.pow(2, this._reconnectAttempts),
+      PeerJsChannel._RECONNECT_MAX_MS,
+    );
+
+    this._reconnectAttempts++;
+
+    console.log(
+      `PeerJsChannel: disconnected from signaling server, reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this._reconnectAttempts})`,
+    );
+
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      if (!this.running) {
+        return;
+      }
+
+      try {
+        (this.peer as any)?.reconnect?.();
+      } catch {
+        // If reconnect throws, schedule another attempt
+        this._scheduleReconnect();
+      }
+    }, delay);
   }
 
   private _handleIncomingConnection(conn: DataConnection): void {
@@ -531,6 +739,7 @@ export class PeerJsChannel implements Channel {
 
     conn.on("open", () => {
       console.log(`PeerJsChannel: connection opened with ${remotePeerId}`);
+      this._exchangeAgentCards(remotePeerId, conn);
     });
 
     conn.on("data", (data: unknown) => {
@@ -540,6 +749,8 @@ export class PeerJsChannel implements Channel {
     conn.on("close", () => {
       console.log(`PeerJsChannel: connection closed with ${remotePeerId}`);
       this.connections.delete(remotePeerId);
+      this.peerCards.delete(remotePeerId);
+      this._taskManagers.delete(remotePeerId);
       this._updateConnectedPeersSignal();
     });
 
@@ -665,26 +876,130 @@ export class PeerJsChannel implements Channel {
       return;
     }
 
-    // A2A JSON-RPC
-    if (msg.jsonrpc === "2.0" && msg.method === "message/send") {
-      const params = msg.params as any;
-      if (!params || !params.message || !Array.isArray(params.message.parts)) {
-        return;
+    // A2A JSON-RPC 2.0 dispatch
+    if (msg.jsonrpc === "2.0") {
+      this._handleA2AJsonRpc(remotePeerId, msg as Record<string, unknown>);
+
+      return;
+    }
+  }
+
+  /**
+   * Dispatch an inbound JSON-RPC 2.0 message (request, response, or notification).
+   */
+  private _handleA2AJsonRpc(
+    remotePeerId: string,
+    msg: Record<string, unknown>,
+  ): void {
+    // Response to a pending request (e.g., GetAgentCard response)
+    if (isJsonRpcResponse(msg)) {
+      const pending = this._pendingRequests.get(msg.id);
+      if (pending) {
+        clearTimeout(pending.timer);
+        this._pendingRequests.delete(msg.id);
+        pending.resolve(msg as A2AJsonRpcResponse);
       }
 
-      this._processInboundA2AEnvelope(remotePeerId, params.message.parts).catch(
-        (err) =>
-          console.error(
-            "PeerJsChannel: failed to process inbound A2A envelope",
-            err,
-          ),
-      );
+      return;
+    }
+
+    const method = msg.method as string | undefined;
+    if (!method) {
+      return;
+    }
+
+    // Multi-party room notifications (`room/*`) — forward to the RoomManager.
+    if (method.startsWith("room/")) {
+      this._roomNotificationHandler?.(remotePeerId, method, msg.params);
+
+      return;
+    }
+
+    // JSON-RPC Request (has id — expects a response)
+    if (isJsonRpcRequest(msg)) {
+      switch (method) {
+        case A2A_METHOD.GET_AGENT_CARD:
+          this._handleGetAgentCard(remotePeerId, msg as A2AJsonRpcRequest);
+
+          break;
+        case A2A_METHOD.SEND_MESSAGE:
+          this._handleA2ASendMessage(remotePeerId, msg as A2AJsonRpcRequest);
+
+          break;
+        case A2A_METHOD.CANCEL_TASK:
+          this._handleA2ACancelTask(remotePeerId, msg as A2AJsonRpcRequest);
+
+          break;
+        case A2A_METHOD.GET_TASK:
+          this._handleA2AGetTask(remotePeerId, msg as A2AJsonRpcRequest);
+
+          break;
+        default:
+          // Legacy "message/send" (existing format) — process as before
+          if (method === "message/send") {
+            const params = msg.params as any;
+            if (params?.message?.parts && Array.isArray(params.message.parts)) {
+              this._processInboundA2AEnvelope(
+                remotePeerId,
+                params.message.parts,
+              ).catch((err) =>
+                console.error(
+                  "PeerJsChannel: failed to process inbound A2A envelope",
+                  err,
+                ),
+              );
+            }
+          } else {
+            this._sendJsonRpcError(remotePeerId, msg.id as string, {
+              code: A2A_ERROR_CODE.METHOD_NOT_FOUND,
+              message: `Method not found: ${method}`,
+            });
+          }
+      }
+
+      return;
+    }
+
+    // JSON-RPC Notification (no id — no response expected)
+    switch (method) {
+      case AGUI_METHOD.EVENT:
+        this._handleAGUIEventNotification(remotePeerId, msg.params);
+
+        break;
+      case A2A_STREAM_METHOD.STATUS_UPDATE:
+        this._handleTaskStatusNotification(remotePeerId, msg.params);
+
+        break;
+      case A2A_STREAM_METHOD.ARTIFACT_UPDATE:
+        // Future: handle artifact streaming notifications
+
+        break;
+      case "message/send":
+        // Legacy notification format (no id)
+        {
+          const params = msg.params as any;
+          if (params?.message?.parts && Array.isArray(params.message.parts)) {
+            this._processInboundA2AEnvelope(
+              remotePeerId,
+              params.message.parts,
+            ).catch((err) =>
+              console.error(
+                "PeerJsChannel: failed to process inbound A2A envelope",
+                err,
+              ),
+            );
+          }
+        }
+
+        break;
     }
   }
 
   private async _processInboundA2AEnvelope(
     remotePeerId: string,
     parts: any[],
+    taskId?: string,
+    contextId?: string,
   ): Promise<void> {
     const groupId = `peer:${remotePeerId}`;
 
@@ -754,6 +1069,8 @@ export class PeerJsChannel implements Channel {
         inboundAttachments.length > 0 ? inboundAttachments : undefined,
       a2uiEnvelopes: a2uiEnvelopes.length > 0 ? a2uiEnvelopes : undefined,
       a2uiAction,
+      taskId,
+      contextId,
     });
   }
 
@@ -777,6 +1094,11 @@ export class PeerJsChannel implements Channel {
         serialization: "binary",
       });
 
+      // PeerJS returns undefined if the peer is disconnected/destroyed
+      if (!conn) {
+        return null;
+      }
+
       this._handleIncomingConnection(conn);
 
       return conn;
@@ -792,22 +1114,425 @@ export class PeerJsChannel implements Channel {
 
   /**
    * Waits up to 5s for a DataConnection to open. Resolves immediately if
-   * already open, or if the connection never fires "open" (we try anyway).
+   * already open. Rejects if the connection errors or the timeout fires
+   * without the connection opening.
    */
   private _waitForOpen(conn: DataConnection): Promise<void> {
     if ((conn as any).open) {
       return Promise.resolve();
     }
 
-    return new Promise<void>((resolve) => {
-      const timeout = setTimeout(resolve, 5000);
-      const handler = () => {
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Connection open timeout (5s)"));
+      }, 5000);
+
+      const openHandler = () => {
         clearTimeout(timeout);
         resolve();
       };
 
-      conn.on("open", handler);
+      const errorHandler = (err: Error) => {
+        clearTimeout(timeout);
+        reject(err);
+      };
+
+      conn.on("open", openHandler);
+      conn.on("error", errorHandler);
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // A2A Protocol Handlers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Exchange agent cards on connection open.
+   * Sends our card request and stores the remote peer's card.
+   */
+  private _exchangeAgentCards(
+    remotePeerId: string,
+    conn: DataConnection,
+  ): void {
+    if (!this._localCard) {
+      return;
+    }
+
+    const request = createGetAgentCardRequest();
+    conn.send(request);
+
+    // Register pending request for the response
+    this._registerPendingRequest(request.id, (response) => {
+      const card = parseAgentCardResponse(response);
+      if (card) {
+        this.peerCards.set(remotePeerId, card);
+        console.log(
+          `PeerJsChannel: received AgentCard from ${remotePeerId}: "${card.name}"`,
+        );
+      }
+    });
+  }
+
+  /**
+   * Handle GetAgentCard request — respond with our local card.
+   */
+  private _handleGetAgentCard(
+    remotePeerId: string,
+    request: A2AJsonRpcRequest,
+  ): void {
+    if (!this._localCard) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.INTERNAL_ERROR,
+        message: "Agent card not available",
+      });
+
+      return;
+    }
+
+    const response = createGetAgentCardResponse(request.id, this._localCard);
+    const conn = this.connections.get(remotePeerId);
+    if (conn) {
+      conn.send(response);
+    }
+  }
+
+  /**
+   * Handle A2A SendMessage request — route through task manager.
+   */
+  private _handleA2ASendMessage(
+    remotePeerId: string,
+    request: A2AJsonRpcRequest,
+  ): void {
+    const params = request.params as SendMessageRequest | undefined;
+    if (!params?.message) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.INVALID_PARAMS,
+        message: "Missing message in SendMessage params",
+      });
+
+      return;
+    }
+
+    // Get or create task manager for this peer
+    let taskManager = this._taskManagers.get(remotePeerId);
+    if (!taskManager) {
+      taskManager = new PeerTaskManager();
+      this._taskManagers.set(remotePeerId, taskManager);
+
+      // Wire up task events to emit over the DataChannel
+      taskManager.on((event) => {
+        this._forwardTaskEvent(remotePeerId, event);
+      });
+    }
+
+    // Process through task manager
+    const response = taskManager.handleSendMessage(params);
+
+    // Send JSON-RPC response with task state
+    const conn = this.connections.get(remotePeerId);
+    if (conn) {
+      const rpcResponse: A2AJsonRpcResponse = {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: response,
+      };
+      conn.send(rpcResponse);
+    }
+
+    // Also deliver the message content to the existing chat UI
+    if (params.message.parts && Array.isArray(params.message.parts)) {
+      this._processInboundA2AEnvelope(
+        remotePeerId,
+        params.message.parts,
+        response.task?.id,
+        response.task?.contextId,
+      ).catch((err) =>
+        console.error("PeerJsChannel: failed to process A2A SendMessage", err),
+      );
+    }
+  }
+
+  /**
+   * Handle A2A CancelTask request.
+   */
+  private _handleA2ACancelTask(
+    remotePeerId: string,
+    request: A2AJsonRpcRequest,
+  ): void {
+    const params = request.params as { taskId?: string } | undefined;
+    if (!params?.taskId) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.INVALID_PARAMS,
+        message: "Missing taskId in CancelTask params",
+      });
+
+      return;
+    }
+
+    const taskManager = this._taskManagers.get(remotePeerId);
+    if (!taskManager) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.TASK_NOT_FOUND,
+        message: `Task not found: ${params.taskId}`,
+      });
+
+      return;
+    }
+
+    const success = taskManager.cancelTask(params.taskId);
+    if (!success) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.TASK_NOT_CANCELABLE,
+        message: `Task not cancelable: ${params.taskId}`,
+      });
+
+      return;
+    }
+
+    const conn = this.connections.get(remotePeerId);
+    if (conn) {
+      const task = taskManager.getTask(params.taskId);
+      const rpcResponse: A2AJsonRpcResponse = {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { task },
+      };
+      conn.send(rpcResponse);
+    }
+  }
+
+  /**
+   * Handle A2A GetTask request.
+   */
+  private _handleA2AGetTask(
+    remotePeerId: string,
+    request: A2AJsonRpcRequest,
+  ): void {
+    const params = request.params as { taskId?: string } | undefined;
+    if (!params?.taskId) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.INVALID_PARAMS,
+        message: "Missing taskId in GetTask params",
+      });
+
+      return;
+    }
+
+    const taskManager = this._taskManagers.get(remotePeerId);
+    const task = taskManager?.getTask(params.taskId);
+    if (!task) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.TASK_NOT_FOUND,
+        message: `Task not found: ${params.taskId}`,
+      });
+
+      return;
+    }
+
+    const conn = this.connections.get(remotePeerId);
+    if (conn) {
+      const rpcResponse: A2AJsonRpcResponse = {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { task },
+      };
+      conn.send(rpcResponse);
+    }
+  }
+
+  /**
+   * Handle an inbound AG-UI event notification from a remote peer.
+   */
+  private _handleAGUIEventNotification(
+    remotePeerId: string,
+    params: unknown,
+  ): void {
+    if (!params || typeof params !== "object") {
+      return;
+    }
+
+    const event = params as AGUIEvent;
+
+    // Dispatch a DOM event so UI components can react
+    window.dispatchEvent(
+      new CustomEvent("shadow-claw-agui-event", {
+        detail: { remotePeerId, event },
+      }),
+    );
+  }
+
+  /**
+   * Handle an inbound task status update notification.
+   */
+  private _handleTaskStatusNotification(
+    remotePeerId: string,
+    params: unknown,
+  ): void {
+    if (!params || typeof params !== "object") {
+      return;
+    }
+
+    const statusUpdate = params as TaskStatusUpdateEvent;
+
+    // If the remote peer signaled a terminal state, notify the orchestrator
+    // so it can suppress further auto-triggers for this conversation.
+    if (
+      statusUpdate.status?.state &&
+      TERMINAL_STATES.has(statusUpdate.status.state as any)
+    ) {
+      const groupId = `peer:${remotePeerId}`;
+      this._onTaskCompleteCallback?.(groupId);
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("shadow-claw-task-status", {
+        detail: { remotePeerId, ...statusUpdate },
+      }),
+    );
+  }
+
+  /**
+   * Forward task manager events over the DataChannel as notifications.
+   */
+  private _forwardTaskEvent(
+    remotePeerId: string,
+    event: {
+      type: string;
+      taskId: string;
+      contextId: string;
+      payload: unknown;
+    },
+  ): void {
+    const conn = this.connections.get(remotePeerId);
+    if (!conn) {
+      return;
+    }
+
+    let method: string;
+    switch (event.type) {
+      case "statusUpdate":
+        method = A2A_STREAM_METHOD.STATUS_UPDATE;
+
+        break;
+      case "artifactUpdate":
+        method = A2A_STREAM_METHOD.ARTIFACT_UPDATE;
+
+        break;
+      case "aguiEvent":
+        method = AGUI_METHOD.EVENT;
+
+        break;
+      default:
+        return;
+    }
+
+    const notification: A2AJsonRpcNotification = {
+      jsonrpc: "2.0",
+      method,
+      params: event.payload,
+    };
+
+    try {
+      conn.send(notification);
+    } catch (err) {
+      console.error(
+        `PeerJsChannel: failed to forward ${event.type} to ${remotePeerId}:`,
+        err,
+      );
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // JSON-RPC Helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Send a JSON-RPC error response to a remote peer.
+   */
+  private _sendJsonRpcError(
+    remotePeerId: string,
+    requestId: string,
+    error: { code: number; message: string; data?: unknown[] },
+  ): void {
+    const conn = this.connections.get(remotePeerId);
+    if (!conn) {
+      return;
+    }
+
+    const response: A2AJsonRpcResponse = {
+      jsonrpc: "2.0",
+      id: requestId,
+      error,
+    };
+
+    try {
+      conn.send(response);
+    } catch {
+      // Ignore send errors for error responses
+    }
+  }
+
+  /**
+   * Register a pending JSON-RPC request (with 10s timeout).
+   */
+  private _registerPendingRequest(
+    requestId: string,
+    callback: (response: A2AJsonRpcResponse) => void,
+  ): void {
+    const timer = setTimeout(() => {
+      this._pendingRequests.delete(requestId);
+      console.warn(
+        `PeerJsChannel: JSON-RPC request ${requestId} timed out (10s)`,
+      );
+    }, 10_000);
+
+    this._pendingRequests.set(requestId, {
+      resolve: callback,
+      timer,
+    });
+  }
+
+  /**
+   * Get the task manager for a peer (creates one if needed).
+   */
+  getTaskManager(remotePeerId: string): PeerTaskManager {
+    let tm = this._taskManagers.get(remotePeerId);
+    if (!tm) {
+      tm = new PeerTaskManager();
+      this._taskManagers.set(remotePeerId, tm);
+      tm.on((event) => {
+        this._forwardTaskEvent(remotePeerId, event);
+      });
+    }
+
+    return tm;
+  }
+
+  /**
+   * Mark the active task for a peer groupId as COMPLETED.
+   * Sends a terminal `tasks/statusUpdate` notification to the remote peer,
+   * signaling that no further responses are expected.
+   *
+   * @returns true if a task was completed, false if no active task exists.
+   */
+  completeActiveTask(groupId: string): boolean {
+    const remotePeerId = groupId.replace(/^peer:/, "");
+    const tm = this._taskManagers.get(remotePeerId);
+    if (!tm) {
+      return false;
+    }
+
+    const activeTasks = tm.getActiveTasks();
+    if (activeTasks.length === 0) {
+      return false;
+    }
+
+    // Complete the most recent active task
+    const task = activeTasks[activeTasks.length - 1];
+    tm.markWorking(task.id);
+    tm.markCompleted(task.id);
+
+    return true;
   }
 }
 

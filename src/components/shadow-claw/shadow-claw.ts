@@ -30,6 +30,7 @@ import {
   ConfirmationDialogOptions,
   OpenFilePayload,
 } from "../../types.js";
+import type { RoomInvitePayload } from "../../channels/peer-protocol.js";
 import { VMStatus } from "../../vm.js";
 import { buildLlamafileHelpDialogOptions } from "../common/help/llamafile.js";
 import { buildTransformersJsHelpDialogOptions } from "../common/help/transformers.js";
@@ -142,6 +143,8 @@ export class ShadowClaw extends ShadowClawElement {
     await this.applyRouteFromCurrentLocation();
 
     await this.processPeerQueryParam();
+
+    await this.processRoomQueryParam();
 
     await this.processPendingSharedPayloads();
   }
@@ -348,6 +351,67 @@ export class ShadowClaw extends ShadowClawElement {
     }
   }
 
+  private async processRoomQueryParam(): Promise<void> {
+    if (!this.db) {
+      return;
+    }
+
+    const currentUrl = new URL(window.location.href);
+    const roomId = (currentUrl.searchParams.get("room") || "").trim();
+    const hostPeerId = (currentUrl.searchParams.get("host") || "").trim();
+    const roomName =
+      (currentUrl.searchParams.get("name") || "").trim() || "Room";
+
+    if (!roomId || !hostPeerId) {
+      return;
+    }
+
+    try {
+      // 1. Ensure PeerJS channel is enabled and the host is trusted
+      const cfg = this.orchestrator.getPeerJsConfig();
+      let myPeerId = cfg.myPeerId;
+      if (!myPeerId) {
+        myPeerId = ulid().toLowerCase();
+      }
+
+      const trusted = new Set(cfg.trustedPeerIds);
+      trusted.add(hostPeerId);
+
+      await this.orchestrator.configurePeerJs(
+        this.db,
+        myPeerId,
+        Array.from(trusted),
+        cfg.serverHost,
+        cfg.serverPort,
+        cfg.serverPath,
+        cfg.serverSecure,
+      );
+
+      if (!cfg.enabled) {
+        await this.orchestrator.setChannelEnabled(this.db, "peerjs", true);
+      }
+
+      // 2. Join the room (connects to host + announces membership)
+      this.orchestrator.joinRoomViaLink(roomId, hostPeerId, roomName);
+
+      // 3. Navigate to the room conversation
+      await orchestratorStore.switchConversation(this.db, `room:${roomId}`);
+      this.showPage("chat");
+
+      // 4. Clean the URL to prevent re-triggering
+      currentUrl.searchParams.delete("room");
+      currentUrl.searchParams.delete("host");
+      currentUrl.searchParams.delete("name");
+      const cleaned = `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`;
+      window.history.replaceState({}, "", cleaned || "/");
+
+      showSuccess(`Joined room "${roomName}"`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      showError(`Failed to join room: ${message}`, 6000);
+    }
+  }
+
   async render() {
     // Bind event listeners
     this.bindEventListeners(this.db);
@@ -454,6 +518,46 @@ export class ShadowClaw extends ShadowClawElement {
               payload.reason,
             ),
           );
+        }
+      },
+    );
+
+    this.orchestrator.events.on(
+      "room-invite",
+      async (invite: RoomInvitePayload) => {
+        if (!this.db || !invite?.roomId || !invite?.hostPeerId) {
+          return;
+        }
+
+        const from = invite.fromAlias || invite.fromPeerId;
+        const accepted = await this.requestConfirmation({
+          title: "Room invitation",
+          message: `${from} invited you to join "${invite.roomName}".`,
+          confirmLabel: "Join",
+          cancelLabel: "Decline",
+        });
+
+        if (!accepted) {
+          return;
+        }
+
+        try {
+          this.orchestrator.joinRoomViaLink(
+            invite.roomId,
+            invite.hostPeerId,
+            invite.roomName,
+          );
+
+          await orchestratorStore.switchConversation(
+            this.db,
+            `room:${invite.roomId}`,
+          );
+          this.showPage("chat");
+          showSuccess(`Joined room "${invite.roomName}"`);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          showError(`Failed to join room: ${message}`, 6000);
         }
       },
     );

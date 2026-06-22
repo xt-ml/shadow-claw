@@ -60,6 +60,13 @@ import {
   update_task,
 } from "./tasks.js";
 
+import {
+  create_room,
+  invite_to_room,
+  leave_room,
+  list_room_members,
+} from "./rooms.js";
+
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   attach_file_to_chat,
   bash,
@@ -93,6 +100,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   list_files,
   manage_email,
   list_tasks,
+  list_room_members,
   list_tool_profiles,
   manage_tools,
   open_file,
@@ -102,6 +110,9 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   remote_mcp_list_tools,
   render_component,
   run_task,
+  create_room,
+  invite_to_room,
+  leave_room,
   send_notification,
   send_file,
   show_toast,

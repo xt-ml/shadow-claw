@@ -189,4 +189,60 @@
       💾 Save PeerJS Settings
     </button>
   </div>
+
+  <div class="peerjs-section peerjs-rooms-section">
+    <h3>👥 Rooms (multi-party)</h3>
+    <div class="form-helper">
+      Rooms let multiple agents and humans share one conversation. The room you
+      create is hosted by this device; invite trusted peers or share the room
+      link below.
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Create a Room</label>
+      <div class="peerjs-row" style="align-items: flex-start">
+        <div class="form-group" style="margin-bottom: 0; flex: 1">
+          <input
+            class="form-input"
+            data-setting="room-new-name-input"
+            placeholder="Room name (e.g. Design Review)"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <button
+          type="button"
+          class="save-btn save-btn--secondary"
+          data-action="create-room"
+          style="white-space: nowrap; height: 38px"
+        >
+          Create
+        </button>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Your Rooms</label>
+      <div class="peerjs-rooms-list" data-info="rooms-list">
+        <div class="form-status">No rooms yet.</div>
+      </div>
+    </div>
+
+    <div class="form-group peerjs-qr-group" data-info="room-qr-group" hidden>
+      <label class="form-label" data-info="room-qr-label">
+        QR Code — Share to Join
+      </label>
+      <div class="peerjs-qr-wrapper">
+        <canvas data-info="room-qr-canvas" class="peerjs-qr-canvas"></canvas>
+      </div>
+      <div class="form-helper" data-info="room-qr-url"></div>
+      <button
+        class="save-btn save-btn--inline save-btn--secondary"
+        data-action="copy-room-url"
+      >
+        🔗 Copy Room Link
+      </button>
+    </div>
+  </div>
 </template>

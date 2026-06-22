@@ -73,10 +73,21 @@ import { ChannelRegistry } from "./channels/channel-registry.js";
 import { IMessageChannel } from "./channels/imessage.js";
 import { PeerJsChannel } from "./channels/peerjs.js";
 import { TelegramChannel } from "./channels/telegram.js";
+import { RoomChannel } from "./channels/room.js";
+import { RoomManager } from "./channels/room-manager.js";
+import type { RoomTransport } from "./channels/room-manager.js";
+import type { RoomInvitePayload } from "./channels/peer-protocol.js";
+import {
+  getRoomMetadata,
+  upsertRoom,
+  deleteRoom,
+  roomIdFromGroupId,
+} from "./db/rooms.js";
 
 import { readGroupFile } from "./storage/readGroupFile.js";
 import { readGroupFileBytes } from "./storage/readGroupFileBytes.js";
 import { toolsStore } from "./stores/tools.js";
+import { formatA2UIActionPrompt } from "./a2ui.js";
 import { orchestratorStore } from "./stores/orchestrator.js";
 import { getCompactionSystemPrompt } from "./worker/getCompactionSystemPrompt.js";
 import { buildSystemPrompt } from "./worker/system-prompt.js";
@@ -91,6 +102,8 @@ import type {
   LLMProvider,
   MessageAttachment,
   ModelDownloadProgressPayload,
+  RoomMeta,
+  RoomMember,
   Task,
   A2UIAction,
 } from "./types.js";
@@ -218,6 +231,11 @@ export class Orchestrator {
   peerjsServerPort: number = 0;
   peerjsServerPath: string = "";
   peerjsServerSecure: boolean = true;
+  /** Peer groupIds where the A2A task has reached a terminal state */
+  private _peerCompletedContexts = new Set<string>();
+  /** Multi-party room channel + manager (layered on the PeerJS transport). */
+  roomChannel: RoomChannel = new RoomChannel();
+  roomManager!: RoomManager;
   triggerPattern: RegExp = buildTriggerPattern(ASSISTANT_NAME);
   useProxy: boolean = false;
   vmBashFullInternetAccess: boolean = false;
@@ -231,7 +249,138 @@ export class Orchestrator {
   webMcpToolsEnabled: boolean = true;
 
   constructor() {
+    this.roomManager = this._createRoomManager();
     this.initializeChannelRegistry();
+  }
+
+  /**
+   * Build the multi-party {@link RoomManager}, wiring it to the PeerJS channel
+   * for transport and to the orchestrator for inbound delivery + persistence.
+   */
+  private _createRoomManager(): RoomManager {
+    const self = this;
+    const transport: RoomTransport = {
+      get myPeerId() {
+        return self.peerjs.myPeerId || self.peerjsMyPeerId;
+      },
+      sendToPeer: (peerId, note) =>
+        self.peerjs.sendRoomNotification(peerId, note),
+      isConnected: (peerId) => self.peerjs.isPeerConnected(peerId),
+      connectToPeer: (peerId) => self.peerjs.connectPeer(peerId),
+    };
+
+    return new RoomManager({
+      transport,
+      getLocalMember: (): RoomMember => ({
+        peerId: self.peerjs.myPeerId || self.peerjsMyPeerId,
+        alias:
+          self.peerjsMyAlias ||
+          self.peerjs.myPeerId ||
+          self.peerjsMyPeerId ||
+          self.assistantName,
+        kind: "agent",
+        agentName: self.assistantName,
+      }),
+      onMessage: (msg) => self.roomChannel.deliverInbound(msg),
+      onInvite: (invite) => self._handleRoomInvite(invite),
+      persistRoom: (room) => {
+        if (self.db) {
+          upsertRoom(self.db, room).catch((err) =>
+            console.error("Failed to persist room:", err),
+          );
+        }
+      },
+      removeRoom: (roomId) => {
+        if (self.db) {
+          deleteRoom(self.db, roomId).catch((err) =>
+            console.error("Failed to delete room:", err),
+          );
+        }
+      },
+    });
+  }
+
+  private _handleRoomInvite(invite: RoomInvitePayload): void {
+    this.events.emit("room-invite", invite);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Multi-party room public API
+  // ---------------------------------------------------------------------------
+
+  /** Create a new room hosted by the local peer. */
+  createRoom(name: string): RoomMeta {
+    const room = this.roomManager.createRoom(name);
+    this.events.emit("rooms-changed", this.roomManager.list());
+
+    return room;
+  }
+
+  /** Join a room advertised by a host (e.g. via a shared link/QR). */
+  joinRoomViaLink(roomId: string, hostPeerId: string, name: string): RoomMeta {
+    const room = this.roomManager.joinRoom(roomId, hostPeerId, name);
+    this.events.emit("rooms-changed", this.roomManager.list());
+
+    return room;
+  }
+
+  /** Invite a (trusted) peer into an existing room. */
+  inviteToRoom(roomId: string, peerId: string): boolean {
+    return this.roomManager.invite(roomId, peerId);
+  }
+
+  /** Leave (member) or disband (host) a room. */
+  leaveRoom(roomId: string): void {
+    this.roomManager.leaveRoom(roomId);
+    this.events.emit("rooms-changed", this.roomManager.list());
+  }
+
+  /** List all joined rooms. */
+  listRooms(): RoomMeta[] {
+    return this.roomManager.list();
+  }
+
+  /**
+   * Route a user interaction on a **shared room surface** (owner-authoritative).
+   *
+   * - If the local peer owns the surface (it called `render_component`), the
+   *   action is enqueued locally so this peer's agent processes it and
+   *   broadcasts the resulting `updateDataModel` envelope to the room.
+   * - Otherwise the action is broadcast over the room mesh so the surface
+   *   owner's agent can process it. The owner then broadcasts the data-model
+   *   update, keeping every member's surface in lockstep.
+   */
+  async routeRoomA2UIAction(
+    groupId: string,
+    action: A2UIAction,
+  ): Promise<void> {
+    const roomId = roomIdFromGroupId(groupId);
+    const myPeerId = this.peerjs.myPeerId || this.peerjsMyPeerId;
+    const ownerPeerId = this.roomManager.getSurfaceOwner(action.surfaceId);
+
+    // We own the surface (or no owner is recorded yet — treat a locally
+    // initiated action on an unknown surface as ours): process it here.
+    if (!ownerPeerId || ownerPeerId === myPeerId) {
+      if (!this.db) {
+        return;
+      }
+
+      await this.enqueue(this.db, {
+        id: ulid(),
+        groupId,
+        sender: this.peerjsMyAlias || myPeerId || "you",
+        content: formatA2UIActionPrompt(action),
+        timestamp: Date.now(),
+        channel: "room",
+        a2uiAction: action,
+      });
+
+      return;
+    }
+
+    // A remote peer owns the surface — broadcast the action to the room so the
+    // owner's agent processes it and synchronizes everyone.
+    this.roomManager.broadcastA2UIAction(roomId, action);
   }
 
   async init(): Promise<ShadowClawDatabase> {
@@ -432,8 +581,22 @@ export class Orchestrator {
       }
     });
 
+    // A2A task completion: when a remote peer sends a terminal status update,
+    // suppress further auto-triggers for that conversation.
+    this.peerjs.onTaskComplete((groupId: string) => {
+      this._peerCompletedContexts.add(groupId);
+    });
+
     await this.loadChannelConfigurations(db);
     this.applyAllChannelRunningStates();
+
+    // Restore persisted multi-party rooms.
+    try {
+      const rooms = await getRoomMetadata(db);
+      this.roomManager.loadRooms(rooms);
+    } catch (err) {
+      console.error("Failed to load rooms:", err);
+    }
 
     this.agentWorker = new Worker(
       toTrustedScriptUrl(
@@ -1990,6 +2153,14 @@ export class Orchestrator {
       badge: "PeerJS",
       autoTrigger: false,
     });
+    this.channelRegistry.register("room:", this.roomChannel, {
+      badge: "Room",
+      autoTrigger: false,
+    });
+    this.roomChannel.setManager(this.roomManager);
+    this.peerjs.setRoomNotificationHandler((from, method, params) =>
+      this.roomManager.handleNotification(from, method, params),
+    );
     this.router = new Router(this.channelRegistry);
   }
 
@@ -2389,8 +2560,15 @@ export class Orchestrator {
     const isFromBrowser = msg.channel === "browser"; // Messages submitted in ShadowClaw UI
     const autoTrigger = this.channelRegistry.shouldAutoTrigger(msg.groupId);
     let hasTrigger = false;
-    if (msg.channel === "browser") {
+    if (msg.channel === "browser" || msg.groupId.startsWith("room:")) {
       hasTrigger = this.triggerPattern.test(msg.content.trim());
+    }
+
+    // ── A2A task-state conversation termination ──────────────────────────────
+    // If the local user sends a new message in a completed peer conversation,
+    // reopen it (clear the terminal state) so the agent will respond again.
+    if (isFromBrowser && msg.groupId.startsWith("peer:")) {
+      this._peerCompletedContexts.delete(msg.groupId);
     }
 
     const isDirectToolCommand = !!directToolCommand;
@@ -2425,6 +2603,15 @@ export class Orchestrator {
       hasTrigger = true;
     }
 
+    // Always trigger the owning agent to process an A2UI surface action. These
+    // `[A2UI ACTION]` messages are only ever constructed on the surface owner's
+    // side (local click on an owned surface, or an inbound `room/a2ui-action`
+    // for a surface we own), so force-triggering here is safe and keeps shared
+    // surfaces owner-authoritative.
+    if (msg.content.trim().startsWith("[A2UI ACTION]")) {
+      hasTrigger = true;
+    }
+
     let isTrigger = false;
     if (isDirectToolCommand) {
       isTrigger = true;
@@ -2432,14 +2619,27 @@ export class Orchestrator {
       isTrigger = true;
     } else if (isFromBrowser) {
       // Messages from the local UI trigger the agent by default,
-      // EXCEPT in P2P channels where we just want to chat with the peer.
-      if (msg.groupId.startsWith("peer:")) {
+      // EXCEPT in P2P / room channels where we just want to chat with peers.
+      if (msg.groupId.startsWith("peer:") || msg.groupId.startsWith("room:")) {
         isTrigger = false;
       } else {
         isTrigger = true;
       }
     } else {
       isTrigger = autoTrigger;
+    }
+
+    // ── A2A terminal-state suppression ───────────────────────────────────────
+    // If the peer conversation's task has reached a terminal state (COMPLETED,
+    // FAILED, CANCELED) via A2A protocol, suppress auto-trigger. The human
+    // user can reopen by sending a new message from the browser UI.
+    if (
+      isTrigger &&
+      !isFromBrowser &&
+      msg.groupId.startsWith("peer:") &&
+      this._peerCompletedContexts.has(msg.groupId)
+    ) {
+      isTrigger = false;
     }
 
     const attachments = await persistMessageAttachments(
@@ -2469,8 +2669,11 @@ export class Orchestrator {
       this.clearPeerJsTypingState(msg.groupId);
     }
 
-    // Forward browser messages to the P2P channel so users can chat directly
-    if (isFromBrowser && msg.groupId.startsWith("peer:")) {
+    // Forward browser messages to the P2P / room channel so users can chat directly
+    if (
+      isFromBrowser &&
+      (msg.groupId.startsWith("peer:") || msg.groupId.startsWith("room:"))
+    ) {
       this.router?.send(msg.groupId, msg.content, attachments).catch((err) => {
         console.error("Failed to route browser message to peer:", err);
       });
@@ -2941,6 +3144,27 @@ export class Orchestrator {
         break;
       }
 
+      case "room-action": {
+        const action = msg.payload?.action;
+
+        try {
+          if (action === "create") {
+            this.createRoom(String(msg.payload.name || "").trim());
+          } else if (action === "invite") {
+            this.inviteToRoom(
+              String(msg.payload.roomId),
+              String(msg.payload.peerId),
+            );
+          } else if (action === "leave") {
+            this.leaveRoom(String(msg.payload.roomId));
+          }
+        } catch (err) {
+          console.error("Failed to handle room action from agent:", err);
+        }
+
+        break;
+      }
+
       case "error": {
         const { groupId, error } = msg.payload;
         this.stopTransformersProgressPolling(groupId);
@@ -3384,6 +3608,15 @@ export class Orchestrator {
           }
         }
 
+        // Broadcast to every member when targeting a multi-party room. The
+        // local peer becomes the owner of this surface (owner-authoritative).
+        if (rcGroupId.startsWith("room:")) {
+          this.roomManager.broadcastA2UI(
+            roomIdFromGroupId(rcGroupId),
+            envelope,
+          );
+        }
+
         break;
       }
     }
@@ -3493,6 +3726,17 @@ export class Orchestrator {
 
     this.setState("idle");
     this.router?.setTyping(groupId, false);
+
+    // ── A2A task completion for peer channels ──────────────────────────────
+    // After delivering a response to a peer, mark the A2A task as COMPLETED.
+    // This sends a terminal `tasks/statusUpdate` notification to the remote peer,
+    // signaling that no further responses are expected from this side.
+    if (groupId.startsWith("peer:") && !deliveryError) {
+      const completed = this.peerjs.completeActiveTask(groupId);
+      if (completed) {
+        this._peerCompletedContexts.add(groupId);
+      }
+    }
 
     if (deliveryError) {
       this.events.emit("error", {

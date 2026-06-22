@@ -1754,9 +1754,23 @@ export class OrchestratorStore {
     const existing = groups.find((g) => g.groupId === groupId);
     if (!existing) {
       const metadata = [...groups];
+      let aliasName = "";
+      if (this.orchestrator?.peerjsPeerAliases) {
+        // Find if any alias matches this remotePeerId
+        for (const [alias, id] of Object.entries(
+          this.orchestrator.peerjsPeerAliases,
+        )) {
+          if (id === remotePeerId) {
+            aliasName = alias;
+
+            break;
+          }
+        }
+      }
+
       metadata.push({
         groupId,
-        name: `Peer: ${remotePeerId.substring(0, 8)}`,
+        name: `Peer: ${aliasName ? aliasName : remotePeerId.substring(0, 8)}`,
         createdAt: Date.now(),
       });
       await saveGroupMetadata(db, metadata);

@@ -896,6 +896,94 @@ export class ShadowClawConversations extends ShadowClawElement {
       });
     }
 
+    const participantsContainer = root.querySelector(
+      "#conversations-details-participants-container",
+    ) as HTMLElement | null;
+    const participantsList = root.querySelector(
+      "#conversations-details-participants-list",
+    ) as HTMLElement | null;
+
+    if (participantsContainer && participantsList) {
+      if (groupId && groupId.startsWith("peer:")) {
+        participantsContainer.style.display = "block";
+        participantsList.replaceChildren();
+
+        const orchestrator = orchestratorStore.orchestrator;
+        if (orchestrator) {
+          const connectedPeers =
+            orchestrator.peerjs?.connectedPeersSignal?.get() || [];
+          const targetPeer = groupId.replace("peer:", "");
+
+          if (connectedPeers.includes(targetPeer)) {
+            let alias = "";
+            if (orchestrator.peerjsPeerAliases) {
+              for (const [a, id] of Object.entries(
+                orchestrator.peerjsPeerAliases,
+              )) {
+                if (id === targetPeer) {
+                  alias = a;
+
+                  break;
+                }
+              }
+            }
+
+            const displayName = alias
+              ? `${alias} (${targetPeer.substring(0, 8)})`
+              : targetPeer;
+
+            const row = document.createElement("div");
+            row.className = "conversations__group-id-row";
+
+            const input = document.createElement("input");
+            input.className =
+              "conversations__input conversations__group-id-input";
+            input.type = "text";
+            input.readOnly = true;
+            input.value = displayName;
+            input.style.marginBottom = "0";
+
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "conversations__group-id-copy-btn";
+            btn.title = "Copy Peer ID";
+            btn.setAttribute("aria-label", "Copy Peer ID to clipboard");
+            btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="1em" width="1em" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z"/></svg>`;
+
+            btn.addEventListener("click", async () => {
+              try {
+                await navigator.clipboard.writeText(targetPeer);
+                const originalInner = btn.innerHTML;
+                btn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" height="1em" width="1em" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true"><path d="M382-240 154-468l57-57 171 171 367-367 57 57-424 424Z"/></svg>`;
+                btn.classList.add("conversations__group-id-copy-btn--copied");
+                setTimeout(() => {
+                  btn.innerHTML = originalInner;
+                  btn.classList.remove(
+                    "conversations__group-id-copy-btn--copied",
+                  );
+                }, 1500);
+              } catch {
+                input.value = targetPeer;
+                input.select();
+              }
+            });
+
+            row.appendChild(input);
+            row.appendChild(btn);
+            participantsList.appendChild(row);
+          } else {
+            const noPeers = document.createElement("div");
+            noPeers.style.fontSize = "0.875rem";
+            noPeers.style.color = "var(--text-secondary)";
+            noPeers.textContent = "Peer is not currently connected.";
+            participantsList.appendChild(noPeers);
+          }
+        }
+      } else {
+        participantsContainer.style.display = "none";
+      }
+    }
+
     if (!dialog) {
       return;
     }

@@ -46,6 +46,23 @@
       </div>
     </div>
 
+    <div class="form-group">
+      <label class="form-label">My Alias</label>
+      <input
+        class="form-input"
+        data-setting="peerjs-my-alias-input"
+        placeholder="e.g. alias"
+        type="text"
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <div class="form-helper">
+        Optional. A friendly name peers can use to @-mention you (e.g.
+        <code>@alias</code>). Your agent will respond to both this alias and
+        your raw Peer ID.
+      </div>
+    </div>
+
     <div class="form-group peerjs-qr-group" data-info="peerjs-qr-group" hidden>
       <label class="form-label">QR Code — Share to Connect</label>
       <div class="peerjs-qr-wrapper">
@@ -61,19 +78,49 @@
     </div>
 
     <div class="form-group">
-      <label class="form-label">Trusted Peer IDs</label>
-      <input
-        class="form-input"
-        data-setting="peerjs-trusted-peer-ids-input"
-        placeholder="peer-id-1, peer-id-2"
-        type="text"
-        autocomplete="off"
-        spellcheck="false"
-      />
+      <label class="form-label">Trusted Peer IDs & Aliases</label>
       <div class="form-helper">
-        Optional. Comma-separated Peer IDs allowed to send you messages. Leave
-        blank to accept connections from any peer.
+        Optional. Peer IDs allowed to send you messages. Leave blank to accept
+        connections from any peer. You can also assign friendly aliases (like
+        "alice") to Peer IDs.
       </div>
+
+      <div
+        class="peerjs-trusted-peers-list"
+        data-info="peerjs-trusted-peers-list"
+      ></div>
+
+      <div class="peerjs-row" style="align-items: flex-start">
+        <div class="form-group" style="margin-bottom: 0">
+          <input
+            class="form-input"
+            data-setting="peerjs-new-trusted-id-input"
+            placeholder="Peer ID (e.g. 01j...)"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <div class="form-group" style="margin-bottom: 0">
+          <input
+            class="form-input"
+            data-setting="peerjs-new-trusted-alias-input"
+            placeholder="Alias (e.g. alice)"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <button
+          type="button"
+          class="save-btn save-btn--secondary"
+          data-action="add-trusted-peer"
+          style="white-space: nowrap; height: 38px"
+        >
+          Add
+        </button>
+      </div>
+
       <div class="form-status" data-info="peerjs-trusted-ids-status">
         Accepting connections from any peer.
       </div>

@@ -105,10 +105,71 @@ export class ShadowClawPeerJs extends ShadowClawElement {
       .querySelector('[data-action="copy-peer-url"]')
       ?.addEventListener("click", () => this.copyPeerUrl());
 
+    root
+      .querySelector('[data-action="add-trusted-peer"]')
+      ?.addEventListener("click", () => {
+        const idInput = root.querySelector(
+          '[data-setting="peerjs-new-trusted-id-input"]',
+        ) as HTMLInputElement | null;
+        const aliasInput = root.querySelector(
+          '[data-setting="peerjs-new-trusted-alias-input"]',
+        ) as HTMLInputElement | null;
+
+        const id = idInput?.value?.trim();
+        const alias = aliasInput?.value?.trim();
+
+        if (id) {
+          this._appendTrustedPeerRow(id, alias || "");
+          if (idInput) {
+            idInput.value = "";
+          }
+
+          if (aliasInput) {
+            aliasInput.value = "";
+          }
+        }
+      });
+
     // Live-update QR when peer ID is typed
     root
       .querySelector('[data-setting="peerjs-my-peer-id-input"]')
       ?.addEventListener("input", () => this.updateQrCode());
+  }
+
+  private _appendTrustedPeerRow(id: string, alias: string) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const list = root.querySelector('[data-info="peerjs-trusted-peers-list"]');
+    if (!list) {
+      return;
+    }
+
+    // Check if ID already exists
+    const existing = list.querySelector(`input[data-id="${id}"]`);
+    if (existing) {
+      return;
+    }
+
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.gap = "0.5rem";
+    row.style.alignItems = "center";
+    row.className = "peerjs-trusted-peer-row";
+
+    row.innerHTML = `
+      <input type="text" class="form-input" style="margin-bottom: 0" value="${id}" data-id="${id}" disabled />
+      <input type="text" class="form-input alias-input" style="margin-bottom: 0" value="${alias}" placeholder="Alias (optional)" />
+      <button type="button" class="save-btn save-btn--danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; white-space: nowrap; height: 38px;">Remove</button>
+    `;
+
+    row.querySelector("button")?.addEventListener("click", () => {
+      row.remove();
+    });
+
+    list.appendChild(row);
   }
 
   async render() {
@@ -150,12 +211,37 @@ export class ShadowClawPeerJs extends ShadowClawElement {
       myPeerIdInput.value = cfg.myPeerId;
     }
 
-    // Trusted Peer IDs
-    const trustedInput = root.querySelector(
-      '[data-setting="peerjs-trusted-peer-ids-input"]',
+    // My Alias
+    const myAliasInput = root.querySelector(
+      '[data-setting="peerjs-my-alias-input"]',
     ) as HTMLInputElement | null;
-    if (trustedInput) {
-      trustedInput.value = cfg.trustedPeerIds.join(", ");
+    if (myAliasInput) {
+      myAliasInput.value = cfg.myAlias;
+    }
+
+    // Trusted Peer IDs & Aliases List
+    const trustedListEl = root.querySelector(
+      '[data-info="peerjs-trusted-peers-list"]',
+    );
+    if (
+      trustedListEl &&
+      trustedListEl.children.length === 0 &&
+      cfg.trustedPeerIds.length > 0
+    ) {
+      cfg.trustedPeerIds.forEach((id) => {
+        let alias = "";
+        if (cfg.peerAliases) {
+          for (const [a, i] of Object.entries(cfg.peerAliases)) {
+            if (i === id) {
+              alias = a;
+
+              break;
+            }
+          }
+        }
+
+        this._appendTrustedPeerRow(id, alias);
+      });
     }
 
     const trustedStatus = root.querySelector(
@@ -168,12 +254,23 @@ export class ShadowClawPeerJs extends ShadowClawElement {
           document.createTextNode("Connect to Trusted Peers: "),
         );
         cfg.trustedPeerIds.forEach((id) => {
+          let btnText = id;
+          if (cfg.peerAliases) {
+            for (const [a, i] of Object.entries(cfg.peerAliases)) {
+              if (i === id) {
+                btnText = a;
+
+                break;
+              }
+            }
+          }
+
           const btn = document.createElement("button");
           btn.className = "save-btn save-btn--secondary";
           btn.style.padding = "0.25rem 0.5rem";
           btn.style.fontSize = "0.75rem";
           btn.style.margin = "0.25rem 0.25rem 0.25rem 0";
-          btn.textContent = id;
+          btn.textContent = btnText;
           btn.addEventListener("click", () => {
             document.dispatchEvent(
               new CustomEvent("shadow-claw-navigate", {
@@ -387,12 +484,17 @@ export class ShadowClawPeerJs extends ShadowClawElement {
       return;
     }
 
+    // ── Snapshot all form values before any awaits ──────────────────────────
+    // Reactive effects triggered by configurePeerJs() → peerjs.start() can
+    // re-render the component while we are mid-save, replacing DOM nodes and
+    // causing later queries to return stale/empty values. Read everything now.
+
     const myPeerIdInput = root.querySelector(
       '[data-setting="peerjs-my-peer-id-input"]',
     ) as HTMLInputElement | null;
 
-    const trustedInput = root.querySelector(
-      '[data-setting="peerjs-trusted-peer-ids-input"]',
+    const myAliasInput = root.querySelector(
+      '[data-setting="peerjs-my-alias-input"]',
     ) as HTMLInputElement | null;
 
     const serverHostInput = root.querySelector(
@@ -425,13 +527,31 @@ export class ShadowClawPeerJs extends ShadowClawElement {
       }
     }
 
-    const trustedPeerIds = parseCommaSeparatedList(trustedInput?.value || "");
+    const myAlias = (myAliasInput?.value || "").trim();
+
+    const trustedPeerIds: string[] = [];
+    const peerAliases: Record<string, string> = {};
+
+    const rows = root.querySelectorAll(".peerjs-trusted-peer-row");
+    rows.forEach((row) => {
+      const idInput = row.querySelector("input[data-id]") as HTMLInputElement;
+      const aliasInput = row.querySelector(".alias-input") as HTMLInputElement;
+      if (idInput && idInput.value) {
+        const id = idInput.value.trim();
+        trustedPeerIds.push(id);
+        if (aliasInput && aliasInput.value.trim()) {
+          peerAliases[aliasInput.value.trim()] = id;
+        }
+      }
+    });
+
     const serverHost = (serverHostInput?.value || "").trim();
     const serverPort = parseInt(serverPortInput?.value || "0", 10) || 0;
     const serverPath = (serverPathInput?.value || "").trim();
     const serverSecure = !!serverSecureToggle?.checked;
     const enabled = !!enabledToggle?.checked;
 
+    // ── Persist ─────────────────────────────────────────────────────────────
     try {
       await orchestrator.configurePeerJs(
         this.db,
@@ -442,6 +562,15 @@ export class ShadowClawPeerJs extends ShadowClawElement {
         serverPath,
         serverSecure,
       );
+
+      if (orchestrator.setPeerjsMyAlias) {
+        await orchestrator.setPeerjsMyAlias(this.db, myAlias);
+      }
+
+      if (orchestrator.setPeerjsPeerAliases) {
+        await orchestrator.setPeerjsPeerAliases(this.db, peerAliases);
+      }
+
       await orchestrator.setChannelEnabled(this.db, "peerjs", enabled);
       await this.render();
       showSuccess("PeerJS settings saved", 3000);
@@ -452,17 +581,6 @@ export class ShadowClawPeerJs extends ShadowClawElement {
       );
     }
   }
-}
-
-function parseCommaSeparatedList(value: string): string[] {
-  return Array.from(
-    new Set(
-      value
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter(Boolean),
-    ),
-  );
 }
 
 customElements.define(elementName, ShadowClawPeerJs);

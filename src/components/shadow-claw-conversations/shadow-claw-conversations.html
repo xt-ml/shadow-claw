@@ -95,31 +95,40 @@
           </svg>
         </button>
       </div>
+
+      <div
+        id="conversations-details-participants-container"
+        class="conversations__participants-container"
+      >
+        <label class="conversations__label"> Connected Participants </label>
+        <div
+          id="conversations-details-participants-list"
+          class="conversations__participants-list"
+        ></div>
+      </div>
       <label class="conversations__label" for="conversations-details-provider">
         Pinned Provider
       </label>
       <select
-        class="conversations__input"
+        class="conversations__input conversations__provider-select"
         id="conversations-details-provider"
         name="conversations-details-provider"
-        style="margin-bottom: 1rem"
       >
         <option value="">Default (Global)</option>
       </select>
 
       <div
         id="conversations-details-model-container"
-        style="display: none; margin-bottom: 1rem"
+        class="conversations__model-container"
       >
         <label class="conversations__label" for="conversations-details-model">
           Pinned Model
         </label>
-        <div style="display: flex; gap: 0.5rem; align-items: center">
+        <div class="conversations__model-row">
           <select
-            class="conversations__input"
+            class="conversations__input conversations__model-select"
             id="conversations-details-model"
             name="conversations-details-model"
-            style="margin-bottom: 0; flex: 1"
           >
             <option value="">Default Model</option>
           </select>

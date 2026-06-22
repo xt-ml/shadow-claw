@@ -568,3 +568,35 @@
   background-color: var(--shadow-claw-bg-tertiary);
   outline: none;
 }
+
+.conversations__participants-container {
+  display: none;
+  margin-bottom: 1rem;
+}
+
+.conversations__participants-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.conversations__provider-select {
+  margin-bottom: 1rem;
+}
+
+.conversations__model-container {
+  display: none;
+  margin-bottom: 1rem;
+}
+
+.conversations__model-row {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.conversations__model-select {
+  flex: 1;
+  margin-bottom: 0;
+}

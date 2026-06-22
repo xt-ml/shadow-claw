@@ -211,7 +211,9 @@ export class Orchestrator {
   telegramUseProxy: boolean = false;
   peerjs: PeerJsChannel = new PeerJsChannel();
   peerjsMyPeerId: string = "";
+  peerjsMyAlias: string = "";
   peerjsTrustedPeerIds: string[] = [];
+  peerjsPeerAliases: Record<string, string> = {};
   peerjsServerHost: string = "";
   peerjsServerPort: number = 0;
   peerjsServerPath: string = "";
@@ -1177,20 +1179,24 @@ export class Orchestrator {
 
   getPeerJsConfig(): {
     myPeerId: string;
+    myAlias: string;
     trustedPeerIds: string[];
     serverHost: string;
     serverPort: number;
     serverPath: string;
     serverSecure: boolean;
+    peerAliases: Record<string, string>;
     enabled: boolean;
   } {
     return {
       myPeerId: this.peerjsMyPeerId,
+      myAlias: this.peerjsMyAlias,
       trustedPeerIds: [...this.peerjsTrustedPeerIds],
       serverHost: this.peerjsServerHost,
       serverPort: this.peerjsServerPort,
       serverPath: this.peerjsServerPath,
       serverSecure: this.peerjsServerSecure,
+      peerAliases: { ...this.peerjsPeerAliases },
       enabled: this.getChannelEnabled("peerjs"),
     };
   }
@@ -1257,6 +1263,23 @@ export class Orchestrator {
     if (normalizedMyPeerId && this.getChannelEnabled("peerjs")) {
       this.peerjs.start();
     }
+  }
+
+  async setPeerjsPeerAliases(
+    db: ShadowClawDatabase,
+    aliases: Record<string, string>,
+  ): Promise<void> {
+    this.peerjsPeerAliases = { ...aliases };
+    await setConfig(
+      db,
+      CONFIG_KEYS.PEERJS_PEER_ALIASES,
+      JSON.stringify(this.peerjsPeerAliases),
+    );
+  }
+
+  async setPeerjsMyAlias(db: ShadowClawDatabase, alias: string): Promise<void> {
+    this.peerjsMyAlias = alias.trim();
+    await setConfig(db, CONFIG_KEYS.PEERJS_MY_ALIAS, this.peerjsMyAlias);
   }
 
   submitMessage(
@@ -2071,8 +2094,25 @@ export class Orchestrator {
     );
     const peerjsServerSecure = peerjsServerSecureRaw !== "false";
 
+    let peerjsPeerAliases: Record<string, string> = {};
+    const storedAliasesRaw = await getConfig(
+      db,
+      CONFIG_KEYS.PEERJS_PEER_ALIASES,
+    );
+    if (storedAliasesRaw) {
+      try {
+        peerjsPeerAliases = JSON.parse(storedAliasesRaw);
+      } catch (err) {
+        console.warn("Failed to parse peerjs_peer_aliases", err);
+      }
+    }
+
     this.peerjsMyPeerId = peerjsMyPeerId;
+    this.peerjsMyAlias = (
+      (await getConfig(db, CONFIG_KEYS.PEERJS_MY_ALIAS)) || ""
+    ).trim();
     this.peerjsTrustedPeerIds = peerjsTrustedPeerIds;
+    this.peerjsPeerAliases = peerjsPeerAliases;
     this.peerjsServerHost = peerjsServerHost;
     this.peerjsServerPort = peerjsServerPort;
     this.peerjsServerPath = peerjsServerPath;
@@ -2356,12 +2396,28 @@ export class Orchestrator {
     const isDirectToolCommand = !!directToolCommand;
 
     // Check for explicit peer ID mention (works for both local and remote)
-    if (
-      !hasTrigger &&
-      this.peerjsMyPeerId &&
-      msg.content.includes(`@${this.peerjsMyPeerId}`)
-    ) {
-      hasTrigger = true;
+    if (!hasTrigger && this.peerjsMyPeerId) {
+      if (msg.content.includes(`@${this.peerjsMyPeerId}`)) {
+        hasTrigger = true;
+      } else if (
+        this.peerjsMyAlias &&
+        msg.content.includes(`@${this.peerjsMyAlias}`)
+      ) {
+        // Also respond to @<my-alias> so peers can use the friendly name
+        hasTrigger = true;
+      } else {
+        // Also check if any alias maps to this.peerjsMyPeerId
+        for (const [alias, rawId] of Object.entries(this.peerjsPeerAliases)) {
+          if (
+            rawId === this.peerjsMyPeerId &&
+            msg.content.includes(`@${alias}`)
+          ) {
+            hasTrigger = true;
+
+            break;
+          }
+        }
+      }
     }
 
     // Always trigger the agent for scheduled tasks

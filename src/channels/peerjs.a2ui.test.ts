@@ -179,7 +179,8 @@ describe("PeerJsChannel.sendA2UI", () => {
       surfaceId: "s1",
     });
 
-    const callArg = (conn.send as jest.Mock).mock.calls[0][0] as any;
+    const calls = (conn.send as jest.Mock).mock.calls;
+    const callArg = calls[calls.length - 1][0] as any;
     expect(callArg.params.message.role).toBe("agent");
   });
 });
@@ -230,7 +231,8 @@ describe("PeerJsChannel.sendA2UIAction", () => {
       dataModel: {},
     });
 
-    const callArg = (conn.send as jest.Mock).mock.calls[0][0] as any;
+    const calls = (conn.send as jest.Mock).mock.calls;
+    const callArg = calls[calls.length - 1][0] as any;
     expect(callArg.params.message.role).toBe("user");
   });
 });

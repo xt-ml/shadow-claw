@@ -167,6 +167,37 @@ The orchestrator listens for A2UI envelopes in worker responses and emits `a2ui-
 
 The `peerjs` channel handler processes A2UI envelopes as `kind: "a2ui"` message parts and routes them to the UI.
 
+## Shared Room Surfaces (multi-party)
+
+In a 1:1 `peer:` conversation a surface is delivered to the single remote peer
+via `sendA2UI` / `sendA2UIAction`. In a multi-party `room:` conversation,
+surfaces are **broadcast to every member** so all agents and humans interact
+with the same surface simultaneously. This is **owner-authoritative**:
+
+- **Ownership:** Whichever agent calls `render_component` in a room owns the
+  surface. The `RoomManager` records `surfaceId → ownerPeerId`.
+- **Surface broadcast (`room/a2ui`):** When the owner renders or updates a
+  surface, the orchestrator broadcasts the envelope to all members over the
+  room mesh (with host-relay fallback and `broadcastId` de-duplication). Every
+  member's `<shadow-claw-a2ui>` applies the same envelope.
+- **Action broadcast (`room/a2ui-action`):** When **any** member clicks a
+  button (or submits input), the action is routed by
+  `Orchestrator.routeRoomA2UIAction`. If the local peer owns the surface it
+  processes the action directly; otherwise the action is broadcast so the
+  owner's agent receives it.
+- **Synchronized state:** Only the owner's agent mutates the data model. It
+  emits an `[A2UI ACTION]` trigger prompt (built by `formatA2UIActionPrompt`),
+  calls `render_component` with `updateDataModel`, and that update is broadcast
+  back to the room — keeping every member's surface in lockstep. Non-owners
+  never process actions for surfaces they do not own (enforced against the
+  local ownership map, so a peer cannot hijack a surface it did not create).
+
+**Wire methods:** `room/a2ui` and `room/a2ui-action` (see
+[channels.md](channels.md) and `src/channels/peer-protocol.ts`).
+
+**Limitation:** Late joiners do not receive a replay of surfaces created before
+they joined; the owner must re-render to include them.
+
 ## Media Resolution
 
 Images, videos, and audio are resolved from:

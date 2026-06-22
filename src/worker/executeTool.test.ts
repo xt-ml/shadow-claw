@@ -128,6 +128,7 @@ describe("executeTool.js", () => {
       },
       DEFAULT_DEV_HOST: "localhost",
       DEFAULT_DEV_PORT: 8888,
+      DEFAULT_GROUP_ID: "default",
     }));
 
     jest.unstable_mockModule("../db/getConfig.js", () => ({
@@ -2945,6 +2946,136 @@ describe("executeTool.js", () => {
 
       expect(result).toContain("Task created successfully.");
       expect(mockPost).toHaveBeenCalled();
+    });
+  });
+
+  describe("room tools", () => {
+    it("posts a room-action to create a room", async () => {
+      const result = await executeTool(
+        {} as any,
+        "create_room",
+        { name: "Design Review" },
+        "group1",
+      );
+
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "room-action",
+        payload: { action: "create", name: "Design Review" },
+      });
+      expect(result).toContain("Design Review");
+    });
+
+    it("requires a name for create_room", async () => {
+      const result = await executeTool({} as any, "create_room", {}, "group1");
+
+      expect(result).toContain("Error");
+      expect(mockPost).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "room-action" }),
+      );
+    });
+
+    it("invites a peer using the explicit room id", async () => {
+      const result = await executeTool(
+        {} as any,
+        "invite_to_room",
+        { peer_id: "peer-xyz", room_id: "room-1" },
+        "group1",
+      );
+
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "room-action",
+        payload: { action: "invite", roomId: "room-1", peerId: "peer-xyz" },
+      });
+      expect(result).toContain("peer-xyz");
+    });
+
+    it("defaults invite room id to the current room conversation", async () => {
+      const result = await executeTool(
+        {} as any,
+        "invite_to_room",
+        { peer_id: "peer-xyz" },
+        "room:room-99",
+      );
+
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "room-action",
+        payload: { action: "invite", roomId: "room-99", peerId: "peer-xyz" },
+      });
+      expect(result).toContain("room-99");
+    });
+
+    it("errors when invite has no room context", async () => {
+      const result = await executeTool(
+        {} as any,
+        "invite_to_room",
+        { peer_id: "peer-xyz" },
+        "group1",
+      );
+
+      expect(result).toContain("Error");
+      expect(mockPost).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "room-action" }),
+      );
+    });
+
+    it("posts a room-action to leave the current room", async () => {
+      const result = await executeTool(
+        {} as any,
+        "leave_room",
+        {},
+        "room:room-7",
+      );
+
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "room-action",
+        payload: { action: "leave", roomId: "room-7" },
+      });
+      expect(result).toContain("room-7");
+    });
+
+    it("lists room members from persisted metadata", async () => {
+      (mockGetConfig as any).mockResolvedValue(
+        JSON.stringify([
+          {
+            roomId: "room-7",
+            name: "Standup",
+            hostPeerId: "host-1",
+            createdAt: 0,
+            members: [
+              { peerId: "host-1", alias: "K9", kind: "agent", agentName: "k9" },
+              { peerId: "peer-2", alias: "Ada", kind: "human" },
+            ],
+          },
+        ]),
+      );
+
+      const result = await executeTool(
+        {} as any,
+        "list_room_members",
+        {},
+        "room:room-7",
+      );
+
+      expect(result).toContain("Standup");
+      expect(result).toContain("K9");
+      expect(result).toContain("@k9");
+      expect(result).toContain("[host]");
+      expect(result).toContain("Ada");
+    });
+
+    it("blocks room mutations during scheduled task execution", async () => {
+      const result = await executeTool(
+        {} as any,
+        "invite_to_room",
+        { peer_id: "peer-xyz", room_id: "room-1" },
+        "group1",
+        { isScheduledTask: true },
+      );
+
+      expect(result).toContain("not allowed during scheduled task execution");
+      expect(mockPost).not.toHaveBeenCalledWith(
+        expect.objectContaining({ type: "room-action" }),
+      );
     });
   });
 });

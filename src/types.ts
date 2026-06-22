@@ -49,9 +49,47 @@ export interface AppDialogOptions extends ConfirmationDialogOptions {
   links?: AppDialogLink[];
 }
 
-export type KnownChannelType = "browser" | "telegram" | "imessage" | "peerjs";
+export type KnownChannelType =
+  | "browser"
+  | "telegram"
+  | "imessage"
+  | "peerjs"
+  | "room";
 
 export type ChannelType = KnownChannelType | (string & {});
+
+/**
+ * A participant in a multi-party room. May be a human (using their own
+ * ShadowClaw instance) or an AI agent.
+ */
+export interface RoomMember {
+  /** PeerJS peer ID used as the network identity for this member. */
+  peerId: string;
+  /** Human-readable display name for the member. */
+  alias: string;
+  /** Whether this member participates as a human or an AI agent. */
+  kind: "human" | "agent";
+  /** Optional assistant name when {@link kind} is "agent" (used for @mentions). */
+  agentName?: string;
+}
+
+/**
+ * Metadata for a multi-party "room" conversation. A room is layered on top of
+ * a {@link GroupMeta} whose groupId is `room:<roomId>`; this record tracks the
+ * host and participant roster separately.
+ */
+export interface RoomMeta {
+  /** Bare room id. The conversation groupId is `room:<roomId>`. */
+  roomId: string;
+  /** Human-readable room name. */
+  name: string;
+  /** Peer ID of the room host (creator) that maintains the authoritative roster. */
+  hostPeerId: string;
+  /** Current participant roster. */
+  members: RoomMember[];
+  /** Epoch ms when the room was created. */
+  createdAt: number;
+}
 
 export interface RemoteUrlAttachmentSource {
   kind: "remote-url";
@@ -97,6 +135,10 @@ export interface InboundMessage {
   a2uiEnvelopes?: A2UIEnvelope[];
   /** A2UI action dispatched by the remote peer's UI (peer channel only) */
   a2uiAction?: A2UIAction;
+  /** A2A task ID for peer protocol task lifecycle tracking */
+  taskId?: string;
+  /** A2A context ID for peer protocol conversation threading */
+  contextId?: string;
 }
 
 export interface StoredMessage {

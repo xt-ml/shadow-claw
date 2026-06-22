@@ -1,8 +1,10 @@
 import { exit } from "node:process";
+import http from "node:http";
 import tcpPortUsed from "tcp-port-used";
 
 import { DEFAULT_DEV_IP } from "../config.js";
 import { createApp } from "./app.js";
+import { attachPeerServer } from "./peer.js";
 import { parseConfig } from "./config.js";
 
 const config = parseConfig();
@@ -18,7 +20,13 @@ if (isPortUsed) {
 
 scheduler.start();
 
-app.listen(config.port, config.bindHost, () => {
+const httpServer = http.createServer(app);
+
+if (config.peerjs) {
+  attachPeerServer(httpServer, app);
+}
+
+httpServer.listen(config.port, config.bindHost, () => {
   console.log(`Server running at http://${config.bindHost}:${config.port}`);
 
   if (config.bindHost === DEFAULT_DEV_IP) {
@@ -37,6 +45,10 @@ app.listen(config.port, config.bindHost, () => {
     console.log(
       `CORS allowlist origins: ${Array.from(config.allowedOrigins).join(", ")}`,
     );
+  }
+
+  if (config.peerjs) {
+    console.log("PeerJS signaling server enabled (routes at /peerjs/*)");
   }
 
   if (config.verbose) {

@@ -126,16 +126,25 @@ const { OrchestratorStore } = await import("./orchestrator.js");
 const { DEFAULT_GROUP_ID } = await import("../config.js");
 
 function createEvents() {
-  const handlers = new Map();
+  const handlers = new Map<string, Set<Function>>();
 
   return {
     on(type: any, callback: any) {
-      handlers.set(type, callback);
+      if (!handlers.has(type)) {
+        handlers.set(type, new Set());
+      }
+
+      handlers.get(type)!.add(callback);
+    },
+    off(type: any, callback: any) {
+      handlers.get(type)?.delete(callback);
     },
     emit(type: any, payload: any) {
-      const handler = handlers.get(type);
-      if (handler) {
-        handler(payload);
+      const cbs = handlers.get(type);
+      if (cbs) {
+        for (const cb of cbs) {
+          cb(payload);
+        }
       }
     },
   };

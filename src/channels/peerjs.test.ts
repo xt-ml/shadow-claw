@@ -289,18 +289,19 @@ describe("PeerJsChannel", () => {
 
       await ch.send("peer:remote-peer", "hello world");
 
-      expect(incomingConn.send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          jsonrpc: "2.0",
-          method: "message/send",
-          params: {
-            message: {
-              role: "agent",
-              parts: [{ kind: "text", text: "hello world" }],
-            },
-          },
-        }),
+      // Find the SendMessage call (skip GetAgentCard)
+      const calls = (incomingConn.send as jest.Mock).mock.calls;
+      const sendMsgCall = calls.find(
+        (c: any[]) => c[0]?.method === "SendMessage",
       );
+      expect(sendMsgCall).toBeDefined();
+      const envelope = sendMsgCall![0] as any;
+      expect(envelope.jsonrpc).toBe("2.0");
+      expect(envelope.method).toBe("SendMessage");
+      expect(envelope.params.message.role).toBe("ROLE_AGENT");
+      expect(envelope.params.message.parts).toEqual([
+        { kind: "text", text: "hello world" },
+      ]);
     });
 
     it("strips peer: prefix to get remote peer id", async () => {
@@ -316,18 +317,19 @@ describe("PeerJsChannel", () => {
 
       await ch.send("peer:abc-123", "test");
 
-      expect(incomingConn.send).toHaveBeenCalledWith(
-        expect.objectContaining({
-          jsonrpc: "2.0",
-          method: "message/send",
-          params: {
-            message: {
-              role: "agent",
-              parts: [{ kind: "text", text: "test" }],
-            },
-          },
-        }),
+      // Find the SendMessage call (skip GetAgentCard)
+      const calls = (incomingConn.send as jest.Mock).mock.calls;
+      const sendMsgCall = calls.find(
+        (c: any[]) => c[0]?.method === "SendMessage",
       );
+      expect(sendMsgCall).toBeDefined();
+      const envelope = sendMsgCall![0] as any;
+      expect(envelope.jsonrpc).toBe("2.0");
+      expect(envelope.method).toBe("SendMessage");
+      expect(envelope.params.message.role).toBe("ROLE_AGENT");
+      expect(envelope.params.message.parts).toEqual([
+        { kind: "text", text: "test" },
+      ]);
     });
   });
 

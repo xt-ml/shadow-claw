@@ -47,6 +47,7 @@ Tool definitions live in modular files under `src/tools/` and are assembled in `
 | `manage_tools.ts`  | `manage_tools`, `list_tool_profiles`                                                                                                                                                                                       |
 | `mcp.ts`           | `remote_mcp_list_tools`, `remote_mcp_call_tool`                                                                                                                                                                            |
 | `email.ts`         | `manage_email`, `email_read_messages`, `email_send_message`                                                                                                                                                                |
+| `rooms.ts`         | `create_room`, `invite_to_room`, `leave_room`, `list_room_members`                                                                                                                                                         |
 
 All are re-exported from `src/tools/index.ts` as the `TOOL_DEFINITIONS` array.
 
@@ -119,6 +120,7 @@ When `isScheduledTask === true`, these tools are blocked:
 
 - `create_task`, `update_task`, `delete_task`, `enable_task`, `disable_task`
 - `send_notification`
+- `create_room`, `invite_to_room`, `leave_room`
 
 This prevents scheduled tasks from creating cascading tasks or infinite push notification loops.
 

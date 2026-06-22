@@ -25,6 +25,7 @@ ShadowClaw has been significantly deduplicated. Instead of a massive `AGENTS.md`
 | Accounts & Credentials        | [docs/subsystems/accounts.md](docs/subsystems/accounts.md)                               |
 | Attachment Capabilities       | [docs/subsystems/attachment-capabilities.md](docs/subsystems/attachment-capabilities.md) |
 | A2UI Interactive Surfaces     | [docs/subsystems/a2ui.md](docs/subsystems/a2ui.md)                                       |
+| AGUI Events & Adapter         | [docs/subsystems/agui.md](docs/subsystems/agui.md)                                       |
 | Channels & Multi-Conversation | [docs/subsystems/channels.md](docs/subsystems/channels.md)                               |
 | Chat Template Sanitizer       | [docs/subsystems/sanitizer.md](docs/subsystems/sanitizer.md)                             |
 | Cryptography & Secrets        | [docs/subsystems/crypto.md](docs/subsystems/crypto.md)                                   |

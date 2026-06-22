@@ -57,6 +57,7 @@ import type {
 } from "../types.js";
 import type { Orchestrator } from "../orchestrator.js";
 import type { StorageStatus } from "../storage/storage.js";
+import { AGUIAdapter } from "../agui-adapter.js";
 
 export type OrchestratorState = "idle" | "thinking" | "responding" | "error";
 
@@ -290,6 +291,7 @@ export class OrchestratorStore {
   public _groups: Signal.State<GroupMeta[]>;
   public _unreadGroupIds: Signal.State<Set<string>>;
   public _streamingText: Signal.State<string | null>;
+  public _aguiEvent: Signal.State<{ groupId: string; event: any } | null>;
   public _contextUsage: Signal.State<ContextUsage | null>;
   public _useProxy: Signal.State<boolean>;
   public _proxyUrl: Signal.State<string>;
@@ -312,6 +314,7 @@ export class OrchestratorStore {
   private _taskSyncOutbox: TaskSyncOutboxOperation[];
   private _replayingTaskSyncOutbox: boolean;
   private _onlineReplayHandler: (() => void) | null;
+  private _aguiAdapter: AGUIAdapter | null;
 
   private deriveGroupName(groupId: string): string {
     if (groupId.startsWith("tg:")) {
@@ -395,6 +398,7 @@ export class OrchestratorStore {
     this._groups = new Signal.State([]);
     this._unreadGroupIds = new Signal.State(new Set());
     this._streamingText = new Signal.State(null);
+    this._aguiEvent = new Signal.State(null);
     this._contextUsage = new Signal.State(null);
     this._useProxy = new Signal.State(false);
     this._proxyUrl = new Signal.State("/proxy");
@@ -417,6 +421,7 @@ export class OrchestratorStore {
     this._taskSyncOutbox = [];
     this._replayingTaskSyncOutbox = false;
     this._onlineReplayHandler = null;
+    this._aguiAdapter = null;
   }
 
   private parseTaskSyncOutbox(raw: string | null | undefined) {
@@ -797,6 +802,13 @@ export class OrchestratorStore {
   }
 
   /**
+   * Get the latest AG-UI event for the active conversation, or null.
+   */
+  get aguiEvent(): { groupId: string; event: any } | null {
+    return this._aguiEvent.get();
+  }
+
+  /**
    * Get the set of groupIds with unread messages.
    */
   get unreadGroupIds(): Set<string> {
@@ -1104,6 +1116,21 @@ export class OrchestratorStore {
         return;
       }
     });
+
+    // --- AG-UI adapter (emits AG-UI CustomEvents for all conversations) ---
+    this._aguiAdapter = new AGUIAdapter(orch.events);
+    this._aguiAdapter.start();
+
+    // Forward AG-UI DOM events into a reactive signal for the active group
+    if (typeof window !== "undefined") {
+      window.addEventListener("shadow-claw-agui-event", ((
+        e: CustomEvent<{ groupId: string; event: unknown }>,
+      ) => {
+        if (e.detail.groupId === this._activeGroupId.get()) {
+          this._aguiEvent.set(e.detail as any);
+        }
+      }) as EventListener);
+    }
 
     // Restore last-active conversation, then load data
     await this.loadGroups(db);

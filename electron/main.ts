@@ -16,6 +16,8 @@ import { mkdir } from "node:fs/promises";
 import express from "express";
 import expressUrlrewrite from "express-urlrewrite";
 
+import { attachPeerServer } from "../src/server/peer.js";
+
 import {
   broadcastPush,
   registerPushRoutes,
@@ -117,6 +119,12 @@ function startServer(databaseDir: string): Promise<number> {
       console.log(`Electron server listening on http://127.0.0.1:${port}`);
       resolve(port);
     });
+
+    // Mount PeerJS signaling server on the Electron http server
+    if (server) {
+      attachPeerServer(server, srv);
+      console.log("PeerJS signaling server enabled (routes at /peerjs/*)");
+    }
 
     server?.on("error", reject);
   });

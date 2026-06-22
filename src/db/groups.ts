@@ -46,10 +46,11 @@ export async function createGroup(
   db: ShadowClawDatabase,
   name: string,
   prefix: string = "br:",
+  id?: string,
 ): Promise<GroupMeta> {
   const groups = await getGroupMetadata(db);
   const group: GroupMeta = {
-    groupId: `${prefix}${ulid()}`,
+    groupId: `${prefix}${id ?? ulid()}`,
     name,
     createdAt: Date.now(),
   };

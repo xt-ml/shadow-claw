@@ -15,6 +15,7 @@ describe("worker utilities", () => {
           outputTokens: 50,
           cacheReadTokens: 0,
           cacheCreationTokens: 0,
+          totalTokens: 150,
           contextLimit: 1000,
         },
       });

@@ -11,14 +11,21 @@ export function createTokenUsageMessage(
   },
   contextLimit: number,
 ): any {
+  const inputTokens = usage.input_tokens || 0;
+  const outputTokens = usage.output_tokens || 0;
+  const cacheReadTokens = usage.cache_read_input_tokens || 0;
+  const cacheCreationTokens = usage.cache_creation_input_tokens || 0;
+
   return {
     type: "token-usage",
     payload: {
       groupId,
-      inputTokens: usage.input_tokens || 0,
-      outputTokens: usage.output_tokens || 0,
-      cacheReadTokens: usage.cache_read_input_tokens || 0,
-      cacheCreationTokens: usage.cache_creation_input_tokens || 0,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+      totalTokens:
+        inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens,
       contextLimit,
     },
   };

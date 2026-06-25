@@ -21,6 +21,7 @@ describe("createTokenUsageMessage", () => {
         outputTokens: 2,
         cacheReadTokens: 3,
         cacheCreationTokens: 4,
+        totalTokens: 10,
         contextLimit: 10,
       },
     });

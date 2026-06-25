@@ -271,6 +271,29 @@ export interface OrchestratorStoreState {
   streamingText: string | null;
 }
 
+export function accumulateTokenUsage(
+  prev: TokenUsage | null,
+  next: TokenUsage,
+): TokenUsage {
+  const inputTokens = (prev?.inputTokens ?? 0) + (next.inputTokens ?? 0);
+  const outputTokens = (prev?.outputTokens ?? 0) + (next.outputTokens ?? 0);
+  const cacheReadTokens =
+    (prev?.cacheReadTokens ?? 0) + (next.cacheReadTokens ?? 0);
+  const cacheCreationTokens =
+    (prev?.cacheCreationTokens ?? 0) + (next.cacheCreationTokens ?? 0);
+
+  return {
+    groupId: next.groupId || prev?.groupId || "",
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheCreationTokens,
+    totalTokens:
+      inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens,
+    contextLimit: next.contextLimit || prev?.contextLimit || 0,
+  };
+}
+
 export class OrchestratorStore {
   private static readonly DEFAULT_PAGE_PATH = "MEMORY.md";
 
@@ -315,6 +338,8 @@ export class OrchestratorStore {
   private _replayingTaskSyncOutbox: boolean;
   private _onlineReplayHandler: (() => void) | null;
   private _aguiAdapter: AGUIAdapter | null;
+  private _tokenUsageAccumulator: TokenUsage | null = null;
+  private _lastOrchestratorState: OrchestratorState = "idle";
 
   private deriveGroupName(groupId: string): string {
     if (groupId.startsWith("tg:")) {
@@ -1021,11 +1046,23 @@ export class OrchestratorStore {
     });
 
     orch.events.on("state-change", (state) => {
+      const prev = this._lastOrchestratorState;
+      this._lastOrchestratorState = state;
       this._state.set(state);
+
       if (state === "idle") {
         this._toolActivity.set(null);
         this._modelDownloadProgress.set(null);
         this._streamingText.set(null);
+      }
+
+      if (
+        state === "thinking" &&
+        prev !== "thinking" &&
+        prev !== "responding"
+      ) {
+        this._tokenUsageAccumulator = null;
+        this._tokenUsage.set(null);
       }
     });
 
@@ -1039,6 +1076,7 @@ export class OrchestratorStore {
     orch.events.on("session-reset", () => {
       this._messages.set([]);
       this._activityLog.set([]);
+      this._tokenUsageAccumulator = null;
       this._tokenUsage.set(null);
       this._contextUsage.set(null);
       this._toolActivity.set(null);
@@ -1057,8 +1095,22 @@ export class OrchestratorStore {
       this.loadHistory();
     });
 
-    orch.events.on("token-usage", (usage) => {
-      this._tokenUsage.set(usage);
+    orch.events.on("token-usage", (usage: TokenUsage | null) => {
+      if (!usage) {
+        return;
+      }
+
+      if (usage.groupId && usage.groupId !== this._activeGroupId.get()) {
+        return;
+      }
+
+      const accumulated = accumulateTokenUsage(
+        this._tokenUsageAccumulator,
+        usage,
+      );
+
+      this._tokenUsageAccumulator = accumulated;
+      this._tokenUsage.set(accumulated);
     });
 
     orch.events.on("context-usage", (usage) => {

@@ -99,6 +99,31 @@ describe("estimateMessageTokens", () => {
       4,
     );
   });
+
+  it("estimates tokens for attachments", () => {
+    const msg: any = {
+      role: "user",
+      content: [
+        {
+          type: "attachment",
+          mediaType: "image",
+          fileName: "test.png",
+          mimeType: "image/png",
+          size: 5000,
+        },
+        {
+          type: "attachment",
+          mediaType: "document",
+          fileName: "test.txt",
+          mimeType: "text/plain",
+          data: "aGVsbG8=", // hello (5 bytes)
+        },
+      ],
+    };
+
+    const result = estimateMessageTokens(msg);
+    expect(result).toBeGreaterThan(1500);
+  });
 });
 
 describe("estimateMessagesTokens", () => {

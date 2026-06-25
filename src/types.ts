@@ -346,6 +346,9 @@ export interface ThinkingLogEntry {
 }
 
 export interface TokenUsage {
+  cacheCreationTokens: number;
+  cacheReadTokens: number;
+  contextLimit: number;
   groupId: string;
   inputTokens: number;
   outputTokens: number;

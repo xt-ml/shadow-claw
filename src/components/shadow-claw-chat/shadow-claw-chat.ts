@@ -1675,16 +1675,31 @@ export class ShadowClawChat extends ShadowClawElement {
 
         if (usage && (usage.inputTokens || usage.outputTokens)) {
           usageEl.classList.add("chat__token-usage--visible");
+
+          const cacheTokens =
+            (usage.cacheReadTokens || 0) + (usage.cacheCreationTokens || 0);
+          const promptTokens = (usage.inputTokens || 0) + cacheTokens;
+          const totalTokens =
+            usage.totalTokens | (promptTokens + (usage.outputTokens || 0));
+
           const inEl = document.createElement("span");
-          inEl.textContent = `⬆ ${this.formatTokenCount(usage.inputTokens)} in`;
+          inEl.textContent = `⬆ ${this.formatTokenCount(promptTokens)} in`;
 
           const outEl = document.createElement("span");
-          outEl.textContent = `⬇ ${this.formatTokenCount(usage.outputTokens)} out`;
+          outEl.textContent = `⬇ ${this.formatTokenCount(totalTokens)} out`;
 
           const totalEl = document.createElement("span");
-          totalEl.textContent = `Σ ${this.formatTokenCount(usage.totalTokens)}`;
+          totalEl.textContent = `Σ ${this.formatTokenCount(totalTokens)}`;
 
-          usageEl.replaceChildren(inEl, outEl, totalEl);
+          const children: Node[] = [inEl, outEl, totalEl];
+
+          if (cacheTokens > 0) {
+            const cacheEl = document.createElement("span");
+            cacheEl.textContent = `⛁ ${this.formatTokenCount(cacheTokens)} cached`;
+            children.push(cacheEl);
+          }
+
+          usageEl.replaceChildren(...children);
         } else {
           usageEl.classList.remove("chat__token-usage--visible");
           usageEl.replaceChildren();

@@ -122,7 +122,8 @@ jest.unstable_mockModule("../db/deleteMessage.js", () => ({
   deleteMessage: mockDeleteMessage,
 }));
 
-const { OrchestratorStore } = await import("./orchestrator.js");
+const { OrchestratorStore, accumulateTokenUsage } =
+  await import("./orchestrator.js");
 const { DEFAULT_GROUP_ID } = await import("../config.js");
 
 function createEvents() {
@@ -149,6 +150,66 @@ function createEvents() {
     },
   };
 }
+
+describe("accumulateTokenUsage", () => {
+  it("accumulates tokens properly", () => {
+    const prev = {
+      groupId: "g1",
+      inputTokens: 10,
+      outputTokens: 20,
+      cacheReadTokens: 5,
+      cacheCreationTokens: 2,
+      totalTokens: 37,
+      contextLimit: 100,
+    };
+
+    const next = {
+      groupId: "g1",
+      inputTokens: 5,
+      outputTokens: 10,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 15,
+      contextLimit: 100,
+    };
+
+    const result = accumulateTokenUsage(prev, next);
+
+    expect(result).toEqual({
+      groupId: "g1",
+      inputTokens: 15,
+      outputTokens: 30,
+      cacheReadTokens: 5,
+      cacheCreationTokens: 2,
+      totalTokens: 52,
+      contextLimit: 100,
+    });
+  });
+
+  it("handles null previous state", () => {
+    const next = {
+      groupId: "g1",
+      inputTokens: 5,
+      outputTokens: 10,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 15,
+      contextLimit: 100,
+    };
+
+    const result = accumulateTokenUsage(null, next);
+
+    expect(result).toEqual({
+      groupId: "g1",
+      inputTokens: 5,
+      outputTokens: 10,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 15,
+      contextLimit: 100,
+    });
+  });
+});
 
 describe("OrchestratorStore", () => {
   beforeEach(() => {
@@ -350,9 +411,25 @@ describe("OrchestratorStore", () => {
     expect(store.state).toBe("error");
     errorSpy.mockRestore();
 
-    events.emit("token-usage", { input: 3, output: 4, total: 7 });
+    events.emit("token-usage", {
+      groupId: "",
+      inputTokens: 3,
+      outputTokens: 4,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 7,
+      contextLimit: 0,
+    });
 
-    expect(store.tokenUsage).toEqual({ input: 3, output: 4, total: 7 });
+    expect(store.tokenUsage).toEqual({
+      groupId: "",
+      inputTokens: 3,
+      outputTokens: 4,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: 7,
+      contextLimit: 0,
+    });
 
     events.emit("session-reset");
 

@@ -1952,6 +1952,32 @@ export class ShadowClawChat extends ShadowClawElement {
 
     this.addCleanup(
       effect(() => {
+        const activeGroupId = orchestratorStore.activeGroupId;
+        const sharedStateEl = root.querySelector(".chat__shared-state");
+        const sharedStateCodeEl = root.querySelector(
+          ".chat__shared-state-code",
+        );
+
+        if (
+          !(sharedStateEl instanceof HTMLElement) ||
+          !(sharedStateCodeEl instanceof HTMLElement)
+        ) {
+          return;
+        }
+
+        const peerState = orchestratorStore.getPeerState(activeGroupId);
+        if (peerState && Object.keys(peerState).length > 0) {
+          sharedStateEl.hidden = false;
+          sharedStateCodeEl.textContent = JSON.stringify(peerState, null, 2);
+        } else {
+          sharedStateEl.hidden = true;
+          sharedStateCodeEl.textContent = "";
+        }
+      }),
+    );
+
+    this.addCleanup(
+      effect(() => {
         const state = orchestratorStore.state;
         const activeGroupId = orchestratorStore.activeGroupId;
         const statusText = root.querySelector(".chat__status-text");

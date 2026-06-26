@@ -446,6 +446,73 @@ describe("OrchestratorStore", () => {
     expect(store.state).toBe("idle");
   });
 
+  it("handles STATE_SNAPSHOT and STATE_DELTA AGUI events", async () => {
+    const store = new OrchestratorStore();
+    const events: any = createEvents();
+    const orch: any = {
+      events,
+      getUseProxy: () => false,
+      getProxyUrl: () => "",
+      getGitProxyUrl: () => "",
+      getVMBashFullInternetAccess: () => false,
+      getTaskServerUrl: () => "/schedule",
+    };
+
+    await store.init({} as any, orch);
+
+    // Initial snapshot
+    window.dispatchEvent(
+      new CustomEvent("shadow-claw-agui-event", {
+        detail: {
+          groupId: "g1",
+          event: {
+            type: "STATE_SNAPSHOT",
+            snapshot: { foo: "bar", count: 1 },
+          },
+        },
+      }),
+    );
+
+    expect(store.getPeerState("g1")).toEqual({ foo: "bar", count: 1 });
+
+    // Delta update
+    window.dispatchEvent(
+      new CustomEvent("shadow-claw-agui-event", {
+        detail: {
+          groupId: "g1",
+          event: {
+            type: "STATE_DELTA",
+            delta: [
+              { op: "replace", path: "/count", value: 2 },
+              { op: "add", path: "/newField", value: true },
+            ],
+          },
+        },
+      }),
+    );
+
+    expect(store.getPeerState("g1")).toEqual({
+      foo: "bar",
+      count: 2,
+      newField: true,
+    });
+
+    // Snapshot overwrites everything
+    window.dispatchEvent(
+      new CustomEvent("shadow-claw-agui-event", {
+        detail: {
+          groupId: "g1",
+          event: {
+            type: "STATE_SNAPSHOT",
+            snapshot: { baz: "qux" },
+          },
+        },
+      }),
+    );
+
+    expect(store.getPeerState("g1")).toEqual({ baz: "qux" });
+  });
+
   it("forwards thinking-log entries to server when activity disk logging is enabled", async () => {
     const store = new OrchestratorStore();
     const events: any = createEvents();

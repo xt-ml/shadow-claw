@@ -58,6 +58,7 @@ import type {
 import type { Orchestrator } from "../orchestrator.js";
 import type { StorageStatus } from "../storage/storage.js";
 import { AGUIAdapter } from "../agui-adapter.js";
+import { applyJsonPatch } from "../utils/jsonPatch.js";
 
 export type OrchestratorState = "idle" | "thinking" | "responding" | "error";
 
@@ -328,6 +329,7 @@ export class OrchestratorStore {
     Map<string, OrchestratorState>
   >;
   public _remoteAgentTypingByGroup: Signal.State<Map<string, boolean>>;
+  public _peerStateByGroup: Signal.State<Map<string, Record<string, unknown>>>;
   private _hadPersistedActivePage: boolean;
   private _initResolve: (() => void) | null;
   private _whenInitialized: Promise<void>;
@@ -435,6 +437,7 @@ export class OrchestratorStore {
     this._activePinnedPage = new Signal.State(null);
     this._remoteAgentStatusByGroup = new Signal.State(new Map());
     this._remoteAgentTypingByGroup = new Signal.State(new Map());
+    this._peerStateByGroup = new Signal.State(new Map());
     this._hadPersistedActivePage = false;
     this._initResolve = null;
     this._whenInitialized = new Promise<void>((resolve) => {
@@ -833,6 +836,10 @@ export class OrchestratorStore {
     return this._aguiEvent.get();
   }
 
+  getPeerState(groupId: string): Record<string, unknown> | null {
+    return this._peerStateByGroup.get().get(groupId) || null;
+  }
+
   /**
    * Get the set of groupIds with unread messages.
    */
@@ -1180,6 +1187,21 @@ export class OrchestratorStore {
       ) => {
         if (e.detail.groupId === this._activeGroupId.get()) {
           this._aguiEvent.set(e.detail as any);
+        }
+
+        const ev = e.detail.event as any;
+        if (ev) {
+          if (ev.type === "STATE_SNAPSHOT") {
+            const currentMap = new Map(this._peerStateByGroup.get());
+            currentMap.set(e.detail.groupId, ev.snapshot || {});
+            this._peerStateByGroup.set(currentMap);
+          } else if (ev.type === "STATE_DELTA") {
+            const currentMap = new Map(this._peerStateByGroup.get());
+            const existingState = currentMap.get(e.detail.groupId) || {};
+            const patched = applyJsonPatch(existingState, ev.delta || []);
+            currentMap.set(e.detail.groupId, patched);
+            this._peerStateByGroup.set(currentMap);
+          }
         }
       }) as EventListener);
     }

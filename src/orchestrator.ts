@@ -1507,11 +1507,13 @@ export class Orchestrator {
     }
 
     const compactTools = toolsStore.enabledTools;
+    const peerState = orchestratorStore.getPeerState(groupId) || undefined;
     const systemPrompt = buildSystemPrompt(
       this.assistantName,
       memory,
       compactTools,
       toolsStore.systemPromptOverride,
+      peerState,
     );
 
     const contextLimit = getContextLimit(this.model);
@@ -1617,11 +1619,13 @@ export class Orchestrator {
     }
 
     const activeTools = toolsStore.enabledTools;
+    const peerState = orchestratorStore.getPeerState(groupId) || undefined;
     const systemPrompt = buildSystemPrompt(
       this.assistantName,
       memory,
       activeTools,
       toolsStore.systemPromptOverride,
+      peerState,
     );
 
     const contextLimit = getContextLimit(this.model);
@@ -2840,11 +2844,13 @@ export class Orchestrator {
         ? toolsStore.allTools.filter((t) => group.toolTags!.includes(t.name))
         : toolsStore.enabledTools;
 
+    const peerState = orchestratorStore.getPeerState(groupId) || undefined;
     const systemPrompt = buildSystemPrompt(
       this.assistantName,
       memory,
       activeTools,
       toolsStore.systemPromptOverride,
+      peerState,
     );
 
     // Build conversation context with dynamic token-aware windowing

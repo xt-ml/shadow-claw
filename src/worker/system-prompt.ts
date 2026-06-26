@@ -10,6 +10,7 @@ export function buildSystemPrompt(
   memory: string,
   tools?: ToolDefinition[],
   promptOverride?: string,
+  sharedState?: Record<string, unknown>,
 ): string {
   const defs = tools || TOOL_DEFINITIONS;
   const hasTools = defs.length > 0;
@@ -177,6 +178,19 @@ export function buildSystemPrompt(
 
   if (memory) {
     parts.push("", "## Persistent Memory", "", memory);
+  }
+
+  if (sharedState && Object.keys(sharedState).length > 0) {
+    parts.push(
+      "",
+      "## Shared Session State (Ground Truth)",
+      "",
+      "The following state is the shared ground truth for this conversation. You must treat this state as absolute and refer to it when relevant:",
+      "",
+      "```json",
+      JSON.stringify(sharedState, null, 2),
+      "```",
+    );
   }
 
   if (promptOverride) {

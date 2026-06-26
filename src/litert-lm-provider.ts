@@ -47,53 +47,142 @@ export function isLiteRtLmSupported(): boolean {
 let liteRtEngine: any | null = null;
 let liteRtEngineModelId: string | null = null;
 
-async function getLiteRtEngine(modelId: string): Promise<any> {
-  if (liteRtEngine && liteRtEngineModelId === modelId) {
+let liteRtEnginePromise: Promise<any> | null = null;
+let liteRtEnginePromiseModelId: string | null = null;
+
+type LiteRtProgressCallback = (received: number, total: number | null) => void;
+
+export async function fetchModelStream(
+  url: string,
+  onProgress: LiteRtProgressCallback,
+  abortSignal?: AbortSignal,
+): Promise<ReadableStream<Uint8Array>> {
+  let response: Response;
+  try {
+    response = await fetch(url, { signal: abortSignal });
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw err;
+    }
+
+    throw new Error(
+      `LiteRT-LM: Failed to fetch model from '${url}': ${err?.message ?? String(err)}`,
+    );
+  }
+
+  if (!response.ok) {
+    throw new Error(
+      `LiteRT-LM: Failed to fetch model from '${url}': ${response.status} ${response.statusText}`,
+    );
+  }
+
+  if (!response.body) {
+    throw new Error(
+      `LiteRT-LM: Failed to fetch model from '${url}': No response body`,
+    );
+  }
+
+  const totalHeader = response.headers.get("content-length");
+  const parsedTotal = totalHeader ? Number(totalHeader) : NaN;
+  const total =
+    Number.isFinite(parsedTotal) && parsedTotal > 0 ? parsedTotal : null;
+  let received = 0;
+
+  const reader = response.body.getReader();
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+
+        if (done) {
+          controller.close();
+
+          return;
+        }
+
+        received += value.byteLength;
+        onProgress(received, total);
+        controller.enqueue(value);
+      } catch (err: any) {
+        controller.error(err);
+      }
+    },
+    cancel(reason) {
+      void reader.cancel(reason);
+    },
+  });
+}
+
+async function getLiteRtEngine(
+  modelId: string,
+  onProgress?: LiteRtProgressCallback,
+  abortSignal?: AbortSignal,
+): Promise<any> {
+  if (liteRtEngineModelId === modelId && liteRtEngine) {
     return liteRtEngine;
   }
 
-  // Dispose old engine if switching models
-  if (liteRtEngine) {
-    try {
-      await liteRtEngine.delete?.();
-    } catch {
-      // Ignore dispose errors
+  if (liteRtEnginePromise && liteRtEnginePromiseModelId === modelId) {
+    return liteRtEnginePromise;
+  }
+
+  liteRtEnginePromiseModelId = modelId;
+  liteRtEnginePromise = (async () => {
+    if (liteRtEngine) {
+      try {
+        await liteRtEngine.delete?.();
+      } catch {}
+
+      liteRtEngine = null;
+      liteRtEngineModelId = null;
     }
 
-    liteRtEngine = null;
-    liteRtEngineModelId = null;
-  }
+    const modelUrl = LITERT_LM_MODEL_URLS[modelId];
+    if (!modelUrl) {
+      throw new Error(
+        `LiteRT-LM: Model '${modelId} is not supported. Supported models: ${LITERT_LM_SUPPORTED_MODELS.join(", ")}`,
+      );
+    }
 
-  const modelUrl = LITERT_LM_MODEL_URLS[modelId];
-  if (!modelUrl) {
-    throw new Error(
-      `LiteRT-LM: Model '${modelId}' is not supported. Supported models: ${LITERT_LM_SUPPORTED_MODELS.join(", ")}`,
+    const litertlm = await import("@litert-lm/core").catch(() => {
+      throw new Error(
+        "LiteRT-LM: The @litert-lm/core package is not installed. Run: npm install @litert-lm/core",
+      );
+    });
+
+    const Engine: any = litertlm.Engine ?? (litertlm as any).default?.Engine;
+    if (typeof Engine?.create !== "function") {
+      throw new Error(
+        "LiteRT-LM: Could not locate Engine.create in @litert-lm/core. Ensure you have the latest version installed.",
+      );
+    }
+
+    const modelStream = await fetchModelStream(
+      modelUrl,
+      onProgress ?? (() => {}),
+      abortSignal,
     );
+
+    const engine = await Engine.create({
+      model: modelStream,
+      mainExecutorSettings: {
+        maxNumTokens: 8192,
+      },
+    });
+
+    liteRtEngine = engine;
+    liteRtEngineModelId = modelId;
+
+    return engine;
+  })();
+
+  try {
+    return await liteRtEnginePromise;
+  } finally {
+    liteRtEnginePromise = null;
+    liteRtEnginePromiseModelId = null;
   }
-
-  // Dynamic import — @litert-lm/core is ESM-only and browser-only
-  const litertlm = await import("@litert-lm/core").catch(() => {
-    throw new Error(
-      "LiteRT-LM: The @litert-lm/core package is not installed. Run: npm install @litert-lm/core",
-    );
-  });
-
-  const Engine: any = litertlm.Engine ?? (litertlm as any).default?.Engine;
-  if (typeof Engine?.create !== "function") {
-    throw new Error(
-      "LiteRT-LM: Could not locate Engine.create in @litert-lm/core. Ensure you have the latest version installed.",
-    );
-  }
-
-  liteRtEngine = await Engine.create({
-    model: modelUrl,
-    mainExecutorSettings: {
-      maxNumTokens: 8192,
-    },
-  });
-  liteRtEngineModelId = modelId;
-
-  return liteRtEngine;
 }
 
 /**
@@ -188,10 +277,59 @@ export async function invokeWithLiteRtLm(
     },
   });
 
+  const formatMb = (bytes: number) => (bytes / (1024 * 1024)).toFixed(0);
+
+  let lastEmittedPct = -1;
+
+  const onProgress: LiteRtProgressCallback = (received, total) => {
+    const progress = total ? received / total : null;
+    const pct = progress != null ? Math.floor(progress * 100) : -1;
+
+    if (pct === lastEmittedPct) {
+      return;
+    }
+
+    lastEmittedPct = pct;
+
+    const message = total
+      ? `Downloading ${modelId}: ${formatMb(received)} / ${formatMb(total)} MB`
+      : `Downloading ${modelId}: ${formatMb(received)} MB`;
+
+    void emit({
+      type: "model-download-progress",
+      payload: { groupId, status: "running", progress, message },
+    });
+  };
+
   let engine: any;
+
   try {
-    engine = await getLiteRtEngine(modelId);
+    engine = await getLiteRtEngine(modelId, onProgress, abortSignal);
   } catch (err: any) {
+    if (abortSignal?.aborted || err?.name === "AbortError") {
+      await emit({
+        type: "model-download-progress",
+        payload: {
+          groupId,
+          status: "error",
+          progress: null,
+          message: "LiteRT-LM model download cancelled.",
+        },
+      });
+
+      return;
+    }
+
+    await emit({
+      type: "model-download-progress",
+      payload: {
+        groupId,
+        status: "error",
+        progress: null,
+        message: `LiteRT-LM model failed to load: ${err?.message ?? String(err)}`,
+      },
+    });
+
     await emit({
       type: "response",
       payload: {

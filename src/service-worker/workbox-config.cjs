@@ -53,14 +53,7 @@ module.exports = {
     {
       urlPattern: ({ url }) =>
         url.hostname === "huggingface.co" && url.pathname.endsWith(".litertlm"),
-      handler: "CacheFirst",
-      options: {
-        cacheName: "shadow-claw-litertlm-models",
-        expiration: {
-          // 365 days
-          maxAgeSeconds: 365 * 24 * 60 * 60,
-        },
-      },
+      handler: "NetworkOnly",
     },
     {
       // exclude loopback proxy paths and channel endpoints that should never be cached

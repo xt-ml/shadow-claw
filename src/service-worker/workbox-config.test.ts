@@ -49,7 +49,7 @@ describe("workbox runtime caching rules", () => {
   });
 
   it("does not cache same-origin telegram proxy requests", () => {
-    const matcher = workboxConfig.runtimeCaching[0]?.urlPattern;
+    const matcher = workboxConfig.runtimeCaching[1]?.urlPattern;
 
     expect(
       matcher({
@@ -61,7 +61,7 @@ describe("workbox runtime caching rules", () => {
   });
 
   it("still caches regular same-origin app assets", () => {
-    const matcher = workboxConfig.runtimeCaching[0]?.urlPattern;
+    const matcher = workboxConfig.runtimeCaching[1]?.urlPattern;
 
     expect(
       matcher({

@@ -7,8 +7,8 @@
  * https://developers.google.com/edge/litert-lm/js
  *
  * Currently supports:
- *   - litert-community/gemma-4-E2B-it-litert-lm  (gemma-4-E2B-it-web.litertlm)
- *   - litert-community/gemma-4-E4B-it-litert-lm  (gemma-4-E4B-it-web.litertlm)
+ *   - litert-community/gemma-4-E2B-it-litert-lm (gemma-4-E2B-it-web.litertlm)
+ *   - litert-community/gemma-4-E4B-it-litert-lm (gemma-4-E4B-it-web.litertlm)
  *
  * Model IDs in config use the litert-community HuggingFace repo ID. We resolve
  * the actual .litertlm file URL from the repo's main branch.
@@ -37,7 +37,12 @@ export const DEFAULT_LITERT_LM_MODEL =
  * Returns true if the LiteRT-LM JS API is available (WebGPU required).
  */
 export function isLiteRtLmSupported(): boolean {
-  return typeof navigator !== "undefined" && "gpu" in navigator;
+  return (
+    typeof navigator !== "undefined" &&
+    "gpu" in navigator &&
+    typeof WebAssembly !== "undefined" &&
+    "Suspending" in WebAssembly
+  );
 }
 
 /**
@@ -50,68 +55,491 @@ let liteRtEngineModelId: string | null = null;
 let liteRtEnginePromise: Promise<any> | null = null;
 let liteRtEnginePromiseModelId: string | null = null;
 
-type LiteRtProgressCallback = (received: number, total: number | null) => void;
+type LiteRtProgressCallback = (
+  received: number,
+  total: number | null,
+  fromCache?: boolean,
+) => void;
 
-export async function fetchModelStream(
-  url: string,
-  onProgress: LiteRtProgressCallback,
-  abortSignal?: AbortSignal,
-): Promise<ReadableStream<Uint8Array>> {
-  let response: Response;
+/**
+ * Persistent Cache Storage bucket for downloaded `.litertlm` model weights.
+ *
+ * We manage this cache directly from the provider (rather than relying on the
+ * Workbox runtime cache) so that:
+ *   - It survives service-worker updates — the model is NOT re-downloaded every
+ *     time the PWA's service worker changes.
+ *   - We avoid the "redirected response cannot be cached" failure that occurs
+ *     when Workbox tries to `cache.put` HuggingFace's 302 → CDN redirect.
+ *   - Downloads can be **resumed after a crash or page reload** — bytes are
+ *     flushed to CacheStorage in fixed-size chunks as they arrive, and a JSON
+ *     metadata entry tracks how much has been written. On the next page load,
+ *     the provider reads the partial meta and issues a `Range` request to
+ *     continue from the last flushed byte offset.
+ *   - The entire model is **never assembled into a single large Blob**,
+ *     preventing the out-of-memory crash on Safari iOS when the final write
+ *     would allocate multiple GB at once.
+ *
+ * Cache Storage is disk-backed and is NOT part of OPFS, so models do not fill
+ * the OPFS quota.
+ *
+ * ### Cache key scheme
+ *
+ *   `<url>?__sc_meta=1`   — JSON metadata (LiteRtPartialMeta)
+ *   `<url>?__sc_chunk=N`  — raw bytes for chunk N (up to LITERT_LM_CHUNK_SIZE)
+ */
+const LITERT_LM_CACHE_NAME = "shadow-claw-litertlm-models";
+const LITERT_LM_MAX_DOWNLOAD_ATTEMPTS = 6;
+
+/**
+ * Flush accumulated bytes to CacheStorage every 16 MiB.
+ * Small enough to keep per-write allocations manageable on mobile Safari;
+ * large enough to keep the number of cache entries reasonable (~128 for a 2 GB
+ * model).
+ */
+const LITERT_LM_CHUNK_SIZE = 16 * 1024 * 1024;
+
+/**
+ * Metadata written to CacheStorage to track partial download state across
+ * page loads / crashes.
+ */
+interface LiteRtPartialMeta {
+  /** Number of complete chunk entries persisted in CacheStorage. */
+  chunks: number;
+  /** Total bytes stored across all persisted chunks. */
+  received: number;
+  /** Known total file size from `Content-Length` / `Content-Range`, or null. */
+  total: number | null;
+  /** Whether the origin server advertised support for `Range` requests. */
+  acceptsRanges: boolean;
+  /** True once all bytes have been flushed and the download is complete. */
+  complete: boolean;
+}
+
+function isCacheStorageAvailable(): boolean {
+  return typeof caches !== "undefined" && typeof caches.open === "function";
+}
+
+/** Cache key for the JSON metadata entry. */
+function metaKey(url: string): string {
+  return `${url}?__sc_meta=1`;
+}
+
+/** Cache key for chunk number `index`. */
+function chunkKey(url: string, index: number): string {
+  return `${url}?__sc_chunk=${index}`;
+}
+
+/** Read and parse the partial meta entry, or return null if absent/invalid. */
+async function readPartialMeta(url: string): Promise<LiteRtPartialMeta | null> {
+  if (!isCacheStorageAvailable()) {
+    return null;
+  }
+
   try {
-    response = await fetch(url, { signal: abortSignal });
-  } catch (err: any) {
-    if (err?.name === "AbortError") {
-      throw err;
+    const cache = await caches.open(LITERT_LM_CACHE_NAME);
+    const resp = await cache.match(metaKey(url));
+    if (!resp?.body) {
+      return null;
     }
 
-    throw new Error(
-      `LiteRT-LM: Failed to fetch model from '${url}': ${err?.message ?? String(err)}`,
-    );
+    const text = await resp.text();
+
+    return JSON.parse(text) as LiteRtPartialMeta;
+  } catch {
+    return null;
+  }
+}
+
+/** Persist the partial meta entry (creates or overwrites). */
+async function writePartialMeta(
+  url: string,
+  meta: LiteRtPartialMeta,
+): Promise<void> {
+  if (!isCacheStorageAvailable()) {
+    return;
   }
 
-  if (!response.ok) {
-    throw new Error(
-      `LiteRT-LM: Failed to fetch model from '${url}': ${response.status} ${response.statusText}`,
+  try {
+    const cache = await caches.open(LITERT_LM_CACHE_NAME);
+    await cache.put(
+      metaKey(url),
+      new Response(JSON.stringify(meta), {
+        headers: { "Content-Type": "application/json" },
+      }),
     );
+  } catch (err) {
+    console.error("writePartialMeta error:", err);
+  }
+}
+
+/**
+ * Write a single chunk of bytes to CacheStorage.
+ * Each chunk is stored as a plain `application/octet-stream` Response whose
+ * body is a Blob wrapping exactly `bytes`.
+ */
+async function flushChunkToCache(
+  url: string,
+  index: number,
+  bytes: Uint8Array,
+): Promise<void> {
+  if (!isCacheStorageAvailable()) {
+    return;
   }
 
-  if (!response.body) {
-    throw new Error(
-      `LiteRT-LM: Failed to fetch model from '${url}': No response body`,
+  try {
+    const cache = await caches.open(LITERT_LM_CACHE_NAME);
+    await cache.put(
+      chunkKey(url, index),
+      new Response(new Blob([bytes as BlobPart]), {
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "Content-Length": String(bytes.byteLength),
+        },
+      }),
     );
+  } catch (err) {
+    console.error("flushChunkToCache error:", err);
   }
+}
 
-  const totalHeader = response.headers.get("content-length");
-  const parsedTotal = totalHeader ? Number(totalHeader) : NaN;
-  const total =
-    Number.isFinite(parsedTotal) && parsedTotal > 0 ? parsedTotal : null;
-  let received = 0;
-
-  const reader = response.body.getReader();
+/**
+ * Return a ReadableStream that lazily reads all cached chunks in order,
+ * yielding the stored bytes without ever assembling a large in-memory Blob.
+ */
+function assembleChunkedStream(
+  url: string,
+  meta: LiteRtPartialMeta,
+): ReadableStream<Uint8Array> {
+  let chunkIndex = 0;
+  let currentReader: ReadableStreamDefaultReader<Uint8Array> | null = null;
 
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
-      try {
-        const { done, value } = await reader.read();
-
-        if (done) {
-          controller.close();
+      // Drain current chunk reader first
+      if (currentReader) {
+        const { done, value } = await currentReader.read();
+        if (!done) {
+          controller.enqueue(value);
 
           return;
         }
 
-        received += value.byteLength;
-        onProgress(received, total);
-        controller.enqueue(value);
-      } catch (err: any) {
+        currentReader = null;
+        chunkIndex++;
+      }
+
+      // Open next chunk
+      if (chunkIndex >= meta.chunks) {
+        controller.close();
+
+        return;
+      }
+
+      try {
+        const cache = await caches.open(LITERT_LM_CACHE_NAME);
+        const resp = await cache.match(chunkKey(url, chunkIndex));
+        if (!resp?.body) {
+          controller.error(
+            new Error(
+              `LiteRT-LM: missing cache chunk ${chunkIndex} for ${url}`,
+            ),
+          );
+
+          return;
+        }
+
+        currentReader = resp.body.getReader();
+        // Read first frame immediately
+        const { done, value } = await currentReader.read();
+        if (!done) {
+          controller.enqueue(value);
+        } else {
+          currentReader = null;
+          chunkIndex++;
+          // Will continue on next pull
+        }
+      } catch (err) {
         controller.error(err);
       }
     },
-    cancel(reason) {
-      void reader.cancel(reason);
+    cancel() {
+      if (currentReader) {
+        void currentReader.cancel();
+        currentReader = null;
+      }
     },
   });
+}
+
+function delayWithAbort(ms: number, abortSignal?: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    if (abortSignal?.aborted) {
+      reject(new DOMException("Aborted", "AbortError"));
+    }
+
+    const timer = setTimeout(() => {
+      abortSignal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new DOMException("Aborted", "AbortError"));
+    };
+
+    abortSignal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function backoffDelayMs(attempt: number): number {
+  return Math.min(15_000, 1_000 * 2 ** (attempt - 1));
+}
+
+/**
+ * Download the model from `url`, persisting bytes to CacheStorage as 16 MiB
+ * chunks.  If a partial download is already present (from a previous crashed
+ * session), it resumes from where it left off using HTTP Range requests.
+ *
+ * Returns a ReadableStream backed by the cached chunks — no large Blob is
+ * ever allocated.
+ */
+async function downloadModelToCache(
+  url: string,
+  onProgress: LiteRtProgressCallback,
+  abortSignal?: AbortSignal,
+): Promise<ReadableStream<Uint8Array>> {
+  // ── Restore partial state from a previous (crashed) session ─────────────
+  let chunkIndex = 0; // index of the NEXT chunk to write
+  let received = 0; // bytes already persisted to cache
+  let total: number | null = null;
+  let acceptsRanges = false;
+
+  const existingMeta = await readPartialMeta(url);
+  if (existingMeta && !existingMeta.complete) {
+    chunkIndex = existingMeta.chunks;
+    received = existingMeta.received;
+    total = existingMeta.total;
+    acceptsRanges = existingMeta.acceptsRanges;
+  }
+
+  // ── Pending bytes not yet flushed to a chunk ─────────────────────────────
+  let pendingBytes: Uint8Array[] = [];
+  let pendingSize = 0;
+
+  /** Flush whatever is in `pendingBytes` as chunk `chunkIndex` and advance. */
+  async function flushPending(): Promise<void> {
+    if (pendingSize === 0) {
+      return;
+    }
+
+    const combined = new Uint8Array(pendingSize);
+    let offset = 0;
+    for (const b of pendingBytes) {
+      combined.set(b, offset);
+      offset += b.byteLength;
+    }
+
+    pendingBytes = [];
+    pendingSize = 0;
+
+    await flushChunkToCache(url, chunkIndex, combined);
+    chunkIndex++;
+    received += combined.byteLength;
+
+    await writePartialMeta(url, {
+      chunks: chunkIndex,
+      received,
+      total,
+      acceptsRanges,
+      complete: false,
+    });
+  }
+
+  // ── Download loop with retry + resume ────────────────────────────────────
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= LITERT_LM_MAX_DOWNLOAD_ATTEMPTS; attempt++) {
+    if (abortSignal?.aborted) {
+      throw new DOMException("Aborted", "AbortError");
+    }
+
+    const requestHeaders: Record<string, string> = {};
+    if (received > 0 && acceptsRanges) {
+      requestHeaders["Range"] = `bytes=${received}-`;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        signal: abortSignal,
+        headers: requestHeaders,
+      });
+    } catch (err: any) {
+      if (abortSignal?.aborted || err?.name === "AbortError") {
+        throw err;
+      }
+
+      lastError = err;
+      if (attempt < LITERT_LM_MAX_DOWNLOAD_ATTEMPTS) {
+        await delayWithAbort(backoffDelayMs(attempt), abortSignal);
+
+        continue;
+      }
+
+      break;
+    }
+
+    // Server ignored our Range request and returned a full 200 — restart.
+    if (requestHeaders["Range"] && response.status === 200) {
+      // Drop pending buffer and discard already-cached chunks so we start over.
+      // (Old chunk cache entries become orphans; they will be overwritten as
+      // new chunks arrive at the same indices.)
+      pendingBytes = [];
+      pendingSize = 0;
+      chunkIndex = 0;
+      received = 0;
+    }
+
+    if (response.status !== 200 && response.status !== 206) {
+      lastError = new Error(
+        `LiteRT-LM: Failed to fetch model from '${url}': ${response.status} ${response.statusText}`,
+      );
+      if (response.status >= 500 && attempt < LITERT_LM_MAX_DOWNLOAD_ATTEMPTS) {
+        await delayWithAbort(backoffDelayMs(attempt), abortSignal);
+
+        continue;
+      }
+
+      throw lastError;
+    }
+
+    if (!response.body) {
+      throw new Error(
+        `LiteRT-LM: Failed to fetch model from '${url}': No response body`,
+      );
+    }
+
+    // Determine total size and range-resume capability from the response.
+    if (total == null) {
+      acceptsRanges =
+        response.status === 206 ||
+        response.headers.get("accept-ranges") === "bytes";
+
+      if (response.status === 206) {
+        const contentRange = response.headers.get("content-range");
+        const match = contentRange?.match(/\/\s*(\d+)\s*$/);
+        if (match) {
+          total = Number(match[1]);
+        }
+      } else {
+        const contentLength = response.headers.get("content-length");
+        const parsed = contentLength ? Number(contentLength) : NaN;
+        total = Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+      }
+    }
+
+    // ── Stream bytes, flushing chunks to CacheStorage as we go ───────────
+    const reader = response.body.getReader();
+    let streamFailed = false;
+    // Bytes already accounted for in `received` (i.e. persisted chunks);
+    // stream-level bytes not yet flushed sit in `pendingBytes`.
+    let streamReceived = received + pendingSize;
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        pendingBytes.push(value);
+        pendingSize += value.byteLength;
+        streamReceived += value.byteLength;
+        onProgress(streamReceived, total);
+
+        if (pendingSize >= LITERT_LM_CHUNK_SIZE) {
+          await flushPending();
+          // After flush, `received` is updated; reset the stream-level tracker.
+          streamReceived = received;
+        }
+      }
+    } catch (err: any) {
+      if (abortSignal?.aborted || err?.name === "AbortError") {
+        throw err;
+      }
+
+      lastError = err;
+      streamFailed = true;
+      try {
+        await reader.cancel();
+      } catch {}
+
+      // If the server supports Range, we can resume from last flush boundary;
+      // drop only the unflushed pending buffer.
+      // If the server doesn't support Range, we must restart entirely.
+      if (!acceptsRanges) {
+        pendingBytes = [];
+        pendingSize = 0;
+        chunkIndex = 0;
+        received = 0;
+      } else {
+        // Drop only the un-flushed pending bytes; keep already-cached chunks.
+        pendingBytes = [];
+        pendingSize = 0;
+      }
+    }
+
+    if (!streamFailed) {
+      lastError = null;
+
+      break;
+    }
+
+    if (attempt < LITERT_LM_MAX_DOWNLOAD_ATTEMPTS) {
+      await delayWithAbort(backoffDelayMs(attempt), abortSignal);
+    }
+  }
+
+  if (lastError) {
+    throw new Error(
+      `LiteRT-LM: failed to download model from '${url}' after ${
+        LITERT_LM_MAX_DOWNLOAD_ATTEMPTS
+      } attempts: ${(lastError as any)?.message ?? String(lastError)}`,
+    );
+  }
+
+  // Flush any remaining bytes that didn't fill a complete chunk.
+  await flushPending();
+
+  // Mark download complete in the meta entry.
+  const finalMeta: LiteRtPartialMeta = {
+    chunks: chunkIndex,
+    received,
+    total,
+    acceptsRanges,
+    complete: true,
+  };
+  await writePartialMeta(url, finalMeta);
+
+  return assembleChunkedStream(url, finalMeta);
+}
+
+export async function loadLiteRtModelStream(
+  url: string,
+  onProgress: LiteRtProgressCallback,
+  abortSignal?: AbortSignal,
+): Promise<ReadableStream<Uint8Array>> {
+  // Fast path: a complete chunked download already exists in CacheStorage.
+  const meta = await readPartialMeta(url);
+  if (meta?.complete) {
+    onProgress(meta.received, meta.received, true);
+
+    return assembleChunkedStream(url, meta);
+  }
+
+  // Slow path: download (with crash-resume if an incomplete meta exists).
+
+  return downloadModelToCache(url, onProgress, abortSignal);
 }
 
 async function getLiteRtEngine(
@@ -158,7 +586,7 @@ async function getLiteRtEngine(
       );
     }
 
-    const modelStream = await fetchModelStream(
+    const modelStream = await loadLiteRtModelStream(
       modelUrl,
       onProgress ?? (() => {}),
       abortSignal,
@@ -250,7 +678,7 @@ export async function invokeWithLiteRtLm(
       type: "response",
       payload: {
         groupId,
-        text: "⚠️ LiteRT-LM requires WebGPU, which is not available in this browser. Try Chrome or Edge on a desktop with GPU support.",
+        text: "⚠️ LiteRT-LM requires WebGPU and WebAssembly.Suspending. These are not both available in this browser.",
       },
     });
 
@@ -281,19 +709,21 @@ export async function invokeWithLiteRtLm(
 
   let lastEmittedPct = -1;
 
-  const onProgress: LiteRtProgressCallback = (received, total) => {
+  const onProgress: LiteRtProgressCallback = (received, total, fromCache) => {
     const progress = total ? received / total : null;
     const pct = progress != null ? Math.floor(progress * 100) : -1;
 
-    if (pct === lastEmittedPct) {
+    if (pct === lastEmittedPct && !fromCache) {
       return;
     }
 
     lastEmittedPct = pct;
 
-    const message = total
-      ? `Downloading ${modelId}: ${formatMb(received)} / ${formatMb(total)} MB`
-      : `Downloading ${modelId}: ${formatMb(received)} MB`;
+    const message = fromCache
+      ? `Loaded ${modelId} from cache (${formatMb(received)} MB )`
+      : total
+        ? `Downloading ${modelId}: ${formatMb(received)} / ${formatMb(total)} MB`
+        : `Downloading ${modelId}: ${formatMb(received)} MB`;
 
     void emit({
       type: "model-download-progress",

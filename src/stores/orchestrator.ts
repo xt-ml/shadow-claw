@@ -1316,7 +1316,11 @@ export class OrchestratorStore {
         console.error("Agent worker not available to execute tool task.");
       }
     } else {
-      this.sendMessage(task.prompt);
+      // Send the prompt directly to the conversation that owns the task,
+      // NOT the currently-visible conversation — scheduled tasks must always
+      // fire in the conversation they were created in.
+      const targetGroupId = task.groupId || this._activeGroupId.get();
+      this.orchestrator?.submitMessage?.(task.prompt, targetGroupId, []);
     }
   }
 

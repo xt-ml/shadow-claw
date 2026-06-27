@@ -655,15 +655,40 @@ describe("OrchestratorStore", () => {
     );
   });
 
-  it("runTask sends prompt for non-script tasks", () => {
+  it("runTask sends prompt to the task's own groupId, not the active group", () => {
     const store: any = new OrchestratorStore();
-    const sendSpy = jest
-      .spyOn(store, "sendMessage")
-      .mockImplementation(() => {});
+    const submitMessage = jest.fn();
+    store.orchestrator = { submitMessage } as any;
 
-    store.runTask({ id: "t1", prompt: "do work" });
+    // Active group is different from the task's group
+    store._activeGroupId.set("active-group");
 
-    expect(sendSpy).toHaveBeenCalledWith("do work");
+    store.runTask({ id: "t1", groupId: "task-group", prompt: "do work" });
+
+    // Must target the task's groupId, NOT the active group
+    expect(submitMessage).toHaveBeenCalledWith("do work", "task-group", []);
+    expect(submitMessage).not.toHaveBeenCalledWith(
+      "do work",
+      "active-group",
+      expect.anything(),
+    );
+  });
+
+  it("runTask with no groupId falls back to active group", () => {
+    const store: any = new OrchestratorStore();
+    const submitMessage = jest.fn();
+    store.orchestrator = { submitMessage } as any;
+
+    store._activeGroupId.set("active-group");
+
+    // Task has no groupId (legacy / unset)
+    store.runTask({ id: "t2", prompt: "fallback work" });
+
+    expect(submitMessage).toHaveBeenCalledWith(
+      "fallback work",
+      "active-group",
+      [],
+    );
   });
 
   it("newSession and compactContext call orchestrator methods", async () => {

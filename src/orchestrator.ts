@@ -2967,7 +2967,7 @@ export class Orchestrator {
         await this.deliverResponse(
           db,
           groupId,
-          "⚠️ Error: LiteRT-LM requires WebGPU, which is not available in this browser. Try Chrome or Edge on a desktop with GPU support.",
+          "⚠️ LiteRT-LM requires WebGPU and WebAssembly.Suspending. These are not both available in this browser.",
         );
 
         return;

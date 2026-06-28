@@ -71,6 +71,8 @@ import {
 import { executeFetchFileTool } from "./tools/fetch-file.js";
 import { executeFetchUrlTool } from "./tools/fetch-url.js";
 import { executeGitTool } from "./tools/git.js";
+import { executeSpawnSubagentTool } from "./tools/spawn-subagent.js";
+import type { SubagentInvokeContext } from "./tools/spawn-subagent.js";
 import {
   A2UI_MINIMAL_CATALOG_ID,
   A2UI_BASIC_CATALOG_ID,
@@ -80,6 +82,7 @@ import {
 import type { A2UIEnvelope } from "../a2ui.js";
 
 export { resolveMcpReauth } from "./tools/remote-mcp.js";
+export type { SubagentInvokeContext };
 
 async function getGroupTasks(
   db: ShadowClawDatabase,
@@ -194,7 +197,11 @@ export async function executeTool(
   name: string,
   input: Record<string, any>,
   groupId: string,
-  options: { isScheduledTask?: boolean; isTaskExecution?: boolean } = {},
+  options: {
+    isScheduledTask?: boolean;
+    isTaskExecution?: boolean;
+    invokeContext?: SubagentInvokeContext;
+  } = {},
 ): Promise<string> {
   try {
     // Block run_task in any task execution context (scheduled OR manual) to
@@ -999,6 +1006,18 @@ export async function executeTool(
         });
 
         return `A2UI surface "${surfaceId}" rendered (action: ${action}).`;
+      }
+
+      case "spawn_subagent": {
+        if (!options.invokeContext) {
+          return "Error: spawn_subagent requires an active agent invocation context. This tool cannot be called directly.";
+        }
+
+        return await executeSpawnSubagentTool(
+          input,
+          groupId,
+          options.invokeContext,
+        );
       }
 
       default:

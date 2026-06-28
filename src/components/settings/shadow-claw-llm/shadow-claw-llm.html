@@ -285,6 +285,26 @@
   </div>
 
   <div class="settings-section">
+    <h3>🤖 Max Parallel Subagents</h3>
+    <div class="form-group">
+      <label class="form-label">Limit</label>
+      <input
+        class="form-input"
+        data-setting="subagent-max-parallel-input"
+        placeholder="5"
+        type="number"
+      />
+      <div class="form-helper">
+        Maximum number of subagents that can run concurrently via the
+        spawn_subagent tool.
+      </div>
+    </div>
+    <button class="save-btn" data-action="save-subagent-max-parallel">
+      💾 Save Subagent Limit
+    </button>
+  </div>
+
+  <div class="settings-section">
     <h3>🚦 Request Rate Limit</h3>
     <div class="form-group">
       <label class="form-label">Calls per Minute</label>

@@ -113,6 +113,9 @@ describe("executeTool.js", () => {
     mockCallRemoteMcpTool = jest.fn();
 
     jest.unstable_mockModule("../config.js", () => ({
+      ASSISTANT_NAME: "mock-assistant",
+      DEFAULT_MAX_ITERATIONS: 10,
+      getProvider: jest.fn(),
       BASH_DEFAULT_TIMEOUT_SEC: 120,
       BASH_MAX_TIMEOUT_SEC: 1800,
       FETCH_MAX_RESPONSE: 1000,
@@ -125,9 +128,11 @@ describe("executeTool.js", () => {
         VM_BASH_TIMEOUT_SEC: "vm-bash-timeout-sec",
         VM_BASH_FULL_INTERNET_ACCESS: "vm-bash-full-internet-access",
         TOOL_PROFILES: "tool_profiles",
+        SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
       },
       DEFAULT_DEV_HOST: "localhost",
       DEFAULT_DEV_PORT: 8888,
+      DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
       DEFAULT_GROUP_ID: "default",
     }));
 
@@ -238,6 +243,8 @@ describe("executeTool.js", () => {
 
     jest.unstable_mockModule("./post.js", () => ({
       post: mockPost,
+      registerSubagentCollector: jest.fn(),
+      unregisterSubagentCollector: jest.fn(),
     }));
 
     jest.unstable_mockModule("./formatShellOutput.js", () => ({

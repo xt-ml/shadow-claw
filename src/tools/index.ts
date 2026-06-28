@@ -20,6 +20,7 @@ import { list_tool_profiles, manage_tools } from "./manage_tools.js";
 import { update_memory } from "./memory.js";
 import { send_notification, show_toast } from "./notifications.js";
 import { list_components, render_component } from "./a2ui.js";
+import { spawn_subagent } from "./subagent.js";
 
 import {
   attach_file_to_chat,
@@ -116,6 +117,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   send_notification,
   send_file,
   show_toast,
+  spawn_subagent,
   update_memory,
   update_task,
   write_file,

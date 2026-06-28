@@ -751,6 +751,10 @@ export class ShadowClaw extends ShadowClawElement {
     }
 
     const navigateEvent = event as any;
+    if (navigateEvent.navigationType === "reload") {
+      return;
+    }
+
     const destinationUrl = navigateEvent?.destination?.url;
     if (typeof destinationUrl !== "string") {
       return;

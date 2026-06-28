@@ -18,6 +18,7 @@ describe("worker and worker/agent.js", () => {
       ASSISTANT_NAME: "k9",
       BASH_DEFAULT_TIMEOUT_SEC: 120,
       BASH_MAX_TIMEOUT_SEC: 1800,
+      DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
       CONFIG_KEYS: {
         PROVIDER: "provider",
         API_KEY: "api_key",
@@ -25,6 +26,7 @@ describe("worker and worker/agent.js", () => {
         MAX_TOKENS: "max_tokens",
         VM_BOOT_MODE: "vm_boot_mode",
         VM_BOOT_HOST: "vm_boot_host",
+        SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
         VM_NETWORK_RELAY_URL: "vm_network_relay_url",
         VM_BASH_TIMEOUT_SEC: "vm_bash_timeout_sec",
         VM_BASH_FULL_INTERNET_ACCESS: "vm_bash_full_internet_access",

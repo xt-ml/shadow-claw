@@ -2,7 +2,13 @@ import { getDb } from "../../../db/db.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../toast.js";
 import { effect } from "../../../effect.js";
-import { getModelMaxTokens } from "../../../config.js";
+import {
+  getModelMaxTokens,
+  CONFIG_KEYS,
+  DEFAULT_SUBAGENT_MAX_PARALLEL,
+} from "../../../config.js";
+import { getConfig } from "../../../db/getConfig.js";
+import { setConfig } from "../../../db/setConfig.js";
 import {
   buildLlamafileHelpDialogOptions,
   LLAMAFILE_EXPECTED_DIR,
@@ -221,6 +227,10 @@ export class ShadowClawLlm extends ShadowClawElement {
       ?.addEventListener("click", () => this.saveMaxIterations());
 
     root
+      .querySelector('[data-action="save-subagent-max-parallel"]')
+      ?.addEventListener("click", () => this.saveSubagentMaxParallel());
+
+    root
       .querySelector('[data-action="save-rate-limit-settings"]')
       ?.addEventListener("click", () => this.saveRateLimitSettings());
 
@@ -323,6 +333,23 @@ export class ShadowClawLlm extends ShadowClawElement {
     ) as HTMLInputElement | null;
     if (maxIterInput && this.orchestrator) {
       maxIterInput.value = String(this.orchestrator.getMaxIterations());
+    }
+
+    // Load subagent max parallel
+    const subagentMaxInput = root.querySelector(
+      '[data-setting="subagent-max-parallel-input"]',
+    ) as HTMLInputElement | null;
+    if (subagentMaxInput) {
+      const rawMax = await getConfig(
+        this.db,
+        CONFIG_KEYS.SUBAGENT_MAX_PARALLEL,
+      );
+      const configuredMax = Number(rawMax);
+      subagentMaxInput.value = String(
+        Number.isFinite(configuredMax) && configuredMax > 0
+          ? configuredMax
+          : DEFAULT_SUBAGENT_MAX_PARALLEL,
+      );
     }
 
     const rateLimitInput = root.querySelector(
@@ -1435,6 +1462,45 @@ export class ShadowClawLlm extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving max iterations: " + errorMsg, 6000);
+    }
+  }
+
+  async saveSubagentMaxParallel() {
+    if (!this.db) {
+      showError("Database not initialized", 3000);
+
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const input = root.querySelector(
+      '[data-setting="subagent-max-parallel-input"]',
+    ) as HTMLInputElement | null;
+    if (!input) {
+      return;
+    }
+
+    const value = parseInt(input.value, 10);
+    if (!value || value < 1) {
+      showWarning("Please enter a valid number (1 or higher)", 3000);
+
+      return;
+    }
+
+    try {
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.SUBAGENT_MAX_PARALLEL,
+        String(value),
+      );
+      showSuccess("Subagent limit saved", 3000);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving subagent limit: " + errorMsg, 6000);
     }
   }
 

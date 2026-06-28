@@ -1012,6 +1012,7 @@ export const CONFIG_KEYS = {
   MAIN_GROUP_README_SUPPRESSED: "main_group_readme_suppressed",
   MAIN_GROUP_INDEX_SUPPRESSED: "main_group_index_suppressed",
   ACTIVITY_LOG_DISK_LOGGING_ENABLED: "activity_log_disk_logging_enabled",
+  SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
 };
 
 /** Default dev server host */
@@ -1022,3 +1023,6 @@ export const DEFAULT_DEV_IP = "127.0.0.1";
 
 /** Default dev server port */
 export const DEFAULT_DEV_PORT = 8888;
+
+/** Default maximum number of parallel subagents */
+export const DEFAULT_SUBAGENT_MAX_PARALLEL = 5;

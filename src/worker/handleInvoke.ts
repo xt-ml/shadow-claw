@@ -17,6 +17,7 @@ import { TOOL_DEFINITIONS } from "../tools.js";
 import { createTokenUsageMessage } from "./createTokenUsageMessage.js";
 import { createToolActivityMessage } from "./createToolActivityMessage.js";
 import { executeTool } from "./executeTool.js";
+import type { SubagentInvokeContext } from "./executeTool.js";
 import { log } from "./log.js";
 import { parseSSEStream } from "./parseSSEStream.js";
 import { post } from "./post.js";
@@ -278,6 +279,22 @@ export async function handleInvoke(
     let currentSystemPrompt = systemPrompt;
     let latestToolResultsFallbackText = "";
 
+    // Build the invoke context for spawn_subagent to inherit
+    const invokeContext: SubagentInvokeContext = {
+      db,
+      apiKey,
+      model,
+      provider: providerId,
+      maxTokens,
+      providerHeaders,
+      streaming: false, // subagents always use non-streaming for clean capture
+      enabledTools: currentTools as any,
+      assistantName: assistantName ?? "",
+      memory: memory ?? "",
+      systemPrompt: currentSystemPrompt ?? "",
+      invokeSubagent: (subPayload) => handleInvoke(db, subPayload),
+    };
+
     // Track exact tool calls to prevent loops
     const toolCallHistory: string[] = [];
 
@@ -480,6 +497,7 @@ export async function handleInvoke(
             } else {
               output = await executeTool(db, block.name, block.input, groupId, {
                 isScheduledTask,
+                invokeContext,
               });
             }
 

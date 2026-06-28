@@ -306,9 +306,9 @@ describe("handleInvoke.js", () => {
       "tool1",
       { arg: 1 },
       "g1",
-      {
+      expect.objectContaining({
         isScheduledTask: false,
-      },
+      }),
     );
 
     expect(mockPost).toHaveBeenCalledWith(
@@ -371,7 +371,7 @@ describe("handleInvoke.js", () => {
       "list_tool_profiles",
       {},
       "g1",
-      { isScheduledTask: false },
+      expect.objectContaining({ isScheduledTask: false }),
     );
 
     expect(mockPost).toHaveBeenCalledWith(

@@ -145,6 +145,12 @@ export function buildSystemPrompt(
       );
     }
 
+    if (has("spawn_subagent")) {
+      strategyLines.push(
+        "- Use spawn_subagent when a task has parallel, independent workstreams (e.g. 'research 3 topics simultaneously', 'process these 5 files independently'). Pass each subagent a focused prompt and, optionally, a restricted tool list. Collect and synthesize their results before responding. Do NOT use spawn_subagent for sequential tasks where step 2 depends on step 1's output — do those steps directly. Use the parallel_agents field to launch multiple subagents in a single tool call.",
+      );
+    }
+
     if (has("git_merge")) {
       gitConflictLines.push(
         "- After git_merge reports conflicts, use read_file to see each conflicted file (with <<<<<<< / ======= / >>>>>>> markers).",

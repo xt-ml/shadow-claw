@@ -440,6 +440,15 @@ export type WorkerOutbound =
         groupId: string;
         envelope: A2UIEnvelope;
       };
+    }
+  | {
+      type: "ask-user";
+      payload: {
+        id: string;
+        groupId: string;
+        question: string;
+        options?: string[];
+      };
     };
 
 export type WorkerInbound =
@@ -466,4 +475,8 @@ export type WorkerInbound =
   | {
       type: "execute-task-tools";
       payload: { groupId: string; tools: TaskToolCall[] };
+    }
+  | {
+      type: "ask-user-response";
+      payload: { id: string; response: string | null };
     };

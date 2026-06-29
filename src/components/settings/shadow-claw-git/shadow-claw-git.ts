@@ -168,7 +168,7 @@ export class ShadowClawGit extends ShadowClawElement {
       if (authorEmailInput) {
         authorEmailInput.value =
           (await getConfig(this.db, CONFIG_KEYS.GIT_AUTHOR_EMAIL)) ||
-          "k9@shadowclaw.local";
+          "agent@example.com";
       }
 
       // Load accounts
@@ -1091,7 +1091,7 @@ export class ShadowClawGit extends ShadowClawElement {
         await setConfig(
           this.db,
           CONFIG_KEYS.GIT_AUTHOR_EMAIL,
-          emailInput.value.trim() || "k9@shadowclaw.local",
+          emailInput.value.trim() || "agent@example.com",
         );
       }
 

@@ -23,24 +23,33 @@ graph TD
 
 ## Supported Git Operations
 
-| Tool              | Operation                      |
-| ----------------- | ------------------------------ |
-| `git_clone`       | Clone a remote repository      |
-| `git_sync`        | Pull + push (sync with remote) |
-| `git_checkout`    | Switch branch                  |
-| `git_branch`      | Create a new branch            |
-| `git_branches`    | List all branches              |
-| `git_status`      | Working tree status            |
-| `git_add`         | Stage files                    |
-| `git_log`         | Commit history                 |
-| `git_diff`        | Show changes                   |
-| `git_commit`      | Create a commit                |
-| `git_pull`        | Fetch + merge from remote      |
-| `git_push`        | Push to remote                 |
-| `git_merge`       | Merge branch                   |
-| `git_reset`       | Reset HEAD / unstage           |
-| `git_list_repos`  | List cloned repos              |
-| `git_delete_repo` | Remove a repo from workspace   |
+| Tool                   | Operation                                        |
+| ---------------------- | ------------------------------------------------ |
+| `git_clone`            | Clone a remote repository                        |
+| `git_init`             | Initialize a new empty repo locally              |
+| `git_sync`             | Manually sync workspace ↔ LightningFS            |
+| `git_checkout`         | Switch branch / tag / commit                     |
+| `git_branch`           | Create a new branch                              |
+| `git_delete_branch`    | Delete a local branch                            |
+| `git_branches`         | List all branches                                |
+| `git_status`           | Working tree status                              |
+| `git_add`              | Stage files                                      |
+| `git_unstage`          | Remove files from the index (inverse of git_add) |
+| `git_log`              | Commit history                                   |
+| `git_diff`             | Show changes (HEAD vs workdir **or** two refs)   |
+| `git_show`             | Commit metadata + diff against parent            |
+| `git_read_file_at_ref` | Read a file at any ref without checkout          |
+| `git_commit`           | Create a commit                                  |
+| `git_fetch`            | Fetch from remote without merging                |
+| `git_pull`             | Fetch + merge from remote                        |
+| `git_push`             | Push to remote (supports `tags: true`)           |
+| `git_merge`            | Merge branch                                     |
+| `git_reset`            | Reset HEAD to a ref (--hard)                     |
+| `git_tag`              | Create lightweight or annotated tag              |
+| `git_remote`           | List / add / remove remotes                      |
+| `git_config`           | Get or set git config values (e.g. user.name)    |
+| `git_list_repos`       | List cloned repos                                |
+| `git_delete_repo`      | Remove a repo from workspace                     |
 
 ## LightningFS ↔ OPFS Sync
 
@@ -111,12 +120,6 @@ The proxy is only needed when:
 - The Git host doesn't support CORS for API endpoints
 - Basic Auth is needed (some browsers strip `Authorization` on cross-origin requests)
 
-## Lazy Loading
+## Dispatch Pattern
 
-All git operations lazy-import `src/git/git.ts`:
-
-```ts
-const { gitTool } = await import("../../git/git.js");
-```
-
-This ensures the isomorphic-git bundle (fairly large) is only loaded when a git tool is actually invoked, not on worker startup.
+Git tool execution is delegated from `executeTool.ts` to `executeGitTool()` in `src/worker/tools/git.ts` via a `case`-grouped switch. The git functions themselves are statically imported from `src/git/git.ts` at worker startup. The `GitToolDeps` interface in `src/worker/tools/git.ts` lists every git function the dispatcher requires, making it easy to inject mocks in tests.

@@ -33,21 +33,24 @@ export interface ToolDefinition {
 
 Tool definitions live in modular files under `src/tools/` and are assembled in `src/tools/index.ts`:
 
-| File               | Tools                                                                                                                                                                                                                      |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `files.ts`         | `read_file`, `write_file`, `patch_file`, `list_files`, `open_file`, `attach_file_to_chat`                                                                                                                                  |
-| `bash.ts`          | `bash`                                                                                                                                                                                                                     |
-| `javascript.ts`    | `javascript`                                                                                                                                                                                                               |
-| `fetch.ts`         | `fetch_url`                                                                                                                                                                                                                |
-| `memory.ts`        | `update_memory`                                                                                                                                                                                                            |
-| `tasks.ts`         | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`                                                                                                                                   |
-| `chat.ts`          | `clear_chat`                                                                                                                                                                                                               |
-| `notifications.ts` | `show_toast`, `send_notification`                                                                                                                                                                                          |
-| `git.ts`           | `git_clone`, `git_sync`, `git_checkout`, `git_branch`, `git_status`, `git_add`, `git_log`, `git_diff`, `git_branches`, `git_list_repos`, `git_delete_repo`, `git_commit`, `git_pull`, `git_push`, `git_merge`, `git_reset` |
-| `manage_tools.ts`  | `manage_tools`, `list_tool_profiles`                                                                                                                                                                                       |
-| `mcp.ts`           | `remote_mcp_list_tools`, `remote_mcp_call_tool`                                                                                                                                                                            |
-| `email.ts`         | `manage_email`, `email_read_messages`, `email_send_message`                                                                                                                                                                |
-| `rooms.ts`         | `create_room`, `invite_to_room`, `leave_room`, `list_room_members`                                                                                                                                                         |
+| File               | Tools                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `files.ts`         | `read_file`, `write_file`, `patch_file`, `list_files`, `open_file`, `attach_file_to_chat`, `send_file`, `search_files`, `diff_files`                                                                                                                                                                                                                               |
+| `bash.ts`          | `bash`                                                                                                                                                                                                                                                                                                                                                             |
+| `javascript.ts`    | `javascript`                                                                                                                                                                                                                                                                                                                                                       |
+| `fetch.ts`         | `fetch_url`, `fetch_file`, `web_search`                                                                                                                                                                                                                                                                                                                            |
+| `memory.ts`        | `update_memory`                                                                                                                                                                                                                                                                                                                                                    |
+| `tasks.ts`         | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`, `run_task`                                                                                                                                                                                                                                                               |
+| `chat.ts`          | `clear_chat`, `ask_user`                                                                                                                                                                                                                                                                                                                                           |
+| `notifications.ts` | `show_toast`, `send_notification`                                                                                                                                                                                                                                                                                                                                  |
+| `time.ts`          | `get_current_time`                                                                                                                                                                                                                                                                                                                                                 |
+| `git.ts`           | `git_clone`, `git_sync`, `git_init`, `git_checkout`, `git_branch`, `git_delete_branch`, `git_branches`, `git_status`, `git_add`, `git_unstage`, `git_log`, `git_diff`, `git_show`, `git_read_file_at_ref`, `git_commit`, `git_fetch`, `git_pull`, `git_push`, `git_merge`, `git_reset`, `git_tag`, `git_remote`, `git_config`, `git_list_repos`, `git_delete_repo` |
+| `subagent.ts`      | `spawn_subagent`                                                                                                                                                                                                                                                                                                                                                   |
+| `manage_tools.ts`  | `manage_tools`, `list_tool_profiles`                                                                                                                                                                                                                                                                                                                               |
+| `mcp.ts`           | `remote_mcp_list_tools`, `remote_mcp_call_tool`                                                                                                                                                                                                                                                                                                                    |
+| `email.ts`         | `manage_email`, `email_read_messages`, `email_send_message`                                                                                                                                                                                                                                                                                                        |
+| `rooms.ts`         | `create_room`, `invite_to_room`, `leave_room`, `list_room_members`                                                                                                                                                                                                                                                                                                 |
+| `a2ui.ts`          | `list_components`, `render_component`                                                                                                                                                                                                                                                                                                                              |
 
 All are re-exported from `src/tools/index.ts` as the `TOOL_DEFINITIONS` array.
 
@@ -94,6 +97,9 @@ Saved profiles can specify a `providerId`. When the orchestrator switches to a m
 - **`patch_file`** — In-place string replacement (safer than sed for targeted edits)
 - **`list_files`** — Returns directory listing with `/` suffix for directories
 - **`open_file`** — Posts `open-file` message to main thread for UI viewer
+- **`send_file`** — Transfers a workspace file to the current peer over PeerJS WebRTC; only works in `peer:` conversations
+- **`search_files`** — Recursively searches file content for a literal string or regex across the workspace, with optional `path` and `file_glob` filters; returns `file:line: content` matches (capped at 500)
+- **`diff_files`** — Compares two workspace files line-by-line and returns a `- [Line N]` / `+ [Line N]` diff (capped at 100 differences)
 
 ### Execution tools
 
@@ -109,6 +115,14 @@ Saved profiles can specify a `providerId`. When the orchestrator switches to a m
   - Response truncation (max 100KB)
   - Git host login page detection
   - Response headers are captured and returned
+- **`fetch_file`** — Fetches a URL and saves the body directly to the workspace in one atomic step; supports the same auth options as `fetch_url`; binary content (images, PDFs, audio, video) is saved as raw bytes
+- **`web_search`** — Performs a DuckDuckGo HTML search via the configured CORS proxy and returns the top 10 results (title, URL, snippet) as plain text
+
+### Agentic tools
+
+- **`get_current_time`** — Returns the current time as an ISO 8601 string (UTC) or formatted for an IANA `timezone` (e.g. `America/New_York`) via `Intl.DateTimeFormat`; use this instead of relying on `bash`
+- **`ask_user`** — Halts the agent and sends an `ask-user` postMessage to the UI, where the user answers (optionally choosing from predefined `options`). The worker blocks until the main thread sends back an `ask-user-response` message that resolves the pending promise via `globalThis.pendingAskUserResolvers`
+- **`spawn_subagent`** — Delegates a task to a parallel, isolated agent invocation; subject to `SUBAGENT_MAX_PARALLEL` concurrency limit
 
 ### Git tools
 

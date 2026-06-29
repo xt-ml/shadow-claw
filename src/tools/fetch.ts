@@ -149,3 +149,21 @@ export const fetch_file: ToolDefinition = {
     required: ["url", "path"],
   },
 };
+
+export const web_search: ToolDefinition = {
+  name: "web_search",
+  description:
+    "Perform a web search using a search engine to discover information. " +
+    "Returns a plain-text summary of the top search results including titles, URLs, and snippets. " +
+    "Use this when you need to find information but don't know the exact URL to fetch.",
+  input_schema: {
+    type: "object",
+    properties: {
+      query: {
+        type: "string",
+        description: "The search query to look up.",
+      },
+    },
+    required: ["query"],
+  },
+};

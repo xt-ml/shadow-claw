@@ -567,5 +567,16 @@ export async function handleMessage(event: MessageEvent): Promise<void> {
 
       break;
     }
+
+    case "ask-user-response": {
+      const { id, response } = payload;
+      const resolvers = (globalThis as any).pendingAskUserResolvers;
+      if (resolvers && resolvers[id]) {
+        resolvers[id](response ?? "");
+        delete resolvers[id];
+      }
+
+      break;
+    }
   }
 }

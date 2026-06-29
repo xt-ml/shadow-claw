@@ -320,6 +320,9 @@ Behavior notes:
 - **Provider Help Dialogs**: When a provider request fails, the application may display a contextual help dialog. Use `app.navigateToWithOpenDialog()` to test flows that interrupt navigation with dialogs, or verify dialog content via standard locators on the `.app-dialog` component.
 - **Attachment Capabilities**: When testing file attachments, keep in mind that the application dynamically selects native vs. fallback delivery based on model capabilities (`src/attachment-capabilities.ts`).
 - **Confirmation Flows**: Destructive chat actions (for example message delete and compact) use app-level dialogs, so tests should assert dialog behavior rather than native `window.confirm()`.
+- **Subagent Testing**: Subagent invocations run in a parallel, isolated worker context. Verify concurrency limits (`SUBAGENT_MAX_PARALLEL`) and correct execution routing without polluting the parent agent's message history.
+- **Shared State Testing**: For Multi-Agent flows, verify that `STATE_SNAPSHOT` and `STATE_DELTA` events correctly synchronize state across participants and properly render in the UI.
+- **`ask_user` Testing**: When the agent calls `ask_user`, the worker blocks on a pending promise until the UI sends back an `ask-user-response` message containing the user's answer. E2E tests that trigger this flow must simulate that postMessage dispatch to unblock the agent; otherwise the invocation will hang.
 
 ### `FilesPage`
 

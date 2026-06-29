@@ -30,6 +30,8 @@ const mockGit: any = {
   push: jest.fn(),
   pull: jest.fn(),
   merge: jest.fn(),
+  walk: jest.fn<any>().mockResolvedValue([]),
+  TREE: jest.fn(() => ({ type: "tree" })),
 };
 
 jest.unstable_mockModule("@isomorphic-git/lightning-fs", () => ({

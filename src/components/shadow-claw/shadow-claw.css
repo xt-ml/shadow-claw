@@ -440,6 +440,48 @@ shadow-claw-conversations {
   color: var(--shadow-claw-on-primary);
 }
 
+.app-prompt-dialog__form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 1rem;
+}
+
+.app-prompt-dialog__title {
+  font-size: 1rem;
+  margin: 0;
+}
+
+.app-prompt-dialog__message {
+  color: var(--shadow-claw-text-secondary);
+  margin: 0;
+}
+
+.app-prompt-dialog__input-area {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.app-prompt-dialog__input {
+  background: var(--shadow-claw-bg-primary);
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-s);
+  color: var(--shadow-claw-text-primary);
+  font: inherit;
+  padding: 0.5rem;
+  width: 100%;
+}
+
+.app-prompt-dialog__actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
 .chat-page {
   flex-direction: column;
 }

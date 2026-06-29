@@ -85,6 +85,8 @@ To prevent infinite execution loops, the system enforces a strict recursion guar
 
 - Tools that manage tasks (`create_task`, `update_task`, `delete_task`, `enable_task`, `disable_task`) and notifications (`send_notification`) are blocked during scheduled task execution.
 - The `run_task` tool is explicitly blocked within **any** task execution context (scheduled or manual) to prevent runaway self-triggering loops.
+- The `spawn_subagent` tool is explicitly excluded from the subagent's allowed tools to prevent infinite subagent recursion. Furthermore, parallel subagent spawns respect a globally configured limit (`SUBAGENT_MAX_PARALLEL`).
+- The `ask_user` tool **blocks the worker** until the UI sends back an `ask-user-response` message. Never call it from a scheduled task or subagent context where no human is present to respond — it will deadlock the worker.
 
 ### HTML Sanitization & Trusted Types
 

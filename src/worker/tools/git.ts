@@ -31,6 +31,16 @@ interface GitToolDeps {
   gitPush: (input: any) => Promise<string>;
   gitMerge: (input: any) => Promise<string>;
   gitReset: (input: any) => Promise<string>;
+  gitFetch: (input: any) => Promise<string>;
+  gitReadFileAtRef: (input: any) => Promise<string>;
+  gitShow: (input: any) => Promise<string>;
+  gitDeleteBranch: (input: any) => Promise<string>;
+  gitInit: (input: any) => Promise<string>;
+  gitTag: (input: any) => Promise<string>;
+  gitListTags: (input: any) => Promise<string>;
+  gitRemote: (input: any) => Promise<string>;
+  gitConfig: (input: any) => Promise<string>;
+  gitUnstage: (input: any) => Promise<string>;
   getRemoteUrl: (input: { repo: string; remote?: string }) => Promise<any>;
   syncLfsToOpfs: (
     db: ShadowClawDatabase,
@@ -394,6 +404,7 @@ export async function executeGitTool(
         branch: input.branch,
         remoteRef: input.remote_ref,
         force: input.force,
+        tags: input.tags,
         token: creds.token,
         username: creds.username,
         password: creds.password,
@@ -516,6 +527,117 @@ export async function executeGitTool(
       await deps.syncLfsToOpfs(db, groupId, input.repo, `repos/${input.repo}`);
 
       return result;
+    }
+
+    case "git_fetch": {
+      const fetchRemoteUrl = await deps.getRemoteUrl({ repo: input.repo });
+      const creds = await deps.resolveGitCredentials(db, fetchRemoteUrl);
+      const corsProxy = await resolveCorsProxy(db, deps);
+
+      return deps.gitFetch({
+        repo: input.repo,
+        branch: input.branch,
+        remote: input.remote,
+        token: creds.token,
+        username: creds.username,
+        password: creds.password,
+        corsProxy,
+      });
+    }
+
+    case "git_read_file_at_ref": {
+      return deps.gitReadFileAtRef({
+        repo: input.repo,
+        ref: input.ref,
+        filepath: input.filepath,
+      });
+    }
+
+    case "git_show": {
+      return deps.gitShow({
+        repo: input.repo,
+        ref: input.ref || "HEAD",
+      });
+    }
+
+    case "git_delete_branch": {
+      return deps.gitDeleteBranch({
+        repo: input.repo,
+        name: input.name,
+      });
+    }
+
+    case "git_init": {
+      const result = await deps.gitInit({ repo: input.repo });
+      await deps.syncLfsToOpfs(db, groupId, input.repo, `repos/${input.repo}`);
+
+      return result;
+    }
+
+    case "git_tag": {
+      const tagRemoteUrl = await deps.getRemoteUrl({ repo: input.repo });
+      const tagCreds = await deps.resolveGitCredentials(db, tagRemoteUrl);
+
+      let authorName = input.author_name;
+      let authorEmail = input.author_email;
+
+      if (!authorName) {
+        authorName =
+          tagCreds.authorName ||
+          (await deps.getConfig(db, deps.configKeys.GIT_AUTHOR_NAME)) ||
+          undefined;
+      }
+
+      if (!authorEmail) {
+        authorEmail =
+          tagCreds.authorEmail ||
+          (await deps.getConfig(db, deps.configKeys.GIT_AUTHOR_EMAIL)) ||
+          undefined;
+      }
+
+      return deps.gitTag({
+        repo: input.repo,
+        tag: input.tag,
+        message: input.message,
+        authorName,
+        authorEmail,
+      });
+    }
+
+    case "git_remote": {
+      return deps.gitRemote({
+        repo: input.repo,
+        command: input.command,
+        remote: input.remote,
+        url: input.url,
+      });
+    }
+
+    case "git_config": {
+      return deps.gitConfig({
+        repo: input.repo,
+        command: input.command,
+        key: input.key,
+        value: input.value,
+      });
+    }
+
+    case "git_unstage": {
+      try {
+        await deps.syncOpfsToLfs(
+          db,
+          groupId,
+          `repos/${input.repo}`,
+          input.repo,
+        );
+      } catch {
+        // Ignore if OPFS folder doesn't exist yet.
+      }
+
+      return deps.gitUnstage({
+        repo: input.repo,
+        filepath: input.filepath,
+      });
     }
 
     default:

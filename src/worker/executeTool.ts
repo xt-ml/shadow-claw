@@ -39,6 +39,16 @@ import {
   gitPush,
   gitMerge,
   gitReset,
+  gitFetch,
+  gitReadFileAtRef,
+  gitShow,
+  gitDeleteBranch,
+  gitInit,
+  gitTag,
+  gitListTags,
+  gitRemote,
+  gitConfig,
+  gitUnstage,
 } from "../git/git.js";
 import { syncLfsToOpfs, syncOpfsToLfs } from "../git/sync.js";
 import { resolveGitCredentials, buildAuthHeaders } from "../git/credentials.js";
@@ -869,7 +879,16 @@ export async function executeTool(
       case "git_pull":
       case "git_push":
       case "git_merge":
-      case "git_reset": {
+      case "git_reset":
+      case "git_fetch":
+      case "git_read_file_at_ref":
+      case "git_show":
+      case "git_delete_branch":
+      case "git_init":
+      case "git_tag":
+      case "git_remote":
+      case "git_config":
+      case "git_unstage": {
         return await executeGitTool(db, name, input, groupId, {
           getConfig,
           getProxyUrl,
@@ -889,6 +908,16 @@ export async function executeTool(
           gitPush,
           gitMerge,
           gitReset,
+          gitFetch,
+          gitReadFileAtRef,
+          gitShow,
+          gitDeleteBranch,
+          gitInit,
+          gitTag,
+          gitListTags,
+          gitRemote,
+          gitConfig,
+          gitUnstage,
           getRemoteUrl,
           syncLfsToOpfs,
           syncOpfsToLfs,
@@ -1018,6 +1047,225 @@ export async function executeTool(
           groupId,
           options.invokeContext,
         );
+      }
+
+      case "get_current_time": {
+        const d = new Date();
+        const tz = input.timezone;
+        if (tz) {
+          try {
+            return new Intl.DateTimeFormat("en-US", {
+              timeZone: tz,
+              timeStyle: "long",
+              dateStyle: "long",
+            }).format(d);
+          } catch (e: any) {
+            return `Error: Invalid timezone ${tz} - ${e.message}`;
+          }
+        }
+
+        return d.toISOString();
+      }
+
+      case "search_files": {
+        const { pattern, path, file_glob, is_regex } = input;
+        if (!pattern) {
+          return "Error: pattern is required.";
+        }
+
+        const searchRegex = is_regex ? new RegExp(pattern) : null;
+
+        const isMatch = (filename: string) => {
+          if (!file_glob) {
+            return true;
+          }
+
+          const glob = file_glob.replace(/\*/g, ".*").replace(/\?/g, ".");
+
+          return new RegExp(`^${glob}$`).test(filename.split("/").pop() || "");
+        };
+
+        const results: string[] = [];
+
+        async function walk(dir: string) {
+          try {
+            const entries = await listGroupFiles(db, groupId, dir);
+            for (const entry of entries) {
+              const fullPath =
+                dir === "." || dir === ""
+                  ? entry
+                  : `${dir}${dir.endsWith("/") ? "" : "/"}${entry}`;
+
+              if (entry.endsWith("/")) {
+                await walk(fullPath.slice(0, -1));
+              } else {
+                if (!isMatch(entry)) {
+                  continue;
+                }
+
+                try {
+                  const content = await readGroupFile(db, groupId, fullPath);
+                  const lines = content.split("\n");
+                  for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    const matches = searchRegex
+                      ? searchRegex.test(line)
+                      : line.includes(pattern);
+                    if (matches) {
+                      results.push(`${fullPath}:${i + 1}: ${line}`);
+                      if (results.length > 500) {
+                        results.push("... (results truncated at 500 matches)");
+
+                        return;
+                      }
+                    }
+                  }
+                } catch (err) {
+                  // Ignore read errors
+                }
+              }
+            }
+          } catch (e) {
+            // Ignore list errors
+          }
+        }
+
+        await walk(path || ".");
+        if (results.length === 0) {
+          return "No matches found.";
+        }
+
+        return results.join("\n");
+      }
+
+      case "diff_files": {
+        const { path_a, path_b } = input;
+        if (!path_a || !path_b) {
+          return "Error: path_a and path_b are required.";
+        }
+
+        let contentA = "";
+        let contentB = "";
+        try {
+          contentA = await readGroupFile(db, groupId, path_a);
+        } catch (e) {
+          return `Error reading ${path_a}: ${e}`;
+        }
+
+        try {
+          contentB = await readGroupFile(db, groupId, path_b);
+        } catch (e) {
+          return `Error reading ${path_b}: ${e}`;
+        }
+
+        if (contentA === contentB) {
+          return "Files are identical.";
+        }
+
+        const linesA = contentA.split("\n");
+        const linesB = contentB.split("\n");
+
+        const diffLines: string[] = [];
+        const maxLines = Math.max(linesA.length, linesB.length);
+        let differences = 0;
+
+        for (let i = 0; i < maxLines; i++) {
+          const a = linesA[i];
+          const b = linesB[i];
+          if (a !== b) {
+            if (a !== undefined) {
+              diffLines.push(`- [Line ${i + 1}] ${a}`);
+            }
+
+            if (b !== undefined) {
+              diffLines.push(`+ [Line ${i + 1}] ${b}`);
+            }
+
+            differences++;
+            if (differences > 100) {
+              diffLines.push("... (diff truncated at 100 differences)");
+
+              break;
+            }
+          }
+        }
+
+        return diffLines.join("\n");
+      }
+
+      case "ask_user": {
+        const { question, options } = input;
+        if (!question) {
+          return "Error: question is required.";
+        }
+
+        const id = ulid();
+        post({
+          type: "ask-user",
+          payload: { id, groupId, question, options },
+        });
+
+        return await new Promise<string>((resolve) => {
+          (globalThis as any).pendingAskUserResolvers =
+            (globalThis as any).pendingAskUserResolvers || {};
+          (globalThis as any).pendingAskUserResolvers[id] = resolve;
+        });
+      }
+
+      case "web_search": {
+        const { query } = input;
+        if (!query) {
+          return "Error: query is required.";
+        }
+
+        const targetUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
+        try {
+          const res = await fetch(targetUrl, {
+            method: "GET",
+            headers: {
+              Accept: "text/html",
+            },
+          });
+
+          if (!res.ok) {
+            return `Error fetching search results: ${res.status}`;
+          }
+
+          const html = await res.text();
+
+          const results: string[] = [];
+          const snippetRegex = /<a class="result__snippet[^>]*>(.*?)<\/a>/gi;
+          const urlRegex =
+            /<a class="result__url" href="([^"]+)">([^<]+)<\/a>/gi;
+
+          let snippetMatch;
+          let urlMatch;
+          while (
+            (snippetMatch = snippetRegex.exec(html)) &&
+            (urlMatch = urlRegex.exec(html))
+          ) {
+            const rawUrl = urlMatch[1];
+            let url = rawUrl;
+            if (rawUrl.includes("//duckduckgo.com/l/?uddg=")) {
+              url = decodeURIComponent(rawUrl.split("uddg=")[1].split("&")[0]);
+            }
+
+            const snippet = stripHtml(snippetMatch[1]);
+            const title = stripHtml(urlMatch[2]);
+            results.push(`Title: ${title}\nURL: ${url}\nSnippet: ${snippet}\n`);
+            if (results.length >= 10) {
+              break;
+            }
+          }
+
+          if (results.length === 0) {
+            return "No results found.";
+          }
+
+          return results.join("\n---\n");
+        } catch (e: any) {
+          return `Search error: ${e.message}`;
+        }
       }
 
       default:

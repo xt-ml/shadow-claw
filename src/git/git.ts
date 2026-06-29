@@ -491,7 +491,7 @@ export async function gitDiff({
     return sections.join("\n");
   }
 
-  // Compare two refs using readTree
+  // Compare two refs using readTree and git.walk
   const oid1 = await git.resolveRef({ fs, dir, ref: ref1 || "HEAD" });
   const oid2 = await git.resolveRef({ fs, dir, ref: ref2 });
 
@@ -499,7 +499,80 @@ export async function gitDiff({
     return "Refs are identical.";
   }
 
-  return `Comparing ${ref1 || "HEAD"} (${oid1.substring(0, 7)}) → ${ref2} (${oid2.substring(0, 7)})\n(Full tree diff not yet implemented — use git_status for working tree changes.)`;
+  const trees = [git.TREE({ ref: oid1 }), git.TREE({ ref: oid2 })];
+  const changes = await git.walk({
+    fs,
+    dir,
+    trees,
+    map: async function (filepath, [A, B]) {
+      // Ignore root directory
+      if (filepath === ".") {
+        return;
+      }
+
+      if ((await A?.type()) === "tree" || (await B?.type()) === "tree") {
+        return;
+      }
+
+      const aOid = await A?.oid();
+      const bOid = await B?.oid();
+
+      // If identical, ignore
+      if (aOid === bOid) {
+        return;
+      }
+
+      // Read contents
+      let oldText = "";
+      let newText = "";
+      let status = "modified";
+
+      try {
+        if (A && aOid) {
+          const aBlob = await A.content();
+          oldText = decodeBytes(aBlob);
+        } else {
+          status = "added";
+        }
+
+        if (B && bOid) {
+          const bBlob = await B.content();
+          newText = decodeBytes(bBlob);
+        } else {
+          status = "deleted";
+        }
+      } catch (err) {
+        // Binary file or error reading
+
+        return `??? ${filepath} (binary or read error)`;
+      }
+
+      if (status === "added") {
+        const added = newText
+          .split("\n")
+          .map((l) => `+${l}`)
+          .join("\n");
+
+        return `--- /dev/null\n+++ ${filepath} (new file)\n${added}`;
+      } else if (status === "deleted") {
+        const removed = oldText
+          .split("\n")
+          .map((l) => `-${l}`)
+          .join("\n");
+
+        return `--- ${filepath} (deleted)\n+++ /dev/null\n${removed}`;
+      } else {
+        return simpleDiff(filepath, oldText, newText);
+      }
+    },
+  });
+
+  const diffStr = changes.filter(Boolean).join("\n\n");
+  if (!diffStr) {
+    return `Comparing ${ref1 || "HEAD"} (${oid1.substring(0, 7)}) → ${ref2} (${oid2.substring(0, 7)})\nNo differences.`;
+  }
+
+  return `Comparing ${ref1 || "HEAD"} (${oid1.substring(0, 7)}) → ${ref2} (${oid2.substring(0, 7)})\n\n${diffStr}`;
 }
 
 /**
@@ -660,7 +733,7 @@ export async function gitCommit({
   repo,
   message,
   authorName = "ShadowClaw",
-  authorEmail = "k9@shadowclaw.local",
+  authorEmail = "agent@example.com",
 }: {
   repo: string;
   message: string;
@@ -723,7 +796,7 @@ export async function gitPull({
   repo,
   branch,
   authorName = "ShadowClaw",
-  authorEmail = "k9@shadowclaw.local",
+  authorEmail = "agent@example.com",
   token,
   username,
   password,
@@ -781,6 +854,7 @@ export async function gitPush({
   remote = "origin",
   corsProxy,
   force = false,
+  tags = false,
 }: {
   repo: string;
   branch?: string;
@@ -791,6 +865,7 @@ export async function gitPush({
   remote?: string;
   corsProxy?: string;
   force?: boolean;
+  tags?: boolean;
 }): Promise<string> {
   const { git, http, fs } = await initGitFs();
   const dir = repoDir(repo);
@@ -803,7 +878,7 @@ export async function gitPush({
 
   const auth = buildAuthCallbacks({ token, username, password });
 
-  const pushOpts = {
+  const pushOpts: any = {
     fs,
     http,
     dir,
@@ -813,6 +888,7 @@ export async function gitPush({
     corsProxy: corsProxy || getProxyUrl("local"),
     ...auth,
     ...(remoteRef ? { remoteRef } : {}),
+    ...(tags ? { tags: true } : {}),
   };
 
   const result = await git.push(pushOpts);
@@ -832,7 +908,7 @@ export async function gitMerge({
   repo,
   theirs,
   authorName = "ShadowClaw",
-  authorEmail = "k9@shadowclaw.local",
+  authorEmail = "agent@example.com",
 }: {
   repo: string;
   theirs: string;
@@ -966,4 +1042,297 @@ export async function gitDeleteRepo({
   await rmdirRecursive(pfs, dir);
 
   return `Deleted "${repo}" from LightningFS git storage.`;
+}
+
+/**
+ * Fetch commits from a remote without merging.
+ */
+export async function gitFetch({
+  repo,
+  branch,
+  token,
+  username,
+  password,
+  remote = "origin",
+  corsProxy,
+}: {
+  repo: string;
+  branch?: string;
+  token?: string;
+  username?: string;
+  password?: string;
+  remote?: string;
+  corsProxy?: string;
+}): Promise<string> {
+  const { git, http, fs } = await initGitFs();
+  const dir = repoDir(repo);
+
+  const auth = buildAuthCallbacks({ token, username, password });
+
+  const fetchOpts: any = {
+    fs,
+    http,
+    dir,
+    remote,
+    singleBranch: true,
+    corsProxy: corsProxy || getProxyUrl("local"),
+    ...auth,
+  };
+
+  if (branch) {
+    fetchOpts.ref = branch;
+  }
+
+  const result = await git.fetch(fetchOpts);
+  const fetchedRef = result.fetchHead || "unknown";
+
+  return `Fetched ${branch || "default branch"} from ${remote} successfully. (FETCH_HEAD is ${fetchedRef})`;
+}
+
+/**
+ * Read the contents of a file at a specific ref without checking it out.
+ */
+export async function gitReadFileAtRef({
+  repo,
+  ref,
+  filepath,
+}: {
+  repo: string;
+  ref: string;
+  filepath: string;
+}): Promise<string> {
+  const { git, fs } = await initGitFs();
+  const dir = repoDir(repo);
+
+  const oid = await git.resolveRef({ fs, dir, ref });
+  const { blob } = await git.readBlob({ fs, dir, oid, filepath });
+
+  return decodeBytes(blob);
+}
+
+/**
+ * Show the commit metadata and the diff of a commit against its parent.
+ */
+export async function gitShow({
+  repo,
+  ref,
+}: {
+  repo: string;
+  ref: string;
+}): Promise<string> {
+  const { git, fs } = await initGitFs();
+  const dir = repoDir(repo);
+
+  const oid = await git.resolveRef({ fs, dir, ref });
+  const commit = await git.readCommit({ fs, dir, oid });
+
+  const parentOid =
+    commit.commit.parent && commit.commit.parent.length > 0
+      ? commit.commit.parent[0]
+      : undefined;
+
+  let diffStr =
+    "(No parent commit, showing as new file is not yet supported in gitShow)";
+  if (parentOid) {
+    diffStr = await gitDiff({ repo, ref1: parentOid, ref2: oid });
+  } else {
+    diffStr = "Initial commit.";
+  }
+
+  const author = `${commit.commit.author.name} <${commit.commit.author.email}>`;
+  const date = new Date(commit.commit.author.timestamp * 1000).toISOString();
+
+  return `commit ${oid}\nAuthor: ${author}\nDate: ${date}\n\n    ${commit.commit.message.replace(/\n/g, "\n    ")}\n\n${diffStr}`;
+}
+
+/**
+ * Delete a branch locally.
+ */
+export async function gitDeleteBranch({
+  repo,
+  name,
+}: {
+  repo: string;
+  name: string;
+}): Promise<string> {
+  const { git, fs } = await initGitFs();
+  const dir = repoDir(repo);
+
+  await git.deleteBranch({ fs, dir, ref: name });
+
+  return `Deleted local branch ${name} in ${repo}`;
+}
+
+/**
+ * Initialize a new git repository locally.
+ */
+export async function gitInit({ repo }: { repo: string }): Promise<string> {
+  const { git, fs, pfs } = await initGitFs();
+  const dir = repoDir(repo);
+
+  await ensureDir(pfs, GIT_ROOT);
+  await ensureDir(pfs, dir);
+
+  await git.init({ fs, dir, defaultBranch: "main" });
+
+  return `Initialized empty Git repository in ${repo} (branch: main)`;
+}
+
+/**
+ * Create an annotated tag.
+ */
+export async function gitTag({
+  repo,
+  tag,
+  message,
+  authorName = "ShadowClaw",
+  authorEmail = "agent@example.com",
+}: {
+  repo: string;
+  tag: string;
+  message?: string;
+  authorName?: string;
+  authorEmail?: string;
+}): Promise<string> {
+  const { git, fs } = await initGitFs();
+  const dir = repoDir(repo);
+
+  if (message) {
+    await git.annotatedTag({
+      fs,
+      dir,
+      ref: tag,
+      message,
+      tagger: { name: authorName, email: authorEmail },
+    });
+
+    return `Created annotated tag ${tag} in ${repo}`;
+  } else {
+    await git.tag({
+      fs,
+      dir,
+      ref: tag,
+    });
+
+    return `Created tag ${tag} in ${repo}`;
+  }
+}
+
+/**
+ * List all tags.
+ */
+export async function gitListTags({ repo }: { repo: string }): Promise<string> {
+  const { git, fs } = await initGitFs();
+  const dir = repoDir(repo);
+
+  const tags = await git.listTags({ fs, dir });
+
+  if (tags.length === 0) {
+    return "No tags found.";
+  }
+
+  return tags.join("\n");
+}
+
+/**
+ * Manage remotes (add/remove/list).
+ */
+export async function gitRemote({
+  repo,
+  command,
+  remote,
+  url,
+}: {
+  repo: string;
+  command: "add" | "remove" | "list";
+  remote?: string;
+  url?: string;
+}): Promise<string> {
+  const { git, fs } = await initGitFs();
+  const dir = repoDir(repo);
+
+  if (command === "list") {
+    const remotes = await git.listRemotes({ fs, dir });
+    if (remotes.length === 0) {
+      return "No remotes.";
+    }
+
+    return remotes.map((r: any) => `${r.remote}\t${r.url}`).join("\n");
+  } else if (command === "add") {
+    if (!remote || !url) {
+      throw new Error("remote and url are required for add");
+    }
+
+    await git.addRemote({ fs, dir, remote, url });
+
+    return `Added remote ${remote} -> ${url}`;
+  } else if (command === "remove") {
+    if (!remote) {
+      throw new Error("remote is required for remove");
+    }
+
+    await git.deleteRemote({ fs, dir, remote });
+
+    return `Removed remote ${remote}`;
+  }
+
+  throw new Error("Invalid command");
+}
+
+/**
+ * Get or set git config values.
+ */
+export async function gitConfig({
+  repo,
+  command,
+  key,
+  value,
+}: {
+  repo: string;
+  command: "get" | "set";
+  key: string;
+  value?: string;
+}): Promise<string> {
+  const { git, fs } = await initGitFs();
+  const dir = repoDir(repo);
+
+  if (command === "get") {
+    const val = await git.getConfig({ fs, dir, path: key });
+
+    return val !== undefined ? String(val) : "";
+  } else if (command === "set") {
+    if (value === undefined) {
+      throw new Error("value is required for set");
+    }
+
+    await git.setConfig({ fs, dir, path: key, value });
+
+    return `Set ${key} = ${value}`;
+  }
+
+  throw new Error("Invalid command");
+}
+
+/**
+ * Unstage files (remove from index).
+ */
+export async function gitUnstage({
+  repo,
+  filepath,
+}: {
+  repo: string;
+  filepath: string | string[];
+}): Promise<string> {
+  const { git, fs } = await initGitFs();
+  const dir = repoDir(repo);
+
+  if (Array.isArray(filepath)) {
+    for (const f of filepath) {
+      await git.remove({ fs, dir, filepath: f });
+    }
+  } else {
+    await git.remove({ fs, dir, filepath });
+  }
+
+  return `Unstaged ${Array.isArray(filepath) ? filepath.join(", ") : filepath} in ${repo}`;
 }

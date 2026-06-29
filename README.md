@@ -38,6 +38,7 @@ A fully-functional agent runtime that runs entirely in the browser—no AI proce
 - **Attachment capabilities** — Native multimodal delivery with automatic text fallback
 - **Remote MCP** — Discover and execute tools from external MCP servers
 - **A2UI interactive surfaces** — Render responsive UI components (Text, Button, TextField, Row/Column layouts) from agents via PeerJS WebRTC with two-way data binding
+- **Multi-Agent Shared State** — Synchronize agent knowledge across participants using `STATE_SNAPSHOT` and `STATE_DELTA` events
 - **Email integration** — IMAP/SMTP support with encrypted credentials
 - **Web Share Target** — Receive files/URLs directly from OS share sheet
 - **Scheduled tasks** — Cron expressions with server-side persistence and Web Push
@@ -120,20 +121,24 @@ ShadowClaw supports multiple LLM providers with a unified adapter pattern:
 
 ## Agent Tools
 
-The agent has access to **30+ tools** including:
+The agent has access to **50+ tools** including:
 
-| Category    | Tools                                                                                                |
-| ----------- | ---------------------------------------------------------------------------------------------------- |
-| **Files**   | `read_file`, `write_file`, `patch_file`, `list_files`, `open_file`, `attach_file_to_chat`            |
-| **Shell**   | `bash` (WebVM or just-bash emulator)                                                                 |
-| **Git**     | `git_clone`, `git_merge`, `git_push`, `git_diff`, `git_reset`, etc.                                  |
-| **Web**     | `fetch_url` (with optional Git or service account auth)                                              |
-| **Compute** | `javascript` (sandboxed)                                                                             |
-| **Tasks**   | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`, `run_task` |
-| **UI**      | `show_toast`, `send_notification`, `clear_chat`                                                      |
-| **Context** | `update_memory` (edits `MEMORY.md`)                                                                  |
-| **Remote**  | `remote_mcp_list_tools`, `remote_mcp_call_tool` (external MCP servers)                               |
-| **Email**   | `manage_email`, `email_read_messages`, `email_send_message`                                          |
+| Category    | Tools                                                                                                                                   |
+| ----------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Files**   | `read_file`, `write_file`, `patch_file`, `list_files`, `open_file`, `attach_file_to_chat`, `send_file`, `search_files`, `diff_files`    |
+| **Shell**   | `bash` (WebVM or just-bash emulator)                                                                                                    |
+| **Git**     | `git_clone`, `git_init`, `git_add`, `git_unstage`, `git_commit`, `git_push`, `git_pull`, `git_fetch`, `git_merge`, `git_diff`, and more |
+| **Web**     | `fetch_url`, `fetch_file`, `web_search` (DuckDuckGo via CORS proxy)                                                                     |
+| **Compute** | `javascript` (sandboxed)                                                                                                                |
+| **Agents**  | `spawn_subagent` (parallel task delegation), `ask_user` (human-in-the-loop pause)                                                       |
+| **Time**    | `get_current_time` (ISO 8601 or IANA timezone)                                                                                          |
+| **Tasks**   | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`, `run_task`                                    |
+| **UI**      | `show_toast`, `send_notification`, `clear_chat`                                                                                         |
+| **Context** | `update_memory` (edits `MEMORY.md`)                                                                                                     |
+| **Remote**  | `remote_mcp_list_tools`, `remote_mcp_call_tool` (external MCP servers)                                                                  |
+| **Email**   | `manage_email`, `email_read_messages`, `email_send_message`                                                                             |
+| **Rooms**   | `create_room`, `invite_to_room`, `leave_room`, `list_room_members`                                                                      |
+| **A2UI**    | `list_components`, `render_component`                                                                                                   |
 
 ### Testing WebMCP Integration
 
@@ -180,7 +185,7 @@ ShadowClaw supports **four messaging channels** by default:
 
 - `br:` — In-browser chat
 - `im:` — iMessage bridge
-- `peer:` — PeerJS WebRTC
+- `peer:` — PeerJS WebRTC (includes Peer Rooms for multi-agent collaboration)
 - `tg:` — Telegram Bot API
 
 Each channel creates isolated conversations with their own message history and workspace.
@@ -307,6 +312,7 @@ Instead of fixed-size message windows, context is **token-aware and adaptive**.
 - Messages walked newest-to-oldest within budget
 - Large outputs truncated at line boundaries
 - UI progress bar tracks context usage
+- **Token estimation & cache tracking** — Tracks token usage and cache hits/misses across context window
 - Auto-compaction triggers at 80% usage
 
 **Full details**: [docs/architecture/context-management.md](docs/architecture/context-management.md)

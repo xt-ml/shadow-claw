@@ -68,7 +68,7 @@ test.describe("Task CRUD", () => {
     // Confirm using the app shell dialog.
     const confirmDialog = tasks.app.root.locator(".app-dialog");
     await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-    await tasks.app.root.locator(".app-dialog__btn--confirm").click();
+    await confirmDialog.locator(".app-dialog__btn--confirm").click();
 
     // Task should be removed
     await expect(taskList.locator(".tasks__item")).toHaveCount(0, {
@@ -102,7 +102,7 @@ test.describe("Task CRUD", () => {
 
     const confirmDialog = tasks.app.root.locator(".app-dialog");
     await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-    await tasks.app.root.locator(".app-dialog__btn--cancel").click();
+    await confirmDialog.locator(".app-dialog__btn--cancel").click();
 
     // Task should still exist
     await expect(taskList.locator(".tasks__item")).toHaveCount(1);

@@ -167,6 +167,16 @@ describe("executeTool.js", () => {
       gitDeleteRepo: mockGitDeleteRepo,
       getProxyUrl: mockGetProxyUrl,
       getRemoteUrl: mockGetRemoteUrl,
+      gitFetch: jest.fn(),
+      gitReadFileAtRef: jest.fn(),
+      gitShow: jest.fn(),
+      gitDeleteBranch: jest.fn(),
+      gitInit: jest.fn(),
+      gitTag: jest.fn(),
+      gitListTags: jest.fn(),
+      gitRemote: jest.fn(),
+      gitConfig: jest.fn(),
+      gitUnstage: jest.fn(),
     }));
 
     jest.unstable_mockModule("../git/sync.js", () => ({
@@ -3083,6 +3093,87 @@ describe("executeTool.js", () => {
       expect(mockPost).not.toHaveBeenCalledWith(
         expect.objectContaining({ type: "room-action" }),
       );
+    });
+  });
+
+  describe("Additional Tools", () => {
+    it("should handle get_current_time", async () => {
+      const result = await executeTool({}, "get_current_time", {}, "group1");
+      expect(result).toMatch(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/);
+    });
+
+    it("should handle search_files", async () => {
+      (mockListGroupFiles as any).mockResolvedValue(["file1.txt"]);
+      (mockReadGroupFile as any).mockResolvedValue(
+        "hello world\ntest pattern\nfoo",
+      );
+
+      const result = await executeTool(
+        {},
+        "search_files",
+        { pattern: "pattern" },
+        "group1",
+      );
+      expect(result).toContain("file1.txt:2: test pattern");
+    });
+
+    it("should handle diff_files", async () => {
+      mockReadGroupFile
+        .mockResolvedValueOnce("line1\nline2")
+        .mockResolvedValueOnce("line1\nline3");
+
+      const result = await executeTool(
+        {},
+        "diff_files",
+        { path_a: "a", path_b: "b" },
+        "group1",
+      );
+      expect(result).toContain("- [Line 2] line2");
+      expect(result).toContain("+ [Line 2] line3");
+    });
+
+    it("should handle ask_user", async () => {
+      const promise = executeTool(
+        {},
+        "ask_user",
+        { question: "yes or no?" },
+        "group1",
+      );
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "ask-user",
+          payload: expect.objectContaining({ question: "yes or no?" }),
+        }),
+      );
+
+      const resolvers = (globalThis as any).pendingAskUserResolvers;
+      const keys = Object.keys(resolvers);
+      expect(keys.length).toBe(1);
+
+      resolvers[keys[0]]("yes");
+
+      const result = await promise;
+      expect(result).toBe("yes");
+    });
+
+    it("should handle web_search", async () => {
+      global.fetch = (jest.fn() as any).mockResolvedValue({
+        ok: true,
+        text: async () =>
+          `<a class="result__url" href="//duckduckgo.com/l/?uddg=https://example.com&rut=x">Example</a><a class="result__snippet">This is an example.</a>`,
+      });
+
+      const result = await executeTool(
+        {},
+        "web_search",
+        { query: "test" },
+        "group1",
+      );
+      expect(result).toContain("URL: https://example.com");
+      expect(result).toContain("Snippet: This is an example.");
     });
   });
 });

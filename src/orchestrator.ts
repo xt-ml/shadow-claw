@@ -3625,6 +3625,12 @@ export class Orchestrator {
 
         break;
       }
+
+      case "ask-user": {
+        this.events.emit("ask-user", msg.payload);
+
+        break;
+      }
     }
   }
 
@@ -3750,6 +3756,16 @@ export class Orchestrator {
         error: `Failed to deliver response to ${this.getChannelTypeForGroup(groupId)}: ${deliveryError.message}`,
       });
     }
+  }
+
+  /**
+   * Respond to an agent's ask_user prompt, unblocking its execution.
+   */
+  answerUserPrompt(id: string, response: string | null): void {
+    this.agentWorker?.postMessage({
+      type: "ask-user-response",
+      payload: { id, response },
+    });
   }
 }
 

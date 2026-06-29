@@ -278,6 +278,10 @@ export const git_push: ToolDefinition = {
         type: "boolean",
         description: "Force push (default: false)",
       },
+      tags: {
+        type: "boolean",
+        description: "Also push all local tags to the remote (default: false)",
+      },
     },
     required: ["repo"],
   },
@@ -390,5 +394,233 @@ export const git_sync: ToolDefinition = {
       },
     },
     required: ["repo", "direction"],
+  },
+};
+
+export const git_fetch: ToolDefinition = {
+  name: "git_fetch",
+  description:
+    "Fetch commits from the remote without merging. " +
+    "Safe for inspecting remote state before deciding to merge or rebase.",
+  input_schema: {
+    type: "object",
+    properties: {
+      repo: {
+        type: "string",
+        description: "Short repo name",
+      },
+      branch: {
+        type: "string",
+        description: "Remote branch to fetch (default: default branch)",
+      },
+      remote: {
+        type: "string",
+        description: "Remote name (default: origin)",
+      },
+    },
+    required: ["repo"],
+  },
+};
+
+export const git_read_file_at_ref: ToolDefinition = {
+  name: "git_read_file_at_ref",
+  description:
+    "Read a file's contents at a specific ref (branch, tag, or commit SHA) " +
+    "without checking it out. Useful for code review across branches.",
+  input_schema: {
+    type: "object",
+    properties: {
+      repo: {
+        type: "string",
+        description: "Short repo name",
+      },
+      ref: {
+        type: "string",
+        description: "Branch name, tag, or commit SHA",
+      },
+      filepath: {
+        type: "string",
+        description: "File path relative to the repo root",
+      },
+    },
+    required: ["repo", "ref", "filepath"],
+  },
+};
+
+export const git_show: ToolDefinition = {
+  name: "git_show",
+  description:
+    "Show the metadata and diff of a specific commit. " +
+    "Returns author, date, message, and a unified diff against the parent commit.",
+  input_schema: {
+    type: "object",
+    properties: {
+      repo: {
+        type: "string",
+        description: "Short repo name",
+      },
+      ref: {
+        type: "string",
+        description: "Commit SHA, branch, or tag to inspect (default: HEAD)",
+      },
+    },
+    required: ["repo", "ref"],
+  },
+};
+
+export const git_delete_branch: ToolDefinition = {
+  name: "git_delete_branch",
+  description: "Delete a local branch from a cloned repo.",
+  input_schema: {
+    type: "object",
+    properties: {
+      repo: {
+        type: "string",
+        description: "Short repo name",
+      },
+      name: {
+        type: "string",
+        description: "Name of the branch to delete",
+      },
+    },
+    required: ["repo", "name"],
+  },
+};
+
+export const git_init: ToolDefinition = {
+  name: "git_init",
+  description:
+    "Initialize a new empty git repository in browser storage. " +
+    "Use this to create a new project from scratch before using git_push to push to a remote.",
+  input_schema: {
+    type: "object",
+    properties: {
+      repo: {
+        type: "string",
+        description:
+          "Short name for the new repo (used for all subsequent git_ operations)",
+      },
+    },
+    required: ["repo"],
+  },
+};
+
+export const git_tag: ToolDefinition = {
+  name: "git_tag",
+  description:
+    "Create a lightweight or annotated tag at HEAD. " +
+    "Use git_push with tags=true to push tags to the remote.",
+  input_schema: {
+    type: "object",
+    properties: {
+      repo: {
+        type: "string",
+        description: "Short repo name",
+      },
+      tag: {
+        type: "string",
+        description: "Tag name (e.g. v1.2.3)",
+      },
+      message: {
+        type: "string",
+        description:
+          "Annotation message — if provided, creates an annotated tag; otherwise lightweight",
+      },
+      author_name: {
+        type: "string",
+        description: "Tagger name (optional, uses configured default)",
+      },
+      author_email: {
+        type: "string",
+        description: "Tagger email (optional, uses configured default)",
+      },
+    },
+    required: ["repo", "tag"],
+  },
+};
+
+export const git_remote: ToolDefinition = {
+  name: "git_remote",
+  description:
+    "Manage git remotes: list, add, or remove a remote in a cloned repo.",
+  input_schema: {
+    type: "object",
+    properties: {
+      repo: {
+        type: "string",
+        description: "Short repo name",
+      },
+      command: {
+        type: "string",
+        enum: ["list", "add", "remove"],
+        description: "Operation to perform",
+      },
+      remote: {
+        type: "string",
+        description:
+          "Remote name (e.g. origin, upstream) — required for add/remove",
+      },
+      url: {
+        type: "string",
+        description: "Remote URL — required for add",
+      },
+    },
+    required: ["repo", "command"],
+  },
+};
+
+export const git_config: ToolDefinition = {
+  name: "git_config",
+  description:
+    "Get or set a git config value for a repo (e.g. user.name, user.email). " +
+    "Persistent per-repo identity avoids specifying author on every commit.",
+  input_schema: {
+    type: "object",
+    properties: {
+      repo: {
+        type: "string",
+        description: "Short repo name",
+      },
+      command: {
+        type: "string",
+        enum: ["get", "set"],
+        description: "Operation: get or set a config value",
+      },
+      key: {
+        type: "string",
+        description:
+          "Config key path (e.g. user.name, user.email, core.autocrlf)",
+      },
+      value: {
+        type: "string",
+        description: "Value to set — required when command is set",
+      },
+    },
+    required: ["repo", "command", "key"],
+  },
+};
+
+export const git_unstage: ToolDefinition = {
+  name: "git_unstage",
+  description:
+    "Remove one or more staged files from the index without touching the working tree. " +
+    "The inverse of git_add — use to undo accidental staging.",
+  input_schema: {
+    type: "object",
+    properties: {
+      repo: {
+        type: "string",
+        description: "Short repo name",
+      },
+      filepath: {
+        anyOf: [
+          { type: "string" },
+          { type: "array", items: { type: "string" } },
+        ],
+        description:
+          "File path or array of file paths to unstage (relative to repo root)",
+      },
+    },
+    required: ["repo", "filepath"],
   },
 };

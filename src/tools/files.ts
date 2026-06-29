@@ -155,3 +155,59 @@ export const list_files: ToolDefinition = {
     },
   },
 };
+
+export const search_files: ToolDefinition = {
+  name: "search_files",
+  description:
+    "Search for a pattern (regex or exact text) in files across the workspace. " +
+    "Useful for finding code references, function definitions, or specific content " +
+    "without needing to rely on a shell environment.",
+  input_schema: {
+    type: "object",
+    properties: {
+      pattern: {
+        type: "string",
+        description: "The text or regular expression to search for.",
+      },
+      path: {
+        type: "string",
+        description:
+          "Optional directory path to restrict the search to (e.g. 'src/'). Defaults to workspace root.",
+      },
+      file_glob: {
+        type: "string",
+        description:
+          "Optional simple glob to filter files (e.g. '*.ts'). Supports * as wildcard.",
+      },
+      is_regex: {
+        type: "boolean",
+        description:
+          "Set to true to parse the pattern as a regular expression.",
+      },
+    },
+    required: ["pattern"],
+  },
+};
+
+export const diff_files: ToolDefinition = {
+  name: "diff_files",
+  description:
+    "Compare two files in the workspace and output the differences. " +
+    "Useful for comparing generated code, checking before patching, or finding changes outside of git repositories.",
+  input_schema: {
+    type: "object",
+    properties: {
+      path_a: {
+        type: "string",
+        description:
+          "Path to the first file relative to the group workspace root.",
+      },
+      path_b: {
+        type: "string",
+        description:
+          "Path to the second file relative to the group workspace root.",
+      },
+    },
+    required: ["path_a", "path_b"],
+  },
+};

@@ -562,6 +562,19 @@ export class ShadowClaw extends ShadowClawElement {
       },
     );
 
+    this.orchestrator.events.on(
+      "ask-user",
+      async (payload: {
+        id: string;
+        groupId: string;
+        question: string;
+        options?: string[];
+      }) => {
+        const response = await this.requestUserPrompt(payload);
+        this.orchestrator.answerUserPrompt(payload.id, response);
+      },
+    );
+
     // React to store changes using effect()
     this.setupEffects();
 
@@ -1003,6 +1016,80 @@ export class ShadowClaw extends ShadowClawElement {
       const onClose = () => {
         dialog.removeEventListener("close", onClose);
         resolve(dialog.returnValue === "confirm");
+      };
+
+      dialog.addEventListener("close", onClose);
+      dialog.showModal();
+    });
+  }
+
+  async requestUserPrompt(options: {
+    question: string;
+    options?: string[];
+  }): Promise<string | null> {
+    const root = this.shadowRoot;
+    if (!root) {
+      return null;
+    }
+
+    const dialog = root.querySelector(
+      ".app-prompt-dialog",
+    ) as HTMLDialogElement | null;
+    const messageEl = root.querySelector(
+      ".app-prompt-dialog__message",
+    ) as HTMLElement | null;
+    const inputAreaEl = root.querySelector(
+      ".app-prompt-dialog__input-area",
+    ) as HTMLElement | null;
+
+    if (!dialog || !messageEl || !inputAreaEl) {
+      return null;
+    }
+
+    if (dialog.open) {
+      dialog.close();
+    }
+
+    messageEl.textContent = options.question;
+    inputAreaEl.replaceChildren();
+
+    if (Array.isArray(options.options) && options.options.length > 0) {
+      const select = document.createElement("select");
+      select.className = "app-prompt-dialog__input";
+      select.name = "prompt-response";
+      for (const opt of options.options) {
+        const optionEl = document.createElement("option");
+        optionEl.value = opt;
+        optionEl.textContent = opt;
+        select.appendChild(optionEl);
+      }
+
+      inputAreaEl.appendChild(select);
+    } else {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "app-prompt-dialog__input";
+      input.name = "prompt-response";
+      input.placeholder = "Enter your response...";
+      input.autocomplete = "off";
+      inputAreaEl.appendChild(input);
+      // Optional: focus after modal is shown
+      setTimeout(() => input.focus(), 50);
+    }
+
+    dialog.returnValue = "";
+
+    return await new Promise<string | null>((resolve) => {
+      const onClose = () => {
+        dialog.removeEventListener("close", onClose);
+        if (dialog.returnValue === "submit") {
+          const inputEl = inputAreaEl.querySelector(
+            "[name='prompt-response']",
+          ) as HTMLInputElement | HTMLSelectElement;
+          resolve(inputEl ? inputEl.value : null);
+        } else {
+          resolve(null);
+        }
       };
 
       dialog.addEventListener("close", onClose);

@@ -274,5 +274,31 @@
         </div>
       </form>
     </shadow-claw-dialog>
+
+    <shadow-claw-dialog
+      dialog-class="app-dialog app-prompt-dialog"
+      aria-labelledby="appPromptTitle"
+    >
+      <form method="dialog" class="app-prompt-dialog__form">
+        <h2 id="appPromptTitle" class="app-prompt-dialog__title">
+          Agent Question
+        </h2>
+        <p class="app-prompt-dialog__message"></p>
+
+        <div class="app-prompt-dialog__input-area">
+          <!-- Will be populated dynamically with either a select or text input -->
+        </div>
+
+        <div class="app-prompt-dialog__actions">
+          <button
+            type="submit"
+            value="submit"
+            class="app-dialog__btn app-dialog__btn--confirm app-prompt-dialog__submit"
+          >
+            Submit
+          </button>
+        </div>
+      </form>
+    </shadow-claw-dialog>
   </div>
 </template>

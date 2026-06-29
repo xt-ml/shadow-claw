@@ -3,6 +3,8 @@ import { jest } from "@jest/globals";
 import {
   isLiteRtLmSupported,
   loadLiteRtModelStream,
+  parseModelSpecificToolCall,
+  parseLiteRtStructured,
 } from "./litert-lm-provider.js";
 
 // jsdom does not implement Blob fully, so we mock it for the tests
@@ -502,5 +504,114 @@ describe("LiteRT-LM Provider", () => {
         ),
       ).rejects.toThrow("Aborted");
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseModelSpecificToolCall
+// ---------------------------------------------------------------------------
+
+describe("parseModelSpecificToolCall", () => {
+  it("parses a Gemma 4 native tool call with a JSON-like arg block", () => {
+    const raw =
+      '<|tool_call>call:web_search{queries:["blueberries latest"]}<tool_call|>';
+    const result = parseModelSpecificToolCall(raw);
+    expect(result).not.toBeNull();
+    expect(result!.name).toBe("web_search");
+    expect(result!.input.queries[0]).toBe("blueberries latest");
+  });
+
+  it('parses a Gemma 4 native tool call with encoded quote tokens <|"|">', () => {
+    // Standard inline output
+    const rawInline =
+      '<|tool_call>call:web_search{queries:[<|"|>Blueberries latest details<|"|>]}<tool_call|>';
+    const resultInline = parseModelSpecificToolCall(rawInline);
+    expect(resultInline).not.toBeNull();
+    expect(resultInline!.name).toBe("web_search");
+    expect(resultInline!.input.queries[0]).toBe("Blueberries latest details");
+
+    // Real-world variant: The model frequently injects a newline before the closing tag
+    const rawWithNewline =
+      '<|tool_call>call:web_search{queries:[<|"|>Blueberries latest details<|"|>]}\n<tool_call|>';
+    const resultWithNewline = parseModelSpecificToolCall(rawWithNewline);
+    expect(resultWithNewline).not.toBeNull();
+    expect(resultWithNewline!.input.queries[0]).toBe(
+      "Blueberries latest details",
+    );
+  });
+
+  it("parses without closing sentinel (model cut off early)", () => {
+    const raw = '<|tool_call>call:web_search{queries:[<|"|>blueberries<|"|>]}';
+    const result = parseModelSpecificToolCall(raw);
+    expect(result).not.toBeNull();
+    expect(result!.name).toBe("web_search");
+  });
+
+  it("returns null for plain text with no tool call", () => {
+    expect(parseModelSpecificToolCall("Hello, how can I help you?")).toBeNull();
+  });
+
+  it("returns null for empty string", () => {
+    expect(parseModelSpecificToolCall("")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// parseLiteRtStructured
+// ---------------------------------------------------------------------------
+
+describe("parseLiteRtStructured", () => {
+  it("parses a JSON tool_use envelope (primary path)", () => {
+    const raw = JSON.stringify({
+      type: "tool_use",
+      tool_calls: [{ name: "web_search", input: { queries: ["test"] } }],
+    });
+    const result = parseLiteRtStructured(raw);
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("tool_use");
+    expect(result!.tool_calls![0].name).toBe("web_search");
+  });
+
+  it("parses a JSON response envelope (primary path)", () => {
+    const raw = JSON.stringify({ type: "response", response: "Hello world" });
+    const result = parseLiteRtStructured(raw);
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("response");
+    expect(result!.response).toBe("Hello world");
+  });
+
+  it("falls back to Gemma 4 native format when JSON parse fails", () => {
+    const raw =
+      '<|tool_call>call:web_search{queries:[<|"|>test<|"|>]}<tool_call|>';
+    const result = parseLiteRtStructured(raw);
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("tool_use");
+    expect(result!.tool_calls![0].name).toBe("web_search");
+  });
+
+  it("returns null for plain text that is neither JSON nor a native tool call", () => {
+    const result = parseLiteRtStructured("Sure, here are the details...");
+    expect(result).toBeNull();
+  });
+
+  it("extracts JSON embedded inside surrounding prose", () => {
+    const raw =
+      'Here is my answer: {"type":"response","response":"blueberries are tasty"}';
+    const result = parseLiteRtStructured(raw);
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("response");
+    expect(result!.response).toBe("blueberries are tasty");
+  });
+
+  it("parses malformed JSON tool calls with missing braces and tools_calls typo", () => {
+    const raw =
+      '{"type": "tool_use", "tools_calls": [{ "name": "web_search", "input": { "query": "what is the latest on blueberries" } ]}';
+    const result = parseLiteRtStructured(raw);
+    expect(result).not.toBeNull();
+    expect(result!.type).toBe("tool_use");
+    expect(result!.tool_calls![0].name).toBe("web_search");
+    expect(result!.tool_calls![0].input!.query).toBe(
+      "what is the latest on blueberries",
+    );
   });
 });

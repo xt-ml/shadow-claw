@@ -2988,6 +2988,7 @@ export class Orchestrator {
           },
           controller.signal,
           effectiveModel,
+          activeTools,
         );
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {

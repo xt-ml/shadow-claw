@@ -294,10 +294,9 @@ async function ensureRemoteMcpSession(
     throw toError(response, payload);
   }
 
-  const sessionId = getHeader(response, "mcp-session-id") || "";
-  if (!sessionId) {
-    throw new Error("Remote MCP initialize response missing mcp-session-id");
-  }
+  const sessionId =
+    getHeader(response, "mcp-session-id") ||
+    `local-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   const session: RemoteMcpSession = {
     sessionId,

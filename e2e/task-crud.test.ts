@@ -66,7 +66,9 @@ test.describe("Task CRUD", () => {
     await taskList.locator(".tasks__delete-btn").first().click();
 
     // Confirm using the app shell dialog.
-    const confirmDialog = tasks.app.root.locator(".app-dialog");
+    const confirmDialog = tasks.app.root.locator(
+      ".app-dialog:not(.app-prompt-dialog)",
+    );
     await expect(confirmDialog).toBeVisible({ timeout: 5000 });
     await confirmDialog.locator(".app-dialog__btn--confirm").click();
 
@@ -100,7 +102,9 @@ test.describe("Task CRUD", () => {
 
     await taskList.locator(".tasks__delete-btn").first().click();
 
-    const confirmDialog = tasks.app.root.locator(".app-dialog");
+    const confirmDialog = tasks.app.root.locator(
+      ".app-dialog:not(.app-prompt-dialog)",
+    );
     await expect(confirmDialog).toBeVisible({ timeout: 5000 });
     await confirmDialog.locator(".app-dialog__btn--cancel").click();
 

@@ -1,16 +1,15 @@
 /**
  * ShadowClaw — Isomorphic-git browser operations
  *
- * Uses LightningFS as the filesystem backend (separate "/git" namespace).
- * Repos are stored at /git/<repo-name>/.
+ * Uses native OPFS handles as the filesystem backend.
+ * Repos are stored under `repos/<repo-name>/` relative to the filesystem root.
  *
- * Dependencies are loaded lazily via dynamic import() using full CDN URLs
- * so this module works inside Web Workers (which lack the page importmap).
+ * Provides a minimal `fs.promises`-compatible adapter so isomorphic-git
+ * can operate fully on OPFS without any intermediate in-memory layer.
  */
 
 import { DEFAULT_DEV_HOST, DEFAULT_DEV_PORT } from "../config.js";
 
-import LightningFS from "@isomorphic-git/lightning-fs";
 import git from "isomorphic-git";
 import http from "isomorphic-git/http/web";
 import { Buffer } from "buffer";
@@ -25,8 +24,268 @@ let _fs: any = null;
 let _pfs: any = null;
 let _initPromise: Promise<void> | null = null;
 
-const GIT_NAMESPACE = "shadowclaw-git";
-const GIT_ROOT = "/git";
+// ---------------------------------------------------------------------------
+// OPFS path resolver helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a posix-style path string into a FileSystemHandle relative to
+ * a given root DirectoryHandle, optionally creating missing directories.
+ *
+ * Returns a FileSystemFileHandle for leaf paths that look like files (i.e.
+ * the last segment has a "." in it or `forceFile` is true), and a
+ * FileSystemDirectoryHandle otherwise.
+ */
+async function resolvePathToHandle(
+  root: FileSystemDirectoryHandle,
+  path: string,
+  opts: { create?: boolean; forceFile?: boolean } = {},
+): Promise<FileSystemHandle> {
+  const segments = path.replace(/^\//, "").split("/").filter(Boolean);
+  if (segments.length === 0) {
+    return root;
+  }
+
+  let current: FileSystemDirectoryHandle = root;
+  for (let i = 0; i < segments.length - 1; i++) {
+    current = await current.getDirectoryHandle(segments[i], {
+      create: opts.create ?? false,
+    });
+  }
+
+  const last = segments[segments.length - 1];
+
+  // Treat as file when the caller says so, or when there's an extension.
+  if (opts.forceFile || last.includes(".")) {
+    try {
+      return await current.getFileHandle(last, {
+        create: opts.create ?? false,
+      });
+    } catch {
+      // Fall through and try as directory.
+    }
+  }
+
+  // Try directory first.
+  try {
+    return await current.getDirectoryHandle(last, {
+      create: opts.create ?? false,
+    });
+  } catch {
+    // If that failed, try as file (e.g. `.git` config file).
+
+    return await current.getFileHandle(last, { create: opts.create ?? false });
+  }
+}
+
+async function resolveDirHandle(
+  root: FileSystemDirectoryHandle,
+  path: string,
+  opts: { create?: boolean } = {},
+): Promise<FileSystemDirectoryHandle> {
+  const segments = path.replace(/^\//, "").split("/").filter(Boolean);
+  let current: FileSystemDirectoryHandle = root;
+  for (const seg of segments) {
+    current = await current.getDirectoryHandle(seg, {
+      create: opts.create ?? false,
+    });
+  }
+
+  return current;
+}
+
+async function resolveFileHandle(
+  root: FileSystemDirectoryHandle,
+  path: string,
+  opts: { create?: boolean } = {},
+): Promise<FileSystemFileHandle> {
+  const segments = path.replace(/^\//, "").split("/").filter(Boolean);
+  if (segments.length === 0) {
+    throw new Error(`Cannot resolve empty path as file`);
+  }
+
+  let current: FileSystemDirectoryHandle = root;
+  for (let i = 0; i < segments.length - 1; i++) {
+    current = await current.getDirectoryHandle(segments[i], {
+      create: opts.create ?? false,
+    });
+  }
+
+  return current.getFileHandle(segments[segments.length - 1], {
+    create: opts.create ?? false,
+  });
+}
+
+/**
+ * Return [parentDirHandle, leafName] for a given path.
+ */
+async function resolveParent(
+  root: FileSystemDirectoryHandle,
+  path: string,
+): Promise<[FileSystemDirectoryHandle, string]> {
+  const segments = path.replace(/^\//, "").split("/").filter(Boolean);
+  if (segments.length === 0) {
+    throw new Error(`Cannot get parent of root`);
+  }
+
+  const name = segments[segments.length - 1];
+  let parent: FileSystemDirectoryHandle = root;
+  for (let i = 0; i < segments.length - 1; i++) {
+    parent = await parent.getDirectoryHandle(segments[i], { create: false });
+  }
+
+  return [parent, name];
+}
+
+// ---------------------------------------------------------------------------
+// Native OPFS fs.promises adapter for isomorphic-git
+// ---------------------------------------------------------------------------
+
+export function makeOpfsFs(root: FileSystemDirectoryHandle) {
+  const promises = {
+    async readFile(
+      path: string,
+      opts?: BufferEncoding | { encoding?: BufferEncoding },
+    ): Promise<Uint8Array | string> {
+      const fh = await resolveFileHandle(root, path);
+      const file = await fh.getFile();
+      const buf = await file.arrayBuffer();
+      const encoding =
+        typeof opts === "string" ? opts : (opts as any)?.encoding;
+      if (encoding === "utf8" || encoding === "utf-8") {
+        return new TextDecoder().decode(buf);
+      }
+
+      return new Uint8Array(buf);
+    },
+
+    async writeFile(
+      path: string,
+      data: Uint8Array | string,
+      _opts?: BufferEncoding | { encoding?: BufferEncoding },
+    ): Promise<void> {
+      const fh = await resolveFileHandle(root, path, { create: true });
+      const writable = await (fh as any).createWritable();
+      if (typeof data === "string") {
+        data = new TextEncoder().encode(data);
+      }
+
+      await writable.write(data);
+      await writable.close();
+    },
+
+    async mkdir(path: string, _opts?: any): Promise<void> {
+      await resolveDirHandle(root, path, { create: true });
+    },
+
+    async rmdir(path: string, _opts?: any): Promise<void> {
+      const [parent, name] = await resolveParent(root, path);
+      await parent.removeEntry(name, { recursive: true });
+    },
+
+    async readdir(path: string): Promise<string[]> {
+      const dh = await resolveDirHandle(root, path);
+      const names: string[] = [];
+      for await (const [name] of (dh as any).entries()) {
+        names.push(name);
+      }
+
+      return names;
+    },
+
+    async stat(path: string): Promise<{
+      isDirectory(): boolean;
+      isFile(): boolean;
+      size: number;
+      mtimeMs: number;
+      mode: number;
+      ino: number;
+      dev: number;
+      nlink: number;
+      uid: number;
+      gid: number;
+      ctime: Date;
+      mtime: Date;
+    }> {
+      let handle: FileSystemHandle;
+      try {
+        handle = await resolvePathToHandle(root, path);
+      } catch {
+        const err: any = new Error(
+          `ENOENT: no such file or directory, stat '${path}'`,
+        );
+        err.code = "ENOENT";
+
+        throw err;
+      }
+
+      if (handle.kind === "directory") {
+        const now = new Date();
+
+        return {
+          isDirectory: () => true,
+          isFile: () => false,
+          size: 0,
+          mtimeMs: Date.now(),
+          mode: 0o40755,
+          ino: 0,
+          dev: 0,
+          nlink: 1,
+          uid: 0,
+          gid: 0,
+          ctime: now,
+          mtime: now,
+        };
+      } else {
+        const file = await (handle as FileSystemFileHandle).getFile();
+        const mtime = new Date(file.lastModified);
+
+        return {
+          isDirectory: () => false,
+          isFile: () => true,
+          size: file.size,
+          mtimeMs: file.lastModified,
+          mode: 0o100644,
+          ino: 0,
+          dev: 0,
+          nlink: 1,
+          uid: 0,
+          gid: 0,
+          ctime: mtime,
+          mtime,
+        };
+      }
+    },
+
+    async lstat(path: string) {
+      // OPFS has no symlinks; lstat == stat.
+
+      return promises.stat(path);
+    },
+
+    async unlink(path: string): Promise<void> {
+      const [parent, name] = await resolveParent(root, path);
+      await parent.removeEntry(name);
+    },
+
+    async symlink(_target: string, _path: string): Promise<void> {
+      // OPFS does not support symlinks; isomorphic-git rarely needs this.
+
+      throw new Error("OPFS does not support symlinks");
+    },
+
+    async readlink(path: string): Promise<string> {
+      // Fallback: read the file content as a symlink target.
+      const data = await promises.readFile(path, "utf8");
+
+      return data as string;
+    },
+  };
+
+  return { promises };
+}
+
+const REPOS_ROOT = "repos";
 const PUBLIC_CORS_PROXY = "https://www.cors-anywhere.com";
 const DEFAULT_DEPTH = 20;
 
@@ -59,9 +318,9 @@ export function getProxyUrl(
 }
 
 /**
- * Lazily load all git dependencies and initialise LightningFS.
+ * Lazily initialise the native OPFS filesystem adapter and isomorphic-git.
  * Safe to call multiple times — idempotent. Returns cached refs after
- * the first successful load.
+ * the first successful call.
  */
 export async function initGitFs(): Promise<{
   git: any;
@@ -75,7 +334,10 @@ export async function initGitFs(): Promise<{
       _http = http;
 
       if (!_fs) {
-        _fs = new LightningFS(GIT_NAMESPACE);
+        // Obtain the OPFS root and use it directly. Workspace-scoped git
+        // operations are routed through groupRoot when available.
+        const opfsRoot = await navigator.storage.getDirectory();
+        _fs = makeOpfsFs(opfsRoot);
         _pfs = _fs.promises;
       }
     })();
@@ -84,6 +346,38 @@ export async function initGitFs(): Promise<{
   await _initPromise;
 
   return { git: _git, http: _http, fs: _fs, pfs: _pfs };
+}
+
+/**
+ * Resolve git modules + an OPFS fs adapter, optionally scoped to a workspace
+ * group directory. When `groupRoot` is supplied the repos are stored at
+ * `repos/<name>/` inside that directory, making them visible to workspace
+ * tools such as `read_file` and the Files panel.
+ */
+export async function initGitContext(
+  groupRoot?: FileSystemDirectoryHandle,
+): Promise<{
+  git: any;
+  http: any;
+  fs: any;
+  pfs: any;
+  repoDirFn: (repo: string) => string;
+}> {
+  // Always initialise so _git / _http modules are cached.
+  const base = await initGitFs();
+  if (groupRoot) {
+    const customFs = makeOpfsFs(groupRoot);
+
+    return {
+      git: base.git,
+      http: base.http,
+      fs: customFs,
+      pfs: customFs.promises,
+      repoDirFn: (repo: string) => `repos/${repo}`,
+    };
+  }
+
+  return { ...base, repoDirFn: repoDir };
 }
 
 /**
@@ -99,14 +393,17 @@ export function repoNameFromUrl(url: string): string {
 }
 
 /**
- * Build the LightningFS dir path for a repo identifier.
+ * Build the OPFS-relative dir path for a repo identifier.
+ * The OPFS root is already scoped to the git namespace, so paths
+ * are relative to that root (e.g. "/git/my-repo" maps to "git/my-repo"
+ * inside the OPFS namespace directory).
  */
 export function repoDir(repo: string): string {
-  return `${GIT_ROOT}/${repo}`;
+  return `${REPOS_ROOT}/${repo}`;
 }
 
 /**
- * Ensure a directory exists in LightningFS (mkdir -p).
+ * Ensure a directory exists in the OPFS adapter (mkdir -p).
  */
 export async function ensureDir(pfs: any, dir: string): Promise<void> {
   try {
@@ -174,7 +471,10 @@ export function buildAuthCallbacks({
 }
 
 /**
- * Clone a repository into LightningFS.
+ * Clone a repository into OPFS or workspace-scoped git storage.
+ *
+ * When a `groupRoot` handle is provided, the repo is cloned under that
+ * workspace root, making it visible to other workspace file tools.
  */
 export async function gitClone({
   url,
@@ -185,6 +485,7 @@ export async function gitClone({
   token,
   username,
   password,
+  groupRoot,
 }: {
   url: string;
   branch?: string;
@@ -194,16 +495,17 @@ export async function gitClone({
   token?: string;
   username?: string;
   password?: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, http, fs, pfs } = await initGitFs();
+  const { git, http, fs, pfs, repoDirFn } = await initGitContext(groupRoot);
   const repo = name || repoNameFromUrl(url);
-  const dir = repoDir(repo);
+  const dir = repoDirFn(repo);
 
   if (!corsProxy) {
     corsProxy = getProxyUrl("local");
   }
 
-  await ensureDir(pfs, GIT_ROOT);
+  await ensureDir(pfs, REPOS_ROOT);
   await ensureDir(pfs, dir);
 
   const auth = buildAuthCallbacks({ token, username, password });
@@ -245,7 +547,7 @@ export async function gitClone({
 
       await git.fetch(fetchOpts);
     } catch (fetchErr) {
-      // Stale LightningFS state — wipe and retry clone once
+      // Stale OPFS state — wipe and retry clone once
       try {
         await rmdirRecursive(pfs, dir);
         await ensureDir(pfs, dir);
@@ -282,12 +584,14 @@ export async function gitClone({
 export async function gitCheckout({
   repo,
   ref,
+  groupRoot,
 }: {
   repo: string;
   ref: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   await git.checkout({ fs, dir, ref, force: true });
 
@@ -302,14 +606,16 @@ export async function gitBranch({
   name,
   checkout = false,
   startPoint,
+  groupRoot,
 }: {
   repo: string;
   name: string;
   checkout?: boolean;
   startPoint?: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const branchOpts: { fs: any; dir: string; ref: string; object?: string } = {
     fs,
@@ -336,9 +642,15 @@ export async function gitBranch({
  *
  * Returns a human-readable status string.
  */
-export async function gitStatus({ repo }: { repo: string }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+export async function gitStatus({
+  repo,
+  groupRoot,
+}: {
+  repo: string;
+  groupRoot?: FileSystemDirectoryHandle;
+}): Promise<string> {
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const matrix = await git.statusMatrix({ fs, dir });
 
@@ -390,13 +702,15 @@ export async function gitLog({
   repo,
   ref,
   depth = 10,
+  groupRoot,
 }: {
   repo: string;
   ref?: string;
   depth?: number;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const logOpts: any = { fs, dir, depth };
   if (ref) {
@@ -428,13 +742,15 @@ export async function gitDiff({
   repo,
   ref1,
   ref2,
+  groupRoot,
 }: {
   repo: string;
   ref1?: string;
   ref2?: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
   const pfs = fs.promises;
 
   // Simple approach: compare statusMatrix-style for working tree changes
@@ -656,12 +972,14 @@ function simpleDiff(
 export async function getRemoteUrl({
   repo,
   remote = "origin",
+  groupRoot,
 }: {
   repo: string;
   remote?: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string | undefined> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   try {
     const remotes = await git.listRemotes({ fs, dir });
@@ -681,12 +999,14 @@ export async function getRemoteUrl({
 export async function gitListBranches({
   repo,
   remote = false,
+  groupRoot,
 }: {
   repo: string;
   remote?: boolean;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const branches = await git.listBranches({
     fs,
@@ -715,11 +1035,13 @@ export async function gitListBranches({
  */
 export async function gitCurrentBranch({
   repo,
+  groupRoot,
 }: {
   repo: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const branch = await git.currentBranch({ fs, dir });
 
@@ -734,14 +1056,16 @@ export async function gitCommit({
   message,
   authorName = "ShadowClaw",
   authorEmail = "agent@example.com",
+  groupRoot,
 }: {
   repo: string;
   message: string;
   authorName?: string;
   authorEmail?: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   // Stage all changes
   const matrix = await git.statusMatrix({ fs, dir });
@@ -771,12 +1095,14 @@ export async function gitCommit({
 export async function gitAdd({
   repo,
   filepath,
+  groupRoot,
 }: {
   repo: string;
   filepath: string | string[];
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   if (Array.isArray(filepath)) {
     for (const f of filepath) {
@@ -802,6 +1128,7 @@ export async function gitPull({
   password,
   remote = "origin",
   corsProxy,
+  groupRoot,
 }: {
   repo: string;
   branch?: string;
@@ -812,9 +1139,10 @@ export async function gitPull({
   password?: string;
   remote?: string;
   corsProxy?: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, http, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, http, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const ref = branch || (await git.currentBranch({ fs, dir }));
 
@@ -855,6 +1183,7 @@ export async function gitPush({
   corsProxy,
   force = false,
   tags = false,
+  groupRoot,
 }: {
   repo: string;
   branch?: string;
@@ -866,9 +1195,10 @@ export async function gitPush({
   corsProxy?: string;
   force?: boolean;
   tags?: boolean;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, http, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, http, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const ref = branch || (await git.currentBranch({ fs, dir }));
 
@@ -909,14 +1239,16 @@ export async function gitMerge({
   theirs,
   authorName = "ShadowClaw",
   authorEmail = "agent@example.com",
+  groupRoot,
 }: {
   repo: string;
   theirs: string;
   authorName?: string;
   authorEmail?: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const currentBranch = await git.currentBranch({ fs, dir });
   if (!currentBranch) {
@@ -951,12 +1283,14 @@ export async function gitMerge({
 export async function gitReset({
   repo,
   ref,
+  groupRoot,
 }: {
   repo: string;
   ref: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs, pfs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, pfs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const currentBranch = await git.currentBranch({ fs, dir });
   if (!currentBranch) {
@@ -978,49 +1312,50 @@ export async function gitReset({
 }
 
 /**
- * List all cloned repos in the /git directory.
+ * List all cloned repos in the repos directory.
  */
-export async function gitListRepos(): Promise<string> {
-  const { pfs } = await initGitFs();
+export async function gitListRepos({
+  groupRoot,
+}: { groupRoot?: FileSystemDirectoryHandle } = {}): Promise<string> {
+  const { pfs } = await initGitContext(groupRoot);
+  const listDir = REPOS_ROOT;
 
   try {
-    const entries = await pfs.readdir(GIT_ROOT);
-    if (entries.length === 0) {
+    const entries = await pfs.readdir(listDir);
+    const repos: string[] = [];
+
+    for (const entry of entries) {
+      const gitDir = `${listDir}/${entry}/.git`;
+      try {
+        const stat = await pfs.stat(gitDir);
+        if (stat.isDirectory()) {
+          repos.push(entry);
+        }
+      } catch {
+        // Skip entries that are not git repositories.
+      }
+    }
+
+    if (repos.length === 0) {
       return "No repos cloned.";
     }
 
-    return entries.join("\n");
+    return repos.join("\n");
   } catch {
     return "No repos cloned.";
   }
 }
 
 /**
- * Recursively remove a directory tree from LightningFS.
- * LightningFS rmdir only works on empty dirs, so we must walk.
- */
-export async function rmdirRecursive(pfs: any, dirPath: string): Promise<void> {
-  const entries = await pfs.readdir(dirPath);
-  for (const entry of entries) {
-    const full = `${dirPath}/${entry}`;
-    const st = await pfs.stat(full);
-    if (st.isDirectory()) {
-      await rmdirRecursive(pfs, full);
-    } else {
-      await pfs.unlink(full);
-    }
-  }
-
-  await pfs.rmdir(dirPath);
-}
-
-/**
- * Delete a cloned repo from LightningFS, wiping all git data.
+ * Delete only the `.git` metadata directory for a repo, leaving the working
+ * tree files intact in `repos/<repo>`.
  */
 export async function gitDeleteRepo({
   repo,
+  groupRoot,
 }: {
   repo: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
   if (!repo) {
     throw new Error("repo name is required");
@@ -1030,18 +1365,45 @@ export async function gitDeleteRepo({
     throw new Error("Invalid repo name");
   }
 
-  const { pfs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { pfs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
+  const gitDir = `${dir}/.git`;
 
   try {
-    await pfs.readdir(dir);
+    await pfs.readdir(gitDir);
   } catch {
-    return `Repo "${repo}" not found in LightningFS.`;
+    return `Repo "${repo}" not found in git storage.`;
   }
 
-  await rmdirRecursive(pfs, dir);
+  await rmdirRecursive(pfs, gitDir);
 
-  return `Deleted "${repo}" from LightningFS git storage.`;
+  return `Deleted git metadata for "${repo}" from OPFS git storage. Working tree files remain in repos/${repo}.`;
+}
+
+/**
+ * Recursively remove a directory tree.
+ * OPFS natively supports `{ recursive: true }` on `removeEntry`, so
+ * we simply delegate to `pfs.rmdir` which uses that flag internally.
+ * The manual walk fallback handles any adapter that doesn't support it.
+ */
+export async function rmdirRecursive(pfs: any, dirPath: string): Promise<void> {
+  try {
+    await pfs.rmdir(dirPath);
+  } catch {
+    // Fallback: manual recursive walk for adapters without recursive rmdir.
+    const entries = await pfs.readdir(dirPath);
+    for (const entry of entries) {
+      const full = `${dirPath}/${entry}`;
+      const st = await pfs.stat(full);
+      if (st.isDirectory()) {
+        await rmdirRecursive(pfs, full);
+      } else {
+        await pfs.unlink(full);
+      }
+    }
+
+    await pfs.rmdir(dirPath);
+  }
 }
 
 /**
@@ -1055,6 +1417,7 @@ export async function gitFetch({
   password,
   remote = "origin",
   corsProxy,
+  groupRoot,
 }: {
   repo: string;
   branch?: string;
@@ -1063,9 +1426,10 @@ export async function gitFetch({
   password?: string;
   remote?: string;
   corsProxy?: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, http, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, http, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const auth = buildAuthCallbacks({ token, username, password });
 
@@ -1096,13 +1460,15 @@ export async function gitReadFileAtRef({
   repo,
   ref,
   filepath,
+  groupRoot,
 }: {
   repo: string;
   ref: string;
   filepath: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const oid = await git.resolveRef({ fs, dir, ref });
   const { blob } = await git.readBlob({ fs, dir, oid, filepath });
@@ -1116,12 +1482,14 @@ export async function gitReadFileAtRef({
 export async function gitShow({
   repo,
   ref,
+  groupRoot,
 }: {
   repo: string;
   ref: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const oid = await git.resolveRef({ fs, dir, ref });
   const commit = await git.readCommit({ fs, dir, oid });
@@ -1151,12 +1519,14 @@ export async function gitShow({
 export async function gitDeleteBranch({
   repo,
   name,
+  groupRoot,
 }: {
   repo: string;
   name: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   await git.deleteBranch({ fs, dir, ref: name });
 
@@ -1166,11 +1536,17 @@ export async function gitDeleteBranch({
 /**
  * Initialize a new git repository locally.
  */
-export async function gitInit({ repo }: { repo: string }): Promise<string> {
-  const { git, fs, pfs } = await initGitFs();
-  const dir = repoDir(repo);
+export async function gitInit({
+  repo,
+  groupRoot,
+}: {
+  repo: string;
+  groupRoot?: FileSystemDirectoryHandle;
+}): Promise<string> {
+  const { git, fs, pfs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
-  await ensureDir(pfs, GIT_ROOT);
+  await ensureDir(pfs, REPOS_ROOT);
   await ensureDir(pfs, dir);
 
   await git.init({ fs, dir, defaultBranch: "main" });
@@ -1187,15 +1563,17 @@ export async function gitTag({
   message,
   authorName = "ShadowClaw",
   authorEmail = "agent@example.com",
+  groupRoot,
 }: {
   repo: string;
   tag: string;
   message?: string;
   authorName?: string;
   authorEmail?: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   if (message) {
     await git.annotatedTag({
@@ -1221,9 +1599,15 @@ export async function gitTag({
 /**
  * List all tags.
  */
-export async function gitListTags({ repo }: { repo: string }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+export async function gitListTags({
+  repo,
+  groupRoot,
+}: {
+  repo: string;
+  groupRoot?: FileSystemDirectoryHandle;
+}): Promise<string> {
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   const tags = await git.listTags({ fs, dir });
 
@@ -1242,14 +1626,16 @@ export async function gitRemote({
   command,
   remote,
   url,
+  groupRoot,
 }: {
   repo: string;
   command: "add" | "remove" | "list";
   remote?: string;
   url?: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   if (command === "list") {
     const remotes = await git.listRemotes({ fs, dir });
@@ -1287,14 +1673,16 @@ export async function gitConfig({
   command,
   key,
   value,
+  groupRoot,
 }: {
   repo: string;
   command: "get" | "set";
   key: string;
   value?: string;
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   if (command === "get") {
     const val = await git.getConfig({ fs, dir, path: key });
@@ -1319,12 +1707,14 @@ export async function gitConfig({
 export async function gitUnstage({
   repo,
   filepath,
+  groupRoot,
 }: {
   repo: string;
   filepath: string | string[];
+  groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
-  const { git, fs } = await initGitFs();
-  const dir = repoDir(repo);
+  const { git, fs, repoDirFn } = await initGitContext(groupRoot);
+  const dir = repoDirFn(repo);
 
   if (Array.isArray(filepath)) {
     for (const f of filepath) {

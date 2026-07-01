@@ -50,7 +50,7 @@ import {
   gitConfig,
   gitUnstage,
 } from "../git/git.js";
-import { syncLfsToOpfs, syncOpfsToLfs } from "../git/sync.js";
+import { getGroupDir } from "../storage/getGroupDir.js";
 import { resolveGitCredentials, buildAuthHeaders } from "../git/credentials.js";
 import { resolveServiceCredentials } from "../accounts/service-accounts.js";
 import { formatShellOutput } from "./formatShellOutput.js";
@@ -865,7 +865,6 @@ export async function executeTool(
 
       // ── Git tools (isomorphic-git) ───────────────────────────────
       case "git_clone":
-      case "git_sync":
       case "git_checkout":
       case "git_branch":
       case "git_status":
@@ -919,8 +918,7 @@ export async function executeTool(
           gitConfig,
           gitUnstage,
           getRemoteUrl,
-          syncLfsToOpfs,
-          syncOpfsToLfs,
+          getGroupDir,
           readGroupFile,
           configKeys: {
             GIT_CORS_PROXY: CONFIG_KEYS.GIT_CORS_PROXY,

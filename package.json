@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.11.7",
+  "version": "1.12.0",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -50,7 +50,6 @@
     "@azure/core-auth": "^1.10.1",
     "@google/genai": "^2.0.1",
     "@huggingface/transformers": "^4.2.0",
-    "@isomorphic-git/lightning-fs": "^4.6.2",
     "@litert-lm/core": "^0.13.1",
     "@types/qrcode": "^1.5.6",
     "commander": "^14.0.3",

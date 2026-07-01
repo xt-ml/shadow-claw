@@ -58,7 +58,6 @@ import {
   git_reset,
   git_show,
   git_status,
-  git_sync,
   git_tag,
   git_unstage,
 } from "./git.js";
@@ -116,7 +115,6 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   git_reset,
   git_show,
   git_status,
-  git_sync,
   git_tag,
   git_unstage,
   javascript,

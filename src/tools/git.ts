@@ -3,9 +3,9 @@ import type { ToolDefinition } from "./types.js";
 export const git_clone: ToolDefinition = {
   name: "git_clone",
   description:
-    "Clone a git repository into browser-persistent storage (LightningFS). " +
-    "The cloned files are automatically synchronized to the OPFS workspace under " +
-    "repos/<repo-name> so you can interact with them. " +
+    "Clone a git repository into browser-persistent OPFS storage. " +
+    "Files are stored directly under repos/<repo-name>/ in the workspace and are " +
+    "immediately accessible to other git_* tools without any extra sync step. " +
     "Works with public and private repos (GitHub, GitLab, GitHub Enterprise, etc.). " +
     "If a Git PAT is configured in Settings, it is used automatically for authentication. " +
     "Uses a CORS proxy. Returns the short repo name used for subsequent git_* operations.",
@@ -16,6 +16,11 @@ export const git_clone: ToolDefinition = {
         type: "string",
         description: "Full HTTPS repo URL (e.g. https://github.com/user/repo)",
       },
+      name: {
+        type: "string",
+        description:
+          "Optional short repo name to use for the clone directory; defaults to the repository name parsed from the URL.",
+      },
       branch: {
         type: "string",
         description: "Branch to clone (default: default branch)",
@@ -23,11 +28,6 @@ export const git_clone: ToolDefinition = {
       depth: {
         type: "number",
         description: "Shallow clone depth (default: 20)",
-      },
-      include_git: {
-        type: "boolean",
-        description:
-          "If true, also syncs the internal .git folder to the workspace (default: false)",
       },
     },
     required: ["url"],
@@ -182,9 +182,9 @@ export const git_list_repos: ToolDefinition = {
 export const git_delete_repo: ToolDefinition = {
   name: "git_delete_repo",
   description:
-    "Delete a cloned git repository from browser storage (LightningFS). " +
+    "Delete the git metadata for a cloned repository while leaving the working tree files in place. " +
     "Use this to clean up corrupted or stale repos that fail to re-clone. " +
-    "Does NOT remove workspace files under repos/ — only the internal git database.",
+    "The repo directory remains under repos/<repo>, but the `.git/` metadata is removed.",
   input_schema: {
     type: "object",
     properties: {
@@ -368,32 +368,6 @@ export const git_reset: ToolDefinition = {
       },
     },
     required: ["repo", "ref"],
-  },
-};
-
-export const git_sync: ToolDefinition = {
-  name: "git_sync",
-  description:
-    "Manually synchronize files between the OPFS workspace and the private LightningFS git database.",
-  input_schema: {
-    type: "object",
-    properties: {
-      repo: {
-        type: "string",
-        description: "Short repo name",
-      },
-      direction: {
-        type: "string",
-        description:
-          "Direction to sync: 'push' (workspace to git db) or 'pull' (git db to workspace)",
-      },
-      include_git: {
-        type: "boolean",
-        description:
-          "If true, includes the hidden .git directory in the sync (default: false)",
-      },
-    },
-    required: ["repo", "direction"],
   },
 };
 

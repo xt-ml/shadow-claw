@@ -25,7 +25,7 @@ Detailed docs for each major subsystem.
 | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
 | [Shell Emulator](subsystems/shell.md)                                   | JS shell via `just-bash` AST evaluation, OPFS bridge, supported commands                                                |
 | [WebVM](subsystems/vm.md)                                               | v86 Alpine Linux, boot modes, exclusivity guard, terminal bridge, 9p sync                                               |
-| [Git Integration](subsystems/git.md)                                    | isomorphic-git, LightningFS ↔ OPFS sync, merge conflicts, credentials                                                   |
+| [Git Integration](subsystems/git.md)                                    | isomorphic-git on native filesystem handles, merge conflicts, credentials                                               |
 | [Channel System](subsystems/channels.md)                                | Channel registry, browser/Telegram/iMessage channels, router, multi-channel flow                                        |
 | [Remote MCP](subsystems/remote-mcp.md)                                  | External MCP servers, tool discovery, authentication, JSON-RPC protocol, OAuth reconnection                             |
 | [Accounts & Credentials](subsystems/accounts.md)                        | Service account management, credential storage, auth bridges                                                            |

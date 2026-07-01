@@ -24,7 +24,9 @@ interface GitToolDeps {
   gitLog: (input: any) => Promise<string>;
   gitDiff: (input: any) => Promise<string>;
   gitListBranches: (input: any) => Promise<string>;
-  gitListRepos: () => Promise<string>;
+  gitListRepos: (input: {
+    groupRoot?: FileSystemDirectoryHandle;
+  }) => Promise<string>;
   gitDeleteRepo: (input: any) => Promise<string>;
   gitCommit: (input: any) => Promise<string>;
   gitPull: (input: any) => Promise<string>;
@@ -41,26 +43,20 @@ interface GitToolDeps {
   gitRemote: (input: any) => Promise<string>;
   gitConfig: (input: any) => Promise<string>;
   gitUnstage: (input: any) => Promise<string>;
-  getRemoteUrl: (input: { repo: string; remote?: string }) => Promise<any>;
-  syncLfsToOpfs: (
-    db: ShadowClawDatabase,
-    groupId: string,
-    repo: string,
-    dir: string,
-    includeGit?: boolean,
-  ) => Promise<void>;
-  syncOpfsToLfs: (
-    db: ShadowClawDatabase,
-    groupId: string,
-    dir: string,
-    repo: string,
-    includeGit?: boolean,
-  ) => Promise<void>;
+  getRemoteUrl: (input: {
+    repo: string;
+    remote?: string;
+    groupRoot?: FileSystemDirectoryHandle;
+  }) => Promise<any>;
   readGroupFile: (
     db: ShadowClawDatabase,
     groupId: string,
     path: string,
   ) => Promise<string>;
+  getGroupDir: (
+    db: ShadowClawDatabase,
+    groupId: string,
+  ) => Promise<FileSystemDirectoryHandle>;
   configKeys: {
     GIT_CORS_PROXY: string;
     GIT_PROXY_URL: string;
@@ -174,6 +170,10 @@ export async function executeGitTool(
   groupId: string,
   deps: GitToolDeps,
 ): Promise<string> {
+  // Resolve the workspace group dir once — all git ops write here so repos
+  // are immediately visible to read_file / write_file / the Files panel.
+  const groupRoot = await deps.getGroupDir(db, groupId);
+
   switch (name) {
     case "git_clone": {
       const creds = await deps.resolveGitCredentials(db, input.url);
@@ -181,41 +181,25 @@ export async function executeGitTool(
 
       const repo = await deps.gitClone({
         url: input.url,
+        name: input.name,
         branch: input.branch,
         depth: input.depth,
         corsProxy,
         token: creds.token,
         username: creds.username,
         password: creds.password,
+        groupRoot,
       });
 
-      const includeGit = input.include_git === true;
-      await deps.syncLfsToOpfs(db, groupId, repo, `repos/${repo}`, includeGit);
-
-      return `Cloned ${input.url} as "${repo}". Files are available recursively at "repos/${repo}". Use repo="${repo}" for other git_ tools.`;
-    }
-
-    case "git_sync": {
-      const dir = `repos/${input.repo}`;
-      const includeGit = input.include_git === true;
-
-      if (input.direction === "push") {
-        await deps.syncOpfsToLfs(db, groupId, dir, input.repo, includeGit);
-
-        return `Synced workspace files in ${dir} to git clone (ready for commit/status).`;
-      }
-
-      await deps.syncLfsToOpfs(db, groupId, input.repo, dir, includeGit);
-
-      return `Synced git clone files to workspace ${dir} (overwriting local changes).`;
+      return `Cloned ${input.url} as "${repo}". Files are at "repos/${repo}/" in the workspace. Use repo="${repo}" for other git_* tools.`;
     }
 
     case "git_checkout": {
       const result = await deps.gitCheckout({
         repo: input.repo,
         ref: input.ref,
+        groupRoot,
       });
-      await deps.syncLfsToOpfs(db, groupId, input.repo, `repos/${input.repo}`);
 
       return result;
     }
@@ -226,50 +210,21 @@ export async function executeGitTool(
         name: input.name,
         checkout: input.checkout,
         startPoint: input.start_point,
+        groupRoot,
       });
-
-      if (input.checkout) {
-        await deps.syncLfsToOpfs(
-          db,
-          groupId,
-          input.repo,
-          `repos/${input.repo}`,
-        );
-      }
 
       return result;
     }
 
     case "git_status": {
-      try {
-        await deps.syncOpfsToLfs(
-          db,
-          groupId,
-          `repos/${input.repo}`,
-          input.repo,
-        );
-      } catch {
-        // Ignore if OPFS folder doesn't exist yet.
-      }
-
-      return deps.gitStatus({ repo: input.repo });
+      return deps.gitStatus({ repo: input.repo, groupRoot });
     }
 
     case "git_add": {
-      try {
-        await deps.syncOpfsToLfs(
-          db,
-          groupId,
-          `repos/${input.repo}`,
-          input.repo,
-        );
-      } catch {
-        // Ignore if OPFS folder doesn't exist yet.
-      }
-
       return deps.gitAdd({
         repo: input.repo,
         filepath: input.filepath,
+        groupRoot,
       });
     }
 
@@ -278,25 +233,16 @@ export async function executeGitTool(
         repo: input.repo,
         ref: input.ref,
         depth: input.depth,
+        groupRoot,
       });
     }
 
     case "git_diff": {
-      try {
-        await deps.syncOpfsToLfs(
-          db,
-          groupId,
-          `repos/${input.repo}`,
-          input.repo,
-        );
-      } catch {
-        // Ignore missing OPFS directory.
-      }
-
       return deps.gitDiff({
         repo: input.repo,
         ref1: input.ref1,
         ref2: input.ref2,
+        groupRoot,
       });
     }
 
@@ -304,30 +250,23 @@ export async function executeGitTool(
       return deps.gitListBranches({
         repo: input.repo,
         remote: input.remote,
+        groupRoot,
       });
     }
 
     case "git_list_repos": {
-      return deps.gitListRepos();
+      return deps.gitListRepos({ groupRoot });
     }
 
     case "git_delete_repo": {
-      return deps.gitDeleteRepo({ repo: input.repo });
+      return deps.gitDeleteRepo({ repo: input.repo, groupRoot });
     }
 
     case "git_commit": {
-      try {
-        await deps.syncOpfsToLfs(
-          db,
-          groupId,
-          `repos/${input.repo}`,
-          input.repo,
-        );
-      } catch {
-        return `Error: Could not sync from OPFS. Did you delete repos/${input.repo}?`;
-      }
-
-      const commitRemoteUrl = await deps.getRemoteUrl({ repo: input.repo });
+      const commitRemoteUrl = await deps.getRemoteUrl({
+        repo: input.repo,
+        groupRoot,
+      });
       const commitCreds = await deps.resolveGitCredentials(db, commitRemoteUrl);
 
       let authorName = input.author_name;
@@ -352,11 +291,15 @@ export async function executeGitTool(
         message: input.message,
         authorName,
         authorEmail,
+        groupRoot,
       });
     }
 
     case "git_pull": {
-      const remoteUrl = await deps.getRemoteUrl({ repo: input.repo });
+      const remoteUrl = await deps.getRemoteUrl({
+        repo: input.repo,
+        groupRoot,
+      });
       const creds = await deps.resolveGitCredentials(db, remoteUrl);
       const corsProxy = await resolveCorsProxy(db, deps);
 
@@ -386,11 +329,15 @@ export async function executeGitTool(
         username: creds.username,
         password: creds.password,
         corsProxy,
+        groupRoot,
       });
     }
 
     case "git_push": {
-      const pushRemoteUrl = await deps.getRemoteUrl({ repo: input.repo });
+      const pushRemoteUrl = await deps.getRemoteUrl({
+        repo: input.repo,
+        groupRoot,
+      });
       const creds = await deps.resolveGitCredentials(db, pushRemoteUrl);
 
       if (!creds.token && !creds.username) {
@@ -409,21 +356,11 @@ export async function executeGitTool(
         username: creds.username,
         password: creds.password,
         corsProxy,
+        groupRoot,
       });
     }
 
     case "git_merge": {
-      try {
-        await deps.syncOpfsToLfs(
-          db,
-          groupId,
-          `repos/${input.repo}`,
-          input.repo,
-        );
-      } catch {
-        // Ignore if OPFS folder doesn't exist yet.
-      }
-
       let authorName = input.author_name;
       let authorEmail = input.author_email;
 
@@ -454,15 +391,9 @@ export async function executeGitTool(
           theirs: input.theirs,
           authorName,
           authorEmail,
+          groupRoot,
         });
       } catch (mergeErr: any) {
-        await deps.syncLfsToOpfs(
-          db,
-          groupId,
-          input.repo,
-          `repos/${input.repo}`,
-        );
-
         const conflictPaths =
           mergeErr?.data?.filepaths ||
           extractConflictPaths(mergeErr?.message ?? String(mergeErr));
@@ -513,8 +444,6 @@ export async function executeGitTool(
         return `${header}\n${sections.join("\n\n")}\n${instructions}`;
       }
 
-      await deps.syncLfsToOpfs(db, groupId, input.repo, `repos/${input.repo}`);
-
       return mergeResult;
     }
 
@@ -522,15 +451,17 @@ export async function executeGitTool(
       const result = await deps.gitReset({
         repo: input.repo,
         ref: input.ref,
+        groupRoot,
       });
-
-      await deps.syncLfsToOpfs(db, groupId, input.repo, `repos/${input.repo}`);
 
       return result;
     }
 
     case "git_fetch": {
-      const fetchRemoteUrl = await deps.getRemoteUrl({ repo: input.repo });
+      const fetchRemoteUrl = await deps.getRemoteUrl({
+        repo: input.repo,
+        groupRoot,
+      });
       const creds = await deps.resolveGitCredentials(db, fetchRemoteUrl);
       const corsProxy = await resolveCorsProxy(db, deps);
 
@@ -542,6 +473,7 @@ export async function executeGitTool(
         username: creds.username,
         password: creds.password,
         corsProxy,
+        groupRoot,
       });
     }
 
@@ -550,6 +482,7 @@ export async function executeGitTool(
         repo: input.repo,
         ref: input.ref,
         filepath: input.filepath,
+        groupRoot,
       });
     }
 
@@ -557,6 +490,7 @@ export async function executeGitTool(
       return deps.gitShow({
         repo: input.repo,
         ref: input.ref || "HEAD",
+        groupRoot,
       });
     }
 
@@ -564,18 +498,21 @@ export async function executeGitTool(
       return deps.gitDeleteBranch({
         repo: input.repo,
         name: input.name,
+        groupRoot,
       });
     }
 
     case "git_init": {
-      const result = await deps.gitInit({ repo: input.repo });
-      await deps.syncLfsToOpfs(db, groupId, input.repo, `repos/${input.repo}`);
+      const result = await deps.gitInit({ repo: input.repo, groupRoot });
 
       return result;
     }
 
     case "git_tag": {
-      const tagRemoteUrl = await deps.getRemoteUrl({ repo: input.repo });
+      const tagRemoteUrl = await deps.getRemoteUrl({
+        repo: input.repo,
+        groupRoot,
+      });
       const tagCreds = await deps.resolveGitCredentials(db, tagRemoteUrl);
 
       let authorName = input.author_name;
@@ -601,6 +538,7 @@ export async function executeGitTool(
         message: input.message,
         authorName,
         authorEmail,
+        groupRoot,
       });
     }
 
@@ -610,6 +548,7 @@ export async function executeGitTool(
         command: input.command,
         remote: input.remote,
         url: input.url,
+        groupRoot,
       });
     }
 
@@ -619,28 +558,19 @@ export async function executeGitTool(
         command: input.command,
         key: input.key,
         value: input.value,
+        groupRoot,
       });
     }
 
     case "git_unstage": {
-      try {
-        await deps.syncOpfsToLfs(
-          db,
-          groupId,
-          `repos/${input.repo}`,
-          input.repo,
-        );
-      } catch {
-        // Ignore if OPFS folder doesn't exist yet.
-      }
-
       return deps.gitUnstage({
         repo: input.repo,
         filepath: input.filepath,
+        groupRoot,
       });
     }
 
     default:
-      return `Unknown git tool: ${name}`;
+      return `Unknown tool: ${name}`;
   }
 }

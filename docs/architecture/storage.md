@@ -38,7 +38,7 @@ Each conversation has an isolated workspace:
         └── workspace/
             ├── MEMORY.md           # Persistent agent memory (auto-loaded per invocation)
             ├── user-files/         # Files created by user or agent
-            └── repos/              # Git repos (auto-synced from LightningFS)
+            └── repos/              # Git repos (stored directly in OPFS git namespace)
                 └── my-repo/
                     ├── src/
                     └── ...

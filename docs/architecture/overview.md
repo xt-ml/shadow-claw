@@ -20,7 +20,7 @@ ShadowClaw is a **browser-native AI assistant** — a fully functional agent run
 | Files         | OPFS + File System Access API                                       |
 | Agent Runtime | Web Worker (`src/worker/worker.ts` → `dist/public/agent.worker.js`) |
 | Shell         | `just-bash` POSIX emulator + optional WebVM (v86)                   |
-| Git           | isomorphic-git + LightningFS (in-browser)                           |
+| Git           | isomorphic-git + native filesystem handles (in-browser)             |
 | PWA           | Service Worker (Workbox) + Web Push                                 |
 | Server        | Express (`src/server/` package)                                     |
 | Desktop       | Electron (`electron/main.ts` → `dist/electron/main.cjs`)            |

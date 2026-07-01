@@ -17,6 +17,7 @@ describe("executeTool.js", () => {
   let mockPost;
   let mockReadGroupFile;
   let mockReadGroupFileBytes;
+  let mockGetGroupDir;
   let mockSandboxedEval;
   let mockStripHtml;
   let mockUlid;
@@ -44,8 +45,6 @@ describe("executeTool.js", () => {
   let mockEncryptValue;
   let mockResolveGitCredentials;
   let mockResolveServiceCredentials;
-  let mockSyncLfsToOpfs;
-  let mockSyncOpfsToLfs;
   let mockListRemoteMcpTools;
   let mockCallRemoteMcpTool;
 
@@ -95,6 +94,7 @@ describe("executeTool.js", () => {
     mockGitStatus = jest.fn();
     mockGetProxyUrl = jest.fn(() => "https://proxy.local");
     mockGetRemoteUrl = (jest.fn() as any).mockResolvedValue(undefined);
+    mockGetGroupDir = jest.fn(async () => ({}) as any);
     mockDecryptValue = jest.fn();
     mockEncryptValue = jest.fn(async (value) => `enc:${value}`);
     mockResolveGitCredentials = (jest.fn() as any).mockResolvedValue({
@@ -107,8 +107,6 @@ describe("executeTool.js", () => {
     mockResolveServiceCredentials = (jest.fn() as any).mockResolvedValue(
       undefined,
     );
-    mockSyncLfsToOpfs = jest.fn();
-    mockSyncOpfsToLfs = jest.fn();
     mockListRemoteMcpTools = jest.fn();
     mockCallRemoteMcpTool = jest.fn();
 
@@ -179,11 +177,6 @@ describe("executeTool.js", () => {
       gitUnstage: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../git/sync.js", () => ({
-      syncLfsToOpfs: mockSyncLfsToOpfs,
-      syncOpfsToLfs: mockSyncOpfsToLfs,
-    }));
-
     jest.unstable_mockModule("../accounts/service-accounts.js", () => ({
       resolveServiceCredentials: mockResolveServiceCredentials,
     }));
@@ -237,6 +230,10 @@ describe("executeTool.js", () => {
 
     jest.unstable_mockModule("../storage/readGroupFileBytes.js", () => ({
       readGroupFileBytes: mockReadGroupFileBytes,
+    }));
+
+    jest.unstable_mockModule("../storage/getGroupDir.js", () => ({
+      getGroupDir: mockGetGroupDir,
     }));
 
     jest.unstable_mockModule("../storage/writeGroupFile.js", () => ({
@@ -2073,7 +2070,7 @@ describe("executeTool.js", () => {
     expect(mockGitPush).not.toHaveBeenCalled();
   });
 
-  it("should clone a repo and sync it to workspace", async () => {
+  it("should clone a repo via git_clone", async () => {
     (mockGetConfig as any).mockImplementation(async (_db, key) =>
       key === "git-cors-proxy" ? "public" : null,
     );
@@ -2082,23 +2079,17 @@ describe("executeTool.js", () => {
     const result = await executeTool(
       {},
       "git_clone",
-      { url: "https://github.com/x/y.git", branch: "main", include_git: true },
+      { url: "https://github.com/x/y.git", branch: "main" },
       "group1",
     );
 
-    expect(mockGitClone).toHaveBeenCalledWith({
-      url: "https://github.com/x/y.git",
-      branch: "main",
-      depth: undefined,
-      corsProxy: "https://proxy.local",
-    });
-
-    expect(mockSyncLfsToOpfs).toHaveBeenCalledWith(
-      {},
-      "group1",
-      "demo-repo",
-      "repos/demo-repo",
-      true,
+    expect(mockGitClone).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://github.com/x/y.git",
+        branch: "main",
+        depth: undefined,
+        corsProxy: "https://proxy.local",
+      }),
     );
 
     expect(result).toContain(
@@ -2106,40 +2097,14 @@ describe("executeTool.js", () => {
     );
   });
 
-  it("should handle git_sync push and pull", async () => {
-    await expect(
-      executeTool(
-        {},
-        "git_sync",
-        { repo: "demo", direction: "push", include_git: true },
-        "group1",
-      ),
-    ).resolves.toContain("Synced workspace files in repos/demo");
-
-    expect(mockSyncOpfsToLfs).toHaveBeenCalledWith(
+  it("should return Unknown git tool for git_sync", async () => {
+    const result = await executeTool(
       {},
+      "git_sync",
+      { repo: "demo", direction: "push" },
       "group1",
-      "repos/demo",
-      "demo",
-      true,
     );
-
-    await expect(
-      executeTool(
-        {},
-        "git_sync",
-        { repo: "demo", direction: "pull" },
-        "group1",
-      ),
-    ).resolves.toContain("Synced git clone files to workspace repos/demo");
-
-    expect(mockSyncLfsToOpfs).toHaveBeenCalledWith(
-      {},
-      "group1",
-      "demo",
-      "repos/demo",
-      false,
-    );
+    expect(result).toContain("Unknown tool: git_sync");
   });
 
   it("should handle git_checkout", async () => {
@@ -2153,24 +2118,18 @@ describe("executeTool.js", () => {
         "group1",
       ),
     ).resolves.toBe("Checked out main");
-
-    expect(mockSyncLfsToOpfs).toHaveBeenCalledWith(
-      {},
-      "group1",
-      "demo",
-      "repos/demo",
-    );
   });
 
-  it("should handle git_status even when OPFS sync fails", async () => {
-    (mockSyncOpfsToLfs as any).mockRejectedValueOnce(new Error("missing dir"));
+  it("should handle git_status", async () => {
     (mockGitStatus as any).mockResolvedValue("clean");
 
     await expect(
       executeTool({} as any, "git_status", { repo: "demo" }, "group1"),
     ).resolves.toBe("clean");
 
-    expect(mockGitStatus).toHaveBeenCalledWith({ repo: "demo" });
+    expect(mockGitStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ repo: "demo" }),
+    );
   });
 
   it("should handle git_add", async () => {
@@ -2185,10 +2144,12 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("added file.txt");
 
-    expect(mockGitAdd).toHaveBeenCalledWith({
-      repo: "demo",
-      filepath: "file.txt",
-    });
+    expect(mockGitAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        filepath: "file.txt",
+      }),
+    );
   });
 
   it("should handle git_log", async () => {
@@ -2203,11 +2164,13 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("commit list");
 
-    expect(mockGitLog).toHaveBeenCalledWith({
-      repo: "demo",
-      ref: "main",
-      depth: 5,
-    });
+    expect(mockGitLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        ref: "main",
+        depth: 5,
+      }),
+    );
   });
 
   it("should handle git_diff", async () => {
@@ -2222,11 +2185,13 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("diff output");
 
-    expect(mockGitDiff).toHaveBeenCalledWith({
-      repo: "demo",
-      ref1: "a",
-      ref2: "b",
-    });
+    expect(mockGitDiff).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        ref1: "a",
+        ref2: "b",
+      }),
+    );
   });
 
   it("should handle git_branches and git_list_repos", async () => {
@@ -2242,10 +2207,12 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("main\nfeature");
 
-    expect(mockGitListBranches).toHaveBeenCalledWith({
-      repo: "demo",
-      remote: true,
-    });
+    expect(mockGitListBranches).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        remote: true,
+      }),
+    );
 
     await expect(
       executeTool({} as any, "git_list_repos", {}, "group1"),
@@ -2254,22 +2221,7 @@ describe("executeTool.js", () => {
     expect(mockGitListRepos).toHaveBeenCalled();
   });
 
-  it("should return sync error message for git_commit when workspace sync fails", async () => {
-    (mockSyncOpfsToLfs as any).mockRejectedValueOnce(new Error("sync failed"));
-
-    const result = await executeTool(
-      {},
-      "git_commit",
-      { repo: "demo", message: "msg" },
-      "group1",
-    );
-
-    expect(result).toContain("Could not sync from OPFS");
-
-    expect(mockGitCommit).not.toHaveBeenCalled();
-  });
-
-  it("should commit using stored author defaults", async () => {
+  it("should handle git_commit using stored author defaults", async () => {
     (mockGetConfig as any).mockImplementation(async (_db, key) => {
       if (key === "git-author-name") {
         return "Jane Dev";
@@ -2299,12 +2251,14 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("committed");
 
-    expect(mockGitCommit).toHaveBeenCalledWith({
-      repo: "demo",
-      message: "msg",
-      authorName: "Jane Dev",
-      authorEmail: "jane@example.com",
-    });
+    expect(mockGitCommit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        message: "msg",
+        authorName: "Jane Dev",
+        authorEmail: "jane@example.com",
+      }),
+    );
   });
 
   it("should pull using decrypted token and author defaults", async () => {
@@ -2341,14 +2295,16 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("pulled");
 
-    expect(mockGitPull).toHaveBeenCalledWith({
-      repo: "demo",
-      branch: "main",
-      authorName: "Jane Dev",
-      authorEmail: "jane@example.com",
-      token: "plaintext-token",
-      corsProxy: "https://proxy.local",
-    });
+    expect(mockGitPull).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        branch: "main",
+        authorName: "Jane Dev",
+        authorEmail: "jane@example.com",
+        token: "plaintext-token",
+        corsProxy: "https://proxy.local",
+      }),
+    );
   });
 
   it("should push using decrypted token and proxy", async () => {
@@ -2377,13 +2333,15 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("pushed");
 
-    expect(mockGitPush).toHaveBeenCalledWith({
-      repo: "demo",
-      branch: "main",
-      force: true,
-      token: "plaintext-token",
-      corsProxy: "https://proxy.local",
-    });
+    expect(mockGitPush).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        branch: "main",
+        force: true,
+        token: "plaintext-token",
+        corsProxy: "https://proxy.local",
+      }),
+    );
   });
 
   // ── patch_file ────────────────────────────────────────────────────
@@ -2482,14 +2440,6 @@ describe("executeTool.js", () => {
       "group1",
     );
 
-    // Should still sync so the agent can read conflicted files
-    expect(mockSyncLfsToOpfs).toHaveBeenCalledWith(
-      {},
-      "group1",
-      "demo",
-      "repos/demo",
-    );
-
     expect(result).toContain("conflicts");
     expect(result).toContain("a.js");
   });
@@ -2570,7 +2520,6 @@ describe("executeTool.js", () => {
       "group1",
     );
 
-    expect(mockSyncLfsToOpfs).toHaveBeenCalled();
     expect(result).toBe("Merged main into feature (abc1234).");
   });
 

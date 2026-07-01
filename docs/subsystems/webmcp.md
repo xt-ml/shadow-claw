@@ -129,7 +129,7 @@ includes the full built-in set:
 | Files         | `read_file`, `write_file`, `patch_file`, `list_files`, `open_file`, `attach_file_to_chat` |
 | Shell         | `bash`, `javascript`                                                                      |
 | Web           | `fetch_url`, `fetch_file`                                                                 |
-| Git           | `git_clone`, `git_sync`, `git_status`, `git_commit`, `git_push`, `git_pull`, and more     |
+| Git           | `git_clone`, `git_status`, `git_commit`, `git_push`, `git_pull`, and more                 |
 | Tasks         | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`  |
 | Memory        | `update_memory`                                                                           |
 | Notifications | `show_toast`, `send_notification`                                                         |

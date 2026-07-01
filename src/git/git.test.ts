@@ -10,9 +10,37 @@ const mockPfs: any = {
   stat: jest.fn<any>().mockResolvedValue({ isDirectory: () => false }),
 };
 
-const mockLightningFS: any = jest.fn(() => ({
-  promises: mockPfs,
-}));
+// Mock navigator.storage.getDirectory() to return a fake OPFS root that
+// ultimately hands back mockPfs via the makeOpfsFs factory in git.ts.
+const mockDirHandle: any = {
+  kind: "directory",
+  name: "workspace-root",
+  getDirectoryHandle: jest
+    .fn<any>()
+    .mockImplementation(() => Promise.resolve(mockDirHandle)),
+  getFileHandle: jest.fn<any>().mockResolvedValue({
+    kind: "file",
+    getFile: jest.fn<any>().mockResolvedValue({
+      size: 0,
+      lastModified: 0,
+      arrayBuffer: async () => new ArrayBuffer(0),
+    }),
+    createWritable: jest
+      .fn<any>()
+      .mockResolvedValue({ write: jest.fn(), close: jest.fn() }),
+  }),
+  removeEntry: jest.fn<any>().mockResolvedValue(undefined),
+  entries: jest.fn<any>().mockReturnValue((async function* () {})()),
+};
+
+// Patch navigator.storage before the module is imported.
+Object.defineProperty(globalThis.navigator, "storage", {
+  value: {
+    getDirectory: jest.fn<any>().mockResolvedValue(mockDirHandle),
+  },
+  configurable: true,
+  writable: true,
+});
 
 const mockGit: any = {
   clone: jest.fn(),
@@ -34,9 +62,6 @@ const mockGit: any = {
   TREE: jest.fn(() => ({ type: "tree" })),
 };
 
-jest.unstable_mockModule("@isomorphic-git/lightning-fs", () => ({
-  default: mockLightningFS,
-}));
 jest.unstable_mockModule("isomorphic-git", () => ({
   default: mockGit,
 }));
@@ -47,19 +72,24 @@ jest.unstable_mockModule("@zip.js/zip.js", () => ({}) as any);
 
 const mod = await import("./git.js");
 
+// Inject the same mockPfs the tests exercise — patch the internal _pfs reference
+// by calling initGitFs() and then overwriting its promises object.
+beforeAll(async () => {
+  const { pfs } = await mod.initGitFs();
+  // Replace each method on the live pfs object with mock fns so tests can spy.
+  Object.assign(pfs, mockPfs);
+});
+
 describe("git.js", () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
-    // Reset default mock behaviors that might have been changed in previous tests
+    // Reset default mock behaviors
     mockGit.clone.mockResolvedValue(undefined);
     mockGit.fetch.mockResolvedValue(undefined);
     mockPfs.readdir.mockResolvedValue([]);
     mockPfs.stat.mockResolvedValue({ isDirectory: () => false });
 
-    // Set UMD globals that git.mjs expects at runtime if still needed,
-    // though the modules should now be correctly mocked.
-    globalThis.LightningFS = mockLightningFS;
     globalThis.git = mockGit;
     globalThis.Buffer = globalThis.Buffer || Uint8Array;
   });
@@ -526,12 +556,20 @@ describe("git.js", () => {
   });
 
   describe("gitListRepos", () => {
-    it("lists repos", async () => {
-      mockPfs.readdir.mockResolvedValue(["repo-a", "repo-b"]);
+    it("lists repos that contain a .git directory", async () => {
+      mockPfs.readdir.mockResolvedValue(["repo-a", "repo-b", "not-a-repo"]);
+      mockPfs.stat.mockImplementation(async (path: string) => {
+        if (path === "repos/repo-a/.git" || path === "repos/repo-b/.git") {
+          return { isDirectory: () => true };
+        }
+
+        throw new Error("ENOENT");
+      });
 
       const result = await mod.gitListRepos();
       expect(result).toContain("repo-a");
       expect(result).toContain("repo-b");
+      expect(result).not.toContain("not-a-repo");
     });
 
     it("handles no repos", async () => {
@@ -556,8 +594,8 @@ describe("git.js", () => {
 
   describe("repoDir", () => {
     it("returns repo directory path", () => {
-      expect(mod.repoDir("my-repo")).toBe("/git/my-repo");
-      expect(mod.repoDir("another-repo")).toBe("/git/another-repo");
+      expect(mod.repoDir("my-repo")).toBe("repos/my-repo");
+      expect(mod.repoDir("another-repo")).toBe("repos/another-repo");
     });
   });
 
@@ -737,7 +775,7 @@ describe("git.js", () => {
         expect.objectContaining({ ref: "main" }),
       );
       expect(mockPfs.writeFile).toHaveBeenCalledWith(
-        "/git/my-repo/.git/refs/heads/feature",
+        "repos/my-repo/.git/refs/heads/feature",
         expect.stringContaining("abc1234567890abcdef1234567890abcdef123456"),
         "utf8",
       );
@@ -760,13 +798,15 @@ describe("git.js", () => {
       mockPfs.readdir.mockResolvedValue(["a.txt", "b.txt"]);
       mockPfs.stat.mockResolvedValue({ isDirectory: () => false });
       mockPfs.unlink.mockResolvedValue(undefined);
-      mockPfs.rmdir.mockResolvedValue(undefined);
+      mockPfs.rmdir
+        .mockRejectedValueOnce(new Error("ENOTEMPTY"))
+        .mockResolvedValue(undefined);
 
-      await mod.rmdirRecursive(mockPfs, "/git/my-repo");
+      await mod.rmdirRecursive(mockPfs, "repos/my-repo");
 
-      expect(mockPfs.unlink).toHaveBeenCalledWith("/git/my-repo/a.txt");
-      expect(mockPfs.unlink).toHaveBeenCalledWith("/git/my-repo/b.txt");
-      expect(mockPfs.rmdir).toHaveBeenCalledWith("/git/my-repo");
+      expect(mockPfs.unlink).toHaveBeenCalledWith("repos/my-repo/a.txt");
+      expect(mockPfs.unlink).toHaveBeenCalledWith("repos/my-repo/b.txt");
+      expect(mockPfs.rmdir).toHaveBeenCalledWith("repos/my-repo");
     });
 
     it("recurses into subdirectories", async () => {
@@ -777,35 +817,39 @@ describe("git.js", () => {
         .mockResolvedValueOnce({ isDirectory: () => true })
         .mockResolvedValueOnce({ isDirectory: () => false });
       mockPfs.unlink.mockResolvedValue(undefined);
-      mockPfs.rmdir.mockResolvedValue(undefined);
+      mockPfs.rmdir
+        .mockRejectedValueOnce(new Error("ENOTEMPTY")) // my-repo
+        .mockRejectedValueOnce(new Error("ENOTEMPTY")) // my-repo/sub
+        .mockResolvedValue(undefined);
 
-      await mod.rmdirRecursive(mockPfs, "/git/my-repo");
+      await mod.rmdirRecursive(mockPfs, "repos/my-repo");
 
-      expect(mockPfs.unlink).toHaveBeenCalledWith("/git/my-repo/sub/file.txt");
-      expect(mockPfs.rmdir).toHaveBeenCalledWith("/git/my-repo/sub");
-      expect(mockPfs.rmdir).toHaveBeenCalledWith("/git/my-repo");
+      expect(mockPfs.unlink).toHaveBeenCalledWith("repos/my-repo/sub/file.txt");
+      expect(mockPfs.rmdir).toHaveBeenCalledWith("repos/my-repo/sub");
+      expect(mockPfs.rmdir).toHaveBeenCalledWith("repos/my-repo");
     });
 
     it("handles empty directory", async () => {
       mockPfs.readdir.mockResolvedValue([]);
       mockPfs.rmdir.mockResolvedValue(undefined);
 
-      await mod.rmdirRecursive(mockPfs, "/git/empty");
+      await mod.rmdirRecursive(mockPfs, "repos/empty");
 
-      expect(mockPfs.rmdir).toHaveBeenCalledWith("/git/empty");
+      expect(mockPfs.rmdir).toHaveBeenCalledWith("repos/empty");
       expect(mockPfs.unlink).not.toHaveBeenCalled();
     });
   });
 
   describe("gitDeleteRepo", () => {
-    it("deletes a repo directory from LightningFS", async () => {
+    it("deletes only the .git metadata directory and leaves the working tree intact", async () => {
       mockPfs.readdir.mockResolvedValue([]);
       mockPfs.rmdir.mockResolvedValue(undefined);
 
       const result = await mod.gitDeleteRepo({ repo: "my-repo" });
 
-      expect(result).toContain("Deleted");
-      expect(result).toContain("my-repo");
+      expect(result).toContain("Deleted git metadata");
+      expect(result).toContain("repos/my-repo");
+      expect(mockPfs.rmdir).toHaveBeenCalledWith("repos/my-repo/.git");
     });
 
     it("throws if repo name is empty", async () => {
@@ -821,9 +865,7 @@ describe("git.js", () => {
     });
 
     it("returns message when repo does not exist", async () => {
-      mockPfs.readdir.mockRejectedValue(
-        Object.assign(new Error("ENOENT"), { code: "ENOENT" }),
-      );
+      mockPfs.readdir.mockRejectedValueOnce(new Error("ENOENT"));
 
       const result = await mod.gitDeleteRepo({ repo: "nonexistent" });
       expect(result).toContain("not found");

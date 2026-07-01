@@ -170,10 +170,29 @@ async function respondWithWorkspaceRouteFile(
 // On every SW startup (including after the browser terminates and restarts the SW
 // to save memory), request the current proxy config from all window clients so the
 // in-memory state is restored without requiring the user to re-save settings.
+let proxyConfigReady = false;
+let proxyConfigResolvers: Array<() => void> = [];
+
+function resolveProxyConfig() {
+  proxyConfigReady = true;
+  for (const resolve of proxyConfigResolvers) {
+    resolve();
+  }
+
+  proxyConfigResolvers = [];
+}
+
 self.clients.matchAll({ type: "window" }).then((clients) => {
-  clients.forEach((client) =>
-    client.postMessage({ type: "request-proxy-config" }),
-  );
+  if (clients.length === 0) {
+    // If no clients are open, we can't get the config. Unblock fetches.
+    resolveProxyConfig();
+  } else {
+    clients.forEach((client) =>
+      client.postMessage({ type: "request-proxy-config" }),
+    );
+    // Timeout to unblock fetches if clients don't respond
+    setTimeout(resolveProxyConfig, 2000);
+  }
 });
 
 self.addEventListener("message", (event: MessageEvent) => {
@@ -181,9 +200,11 @@ self.addEventListener("message", (event: MessageEvent) => {
     useProxy = !!event.data.payload?.useProxy;
     proxyUrl = event.data.payload?.proxyUrl || "/proxy";
     console.log("fetch proxy: config updated", { useProxy, proxyUrl });
+    resolveProxyConfig();
   } else if (event.data?.type === "set-use-proxy") {
     // Legacy support for basic toggle
     useProxy = !!event.data.payload?.useProxy;
+    resolveProxyConfig();
   }
 });
 
@@ -213,11 +234,6 @@ self.addEventListener("fetch", (event: FetchEvent) => {
     }
   }
 
-  // Only proxy if enabled
-  if (!useProxy) {
-    return;
-  }
-
   if (shouldBypassFetchProxy(requestUrl, location.origin)) {
     return;
   }
@@ -229,6 +245,17 @@ self.addEventListener("fetch", (event: FetchEvent) => {
 
   event.respondWith(
     (async () => {
+      if (!proxyConfigReady) {
+        await new Promise<void>((resolve) =>
+          proxyConfigResolvers.push(resolve),
+        );
+      }
+
+      // Only proxy if enabled
+      if (!useProxy) {
+        return fetch(event.request);
+      }
+
       try {
         const headers: Record<string, string> = {};
         event.request.headers.forEach((value, key) => {

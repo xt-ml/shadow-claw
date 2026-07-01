@@ -21,10 +21,12 @@ export interface TaskRunner {
  */
 export class TaskScheduler {
   runner: TaskRunner;
+  onTaskChange?: () => void;
   interval: ReturnType<typeof setInterval> | null = null;
 
-  constructor(runner: TaskRunner) {
+  constructor(runner: TaskRunner, onTaskChange?: () => void) {
     this.runner = runner;
+    this.onTaskChange = onTaskChange;
   }
 
   /**
@@ -69,6 +71,7 @@ export class TaskScheduler {
         ) {
           // Mark as run immediately to prevent double-firing
           await updateTaskLastRun(task.id, now.getTime());
+          this.onTaskChange?.();
 
           // Fire task (non-blocking)
           this.runner(task).catch((err) => {

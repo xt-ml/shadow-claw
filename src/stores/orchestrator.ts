@@ -9,6 +9,7 @@ import { getAllTasks } from "../db/getAllTasks.js";
 import { getRecentMessages } from "../db/getRecentMessages.js";
 import { saveTask } from "../db/saveTask.js";
 import { clearGroupMessages } from "../db/clearGroupMessages.js";
+import { updateTaskLastRun } from "../db/updateTaskLastRun.js";
 import { cloneGroupMessages } from "../db/cloneGroupMessages.js";
 import { cloneGroupTasks } from "../db/cloneGroupTasks.js";
 import { getConfig } from "../db/getConfig.js";
@@ -1297,7 +1298,13 @@ export class OrchestratorStore {
   /**
    * Run a task
    */
-  runTask(task: Task, isManual: boolean = false): void {
+  async runTask(task: Task, isManual: boolean = false): Promise<void> {
+    const db = this._db;
+    if (isManual && db) {
+      await updateTaskLastRun(task.id, Date.now());
+      await this.loadTasks(db);
+    }
+
     if (
       task.type === "tools" &&
       Array.isArray(task.tools) &&

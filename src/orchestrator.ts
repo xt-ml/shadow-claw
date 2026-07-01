@@ -628,9 +628,14 @@ export class Orchestrator {
     // The worker reads persisted VM boot mode and eagerly boots the VM itself.
 
     // Set up task scheduler
-    this.scheduler = new TaskScheduler(async (task) => {
-      orchestratorStore.runTask(task);
-    });
+    this.scheduler = new TaskScheduler(
+      async (task) => {
+        orchestratorStore.runTask(task);
+      },
+      () => {
+        this.events.emit("task-change", { type: "executed" });
+      },
+    );
 
     this.scheduler.start();
 

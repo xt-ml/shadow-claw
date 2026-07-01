@@ -197,7 +197,7 @@ export async function registerWebMcpTools(
 
       // Always use AbortController signals — both the polyfill and the native
       // Chrome API honour { signal } for lifecycle management.
-      modelContext.registerTool(toolDef, { signal: controller.signal });
+      await modelContext.registerTool(toolDef, { signal: controller.signal });
 
       // Yield to the event loop between registrations.
       await new Promise((resolve) => setTimeout(resolve, 0));

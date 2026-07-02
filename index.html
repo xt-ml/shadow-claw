@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>ShadowClaw</title>
+    <meta charset="UTF-8" />
+    <meta name="revision" content="8007b535d9e9cb6efa82da887d6ab67bf9456676" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="description" content="ShadowClaw - Browser-native AI agent." />
+    <meta name="theme-color" content="#fff" />
+    <meta
+      http-equiv="origin-trial"
+      content="A88uTgESYWcVgREKVReKB6jom41uP8TzW6ei3jNdidf+Xl6ONqKRjKNBphsxhrZmdkakLK3oXDgkGq53rtZYSAMAAAB2eyJvcmlnaW4iOiJodHRwczovL3h0LW1sLmdpdGh1Yi5pbzo0NDMiLCJmZWF0dXJlIjoiV2ViTUNQIiwiZXhwaXJ5IjoxNzk0ODczNjAwLCJpc1N1YmRvbWFpbiI6dHJ1ZSwiaXNUaGlyZFBhcnR5Ijp0cnVlfQ=="
+    />
+    <base href="/shadow-claw/" />
+
+    <script src="theme-init.js"></script>
+
+    <link rel="manifest" href="manifest.json" />
+    <link href="assets/icons/favicon.ico" rel="icon" type="image/x-icon" />
+    <link href="assets/icons/180.png" rel="apple-touch-icon" />
+    <link rel="stylesheet" href="index.css" />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined&display=swap"
+    />
+  </head>
+
+  <body>
+    <shadow-claw data-prerender-no-seed="true">
+      <template shadowrootmode="open" data-shadow-claw-dsd="true">
+<link rel="stylesheet" href="components/shadow-claw/shadow-claw.css" />
+<div class="app">  <header class="header"> <button aria-label="Open menu" title="Open menu" id="menu-button"> <svg xmlns="http://www.w3.org/2000/svg" width="1.5rem" height="1.5rem" fill="currentColor" viewBox="0 -960 960 960"><path d="M120-680v-80h720v80zm0 480v-80h720v80zm0-240v-80h720v80z"/></svg> </button> <h1> <slot name="header-title-link"></slot> <div class="header-actions"> <button aria-label="Toggle theme" title="Toggle theme" class="theme-mode-toggle theme-toggle"> <svg xmlns="http://www.w3.org/2000/svg" width="1.5rem" height="1.5rem" fill="currentColor" class="sun-icon" viewBox="0 -960 960 960"><path d="M480-360q50 0 85-35t35-85-35-85-85-35-85 35-35 85 35 85 85 35m0 80q-83 0-141.5-58.5T280-480t58.5-141.5T480-680t141.5 58.5T680-480t-58.5 141.5T480-280M200-440H40v-80h160zm720 0H760v-80h160zM440-760v-160h80v160zm0 720v-160h80v160zM256-650l-101-97 57-59 96 100zm492 496-97-101 53-55 101 97zm-98-550 97-101 59 57-101 97zM158-190l97-101 55 53-101 97z"/></svg> <svg xmlns="http://www.w3.org/2000/svg" width="1.5rem" height="1.5rem" fill="currentColor" class="moon-icon" viewBox="0 -960 960 960"><path d="M480-120q-150 0-255-105T120-480t105-255 255-105q14 0 27.5 1t26.5 3q-41 29-65.5 75.5T444-660q0 90 63 153t153 63q52 0 99-24.5t75-65.5q2 13 3 26.5t1 27.5q0 150-105 255T480-120m0-80q88 0 158-48.5T740-375q-20 5-40 8t-40 3q-123 0-209.5-86.5T364-660q0-20 3-40t8-40q-74 30-122.5 100T204-480q0 116 82 198t194 82m-12-274"/></svg> </button> <button aria-label="Hide action header" title="Hide action header" aria-pressed="false" class="header-main-toggle theme-toggle" type="button"> <svg xmlns="http://www.w3.org/2000/svg" width="1.5rem" height="1.5rem" fill="currentColor" viewBox="0 -960 960 960"><path d="M280-200h400v-80H280zm200-200L280-600l56-56 104 104v-328h80v328l104-104 56 56z"/></svg> </button> <button aria-label="Hide activity log" title="Hide activity log" aria-pressed="false" class="activity-log-toggle theme-toggle" type="button"> <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 -960 960 960"><path d="M80-600v-160q0-33 23.5-56.5T160-840h640q33 0 56.5 23.5T880-760v160h-80v-160H160v160zm80 360q-33 0-56.5-23.5T80-320v-200h80v200h640v-200h80v200q0 33-23.5 56.5T800-240zM40-120v-80h880v80zm40-400v-80h240q11 0 21 6t15 16l47 93 123-215q5-9 14-14.5t20-5.5 21 5.5 15 16.5l49 98h235v80H620q-11 0-21-5.5T584-542l-26-53-123 215q-5 10-15 15t-21 5-20.5-6-14.5-16l-69-138z"/></svg> </button> <button aria-label="Hide WebVM terminal" title="Hide WebVM terminal" aria-pressed="true" class="theme-toggle webvm-toggle" type="button"> <svg xmlns="http://www.w3.org/2000/svg" width="1.5rem" height="1.5rem" fill="currentColor" viewBox="0 -960 960 960"><path d="M320-280 120-480l200-200 56 56-104 104h568v80H272l104 104zm320 0-56-56 104-104H120v-80h568L584-624l56-56 200 200z"/></svg> </button> <slot name="header-actions-logo"></slot> </div> </h1> </header>  <div class="app-body">  <aside class="sidebar"> <div class="sidebar-boot-skeleton" aria-hidden="true"> <div class="skeleton-nav-wrapper"> <div class="skeleton-item skeleton-nav"></div> <div class="skeleton-item skeleton-nav"></div> <div class="skeleton-item skeleton-nav"></div> <div class="skeleton-item skeleton-nav"></div> </div> <div class="skeleton-divider"></div> <div class="skeleton-convo-wrapper"> <div class="skeleton-convo skeleton-item"></div> <div class="skeleton-convo skeleton-item"></div> <div class="skeleton-convo skeleton-item"></div> </div> </div> <nav class="nav-menu"> <li class="active nav-item" data-page="pages">📚 Pages</li> <li class="nav-item active" data-page="chat">💬 Chat</li> <li class="nav-item" data-page="tasks">&nbsp;✓&nbsp;&nbsp;Tasks</li> <li class="nav-item" data-page="files">📁 Files</li> </nav> <div class="sidebar-spacer"></div> <shadow-claw-conversations></shadow-claw-conversations> <div class="sidebar-footer"> <button class="settings-btn" data-action="show-settings"> ⚙️ Settings </button> </div> </aside> <div class="sidebar-resize-handle" title="Drag to resize sidebar"></div>  <div class="main-content"> <div class="main-content-boot-skeleton" aria-hidden="true"> <svg xmlns="http://www.w3.org/2000/svg" class="boot-loading-svg" viewBox="0 0 44 44"><g fill="none" fill-rule="evenodd" stroke="currentColor" stroke-width="2"><circle cx="22" cy="22" r="1"><animate attributeName="r" begin="0s" calcMode="spline" dur="1.8s" keySplines="0.165, 0.84, 0.44, 1" keyTimes="0; 1" repeatCount="indefinite" values="1; 20"/><animate attributeName="stroke-opacity" begin="0s" calcMode="spline" dur="1.8s" keySplines="0.3, 0.61, 0.355, 1" keyTimes="0; 1" repeatCount="indefinite" values="1; 0"/></circle><circle cx="22" cy="22" r="1"><animate attributeName="r" begin="-0.9s" calcMode="spline" dur="1.8s" keySplines="0.165, 0.84, 0.44, 1" keyTimes="0; 1" repeatCount="indefinite" values="1; 20"/><animate attributeName="stroke-opacity" begin="-0.9s" calcMode="spline" dur="1.8s" keySplines="0.3, 0.61, 0.355, 1" keyTimes="0; 1" repeatCount="indefinite" values="1; 0"/></circle></g></svg> <div class="boot-loading-text">Preparing workspace...</div> </div>  <div class="chat-page page" data-page-id="chat"> <shadow-claw-chat></shadow-claw-chat> </div>  <div class="page" data-page-id="tasks"> <shadow-claw-tasks></shadow-claw-tasks> </div>  <div class="page" data-page-id="files"> <shadow-claw-files></shadow-claw-files> </div>  <div class="active page" data-page-id="pages"> <shadow-claw-pages></shadow-claw-pages> </div>  <div class="page" data-page-id="settings"> <shadow-claw-settings></shadow-claw-settings> </div>  <div class="page" data-page-id="tools"> <shadow-claw-tools></shadow-claw-tools> </div>  <div class="page" data-page-id="channels"> <shadow-claw-channels></shadow-claw-channels> </div> <shadow-claw-file-viewer id="file-viewer"></shadow-claw-file-viewer> <shadow-claw-toast></shadow-claw-toast> </div> </div> <shadow-claw-dialog dialog-class="app-dialog" aria-labelledby="appDialogTitle">
+<template>
+<form method="dialog" class="app-confirm-dialog__form"> <h2 id="appDialogTitle" class="app-dialog__title">Confirm</h2> <p class="app-dialog__message"></p> <ul class="app-dialog__details" hidden></ul> <div class="app-dialog__links" hidden></div> <div class="app-confirm-dialog__actions"> <button type="submit" value="cancel" class="app-dialog__btn app-dialog__btn--cancel"> Cancel </button> <button type="submit" value="confirm" class="app-dialog__btn app-dialog__btn--confirm"> Confirm </button> </div> </form>
+</template>
+</shadow-claw-dialog> <shadow-claw-dialog dialog-class="app-dialog app-prompt-dialog" aria-labelledby="appPromptTitle">
+<template>
+<form method="dialog" class="app-prompt-dialog__form"> <h2 id="appPromptTitle" class="app-prompt-dialog__title"> Agent Question </h2> <p class="app-prompt-dialog__message"></p> <div class="app-prompt-dialog__input-area">  </div> <div class="app-prompt-dialog__actions"> <button type="submit" value="submit" class="app-dialog__btn app-dialog__btn--confirm app-prompt-dialog__submit"> Submit </button> </div> </form>
+</template>
+</shadow-claw-dialog> </div>
+</template>
+<a
+        class="header-title-link"
+        href="https://xt-ml.github.io/shadow-claw/"
+        slot="header-title-link"
+      >
+        <svg
+          class="header-title-logo"
+          viewBox="0 0 128 128"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <!-- Background -->
+          <rect
+            fill="var(--shadow-claw-icon-bg)"
+            height="128"
+            rx="16"
+            width="128"
+          ></rect>
+
+          <!-- Tail Fan -->
+          <ellipse
+            cx="64"
+            cy="108"
+            fill="var(--shadow-claw-icon-body)"
+            rx="18"
+            ry="12"
+          ></ellipse>
+          <ellipse
+            cx="52"
+            cy="112"
+            fill="var(--shadow-claw-icon-accent-dark)"
+            rx="8"
+            ry="10"
+          ></ellipse>
+          <ellipse
+            cx="76"
+            cy="112"
+            fill="var(--shadow-claw-icon-accent-dark)"
+            rx="8"
+            ry="10"
+          ></ellipse>
+
+          <!-- Tail Segments -->
+          <ellipse
+            cx="64"
+            cy="92"
+            fill="var(--shadow-claw-icon-body-segment)"
+            rx="14"
+            ry="8"
+          ></ellipse>
+          <ellipse
+            cx="64"
+            cy="82"
+            fill="var(--shadow-claw-icon-body)"
+            rx="12"
+            ry="7"
+          ></ellipse>
+          <ellipse
+            cx="64"
+            cy="74"
+            fill="var(--shadow-claw-icon-body-segment)"
+            rx="10"
+            ry="6"
+          ></ellipse>
+
+          <!-- Main Body -->
+          <ellipse
+            cx="64"
+            cy="58"
+            fill="var(--shadow-claw-icon-body)"
+            rx="20"
+            ry="18"
+          ></ellipse>
+
+          <!-- Body Segments -->
+          <ellipse
+            cx="64"
+            cy="50"
+            fill="var(--shadow-claw-icon-body-segment)"
+            rx="16"
+            ry="10"
+          ></ellipse>
+
+          <!-- Left Claw Arm -->
+          <rect
+            fill="var(--shadow-claw-icon-body)"
+            height="8"
+            rx="4"
+            transform="rotate(-20 37 49)"
+            width="18"
+            x="28"
+            y="45"
+          ></rect>
+
+          <!-- Left Claw -->
+          <ellipse
+            cx="20"
+            cy="38"
+            fill="var(--shadow-claw-icon-claw-main)"
+            rx="14"
+            ry="10"
+          ></ellipse>
+          <ellipse
+            cx="16"
+            cy="36"
+            fill="var(--shadow-claw-icon-claw-inner)"
+            rx="10"
+            ry="7"
+          ></ellipse>
+          <ellipse
+            cx="12"
+            cy="34"
+            fill="var(--shadow-claw-icon-accent-dark)"
+            rx="5"
+            ry="4"
+          ></ellipse>
+
+          <!-- Right Claw Arm -->
+          <rect
+            fill="var(--shadow-claw-icon-body)"
+            height="8"
+            rx="4"
+            transform="rotate(20 91 49)"
+            width="18"
+            x="82"
+            y="45"
+          ></rect>
+
+          <!-- Right Claw -->
+          <ellipse
+            cx="108"
+            cy="38"
+            fill="var(--shadow-claw-icon-claw-main)"
+            rx="14"
+            ry="10"
+          ></ellipse>
+          <ellipse
+            cx="112"
+            cy="36"
+            fill="var(--shadow-claw-icon-claw-inner)"
+            rx="10"
+            ry="7"
+          ></ellipse>
+          <ellipse
+            cx="116"
+            cy="34"
+            fill="var(--shadow-claw-icon-accent-dark)"
+            rx="5"
+            ry="4"
+          ></ellipse>
+
+          <!-- Legs - Left -->
+          <rect
+            fill="var(--shadow-claw-icon-accent-dark)"
+            height="4"
+            rx="2"
+            transform="rotate(-30 44 64)"
+            width="12"
+            x="38"
+            y="62"
+          ></rect>
+          <rect
+            fill="var(--shadow-claw-icon-accent-dark)"
+            height="4"
+            rx="2"
+            transform="rotate(-25 43 70)"
+            width="14"
+            x="36"
+            y="68"
+          ></rect>
+          <rect
+            fill="var(--shadow-claw-icon-accent-dark)"
+            height="4"
+            rx="2"
+            transform="rotate(-20 44 76)"
+            width="12"
+            x="38"
+            y="74"
+          ></rect>
+
+          <!-- Legs - Right -->
+          <rect
+            fill="var(--shadow-claw-icon-accent-dark)"
+            height="4"
+            rx="2"
+            transform="rotate(30 84 64)"
+            width="12"
+            x="78"
+            y="62"
+          ></rect>
+          <rect
+            fill="var(--shadow-claw-icon-accent-dark)"
+            height="4"
+            rx="2"
+            transform="rotate(25 85 70)"
+            width="14"
+            x="78"
+            y="68"
+          ></rect>
+          <rect
+            fill="var(--shadow-claw-icon-accent-dark)"
+            height="4"
+            rx="2"
+            transform="rotate(20 84 76)"
+            width="12"
+            x="78"
+            y="74"
+          ></rect>
+
+          <!-- Head -->
+          <ellipse
+            cx="64"
+            cy="38"
+            fill="var(--shadow-claw-icon-body)"
+            rx="14"
+            ry="12"
+          ></ellipse>
+
+          <!-- Eyes  -->
+          <circle
+            cx="56"
+            cy="34"
+            fill="var(--shadow-claw-icon-eye)"
+            r="5"
+          ></circle>
+          <circle
+            cx="72"
+            cy="34"
+            fill="var(--shadow-claw-icon-eye)"
+            r="5"
+          ></circle>
+          <!-- Shine centered to look friendly -->
+          <circle
+            cx="56"
+            cy="33"
+            fill="var(--shadow-claw-icon-eye-shine)"
+            r="2"
+          ></circle>
+          <circle
+            cx="72"
+            cy="33"
+            fill="var(--shadow-claw-icon-eye-shine)"
+            r="2"
+          ></circle>
+
+          <!-- Mouth -->
+          <path
+            d="M60 42 Q64 46 68 42"
+            fill="none"
+            stroke="var(--shadow-claw-icon-accent-dark)"
+            stroke-linecap="round"
+            stroke-width="2"
+          ></path>
+
+          <!-- Antennae -->
+          <path
+            d="M58 26 Q50 14 42 8"
+            fill="none"
+            stroke="var(--shadow-claw-icon-accent-dark)"
+            stroke-linecap="round"
+            stroke-width="3"
+          ></path>
+          <path
+            d="M70 26 Q78 14 86 8"
+            fill="none"
+            stroke="var(--shadow-claw-icon-accent-dark)"
+            stroke-linecap="round"
+            stroke-width="3"
+          ></path>
+          <path
+            d="M60 24 Q54 16 50 10"
+            fill="none"
+            stroke="var(--shadow-claw-icon-body)"
+            stroke-linecap="round"
+            stroke-width="2"
+          ></path>
+          <path
+            d="M68 24 Q74 16 78 10"
+            fill="none"
+            stroke="var(--shadow-claw-icon-body)"
+            stroke-linecap="round"
+            stroke-width="2"
+          ></path>
+
+          <!-- Highlight on body -->
+          <ellipse
+            cx="60"
+            cy="55"
+            fill="var(--shadow-claw-icon-body-shine)"
+            opacity="0.4"
+            rx="6"
+            ry="8"
+          ></ellipse>
+        </svg>
+        <span class="header-title">ShadowClaw</span>
+      </a>
+      <a
+        aria-label="Shadow Claw Project on GitHub"
+        class="header-actions-logo-link"
+        href="https://github.com/xt-ml/shadow-claw"
+        slot="header-actions-logo"
+      >
+        <svg
+          aria-hidden="true"
+          focusable="false"
+          viewBox="0 0 496 512"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <path
+            d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8z"
+            fill="var(--shadow-claw-bg-primary-reverse, currentColor)"
+          ></path>
+        </svg>
+      </a>
+    </shadow-claw>
+
+    <script type="module" src="index.js"></script>
+    <script type="module" src="service-worker/init.js"></script>
+  </body>
+</html>

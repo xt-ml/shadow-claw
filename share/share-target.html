@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>ShadowClaw</title>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <meta name="description" content="ShadowClaw - Browser-native AI agent." />
+    <meta name="theme-color" content="#fff" />
+    <base href="/shadow-claw/" />
+    <link rel="manifest" href="manifest.json" />
+    <link href="assets/icons/favicon.ico" rel="icon" type="image/x-icon" />
+    <link href="assets/icons/180.png" rel="apple-touch-icon" />
+    <script>
+      (function () {
+        const themeKey = "shadow-claw-theme";
+        const storedTheme = localStorage.getItem(themeKey) || "system";
+        const prefersDark =
+          window.matchMedia &&
+          window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const resolvedTheme =
+          storedTheme === "system"
+            ? prefersDark
+              ? "dark"
+              : "light"
+            : storedTheme;
+
+        document.documentElement.classList.add(`${resolvedTheme}-mode`);
+      })();
+    </script>
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body>
+    <template id="share-target-boot-template">
+      <div aria-hidden="true" class="boot-shell">
+        <header class="boot-shell-header">
+          <div class="boot-shell-brand">🦞 ShadowClaw</div>
+          <div class="boot-shell-status">Importing shared content...</div>
+        </header>
+        <div class="boot-shell-body">
+          <main class="boot-shell-main">
+            <div class="boot-shell-card"></div>
+            <div class="boot-shell-card"></div>
+          </main>
+        </div>
+      </div>
+    </template>
+
+    <shadow-claw></shadow-claw>
+
+    <script>
+      const host = document.querySelector("shadow-claw");
+      const template = document.querySelector("#share-target-boot-template");
+
+      if (host && template instanceof HTMLTemplateElement) {
+        host.append(template.content.cloneNode(true));
+      }
+    </script>
+    <script src="index.js" type="module"></script>
+  </body>
+</html>

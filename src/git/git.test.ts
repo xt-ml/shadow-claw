@@ -492,6 +492,24 @@ describe("git.js", () => {
       expect(result).toContain("Committed abc1234");
     });
 
+    it("handles root directory entries from statusMatrix", async () => {
+      mockGit.statusMatrix.mockResolvedValue([
+        [".", 0, 2, 0], // root entry for a new/staged repo root
+      ]);
+      mockGit.commit.mockResolvedValue("abc1234567890");
+
+      const result = await mod.gitCommit({
+        repo: "my-repo",
+        message: "root commit",
+      });
+
+      expect(mockGit.add).toHaveBeenCalledWith(
+        expect.objectContaining({ filepath: "." }),
+      );
+      expect(mockGit.commit).toHaveBeenCalled();
+      expect(result).toContain("Committed abc1234");
+    });
+
     it("handles removed files", async () => {
       mockGit.statusMatrix.mockResolvedValue([
         ["deleted.txt", 1, 0, 1], // deleted
@@ -629,6 +647,61 @@ describe("git.js", () => {
           filepath: "file.txt",
         }),
       );
+    });
+
+    it("normalizes leading ./ paths before staging", async () => {
+      await mod.gitAdd({ repo: "my-repo", filepath: "./file.txt" });
+
+      expect(mockGit.add).toHaveBeenCalledWith(
+        expect.objectContaining({
+          filepath: "file.txt",
+        }),
+      );
+    });
+
+    it("stages the entire repo when filepath is omitted", async () => {
+      mockGit.statusMatrix.mockResolvedValue([
+        ["file.txt", 1, 1, 1],
+        ["bin/build.mjs", 1, 1, 1],
+        ["new-file.txt", 0, 1, 0],
+        ["modified.txt", 1, 1, 0],
+      ]);
+
+      const result = await mod.gitAdd({ repo: "my-repo" });
+
+      expect(result).toContain("my-repo");
+      expect(mockGit.add).toHaveBeenCalledTimes(2);
+      expect(mockGit.add).toHaveBeenCalledWith(
+        expect.objectContaining({ filepath: "new-file.txt" }),
+      );
+      expect(mockGit.add).toHaveBeenCalledWith(
+        expect.objectContaining({ filepath: "modified.txt" }),
+      );
+    });
+
+    it("uses '.' as repo root when omitted for commit and add flows", async () => {
+      mockGit.statusMatrix.mockResolvedValue([
+        ["file.txt", 1, 1, 1],
+        ["bin/build.mjs", 1, 1, 1],
+        ["new-file.txt", 0, 1, 0],
+      ]);
+
+      const result = await mod.gitAdd({ repo: "my-repo" });
+
+      expect(result).toContain("my-repo");
+      expect(mockGit.add).toHaveBeenCalledTimes(1);
+      expect(mockGit.add).toHaveBeenCalledWith(
+        expect.objectContaining({ filepath: "new-file.txt" }),
+      );
+    });
+  });
+
+  describe("makeOpfsFs", () => {
+    it("returns stats objects with isSymbolicLink support", async () => {
+      const fs = mod.makeOpfsFs(mockDirHandle);
+      const stats = await fs.promises.stat("file.txt");
+
+      expect(stats.isSymbolicLink()).toBe(false);
     });
   });
 

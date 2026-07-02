@@ -201,7 +201,7 @@ export const git_delete_repo: ToolDefinition = {
 export const git_add: ToolDefinition = {
   name: "git_add",
   description:
-    "Stage files in a cloned repo. Accepts a single filepath or an array of filepaths.",
+    "Stage files in a cloned repo. Accepts an array of filepaths. If omitted or empty, stages the repo root.",
   input_schema: {
     type: "object",
     properties: {
@@ -209,16 +209,14 @@ export const git_add: ToolDefinition = {
         type: "string",
         description: "Short repo name",
       },
-      filepath: {
-        anyOf: [
-          { type: "string" },
-          { type: "array", items: { type: "string" } },
-        ],
+      filepaths: {
+        type: "array",
+        items: { type: "string" },
         description:
-          "File path or array of file paths to stage (relative to repo root)",
+          "Array of file paths to stage (relative to repo root). Pass a single item for one file.",
       },
     },
-    required: ["repo", "filepath"],
+    required: ["repo"],
   },
 };
 

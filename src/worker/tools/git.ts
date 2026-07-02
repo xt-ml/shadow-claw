@@ -223,7 +223,7 @@ export async function executeGitTool(
     case "git_add": {
       return deps.gitAdd({
         repo: input.repo,
-        filepath: input.filepath,
+        filepath: input.filepaths ?? input.filepath,
         groupRoot,
       });
     }

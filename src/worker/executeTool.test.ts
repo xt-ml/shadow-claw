@@ -2139,6 +2139,26 @@ describe("executeTool.js", () => {
       executeTool(
         {},
         "git_add",
+        { repo: "demo", filepaths: ["file.txt"] },
+        "group1",
+      ),
+    ).resolves.toBe("added file.txt");
+
+    expect(mockGitAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        filepath: ["file.txt"],
+      }),
+    );
+  });
+
+  it("should support legacy filepath for git_add", async () => {
+    (mockGitAdd as any).mockResolvedValue("added file.txt");
+
+    await expect(
+      executeTool(
+        {},
+        "git_add",
         { repo: "demo", filepath: "file.txt" },
         "group1",
       ),

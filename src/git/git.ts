@@ -36,12 +36,23 @@ let _initPromise: Promise<void> | null = null;
  * the last segment has a "." in it or `forceFile` is true), and a
  * FileSystemDirectoryHandle otherwise.
  */
+function normalizeOpfsPath(path: string): string {
+  return path
+    .trim()
+    .replace(/^[\\/]+/, "")
+    .replace(/[\\/]+$/, "")
+    .split(/[\\/]+/)
+    .filter((segment) => segment !== "." && segment !== "")
+    .join("/");
+}
+
 async function resolvePathToHandle(
   root: FileSystemDirectoryHandle,
   path: string,
   opts: { create?: boolean; forceFile?: boolean } = {},
 ): Promise<FileSystemHandle> {
-  const segments = path.replace(/^\//, "").split("/").filter(Boolean);
+  const normalizedPath = normalizeOpfsPath(path);
+  const segments = normalizedPath.split("/").filter(Boolean);
   if (segments.length === 0) {
     return root;
   }
@@ -83,7 +94,12 @@ async function resolveDirHandle(
   path: string,
   opts: { create?: boolean } = {},
 ): Promise<FileSystemDirectoryHandle> {
-  const segments = path.replace(/^\//, "").split("/").filter(Boolean);
+  const normalizedPath = normalizeOpfsPath(path);
+  const segments = normalizedPath.split("/").filter(Boolean);
+  if (segments.length === 0) {
+    return root;
+  }
+
   let current: FileSystemDirectoryHandle = root;
   for (const seg of segments) {
     current = await current.getDirectoryHandle(seg, {
@@ -99,9 +115,10 @@ async function resolveFileHandle(
   path: string,
   opts: { create?: boolean } = {},
 ): Promise<FileSystemFileHandle> {
-  const segments = path.replace(/^\//, "").split("/").filter(Boolean);
+  const normalizedPath = normalizeOpfsPath(path);
+  const segments = normalizedPath.split("/").filter(Boolean);
   if (segments.length === 0) {
-    throw new Error(`Cannot resolve empty path as file`);
+    throw new Error(`Cannot resolve '.' as file`);
   }
 
   let current: FileSystemDirectoryHandle = root;
@@ -123,7 +140,8 @@ async function resolveParent(
   root: FileSystemDirectoryHandle,
   path: string,
 ): Promise<[FileSystemDirectoryHandle, string]> {
-  const segments = path.replace(/^\//, "").split("/").filter(Boolean);
+  const normalizedPath = normalizeOpfsPath(path);
+  const segments = normalizedPath.split("/").filter(Boolean);
   if (segments.length === 0) {
     throw new Error(`Cannot get parent of root`);
   }
@@ -135,6 +153,14 @@ async function resolveParent(
   }
 
   return [parent, name];
+}
+
+function normalizeGitPath(filepath: string): string {
+  return filepath
+    .trim()
+    .replace(/\\/g, "/")
+    .replace(/^\/+/, "")
+    .replace(/^\.\//, "");
 }
 
 // ---------------------------------------------------------------------------
@@ -196,6 +222,7 @@ export function makeOpfsFs(root: FileSystemDirectoryHandle) {
     async stat(path: string): Promise<{
       isDirectory(): boolean;
       isFile(): boolean;
+      isSymbolicLink(): boolean;
       size: number;
       mtimeMs: number;
       mode: number;
@@ -225,6 +252,7 @@ export function makeOpfsFs(root: FileSystemDirectoryHandle) {
         return {
           isDirectory: () => true,
           isFile: () => false,
+          isSymbolicLink: () => false,
           size: 0,
           mtimeMs: Date.now(),
           mode: 0o40755,
@@ -243,6 +271,7 @@ export function makeOpfsFs(root: FileSystemDirectoryHandle) {
         return {
           isDirectory: () => false,
           isFile: () => true,
+          isSymbolicLink: () => false,
           size: file.size,
           mtimeMs: file.lastModified,
           mode: 0o100644,
@@ -400,6 +429,22 @@ export function repoNameFromUrl(url: string): string {
  */
 export function repoDir(repo: string): string {
   return `${REPOS_ROOT}/${repo}`;
+}
+
+/**
+ * Ensure core.filemode is set to false to prevent isomorphic-git from
+ * considering mode changes (like 100755 to 100644) as file modifications
+ * which breaks diff/status/add/commit on OPFS.
+ */
+export async function ensureCoreFilemodeFalse(git: any, fs: any, dir: string) {
+  try {
+    const filemode = await git.getConfig({ fs, dir, path: "core.filemode" });
+    if (filemode !== false) {
+      await git.setConfig({ fs, dir, path: "core.filemode", value: false });
+    }
+  } catch (err) {
+    console.error("Failed to set core.filemode=false:", err);
+  }
 }
 
 /**
@@ -575,6 +620,8 @@ export async function gitClone({
     }
   }
 
+  await ensureCoreFilemodeFalse(git, fs, dir);
+
   return repo;
 }
 
@@ -651,6 +698,7 @@ export async function gitStatus({
 }): Promise<string> {
   const { git, fs, repoDirFn } = await initGitContext(groupRoot);
   const dir = repoDirFn(repo);
+  await ensureCoreFilemodeFalse(git, fs, dir);
 
   const matrix = await git.statusMatrix({ fs, dir });
 
@@ -752,6 +800,7 @@ export async function gitDiff({
   const { git, fs, repoDirFn } = await initGitContext(groupRoot);
   const dir = repoDirFn(repo);
   const pfs = fs.promises;
+  await ensureCoreFilemodeFalse(git, fs, dir);
 
   // Simple approach: compare statusMatrix-style for working tree changes
   if (!ref1 && !ref2) {
@@ -1066,6 +1115,7 @@ export async function gitCommit({
 }): Promise<string> {
   const { git, fs, repoDirFn } = await initGitContext(groupRoot);
   const dir = repoDirFn(repo);
+  await ensureCoreFilemodeFalse(git, fs, dir);
 
   // Stage all changes
   const matrix = await git.statusMatrix({ fs, dir });
@@ -1098,21 +1148,53 @@ export async function gitAdd({
   groupRoot,
 }: {
   repo: string;
-  filepath: string | string[];
+  filepath?: string | string[];
   groupRoot?: FileSystemDirectoryHandle;
 }): Promise<string> {
   const { git, fs, repoDirFn } = await initGitContext(groupRoot);
   const dir = repoDirFn(repo);
 
-  if (Array.isArray(filepath)) {
-    for (const f of filepath) {
-      await git.add({ fs, dir, filepath: f });
-    }
-  } else {
-    await git.add({ fs, dir, filepath });
+  const paths =
+    filepath === undefined || filepath === null || filepath === ""
+      ? ["."]
+      : Array.isArray(filepath)
+        ? filepath
+            .filter((p) => p !== undefined && p !== null && p !== "")
+            .map((p) => normalizeGitPath(p))
+        : [normalizeGitPath(filepath)];
+
+  if (paths.length === 0) {
+    paths.push(".");
   }
 
-  return `Added ${Array.isArray(filepath) ? filepath.join(", ") : filepath} to the index in ${repo}`;
+  await ensureCoreFilemodeFalse(git, fs, dir);
+
+  if (paths.length === 1 && paths[0] === ".") {
+    const matrix: [string, number, number, number][] = await git.statusMatrix({
+      fs,
+      dir,
+    });
+
+    const changedPaths = matrix
+      .filter(([, head, workdir, stage]) => workdir !== stage || head === 0)
+      .map(([filepath]) => filepath);
+
+    if (changedPaths.length === 0) {
+      return `No changes to add in ${repo}`;
+    }
+
+    for (const filepath of changedPaths) {
+      await git.add({ fs, dir, filepath });
+    }
+
+    return `Added ${changedPaths.join(", ")} to the index in ${repo}`;
+  }
+
+  for (const f of paths) {
+    await git.add({ fs, dir, filepath: f });
+  }
+
+  return `Added ${paths.join(", ")} to the index in ${repo}`;
 }
 
 /**
@@ -1550,6 +1632,7 @@ export async function gitInit({
   await ensureDir(pfs, dir);
 
   await git.init({ fs, dir, defaultBranch: "main" });
+  await ensureCoreFilemodeFalse(git, fs, dir);
 
   return `Initialized empty Git repository in ${repo} (branch: main)`;
 }

@@ -16,12 +16,12 @@ jest.unstable_mockModule("../crypto.js", () => ({
 jest.unstable_mockModule("../config.js", () => ({
   CONFIG_KEYS: {
     GIT_ACCOUNTS: "git_accounts",
+    GIT_AUTHOR_EMAIL: "git_author_email",
+    GIT_AUTHOR_NAME: "git_author_name",
     GIT_DEFAULT_ACCOUNT: "git_default_account",
+    GIT_PASSWORD: "git_password",
     GIT_TOKEN: "git_token",
     GIT_USERNAME: "git_username",
-    GIT_PASSWORD: "git_password",
-    GIT_AUTHOR_NAME: "git_author_name",
-    GIT_AUTHOR_EMAIL: "git_author_email",
   },
   getProviderTokenAuthScheme: (
     providerId,
@@ -31,32 +31,32 @@ jest.unstable_mockModule("../config.js", () => ({
     const schemes = {
       github: {
         default: {
-          pat: { headerName: "Authorization", headerPrefix: "token " },
           oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
+          pat: { headerName: "Authorization", headerPrefix: "token " },
         },
       },
       gitlab: {
-        default: {
-          pat: { headerName: "PRIVATE-TOKEN", headerPrefix: "" },
-          oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
-        },
         byServiceType: {
           git_remote: {
-            pat: { headerName: "Authorization", headerPrefix: "Bearer " },
             oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
+            pat: { headerName: "Authorization", headerPrefix: "Bearer " },
           },
+        },
+        default: {
+          oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
+          pat: { headerName: "PRIVATE-TOKEN", headerPrefix: "" },
         },
       },
       azure_devops: {
-        default: {
-          pat: { headerName: "Authorization", headerPrefix: "Bearer " },
-          oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
-        },
         byServiceType: {
           git_remote: {
-            pat: { headerName: "Authorization", headerPrefix: "Basic " },
             oauth: { headerName: "Authorization", headerPrefix: "Basic " },
+            pat: { headerName: "Authorization", headerPrefix: "Basic " },
           },
+        },
+        default: {
+          oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
+          pat: { headerName: "Authorization", headerPrefix: "Bearer " },
         },
       },
     };
@@ -81,8 +81,11 @@ const { resolveGitCredentials, detectProvider, buildAuthHeaders } =
 
 const mockGetConfig = getConfig as any;
 const mockSetConfig = setConfig as any;
-function setupConfig(map) {
-  (mockGetConfig as any).mockImplementation(async (_db, key) => map[key]);
+
+function setupConfig(map: any) {
+  (mockGetConfig as any).mockImplementation(
+    async (_db: any, key: any) => map[key],
+  );
 }
 
 const fakeDb: any = {} as any;
@@ -97,13 +100,13 @@ describe("resolveGitCredentials", () => {
   it("returns empty creds when nothing is configured", async () => {
     const result = await resolveGitCredentials(fakeDb);
     expect(result).toEqual({
+      authMode: "pat",
+      authorEmail: undefined,
+      authorName: undefined,
+      password: undefined,
+      provider: "generic",
       token: undefined,
       username: undefined,
-      password: undefined,
-      authorName: undefined,
-      authorEmail: undefined,
-      provider: "generic",
-      authMode: "pat",
     });
   });
 
@@ -111,15 +114,17 @@ describe("resolveGitCredentials", () => {
   describe("legacy fallback (no accounts configured)", () => {
     it("returns decrypted token from legacy GIT_TOKEN", async () => {
       setupConfig({ git_token: "enc-tok" });
+
       const result = await resolveGitCredentials(fakeDb);
       expect(result.token).toBe("decrypted:enc-tok");
     });
 
     it("returns username and decrypted password from legacy keys", async () => {
       setupConfig({
-        git_username: "alice",
         git_password: "enc-pw",
+        git_username: "alice",
       });
+
       const result = await resolveGitCredentials(fakeDb);
       expect(result.username).toBe("alice");
       expect(result.password).toBe("decrypted:enc-pw");
@@ -127,9 +132,10 @@ describe("resolveGitCredentials", () => {
 
     it("returns author name and email from legacy keys", async () => {
       setupConfig({
-        git_author_name: "Alice",
         git_author_email: "alice@example.com",
+        git_author_name: "Alice",
       });
+
       const result = await resolveGitCredentials(fakeDb);
       expect(result.authorName).toBe("Alice");
       expect(result.authorEmail).toBe("alice@example.com");
@@ -139,25 +145,25 @@ describe("resolveGitCredentials", () => {
   // ── Multi-account with host pattern matching ───────────────────
   describe("multi-account resolution", () => {
     const githubAccount: any = {
+      authorEmail: "gh@example.com",
+      authorName: "GH User",
+      hostPattern: "github.com",
       id: "acct-1",
       label: "GitHub",
-      hostPattern: "github.com",
+      password: "",
       token: "enc-gh-tok",
       username: "",
-      password: "",
-      authorName: "GH User",
-      authorEmail: "gh@example.com",
     };
 
     const azureAccount: any = {
+      authorEmail: "az@example.com",
+      authorName: "AZ User",
+      hostPattern: "dev.azure.com",
       id: "acct-2",
       label: "ADO",
-      hostPattern: "dev.azure.com",
+      password: "enc-az-pw",
       token: "enc-az-tok",
       username: "azuser",
-      password: "enc-az-pw",
-      authorName: "AZ User",
-      authorEmail: "az@example.com",
     };
 
     it("matches account by URL hostname", async () => {
@@ -170,6 +176,7 @@ describe("resolveGitCredentials", () => {
         fakeDb,
         "https://github.com/org/repo.git",
       );
+
       expect(result.token).toBe("decrypted:enc-gh-tok");
       expect(result.authorName).toBe("GH User");
       expect(result.authorEmail).toBe("gh@example.com");
@@ -185,13 +192,14 @@ describe("resolveGitCredentials", () => {
         fakeDb,
         "https://dev.azure.com/org/project/_git/repo",
       );
+
+      expect(result.authorName).toBe("AZ User");
+      expect(result.password).toBe("decrypted:enc-az-pw");
       expect(result.token).toBe("decrypted:enc-az-tok");
       expect(result.username).toBe("azuser");
-      expect(result.password).toBe("decrypted:enc-az-pw");
-      expect(result.authorName).toBe("AZ User");
     });
 
-    it("falls back to default account when URL has no match", async () => {
+    it("does not fall back to unrelated default account when URL has not match", async () => {
       setupConfig({
         git_accounts: [githubAccount, azureAccount],
         git_default_account: "acct-2",
@@ -201,9 +209,12 @@ describe("resolveGitCredentials", () => {
         fakeDb,
         "https://gitlab.com/org/repo.git",
       );
-      // Should fall back to default (Azure, id=acct-2)
-      expect(result.token).toBe("decrypted:enc-az-tok");
-      expect(result.username).toBe("azuser");
+
+      // Should NOT send Azure credentials to GitLab -- that will cause 401s on
+      // public repos. Instead, return empty creds for anonymous clones
+      expect(result.token).toBeUndefined();
+      expect(result.username).toBeUndefined();
+      expect(result.password).toBeUndefined();
     });
 
     it("falls back to default account when no URL is provided", async () => {
@@ -228,14 +239,14 @@ describe("resolveGitCredentials", () => {
 
     it("skips empty token and password fields", async () => {
       const noTokenAccount: any = {
+        authorEmail: "",
+        authorName: "",
+        hostPattern: "example.com",
         id: "acct-3",
         label: "No Token",
-        hostPattern: "example.com",
+        password: "",
         token: "",
         username: "user",
-        password: "",
-        authorName: "",
-        authorEmail: "",
       };
 
       setupConfig({
@@ -247,6 +258,7 @@ describe("resolveGitCredentials", () => {
         fakeDb,
         "https://example.com/repo.git",
       );
+
       expect(result.token).toBeUndefined();
       expect(result.username).toBe("user");
       expect(result.password).toBeUndefined();
@@ -254,14 +266,14 @@ describe("resolveGitCredentials", () => {
 
     it("supports partial hostPattern matching (substring of hostname)", async () => {
       const account: any = {
+        authorEmail: "",
+        authorName: "",
+        hostPattern: "gitlab.mycompany.com",
         id: "acct-4",
         label: "Custom GitLab",
-        hostPattern: "gitlab.mycompany.com",
+        password: "",
         token: "enc-custom-tok",
         username: "",
-        password: "",
-        authorName: "",
-        authorEmail: "",
       };
 
       setupConfig({
@@ -272,32 +284,33 @@ describe("resolveGitCredentials", () => {
         fakeDb,
         "https://gitlab.mycompany.com/group/project.git",
       );
+
       expect(result.token).toBe("decrypted:enc-custom-tok");
     });
 
     it("supports selecting an explicit git account id", async () => {
       const patAccount: any = {
+        authMode: "pat",
+        authorEmail: "",
+        authorName: "",
+        hostPattern: "github.com",
         id: "acct-pat",
         label: "GitHub PAT",
-        hostPattern: "github.com",
+        password: "",
         token: "enc-pat-tok",
         username: "",
-        password: "",
-        authorName: "",
-        authorEmail: "",
-        authMode: "pat",
       };
 
       const oauthAccount: any = {
+        authMode: "oauth",
+        authorEmail: "",
+        authorName: "",
+        hostPattern: "github.com",
         id: "acct-oauth",
         label: "GitHub OAuth",
-        hostPattern: "github.com",
+        password: "",
         token: "enc-oauth-tok",
         username: "",
-        password: "",
-        authorName: "",
-        authorEmail: "",
-        authMode: "oauth",
       };
 
       setupConfig({
@@ -317,27 +330,27 @@ describe("resolveGitCredentials", () => {
 
     it("prefers matching auth mode when host patterns tie", async () => {
       const patAccount: any = {
+        authMode: "pat",
+        authorEmail: "",
+        authorName: "",
+        hostPattern: "github.com",
         id: "acct-pat",
         label: "GitHub PAT",
-        hostPattern: "github.com",
+        password: "",
         token: "enc-pat-tok",
         username: "",
-        password: "",
-        authorName: "",
-        authorEmail: "",
-        authMode: "pat",
       };
 
       const oauthAccount: any = {
+        authMode: "oauth",
+        authorEmail: "",
+        authorName: "",
+        hostPattern: "github.com",
         id: "acct-oauth",
         label: "GitHub OAuth",
-        hostPattern: "github.com",
+        password: "",
         token: "enc-oauth-tok",
         username: "",
-        password: "",
-        authorName: "",
-        authorEmail: "",
-        authMode: "oauth",
       };
 
       setupConfig({
@@ -357,20 +370,20 @@ describe("resolveGitCredentials", () => {
 
     it("refreshes expiring OAuth Git tokens before returning credentials", async () => {
       const oauthAccount: any = {
+        accessTokenExpiresAt: Date.now() - 1_000,
+        authMode: "oauth",
+        authorEmail: "",
+        authorName: "",
+        hostPattern: "github.com",
         id: "oauth-1",
         label: "GitHub OAuth",
-        hostPattern: "github.com",
+        oauthClientId: "client-123",
+        oauthProviderId: "github",
+        password: "",
+        refreshToken: "enc-refresh",
+        scopes: ["repo"],
         token: "enc-old-access",
         username: "",
-        password: "",
-        authorName: "",
-        authorEmail: "",
-        authMode: "oauth",
-        oauthProviderId: "github",
-        oauthClientId: "client-123",
-        refreshToken: "enc-refresh",
-        accessTokenExpiresAt: Date.now() - 1_000,
-        scopes: ["repo"],
       };
 
       setupConfig({
@@ -378,14 +391,14 @@ describe("resolveGitCredentials", () => {
       });
 
       (global as any).fetch = (jest.fn() as any).mockResolvedValue({
-        ok: true,
         json: async () => ({
           accessToken: "new-access-token",
-          refreshToken: "new-refresh-token",
           expiresIn: 3600,
+          refreshToken: "new-refresh-token",
           scope: "repo read:user",
           tokenType: "Bearer",
         }),
+        ok: true,
       });
 
       const result = await resolveGitCredentials(
@@ -402,8 +415,8 @@ describe("resolveGitCredentials", () => {
         expect.arrayContaining([
           expect.objectContaining({
             id: "oauth-1",
-            token: "encrypted:new-access-token",
             refreshToken: "encrypted:new-refresh-token",
+            token: "encrypted:new-access-token",
           }),
         ]),
       );
@@ -411,20 +424,20 @@ describe("resolveGitCredentials", () => {
 
     it("forces Git OAuth refresh when forceRefresh option is true", async () => {
       const oauthAccount: any = {
+        accessTokenExpiresAt: Date.now() + 60 * 60 * 1000,
+        authMode: "oauth",
+        authorEmail: "",
+        authorName: "",
+        hostPattern: "github.com",
         id: "oauth-2",
         label: "GitHub OAuth",
-        hostPattern: "github.com",
+        oauthClientId: "client-123",
+        oauthProviderId: "github",
+        password: "",
+        refreshToken: "enc-refresh",
+        scopes: ["repo"],
         token: "enc-old-access",
         username: "",
-        password: "",
-        authorName: "",
-        authorEmail: "",
-        authMode: "oauth",
-        oauthProviderId: "github",
-        oauthClientId: "client-123",
-        refreshToken: "enc-refresh",
-        accessTokenExpiresAt: Date.now() + 60 * 60 * 1000,
-        scopes: ["repo"],
       };
 
       setupConfig({
@@ -432,11 +445,11 @@ describe("resolveGitCredentials", () => {
       });
 
       (global as any).fetch = (jest.fn() as any).mockResolvedValue({
-        ok: true,
         json: async () => ({
           accessToken: "forced-access-token",
           expiresIn: 1800,
         }),
+        ok: true,
       });
 
       const result = await resolveGitCredentials(
@@ -454,19 +467,19 @@ describe("resolveGitCredentials", () => {
 
     it("marks Git OAuth account as reauth-required after repeated refresh failures", async () => {
       const oauthAccount: any = {
+        accessTokenExpiresAt: Date.now() - 1_000,
+        authMode: "oauth",
+        authorEmail: "",
+        authorName: "",
+        hostPattern: "github.com",
         id: "oauth-3",
         label: "GitHub OAuth",
-        hostPattern: "github.com",
+        oauthClientId: "client-123",
+        oauthProviderId: "github",
+        password: "",
+        refreshToken: "enc-refresh",
         token: "enc-old-access",
         username: "",
-        password: "",
-        authorName: "",
-        authorEmail: "",
-        authMode: "oauth",
-        oauthProviderId: "github",
-        oauthClientId: "client-123",
-        refreshToken: "enc-refresh",
-        accessTokenExpiresAt: Date.now() - 1_000,
       };
 
       setupConfig({
@@ -474,17 +487,19 @@ describe("resolveGitCredentials", () => {
       });
 
       (global as any).fetch = (jest.fn() as any).mockResolvedValue({
+        json: async () => ({ error: "invalid_grant" }),
         ok: false,
         status: 401,
-        json: async () => ({ error: "invalid_grant" }),
       });
 
       await resolveGitCredentials(fakeDb, "https://github.com/org/repo.git", {
         authMode: "oauth",
       });
+
       await resolveGitCredentials(fakeDb, "https://github.com/org/repo.git", {
         authMode: "oauth",
       });
+
       const third = await resolveGitCredentials(
         fakeDb,
         "https://github.com/org/repo.git",
@@ -500,8 +515,8 @@ describe("resolveGitCredentials", () => {
         expect.arrayContaining([
           expect.objectContaining({
             id: "oauth-3",
-            oauthRefreshFailureCount: 3,
             oauthReauthRequired: true,
+            oauthRefreshFailureCount: 3,
           }),
         ]),
       );

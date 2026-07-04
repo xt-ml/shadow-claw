@@ -2,8 +2,8 @@ import type { AccountAuthMode } from "../../accounts/service-accounts.js";
 import type {
   GitAuthMode,
   ResolvedGitCredentials,
-} from "../../git/credentials.js";
-import type { ShadowClawDatabase } from "../../types.js";
+  ShadowClawDatabase,
+} from "../../types.js";
 
 interface FetchResult {
   status: string;

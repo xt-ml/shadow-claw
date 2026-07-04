@@ -1,12 +1,15 @@
+import { sanitizeModelOutput } from "./chat-template-sanitizer.js";
+import { CONFIG_KEYS } from "./config.js";
 import { ShadowClawDatabase } from "./db/db.js";
+import { getConfig } from "./db/getConfig.js";
+import { toTrustedScriptUrl } from "./security/trusted-types.js";
 import { ToolDefinition } from "./tools.js";
 import { createLogMessage } from "./worker/createLogMessage.js";
 import { createToolActivityMessage } from "./worker/createToolActivityMessage.js";
 import { executeTool } from "./worker/executeTool.js";
-import { getConfig } from "./db/getConfig.js";
-import { CONFIG_KEYS } from "./config.js";
-import { sanitizeModelOutput } from "./chat-template-sanitizer.js";
-import { toTrustedScriptUrl } from "./security/trusted-types.js";
+import { setPostHandler } from "./worker/post.js";
+
+import type { SubagentInvokeContext } from "./worker/tools/spawn-subagent.js";
 
 class TransformersJsManager {
   private worker: Worker | null = null;
@@ -190,6 +193,7 @@ export async function invokeWithTransformersJs(
   _abortSignal: AbortSignal | undefined,
   tools: ToolDefinition[] | undefined,
   modelId: string,
+  invokeContext?: SubagentInvokeContext,
 ) {
   const activeTools = tools || [];
   const backend =
@@ -307,13 +311,18 @@ export async function invokeWithTransformersJs(
     const toolResults: any[] = [];
     for (const call of calls) {
       await emit(createToolActivityMessage(groupId, call.name, "running"));
-      const output = await executeTool(
-        db,
-        call.name,
-        call.input || {},
-        groupId,
-        {},
-      );
+      setPostHandler((msg) => {
+        emit(msg);
+      });
+      let output: any;
+      try {
+        output = await executeTool(db, call.name, call.input || {}, groupId, {
+          invokeContext,
+        });
+      } finally {
+        setPostHandler(null);
+      }
+
       await emit(createToolActivityMessage(groupId, call.name, "done"));
 
       toolResults.push({

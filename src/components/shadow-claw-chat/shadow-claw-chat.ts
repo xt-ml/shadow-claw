@@ -336,7 +336,7 @@ export class ShadowClawChat extends ShadowClawElement {
     let contentEl: HTMLElement | null = null;
 
     if (!streamDiv) {
-      const assistantName = localStorage.getItem("assistantName") || "k9";
+      const assistantName = localStorage.getItem("assistantName") || "example";
 
       streamDiv = document.createElement("article");
       streamDiv.className =
@@ -1536,7 +1536,8 @@ export class ShadowClawChat extends ShadowClawElement {
             }
 
             const messageType = msg.isFromMe ? "assistant" : "user";
-            const assistantName = localStorage.getItem("assistantName") || "k9";
+            const assistantName =
+              localStorage.getItem("assistantName") || "example";
             const sender = msg.isFromMe ? assistantName : msg.sender || "You";
 
             const msgDiv = document.createElement("article");

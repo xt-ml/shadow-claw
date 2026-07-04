@@ -61,6 +61,24 @@ globalThis.Response = global.Response;
 globalThis.Request = global.Request;
 globalThis.Headers = global.Headers;
 
+// Patch TextEncoder
+if (typeof globalThis.TextEncoder === "undefined") {
+  (globalThis as any).TextEncoder = class TextEncoder {
+    encode(str: string): Uint8Array {
+      return new Uint8Array(Buffer.from(str, "utf-8"));
+    }
+  };
+}
+
+// Patch TextDecoder
+if (typeof globalThis.TextDecoder === "undefined") {
+  (globalThis as any).TextDecoder = class TextDecoder {
+    decode(buf: Uint8Array): string {
+      return Buffer.from(buf).toString("utf-8");
+    }
+  };
+}
+
 // Implement a filesystem-aware fetch for component templates/styles
 globalThis.fetch = jest.fn((url: string | URL | Request) => {
   const urlStr = url.toString();

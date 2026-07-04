@@ -5,6 +5,7 @@ import { createLogMessage } from "./worker/createLogMessage.js";
 import { createToolActivityMessage } from "./worker/createToolActivityMessage.js";
 import { executeTool } from "./worker/executeTool.js";
 import { setPostHandler } from "./worker/post.js";
+import type { SubagentInvokeContext } from "./worker/tools/spawn-subagent.js";
 import { sanitizeModelOutput } from "./chat-template-sanitizer.js";
 import { NANO_BUILTIN_PROFILE } from "./tools/builtin-profiles.js";
 
@@ -692,6 +693,7 @@ export async function invokeWithPromptApi(
   emit: (message: any) => Promise<void> | void,
   abortSignal: AbortSignal | undefined,
   tools: ToolDefinition[] | undefined,
+  invokeContext?: SubagentInvokeContext,
 ) {
   const activeTools = tools || PROMPT_API_TOOLS;
 
@@ -1144,6 +1146,7 @@ export async function invokeWithPromptApi(
             call.name,
             call.input || {},
             groupId,
+            { invokeContext },
           );
         } finally {
           setPostHandler(null);

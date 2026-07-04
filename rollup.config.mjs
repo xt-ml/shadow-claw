@@ -57,13 +57,6 @@ const commonPlugins = (tsconfig, terserOptions = {}) => [
         find: /^isomorphic-git$/,
         replacement: resolve(__dirname, "node_modules/isomorphic-git/index.js"),
       },
-      {
-        find: "isomorphic-git/http/web",
-        replacement: resolve(
-          __dirname,
-          "node_modules/isomorphic-git/http/web/index.js",
-        ),
-      },
     ],
   }),
   nodeResolve({

@@ -18,6 +18,8 @@ import { ShadowClawDatabase } from "./db/db.js";
 import { createLogMessage } from "./worker/createLogMessage.js";
 import { createToolActivityMessage } from "./worker/createToolActivityMessage.js";
 import { executeTool } from "./worker/executeTool.js";
+import { setPostHandler } from "./worker/post.js";
+import type { SubagentInvokeContext } from "./worker/tools/spawn-subagent.js";
 import { sanitizeModelOutput } from "./chat-template-sanitizer.js";
 import { ToolDefinition } from "./tools.js";
 
@@ -934,6 +936,7 @@ export async function invokeWithLiteRtLm(
   abortSignal: AbortSignal | undefined,
   modelId: string,
   tools?: ToolDefinition[],
+  invokeContext?: SubagentInvokeContext,
 ) {
   if (!isLiteRtLmSupported()) {
     await emit({
@@ -1171,15 +1174,13 @@ export async function invokeWithLiteRtLm(
         await emit(createToolActivityMessage(groupId, call.name, "running"));
         let output: any;
         try {
-          output = await executeTool(
-            db,
-            call.name,
-            call.input || {},
-            groupId,
-            {},
-          );
+          output = await executeTool(db, call.name, call.input || {}, groupId, {
+            invokeContext,
+          });
         } catch (err: any) {
           output = `Error: ${err?.message ?? String(err)}`;
+        } finally {
+          setPostHandler(null);
         }
 
         await emit(createToolActivityMessage(groupId, call.name, "done"));

@@ -187,7 +187,7 @@ jest.unstable_mockModule("../../db/db.js", () => ({
 jest.unstable_mockModule("../../db/getConfig.js", () => ({
   getConfig: jest.fn<any>().mockImplementation((_db: unknown, key: string) => {
     if (key === "assistant_name") {
-      return Promise.resolve("k9");
+      return Promise.resolve("example");
     }
 
     return Promise.resolve("true");
@@ -316,7 +316,7 @@ describe("shadow-claw-settings", () => {
         objectStore: () => ({
           getAll: () => {
             const request: any = {
-              result: [{ key: "assistant_name", value: "k9" }],
+              result: [{ key: "assistant_name", value: "example" }],
             };
 
             setTimeout(() => {
@@ -544,7 +544,7 @@ describe("shadow-claw-settings", () => {
   it("populates and saves assistant name", async () => {
     const setAssistantName = jest.fn();
     const orchestrator = {
-      getAssistantName: jest.fn().mockReturnValue("k9"),
+      getAssistantName: jest.fn().mockReturnValue("example"),
       setAssistantName,
     };
     (orchestratorStore as any).orchestrator = orchestrator;
@@ -558,7 +558,7 @@ describe("shadow-claw-settings", () => {
     const nameInput = el.shadowRoot?.querySelector<HTMLInputElement>(
       '[data-setting="assistant-name-input"]',
     );
-    expect(nameInput?.value).toBe("k9");
+    expect(nameInput?.value).toBe("example");
 
     if (nameInput) {
       nameInput.value = "new-name";

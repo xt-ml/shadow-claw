@@ -15,7 +15,7 @@ describe("worker and worker/agent.js", () => {
   beforeAll(async () => {
     // Mock the dependencies that agent.mjs imports
     jest.unstable_mockModule("../config.js", () => ({
-      ASSISTANT_NAME: "k9",
+      ASSISTANT_NAME: "example",
       BASH_DEFAULT_TIMEOUT_SEC: 120,
       BASH_MAX_TIMEOUT_SEC: 1800,
       DEFAULT_SUBAGENT_MAX_PARALLEL: 5,

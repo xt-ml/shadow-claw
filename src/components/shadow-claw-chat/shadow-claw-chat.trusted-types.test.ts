@@ -79,7 +79,7 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
         id: "m1",
         groupId: "group-1",
         isFromMe: true,
-        sender: "k9",
+        sender: "example",
         content: "hello",
         timestamp: 1,
       },

@@ -36,7 +36,7 @@ const host: RoomMember = {
   peerId: "host-peer",
   alias: "Host",
   kind: "agent",
-  agentName: "k9",
+  agentName: "example",
 };
 
 function makeRoom(overrides: Partial<RoomMeta> = {}): RoomMeta {

@@ -16,11 +16,6 @@ export default {
         // Signal Polyfill
         "^signal-polyfill$": "<rootDir>/src/__mocks__/signal-polyfill.cjs",
         // Bare specifiers (used by other modules or older patterns)
-        "^@isomorphic-git/lightning-fs$":
-          "<rootDir>/src/git/__mocks__/lightningFs.cjs",
-        "^isomorphic-git$": "<rootDir>/src/git/__mocks__/isomorphicGit.cjs",
-        "^isomorphic-git/http/web$": "<rootDir>/src/git/__mocks__/httpWeb.cjs",
-        "^buffer$": "<rootDir>/src/git/__mocks__/buffer-mock.cjs",
         "^zip$": "<rootDir>/src/__mocks__/zip.cjs",
         "^jszip$": "<rootDir>/src/__mocks__/jszip.cjs",
         "^dompurify$": "<rootDir>/src/__mocks__/dompurify.cjs",

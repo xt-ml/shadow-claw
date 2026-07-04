@@ -3,9 +3,83 @@ import { modelRegistry } from "./model-registry.js";
 import { sanitizeModelOutput } from "./chat-template-sanitizer.js";
 
 import type { ProviderConfig } from "./config.js";
+import type { ToolResultContentBlock } from "./types.js";
 
 function formatAttachmentFallbackText(block: any): string {
   return `[Attachment: ${block.fileName} (${block.mimeType}) is available in chat history${block.path ? ` at ${block.path}` : ""}]`;
+}
+
+function richToolResultToText(content: ToolResultContentBlock[]): string {
+  return content
+    .map((block) => {
+      if (block.type === "text") {
+        return block.text;
+      }
+
+      if (block.type === "image") {
+        return `[Image: ${block.media_type}, ${Math.ceil((block.data.length * 3) / 4)} bytes base64-encoded]`;
+      }
+
+      return "";
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
+function formatOpenAIToolResultContent(
+  content: ToolResultContentBlock[],
+  model: string,
+): string | any[] {
+  const canSendImages = canSendNativeImage(model);
+
+  if (!canSendImages) {
+    return richToolResultToText(content);
+  }
+
+  const blocks: any[] = [];
+  for (const block of content) {
+    if (block.type === "text") {
+      blocks.push({ type: "text", text: block.text });
+    } else if (block.type === "image") {
+      blocks.push({
+        type: "image_url",
+        image_url: {
+          url: `data:${block.media_type};base64,${block.data}`,
+        },
+      });
+    }
+  }
+
+  return blocks;
+}
+
+function formatAnthropicToolResultContent(
+  content: ToolResultContentBlock[],
+  model: string,
+): string | any[] {
+  const canSendImages = canSendNativeImage(model);
+
+  if (!canSendImages) {
+    return richToolResultToText(content);
+  }
+
+  const blocks: any[] = [];
+  for (const block of content) {
+    if (block.type === "text") {
+      blocks.push({ type: "text", text: block.text });
+    } else if (block.type === "image") {
+      blocks.push({
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: block.media_type,
+          data: block.data,
+        },
+      });
+    }
+  }
+
+  return blocks;
 }
 
 function canSendNativeImage(model: string): boolean {
@@ -120,8 +194,21 @@ function mapAnthropicContent(blocks: any[], model: string): any[] {
       continue;
     }
 
-    if (block?.type === "tool_use" || block?.type === "tool_result") {
+    if (block?.type === "tool_use") {
       content.push(block);
+
+      continue;
+    }
+
+    if (block?.type === "tool_result") {
+      if (Array.isArray(block.content)) {
+        content.push({
+          ...block,
+          content: formatAnthropicToolResultContent(block.content, model),
+        });
+      } else {
+        content.push(block);
+      }
 
       continue;
     }
@@ -302,13 +389,22 @@ class OpenAIAdapter extends BaseAdapter {
         }
 
         for (const toolResult of toolResults) {
+          let toolContent: string | any[];
+          if (typeof toolResult.content === "string") {
+            toolContent = toolResult.content;
+          } else if (Array.isArray(toolResult.content)) {
+            toolContent = formatOpenAIToolResultContent(
+              toolResult.content,
+              model,
+            );
+          } else {
+            toolContent = JSON.stringify(toolResult.content);
+          }
+
           openaiMessages.push({
             role: "tool",
             tool_call_id: toolResult.tool_use_id,
-            content:
-              typeof toolResult.content === "string"
-                ? toolResult.content
-                : JSON.stringify(toolResult.content),
+            content: toolContent,
           });
         }
 
@@ -564,13 +660,21 @@ function mapGoogleContent(content: any[], _model: string): any[] {
       }
 
       if (block.type === "tool_result") {
+        let resultContent: string;
+        if (typeof block.content === "string") {
+          resultContent = block.content;
+        } else if (Array.isArray(block.content)) {
+          resultContent = richToolResultToText(block.content);
+        } else if (typeof block.output === "string") {
+          resultContent = block.output;
+        } else {
+          resultContent = JSON.stringify(block.output ?? block.content ?? "");
+        }
+
         return {
           functionResponse: {
             name: block.name,
-            response:
-              typeof block.output === "string"
-                ? { result: block.output }
-                : block.output,
+            response: { result: resultContent },
           },
         };
       }

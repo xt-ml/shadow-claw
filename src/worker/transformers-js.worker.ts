@@ -1,18 +1,20 @@
 import {
-  env,
+  AutoModelForCausalLM,
   AutoProcessor,
   AutoTokenizer,
-  AutoModelForCausalLM,
   TextStreamer,
+  env,
 } from "@huggingface/transformers";
-import {
-  getHuggingFaceDomain,
-  isRemoteEnvironment,
-} from "./transformers-js-utils.js";
+
 import {
   getPreferredDtypes,
   normalizeDtypeStrategy,
 } from "./transformers-js-load-options.js";
+
+import {
+  getHuggingFaceDomain,
+  isRemoteEnvironment,
+} from "./transformers-js-utils.js";
 
 // Configure Transformers.js
 if (isRemoteEnvironment()) {
@@ -34,6 +36,7 @@ if (isRemoteEnvironment()) {
         : hdrs && typeof hdrs === "object"
           ? "Range" in hdrs
           : false;
+
     if (hasRange) {
       return nativeFetch(url, { ...options, cache: "no-store" });
     }
@@ -67,10 +70,10 @@ if (isRemoteEnvironment()) {
   }
 })();
 
+let currentDevice: string | null = null;
+let currentModelId: string | null = null;
 let model: any = null;
 let processor: any = null;
-let currentModelId: string | null = null;
-let currentDevice: string | null = null;
 
 async function loadModel(
   modelId: string,
@@ -95,13 +98,13 @@ async function loadModel(
   currentDevice = device;
 
   self.postMessage({
-    type: "progress",
     payload: {
       groupId,
-      status: "running",
-      progress: 0,
       message: `Loading ${modelId}...`,
+      progress: 0,
+      status: "running",
     },
+    type: "progress",
   });
 
   try {
@@ -110,13 +113,13 @@ async function loadModel(
         progress_callback: (info: any) => {
           if (info.status === "progress") {
             self.postMessage({
-              type: "progress",
               payload: {
                 groupId,
-                status: "running",
-                progress: info.progress / 100,
                 message: `Downloading processor... ${Math.round(info.progress)}%`,
+                progress: info.progress / 100,
+                status: "running",
               },
+              type: "progress",
             });
           }
         },
@@ -127,13 +130,13 @@ async function loadModel(
         progress_callback: (info: any) => {
           if (info.status === "progress") {
             self.postMessage({
-              type: "progress",
               payload: {
                 groupId,
-                status: "running",
-                progress: info.progress / 100,
                 message: `Downloading tokenizer... ${Math.round(info.progress)}%`,
+                progress: info.progress / 100,
+                status: "running",
               },
+              type: "progress",
             });
           }
         },
@@ -145,6 +148,7 @@ async function loadModel(
     const navigatorWithMemory = navigator as Navigator & {
       deviceMemory?: number;
     };
+
     const deviceMemoryGb =
       typeof navigatorWithMemory.deviceMemory === "number"
         ? navigatorWithMemory.deviceMemory
@@ -167,15 +171,13 @@ async function loadModel(
       deviceMemoryGb,
       strategy,
     );
+
     let lastModelLoadError: unknown = null;
     for (const dtype of dtypeCandidates) {
       try {
         model = await AutoModelForCausalLM.from_pretrained(modelId, {
           device: targetDevice,
           dtype,
-          session_options: {
-            logSeverityLevel: 0,
-          },
           progress_callback: (info: any) => {
             if (info.status === "progress") {
               self.postMessage({
@@ -189,11 +191,15 @@ async function loadModel(
               });
             }
           },
+          session_options: {
+            logSeverityLevel: 0,
+          },
         });
 
         break;
       } catch (error) {
         lastModelLoadError = error;
+
         console.warn(
           `Model load failed for dtype '${dtype}', trying next candidate...`,
           error,
@@ -216,14 +222,15 @@ async function loadModel(
       type: "progress",
       payload: {
         groupId,
-        status: "done",
-        progress: 1,
         message: "Model ready.",
+        progress: 1,
+        status: "done",
       },
     });
   } catch (err: any) {
     console.error("Failed to load model:", err);
     let errorMessage = err.message || String(err);
+
     if (errorMessage.includes("401")) {
       errorMessage =
         "HuggingFace returned 401 Unauthorized. This model might be gated (requires login) or the service worker proxy rules are interfering. Please ensure you are not using a gated model or hard-reload to update proxy rules.";
@@ -260,7 +267,20 @@ async function generate(
           }
 
           if (block.type === "tool_result") {
-            return `[TOOL_RESULT] ${block.content}`;
+            if (typeof block.content === "string") {
+              return `[TOOL_RESULT] ${block.content}`;
+            }
+
+            if (Array.isArray(block.content)) {
+              const textParts = block.content
+                .filter((b: any) => b.type === "text")
+                .map((b: any) => b.text)
+                .join("\n");
+
+              return `[TOOL_RESULT] ${textParts || "[image content]"}`;
+            }
+
+            return `[TOOL_RESULT] ${JSON.stringify(block.content)}`;
           }
 
           return "";
@@ -287,6 +307,7 @@ async function generate(
     const thinkTokens = tokenizer.encode("<think></think>", {
       add_special_tokens: false,
     });
+
     if (thinkTokens && thinkTokens.length === 2) {
       START_THINKING_TOKEN_ID = Number(thinkTokens[0]);
       END_THINKING_TOKEN_ID = Number(thinkTokens[1]);
@@ -319,37 +340,37 @@ async function generate(
 
   let streamedText = "";
   const trackingStreamer = new TextStreamer(tokenizer, {
-    skip_prompt: true,
-    skip_special_tokens: true,
     callback_function: (text: string) => {
       if (phase === "thinking") {
         // Route reasoning trace to a separate channel so the provider
         // can surface it in the activity log instead of the chat stream.
         self.postMessage({
-          type: "thinking-chunk",
           payload: { groupId, text },
+          type: "thinking-chunk",
         });
       } else {
         streamedText += text;
         self.postMessage({
-          type: "chunk",
           payload: { groupId, text },
+          type: "chunk",
         });
       }
     },
+    skip_prompt: true,
+    skip_special_tokens: true,
     token_callback_function,
   });
 
   await model.generate({
     ...inputs,
     max_new_tokens: maxTokens,
-    streamer: trackingStreamer,
     signal: abortSignal,
+    streamer: trackingStreamer,
   });
 
   self.postMessage({
-    type: "done",
     payload: { groupId, text: streamedText },
+    type: "done",
   });
 }
 
@@ -386,8 +407,8 @@ self.onmessage = async (event) => {
     self.postMessage({
       type: "error",
       payload: {
-        groupId: payload?.groupId,
         error: error.message || String(error),
+        groupId: payload?.groupId,
       },
     });
   }

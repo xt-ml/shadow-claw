@@ -1,29 +1,19 @@
 import { CONFIG_KEYS, OAUTH_PROVIDER_DEFINITIONS } from "./config.js";
-import { encryptValue, decryptValue } from "./crypto.js";
+import { decryptValue, encryptValue } from "./crypto.js";
 import { getConfig } from "./db/getConfig.js";
 import { setConfig } from "./db/setConfig.js";
 import { getRemoteMcpConnection } from "./mcp-connections.js";
 import { clearRemoteMcpSession } from "./remote-mcp-client.js";
 
-import type { ShadowClawDatabase } from "./types.js";
 import type { ServiceAccount } from "./accounts/service-accounts.js";
-import type { GitAccount } from "./git/credentials.js";
 import type { RemoteMcpCredentialRef } from "./mcp-connections.js";
-
-interface OAuthAccountLike {
-  id: string;
-  oauthProviderId?: string;
-  oauthClientId?: string;
-  oauthClientSecret?: string;
-  refreshToken?: string;
-  accessTokenExpiresAt?: number;
-  tokenType?: string;
-  scopes?: string[];
-  oauthCustomAuthorizeUrl?: string;
-  oauthCustomTokenUrl?: string;
-  oauthCustomUsePkce?: boolean;
-  oauthCustomRedirectUri?: string;
-}
+import type {
+  GitAccount,
+  OAuthAccountLike,
+  ReconnectMcpOAuthOptions,
+  ReconnectMcpOAuthResult,
+  ShadowClawDatabase,
+} from "./types.js";
 
 /** Helper to build account update fields from OAuth token payload. */
 function buildOAuthUpdateFields(
@@ -39,32 +29,22 @@ function buildOAuthUpdateFields(
   encryptedRefreshToken: string | undefined,
 ) {
   return {
-    token: encryptedAccessToken,
-    refreshToken: encryptedRefreshToken,
     accessTokenExpiresAt: payload.expiresIn
       ? Date.now() + payload.expiresIn * 1000
       : existingAccount.accessTokenExpiresAt,
-    tokenType: payload.tokenType || existingAccount.tokenType,
+    oauthReauthRequired: false,
+    oauthReauthRequiredAt: undefined,
+    oauthRefreshFailureCount: 0,
+    refreshToken: encryptedRefreshToken,
     scopes: payload.scope
       ? payload.scope
           .split(/[\s,]+/)
           .map((s) => s.trim())
           .filter(Boolean)
       : existingAccount.scopes,
-    oauthRefreshFailureCount: 0,
-    oauthReauthRequired: false,
-    oauthReauthRequiredAt: undefined,
+    token: encryptedAccessToken,
+    tokenType: payload.tokenType || existingAccount.tokenType,
   };
-}
-
-export interface ReconnectMcpOAuthResult {
-  success: boolean;
-  error?: string;
-}
-
-export interface ReconnectMcpOAuthOptions {
-  /** When true, only attempt a silent token refresh — do not open a popup. */
-  silentOnly?: boolean;
 }
 
 /**
@@ -95,16 +75,16 @@ async function trySilentRefresh(
 
   try {
     const response = await fetch("/oauth/refresh", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        providerId: account.oauthProviderId,
         clientId: account.oauthClientId,
         clientSecret: clientSecret || undefined,
+        providerId: account.oauthProviderId,
         refreshToken: decryptedRefreshToken,
         scope: account.scopes,
         tokenUrl: account.oauthCustomTokenUrl,
       }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
     });
 
     if (!response.ok) {
@@ -113,10 +93,10 @@ async function trySilentRefresh(
 
     const payload = (await response.json()) as {
       accessToken?: string;
-      refreshToken?: string;
       expiresIn?: number;
-      tokenType?: string;
+      refreshToken?: string;
       scope?: string;
+      tokenType?: string;
     };
 
     if (!payload.accessToken) {
@@ -139,10 +119,10 @@ async function trySilentRefresh(
     const updatedFields = buildOAuthUpdateFields(
       {
         accessToken: payload.accessToken,
-        refreshToken: payload.refreshToken,
         expiresIn: payload.expiresIn,
-        tokenType: payload.tokenType,
+        refreshToken: payload.refreshToken,
         scope: payload.scope,
+        tokenType: payload.tokenType,
       },
       account,
       encryptedAccessToken,
@@ -153,14 +133,17 @@ async function trySilentRefresh(
       const idx = serviceAccounts.findIndex(
         (acct) => acct.id === ref.accountId,
       );
+
       if (idx !== -1) {
         Object.assign(serviceAccounts[idx], updatedFields);
+
         await setConfig(db, CONFIG_KEYS.SERVICE_ACCOUNTS, serviceAccounts);
       }
     } else if (accountStore === "git" && ref.gitAccountId) {
       const idx = gitAccounts.findIndex((acct) => acct.id === ref.gitAccountId);
       if (idx !== -1) {
         Object.assign(gitAccounts[idx], updatedFields);
+
         await setConfig(db, CONFIG_KEYS.GIT_ACCOUNTS, gitAccounts);
       }
     }
@@ -208,6 +191,7 @@ export async function reconnectMcpOAuth(
   const serviceAccounts: ServiceAccount[] = Array.isArray(serviceRaw)
     ? serviceRaw
     : [];
+
   const gitRaw = await getConfig(db, CONFIG_KEYS.GIT_ACCOUNTS);
   const gitAccounts: GitAccount[] = Array.isArray(gitRaw) ? gitRaw : [];
 
@@ -219,30 +203,32 @@ export async function reconnectMcpOAuth(
     account = serviceAccounts.find((acct) => acct.id === ref.accountId) as
       | OAuthAccountLike
       | undefined;
+
     accountStore = "service";
   } else if (ref.gitAccountId) {
     account = gitAccounts.find((acct) => acct.id === ref.gitAccountId) as
       | OAuthAccountLike
       | undefined;
+
     accountStore = "git";
   }
 
   if (!account || !accountStore) {
     return {
-      success: false,
       error:
         "Linked account not found. Edit the connection to re-configure authentication.",
+      success: false,
     };
   }
 
-  const providerId = account.oauthProviderId;
   const clientId = account.oauthClientId;
+  const providerId = account.oauthProviderId;
 
   if (!providerId || !clientId) {
     return {
-      success: false,
       error:
         "Account is missing OAuth provider or client ID. Edit the account in Settings → Accounts to fix.",
+      success: false,
     };
   }
 
@@ -269,9 +255,9 @@ export async function reconnectMcpOAuth(
   // If silentOnly was requested, don't open a popup.
   if (options.silentOnly) {
     return {
-      success: false,
       error:
         "Silent token refresh failed. Use Settings → Remote MCP → Reconnect OAuth for full re-authorization.",
+      success: false,
     };
   }
 
@@ -293,8 +279,6 @@ export async function reconnectMcpOAuth(
 
   try {
     const authorizeRes = await fetch("/oauth/authorize", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({
         providerId,
         clientId,
@@ -311,12 +295,14 @@ export async function reconnectMcpOAuth(
           ? { usePkce: account.oauthCustomUsePkce }
           : {}),
       }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
     });
 
     const authorizePayload = (await authorizeRes.json()) as {
-      state?: string;
       authorizeUrl?: string;
       error?: string;
+      state?: string;
     };
 
     if (
@@ -345,9 +331,10 @@ export async function reconnectMcpOAuth(
       const sessionRes = await fetch(
         `/oauth/session/${encodeURIComponent(state)}`,
       );
+
       const sessionPayload = (await sessionRes.json()) as {
-        status?: string;
         error?: string;
+        status?: string;
       };
 
       if (!sessionRes.ok) {
@@ -372,18 +359,18 @@ export async function reconnectMcpOAuth(
     }
 
     const tokenRes = await fetch("/oauth/token", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
       body: JSON.stringify({ state }),
+      headers: { "content-type": "application/json" },
+      method: "POST",
     });
 
     const tokenPayload = (await tokenRes.json()) as {
       accessToken?: string;
-      refreshToken?: string;
+      error?: string;
       expiresIn?: number;
+      refreshToken?: string;
       scope?: string;
       tokenType?: string;
-      error?: string;
     };
 
     if (!tokenRes.ok || !tokenPayload.accessToken) {
@@ -407,10 +394,10 @@ export async function reconnectMcpOAuth(
     const updatedFields = buildOAuthUpdateFields(
       {
         accessToken: tokenPayload.accessToken,
-        refreshToken: tokenPayload.refreshToken,
         expiresIn: tokenPayload.expiresIn,
-        tokenType: tokenPayload.tokenType,
+        refreshToken: tokenPayload.refreshToken,
         scope: tokenPayload.scope,
+        tokenType: tokenPayload.tokenType,
       },
       account,
       encryptedAccessToken,
@@ -424,12 +411,14 @@ export async function reconnectMcpOAuth(
       );
       if (idx !== -1) {
         Object.assign(serviceAccounts[idx], updatedFields);
+
         await setConfig(db, CONFIG_KEYS.SERVICE_ACCOUNTS, serviceAccounts);
       }
     } else if (accountStore === "git" && ref.gitAccountId) {
       const idx = gitAccounts.findIndex((acct) => acct.id === ref.gitAccountId);
       if (idx !== -1) {
         Object.assign(gitAccounts[idx], updatedFields);
+
         await setConfig(db, CONFIG_KEYS.GIT_ACCOUNTS, gitAccounts);
       }
     }

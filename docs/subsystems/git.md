@@ -1,9 +1,8 @@
 # Git Integration
 
-> In-browser Git operations using isomorphic-git with LightningFS as the filesystem,
-> synchronized to the OPFS workspace.
+> In-browser Git operations using isomorphic-git with native filesystem handles as the backend.
 
-**Source:** `src/git/git.ts` · `src/git/sync.ts` · `src/git/credentials.ts`
+**Source:** `src/git/git.ts` · `src/git/credentials.ts`
 
 ## Architecture
 
@@ -11,15 +10,18 @@
 graph TD
   Tools["Agent git_* tools"] --> Git["src/git/git.ts"]
   Git --> IG["isomorphic-git"]
-  IG --> LFS["LightningFS<br>In-memory / in-browser FS"]
-  Git --> Sync["src/git/sync.ts<br>LightningFS ↔ OPFS sync"]
-  Sync --> OPFS["OPFS Workspace<br>shadowclaw/<groupId>/workspace/repos/"]
-  Sync --> LFS
-  Git --> Creds["src/git/credentials.ts<br>Token management"]
-  Creds --> DB["IndexedDB<br>Encrypted Git token"]
-  Git --> HTTP["isomorphic-git/http/web<br>CORS-aware HTTP client"]
-  HTTP --> Proxy["Express proxy<br>/proxy/git/*<br>(for restricted CORS hosts)"]
+  IG --> OPFS["OPFS\n(group workspace repos/ namespace)"]
+  Git --> Creds["src/git/credentials.ts\nToken management"]
+  Creds --> DB["IndexedDB\nEncrypted Git token"]
+  Git --> HTTP["isomorphic-git/http/web\nCORS-aware HTTP client"]
+  HTTP --> Proxy["Express proxy\n/proxy/git/*\n(for restricted CORS hosts)"]
 ```
+
+## How it works
+
+isomorphic-git writes and reads directly to/from OPFS via a hand-rolled `fs.promises`-compatible adapter (`makeOpfsFs`) defined in `src/git/git.ts`. There is no intermediate in-memory layer — all git object storage is durably persisted in OPFS through the same filesystem root used by workspace files.
+
+Repos are stored at `repos/<repo-name>/` inside the workspace group directory.
 
 ## Supported Git Operations
 
@@ -27,7 +29,6 @@ graph TD
 | ---------------------- | ------------------------------------------------ |
 | `git_clone`            | Clone a remote repository                        |
 | `git_init`             | Initialize a new empty repo locally              |
-| `git_sync`             | Manually sync workspace ↔ LightningFS            |
 | `git_checkout`         | Switch branch / tag / commit                     |
 | `git_branch`           | Create a new branch                              |
 | `git_delete_branch`    | Delete a local branch                            |
@@ -49,35 +50,43 @@ graph TD
 | `git_remote`           | List / add / remove remotes                      |
 | `git_config`           | Get or set git config values (e.g. user.name)    |
 | `git_list_repos`       | List cloned repos                                |
-| `git_delete_repo`      | Remove a repo from workspace                     |
+| `git_delete_repo`      | Remove a repo from OPFS git storage              |
 
-## LightningFS ↔ OPFS Sync
+## OPFS Filesystem Adapter
 
-isomorphic-git requires a synchronous filesystem interface, which OPFS can't provide on the main thread. ShadowClaw solves this by:
+`makeOpfsFs(root: FileSystemDirectoryHandle)` in `src/git/git.ts` returns a `{ promises }` object satisfying the subset of Node's `fs.promises` that isomorphic-git requires:
 
-1. **Clone operation:** isomorphic-git writes to LightningFS (in-memory)
-2. **OPFS sync:** `syncLightningFsToOpfs()` mirrors the LightningFS tree to OPFS
-3. **Future reads:** Files are read from OPFS directly; LightningFS is re-seeded from OPFS before git operations
-
-The sync is directional — LightningFS → OPFS — to ensure changes are durable (OPFS survives page reload, LightningFS doesn't).
+| Method      | OPFS implementation                                             |
+| ----------- | --------------------------------------------------------------- |
+| `readFile`  | `FileSystemFileHandle.getFile()` → `arrayBuffer()`              |
+| `writeFile` | `FileSystemFileHandle.createWritable()` → `write()` / `close()` |
+| `mkdir`     | `getDirectoryHandle(seg, { create: true })`                     |
+| `rmdir`     | `removeEntry(name, { recursive: true })`                        |
+| `readdir`   | async `for await` over `dirHandle.entries()`                    |
+| `stat`      | synthesized `{ isDirectory(), isFile(), size, mtimeMs, ... }`   |
+| `lstat`     | delegates to `stat` (OPFS has no symlinks)                      |
+| `unlink`    | `parentDir.removeEntry(name)`                                   |
+| `symlink`   | throws (unsupported)                                            |
+| `readlink`  | reads file content as target string (fallback)                  |
 
 ## Workspace Layout
 
-Repos live in the group workspace at `repos/<repo-name>/`:
+Repos live in the workspace `repos/` directory:
 
 ```text
-shadowclaw/<groupId>/workspace/
-└── repos/
-    ├── my-project/
-    │   ├── .git/
-    │   ├── src/
-    │   └── README.md
-    └── another-repo/
-        ├── .git/
-        └── ...
+repos/
+└── my-project/
+    ├── .git/
+    │   ├── objects/
+    │   ├── refs/
+    │   └── HEAD
+    ├── src/
+    └── README.md
 ```
 
-`git_list_repos` lists all immediate subdirectories of `repos/` that contain a `.git` directory.
+`git_list_repos` lists all immediate subdirectories of `repos/` that contain a `.git/` directory.
+
+> Note: Because git operates directly on the shared workspace handle, the `.git/` directory is visible under `repos/<repo>/.git/`. Do not modify `.git/` directly from `bash`, `write_file`, or the File Browser unless you understand git internals, as doing so can corrupt repository metadata.
 
 ## Merge Workflow
 

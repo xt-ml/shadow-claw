@@ -1,10 +1,10 @@
 import { CONFIG_KEYS } from "../../../config.js";
+import { encryptValue } from "../../../crypto.js";
 import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
 import { getConfig } from "../../../db/getConfig.js";
-import { encryptValue } from "../../../crypto.js";
 
-import { testRemoteMcpConnection } from "../../../remote-mcp-client.js";
 import { reconnectMcpOAuth } from "../../../mcp-reconnect.js";
+import { testRemoteMcpConnection } from "../../../remote-mcp-client.js";
 
 import {
   bindRemoteMcpCredentialRef,
@@ -17,8 +17,9 @@ import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import { showError, showSuccess } from "../../../toast.js";
 import { escapeHtml } from "../../../utils/utils.js";
 
+import { GitAccount } from "../../../types.js";
+
 import type { ServiceAccount } from "../../../accounts/service-accounts.js";
-import type { GitAccount } from "../../../git/credentials.js";
 import type { McpConnectionTestResult } from "../../../remote-mcp-client.js";
 
 import type {
@@ -28,9 +29,10 @@ import type {
 } from "../../../mcp-connections.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
-import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
+
 import "../../common/shadow-claw-actions/shadow-claw-actions.js";
 import "../../common/shadow-claw-card/shadow-claw-card.js";
+import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 
 const elementName = "shadow-claw-mcp-remote";
 

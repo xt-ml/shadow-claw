@@ -17,6 +17,7 @@ describe("executeTool.js", () => {
   let mockPost;
   let mockReadGroupFile;
   let mockReadGroupFileBytes;
+  let mockGetGroupDir;
   let mockSandboxedEval;
   let mockStripHtml;
   let mockUlid;
@@ -44,8 +45,6 @@ describe("executeTool.js", () => {
   let mockEncryptValue;
   let mockResolveGitCredentials;
   let mockResolveServiceCredentials;
-  let mockSyncLfsToOpfs;
-  let mockSyncOpfsToLfs;
   let mockListRemoteMcpTools;
   let mockCallRemoteMcpTool;
 
@@ -95,6 +94,7 @@ describe("executeTool.js", () => {
     mockGitStatus = jest.fn();
     mockGetProxyUrl = jest.fn(() => "https://proxy.local");
     mockGetRemoteUrl = (jest.fn() as any).mockResolvedValue(undefined);
+    mockGetGroupDir = jest.fn(async () => ({}) as any);
     mockDecryptValue = jest.fn();
     mockEncryptValue = jest.fn(async (value) => `enc:${value}`);
     mockResolveGitCredentials = (jest.fn() as any).mockResolvedValue({
@@ -107,8 +107,6 @@ describe("executeTool.js", () => {
     mockResolveServiceCredentials = (jest.fn() as any).mockResolvedValue(
       undefined,
     );
-    mockSyncLfsToOpfs = jest.fn();
-    mockSyncOpfsToLfs = jest.fn();
     mockListRemoteMcpTools = jest.fn();
     mockCallRemoteMcpTool = jest.fn();
 
@@ -179,11 +177,6 @@ describe("executeTool.js", () => {
       gitUnstage: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../git/sync.js", () => ({
-      syncLfsToOpfs: mockSyncLfsToOpfs,
-      syncOpfsToLfs: mockSyncOpfsToLfs,
-    }));
-
     jest.unstable_mockModule("../accounts/service-accounts.js", () => ({
       resolveServiceCredentials: mockResolveServiceCredentials,
     }));
@@ -237,6 +230,10 @@ describe("executeTool.js", () => {
 
     jest.unstable_mockModule("../storage/readGroupFileBytes.js", () => ({
       readGroupFileBytes: mockReadGroupFileBytes,
+    }));
+
+    jest.unstable_mockModule("../storage/getGroupDir.js", () => ({
+      getGroupDir: mockGetGroupDir,
     }));
 
     jest.unstable_mockModule("../storage/writeGroupFile.js", () => ({
@@ -584,7 +581,8 @@ describe("executeTool.js", () => {
   });
 
   it("should handle read_file tool", async () => {
-    (mockReadGroupFile as any).mockResolvedValue("file content");
+    const textBytes = new Uint8Array(Buffer.from("file content", "utf-8"));
+    (mockReadGroupFileBytes as any).mockResolvedValue(textBytes);
     const result = await executeTool(
       {},
       "read_file",
@@ -592,7 +590,7 @@ describe("executeTool.js", () => {
       "group1",
     );
 
-    expect(mockReadGroupFile).toHaveBeenCalledWith(
+    expect(mockReadGroupFileBytes).toHaveBeenCalledWith(
       {} as any,
       "group1",
       "test.txt",
@@ -602,10 +600,16 @@ describe("executeTool.js", () => {
   });
 
   it("should handle read_file with multiple paths", async () => {
-    mockReadGroupFile
-      .mockResolvedValueOnce("content of file A")
-      .mockResolvedValueOnce("content of file B")
-      .mockResolvedValueOnce("content of file C");
+    mockReadGroupFileBytes
+      .mockResolvedValueOnce(
+        new Uint8Array(Buffer.from("content of file A", "utf-8")),
+      )
+      .mockResolvedValueOnce(
+        new Uint8Array(Buffer.from("content of file B", "utf-8")),
+      )
+      .mockResolvedValueOnce(
+        new Uint8Array(Buffer.from("content of file C", "utf-8")),
+      );
 
     const result = await executeTool(
       {},
@@ -614,10 +618,22 @@ describe("executeTool.js", () => {
       "group1",
     );
 
-    expect(mockReadGroupFile).toHaveBeenCalledTimes(3);
-    expect(mockReadGroupFile).toHaveBeenCalledWith({} as any, "group1", "a.js");
-    expect(mockReadGroupFile).toHaveBeenCalledWith({} as any, "group1", "b.js");
-    expect(mockReadGroupFile).toHaveBeenCalledWith({} as any, "group1", "c.js");
+    expect(mockReadGroupFileBytes).toHaveBeenCalledTimes(3);
+    expect(mockReadGroupFileBytes).toHaveBeenCalledWith(
+      {} as any,
+      "group1",
+      "a.js",
+    );
+    expect(mockReadGroupFileBytes).toHaveBeenCalledWith(
+      {} as any,
+      "group1",
+      "b.js",
+    );
+    expect(mockReadGroupFileBytes).toHaveBeenCalledWith(
+      {} as any,
+      "group1",
+      "c.js",
+    );
 
     expect(result).toContain("--- a.js ---");
     expect(result).toContain("content of file A");
@@ -628,8 +644,10 @@ describe("executeTool.js", () => {
   });
 
   it("should handle read_file with paths where some files fail", async () => {
-    mockReadGroupFile
-      .mockResolvedValueOnce("content of good file")
+    mockReadGroupFileBytes
+      .mockResolvedValueOnce(
+        new Uint8Array(Buffer.from("content of good file", "utf-8")),
+      )
       .mockRejectedValueOnce(new Error("File not found: missing.js"));
 
     const result = await executeTool(
@@ -646,7 +664,9 @@ describe("executeTool.js", () => {
   });
 
   it("should handle read_file with paths preferring paths over path", async () => {
-    (mockReadGroupFile as any).mockResolvedValue("multi content");
+    (mockReadGroupFileBytes as any).mockResolvedValue(
+      new Uint8Array(Buffer.from("multi content", "utf-8")),
+    );
 
     await executeTool(
       {},
@@ -655,16 +675,109 @@ describe("executeTool.js", () => {
       "group1",
     );
 
-    expect(mockReadGroupFile).toHaveBeenCalledWith(
+    expect(mockReadGroupFileBytes).toHaveBeenCalledWith(
       {} as any,
       "group1",
       "used.js",
     );
-    expect(mockReadGroupFile).not.toHaveBeenCalledWith(
+    expect(mockReadGroupFileBytes).not.toHaveBeenCalledWith(
       {},
       "group1",
       "ignored.js",
     );
+  });
+
+  it("should return image content blocks for PNG files", async () => {
+    const pngBytes: any = new Uint8Array([
+      137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 1, 2, 3,
+    ]);
+
+    (mockReadGroupFileBytes as any).mockResolvedValue(pngBytes);
+
+    const result = await executeTool(
+      {},
+      "read_file",
+      { path: "screenshot.png" },
+      "group1",
+    );
+
+    expect(mockReadGroupFileBytes).toHaveBeenCalledWith(
+      {} as any,
+      "group1",
+      "screenshot.png",
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    const blocks = result as any[];
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]).toEqual({
+      type: "text",
+      text: "Contents of image file: screenshot.png",
+    });
+    expect(blocks[1].type).toBe("image");
+    expect(blocks[1].media_type).toBe("image/png");
+    expect(typeof blocks[1].data).toBe("string");
+    expect(blocks[1].data.length).toBeGreaterThan(0);
+  });
+
+  it("should return image content blocks for JPEG files", async () => {
+    const jpegBytes = new Uint8Array([255, 216, 255, 224, 0, 1, 2, 3]);
+    (mockReadGroupFileBytes as any).mockResolvedValue(jpegBytes);
+
+    const result = await executeTool(
+      {},
+      "read_file",
+      { path: "photo.jpg" },
+      "group1",
+    );
+
+    expect(Array.isArray(result)).toBe(true);
+    const blocks = result as any[];
+    expect(blocks[1].type).toBe("image");
+    expect(blocks[1].media_type).toBe("image/jpeg");
+  });
+
+  it("should return error for binary non-image files", async () => {
+    const binaryBytes = new Uint8Array(100);
+    binaryBytes[0] = 0x7f;
+    binaryBytes[1] = 0x45;
+    binaryBytes[2] = 0x4c;
+    binaryBytes[3] = 0x46; //ELF header
+    binaryBytes[10] = 0; //null byte
+
+    (mockReadGroupFileBytes as any).mockResolvedValue(binaryBytes);
+
+    const result = await executeTool(
+      {},
+      "read_file",
+      { path: "program.exe" },
+      "group1",
+    );
+
+    expect(typeof result).toBe("string");
+    expect(result).toContain("binary file");
+    expect(result).toContain("cannot be displayed as text");
+  });
+
+  it("should handle image fuiles in batch reads with placeholder", async () => {
+    mockReadGroupFileBytes
+      .mockResolvedValueOnce(
+        new Uint8Array(Buffer.from("text content", "utf-8")),
+      )
+      .mockResolvedValueOnce(new Uint8Array([137, 80, 78, 71]));
+
+    const result = await executeTool(
+      {},
+      "read_file",
+      { paths: ["readme.md", "logo.png"] },
+      "group1",
+    );
+
+    expect(typeof result).toBe("string");
+    expect(result).toContain("--- readme.md ---");
+    expect(result).toContain("text content");
+    expect(result).toContain("--- logo.png ---");
+    expect(result).toContain("use read_file with a single path");
   });
 
   it("should post open_file event", async () => {
@@ -2073,7 +2186,7 @@ describe("executeTool.js", () => {
     expect(mockGitPush).not.toHaveBeenCalled();
   });
 
-  it("should clone a repo and sync it to workspace", async () => {
+  it("should clone a repo via git_clone", async () => {
     (mockGetConfig as any).mockImplementation(async (_db, key) =>
       key === "git-cors-proxy" ? "public" : null,
     );
@@ -2082,23 +2195,17 @@ describe("executeTool.js", () => {
     const result = await executeTool(
       {},
       "git_clone",
-      { url: "https://github.com/x/y.git", branch: "main", include_git: true },
+      { url: "https://github.com/x/y.git", branch: "main" },
       "group1",
     );
 
-    expect(mockGitClone).toHaveBeenCalledWith({
-      url: "https://github.com/x/y.git",
-      branch: "main",
-      depth: undefined,
-      corsProxy: "https://proxy.local",
-    });
-
-    expect(mockSyncLfsToOpfs).toHaveBeenCalledWith(
-      {},
-      "group1",
-      "demo-repo",
-      "repos/demo-repo",
-      true,
+    expect(mockGitClone).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://github.com/x/y.git",
+        branch: "main",
+        depth: undefined,
+        corsProxy: "https://proxy.local",
+      }),
     );
 
     expect(result).toContain(
@@ -2106,40 +2213,14 @@ describe("executeTool.js", () => {
     );
   });
 
-  it("should handle git_sync push and pull", async () => {
-    await expect(
-      executeTool(
-        {},
-        "git_sync",
-        { repo: "demo", direction: "push", include_git: true },
-        "group1",
-      ),
-    ).resolves.toContain("Synced workspace files in repos/demo");
-
-    expect(mockSyncOpfsToLfs).toHaveBeenCalledWith(
+  it("should return Unknown git tool for git_sync", async () => {
+    const result = await executeTool(
       {},
+      "git_sync",
+      { repo: "demo", direction: "push" },
       "group1",
-      "repos/demo",
-      "demo",
-      true,
     );
-
-    await expect(
-      executeTool(
-        {},
-        "git_sync",
-        { repo: "demo", direction: "pull" },
-        "group1",
-      ),
-    ).resolves.toContain("Synced git clone files to workspace repos/demo");
-
-    expect(mockSyncLfsToOpfs).toHaveBeenCalledWith(
-      {},
-      "group1",
-      "demo",
-      "repos/demo",
-      false,
-    );
+    expect(result).toContain("Unknown tool: git_sync");
   });
 
   it("should handle git_checkout", async () => {
@@ -2153,27 +2234,41 @@ describe("executeTool.js", () => {
         "group1",
       ),
     ).resolves.toBe("Checked out main");
-
-    expect(mockSyncLfsToOpfs).toHaveBeenCalledWith(
-      {},
-      "group1",
-      "demo",
-      "repos/demo",
-    );
   });
 
-  it("should handle git_status even when OPFS sync fails", async () => {
-    (mockSyncOpfsToLfs as any).mockRejectedValueOnce(new Error("missing dir"));
+  it("should handle git_status", async () => {
     (mockGitStatus as any).mockResolvedValue("clean");
 
     await expect(
       executeTool({} as any, "git_status", { repo: "demo" }, "group1"),
     ).resolves.toBe("clean");
 
-    expect(mockGitStatus).toHaveBeenCalledWith({ repo: "demo" });
+    expect(mockGitStatus).toHaveBeenCalledWith(
+      expect.objectContaining({ repo: "demo" }),
+    );
   });
 
   it("should handle git_add", async () => {
+    (mockGitAdd as any).mockResolvedValue("added file.txt");
+
+    await expect(
+      executeTool(
+        {},
+        "git_add",
+        { repo: "demo", filepaths: ["file.txt"] },
+        "group1",
+      ),
+    ).resolves.toBe("added file.txt");
+
+    expect(mockGitAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        filepath: ["file.txt"],
+      }),
+    );
+  });
+
+  it("should support legacy filepath for git_add", async () => {
     (mockGitAdd as any).mockResolvedValue("added file.txt");
 
     await expect(
@@ -2185,10 +2280,12 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("added file.txt");
 
-    expect(mockGitAdd).toHaveBeenCalledWith({
-      repo: "demo",
-      filepath: "file.txt",
-    });
+    expect(mockGitAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        filepath: "file.txt",
+      }),
+    );
   });
 
   it("should handle git_log", async () => {
@@ -2203,11 +2300,13 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("commit list");
 
-    expect(mockGitLog).toHaveBeenCalledWith({
-      repo: "demo",
-      ref: "main",
-      depth: 5,
-    });
+    expect(mockGitLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        ref: "main",
+        depth: 5,
+      }),
+    );
   });
 
   it("should handle git_diff", async () => {
@@ -2222,11 +2321,13 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("diff output");
 
-    expect(mockGitDiff).toHaveBeenCalledWith({
-      repo: "demo",
-      ref1: "a",
-      ref2: "b",
-    });
+    expect(mockGitDiff).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        ref1: "a",
+        ref2: "b",
+      }),
+    );
   });
 
   it("should handle git_branches and git_list_repos", async () => {
@@ -2242,10 +2343,12 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("main\nfeature");
 
-    expect(mockGitListBranches).toHaveBeenCalledWith({
-      repo: "demo",
-      remote: true,
-    });
+    expect(mockGitListBranches).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        remote: true,
+      }),
+    );
 
     await expect(
       executeTool({} as any, "git_list_repos", {}, "group1"),
@@ -2254,22 +2357,7 @@ describe("executeTool.js", () => {
     expect(mockGitListRepos).toHaveBeenCalled();
   });
 
-  it("should return sync error message for git_commit when workspace sync fails", async () => {
-    (mockSyncOpfsToLfs as any).mockRejectedValueOnce(new Error("sync failed"));
-
-    const result = await executeTool(
-      {},
-      "git_commit",
-      { repo: "demo", message: "msg" },
-      "group1",
-    );
-
-    expect(result).toContain("Could not sync from OPFS");
-
-    expect(mockGitCommit).not.toHaveBeenCalled();
-  });
-
-  it("should commit using stored author defaults", async () => {
+  it("should handle git_commit using stored author defaults", async () => {
     (mockGetConfig as any).mockImplementation(async (_db, key) => {
       if (key === "git-author-name") {
         return "Jane Dev";
@@ -2299,12 +2387,14 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("committed");
 
-    expect(mockGitCommit).toHaveBeenCalledWith({
-      repo: "demo",
-      message: "msg",
-      authorName: "Jane Dev",
-      authorEmail: "jane@example.com",
-    });
+    expect(mockGitCommit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        message: "msg",
+        authorName: "Jane Dev",
+        authorEmail: "jane@example.com",
+      }),
+    );
   });
 
   it("should pull using decrypted token and author defaults", async () => {
@@ -2341,14 +2431,16 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("pulled");
 
-    expect(mockGitPull).toHaveBeenCalledWith({
-      repo: "demo",
-      branch: "main",
-      authorName: "Jane Dev",
-      authorEmail: "jane@example.com",
-      token: "plaintext-token",
-      corsProxy: "https://proxy.local",
-    });
+    expect(mockGitPull).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        branch: "main",
+        authorName: "Jane Dev",
+        authorEmail: "jane@example.com",
+        token: "plaintext-token",
+        corsProxy: "https://proxy.local",
+      }),
+    );
   });
 
   it("should push using decrypted token and proxy", async () => {
@@ -2377,13 +2469,15 @@ describe("executeTool.js", () => {
       ),
     ).resolves.toBe("pushed");
 
-    expect(mockGitPush).toHaveBeenCalledWith({
-      repo: "demo",
-      branch: "main",
-      force: true,
-      token: "plaintext-token",
-      corsProxy: "https://proxy.local",
-    });
+    expect(mockGitPush).toHaveBeenCalledWith(
+      expect.objectContaining({
+        repo: "demo",
+        branch: "main",
+        force: true,
+        token: "plaintext-token",
+        corsProxy: "https://proxy.local",
+      }),
+    );
   });
 
   // ── patch_file ────────────────────────────────────────────────────
@@ -2482,14 +2576,6 @@ describe("executeTool.js", () => {
       "group1",
     );
 
-    // Should still sync so the agent can read conflicted files
-    expect(mockSyncLfsToOpfs).toHaveBeenCalledWith(
-      {},
-      "group1",
-      "demo",
-      "repos/demo",
-    );
-
     expect(result).toContain("conflicts");
     expect(result).toContain("a.js");
   });
@@ -2570,7 +2656,6 @@ describe("executeTool.js", () => {
       "group1",
     );
 
-    expect(mockSyncLfsToOpfs).toHaveBeenCalled();
     expect(result).toBe("Merged main into feature (abc1234).");
   });
 
@@ -2853,7 +2938,7 @@ describe("executeTool.js", () => {
   });
 
   it("should handle tool error", async () => {
-    (mockReadGroupFile as any).mockRejectedValue(new Error("fail"));
+    (mockReadGroupFileBytes as any).mockRejectedValue(new Error("fail"));
 
     const result = await executeTool(
       {} as any,
@@ -2862,7 +2947,7 @@ describe("executeTool.js", () => {
       "group1",
     );
 
-    expect(result).toContain("Tool error (read_file): fail");
+    expect(result).toContain("Error reading x: fail");
   });
 
   describe("scheduled-task tool guard", () => {
@@ -3059,7 +3144,12 @@ describe("executeTool.js", () => {
             hostPeerId: "host-1",
             createdAt: 0,
             members: [
-              { peerId: "host-1", alias: "K9", kind: "agent", agentName: "k9" },
+              {
+                peerId: "host-1",
+                alias: "example",
+                kind: "agent",
+                agentName: "example",
+              },
               { peerId: "peer-2", alias: "Ada", kind: "human" },
             ],
           },
@@ -3074,8 +3164,8 @@ describe("executeTool.js", () => {
       );
 
       expect(result).toContain("Standup");
-      expect(result).toContain("K9");
-      expect(result).toContain("@k9");
+      expect(result).toContain("example");
+      expect(result).toContain("@example");
       expect(result).toContain("[host]");
       expect(result).toContain("Ada");
     });

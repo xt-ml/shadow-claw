@@ -1,27 +1,17 @@
-/*
-import type { ShadowClaw } from "./components/shadow-claw/shadow-claw.js";
-import type { Orchestrator } from "./orchestrator.js";
-*/
-import type { ToastType } from "./stores/toast.js";
-import type { VMBootMode } from "./vm.js";
-import type { A2UIEnvelope, A2UIAction } from "./a2ui.js";
+import type { A2UIAction, A2UIEnvelope } from "./a2ui.js";
 
-// Re-export so callers can import from types.ts
-export type { A2UIEnvelope, A2UIAction };
-
-/*
-import type {
-  clearAllToasts,
-  dismissToast,
-  showError,
-  showInfo,
-  showSuccess,
-  showToast,
-  showWarning,
-} from "./toast.js";
-*/
+import {
+  StoredCredentialAuthMode,
+  StoredCredentialBase,
+  StoredCredentialOAuthFields,
+} from "./accounts/stored-credentials.js";
 
 import type { E2eBridge } from "./e2e-bridge.js";
+import type { ToastType } from "./stores/toast.js";
+import type { VMBootMode } from "./vm.js";
+
+// Re-export so callers can import from types.ts
+export type { A2UIAction, A2UIEnvelope };
 
 // Extend the actual globalThis interface
 declare global {
@@ -32,27 +22,27 @@ declare global {
 }
 
 export interface ConfirmationDialogOptions {
-  title: string;
-  message: string;
-  confirmLabel?: string;
   cancelLabel?: string;
+  confirmLabel?: string;
+  message: string;
+  title: string;
 }
 
 export interface AppDialogLink {
-  label: string;
   href: string;
+  label: string;
 }
 
 export interface AppDialogOptions extends ConfirmationDialogOptions {
-  mode?: "confirm" | "info";
   details?: string[];
+  mode?: "confirm" | "info";
   links?: AppDialogLink[];
 }
 
 export type KnownChannelType =
   | "browser"
-  | "telegram"
   | "imessage"
+  | "telegram"
   | "peerjs"
   | "room";
 
@@ -63,14 +53,14 @@ export type ChannelType = KnownChannelType | (string & {});
  * ShadowClaw instance) or an AI agent.
  */
 export interface RoomMember {
-  /** PeerJS peer ID used as the network identity for this member. */
-  peerId: string;
-  /** Human-readable display name for the member. */
-  alias: string;
-  /** Whether this member participates as a human or an AI agent. */
-  kind: "human" | "agent";
   /** Optional assistant name when {@link kind} is "agent" (used for @mentions). */
   agentName?: string;
+  /** Human-readable display name for the member. */
+  alias: string;
+  /** PeerJS peer ID used as the network identity for this member. */
+  peerId: string;
+  /** Whether this member participates as a human or an AI agent. */
+  kind: "human" | "agent";
 }
 
 /**
@@ -92,34 +82,34 @@ export interface RoomMeta {
 }
 
 export interface RemoteUrlAttachmentSource {
+  headers?: Record<string, string>;
   kind: "remote-url";
   url: string;
-  headers?: Record<string, string>;
 }
 
 export interface LocalFileAttachmentSource {
-  kind: "local-file";
   file: Blob;
+  kind: "local-file";
 }
 
 export interface InlineTextAttachmentSource {
   kind: "inline-text";
-  text: string;
   mimeType?: string;
+  text: string;
 }
 
 export type MessageAttachmentSource =
-  | RemoteUrlAttachmentSource
+  | InlineTextAttachmentSource
   | LocalFileAttachmentSource
-  | InlineTextAttachmentSource;
+  | RemoteUrlAttachmentSource;
 
 export interface MessageAttachment {
-  id?: string;
   fileName: string;
+  id?: string;
   mimeType?: string;
-  size?: number;
   path?: string;
   previewDisposition?: "inline" | "file";
+  size?: number;
   source?: MessageAttachmentSource;
 }
 
@@ -142,43 +132,40 @@ export interface InboundMessage {
 }
 
 export interface StoredMessage {
-  id: string;
-  groupId: string;
-  sender: string;
-  content: string;
-  timestamp: number;
+  a2uiAction?: A2UIAction;
+  a2uiEnvelopes?: A2UIEnvelope[];
+  attachments?: MessageAttachment[];
   channel: ChannelType;
+  content: string;
+  groupId: string;
+  id: string;
   isFromMe: boolean;
   isTrigger: boolean;
-  attachments?: MessageAttachment[];
-  a2uiEnvelopes?: A2UIEnvelope[];
-  a2uiAction?: A2UIAction;
+  sender: string;
+  timestamp: number;
 }
 
 export interface TaskToolCall {
-  name: string;
   input: Record<string, any>;
+  name: string;
   suppressOutput?: boolean;
 }
 
 export interface Task {
-  id: string;
-  groupId: string;
-  schedule?: string; // cron expression, optional for unscheduled tasks
-
-  type?: "prompt" | "tools";
-  prompt: string;
-  tools?: TaskToolCall[];
-
-  enabled: boolean;
-
-  lastRun: number | null;
   createdAt: number;
+  enabled: boolean;
+  groupId: string;
+  id: string;
+  lastRun: number | null;
+  prompt: string;
+  schedule?: string; // cron expression, optional for unscheduled tasks
+  tools?: TaskToolCall[];
+  type?: "prompt" | "tools";
 }
 
 export interface ConversationMessage {
-  role: "user" | "assistant" | "system";
   content: string | ContentBlock[];
+  role: "user" | "assistant" | "system";
 }
 
 export interface Session {
@@ -188,53 +175,66 @@ export interface Session {
 }
 
 export interface TextContent {
-  type: "text";
   text: string;
+  type: "text";
 }
 
 export interface ToolUseContent {
-  type: "tool_use";
   id: string;
-  name: string;
   input: Record<string, any>;
+  name: string;
+  type: "tool_use";
 }
 
+export interface ToolResultTextBlock {
+  text: string;
+  type: "text";
+}
+
+export interface ToolResultImageBlock {
+  data: string;
+  media_type: string;
+  type: "image";
+}
+
+export type ToolResultContentBlock = ToolResultTextBlock | ToolResultImageBlock;
+
 export interface ToolResultContent {
-  type: "tool_result";
+  content: string | ToolResultContentBlock[];
   tool_use_id: string;
-  content: string;
+  type: "tool_result";
 }
 
 export interface AttachmentContent {
-  type: "attachment";
-  mediaType: "image" | "audio" | "video" | "document" | "file";
-  fileName: string;
-  mimeType: string;
-  size?: number;
-  path?: string;
   data?: string;
+  fileName: string;
+  mediaType: "image" | "audio" | "video" | "document" | "file";
+  mimeType: string;
+  path?: string;
+  size?: number;
+  type: "attachment";
 }
 
 export type ContentBlock =
+  | AttachmentContent
   | TextContent
-  | ToolUseContent
   | ToolResultContent
-  | AttachmentContent;
+  | ToolUseContent;
 
 export interface ConfigEntry {
-  key: string;
   value: string; // JSON-encoded or raw string
+  key: string;
 }
 
 export type ShadowClawDatabase = IDBDatabase | null;
 
 export interface GroupMeta {
+  createdAt: number;
   groupId: string;
   name: string;
-  createdAt: number;
-  toolTags?: string[];
-  pinnedProvider?: string;
   pinnedModel?: string;
+  pinnedProvider?: string;
+  toolTags?: string[];
 }
 
 export interface SavedPageRef {
@@ -253,61 +253,61 @@ export type ChannelDisplayCallback = (
 ) => void;
 
 export interface ChannelRegistrationOptions {
-  badge?: string;
   autoTrigger?: boolean;
+  badge?: string;
 }
 
 export interface Channel {
-  type: ChannelType;
-  start(): void;
-  stop(): void;
+  onMessage(callback: ChannelMessageCallback): void;
+  onTyping?(callback: ChannelTypingCallback): void;
   send(
     groupId: string,
     text: string,
     attachments?: MessageAttachment[],
   ): Promise<void>;
   setTyping(groupId: string, typing: boolean): void;
-  onMessage(callback: ChannelMessageCallback): void;
-  onTyping?(callback: ChannelTypingCallback): void;
+  start(): void;
+  stop(): void;
+  type: ChannelType;
 }
 
 export interface InvokePayload {
-  groupId: string;
-  messages: ConversationMessage[];
-  systemPrompt: string;
-  assistantName: string;
-  memory: string;
   apiKey: string;
-  model: string;
-  maxTokens: number;
-  maxIterations?: number;
-  provider?: any;
-  storageHandle?: any;
-  enabledTools?: any;
-  providerHeaders?: Record<string, string>;
-  streaming?: boolean;
+  assistantName: string;
   contextCompression?: boolean;
   contextLimit?: number;
-  rateLimitCallsPerMinute?: number;
+  enabledTools?: any;
+  groupId: string;
+  maxIterations?: number;
+  maxTokens: number;
+  memory: string;
+  messages: ConversationMessage[];
+  model: string;
+  provider?: any;
+  providerHeaders?: Record<string, string>;
   rateLimitAutoAdapt?: boolean;
+  rateLimitCallsPerMinute?: number;
+  storageHandle?: any;
+  streaming?: boolean;
+  systemPrompt: string;
 }
 
 export interface CompactPayload {
-  groupId: string;
-  messages: ConversationMessage[];
-  systemPrompt: string;
-  assistantName: string;
-  memory: string;
   apiKey: string;
-  model: string;
-  maxTokens: number;
-  provider?: any;
-  storageHandle?: any;
-  providerHeaders?: Record<string, string>;
+  assistantName: string;
   contextCompression?: boolean;
   contextLimit?: number;
-  rateLimitCallsPerMinute?: number;
+  groupId: string;
+  maxTokens: number;
+  memory: string;
+  messages: ConversationMessage[];
+  model: string;
+  provider?: any;
+  providerHeaders?: Record<string, string>;
   rateLimitAutoAdapt?: boolean;
+  rateLimitCallsPerMinute?: number;
+  storageHandle?: any;
+  systemPrompt: string;
 }
 
 export interface ResponsePayload {
@@ -316,8 +316,8 @@ export interface ResponsePayload {
 }
 
 export interface ErrorPayload {
-  groupId: string;
   error: string;
+  groupId: string;
 }
 
 export interface TypingPayload {
@@ -326,21 +326,21 @@ export interface TypingPayload {
 
 export interface ToolActivityPayload {
   groupId: string;
-  tool: string;
   status: string;
+  tool: string;
 }
 
 export interface ModelDownloadProgressPayload {
   groupId: string;
-  status: "running" | "done" | "error";
-  progress: number | null; // 0..1 when known
   message?: string;
+  progress: number | null; // 0..1 when known
+  status: "running" | "done" | "error";
 }
 
 export interface ThinkingLogEntry {
   groupId: string;
-  level: "info" | "api-call" | "tool" | "error";
   label: string;
+  level: "info" | "api-call" | "tool" | "error";
   message: string;
   timestamp: number;
 }
@@ -356,15 +356,15 @@ export interface TokenUsage {
 }
 
 export interface ContextUsage {
-  estimatedTokens: number; // Tokens used by conversation messages
   contextLimit: number; // Model's total context window (tokens)
-  usagePercent: number; // Percentage of context budget used (0-100)
+  estimatedTokens: number; // Tokens used by conversation messages
   truncatedCount: number; // Messages dropped from the beginning
+  usagePercent: number; // Percentage of context budget used (0-100)
 }
 
 export interface ToolActivity {
-  tool: string;
   status: string;
+  tool: string;
 }
 
 export interface CompactDonePayload {
@@ -378,11 +378,11 @@ export interface OpenFilePayload {
 }
 
 export interface VMStatusPayload {
-  ready: boolean;
-  booting: boolean;
   bootAttempted: boolean;
+  booting: boolean;
   error: string | null;
   mode?: "ext2" | "9p" | null;
+  ready: boolean;
 }
 
 export interface VMTerminalOutputPayload {
@@ -395,66 +395,82 @@ export interface VMTerminalErrorPayload {
 
 export interface ManageToolsPayload {
   action: "enable" | "disable" | "activate_profile";
-  toolNames?: string[];
   profileId?: string;
+  toolNames?: string[];
 }
 
 export interface LLMProvider {
-  id: string;
-  name: string;
-  models?: string[];
-  modelsUrl?: string;
-  headers?: Record<string, string>;
   apiKeyHeader?: string;
   apiKeyHeaderFormat?: string;
+  headers?: Record<string, string>;
+  id: string;
+  models?: string[];
+  modelsUrl?: string;
+  name: string;
   requiresApiKey?: boolean;
 }
 
 export type WorkerOutbound =
-  | { type: "response"; payload: ResponsePayload }
-  | { type: "error"; payload: ErrorPayload }
-  | { type: "typing"; payload: TypingPayload }
-  | { type: "tool-activity"; payload: ToolActivityPayload }
-  | { type: "model-download-progress"; payload: ModelDownloadProgressPayload }
-  | { type: "thinking-log"; payload: ThinkingLogEntry }
-  | { type: "compact-done"; payload: CompactDonePayload }
-  | { type: "open-file"; payload: OpenFilePayload }
-  | { type: "vm-status"; payload: VMStatusPayload }
-  | { type: "vm-terminal-opened"; payload: { ok: true } }
-  | { type: "vm-terminal-output"; payload: VMTerminalOutputPayload }
-  | { type: "vm-terminal-closed"; payload: { ok: true } }
-  | { type: "vm-workspace-synced"; payload: { groupId: string } }
-  | { type: "vm-terminal-error"; payload: VMTerminalErrorPayload }
-  | {
-      type: "show-toast";
-      payload: {
-        message: string;
-        type?: ToastType;
-        duration?: number;
-      };
-    }
-  | { type: "manage-tools"; payload: ManageToolsPayload }
-  | {
-      type: "render-component";
-      payload: {
-        groupId: string;
-        envelope: A2UIEnvelope;
-      };
-    }
   | {
       type: "ask-user";
       payload: {
-        id: string;
         groupId: string;
-        question: string;
+        id: string;
         options?: string[];
+        question: string;
       };
-    };
+    }
+  | { type: "compact-done"; payload: CompactDonePayload }
+  | { type: "error"; payload: ErrorPayload }
+  | { type: "manage-tools"; payload: ManageToolsPayload }
+  | { type: "model-download-progress"; payload: ModelDownloadProgressPayload }
+  | {
+      type: "open-file";
+      payload:
+        | OpenFilePayload
+        | {
+            type: "render-component";
+            payload: {
+              envelope: A2UIEnvelope;
+              groupId: string;
+            };
+          };
+    }
+  | { type: "response"; payload: ResponsePayload }
+  | {
+      type: "show-toast";
+      payload: {
+        duration?: number;
+        message: string;
+        type?: ToastType;
+      };
+    }
+  | { type: "thinking-log"; payload: ThinkingLogEntry }
+  | { type: "tool-activity"; payload: ToolActivityPayload }
+  | { type: "typing"; payload: TypingPayload }
+  | { type: "vm-status"; payload: VMStatusPayload }
+  | { type: "vm-terminal-closed"; payload: { ok: true } }
+  | { type: "vm-terminal-error"; payload: VMTerminalErrorPayload }
+  | { type: "vm-terminal-opened"; payload: { ok: true } }
+  | { type: "vm-terminal-output"; payload: VMTerminalOutputPayload }
+  | { type: "vm-workspace-synced"; payload: { groupId: string } };
 
 export type WorkerInbound =
-  | { type: "invoke"; payload: InvokePayload }
+  | {
+      type: "ask-user-response";
+      payload: { id: string; response: string | null };
+    }
   | { type: "cancel"; payload: { groupId: string } }
   | { type: "compact"; payload: CompactPayload }
+  | {
+      payload: { groupId: string; name: string; input: Record<string, any> };
+      type: "execute-direct-tool";
+    }
+  | {
+      type: "execute-task-tools";
+      payload: { groupId: string; tools: TaskToolCall[] };
+    }
+  | { type: "invoke"; payload: InvokePayload }
   | {
       type: "set-vm-mode";
       payload: {
@@ -463,20 +479,129 @@ export type WorkerInbound =
         networkRelayUrl?: string;
       };
     }
-  | { type: "vm-terminal-open"; payload?: { groupId?: string } }
-  | { type: "vm-terminal-input"; payload: { data: string } }
   | { type: "vm-terminal-close"; payload?: { groupId?: string } }
-  | { type: "vm-workspace-sync"; payload?: { groupId?: string } }
+  | { type: "vm-terminal-input"; payload: { data: string } }
+  | { type: "vm-terminal-open"; payload?: { groupId?: string } }
   | { type: "vm-workspace-flush"; payload?: { groupId?: string } }
-  | {
-      type: "execute-direct-tool";
-      payload: { groupId: string; name: string; input: Record<string, any> };
-    }
-  | {
-      type: "execute-task-tools";
-      payload: { groupId: string; tools: TaskToolCall[] };
-    }
-  | {
-      type: "ask-user-response";
-      payload: { id: string; response: string | null };
-    };
+  | { type: "vm-workspace-sync"; payload?: { groupId?: string } };
+
+export type GitAuthMode = StoredCredentialAuthMode;
+export type GitProvider = "github" | "azure-devops" | "gitlab" | "generic";
+
+export interface GitAccount
+  extends StoredCredentialBase, StoredCredentialOAuthFields {
+  authorEmail: string; // Commit author email (empty string to use global default)
+  authorName: string; // Commit author name (empty string to use global default)
+  password: string; // Encrypted password (empty string if not set)
+  provider?: GitProvider; // Explicit provider type (auto-detected from hostPattern if omitted)
+  username: string; // Plaintext username (empty string if not set)
+}
+
+export interface GitToolDeps {
+  configKeys: {
+    GIT_AUTHOR_EMAIL: string;
+    GIT_AUTHOR_NAME: string;
+    GIT_CORS_PROXY: string;
+    GIT_PROXY_URL: string;
+  };
+  getConfig: (db: ShadowClawDatabase, key: string) => Promise<any>;
+  getGroupDir: (
+    db: ShadowClawDatabase,
+    groupId: string,
+  ) => Promise<FileSystemDirectoryHandle>;
+  getProxyUrl: (
+    pref: "local" | "public" | "custom",
+    customUrl?: string,
+  ) => string;
+  getRemoteUrl: (input: {
+    groupRoot?: FileSystemDirectoryHandle;
+    remote?: string;
+    repo: string;
+  }) => Promise<any>;
+  gitAdd: (input: any) => Promise<string>;
+  gitBranch: (input: any) => Promise<string>;
+  gitCheckout: (input: any) => Promise<string>;
+  gitClone: (input: any) => Promise<string>;
+  gitCommit: (input: any) => Promise<string>;
+  gitConfig: (input: any) => Promise<string>;
+  gitDeleteBranch: (input: any) => Promise<string>;
+  gitDeleteRepo: (input: any) => Promise<string>;
+  gitDiff: (input: any) => Promise<string>;
+  gitFetch: (input: any) => Promise<string>;
+  gitInit: (input: any) => Promise<string>;
+  gitListBranches: (input: any) => Promise<string>;
+  gitListRepos: (input: {
+    groupRoot?: FileSystemDirectoryHandle;
+  }) => Promise<string>;
+  gitListTags: (input: any) => Promise<string>;
+  gitLog: (input: any) => Promise<string>;
+  gitMerge: (input: any) => Promise<string>;
+  gitPull: (input: any) => Promise<string>;
+  gitPush: (input: any) => Promise<string>;
+  gitReadFileAtRef: (input: any) => Promise<string>;
+  gitRemote: (input: any) => Promise<string>;
+  gitReset: (input: any) => Promise<string>;
+  gitShow: (input: any) => Promise<string>;
+  gitStatus: (input: any) => Promise<string>;
+  gitTag: (input: any) => Promise<string>;
+  gitUnstage: (input: any) => Promise<string>;
+  readGroupFile: (
+    db: ShadowClawDatabase,
+    groupId: string,
+    path: string,
+  ) => Promise<string>;
+  resolveGitCredentials: (
+    db: ShadowClawDatabase,
+    url: any,
+  ) => Promise<{
+    authorEmail?: string;
+    authorName?: string;
+    password?: string;
+    token?: string;
+    username?: string;
+  }>;
+}
+
+export interface ResolvedGitCredentials {
+  accountId?: string;
+  authMode?: GitAuthMode;
+  authorEmail?: string;
+  authorName?: string;
+  hostPattern?: string; // Host pattern from the matched account
+  password?: string;
+  provider?: GitProvider; // Detected or explicit provider type
+  reauthRequired?: boolean;
+  token?: string;
+  username?: string;
+}
+
+export interface ResolveGitCredentialsOptions {
+  accountId?: string;
+  authMode?: GitAuthMode;
+  forceRefresh?: boolean;
+}
+
+export interface OAuthAccountLike {
+  accessTokenExpiresAt?: number;
+  id: string;
+  oauthClientId?: string;
+  oauthClientSecret?: string;
+  oauthCustomAuthorizeUrl?: string;
+  oauthCustomRedirectUri?: string;
+  oauthCustomTokenUrl?: string;
+  oauthCustomUsePkce?: boolean;
+  oauthProviderId?: string;
+  refreshToken?: string;
+  scopes?: string[];
+  tokenType?: string;
+}
+
+export interface ReconnectMcpOAuthResult {
+  error?: string;
+  success: boolean;
+}
+
+export interface ReconnectMcpOAuthOptions {
+  /** When true, only attempt a silent token refresh — do not open a popup. */
+  silentOnly?: boolean;
+}

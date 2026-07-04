@@ -300,7 +300,7 @@ describe("OrchestratorStore", () => {
       id: "tg-1",
       groupId: "tg:8352127045",
       sender: "Karl",
-      content: "@k9 hello",
+      content: "@example hello",
       timestamp: 1700000000000,
       channel: "telegram",
       isFromMe: false,
@@ -674,21 +674,153 @@ describe("OrchestratorStore", () => {
     );
   });
 
-  it("runTask with no groupId falls back to active group", () => {
+  it("runTask with no groupId refuses to execute (prevents conversation pollution)", () => {
     const store: any = new OrchestratorStore();
     const submitMessage = jest.fn();
     store.orchestrator = { submitMessage } as any;
 
     store._activeGroupId.set("active-group");
 
-    // Task has no groupId (legacy / unset)
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    // Task has no groupId - must NOT execute in active conversation
     store.runTask({ id: "t2", prompt: "fallback work" });
 
-    expect(submitMessage).toHaveBeenCalledWith(
-      "fallback work",
-      "active-group",
-      [],
-    );
+    expect(submitMessage).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  describe("scheduled task conversation isolation", () => {
+    beforeEach(() => {
+      (mockListGroups as any).mockResolvedValue([
+        { groupId: "conversation-a", name: "Conv A", createdAt: 0 },
+        { groupId: "conversation-b", name: "Conv B", createdAt: 0 },
+      ]);
+    });
+
+    it("state-change for a different group does not update store state", async () => {
+      const store = new OrchestratorStore();
+      const events: any = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+      };
+
+      await store.init({} as any, orch);
+
+      store._activeGroupId.set("conversation-b");
+
+      events.emit("state-change", {
+        state: "thinking",
+        groupId: "conversation-a",
+      });
+      expect(store.state).toBe("idle");
+    });
+
+    it("state-change for the active group DOES update store state", async () => {
+      const store = new OrchestratorStore();
+      const events: any = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+      };
+
+      await store.init({} as any, orch);
+
+      store._activeGroupId.set("conversation-b");
+
+      events.emit("state-change", {
+        state: "thinking",
+        groupId: "conversation-b",
+      });
+
+      expect(store.state).toBe("thinking");
+    });
+
+    it("runTask with empty groupId does NOT fall back to active group", () => {
+      const store: any = new OrchestratorStore();
+      const submitMessage = jest.fn();
+      store.orchestrator = { submitMessage } as any;
+
+      store._activeGroupId.set("conversation-b");
+
+      store.runTask({
+        id: "t3",
+        groupId: "",
+        prompt: "scheduled work",
+        enabled: true,
+      });
+
+      expect(submitMessage).not.toHaveBeenCalledWith(
+        "scheduled work",
+        "conversation-b",
+        expect.anything(),
+      );
+    });
+
+    it("message event with different groupId is NOT appended to active conversation", async () => {
+      const store = new OrchestratorStore();
+      const events: any = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+      };
+
+      await store.init({} as any, orch);
+
+      store._activeGroupId.set("conversation-b");
+      const initialMessages = store.messages.length;
+
+      events.emit("message", {
+        id: "sched-1",
+        groupId: "conversation-a",
+        sender: "Scheduler",
+        content: "[SCHEDULED TASK] do something",
+        timestamp: Date.now(),
+        channel: "browser",
+        isFromMe: false,
+        isTrigger: true,
+      });
+
+      expect(store.messages.length).toBe(initialMessages);
+    });
+
+    it("streaming-start for a different group does NOT set streaming state", async () => {
+      const store = new OrchestratorStore();
+      const events: any = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+      };
+
+      await store.init({} as any, orch);
+
+      store._activeGroupId.set("conversation-b");
+
+      events.emit("streaming-start", { groupId: "conversation-a" });
+      events.emit("streaming-chunk", {
+        groupId: "conversation-a",
+        text: "the conversation text",
+      });
+
+      expect(store.streamingText).toBeNull();
+    });
   });
 
   it("newSession and compactContext call orchestrator methods", async () => {

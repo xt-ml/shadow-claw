@@ -9,12 +9,14 @@ import {
 } from "../../../accounts/stored-credentials.js";
 
 import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
-import { detectProvider, type GitAccount } from "../../../git/credentials.js";
+import { detectProvider } from "../../../git/credentials.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 import "../../common/shadow-claw-actions/shadow-claw-actions.js";
 import "../../common/shadow-claw-card/shadow-claw-card.js";
+
+import { GitAccount } from "../../../types.js";
 
 const elementName = "shadow-claw-git";
 const GIT_OAUTH_PROVIDER_IDS = ["github", "gitlab", "azure_devops"];

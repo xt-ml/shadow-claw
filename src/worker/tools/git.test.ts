@@ -23,9 +23,8 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     gitMerge: jest.fn(async () => "merged"),
     gitReset: jest.fn(async () => "reset"),
     getRemoteUrl: jest.fn(async () => "https://example.com/repo.git"),
-    syncLfsToOpfs: jest.fn(async () => undefined),
-    syncOpfsToLfs: jest.fn(async () => undefined),
     readGroupFile: jest.fn(async () => ""),
+    getGroupDir: jest.fn(async () => ({}) as any),
     configKeys: {
       GIT_CORS_PROXY: "git-cors-proxy",
       GIT_PROXY_URL: "git-proxy-url",
@@ -37,7 +36,7 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
 }
 
 describe("worker/tools/git", () => {
-  it("handles git_clone and syncs workspace mirror", async () => {
+  it("handles git_clone", async () => {
     const deps = makeDeps();
 
     const result = await executeGitTool(
@@ -49,43 +48,75 @@ describe("worker/tools/git", () => {
     );
 
     expect(deps.gitClone).toHaveBeenCalled();
-    expect(deps.syncLfsToOpfs).toHaveBeenCalledWith(
+    expect(result).toContain('Cloned https://example.com/repo.git as "demo"');
+  });
+
+  it("handles git_clone with a custom name", async () => {
+    const deps = makeDeps();
+
+    const result = await executeGitTool(
       {} as any,
+      "git_clone",
+      {
+        url: "https://example.com/repo.git",
+        branch: "main",
+        name: "custom-repo",
+      },
       "group-1",
-      "demo",
-      "repos/demo",
-      false,
+      deps,
+    );
+
+    expect(deps.gitClone).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: "https://example.com/repo.git",
+        name: "custom-repo",
+      }),
     );
     expect(result).toContain('Cloned https://example.com/repo.git as "demo"');
   });
 
-  it("handles git_sync push and pull", async () => {
-    const deps = makeDeps();
+  it("passes groupRoot to git_list_repos and git_delete_repo", async () => {
+    const fakeGroupRoot = { name: "workspace-root" } as any;
+    const deps = makeDeps({
+      getGroupDir: jest.fn(async () => fakeGroupRoot),
+      gitListRepos: jest.fn(async () => "repo-a"),
+      gitDeleteRepo: jest.fn(async () => "deleted"),
+    });
 
-    const pushResult = await executeGitTool(
+    await executeGitTool({} as any, "git_list_repos", {}, "group-1", deps);
+    expect(deps.gitListRepos).toHaveBeenCalledWith({
+      groupRoot: fakeGroupRoot,
+    });
+
+    await executeGitTool(
       {} as any,
-      "git_sync",
-      { repo: "demo", direction: "push", include_git: true },
+      "git_delete_repo",
+      { repo: "demo" },
       "group-1",
       deps,
     );
-    const pullResult = await executeGitTool(
-      {} as any,
-      "git_sync",
-      { repo: "demo", direction: "pull", include_git: true },
-      "group-1",
-      deps,
-    );
-
-    expect(pushResult).toContain("Synced workspace files");
-    expect(pullResult).toContain("Synced git clone files");
+    expect(deps.gitDeleteRepo).toHaveBeenCalledWith({
+      repo: "demo",
+      groupRoot: fakeGroupRoot,
+    });
   });
 
-  it("continues git_status even if OPFS sync fails", async () => {
+  it("returns unknown-tool message for git_sync", async () => {
+    const deps = makeDeps();
+
+    const result = await executeGitTool(
+      {} as any,
+      "git_sync",
+      { repo: "demo", direction: "push" },
+      "group-1",
+      deps,
+    );
+
+    expect(result).toContain("Unknown tool: git_sync");
+  });
+
+  it("calls gitStatus directly", async () => {
     const deps = makeDeps({
-      syncOpfsToLfs: jest.fn(async () => {
-        throw new Error("missing");
-      }),
       gitStatus: jest.fn(async () => "M file.ts"),
     });
 
@@ -100,11 +131,9 @@ describe("worker/tools/git", () => {
     expect(result).toBe("M file.ts");
   });
 
-  it("returns friendly error when git_commit sync fails", async () => {
+  it("calls gitCommit directly", async () => {
     const deps = makeDeps({
-      syncOpfsToLfs: jest.fn(async () => {
-        throw new Error("boom");
-      }),
+      gitCommit: jest.fn(async () => "Committed abc1234: msg"),
     });
 
     const result = await executeGitTool(
@@ -115,7 +144,7 @@ describe("worker/tools/git", () => {
       deps,
     );
 
-    expect(result).toContain("Error: Could not sync from OPFS");
+    expect(result).toContain("Committed");
   });
 
   it("returns missing-credentials message for git_push", async () => {

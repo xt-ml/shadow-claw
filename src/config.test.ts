@@ -1,43 +1,44 @@
 import {
   ASSISTANT_NAME,
   buildTriggerPattern,
-  TRIGGER_PATTERN,
+  CONFIG_KEYS,
   CONTEXT_WINDOW_SIZE,
-  DEFAULT_MAX_TOKENS,
-  DEFAULT_PROVIDER,
-  SCHEDULER_INTERVAL,
-  PROCESS_LOOP_INTERVAL,
-  FETCH_MAX_RESPONSE,
+  COPILOT_AZURE_OPENAI_PROXY_URL,
   DB_NAME,
   DB_VERSION,
-  OPFS_ROOT,
-  DEFAULT_GROUP_ID,
-  COPILOT_AZURE_OPENAI_PROXY_URL,
-  GITHUB_MODELS_PROXY_URL,
-  GITHUB_MODELS_PROXY_MODELS_URL,
-  TRANSFORMERS_JS_PROXY_URL,
-  TRANSFORMERS_JS_PROXY_MODELS_URL,
-  LLAMAFILE_PROXY_URL,
-  LLAMAFILE_PROXY_MODELS_URL,
-  PROVIDERS,
-  GENERAL_ACCOUNT_PROVIDER_CAPABILITIES,
-  PROVIDER_AUTH_CAPABILITIES,
-  OAUTH_PROVIDER_DEFINITIONS,
-  getProvider,
-  getGeneralAccountProviderCapabilities,
-  getProviderTokenAuthScheme,
-  getProviderAuthCapabilities,
-  getOAuthProviderDefinition,
-  getDefaultProvider,
-  getAvailableProviders,
-  getProviderApiKeyConfigKey,
-  CONFIG_KEYS,
-  DEFAULT_VM_BOOT_HOST,
   DEFAULT_DEV_HOST,
   DEFAULT_DEV_IP,
   DEFAULT_DEV_PORT,
+  DEFAULT_GROUP_ID,
+  DEFAULT_MAX_TOKENS,
+  DEFAULT_PROVIDER,
+  DEFAULT_VM_BOOT_HOST,
+  FETCH_MAX_RESPONSE,
+  GENERAL_ACCOUNT_PROVIDER_CAPABILITIES,
+  getAvailableProviders,
+  getDefaultProvider,
+  getGeneralAccountProviderCapabilities,
   getModelMaxTokens,
+  getOAuthProviderDefinition,
+  getProvider,
+  getProviderApiKeyConfigKey,
+  getProviderAuthCapabilities,
+  getProviderTokenAuthScheme,
+  GITHUB_MODELS_PROXY_MODELS_URL,
+  GITHUB_MODELS_PROXY_URL,
+  LLAMAFILE_PROXY_MODELS_URL,
+  LLAMAFILE_PROXY_URL,
+  OAUTH_PROVIDER_DEFINITIONS,
+  OPFS_ROOT,
+  PROCESS_LOOP_INTERVAL,
+  PROVIDER_AUTH_CAPABILITIES,
+  PROVIDERS,
+  SCHEDULER_INTERVAL,
+  TRANSFORMERS_JS_PROXY_MODELS_URL,
+  TRANSFORMERS_JS_PROXY_URL,
+  TRIGGER_PATTERN,
 } from "./config.js";
+
 import { modelRegistry } from "./model-registry.js";
 
 describe("config.js", () => {
@@ -47,7 +48,7 @@ describe("config.js", () => {
 
   describe("Constants", () => {
     it("should have valid ASSISTANT_NAME", () => {
-      expect(ASSISTANT_NAME).toBe("k9");
+      expect(ASSISTANT_NAME).toBe("example");
     });
 
     it("should have valid context window size", () => {
@@ -133,19 +134,19 @@ describe("config.js", () => {
 
   describe("buildTriggerPattern", () => {
     it("should create a pattern that matches @name at start of message", () => {
-      const pattern = buildTriggerPattern("k9");
-      expect(pattern.test("@k9 hello")).toBe(true);
+      const pattern = buildTriggerPattern("example");
+      expect(pattern.test("@example hello")).toBe(true);
     });
 
     it("should create a pattern that matches @name with space prefix", () => {
-      const pattern = buildTriggerPattern("k9");
-      expect(pattern.test("hey @k9 what's up")).toBe(true);
+      const pattern = buildTriggerPattern("example");
+      expect(pattern.test("hey @example what's up")).toBe(true);
     });
 
     it("should be case-insensitive", () => {
-      const pattern = buildTriggerPattern("k9");
-      expect(pattern.test("@k9")).toBe(true);
-      expect(pattern.test("@K9")).toBe(true);
+      const pattern = buildTriggerPattern("example");
+      expect(pattern.test("@example")).toBe(true);
+      expect(pattern.test("@example")).toBe(true);
     });
 
     it("should escape special regex characters", () => {
@@ -155,13 +156,13 @@ describe("config.js", () => {
     });
 
     it("should not match @name as part of a longer word", () => {
-      const pattern = buildTriggerPattern("k9");
-      expect(pattern.test("@k9s")).toBe(false); // word boundary enforced
+      const pattern = buildTriggerPattern("example");
+      expect(pattern.test("@examples")).toBe(false); // word boundary enforced
     });
 
     it("TRIGGER_PATTERN should be a valid regex", () => {
       expect(TRIGGER_PATTERN).toBeInstanceOf(RegExp);
-      expect(TRIGGER_PATTERN.test("@k9")).toBe(true);
+      expect(TRIGGER_PATTERN.test("@example")).toBe(true);
     });
   });
 
@@ -366,6 +367,7 @@ describe("config.js", () => {
         "pat",
         "git_remote",
       );
+
       expect(scheme).toEqual({
         headerName: "Authorization",
         headerPrefix: "Basic ",
@@ -420,61 +422,61 @@ describe("config.js", () => {
 
   describe("CONFIG_KEYS", () => {
     it("should define all required config keys", () => {
-      expect(CONFIG_KEYS.PROVIDER).toBe("provider");
       expect(CONFIG_KEYS.API_KEY).toBe("api_key");
+      expect(CONFIG_KEYS.ASSISTANT_NAME).toBe("assistant_name");
+      expect(CONFIG_KEYS.BEDROCK_AUTH_MODE).toBe("bedrock_auth_mode");
+      expect(CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK).toBe(
+        "bedrock_profile_fallback",
+      );
+      expect(CONFIG_KEYS.BEDROCK_REGION_FALLBACK).toBe(
+        "bedrock_region_fallback",
+      );
       expect(CONFIG_KEYS.CHANNEL_ENABLED_PREFIX).toBe("channel_enabled:");
-      expect(CONFIG_KEYS.TELEGRAM_BOT_TOKEN).toBe("telegram_bot_token");
-      expect(CONFIG_KEYS.TELEGRAM_CHAT_IDS).toBe("telegram_chat_ids");
-      expect(CONFIG_KEYS.TELEGRAM_USE_PROXY).toBe("telegram_use_proxy");
-      expect(CONFIG_KEYS.IMESSAGE_SERVER_URL).toBe("imessage_server_url");
+      expect(CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT).toBe("chat_input_area_height");
+      expect(CONFIG_KEYS.GIT_AUTHOR_EMAIL).toBe("git_author_email");
+      expect(CONFIG_KEYS.GIT_AUTHOR_NAME).toBe("git_author_name");
+      expect(CONFIG_KEYS.GIT_CORS_PROXY).toBe("git_cors_proxy");
+      expect(CONFIG_KEYS.GIT_TOKEN).toBe("git_token");
       expect(CONFIG_KEYS.IMESSAGE_API_KEY).toBe("imessage_api_key");
       expect(CONFIG_KEYS.IMESSAGE_CHAT_IDS).toBe("imessage_chat_ids");
-      expect(CONFIG_KEYS.TRIGGER_PATTERN).toBe("trigger_pattern");
-      expect(CONFIG_KEYS.MODEL).toBe("model");
+      expect(CONFIG_KEYS.IMESSAGE_SERVER_URL).toBe("imessage_server_url");
+      expect(CONFIG_KEYS.INTEGRATION_CONNECTIONS).toBe(
+        "integration_connections",
+      );
+      expect(CONFIG_KEYS.LLAMAFILE_HOST).toBe("llamafile_host");
+      expect(CONFIG_KEYS.LLAMAFILE_MODE).toBe("llamafile_mode");
+      expect(CONFIG_KEYS.LLAMAFILE_OFFLINE).toBe("llamafile_offline");
+      expect(CONFIG_KEYS.LLAMAFILE_PORT).toBe("llamafile_port");
       expect(CONFIG_KEYS.MAX_TOKENS).toBe("max_tokens");
+      expect(CONFIG_KEYS.MODEL).toBe("model");
       expect(CONFIG_KEYS.PASSPHRASE_SALT).toBe("passphrase_salt");
       expect(CONFIG_KEYS.PASSPHRASE_VERIFY).toBe("passphrase_verify");
-      expect(CONFIG_KEYS.ASSISTANT_NAME).toBe("assistant_name");
-      expect(CONFIG_KEYS.STORAGE_HANDLE).toBe("storage_handle");
+      expect(CONFIG_KEYS.PROVIDER).toBe("provider");
+      expect(CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT).toBe("rate_limit_auto_adapt");
+      expect(CONFIG_KEYS.RATE_LIMIT_CALLS_PER_MINUTE).toBe(
+        "rate_limit_calls_per_minute",
+      );
+      expect(CONFIG_KEYS.REMOTE_MCP_CONNECTIONS).toBe("remote_mcp_connections");
       expect(CONFIG_KEYS.SERVICE_ACCOUNTS).toBe("service_accounts");
       expect(CONFIG_KEYS.SERVICE_DEFAULT_ACCOUNT).toBe(
         "service_default_account",
       );
-      expect(CONFIG_KEYS.GIT_TOKEN).toBe("git_token");
-      expect(CONFIG_KEYS.GIT_AUTHOR_NAME).toBe("git_author_name");
-      expect(CONFIG_KEYS.GIT_AUTHOR_EMAIL).toBe("git_author_email");
-      expect(CONFIG_KEYS.GIT_CORS_PROXY).toBe("git_cors_proxy");
-      expect(CONFIG_KEYS.VM_BOOT_MODE).toBe("vm_boot_mode");
-      expect(CONFIG_KEYS.VM_BOOT_HOST).toBe("vm_boot_host");
-      expect(CONFIG_KEYS.VM_NETWORK_RELAY_URL).toBe("vm_network_relay_url");
-      expect(CONFIG_KEYS.VM_BASH_TIMEOUT_SEC).toBe("vm_bash_timeout_sec");
+      expect(CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN).toBe("sidebar_pages_hidden");
+      expect(CONFIG_KEYS.SIDEBAR_WIDTH).toBe("sidebar_width");
+      expect(CONFIG_KEYS.STORAGE_HANDLE).toBe("storage_handle");
+      expect((CONFIG_KEYS as any).TASK_SYNC_OUTBOX).toBe("task_sync_outbox");
+      expect(CONFIG_KEYS.TELEGRAM_BOT_TOKEN).toBe("telegram_bot_token");
+      expect(CONFIG_KEYS.TELEGRAM_CHAT_IDS).toBe("telegram_chat_ids");
+      expect(CONFIG_KEYS.TELEGRAM_USE_PROXY).toBe("telegram_use_proxy");
+      expect(CONFIG_KEYS.TRIGGER_PATTERN).toBe("trigger_pattern");
       expect(CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS).toBe(
         "vm_bash_full_internet_access",
       );
-      expect(CONFIG_KEYS.REMOTE_MCP_CONNECTIONS).toBe("remote_mcp_connections");
-      expect(CONFIG_KEYS.INTEGRATION_CONNECTIONS).toBe(
-        "integration_connections",
-      );
+      expect(CONFIG_KEYS.VM_BASH_TIMEOUT_SEC).toBe("vm_bash_timeout_sec");
+      expect(CONFIG_KEYS.VM_BOOT_HOST).toBe("vm_boot_host");
+      expect(CONFIG_KEYS.VM_BOOT_MODE).toBe("vm_boot_mode");
+      expect(CONFIG_KEYS.VM_NETWORK_RELAY_URL).toBe("vm_network_relay_url");
       expect(CONFIG_KEYS.WEBMCP_TOOLS_ENABLED).toBe("webmcp_tools_enabled");
-      expect((CONFIG_KEYS as any).TASK_SYNC_OUTBOX).toBe("task_sync_outbox");
-      expect(CONFIG_KEYS.LLAMAFILE_MODE).toBe("llamafile_mode");
-      expect(CONFIG_KEYS.LLAMAFILE_HOST).toBe("llamafile_host");
-      expect(CONFIG_KEYS.LLAMAFILE_PORT).toBe("llamafile_port");
-      expect(CONFIG_KEYS.LLAMAFILE_OFFLINE).toBe("llamafile_offline");
-      expect(CONFIG_KEYS.BEDROCK_REGION_FALLBACK).toBe(
-        "bedrock_region_fallback",
-      );
-      expect(CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK).toBe(
-        "bedrock_profile_fallback",
-      );
-      expect(CONFIG_KEYS.BEDROCK_AUTH_MODE).toBe("bedrock_auth_mode");
-      expect(CONFIG_KEYS.RATE_LIMIT_CALLS_PER_MINUTE).toBe(
-        "rate_limit_calls_per_minute",
-      );
-      expect(CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT).toBe("rate_limit_auto_adapt");
-      expect(CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN).toBe("sidebar_pages_hidden");
-      expect(CONFIG_KEYS.SIDEBAR_WIDTH).toBe("sidebar_width");
-      expect(CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT).toBe("chat_input_area_height");
     });
 
     it("should include STREAMING_ENABLED config key", () => {
@@ -490,7 +492,6 @@ describe("config.js", () => {
     it("should return provider config by ID", () => {
       const provider = getProvider("openrouter");
       expect(provider).toBeDefined();
-
       expect(provider!.id).toBe("openrouter");
     });
 
@@ -630,9 +631,7 @@ describe("config.js", () => {
 
     it("should return DEFAULT_MAX_TOKENS for empty/null model", () => {
       expect(getModelMaxTokens("")).toBe(DEFAULT_MAX_TOKENS);
-
       expect(getModelMaxTokens(null as any)).toBe(DEFAULT_MAX_TOKENS);
-
       expect(getModelMaxTokens(undefined as any)).toBe(DEFAULT_MAX_TOKENS);
     });
 

@@ -734,7 +734,7 @@ describe("Llamafile prompt echo stripping", () => {
   it("removes echoed SYSTEM/USER scaffold from non-streaming output", async () => {
     const mod = await import("./proxy.js");
     const prompt = [
-      "SYSTEM: You are k9.",
+      "SYSTEM: You are example.",
       "",
       "USER: What tools do you have access to?",
       "",
@@ -749,7 +749,7 @@ describe("Llamafile prompt echo stripping", () => {
 
   it("leaves normal non-echo responses unchanged", async () => {
     const mod = await import("./proxy.js");
-    const prompt = "SYSTEM: You are k9.\n\nUSER: hello\n\nASSISTANT:";
+    const prompt = "SYSTEM: You are example.\n\nUSER: hello\n\nASSISTANT:";
     const raw = "I can help with that.";
 
     const cleaned = mod.stripLlamafilePromptEcho(raw, prompt);

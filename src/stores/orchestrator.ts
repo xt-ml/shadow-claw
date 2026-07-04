@@ -1053,7 +1053,14 @@ export class OrchestratorStore {
       void this.forwardActivityLogEntryToServer(entry);
     });
 
-    orch.events.on("state-change", (state) => {
+    orch.events.on("state-change", (payload) => {
+      const state = typeof payload === "string" ? payload : payload.state;
+      const groupId = typeof payload === "string" ? undefined : payload.groupId;
+
+      if (groupId && groupId !== this._activeGroupId.get()) {
+        return;
+      }
+
       const prev = this._lastOrchestratorState;
       this._lastOrchestratorState = state;
       this._state.set(state);
@@ -1326,8 +1333,15 @@ export class OrchestratorStore {
       // Send the prompt directly to the conversation that owns the task,
       // NOT the currently-visible conversation — scheduled tasks must always
       // fire in the conversation they were created in.
-      const targetGroupId = task.groupId || this._activeGroupId.get();
-      this.orchestrator?.submitMessage?.(task.prompt, targetGroupId, []);
+      if (!task.groupId) {
+        console.error(
+          `Task ${task.id} has no groupId - refusing to execute in active conversation to prevent context pollution.`,
+        );
+
+        return;
+      }
+
+      this.orchestrator?.submitMessage?.(task.prompt, task.groupId, []);
     }
   }
 

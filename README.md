@@ -2,7 +2,7 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/xt-ml/shadow-claw)
 
-A browser-native, fully-featured AI assistant. TypeScript + Web Components + IndexedDB + OPFS.
+A browser-native, fully-featured AI assistant. TypeScript + Web Components + IndexedDB + File System API.
 
 [![ShadowClaw Screenshot](assets/screenshots/shadow-claw-screenshot-1920x1050.png)](https://xt-ml.github.io/shadow-claw/)
 

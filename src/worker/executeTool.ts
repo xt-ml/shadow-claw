@@ -4,10 +4,17 @@ import {
   CONFIG_KEYS,
   FETCH_MAX_RESPONSE,
 } from "../config.js";
-import { NANO_BUILTIN_PROFILE } from "../tools/builtin-profiles.js";
-import { getConfig } from "../db/getConfig.js";
+
 import { getAllTasks } from "../db/getAllTasks.js";
+import { getConfig } from "../db/getConfig.js";
+import {
+  getRoomMetadata,
+  ROOM_PREFIX,
+  roomIdFromGroupId,
+} from "../db/rooms.js";
+
 import { executeShell } from "../shell/shell.js";
+
 import {
   bootVM,
   executeInVM,
@@ -15,84 +22,93 @@ import {
   getVMStatus,
   isVMReady,
 } from "../vm.js";
+
+import { groupFileExists } from "../storage/groupFileExists.js";
 import { listGroupFiles } from "../storage/listGroupFiles.js";
 import { readGroupFile } from "../storage/readGroupFile.js";
-import { writeGroupFile } from "../storage/writeGroupFile.js";
+import { readGroupFileBytes } from "../storage/readGroupFileBytes.js";
 import { uploadGroupFile } from "../storage/uploadGroupFile.js";
-import { groupFileExists } from "../storage/groupFileExists.js";
-import { ulid } from "../utils/ulid.js";
+import { writeGroupFile } from "../storage/writeGroupFile.js";
+
 import {
-  gitClone,
   getProxyUrl,
-  gitCheckout,
-  gitBranch,
-  gitStatus,
+  getRemoteUrl,
   gitAdd,
-  gitLog,
+  gitBranch,
+  gitCheckout,
+  gitClone,
+  gitCommit,
+  gitConfig,
+  gitDeleteBranch,
+  gitDeleteRepo,
   gitDiff,
+  gitFetch,
+  gitInit,
   gitListBranches,
   gitListRepos,
-  gitDeleteRepo,
-  gitCommit,
-  getRemoteUrl,
+  gitListTags,
+  gitLog,
+  gitMerge,
   gitPull,
   gitPush,
-  gitMerge,
-  gitReset,
-  gitFetch,
   gitReadFileAtRef,
-  gitShow,
-  gitDeleteBranch,
-  gitInit,
-  gitTag,
-  gitListTags,
   gitRemote,
-  gitConfig,
+  gitReset,
+  gitShow,
+  gitStatus,
+  gitTag,
   gitUnstage,
 } from "../git/git.js";
-import { syncLfsToOpfs, syncOpfsToLfs } from "../git/sync.js";
-import { resolveGitCredentials, buildAuthHeaders } from "../git/credentials.js";
+import { ulid } from "../utils/ulid.js";
+
 import { resolveServiceCredentials } from "../accounts/service-accounts.js";
+import { buildAuthHeaders, resolveGitCredentials } from "../git/credentials.js";
+import { getGroupDir } from "../storage/getGroupDir.js";
 import { formatShellOutput } from "./formatShellOutput.js";
 import { post } from "./post.js";
 import { sandboxedEval } from "./sandboxedEval.js";
 import { stripHtml } from "./stripHtml.js";
+
 import {
-  getRoomMetadata,
-  roomIdFromGroupId,
-  ROOM_PREFIX,
-} from "../db/rooms.js";
-import {
-  withRetry,
   isRetryableFetchError,
   RETRYABLE_STATUS_CODES,
+  withRetry,
 } from "./withRetry.js";
-import { Task, ShadowClawDatabase } from "../types.js";
+
+import { ShadowClawDatabase, Task } from "../types.js";
+
 import {
   callRemoteMcpTool,
   listRemoteMcpTools,
   McpReauthRequiredError,
 } from "../remote-mcp-client.js";
+
+import { NANO_BUILTIN_PROFILE } from "../tools/builtin-profiles.js";
 import { executeManageEmailTool } from "./tools/email.js";
-import {
-  executeRemoteMcpCallTool,
-  executeRemoteMcpListTools,
-} from "./tools/remote-mcp.js";
 import { executeFetchFileTool } from "./tools/fetch-file.js";
 import { executeFetchUrlTool } from "./tools/fetch-url.js";
 import { executeGitTool } from "./tools/git.js";
 import { executeSpawnSubagentTool } from "./tools/spawn-subagent.js";
-import type { SubagentInvokeContext } from "./tools/spawn-subagent.js";
+
 import {
-  A2UI_MINIMAL_CATALOG_ID,
+  executeRemoteMcpCallTool,
+  executeRemoteMcpListTools,
+} from "./tools/remote-mcp.js";
+
+import {
   A2UI_BASIC_CATALOG_ID,
-  MINIMAL_CATALOG_REFERENCE,
+  A2UI_MINIMAL_CATALOG_ID,
   BASIC_CATALOG_REFERENCE,
+  MINIMAL_CATALOG_REFERENCE,
 } from "../a2ui.js";
+
 import type { A2UIEnvelope } from "../a2ui.js";
+import type { ToolResultContentBlock } from "../types.js";
+import type { SubagentInvokeContext } from "./tools/spawn-subagent.js";
+
+export type { SubagentInvokeContext };
 
 export { resolveMcpReauth } from "./tools/remote-mcp.js";
-export type { SubagentInvokeContext };
 
 async function getGroupTasks(
   db: ShadowClawDatabase,
@@ -199,6 +215,44 @@ function isImagePath(path: string): boolean {
   return /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(path);
 }
 
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  avif: "image/avif",
+  bmp: "image/bmp",
+  gif: "image/gif",
+  jpeg: "image/jpeg",
+  jpg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+};
+
+const MAX_INLINE_IMAGE_BYTES = 10 * 1024 * 1024;
+
+function getImageMimeType(path: string): string | null {
+  const ext = path.toLowerCase().split(".").pop() || "";
+
+  return IMAGE_MIME_TYPES[ext] || null;
+}
+
+function isBinaryContent(bytes: Uint8Array): boolean {
+  const sampleSize = Math.min(bytes.length, 8192);
+  let nonPrintable = 0;
+
+  for (let i = 0; i < sampleSize; i++) {
+    const b = bytes[i];
+    if (b === 0) {
+      return true;
+    }
+
+    if (b < 32 && b !== 9 && b !== 10 && b !== 1) {
+      nonPrintable++;
+    }
+  }
+
+  return nonPrintable / sampleSize > 0.1;
+}
+
+export type ToolResult = string | ToolResultContentBlock[];
+
 /**
  * Execute a tool
  */
@@ -208,11 +262,11 @@ export async function executeTool(
   input: Record<string, any>,
   groupId: string,
   options: {
+    invokeContext?: SubagentInvokeContext;
     isScheduledTask?: boolean;
     isTaskExecution?: boolean;
-    invokeContext?: SubagentInvokeContext;
   } = {},
-): Promise<string> {
+): Promise<ToolResult> {
   try {
     // Block run_task in any task execution context (scheduled OR manual) to
     // prevent runaway self-triggering loops. run_task is only safe from the
@@ -237,6 +291,7 @@ export async function executeTool(
         "invite_to_room",
         "leave_room",
       ]);
+
       if (BLOCKED_TOOLS.has(name)) {
         return `Tool "${name}" is not allowed during scheduled task execution to prevent recursion.`;
       }
@@ -248,6 +303,7 @@ export async function executeTool(
           db,
           CONFIG_KEYS.VM_BASH_TIMEOUT_SEC,
         );
+
         const configuredTimeout = Number(configuredTimeoutRaw);
         const defaultTimeoutSec = Number.isFinite(configuredTimeout)
           ? Math.min(Math.max(configuredTimeout, 1), BASH_MAX_TIMEOUT_SEC)
@@ -295,11 +351,11 @@ export async function executeTool(
         post({
           type: "show-toast",
           payload: {
+            duration: 7000,
             message:
               `WebVM unavailable for this bash command. ${reason} ` +
               "Falling back to JavaScript Bash Emulator and retrying WebVM on the next command.",
             type: "warning",
-            duration: 7000,
           },
         });
 
@@ -319,13 +375,64 @@ export async function executeTool(
         }
 
         if (filePaths.length === 1) {
-          return await readGroupFile(db, groupId, filePaths[0]);
+          const singlePath = filePaths[0];
+          const mimeType = getImageMimeType(singlePath);
+
+          if (mimeType) {
+            try {
+              const bytes = await readGroupFileBytes(db, groupId, singlePath);
+
+              if (bytes.length > MAX_INLINE_IMAGE_BYTES) {
+                return `Error: image file ${singlePath} is too large to inline (${bytes.length} btes, max  ${MAX_INLINE_IMAGE_BYTES}).`;
+              }
+
+              let binary = "";
+              for (let i = 0; i < bytes.length; i++) {
+                binary += String.fromCharCode(bytes[i]);
+              }
+
+              const base64 = btoa(binary);
+
+              return [
+                { type: "text", text: `Contents of image file: ${singlePath}` },
+                { type: "image", media_type: mimeType, data: base64 },
+              ] as ToolResultContentBlock[];
+            } catch (err: any) {
+              return `Error reading image ${singlePath}: ${err.message}`;
+            }
+          }
+
+          try {
+            const bytes = await readGroupFileBytes(db, groupId, singlePath);
+
+            if (isBinaryContent(bytes)) {
+              return (
+                `Error: ${singlePath} is a binary file and cannot be displayed as text. ` +
+                "Use open_file to view it in the UI, or attach_file_to_chat to share it."
+              );
+            }
+
+            return new TextDecoder("utf-8").decode(bytes);
+          } catch (err: any) {
+            return `Error reading ${singlePath}: ${err.message}`;
+          }
         }
 
         const sections = await Promise.all(
           filePaths.map(async (p: string) => {
             try {
-              const content = await readGroupFile(db, groupId, p);
+              const mimeType = getImageMimeType(p);
+              if (mimeType) {
+                return `--- ${p} ---\n[Image file: use read_file with a single path to see this image]`;
+              }
+
+              const bytes = await readGroupFileBytes(db, groupId, p);
+
+              if (isBinaryContent(bytes)) {
+                return `--- ${p} ---\n[Binary file: cannot display as text]`;
+              }
+
+              const content = new TextDecoder("utf-8").decode(bytes);
 
               return `--- ${p} ---\n${content}`;
             } catch (err: any) {
@@ -381,6 +488,7 @@ export async function executeTool(
           typeof input.alt === "string" && input.alt.trim()
             ? input.alt.trim()
             : defaultLabel;
+
         const label = escapeMarkdownLabel(labelInput);
 
         const markdown = isImagePath(normalizedPath)
@@ -418,8 +526,8 @@ export async function executeTool(
         }
 
         post({
-          type: "send-file",
           payload: { groupId, path: sfPath },
+          type: "send-file",
         });
 
         return `Sending file to peer: ${sfPath}. The transfer will proceed in the background — you can continue chatting.`;
@@ -468,9 +576,9 @@ export async function executeTool(
           type: "manage-tools",
           payload: {
             action,
-            toolNames: tool_names,
-            profileId: profile_id,
             groupId,
+            profileId: profile_id,
+            toolNames: tool_names,
           },
         });
 
@@ -502,32 +610,32 @@ export async function executeTool(
 
       case "fetch_url": {
         return await executeFetchUrlTool(db, input, groupId, {
-          fetchImpl: fetch,
-          resolveGitCredentials,
           buildAuthHeaders,
-          resolveServiceCredentials,
-          withRetry,
+          fetchImpl: fetch,
+          fetchMaxResponse: FETCH_MAX_RESPONSE,
           isRetryableFetchError,
+          post,
+          resolveGitCredentials,
+          resolveServiceCredentials,
           retryableStatusCodes: RETRYABLE_STATUS_CODES,
           stripHtml,
           uploadGroupFile,
-          post,
-          fetchMaxResponse: FETCH_MAX_RESPONSE,
+          withRetry,
         });
       }
 
       case "fetch_file": {
         return await executeFetchFileTool(db, input, groupId, {
-          fetchImpl: fetch,
-          resolveGitCredentials,
           buildAuthHeaders,
-          resolveServiceCredentials,
-          withRetry,
+          fetchImpl: fetch,
           isRetryableFetchError,
-          retryableStatusCodes: RETRYABLE_STATUS_CODES,
           post,
-          writeGroupFile,
+          resolveGitCredentials,
+          resolveServiceCredentials,
+          retryableStatusCodes: RETRYABLE_STATUS_CODES,
           uploadGroupFile,
+          withRetry,
+          writeGroupFile,
         });
       }
 
@@ -550,15 +658,15 @@ export async function executeTool(
         }
 
         const taskData = {
-          id: ulid(),
-          groupId,
-          schedule: input.schedule.trim(),
-          type: taskType,
-          prompt: input.prompt ? input.prompt.trim() : "",
-          tools: Array.isArray(input.tools) ? input.tools : [],
-          enabled: true,
-          lastRun: null,
           createdAt: Date.now(),
+          enabled: true,
+          groupId,
+          id: ulid(),
+          lastRun: null,
+          prompt: input.prompt ? input.prompt.trim() : "",
+          schedule: input.schedule.trim(),
+          tools: Array.isArray(input.tools) ? input.tools : [],
+          type: taskType,
         };
 
         post({ type: "task-created", payload: { task: taskData } });
@@ -567,10 +675,9 @@ export async function executeTool(
       }
 
       case "javascript": {
-        const code = input.code;
         const allowFullInternetAccess = await getAllowFullInternetAccess(db);
         const result = (await sandboxedEval(
-          code,
+          input.code,
           undefined,
           allowFullInternetAccess,
         )) as any;
@@ -616,7 +723,6 @@ export async function executeTool(
 
       case "update_task": {
         const tasks = await getGroupTasks(db, groupId);
-
         const task = tasks.find((t: any) => t.id === input.id);
 
         if (!task) {
@@ -665,7 +771,6 @@ export async function executeTool(
 
       case "disable_task": {
         const tasks = await getGroupTasks(db, groupId);
-
         const task = tasks.find((t: any) => t.id === input.id);
         if (!task) {
           return `Error: Task with ID ${input.id} not found.`;
@@ -711,9 +816,9 @@ export async function executeTool(
         post({
           type: "show-toast",
           payload: {
+            duration: input.duration,
             message: input.message,
             type: input.type || "info",
-            duration: input.duration,
           },
         });
 
@@ -724,9 +829,9 @@ export async function executeTool(
         post({
           type: "send-notification",
           payload: {
-            title: input.title || "ShadowClaw",
             body: input.body,
             groupId,
+            title: input.title || "ShadowClaw",
           },
         });
 
@@ -763,8 +868,8 @@ export async function executeTool(
         }
 
         post({
-          type: "room-action",
           payload: { action: "invite", roomId, peerId },
+          type: "room-action",
         });
 
         return `Invited peer ${peerId} to room ${roomId}.`;
@@ -780,8 +885,8 @@ export async function executeTool(
         }
 
         post({
-          type: "room-action",
           payload: { action: "leave", roomId },
+          type: "room-action",
         });
 
         return `Leaving room ${roomId}.`;
@@ -847,8 +952,8 @@ export async function executeTool(
 
       case "remote_mcp_list_tools": {
         return await executeRemoteMcpListTools(db, input, groupId, {
-          listRemoteMcpTools,
           callRemoteMcpTool,
+          listRemoteMcpTools,
           McpReauthRequiredError,
           post,
         });
@@ -856,8 +961,8 @@ export async function executeTool(
 
       case "remote_mcp_call_tool": {
         return await executeRemoteMcpCallTool(db, input, groupId, {
-          listRemoteMcpTools,
           callRemoteMcpTool,
+          listRemoteMcpTools,
           McpReauthRequiredError,
           post,
         });
@@ -865,7 +970,6 @@ export async function executeTool(
 
       // ── Git tools (isomorphic-git) ───────────────────────────────
       case "git_clone":
-      case "git_sync":
       case "git_checkout":
       case "git_branch":
       case "git_status":
@@ -890,44 +994,43 @@ export async function executeTool(
       case "git_config":
       case "git_unstage": {
         return await executeGitTool(db, name, input, groupId, {
-          getConfig,
-          getProxyUrl,
-          resolveGitCredentials,
-          gitClone,
-          gitCheckout,
-          gitBranch,
-          gitStatus,
-          gitAdd,
-          gitLog,
-          gitDiff,
-          gitListBranches,
-          gitListRepos,
-          gitDeleteRepo,
-          gitCommit,
-          gitPull,
-          gitPush,
-          gitMerge,
-          gitReset,
-          gitFetch,
-          gitReadFileAtRef,
-          gitShow,
-          gitDeleteBranch,
-          gitInit,
-          gitTag,
-          gitListTags,
-          gitRemote,
-          gitConfig,
-          gitUnstage,
-          getRemoteUrl,
-          syncLfsToOpfs,
-          syncOpfsToLfs,
-          readGroupFile,
           configKeys: {
             GIT_CORS_PROXY: CONFIG_KEYS.GIT_CORS_PROXY,
             GIT_PROXY_URL: CONFIG_KEYS.GIT_PROXY_URL,
             GIT_AUTHOR_NAME: CONFIG_KEYS.GIT_AUTHOR_NAME,
             GIT_AUTHOR_EMAIL: CONFIG_KEYS.GIT_AUTHOR_EMAIL,
           },
+          getConfig,
+          getGroupDir,
+          getProxyUrl,
+          getRemoteUrl,
+          gitAdd,
+          gitBranch,
+          gitCheckout,
+          gitClone,
+          gitCommit,
+          gitConfig,
+          gitDeleteBranch,
+          gitDeleteRepo,
+          gitDiff,
+          gitFetch,
+          gitInit,
+          gitListBranches,
+          gitListRepos,
+          gitListTags,
+          gitLog,
+          gitMerge,
+          gitPull,
+          gitPush,
+          gitReadFileAtRef,
+          gitRemote,
+          gitReset,
+          gitShow,
+          gitStatus,
+          gitTag,
+          gitUnstage,
+          readGroupFile,
+          resolveGitCredentials,
         });
       }
 
@@ -948,6 +1051,7 @@ export async function executeTool(
               typeof spec.properties === "object"
             ) {
               input.components[key] = { ...spec, ...(spec.properties as any) };
+
               delete input.components[key].properties;
             }
           }
@@ -977,12 +1081,12 @@ export async function executeTool(
                 : A2UI_MINIMAL_CATALOG_ID;
 
             envelope = {
-              type: "createSurface",
-              surfaceId,
               catalogId: resolvedCatalogId,
-              rootComponentId: input.rootComponentId,
               components: input.components,
               dataModel: input.dataModel,
+              rootComponentId: input.rootComponentId,
+              surfaceId,
+              type: "createSurface",
             };
 
             break;
@@ -994,9 +1098,9 @@ export async function executeTool(
             }
 
             envelope = {
-              type: "updateComponents",
-              surfaceId,
               components: input.components,
+              surfaceId,
+              type: "updateComponents",
             };
 
             break;
@@ -1008,9 +1112,9 @@ export async function executeTool(
             }
 
             envelope = {
-              type: "updateDataModel",
-              surfaceId,
               patches: input.patches,
+              surfaceId,
+              type: "updateDataModel",
             };
 
             break;
@@ -1018,8 +1122,8 @@ export async function executeTool(
 
           case "deleteSurface": {
             envelope = {
-              type: "deleteSurface",
               surfaceId,
+              type: "deleteSurface",
             };
 
             break;
@@ -1030,8 +1134,8 @@ export async function executeTool(
         }
 
         post({
-          type: "render-component",
           payload: { groupId, envelope },
+          type: "render-component",
         });
 
         return `A2UI surface "${surfaceId}" rendered (action: ${action}).`;
@@ -1208,6 +1312,7 @@ export async function executeTool(
         return await new Promise<string>((resolve) => {
           (globalThis as any).pendingAskUserResolvers =
             (globalThis as any).pendingAskUserResolvers || {};
+
           (globalThis as any).pendingAskUserResolvers[id] = resolve;
         });
       }

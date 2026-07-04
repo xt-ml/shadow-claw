@@ -2,7 +2,7 @@ import { modelRegistry } from "./model-registry.js";
 
 /** Default assistant name (used in trigger pattern) */
 
-export const ASSISTANT_NAME = "k9";
+export const ASSISTANT_NAME = "example";
 
 /**
  * Build a trigger pattern for the assistant name

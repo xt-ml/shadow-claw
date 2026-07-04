@@ -1,3 +1,50 @@
+import { BrowserChatChannel } from "./channels/browser-chat.js";
+import { ChannelRegistry } from "./channels/channel-registry.js";
+import { IMessageChannel } from "./channels/imessage.js";
+import { PeerJsChannel } from "./channels/peerjs.js";
+import { RoomManager } from "./channels/room-manager.js";
+import { RoomChannel } from "./channels/room.js";
+import { TelegramChannel } from "./channels/telegram.js";
+
+import { isLlamafileResolutionError } from "./components/common/help/llamafile.js";
+import { detectProviderHelpType } from "./components/common/help/providers.js";
+import { isTransformersJsResolutionError } from "./components/common/help/transformers.js";
+
+import { buildDynamicContext } from "./context/buildDynamicContext.js";
+import { estimateTokens } from "./context/estimateTokens.js";
+
+import { buildConversationMessages } from "./db/buildConversationMessages.js";
+import { clearGroupMessages } from "./db/clearGroupMessages.js";
+import { deleteTask } from "./db/deleteTask.js";
+import { getAllTasks } from "./db/getAllTasks.js";
+import { getConfig } from "./db/getConfig.js";
+import { listGroups } from "./db/groups.js";
+import { openDatabase } from "./db/openDatabase.js";
+
+import {
+  deleteRoom,
+  getRoomMetadata,
+  roomIdFromGroupId,
+  upsertRoom,
+} from "./db/rooms.js";
+
+import { saveMessage } from "./db/saveMessage.js";
+import { saveTask } from "./db/saveTask.js";
+import { setConfig } from "./db/setConfig.js";
+
+import { readGroupFile } from "./storage/readGroupFile.js";
+import { readGroupFileBytes } from "./storage/readGroupFileBytes.js";
+
+import { orchestratorStore } from "./stores/orchestrator.js";
+import { toolsStore } from "./stores/tools.js";
+
+import { getCompactionSystemPrompt } from "./worker/getCompactionSystemPrompt.js";
+import { post as workerPost } from "./worker/post.js";
+import { buildSystemPrompt } from "./worker/system-prompt.js";
+
+import { formatA2UIActionPrompt } from "./a2ui.js";
+import { playNotificationChime } from "./audio.js";
+
 import {
   ASSISTANT_NAME,
   CONFIG_KEYS,
@@ -14,98 +61,64 @@ import {
   getProviderApiKeyConfigKey,
 } from "./config.js";
 
-import {
-  compactWithPromptApi,
-  invokeWithPromptApi,
-  isPromptApiSupported,
-} from "./prompt-api-provider.js";
-import { isLlamafileResolutionError } from "./components/common/help/llamafile.js";
-import { detectProviderHelpType } from "./components/common/help/providers.js";
-import { isTransformersJsResolutionError } from "./components/common/help/transformers.js";
-import { invokeWithTransformersJs } from "./transformers-js-provider.js";
+import { decryptValue, encryptValue } from "./crypto.js";
+import { effect } from "./effect.js";
+
 import {
   invokeWithLiteRtLm,
   isLiteRtLmSupported,
 } from "./litert-lm-provider.js";
 
-import {
-  registerWebMcpTools,
-  unregisterWebMcpTools,
-  setWebMcpMode as applyWebMcpMode,
-  getWebMcpMode as readWebMcpMode,
-  type WebMcpMode,
-} from "./webmcp.js";
+import { getRemoteMcpConnection } from "./mcp-connections.js";
+import { reconnectMcpOAuth } from "./mcp-reconnect.js";
 
-import { playNotificationChime } from "./audio.js";
-import { toTrustedScriptUrl } from "./security/trusted-types.js";
-import { decryptValue, encryptValue } from "./crypto.js";
-import { effect } from "./effect.js";
-import { modelRegistry } from "./model-registry.js";
 import {
   inferAttachmentMimeType,
   persistMessageAttachments,
 } from "./message-attachments.js";
+
+import { modelRegistry } from "./model-registry.js";
+import { getPushUrl } from "./notifications/push-client.js";
+
+import {
+  compactWithPromptApi,
+  invokeWithPromptApi,
+  isPromptApiSupported,
+} from "./prompt-api-provider.js";
+
 import { getContextLimit } from "./providers.js";
 import { Router } from "./router.js";
+import { toTrustedScriptUrl } from "./security/trusted-types.js";
 import { TaskScheduler } from "./task-scheduler.js";
 import { showToast } from "./toast.js";
+import { invokeWithTransformersJs } from "./transformers-js-provider.js";
 import { ulid } from "./utils/ulid.js";
 import { VMBootMode, VMStatus } from "./vm.js";
 
-import { type ShadowClawDatabase } from "./db/db.js";
-
-import { buildConversationMessages } from "./db/buildConversationMessages.js";
-import { clearGroupMessages } from "./db/clearGroupMessages.js";
-import { deleteTask } from "./db/deleteTask.js";
-import { getAllTasks } from "./db/getAllTasks.js";
-import { getConfig } from "./db/getConfig.js";
-import { openDatabase } from "./db/openDatabase.js";
-import { saveMessage } from "./db/saveMessage.js";
-import { saveTask } from "./db/saveTask.js";
-import { setConfig } from "./db/setConfig.js";
-import { listGroups } from "./db/groups.js";
-
-import { buildDynamicContext } from "./context/buildDynamicContext.js";
-import { estimateTokens } from "./context/estimateTokens.js";
-
-import { BrowserChatChannel } from "./channels/browser-chat.js";
-import { ChannelRegistry } from "./channels/channel-registry.js";
-import { IMessageChannel } from "./channels/imessage.js";
-import { PeerJsChannel } from "./channels/peerjs.js";
-import { TelegramChannel } from "./channels/telegram.js";
-import { RoomChannel } from "./channels/room.js";
-import { RoomManager } from "./channels/room-manager.js";
-import type { RoomTransport } from "./channels/room-manager.js";
-import type { RoomInvitePayload } from "./channels/peer-protocol.js";
 import {
-  getRoomMetadata,
-  upsertRoom,
-  deleteRoom,
-  roomIdFromGroupId,
-} from "./db/rooms.js";
+  setWebMcpMode as applyWebMcpMode,
+  getWebMcpMode as readWebMcpMode,
+  registerWebMcpTools,
+  unregisterWebMcpTools,
+  type WebMcpMode,
+} from "./webmcp.js";
 
-import { readGroupFile } from "./storage/readGroupFile.js";
-import { readGroupFileBytes } from "./storage/readGroupFileBytes.js";
-import { toolsStore } from "./stores/tools.js";
-import { formatA2UIActionPrompt } from "./a2ui.js";
-import { orchestratorStore } from "./stores/orchestrator.js";
-import { getCompactionSystemPrompt } from "./worker/getCompactionSystemPrompt.js";
-import { buildSystemPrompt } from "./worker/system-prompt.js";
-import { getPushUrl } from "./notifications/push-client.js";
-import { getRemoteMcpConnection } from "./mcp-connections.js";
-import { reconnectMcpOAuth } from "./mcp-reconnect.js";
+import type { RoomInvitePayload } from "./channels/peer-protocol.js";
+import type { RoomTransport } from "./channels/room-manager.js";
+import { type ShadowClawDatabase } from "./db/db.js";
+import type { SubagentInvokeContext } from "./worker/tools/spawn-subagent.js";
 
 import type {
+  A2UIAction,
   Channel,
   ChannelType,
   InboundMessage,
   LLMProvider,
   MessageAttachment,
   ModelDownloadProgressPayload,
-  RoomMeta,
   RoomMember,
+  RoomMeta,
   Task,
-  A2UIAction,
 } from "./types.js";
 
 /**
@@ -138,20 +151,20 @@ class EventBus {
 export type OrchestratorState = "idle" | "thinking" | "responding" | "error";
 
 interface DirectToolCommandPolicy {
-  enabledChannelTypes: string[];
   allowedTools: string[];
+  enabledChannelTypes: string[];
   requireMention: boolean;
 }
 
 const DEFAULT_DIRECT_TOOL_COMMAND_POLICY: DirectToolCommandPolicy = {
-  enabledChannelTypes: ["telegram"],
   allowedTools: ["clear_chat", "show_toast"],
+  enabledChannelTypes: ["telegram"],
   requireMention: true,
 };
 
 type ParsedDirectToolCommand = {
-  toolName: string;
   input: Record<string, any>;
+  toolName: string;
 };
 
 /**
@@ -163,15 +176,17 @@ export class Orchestrator {
   _webMcpEffectCleanup: (() => void) | null = null;
   _webMcpRegistrationLock: Promise<void> = Promise.resolve();
 
-  agentWorker: Worker | null = null;
-  #encryptedApiKey: string | null = null;
   #apiKeyCache: { value: string; expiresAt: number } | null = null;
+  #encryptedApiKey: string | null = null;
 
+  agentWorker: Worker | null = null;
   assistantName: string = ASSISTANT_NAME;
   browserChat: BrowserChatChannel = new BrowserChatChannel();
+
   bedrockRegionFallback: string = "";
   bedrockProfileFallback: string = "";
   bedrockAuthMode: string = "provider_chain";
+
   channelRegistry: ChannelRegistry = new ChannelRegistry();
   contextCompressionEnabled: boolean = false;
   channelEnabledByType: Record<string, boolean> = {
@@ -180,64 +195,81 @@ export class Orchestrator {
     telegram: false,
     imessage: false,
   };
+
   db: ShadowClawDatabase | null = null;
-  events: EventBus = new EventBus();
   directToolCommandPolicy: DirectToolCommandPolicy = {
     ...DEFAULT_DIRECT_TOOL_COMMAND_POLICY,
   };
+
+  events: EventBus = new EventBus();
   gitProxyUrl: string = "/git-proxy";
   taskServerUrl: string = "/schedule";
+
   imessage: IMessageChannel = new IMessageChannel();
   imessageApiKey: string = "";
   imessageChatIds: string[] = [];
   imessageServerUrl: string = "";
+
   llamafileMode: "server" | "cli" = "cli";
   llamafileHost: string = "127.0.0.1";
   llamafilePort: number = 8080;
   llamafileOffline: boolean = true;
+
   maxIterations: number = DEFAULT_MAX_ITERATIONS;
   maxTokens: number = DEFAULT_MAX_TOKENS;
+
   rateLimitCallsPerMinute: number = 0;
   rateLimitAutoAdapt: boolean = true;
+
   messageQueue: any[] = [];
   model: string = getDefaultProvider().defaultModel;
   pendingScheduledTasks: Set<string> = new Set();
   processing: boolean = false;
   promptControllers: Map<string, AbortController> = new Map();
   transformersProgressPollers: Map<string, number> = new Map();
+
   inFlightTriggerByGroup: Map<string, string> = new Map();
   inFlightProviderRequestIds: Map<string, string> = new Map();
   inFlightEffectiveProviderByGroup: Map<
     string,
     { providerId: string; providerConfig: import("./config.js").ProviderConfig }
   > = new Map();
+
   provider: string = DEFAULT_PROVIDER;
   providerConfig: import("./config.js").ProviderConfig = getDefaultProvider();
+
   proxyUrl: string = "/proxy";
   router: Router | null = null;
   scheduler: TaskScheduler | null = null;
   state: OrchestratorState = "idle";
   streamingEnabled: boolean = true;
+
   telegram: TelegramChannel = new TelegramChannel();
   telegramBotToken: string = "";
   telegramChatIds: string[] = [];
   telegramUseProxy: boolean = false;
+
   peerjs: PeerJsChannel = new PeerJsChannel();
-  peerjsMyPeerId: string = "";
   peerjsMyAlias: string = "";
-  peerjsTrustedPeerIds: string[] = [];
+  peerjsMyPeerId: string = "";
   peerjsPeerAliases: Record<string, string> = {};
   peerjsServerHost: string = "";
-  peerjsServerPort: number = 0;
   peerjsServerPath: string = "";
+  peerjsServerPort: number = 0;
   peerjsServerSecure: boolean = true;
+  peerjsTrustedPeerIds: string[] = [];
+
   /** Peer groupIds where the A2A task has reached a terminal state */
   private _peerCompletedContexts = new Set<string>();
+
   /** Multi-party room channel + manager (layered on the PeerJS transport). */
   roomChannel: RoomChannel = new RoomChannel();
   roomManager!: RoomManager;
+
   triggerPattern: RegExp = buildTriggerPattern(ASSISTANT_NAME);
+
   useProxy: boolean = false;
+
   vmBashFullInternetAccess: boolean = false;
   vmBootMode: VMBootMode = "disabled";
   vmStatus: VMStatus = {
@@ -246,6 +278,7 @@ export class Orchestrator {
     bootAttempted: false,
     error: null,
   };
+
   webMcpToolsEnabled: boolean = true;
 
   constructor() {
@@ -445,6 +478,7 @@ export class Orchestrator {
         storedMaxTokens || String(dynamicMaxTokens),
         10,
       );
+
       // Hard clamp any stored manual overrides against our new safe dynamic boundaries
       // to avoid 400 errors if a user previously forced a too-large MAX_TOKENS in the DB.
       this.maxTokens = Math.min(parsedStored, dynamicMaxTokens);
@@ -460,6 +494,7 @@ export class Orchestrator {
       db,
       CONFIG_KEYS.RATE_LIMIT_CALLS_PER_MINUTE,
     );
+
     if (storedRateLimitCallsPerMinute) {
       const parsed = parseInt(storedRateLimitCallsPerMinute, 10);
       this.rateLimitCallsPerMinute = Number.isFinite(parsed)
@@ -471,6 +506,7 @@ export class Orchestrator {
       db,
       CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT,
     );
+
     this.rateLimitAutoAdapt = storedRateLimitAutoAdapt !== "false";
 
     const storedLlamafileMode = await getConfig(db, CONFIG_KEYS.LLAMAFILE_MODE);
@@ -501,6 +537,7 @@ export class Orchestrator {
       db,
       CONFIG_KEYS.LLAMAFILE_OFFLINE,
     );
+
     if (storedLlamafileOffline === "false") {
       this.llamafileOffline = false;
     }
@@ -524,12 +561,14 @@ export class Orchestrator {
       db,
       CONFIG_KEYS.WEBMCP_TOOLS_ENABLED,
     );
+
     this.webMcpToolsEnabled = storedWebMcpToolsEnabled !== "false";
 
     const storedBashFullInternetAccess = await getConfig(
       db,
       CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS,
     );
+
     this.vmBashFullInternetAccess = storedBashFullInternetAccess === "true";
 
     // Load WebMCP mode preference (default: polyfill)
@@ -543,12 +582,14 @@ export class Orchestrator {
       db,
       CONFIG_KEYS.CONTEXT_COMPRESSION_ENABLED,
     );
+
     this.contextCompressionEnabled = storedCompression === "true";
 
     const storedDirectToolPolicy = await getConfig(
       db,
       CONFIG_KEYS.DIRECT_TOOL_COMMAND_POLICY,
     );
+
     this.directToolCommandPolicy = this.parseDirectToolCommandPolicy(
       storedDirectToolPolicy,
     );
@@ -593,6 +634,7 @@ export class Orchestrator {
     // Restore persisted multi-party rooms.
     try {
       const rooms = await getRoomMetadata(db);
+
       this.roomManager.loadRooms(rooms);
     } catch (err) {
       console.error("Failed to load rooms:", err);
@@ -618,8 +660,8 @@ export class Orchestrator {
     const storageHandle = await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE);
     if (storageHandle) {
       this.agentWorker.postMessage({
-        type: "set-storage",
         payload: { storageHandle },
+        type: "set-storage",
       });
     }
 
@@ -695,8 +737,8 @@ export class Orchestrator {
       }
 
       this.#apiKeyCache = {
-        value: decrypted,
         expiresAt: now + 30000, // 30s TTL
+        value: decrypted,
       };
 
       return decrypted;
@@ -709,7 +751,9 @@ export class Orchestrator {
 
   async setApiKey(db: ShadowClawDatabase, key: string): Promise<void> {
     this.#encryptedApiKey = await encryptValue(key);
-    this.#apiKeyCache = null; // Invalidate cache
+
+    // Invalidate cache
+    this.#apiKeyCache = null;
 
     const encrypted = await encryptValue(key);
 
@@ -746,6 +790,7 @@ export class Orchestrator {
         this.#encryptedApiKey = storedKey;
       } catch (e) {
         console.warn("[Orchestrator] Failed to load API key:", e);
+
         this.#encryptedApiKey = "";
       }
     }
@@ -860,10 +905,10 @@ export class Orchestrator {
   }
 
   getLlamafileSettings(): {
-    mode: "server" | "cli";
     host: string;
-    port: number;
+    mode: "server" | "cli";
     offline: boolean;
+    port: number;
   } {
     return {
       mode: this.llamafileMode,
@@ -876,10 +921,10 @@ export class Orchestrator {
   async setLlamafileSettings(
     db: ShadowClawDatabase,
     settings: {
-      mode: "server" | "cli";
       host: string;
-      port: number;
+      mode: "server" | "cli";
       offline: boolean;
+      port: number;
     },
   ): Promise<void> {
     this.llamafileMode = settings.mode;
@@ -916,11 +961,13 @@ export class Orchestrator {
     const normalized = Math.max(1, Math.min(value, dynamicMaxTokens));
 
     this.maxTokens = normalized;
+
     await setConfig(db, CONFIG_KEYS.MAX_TOKENS, String(normalized));
   }
 
   async setMaxIterations(db: ShadowClawDatabase, value: number): Promise<void> {
     this.maxIterations = value;
+
     await setConfig(db, CONFIG_KEYS.MAX_ITERATIONS, String(value));
   }
 
@@ -937,6 +984,7 @@ export class Orchestrator {
       : 0;
 
     this.rateLimitCallsPerMinute = normalized;
+
     await setConfig(
       db,
       CONFIG_KEYS.RATE_LIMIT_CALLS_PER_MINUTE,
@@ -953,6 +1001,7 @@ export class Orchestrator {
     enabled: boolean,
   ): Promise<void> {
     this.rateLimitAutoAdapt = !!enabled;
+
     await setConfig(
       db,
       CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT,
@@ -988,7 +1037,9 @@ export class Orchestrator {
     // Unregister with old mode, switch, re-register with new mode.
     unregisterWebMcpTools();
     applyWebMcpMode(mode);
+
     await setConfig(db, CONFIG_KEYS.WEBMCP_MODE, mode);
+
     this.syncWebMcpRegistration(db);
   }
 
@@ -997,11 +1048,13 @@ export class Orchestrator {
     enabled: boolean,
   ): Promise<void> {
     this.webMcpToolsEnabled = !!enabled;
+
     await setConfig(
       db,
       CONFIG_KEYS.WEBMCP_TOOLS_ENABLED,
       this.webMcpToolsEnabled ? "true" : "false",
     );
+
     this.syncWebMcpRegistration(db);
   }
 
@@ -1010,6 +1063,7 @@ export class Orchestrator {
     enabled: boolean,
   ): Promise<void> {
     this.streamingEnabled = !!enabled;
+
     await setConfig(
       db,
       CONFIG_KEYS.STREAMING_ENABLED,
@@ -1026,6 +1080,7 @@ export class Orchestrator {
     enabled: boolean,
   ): Promise<void> {
     this.contextCompressionEnabled = !!enabled;
+
     await setConfig(
       db,
       CONFIG_KEYS.CONTEXT_COMPRESSION_ENABLED,
@@ -1039,6 +1094,7 @@ export class Orchestrator {
 
   async setUseProxy(db: ShadowClawDatabase, enabled: boolean): Promise<void> {
     this.useProxy = !!enabled;
+
     await setConfig(
       db,
       CONFIG_KEYS.USE_PROXY,
@@ -1053,7 +1109,9 @@ export class Orchestrator {
 
   async setProxyUrl(db: ShadowClawDatabase, url: string): Promise<void> {
     this.proxyUrl = url || "/proxy";
+
     await setConfig(db, CONFIG_KEYS.PROXY_URL, this.proxyUrl);
+
     this.syncProxyConfigToServiceWorker();
   }
 
@@ -1063,6 +1121,7 @@ export class Orchestrator {
 
   async setGitProxyUrl(db: ShadowClawDatabase, url: string): Promise<void> {
     this.gitProxyUrl = url || "/git-proxy";
+
     await setConfig(db, CONFIG_KEYS.GIT_PROXY_URL, this.gitProxyUrl);
   }
 
@@ -1072,6 +1131,7 @@ export class Orchestrator {
 
   async setTaskServerUrl(db: ShadowClawDatabase, url: string): Promise<void> {
     this.taskServerUrl = url || "/schedule";
+
     await setConfig(db, CONFIG_KEYS.TASK_SERVER_URL, this.taskServerUrl);
   }
 
@@ -1101,8 +1161,8 @@ export class Orchestrator {
     await setConfig(db, CONFIG_KEYS.VM_BOOT_MODE, normalized);
 
     this.agentWorker?.postMessage({
-      type: "set-vm-mode",
       payload: { mode: normalized },
+      type: "set-vm-mode",
     });
   }
 
@@ -1112,8 +1172,8 @@ export class Orchestrator {
     await setConfig(db, CONFIG_KEYS.VM_BOOT_HOST, normalized);
 
     this.agentWorker?.postMessage({
-      type: "set-vm-mode",
       payload: { bootHost: normalized },
+      type: "set-vm-mode",
     });
   }
 
@@ -1126,8 +1186,8 @@ export class Orchestrator {
     await setConfig(db, CONFIG_KEYS.VM_NETWORK_RELAY_URL, normalized);
 
     this.agentWorker?.postMessage({
-      type: "set-vm-mode",
       payload: { networkRelayUrl: normalized },
+      type: "set-vm-mode",
     });
   }
 
@@ -1149,6 +1209,7 @@ export class Orchestrator {
     enabled: boolean,
   ): Promise<void> {
     this.vmBashFullInternetAccess = !!enabled;
+
     await setConfig(
       db,
       CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS,
@@ -1166,36 +1227,36 @@ export class Orchestrator {
 
   openTerminalSession(groupId = DEFAULT_GROUP_ID): void {
     this.agentWorker?.postMessage({
-      type: "vm-terminal-open",
       payload: { groupId },
+      type: "vm-terminal-open",
     });
   }
 
   syncTerminalWorkspace(groupId = DEFAULT_GROUP_ID): void {
     this.agentWorker?.postMessage({
-      type: "vm-workspace-sync",
       payload: { groupId },
+      type: "vm-workspace-sync",
     });
   }
 
   flushTerminalWorkspace(groupId = DEFAULT_GROUP_ID): void {
     this.agentWorker?.postMessage({
-      type: "vm-workspace-flush",
       payload: { groupId },
+      type: "vm-workspace-flush",
     });
   }
 
   sendTerminalInput(data: string): void {
     this.agentWorker?.postMessage({
-      type: "vm-terminal-input",
       payload: { data },
+      type: "vm-terminal-input",
     });
   }
 
   closeTerminalSession(groupId = DEFAULT_GROUP_ID): void {
     this.agentWorker?.postMessage({
-      type: "vm-terminal-close",
       payload: { groupId },
+      type: "vm-terminal-close",
     });
   }
 
@@ -1206,28 +1267,28 @@ export class Orchestrator {
   getTelegramConfig(): {
     botToken: string;
     chatIds: string[];
-    useProxy: boolean;
     enabled: boolean;
+    useProxy: boolean;
   } {
     return {
       botToken: this.telegramBotToken,
       chatIds: [...this.telegramChatIds],
-      useProxy: this.telegramUseProxy,
       enabled: this.getChannelEnabled("telegram"),
+      useProxy: this.telegramUseProxy,
     };
   }
 
   getIMessageConfig(): {
-    serverUrl: string;
     apiKey: string;
     chatIds: string[];
     enabled: boolean;
+    serverUrl: string;
   } {
     return {
-      serverUrl: this.imessageServerUrl,
       apiKey: this.imessageApiKey,
       chatIds: [...this.imessageChatIds],
       enabled: this.getChannelEnabled("imessage"),
+      serverUrl: this.imessageServerUrl,
     };
   }
 
@@ -1286,11 +1347,13 @@ export class Orchestrator {
       CONFIG_KEYS.TELEGRAM_BOT_TOKEN,
       normalizedToken,
     );
+
     await setConfig(
       db,
       CONFIG_KEYS.TELEGRAM_CHAT_IDS,
       JSON.stringify(normalizedChatIds),
     );
+
     await setConfig(
       db,
       CONFIG_KEYS.TELEGRAM_USE_PROXY,
@@ -1303,6 +1366,7 @@ export class Orchestrator {
       normalizedChatIds,
       normalizedUseProxy,
     );
+
     if (normalizedToken && this.getChannelEnabled("telegram")) {
       this.telegram.start();
     }
@@ -1328,6 +1392,7 @@ export class Orchestrator {
       CONFIG_KEYS.IMESSAGE_API_KEY,
       normalizedApiKey,
     );
+
     await setConfig(
       db,
       CONFIG_KEYS.IMESSAGE_CHAT_IDS,
@@ -1340,32 +1405,33 @@ export class Orchestrator {
       normalizedApiKey,
       normalizedChatIds,
     );
+
     if (normalizedServerUrl && this.getChannelEnabled("imessage")) {
       this.imessage.start();
     }
   }
 
   getPeerJsConfig(): {
-    myPeerId: string;
-    myAlias: string;
-    trustedPeerIds: string[];
-    serverHost: string;
-    serverPort: number;
-    serverPath: string;
-    serverSecure: boolean;
-    peerAliases: Record<string, string>;
     enabled: boolean;
+    myAlias: string;
+    myPeerId: string;
+    peerAliases: Record<string, string>;
+    serverHost: string;
+    serverPath: string;
+    serverPort: number;
+    serverSecure: boolean;
+    trustedPeerIds: string[];
   } {
     return {
-      myPeerId: this.peerjsMyPeerId,
-      myAlias: this.peerjsMyAlias,
-      trustedPeerIds: [...this.peerjsTrustedPeerIds],
-      serverHost: this.peerjsServerHost,
-      serverPort: this.peerjsServerPort,
-      serverPath: this.peerjsServerPath,
-      serverSecure: this.peerjsServerSecure,
-      peerAliases: { ...this.peerjsPeerAliases },
       enabled: this.getChannelEnabled("peerjs"),
+      myAlias: this.peerjsMyAlias,
+      myPeerId: this.peerjsMyPeerId,
+      peerAliases: { ...this.peerjsPeerAliases },
+      serverHost: this.peerjsServerHost,
+      serverPath: this.peerjsServerPath,
+      serverPort: this.peerjsServerPort,
+      serverSecure: this.peerjsServerSecure,
+      trustedPeerIds: [...this.peerjsTrustedPeerIds],
     };
   }
 
@@ -1384,6 +1450,7 @@ export class Orchestrator {
     const normalizedServerPort = Number.isFinite(serverPort)
       ? Math.max(0, Math.floor(serverPort))
       : 0;
+
     const normalizedServerPath = serverPath.trim();
     const normalizedServerSecure = !!serverSecure;
 
@@ -1400,12 +1467,14 @@ export class Orchestrator {
       CONFIG_KEYS.PEERJS_TRUSTED_PEER_IDS,
       JSON.stringify(normalizedTrustedPeerIds),
     );
+
     await setConfig(db, CONFIG_KEYS.PEERJS_SERVER_HOST, normalizedServerHost);
     await setConfig(
       db,
       CONFIG_KEYS.PEERJS_SERVER_PORT,
       normalizedServerPort ? String(normalizedServerPort) : "",
     );
+
     await setConfig(db, CONFIG_KEYS.PEERJS_SERVER_PATH, normalizedServerPath);
     await setConfig(
       db,
@@ -1416,8 +1485,8 @@ export class Orchestrator {
     const serverConfig = normalizedServerHost
       ? {
           host: normalizedServerHost,
-          port: normalizedServerPort || undefined,
           path: normalizedServerPath || undefined,
+          port: normalizedServerPort || undefined,
           secure: normalizedServerSecure,
         }
       : {};
@@ -1428,6 +1497,7 @@ export class Orchestrator {
       normalizedTrustedPeerIds,
       serverConfig,
     );
+
     if (normalizedMyPeerId && this.getChannelEnabled("peerjs")) {
       this.peerjs.start();
     }
@@ -1438,6 +1508,7 @@ export class Orchestrator {
     aliases: Record<string, string>,
   ): Promise<void> {
     this.peerjsPeerAliases = { ...aliases };
+
     await setConfig(
       db,
       CONFIG_KEYS.PEERJS_PEER_ALIASES,
@@ -1447,6 +1518,7 @@ export class Orchestrator {
 
   async setPeerjsMyAlias(db: ShadowClawDatabase, alias: string): Promise<void> {
     this.peerjsMyAlias = alias.trim();
+
     await setConfig(db, CONFIG_KEYS.PEERJS_MY_ALIAS, this.peerjsMyAlias);
   }
 
@@ -1501,7 +1573,7 @@ export class Orchestrator {
       return;
     }
 
-    this.setState("thinking");
+    this.setState("thinking", groupId);
     this.events.emit("typing", { groupId, typing: true });
 
     let memory = "";
@@ -1542,7 +1614,7 @@ export class Orchestrator {
         });
 
         this.events.emit("typing", { groupId, typing: false });
-        this.setState("idle");
+        this.setState("idle", groupId);
 
         return;
       }
@@ -1585,24 +1657,23 @@ export class Orchestrator {
     this.agentWorker?.postMessage({
       type: "compact",
       payload: {
-        groupId,
-        messages,
-        systemPrompt,
-        assistantName: this.assistantName,
-        memory,
         apiKey: await this.getApiKeyForRequest(),
+        assistantName: this.assistantName,
+        contextCompression: this.contextCompressionEnabled,
+        contextLimit: getContextLimit(this.model),
+        groupId,
+        memory,
+        messages,
         model: this.model,
-
         provider: this.provider,
-        storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
         providerHeaders: this.getProviderRuntimeHeaders(
           this.provider,
           providerRequestId,
         ),
-        contextCompression: this.contextCompressionEnabled,
-        contextLimit: getContextLimit(this.model),
-        rateLimitCallsPerMinute: this.rateLimitCallsPerMinute,
         rateLimitAutoAdapt: this.rateLimitAutoAdapt,
+        rateLimitCallsPerMinute: this.rateLimitCallsPerMinute,
+        storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
+        systemPrompt,
       },
     });
   }
@@ -1652,29 +1723,31 @@ export class Orchestrator {
   }
 
   getBedrockSettings(): {
-    region: string;
-    profile: string;
     authMode: string;
+    profile: string;
+    region: string;
   } {
     return {
-      region: this.bedrockRegionFallback,
-      profile: this.bedrockProfileFallback,
       authMode: this.bedrockAuthMode,
+      profile: this.bedrockProfileFallback,
+      region: this.bedrockRegionFallback,
     };
   }
 
   async setBedrockSettings(
     db: ShadowClawDatabase,
     settings: {
-      region: string;
-      profile: string;
       authMode: string;
+      profile: string;
+      region: string;
     },
   ): Promise<void> {
     const region =
       typeof settings.region === "string" ? settings.region.trim() : "";
+
     const profile =
       typeof settings.profile === "string" ? settings.profile.trim() : "";
+
     const authMode = settings.authMode === "sso" ? "sso" : "provider_chain";
 
     this.bedrockRegionFallback = region;
@@ -1709,13 +1782,13 @@ export class Orchestrator {
   private async cancelLlamafileRequest(requestId: string): Promise<void> {
     try {
       await fetch(LLAMAFILE_PROXY_URL.replace("/chat/completions", "/cancel"), {
-        method: "POST",
+        body: JSON.stringify({ requestId }),
         headers: {
           "Content-Type": "application/json",
           "x-shadowclaw-request-id": requestId,
         },
-        body: JSON.stringify({ requestId }),
         keepalive: true,
+        method: "POST",
       });
     } catch {
       // Best-effort cancellation only.
@@ -1772,6 +1845,7 @@ export class Orchestrator {
     const timer = this.transformersProgressPollers.get(groupId);
     if (typeof timer === "number") {
       clearInterval(timer);
+
       this.transformersProgressPollers.delete(groupId);
     }
   }
@@ -1779,10 +1853,10 @@ export class Orchestrator {
   private async pollTransformersProgress(groupId: string): Promise<void> {
     try {
       const res = await fetch(this.getTransformersStatusUrl(), {
-        method: "GET",
         headers: {
           Accept: "application/json",
         },
+        method: "GET",
       });
 
       if (!res.ok) {
@@ -1800,15 +1874,15 @@ export class Orchestrator {
 
       const payload: ModelDownloadProgressPayload = {
         groupId,
-        status:
-          status?.status === "done" || status?.status === "error"
-            ? status.status
-            : "running",
-        progress: normalizedProgress,
         message:
           typeof status?.message === "string" && status.message
             ? status.message
             : undefined,
+        progress: normalizedProgress,
+        status:
+          status?.status === "done" || status?.status === "error"
+            ? status.status
+            : "running",
       };
 
       this.events.emit("model-download-progress", payload);
@@ -1827,9 +1901,9 @@ export class Orchestrator {
     // Show immediate feedback while the first network poll is in flight.
     this.events.emit("model-download-progress", {
       groupId,
-      status: "running",
-      progress: null,
       message: "Preparing local model download...",
+      progress: null,
+      status: "running",
     });
 
     void this.pollTransformersProgress(groupId);
@@ -1863,6 +1937,7 @@ export class Orchestrator {
     const promptController = this.promptControllers.get(groupId);
     if (promptController) {
       promptController.abort();
+
       this.promptControllers.delete(groupId);
     }
 
@@ -1871,7 +1946,7 @@ export class Orchestrator {
 
     this.events.emit("typing", { groupId, typing: false });
     this.router?.setTyping(groupId, false);
-    this.setState("idle");
+    this.setState("idle", groupId);
   }
 
   async restartCurrentRequest(groupId = DEFAULT_GROUP_ID): Promise<boolean> {
@@ -1889,6 +1964,7 @@ export class Orchestrator {
     }
 
     this.stopCurrentRequest(groupId);
+
     await this.invokeAgent(this.db, groupId, triggerContent);
 
     return true;
@@ -1908,6 +1984,7 @@ export class Orchestrator {
       this.provider,
       this.model,
     );
+
     if (candidates.length === 0) {
       return;
     }
@@ -1916,6 +1993,7 @@ export class Orchestrator {
     const exact = candidates.find(
       (p) => p.providerId === this.provider && p.model === this.model,
     );
+
     if (exact) {
       await toolsStore.activateProfile(db, exact.id);
 
@@ -1926,6 +2004,7 @@ export class Orchestrator {
     const providerOnly = candidates.find(
       (p) => p.providerId === this.provider && !p.model,
     );
+
     if (providerOnly) {
       await toolsStore.activateProfile(db, providerOnly.id);
     }
@@ -1991,9 +2070,9 @@ export class Orchestrator {
     try {
       const base = this.taskServerUrl.replace(/\/$/, "");
       const res = await fetch(`${base}/tasks`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(task),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
       });
 
       if (!res.ok) {
@@ -2031,6 +2110,7 @@ export class Orchestrator {
 
       if (!sub) {
         this._pushSubscriptionWarned = true;
+
         showToast(
           "Push notifications are not enabled. Scheduled tasks will only run while the app is open. Enable push in Settings for background execution.",
           { type: "warning" },
@@ -2070,8 +2150,9 @@ export class Orchestrator {
    * Shut down everything
    */
   shutdown() {
-    this.scheduler?.stop();
     this.channelRegistry.stopAll();
+    this.scheduler?.stop();
+
     for (const groupId of this.transformersProgressPollers.keys()) {
       this.stopTransformersProgressPolling(groupId);
     }
@@ -2106,11 +2187,10 @@ export class Orchestrator {
     // passed.
     this._webMcpEffectCleanup = effect(() => {
       // Access signals to establish tracking.
-      const globalTools = toolsStore.enabledTools;
-      const allTools = toolsStore.allTools;
       const activeGroupId = orchestratorStore.activeGroupId;
+      const allTools = toolsStore.allTools;
+      const globalTools = toolsStore.enabledTools;
       const groups = orchestratorStore.groups;
-
       const group = groups.find((g) => g.groupId === activeGroupId);
       const tools =
         group?.toolTags && group.toolTags.length > 0
@@ -2139,9 +2219,9 @@ export class Orchestrator {
     });
   }
 
-  setState(state: OrchestratorState): void {
+  setState(state: OrchestratorState, groupId?: string): void {
     this.state = state;
-    this.events.emit("state-change", state);
+    this.events.emit("state-change", { state, groupId });
   }
 
   initializeChannelRegistry(): void {
@@ -2150,26 +2230,32 @@ export class Orchestrator {
       badge: "Browser",
       autoTrigger: true,
     });
+
     this.channelRegistry.register("tg:", this.telegram, {
       badge: "Telegram",
       autoTrigger: false,
     });
+
     this.channelRegistry.register("im:", this.imessage, {
       badge: "iMessage",
       autoTrigger: true,
     });
+
     this.channelRegistry.register("peer:", this.peerjs, {
       badge: "PeerJS",
       autoTrigger: false,
     });
+
     this.channelRegistry.register("room:", this.roomChannel, {
       badge: "Room",
       autoTrigger: false,
     });
+
     this.roomChannel.setManager(this.roomManager);
     this.peerjs.setRoomNotificationHandler((from, method, params) =>
       this.roomManager.handleNotification(from, method, params),
     );
+
     this.router = new Router(this.channelRegistry);
   }
 
@@ -2178,6 +2264,7 @@ export class Orchestrator {
       db,
       "telegram",
     );
+
     this.channelEnabledByType.imessage = await this.loadChannelEnabled(
       db,
       "imessage",
@@ -2194,10 +2281,12 @@ export class Orchestrator {
 
     const telegramUseProxy =
       (await getConfig(db, CONFIG_KEYS.TELEGRAM_USE_PROXY)) === "true";
+
     this.telegramBotToken = telegramToken;
     this.telegramChatIds = telegramChatIds;
     this.telegramUseProxy = telegramUseProxy;
     this.telegram.configure(telegramToken, telegramChatIds, telegramUseProxy);
+
     const readWorkspaceFileAsBlob = async (
       groupId: string,
       path: string,
@@ -2220,6 +2309,7 @@ export class Orchestrator {
         return null;
       }
     };
+
     this.telegram.fileReader = readWorkspaceFileAsBlob;
     this.imessage.fileReader = readWorkspaceFileAsBlob;
 
@@ -2228,6 +2318,7 @@ export class Orchestrator {
     )
       .trim()
       .replace(/\/+$/, "");
+
     const imessageApiKey = await this.loadSecretConfig(
       db,
       CONFIG_KEYS.IMESSAGE_API_KEY,
@@ -2236,6 +2327,7 @@ export class Orchestrator {
     const imessageChatIds = parseStoredStringList(
       await getConfig(db, CONFIG_KEYS.IMESSAGE_CHAT_IDS),
     );
+
     this.imessageServerUrl = imessageServerUrl;
     this.imessageApiKey = imessageApiKey;
     this.imessageChatIds = imessageChatIds;
@@ -2258,27 +2350,34 @@ export class Orchestrator {
     const peerjsServerHost = (
       (await getConfig(db, CONFIG_KEYS.PEERJS_SERVER_HOST)) || ""
     ).trim();
+
     const peerjsServerPortRaw = await getConfig(
       db,
       CONFIG_KEYS.PEERJS_SERVER_PORT,
     );
+
     const peerjsServerPort = peerjsServerPortRaw
       ? parseInt(peerjsServerPortRaw, 10) || 0
       : 0;
+
     const peerjsServerPath = (
       (await getConfig(db, CONFIG_KEYS.PEERJS_SERVER_PATH)) || ""
     ).trim();
+
     const peerjsServerSecureRaw = await getConfig(
       db,
       CONFIG_KEYS.PEERJS_SERVER_SECURE,
     );
+
     const peerjsServerSecure = peerjsServerSecureRaw !== "false";
 
     let peerjsPeerAliases: Record<string, string> = {};
+
     const storedAliasesRaw = await getConfig(
       db,
       CONFIG_KEYS.PEERJS_PEER_ALIASES,
     );
+
     if (storedAliasesRaw) {
       try {
         peerjsPeerAliases = JSON.parse(storedAliasesRaw);
@@ -2291,6 +2390,7 @@ export class Orchestrator {
     this.peerjsMyAlias = (
       (await getConfig(db, CONFIG_KEYS.PEERJS_MY_ALIAS)) || ""
     ).trim();
+
     this.peerjsTrustedPeerIds = peerjsTrustedPeerIds;
     this.peerjsPeerAliases = peerjsPeerAliases;
     this.peerjsServerHost = peerjsServerHost;
@@ -2447,6 +2547,7 @@ export class Orchestrator {
             (v): v is string => typeof v === "string" && v.trim().length > 0,
           )
         : DEFAULT_DIRECT_TOOL_COMMAND_POLICY.enabledChannelTypes;
+
       const allowedTools = Array.isArray(parsed.allowedTools)
         ? parsed.allowedTools.filter(
             (v): v is string => typeof v === "string" && v.trim().length > 0,
@@ -2454,8 +2555,8 @@ export class Orchestrator {
         : DEFAULT_DIRECT_TOOL_COMMAND_POLICY.allowedTools;
 
       return {
-        enabledChannelTypes,
         allowedTools,
+        enabledChannelTypes,
         requireMention:
           typeof parsed.requireMention === "boolean"
             ? parsed.requireMention
@@ -2484,6 +2585,7 @@ export class Orchestrator {
         `^@${escapedAssistant}\\b\\s*(?:-|:)?\\s*`,
         "i",
       );
+
       if (!mentionPrefix.test(commandPart)) {
         return null;
       }
@@ -2568,7 +2670,9 @@ export class Orchestrator {
     const directToolCommand = this.parseDirectToolCommand(msg);
     const isFromBrowser = msg.channel === "browser"; // Messages submitted in ShadowClaw UI
     const autoTrigger = this.channelRegistry.shouldAutoTrigger(msg.groupId);
+
     let hasTrigger = false;
+
     if (msg.channel === "browser" || msg.groupId.startsWith("room:")) {
       hasTrigger = this.triggerPattern.test(msg.content.trim());
     }
@@ -2716,6 +2820,7 @@ export class Orchestrator {
     // Look up the effective provider for the next message's group
     const nextMsg = this.messageQueue[0];
     const nextGroupId = nextMsg?.groupId;
+
     let effectiveProviderConfig = this.providerConfig;
     let effectiveProviderId = this.provider;
 
@@ -2792,7 +2897,7 @@ export class Orchestrator {
     triggerContent: string,
   ): Promise<void> {
     this.inFlightTriggerByGroup.set(groupId, triggerContent);
-    this.setState("thinking");
+    this.setState("thinking", groupId);
     this.router?.setTyping(groupId, true);
     this.events.emit("typing", { groupId, typing: true });
 
@@ -2827,12 +2932,14 @@ export class Orchestrator {
     const group = groups.find((g) => g.groupId === groupId);
 
     const effectiveProviderId = group?.pinnedProvider ?? this.provider;
+
     // When a provider is pinned but no specific model is pinned, default to that provider's own defaultModel
     const effectiveModel =
       group?.pinnedModel ??
       (group?.pinnedProvider
         ? (getProvider(group.pinnedProvider)?.defaultModel ?? this.model)
         : this.model);
+
     const effectiveProviderConfig =
       getProvider(effectiveProviderId) ?? this.providerConfig;
 
@@ -2898,6 +3005,35 @@ export class Orchestrator {
       const controller = new AbortController();
       this.promptControllers.set(groupId, controller);
 
+      const transformersInvokeContext: SubagentInvokeContext = {
+        apiKey: "",
+        assistantName: this.assistantName,
+        db,
+        enabledTools: activeTools as any,
+        invokeSubagent: async (subPayload) => {
+          await invokeWithTransformersJs(
+            db,
+            subPayload.groupId,
+            subPayload.systemPrompt,
+            subPayload.messages,
+            subPayload.maxTokens,
+            async (msg: any) => {
+              workerPost(msg);
+            },
+            controller.signal,
+            subPayload.enabledTools,
+            subPayload.model,
+          );
+        },
+        maxTokens: this.maxTokens,
+        memory: memory ?? "",
+        model: effectiveModel,
+        provider: effectiveProviderId,
+        providerHeaders: {},
+        streaming: false,
+        systemPrompt,
+      };
+
       try {
         await invokeWithTransformersJs(
           db,
@@ -2911,6 +3047,7 @@ export class Orchestrator {
           controller.signal,
           activeTools,
           effectiveModel,
+          transformersInvokeContext,
         );
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
@@ -2940,6 +3077,34 @@ export class Orchestrator {
       const controller = new AbortController();
       this.promptControllers.set(groupId, controller);
 
+      const promptApiInvokeContext: SubagentInvokeContext = {
+        apiKey: "",
+        assistantName: this.assistantName,
+        db,
+        enabledTools: activeTools as any,
+        invokeSubagent: async (subPayload) => {
+          await invokeWithPromptApi(
+            db,
+            subPayload.groupId,
+            subPayload.systemPrompt,
+            subPayload.messages,
+            subPayload.maxTokens,
+            async (msg: any) => {
+              workerPost(msg);
+            },
+            controller.signal,
+            subPayload.enabledTools,
+          );
+        },
+        maxTokens: this.maxTokens,
+        memory: memory ?? "",
+        model: effectiveModel,
+        provider: effectiveProviderId,
+        providerHeaders: {},
+        streaming: false,
+        systemPrompt,
+      };
+
       try {
         await invokeWithPromptApi(
           db,
@@ -2952,6 +3117,7 @@ export class Orchestrator {
           },
           controller.signal,
           activeTools,
+          promptApiInvokeContext,
         );
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
@@ -2981,6 +3147,35 @@ export class Orchestrator {
       const controller = new AbortController();
       this.promptControllers.set(groupId, controller);
 
+      const liteRtInvokeContext: SubagentInvokeContext = {
+        apiKey: "",
+        assistantName: this.assistantName,
+        db,
+        enabledTools: activeTools as any,
+        invokeSubagent: async (subPayload) => {
+          await invokeWithLiteRtLm(
+            db,
+            subPayload.groupId,
+            subPayload.systemPrompt,
+            subPayload.messages,
+            subPayload.maxTokens,
+            async (msg: any) => {
+              workerPost(msg);
+            },
+            controller.signal,
+            subPayload.model,
+            subPayload.enabledTools,
+          );
+        },
+        maxTokens: this.maxTokens,
+        memory: memory ?? "",
+        model: effectiveModel,
+        provider: effectiveProviderId,
+        providerHeaders: {},
+        streaming: false,
+        systemPrompt,
+      };
+
       try {
         await invokeWithLiteRtLm(
           db,
@@ -2994,6 +3189,7 @@ export class Orchestrator {
           controller.signal,
           effectiveModel,
           activeTools,
+          liteRtInvokeContext,
         );
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {
@@ -3028,32 +3224,31 @@ export class Orchestrator {
     this.agentWorker?.postMessage({
       type: "invoke",
       payload: {
-        groupId,
-        messages,
-        systemPrompt,
-        assistantName: this.assistantName,
-        memory,
         apiKey:
           effectiveProviderId === this.provider
             ? await this.getApiKeyForRequest()
             : await this.#getApiKeyForSpecificProvider(db, effectiveProviderId),
-
-        model: effectiveModel,
-        maxTokens: this.maxTokens,
-        maxIterations: this.maxIterations,
-        provider: effectiveProviderId,
-        storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
+        assistantName: this.assistantName,
+        contextCompression: this.contextCompressionEnabled,
+        contextLimit: getContextLimit(effectiveModel),
         enabledTools: activeTools,
+        groupId,
+        isScheduledTask: this._schedulerTriggeredGroups.has(groupId),
+        maxIterations: this.maxIterations,
+        maxTokens: this.maxTokens,
+        memory,
+        messages,
+        model: effectiveModel,
+        provider: effectiveProviderId,
         providerHeaders: this.getProviderRuntimeHeaders(
           effectiveProviderId,
           providerRequestId,
         ),
-        streaming: shouldStream,
-        contextCompression: this.contextCompressionEnabled,
-        contextLimit: getContextLimit(effectiveModel),
-        rateLimitCallsPerMinute: this.rateLimitCallsPerMinute,
         rateLimitAutoAdapt: this.rateLimitAutoAdapt,
-        isScheduledTask: this._schedulerTriggeredGroups.has(groupId),
+        rateLimitCallsPerMinute: this.rateLimitCallsPerMinute,
+        storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
+        streaming: shouldStream,
+        systemPrompt,
       },
     });
   }
@@ -3066,6 +3261,7 @@ export class Orchestrator {
         this.clearProviderRequest(groupId);
         this.inFlightTriggerByGroup.delete(groupId);
         this.inFlightEffectiveProviderByGroup.delete(groupId);
+
         await this.deliverResponse(db, groupId, text);
 
         break;
@@ -3073,7 +3269,7 @@ export class Orchestrator {
 
       case "streaming-start": {
         const { groupId } = msg.payload;
-        this.setState("responding");
+        this.setState("responding", groupId);
         this.events.emit("streaming-start", { groupId });
 
         break;
@@ -3096,8 +3292,9 @@ export class Orchestrator {
       case "streaming-end": {
         const { groupId } = msg.payload;
         this.events.emit("streaming-end", { groupId });
+
         // Switch back to thinking (tool calls are about to execute)
-        this.setState("thinking");
+        this.setState("thinking", groupId);
 
         break;
       }
@@ -3147,6 +3344,7 @@ export class Orchestrator {
           }
 
           await saveTask(db, task);
+
           this.events.emit("task-change", { type: "created", task });
         } catch (err) {
           console.error("Failed to save task from agent:", err);
@@ -3182,15 +3380,19 @@ export class Orchestrator {
         this.stopTransformersProgressPolling(groupId);
         this.clearProviderRequest(groupId);
         this.inFlightTriggerByGroup.delete(groupId);
+
         let finalError = error;
         let hasProviderHelp = false;
 
         // Use the effective provider that was active when this invocation started
         const inFlightProvider =
           this.inFlightEffectiveProviderByGroup.get(groupId);
+
         this.inFlightEffectiveProviderByGroup.delete(groupId);
+
         const errorProviderId =
           inFlightProvider?.providerId ?? this.getProvider();
+
         const errorProviderConfig =
           inFlightProvider?.providerConfig ?? this.providerConfig;
 
@@ -3211,6 +3413,7 @@ export class Orchestrator {
           isLlamafileResolutionError(error)
         ) {
           hasProviderHelp = true;
+
           this.events.emit("provider-help", {
             providerId: "llamafile",
             reason: error,
@@ -3222,6 +3425,7 @@ export class Orchestrator {
           isTransformersJsResolutionError(error)
         ) {
           hasProviderHelp = true;
+
           this.events.emit("provider-help", {
             providerId: "transformers_js_local",
             reason: error,
@@ -3259,6 +3463,7 @@ export class Orchestrator {
 
       case "tool-activity": {
         this.events.emit("tool-activity", msg.payload);
+
         // If a file was written, or bash finished (might have changed files), emit file-change
         if (
           (msg.payload.tool === "write_file" &&
@@ -3287,6 +3492,7 @@ export class Orchestrator {
 
       case "compact-done": {
         this.clearProviderRequest(msg.payload.groupId);
+
         await this.handleCompactDone(
           db,
           msg.payload.groupId,
@@ -3306,6 +3512,7 @@ export class Orchestrator {
         const { groupId } = msg.payload;
         const tasks = await getAllTasks(db);
         const groupTasks = tasks.filter((t) => t.groupId === groupId);
+
         this.agentWorker?.postMessage({
           type: "task-list-response",
           payload: { groupId, tasks: groupTasks },
@@ -3339,6 +3546,7 @@ export class Orchestrator {
           }
 
           await saveTask(db, task);
+
           this.events.emit("task-change", { type: "updated", task });
         } catch (err) {
           console.error("Failed to update task from agent:", err);
@@ -3376,6 +3584,7 @@ export class Orchestrator {
           }
 
           await deleteTask(db, id);
+
           this.events.emit("task-change", { type: "deleted", id });
         } catch (err) {
           console.error("Failed to delete task from agent:", err);
@@ -3427,8 +3636,6 @@ export class Orchestrator {
             showToast(
               `🔑 OAuth auto-reconnect failed for "${label}": ${result.error}`,
               {
-                type: "error",
-                duration: 15000,
                 action: {
                   label: "Reconnect Now",
                   onClick: async () => {
@@ -3449,13 +3656,15 @@ export class Orchestrator {
                     }
                   },
                 },
+                duration: 15000,
+                type: "error",
               },
             );
           }
 
           this.agentWorker?.postMessage({
-            type: "mcp-reauth-result",
             payload: { connectionId, success: result.success },
+            type: "mcp-reauth-result",
           });
         } else {
           showToast(
@@ -3464,8 +3673,8 @@ export class Orchestrator {
           );
 
           this.agentWorker?.postMessage({
-            type: "mcp-reauth-result",
             payload: { connectionId, success: false },
+            type: "mcp-reauth-result",
           });
         }
 
@@ -3492,8 +3701,8 @@ export class Orchestrator {
         this.agentWorker?.postMessage({
           type: "update-tools",
           payload: {
-            groupId: finalGroupId,
             enabledTools: toolsStore.enabledTools,
+            groupId: finalGroupId,
             systemPromptOverride: toolsStore.systemPromptOverride,
           },
         });
@@ -3517,9 +3726,9 @@ export class Orchestrator {
 
         getPushUrl("/push/broadcast").then((url) => {
           fetch(url, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ title, body }),
+            headers: { "Content-Type": "application/json" },
+            method: "POST",
           }).catch((err) =>
             console.error("Failed to broadcast push notification:", err),
           );
@@ -3589,7 +3798,9 @@ export class Orchestrator {
             ]);
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err);
+
             console.error("send-file: delivery failed:", err);
+
             showToast(`Failed to send file to peer: ${msg}`, {
               type: "error",
               duration: 6000,
@@ -3648,21 +3859,22 @@ export class Orchestrator {
     await clearGroupMessages(db, groupId);
 
     const stored = {
-      id: ulid(),
-      groupId,
-      sender: this.assistantName,
-      content: `📝 **Context Compacted**\n\n${summary}`,
-      timestamp: Date.now(),
       channel: this.getChannelTypeForGroup(groupId),
+      content: `📝 **Context Compacted**\n\n${summary}`,
+      groupId,
+      id: ulid(),
       isFromMe: true,
       isTrigger: false,
+      sender: this.assistantName,
+      timestamp: Date.now(),
     };
 
     await saveMessage(db, stored);
 
     this.events.emit("context-compacted", { groupId, summary });
     this.events.emit("typing", { groupId, typing: false });
-    this.setState("idle");
+
+    this.setState("idle", groupId);
   }
 
   /**
@@ -3676,14 +3888,14 @@ export class Orchestrator {
   ): Promise<void> {
     const channelType = this.getChannelTypeForGroup(groupId);
     const stored = {
-      id: ulid(),
-      groupId,
-      sender: this.assistantName,
-      content: text,
-      timestamp: Date.now(),
       channel: channelType,
+      content: text,
+      groupId,
+      id: ulid(),
       isFromMe: true,
       isTrigger: false,
+      sender: this.assistantName,
+      timestamp: Date.now(),
     };
 
     await saveMessage(db, stored);
@@ -3694,10 +3906,12 @@ export class Orchestrator {
       } catch (error) {
         const deliveryError =
           error instanceof Error ? error : new Error(String(error));
+
         console.error(
           "Failed to deliver intermediate channel response:",
           deliveryError,
         );
+
         this.events.emit("error", {
           groupId,
           error: `Failed to deliver response to ${channelType}: ${deliveryError.message}`,
@@ -3714,14 +3928,14 @@ export class Orchestrator {
     text: string,
   ): Promise<void> {
     const stored = {
-      id: ulid(),
-      groupId,
-      sender: this.assistantName,
-      content: text,
-      timestamp: Date.now(),
       channel: this.getChannelTypeForGroup(groupId),
+      content: text,
+      groupId,
+      id: ulid(),
       isFromMe: true,
       isTrigger: false,
+      sender: this.assistantName,
+      timestamp: Date.now(),
     };
 
     await saveMessage(db, stored);
@@ -3731,18 +3945,20 @@ export class Orchestrator {
       await this.router?.send(groupId, text);
     } catch (error) {
       deliveryError = error instanceof Error ? error : new Error(String(error));
+
       console.error("Failed to deliver channel response:", deliveryError);
     }
 
     if (this.pendingScheduledTasks.has(groupId)) {
       this.pendingScheduledTasks.delete(groupId);
+
       playNotificationChime();
     }
 
     this.events.emit("message", stored);
     this.events.emit("typing", { groupId, typing: false });
 
-    this.setState("idle");
+    this.setState("idle", groupId);
     this.router?.setTyping(groupId, false);
 
     // ── A2A task completion for peer channels ──────────────────────────────
@@ -3769,8 +3985,8 @@ export class Orchestrator {
    */
   answerUserPrompt(id: string, response: string | null): void {
     this.agentWorker?.postMessage({
-      type: "ask-user-response",
       payload: { id, response },
+      type: "ask-user-response",
     });
   }
 }

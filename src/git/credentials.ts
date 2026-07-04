@@ -1,47 +1,19 @@
 import { CONFIG_KEYS, getProviderTokenAuthScheme } from "../config.js";
-import { getConfig } from "../db/getConfig.js";
-import { setConfig } from "../db/setConfig.js";
+
+import { resolveStoredCredentialAuthMode } from "../accounts/stored-credentials.js";
 import { decryptValue, encryptValue } from "../crypto.js";
 
-import {
-  resolveStoredCredentialAuthMode,
-  type StoredCredentialAuthMode,
-  type StoredCredentialBase,
-  type StoredCredentialOAuthFields,
-} from "../accounts/stored-credentials.js";
+import { getConfig } from "../db/getConfig.js";
+import { setConfig } from "../db/setConfig.js";
 
-import type { ShadowClawDatabase } from "../types.js";
-
-export type GitProvider = "github" | "azure-devops" | "gitlab" | "generic";
-export type GitAuthMode = StoredCredentialAuthMode;
-
-export interface GitAccount
-  extends StoredCredentialBase, StoredCredentialOAuthFields {
-  username: string; // Plaintext username (empty string if not set)
-  password: string; // Encrypted password (empty string if not set)
-  authorName: string; // Commit author name (empty string to use global default)
-  authorEmail: string; // Commit author email (empty string to use global default)
-  provider?: GitProvider; // Explicit provider type (auto-detected from hostPattern if omitted)
-}
-
-export interface ResolvedGitCredentials {
-  token?: string;
-  username?: string;
-  password?: string;
-  authorName?: string;
-  authorEmail?: string;
-  provider?: GitProvider; // Detected or explicit provider type
-  hostPattern?: string; // Host pattern from the matched account
-  accountId?: string;
-  authMode?: GitAuthMode;
-  reauthRequired?: boolean;
-}
-
-export interface ResolveGitCredentialsOptions {
-  accountId?: string;
-  authMode?: GitAuthMode;
-  forceRefresh?: boolean;
-}
+import type {
+  GitAccount,
+  GitAuthMode,
+  GitProvider,
+  ResolveGitCredentialsOptions,
+  ResolvedGitCredentials,
+  ShadowClawDatabase,
+} from "../types.js";
 
 const OAUTH_REFRESH_WINDOW_MS = 60_000;
 const OAUTH_REFRESH_FAILURE_THRESHOLD = 3;
@@ -97,7 +69,6 @@ export function buildAuthHeaders(
   }
 
   const provider = creds.provider || detectProvider(creds.hostPattern || "");
-
   const mappedProviderId = mapGitProviderToGeneralProviderId(provider);
   const authMode = creds.authMode || "pat";
 
@@ -171,6 +142,7 @@ function matchAccountsByHost(
 ): GitAccount[] {
   const lower = hostAndPath.toLowerCase();
   const matches: GitAccount[] = [];
+
   let bestLen = -1;
   for (const a of accounts) {
     if (!a.hostPattern) {
@@ -181,6 +153,7 @@ function matchAccountsByHost(
     if (lower.includes(pattern)) {
       if (pattern.length > bestLen) {
         bestLen = pattern.length;
+
         matches.length = 0;
         matches.push(a);
       } else if (pattern.length === bestLen) {
@@ -216,6 +189,7 @@ function pickAccountByAuthMode(
     const legacyPat = accounts.find(
       (acct) => resolveGitAuthMode(acct) === "pat" && !acct.authMode,
     );
+
     if (legacyPat) {
       return legacyPat;
     }
@@ -311,6 +285,7 @@ async function tryRefreshOAuthAccount(
         ? account.oauthReauthRequiredAt || Date.now()
         : undefined,
     };
+
     await persistAccount(updatedAccount);
 
     return updatedAccount;
@@ -318,17 +293,17 @@ async function tryRefreshOAuthAccount(
 
   try {
     const response = await fetch("/oauth/refresh", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-      },
       body: JSON.stringify({
-        providerId: account.oauthProviderId,
         clientId: account.oauthClientId,
         clientSecret: oauthClientSecret,
+        providerId: account.oauthProviderId,
         refreshToken: decryptedRefreshToken,
         scope: account.scopes,
       }),
+      headers: {
+        "content-type": "application/json",
+      },
+      method: "POST",
     });
 
     if (!response.ok) {
@@ -337,10 +312,10 @@ async function tryRefreshOAuthAccount(
 
     const payload = (await response.json()) as {
       accessToken?: string;
-      refreshToken?: string;
       expiresIn?: number;
-      tokenType?: string;
+      refreshToken?: string;
       scope?: string;
+      tokenType?: string;
     };
 
     if (!payload.accessToken) {
@@ -357,6 +332,7 @@ async function tryRefreshOAuthAccount(
       const maybeEncryptedRefreshToken = await encryptValue(
         payload.refreshToken,
       );
+
       if (maybeEncryptedRefreshToken) {
         encryptedRefreshToken = maybeEncryptedRefreshToken;
       }
@@ -427,7 +403,7 @@ async function resolveFromAccounts(
     account = accounts.find((a) => a.id === options.accountId);
   }
 
-  // 1. Match by URL host (+ path prefix when the pattern includes a path)
+  // Match by URL host (+ path prefix when the pattern includes a path)
   if (!account && url) {
     const hostAndPath = extractHostAndPath(url);
     if (hostAndPath) {
@@ -436,33 +412,49 @@ async function resolveFromAccounts(
     }
   }
 
-  // 2. Fall back to default account
+  // Fall back to default account (only when no URL was provided, or the
+  // default account's host matches the URL). Sending unrelated credentials
+  // to a public repo host causes a 401 even though the repo is public.
   if (!account) {
     const defaultId = await getConfig(db, CONFIG_KEYS.GIT_DEFAULT_ACCOUNT);
     if (defaultId) {
-      account = accounts.find((a) => a.id === defaultId);
+      const defaultAccount = accounts.find((a) => a.id === defaultId);
+      if (defaultAccount) {
+        if (!url) {
+          account = defaultAccount;
+        } else {
+          const hostAndPath = extractHostAndPath(url);
+          if (hostAndPath && defaultAccount.hostPattern) {
+            const lower = hostAndPath?.toLowerCase();
+            const pattern = defaultAccount.hostPattern.toLowerCase();
+            if (lower?.includes(pattern)) {
+              account = defaultAccount;
+            }
+          }
+        }
+      }
     }
   }
 
-  // 3. Fall back to first account matching requested mode
-  if (!account && options.authMode) {
+  // Fall back to first account matching requested mode
+  if (!account && !url && options.authMode) {
     account = pickAccountByAuthMode(accounts, options.authMode);
   }
 
-  // 4. Fall back to first account
-  if (!account) {
+  // Fall back to first account
+  if (!account && !url) {
     account = accounts[0];
   }
 
   if (!account) {
     return {
+      authMode: "pat",
+      authorEmail: undefined,
+      authorName: undefined,
+      password: undefined,
+      provider: "generic",
       token: undefined,
       username: undefined,
-      password: undefined,
-      authorName: undefined,
-      authorEmail: undefined,
-      provider: "generic",
-      authMode: "pat",
     };
   }
 
@@ -475,29 +467,29 @@ async function resolveFromAccounts(
 
   if (resolveGitAuthMode(account) === "oauth" && account.oauthReauthRequired) {
     return {
-      token: undefined,
-      username: account.username || undefined,
-      password: undefined,
-      authorName: account.authorName || undefined,
-      authorEmail: account.authorEmail || undefined,
-      provider,
-      hostPattern: account.hostPattern || undefined,
       accountId: account.id,
       authMode: "oauth",
+      authorEmail: account.authorEmail || undefined,
+      authorName: account.authorName || undefined,
+      hostPattern: account.hostPattern || undefined,
+      password: undefined,
+      provider,
       reauthRequired: true,
+      token: undefined,
+      username: account.username || undefined,
     };
   }
 
   return {
-    token: await decryptIfPresent(account.token),
-    username: account.username || undefined,
-    password: await decryptIfPresent(account.password),
-    authorName: account.authorName || undefined,
-    authorEmail: account.authorEmail || undefined,
-    provider,
-    hostPattern: account.hostPattern || undefined,
     accountId: account.id,
     authMode: resolveGitAuthMode(account),
+    authorEmail: account.authorEmail || undefined,
+    authorName: account.authorName || undefined,
+    hostPattern: account.hostPattern || undefined,
+    password: await decryptIfPresent(account.password),
+    provider,
+    token: await decryptIfPresent(account.token),
+    username: account.username || undefined,
   };
 }
 
@@ -511,13 +503,13 @@ async function resolveFromLegacy(
   const encPassword = await getConfig(db, CONFIG_KEYS.GIT_PASSWORD);
 
   return {
-    token: encToken ? await decryptIfPresent(encToken) : undefined,
-    username: (await getConfig(db, CONFIG_KEYS.GIT_USERNAME)) || undefined,
-    password: encPassword ? await decryptIfPresent(encPassword) : undefined,
-    authorName: (await getConfig(db, CONFIG_KEYS.GIT_AUTHOR_NAME)) || undefined,
+    authMode: "pat",
     authorEmail:
       (await getConfig(db, CONFIG_KEYS.GIT_AUTHOR_EMAIL)) || undefined,
+    authorName: (await getConfig(db, CONFIG_KEYS.GIT_AUTHOR_NAME)) || undefined,
+    password: encPassword ? await decryptIfPresent(encPassword) : undefined,
     provider: "generic" as GitProvider,
-    authMode: "pat",
+    token: encToken ? await decryptIfPresent(encToken) : undefined,
+    username: (await getConfig(db, CONFIG_KEYS.GIT_USERNAME)) || undefined,
   };
 }

@@ -3,8 +3,10 @@ import {
   getProvider,
   ProviderConfig,
 } from "../config.js";
+
 import { buildDynamicContext } from "../context/buildDynamicContext.js";
 import { estimateTokens } from "../context/estimateTokens.js";
+
 import {
   buildHeaders,
   formatRequest,
@@ -17,20 +19,28 @@ import { TOOL_DEFINITIONS } from "../tools.js";
 import { createTokenUsageMessage } from "./createTokenUsageMessage.js";
 import { createToolActivityMessage } from "./createToolActivityMessage.js";
 import { executeTool } from "./executeTool.js";
-import type { SubagentInvokeContext } from "./executeTool.js";
 import { log } from "./log.js";
 import { parseSSEStream } from "./parseSSEStream.js";
 import { post } from "./post.js";
+
+import {
+  RateLimitConfig,
+  updateRateLimitFromHeaders,
+  waitForRateLimitSlot,
+} from "./rate-limit.js";
+
 import { StreamAccumulator, StreamFormat } from "./StreamAccumulator.js";
 import { buildSystemPrompt } from "./system-prompt.js";
 import { clearToolState, getToolState } from "./tool-state.js";
+import { isRetryableHttpError, withRetry } from "./withRetry.js";
+
+import type { SubagentInvokeContext, ToolResult } from "./executeTool.js";
+
 import {
-  waitForRateLimitSlot,
-  updateRateLimitFromHeaders,
-  RateLimitConfig,
-} from "./rate-limit.js";
-import { withRetry, isRetryableHttpError } from "./withRetry.js";
-import { InvokePayload, ContentBlock } from "../types.js";
+  ContentBlock,
+  InvokePayload,
+  ToolResultContentBlock,
+} from "../types.js";
 
 /**
  * Throttle interval (ms) for streaming text chunks sent to the UI.
@@ -171,12 +181,19 @@ function buildToolResultsFallbackText(toolResults: ContentBlock[]): string {
   const lines = toolResults
     .filter((entry) => entry?.type === "tool_result")
     .map((entry) => {
-      const content =
-        typeof entry.content === "string"
-          ? entry.content.trim()
-          : JSON.stringify(entry.content).trim();
+      if (typeof (entry as any).content === "string") {
+        return (entry as any).content.trim();
+      }
 
-      return content;
+      if (Array.isArray((entry as any).content)) {
+        return ((entry as any).content as ToolResultContentBlock[])
+          .filter((block) => block.type === "text")
+          .map((block) => (block as { type: "text"; text: string }).text)
+          .join("\n")
+          .trim();
+      }
+
+      return JSON.stringify((entry as any).content).trim();
     })
     .filter(Boolean);
 
@@ -205,32 +222,32 @@ export async function handleInvoke(
   abortSignal?: AbortSignal,
 ): Promise<void> {
   const {
-    groupId,
-    messages,
-    systemPrompt,
     apiKey,
-    model,
-    maxTokens,
-    provider: providerId,
-    storageHandle,
-    enabledTools,
-    streaming = false,
-    maxIterations: payloadMaxIterations,
-    isScheduledTask = false,
+    assistantName,
     contextCompression = false,
     contextLimit: payloadContextLimit,
-    providerHeaders = {},
-    rateLimitCallsPerMinute = 0,
-    rateLimitAutoAdapt = true,
-    assistantName,
+    enabledTools,
+    groupId,
+    isScheduledTask = false,
+    maxIterations: payloadMaxIterations,
+    maxTokens,
     memory,
+    messages,
+    model,
+    provider: providerId,
+    providerHeaders = {},
+    rateLimitAutoAdapt = true,
+    rateLimitCallsPerMinute = 0,
+    storageHandle,
+    streaming = false,
+    systemPrompt,
   } = payload;
 
   const rateLimitConfig: RateLimitConfig = {
+    autoAdapt: rateLimitAutoAdapt !== false,
     callsPerMinute: Number.isFinite(rateLimitCallsPerMinute)
       ? Math.max(0, Math.floor(rateLimitCallsPerMinute))
       : 0,
-    autoAdapt: rateLimitAutoAdapt !== false,
   };
 
   if (storageHandle) {
@@ -240,8 +257,8 @@ export async function handleInvoke(
   const provider = getProvider(providerId);
   if (!provider) {
     post({
-      type: "error",
       payload: { groupId, error: `Unknown provider: ${providerId}` },
+      type: "error",
     });
 
     return;
@@ -276,23 +293,24 @@ export async function handleInvoke(
     let currentTools = Array.isArray(enabledTools)
       ? enabledTools
       : TOOL_DEFINITIONS;
+
     let currentSystemPrompt = systemPrompt;
     let latestToolResultsFallbackText = "";
 
     // Build the invoke context for spawn_subagent to inherit
     const invokeContext: SubagentInvokeContext = {
-      db,
       apiKey,
+      assistantName: assistantName ?? "",
+      db,
+      enabledTools: currentTools as any,
+      invokeSubagent: (subPayload) => handleInvoke(db, subPayload),
+      maxTokens,
+      memory: memory ?? "",
       model,
       provider: providerId,
-      maxTokens,
       providerHeaders,
       streaming: false, // subagents always use non-streaming for clean capture
-      enabledTools: currentTools as any,
-      assistantName: assistantName ?? "",
-      memory: memory ?? "",
       systemPrompt: currentSystemPrompt ?? "",
-      invokeSubagent: (subPayload) => handleInvoke(db, subPayload),
     };
 
     // Track exact tool calls to prevent loops
@@ -320,9 +338,9 @@ export async function handleInvoke(
       const { messages: payloadMessages, estimatedTokens } =
         buildDynamicContext(currentMessages as any, {
           contextLimit,
-          systemPromptTokens,
           maxOutputTokens: maxTokens,
           skimTop: contextCompression,
+          systemPromptTokens,
         });
 
       // Strict proxy boundaries (e.g. Azure OpenAI) calculate: prompt_tokens + max_tokens <= context_window.
@@ -341,10 +359,10 @@ export async function handleInvoke(
         payloadMessages,
         currentTools as any,
         {
-          model,
-          maxTokens: safeMaxTokens,
-          system: currentSystemPrompt,
           contextCompression,
+          maxTokens: safeMaxTokens,
+          model,
+          system: currentSystemPrompt,
         },
       );
 
@@ -433,16 +451,16 @@ export async function handleInvoke(
 
         if (intermediateText) {
           post({
-            type: "intermediate-response",
             payload: { groupId, text: intermediateText },
+            type: "intermediate-response",
           });
         }
 
         // If we were streaming text before tool calls, clear the streaming bubble
         if (useStreaming) {
           post({
-            type: "streaming-end",
             payload: { groupId },
+            type: "streaming-end",
           });
         }
 
@@ -468,9 +486,9 @@ export async function handleInvoke(
               log(groupId, "warning", "Tool blocked", blockedMessage);
 
               toolResults.push({
-                type: "tool_result",
-                tool_use_id: block.id,
                 content: blockedMessage,
+                tool_use_id: block.id,
+                type: "tool_result",
               });
 
               continue;
@@ -486,7 +504,7 @@ export async function handleInvoke(
 
             post(createToolActivityMessage(groupId, block.name, "running"));
 
-            let output: any;
+            let output: ToolResult;
             if (timesCalled >= 3) {
               output = `SYSTEM ERROR: You have repeatedly called this tool with the exact same input (${timesCalled + 1} times). This is a rigid loop. STOP calling this tool with these arguments. Try a different approach, fix the underlying issue, or ask the user for help.`;
 
@@ -513,20 +531,29 @@ export async function handleInvoke(
 
             post(createToolActivityMessage(groupId, block.name, "done"));
 
-            toolResults.push({
-              type: "tool_result",
-              tool_use_id: block.id,
-              content:
-                typeof output === "string"
-                  ? output.slice(0, 100_000)
-                  : JSON.stringify(output).slice(0, 100_000),
-            });
+            if (Array.isArray(output)) {
+              toolResults.push({
+                content: output as ToolResultContentBlock[],
+                tool_use_id: block.id,
+                type: "tool_result",
+              });
+            } else {
+              toolResults.push({
+                content:
+                  typeof output === "string"
+                    ? output.slice(0, 100_000)
+                    : JSON.stringify(output).slice(0, 100_000),
+                tool_use_id: block.id,
+                type: "tool_result",
+              });
+            }
           }
         }
 
         // Continue conversation with tool results
         latestToolResultsFallbackText =
           buildToolResultsFallbackText(toolResults);
+
         currentMessages.push({ role: "assistant", content: result.content });
         currentMessages.push({ role: "user", content: toolResults as any });
 
@@ -541,6 +568,7 @@ export async function handleInvoke(
         const cleaned = text
           .replace(/<internal>[\s\S]*?<\/internal>/g, "")
           .trim();
+
         const isPlaceholderOnly = cleaned.toLowerCase() === "(no response)";
         const preferredModelText = isPlaceholderOnly ? "" : cleaned;
         const finalText = preferredModelText
@@ -552,14 +580,14 @@ export async function handleInvoke(
         // If streaming was used, the text was already streamed chunk-by-chunk.
         if (useStreaming) {
           post({
-            type: "streaming-done",
             payload: { groupId, text: finalText },
+            type: "streaming-done",
           });
         }
 
         post({
-          type: "response",
           payload: { groupId, text: finalText },
+          type: "response",
         });
 
         return;
@@ -568,11 +596,11 @@ export async function handleInvoke(
 
     // Max iterations reached
     post({
-      type: "response",
       payload: {
-        groupId,
         text: `⚠️ Reached maximum tool-use iterations (${maxIterations}). Stopping to avoid excessive API usage.`,
+        groupId,
       },
+      type: "response",
     });
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") {
@@ -584,8 +612,8 @@ export async function handleInvoke(
     // If we were streaming when the error occurred, preserve partial content
     if (useStreaming) {
       post({
-        type: "streaming-error",
         payload: { groupId, error: message },
+        type: "streaming-error",
       });
     }
 
@@ -618,9 +646,9 @@ async function callApi(
       );
 
       const res = await fetch(url, {
-        method: "POST",
-        headers,
         body: JSON.stringify(body),
+        headers,
+        method: "POST",
         signal: abortSignal,
       });
 
@@ -641,12 +669,10 @@ async function callApi(
       return parseResponse(typedProvider, rawResult);
     },
     {
-      maxRetries: 3,
       baseDelayMs: 2000,
-      maxDelayMs: 30_000,
       jitterFactor: 0.5,
-      signal: abortSignal,
-      shouldRetry: (error) => isRetryableHttpError(error),
+      maxDelayMs: 30_000,
+      maxRetries: 3,
       onRetry: (_attempt, _maxRetries, _delayMs, _error) => {
         const errMsg =
           _error instanceof Error ? _error.message : String(_error);
@@ -667,6 +693,8 @@ async function callApi(
           },
         });
       },
+      shouldRetry: (error) => isRetryableHttpError(error),
+      signal: abortSignal,
     },
   );
 }
@@ -698,9 +726,9 @@ async function callWithStreaming(
   await waitForRateLimitSlot(providerId, groupId, rateLimitConfig, abortSignal);
 
   const res = await fetch(url, {
-    method: "POST",
-    headers,
     body: JSON.stringify(streamBody),
+    headers,
+    method: "POST",
     signal: abortSignal,
   });
 
@@ -711,6 +739,7 @@ async function callWithStreaming(
     const error = new Error(
       `${typedProvider.name} API error ${res.status}: ${errBody}`,
     );
+
     (error as any).status = res.status;
 
     throw error;
@@ -722,8 +751,8 @@ async function callWithStreaming(
 
   // Signal the UI that a streaming response is starting
   post({
-    type: "streaming-start",
     payload: { groupId },
+    type: "streaming-start",
   });
 
   let lastChunkTime = 0;
@@ -742,9 +771,10 @@ async function callWithStreaming(
         // Flush to the UI only when the throttle interval has elapsed
         if (now - lastChunkTime >= STREAM_THROTTLE_MS) {
           post({
-            type: "streaming-chunk",
             payload: { groupId, text: pendingText },
+            type: "streaming-chunk",
           });
+
           pendingText = "";
           lastChunkTime = now;
         }
@@ -765,8 +795,8 @@ async function callWithStreaming(
   // Flush any remaining buffered text that didn't make it through the throttle
   if (pendingText) {
     post({
-      type: "streaming-chunk",
       payload: { groupId, text: pendingText },
+      type: "streaming-chunk",
     });
   }
 

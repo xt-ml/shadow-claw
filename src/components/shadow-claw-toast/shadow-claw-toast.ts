@@ -1,4 +1,4 @@
-import { effect } from "../../effect.js";
+import { effect } from "../../core/effect.js";
 import { toastStore, type Toast, type ToastType } from "../../stores/toast.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";

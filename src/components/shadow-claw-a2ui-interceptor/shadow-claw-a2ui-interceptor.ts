@@ -1,4 +1,4 @@
-import type { A2UIAction } from "../../a2ui.js";
+import type { A2UIAction } from "../../ui/a2ui.js";
 
 export class ShadowClawA2UIInterceptor extends HTMLElement {
   constructor() {

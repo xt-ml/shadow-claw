@@ -6,7 +6,7 @@ jest.unstable_mockModule("../db/txPromise.js", () => ({
 }));
 
 const { deleteConfig } = await import("./deleteConfig.js");
-const { txPromise } = await import("../db/txPromise.js");
+const { txPromise } = await import("./txPromise.js");
 
 describe("deleteConfig", () => {
   const db: any = {} as any;

@@ -7,8 +7,8 @@ jest.unstable_mockModule("../../db/db.js", () => ({
 jest.unstable_mockModule("../../db/saveTask.js", () => ({
   saveTask: jest.fn(),
 }));
-jest.unstable_mockModule("../../effect.js", () => ({ effect: jest.fn() }));
-jest.unstable_mockModule("../../markdown.js", () => ({
+jest.unstable_mockModule("../../core/effect.js", () => ({ effect: jest.fn() }));
+jest.unstable_mockModule("../../content/markdown.js", () => ({
   renderMarkdown: jest.fn((x) => x),
 }));
 
@@ -32,7 +32,7 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
   orchestratorStore: { activeGroupId: "default", db: {}, orchestrator: null },
 }));
 
-jest.unstable_mockModule("../../toast.js", () => ({
+jest.unstable_mockModule("../../ui/toast.js", () => ({
   showError: jest.fn(),
   showInfo: jest.fn(),
   showSuccess: jest.fn(),

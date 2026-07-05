@@ -1,5 +1,9 @@
-import { getProvider, ProviderConfig } from "../config.js";
-import { buildHeaders, formatRequest, parseResponse } from "../providers.js";
+import { getProvider, ProviderConfig } from "../config/config.js";
+import {
+  buildHeaders,
+  formatRequest,
+  parseResponse,
+} from "../subsystems/providers/providers.js";
 import { setStorageRoot } from "../storage/storage.js";
 import { getCompactionMessages } from "./getCompactionMessages.js";
 import { getCompactionSystemPrompt } from "./getCompactionSystemPrompt.js";
@@ -10,7 +14,7 @@ import {
   updateRateLimitFromHeaders,
   RateLimitConfig,
 } from "./rate-limit.js";
-import { CompactPayload } from "../types.js";
+import { CompactPayload } from "../subsystems/worker/types.js";
 
 /**
  * Handle context compaction

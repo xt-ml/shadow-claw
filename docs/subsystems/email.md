@@ -2,7 +2,7 @@
 
 > IMAP/SMTP support with encrypted credentials.
 
-**Source:** `src/email/catalog.ts` · `src/email/connections.ts` · `src/tools/email.ts`
+**Source:** `src/subsystems/email/catalog.ts` · `src/subsystems/email/connections.ts` · `src/subsystems/tools/email.ts`
 
 ## Overview
 
@@ -21,13 +21,13 @@ The subsystem provides complete mail client functionality exposed as a set of to
 
 Email configurations are managed as connection records and stored securely.
 
-- **Connection Records**: Managed via `src/email/connections.ts`, connections are stored in IndexedDB under the `INTEGRATION_CONNECTIONS` config key. A connection consists of a plugin ID, a label, enablement status, and plugin-specific configuration (like host, port, and secure flags).
-- **Plugins**: Supported protocols are defined in `src/email/catalog.ts` via `EmailPluginManifest` (e.g., the `imap` plugin which supports both `basic_userpass` and `oauth` auth types).
+- **Connection Records**: Managed via `src/subsystems/email/connections.ts`, connections are stored in IndexedDB under the `INTEGRATION_CONNECTIONS` config key. A connection consists of a plugin ID, a label, enablement status, and plugin-specific configuration (like host, port, and secure flags).
+- **Plugins**: Supported protocols are defined in `src/subsystems/email/catalog.ts` via `EmailPluginManifest` (e.g., the `imap` plugin which supports both `basic_userpass` and `oauth` auth types).
 - **Credential Storage**: Passwords and OAuth secrets are never stored in plaintext. They are stored as `EmailCredentialRef` objects with the actual secret encrypted by the Cryptography subsystem (`encryptedSecret`).
 
 ## Tool Surface
 
-The subsystem exposes three main tools to the agent (defined in `src/tools/email.ts`):
+The subsystem exposes three main tools to the agent (defined in `src/subsystems/tools/email.ts`):
 
 - `manage_email` — The omni-tool for managing connections (connect, configure, delete, test) and performing advanced email actions (download_attachments, mark_as_read/unread).
 - `email_read_messages` — A focused tool to fetch recent messages. It supports parameters like `mailbox_path`, `limit`, and `unread_only`.

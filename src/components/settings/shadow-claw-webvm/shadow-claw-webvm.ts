@@ -3,15 +3,15 @@ import {
   BASH_MAX_TIMEOUT_SEC,
   CONFIG_KEYS,
   DEFAULT_VM_BOOT_HOST,
-} from "../../../config.js";
+} from "../../../config/config.js";
 
 import { getConfig } from "../../../db/getConfig.js";
-import { showError, showSuccess, showWarning } from "../../../toast.js";
-import type { ShadowClawDatabase } from "../../../types.js";
-import type { Orchestrator } from "../../../orchestrator.js";
+import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
+import type { ShadowClawDatabase } from "../../../db/types.js";
+import type { Orchestrator } from "../../../core/orchestrator.js";
 import { getDb } from "../../../db/db.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
-import { effect } from "../../../effect.js";
+import { effect } from "../../../core/effect.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 

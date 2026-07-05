@@ -1,7 +1,7 @@
 import { copyGroupEntry } from "./copyGroupEntry.js";
 import { getGroupDir } from "./getGroupDir.js";
 import { parsePath } from "./parsePath.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Move (rename and/or relocate) a file or directory in a group's workspace.

@@ -193,7 +193,7 @@ with the same surface simultaneously. This is **owner-authoritative**:
   local ownership map, so a peer cannot hijack a surface it did not create).
 
 **Wire methods:** `room/a2ui` and `room/a2ui-action` (see
-[channels.md](channels.md) and `src/channels/peer-protocol.ts`).
+[channels.md](channels.md) and `src/subsystems/channels/peer-protocol.ts`).
 
 **Limitation:** Late joiners do not receive a replay of surfaces created before
 they joined; the owner must re-render to include them.

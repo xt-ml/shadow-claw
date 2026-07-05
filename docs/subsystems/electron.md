@@ -83,10 +83,10 @@ The Electron app runs the **exact same server stack** as `src/server/server.ts`:
 | Static file serving   | `express.static()`                                                                                     |
 | Bedrock + Azure proxy | `src/server/proxy.ts` → `registerProxyRoutes()`                                                        |
 | CSP report-only       | `src/server/middleware/csp.ts` → `createCspReportOnlyMiddleware()` + `src/server/routes/csp-report.ts` |
-| Push notifications    | `src/notifications/push-routes.ts`                                                                     |
-| Task scheduling       | `src/notifications/task-schedule-routes.ts`                                                            |
+| Push notifications    | `src/subsystems/notifications/push-routes.ts`                                                          |
+| Task scheduling       | `src/subsystems/notifications/task-schedule-routes.ts`                                                 |
 | Activity logging      | `src/server/routes/activity-log.ts`                                                                    |
-| Server-side scheduler | `src/notifications/task-scheduler-server.ts`                                                           |
+| Server-side scheduler | `src/subsystems/notifications/task-scheduler-server.ts`                                                |
 
 Both entry points call the same functions from shared modules — no code duplication between dev server and desktop app.
 

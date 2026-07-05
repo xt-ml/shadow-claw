@@ -2,7 +2,7 @@
 
 > Sanitizes local-model output by stripping control tokens and structural wrappers before rendering.
 
-**Source:** `src/chat-template-sanitizer.ts` · `src/chat-template-sanitizer.test.ts`
+**Source:** `src/content/chat-template-sanitizer.ts` · `src/content/chat-template-sanitizer.test.ts`
 
 ## Why this exists
 
@@ -30,8 +30,8 @@ It is part of the local-model response handling path and complements provider/mo
 
 ## Updating sanitizer behavior
 
-1. Add or update a failing case in `src/chat-template-sanitizer.test.ts`.
-2. Update implementation in `src/chat-template-sanitizer.ts`.
+1. Add or update a failing case in `src/content/chat-template-sanitizer.test.ts`.
+2. Update implementation in `src/content/chat-template-sanitizer.ts`.
 3. Re-run tests to confirm only intended artifacts are removed.
 
 ## Related docs

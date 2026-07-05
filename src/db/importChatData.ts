@@ -1,7 +1,7 @@
 import { clearGroupMessages } from "./clearGroupMessages.js";
 import { saveMessage } from "./saveMessage.js";
 import { saveSession } from "./saveSession.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "./types.js";
 
 export interface ChatData {
   messages: any[];

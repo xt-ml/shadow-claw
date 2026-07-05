@@ -1,5 +1,5 @@
 import { getDb } from "./db.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "./types.js";
 
 /**
  * Execute a transaction and return result

@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals";
 
 // Mock dependencies
-jest.unstable_mockModule("../config.js", () => ({
+jest.unstable_mockModule("../config/config.js", () => ({
   CONFIG_KEYS: { STORAGE_HANDLE: "storageHandle" },
   OPFS_ROOT: "sc-root",
 }));

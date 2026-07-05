@@ -1,7 +1,7 @@
-import { CONFIG_KEYS } from "../../../config.js";
+import { CONFIG_KEYS } from "../../../config/config.js";
 import { getConfig } from "../../../db/getConfig.js";
 
-import { effect } from "../../../effect.js";
+import { effect } from "../../../core/effect.js";
 
 import { getStorageEstimate } from "../../../storage/getStorageEstimate.js";
 import { isPersistent } from "../../../storage/isPersistent.js";
@@ -10,9 +10,9 @@ import { resetStorageDirectory } from "../../../storage/storage.js";
 import { selectStorageDirectory } from "../../../storage/selectStorageDirectory.js";
 
 import { orchestratorStore } from "../../../stores/orchestrator.js";
-import { showError, showSuccess, showWarning } from "../../../toast.js";
+import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 
-import type { ShadowClawDatabase } from "../../../types.js";
+import type { ShadowClawDatabase } from "../../../db/types.js";
 import { getDb } from "../../../db/db.js";
 import ShadowClawElement from "../../shadow-claw-element.js";
 import { setSanitizedHtml } from "../../../security/trusted-types.js";

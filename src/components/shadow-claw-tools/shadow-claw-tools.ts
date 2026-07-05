@@ -1,13 +1,13 @@
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
-import { getAvailableProviders, getProvider } from "../../config.js";
-import { effect } from "../../effect.js";
+import { getAvailableProviders, getProvider } from "../../config/config.js";
+import { effect } from "../../core/effect.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
-import { TOOL_DEFINITIONS } from "../../tools.js";
+import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
 import { toolsStore } from "../../stores/tools.js";
-import { showError, showInfo, showSuccess } from "../../toast.js";
+import { showError, showInfo, showSuccess } from "../../ui/toast.js";
 import { ulid } from "../../utils/ulid.js";
 
-import type { Orchestrator } from "../../orchestrator.js";
+import type { Orchestrator } from "../../core/orchestrator.js";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";

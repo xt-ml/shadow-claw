@@ -1,5 +1,5 @@
 import { txPromise } from "./txPromise.js";
-import type { Task, ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase, Task } from "./types.js";
 
 /**
  * Get all tasks

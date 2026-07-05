@@ -46,24 +46,33 @@ describe("app", () => {
     jest.unstable_mockModule("./routes/csp-report.js", () => ({
       registerCspReportRoutes: jest.fn(),
     }));
-    jest.unstable_mockModule("../notifications/push-store.js", () => ({
-      openPushStore: jest.fn(),
-    }));
-    jest.unstable_mockModule("../notifications/push-routes.js", () => ({
-      registerPushRoutes: jest.fn(),
-      broadcastPush: jest.fn(),
-    }));
-    jest.unstable_mockModule("../notifications/task-schedule-store.js", () => ({
-      openTaskScheduleStore: jest.fn(),
-      getEnabledScheduledTasks: jest.fn(),
-      updateScheduledTaskLastRun: jest.fn(),
-    }));
     jest.unstable_mockModule(
-      "../notifications/task-schedule-routes.js",
+      "../subsystems/notifications/push-store.js",
+      () => ({
+        openPushStore: jest.fn(),
+      }),
+    );
+    jest.unstable_mockModule(
+      "../subsystems/notifications/push-routes.js",
+      () => ({
+        registerPushRoutes: jest.fn(),
+        broadcastPush: jest.fn(),
+      }),
+    );
+    jest.unstable_mockModule(
+      "../subsystems/notifications/task-schedule-store.js",
+      () => ({
+        openTaskScheduleStore: jest.fn(),
+        getEnabledScheduledTasks: jest.fn(),
+        updateScheduledTaskLastRun: jest.fn(),
+      }),
+    );
+    jest.unstable_mockModule(
+      "../subsystems/notifications/task-schedule-routes.js",
       () => ({ registerTaskScheduleRoutes: jest.fn() }),
     );
     jest.unstable_mockModule(
-      "../notifications/task-scheduler-server.js",
+      "../subsystems/notifications/task-scheduler-server.js",
       () => ({
         ServerTaskScheduler: jest.fn().mockImplementation(() => ({})),
       }),
@@ -93,7 +102,8 @@ describe("app", () => {
     const { registerProxyRoutes } = await import("./proxy.js");
     const { registerOAuthRoutes } = await import("./routes/oauth.js");
     const { registerCspReportRoutes } = await import("./routes/csp-report.js");
-    const { openPushStore } = await import("../notifications/push-store.js");
+    const { openPushStore } =
+      await import("../subsystems/notifications/push-store.js");
     const { createCspReportOnlyMiddleware } =
       await import("./middleware/csp.js");
     const { registerStaticFilesMiddleware } =

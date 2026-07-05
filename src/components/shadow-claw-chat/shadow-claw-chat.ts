@@ -1,12 +1,12 @@
 import JSZip from "jszip";
 
-import { CONFIG_KEYS } from "../../config.js";
+import { CONFIG_KEYS } from "../../config/config.js";
 import {
   formatModelAttachmentCapabilitySummary,
   getAttachmentCategory,
   getModelAttachmentCapabilities,
-} from "../../attachment-capabilities.js";
-import { effect } from "../../effect.js";
+} from "../../content/attachment-capabilities.js";
+import { effect } from "../../core/effect.js";
 
 import { getDb } from "../../db/db.js";
 import { exportChatData } from "../../db/exportChatData.js";
@@ -15,7 +15,7 @@ import { getConfig } from "../../db/getConfig.js";
 import { setConfig } from "../../db/setConfig.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { downloadGroupFile } from "../../storage/downloadGroupFile.js";
-import { transferProgressSignal } from "../../channels/peerjs.js";
+import { transferProgressSignal } from "../../subsystems/channels/peerjs.js";
 
 import { chatUiStore } from "../../stores/chat-ui.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
@@ -25,20 +25,27 @@ import type { OrchestratorState } from "../../stores/orchestrator.js";
 import {
   inferAttachmentMimeType,
   shouldInlineAttachmentInChat,
-} from "../../message-attachments.js";
-import { renderMarkdown } from "../../markdown.js";
+} from "../../content/message-attachments.js";
+import { renderMarkdown } from "../../content/markdown.js";
 import { setSanitizedHtml } from "../../security/trusted-types.js";
 
-import { showError, showInfo, showSuccess, showWarning } from "../../toast.js";
 import {
-  AppDialogOptions,
+  showError,
+  showInfo,
+  showSuccess,
+  showWarning,
+} from "../../ui/toast.js";
+import {
   MessageAttachment,
   MessageAttachmentSource,
-  StoredMessage,
+} from "../../content/types.js";
+import { StoredMessage } from "../../db/types.js";
+import {
   ThinkingLogEntry,
   ToolActivity,
-} from "../../types.js";
-import type { ShadowClawDatabase } from "../../types.js";
+} from "../../subsystems/worker/types.js";
+import type { AppDialogOptions } from "../../ui/types.js";
+import type { ShadowClawDatabase } from "../../db/types.js";
 import {
   formatDateForFilename,
   formatTimestamp,

@@ -1,4 +1,4 @@
-import type { A2UIComponentSpec, TextFieldSpec } from "../../../a2ui.js";
+import type { A2UIComponentSpec, TextFieldSpec } from "../../../ui/a2ui.js";
 
 export interface SurfaceState {
   surfaceId: string;

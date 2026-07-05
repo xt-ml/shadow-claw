@@ -34,7 +34,7 @@ const PROVIDERS: any = {
   },
 };
 
-jest.unstable_mockModule("../../../config.js", () => ({
+jest.unstable_mockModule("../../../config/config.js", () => ({
   CONFIG_KEYS: {
     PROVIDER: "provider",
     API_KEY: "api_key",
@@ -69,7 +69,7 @@ jest.unstable_mockModule("../../../db/getConfig.js", () => ({
   getConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
-jest.unstable_mockModule("../../../toast.js", () => ({
+jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
   showWarning: jest.fn(),
@@ -99,7 +99,7 @@ const {
   showSuccess,
   showWarning: _showWarning,
   showError,
-} = await import("../../../toast.js");
+} = await import("../../../ui/toast.js");
 
 function createOrchestratorStub(overrides = {}) {
   return {

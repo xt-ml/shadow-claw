@@ -52,10 +52,10 @@ Tests are the source of truth for expected behavior. Before implementing a new f
 ### File Naming
 
 - Source files use `.ts` (TypeScript).
-- Tests live **next to** their source file: `src/orchestrator.ts` → `src/orchestrator.test.ts`.
+- Tests live **next to** their source file: `src/core/orchestrator.ts` → `src/core/orchestrator.test.ts`.
 - End-to-end tests live in `e2e/` and use Playwright with fixtures + Page Objects. Extensions are `.ts`.
 - Components are in `src/components/shadow-claw-*/shadow-claw-*.ts` (each in its own subdirectory with co-located `.html` and `.css` files).
-- `src/theme-init.ts` is a TypeScript bootstrap script compiled by Rollup as a self-contained IIFE (`dist/public/theme-init.js`). It must remain free of module-level side effects that depend on the full app being ready.
+- `src/core/theme-init.ts` is a TypeScript bootstrap script compiled by Rollup as a self-contained IIFE (`dist/public/theme-init.js`). It must remain free of module-level side effects that depend on the full app being ready.
 
 ### Types & Imports
 
@@ -92,7 +92,7 @@ To prevent infinite execution loops, the system enforces a strict recursion guar
 
 - **Explicit Pre-Sanitization:** All dynamically rendered HTML, inline SVGs, or iframe `srcdoc` values must be sanitized using DOMPurify (e.g., `sanitizeToTrustedHtml` or `sanitizeSrcdocHtml`) **before** being passed to the Trusted Types policy.
 - **Identity Transform Policy:** The primary Trusted Types policy's `createHTML` callback in `src/security/trusted-types.ts` is intentionally implemented as an identity transform `(input) => input`. This prevents double-sanitization and preserves caller-specified custom sanitization options (such as allowing `blob:` URLs for relative workspace media previews) that would otherwise be lost.
-- **Default Trusted Types Policy:** Use `ensureDefaultTrustedTypesPolicy()` from `src/security/default-trusted-types-policy.ts` to register the `"default"` Trusted Types policy idempotently. It uses `trustedTypes.getPolicy("default")` before attempting `createPolicy`, so it is safe to call from multiple modules (including after HMR). Use `toDefaultTrustedScriptUrl()` for script URL sinks such as Workbox service worker registration. Both are called as early as possible from `src/theme-init.ts`.
+- **Default Trusted Types Policy:** Use `ensureDefaultTrustedTypesPolicy()` from `src/security/default-trusted-types-policy.ts` to register the `"default"` Trusted Types policy idempotently. It uses `trustedTypes.getPolicy("default")` before attempting `createPolicy`, so it is safe to call from multiple modules (including after HMR). Use `toDefaultTrustedScriptUrl()` for script URL sinks such as Workbox service worker registration. Both are called as early as possible from `src/core/theme-init.ts`.
 - **Custom Purify Options:** When rendering media resolved relative to the workspace, pass custom DOMPurify configurations extending the standard `ALLOWED_URI_REGEXP` to allow `blob:` URIs safely.
 
 ## What to Avoid
@@ -100,7 +100,7 @@ To prevent infinite execution loops, the system enforces a strict recursion guar
 - **Do not** add a frontend framework (React, Vue, Svelte, etc.).
 - **Do not** call `indexedDB` or `navigator.storage.getDirectory()` directly — use `src/db/db.ts` and `src/storage/storage.ts`.
 - **Do not** `postMessage` to the worker with ad-hoc shapes — use the typed protocol in `docs/architecture/worker-protocol.md`.
-- **Do not** store API keys in plaintext — always go through `src/crypto.ts`.
+- **Do not** store API keys in plaintext — always go through `src/security/crypto.ts`.
 - **Do not** import Electron modules from browser-side `.ts` files — Electron is desktop-only.
 - **Do not** rely on `navigator.modelContext` alone for WebMCP detection; prefer `document.modelContext` with `navigator.modelContext` fallback for compatibility.
 - **Do not** commit `dist-electron/`, `push-subscriptions.db`, or `scheduled-tasks.db` — they are git-ignored.

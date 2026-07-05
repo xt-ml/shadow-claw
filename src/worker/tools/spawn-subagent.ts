@@ -3,10 +3,13 @@ import {
   unregisterSubagentCollector,
 } from "../post.js";
 import { ulid } from "../../utils/ulid.js";
-import type { InvokePayload } from "../../types.js";
-import type { ToolDefinition } from "../../tools/types.js";
+import type { InvokePayload } from "../../subsystems/worker/types.js";
+import type { ToolDefinition } from "../../subsystems/tools/types.js";
 import { getConfig } from "../../db/getConfig.js";
-import { CONFIG_KEYS, DEFAULT_SUBAGENT_MAX_PARALLEL } from "../../config.js";
+import {
+  CONFIG_KEYS,
+  DEFAULT_SUBAGENT_MAX_PARALLEL,
+} from "../../config/config.js";
 
 /**
  * Context inherited from the parent agent invocation.

@@ -1,4 +1,4 @@
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "./types.js";
 
 /**
  * Delete all messages for a given group

@@ -1,14 +1,15 @@
 import QRCode from "qrcode";
 
 import { getDb } from "../../../db/db.js";
-import { effect } from "../../../effect.js";
+import { effect } from "../../../core/effect.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
-import { showError, showSuccess } from "../../../toast.js";
+import { showError, showSuccess } from "../../../ui/toast.js";
 import { ulid } from "../../../utils/ulid.js";
 import { roomGroupId } from "../../../db/rooms.js";
 
-import type { Orchestrator } from "../../../orchestrator.js";
-import type { RoomMeta, ShadowClawDatabase } from "../../../types.js";
+import type { Orchestrator } from "../../../core/orchestrator.js";
+import type { ShadowClawDatabase } from "../../../db/types.js";
+import type { RoomMeta } from "../../../subsystems/channels/types.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 

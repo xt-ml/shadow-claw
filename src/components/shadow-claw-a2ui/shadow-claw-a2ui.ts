@@ -10,7 +10,7 @@
 
 import ShadowClawElement from "../shadow-claw-element.js";
 
-import { applyDataModelPatches } from "../../a2ui.js";
+import { applyDataModelPatches } from "../../ui/a2ui.js";
 import { getDb } from "../../db/db.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { chatUiStore } from "../../stores/chat-ui.js";
@@ -36,7 +36,7 @@ import {
   renderVideo,
 } from "./catalog/index.js";
 
-import type { A2UIEnvelope, A2UIAction, TextFieldSpec } from "../../a2ui.js";
+import type { A2UIEnvelope, A2UIAction, TextFieldSpec } from "../../ui/a2ui.js";
 import type { SurfaceState } from "./catalog/types.js";
 
 export class ShadowClawA2UI extends ShadowClawElement {

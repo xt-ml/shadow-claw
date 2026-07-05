@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../config.js", () => ({
+jest.unstable_mockModule("../../../config/config.js", () => ({
   CONFIG_KEYS: {
     EMAIL_CONNECTIONS: "email_connections",
     SERVICE_ACCOUNTS: "service_accounts",
@@ -19,23 +19,23 @@ jest.unstable_mockModule("../../../db/setConfig.js", () => ({
   setConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
-jest.unstable_mockModule("../../../email/catalog.js", () => ({
+jest.unstable_mockModule("../../../subsystems/email/catalog.js", () => ({
   getEmailPluginManifest: jest.fn<any>().mockReturnValue(null),
   listEmailPluginManifests: jest.fn<any>().mockReturnValue([]),
 }));
 
-jest.unstable_mockModule("../../../email/connections.js", () => ({
+jest.unstable_mockModule("../../../subsystems/email/connections.js", () => ({
   listEmailConnections: jest.fn<any>().mockResolvedValue([]),
   upsertEmailConnection: jest.fn<any>().mockResolvedValue({ id: "conn-1" }),
   deleteEmailConnection: jest.fn<any>().mockResolvedValue(undefined),
   bindEmailCredentialRef: jest.fn<any>().mockResolvedValue(null),
 }));
 
-jest.unstable_mockModule("../../../crypto.js", () => ({
+jest.unstable_mockModule("../../../security/crypto.js", () => ({
   encryptValue: jest.fn<any>().mockResolvedValue("encrypted"),
 }));
 
-jest.unstable_mockModule("../../../toast.js", () => ({
+jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showSuccess: jest.fn(),
   showError: jest.fn(),
 }));
@@ -77,7 +77,7 @@ describe("shadow-claw-integrations", () => {
 
   it("routes renderConnectionList card.innerHTML through the Trusted Types helper", async () => {
     const { listEmailConnections } =
-      await import("../../../email/connections.js");
+      await import("../../../subsystems/email/connections.js");
     (listEmailConnections as jest.Mock<any>).mockResolvedValue([
       {
         id: "conn-1",

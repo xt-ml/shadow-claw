@@ -25,13 +25,13 @@ Communication is strictly message-based — the main thread and worker communica
 - LLM API calls (`fetch()`)
 - Tool execution (`executeTool.ts`)
 - JS shell emulator (`src/shell/shell.ts`)
-- WebVM initialization and operation (`src/vm.ts`)
-- Git operations (`src/git/git.ts`)
+- WebVM initialization and operation (`src/shell/vm.ts`)
+- Git operations (`src/subsystems/git/git.ts`)
 - SSE stream parsing (`parseSSEStream.ts`, `StreamAccumulator.ts`)
 
 ### What runs on the main thread
 
-- Orchestrator state machine (`src/orchestrator.ts`)
+- Orchestrator state machine (`src/core/orchestrator.ts`)
 - UI reactivity and rendering
 - IndexedDB access
 - Task scheduling
@@ -73,6 +73,6 @@ The WebVM (v86) is **worker-owned**. This was an explicit choice:
 ## Impact
 
 - All LLM calls, tool execution, and VM ops are in `src/worker/`
-- The worker is the **only** non-test runtime importer of `src/vm.ts`
+- The worker is the **only** non-test runtime importer of `src/shell/vm.ts`
 - Terminal UI components talk to the orchestrator's terminal bridge methods — never directly to `vm.ts`
 - New agent capabilities go in `src/worker/executeTool.ts` (new tools) or `src/worker/handleMessage.ts` (new message types)

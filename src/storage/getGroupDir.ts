@@ -1,6 +1,6 @@
 import { getNestedDir } from "./getNestedDir.js";
 import { getStorageRoot } from "./storage.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Get the group workspace directory.

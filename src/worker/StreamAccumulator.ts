@@ -1,4 +1,4 @@
-import { sanitizeModelOutput } from "../chat-template-sanitizer.js";
+import { sanitizeModelOutput } from "../content/chat-template-sanitizer.js";
 
 /**
  * Accumulates streamed SSE chunks into a unified response object.

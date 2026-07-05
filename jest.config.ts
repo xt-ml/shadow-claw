@@ -5,7 +5,7 @@ export default {
     {
       displayName: "src",
       testEnvironment: "jsdom",
-      setupFilesAfterEnv: ["<rootDir>/src/jest-setup.ts"],
+      setupFilesAfterEnv: ["<rootDir>/src/testing/jest-setup.ts"],
       roots: ["<rootDir>/src", "<rootDir>/electron"],
       resolver: "<rootDir>/jest-ts-resolver.cjs",
       transform: {
@@ -24,7 +24,7 @@ export default {
         "^pdfjs-dist$": "<rootDir>/src/__mocks__/pdfjs-dist.cjs",
         "^just-bash$": "<rootDir>/src/__mocks__/just-bash.cjs",
         "^node:sqlite$":
-          "<rootDir>/src/notifications/__mocks__/node-sqlite.cjs",
+          "<rootDir>/src/subsystems/notifications/__mocks__/node-sqlite.cjs",
       },
       testPathIgnorePatterns: [
         "/dist/",
@@ -54,13 +54,13 @@ export default {
         "^.+\\.ts$": "<rootDir>/jest-ts-transform.cjs",
       },
       testMatch: [
-        "<rootDir>/src/notifications/push-store.test.ts",
-        "<rootDir>/src/notifications/push-routes.test.ts",
-        "<rootDir>/src/notifications/push-client.test.ts",
+        "<rootDir>/src/subsystems/notifications/push-store.test.ts",
+        "<rootDir>/src/subsystems/notifications/push-routes.test.ts",
+        "<rootDir>/src/subsystems/notifications/push-client.test.ts",
       ],
       moduleNameMapper: {
         "^node:sqlite$":
-          "<rootDir>/src/notifications/__mocks__/node-sqlite.cjs",
+          "<rootDir>/src/subsystems/notifications/__mocks__/node-sqlite.cjs",
       },
     },
     {
@@ -73,13 +73,13 @@ export default {
         "^.+\\.ts$": "<rootDir>/jest-ts-transform.cjs",
       },
       testMatch: [
-        "<rootDir>/src/notifications/task-schedule-store.test.ts",
-        "<rootDir>/src/notifications/task-schedule-routes.test.ts",
-        "<rootDir>/src/notifications/task-scheduler-server.test.ts",
+        "<rootDir>/src/subsystems/notifications/task-schedule-store.test.ts",
+        "<rootDir>/src/subsystems/notifications/task-schedule-routes.test.ts",
+        "<rootDir>/src/subsystems/notifications/task-scheduler-server.test.ts",
       ],
       moduleNameMapper: {
         "^node:sqlite$":
-          "<rootDir>/src/notifications/__mocks__/node-sqlite.cjs",
+          "<rootDir>/src/subsystems/notifications/__mocks__/node-sqlite.cjs",
       },
     },
     {

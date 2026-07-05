@@ -2,7 +2,7 @@ import * as zip from "@zip.js/zip.js";
 import { formatDateForFilename } from "../utils/utils.js";
 import { addDirToZip } from "./addDirToZip.js";
 import { getGroupDir } from "./getGroupDir.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Download entire group workspace as a zip file

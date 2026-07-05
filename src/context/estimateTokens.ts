@@ -1,4 +1,7 @@
-import type { AttachmentContent, ConversationMessage } from "../types.js";
+import type {
+  AttachmentContent,
+  ConversationMessage,
+} from "../content/types.js";
 
 /**
  * @module estimateTokens

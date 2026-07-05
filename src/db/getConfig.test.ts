@@ -5,7 +5,7 @@ jest.unstable_mockModule("../db/txPromise.js", () => ({
 }));
 
 const { getConfig } = await import("./getConfig.js");
-const { txPromise } = await import("../db/txPromise.js");
+const { txPromise } = await import("./txPromise.js");
 
 describe("getConfig", () => {
   it("returns entry value", async () => {

@@ -18,7 +18,7 @@ While modern browsers increasingly support the Trusted Types API natively, older
 
 ### Automatic Initialization
 
-The tinyfill is automatically initialized in [`src/theme-init.ts`](../../src/theme-init.ts) at application startup:
+The tinyfill is automatically initialized in [`src/core/theme-init.ts`](../../src/core/theme-init.ts) at application startup:
 
 ```typescript
 import { initializeTrustedTypesTinyfill } from "./security/trusted-types-tinyfill.js";

@@ -28,7 +28,7 @@ describe("executeSpawnSubagentTool", () => {
       getConfig: jest.fn().mockResolvedValue(5),
     }));
 
-    jest.unstable_mockModule("../../config.js", () => ({
+    jest.unstable_mockModule("../../config/config.js", () => ({
       CONFIG_KEYS: {
         SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
       },

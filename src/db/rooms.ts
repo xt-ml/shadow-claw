@@ -11,7 +11,8 @@ import { getConfig } from "./getConfig.js";
 import { setConfig } from "./setConfig.js";
 import { createGroup } from "./groups.js";
 import { ulid } from "../utils/ulid.js";
-import type { ShadowClawDatabase, RoomMeta, RoomMember } from "../types.js";
+import type { ShadowClawDatabase } from "./types.js";
+import type { RoomMember, RoomMeta } from "../subsystems/channels/types.js";
 
 const CONFIG_KEY = "room_metadata";
 

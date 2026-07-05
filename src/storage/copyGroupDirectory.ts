@@ -1,6 +1,6 @@
 import { getGroupDir } from "./getGroupDir.js";
 import { writeFileHandle } from "./writeFileHandle.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Copy a nested directory from one group workspace to another.

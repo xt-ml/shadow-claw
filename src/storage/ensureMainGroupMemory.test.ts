@@ -32,7 +32,7 @@ const {
   isMainGroupMemorySuppressed,
   setMainGroupMemorySuppressed,
 } = await import("./ensureMainGroupMemory.js");
-const { DEFAULT_GROUP_ID } = await import("../config.js");
+const { DEFAULT_GROUP_ID } = await import("../config/config.js");
 
 describe("ensureMainGroupMemory", () => {
   beforeEach(() => {

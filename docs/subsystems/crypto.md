@@ -2,7 +2,7 @@
 
 > AES-256-GCM encryption for API keys and sensitive credentials using the Web Crypto API.
 
-**Source:** `src/crypto.ts`
+**Source:** `src/security/crypto.ts`
 
 ## Architecture
 
@@ -105,7 +105,7 @@ Decode UTF-8 → plaintext
 
 ## Settings Backup & Restore
 
-To facilitate configuration portability while preserving security, settings export/import logic is encapsulated in `src/settings-backup.ts`:
+To facilitate configuration portability while preserving security, settings export/import logic is encapsulated in `src/config/settings-backup.ts`:
 
 - **Backup Encryption**: When exporting settings, standard configuration values remain in plaintext, but any encrypted keys (API keys, git tokens, etc.) are decrypted via `crypto.ts` and re-encrypted using a user-provided password.
 - **Restore Decryption**: When importing settings, the module prompts for the password to decrypt the sensitive values, which are then securely re-encrypted with the local environment's browser-specific `CryptoKey` and saved back into IndexedDB.

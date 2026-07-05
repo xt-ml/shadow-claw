@@ -1,5 +1,5 @@
 import { txPromise } from "./txPromise.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "./types.js";
 
 /**
  * Delete a message from the database by ID

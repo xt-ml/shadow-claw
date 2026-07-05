@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import type { Config } from "dompurify";
 
 import { escapeHtml, sanitizeHtml } from "../utils/utils.js";

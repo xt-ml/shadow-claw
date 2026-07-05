@@ -1,5 +1,5 @@
 import { getGroupDir } from "./getGroupDir.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Get the workspace subdirectory for a group.

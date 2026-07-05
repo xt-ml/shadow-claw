@@ -58,17 +58,17 @@ describe("worker/tools/email", () => {
     mockGroupFileExists = jest.fn(async () => false);
     mockUlid = jest.fn(() => "mock-ulid");
 
-    jest.unstable_mockModule("../../crypto.js", () => ({
+    jest.unstable_mockModule("../../security/crypto.js", () => ({
       decryptValue: mockDecryptValue,
       encryptValue: mockEncryptValue,
     }));
 
-    jest.unstable_mockModule("../../email/catalog.js", () => ({
+    jest.unstable_mockModule("../../subsystems/email/catalog.js", () => ({
       getEmailPluginManifest: mockGetEmailPluginManifest,
       listEmailPluginManifests: mockListEmailPluginManifests,
     }));
 
-    jest.unstable_mockModule("../../email/connections.js", () => ({
+    jest.unstable_mockModule("../../subsystems/email/connections.js", () => ({
       bindEmailCredentialRef: mockBindEmailCredentialRef,
       deleteEmailConnection: mockDeleteEmailConnection,
       getEmailConnection: mockGetEmailConnection,
@@ -76,13 +76,16 @@ describe("worker/tools/email", () => {
       upsertEmailConnection: mockUpsertEmailConnection,
     }));
 
-    jest.unstable_mockModule("../../mcp-connections.js", () => ({
+    jest.unstable_mockModule("../../subsystems/mcp/mcp-connections.js", () => ({
       listRemoteMcpConnections: mockListRemoteMcpConnections,
     }));
 
-    jest.unstable_mockModule("../../accounts/service-accounts.js", () => ({
-      resolveServiceCredentials: mockResolveServiceCredentials,
-    }));
+    jest.unstable_mockModule(
+      "../../subsystems/accounts/service-accounts.js",
+      () => ({
+        resolveServiceCredentials: mockResolveServiceCredentials,
+      }),
+    );
 
     jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
       readGroupFileBytes: mockReadGroupFileBytes,

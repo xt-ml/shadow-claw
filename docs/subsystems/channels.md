@@ -3,16 +3,16 @@
 > A pluggable registry pattern that maps conversation group IDs to channel
 > implementations, enabling multi-channel support.
 
-**Source:** `src/channels/channel-registry.ts` · `src/channels/browser-chat.ts` · `src/channels/telegram.ts` · `src/channels/imessage.ts` · `src/channels/peerjs.ts` · `src/router.ts`
+**Source:** `src/subsystems/channels/channel-registry.ts` · `src/subsystems/channels/browser-chat.ts` · `src/subsystems/channels/telegram.ts` · `src/subsystems/channels/imessage.ts` · `src/subsystems/channels/peerjs.ts` · `src/core/router.ts`
 
 ## Built-in Channels
 
-| Channel  | Type       | Prefix  | Source                      | Purpose                             |
-| -------- | ---------- | ------- | --------------------------- | ----------------------------------- |
-| Browser  | `browser`  | `br:`   | `src/channels/browser-chat` | In-browser chat UI                  |
-| PeerJS   | `peerjs`   | `peer:` | `src/channels/peerjs.ts`    | WebRTC P2P via PeerJS data channels |
-| Telegram | `telegram` | `tg:`   | `src/channels/telegram.ts`  | Telegram Bot API integration        |
-| iMessage | `imessage` | `im:`   | `src/channels/imessage.ts`  | iMessage bridge via HTTP service    |
+| Channel  | Type       | Prefix  | Source                                 | Purpose                             |
+| -------- | ---------- | ------- | -------------------------------------- | ----------------------------------- |
+| Browser  | `browser`  | `br:`   | `src/subsystems/channels/browser-chat` | In-browser chat UI                  |
+| PeerJS   | `peerjs`   | `peer:` | `src/subsystems/channels/peerjs.ts`    | WebRTC P2P via PeerJS data channels |
+| Telegram | `telegram` | `tg:`   | `src/subsystems/channels/telegram.ts`  | Telegram Bot API integration        |
+| iMessage | `imessage` | `im:`   | `src/subsystems/channels/imessage.ts`  | iMessage bridge via HTTP service    |
 
 ## Architecture
 
@@ -27,7 +27,7 @@ graph LR
 
 ## Channel Registry
 
-**File:** `src/channels/channel-registry.ts`
+**File:** `src/subsystems/channels/channel-registry.ts`
 
 The `ChannelRegistry` maps groupId prefixes to `Channel` implementations.
 
@@ -64,7 +64,7 @@ interface Channel {
 
 ## Browser Chat Channel
 
-**File:** `src/channels/browser-chat.ts` (prefix: `br:`)
+**File:** `src/subsystems/channels/browser-chat.ts` (prefix: `br:`)
 
 The primary channel that bridges the in-browser chat UI with the orchestrator.
 
@@ -82,7 +82,7 @@ The primary channel that bridges the in-browser chat UI with the orchestrator.
 
 ## Telegram Channel
 
-**File:** `src/channels/telegram.ts` (prefix: `tg:`)
+**File:** `src/subsystems/channels/telegram.ts` (prefix: `tg:`)
 
 Bridge to Telegram bots via the Bot API. Conversations are mapped to Telegram chat IDs.
 
@@ -92,7 +92,7 @@ Bridge to Telegram bots via the Bot API. Conversations are mapped to Telegram ch
 
 ## iMessage Channel
 
-**File:** `src/channels/imessage.ts` (prefix: `im:`)
+**File:** `src/subsystems/channels/imessage.ts` (prefix: `im:`)
 
 Bridge to iMessage conversations via an HTTP relay service.
 
@@ -103,7 +103,7 @@ Bridge to iMessage conversations via an HTTP relay service.
 
 ## Router
 
-**File:** `src/router.ts`
+**File:** `src/core/router.ts`
 
 Routes outbound messages and typing indicators to the correct channel:
 

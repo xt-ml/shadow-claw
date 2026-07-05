@@ -10,7 +10,7 @@
 
 ## Step 1 — Add the provider config
 
-Open `src/config.ts` and add an entry to `PROVIDERS`:
+Open `src/config/config.ts` and add an entry to `PROVIDERS`:
 
 ```ts
 my_provider: {
@@ -32,7 +32,7 @@ my_provider: {
 | `"anthropic"`  | `AnthropicAdapter`    | Provider uses Anthropic `/messages` format         |
 | `"prompt_api"` | (no adapter, special) | Browser Prompt API — no network, no key, on-device |
 
-> The adapter (in `src/providers.ts`) automatically handles format-specific request/response transformation.
+> The adapter (in `src/subsystems/providers/providers.ts`) automatically handles format-specific request/response transformation.
 
 ### `requiresApiKey`
 
@@ -59,7 +59,7 @@ If `requiresApiKey: true`, Settings and orchestrator gating use this storage pat
 
 ## Step 3 — Add model context limits (optional)
 
-If your provider exposes models not yet in the context limit registry, add a case to `getContextLimit(model)` in `src/providers.ts`:
+If your provider exposes models not yet in the context limit registry, add a case to `getContextLimit(model)` in `src/subsystems/providers/providers.ts`:
 
 ```ts
 // In getContextLimit(model)
@@ -70,7 +70,7 @@ if (m.includes("my-model-name")) {
 
 The function uses a **fallback chain**:
 
-1. **Model registry** (`src/model-registry.ts`) — dynamic metadata if available
+1. **Model registry** (`src/subsystems/providers/model-registry.ts`) — dynamic metadata if available
 2. **Pattern matching** — model name matching against known families
 3. **Fallback** — defaults to 4,096 tokens if no match
 
@@ -79,7 +79,7 @@ ones so family-level matches do not hide model-specific limits.
 
 ## Step 4 — Add model fetching (optional)
 
-If the provider supports `/models`, add it to the `fetchModels(providerId, apiKey)` function in `src/config.ts`:
+If the provider supports `/models`, add it to the `fetchModels(providerId, apiKey)` function in `src/config/config.ts`:
 
 ```ts
 case "my_provider": {
@@ -138,7 +138,7 @@ Then update your provider's `baseUrl` to point to the proxy: `http://localhost:8
 
 ## Step 6 — Write a test
 
-Add to `src/config.test.ts` or a new file:
+Add to `src/config/config.test.ts` or a new file:
 
 ```ts
 import { PROVIDERS, CONFIG_KEYS } from "./config.js";
@@ -176,7 +176,7 @@ Watch the Network tab in DevTools for `text/event-stream` responses. Each chunk 
 ## Tips
 
 - **Test streaming manually** after adding a new streaming provider. SSE passthrough through the proxy has subtle failure modes (compression buffering, chunked transfer encoding).
-- **Model context limits:** Add a case to `getContextLimit()` in `src/providers.ts` for your model family if it's not already covered by pattern matching.
-- **Dynamic model metadata:** Use `src/model-registry.ts` to cache model capabilities (tool support, context window) at startup if your API provides `/models` with capability hints.
+- **Model context limits:** Add a case to `getContextLimit()` in `src/subsystems/providers/providers.ts` for your model family if it's not already covered by pattern matching.
+- **Dynamic model metadata:** Use `src/subsystems/providers/model-registry.ts` to cache model capabilities (tool support, context window) at startup if your API provides `/models` with capability hints.
 - **Context compression:** If the provider supports prompt compaction, set `supportsCompaction: true` and validate it works with longer conversations.
 - **Auto-profile activation:** If your provider uses a small or constrained model, consider creating a tool profile that activates automatically when this provider/model is selected.

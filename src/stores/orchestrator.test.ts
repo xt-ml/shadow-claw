@@ -59,7 +59,7 @@ jest.unstable_mockModule("../storage/storage.js", () => ({
   getStorageStatus: mockGetStorageStatus,
 }));
 
-jest.unstable_mockModule("../toast.js", () => ({
+jest.unstable_mockModule("../ui/toast.js", () => ({
   showError: mockShowError,
 }));
 
@@ -124,7 +124,7 @@ jest.unstable_mockModule("../db/deleteMessage.js", () => ({
 
 const { OrchestratorStore, accumulateTokenUsage } =
   await import("./orchestrator.js");
-const { DEFAULT_GROUP_ID } = await import("../config.js");
+const { DEFAULT_GROUP_ID } = await import("../config/config.js");
 
 function createEvents() {
   const handlers = new Map<string, Set<Function>>();

@@ -1,4 +1,4 @@
-import { OPFS_ROOT } from "../config.js";
+import { OPFS_ROOT } from "../config/config.js";
 import { getGroupDir } from "./getGroupDir.js";
 import { parsePath } from "./parsePath.js";
 import {
@@ -11,7 +11,7 @@ import {
   writeOpfsPathViaWorker,
   type WriteContent,
 } from "./writeFileHandle.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Write content to a file in a group's workspace.

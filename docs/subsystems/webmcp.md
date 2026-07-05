@@ -2,7 +2,7 @@
 
 > Browser's Model Context Protocol integration and tool execution.
 
-**Source:** `src/webmcp.ts`
+**Source:** `src/subsystems/mcp/webmcp.ts`
 
 ## Overview
 
@@ -121,7 +121,7 @@ Clears both `registeredToolControllers` and `registeredToolNames`.
 
 ## Tool Surface
 
-All tools in `TOOL_DEFINITIONS` (`src/tools/index.ts`) are exposed via WebMCP. This
+All tools in `TOOL_DEFINITIONS` (`src/subsystems/tools/index.ts`) are exposed via WebMCP. This
 includes the full built-in set:
 
 | Category      | Tools                                                                                     |

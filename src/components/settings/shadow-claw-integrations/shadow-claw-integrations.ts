@@ -1,4 +1,4 @@
-import { CONFIG_KEYS } from "../../../config.js";
+import { CONFIG_KEYS } from "../../../config/config.js";
 import { getDb } from "../../../db/db.js";
 import { getConfig } from "../../../db/getConfig.js";
 import { setConfig } from "../../../db/setConfig.js";
@@ -6,7 +6,7 @@ import {
   getEmailPluginManifest,
   listEmailPluginManifests,
   type EmailPluginManifest,
-} from "../../../email/catalog.js";
+} from "../../../subsystems/email/catalog.js";
 import {
   deleteEmailConnection,
   bindEmailCredentialRef,
@@ -14,15 +14,15 @@ import {
   upsertEmailConnection,
   type EmailConnectionRecord,
   type EmailCredentialRef,
-} from "../../../email/connections.js";
-import { encryptValue } from "../../../crypto.js";
-import { showError, showSuccess } from "../../../toast.js";
+} from "../../../subsystems/email/connections.js";
+import { encryptValue } from "../../../security/crypto.js";
+import { showError, showSuccess } from "../../../ui/toast.js";
 import { ulid } from "../../../utils/ulid.js";
 import { resolveConnectionTestAuth } from "./connection-test-auth.js";
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
 
-import type { ShadowClawDatabase } from "../../../types.js";
-import type { ServiceAccount } from "../../../accounts/service-accounts.js";
+import type { ShadowClawDatabase } from "../../../db/types.js";
+import type { ServiceAccount } from "../../../subsystems/accounts/service-accounts.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 

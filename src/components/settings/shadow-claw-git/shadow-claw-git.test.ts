@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../config.js", () => ({
+jest.unstable_mockModule("../../../config/config.js", () => ({
   CONFIG_KEYS: {
     GIT_AUTHOR_NAME: "git_author_name",
     GIT_AUTHOR_EMAIL: "git_author_email",
@@ -93,7 +93,7 @@ jest.unstable_mockModule("../../../db/getConfig.js", () => ({
   getConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
-jest.unstable_mockModule("../../../crypto.js", () => ({
+jest.unstable_mockModule("../../../security/crypto.js", () => ({
   decryptValue: jest.fn<any>().mockResolvedValue("decrypted-token"),
   encryptValue: jest.fn<any>().mockResolvedValue("encrypted-token"),
 }));
@@ -109,7 +109,7 @@ jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../../../toast.js", () => ({
+jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
   showWarning: jest.fn(),
@@ -145,10 +145,10 @@ jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
 
 const { setConfig } = await import("../../../db/setConfig.js");
 const { getConfig } = await import("../../../db/getConfig.js");
-const { showError } = await import("../../../toast.js");
+const { showError } = await import("../../../ui/toast.js");
 const { setSanitizedHtml } = await import("../../../security/trusted-types.js");
 const { ShadowClawGit } = await import("./shadow-claw-git.js");
-const { showSuccess } = await import("../../../toast.js");
+const { showSuccess } = await import("../../../ui/toast.js");
 
 describe("shadow-claw-git", () => {
   jest.setTimeout(30000);

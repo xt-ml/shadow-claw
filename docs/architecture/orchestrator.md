@@ -3,7 +3,7 @@
 > The orchestrator is the brain of ShadowClaw's main thread — a state machine
 > that coordinates conversations, the agent worker, task scheduling, and UI updates.
 
-**Source:** `src/orchestrator.ts` · `src/stores/orchestrator.ts`
+**Source:** `src/core/orchestrator.ts` · `src/stores/orchestrator.ts`
 
 ## State Machine
 
@@ -117,51 +117,51 @@ Context compaction summarizes the conversation to free token budget:
 
 The orchestrator dispatches all worker messages through `handleWorkerMessage(db, msg)`:
 
-| Message Type              | Action                                                          |
-| ------------------------- | --------------------------------------------------------------- |
-| `response`                | Persist to DB, emit to router, set state `idle`                 |
-| `streaming-start`         | Set state `responding`, emit event                              |
-| `streaming-chunk`         | Forward to UI (store accumulates chunks)                        |
-| `intermediate-response`   | Persist text as permanent bubble (before tool calls)            |
-| `streaming-end`           | Set state `thinking` (tool calls coming)                        |
-| `streaming-done`          | Emit event, set state `idle`                                    |
-| `streaming-error`         | Emit error event                                                |
+| Message Type              | Action                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `response`                | Persist to DB, emit to router, set state `idle`                                                              |
+| `streaming-start`         | Set state `responding`, emit event                                                                           |
+| `streaming-chunk`         | Forward to UI (store accumulates chunks)                                                                     |
+| `intermediate-response`   | Persist text as permanent bubble (before tool calls)                                                         |
+| `streaming-end`           | Set state `thinking` (tool calls coming)                                                                     |
+| `streaming-done`          | Emit event, set state `idle`                                                                                 |
+| `streaming-error`         | Emit error event                                                                                             |
 | `error`                   | Deliver error response prefixed with "⚠️ Error:"; may emit `provider-help` for provider-specific remediation |
-| `typing`                  | Emit typing event to router                                     |
-| `tool-activity`           | Emit event; trigger `file-change` on write_file/bash completion |
-| `task-created`            | Check recursion guard → sync to server → save to DB             |
-| `update-task`             | Check recursion guard → sync to server → update DB              |
-| `delete-task`             | Check recursion guard → delete from server → delete from DB     |
-| `token-usage`             | Emit for UI stats                                               |
-| `thinking-log`            | Emit for debug sidebar                                          |
-| `compact-done`            | Clear messages, save summary, set state `idle`                  |
-| `model-download-progress` | Emit for Prompt API download UI                                 |
-| `vm-status`               | Update `vmStatus`, emit event                                   |
-| `vm-terminal-*`           | Forward to terminal component via events                        |
-| `vm-workspace-synced`     | Emit `file-change` event                                        |
-| `open-file`               | Emit for file viewer                                            |
-| `show-toast`              | Call `showToast()` helper                                       |
-| `send-notification`       | Check recursion guard → POST `/push/broadcast`                  |
+| `typing`                  | Emit typing event to router                                                                                  |
+| `tool-activity`           | Emit event; trigger `file-change` on write_file/bash completion                                              |
+| `task-created`            | Check recursion guard → sync to server → save to DB                                                          |
+| `update-task`             | Check recursion guard → sync to server → update DB                                                           |
+| `delete-task`             | Check recursion guard → delete from server → delete from DB                                                  |
+| `token-usage`             | Emit for UI stats                                                                                            |
+| `thinking-log`            | Emit for debug sidebar                                                                                       |
+| `compact-done`            | Clear messages, save summary, set state `idle`                                                               |
+| `model-download-progress` | Emit for Prompt API download UI                                                                              |
+| `vm-status`               | Update `vmStatus`, emit event                                                                                |
+| `vm-terminal-*`           | Forward to terminal component via events                                                                     |
+| `vm-workspace-synced`     | Emit `file-change` event                                                                                     |
+| `open-file`               | Emit for file viewer                                                                                         |
+| `show-toast`              | Call `showToast()` helper                                                                                    |
+| `send-notification`       | Check recursion guard → POST `/push/broadcast`                                                               |
 
 ## EventBus
 
 Simple event emitter for orchestrator-to-UI communication:
 
-| Event                                    | When emitted                    |
-| ---------------------------------------- | ------------------------------- |
-| `ready`                                  | Orchestrator initialized        |
-| `state-change`                           | State transitioned              |
-| `message`                                | New message received/created    |
-| `typing`                                 | Typing indicator toggled        |
-| `tool-activity`                          | Tool execution started/finished |
-| `context-usage`                          | Token budget stats updated      |
-| `streaming-start/chunk/end/done`         | SSE lifecycle events            |
-| `vm-status`                              | VM status changed               |
-| `vm-terminal-opened/closed/output/error` | Terminal session events         |
-| `file-change`                            | Workspace file system changed   |
-| `context-compacted`                      | Context summarized              |
-| `task-change`                            | Task created/updated/deleted    |
-| `model-download-progress`                | Prompt API model downloading    |
+| Event                                    | When emitted                                                    |
+| ---------------------------------------- | --------------------------------------------------------------- |
+| `ready`                                  | Orchestrator initialized                                        |
+| `state-change`                           | State transitioned                                              |
+| `message`                                | New message received/created                                    |
+| `typing`                                 | Typing indicator toggled                                        |
+| `tool-activity`                          | Tool execution started/finished                                 |
+| `context-usage`                          | Token budget stats updated                                      |
+| `streaming-start/chunk/end/done`         | SSE lifecycle events                                            |
+| `vm-status`                              | VM status changed                                               |
+| `vm-terminal-opened/closed/output/error` | Terminal session events                                         |
+| `file-change`                            | Workspace file system changed                                   |
+| `context-compacted`                      | Context summarized                                              |
+| `task-change`                            | Task created/updated/deleted                                    |
+| `model-download-progress`                | Prompt API model downloading                                    |
 | `provider-help`                          | Provider-specific setup/help dialog hint (e.g., local runtimes) |
 
 ## Conversation Isolation

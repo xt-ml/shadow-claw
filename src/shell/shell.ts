@@ -1,6 +1,6 @@
 import { Bash } from "just-bash";
 import { createFileSystem } from "./fs.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 export interface ShellResult {
   stdout: string;

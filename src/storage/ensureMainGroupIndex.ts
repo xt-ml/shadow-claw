@@ -1,11 +1,12 @@
-import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config.js";
+/// <reference lib="dom" />
+import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config/config.js";
 import { getConfig } from "../db/getConfig.js";
 import { setConfig } from "../db/setConfig.js";
 import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "./defaultIndexContent.mjs";
 import { groupFileExists } from "./groupFileExists.js";
 import { writeGroupFile } from "./writeGroupFile.js";
 
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 export const DEFAULT_MAIN_GROUP_INDEX_PATH = "index.html";
 export const STATIC_MAIN_GROUP_INDEX_PATH = "br-main/index.html";

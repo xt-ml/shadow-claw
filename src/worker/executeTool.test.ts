@@ -110,7 +110,7 @@ describe("executeTool.js", () => {
     mockListRemoteMcpTools = jest.fn();
     mockCallRemoteMcpTool = jest.fn();
 
-    jest.unstable_mockModule("../config.js", () => ({
+    jest.unstable_mockModule("../config/config.js", () => ({
       ASSISTANT_NAME: "mock-assistant",
       DEFAULT_MAX_ITERATIONS: 10,
       getProvider: jest.fn(),
@@ -142,12 +142,12 @@ describe("executeTool.js", () => {
       getAllTasks: mockGetAllTasks,
     }));
 
-    jest.unstable_mockModule("../crypto.js", () => ({
+    jest.unstable_mockModule("../security/crypto.js", () => ({
       decryptValue: mockDecryptValue,
       encryptValue: mockEncryptValue,
     }));
 
-    jest.unstable_mockModule("../git/git.js", () => ({
+    jest.unstable_mockModule("../subsystems/git/git.js", () => ({
       gitAdd: mockGitAdd,
       gitCheckout: mockGitCheckout,
       gitClone: mockGitClone,
@@ -177,11 +177,14 @@ describe("executeTool.js", () => {
       gitUnstage: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../accounts/service-accounts.js", () => ({
-      resolveServiceCredentials: mockResolveServiceCredentials,
-    }));
+    jest.unstable_mockModule(
+      "../subsystems/accounts/service-accounts.js",
+      () => ({
+        resolveServiceCredentials: mockResolveServiceCredentials,
+      }),
+    );
 
-    jest.unstable_mockModule("../git/credentials.js", () => ({
+    jest.unstable_mockModule("../subsystems/git/credentials.js", () => ({
       resolveGitCredentials: mockResolveGitCredentials,
       buildAuthHeaders: jest.fn((creds: any) => {
         if (creds.token) {
@@ -192,7 +195,7 @@ describe("executeTool.js", () => {
       }),
     }));
 
-    jest.unstable_mockModule("../remote-mcp-client.js", () => ({
+    jest.unstable_mockModule("../subsystems/mcp/remote-mcp-client.js", () => ({
       listRemoteMcpTools: mockListRemoteMcpTools,
       callRemoteMcpTool: mockCallRemoteMcpTool,
       McpReauthRequiredError: class McpReauthRequiredError extends Error {
@@ -205,7 +208,7 @@ describe("executeTool.js", () => {
       },
     }));
 
-    jest.unstable_mockModule("../vm.js", () => ({
+    jest.unstable_mockModule("../shell/vm.js", () => ({
       bootVM: mockBootVM,
       executeInVM: mockExecuteInVM,
       getVMBootModePreference: mockGetVMBootModePreference,
@@ -2055,7 +2058,8 @@ describe("executeTool.js", () => {
   });
 
   it("should post mcp-reauth-required when remote_mcp_list_tools throws McpReauthRequiredError", async () => {
-    const { McpReauthRequiredError } = await import("../remote-mcp-client.js");
+    const { McpReauthRequiredError } =
+      await import("../subsystems/mcp/remote-mcp-client.js");
     (mockListRemoteMcpTools as any).mockRejectedValue(
       new McpReauthRequiredError("conn-oauth"),
     );
@@ -2078,7 +2082,8 @@ describe("executeTool.js", () => {
   });
 
   it("should post mcp-reauth-required when remote_mcp_call_tool throws McpReauthRequiredError", async () => {
-    const { McpReauthRequiredError } = await import("../remote-mcp-client.js");
+    const { McpReauthRequiredError } =
+      await import("../subsystems/mcp/remote-mcp-client.js");
     (mockCallRemoteMcpTool as any).mockRejectedValue(
       new McpReauthRequiredError("conn-oauth-2"),
     );
@@ -2101,7 +2106,8 @@ describe("executeTool.js", () => {
   });
 
   it("should retry remote_mcp_list_tools after successful reauth", async () => {
-    const { McpReauthRequiredError } = await import("../remote-mcp-client.js");
+    const { McpReauthRequiredError } =
+      await import("../subsystems/mcp/remote-mcp-client.js");
     let callCount = 0;
     (mockListRemoteMcpTools as any).mockImplementation(() => {
       callCount++;
@@ -2127,7 +2133,8 @@ describe("executeTool.js", () => {
   });
 
   it("should deduplicate concurrent reauth requests for the same connectionId", async () => {
-    const { McpReauthRequiredError } = await import("../remote-mcp-client.js");
+    const { McpReauthRequiredError } =
+      await import("../subsystems/mcp/remote-mcp-client.js");
     (mockListRemoteMcpTools as any).mockRejectedValue(
       new McpReauthRequiredError("conn-dedup"),
     );

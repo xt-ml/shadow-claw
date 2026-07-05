@@ -1,5 +1,5 @@
 import { getGroupDir } from "./getGroupDir.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Recursively delete all files and directories in a group's workspace.

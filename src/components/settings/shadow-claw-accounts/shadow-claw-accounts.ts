@@ -1,11 +1,14 @@
-import { CONFIG_KEYS, OAUTH_PROVIDER_DEFINITIONS } from "../../../config.js";
+import {
+  CONFIG_KEYS,
+  OAUTH_PROVIDER_DEFINITIONS,
+} from "../../../config/config.js";
 import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
 import { getConfig } from "../../../db/getConfig.js";
-import { showError, showSuccess } from "../../../toast.js";
+import { showError, showSuccess } from "../../../ui/toast.js";
 import { escapeHtml } from "../../../utils/utils.js";
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
 
-import type { ServiceAccount } from "../../../accounts/service-accounts.js";
+import type { ServiceAccount } from "../../../subsystems/accounts/service-accounts.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
@@ -661,7 +664,7 @@ export class ShadowClawAccounts extends ShadowClawElement {
     }
 
     try {
-      const { encryptValue } = await import("../../../crypto.js");
+      const { encryptValue } = await import("../../../security/crypto.js");
       const { setConfig } = await import("../../../db/setConfig.js");
 
       const tokenRaw = (

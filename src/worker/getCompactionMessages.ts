@@ -1,4 +1,4 @@
-import { ConversationMessage } from "../types.js";
+import { ConversationMessage } from "../content/types.js";
 
 /**
  * Build the message list for compaction

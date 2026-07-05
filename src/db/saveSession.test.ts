@@ -5,7 +5,7 @@ jest.unstable_mockModule("../db/txPromise.js", () => ({
 }));
 
 const { saveSession } = await import("./saveSession.js");
-const { txPromise } = await import("../db/txPromise.js");
+const { txPromise } = await import("./txPromise.js");
 
 describe("saveSession", () => {
   it("persists session and resolves undefined", async () => {

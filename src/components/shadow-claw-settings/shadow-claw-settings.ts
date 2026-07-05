@@ -12,18 +12,18 @@ import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 
-import { ASSISTANT_NAME, CONFIG_KEYS } from "../../config.js";
-import type { Orchestrator } from "../../orchestrator.js";
-import type { ShadowClawDatabase } from "../../types.js";
+import { ASSISTANT_NAME, CONFIG_KEYS } from "../../config/config.js";
+import type { Orchestrator } from "../../core/orchestrator.js";
+import type { ShadowClawDatabase } from "../../db/types.js";
 import { getDb } from "../../db/db.js";
 import {
   createSettingsBackupBlob,
   parseSettingsBackupPayload,
   reapplyPlaintextPasswords,
   type ConfigEntryRecord,
-} from "../../settings-backup.js";
+} from "../../config/settings-backup.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
-import { showError, showInfo, showSuccess } from "../../toast.js";
+import { showError, showInfo, showSuccess } from "../../ui/toast.js";
 import { formatDateForFilename } from "../../utils/utils.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
@@ -478,7 +478,7 @@ export class ShadowClawSettings extends ShadowClawElement {
 
         const entries = await this.getAllConfigEntries();
         const { writeSettingsBackupToFileHandle } =
-          await import("../../settings-backup.js");
+          await import("../../config/settings-backup.js");
 
         await writeSettingsBackupToFileHandle(
           fileHandle,
@@ -591,7 +591,7 @@ export class ShadowClawSettings extends ShadowClawElement {
 
     const name = nameInput.value.trim();
     if (!name) {
-      const { showWarning } = await import("../../toast.js");
+      const { showWarning } = await import("../../ui/toast.js");
       showWarning("Please enter a name", 3000);
 
       return;

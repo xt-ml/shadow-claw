@@ -3,11 +3,11 @@
  * Stores group metadata in the config store as JSON.
  */
 
-import { DEFAULT_GROUP_ID } from "../config.js";
+import { DEFAULT_GROUP_ID } from "../config/config.js";
 import { getConfig } from "./getConfig.js";
 import { setConfig } from "./setConfig.js";
 import { ulid } from "../utils/ulid.js";
-import type { ShadowClawDatabase, GroupMeta } from "../types.js";
+import type { GroupMeta, ShadowClawDatabase } from "./types.js";
 
 const CONFIG_KEY = "group_metadata";
 

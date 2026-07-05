@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../orchestrator.js", () => ({
+jest.unstable_mockModule("../../core/orchestrator.js", () => ({
   Orchestrator: class {
     async init() {
       return {};
@@ -23,7 +23,7 @@ jest.unstable_mockModule("../../orchestrator.js", () => ({
 
 (globalThis as any).__ACTIVE_SHADOW_CLAW__ = null;
 
-jest.unstable_mockModule("../../effect.js", () => ({
+jest.unstable_mockModule("../../core/effect.js", () => ({
   effect: jest.fn(() => () => {}),
 }));
 const mockGetConfigByKey = new Map<string, unknown>();
@@ -36,7 +36,7 @@ jest.unstable_mockModule("../../db/getConfig.js", () => ({
     return null;
   }),
 }));
-jest.unstable_mockModule("../../markdown.js", () => ({
+jest.unstable_mockModule("../../content/markdown.js", () => ({
   renderMarkdown: jest.fn((value) => String(value)),
 }));
 
@@ -87,7 +87,7 @@ jest.unstable_mockModule("../../stores/theme.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../../toast.js", () => ({
+jest.unstable_mockModule("../../ui/toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
   showWarning: jest.fn(),
@@ -105,7 +105,7 @@ jest.unstable_mockModule("../../stores/tools.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../../vm.js", () => ({
+jest.unstable_mockModule("../../shell/vm.js", () => ({
   bootVM: (jest.fn() as any).mockResolvedValue(undefined),
   getVMStatus: jest.fn(() => ({
     ready: false,

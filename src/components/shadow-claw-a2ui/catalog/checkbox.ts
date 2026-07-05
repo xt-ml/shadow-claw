@@ -1,6 +1,6 @@
-import { resolveDynamicString } from "../../../a2ui.js";
+import { resolveDynamicString } from "../../../ui/a2ui.js";
 
-import type { CheckBoxSpec } from "../../../a2ui.js";
+import type { CheckBoxSpec } from "../../../ui/a2ui.js";
 import type { SurfaceState, RenderContext } from "./types.js";
 
 export function renderCheckBox(

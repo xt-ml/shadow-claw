@@ -3,7 +3,7 @@ import {
   BASH_MAX_TIMEOUT_SEC,
   CONFIG_KEYS,
   FETCH_MAX_RESPONSE,
-} from "../config.js";
+} from "../config/config.js";
 
 import { getAllTasks } from "../db/getAllTasks.js";
 import { getConfig } from "../db/getConfig.js";
@@ -21,7 +21,7 @@ import {
   getVMBootModePreference,
   getVMStatus,
   isVMReady,
-} from "../vm.js";
+} from "../shell/vm.js";
 
 import { groupFileExists } from "../storage/groupFileExists.js";
 import { listGroupFiles } from "../storage/listGroupFiles.js";
@@ -58,11 +58,14 @@ import {
   gitStatus,
   gitTag,
   gitUnstage,
-} from "../git/git.js";
+} from "../subsystems/git/git.js";
 import { ulid } from "../utils/ulid.js";
 
-import { resolveServiceCredentials } from "../accounts/service-accounts.js";
-import { buildAuthHeaders, resolveGitCredentials } from "../git/credentials.js";
+import { resolveServiceCredentials } from "../subsystems/accounts/service-accounts.js";
+import {
+  buildAuthHeaders,
+  resolveGitCredentials,
+} from "../subsystems/git/credentials.js";
 import { getGroupDir } from "../storage/getGroupDir.js";
 import { formatShellOutput } from "./formatShellOutput.js";
 import { post } from "./post.js";
@@ -75,15 +78,15 @@ import {
   withRetry,
 } from "./withRetry.js";
 
-import { ShadowClawDatabase, Task } from "../types.js";
+import { ShadowClawDatabase, Task } from "../db/types.js";
 
 import {
   callRemoteMcpTool,
   listRemoteMcpTools,
   McpReauthRequiredError,
-} from "../remote-mcp-client.js";
+} from "../subsystems/mcp/remote-mcp-client.js";
 
-import { NANO_BUILTIN_PROFILE } from "../tools/builtin-profiles.js";
+import { NANO_BUILTIN_PROFILE } from "../subsystems/tools/builtin-profiles.js";
 import { executeManageEmailTool } from "./tools/email.js";
 import { executeFetchFileTool } from "./tools/fetch-file.js";
 import { executeFetchUrlTool } from "./tools/fetch-url.js";
@@ -100,10 +103,10 @@ import {
   A2UI_MINIMAL_CATALOG_ID,
   BASIC_CATALOG_REFERENCE,
   MINIMAL_CATALOG_REFERENCE,
-} from "../a2ui.js";
+} from "../ui/a2ui.js";
 
-import type { A2UIEnvelope } from "../a2ui.js";
-import type { ToolResultContentBlock } from "../types.js";
+import type { A2UIEnvelope } from "../ui/a2ui.js";
+import type { ToolResultContentBlock } from "../content/types.js";
 import type { SubagentInvokeContext } from "./tools/spawn-subagent.js";
 
 export type { SubagentInvokeContext };

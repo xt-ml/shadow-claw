@@ -1,22 +1,25 @@
-import { CONFIG_KEYS, OAUTH_PROVIDER_DEFINITIONS } from "../../../config.js";
+import {
+  CONFIG_KEYS,
+  OAUTH_PROVIDER_DEFINITIONS,
+} from "../../../config/config.js";
 import { getConfig } from "../../../db/getConfig.js";
-import { showError, showSuccess } from "../../../toast.js";
+import { showError, showSuccess } from "../../../ui/toast.js";
 import { escapeHtml } from "../../../utils/utils.js";
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import {
   resolveStoredCredentialAuthMode,
   type PendingOAuthResult,
-} from "../../../accounts/stored-credentials.js";
+} from "../../../subsystems/accounts/stored-credentials.js";
 
 import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
-import { detectProvider } from "../../../git/credentials.js";
+import { detectProvider } from "../../../subsystems/git/credentials.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 import "../../common/shadow-claw-actions/shadow-claw-actions.js";
 import "../../common/shadow-claw-card/shadow-claw-card.js";
 
-import { GitAccount } from "../../../types.js";
+import { GitAccount } from "../../../subsystems/git/types.js";
 
 const elementName = "shadow-claw-git";
 const GIT_OAUTH_PROVIDER_IDS = ["github", "gitlab", "azure_devops"];
@@ -715,7 +718,7 @@ export class ShadowClawGit extends ShadowClawElement {
     }
 
     try {
-      const { encryptValue } = await import("../../../crypto.js");
+      const { encryptValue } = await import("../../../security/crypto.js");
       const { setConfig } = await import("../../../db/setConfig.js");
 
       const tokenRaw = (

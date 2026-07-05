@@ -1,4 +1,5 @@
-import type { GitToolDeps, ShadowClawDatabase } from "../../types.js";
+import type { GitToolDeps } from "../../subsystems/git/types.js";
+import type { ShadowClawDatabase } from "../../db/types.js";
 
 function extractConflictPaths(message: string): string[] {
   const match = message.match(/conflicts? in the following files?:\s*(.+)/i);

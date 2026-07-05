@@ -3,7 +3,7 @@
 > Web Push notifications delivered via VAPID, a server-side SQLite task scheduler,
 > and a client-side cron evaluator — so tasks fire even when no browser tab is open.
 
-**Source:** `src/notifications/` · `src/task-scheduler.ts` · `src/cron.ts` · `src/service-worker/push-handler.ts`
+**Source:** `src/subsystems/notifications/` · `src/subsystems/tools/task-scheduler.ts` · `src/subsystems/tools/cron.ts` · `src/service-worker/push-handler.ts`
 
 ## System Overview
 
@@ -77,7 +77,7 @@ The service worker uses a `BroadcastChannel("shadowclaw-push")` to relay push ev
 
 ## Client-Side Task Scheduler
 
-**File:** `src/task-scheduler.ts`
+**File:** `src/subsystems/tools/task-scheduler.ts`
 
 Evaluates cron expressions every 60 seconds and invokes the agent for due tasks:
 
@@ -94,7 +94,7 @@ flowchart TD
   E -->|no| J[Skip duplicate]
 ```
 
-**Cron matching** (`src/cron.ts`) — shared module evaluating standard 5-field cron expressions:
+**Cron matching** (`src/subsystems/tools/cron.ts`) — shared module evaluating standard 5-field cron expressions:
 
 ```text
 min   hour  dom   month  dow
@@ -107,7 +107,7 @@ Supports: `*`, `*/n` (step), `n-m` (range), `n,m` (list).
 
 ## Server-Side Task Scheduler
 
-**File:** `src/notifications/task-scheduler-server.ts`
+**File:** `src/subsystems/notifications/task-scheduler-server.ts`
 
 Runs on the Express/Electron server and fires even when no browser tab is open:
 

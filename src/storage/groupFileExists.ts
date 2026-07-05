@@ -1,5 +1,5 @@
 import { readGroupFile } from "./readGroupFile.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Check if a file exists in a group's workspace.

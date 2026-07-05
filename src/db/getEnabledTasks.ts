@@ -1,5 +1,5 @@
 import { getDb } from "./db.js";
-import type { ShadowClawDatabase, Task } from "../types.js";
+import type { ShadowClawDatabase, Task } from "./types.js";
 
 /**
  * Get all enabled tasks

@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../effect.js", () => ({ effect: jest.fn() }));
-jest.unstable_mockModule("../../markdown.js", () => ({
+jest.unstable_mockModule("../../core/effect.js", () => ({ effect: jest.fn() }));
+jest.unstable_mockModule("../../content/markdown.js", () => ({
   renderMarkdown: jest.fn((value) => String(value)),
 }));
 
@@ -67,7 +67,7 @@ jest.unstable_mockModule("highlight.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../../toast.js", () => ({
+jest.unstable_mockModule("../../ui/toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
   showWarning: jest.fn(),
@@ -76,7 +76,7 @@ jest.unstable_mockModule("../../toast.js", () => ({
 const { ShadowClawFileViewer } = await import("./shadow-claw-file-viewer.js");
 const { fileViewerStore } = await import("../../stores/file-viewer.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
-const { renderMarkdown } = await import("../../markdown.js");
+const { renderMarkdown } = await import("../../content/markdown.js");
 const { setSanitizedHtml, toTrustedHtmlPresanitized } =
   await import("../../security/trusted-types.js");
 const { readGroupFileBytes } =

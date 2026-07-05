@@ -1,6 +1,6 @@
 import { applyWeight } from "./shared.js";
 
-import type { ListSpec } from "../../../a2ui.js";
+import type { ListSpec } from "../../../ui/a2ui.js";
 import type { SurfaceState, RenderContext } from "./types.js";
 
 export function renderList(

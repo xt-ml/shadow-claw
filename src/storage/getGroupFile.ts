@@ -1,6 +1,6 @@
 import { getGroupDir } from "./getGroupDir.js";
 import { parsePath } from "./parsePath.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Get a native File object from a file in a group's workspace.

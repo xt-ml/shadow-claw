@@ -54,7 +54,7 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
 }));
 
 // Mock effect
-jest.unstable_mockModule("../../effect.js", () => ({
+jest.unstable_mockModule("../../core/effect.js", () => ({
   effect: jest.fn((fn: any) => {
     fn();
 

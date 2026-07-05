@@ -1,4 +1,4 @@
-import type { AppDialogOptions } from "../../../types.js";
+import type { AppDialogOptions } from "../../../ui/types.js";
 
 export const LLAMAFILE_EXPECTED_DIR = "assets/cache/llamafile";
 export const LLAMAFILE_PROJECT_URL = "https://github.com/mozilla-ai/llamafile";

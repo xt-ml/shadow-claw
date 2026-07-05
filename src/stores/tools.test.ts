@@ -11,7 +11,8 @@ jest.unstable_mockModule("../db/setConfig.js", () => ({
 }));
 
 const { ToolsStore } = await import("./tools.js");
-const { NANO_BUILTIN_PROFILE } = await import("../prompt-api-provider.js");
+const { NANO_BUILTIN_PROFILE } =
+  await import("../subsystems/providers/prompt-api-provider.js");
 
 const db: any = {} as any;
 

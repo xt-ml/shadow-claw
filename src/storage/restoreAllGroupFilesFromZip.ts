@@ -2,7 +2,7 @@ import * as zip from "@zip.js/zip.js";
 import { deleteAllGroupFiles } from "./deleteAllGroupFiles.js";
 import { getGroupDir } from "./getGroupDir.js";
 import { writeFileHandle } from "./writeFileHandle.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Restore files from a zip backup into group workspace,

@@ -1,8 +1,8 @@
-import { decryptValue, encryptValue } from "../../crypto.js";
+import { decryptValue, encryptValue } from "../../security/crypto.js";
 import {
   getEmailPluginManifest,
   listEmailPluginManifests,
-} from "../../email/catalog.js";
+} from "../../subsystems/email/catalog.js";
 import {
   bindEmailCredentialRef,
   deleteEmailConnection,
@@ -10,14 +10,14 @@ import {
   listEmailConnections,
   upsertEmailConnection,
   type EmailConnectionRecord,
-} from "../../email/connections.js";
-import { listRemoteMcpConnections } from "../../mcp-connections.js";
-import { resolveServiceCredentials } from "../../accounts/service-accounts.js";
+} from "../../subsystems/email/connections.js";
+import { listRemoteMcpConnections } from "../../subsystems/mcp/mcp-connections.js";
+import { resolveServiceCredentials } from "../../subsystems/accounts/service-accounts.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { writeGroupFileBytes } from "../../storage/writeGroupFileBytes.js";
 import { groupFileExists } from "../../storage/groupFileExists.js";
 import { ulid } from "../../utils/ulid.js";
-import type { ShadowClawDatabase } from "../../types.js";
+import type { ShadowClawDatabase } from "../../db/types.js";
 
 interface ResolvedIntegrationEmailAuth {
   authType: "basic_userpass" | "oauth";

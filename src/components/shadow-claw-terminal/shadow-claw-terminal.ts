@@ -1,5 +1,5 @@
 import { orchestratorStore } from "../../stores/orchestrator.js";
-import { VMStatusPayload } from "../../types.js";
+import { VMStatusPayload } from "../../subsystems/worker/types.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
 const MAX_OUTPUT_LENGTH = 80_000;

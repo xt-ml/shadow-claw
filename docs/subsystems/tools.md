@@ -2,13 +2,13 @@
 
 > Modular tool definitions giving the agent capabilities, with profiles for per-provider/model customization.
 
-**Source:** `src/tools/` · `src/worker/executeTool.ts` · `src/stores/tools.ts`
+**Source:** `src/subsystems/tools/` · `src/worker/executeTool.ts` · `src/stores/tools.ts`
 
 ## Tool Architecture
 
 ```mermaid
 graph TD
-  Defs["src/tools/*.ts<br>Tool definitions"] --> Index["src/tools/index.ts<br>TOOL_DEFINITIONS array"]
+  Defs["src/subsystems/tools/*.ts<br>Tool definitions"] --> Index["src/subsystems/tools/index.ts<br>TOOL_DEFINITIONS array"]
   Index --> Store["toolsStore<br>Enabled/disabled state"]
   Store --> Orchestrator["Orchestrator<br>Passes enabledTools to worker"]
   Orchestrator --> Worker["Worker<br>Formats tools for LLM"]
@@ -21,7 +21,7 @@ graph TD
 Each tool is defined as a typed JSON schema object:
 
 ```ts
-// src/tools/types.ts
+// src/subsystems/tools/types.ts
 export interface ToolDefinition {
   name: string; // Unique tool name (snake_case)
   description: string; // LLM-facing description
@@ -31,7 +31,7 @@ export interface ToolDefinition {
 
 ## Tool Files
 
-Tool definitions live in modular files under `src/tools/` and are assembled in `src/tools/index.ts`:
+Tool definitions live in modular files under `src/subsystems/tools/` and are assembled in `src/subsystems/tools/index.ts`:
 
 | File               | Tools                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -52,7 +52,7 @@ Tool definitions live in modular files under `src/tools/` and are assembled in `
 | `rooms.ts`         | `create_room`, `invite_to_room`, `leave_room`, `list_room_members`                                                                                                                                                                                                                                                                                     |
 | `a2ui.ts`          | `list_components`, `render_component`                                                                                                                                                                                                                                                                                                                  |
 
-All are re-exported from `src/tools/index.ts` as the `TOOL_DEFINITIONS` array.
+All are re-exported from `src/subsystems/tools/index.ts` as the `TOOL_DEFINITIONS` array.
 
 ## Agent-Driven Tool Management
 
@@ -126,7 +126,7 @@ Saved profiles can specify a `providerId`. When the orchestrator switches to a m
 
 ### Git tools
 
-All git tools use lazy `import()` to load `src/git/git.ts` only when needed. See [Git Integration](git.md) for details.
+All git tools use lazy `import()` to load `src/subsystems/git/git.ts` only when needed. See [Git Integration](git.md) for details.
 
 ### Recursion guard
 
@@ -175,7 +175,7 @@ When a user manually toggles individual tools:
 
 ### WebMCP integration
 
-When the browser WebMCP API is available (`document.modelContext`, with `navigator.modelContext` fallback), tools are also registered via `src/webmcp.ts` so browser-side model contexts can invoke the same tool surface through `registerWebMcpTools()`.
+When the browser WebMCP API is available (`document.modelContext`, with `navigator.modelContext` fallback), tools are also registered via `src/subsystems/mcp/webmcp.ts` so browser-side model contexts can invoke the same tool surface through `registerWebMcpTools()`.
 
 ShadowClaw registers tools with explicit annotations for current WebMCP implementations:
 

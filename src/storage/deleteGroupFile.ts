@@ -2,8 +2,8 @@ import { getGroupDir } from "./getGroupDir.js";
 import { parsePath } from "./parsePath.js";
 import { setMainGroupMemorySuppressed } from "./ensureMainGroupMemory.js";
 import { setMainGroupIndexSuppressed } from "./ensureMainGroupIndex.js";
-import { DEFAULT_GROUP_ID } from "../config.js";
-import type { ShadowClawDatabase } from "../types.js";
+import { DEFAULT_GROUP_ID } from "../config/config.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Delete a file from a group's workspace.

@@ -68,7 +68,7 @@ describe("handleMessage.js", () => {
       setStorageRoot: mockSetStorageRoot,
     }));
 
-    jest.unstable_mockModule("../vm.js", () => ({
+    jest.unstable_mockModule("../shell/vm.js", () => ({
       attachTerminalWorkspaceAutoSync: mockAttachTerminalWorkspaceAutoSync,
       bootVM: mockBootVM,
       createTerminalSession: mockCreateTerminalSession,

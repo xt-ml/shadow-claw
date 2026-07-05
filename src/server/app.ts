@@ -6,16 +6,16 @@ import path from "node:path";
 import {
   broadcastPush,
   registerPushRoutes,
-} from "../notifications/push-routes.js";
-import { openPushStore } from "../notifications/push-store.js";
+} from "../subsystems/notifications/push-routes.js";
+import { openPushStore } from "../subsystems/notifications/push-store.js";
 
-import { registerTaskScheduleRoutes } from "../notifications/task-schedule-routes.js";
+import { registerTaskScheduleRoutes } from "../subsystems/notifications/task-schedule-routes.js";
 import {
   getEnabledScheduledTasks,
   openTaskScheduleStore,
   updateScheduledTaskLastRun,
-} from "../notifications/task-schedule-store.js";
-import { ServerTaskScheduler } from "../notifications/task-scheduler-server.js";
+} from "../subsystems/notifications/task-schedule-store.js";
+import { ServerTaskScheduler } from "../subsystems/notifications/task-scheduler-server.js";
 
 import { createLogger } from "./logger.js";
 import { createCorsMiddleware } from "./middleware/cors.js";

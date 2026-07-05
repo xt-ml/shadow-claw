@@ -2,7 +2,7 @@
 
 > MIME-aware attachment handling and modality detection for native vs fallback delivery.
 
-**Source:** `src/attachment-capabilities.ts` · `src/message-attachments.ts`
+**Source:** `src/content/attachment-capabilities.ts` · `src/content/message-attachments.ts`
 
 ## Overview
 
@@ -27,8 +27,8 @@ Attachments are mapped to one of six categories based on MIME type and file exte
 
 Model capabilities are resolved via a two-stage process:
 
-1.  **Metadata Lookup**: The `ModelRegistry` is checked for dynamic metadata (e.g., `supportsImageInput`) fetched from provider APIs (OpenRouter, etc.).
-2.  **Heuristic Fallback**: If metadata is missing or incomplete, heuristic patterns are matched against the model ID (e.g., `gpt-4o`, `claude-3-5`, `gemini`).
+1. **Metadata Lookup**: The `ModelRegistry` is checked for dynamic metadata (e.g., `supportsImageInput`) fetched from provider APIs (OpenRouter, etc.).
+2. **Heuristic Fallback**: If metadata is missing or incomplete, heuristic patterns are matched against the model ID (e.g., `gpt-4o`, `claude-3-5`, `gemini`).
 
 ### Native Support Detection
 

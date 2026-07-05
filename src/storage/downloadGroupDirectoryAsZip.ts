@@ -1,7 +1,7 @@
 import * as zip from "@zip.js/zip.js";
 import { addDirToZip } from "./addDirToZip.js";
 import { getGroupDir } from "./getGroupDir.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Create a zip file of a directory and trigger download

@@ -3,8 +3,8 @@ import { Signal } from "signal-polyfill";
 import { readGroupFile } from "../storage/readGroupFile.js";
 import { readGroupFileBytes } from "../storage/readGroupFileBytes.js";
 import { getGroupFile } from "../storage/getGroupFile.js";
-import { DEFAULT_GROUP_ID } from "../config.js";
-import type { ShadowClawDatabase } from "../types.js";
+import { DEFAULT_GROUP_ID } from "../config/config.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 export interface FileInfo {
   name: string;

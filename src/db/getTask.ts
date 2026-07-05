@@ -1,6 +1,6 @@
 import { openDatabase } from "./openDatabase.js";
 import { txPromise } from "./txPromise.js";
-import type { Task } from "../types.js";
+import type { Task } from "./types.js";
 
 /**
  * Get a task by ID

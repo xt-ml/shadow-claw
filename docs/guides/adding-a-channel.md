@@ -16,17 +16,17 @@ Make sure you understand the [`Channel` interface and `ChannelRegistry`](../subs
 
 ShadowClaw already includes three channel implementations:
 
-| Channel  | Prefix | Source                      | When to use as reference     |
-| -------- | ------ | --------------------------- | ---------------------------- |
-| Browser  | `br:`  | `src/channels/browser-chat` | Simple in-app UI pattern     |
-| Telegram | `tg:`  | `src/channels/telegram.ts`  | External service integration |
-| iMessage | `im:`  | `src/channels/imessage.ts`  | Relay/bridge pattern         |
+| Channel  | Prefix | Source                                 | When to use as reference     |
+| -------- | ------ | -------------------------------------- | ---------------------------- |
+| Browser  | `br:`  | `src/subsystems/channels/browser-chat` | Simple in-app UI pattern     |
+| Telegram | `tg:`  | `src/subsystems/channels/telegram.ts`  | External service integration |
+| iMessage | `im:`  | `src/subsystems/channels/imessage.ts`  | Relay/bridge pattern         |
 
 Study the implementation style that best matches your use case.
 
 ## Step 1 — Write a failing test
 
-Create `src/channels/my-channel.test.ts`:
+Create `src/subsystems/channels/my-channel.test.ts`:
 
 ```ts
 import { MyChannel } from "./my-channel.js";
@@ -59,7 +59,7 @@ describe("MyChannel", () => {
 
 ## Step 2 — Implement the channel
 
-Create `src/channels/my-channel.ts`:
+Create `src/subsystems/channels/my-channel.ts`:
 
 ```ts
 import type { Channel, InboundMessage } from "../types.js";
@@ -120,7 +120,7 @@ export class MyChannel implements Channel {
 
 ## Step 3 — Register in the orchestrator
 
-Open `src/orchestrator.ts` and add your channel to `initChannels()`:
+Open `src/core/orchestrator.ts` and add your channel to `initChannels()`:
 
 ```ts
 import { MyChannel } from "./channels/my-channel.js";

@@ -2,7 +2,7 @@ import { exit } from "node:process";
 import http from "node:http";
 import tcpPortUsed from "tcp-port-used";
 
-import { DEFAULT_DEV_IP } from "../config.js";
+import { DEFAULT_DEV_IP } from "../config/config.js";
 import { createApp } from "./app.js";
 import { attachPeerServer } from "./peer.js";
 import { parseConfig } from "./config.js";

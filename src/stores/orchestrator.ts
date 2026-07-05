@@ -1,6 +1,6 @@
 import { Signal } from "signal-polyfill";
 
-import { DEFAULT_GROUP_ID, CONFIG_KEYS } from "../config.js";
+import { DEFAULT_GROUP_ID, CONFIG_KEYS } from "../config/config.js";
 
 import { deleteTask } from "../db/deleteTask.js";
 import { deleteMessage } from "../db/deleteMessage.js";
@@ -41,24 +41,26 @@ import { readGroupFile } from "../storage/readGroupFile.js";
 import { requestStorageAccess } from "../storage/requestStorageAccess.js";
 import { getStorageStatus } from "../storage/storage.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
-import { showError } from "../toast.js";
+import { showError } from "../ui/toast.js";
+import type { MessageAttachment } from "../content/types.js";
 import type {
-  MessageAttachment,
+  GroupMeta,
+  SavedPageRef,
   ShadowClawDatabase,
   StoredMessage,
   Task,
-  ThinkingLogEntry,
+} from "../db/types.js";
+import type {
+  ContextUsage,
   ModelDownloadProgressPayload,
+  ThinkingLogEntry,
   TokenUsage,
   ToolActivity,
-  ContextUsage,
-  GroupMeta,
-  SavedPageRef,
-  A2UIAction,
-} from "../types.js";
-import type { Orchestrator } from "../orchestrator.js";
+} from "../subsystems/worker/types.js";
+import type { A2UIAction } from "../ui/a2ui.js";
+import type { Orchestrator } from "../core/orchestrator.js";
 import type { StorageStatus } from "../storage/storage.js";
-import { AGUIAdapter } from "../agui-adapter.js";
+import { AGUIAdapter } from "../ui/agui-adapter.js";
 import { applyJsonPatch } from "../utils/jsonPatch.js";
 
 export type OrchestratorState = "idle" | "thinking" | "responding" | "error";
@@ -1860,7 +1862,7 @@ export class OrchestratorStore {
   async createConversation(
     db: ShadowClawDatabase,
     name: string,
-  ): Promise<import("../types.js").GroupMeta> {
+  ): Promise<GroupMeta> {
     const group = await createGroup(db, name);
     await this.loadGroups(db);
     this.setActiveGroup(db, group.groupId);

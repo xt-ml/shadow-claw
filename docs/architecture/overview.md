@@ -2,7 +2,7 @@
 
 > High-level architecture, data flow, and design philosophy of ShadowClaw.
 
-**Source:** `src/index.ts` · `src/worker/worker.ts` · `src/server/server.ts` · `electron/main.ts`
+**Source:** `src/core/index.ts` · `src/worker/worker.ts` · `src/server/server.ts` · `electron/main.ts`
 
 ## What is ShadowClaw?
 
@@ -66,7 +66,7 @@ The entire codebase is TypeScript. Rollup produces six distinct bundles:
 
 | Bundle                     | Input                                | Output                                       | Purpose                               |
 | -------------------------- | ------------------------------------ | -------------------------------------------- | ------------------------------------- |
-| Frontend                   | `src/index.ts`                       | `dist/public/index.js`                       | App bootstrap + all UI                |
+| Frontend                   | `src/core/index.ts`                  | `dist/public/index.js`                       | App bootstrap + all UI                |
 | Agent Worker               | `src/worker/worker.ts`               | `dist/public/agent.worker.js`                | Tool-use loop + VM                    |
 | Service Worker init        | `src/service-worker/init.ts`         | `dist/public/service-worker/init.js`         | PWA cache registration                |
 | Service Worker push        | `src/service-worker/push-handler.ts` | `dist/public/service-worker/push-handler.js` | Push event handler                    |
@@ -168,7 +168,7 @@ sequenceDiagram
 
 | File                                 | Thread  | Role                                                                          |
 | ------------------------------------ | ------- | ----------------------------------------------------------------------------- |
-| `src/index.ts`                       | Main    | App bootstrap — opens IndexedDB, boots orchestrator, registers service worker |
+| `src/core/index.ts`                  | Main    | App bootstrap — opens IndexedDB, boots orchestrator, registers service worker |
 | `src/worker/worker.ts`               | Worker  | Agent worker — owns LLM tool-use loop, VM, tool execution                     |
 | `src/server/server.ts`               | Node.js | Express dev/prod server — proxy, push, scheduling, static files               |
 | `electron/main.ts`                   | Node.js | Electron main process — same Express server in-process                        |
@@ -178,23 +178,35 @@ sequenceDiagram
 
 ## Key Directories
 
-| Directory                  | Contents                                                                     |
-| -------------------------- | ---------------------------------------------------------------------------- |
-| `src/`                     | All application source code                                                  |
-| `src/components/`          | Web Components (`<shadow-claw-*>`), each in its own subdirectory             |
-| `src/components/common/`   | Reusable shared components (`empty-state`, `card`, `actions`)                |
-| `src/components/settings/` | Recommended home for settings feature components (incremental migration)     |
-| `src/stores/`              | Reactive signal-based state stores                                           |
-| `src/tools/`               | Agent tool definitions (modular `.ts` files)                                 |
-| `src/worker/`              | Worker internals (invoke handler, tool executor, stream parser, retry logic) |
-| `src/shell/`               | JS shell emulator + OPFS bridge                                              |
-| `src/context/`             | Token estimation, dynamic windowing, output truncation                       |
-| `src/channels/`            | Channel registry + browser chat channel                                      |
-| `src/db/`                  | IndexedDB layer (granular modules for each DB operation)                     |
-| `src/storage/`             | OPFS + File System Access API abstractions                                   |
-| `src/git/`                 | isomorphic-git operations + OPFS sync                                        |
-| `src/notifications/`       | Web Push + server-side SQLite task scheduling                                |
-| `src/server/`              | Express server + proxy routes                                                |
-| `src/service-worker/`      | Service worker modules                                                       |
-| `electron/`                | Electron desktop app entry point                                             |
-| `e2e/`                     | Playwright E2E tests (Page Object Model pattern)                             |
+| Directory                       | Contents                                                                     |
+| ------------------------------- | ---------------------------------------------------------------------------- |
+| `src/`                          | All application source code                                                  |
+| `src/components/`               | Web Components (`<shadow-claw-*>`), each in its own subdirectory             |
+| `src/components/common/`        | Reusable shared components (`empty-state`, `card`, `actions`)                |
+| `src/components/settings/`      | Recommended home for settings feature components (incremental migration)     |
+| `src/context/`                  | Token estimation, dynamic windowing, output truncation                       |
+| `src/db/`                       | IndexedDB layer (granular modules for each DB operation)                     |
+| `src/server/`                   | Express server + proxy routes                                                |
+| `src/service-worker/`           | Service worker modules                                                       |
+| `src/shell/`                    | JS shell emulator + OPFS bridge                                              |
+| `src/storage/`                  | OPFS + File System Access API abstractions                                   |
+| `src/stores/`                   | Reactive signal-based state stores                                           |
+| `src/subsystems/channels/`      | Channel registry + browser chat channel                                      |
+| `src/subsystems/git/`           | isomorphic-git operations + OPFS sync                                        |
+| `src/subsystems/notifications/` | Web Push + server-side SQLite task scheduling                                |
+| `src/subsystems/tools/`         | Agent tool definitions (modular `.ts` files)                                 |
+| `src/worker/`                   | Worker internals (invoke handler, tool executor, stream parser, retry logic) |
+| `electron/`                     | Electron desktop app entry point                                             |
+| `e2e/`                          | Playwright E2E tests (Page Object Model pattern)                             |
+
+## Source directory categories
+
+- `src/core/` contains the application bootstrap, orchestrator brain, and main routing wiring.
+- `src/config/` contains configuration keys, provider settings, auth integration settings, and feature flags.
+- `src/content/` contains content sanitization, markdown rendering, attachment handling, and message parsing.
+- `src/security/` contains cryptography, credential helpers, and trusted types wrappers.
+- `src/subsystems/` contains full integrations and cross-cutting feature bundles such as `git`, `mcp`, `providers`, `notifications`, and `channels`.
+- `src/ui/` contains page-level UI glue and view scaffolding that is not a standalone Web Component.
+- `src/utils/` contains generic utilities and reusable helpers used across the application.
+
+Stable root directories also include `src/components/`, `src/stores/`, `src/worker/`, `src/shell/`, `src/storage/`, `src/server/`, `src/service-worker/`, and `electron/`.

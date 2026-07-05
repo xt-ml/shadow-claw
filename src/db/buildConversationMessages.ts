@@ -1,4 +1,4 @@
-import { getAttachmentCategory } from "../attachment-capabilities.js";
+import { getAttachmentCategory } from "../content/attachment-capabilities.js";
 import { readGroupFileBytes } from "../storage/readGroupFileBytes.js";
 import { getDb } from "./db.js";
 import { getRecentMessages } from "./getRecentMessages.js";
@@ -6,7 +6,7 @@ import type {
   AttachmentContent,
   ConversationMessage,
   MessageAttachment,
-} from "../types.js";
+} from "../content/types.js";
 
 const MAX_NATIVE_IMAGE_BYTES = 3 * 1024 * 1024;
 const MAX_NATIVE_AUDIO_BYTES = 5 * 1024 * 1024;

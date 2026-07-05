@@ -1,5 +1,5 @@
 import { getSession } from "./getSession.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "./types.js";
 import type { ChatData } from "./importChatData.js";
 
 /**

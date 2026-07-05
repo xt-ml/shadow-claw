@@ -1,7 +1,7 @@
 import {
   buildProviderHelpDialogOptions,
   detectProviderHelpType,
-} from "./providers.js";
+} from "../../../components/common/help/providers.js";
 
 describe("provider help", () => {
   it("detects missing api key errors", () => {

@@ -21,15 +21,15 @@ import { attachPeerServer } from "../src/server/peer.js";
 import {
   broadcastPush,
   registerPushRoutes,
-} from "../src/notifications/push-routes.js";
-import { openPushStore } from "../src/notifications/push-store.js";
-import { registerTaskScheduleRoutes } from "../src/notifications/task-schedule-routes.js";
+} from "../src/subsystems/notifications/push-routes.js";
+import { openPushStore } from "../src/subsystems/notifications/push-store.js";
+import { registerTaskScheduleRoutes } from "../src/subsystems/notifications/task-schedule-routes.js";
 import {
   getEnabledScheduledTasks,
   openTaskScheduleStore,
   updateScheduledTaskLastRun,
-} from "../src/notifications/task-schedule-store.js";
-import { ServerTaskScheduler } from "../src/notifications/task-scheduler-server.js";
+} from "../src/subsystems/notifications/task-schedule-store.js";
+import { ServerTaskScheduler } from "../src/subsystems/notifications/task-scheduler-server.js";
 
 import { registerOAuthRoutes } from "../src/server/routes/oauth.js";
 import { registerActivityLogRoutes } from "../src/server/routes/activity-log.js";

@@ -5,7 +5,7 @@ jest.unstable_mockModule("../db/txPromise.js", () => ({
 }));
 
 const { getAllTasks } = await import("./getAllTasks.js");
-const { txPromise } = await import("../db/txPromise.js");
+const { txPromise } = await import("./txPromise.js");
 
 describe("getAllTasks", () => {
   it("normalizes enabled to boolean values", async () => {

@@ -1,4 +1,4 @@
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 const PENDING_SHARES_STORE = "pendingShares";
 

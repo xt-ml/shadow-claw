@@ -27,7 +27,7 @@ Before adding anything, check the `just-bash` built-ins:
 | Data     | `jq`, `sqlite3`, `yq`, `js-exec`                                                                                                                                                                                             |
 | Sys      | `echo`, `printf`, `env`, `export`, `cd`, `exit`, `true`, `false`, `test`, `[`, `[[`                                                                                                                                          |
 
-Most operations are already covered. The `javascript` tool (`src/tools/javascript.ts`)
+Most operations are already covered. The `javascript` tool (`src/subsystems/tools/javascript.ts`)
 is almost always a better choice than adding a shell built-in.
 
 ## Adding a New Built-in (upstream contribution or fork)
@@ -77,7 +77,7 @@ The sandbox in `src/worker/sandboxedEval.ts` restricts:
 
 ## When Should the Agent Use bash vs javascript?
 
-The system prompt (`src/orchestrator.ts`) advises:
+The system prompt (`src/core/orchestrator.ts`) advises:
 
 - `bash` → file navigation, grep, sed, quick one-liners
 - `javascript` → computation, data transformation, anything requiring logic

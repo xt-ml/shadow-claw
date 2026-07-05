@@ -205,7 +205,7 @@ This keeps UI and worker cancellation behavior consistent while preventing orpha
 
 ### Git tools
 
-All git tools use lazy `import()` to load `src/git/git.ts` only when needed.
+All git tools use lazy `import()` to load `src/subsystems/git/git.ts` only when needed.
 
 ### Recursion guard
 

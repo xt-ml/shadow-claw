@@ -30,13 +30,13 @@ jest.unstable_mockModule("../../storage/downloadGroupFile.js", () => ({
   downloadGroupFile: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../attachment-capabilities.js", () => ({
+jest.unstable_mockModule("../../content/attachment-capabilities.js", () => ({
   formatModelAttachmentCapabilitySummary: jest.fn(),
   getAttachmentCategory: jest.fn(),
   getModelAttachmentCapabilities: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../effect.js", () => ({
+jest.unstable_mockModule("../../core/effect.js", () => ({
   effect: jest.fn((callback: () => void) => {
     callback();
 
@@ -44,7 +44,7 @@ jest.unstable_mockModule("../../effect.js", () => ({
   }),
 }));
 
-jest.unstable_mockModule("../../markdown.js", () => ({
+jest.unstable_mockModule("../../content/markdown.js", () => ({
   renderMarkdown: jest.fn((value: string) => `<p>${value}</p>`),
 }));
 
@@ -91,12 +91,12 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../../message-attachments.js", () => ({
+jest.unstable_mockModule("../../content/message-attachments.js", () => ({
   inferAttachmentMimeType: jest.fn(),
   shouldInlineAttachmentInChat: jest.fn(() => false),
 }));
 
-jest.unstable_mockModule("../../toast.js", () => ({
+jest.unstable_mockModule("../../ui/toast.js", () => ({
   showError: jest.fn(),
   showInfo: jest.fn(),
   showSuccess: jest.fn(),

@@ -1,4 +1,4 @@
-import type { AppDialogOptions } from "../../../types.js";
+import type { AppDialogOptions } from "../../../ui/types.js";
 
 export const TRANSFORMERS_JS_CACHE_DIR = "assets/cache/transformers.js";
 export const TRANSFORMERS_JS_PROJECT_URL =

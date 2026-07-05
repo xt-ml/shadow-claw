@@ -54,12 +54,12 @@ describe("handleInvoke.js", () => {
     mockClearToolState = jest.fn();
     mockBuildSystemPrompt = jest.fn();
 
-    jest.unstable_mockModule("../config.js", () => ({
+    jest.unstable_mockModule("../config/config.js", () => ({
       DEFAULT_MAX_ITERATIONS: 50,
       getProvider: mockGetProvider,
     }));
 
-    jest.unstable_mockModule("../providers.js", () => ({
+    jest.unstable_mockModule("../subsystems/providers/providers.js", () => ({
       buildHeaders: mockBuildHeaders,
       formatRequest: mockFormatRequest,
       getContextLimit: mockGetContextLimit,
@@ -70,7 +70,7 @@ describe("handleInvoke.js", () => {
       setStorageRoot: mockSetStorageRoot,
     }));
 
-    jest.unstable_mockModule("../tools.js", () => ({
+    jest.unstable_mockModule("../subsystems/tools/tools.js", () => ({
       TOOL_DEFINITIONS: [],
     }));
 

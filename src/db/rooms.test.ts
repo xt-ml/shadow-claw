@@ -30,7 +30,7 @@ const {
   deleteRoom,
 } = await import("./rooms.js");
 
-import type { RoomMeta, RoomMember } from "../types.js";
+import type { RoomMember, RoomMeta } from "../subsystems/channels/types.js";
 
 const host: RoomMember = {
   peerId: "host-peer",

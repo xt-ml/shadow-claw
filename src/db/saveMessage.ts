@@ -1,5 +1,5 @@
 import { txPromise } from "./txPromise.js";
-import type { ShadowClawDatabase, StoredMessage } from "../types.js";
+import type { ShadowClawDatabase, StoredMessage } from "./types.js";
 
 /**
  * Save a message to the database

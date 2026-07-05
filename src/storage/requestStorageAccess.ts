@@ -1,6 +1,6 @@
-import { CONFIG_KEYS } from "../config.js";
+import { CONFIG_KEYS } from "../config/config.js";
 import { getConfig } from "../db/getConfig.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 function isDirectoryHandle(handle: any): handle is FileSystemDirectoryHandle {
   if (!handle || typeof handle !== "object") {

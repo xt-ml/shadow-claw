@@ -1,9 +1,9 @@
-import type { AccountAuthMode } from "../../accounts/service-accounts.js";
+import type { AccountAuthMode } from "../../subsystems/accounts/service-accounts.js";
+import type { ShadowClawDatabase } from "../../db/types.js";
 import type {
   GitAuthMode,
   ResolvedGitCredentials,
-  ShadowClawDatabase,
-} from "../../types.js";
+} from "../../subsystems/git/types.js";
 
 export interface FetchFileDeps {
   fetchImpl: typeof fetch;

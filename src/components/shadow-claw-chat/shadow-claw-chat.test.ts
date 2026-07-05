@@ -262,11 +262,11 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
         importChatData: jest.fn(),
       }));
 
-      jest.unstable_mockModule("../../effect.js", () => ({
+      jest.unstable_mockModule("../../core/effect.js", () => ({
         effect: jest.fn(),
       }));
 
-      jest.unstable_mockModule("../../markdown.js", () => ({
+      jest.unstable_mockModule("../../content/markdown.js", () => ({
         renderMarkdown: jest.fn((str: string) => `<p>${str}</p>`),
       }));
 
@@ -296,7 +296,7 @@ describe("shadow-claw-chat UX enhancements (issue #10)", () => {
         handleSpecialLinkNavigation: jest.fn(() => false),
       }));
 
-      jest.unstable_mockModule("../../toast.js", () => ({
+      jest.unstable_mockModule("../../ui/toast.js", () => ({
         showSuccess: jest.fn(),
         showError: jest.fn(),
         showInfo: jest.fn(),
@@ -423,11 +423,11 @@ describe("message copy button", () => {
       importChatData: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../../effect.js", () => ({
+    jest.unstable_mockModule("../../core/effect.js", () => ({
       effect: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../../markdown.js", () => ({
+    jest.unstable_mockModule("../../content/markdown.js", () => ({
       renderMarkdown: jest.fn((str: string) => `<p>${str}</p>`),
     }));
 
@@ -458,7 +458,7 @@ describe("message copy button", () => {
       handleSpecialLinkNavigation: jest.fn(() => false),
     }));
 
-    jest.unstable_mockModule("../../toast.js", () => ({
+    jest.unstable_mockModule("../../ui/toast.js", () => ({
       showSuccess: jest.fn(),
       showError: jest.fn(),
     }));
@@ -870,11 +870,11 @@ describe("chat workspace link resolution", () => {
       importChatData: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../../effect.js", () => ({
+    jest.unstable_mockModule("../../core/effect.js", () => ({
       effect: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../../markdown.js", () => ({
+    jest.unstable_mockModule("../../content/markdown.js", () => ({
       renderMarkdown: jest.fn((str: string) => `<p>${str}</p>`),
     }));
 
@@ -903,7 +903,7 @@ describe("chat workspace link resolution", () => {
       handleSpecialLinkNavigation: jest.fn(() => false),
     }));
 
-    jest.unstable_mockModule("../../toast.js", () => ({
+    jest.unstable_mockModule("../../ui/toast.js", () => ({
       showSuccess: jest.fn(),
       showError: jest.fn(),
       showInfo: jest.fn(),
@@ -993,10 +993,10 @@ describe("chat attachment helpers", () => {
     jest.unstable_mockModule("../../db/importChatData.js", () => ({
       importChatData: jest.fn(),
     }));
-    jest.unstable_mockModule("../../effect.js", () => ({
+    jest.unstable_mockModule("../../core/effect.js", () => ({
       effect: jest.fn(),
     }));
-    jest.unstable_mockModule("../../markdown.js", () => ({
+    jest.unstable_mockModule("../../content/markdown.js", () => ({
       renderMarkdown: jest.fn((str: string) => `<p>${str}</p>`),
     }));
     jest.unstable_mockModule("../../stores/file-viewer.js", () => ({
@@ -1024,7 +1024,7 @@ describe("chat attachment helpers", () => {
       formatDateForFilename: jest.fn((date: Date) => date.toISOString()),
       handleSpecialLinkNavigation: jest.fn(() => false),
     }));
-    jest.unstable_mockModule("../../toast.js", () => ({
+    jest.unstable_mockModule("../../ui/toast.js", () => ({
       showSuccess: jest.fn(),
       showError: jest.fn(),
       showInfo: jest.fn(),

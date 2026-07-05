@@ -1,15 +1,18 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../notifications/push-client.js", () => ({
-  getCurrentSubscription: jest.fn<any>().mockResolvedValue(null),
-  subscribeToPush: jest
-    .fn<any>()
-    .mockResolvedValue({ endpoint: "test-endpoint" }),
-  unsubscribeFromPush: jest.fn<any>().mockResolvedValue(true),
-  getPushUrl: jest
-    .fn<any>()
-    .mockImplementation((path) => Promise.resolve(path)),
-}));
+jest.unstable_mockModule(
+  "../../../subsystems/notifications/push-client.js",
+  () => ({
+    getCurrentSubscription: jest.fn<any>().mockResolvedValue(null),
+    subscribeToPush: jest
+      .fn<any>()
+      .mockResolvedValue({ endpoint: "test-endpoint" }),
+    unsubscribeFromPush: jest.fn<any>().mockResolvedValue(true),
+    getPushUrl: jest
+      .fn<any>()
+      .mockImplementation((path) => Promise.resolve(path)),
+  }),
+);
 
 jest.unstable_mockModule("../../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue({
@@ -30,7 +33,8 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
 
 const { ShadowClawNotifications } =
   await import("./shadow-claw-notifications.js");
-const pushClient = await import("../../../notifications/push-client.js");
+const pushClient =
+  await import("../../../subsystems/notifications/push-client.js");
 
 describe("shadow-claw-notifications", () => {
   beforeEach(() => {

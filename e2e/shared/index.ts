@@ -1,6 +1,6 @@
 import { APIRequestContext, Page } from "@playwright/test";
 
-import { DEFAULT_GROUP_ID } from "../../src/config.js";
+import { DEFAULT_GROUP_ID } from "../../src/config/config.js";
 
 export const appUrl = "http://localhost:8888";
 

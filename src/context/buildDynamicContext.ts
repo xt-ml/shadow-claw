@@ -1,6 +1,6 @@
 import { estimateMessageTokens } from "./estimateTokens.js";
 import { truncateToolOutput } from "./truncateToolOutput.js";
-import type { ConversationMessage } from "../types.js";
+import type { ConversationMessage } from "../content/types.js";
 
 interface DynamicContextResult {
   messages: ConversationMessage[];

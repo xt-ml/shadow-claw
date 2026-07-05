@@ -16,7 +16,7 @@ jest.unstable_mockModule("./ensureMainGroupIndex.js", () => ({
   setMainGroupIndexSuppressed: jest.fn(),
 }));
 
-jest.unstable_mockModule("../config.js", () => ({
+jest.unstable_mockModule("../config/config.js", () => ({
   DEFAULT_GROUP_ID: "br-main",
 }));
 

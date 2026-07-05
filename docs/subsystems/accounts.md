@@ -2,19 +2,19 @@
 
 > Service account management and credential storage for multi-channel and provider authentication.
 
-**Source:** `src/accounts/service-accounts.ts` · `src/accounts/stored-credentials.ts`
+**Source:** `src/subsystems/accounts/service-accounts.ts` · `src/subsystems/accounts/stored-credentials.ts`
 
 ## Overview
 
 The accounts subsystem provides:
 
 1. **Service Accounts** — Named credentials (API keys, tokens, auth headers) organized by provider/service
-2. **Credential Storage** — Encrypted storage via `src/crypto.ts` (AES-256-GCM)
+2. **Credential Storage** — Encrypted storage via `src/security/crypto.ts` (AES-256-GCM)
 3. **Multi-Channel Auth** — Support for Telegram bot tokens, iMessage bridge keys, and provider-specific credentials
 
 ## Service Accounts
 
-**File:** `src/accounts/service-accounts.ts`
+**File:** `src/subsystems/accounts/service-accounts.ts`
 
 Service accounts are named sets of credentials for external services:
 
@@ -41,7 +41,7 @@ interface ServiceAccount {
 
 ## Stored Credentials
 
-**File:** `src/accounts/stored-credentials.ts`
+**File:** `src/subsystems/accounts/stored-credentials.ts`
 
 Low-level credential storage layer with IndexedDB persistence:
 
@@ -74,7 +74,7 @@ Low-level credential storage layer with IndexedDB persistence:
 
 ## Encryption
 
-All credentials are encrypted at rest using `src/crypto.ts`:
+All credentials are encrypted at rest using `src/security/crypto.ts`:
 
 ```ts
 // Encryption

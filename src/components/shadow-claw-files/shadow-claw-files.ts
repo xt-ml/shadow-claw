@@ -12,11 +12,11 @@ import { restoreAllGroupFilesFromZip } from "../../storage/restoreAllGroupFilesF
 import { uploadGroupFile } from "../../storage/uploadGroupFile.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
 
-import { effect } from "../../effect.js";
+import { effect } from "../../core/effect.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { filesUiStore } from "../../stores/files-ui.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
-import { showError, showSuccess, showWarning } from "../../toast.js";
+import { showError, showSuccess, showWarning } from "../../ui/toast.js";
 
 import { getDb } from "../../db/db.js";
 
@@ -29,7 +29,7 @@ import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
-import type { ShadowClawDatabase } from "../../types.js";
+import type { ShadowClawDatabase } from "../../db/types.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
 const elementName = "shadow-claw-files";

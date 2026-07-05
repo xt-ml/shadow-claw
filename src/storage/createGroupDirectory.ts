@@ -1,6 +1,6 @@
 import { getGroupDir } from "./getGroupDir.js";
 import { invalidateStorageRoot, isStaleHandleError } from "./storage.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Create a directory (and any missing parent directories) in a group's workspace.

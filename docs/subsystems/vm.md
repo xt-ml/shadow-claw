@@ -3,7 +3,7 @@
 > An optional v86-based Alpine Linux VM running in the Web Worker, providing a real
 > bash environment when the just-bash JS shell emulator isn't sufficient.
 
-**Source:** `src/vm.ts`
+**Source:** `src/shell/vm.ts`
 
 ## Boot Modes
 

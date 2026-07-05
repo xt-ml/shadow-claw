@@ -1,5 +1,5 @@
 import { getDb } from "./db.js";
-import type { ShadowClawDatabase, StoredMessage } from "../types.js";
+import type { ShadowClawDatabase, StoredMessage } from "./types.js";
 
 /**
  * Get recent messages for a group

@@ -1,7 +1,7 @@
 import { applyWeight } from "./shared.js";
-import { resolveDynamicString } from "../../../a2ui.js";
+import { resolveDynamicString } from "../../../ui/a2ui.js";
 
-import type { DateTimeInputSpec } from "../../../a2ui.js";
+import type { DateTimeInputSpec } from "../../../ui/a2ui.js";
 import type { RenderContext, SurfaceState } from "./types.js";
 
 export function renderDateTimeInput(

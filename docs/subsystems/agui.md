@@ -2,7 +2,7 @@
 
 > The AG-UI Event Adapter translates orchestrator lifecycle and streaming events into standardized AG-UI protocol events for UI visibility.
 
-**Source:** `src/agui-adapter.ts` · `src/channels/peer-protocol.ts`
+**Source:** `src/ui/agui-adapter.ts` · `src/subsystems/channels/peer-protocol.ts`
 
 ## Overview
 

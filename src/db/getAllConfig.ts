@@ -1,6 +1,6 @@
 import { openDatabase } from "./openDatabase.js";
 import { txPromise } from "./txPromise.js";
-import type { ConfigEntry } from "../types.js";
+import type { ConfigEntry } from "./types.js";
 
 /**
  * Get all config entries

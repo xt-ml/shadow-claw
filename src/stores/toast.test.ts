@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-import { ToastStore } from "./toast.js";
+import { ToastStore } from "../stores/toast.js";
 
 describe("ToastStore", () => {
   beforeEach(() => {

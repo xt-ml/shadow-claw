@@ -209,7 +209,7 @@ jest.unstable_mockModule("../../db/setConfig.js", () => ({
   .mockResolvedValue(undefined);
 (globalThis as any)._mockParseSettingsBackupPayload = jest.fn<any>();
 (globalThis as any)._mockReapplyPlaintextPasswords = jest.fn<any>();
-jest.unstable_mockModule("../../settings-backup.js", () => ({
+jest.unstable_mockModule("../../config/settings-backup.js", () => ({
   createSettingsBackupBlob: (...args: any[]) =>
     (globalThis as any)._mockCreateSettingsBackupBlob(...args),
   writeSettingsBackupToFileHandle: (...args: any[]) =>

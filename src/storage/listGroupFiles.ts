@@ -1,6 +1,6 @@
 import { getGroupDir } from "./getGroupDir.js";
 import { invalidateStorageRoot, isStaleHandleError } from "./storage.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * List files and directories in a group's workspace directory.

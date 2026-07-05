@@ -17,21 +17,24 @@ jest.unstable_mockModule("../../../db/getConfig.js", () => ({
   getConfig: mockGetConfig,
 }));
 
-jest.unstable_mockModule("../../../crypto.js", () => ({
+jest.unstable_mockModule("../../../security/crypto.js", () => ({
   encryptValue: mockEncryptValue,
 }));
 
-jest.unstable_mockModule("../../../mcp-connections.js", () => ({
+jest.unstable_mockModule("../../../subsystems/mcp/mcp-connections.js", () => ({
   listRemoteMcpConnections: mockListConnections,
   upsertRemoteMcpConnection: mockUpsertConnection,
   bindRemoteMcpCredentialRef: mockBindCredential,
   deleteRemoteMcpConnection: mockDeleteConnection,
 }));
 
-jest.unstable_mockModule("../../../remote-mcp-client.js", () => ({
-  testRemoteMcpConnection: mockTestConnection,
-  clearRemoteMcpSession: jest.fn(),
-}));
+jest.unstable_mockModule(
+  "../../../subsystems/mcp/remote-mcp-client.js",
+  () => ({
+    testRemoteMcpConnection: mockTestConnection,
+    clearRemoteMcpSession: jest.fn(),
+  }),
+);
 
 jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
   sanitizeToTrustedHtml: jest.fn((html: string) => html),
@@ -44,7 +47,7 @@ jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
 }));
 
 const mockReconnectMcpOAuth = jest.fn<any>();
-jest.unstable_mockModule("../../../mcp-reconnect.js", () => ({
+jest.unstable_mockModule("../../../subsystems/mcp/mcp-reconnect.js", () => ({
   reconnectMcpOAuth: mockReconnectMcpOAuth,
 }));
 

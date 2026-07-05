@@ -61,10 +61,10 @@ jest.unstable_mockModule("../../storage/moveGroupEntry.js", () => ({
   moveGroupEntry: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../effect.js", () => ({
+jest.unstable_mockModule("../../core/effect.js", () => ({
   effect: jest.fn(() => () => {}),
 }));
-jest.unstable_mockModule("../../toast.js", () => ({
+jest.unstable_mockModule("../../ui/toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
   showWarning: jest.fn(),
@@ -111,7 +111,8 @@ const { createGroupDirectory } =
   await import("../../storage/createGroupDirectory.js");
 const { copyGroupEntry } = await import("../../storage/copyGroupEntry.js");
 const { moveGroupEntry } = await import("../../storage/moveGroupEntry.js");
-const { showSuccess, showWarning, showError } = await import("../../toast.js");
+const { showSuccess, showWarning, showError } =
+  await import("../../ui/toast.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { filesUiStore } = await import("../../stores/files-ui.js");
 

@@ -1,11 +1,11 @@
 import "../shadow-claw-peerjs/shadow-claw-peerjs.js";
 import { getDb } from "../../../db/db.js";
-import { effect } from "../../../effect.js";
+import { effect } from "../../../core/effect.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
-import { showError, showSuccess, showWarning } from "../../../toast.js";
+import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 
-import type { Orchestrator } from "../../../orchestrator.js";
-import type { ShadowClawDatabase } from "../../../types.js";
+import type { Orchestrator } from "../../../core/orchestrator.js";
+import type { ShadowClawDatabase } from "../../../db/types.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 

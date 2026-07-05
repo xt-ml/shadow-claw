@@ -88,7 +88,7 @@ const commonPlugins = (tsconfig, terserOptions = {}) => [
 const configs = [
   // Early Bootstrap Script (classic script, loaded before modules)
   {
-    input: "src/theme-init.ts",
+    input: "src/core/theme-init.ts",
     output: {
       file: "dist/public/theme-init.js",
       format: "iife",
@@ -101,7 +101,7 @@ const configs = [
   },
   // Frontend
   {
-    input: "src/index.ts",
+    input: "src/core/index.ts",
     output: {
       dir: "dist/public",
       entryFileNames: "index.js",
@@ -167,8 +167,12 @@ const configs = [
             rename: "pdf.worker.js",
           },
           {
-            src: "src/file-viewer-preview-bridge.js",
+            src: "src/components/shadow-claw-file-viewer/file-viewer-preview-bridge.js",
             dest: "dist/public/assets",
+          },
+          {
+            src: "src/subsystems/channels/bindings",
+            dest: "dist/public",
           },
         ],
         copyOnce: true,

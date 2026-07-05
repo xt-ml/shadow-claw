@@ -2,16 +2,16 @@
 
 > In-browser Git operations using isomorphic-git with native filesystem handles as the backend.
 
-**Source:** `src/git/git.ts` · `src/git/credentials.ts`
+**Source:** `src/subsystems/git/git.ts` · `src/subsystems/git/credentials.ts`
 
 ## Architecture
 
 ```mermaid
 graph TD
-  Tools["Agent git_* tools"] --> Git["src/git/git.ts"]
+  Tools["Agent git_* tools"] --> Git["src/subsystems/git/git.ts"]
   Git --> IG["isomorphic-git"]
   IG --> OPFS["OPFS\n(group workspace repos/ namespace)"]
-  Git --> Creds["src/git/credentials.ts\nToken management"]
+  Git --> Creds["src/subsystems/git/credentials.ts\nToken management"]
   Creds --> DB["IndexedDB\nEncrypted Git token"]
   Git --> HTTP["isomorphic-git/http/web\nCORS-aware HTTP client"]
   HTTP --> Proxy["Express proxy\n/proxy/git/*\n(for restricted CORS hosts)"]
@@ -19,7 +19,7 @@ graph TD
 
 ## How it works
 
-isomorphic-git writes and reads directly to/from OPFS via a hand-rolled `fs.promises`-compatible adapter (`makeOpfsFs`) defined in `src/git/git.ts`. There is no intermediate in-memory layer — all git object storage is durably persisted in OPFS through the same filesystem root used by workspace files.
+isomorphic-git writes and reads directly to/from OPFS via a hand-rolled `fs.promises`-compatible adapter (`makeOpfsFs`) defined in `src/subsystems/git/git.ts`. There is no intermediate in-memory layer — all git object storage is durably persisted in OPFS through the same filesystem root used by workspace files.
 
 Repos are stored at `repos/<repo-name>/` inside the workspace group directory.
 
@@ -54,7 +54,7 @@ Repos are stored at `repos/<repo-name>/` inside the workspace group directory.
 
 ## OPFS Filesystem Adapter
 
-`makeOpfsFs(root: FileSystemDirectoryHandle)` in `src/git/git.ts` returns a `{ promises }` object satisfying the subset of Node's `fs.promises` that isomorphic-git requires:
+`makeOpfsFs(root: FileSystemDirectoryHandle)` in `src/subsystems/git/git.ts` returns a `{ promises }` object satisfying the subset of Node's `fs.promises` that isomorphic-git requires:
 
 | Method      | OPFS implementation                                             |
 | ----------- | --------------------------------------------------------------- |
@@ -100,11 +100,11 @@ The agent is instructed to **never** use `bash`, `sed`, or `grep` to resolve mer
 4. `git_add` the resolved file
 5. `git_commit` the merge
 
-This is reflected in the system prompt (`src/orchestrator.ts` → `buildSystemPrompt`).
+This is reflected in the system prompt (`src/core/orchestrator.ts` → `buildSystemPrompt`).
 
 ## Credentials
 
-**File:** `src/git/credentials.ts`
+**File:** `src/subsystems/git/credentials.ts`
 
 Git credentials are managed via the encrypted `CONFIG_KEYS.GIT_TOKEN` config key.
 
@@ -131,4 +131,4 @@ The proxy is only needed when:
 
 ## Dispatch Pattern
 
-Git tool execution is delegated from `executeTool.ts` to `executeGitTool()` in `src/worker/tools/git.ts` via a `case`-grouped switch. The git functions themselves are statically imported from `src/git/git.ts` at worker startup. The `GitToolDeps` interface in `src/worker/tools/git.ts` lists every git function the dispatcher requires, making it easy to inject mocks in tests.
+Git tool execution is delegated from `executeTool.ts` to `executeGitTool()` in `src/worker/tools/git.ts` via a `case`-grouped switch. The git functions themselves are statically imported from `src/subsystems/git/git.ts` at worker startup. The `GitToolDeps` interface in `src/worker/tools/git.ts` lists every git function the dispatcher requires, making it easy to inject mocks in tests.

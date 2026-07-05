@@ -16,11 +16,11 @@ Integration plugins implement a common contract:
 - `actions`: declared operations with JSON-schema-like input/output
 - `executeAction(actionName, input, context)`: runtime action dispatch
 
-The shared contract lives in `src/integrations/types.ts`.
+The current integration contract is implemented by worker tool adapters and server route handlers. For example, email integration is implemented in `src/worker/tools/email.ts` and `src/server/routes/integrations-email.ts`.
 
 ## Registry
 
-The `IntegrationRegistry` in `src/integrations/registry.ts` provides:
+Integration dispatch is handled by the worker tool registry and server route registration under `src/worker/tools/` and `src/server/routes/integrations-*.ts`.
 
 - `register(plugin)` and `unregister(pluginId)`
 - `list()` for discoverability and UI/docs tooling
@@ -33,7 +33,7 @@ It enforces:
 
 ## Configurable Plugin Catalog
 
-The configurable protocol catalog is defined in `src/integrations/catalog.ts`.
+The configurable protocol catalog is defined by the worker tool metadata and server route handlers for integrations.
 
 - Includes built-in manifests for IMAP, SMTP, RSS, XMPP, AT Protocol, ActivityPub, and Mastodon.
 - Each manifest declares expected actions, auth modes, and configurable fields.
@@ -47,7 +47,7 @@ Helper APIs:
 ## Connection Records
 
 Per-account/per-endpoint plugin configuration is persisted through
-`src/integrations/connections.ts` under config key `integration_connections`.
+`src/config/config.ts` under config key `INTEGRATION_CONNECTIONS`.
 
 - Supports create/update/list/get by id or label.
 - Stores plugin-specific config map and optional credential reference.
@@ -58,7 +58,7 @@ three RSS feeds, and one Mastodon account) without adding bespoke schema files.
 
 ## Plugin Manager
 
-`src/integrations/manager.ts` adds lazy-loading plugin factories:
+Worker tool modules and server route handlers are loaded as needed from `src/worker/tools/` and `src/server/routes/`.
 
 - Register a factory per plugin id.
 - Load plugin on first use.
@@ -93,7 +93,7 @@ This allows future SMTP/Graph/Gmail APIs to expose the same capability shape, ev
 
 ## Next Implementation Step
 
-1. Add an IMAP plugin package under `src/integrations/plugins/imap/`.
+1. Add a new integration tool module under `src/worker/tools/` and a corresponding server route under `src/server/routes/`.
 2. Add server-side routes for IMAP network operations (Node runtime only).
 3. Expose plugin actions as tools:
    - `integration_read_messages`

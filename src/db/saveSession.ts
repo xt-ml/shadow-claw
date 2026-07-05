@@ -1,5 +1,5 @@
 import { txPromise } from "./txPromise.js";
-import type { ShadowClawDatabase, Session } from "../types.js";
+import type { Session, ShadowClawDatabase } from "./types.js";
 
 /**
  * Save a session

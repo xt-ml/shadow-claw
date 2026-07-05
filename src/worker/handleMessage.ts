@@ -1,6 +1,6 @@
 import { openDatabase } from "../db/openDatabase.js";
 import { setStorageRoot } from "../storage/storage.js";
-import { DEFAULT_GROUP_ID } from "../config.js";
+import { DEFAULT_GROUP_ID } from "../config/config.js";
 import {
   attachTerminalWorkspaceAutoSync,
   bootVM,
@@ -14,7 +14,7 @@ import {
   subscribeVMBootOutput,
   syncVMWorkspaceFromHost,
   shutdownVM,
-} from "../vm.js";
+} from "../shell/vm.js";
 import { handleCompact } from "./handleCompact.js";
 import { handleInvoke } from "./handleInvoke.js";
 import { pendingTasks } from "./pendingTasks.js";

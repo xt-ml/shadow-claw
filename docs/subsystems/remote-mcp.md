@@ -2,7 +2,7 @@
 
 > Remote Model Context Protocol (MCP) servers enable agents to discover and execute tools from external services without bundling them into the core application.
 
-**Source:** `src/mcp-connections.ts` · `src/remote-mcp-client.ts` · Settings → Remote MCP
+**Source:** `src/subsystems/mcp/mcp-connections.ts` · `src/subsystems/mcp/remote-mcp-client.ts` · Settings → Remote MCP
 
 ## Overview
 

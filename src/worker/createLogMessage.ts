@@ -1,4 +1,4 @@
-import { WorkerOutbound } from "../types.js";
+import { WorkerOutbound } from "../subsystems/worker/types.js";
 
 /**
  * Create a thinking-log message object

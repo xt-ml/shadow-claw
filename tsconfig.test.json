@@ -13,8 +13,8 @@
   },
   "include": [
     "src/**/*.test.ts",
-    "src/jest-setup.ts",
-    "src/test-types.d.ts"
+    "src/testing/jest-setup.ts",
+    "src/testing/test-types.d.ts"
   ],
   "exclude": [
     "node_modules",

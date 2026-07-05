@@ -1,6 +1,6 @@
-import { DB_NAME, DB_VERSION } from "../config.js";
+import { DB_NAME, DB_VERSION } from "../config/config.js";
 import { setDB } from "./db.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "./types.js";
 
 /**
  * Open (or create) the IndexedDB database.

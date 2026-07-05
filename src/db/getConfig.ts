@@ -1,5 +1,5 @@
 import { txPromise } from "./txPromise.js";
-import type { ShadowClawDatabase, ConfigEntry } from "../types.js";
+import type { ConfigEntry, ShadowClawDatabase } from "./types.js";
 
 /**
  * Get a config value

@@ -5,7 +5,7 @@ import { jest } from "@jest/globals";
   replaceSync() {}
 } as any;
 
-jest.unstable_mockModule("../../../toast.js", () => ({
+jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
   showWarning: jest.fn(),

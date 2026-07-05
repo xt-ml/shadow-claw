@@ -1,7 +1,7 @@
 import { jest } from "@jest/globals";
 import { toastStore } from "../../stores/toast.js";
 
-jest.unstable_mockModule("../../effect.js", () => ({
+jest.unstable_mockModule("../../core/effect.js", () => ({
   effect: jest.fn((fn: any) => {
     fn();
 

@@ -1,3 +1,4 @@
+/// <reference lib="dom" />
 import DOMPurify, { Config } from "dompurify";
 
 export type HashInput = File | Blob | ArrayBuffer | ArrayBufferView;

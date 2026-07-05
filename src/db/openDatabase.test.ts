@@ -6,7 +6,7 @@ jest.unstable_mockModule("./db.js", () => ({
   setDB,
 }));
 
-jest.unstable_mockModule("../config.js", () => ({
+jest.unstable_mockModule("../config/config.js", () => ({
   DB_NAME: "shadowclaw-test",
   DB_VERSION: 3,
 }));

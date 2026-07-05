@@ -3,11 +3,11 @@
 > The LLM provider registry — multiple API formats, streaming, key management,
 > and the special browser Prompt API path.
 
-**Source:** `src/config.ts` · `src/providers.ts` · `src/prompt-api-provider.ts` · `src/model-registry.ts`
+**Source:** `src/config/config.ts` · `src/subsystems/providers/providers.ts` · `src/subsystems/providers/prompt-api-provider.ts` · `src/subsystems/providers/model-registry.ts`
 
 ## Provider Architecture
 
-Providers are handled via an **adapter pattern** in `src/providers.ts`:
+Providers are handled via an **adapter pattern** in `src/subsystems/providers/providers.ts`:
 
 ```text
 Provider (config) → Adapter (format-specific) → Request/Response transformation
@@ -25,7 +25,7 @@ Provider (config) → Adapter (format-specific) → Request/Response transformat
 
 ## Provider Registry
 
-All providers are declared in `src/config.ts` under `PROVIDERS`:
+All providers are declared in `src/config/config.ts` under `PROVIDERS`:
 
 | Provider ID                  | Format            | Streaming | API Key Required       |
 | ---------------------------- | ----------------- | --------- | ---------------------- |
@@ -113,7 +113,7 @@ Used by direct Google Gemini API integrations (`format: "google"`). Note that th
 - **Response parsing**:
   - Extracts text and `functionCall` blocks from the response candidates.
 
-### Prompt API format (`src/prompt-api-provider.ts`)
+### Prompt API format (`src/subsystems/providers/prompt-api-provider.ts`)
 
 Browser's experimental Prompt API (`window.LanguageModel`). Runs entirely on-device.
 
@@ -140,7 +140,7 @@ ShadowClaw includes a contextual help system that intercepts provider errors and
 
 ## Tool Formats by Provider
 
-The `formatToolsForProvider(tools, format)` function in `src/providers.ts` converts the internal `TOOL_DEFINITIONS` into the provider's expected format:
+The `formatToolsForProvider(tools, format)` function in `src/subsystems/providers/providers.ts` converts the internal `TOOL_DEFINITIONS` into the provider's expected format:
 
 ```mermaid
 graph LR
@@ -175,7 +175,7 @@ For providers that do not emit rate limit headers, users can configure a fixed `
 
 ## Model Registry
 
-**File:** `src/model-registry.ts`
+**File:** `src/subsystems/providers/model-registry.ts`
 
 The `ModelRegistry` is a dynamic metadata store that caches model information fetched from provider APIs (e.g., OpenRouter's `/v1/models` or HuggingFace Router).
 

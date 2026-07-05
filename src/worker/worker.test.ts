@@ -14,7 +14,7 @@ describe("worker and worker/agent.js", () => {
 
   beforeAll(async () => {
     // Mock the dependencies that agent.mjs imports
-    jest.unstable_mockModule("../config.js", () => ({
+    jest.unstable_mockModule("../config/config.js", () => ({
       ASSISTANT_NAME: "example",
       BASH_DEFAULT_TIMEOUT_SEC: 120,
       BASH_MAX_TIMEOUT_SEC: 1800,
@@ -59,7 +59,7 @@ describe("worker and worker/agent.js", () => {
       openDatabase: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../vm.js", () => ({
+    jest.unstable_mockModule("../shell/vm.js", () => ({
       attachTerminalWorkspaceAutoSync: jest.fn(),
       bootVM: jest.fn(),
       createTerminalSession: jest.fn(),
@@ -79,7 +79,7 @@ describe("worker and worker/agent.js", () => {
       syncVMWorkspaceFromHost: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../providers.js", () => ({
+    jest.unstable_mockModule("../subsystems/providers/providers.js", () => ({
       buildHeaders: jest.fn(),
       formatRequest: jest.fn(),
       getContextLimit: jest.fn(),
@@ -110,15 +110,13 @@ describe("worker and worker/agent.js", () => {
       writeGroupFile: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../tools.js", () => ({
+    jest.unstable_mockModule("../subsystems/tools/tools.js", () => ({
       TOOL_DEFINITIONS: [],
     }));
 
     jest.unstable_mockModule("../utils/ulid.js", () => ({
       ulid: jest.fn(() => "01AN4Z07BY79KA1307SR9X4MV3"),
     }));
-
-    jest.unstable_mockModule("../types.js", () => ({}) as any);
 
     jest.unstable_mockModule("./sandboxedEval.js", () => ({
       sandboxedEval: mockSandboxedEval,

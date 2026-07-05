@@ -1,10 +1,10 @@
-import { ChannelRegistry } from "../../channels/channel-registry.js";
-import { CONFIG_KEYS } from "../../config.js";
+import { ChannelRegistry } from "../../subsystems/channels/channel-registry.js";
+import { CONFIG_KEYS } from "../../config/config.js";
 import { getConfig } from "../../db/getConfig.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
-import { TOOL_DEFINITIONS } from "../../tools.js";
+import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
 
-import { effect } from "../../effect.js";
+import { effect } from "../../core/effect.js";
 import { setConfig } from "../../db/setConfig.js";
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
 import { setSanitizedHtml } from "../../security/trusted-types.js";

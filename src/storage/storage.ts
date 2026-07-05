@@ -1,7 +1,7 @@
-import { CONFIG_KEYS, OPFS_ROOT } from "../config.js";
+import { CONFIG_KEYS, OPFS_ROOT } from "../config/config.js";
 import { deleteConfig } from "../db/deleteConfig.js";
 import { getConfig } from "../db/getConfig.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 export interface StorageStatus {
   type: "opfs" | "local";

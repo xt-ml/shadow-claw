@@ -137,10 +137,10 @@ customElements.define(elementName, ShadowClawMyPage);
 
 ## Step 5 — Register the component
 
-Import the new component from `src/index.ts` (or from the parent page component if it's a sub-section):
+Import the new component from `src/core/index.ts` (or from the parent page component if it's a sub-section):
 
 ```ts
-// In src/index.ts or src/components/shadow-claw/shadow-claw.ts:
+// In src/core/index.ts or src/components/shadow-claw/shadow-claw.ts:
 import "./components/shadow-claw-my-page/shadow-claw-my-page.js";
 ```
 

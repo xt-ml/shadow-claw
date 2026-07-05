@@ -1,5 +1,5 @@
 import { ulid } from "../utils/ulid.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "./types.js";
 
 /**
  * Clone all tasks from one group to another, assigning new IDs.

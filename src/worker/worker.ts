@@ -1,5 +1,5 @@
 import { handleMessage } from "./agent.js";
-import { CONFIG_KEYS, DEFAULT_VM_BOOT_HOST } from "../config.js";
+import { CONFIG_KEYS, DEFAULT_VM_BOOT_HOST } from "../config/config.js";
 import { getConfig } from "../db/getConfig.js";
 import { openDatabase } from "../db/openDatabase.js";
 
@@ -9,7 +9,7 @@ import {
   setVMBootModePreference,
   setVMNetworkRelayURLPreference,
   subscribeVMStatus,
-} from "../vm.js";
+} from "../shell/vm.js";
 
 /**
  * ShadowClaw Agent Worker

@@ -2,7 +2,7 @@ import {
   DEFAULT_MAX_ITERATIONS,
   getProvider,
   ProviderConfig,
-} from "../config.js";
+} from "../config/config.js";
 
 import { buildDynamicContext } from "../context/buildDynamicContext.js";
 import { estimateTokens } from "../context/estimateTokens.js";
@@ -12,10 +12,10 @@ import {
   formatRequest,
   getContextLimit,
   parseResponse,
-} from "../providers.js";
+} from "../subsystems/providers/providers.js";
 
 import { setStorageRoot } from "../storage/storage.js";
-import { TOOL_DEFINITIONS } from "../tools.js";
+import { TOOL_DEFINITIONS } from "../subsystems/tools/tools.js";
 import { createTokenUsageMessage } from "./createTokenUsageMessage.js";
 import { createToolActivityMessage } from "./createToolActivityMessage.js";
 import { executeTool } from "./executeTool.js";
@@ -36,11 +36,9 @@ import { isRetryableHttpError, withRetry } from "./withRetry.js";
 
 import type { SubagentInvokeContext, ToolResult } from "./executeTool.js";
 
-import {
-  ContentBlock,
-  InvokePayload,
-  ToolResultContentBlock,
-} from "../types.js";
+import { ToolResultContentBlock } from "../content/types.js";
+import { InvokePayload } from "../subsystems/worker/types.js";
+import { ContentBlock } from "../content/types.js";
 
 /**
  * Throttle interval (ms) for streaming text chunks sent to the UI.

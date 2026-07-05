@@ -5,7 +5,7 @@ jest.unstable_mockModule("../db/txPromise.js", () => ({
 }));
 
 const { getSession } = await import("./getSession.js");
-const { txPromise } = await import("../db/txPromise.js");
+const { txPromise } = await import("./txPromise.js");
 
 describe("getSession", () => {
   it("reads session by group id", async () => {

@@ -184,7 +184,7 @@ interface MyServiceCredentials {
 
 ## Encryption & Security
 
-All credentials are encrypted using `src/crypto.ts`:
+All credentials are encrypted using `src/security/crypto.ts`:
 
 ```ts
 // Encryption (automatic in storage layer)

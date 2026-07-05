@@ -1,11 +1,11 @@
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
-import { effect } from "../../effect.js";
-import { renderMarkdown } from "../../markdown.js";
+import { effect } from "../../core/effect.js";
+import { renderMarkdown } from "../../content/markdown.js";
 import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
-import { showError, showInfo, showSuccess } from "../../toast.js";
-import { Task } from "../../types.js";
+import { showError, showInfo, showSuccess } from "../../ui/toast.js";
+import { Task } from "../../db/types.js";
 import { escapeHtml } from "../../utils/utils.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";

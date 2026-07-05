@@ -1,12 +1,12 @@
 import { getDb } from "../../../db/db.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
-import { showError, showSuccess, showWarning } from "../../../toast.js";
-import { effect } from "../../../effect.js";
+import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
+import { effect } from "../../../core/effect.js";
 import {
   getModelMaxTokens,
   CONFIG_KEYS,
   DEFAULT_SUBAGENT_MAX_PARALLEL,
-} from "../../../config.js";
+} from "../../../config/config.js";
 import { getConfig } from "../../../db/getConfig.js";
 import { setConfig } from "../../../db/setConfig.js";
 import {
@@ -18,12 +18,10 @@ import {
   isLikelyInstructionModelId,
 } from "./model-ranking.js";
 
-import type { Orchestrator } from "../../../orchestrator.js";
-import type {
-  AppDialogOptions,
-  LLMProvider,
-  ShadowClawDatabase,
-} from "../../../types.js";
+import type { Orchestrator } from "../../../core/orchestrator.js";
+import type { ShadowClawDatabase } from "../../../db/types.js";
+import type { LLMProvider } from "../../../subsystems/providers/types.js";
+import type { AppDialogOptions } from "../../../ui/types.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
@@ -1770,7 +1768,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     const { getConfig } = await import("../../../db/getConfig.js");
-    const { CONFIG_KEYS } = await import("../../../config.js");
+    const { CONFIG_KEYS } = await import("../../../config/config.js");
 
     const backend =
       (await getConfig(this.db, CONFIG_KEYS.TRANSFORMERS_JS_BACKEND)) || "cpu";
@@ -1813,7 +1811,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     const dtypeStrategy = dtypeStrategySelect?.value || "auto";
 
     const { setConfig } = await import("../../../db/setConfig.js");
-    const { CONFIG_KEYS } = await import("../../../config.js");
+    const { CONFIG_KEYS } = await import("../../../config/config.js");
 
     await setConfig(this.db, CONFIG_KEYS.TRANSFORMERS_JS_BACKEND, backend);
     await setConfig(

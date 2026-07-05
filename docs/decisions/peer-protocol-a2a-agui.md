@@ -27,53 +27,86 @@ Implement a **custom A2A v1.0 protocol binding over WebRTC DataChannel**, augmen
 ### Protocol Binding Identifier
 
 ```
-http://localhost:8888/bindings/webrtc-datachannel/v1
+https://xt-ml.github.io/shadow-claw/bindings/webrtc-datachannel/v1
 ```
 
 ## Architecture
 
-### New Files
+The peer-to-peer channel is structured as three interconnected modules working over a WebRTC DataChannel:
 
-| File                                | Purpose                                                |
-| ----------------------------------- | ------------------------------------------------------ |
-| `src/channels/peer-protocol.ts`     | A2A data model types, AG-UI events, task state machine |
-| `src/channels/peer-agent-card.ts`   | AgentCard construction and exchange logic              |
-| `src/channels/peer-task-manager.ts` | Task lifecycle state machine (per-connection)          |
+### Protocol Layer (`src/subsystems/channels/peer-protocol.ts`)
 
-### Modified Files
+Defines the A2A v1.0 canonical data model and AG-UI event types adapted for WebRTC DataChannel transport. Contains:
 
-| File                     | Change                                                                  |
-| ------------------------ | ----------------------------------------------------------------------- |
-| `src/channels/peerjs.ts` | Use new protocol layer for send/receive, agent card exchange on connect |
-| `src/types.ts`           | Add optional `taskId`, `contextId` to `InboundMessage`                  |
+- **Task States**: SUBMITTED, WORKING, COMPLETED, FAILED, CANCELED, INPUT_REQUIRED, REJECTED (spec §4.1.3)
+- **Message Types**: Role (AGENT / USER), Parts (text, raw, URL, data), task references
+- **Artifact Types**: Named binary or structured data chunks with streaming semantics
+- **AG-UI Events**: RUN_STARTED, RUN_FINISHED, TEXT_MESSAGE_CONTENT, TOOL_CALL_START/END, STATE_SNAPSHOT, STATE_DELTA
+- **Wire Envelope**: JSON-RPC 2.0 over DataChannel for SendMessage, GetTask, CancelTask, GetAgentCard methods
+
+### Agent Card Exchange (`src/subsystems/channels/peer-agent-card.ts`)
+
+Constructs and exchanges agent identity and capability information on connection:
+
+- **AgentCard Schema**: name, description, version, supported interfaces, capabilities (streaming, push), skills list, icon
+- **Interface Advertisement**: WebRTC protocol binding URL, protocol version
+- **Capability Discovery**: Remote peer learns what tools, models, and interaction modes are available before sending first message
+- **Exchange Flow**: Both peers send `GetAgentCard` immediately after DataChannel opens; each responds with their capabilities
+
+### Task Manager (`src/subsystems/channels/peer-task-manager.ts`)
+
+Per-connection state machine that:
+
+- **Creates tasks** from incoming `SendMessage` calls without a pre-existing taskId
+- **Transitions state** following A2A lifecycle: SUBMITTED → WORKING → terminal state (COMPLETED, FAILED, CANCELED)
+- **Emits AG-UI events** during execution (text chunks, tool use, state deltas) for streaming visibility to the caller
+- **Stores history**: Recent messages per task for context on follow-up calls
+- **Handles cancellation**: `CancelTask` requests transition to CANCELED state and interrupt processing
+
+### PeerJS Integration (`src/subsystems/channels/peerjs.ts`)
+
+The existing channel is augmented to:
+
+- Exchange agent cards via `GetAgentCard` on connection open
+- Wrap outgoing `send()` calls in proper A2A Message format (role, parts, contextId/taskId)
+- Route incoming messages through the task manager instead of directly to handlers
+- Emit AG-UI events from task manager to the UI for streaming rendering
+- Emit `TaskStatusUpdateEvent` when tasks reach terminal states
+- Accept both legacy `{ type: "chat" }` messages (backward compat) and new A2A JSON-RPC envelopes
+
+### Message Schema Extensions
+
+`InboundMessage` gains optional `taskId` and `contextId` fields to correlate received messages with their originating tasks, enabling proper history tracking across multiple turns in the same conversation.
 
 ---
 
-## Implementation Plan
+## Protocol Specification
 
-### Phase 1: Protocol Types (`peer-protocol.ts`)
+### Data Model
 
-Define the A2A v1.0 canonical data model adapted for WebRTC:
+The channel uses A2A v1.0 canonical types adapted for WebRTC DataChannel:
+
+**Task States** (spec §4.1.3):
+
+- `SUBMITTED`: Task created, awaiting processing
+- `WORKING`: Active execution
+- `COMPLETED`: Success terminal state
+- `FAILED`: Error terminal state
+- `CANCELED`: Cancellation terminal state
+- `INPUT_REQUIRED`: Paused, waiting for user input
+- `REJECTED`: Rejected at submission time
+
+**Core Types**:
 
 ```typescript
-// A2A Task States (spec §4.1.3)
-enum TaskState {
-  SUBMITTED = "TASK_STATE_SUBMITTED",
-  WORKING = "TASK_STATE_WORKING",
-  COMPLETED = "TASK_STATE_COMPLETED",
-  FAILED = "TASK_STATE_FAILED",
-  CANCELED = "TASK_STATE_CANCELED",
-  INPUT_REQUIRED = "TASK_STATE_INPUT_REQUIRED",
-  REJECTED = "TASK_STATE_REJECTED",
-}
-
 // A2A Roles (spec §4.1.5)
 enum Role {
   USER = "ROLE_USER",
   AGENT = "ROLE_AGENT",
 }
 
-// A2A Part (spec §4.1.6 — v1.0 uses member-name discriminator, not "kind")
+// A2A Part — multimodal content (spec §4.1.6)
+// v1.0 uses member-name discriminator, not "kind"
 type Part =
   | { text: string; mediaType?: string; metadata?: Record<string, unknown> }
   | {
@@ -95,30 +128,30 @@ interface Message {
   messageId: string;
   role: Role;
   parts: Part[];
-  contextId?: string;
-  taskId?: string;
+  contextId?: string; // conversation context
+  taskId?: string; // originating task
   metadata?: Record<string, unknown>;
-  referenceTaskIds?: string[];
+  referenceTaskIds?: string[]; // prior tasks this message references
 }
 
 // A2A TaskStatus (spec §4.1.2)
 interface TaskStatus {
   state: TaskState;
-  message?: Message;
+  message?: Message; // most recent message in this state
   timestamp?: string; // ISO 8601
 }
 
-// A2A Task (spec §4.1.1)
+// A2A Task (spec §4.1.1) — tracks full lifecycle
 interface Task {
   id: string;
   contextId?: string;
   status: TaskStatus;
   artifacts?: Artifact[];
-  history?: Message[];
+  history?: Message[]; // recent messages in this task
   metadata?: Record<string, unknown>;
 }
 
-// A2A Artifact (spec §4.1.7)
+// A2A Artifact (spec §4.1.7) — named data chunks
 interface Artifact {
   artifactId: string;
   name?: string;
@@ -126,29 +159,68 @@ interface Artifact {
   parts: Part[];
   metadata?: Record<string, unknown>;
 }
-
-// Streaming events (spec §4.2)
-interface TaskStatusUpdateEvent {
-  taskId: string;
-  contextId: string;
-  status: TaskStatus;
-  metadata?: Record<string, unknown>;
-}
-
-interface TaskArtifactUpdateEvent {
-  taskId: string;
-  contextId: string;
-  artifact: Artifact;
-  append?: boolean;
-  lastChunk?: boolean;
-  metadata?: Record<string, unknown>;
-}
 ```
 
-#### AG-UI Events (layered on top for streaming visibility)
+### Wire Envelope (JSON-RPC 2.0)
+
+All peer-to-peer messages use JSON-RPC 2.0 framing over the DataChannel (spec §9):
 
 ```typescript
-// AG-UI lifecycle events
+interface A2AWireMessage {
+  jsonrpc: "2.0";
+  id?: string; // present for requests, absent for notifications
+  method: string;
+  params?: unknown;
+  result?: unknown; // present in responses
+  error?: A2AError; // present in error responses
+}
+
+// Supported methods:
+// - "SendMessage"           → initiate or continue a task
+// - "GetTask"               → poll task state
+// - "CancelTask"            → request task cancellation
+// - "GetAgentCard"          → peer capability discovery (called on connect)
+// - "agui/event"            → notification of streaming event (no id)
+```
+
+### Connection Lifecycle
+
+When a DataChannel opens between peers:
+
+```
+1. Capability Exchange
+   ← { method: "GetAgentCard", id: "..." }
+   → { result: AgentCard }
+   → { method: "GetAgentCard", id: "..." }
+   ← { result: AgentCard }
+
+2. User Initiates Task
+   → { method: "SendMessage", params: {
+        message: { role: "ROLE_USER", parts: [...] }
+      }}
+   ← { result: { task: { id: "...", status: {...} } } }
+
+3. Agent Streams Response
+   ← { method: "agui/event", params: {
+        type: "TEXT_MESSAGE_START", messageId: "..." } }
+   ← { method: "agui/event", params: {
+        type: "TEXT_MESSAGE_CONTENT", messageId: "...", delta: "..." } }
+   ← { method: "agui/event", params: {
+        type: "TEXT_MESSAGE_END", messageId: "..." } }
+
+4. Task Terminal State
+   ← { method: "agui/event", params: {
+        type: "RUN_FINISHED", runId: "..." } }
+   ← { result: { task: { id: "...", status: {
+        state: "TASK_STATE_COMPLETED" } } } }
+```
+
+### AG-UI Event Stream
+
+AG-UI events are notifications (no request id) sent during task execution to provide streaming visibility to the caller:
+
+```typescript
+// Lifecycle
 interface AGUIRunStarted {
   type: "RUN_STARTED";
   threadId: string;
@@ -161,7 +233,7 @@ interface AGUIRunFinished {
   runId: string;
 }
 
-// AG-UI text streaming
+// Text streaming
 interface AGUITextMessageStart {
   type: "TEXT_MESSAGE_START";
   messageId: string;
@@ -179,7 +251,7 @@ interface AGUITextMessageEnd {
   messageId: string;
 }
 
-// AG-UI tool call visibility
+// Tool use visibility
 interface AGUIToolCallStart {
   type: "TOOL_CALL_START";
   toolCallId: string;
@@ -192,7 +264,7 @@ interface AGUIToolCallEnd {
   toolCallId: string;
 }
 
-// AG-UI state sync
+// State synchronization
 interface AGUIStateSnapshot {
   type: "STATE_SNAPSHOT";
   snapshot: Record<string, unknown>;
@@ -204,68 +276,9 @@ interface AGUIStateDelta {
 }
 ```
 
-### Phase 2: Wire Protocol (JSON-RPC over DataChannel)
+### Agent Card Exchange
 
-Following A2A JSON-RPC binding (spec §9), adapted for bidirectional DataChannel:
-
-```typescript
-// All messages over the DataChannel use this envelope
-interface A2AWireMessage {
-  jsonrpc: "2.0";
-  id?: string; // present for requests, absent for notifications
-  method: string;
-  params?: unknown;
-  result?: unknown; // present in responses
-  error?: A2AError; // present in error responses
-}
-
-// Methods we support over WebRTC DataChannel:
-// - "SendMessage"           → initiate/continue task
-// - "SendStreamingMessage"  → streaming with AG-UI events
-// - "GetTask"               → poll task state
-// - "CancelTask"            → request cancellation
-// - "GetAgentCard"          → capability discovery (custom, on-connect)
-//
-// AG-UI events are sent as notifications (no id):
-// - "agui/event"            → AG-UI event notification
-```
-
-#### Connection Lifecycle
-
-```
-┌─────────────────────────────────────────────────────────┐
-│ WebRTC DataChannel Connection Opened                    │
-├─────────────────────────────────────────────────────────┤
-│ 1. Both peers exchange AgentCards:                      │
-│    → { method: "GetAgentCard", id: "..." }              │
-│    ← { result: { ...AgentCard } }                       │
-│                                                         │
-│ 2. Client sends message to initiate task:               │
-│    → { method: "SendMessage", params: {                 │
-│         message: { role: "ROLE_USER", parts: [...] }    │
-│       }}                                                │
-│    ← { result: { task: { id: "...", status: {           │
-│         state: "TASK_STATE_WORKING" } } } }             │
-│                                                         │
-│ 3. Agent streams AG-UI events:                          │
-│    ← { method: "agui/event", params: {                  │
-│         type: "TEXT_MESSAGE_START", ... } }             │
-│    ← { method: "agui/event", params: {                  │
-│         type: "TEXT_MESSAGE_CONTENT", delta: "..." } }  │
-│    ← { method: "agui/event", params: {                  │
-│         type: "TEXT_MESSAGE_END", ... } }               │
-│                                                         │
-│ 4. Task completes:                                      │
-│    ← { method: "agui/event", params: {                  │
-│         type: "RUN_FINISHED", ... } }                   │
-│    ← { method: "tasks/statusUpdate", params: {          │
-│         taskId: "...", status: {                        │
-│           state: "TASK_STATE_COMPLETED" } } }           │
-│                                                         │
-└─────────────────────────────────────────────────────────┘
-```
-
-### Phase 3: Agent Card (`peer-agent-card.ts`)
+Each peer advertises its identity and capabilities via `AgentCard`:
 
 ```typescript
 interface AgentCard {
@@ -288,7 +301,7 @@ interface AgentInterface {
 
 interface AgentCapabilities {
   streaming: boolean;
-  pushNotifications: boolean; // false for WebRTC (we have DataChannel)
+  pushNotifications: boolean; // false for WebRTC (we use DataChannel)
   extensions?: AgentExtension[];
 }
 
@@ -303,41 +316,23 @@ interface AgentSkill {
 }
 ```
 
-The agent card is constructed from the local agent's configuration (model, tools, name) and exchanged immediately when a DataChannel opens.
+The card is constructed from the local agent's configuration (model, available tools, name) and sent immediately when the DataChannel opens, allowing the remote peer to make informed decisions about what to ask the agent.
 
-### Phase 4: Task Manager (`peer-task-manager.ts`)
+### Task State Machine
 
-A per-connection state machine that:
+The TaskManager (`peer-task-manager.ts`) maintains per-connection state:
 
-1. **Creates tasks** when `SendMessage` is received without a `taskId`
-2. **Transitions states** following the A2A state diagram:
-   ```
-   SUBMITTED → WORKING → COMPLETED (terminal)
-                       → FAILED (terminal)
-                       → CANCELED (terminal)
-                       → INPUT_REQUIRED (interrupted) → WORKING
-   ```
-3. **Emits AG-UI events** during task execution for streaming visibility
-4. **Stores task history** (recent messages per task)
-5. **Handles CancelTask** requests gracefully
-
-### Phase 5: Integration into `peerjs.ts`
-
-Modify the existing channel to:
-
-1. **On connection open**: Exchange agent cards via `GetAgentCard`
-2. **On send()**: Wrap in `SendMessage` with proper A2A Message format
-3. **On receive**: Dispatch through task manager, emit AG-UI events to UI
-4. **On task complete**: Emit `TaskStatusUpdateEvent` with terminal state
-5. **Backward compat**: Continue accepting legacy `{ type: "chat" }` messages
-
-### Phase 6: AG-UI Event Rendering
-
-The UI already handles streaming text. AG-UI events add:
-
-- **Tool call indicators**: Show when peer agent is using tools
-- **State sync**: Shared facts (current date, session metadata)
-- **Run lifecycle**: Clear start/end boundaries in the UI
+- **Creates tasks** from incoming `SendMessage` calls without a pre-existing `taskId`
+- **Transitions state** following A2A lifecycle:
+  ```
+  SUBMITTED → WORKING → COMPLETED (terminal)
+                      → FAILED (terminal)
+                      → CANCELED (terminal)
+                      → INPUT_REQUIRED (interrupted) → WORKING
+  ```
+- **Emits AG-UI events** on each state transition and during message streaming
+- **Maintains history**: Stores recent messages per task for context on follow-up calls
+- **Handles cancellation**: `CancelTask` requests move the task to CANCELED state and interrupt in-flight processing
 
 ---
 

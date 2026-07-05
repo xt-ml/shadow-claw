@@ -4,7 +4,7 @@ import { writeGroupFile } from "../storage/writeGroupFile.js";
 import { deleteGroupFile } from "../storage/deleteGroupFile.js";
 import { listGroupFiles } from "../storage/listGroupFiles.js";
 import { createGroupDirectory } from "../storage/createGroupDirectory.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 export class ShadowClawFileSystem extends InMemoryFs {
   private db: ShadowClawDatabase;

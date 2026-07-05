@@ -5,7 +5,7 @@
 ## Where Tools Live
 
 ```text
-src/tools/
+src/subsystems/tools/
 ├── bash.ts          bash execution
 ├── chat.ts          clear_chat
 ├── fetch.ts         fetch_url
@@ -46,7 +46,7 @@ npm test -- --testPathPattern executeTool
 
 ## Step 2 — Create the tool definition file
 
-Create `src/tools/my-tool.ts`:
+Create `src/subsystems/tools/my-tool.ts`:
 
 ```ts
 import type { ToolDefinition } from "./types.js";
@@ -72,7 +72,7 @@ export const my_tool: ToolDefinition = {
 
 ## Step 3 — Register the tool
 
-Open `src/tools/index.ts` and add the import + export:
+Open `src/subsystems/tools/index.ts` and add the import + export:
 
 ```ts
 import { my_tool } from "./my-tool.js";
@@ -169,4 +169,4 @@ Fix any TypeScript errors before opening a PR.
 - **Input validation:** Destructure and validate inputs early; return clear error strings for bad inputs.
 - **`read_file` supports batch reads** via a `paths` array — model this pattern for tools that often need multiple inputs.
 - **Lazy imports for heavy dependencies:** If your tool depends on a large library, use `await import()` inside the case block.
-- **Update the system prompt** (`src/orchestrator.ts` → `buildSystemPrompt`) if the tool needs explicit agent guidance (e.g., preferred usage patterns or when NOT to use it).
+- **Update the system prompt** (`src/core/orchestrator.ts` → `buildSystemPrompt`) if the tool needs explicit agent guidance (e.g., preferred usage patterns or when NOT to use it).

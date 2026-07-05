@@ -1,4 +1,4 @@
-import type { TextVariant } from "../../../a2ui.js";
+import type { TextVariant } from "../../../ui/a2ui.js";
 
 export function variantToTag(variant: TextVariant): string {
   switch (variant) {

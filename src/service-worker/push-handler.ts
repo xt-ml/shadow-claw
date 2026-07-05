@@ -100,9 +100,14 @@ self.addEventListener("notificationclick", (event: NotificationEvent) => {
           }
         }
 
-        // Otherwise open a new window
+        // Otherwise open a new window at the service worker scope root.
+        // This ensures local (http://localhost:8888/) and GitHub Pages
+        // subpath deployments (/shadow-claw/) both open the correct app URL.
+        const scopeUrl = self.registration?.scope
+          ? new URL(".", self.registration.scope).href
+          : "/";
 
-        return self.clients.openWindow("/");
+        return self.clients.openWindow(scopeUrl);
       }),
   );
 });

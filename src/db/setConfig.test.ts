@@ -5,7 +5,7 @@ jest.unstable_mockModule("../db/txPromise.js", () => ({
 }));
 
 const { setConfig } = await import("./setConfig.js");
-const { txPromise } = await import("../db/txPromise.js");
+const { txPromise } = await import("./txPromise.js");
 
 describe("setConfig", () => {
   it("persists key/value and resolves undefined", async () => {

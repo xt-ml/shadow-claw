@@ -1,7 +1,7 @@
 import { applyWeight, variantToTag } from "./shared.js";
-import { resolveDynamicString } from "../../../a2ui.js";
+import { resolveDynamicString } from "../../../ui/a2ui.js";
 
-import type { TextSpec } from "../../../a2ui.js";
+import type { TextSpec } from "../../../ui/a2ui.js";
 import type { SurfaceState } from "./types.js";
 
 export function renderText(spec: TextSpec, surface: SurfaceState): HTMLElement {

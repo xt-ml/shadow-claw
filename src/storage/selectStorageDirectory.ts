@@ -1,8 +1,8 @@
-import { CONFIG_KEYS } from "../config.js";
+import { CONFIG_KEYS } from "../config/config.js";
 import { setConfig } from "../db/setConfig.js";
 import { ensureMainGroupMemory } from "./ensureMainGroupMemory.js";
 import { ensureMainGroupIndex } from "./ensureMainGroupIndex.js";
-import type { ShadowClawDatabase } from "../types.js";
+import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
  * Select a local directory for storage using the File System Access API.

@@ -15,7 +15,7 @@ jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../../../toast.js", () => ({
+jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showSuccess: jest.fn(),
   showError: jest.fn(),
   showWarning: jest.fn(),
@@ -49,7 +49,7 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
 
 const { orchestratorStore } = await import("../../../stores/orchestrator.js");
 const { ShadowClawWebvm } = await import("./shadow-claw-webvm.js");
-const { showSuccess } = await import("../../../toast.js");
+const { showSuccess } = await import("../../../ui/toast.js");
 
 function createOrchestratorStub(overrides = {}) {
   return {

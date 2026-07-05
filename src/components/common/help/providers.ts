@@ -1,5 +1,5 @@
-import { getProvider } from "../../../config.js";
-import type { AppDialogOptions } from "../../../types.js";
+import { getProvider } from "../../../config/config.js";
+import type { AppDialogOptions } from "../../../ui/types.js";
 
 export type ProviderHelpType =
   | "api-key-missing"

@@ -1,10 +1,10 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../effect.js", () => ({
+jest.unstable_mockModule("../../core/effect.js", () => ({
   effect: jest.fn(() => () => undefined),
 }));
 
-jest.unstable_mockModule("../../markdown.js", () => ({
+jest.unstable_mockModule("../../content/markdown.js", () => ({
   renderMarkdown: jest.fn(async (value: string) => `<p>${value}</p>`),
 }));
 
@@ -66,7 +66,7 @@ jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
   readGroupFileBytes: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../toast.js", () => ({
+jest.unstable_mockModule("../../ui/toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
 }));
@@ -80,7 +80,7 @@ const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { readGroupFile } = await import("../../storage/readGroupFile.js");
 const { readGroupFileBytes } =
   await import("../../storage/readGroupFileBytes.js");
-const { renderMarkdown } = await import("../../markdown.js");
+const { renderMarkdown } = await import("../../content/markdown.js");
 const { setSanitizedHtml, setTrustedSrcdoc } =
   await import("../../security/trusted-types.js");
 

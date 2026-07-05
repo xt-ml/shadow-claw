@@ -1,11 +1,11 @@
-import { effect } from "../../effect.js";
+import { effect } from "../../core/effect.js";
 import {
   getFileRouteDirPath,
   getWorkspaceRouteRequestPath,
   resolveHrefAgainstRoute,
   applyBasePath,
-} from "../../app-routes.js";
-import { renderMarkdown } from "../../markdown.js";
+} from "../../core/app-routes.js";
+import { renderMarkdown } from "../../content/markdown.js";
 import {
   sanitizeSrcdocHtml,
   setSanitizedHtml,
@@ -14,13 +14,13 @@ import {
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { readGroupFile } from "../../storage/readGroupFile.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
-import { showError, showSuccess } from "../../toast.js";
+import { showError, showSuccess } from "../../ui/toast.js";
 import type { Config } from "dompurify";
 import type {
   GroupMeta,
   SavedPageRef,
   ShadowClawDatabase,
-} from "../../types.js";
+} from "../../db/types.js";
 
 import { getDb } from "../../db/db.js";
 import ShadowClawElement from "../shadow-claw-element.js";

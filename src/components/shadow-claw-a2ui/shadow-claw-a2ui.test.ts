@@ -14,9 +14,9 @@ import {
   resolveDynamicString,
   applyDataModelPatches,
   resolveJsonPointer,
-} from "../../a2ui.js";
-import type { A2UICreateSurface } from "../../a2ui.js";
-import { A2UI_MINIMAL_CATALOG_ID } from "../../a2ui.js";
+} from "../../ui/a2ui.js";
+import type { A2UICreateSurface } from "../../ui/a2ui.js";
+import { A2UI_MINIMAL_CATALOG_ID } from "../../ui/a2ui.js";
 
 // ---------------------------------------------------------------------------
 // Pure-logic helpers (no DOM needed)

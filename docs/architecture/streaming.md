@@ -9,11 +9,11 @@
 
 Streaming is controlled by three conditions that must all be true:
 
-| Gate            | Check                                            | Source             |
-| --------------- | ------------------------------------------------ | ------------------ |
-| Global toggle   | `CONFIG_KEYS.STREAMING_ENABLED` (default `true`) | Settings → LLM     |
-| Provider opt-in | `supportsStreaming: true` in provider config     | `src/config.ts`    |
-| Format check    | Provider format is `"openai"` or `"anthropic"`   | Not `"prompt_api"` |
+| Gate            | Check                                            | Source                 |
+| --------------- | ------------------------------------------------ | ---------------------- |
+| Global toggle   | `CONFIG_KEYS.STREAMING_ENABLED` (default `true`) | Settings → LLM         |
+| Provider opt-in | `supportsStreaming: true` in provider config     | `src/config/config.ts` |
+| Format check    | Provider format is `"openai"` or `"anthropic"`   | Not `"prompt_api"`     |
 
 ## End-to-End Flow
 

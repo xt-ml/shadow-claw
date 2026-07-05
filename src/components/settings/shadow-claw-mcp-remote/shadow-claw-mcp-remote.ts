@@ -1,32 +1,32 @@
-import { CONFIG_KEYS } from "../../../config.js";
-import { encryptValue } from "../../../crypto.js";
+import { CONFIG_KEYS } from "../../../config/config.js";
+import { encryptValue } from "../../../security/crypto.js";
 import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
 import { getConfig } from "../../../db/getConfig.js";
 
-import { reconnectMcpOAuth } from "../../../mcp-reconnect.js";
-import { testRemoteMcpConnection } from "../../../remote-mcp-client.js";
+import { reconnectMcpOAuth } from "../../../subsystems/mcp/mcp-reconnect.js";
+import { testRemoteMcpConnection } from "../../../subsystems/mcp/remote-mcp-client.js";
 
 import {
   bindRemoteMcpCredentialRef,
   deleteRemoteMcpConnection,
   listRemoteMcpConnections,
   upsertRemoteMcpConnection,
-} from "../../../mcp-connections.js";
+} from "../../../subsystems/mcp/mcp-connections.js";
 
 import { setSanitizedHtml } from "../../../security/trusted-types.js";
-import { showError, showSuccess } from "../../../toast.js";
+import { showError, showSuccess } from "../../../ui/toast.js";
 import { escapeHtml } from "../../../utils/utils.js";
 
-import { GitAccount } from "../../../types.js";
+import { GitAccount } from "../../../subsystems/git/types.js";
 
-import type { ServiceAccount } from "../../../accounts/service-accounts.js";
-import type { McpConnectionTestResult } from "../../../remote-mcp-client.js";
+import type { ServiceAccount } from "../../../subsystems/accounts/service-accounts.js";
+import type { McpConnectionTestResult } from "../../../subsystems/mcp/remote-mcp-client.js";
 
 import type {
   RemoteMcpConnectionRecord,
   RemoteMcpCredentialRef,
   RemoteMcpTransport,
-} from "../../../mcp-connections.js";
+} from "../../../subsystems/mcp/mcp-connections.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 

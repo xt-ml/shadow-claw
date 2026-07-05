@@ -1,13 +1,13 @@
 import type { Config } from "dompurify";
 
-import { effect } from "../../effect.js";
+import { effect } from "../../core/effect.js";
 import {
   getFileRouteDirPath,
   getWorkspaceRouteRequestPath,
   resolveHrefAgainstRoute,
   applyBasePath,
-} from "../../app-routes.js";
-import { renderMarkdown } from "../../markdown.js";
+} from "../../core/app-routes.js";
+import { renderMarkdown } from "../../content/markdown.js";
 import {
   sanitizeSrcdocHtml,
   setSanitizedHtml,
@@ -19,11 +19,11 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 import { themeStore } from "../../stores/theme.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
-import { showError, showSuccess } from "../../toast.js";
+import { showError, showSuccess } from "../../ui/toast.js";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.js";
-import type { ShadowClawDatabase } from "../../types.js";
+import type { ShadowClawDatabase } from "../../db/types.js";
 import { getDb } from "../../db/db.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";

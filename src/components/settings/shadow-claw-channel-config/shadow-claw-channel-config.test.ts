@@ -10,15 +10,15 @@ jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../../../toast.js", () => ({
+jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showSuccess: jest.fn(),
   showError: jest.fn(),
   showWarning: jest.fn(),
 }));
 
 const { orchestratorStore } = await import("../../../stores/orchestrator.js");
-const { showSuccess } = await import("../../../toast.js");
-const { showError, showWarning } = await import("../../../toast.js");
+const { showSuccess } = await import("../../../ui/toast.js");
+const { showError, showWarning } = await import("../../../ui/toast.js");
 const { ShadowClawChannelConfig } =
   await import("./shadow-claw-channel-config.js");
 

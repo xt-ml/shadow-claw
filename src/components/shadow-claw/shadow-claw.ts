@@ -1,23 +1,23 @@
-import { effect } from "../../effect.js";
+import { effect } from "../../core/effect.js";
 import {
   buildRoutePath,
   parseRouteFromUrl,
   applyBasePath,
   type ShadowClawAppRoute,
-} from "../../app-routes.js";
-import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../config.js";
+} from "../../core/app-routes.js";
+import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../config/config.js";
 import { ShadowClawNavigateDetail } from "../../utils/utils.js";
 
 import { ShadowClawDatabase, setDB } from "../../db/db.js";
 import { getConfig } from "../../db/getConfig.js";
 import { setConfig } from "../../db/setConfig.js";
-import { Orchestrator, OrchestratorState } from "../../orchestrator.js";
+import { Orchestrator, OrchestratorState } from "../../core/orchestrator.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { Themes, themeStore } from "../../stores/theme.js";
 import { toolsStore } from "../../stores/tools.js";
 import { consumePendingShares } from "../../share-target/pending-shares.js";
-import { showError, showSuccess } from "../../toast.js";
+import { showError, showSuccess } from "../../ui/toast.js";
 import { ulid } from "../../utils/ulid.js";
 import { writeGroupFileBytes } from "../../storage/writeGroupFileBytes.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
@@ -25,13 +25,13 @@ import {
   buildProviderHelpDialogOptions,
   type ProviderHelpType,
 } from "../common/help/providers.js";
-import {
+import { OpenFilePayload } from "../../subsystems/worker/types.js";
+import type {
   AppDialogOptions,
   ConfirmationDialogOptions,
-  OpenFilePayload,
-} from "../../types.js";
-import type { RoomInvitePayload } from "../../channels/peer-protocol.js";
-import { VMStatus } from "../../vm.js";
+} from "../../ui/types.js";
+import type { RoomInvitePayload } from "../../subsystems/channels/peer-protocol.js";
+import { VMStatus } from "../../shell/vm.js";
 import { buildLlamafileHelpDialogOptions } from "../common/help/llamafile.js";
 import { buildTransformersJsHelpDialogOptions } from "../common/help/transformers.js";
 

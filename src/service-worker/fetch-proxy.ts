@@ -1,6 +1,6 @@
 /// <reference types="@types/serviceworker" />
 
-import { getWorkspaceRouteRequestPath } from "../app-routes.js";
+import { getWorkspaceRouteRequestPath } from "../core/app-routes.js";
 import { shouldBypassFetchProxy } from "./fetch-proxy-rules.js";
 
 /**

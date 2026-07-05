@@ -2,7 +2,7 @@
 
 > TC39 Signals, `effect()`, stores, `ShadowClawElement`, and Web Components — no framework, no virtual DOM.
 
-**Source:** `src/effect.ts` · `src/stores/` · `src/components/` · `src/components/shadow-claw-element.ts`
+**Source:** `src/core/effect.ts` · `src/stores/` · `src/components/` · `src/components/shadow-claw-element.ts`
 
 ## Architecture
 
@@ -272,7 +272,7 @@ are persisted under `.cache/logs` in the app data directory.
 
 ### Markdown rendering
 
-`src/markdown.ts` uses `marked` with `breaks: true`:
+`src/content/markdown.ts` uses `marked` with `breaks: true`:
 
 - Single newlines → `<br>` tags
 - Double newlines → `<p>` paragraphs

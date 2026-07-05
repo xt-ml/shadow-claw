@@ -3,7 +3,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
-import { DEFAULT_DEV_IP, DEFAULT_DEV_PORT } from "../config.js";
+import { DEFAULT_DEV_IP, DEFAULT_DEV_PORT } from "../config/config.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

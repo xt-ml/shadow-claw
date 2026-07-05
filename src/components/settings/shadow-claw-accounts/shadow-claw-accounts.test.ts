@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-jest.unstable_mockModule("../../../config.js", () => ({
+jest.unstable_mockModule("../../../config/config.js", () => ({
   CONFIG_KEYS: {
     SERVICE_ACCOUNTS: "service_accounts",
     SERVICE_DEFAULT_ACCOUNT: "service_default_account",
@@ -29,12 +29,12 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue({}),
 }));
 
-jest.unstable_mockModule("../../../toast.js", () => ({
+jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
 }));
 
-jest.unstable_mockModule("../../../crypto.js", () => ({
+jest.unstable_mockModule("../../../security/crypto.js", () => ({
   encryptValue: jest.fn<any>().mockResolvedValue("encrypted-token"),
 }));
 
@@ -54,7 +54,7 @@ jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
 
 const { setConfig } = await import("../../../db/setConfig.js");
 const { getConfig } = await import("../../../db/getConfig.js");
-const { showSuccess, showError } = await import("../../../toast.js");
+const { showSuccess, showError } = await import("../../../ui/toast.js");
 const { setSanitizedHtml } = await import("../../../security/trusted-types.js");
 const { ShadowClawAccounts } = await import("./shadow-claw-accounts.js");
 

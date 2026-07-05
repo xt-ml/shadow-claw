@@ -868,6 +868,42 @@ describe("Orchestrator", () => {
       await o._warnIfNoPushSubscription();
       expect(o._pushSubscriptionWarned).toBe(false);
     });
+
+    it("starts local scheduler when push subscription is missing", async () => {
+      const o = new Orchestrator();
+      const mockGetSubscription = jest.fn(async () => null);
+      const readyPromise = Promise.resolve({
+        pushManager: { getSubscription: mockGetSubscription },
+      } as any);
+
+      Object.defineProperty(navigator, "serviceWorker", {
+        configurable: true,
+        value: {
+          ready: readyPromise,
+        },
+      });
+
+      const shouldStart = await o._shouldStartLocalScheduler();
+      expect(shouldStart).toBe(true);
+    });
+
+    it("does not start local scheduler when push subscription exists", async () => {
+      const o = new Orchestrator();
+      const mockGetSubscription = jest.fn(async () => ({}));
+      const readyPromise = Promise.resolve({
+        pushManager: { getSubscription: mockGetSubscription },
+      } as any);
+
+      Object.defineProperty(navigator, "serviceWorker", {
+        configurable: true,
+        value: {
+          ready: readyPromise,
+        },
+      });
+
+      const shouldStart = await o._shouldStartLocalScheduler();
+      expect(shouldStart).toBe(false);
+    });
   });
 
   describe("scheduler recursion guard (_schedulerTriggeredGroups)", () => {
@@ -1018,6 +1054,33 @@ describe("Orchestrator", () => {
       expect(fetchSpy).not.toHaveBeenCalled();
 
       (globalThis as any).fetch = origFetch;
+    });
+
+    it("marks groupId as scheduled while running local scheduled tasks", async () => {
+      const o = new Orchestrator();
+      const runTaskSpy = jest
+        .spyOn(orchestratorStore, "runTask")
+        .mockResolvedValue(undefined);
+
+      const task = {
+        id: "t1",
+        groupId: "br:main",
+        prompt: "Hello",
+        schedule: "* * * * *",
+        enabled: true,
+        createdAt: Date.now(),
+        lastRun: null,
+      };
+
+      const before = o._schedulerTriggeredGroups.has(task.groupId);
+      expect(before).toBe(false);
+
+      await o._runTaskAsScheduled(task as any);
+
+      expect(runTaskSpy).toHaveBeenCalledWith(task);
+      expect(o._schedulerTriggeredGroups.has(task.groupId)).toBe(false);
+
+      runTaskSpy.mockRestore();
     });
   });
 

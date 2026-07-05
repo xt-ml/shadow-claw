@@ -54,6 +54,9 @@ describe("ServerTaskScheduler", () => {
       id: "t1",
       groupId: "br:main",
       prompt: "Daily check",
+      type: undefined,
+      tools: null,
+      channel: undefined,
     });
   });
 

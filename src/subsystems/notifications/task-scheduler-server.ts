@@ -22,6 +22,9 @@ export interface ServerTaskSchedulerDeps {
     id: string;
     groupId: string;
     prompt: string;
+    type?: string | null;
+    tools?: unknown[] | null;
+    channel?: string | null;
   }) => Promise<{ sent: number; failed: number; noSubscribers?: true }>;
 }
 
@@ -34,6 +37,9 @@ export class ServerTaskScheduler {
     id: string;
     groupId: string;
     prompt: string;
+    type?: string | null;
+    tools?: unknown[] | null;
+    channel?: string | null;
   }) => Promise<{ sent: number; failed: number; noSubscribers?: true }>;
   private _interval: ReturnType<typeof setInterval> | null;
 
@@ -88,6 +94,9 @@ export class ServerTaskScheduler {
             id: task.id,
             groupId: task.group_id,
             prompt: task.prompt,
+            type: task.type,
+            tools: task.tools ? JSON.parse(task.tools) : null,
+            channel: task.channel,
           })
 
             .then((result) => {

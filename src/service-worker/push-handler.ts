@@ -13,6 +13,9 @@ interface PushData {
   taskId?: string;
   groupId?: string;
   prompt?: string;
+  taskType?: string;
+  tools?: unknown[];
+  channel?: string;
 }
 
 self.addEventListener("push", (event: PushEvent) => {
@@ -38,14 +41,20 @@ self.addEventListener("push", (event: PushEvent) => {
               taskId: data.taskId,
               groupId: data.groupId,
               prompt: data.prompt,
+              taskType: data.taskType,
+              tools: data.tools,
+              channel: data.channel,
             });
           }
 
           return self.registration.showNotification(
-            "ShadowClaw — Scheduled Task",
+            `ShadowClaw — Scheduled Task${data.taskType ? ` (${data.taskType})` : ""}`,
             {
               body: data.prompt
-                ? data.prompt.slice(0, 120)
+                ? `${data.prompt.slice(0, 120)}${data.tools?.length ? ` | Tools: ${data.tools.map((t) => (typeof t === "object" && t !== null && "name" in t ? (t as any).name : String(t))).join(", ")}` : ""}`.slice(
+                    0,
+                    120,
+                  )
                 : "A scheduled task has been triggered.",
               icon: "/assets/icons/512.png",
               badge: "/assets/icons/192.png",
@@ -54,6 +63,9 @@ self.addEventListener("push", (event: PushEvent) => {
                 taskId: data.taskId,
                 groupId: data.groupId,
                 prompt: data.prompt,
+                taskType: data.taskType,
+                tools: data.tools,
+                channel: data.channel,
               },
             },
           );
@@ -76,8 +88,6 @@ self.addEventListener("push", (event: PushEvent) => {
 self.addEventListener("notificationclick", (event: NotificationEvent) => {
   event.notification.close();
 
-  const notificationData: PushData = event.notification.data;
-
   event.waitUntil(
     self.clients
       .matchAll({ type: "window", includeUncontrolled: true })
@@ -85,16 +95,8 @@ self.addEventListener("notificationclick", (event: NotificationEvent) => {
         // Focus an existing window if open
         for (const client of clientList) {
           if (client.url.includes(self.location.origin) && "focus" in client) {
-            // If this was a scheduled-task notification, relay trigger data
-            // to the focused client in case it wasn't delivered via the push event
-            if (notificationData?.type === "scheduled-task") {
-              client.postMessage({
-                type: "scheduled-task-trigger",
-                taskId: notificationData.taskId,
-                groupId: notificationData.groupId,
-                prompt: notificationData.prompt,
-              });
-            }
+            // When the app is already open, just focus it. The push event
+            // should have already delivered the trigger to the window.
 
             return client.focus();
           }

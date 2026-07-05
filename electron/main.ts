@@ -94,6 +94,9 @@ function startServer(databaseDir: string): Promise<number> {
           taskId: task.id,
           groupId: task.groupId,
           prompt: task.prompt,
+          taskType: task.type,
+          tools: task.tools,
+          channel: task.channel,
         }),
     });
     serverScheduler.start();

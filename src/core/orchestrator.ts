@@ -673,17 +673,22 @@ export class Orchestrator {
     this.syncProxyConfigToServiceWorker();
     // The worker reads persisted VM boot mode and eagerly boots the VM itself.
 
-    // Set up task scheduler
+    // Set up task scheduler.
+    // When push scheduling is available, the server-side scheduler should be
+    // authoritative. The local client scheduler is only used as a fallback
+    // when push background execution is unavailable.
     this.scheduler = new TaskScheduler(
       async (task) => {
-        orchestratorStore.runTask(task);
+        await this._runTaskAsScheduled(task);
       },
       () => {
         this.events.emit("task-change", { type: "executed" });
       },
     );
 
-    this.scheduler.start();
+    if (await this._shouldStartLocalScheduler()) {
+      this.scheduler.start();
+    }
 
     // Listen for scheduled-task-trigger messages from the service worker.
     // When the server-side scheduler fires, it sends a push notification;
@@ -2037,7 +2042,7 @@ export class Orchestrator {
         return;
       }
 
-      const { taskId, groupId, prompt } = event.data;
+      const { taskId, groupId, prompt, taskType, tools } = event.data;
       if (!groupId) {
         return;
       }
@@ -2050,7 +2055,26 @@ export class Orchestrator {
         const fullTask = orchestratorStore.tasks.find((t) => t.id === taskId);
         if (fullTask) {
           orchestratorStore.runTask(fullTask);
-        } else if (prompt) {
+
+          return;
+        }
+
+        if (taskType === "tools" && Array.isArray(tools) && tools.length > 0) {
+          orchestratorStore.runTask({
+            id: taskId || `push-task-${Date.now()}`,
+            groupId,
+            createdAt: Date.now(),
+            enabled: true,
+            prompt: prompt || "",
+            type: "tools",
+            tools,
+            lastRun: null,
+          });
+
+          return;
+        }
+
+        if (prompt) {
           // Fallback if not found in local store
           this.submitMessage(prompt, groupId);
         }
@@ -2092,6 +2116,39 @@ export class Orchestrator {
       return false;
     } finally {
       this._warnIfNoPushSubscription();
+    }
+  }
+
+  async _shouldStartLocalScheduler(): Promise<boolean> {
+    if (typeof navigator === "undefined" || !navigator.serviceWorker) {
+      return true;
+    }
+
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+
+      return !sub;
+    } catch {
+      return true;
+    }
+  }
+
+  async _runTaskAsScheduled(task: Task): Promise<void> {
+    if (!task.groupId) {
+      console.error(
+        "Scheduled task has no groupId — refusing to execute to prevent context pollution.",
+      );
+
+      return;
+    }
+
+    this._schedulerTriggeredGroups.add(task.groupId);
+
+    try {
+      await orchestratorStore.runTask(task);
+    } finally {
+      this._schedulerTriggeredGroups.delete(task.groupId);
     }
   }
 

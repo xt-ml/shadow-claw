@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 import DOMPurify, { Config } from "dompurify";
+import { parseRouteFromUrl } from "../core/app-routes.js";
 
 export type HashInput = File | Blob | ArrayBuffer | ArrayBufferView;
 
@@ -150,6 +151,31 @@ export function handleSpecialLinkNavigation(
     }
   }
 
+  // 1.5. Check if it is an absolute application route (e.g., /files/room:123/path, /chat/...)
+  if (trimmed.startsWith("/")) {
+    try {
+      const urlLike = new URL(trimmed, window.location.origin);
+      const route = parseRouteFromUrl(urlLike, currentGroupId);
+      if (route) {
+        document.dispatchEvent(
+          new CustomEvent("shadow-claw-navigate", {
+            detail: {
+              page: route.page,
+              groupId: route.groupId,
+              path: route.path,
+              anchor: route.anchor || (urlLike.hash ? urlLike.hash.slice(1) : undefined),
+            },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+        return true;
+      }
+    } catch {
+      // Fallback to relative workspace path resolution below
+    }
+  }
+
   // 2. Relative or absolute workspace paths, e.g., "docs/README.md"
   // If it does not have a scheme (http, https, mailto, etc.) and is not external:
   const hasScheme = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed);
@@ -193,12 +219,8 @@ export function handleSpecialLinkNavigation(
     }
 
     if (finalPath) {
-      // Determine target page: pages if it's markdown, files otherwise
-      const isMarkdown = /\.(md|markdown)$/i.test(finalPath);
-      const targetPage = isMarkdown ? "pages" : "files";
-
       const detail: ShadowClawNavigateDetail = {
-        page: targetPage,
+        page: "files",
         groupId: currentGroupId || undefined,
         path: finalPath,
         anchor: anchor || undefined,

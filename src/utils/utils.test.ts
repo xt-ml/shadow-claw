@@ -114,5 +114,17 @@ describe("utils", () => {
       expect(result).toBe(false);
       expect(mockDispatch).not.toHaveBeenCalled();
     });
+
+    it("should intercept and dispatch shadow-claw-navigate for absolute application routes", () => {
+      const url = "/files/room:01KWD6TX7QEG8V7R978E677PYR/weather/README.md";
+      const result = handleSpecialLinkNavigation(url, "", "default-group");
+      expect(result).toBe(true);
+      expect(mockDispatch).toHaveBeenCalled();
+      const event = mockDispatch.mock.calls[0][0] as CustomEvent;
+      expect(event.detail.page).toBe("files");
+      expect(event.detail.groupId).toBe("room:01KWD6TX7QEG8V7R978E677PYR");
+      expect(event.detail.path).toBe("weather/README.md");
+      expect(event.detail.anchor).toBeUndefined();
+    });
   });
 });

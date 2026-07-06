@@ -1,10 +1,11 @@
-export type StoredCredentialAuthMode = "pat" | "oauth";
+export type StoredCredentialAuthMode = "token" | "basic" | "oauth";
 
 export interface StoredCredentialBase {
   id: string;
   label: string;
   hostPattern: string;
   token: string;
+  basicUsername?: string;
   authMode?: StoredCredentialAuthMode;
 }
 
@@ -46,7 +47,19 @@ export function resolveStoredCredentialAuthMode(
   credential: OAuthCapableStoredCredential | null | undefined,
 ): StoredCredentialAuthMode {
   if (!credential) {
-    return "pat";
+    return "token";
+  }
+
+  // Treat legacy "pat" string identically to "token" mode
+  if (
+    credential.authMode === "token" ||
+    (credential.authMode as string) === "pat"
+  ) {
+    return "token";
+  }
+
+  if (credential.authMode === "basic") {
+    return "basic";
   }
 
   if (credential.authMode === "oauth") {
@@ -65,5 +78,5 @@ export function resolveStoredCredentialAuthMode(
     return "oauth";
   }
 
-  return "pat";
+  return "token";
 }

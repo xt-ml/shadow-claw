@@ -113,7 +113,7 @@ describe("mcp-connections", () => {
     await expect(
       bindRemoteMcpCredentialRef(db, "conn-1", {
         serviceType: "git_remote",
-        authType: "pat",
+        authType: "token",
         accountId: "git-acct-1",
       }),
     ).rejects.toThrow(

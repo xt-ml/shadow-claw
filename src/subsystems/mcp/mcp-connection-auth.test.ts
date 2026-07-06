@@ -156,7 +156,7 @@ describe("resolveRemoteMcpConnectionAuth", () => {
       "https://mcp.example.com",
       {
         accountId: "git-1",
-        authMode: "pat",
+        authMode: "token",
       },
     );
     expect(result?.headers).toEqual({ Authorization: "Bearer abc" });

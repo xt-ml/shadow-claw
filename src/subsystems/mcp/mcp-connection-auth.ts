@@ -18,8 +18,8 @@ export interface ResolveRemoteMcpAuthOptions {
   forceRefresh?: boolean;
 }
 
-function toAccountAuthMode(authType: AuthType): "pat" | "oauth" {
-  return authType === "oauth" ? "oauth" : "pat";
+function toAccountAuthMode(authType: AuthType): "token" | "oauth" | "basic" {
+  return authType === "oauth" ? "oauth" : "token";
 }
 
 export async function resolveRemoteMcpConnectionAuth(

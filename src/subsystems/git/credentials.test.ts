@@ -32,31 +32,31 @@ jest.unstable_mockModule("../../config/config.js", () => ({
       github: {
         default: {
           oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
-          pat: { headerName: "Authorization", headerPrefix: "token " },
+          token: { headerName: "Authorization", headerPrefix: "token " },
         },
       },
       gitlab: {
         byServiceType: {
           git_remote: {
             oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
-            pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+            token: { headerName: "Authorization", headerPrefix: "Bearer " },
           },
         },
         default: {
           oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
-          pat: { headerName: "PRIVATE-TOKEN", headerPrefix: "" },
+          token: { headerName: "PRIVATE-TOKEN", headerPrefix: "" },
         },
       },
       azure_devops: {
         byServiceType: {
           git_remote: {
             oauth: { headerName: "Authorization", headerPrefix: "Basic " },
-            pat: { headerName: "Authorization", headerPrefix: "Basic " },
+            token: { headerName: "Authorization", headerPrefix: "Basic " },
           },
         },
         default: {
           oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
-          pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+          token: { headerName: "Authorization", headerPrefix: "Bearer " },
         },
       },
     };
@@ -100,7 +100,7 @@ describe("resolveGitCredentials", () => {
   it("returns empty creds when nothing is configured", async () => {
     const result = await resolveGitCredentials(fakeDb);
     expect(result).toEqual({
-      authMode: "pat",
+      authMode: "token",
       authorEmail: undefined,
       authorName: undefined,
       password: undefined,
@@ -290,7 +290,7 @@ describe("resolveGitCredentials", () => {
 
     it("supports selecting an explicit git account id", async () => {
       const patAccount: any = {
-        authMode: "pat",
+        authMode: "token",
         authorEmail: "",
         authorName: "",
         hostPattern: "github.com",
@@ -330,7 +330,7 @@ describe("resolveGitCredentials", () => {
 
     it("prefers matching auth mode when host patterns tie", async () => {
       const patAccount: any = {
-        authMode: "pat",
+        authMode: "token",
         authorEmail: "",
         authorName: "",
         hostPattern: "github.com",

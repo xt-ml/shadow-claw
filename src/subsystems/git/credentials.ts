@@ -73,7 +73,7 @@ export function buildAuthHeaders(
 
   const provider = creds.provider || detectProvider(creds.hostPattern || "");
   const mappedProviderId = mapGitProviderToGeneralProviderId(provider);
-  const authMode = creds.authMode || "pat";
+  const authMode = creds.authMode || "token";
 
   // Some git providers (Azure DevOps) need Basic auth for PAT/OAuth over git HTTP.
   if (
@@ -188,9 +188,9 @@ function pickAccountByAuthMode(
   }
 
   // Legacy accounts without explicit mode should behave as PAT accounts.
-  if (authMode === "pat") {
+  if (authMode === "token") {
     const legacyPat = accounts.find(
-      (acct) => resolveGitAuthMode(acct) === "pat" && !acct.authMode,
+      (acct) => resolveGitAuthMode(acct) === "token" && !acct.authMode,
     );
 
     if (legacyPat) {
@@ -451,7 +451,7 @@ async function resolveFromAccounts(
 
   if (!account) {
     return {
-      authMode: "pat",
+      authMode: "token",
       authorEmail: undefined,
       authorName: undefined,
       password: undefined,
@@ -506,7 +506,7 @@ async function resolveFromLegacy(
   const encPassword = await getConfig(db, CONFIG_KEYS.GIT_PASSWORD);
 
   return {
-    authMode: "pat",
+    authMode: "token",
     authorEmail:
       (await getConfig(db, CONFIG_KEYS.GIT_AUTHOR_EMAIL)) || undefined,
     authorName: (await getConfig(db, CONFIG_KEYS.GIT_AUTHOR_NAME)) || undefined,

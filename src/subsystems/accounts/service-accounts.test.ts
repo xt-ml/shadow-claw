@@ -22,7 +22,7 @@ describe("resolveServiceCredentials", () => {
         aliases: ["github", "api.github.com"],
         defaultMode: "oauth",
         tokenAuth: {
-          pat: { headerName: "Authorization", headerPrefix: "token " },
+          token: { headerName: "Authorization", headerPrefix: "token " },
           oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
         },
       },
@@ -31,7 +31,7 @@ describe("resolveServiceCredentials", () => {
         aliases: ["gitlab", "gitlab.com"],
         defaultMode: "oauth",
         tokenAuth: {
-          pat: { headerName: "PRIVATE-TOKEN", headerPrefix: "" },
+          token: { headerName: "PRIVATE-TOKEN", headerPrefix: "" },
           oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
         },
       },
@@ -40,7 +40,7 @@ describe("resolveServiceCredentials", () => {
         aliases: ["figma", "api.figma.com"],
         defaultMode: "oauth",
         tokenAuth: {
-          pat: { headerName: "X-Figma-Token", headerPrefix: "" },
+          token: { headerName: "X-Figma-Token", headerPrefix: "" },
           oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
         },
       },
@@ -49,7 +49,7 @@ describe("resolveServiceCredentials", () => {
         aliases: ["notion", "notion.so", "api.notion.com"],
         defaultMode: "oauth",
         tokenAuth: {
-          pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+          token: { headerName: "Authorization", headerPrefix: "Bearer " },
           oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
         },
       },
@@ -124,7 +124,7 @@ describe("resolveServiceCredentials", () => {
       headerName: "X-Figma-Token",
       headerValue: "plain-pat-123",
       accountId: "1",
-      authMode: "pat",
+      authMode: "token",
     });
     expect(mockDecryptValue).toHaveBeenCalledWith("enc-token");
   });
@@ -247,7 +247,7 @@ describe("resolveServiceCredentials", () => {
         service: "Example",
         hostPattern: "api.example.com",
         token: "enc-pat",
-        authMode: "pat",
+        authMode: "token",
       },
       {
         id: "2",
@@ -290,7 +290,7 @@ describe("resolveServiceCredentials", () => {
         service: "Example",
         hostPattern: "api.example.com",
         token: "enc-pat",
-        authMode: "pat",
+        authMode: "token",
       },
       {
         id: "2",
@@ -333,7 +333,7 @@ describe("resolveServiceCredentials", () => {
         service: "GitHub",
         hostPattern: "api.github.com",
         token: "enc-gh-pat",
-        authMode: "pat",
+        authMode: "token",
       },
     ];
 
@@ -430,7 +430,7 @@ describe("resolveServiceCredentials", () => {
         service: "Figma",
         hostPattern: "api.figma.com",
         token: "enc-fig-pat",
-        authMode: "pat",
+        authMode: "token",
       },
       {
         id: "fig-oauth",

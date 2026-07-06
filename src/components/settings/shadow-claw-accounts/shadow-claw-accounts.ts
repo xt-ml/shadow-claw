@@ -19,9 +19,20 @@ const elementName = "shadow-claw-accounts";
 
 function resolveAccountAuthMode(
   account: ServiceAccount | null,
-): "pat" | "oauth" {
+): "token" | "basic" | "oauth" {
   if (!account) {
-    return "pat";
+    return "token";
+  }
+
+  if (
+    account.authMode === "token" ||
+    (account.authMode as string) === "token"
+  ) {
+    return "token";
+  }
+
+  if (account.authMode === "basic") {
+    return "basic";
   }
 
   if (account.authMode === "oauth") {
@@ -40,7 +51,7 @@ function resolveAccountAuthMode(
     return "oauth";
   }
 
-  return "pat";
+  return "token";
 }
 
 export class ShadowClawAccounts extends ShadowClawElement {
@@ -164,13 +175,15 @@ export class ShadowClawAccounts extends ShadowClawElement {
       const authLabel =
         authMode === "oauth"
           ? `OAuth${acct.oauthProviderId ? ` (${acct.oauthProviderId})` : ""}`
-          : "PAT";
+          : authMode === "basic"
+            ? "Basic Auth"
+            : "Token";
       const credentialLabel = hasToken
         ? authMode === "oauth"
           ? needsReauth
             ? "Reconnect required"
             : "OAuth token saved"
-          : "PAT saved"
+          : "Token saved"
         : "No token";
       const cardMeta = `${acct.service} · ${acct.hostPattern} · ${authLabel} · ${credentialLabel}`;
 
@@ -262,10 +275,11 @@ export class ShadowClawAccounts extends ShadowClawElement {
         <div class="form-group">
           <label class="form-label">Auth Mode</label>
           <select class="form-input" data-field="acct-auth-mode">
-            <option value="pat"${selectedAuthMode === "pat" ? " selected" : ""}>PAT</option>
+            <option value="token"${selectedAuthMode === "token" ? " selected" : ""}>Token (PAT)</option>
+            <option value="basic"${selectedAuthMode === "basic" ? " selected" : ""}>Basic Auth</option>
             <option value="oauth"${selectedAuthMode === "oauth" ? " selected" : ""}>OAuth</option>
           </select>
-          <div class="form-helper">Use PAT for manual tokens, or OAuth for provider-managed access tokens.</div>
+          <div class="form-helper">Use Token for generic tokens, Basic for user/password, or OAuth for provider-managed access.</div>
         </div>
 
         <div class="oauth-fields" data-region="oauth-fields">
@@ -326,10 +340,18 @@ export class ShadowClawAccounts extends ShadowClawElement {
           </div>
         </div>
 
+        <div class="form-group" data-region="basic-username-field">
+          <label class="form-label">Username or Email</label>
+          <input type="text" class="form-input" data-field="acct-basic-username"
+                 placeholder="e.g. user@example.com"
+                 value="${escapeHtml(existing?.basicUsername || "")}" />
+          <div class="form-helper">Required for Basic Auth.</div>
+        </div>
+
         <div class="form-group" data-region="pat-fields">
-          <label class="form-label">Personal Access Token</label>
+          <label class="form-label" data-region="pat-label">Access Token</label>
           <input type="password" class="form-input" data-field="acct-token"
-                 placeholder="${existing?.token ? "•••••••••••• (Saved)" : "Paste PAT"}" />
+                 placeholder="${existing?.token ? "•••••••••••• (Saved)" : "Paste Token"}" />
           <div class="form-helper">Stored encrypted locally. Leave blank to keep the existing token.</div>
         </div>
 
@@ -381,9 +403,14 @@ export class ShadowClawAccounts extends ShadowClawElement {
       slot.querySelector('[data-field="acct-auth-mode"]') as HTMLSelectElement
     )?.value;
     const isOAuth = mode === "oauth";
+    const isBasic = mode === "basic";
 
     const oauthRegion = slot.querySelector('[data-region="oauth-fields"]');
     const patRegion = slot.querySelector('[data-region="pat-fields"]');
+    const basicUsernameRegion = slot.querySelector(
+      '[data-region="basic-username-field"]',
+    );
+    const patLabel = slot.querySelector('[data-region="pat-label"]');
 
     if (oauthRegion instanceof HTMLElement) {
       oauthRegion.style.display = isOAuth ? "block" : "none";
@@ -391,6 +418,14 @@ export class ShadowClawAccounts extends ShadowClawElement {
 
     if (patRegion instanceof HTMLElement) {
       patRegion.style.display = isOAuth ? "none" : "block";
+    }
+
+    if (patLabel) {
+      patLabel.textContent = isBasic ? "Password / API Token" : "Access Token";
+    }
+
+    if (basicUsernameRegion instanceof HTMLElement) {
+      basicUsernameRegion.style.display = isBasic ? "block" : "none";
     }
   }
 
@@ -656,6 +691,11 @@ export class ShadowClawAccounts extends ShadowClawElement {
     const authMode = (
       slot.querySelector('[data-field="acct-auth-mode"]') as HTMLSelectElement
     )?.value as ServiceAccount["authMode"];
+    const basicUsername = (
+      slot.querySelector(
+        '[data-field="acct-basic-username"]',
+      ) as HTMLInputElement
+    )?.value.trim();
 
     if (!label || !service || !hostPattern) {
       showError("Label, Service, and Host Pattern are required.", 4000);
@@ -845,7 +885,8 @@ export class ShadowClawAccounts extends ShadowClawElement {
           service,
           hostPattern,
           token,
-          authMode: authMode || "pat",
+          basicUsername: authMode === "basic" ? basicUsername : undefined,
+          authMode: authMode || "token",
           oauthProviderId,
           oauthClientId,
           oauthClientSecret,
@@ -877,7 +918,9 @@ export class ShadowClawAccounts extends ShadowClawElement {
         existing.service = service;
         existing.hostPattern = hostPattern;
         existing.token = token;
-        existing.authMode = authMode || "pat";
+        existing.basicUsername =
+          authMode === "basic" ? basicUsername : undefined;
+        existing.authMode = authMode || "token";
         existing.oauthProviderId = oauthProviderId;
         existing.oauthClientId = oauthClientId;
         existing.oauthClientSecret = oauthClientSecret;

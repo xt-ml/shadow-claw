@@ -241,8 +241,14 @@ function getServiceAuthFormat(
   const authMode = resolveAccountAuthMode(account);
   const provider = resolveProviderCapabilities(account, url);
   if (provider) {
-    const scheme =
-      authMode === "oauth" ? provider.tokenAuth.oauth : provider.tokenAuth.pat;
+    let scheme;
+    if (authMode === "oauth") {
+      scheme = provider.tokenAuth.oauth;
+    } else if (authMode === "basic" && provider.tokenAuth.basic) {
+      scheme = provider.tokenAuth.basic;
+    } else {
+      scheme = provider.tokenAuth.token;
+    }
 
     return {
       headerName: scheme.headerName,
@@ -250,7 +256,10 @@ function getServiceAuthFormat(
     };
   }
 
-  return { headerName: "Authorization", headerPrefix: "Bearer " };
+  return {
+    headerName: "Authorization",
+    headerPrefix: authMode === "basic" ? "Basic " : "Bearer ",
+  };
 }
 
 /**
@@ -395,7 +404,15 @@ export async function resolveServiceCredentials(
   }
 
   const { headerName, headerPrefix } = getServiceAuthFormat(account, url);
-  const headerValue = headerPrefix ? `${headerPrefix}${token}` : token;
+  let finalToken = token;
+
+  if (resolveAccountAuthMode(account) === "basic" && account.basicUsername) {
+    finalToken = btoa(`${account.basicUsername}:${token}`);
+  }
+
+  const headerValue = headerPrefix
+    ? `${headerPrefix}${finalToken}`
+    : finalToken;
 
   return {
     token,

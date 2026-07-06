@@ -234,7 +234,7 @@ export interface ProviderConfig {
   supportsStreaming?: boolean;
 }
 
-export type ProviderAuthMode = "pat" | "oauth";
+export type ProviderAuthMode = "token" | "basic" | "oauth";
 
 export type ServiceType =
   | "http_api"
@@ -244,7 +244,7 @@ export type ServiceType =
 
 export type AuthType =
   | "none"
-  | "pat"
+  | "token"
   | "oauth"
   | "basic_userpass"
   | "custom_header"
@@ -279,15 +279,17 @@ export interface GeneralAccountProviderCapabilities {
   serviceTypes?: ServiceType[];
   authTypes?: AuthType[];
   tokenAuth: {
-    pat: ProviderTokenAuthScheme;
+    token: ProviderTokenAuthScheme;
     oauth: ProviderTokenAuthScheme;
+    basic?: ProviderTokenAuthScheme;
   };
   tokenAuthByServiceType?: Partial<
     Record<
       ServiceType,
       {
-        pat: ProviderTokenAuthScheme;
+        token: ProviderTokenAuthScheme;
         oauth: ProviderTokenAuthScheme;
+        basic?: ProviderTokenAuthScheme;
       }
     >
   >;
@@ -326,12 +328,12 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
     providerId: "github",
     name: "GitHub",
     aliases: ["github", "api.github.com"],
-    modes: ["oauth", "pat"],
+    modes: ["oauth", "token"],
     defaultMode: "oauth",
     serviceTypes: ["http_api", "git_remote"],
-    authTypes: ["pat", "oauth"],
+    authTypes: ["token", "oauth"],
     tokenAuth: {
-      pat: { headerName: "Authorization", headerPrefix: "token " },
+      token: { headerName: "Authorization", headerPrefix: "token " },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
     },
     oauth: {
@@ -347,17 +349,17 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
     providerId: "gitlab",
     name: "GitLab",
     aliases: ["gitlab", "gitlab.com"],
-    modes: ["oauth", "pat"],
+    modes: ["oauth", "token"],
     defaultMode: "oauth",
     serviceTypes: ["http_api", "git_remote"],
-    authTypes: ["pat", "oauth"],
+    authTypes: ["token", "oauth"],
     tokenAuth: {
-      pat: { headerName: "PRIVATE-TOKEN", headerPrefix: "" },
+      token: { headerName: "PRIVATE-TOKEN", headerPrefix: "" },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
     },
     tokenAuthByServiceType: {
       git_remote: {
-        pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+        token: { headerName: "Authorization", headerPrefix: "Bearer " },
         oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
       },
     },
@@ -374,12 +376,12 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
     providerId: "figma",
     name: "Figma",
     aliases: ["figma", "api.figma.com"],
-    modes: ["oauth", "pat"],
+    modes: ["oauth", "token"],
     defaultMode: "oauth",
     serviceTypes: ["http_api"],
-    authTypes: ["pat", "oauth"],
+    authTypes: ["token", "oauth"],
     tokenAuth: {
-      pat: { headerName: "X-Figma-Token", headerPrefix: "" },
+      token: { headerName: "X-Figma-Token", headerPrefix: "" },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
     },
     oauth: {
@@ -398,12 +400,12 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
     providerId: "notion",
     name: "Notion",
     aliases: ["notion", "api.notion.com", "notion.so"],
-    modes: ["oauth", "pat"],
+    modes: ["oauth", "token"],
     defaultMode: "oauth",
     serviceTypes: ["http_api"],
-    authTypes: ["pat", "oauth"],
+    authTypes: ["token", "oauth"],
     tokenAuth: {
-      pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+      token: { headerName: "Authorization", headerPrefix: "Bearer " },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
     },
     oauth: {
@@ -419,12 +421,12 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
     providerId: "microsoft_graph",
     name: "Microsoft Graph",
     aliases: ["microsoft", "graph.microsoft.com", "microsoft_graph"],
-    modes: ["oauth", "pat"],
+    modes: ["oauth", "token"],
     defaultMode: "oauth",
     serviceTypes: ["http_api"],
-    authTypes: ["pat", "oauth"],
+    authTypes: ["token", "oauth"],
     tokenAuth: {
-      pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+      token: { headerName: "Authorization", headerPrefix: "Bearer " },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
     },
     oauth: {
@@ -441,12 +443,12 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
     providerId: "yahoo_mail",
     name: "Yahoo Mail",
     aliases: ["yahoo", "yahoo_mail", "mail.yahoo.com"],
-    modes: ["oauth", "pat"],
+    modes: ["oauth", "token"],
     defaultMode: "oauth",
     serviceTypes: ["http_api"],
-    authTypes: ["pat", "oauth"],
+    authTypes: ["token", "oauth"],
     tokenAuth: {
-      pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+      token: { headerName: "Authorization", headerPrefix: "Bearer " },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
     },
     oauth: {
@@ -462,12 +464,12 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
     providerId: "google",
     name: "Google",
     aliases: ["google", "googleapis.com"],
-    modes: ["oauth", "pat"],
+    modes: ["oauth", "token"],
     defaultMode: "oauth",
     serviceTypes: ["http_api"],
-    authTypes: ["pat", "oauth"],
+    authTypes: ["token", "oauth"],
     tokenAuth: {
-      pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+      token: { headerName: "Authorization", headerPrefix: "Bearer " },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
     },
     oauth: {
@@ -483,13 +485,14 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
     providerId: "atlassian",
     name: "Atlassian",
     aliases: ["atlassian", "api.atlassian.com"],
-    modes: ["oauth", "pat"],
-    defaultMode: "oauth",
+    modes: ["oauth", "token", "basic"],
+    defaultMode: "basic",
     serviceTypes: ["http_api", "git_remote"],
-    authTypes: ["pat", "oauth"],
+    authTypes: ["token", "oauth", "basic_userpass"],
     tokenAuth: {
-      pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+      token: { headerName: "Authorization", headerPrefix: "Bearer " },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
+      basic: { headerName: "Authorization", headerPrefix: "Basic " },
     },
     oauth: {
       authorizeUrl: "https://auth.atlassian.com/authorize",
@@ -504,12 +507,12 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
     providerId: "slack",
     name: "Slack",
     aliases: ["slack", "slack.com"],
-    modes: ["oauth", "pat"],
+    modes: ["oauth", "token"],
     defaultMode: "oauth",
     serviceTypes: ["http_api"],
-    authTypes: ["pat", "oauth"],
+    authTypes: ["token", "oauth"],
     tokenAuth: {
-      pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+      token: { headerName: "Authorization", headerPrefix: "Bearer " },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
     },
     oauth: {
@@ -525,12 +528,12 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
     providerId: "linear",
     name: "Linear",
     aliases: ["linear", "api.linear.app", "linear.app"],
-    modes: ["oauth", "pat"],
+    modes: ["oauth", "token"],
     defaultMode: "oauth",
     serviceTypes: ["http_api"],
-    authTypes: ["pat", "oauth"],
+    authTypes: ["token", "oauth"],
     tokenAuth: {
-      pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+      token: { headerName: "Authorization", headerPrefix: "Bearer " },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
     },
     oauth: {
@@ -546,17 +549,17 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
     providerId: "azure_devops",
     name: "Azure DevOps",
     aliases: ["azure_devops", "dev.azure.com"],
-    modes: ["oauth", "pat"],
+    modes: ["oauth", "token"],
     defaultMode: "oauth",
     serviceTypes: ["http_api", "git_remote"],
-    authTypes: ["pat", "oauth", "basic_userpass", "ssh_key"],
+    authTypes: ["token", "oauth", "basic_userpass", "ssh_key"],
     tokenAuth: {
-      pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+      token: { headerName: "Authorization", headerPrefix: "Bearer " },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
     },
     tokenAuthByServiceType: {
       git_remote: {
-        pat: { headerName: "Authorization", headerPrefix: "Basic " },
+        token: { headerName: "Authorization", headerPrefix: "Basic " },
         oauth: { headerName: "Authorization", headerPrefix: "Basic " },
       },
     },
@@ -573,12 +576,12 @@ export const GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: Record<
     providerId: "custom_mcp",
     name: "Custom MCP",
     aliases: ["custom_mcp"],
-    modes: ["oauth", "pat"],
+    modes: ["oauth", "token"],
     defaultMode: "oauth",
     serviceTypes: ["mcp_remote", "webmcp_local"],
-    authTypes: ["none", "pat", "oauth", "custom_header", "ssh_key"],
+    authTypes: ["none", "token", "oauth", "custom_header", "ssh_key"],
     tokenAuth: {
-      pat: { headerName: "Authorization", headerPrefix: "Bearer " },
+      token: { headerName: "Authorization", headerPrefix: "Bearer " },
       oauth: { headerName: "Authorization", headerPrefix: "Bearer " },
     },
     oauth: {

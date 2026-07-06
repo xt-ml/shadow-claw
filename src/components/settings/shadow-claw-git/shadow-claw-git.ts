@@ -40,7 +40,7 @@ function mapDetectedProviderToOAuthProviderId(
 
 function resolveGitAccountAuthMode(
   account: GitAccount | null,
-): "pat" | "oauth" {
+): "token" | "oauth" | "basic" {
   return resolveStoredCredentialAuthMode(account);
 }
 
@@ -371,7 +371,7 @@ export class ShadowClawGit extends ShadowClawElement {
         <div class="form-group">
           <label class="form-label">Auth Mode</label>
           <select class="form-input" data-field="acct-auth-mode">
-            <option value="pat"${selectedAuthMode === "pat" ? " selected" : ""}>PAT / Username</option>
+            <option value="token"${selectedAuthMode === "token" ? " selected" : ""}>PAT / Username</option>
             <option value="oauth"${selectedAuthMode === "oauth" ? " selected" : ""}>OAuth</option>
           </select>
           <div class="form-helper">Use OAuth for provider-managed access tokens or PAT for manual Git credentials.</div>
@@ -894,7 +894,7 @@ export class ShadowClawGit extends ShadowClawElement {
           password,
           authorName,
           authorEmail,
-          authMode: authMode || "pat",
+          authMode: authMode || "token",
           oauthProviderId,
           oauthClientId,
           oauthClientSecret,
@@ -923,7 +923,7 @@ export class ShadowClawGit extends ShadowClawElement {
         existing.password = password;
         existing.authorName = authorName;
         existing.authorEmail = authorEmail;
-        existing.authMode = authMode || "pat";
+        existing.authMode = authMode || "token";
         existing.oauthProviderId = oauthProviderId;
         existing.oauthClientId = oauthClientId;
         existing.oauthClientSecret = oauthClientSecret;

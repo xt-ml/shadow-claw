@@ -611,7 +611,7 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
 
       return {
         serviceType: "mcp_remote",
-        authType: authSelection === "service_oauth" ? "oauth" : "pat",
+        authType: authSelection === "service_oauth" ? "oauth" : "token",
         providerId: "custom_mcp",
         accountId,
       };
@@ -627,7 +627,7 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
 
       return {
         serviceType: "mcp_remote",
-        authType: authSelection === "git_oauth" ? "oauth" : "pat",
+        authType: authSelection === "git_oauth" ? "oauth" : "token",
         providerId: "custom_mcp",
         gitAccountId,
       };

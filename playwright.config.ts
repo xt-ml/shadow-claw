@@ -12,7 +12,7 @@ export default defineConfig({
     navigationTimeout: 45000,
     screenshot: "only-on-failure",
     video: "retain-on-failure",
-    serviceWorkers: "block",
+    serviceWorkers: "allow",
   },
   webServer: {
     command: "npm start",

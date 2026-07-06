@@ -51,7 +51,7 @@ export interface FetchUrlDeps {
   ) => Promise<
     | {
         accountId: string;
-        authMode: "pat" | "oauth";
+        authMode: "token" | "oauth" | "basic";
         headerName: string;
         headerValue: string;
         service: string;
@@ -115,7 +115,7 @@ class HttpError extends Error implements HttpErrorLike {
 function parseAuthMode(
   value: unknown,
 ): AccountAuthMode | GitAuthMode | undefined {
-  if (value === "pat" || value === "oauth") {
+  if (value === "token" || value === "oauth") {
     return value;
   }
 
@@ -138,7 +138,7 @@ export async function executeFetchUrlTool(
     let resolvedGitCredentials:
       | {
           accountId?: string;
-          authMode?: "pat" | "oauth";
+          authMode?: "token" | "oauth" | "basic" | "basic";
           hostPattern?: string;
           provider?: string;
           reauthRequired?: boolean;
@@ -147,7 +147,7 @@ export async function executeFetchUrlTool(
     let resolvedServiceCredentials:
       | {
           accountId: string;
-          authMode: "pat" | "oauth";
+          authMode: "token" | "oauth" | "basic";
           headerName: string;
           headerValue: string;
           service: string;

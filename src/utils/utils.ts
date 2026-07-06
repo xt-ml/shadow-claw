@@ -163,12 +163,15 @@ export function handleSpecialLinkNavigation(
               page: route.page,
               groupId: route.groupId,
               path: route.path,
-              anchor: route.anchor || (urlLike.hash ? urlLike.hash.slice(1) : undefined),
+              anchor:
+                route.anchor ||
+                (urlLike.hash ? urlLike.hash.slice(1) : undefined),
             },
             bubbles: true,
             composed: true,
           }),
         );
+
         return true;
       }
     } catch {

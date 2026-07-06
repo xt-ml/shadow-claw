@@ -304,7 +304,7 @@ describe("config.js", () => {
       const github = PROVIDER_AUTH_CAPABILITIES.github;
       expect(github).toBeDefined();
       expect(github.modes).toContain("oauth");
-      expect(github.modes).toContain("pat");
+      expect(github.modes).toContain("token");
       expect(github.defaultMode).toBe("oauth");
     });
 
@@ -312,7 +312,7 @@ describe("config.js", () => {
       const caps = getProviderAuthCapabilities("gitlab");
       expect(caps).toBeDefined();
       expect(caps?.providerId).toBe("gitlab");
-      expect(caps?.modes).toEqual(["oauth", "pat"]);
+      expect(caps?.modes).toEqual(["oauth", "token"]);
     });
 
     it("should return null for unknown capability provider IDs", () => {
@@ -325,7 +325,7 @@ describe("config.js", () => {
       const github = GENERAL_ACCOUNT_PROVIDER_CAPABILITIES.github;
       expect(github).toBeDefined();
       expect(github.providerId).toBe("github");
-      expect(github.tokenAuth.pat.headerName).toBe("Authorization");
+      expect(github.tokenAuth.token.headerName).toBe("Authorization");
       expect(github.oauth?.authorizeUrl).toContain("github.com");
     });
 
@@ -346,7 +346,7 @@ describe("config.js", () => {
       expect(customMcp.serviceTypes).toContain("mcp_remote");
       expect(customMcp.serviceTypes).toContain("webmcp_local");
       expect(customMcp.authTypes).toContain("oauth");
-      expect(customMcp.authTypes).toContain("pat");
+      expect(customMcp.authTypes).toContain("token");
       expect(customMcp.authTypes).toContain("ssh_key");
     });
 
@@ -364,7 +364,7 @@ describe("config.js", () => {
     it("should resolve service-type specific auth scheme for azure devops git remote", () => {
       const scheme = getProviderTokenAuthScheme(
         "azure_devops",
-        "pat",
+        "token",
         "git_remote",
       );
 
@@ -375,7 +375,7 @@ describe("config.js", () => {
     });
 
     it("should fall back to default auth scheme when service type override is absent", () => {
-      const scheme = getProviderTokenAuthScheme("github", "pat", "http_api");
+      const scheme = getProviderTokenAuthScheme("github", "token", "http_api");
       expect(scheme).toEqual({
         headerName: "Authorization",
         headerPrefix: "token ",

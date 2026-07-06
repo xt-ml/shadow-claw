@@ -1,9 +1,9 @@
 import { resolveStoredCredentialAuthMode } from "./stored-credentials.js";
 
 describe("resolveStoredCredentialAuthMode", () => {
-  it("defaults to pat when credential is absent", () => {
-    expect(resolveStoredCredentialAuthMode(undefined)).toBe("pat");
-    expect(resolveStoredCredentialAuthMode(null)).toBe("pat");
+  it("defaults to token when credential is absent", () => {
+    expect(resolveStoredCredentialAuthMode(undefined)).toBe("token");
+    expect(resolveStoredCredentialAuthMode(null)).toBe("token");
   });
 
   it("preserves explicit oauth auth mode", () => {
@@ -28,11 +28,11 @@ describe("resolveStoredCredentialAuthMode", () => {
     ).toBe("oauth");
   });
 
-  it("stays pat when oauth fields are not present", () => {
+  it("stays token when oauth fields are not present", () => {
     expect(
       resolveStoredCredentialAuthMode({
-        authMode: "pat",
+        authMode: "token",
       }),
-    ).toBe("pat");
+    ).toBe("token");
   });
 });

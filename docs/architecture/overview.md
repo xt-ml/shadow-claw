@@ -6,14 +6,14 @@
 
 ## What is ShadowClaw?
 
-ShadowClaw is a **browser-native AI assistant** — a fully functional agent runtime that runs entirely in the browser with zero server-side AI logic. It's built with TypeScript and bundled with Rollup.
+ShadowClaw is a **browser-native AI assistant** — a fully functional agent runtime that runs entirely in the browser with zero server-side AI logic. It's built with TypeScript and bundled with Rolldown.
 
 **Stack at a glance:**
 
 | Layer         | Technology                                                          |
 | ------------- | ------------------------------------------------------------------- |
 | Language      | TypeScript (`.ts`) — all source files                               |
-| Build         | Rollup (frontend, worker, service workers, server, Electron)        |
+| Build         | Rolldown (frontend, worker, service workers, server, Electron)      |
 | UI            | Native Web Components + Shadow DOM                                  |
 | Reactivity    | TC39 Signals via `signal-polyfill`                                  |
 | State         | IndexedDB (messages, config, tasks, sessions)                       |
@@ -60,9 +60,9 @@ Everything runs in the browser. The Express server provides a suite of backend s
 - Static file serving and SPA routing
 - Transformers.js and Llamafile local model runtimes
 
-### 2. TypeScript everywhere, Rollup for bundling
+### 2. TypeScript everywhere, Rolldown for bundling
 
-The entire codebase is TypeScript. Rollup produces six distinct bundles:
+The entire codebase is TypeScript. Rolldown produces six distinct bundles:
 
 | Bundle                     | Input                                | Output                                       | Purpose                               |
 | -------------------------- | ------------------------------------ | -------------------------------------------- | ------------------------------------- |
@@ -74,7 +74,7 @@ The entire codebase is TypeScript. Rollup produces six distinct bundles:
 | Server                     | `src/server/server.ts`               | `dist/server.js`                             | Express server (modular routes/proxy) |
 | Electron                   | `electron/main.ts`                   | `dist/electron/main.cjs`                     | Desktop app entry                     |
 
-External dependencies are installed via `npm install` and bundled by Rollup — no CDN importmaps.
+External dependencies are installed via `npm install` and bundled by Rolldown — no CDN importmaps.
 
 ### 3. Worker-isolated agent
 

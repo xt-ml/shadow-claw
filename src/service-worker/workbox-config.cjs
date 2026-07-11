@@ -36,7 +36,7 @@ module.exports = {
     "service-worker/push-handler.js",
     "service-worker/share-target.js",
   ],
-  // // Force new service worker versions to activate and control pages immediately.
+  // // Force new service worker to activate and control pages immediately (bypassing dialog asking for reload).
   // skipWaiting: true,
   clientsClaim: true,
   navigateFallback: "/index.html",

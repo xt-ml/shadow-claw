@@ -3,7 +3,7 @@
 import { execSync } from "node:child_process";
 import { cp, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { chdir, env, exit } from "node:process";
+import { chdir, env, exit, argv } from "node:process";
 import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -58,11 +58,7 @@ async function main() {
   await cp("README.md", "dist/public/README.md");
   await cp("AGENTS.md", "dist/public/AGENTS.md");
 
-  // npm run -s tsc
-  await run("npm run -s tsc");
-
-  // npm run -s rollup
-  await run("npm run -s rollup");
+  await run("npm run -s rolldown");
 
   // Render static DSD shell into index.html for no-JS and first paint.
   // Pages content seeding from main/ is enabled by default.

@@ -52,7 +52,7 @@ src/db/
 This granularity enables:
 
 - Fine-grained unit testing (mock only what's needed)
-- Dead code elimination by Rollup
+- Dead code elimination by Rolldown
 - Clear ownership of each DB operation
 
 ### OPFS for files

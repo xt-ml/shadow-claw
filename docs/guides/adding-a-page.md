@@ -185,4 +185,4 @@ npm run tsc
 - **Use unique IDs** for interactive elements (prefixed with the component name) for Playwright E2E tests
 - **`<shadow-claw-page-header>`** is the reusable mobile-first header — use it for consistent navigation
 - **Don't manipulate the light DOM** — all rendering happens inside the shadow root
-- **Rollup copies** `.css` and `.html` files to `dist/public/` automatically via the `copy` plugin
+- **Rolldown copies** `.css` and `.html` files to `dist/public/` automatically via the `copy` plugin

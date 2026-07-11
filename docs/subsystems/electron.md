@@ -7,7 +7,7 @@
 
 ## Build Output
 
-The Electron main process is compiled by Rollup from `electron/main.ts` to `dist/electron/main.cjs` (CommonJS format, since Electron requires CJS for the main process).
+The Electron main process is compiled by Rolldown from `electron/main.ts` to `dist/electron/main.cjs` (CommonJS format, since Electron requires CJS for the main process).
 
 ```bash
 npm run electron              # Build + launch desktop app

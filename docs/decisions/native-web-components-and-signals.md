@@ -38,7 +38,7 @@ src/components/shadow-claw-chat/
 └── shadow-claw-chat.css    ← adopted at runtime
 ```
 
-The `ShadowClawElement` base class fetches these files at `connectedCallback()` time. Rollup's `copy` plugin mirrors them to `dist/public/` at build time.
+The `ShadowClawElement` base class fetches these files at `connectedCallback()` time. Rolldown's `copy` plugin mirrors them to `dist/public/` at build time.
 
 **Why co-location?** Before this change, all component HTML was inline strings in JS files and all CSS was a single monolithic `index.css`. Co-location makes each component self-contained and easier to maintain/review. Shadow DOM isolation means component CSS can't interfere with the main stylesheet.
 

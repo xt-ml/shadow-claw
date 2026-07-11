@@ -9,7 +9,7 @@ A browser-native, fully-featured AI assistant. TypeScript + Web Components + Ind
 ## Quick Start
 
 ```bash
-npm install && npm start  # Express server → http://localhost:8888
+npm install && npm run dev  # Dev server → http://localhost:8888
 ```
 
 Open Settings, select a provider (or use browser Prompt API), and start chatting.
@@ -333,12 +333,13 @@ E2E test architecture: [`e2e/README.md`](e2e/README.md)
 ## Development
 
 ```bash
+npm run dev                  # Dev server (watch mode)
 npm start                    # Express server
 npm test                     # Jest (*.test.ts files live next to source)
 npm run e2e                  # Playwright E2E tests (e2e/*.test.ts)
 npm run e2e:install          # Install Playwright browser binaries
 npm run tsc                  # TypeScript type-check
-npm run build                # Bundle application via Rollup + generate service worker
+npm run build                # Bundle application via Rolldown + generate service worker
 npm run build:service-worker # Generate the Workbox service worker
 npm run build:prod           # Production bundle build
 npm run format               # Prettier

@@ -123,7 +123,7 @@ src/components/shadow-claw-chat/
 └── shadow-claw-chat.css    # Shadow DOM styles (adopted at runtime)
 ```
 
-Rollup's `copy` plugin mirrors `.css` and `.html` files to `dist/public/` preserving the `src/`-relative path, so `fetch("components/shadow-claw-chat/shadow-claw-chat.css")` resolves correctly at runtime.
+Rolldown's `copy` plugin mirrors `.css` and `.html` files to `dist/public/` preserving the `src/`-relative path, so `fetch("components/shadow-claw-chat/shadow-claw-chat.css")` resolves correctly at runtime.
 
 ## Store Pattern
 

@@ -68,7 +68,7 @@ The _why_ behind key choices.
 
 | Document                                                                            | Decision                                                   |
 | ----------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [Bundled TypeScript Architecture](decisions/bundled-typescript-architecture.md)     | Rationale for the transition to Rollup + TypeScript        |
+| [Bundled TypeScript Architecture](decisions/bundled-typescript-architecture.md)     | Rationale for the transition to Rolldown + TypeScript      |
 | [Native Web Components and Signals](decisions/native-web-components-and-signals.md) | Why native standards for UI and reactivity                 |
 | [Worker-Isolated Agent Runtime](decisions/worker-isolated-agent-runtime.md)         | Why the agent and VM run in dedicated workers              |
 | [IndexedDB and OPFS Storage](decisions/indexeddb-and-opfs-storage.md)               | Why IndexedDB and OPFS for persistent storage              |

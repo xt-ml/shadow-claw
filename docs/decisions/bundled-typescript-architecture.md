@@ -10,19 +10,19 @@ ShadowClaw originally shipped as a collection of browser-native ES modules (`.mj
 
 ## Decision
 
-Migrate the entire codebase to **TypeScript (`.ts`)** compiled and bundled with **Rollup**.
+Migrate the entire codebase to **TypeScript (`.ts`)** compiled and bundled with **Rolldown**.
 
 ### Key choices:
 
 - **TypeScript** — strict type-checking across the board, shared interfaces via `src/types.ts`, typed messages for the worker protocol
-- **Rollup** — produces single-file bundles for frontend, worker, service workers, server, and Electron. Handles Node polyfills via `rollup-plugin-polyfill-node` + aliasing
+- **Rolldown** — produces single-file bundles for frontend, worker, service workers, server, and Electron. Handles Node polyfills via `rollup-plugin-polyfill-node` + aliasing
 - **Multiple tsconfig files** — distinct TypeScript configurations for each runtime context:
   - `tsconfig.json` — frontend app (browser, DOM)
   - `tsconfig.agent.worker.json` — worker runtime (WebWorker)
   - `tsconfig.service.worker.json` — service workers (ServiceWorker)
   - `tsconfig.server.json` — server (Node.js)
 - **Jest custom resolver (`jest-ts-resolver.cjs`)** — maps `.js` imports to `.ts` files in the test environment, so TypeScript's recommended convention of writing `import from "./foo.js"` works without `@ts-ignore`
-- **esbuild for TypeScript transpilation** inside Rollup (via `rollup-plugin-esbuild`) — faster than `ts-loader` or `tsc` for bundling
+- **esbuild for TypeScript transpilation** inside Rolldown (via `rollup-plugin-esbuild`) — faster than `ts-loader` or `tsc` for bundling
 - **Co-located component assets** — HTML templates and CSS stylesheets move into component subdirectories with the TypeScript source, co-located for clarity
 
 ## Trade-offs
@@ -38,7 +38,7 @@ Migrate the entire codebase to **TypeScript (`.ts`)** compiled and bundled with 
 ### Disadvantages
 
 - **Build step required** — `npm run build` before running. Dev loop is now: edit → build → refresh.
-- **Rollup config complexity** — `rollup.config.mjs` is ~300 lines managing six separate bundles, plugin configuration, and asset copying
+- **Rolldown config complexity** — `rolldown.config.mjs` is ~300 lines managing six separate bundles, plugin configuration, and asset copying
 - **TypeScript can be strict** — some areas use `as any` to bridge JavaScript interop
 - **Large initial migration** — the `.mjs` → `.ts` migration touched every source file
 
@@ -47,8 +47,8 @@ Migrate the entire codebase to **TypeScript (`.ts`)** compiled and bundled with 
 | Alternative           | Why not chosen                                                               |
 | --------------------- | ---------------------------------------------------------------------------- |
 | Vite                  | Opinionated defaults not suited to multi-target (worker, SW, Electron) build |
-| Webpack               | Higher config complexity than Rollup for this use case                       |
-| esbuild directly      | Rollup's plugin ecosystem and tree-shaking superior for libraries            |
+| Webpack               | Higher config complexity than Rolldown for this use case                     |
+| esbuild directly      | Rolldown's plugin ecosystem and tree-shaking superior for libraries          |
 | Remain `.mjs` + JSDoc | Does not give true strict type safety; Electron CJS requirement blocks       |
 | Deno                  | Would require rewriting all npm package usage                                |
 

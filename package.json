@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.12.3",
+  "version": "1.12.4",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -21,7 +21,7 @@
     "build": "npm run -s tsc && node bin/build.mjs",
     "clean:service-worker": "node bin/rimraf.mjs dist/public/workbox-*.js && node bin/rimraf.mjs dist/public/service-worker.js",
     "deploy:gh-pages": "npm run build:prod:prerender-main-memory-false && gh-pages -f -m \"npm run deploy:gh-pages\" -d dist/public -r git@github.com:xt-ml/shadow-claw.git",
-    "dev": "npm run build:prerender-main-memory-false && concurrently \"npm run rolldown -- --watch\" \"node --watch dist/server.js\"",
+    "dev": "npm run build:prerender-main-memory-false && concurrently -P \"npm run rolldown -- --watch\" \"node --watch dist/server.js {@}\" --",
     "e2e:install": "npx playwright install",
     "e2e": "node bin/rimraf.mjs .cache/e2e-database && npx playwright test",
     "electron:build:mac": "npm run build:prerender-main-memory-false && npm run build:service-worker && electron-builder --mac",

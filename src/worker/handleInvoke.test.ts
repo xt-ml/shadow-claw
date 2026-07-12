@@ -64,6 +64,7 @@ describe("handleInvoke.js", () => {
       formatRequest: mockFormatRequest,
       getContextLimit: mockGetContextLimit,
       parseResponse: mockParseResponse,
+      normalizeMeshLlmResult: jest.fn((r) => r),
     }));
 
     jest.unstable_mockModule("../storage/storage.js", () => ({

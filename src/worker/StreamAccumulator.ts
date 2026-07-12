@@ -24,7 +24,7 @@ export interface StreamCallbacks {
   source?: string;
 }
 
-export type StreamFormat = "openai" | "anthropic";
+export type StreamFormat = "openai" | "anthropic" | "mesh-llm";
 
 export interface ContentBlockAccumulator {
   type: string;
@@ -68,7 +68,7 @@ export class StreamAccumulator {
    * Feed a single parsed SSE chunk into the accumulator.
    */
   push(chunk: any): void {
-    if (this.format === "openai") {
+    if (this.format === "openai" || this.format === "mesh-llm") {
       this._pushOpenAI(chunk);
     } else {
       this._pushAnthropic(chunk);
@@ -83,7 +83,7 @@ export class StreamAccumulator {
     stop_reason: string;
     usage: { input_tokens: number; output_tokens: number };
   } {
-    if (this.format === "openai") {
+    if (this.format === "openai" || this.format === "mesh-llm") {
       return this._finalizeOpenAI();
     }
 

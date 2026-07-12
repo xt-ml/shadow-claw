@@ -40,6 +40,7 @@ All providers are declared in `src/config/config.ts` under `PROVIDERS`:
 | `bedrock_proxy`              | `anthropic`       | ✅        | ❌ (AWS SSO via proxy) |
 | `gemini_proxy`               | `openai`          | ✅        | ✅                     |
 | `vertex_ai`                  | `openai`          | ✅        | ✅                     |
+| `mesh-llm`                   | `mesh-llm`        | ✅        | ❌                     |
 | `prompt_api`                 | `prompt_api`      | ❌        | ❌                     |
 
 > **Llamafile Note:** The local proxy context size for Llamafile defaults to 8192 tokens but can be configured via the `LLAMAFILE_CTX_SIZE` environment variable (e.g., `LLAMAFILE_CTX_SIZE=32768`).

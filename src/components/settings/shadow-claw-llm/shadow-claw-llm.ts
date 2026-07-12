@@ -249,6 +249,10 @@ export class ShadowClawLlm extends ShadowClawElement {
       ?.addEventListener("click", () => this.saveBedrockSettings());
 
     root
+      .querySelector('[data-action="save-mesh-llm-settings"]')
+      ?.addEventListener("click", () => this.saveMeshLlmSettings());
+
+    root
       .querySelector('[data-action="save-transformers-js-settings"]')
       ?.addEventListener("click", () => this.saveTransformersJsSettings());
 
@@ -306,6 +310,8 @@ export class ShadowClawLlm extends ShadowClawElement {
     this.updateModelProviderHelperText();
     this.updateBedrockSettingsVisibility(currentProvider);
     this.renderBedrockSettings();
+    this.updateMeshLlmSettingsVisibility(currentProvider);
+    this.renderMeshLlmSettings();
     this.updateTransformersJsSettingsVisibility(currentProvider);
     this.renderTransformersJsSettings();
 
@@ -476,7 +482,7 @@ export class ShadowClawLlm extends ShadowClawElement {
      * Heuristic to determine if a model is "free" or "included" based on provider metadata
      */
     const isFreeModel = (m: any) => {
-      if (localOnlyProviderIds.has(currentProvider)) {
+      if (localOnlyProviderIds.has(currentProvider) || currentProvider === "mesh-llm") {
         return true;
       }
 
@@ -1105,6 +1111,37 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
   }
 
+  updateMeshLlmSettingsVisibility(providerId: string) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const section = root.querySelector('[data-setting="mesh-llm-settings"]') as HTMLElement | null;
+    if (!section) {
+      return;
+    }
+
+    section.style.display = providerId === "mesh-llm" ? "block" : "none";
+  }
+
+  renderMeshLlmSettings() {
+    if (!this.orchestrator) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const settings = (this.orchestrator as any).getMeshLlmSettings?.();
+    const hostInput = root.querySelector('[data-setting="mesh-llm-host-input"]') as HTMLInputElement | null;
+    if (hostInput) {
+      hostInput.value = settings?.host || "";
+    }
+  }
+
   updateLlamafileModeVisibility() {
     if (!this.orchestrator) {
       return;
@@ -1247,7 +1284,8 @@ export class ShadowClawLlm extends ShadowClawElement {
         this.updateLlamafileModeVisibility();
         this.updateLlamafileModelSectionVisibility();
         this.updateBedrockSettingsVisibility(providerId);
-        this.renderBedrockSettings();
+        this.updateBedrockSettingsVisibility(providerId);
+        this.updateMeshLlmSettingsVisibility(providerId);
         this.updateTransformersJsSettingsVisibility(providerId);
         this.renderTransformersJsSettings();
 
@@ -1401,6 +1439,37 @@ export class ShadowClawLlm extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving streaming setting: " + errorMsg, 6000);
+    }
+  }
+
+  async saveMeshLlmSettings() {
+    if (!this.orchestrator || !this.db) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const hostInput = root.querySelector('[data-setting="mesh-llm-host-input"]') as HTMLInputElement | null;
+    if (!hostInput) {
+      return;
+    }
+
+    const host = hostInput.value.trim();
+
+    try {
+      if ((this.orchestrator as any).setMeshLlmSettings) {
+        await (this.orchestrator as any).setMeshLlmSettings(this.db, { host });
+        showSuccess("Mesh LLM settings saved", 3000);
+        if (this.orchestrator.getProvider() === "mesh-llm") {
+          this.updateModelSelector();
+        }
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving Mesh LLM settings: " + errorMsg, 6000);
     }
   }
 

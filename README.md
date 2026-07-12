@@ -20,7 +20,7 @@ Open Settings, select a provider (or use browser Prompt API), and start chatting
 
 A fully-functional agent runtime that runs entirely in the browser—no AI processing on a server. Built with TypeScript, it provides:
 
-- **Multi-model support**: OpenRouter, Anthropic, Google Gemini, AWS Bedrock, Ollama, Llamafile, Transformers.js, and browser-native Prompt API
+- **Multi-model support**: OpenRouter, Anthropic, Google Gemini, AWS Bedrock, Ollama, Llamafile, Mesh LLM, Transformers.js, and browser-native Prompt API
 - **Web Components UI**: Native Custom Elements + TC39 Signals for reactive updates
 - **Persistent storage**: IndexedDB for messages/config, OPFS for files
 - **Agent tools**: File I/O, shell (with optional WebVM), Git, HTTP, JavaScript execution
@@ -105,7 +105,7 @@ ShadowClaw supports multiple LLM providers with a unified adapter pattern:
 | ------------------ | -------------------------------------------------------------------- | ---------------------------------- |
 | **Cloud**          | OpenRouter, OpenAI, Anthropic, Google Gemini, AWS Bedrock, Vertex AI | API key required                   |
 | **GitHub/Copilot** | GitHub Models, Copilot Azure                                         | Server-side proxy                  |
-| **Local**          | Ollama, Llamafile, Transformers.js                                   | Runs on local server or in-browser |
+| **Local**          | Ollama, Llamafile, Mesh LLM, Transformers.js                         | Runs on local server or in-browser |
 | **Browser**        | Prompt API (`window.LanguageModel`), LiteRT                          | Experimental, keyless, Gemini Nano |
 
 **Features:**

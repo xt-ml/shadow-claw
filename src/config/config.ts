@@ -59,6 +59,16 @@ export const MODEL_OUTPUT_LIMITS: Array<{
   { pattern: "gpt-3.5", maxTokens: 4096 },
   // Qwen 2.5 family — 32k+ max output
   { pattern: "qwen-2.5", maxTokens: 32768 },
+  // Qwen3.5 family (MTP etc.) — large context, 32k max output (must precede qwen3)
+  { pattern: "Qwen3.5", maxTokens: 32768 },
+  { pattern: "qwen3.5", maxTokens: 32768 },
+  // Qwen3 family — 32k max output
+  { pattern: "Qwen3", maxTokens: 32768 },
+  { pattern: "qwen3", maxTokens: 32768 },
+  // Gemma 4 family (covers unsloth GGUF variants served via Mesh LLM)
+  { pattern: "gemma-4", maxTokens: 16384 },
+  // Mesh LLM "mesh" routing model (MoA) — API reports context_length 242144
+  { pattern: "mesh", maxTokens: 32768 },
   // OpenRouter Free — generous 32k fallback for routing
   { pattern: "openrouter/free", maxTokens: 32768 },
   // Ollama Qwen3 8B — 4096 max output
@@ -92,9 +102,19 @@ export function getModelMaxTokens(modelId: string): number {
     }
 
     // Registry hit but no explicit maxOutput.
-    // Use half the context window for smaller models, capped generously at 32k.
+    // Scale the ceiling with the context window so large-context models
+    // (e.g. Mesh LLM mesh 242k, Qwen3.5 262k) aren't hard-capped at 32k.
     if (info.contextWindow) {
-      return Math.min(32768, Math.floor(info.contextWindow / 2));
+      let ceiling: number;
+      if (info.contextWindow >= 200_000) {
+        ceiling = 131_072; // very-large-context models
+      } else if (info.contextWindow >= 100_000) {
+        ceiling = 65_536; // large-context models
+      } else {
+        ceiling = 32_768; // standard models
+      }
+
+      return Math.min(ceiling, Math.floor(info.contextWindow / 2));
     }
   }
 
@@ -217,7 +237,13 @@ export interface ProviderConfig {
   id: string;
   name: string;
   baseUrl: string;
-  format: "openai" | "anthropic" | "prompt_api" | "transformers_js" | "google";
+  format:
+    | "openai"
+    | "anthropic"
+    | "prompt_api"
+    | "transformers_js"
+    | "google"
+    | "mesh-llm";
   apiKeyHeader: string;
   apiKeyHeaderFormat?: string;
   headers: Record<string, string>;
@@ -739,6 +765,18 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     requiresApiKey: true,
     supportsStreaming: true,
   },
+  "mesh-llm": {
+    id: "mesh-llm",
+    name: "Mesh LLM (Local Proxy)",
+    baseUrl: "http://localhost:8888/mesh-llm-proxy/chat/completions",
+    format: "mesh-llm",
+    apiKeyHeader: "Authorization",
+    headers: {},
+    defaultModel: "mesh",
+    modelsUrl: "http://localhost:8888/mesh-llm-proxy/models",
+    requiresApiKey: false,
+    supportsStreaming: true,
+  },
   ollama: {
     id: "ollama",
     name: "Ollama (Local Proxy)",
@@ -933,89 +971,90 @@ export function getOAuthProviderDefinition(
 
 /** Config keys */
 export const CONFIG_KEYS = {
-  PROVIDER: "provider",
+  ACTIVE_TOOL_PROFILE: "active_tool_profile",
+  ACTIVITY_LOG_DISK_LOGGING_ENABLED: "activity_log_disk_logging_enabled",
   API_KEY: "api_key",
+  ASSISTANT_NAME: "assistant_name",
+  BEDROCK_AUTH_MODE: "bedrock_auth_mode",
+  BEDROCK_PROFILE_FALLBACK: "bedrock_profile_fallback",
+  BEDROCK_REGION_FALLBACK: "bedrock_region_fallback",
   CHANNEL_ENABLED_PREFIX: "channel_enabled:",
+  CHAT_INPUT_AREA_HEIGHT: "chat_input_area_height",
+  CONTEXT_COMPRESSION_ENABLED: "context_compression_enabled",
+  CONVERSATIONS_HEIGHT: "conversations_height",
+  CUSTOM_TOOLS: "custom_tools",
+  DIRECT_TOOL_COMMAND_POLICY: "direct_tool_command_policy",
+  ENABLED_TOOLS: "enabled_tools",
+  GIT_ACCOUNTS: "git_accounts",
+  GIT_AUTHOR_EMAIL: "git_author_email",
+  GIT_AUTHOR_NAME: "git_author_name",
+  GIT_CORS_PROXY: "git_cors_proxy",
+  GIT_DEFAULT_ACCOUNT: "git_default_account",
+  GIT_PASSWORD: "git_password",
+  GIT_PROXY_URL: "git_proxy_url",
+  GIT_TOKEN: "git_token",
+  GIT_USERNAME: "git_username",
+  IMESSAGE_API_KEY: "imessage_api_key",
+  IMESSAGE_CHAT_IDS: "imessage_chat_ids",
+  IMESSAGE_SERVER_URL: "imessage_server_url",
+  INTEGRATION_CONNECTIONS: "integration_connections",
+  LAST_ACTIVE_GROUP: "last_active_group",
+  LAST_ACTIVE_PAGE: "last_active_page",
+  LAST_SELECTED_PINNED_PAGE: "last_selected_pinned_page",
+  LLAMAFILE_HOST: "llamafile_host",
+  LLAMAFILE_MODE: "llamafile_mode",
+  LLAMAFILE_OFFLINE: "llamafile_offline",
+  LLAMAFILE_PORT: "llamafile_port",
+  MAIN_GROUP_INDEX_SUPPRESSED: "main_group_index_suppressed",
+  MAIN_GROUP_README_SUPPRESSED: "main_group_readme_suppressed",
+  MAX_ITERATIONS: "max_iterations",
+  MAX_TOKENS: "max_tokens",
+  MESH_LLM_HOST: "mesh_llm_host",
+  MODEL: "model",
+  PAGES_LIST: "pages_list",
+  PASSPHRASE_SALT: "passphrase_salt",
+  PASSPHRASE_VERIFY: "passphrase_verify",
+  PEERJS_MY_ALIAS: "peerjs_my_alias",
+  PEERJS_MY_PEER_ID: "peerjs_my_peer_id",
+  PEERJS_PEER_ALIASES: "peerjs_peer_aliases",
+  PEERJS_SERVER_HOST: "peerjs_server_host",
+  PEERJS_SERVER_PATH: "peerjs_server_path",
+  PEERJS_SERVER_PORT: "peerjs_server_port",
+  PEERJS_SERVER_SECURE: "peerjs_server_secure",
+  PEERJS_TRUSTED_PEER_IDS: "peerjs_trusted_peer_ids",
+  PROVIDER: "provider",
+  PROXY_URL: "proxy_url",
+  PUSH_PROXY_URL: "push_proxy_url",
+  RATE_LIMIT_AUTO_ADAPT: "rate_limit_auto_adapt",
+  RATE_LIMIT_CALLS_PER_MINUTE: "rate_limit_calls_per_minute",
+  REMOTE_MCP_CONNECTIONS: "remote_mcp_connections",
+  SERVICE_ACCOUNTS: "service_accounts",
+  SERVICE_DEFAULT_ACCOUNT: "service_default_account",
+  SIDEBAR_DEFAULT_PAGE: "sidebar_default_page",
+  SIDEBAR_PAGES_HIDDEN: "sidebar_pages_hidden",
+  SIDEBAR_WIDTH: "sidebar_width",
+  STORAGE_HANDLE: "storage_handle",
+  STREAMING_ENABLED: "streaming_enabled",
+  SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
+  SYSTEM_PROMPT_OVERRIDE: "system_prompt_override",
+  TASK_SERVER_URL: "task_server_url",
+  TASK_SYNC_OUTBOX: "task_sync_outbox",
   TELEGRAM_BOT_TOKEN: "telegram_bot_token",
   TELEGRAM_CHAT_IDS: "telegram_chat_ids",
   TELEGRAM_USE_PROXY: "telegram_use_proxy",
-  IMESSAGE_SERVER_URL: "imessage_server_url",
-  IMESSAGE_API_KEY: "imessage_api_key",
-  IMESSAGE_CHAT_IDS: "imessage_chat_ids",
-  PEERJS_MY_PEER_ID: "peerjs_my_peer_id",
-  PEERJS_MY_ALIAS: "peerjs_my_alias",
-  PEERJS_TRUSTED_PEER_IDS: "peerjs_trusted_peer_ids",
-  PEERJS_PEER_ALIASES: "peerjs_peer_aliases",
-  PEERJS_SERVER_HOST: "peerjs_server_host",
-  PEERJS_SERVER_PORT: "peerjs_server_port",
-  PEERJS_SERVER_PATH: "peerjs_server_path",
-  PEERJS_SERVER_SECURE: "peerjs_server_secure",
-  TRIGGER_PATTERN: "trigger_pattern",
-  MODEL: "model",
-  MAX_TOKENS: "max_tokens",
-  PASSPHRASE_SALT: "passphrase_salt",
-  PASSPHRASE_VERIFY: "passphrase_verify",
-  ASSISTANT_NAME: "assistant_name",
-  STORAGE_HANDLE: "storage_handle",
-  SERVICE_ACCOUNTS: "service_accounts",
-  SERVICE_DEFAULT_ACCOUNT: "service_default_account",
-  GIT_TOKEN: "git_token",
-  GIT_USERNAME: "git_username",
-  GIT_PASSWORD: "git_password",
-  GIT_AUTHOR_NAME: "git_author_name",
-  GIT_AUTHOR_EMAIL: "git_author_email",
-  GIT_CORS_PROXY: "git_cors_proxy",
-  GIT_ACCOUNTS: "git_accounts",
-  GIT_DEFAULT_ACCOUNT: "git_default_account",
-  VM_BOOT_MODE: "vm_boot_mode",
-  VM_BOOT_HOST: "vm_boot_host",
-  VM_NETWORK_RELAY_URL: "vm_network_relay_url",
-  VM_BASH_TIMEOUT_SEC: "vm_bash_timeout_sec",
-  VM_BASH_FULL_INTERNET_ACCESS: "vm_bash_full_internet_access",
-  ENABLED_TOOLS: "enabled_tools",
-  CUSTOM_TOOLS: "custom_tools",
-  SYSTEM_PROMPT_OVERRIDE: "system_prompt_override",
   TOOL_PROFILES: "tool_profiles",
-  ACTIVE_TOOL_PROFILE: "active_tool_profile",
-  WEBMCP_TOOLS_ENABLED: "webmcp_tools_enabled",
-  WEBMCP_MODE: "webmcp_mode",
-  STREAMING_ENABLED: "streaming_enabled",
-  MAX_ITERATIONS: "max_iterations",
-  RATE_LIMIT_CALLS_PER_MINUTE: "rate_limit_calls_per_minute",
-  RATE_LIMIT_AUTO_ADAPT: "rate_limit_auto_adapt",
-  TASK_SYNC_OUTBOX: "task_sync_outbox",
-  LAST_ACTIVE_GROUP: "last_active_group",
-  SIDEBAR_DEFAULT_PAGE: "sidebar_default_page",
-  SIDEBAR_PAGES_HIDDEN: "sidebar_pages_hidden",
-  CONVERSATIONS_HEIGHT: "conversations_height",
-  SIDEBAR_WIDTH: "sidebar_width",
-  CHAT_INPUT_AREA_HEIGHT: "chat_input_area_height",
-  VAPID_SUBJECT: "vapid_subject",
-  USE_PROXY: "use_proxy",
-  PROXY_URL: "proxy_url",
-  GIT_PROXY_URL: "git_proxy_url",
-  PUSH_PROXY_URL: "push_proxy_url",
-  TASK_SERVER_URL: "task_server_url",
-  REMOTE_MCP_CONNECTIONS: "remote_mcp_connections",
-  INTEGRATION_CONNECTIONS: "integration_connections",
-  CONTEXT_COMPRESSION_ENABLED: "context_compression_enabled",
   TRANSFORMERS_JS_BACKEND: "transformers_js_backend",
   TRANSFORMERS_JS_DTYPE_STRATEGY: "transformers_js_dtype_strategy",
-  DIRECT_TOOL_COMMAND_POLICY: "direct_tool_command_policy",
-  LLAMAFILE_MODE: "llamafile_mode",
-  LLAMAFILE_HOST: "llamafile_host",
-  LLAMAFILE_PORT: "llamafile_port",
-  LLAMAFILE_OFFLINE: "llamafile_offline",
-  BEDROCK_REGION_FALLBACK: "bedrock_region_fallback",
-  BEDROCK_PROFILE_FALLBACK: "bedrock_profile_fallback",
-  BEDROCK_AUTH_MODE: "bedrock_auth_mode",
-  LAST_ACTIVE_PAGE: "last_active_page",
-  LAST_SELECTED_PINNED_PAGE: "last_selected_pinned_page",
-  PAGES_LIST: "pages_list",
-  MAIN_GROUP_README_SUPPRESSED: "main_group_readme_suppressed",
-  MAIN_GROUP_INDEX_SUPPRESSED: "main_group_index_suppressed",
-  ACTIVITY_LOG_DISK_LOGGING_ENABLED: "activity_log_disk_logging_enabled",
-  SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
+  TRIGGER_PATTERN: "trigger_pattern",
+  USE_PROXY: "use_proxy",
+  VAPID_SUBJECT: "vapid_subject",
+  VM_BASH_FULL_INTERNET_ACCESS: "vm_bash_full_internet_access",
+  VM_BASH_TIMEOUT_SEC: "vm_bash_timeout_sec",
+  VM_BOOT_HOST: "vm_boot_host",
+  VM_BOOT_MODE: "vm_boot_mode",
+  VM_NETWORK_RELAY_URL: "vm_network_relay_url",
+  WEBMCP_MODE: "webmcp_mode",
+  WEBMCP_TOOLS_ENABLED: "webmcp_tools_enabled",
 };
 
 /** Default dev server host */

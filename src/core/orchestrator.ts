@@ -215,6 +215,8 @@ export class Orchestrator {
   llamafilePort: number = 8080;
   llamafileOffline: boolean = true;
 
+  meshLlmHost: string = "";
+
   maxIterations: number = DEFAULT_MAX_ITERATIONS;
   maxTokens: number = DEFAULT_MAX_TOKENS;
 
@@ -548,6 +550,13 @@ export class Orchestrator {
 
     this.applyLlamafileHeaders();
 
+    const storedmeshLlmHost = await getConfig(db, CONFIG_KEYS.MESH_LLM_HOST);
+    if (storedmeshLlmHost) {
+      this.meshLlmHost = storedmeshLlmHost;
+    }
+
+    this.applyMeshLlmHeaders();
+
     const storedVMBootMode = await getConfig(db, CONFIG_KEYS.VM_BOOT_MODE);
     this.vmBootMode =
       storedVMBootMode === "disabled" ||
@@ -875,6 +884,7 @@ export class Orchestrator {
     this.providerConfig = newProvider;
     this.model = newProvider.defaultModel;
     this.applyLlamafileHeaders();
+    this.applyMeshLlmHeaders();
 
     // Load API key for the new provider first so fetchModelInfo can use it.
     await this.loadApiKeyForProvider(db, providerId);
@@ -951,6 +961,37 @@ export class Orchestrator {
     );
 
     this.applyLlamafileHeaders();
+  }
+
+  applyMeshLlmHeaders() {
+    if (this.providerConfig?.id !== "mesh-llm") {
+      return;
+    }
+
+    this.providerConfig = {
+      ...this.providerConfig,
+      headers: {
+        ...(this.providerConfig.headers || {}),
+        "x-mesh-llm-host": this.meshLlmHost,
+      },
+    };
+  }
+
+  getMeshLlmSettings(): { host: string } {
+    return {
+      host: this.meshLlmHost,
+    };
+  }
+
+  async setMeshLlmSettings(
+    db: ShadowClawDatabase,
+    settings: { host: string },
+  ): Promise<void> {
+    this.meshLlmHost = settings.host;
+
+    await setConfig(db, CONFIG_KEYS.MESH_LLM_HOST, settings.host);
+
+    this.applyMeshLlmHeaders();
   }
 
   getModel(): string {

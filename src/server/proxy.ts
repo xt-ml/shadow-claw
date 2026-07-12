@@ -20,6 +20,7 @@ import { registerVertexAiRoutes } from "./routes/vertex-ai.js";
 import { registerOllamaRoutes } from "./routes/ollama.js";
 import { registerTransformersJsRoutes } from "./routes/transformers-js.js";
 import { registerLlamafileRoutes } from "./routes/llamafile.js";
+import { registerMeshLlmRoutes } from "./routes/mesh-llm.js";
 import { registerIntegrationEmailRoutes } from "./routes/integrations-email.js";
 
 import { createTransformersRuntimeService } from "./services/transformers-runtime.js";
@@ -53,6 +54,7 @@ export function registerProxyRoutes(
   registerGeminiRoutes(app, options);
   registerVertexAiRoutes(app, options);
   registerOllamaRoutes(app, options);
+  registerMeshLlmRoutes(app, options);
 
   // Register locally hosted engine routes
   registerTransformersJsRoutes(app, transformersRuntimeService, options);

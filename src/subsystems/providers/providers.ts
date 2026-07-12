@@ -784,6 +784,148 @@ class GoogleAdapter extends BaseAdapter {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Mesh LLM Adapter
+// Mesh LLM uses a non-standard response format:
+//   - Thought blocks: <|channel>thought ... <channel|>
+//   - Tool calls:     <|tool_call>call:toolName{...json...}<tool_call|>
+//
+// Request formatting reuses the standard OpenAI path since Mesh LLM accepts
+// standard /v1/chat/completions requests.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Strip Mesh LLM thought-channel blocks: <|channel>thought ... <channel|>
+ */
+function stripMeshLlmThoughtBlocks(text: string): string {
+  // <|channel>thought ... <channel|>
+
+  return text
+    .replace(/<\|channel>[\s\S]*?<channel\|>/g, "")
+    .replace(/^[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * Parse Mesh LLM tool calls out of text content.
+ *
+ * Format: <|tool_call>call:toolName{...json...}<tool_call|>
+ *
+ * Returns { toolBlocks, residualText } where residualText is the text
+ * with all tool call blocks removed.
+ */
+function parseMeshLlmToolCalls(text: string): {
+  toolBlocks: Array<{
+    type: "tool_use";
+    id: string;
+    name: string;
+    input: Record<string, any>;
+  }>;
+  residualText: string;
+} {
+  const TOOL_CALL_RE = /<\|tool_call>call:([a-zA-Z_][a-zA-Z0-9_]*)(\{[\s\S]*?\})?<tool_call\|>/g;
+  const toolBlocks: Array<{
+    type: "tool_use";
+    id: string;
+    name: string;
+    input: Record<string, any>;
+  }> = [];
+
+  const residualText = text.replace(TOOL_CALL_RE, (_, name, rawJson) => {
+    let input: Record<string, any> = {};
+    if (rawJson) {
+      try {
+        const parsed = JSON.parse(rawJson);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          input = parsed;
+        }
+      } catch {
+        // Malformed JSON — use empty input
+      }
+    }
+
+    toolBlocks.push({
+      type: "tool_use",
+      id: `mesh_llm_call_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+      name,
+      input,
+    });
+
+    return "";
+  });
+
+  return {
+    toolBlocks,
+    residualText: residualText
+      .replace(/^[ \t]+$/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim(),
+  };
+}
+
+/**
+ * Post-process a finalized Mesh LLM result (from either non-streaming or
+ * streaming path) to strip thought blocks and convert inline tool call
+ * syntax to the internal tool_use format.
+ *
+ * Exported so that `handleInvoke` can apply the same transformation after
+ * the `StreamAccumulator` finalizes a streaming response.
+ */
+export function normalizeMeshLlmResult(result: any): any {
+  if (!result || !Array.isArray(result.content)) {
+    return result;
+  }
+
+  const processedContent: any[] = [];
+  let hasToolCalls = false;
+
+  for (const block of result.content) {
+    if (block.type !== "text") {
+      processedContent.push(block);
+
+      continue;
+    }
+
+    // 1. Strip thought blocks
+    const withoutThoughts = stripMeshLlmThoughtBlocks(block.text);
+
+    // 2. Parse inline tool calls
+    const { toolBlocks, residualText } = parseMeshLlmToolCalls(withoutThoughts);
+
+    if (residualText) {
+      processedContent.push({ type: "text", text: residualText });
+    }
+
+    if (toolBlocks.length > 0) {
+      hasToolCalls = true;
+      processedContent.push(...toolBlocks);
+    }
+  }
+
+  return {
+    ...result,
+    content: processedContent,
+    stop_reason:
+      hasToolCalls || result.stop_reason === "tool_use"
+        ? "tool_use"
+        : result.stop_reason,
+  };
+}
+
+/**
+ * Adapter for Mesh LLM — uses standard OpenAI request format but applies
+ * custom response parsing to handle Mesh LLM's proprietary token syntax.
+ */
+class MeshLlmAdapter extends OpenAIAdapter {
+  parseResponse(response: any): any {
+    // First, run the base OpenAI parse to get text + any standard tool_calls
+    const base = super.parseResponse(response);
+
+    return normalizeMeshLlmResult(base);
+  }
+}
+
 /**
  * Map of format string to Adapter class
  */
@@ -791,6 +933,7 @@ const ADAPTER_MAP: Record<string, typeof BaseAdapter> = {
   openai: OpenAIAdapter,
   anthropic: AnthropicAdapter,
   google: GoogleAdapter,
+  "mesh-llm": MeshLlmAdapter,
 };
 
 /**
@@ -1008,6 +1151,26 @@ export function getContextLimit(model: string): number {
 
   if (m.includes("phi-3")) {
     return 4_096;
+  }
+
+  // Qwen3 / Qwen3.5 (covers Mesh LLM unsloth GGUF variants)
+  // native_context_length from Mesh LLM API:
+  //   Qwen3.5-9B-MTP: 262 144   Qwen3-0.6B/8B: 40 960   Qwen3-4B: 32 768
+  if (m.includes("qwen3.5")) {
+    return 262_144;
+  }
+
+  if (m.includes("qwen3-0.6b") || m.includes("qwen3-1.7b")) {
+    return 40_960;
+  }
+
+  if (m.includes("qwen3")) {
+    return 128_000;
+  }
+
+  // Mesh LLM "mesh" routing model (MoA) — reported context_length 242 144
+  if (m === "mesh") {
+    return 242_144;
   }
 
   return 4_096;

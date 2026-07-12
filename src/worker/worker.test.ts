@@ -84,6 +84,7 @@ describe("worker and worker/agent.js", () => {
       formatRequest: jest.fn(),
       getContextLimit: jest.fn(),
       parseResponse: jest.fn(),
+      normalizeMeshLlmResult: jest.fn((r) => r),
     }));
 
     jest.unstable_mockModule("../shell/shell.js", () => ({

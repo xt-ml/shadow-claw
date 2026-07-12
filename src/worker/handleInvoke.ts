@@ -11,6 +11,7 @@ import {
   buildHeaders,
   formatRequest,
   getContextLimit,
+  normalizeMeshLlmResult,
   parseResponse,
 } from "../subsystems/providers/providers.js";
 
@@ -716,7 +717,8 @@ async function callWithStreaming(
     ...body,
     stream: true,
     // For OpenAI-compatible APIs, request usage in the stream
-    ...(typedProvider.format === "openai" && {
+    ...((typedProvider.format === "openai" ||
+      typedProvider.format === "mesh-llm") && {
       stream_options: { include_usage: true },
     }),
   };
@@ -798,5 +800,14 @@ async function callWithStreaming(
     });
   }
 
-  return accumulator.finalize();
+  let finalResult = accumulator.finalize();
+
+  // Mesh LLM streams standard OpenAI SSE chunks but its assembled text may
+  // contain proprietary markers for thoughts and tool calls.
+  // We normalize the final assembled object before the agent loop consumes it.
+  if (typedProvider.format === "mesh-llm") {
+    finalResult = normalizeMeshLlmResult(finalResult);
+  }
+
+  return finalResult;
 }

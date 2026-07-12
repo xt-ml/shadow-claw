@@ -641,7 +641,7 @@ describe("config.js", () => {
         maxOutput: null,
       });
 
-      expect(getModelMaxTokens("openai/gpt-4.1")).toBe(32768);
+      expect(getModelMaxTokens("openai/gpt-4.1")).toBe(64000);
     });
   });
 });

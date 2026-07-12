@@ -170,6 +170,30 @@
 
   <div
     class="settings-section"
+    data-setting="mesh-llm-settings"
+    style="display: none"
+  >
+    <h3>🌐 Mesh LLM Host</h3>
+    <div class="form-group">
+      <label class="form-label">Mesh LLM Host</label>
+      <input
+        class="form-input"
+        data-setting="mesh-llm-host-input"
+        placeholder="https://public.mesh-llm.cloud"
+        type="text"
+      />
+      <div class="form-helper">
+        Leave empty to use the default public mesh, or provide a local endpoint
+        (e.g. <code>http://localhost:9337</code>).
+      </div>
+    </div>
+    <button class="save-btn" data-action="save-mesh-llm-settings">
+      💾 Save Mesh LLM Settings
+    </button>
+  </div>
+
+  <div
+    class="settings-section"
     data-setting="transformers-js-settings"
     style="display: none"
   >

@@ -2,57 +2,23 @@ import {
   CONFIG_KEYS,
   OAUTH_PROVIDER_DEFINITIONS,
 } from "../../../config/config.js";
+
 import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
 import { getConfig } from "../../../db/getConfig.js";
+import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
 import { escapeHtml } from "../../../utils/utils.js";
-import { setSanitizedHtml } from "../../../security/trusted-types.js";
+import { resolveAccountAuthMode } from "./utils/resolveAccountAuthMode.js";
 
 import type { ServiceAccount } from "../../../subsystems/accounts/service-accounts.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
-import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
+
 import "../../common/shadow-claw-actions/shadow-claw-actions.js";
 import "../../common/shadow-claw-card/shadow-claw-card.js";
+import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 
 const elementName = "shadow-claw-accounts";
-
-function resolveAccountAuthMode(
-  account: ServiceAccount | null,
-): "token" | "basic" | "oauth" {
-  if (!account) {
-    return "token";
-  }
-
-  if (
-    account.authMode === "token" ||
-    (account.authMode as string) === "token"
-  ) {
-    return "token";
-  }
-
-  if (account.authMode === "basic") {
-    return "basic";
-  }
-
-  if (account.authMode === "oauth") {
-    return "oauth";
-  }
-
-  if (
-    account.oauthProviderId ||
-    account.oauthClientId ||
-    account.oauthClientSecret ||
-    account.refreshToken ||
-    account.accessTokenExpiresAt ||
-    account.tokenType ||
-    account.oauthReauthRequired
-  ) {
-    return "oauth";
-  }
-
-  return "token";
-}
 
 export class ShadowClawAccounts extends ShadowClawElement {
   static componentPath = `components/settings/${elementName}`;
@@ -122,21 +88,15 @@ export class ShadowClawAccounts extends ShadowClawElement {
       });
   }
 
-  async render() {
+  hideAccountForm() {
     const root = this.shadowRoot;
-    if (!root || !this.db) {
+    if (!root) {
       return;
     }
 
-    try {
-      const raw = await getConfig(this.db, CONFIG_KEYS.SERVICE_ACCOUNTS);
-      this.accounts = Array.isArray(raw) ? raw : [];
-      this.defaultAccountId =
-        (await getConfig(this.db, CONFIG_KEYS.SERVICE_DEFAULT_ACCOUNT)) || "";
-
-      this.renderAccountList();
-    } catch (e) {
-      console.warn("Could not load service accounts:", e);
+    const slot = root.querySelector('[data-region="account-form-slot"]');
+    if (slot) {
+      slot.replaceChildren();
     }
   }
 
@@ -384,18 +344,6 @@ export class ShadowClawAccounts extends ShadowClawElement {
 
     this.updateAuthModeVisibility(slot);
     this.updateCustomMcpFieldsVisibility(slot);
-  }
-
-  hideAccountForm() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const slot = root.querySelector('[data-region="account-form-slot"]');
-    if (slot) {
-      slot.replaceChildren();
-    }
   }
 
   updateAuthModeVisibility(slot: Element) {
@@ -661,6 +609,52 @@ export class ShadowClawAccounts extends ShadowClawElement {
       if (connectBtn) {
         connectBtn.disabled = false;
       }
+    }
+  }
+
+  async deleteAccount(id: string) {
+    if (!this.db) {
+      return;
+    }
+
+    this.accounts = this.accounts.filter((account) => account.id !== id);
+
+    if (this.defaultAccountId === id) {
+      this.defaultAccountId = this.accounts[0]?.id || "";
+    }
+
+    try {
+      const { setConfig } = await import("../../../db/setConfig.js");
+      await setConfig(this.db, CONFIG_KEYS.SERVICE_ACCOUNTS, this.accounts);
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.SERVICE_DEFAULT_ACCOUNT,
+        this.defaultAccountId,
+      );
+    } catch (err) {
+      console.warn("Error persisting account deletion:", err);
+    }
+
+    this.renderAccountList();
+
+    showSuccess("Account deleted", 3000);
+  }
+
+  async render() {
+    const root = this.shadowRoot;
+    if (!root || !this.db) {
+      return;
+    }
+
+    try {
+      const raw = await getConfig(this.db, CONFIG_KEYS.SERVICE_ACCOUNTS);
+      this.accounts = Array.isArray(raw) ? raw : [];
+      this.defaultAccountId =
+        (await getConfig(this.db, CONFIG_KEYS.SERVICE_DEFAULT_ACCOUNT)) || "";
+
+      this.renderAccountList();
+    } catch (e) {
+      console.warn("Could not load service accounts:", e);
     }
   }
 
@@ -947,34 +941,6 @@ export class ShadowClawAccounts extends ShadowClawElement {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving account: " + errorMsg, 6000);
     }
-  }
-
-  async deleteAccount(id: string) {
-    if (!this.db) {
-      return;
-    }
-
-    this.accounts = this.accounts.filter((account) => account.id !== id);
-
-    if (this.defaultAccountId === id) {
-      this.defaultAccountId = this.accounts[0]?.id || "";
-    }
-
-    try {
-      const { setConfig } = await import("../../../db/setConfig.js");
-      await setConfig(this.db, CONFIG_KEYS.SERVICE_ACCOUNTS, this.accounts);
-      await setConfig(
-        this.db,
-        CONFIG_KEYS.SERVICE_DEFAULT_ACCOUNT,
-        this.defaultAccountId,
-      );
-    } catch (err) {
-      console.warn("Error persisting account deletion:", err);
-    }
-
-    this.renderAccountList();
-
-    showSuccess("Account deleted", 3000);
   }
 
   async setDefaultAccount(id: string) {

@@ -22,75 +22,37 @@ if (typeof window !== "undefined") {
   }
 }
 
-import "../components/shadow-claw/shadow-claw.js";
-
-import { orchestratorStore } from "../stores/orchestrator.js";
-import {
-  installE2eBridge,
-  shouldInstallE2eBridge,
-} from "../testing/e2e-bridge.js";
+import { initializeApp } from "./utils/initializeApp.js";
 import { resumeAudioContext } from "../ui/audio.js";
 
-import type { ShadowClaw } from "../components/shadow-claw/shadow-claw.js";
-import type { Orchestrator } from "./orchestrator.js";
+import "../components/shadow-claw/shadow-claw.js";
 
-const BOOT_PENDING_CLASS = "sc-js-boot-pending";
-const BOOT_PENDING_ATTR = "data-js-boot-pending";
-const HYDRATION_PENDING_ATTR = "data-hydration-pending";
-
-function clearBootPendingClass(): void {
-  if (typeof document === "undefined") {
-    return;
-  }
-
-  document.documentElement.classList.remove(BOOT_PENDING_CLASS);
-  const host = document.querySelector("shadow-claw");
-  host?.removeAttribute(BOOT_PENDING_ATTR);
-  host?.removeAttribute(HYDRATION_PENDING_ATTR);
-}
+export const BOOT_PENDING_CLASS = "sc-js-boot-pending";
+export const BOOT_PENDING_ATTR = "data-js-boot-pending";
+export const HYDRATION_PENDING_ATTR = "data-hydration-pending";
 
 let isInitializing = false;
-async function initializeApp(): Promise<Orchestrator | undefined> {
-  if (isInitializing) {
-    return;
-  }
-
-  isInitializing = true;
-  try {
-    console.log("🦞 ShadowClaw initializing...");
-
-    const uiElement = (document.querySelector("shadow-claw") ||
-      document.body.appendChild(
-        document.createElement("shadow-claw"),
-      )) as ShadowClaw;
-
-    console.log("✅ ShadowClaw initialized successfully");
-
-    // Conditionally install E2E bridge for tests
-    if (shouldInstallE2eBridge()) {
-      console.log("🧪 E2E Test Bridge enabled");
-      installE2eBridge(orchestratorStore, uiElement);
-    }
-
-    await orchestratorStore.whenInitialized;
-
-    return uiElement.orchestrator;
-  } catch (error) {
-    console.error("❌ Failed to initialize ShadowClaw:", error);
-
-    throw error;
-  } finally {
-    clearBootPendingClass();
-  }
-}
 
 // Initialize on DOM ready
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initializeApp);
-} else {
-  initializeApp().catch((err) => {
-    console.error("Fatal error during initialization:", err);
+  document.addEventListener("DOMContentLoaded", async () => {
+    try {
+      const result = await initializeApp(document, isInitializing);
+      isInitializing = Boolean(result?.isInitializing);
+    } catch(e) {
+      console.error("Fatal error during initialization:", e);
+      isInitializing = false;
+    }
   });
+} else {
+  initializeApp(document, isInitializing)
+    .then((result) => {
+      isInitializing = Boolean(result?.isInitializing);
+    })
+    .catch((err) => {
+      console.error("Fatal error during initialization:", err);
+      isInitializing = false;
+    });
 }
 
 // Register user gesture listeners for audio resumption

@@ -116,120 +116,22 @@ export class ShadowClawGit extends ShadowClawElement {
       });
   }
 
-  async render() {
+  /**
+   * Hide the account form.
+   */
+  hideAccountForm() {
     const root = this.shadowRoot;
     if (!root) {
       return;
     }
 
-    try {
-      const proxyPref =
-        (await getConfig(this.db, CONFIG_KEYS.GIT_CORS_PROXY)) || "local";
-
-      const localRadio: HTMLInputElement | null = root.querySelector(
-        '[data-setting="git-proxy-local"]',
-      );
-
-      const publicRadio: HTMLInputElement | null = root.querySelector(
-        '[data-setting="git-proxy-public"]',
-      );
-
-      const customRadio: HTMLInputElement | null = root.querySelector(
-        '[data-setting="git-proxy-custom"]',
-      );
-
-      const customUrlInput: HTMLInputElement | null = root.querySelector(
-        '[data-setting="git-proxy-url-input"]',
-      );
-
-      if (localRadio && publicRadio && customRadio) {
-        localRadio.checked = proxyPref === "local";
-        publicRadio.checked = proxyPref === "public";
-        customRadio.checked = proxyPref === "custom";
-      }
-
-      const { orchestratorStore } =
-        await import("../../../stores/orchestrator.js");
-      if (customUrlInput) {
-        customUrlInput.value = orchestratorStore.gitProxyUrl || "/git-proxy";
-      }
-
-      this.updateCustomProxyVisibility();
-
-      const authorNameInput: HTMLInputElement | null = root.querySelector(
-        '[data-setting="git-author-name-input"]',
-      );
-
-      if (authorNameInput) {
-        authorNameInput.value =
-          (await getConfig(this.db, CONFIG_KEYS.GIT_AUTHOR_NAME)) ||
-          "ShadowClaw";
-      }
-
-      const authorEmailInput: HTMLInputElement | null = root.querySelector(
-        '[data-setting="git-author-email-input"]',
-      );
-
-      if (authorEmailInput) {
-        authorEmailInput.value =
-          (await getConfig(this.db, CONFIG_KEYS.GIT_AUTHOR_EMAIL)) ||
-          "agent@example.com";
-      }
-
-      // Load accounts
-      const raw = await getConfig(this.db, CONFIG_KEYS.GIT_ACCOUNTS);
-      this.accounts = Array.isArray(raw) ? raw : [];
-      this.defaultAccountId =
-        (await getConfig(this.db, CONFIG_KEYS.GIT_DEFAULT_ACCOUNT)) || "";
-
-      // Migrate legacy single-account if no accounts exist
-      if (this.accounts.length === 0) {
-        await this.migrateLegacyAccount();
-      }
-
-      this.renderAccountList();
-      this.updateGitWarning();
-    } catch (e) {
-      console.warn("Could not load git settings:", e);
-    }
-  }
-
-  /**
-   * Migrate legacy single-key config into an account entry.
-   * Only runs when no accounts exist and a legacy token or username is present.
-   */
-  async migrateLegacyAccount() {
-    if (!this.db) {
-      return;
+    const slot = root.querySelector('[data-region="account-form-slot"]');
+    if (slot) {
+      slot.replaceChildren();
     }
 
-    const encToken = await getConfig(this.db, CONFIG_KEYS.GIT_TOKEN);
-    const username = await getConfig(this.db, CONFIG_KEYS.GIT_USERNAME);
-
-    if (!encToken && !username) {
-      return;
-    }
-
-    const encPassword =
-      (await getConfig(this.db, CONFIG_KEYS.GIT_PASSWORD)) || "";
-
-    const legacy: GitAccount = {
-      id: "legacy-migrated",
-      label: "GitHub",
-      hostPattern: "github.com",
-      token: encToken || "",
-      username: username || "",
-      password: encPassword,
-      authorName: "",
-      authorEmail: "",
-    };
-
-    this.accounts = [legacy];
-    this.defaultAccountId = legacy.id;
-
-    const { setConfig } = await import("../../../db/setConfig.js");
-    await setConfig(this.db, CONFIG_KEYS.GIT_ACCOUNTS, this.accounts);
-    await setConfig(this.db, CONFIG_KEYS.GIT_DEFAULT_ACCOUNT, legacy.id);
+    this.editingAccountId = null;
+    this.pendingOauthResult = null;
   }
 
   /**
@@ -475,24 +377,6 @@ export class ShadowClawGit extends ShadowClawElement {
     this.updateAuthModeVisibility(slot);
   }
 
-  /**
-   * Hide the account form.
-   */
-  hideAccountForm() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const slot = root.querySelector('[data-region="account-form-slot"]');
-    if (slot) {
-      slot.replaceChildren();
-    }
-
-    this.editingAccountId = null;
-    this.pendingOauthResult = null;
-  }
-
   updateAuthModeVisibility(slot: Element) {
     const mode = (
       slot.querySelector('[data-field="acct-auth-mode"]') as HTMLSelectElement
@@ -508,6 +392,27 @@ export class ShadowClawGit extends ShadowClawElement {
 
     if (patRegion instanceof HTMLElement) {
       patRegion.style.display = isOAuth ? "none" : "block";
+    }
+  }
+
+  /**
+   * Show/hide the custom proxy URL input based on current radio selection.
+   */
+  updateCustomProxyVisibility() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const customRadio: HTMLInputElement | null = root.querySelector(
+      '[data-setting="git-proxy-custom"]',
+    );
+
+    const field: HTMLElement | null = root.querySelector(
+      '[data-region="git-custom-proxy-field"]',
+    );
+    if (field instanceof HTMLElement) {
+      field.style.display = customRadio?.checked ? "block" : "none";
     }
   }
 
@@ -678,6 +583,155 @@ export class ShadowClawGit extends ShadowClawElement {
       if (connectBtn) {
         connectBtn.disabled = false;
       }
+    }
+  }
+
+  /**
+   * Delete an account by id.
+   */
+  async deleteAccount(id: string) {
+    if (!this.db) {
+      return;
+    }
+
+    this.accounts = this.accounts.filter((a) => a.id !== id);
+
+    // If we deleted the default, pick a new default
+    if (this.defaultAccountId === id) {
+      this.defaultAccountId = this.accounts[0]?.id || "";
+    }
+
+    try {
+      const { setConfig } = await import("../../../db/setConfig.js");
+      await setConfig(this.db, CONFIG_KEYS.GIT_ACCOUNTS, this.accounts);
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.GIT_DEFAULT_ACCOUNT,
+        this.defaultAccountId,
+      );
+    } catch (err) {
+      console.warn("Error persisting account deletion:", err);
+    }
+
+    this.renderAccountList();
+    this.updateGitWarning();
+
+    showSuccess("Account deleted", 3000);
+  }
+
+  /**
+   * Migrate legacy single-key config into an account entry.
+   * Only runs when no accounts exist and a legacy token or username is present.
+   */
+  async migrateLegacyAccount() {
+    if (!this.db) {
+      return;
+    }
+
+    const encToken = await getConfig(this.db, CONFIG_KEYS.GIT_TOKEN);
+    const username = await getConfig(this.db, CONFIG_KEYS.GIT_USERNAME);
+
+    if (!encToken && !username) {
+      return;
+    }
+
+    const encPassword =
+      (await getConfig(this.db, CONFIG_KEYS.GIT_PASSWORD)) || "";
+
+    const legacy: GitAccount = {
+      id: "legacy-migrated",
+      label: "GitHub",
+      hostPattern: "github.com",
+      token: encToken || "",
+      username: username || "",
+      password: encPassword,
+      authorName: "",
+      authorEmail: "",
+    };
+
+    this.accounts = [legacy];
+    this.defaultAccountId = legacy.id;
+
+    const { setConfig } = await import("../../../db/setConfig.js");
+    await setConfig(this.db, CONFIG_KEYS.GIT_ACCOUNTS, this.accounts);
+    await setConfig(this.db, CONFIG_KEYS.GIT_DEFAULT_ACCOUNT, legacy.id);
+  }
+
+  async render() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    try {
+      const proxyPref =
+        (await getConfig(this.db, CONFIG_KEYS.GIT_CORS_PROXY)) || "local";
+
+      const localRadio: HTMLInputElement | null = root.querySelector(
+        '[data-setting="git-proxy-local"]',
+      );
+
+      const publicRadio: HTMLInputElement | null = root.querySelector(
+        '[data-setting="git-proxy-public"]',
+      );
+
+      const customRadio: HTMLInputElement | null = root.querySelector(
+        '[data-setting="git-proxy-custom"]',
+      );
+
+      const customUrlInput: HTMLInputElement | null = root.querySelector(
+        '[data-setting="git-proxy-url-input"]',
+      );
+
+      if (localRadio && publicRadio && customRadio) {
+        localRadio.checked = proxyPref === "local";
+        publicRadio.checked = proxyPref === "public";
+        customRadio.checked = proxyPref === "custom";
+      }
+
+      const { orchestratorStore } =
+        await import("../../../stores/orchestrator.js");
+      if (customUrlInput) {
+        customUrlInput.value = orchestratorStore.gitProxyUrl || "/git-proxy";
+      }
+
+      this.updateCustomProxyVisibility();
+
+      const authorNameInput: HTMLInputElement | null = root.querySelector(
+        '[data-setting="git-author-name-input"]',
+      );
+
+      if (authorNameInput) {
+        authorNameInput.value =
+          (await getConfig(this.db, CONFIG_KEYS.GIT_AUTHOR_NAME)) ||
+          "ShadowClaw";
+      }
+
+      const authorEmailInput: HTMLInputElement | null = root.querySelector(
+        '[data-setting="git-author-email-input"]',
+      );
+
+      if (authorEmailInput) {
+        authorEmailInput.value =
+          (await getConfig(this.db, CONFIG_KEYS.GIT_AUTHOR_EMAIL)) ||
+          "agent@example.com";
+      }
+
+      // Load accounts
+      const raw = await getConfig(this.db, CONFIG_KEYS.GIT_ACCOUNTS);
+      this.accounts = Array.isArray(raw) ? raw : [];
+      this.defaultAccountId =
+        (await getConfig(this.db, CONFIG_KEYS.GIT_DEFAULT_ACCOUNT)) || "";
+
+      // Migrate legacy single-account if no accounts exist
+      if (this.accounts.length === 0) {
+        await this.migrateLegacyAccount();
+      }
+
+      this.renderAccountList();
+      this.updateGitWarning();
+    } catch (e) {
+      console.warn("Could not load git settings:", e);
     }
   }
 
@@ -950,88 +1004,6 @@ export class ShadowClawGit extends ShadowClawElement {
   }
 
   /**
-   * Delete an account by id.
-   */
-  async deleteAccount(id: string) {
-    if (!this.db) {
-      return;
-    }
-
-    this.accounts = this.accounts.filter((a) => a.id !== id);
-
-    // If we deleted the default, pick a new default
-    if (this.defaultAccountId === id) {
-      this.defaultAccountId = this.accounts[0]?.id || "";
-    }
-
-    try {
-      const { setConfig } = await import("../../../db/setConfig.js");
-      await setConfig(this.db, CONFIG_KEYS.GIT_ACCOUNTS, this.accounts);
-      await setConfig(
-        this.db,
-        CONFIG_KEYS.GIT_DEFAULT_ACCOUNT,
-        this.defaultAccountId,
-      );
-    } catch (err) {
-      console.warn("Error persisting account deletion:", err);
-    }
-
-    this.renderAccountList();
-    this.updateGitWarning();
-
-    showSuccess("Account deleted", 3000);
-  }
-
-  /**
-   * Set an account as the default.
-   */
-  async setDefaultAccount(id: string) {
-    if (!this.db) {
-      return;
-    }
-
-    this.defaultAccountId = id;
-
-    try {
-      const { setConfig } = await import("../../../db/setConfig.js");
-      await setConfig(this.db, CONFIG_KEYS.GIT_DEFAULT_ACCOUNT, id);
-    } catch (err) {
-      console.warn("Error setting default account:", err);
-    }
-
-    this.renderAccountList();
-
-    showSuccess("Default account updated", 3000);
-  }
-
-  /**
-   * Update the Git security warning visibility.
-   */
-  async updateGitWarning() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const warningEl: HTMLElement | null = root.querySelector(
-      '[data-setting="git-proxy-warning"]',
-    );
-
-    if (!warningEl) {
-      return;
-    }
-
-    const publicRadio: HTMLInputElement | null = root.querySelector(
-      '[data-setting="git-proxy-public"]',
-    );
-
-    const hasToken = this.accounts.some((a) => !!a.token);
-
-    warningEl.style.display =
-      publicRadio?.checked && hasToken ? "block" : "none";
-  }
-
-  /**
    * Save global Git settings (proxy, default author).
    */
   async saveGitSettings() {
@@ -1110,24 +1082,52 @@ export class ShadowClawGit extends ShadowClawElement {
   }
 
   /**
-   * Show/hide the custom proxy URL input based on current radio selection.
+   * Set an account as the default.
    */
-  updateCustomProxyVisibility() {
+  async setDefaultAccount(id: string) {
+    if (!this.db) {
+      return;
+    }
+
+    this.defaultAccountId = id;
+
+    try {
+      const { setConfig } = await import("../../../db/setConfig.js");
+      await setConfig(this.db, CONFIG_KEYS.GIT_DEFAULT_ACCOUNT, id);
+    } catch (err) {
+      console.warn("Error setting default account:", err);
+    }
+
+    this.renderAccountList();
+
+    showSuccess("Default account updated", 3000);
+  }
+
+  /**
+   * Update the Git security warning visibility.
+   */
+  async updateGitWarning() {
     const root = this.shadowRoot;
     if (!root) {
       return;
     }
 
-    const customRadio: HTMLInputElement | null = root.querySelector(
-      '[data-setting="git-proxy-custom"]',
+    const warningEl: HTMLElement | null = root.querySelector(
+      '[data-setting="git-proxy-warning"]',
     );
 
-    const field: HTMLElement | null = root.querySelector(
-      '[data-region="git-custom-proxy-field"]',
-    );
-    if (field instanceof HTMLElement) {
-      field.style.display = customRadio?.checked ? "block" : "none";
+    if (!warningEl) {
+      return;
     }
+
+    const publicRadio: HTMLInputElement | null = root.querySelector(
+      '[data-setting="git-proxy-public"]',
+    );
+
+    const hasToken = this.accounts.some((a) => !!a.token);
+
+    warningEl.style.display =
+      publicRadio?.checked && hasToken ? "block" : "none";
   }
 }
 

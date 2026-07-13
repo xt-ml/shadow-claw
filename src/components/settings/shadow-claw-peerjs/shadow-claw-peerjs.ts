@@ -1,11 +1,11 @@
 import QRCode from "qrcode";
 
-import { getDb } from "../../../db/db.js";
 import { effect } from "../../../core/effect.js";
+import { getDb } from "../../../db/db.js";
+import { roomGroupId } from "../../../db/rooms.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
 import { ulid } from "../../../utils/ulid.js";
-import { roomGroupId } from "../../../db/rooms.js";
 
 import type { Orchestrator } from "../../../core/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
@@ -40,15 +40,6 @@ export class ShadowClawPeerJs extends ShadowClawElement {
     super();
   }
 
-  getOrchestrator(): Orchestrator | null {
-    const current = orchestratorStore.orchestrator;
-    if (current) {
-      this.orchestrator = current;
-    }
-
-    return this.orchestrator;
-  }
-
   async connectedCallback() {
     await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
@@ -67,27 +58,6 @@ export class ShadowClawPeerJs extends ShadowClawElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-  }
-
-  setupEffects() {
-    this.addCleanup(
-      effect(() => {
-        const ready = orchestratorStore.ready;
-        if (!ready) {
-          return;
-        }
-
-        const orchestrator = this.getOrchestrator();
-        if (orchestrator) {
-          // Track connected peers so that this effect re-runs when connections change
-          orchestrator.peerjs?.connectedPeersSignal?.get();
-          // Track rooms so the rooms list re-renders on membership changes
-          orchestrator.roomManager?.roomsSignal?.get();
-        }
-
-        void this.render();
-      }),
-    );
   }
 
   bindEventListeners() {
@@ -151,40 +121,304 @@ export class ShadowClawPeerJs extends ShadowClawElement {
       ?.addEventListener("click", () => this.copyRoomUrl());
   }
 
-  private _appendTrustedPeerRow(id: string, alias: string) {
+  createRoom() {
+    const root = this.shadowRoot;
+    const orchestrator = this.getOrchestrator();
+    if (!root || !orchestrator) {
+      return;
+    }
+
+    const input = root.querySelector(
+      '[data-setting="room-new-name-input"]',
+    ) as HTMLInputElement | null;
+    const name = (input?.value || "").trim();
+    if (!name) {
+      showError("Enter a room name.", 3000);
+
+      return;
+    }
+
+    try {
+      const room = orchestrator.createRoom(name);
+      if (input) {
+        input.value = "";
+      }
+
+      showSuccess(`Room "${room.name}" created.`, 2500);
+      void this.showRoomQr(room);
+    } catch (error) {
+      showError(
+        `Failed to create room: ${error instanceof Error ? error.message : String(error)}`,
+        5000,
+      );
+    }
+  }
+
+  generatePeerId() {
     const root = this.shadowRoot;
     if (!root) {
       return;
     }
 
-    const list = root.querySelector('[data-info="peerjs-trusted-peers-list"]');
-    if (!list) {
+    // Generate a URL-friendly random ID (lowercase ulid)
+    const newId = ulid().toLowerCase();
+
+    const myPeerIdInput = root.querySelector(
+      '[data-setting="peerjs-my-peer-id-input"]',
+    ) as HTMLInputElement | null;
+
+    if (myPeerIdInput) {
+      myPeerIdInput.value = newId;
+    }
+
+    void this.updateQrCode();
+  }
+
+  getOrchestrator(): Orchestrator | null {
+    const current = orchestratorStore.orchestrator;
+    if (current) {
+      this.orchestrator = current;
+    }
+
+    return this.orchestrator;
+  }
+
+  invitePeerToRoom(room: RoomMeta, peerId: string) {
+    const orchestrator = this.getOrchestrator();
+    if (!orchestrator) {
       return;
     }
 
-    // Check if ID already exists
-    const existing = list.querySelector(`input[data-id="${id}"]`);
-    if (existing) {
+    const ok = orchestrator.inviteToRoom(room.roomId, peerId);
+    if (ok) {
+      showSuccess(`Invited ${peerId.substring(0, 8)} to "${room.name}".`, 2500);
+    } else {
+      showError("Failed to invite peer (are you the host?).", 4000);
+    }
+  }
+
+  renderRooms() {
+    const root = this.shadowRoot;
+    if (!root) {
       return;
     }
 
-    const row = document.createElement("div");
-    row.style.display = "flex";
-    row.style.gap = "0.5rem";
-    row.style.alignItems = "center";
-    row.className = "peerjs-trusted-peer-row";
+    const orchestrator = this.getOrchestrator();
+    const listEl = root.querySelector('[data-info="rooms-list"]');
+    if (!listEl) {
+      return;
+    }
 
-    row.innerHTML = `
-      <input type="text" class="form-input" style="margin-bottom: 0" value="${id}" data-id="${id}" disabled />
-      <input type="text" class="form-input alias-input" style="margin-bottom: 0" value="${alias}" placeholder="Alias (optional)" />
-      <button type="button" class="save-btn save-btn--danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; white-space: nowrap; height: 38px;">Remove</button>
-    `;
+    const rooms: RoomMeta[] = orchestrator?.listRooms?.() ?? [];
+    const connectedPeers = new Set(
+      orchestrator?.peerjs?.connectedPeersSignal?.get() ?? [],
+    );
+    const myPeerId = orchestrator?.getPeerJsConfig?.().myPeerId ?? "";
 
-    row.querySelector("button")?.addEventListener("click", () => {
-      row.remove();
+    listEl.textContent = "";
+
+    if (!rooms.length) {
+      const empty = document.createElement("div");
+      empty.className = "form-status";
+      empty.textContent = "No rooms yet.";
+      listEl.appendChild(empty);
+
+      return;
+    }
+
+    const trusted = this._trustedPeerOptions();
+
+    rooms.forEach((room) => {
+      const isHost = room.hostPeerId === myPeerId;
+
+      const card = document.createElement("div");
+      card.className = "peerjs-room-card";
+
+      const header = document.createElement("div");
+      header.className = "peerjs-room-header";
+
+      const title = document.createElement("strong");
+      title.textContent = room.name;
+      header.appendChild(title);
+
+      if (isHost) {
+        const badge = document.createElement("span");
+        badge.className = "peerjs-room-badge";
+        badge.textContent = "Host";
+        header.appendChild(badge);
+      }
+
+      card.appendChild(header);
+
+      // Member roster
+      const roster = document.createElement("div");
+      roster.className = "peerjs-room-roster";
+      room.members.forEach((m) => {
+        const chip = document.createElement("span");
+        chip.className = "peerjs-room-member";
+        const online = m.peerId === myPeerId || connectedPeers.has(m.peerId);
+        const icon = m.kind === "agent" ? "🤖" : "🧑";
+        const dot = online ? "🟢" : "⚪️";
+        chip.textContent = `${dot} ${icon} ${m.alias || m.peerId}`;
+        chip.title = m.peerId;
+        roster.appendChild(chip);
+      });
+      card.appendChild(roster);
+
+      // Actions
+      const actions = document.createElement("div");
+      actions.className = "peerjs-room-actions";
+
+      const openBtn = document.createElement("button");
+      openBtn.type = "button";
+      openBtn.className = "save-btn save-btn--secondary";
+      openBtn.textContent = "Open";
+      openBtn.addEventListener("click", () => {
+        document.dispatchEvent(
+          new CustomEvent("shadow-claw-navigate", {
+            detail: { page: "chat", groupId: roomGroupId(room.roomId) },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      });
+      actions.appendChild(openBtn);
+
+      if (isHost) {
+        const select = document.createElement("select");
+        select.className = "form-input peerjs-room-invite-select";
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = trusted.length
+          ? "Invite trusted peer…"
+          : "No trusted peers";
+        select.appendChild(placeholder);
+        trusted
+          .filter((t) => !room.members.some((m) => m.peerId === t.id))
+          .forEach((t) => {
+            const opt = document.createElement("option");
+            opt.value = t.id;
+            opt.textContent = t.label;
+            select.appendChild(opt);
+          });
+        actions.appendChild(select);
+
+        const inviteBtn = document.createElement("button");
+        inviteBtn.type = "button";
+        inviteBtn.className = "save-btn save-btn--secondary";
+        inviteBtn.textContent = "Invite";
+        inviteBtn.addEventListener("click", () => {
+          const peerId = select.value.trim();
+          if (!peerId) {
+            showError("Select a trusted peer to invite.", 3000);
+
+            return;
+          }
+
+          this.invitePeerToRoom(room, peerId);
+          select.value = "";
+        });
+        actions.appendChild(inviteBtn);
+
+        const linkBtn = document.createElement("button");
+        linkBtn.type = "button";
+        linkBtn.className = "save-btn save-btn--secondary";
+        linkBtn.textContent = "🔗 Link / QR";
+        linkBtn.addEventListener("click", () => {
+          void this.showRoomQr(room);
+        });
+        actions.appendChild(linkBtn);
+      }
+
+      const leaveBtn = document.createElement("button");
+      leaveBtn.type = "button";
+      leaveBtn.className = "save-btn save-btn--danger";
+      leaveBtn.textContent = isHost ? "Disband" : "Leave";
+      leaveBtn.addEventListener("click", () => {
+        orchestrator?.leaveRoom?.(room.roomId);
+        showSuccess(isHost ? "Room disbanded." : "Left room.", 2500);
+      });
+      actions.appendChild(leaveBtn);
+
+      card.appendChild(actions);
+      listEl.appendChild(card);
     });
+  }
 
-    list.appendChild(row);
+  setupEffects() {
+    this.addCleanup(
+      effect(() => {
+        const ready = orchestratorStore.ready;
+        if (!ready) {
+          return;
+        }
+
+        const orchestrator = this.getOrchestrator();
+        if (orchestrator) {
+          // Track connected peers so that this effect re-runs when connections change
+          orchestrator.peerjs?.connectedPeersSignal?.get();
+          // Track rooms so the rooms list re-renders on membership changes
+          orchestrator.roomManager?.roomsSignal?.get();
+        }
+
+        void this.render();
+      }),
+    );
+  }
+
+  async copyPeerId() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const myPeerIdInput = root.querySelector(
+      '[data-setting="peerjs-my-peer-id-input"]',
+    ) as HTMLInputElement | null;
+
+    const peerId = myPeerIdInput?.value?.trim() || "";
+    if (!peerId) {
+      showError("No Peer ID to copy.", 3000);
+
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(peerId);
+      showSuccess("Peer ID copied to clipboard", 2500);
+    } catch {
+      showError("Failed to copy Peer ID.", 3000);
+    }
+  }
+
+  async copyPeerUrl() {
+    if (!this._currentPeerUrl) {
+      showError("No connection URL available. Enter a Peer ID first.", 3000);
+
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(this._currentPeerUrl);
+      showSuccess("Connection URL copied to clipboard", 2500);
+    } catch {
+      showError("Failed to copy connection URL.", 3000);
+    }
+  }
+
+  async copyRoomUrl() {
+    if (!this._currentRoomUrl) {
+      showError("Create or select a room first.", 3000);
+
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(this._currentRoomUrl);
+      showSuccess("Room link copied to clipboard", 2500);
+    } catch {
+      showError("Failed to copy room link.", 3000);
+    }
   }
 
   async render() {
@@ -344,441 +578,6 @@ export class ShadowClawPeerJs extends ShadowClawElement {
     this.renderRooms();
   }
 
-  async updateQrCode() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const myPeerIdInput = root.querySelector(
-      '[data-setting="peerjs-my-peer-id-input"]',
-    ) as HTMLInputElement | null;
-
-    const peerId = myPeerIdInput?.value?.trim() || "";
-
-    const qrGroup = root.querySelector(
-      '[data-info="peerjs-qr-group"]',
-    ) as HTMLElement | null;
-
-    const canvas = root.querySelector(
-      '[data-info="peerjs-qr-canvas"]',
-    ) as HTMLCanvasElement | null;
-
-    const qrUrlEl = root.querySelector('[data-info="peerjs-qr-url"]');
-
-    if (!peerId) {
-      if (qrGroup) {
-        qrGroup.hidden = true;
-      }
-
-      this._currentPeerUrl = "";
-
-      return;
-    }
-
-    // Build shareable URL: current origin + ?peer=<id>
-    const peerUrl = `${window.location.origin}${window.location.pathname}?peer=${encodeURIComponent(peerId)}`;
-    this._currentPeerUrl = peerUrl;
-
-    if (qrGroup) {
-      qrGroup.hidden = false;
-    }
-
-    if (qrUrlEl) {
-      qrUrlEl.textContent = peerUrl;
-    }
-
-    if (canvas) {
-      try {
-        await QRCode.toCanvas(canvas, peerUrl, {
-          width: 180,
-          margin: 1,
-          color: { dark: "#000000", light: "#ffffff" },
-        });
-      } catch (err) {
-        console.error("PeerJS QR code render error:", err);
-      }
-    }
-  }
-
-  async updateConnectionStatus() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const orchestrator = this.getOrchestrator();
-    const statusEl = root.querySelector(
-      '[data-info="peerjs-connection-status"]',
-    );
-    if (!statusEl) {
-      return;
-    }
-
-    if (!orchestrator) {
-      statusEl.textContent = "Not connected.";
-
-      return;
-    }
-
-    const connectedPeers =
-      orchestrator.peerjs?.connectedPeersSignal?.get() || [];
-    if (connectedPeers.length === 0) {
-      statusEl.textContent = "Not connected.";
-    } else {
-      const peers = connectedPeers.join(", ");
-      statusEl.textContent = `Connected to: ${peers}`;
-    }
-  }
-
-  generatePeerId() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    // Generate a URL-friendly random ID (lowercase ulid)
-    const newId = ulid().toLowerCase();
-
-    const myPeerIdInput = root.querySelector(
-      '[data-setting="peerjs-my-peer-id-input"]',
-    ) as HTMLInputElement | null;
-
-    if (myPeerIdInput) {
-      myPeerIdInput.value = newId;
-    }
-
-    void this.updateQrCode();
-  }
-
-  async copyPeerId() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const myPeerIdInput = root.querySelector(
-      '[data-setting="peerjs-my-peer-id-input"]',
-    ) as HTMLInputElement | null;
-
-    const peerId = myPeerIdInput?.value?.trim() || "";
-    if (!peerId) {
-      showError("No Peer ID to copy.", 3000);
-
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(peerId);
-      showSuccess("Peer ID copied to clipboard", 2500);
-    } catch {
-      showError("Failed to copy Peer ID.", 3000);
-    }
-  }
-
-  async copyPeerUrl() {
-    if (!this._currentPeerUrl) {
-      showError("No connection URL available. Enter a Peer ID first.", 3000);
-
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(this._currentPeerUrl);
-      showSuccess("Connection URL copied to clipboard", 2500);
-    } catch {
-      showError("Failed to copy connection URL.", 3000);
-    }
-  }
-
-  // ── Rooms ─────────────────────────────────────────────────────────────────
-
-  renderRooms() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const orchestrator = this.getOrchestrator();
-    const listEl = root.querySelector('[data-info="rooms-list"]');
-    if (!listEl) {
-      return;
-    }
-
-    const rooms: RoomMeta[] = orchestrator?.listRooms?.() ?? [];
-    const connectedPeers = new Set(
-      orchestrator?.peerjs?.connectedPeersSignal?.get() ?? [],
-    );
-    const myPeerId = orchestrator?.getPeerJsConfig?.().myPeerId ?? "";
-
-    listEl.textContent = "";
-
-    if (!rooms.length) {
-      const empty = document.createElement("div");
-      empty.className = "form-status";
-      empty.textContent = "No rooms yet.";
-      listEl.appendChild(empty);
-
-      return;
-    }
-
-    const trusted = this._trustedPeerOptions();
-
-    rooms.forEach((room) => {
-      const isHost = room.hostPeerId === myPeerId;
-
-      const card = document.createElement("div");
-      card.className = "peerjs-room-card";
-
-      const header = document.createElement("div");
-      header.className = "peerjs-room-header";
-
-      const title = document.createElement("strong");
-      title.textContent = room.name;
-      header.appendChild(title);
-
-      if (isHost) {
-        const badge = document.createElement("span");
-        badge.className = "peerjs-room-badge";
-        badge.textContent = "Host";
-        header.appendChild(badge);
-      }
-
-      card.appendChild(header);
-
-      // Member roster
-      const roster = document.createElement("div");
-      roster.className = "peerjs-room-roster";
-      room.members.forEach((m) => {
-        const chip = document.createElement("span");
-        chip.className = "peerjs-room-member";
-        const online = m.peerId === myPeerId || connectedPeers.has(m.peerId);
-        const icon = m.kind === "agent" ? "🤖" : "🧑";
-        const dot = online ? "🟢" : "⚪️";
-        chip.textContent = `${dot} ${icon} ${m.alias || m.peerId}`;
-        chip.title = m.peerId;
-        roster.appendChild(chip);
-      });
-      card.appendChild(roster);
-
-      // Actions
-      const actions = document.createElement("div");
-      actions.className = "peerjs-room-actions";
-
-      const openBtn = document.createElement("button");
-      openBtn.type = "button";
-      openBtn.className = "save-btn save-btn--secondary";
-      openBtn.textContent = "Open";
-      openBtn.addEventListener("click", () => {
-        document.dispatchEvent(
-          new CustomEvent("shadow-claw-navigate", {
-            detail: { page: "chat", groupId: roomGroupId(room.roomId) },
-            bubbles: true,
-            composed: true,
-          }),
-        );
-      });
-      actions.appendChild(openBtn);
-
-      if (isHost) {
-        const select = document.createElement("select");
-        select.className = "form-input peerjs-room-invite-select";
-        const placeholder = document.createElement("option");
-        placeholder.value = "";
-        placeholder.textContent = trusted.length
-          ? "Invite trusted peer…"
-          : "No trusted peers";
-        select.appendChild(placeholder);
-        trusted
-          .filter((t) => !room.members.some((m) => m.peerId === t.id))
-          .forEach((t) => {
-            const opt = document.createElement("option");
-            opt.value = t.id;
-            opt.textContent = t.label;
-            select.appendChild(opt);
-          });
-        actions.appendChild(select);
-
-        const inviteBtn = document.createElement("button");
-        inviteBtn.type = "button";
-        inviteBtn.className = "save-btn save-btn--secondary";
-        inviteBtn.textContent = "Invite";
-        inviteBtn.addEventListener("click", () => {
-          const peerId = select.value.trim();
-          if (!peerId) {
-            showError("Select a trusted peer to invite.", 3000);
-
-            return;
-          }
-
-          this.invitePeerToRoom(room, peerId);
-          select.value = "";
-        });
-        actions.appendChild(inviteBtn);
-
-        const linkBtn = document.createElement("button");
-        linkBtn.type = "button";
-        linkBtn.className = "save-btn save-btn--secondary";
-        linkBtn.textContent = "🔗 Link / QR";
-        linkBtn.addEventListener("click", () => {
-          void this.showRoomQr(room);
-        });
-        actions.appendChild(linkBtn);
-      }
-
-      const leaveBtn = document.createElement("button");
-      leaveBtn.type = "button";
-      leaveBtn.className = "save-btn save-btn--danger";
-      leaveBtn.textContent = isHost ? "Disband" : "Leave";
-      leaveBtn.addEventListener("click", () => {
-        orchestrator?.leaveRoom?.(room.roomId);
-        showSuccess(isHost ? "Room disbanded." : "Left room.", 2500);
-      });
-      actions.appendChild(leaveBtn);
-
-      card.appendChild(actions);
-      listEl.appendChild(card);
-    });
-  }
-
-  private _trustedPeerOptions(): Array<{ id: string; label: string }> {
-    const orchestrator = this.getOrchestrator();
-    const cfg = orchestrator?.getPeerJsConfig?.();
-    if (!cfg) {
-      return [];
-    }
-
-    return cfg.trustedPeerIds.map((id) => {
-      let label = id;
-      if (cfg.peerAliases) {
-        for (const [alias, mappedId] of Object.entries(cfg.peerAliases)) {
-          if (mappedId === id) {
-            label = `${alias} (${id.substring(0, 8)})`;
-
-            break;
-          }
-        }
-      }
-
-      return { id, label };
-    });
-  }
-
-  createRoom() {
-    const root = this.shadowRoot;
-    const orchestrator = this.getOrchestrator();
-    if (!root || !orchestrator) {
-      return;
-    }
-
-    const input = root.querySelector(
-      '[data-setting="room-new-name-input"]',
-    ) as HTMLInputElement | null;
-    const name = (input?.value || "").trim();
-    if (!name) {
-      showError("Enter a room name.", 3000);
-
-      return;
-    }
-
-    try {
-      const room = orchestrator.createRoom(name);
-      if (input) {
-        input.value = "";
-      }
-
-      showSuccess(`Room "${room.name}" created.`, 2500);
-      void this.showRoomQr(room);
-    } catch (error) {
-      showError(
-        `Failed to create room: ${error instanceof Error ? error.message : String(error)}`,
-        5000,
-      );
-    }
-  }
-
-  invitePeerToRoom(room: RoomMeta, peerId: string) {
-    const orchestrator = this.getOrchestrator();
-    if (!orchestrator) {
-      return;
-    }
-
-    const ok = orchestrator.inviteToRoom(room.roomId, peerId);
-    if (ok) {
-      showSuccess(`Invited ${peerId.substring(0, 8)} to "${room.name}".`, 2500);
-    } else {
-      showError("Failed to invite peer (are you the host?).", 4000);
-    }
-  }
-
-  private _buildRoomUrl(room: RoomMeta): string {
-    const params = new URLSearchParams({
-      room: room.roomId,
-      host: room.hostPeerId,
-      name: room.name,
-    });
-
-    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
-  }
-
-  async showRoomQr(room: RoomMeta) {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const url = this._buildRoomUrl(room);
-    this._currentRoomUrl = url;
-
-    const group = root.querySelector(
-      '[data-info="room-qr-group"]',
-    ) as HTMLElement | null;
-    const label = root.querySelector('[data-info="room-qr-label"]');
-    const urlEl = root.querySelector('[data-info="room-qr-url"]');
-    const canvas = root.querySelector(
-      '[data-info="room-qr-canvas"]',
-    ) as HTMLCanvasElement | null;
-
-    if (group) {
-      group.hidden = false;
-    }
-
-    if (label) {
-      label.textContent = `QR Code — Share to Join "${room.name}"`;
-    }
-
-    if (urlEl) {
-      urlEl.textContent = url;
-    }
-
-    if (canvas) {
-      try {
-        await QRCode.toCanvas(canvas, url, {
-          width: 180,
-          margin: 1,
-          color: { dark: "#000000", light: "#ffffff" },
-        });
-      } catch (err) {
-        console.error("Room QR code render error:", err);
-      }
-    }
-  }
-
-  async copyRoomUrl() {
-    if (!this._currentRoomUrl) {
-      showError("Create or select a room first.", 3000);
-
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(this._currentRoomUrl);
-      showSuccess("Room link copied to clipboard", 2500);
-    } catch {
-      showError("Failed to copy room link.", 3000);
-    }
-  }
-
   async savePeerJsConfig() {
     const orchestrator = this.getOrchestrator();
     if (!orchestrator || !this.db) {
@@ -886,6 +685,205 @@ export class ShadowClawPeerJs extends ShadowClawElement {
         6000,
       );
     }
+  }
+
+  async showRoomQr(room: RoomMeta) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const url = this._buildRoomUrl(room);
+    this._currentRoomUrl = url;
+
+    const group = root.querySelector(
+      '[data-info="room-qr-group"]',
+    ) as HTMLElement | null;
+    const label = root.querySelector('[data-info="room-qr-label"]');
+    const urlEl = root.querySelector('[data-info="room-qr-url"]');
+    const canvas = root.querySelector(
+      '[data-info="room-qr-canvas"]',
+    ) as HTMLCanvasElement | null;
+
+    if (group) {
+      group.hidden = false;
+    }
+
+    if (label) {
+      label.textContent = `QR Code — Share to Join "${room.name}"`;
+    }
+
+    if (urlEl) {
+      urlEl.textContent = url;
+    }
+
+    if (canvas) {
+      try {
+        await QRCode.toCanvas(canvas, url, {
+          width: 180,
+          margin: 1,
+          color: { dark: "#000000", light: "#ffffff" },
+        });
+      } catch (err) {
+        console.error("Room QR code render error:", err);
+      }
+    }
+  }
+
+  async updateConnectionStatus() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const orchestrator = this.getOrchestrator();
+    const statusEl = root.querySelector(
+      '[data-info="peerjs-connection-status"]',
+    );
+    if (!statusEl) {
+      return;
+    }
+
+    if (!orchestrator) {
+      statusEl.textContent = "Not connected.";
+
+      return;
+    }
+
+    const connectedPeers =
+      orchestrator.peerjs?.connectedPeersSignal?.get() || [];
+    if (connectedPeers.length === 0) {
+      statusEl.textContent = "Not connected.";
+    } else {
+      const peers = connectedPeers.join(", ");
+      statusEl.textContent = `Connected to: ${peers}`;
+    }
+  }
+
+  async updateQrCode() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const myPeerIdInput = root.querySelector(
+      '[data-setting="peerjs-my-peer-id-input"]',
+    ) as HTMLInputElement | null;
+
+    const peerId = myPeerIdInput?.value?.trim() || "";
+
+    const qrGroup = root.querySelector(
+      '[data-info="peerjs-qr-group"]',
+    ) as HTMLElement | null;
+
+    const canvas = root.querySelector(
+      '[data-info="peerjs-qr-canvas"]',
+    ) as HTMLCanvasElement | null;
+
+    const qrUrlEl = root.querySelector('[data-info="peerjs-qr-url"]');
+
+    if (!peerId) {
+      if (qrGroup) {
+        qrGroup.hidden = true;
+      }
+
+      this._currentPeerUrl = "";
+
+      return;
+    }
+
+    // Build shareable URL: current origin + ?peer=<id>
+    const peerUrl = `${window.location.origin}${window.location.pathname}?peer=${encodeURIComponent(peerId)}`;
+    this._currentPeerUrl = peerUrl;
+
+    if (qrGroup) {
+      qrGroup.hidden = false;
+    }
+
+    if (qrUrlEl) {
+      qrUrlEl.textContent = peerUrl;
+    }
+
+    if (canvas) {
+      try {
+        await QRCode.toCanvas(canvas, peerUrl, {
+          width: 180,
+          margin: 1,
+          color: { dark: "#000000", light: "#ffffff" },
+        });
+      } catch (err) {
+        console.error("PeerJS QR code render error:", err);
+      }
+    }
+  }
+
+  private _appendTrustedPeerRow(id: string, alias: string) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const list = root.querySelector('[data-info="peerjs-trusted-peers-list"]');
+    if (!list) {
+      return;
+    }
+
+    // Check if ID already exists
+    const existing = list.querySelector(`input[data-id="${id}"]`);
+    if (existing) {
+      return;
+    }
+
+    const row = document.createElement("div");
+    row.style.display = "flex";
+    row.style.gap = "0.5rem";
+    row.style.alignItems = "center";
+    row.className = "peerjs-trusted-peer-row";
+
+    row.innerHTML = `
+      <input type="text" class="form-input" style="margin-bottom: 0" value="${id}" data-id="${id}" disabled />
+      <input type="text" class="form-input alias-input" style="margin-bottom: 0" value="${alias}" placeholder="Alias (optional)" />
+      <button type="button" class="save-btn save-btn--danger" style="padding: 0.25rem 0.5rem; font-size: 0.75rem; white-space: nowrap; height: 38px;">Remove</button>
+    `;
+
+    row.querySelector("button")?.addEventListener("click", () => {
+      row.remove();
+    });
+
+    list.appendChild(row);
+  }
+
+  private _buildRoomUrl(room: RoomMeta): string {
+    const params = new URLSearchParams({
+      room: room.roomId,
+      host: room.hostPeerId,
+      name: room.name,
+    });
+
+    return `${window.location.origin}${window.location.pathname}?${params.toString()}`;
+  }
+
+  private _trustedPeerOptions(): Array<{ id: string; label: string }> {
+    const orchestrator = this.getOrchestrator();
+    const cfg = orchestrator?.getPeerJsConfig?.();
+    if (!cfg) {
+      return [];
+    }
+
+    return cfg.trustedPeerIds.map((id) => {
+      let label = id;
+      if (cfg.peerAliases) {
+        for (const [alias, mappedId] of Object.entries(cfg.peerAliases)) {
+          if (mappedId === id) {
+            label = `${alias} (${id.substring(0, 8)})`;
+
+            break;
+          }
+        }
+      }
+
+      return { id, label };
+    });
   }
 }
 

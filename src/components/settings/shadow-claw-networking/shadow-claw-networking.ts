@@ -1,5 +1,5 @@
-import { getDb } from "../../../db/db.js";
 import { effect } from "../../../core/effect.js";
+import { getDb } from "../../../db/db.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 
@@ -44,15 +44,6 @@ export class ShadowClawNetworking extends ShadowClawElement {
     await this.render();
   }
 
-  setupEffects() {
-    effect(() => {
-      if (orchestratorStore.ready) {
-        this.orchestrator = orchestratorStore.orchestrator;
-        this.render();
-      }
-    });
-  }
-
   bindEventListeners() {
     const root = this.shadowRoot;
     if (!root) {
@@ -72,6 +63,29 @@ export class ShadowClawNetworking extends ShadowClawElement {
       ?.addEventListener("click", () => {
         void this.saveProxyUrl();
       });
+  }
+
+  setupEffects() {
+    effect(() => {
+      if (orchestratorStore.ready) {
+        this.orchestrator = orchestratorStore.orchestrator;
+        this.render();
+      }
+    });
+  }
+
+  async onProxyToggle(enabled: boolean) {
+    if (!this.orchestrator || !this.db) {
+      return;
+    }
+
+    try {
+      await this.orchestrator.setUseProxy(this.db, enabled);
+      showSuccess(enabled ? "CORS Proxy enabled" : "CORS Proxy disabled", 2500);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving proxy setting: " + errorMsg, 6000);
+    }
   }
 
   async render() {
@@ -96,20 +110,6 @@ export class ShadowClawNetworking extends ShadowClawElement {
     ) as HTMLInputElement | null;
     if (proxyUrlInput) {
       proxyUrlInput.value = this.orchestrator.getProxyUrl();
-    }
-  }
-
-  async onProxyToggle(enabled: boolean) {
-    if (!this.orchestrator || !this.db) {
-      return;
-    }
-
-    try {
-      await this.orchestrator.setUseProxy(this.db, enabled);
-      showSuccess(enabled ? "CORS Proxy enabled" : "CORS Proxy disabled", 2500);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError("Error saving proxy setting: " + errorMsg, 6000);
     }
   }
 

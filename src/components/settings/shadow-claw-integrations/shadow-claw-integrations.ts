@@ -2,27 +2,32 @@ import { CONFIG_KEYS } from "../../../config/config.js";
 import { getDb } from "../../../db/db.js";
 import { getConfig } from "../../../db/getConfig.js";
 import { setConfig } from "../../../db/setConfig.js";
+import { encryptValue } from "../../../security/crypto.js";
+import { setSanitizedHtml } from "../../../security/trusted-types.js";
+
 import {
   getEmailPluginManifest,
   listEmailPluginManifests,
-  type EmailPluginManifest,
 } from "../../../subsystems/email/catalog.js";
+
 import {
-  deleteEmailConnection,
   bindEmailCredentialRef,
+  deleteEmailConnection,
   listEmailConnections,
   upsertEmailConnection,
-  type EmailConnectionRecord,
-  type EmailCredentialRef,
 } from "../../../subsystems/email/connections.js";
-import { encryptValue } from "../../../security/crypto.js";
+
 import { showError, showSuccess } from "../../../ui/toast.js";
 import { ulid } from "../../../utils/ulid.js";
 import { resolveConnectionTestAuth } from "./connection-test-auth.js";
-import { setSanitizedHtml } from "../../../security/trusted-types.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { ServiceAccount } from "../../../subsystems/accounts/service-accounts.js";
+import type { EmailPluginManifest } from "../../../subsystems/email/catalog.js";
+import type {
+  EmailConnectionRecord,
+  EmailCredentialRef,
+} from "../../../subsystems/email/connections.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 
@@ -159,11 +164,12 @@ export class ShadowClawIntegrations extends ShadowClawElement {
   static styles = `${ShadowClawIntegrations.componentPath}/${elementName}.css`;
   static template = `${ShadowClawIntegrations.componentPath}/${elementName}.html`;
 
-  db: ShadowClawDatabase | null = null;
-  manifests: EmailPluginManifest[] = [];
-  connections: EmailConnectionRecord[] = [];
   accounts: ServiceAccount[] = [];
+  connections: EmailConnectionRecord[] = [];
+
+  db: ShadowClawDatabase | null = null;
   editingConnectionId: string | null = null;
+  manifests: EmailPluginManifest[] = [];
   pendingOauthResult: {
     providerId: string;
     accessToken: string;
@@ -173,16 +179,6 @@ export class ShadowClawIntegrations extends ShadowClawElement {
     tokenType?: string;
   } | null = null;
 
-  getEmailOAuthProvider(
-    providerId: string | undefined,
-  ): EmailOAuthProviderConfig {
-    if (providerId && EMAIL_OAUTH_PROVIDERS[providerId]) {
-      return EMAIL_OAUTH_PROVIDERS[providerId];
-    }
-
-    return EMAIL_OAUTH_PROVIDERS.google;
-  }
-
   async connectedCallback() {
     await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
@@ -191,18 +187,48 @@ export class ShadowClawIntegrations extends ShadowClawElement {
     await this.reload();
   }
 
-  async requestConfirmation(options: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-  }): Promise<boolean> {
-    const appShell = document.querySelector("shadow-claw") as any;
-    if (appShell && typeof appShell.requestDialog === "function") {
-      return await appShell.requestDialog({ mode: "confirm", ...options });
+  applyImapPreset(slot: Element) {
+    const presetSelect = slot.querySelector(
+      "#int-imap-preset",
+    ) as HTMLSelectElement | null;
+    const usernameInput = slot.querySelector(
+      "#int-username",
+    ) as HTMLInputElement | null;
+
+    const selectedPreset = presetSelect?.value || "auto";
+    const preset = this.resolveImapPreset(
+      selectedPreset,
+      usernameInput?.value || "",
+    );
+    if (!preset) {
+      showError(
+        "Could not auto-detect IMAP settings from this email domain. Choose a preset or enter settings manually.",
+        5000,
+      );
+
+      return;
     }
 
-    return false;
+    this.setConfigFieldValue(slot, "host", preset.imapHost);
+    this.setConfigFieldValue(slot, "port", String(preset.imapPort));
+    this.setConfigFieldValue(slot, "secure", String(preset.imapSecure));
+    this.setConfigFieldValue(slot, "smtpHost", preset.smtpHost);
+    this.setConfigFieldValue(slot, "smtpPort", String(preset.smtpPort));
+    this.setConfigFieldValue(slot, "smtpSecure", String(preset.smtpSecure));
+
+    const fromAddress = (usernameInput?.value || "").trim();
+    if (fromAddress) {
+      this.setConfigFieldValue(slot, "fromAddress", fromAddress);
+    }
+
+    const mailboxInput = slot.querySelector(
+      "#cfg-mailboxPath",
+    ) as HTMLInputElement | null;
+    if (mailboxInput && !mailboxInput.value.trim()) {
+      mailboxInput.value = "INBOX";
+    }
+
+    showSuccess("Applied IMAP preset defaults", 2500);
   }
 
   bindEventListeners() {
@@ -216,18 +242,77 @@ export class ShadowClawIntegrations extends ShadowClawElement {
       ?.addEventListener("click", () => this.showForm(null));
   }
 
-  async reload() {
-    if (!this.db) {
-      return;
+  escapeHtml(value: string): string {
+    return value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  getEmailOAuthProvider(
+    providerId: string | undefined,
+  ): EmailOAuthProviderConfig {
+    if (providerId && EMAIL_OAUTH_PROVIDERS[providerId]) {
+      return EMAIL_OAUTH_PROVIDERS[providerId];
     }
 
-    this.manifests = listEmailPluginManifests().filter(
-      (manifest) => manifest.id === "imap",
-    );
-    this.connections = await listEmailConnections(this.db);
-    const rawAccounts = await getConfig(this.db, CONFIG_KEYS.SERVICE_ACCOUNTS);
-    this.accounts = Array.isArray(rawAccounts) ? rawAccounts : [];
-    this.renderConnectionList();
+    return EMAIL_OAUTH_PROVIDERS.google;
+  }
+
+  getInitialPluginId(existing: EmailConnectionRecord | null): string {
+    if (existing?.pluginId) {
+      return existing.pluginId;
+    }
+
+    if (this.manifests.some((item) => item.id === "imap")) {
+      return "imap";
+    }
+
+    return this.manifests[0]?.id || "";
+  }
+
+  renderConfigFieldRows(
+    manifest: EmailPluginManifest,
+    cfg: Record<string, unknown>,
+  ): string {
+    return manifest.configurableFields
+      .map((field) => {
+        const value = cfg[field];
+        const displayLabel =
+          manifest.id === "imap" ? (IMAP_FIELD_LABELS[field] ?? field) : field;
+
+        if (field === "secure" || field === "smtpSecure") {
+          const selected = typeof value === "boolean" ? value : true;
+
+          return `
+            <div class="form-row">
+              <label for="cfg-${this.escapeHtml(field)}">${this.escapeHtml(displayLabel)}</label>
+              <select id="cfg-${this.escapeHtml(field)}" data-config-field="${this.escapeHtml(field)}">
+                <option value="true" ${selected ? "selected" : ""}>enabled</option>
+                <option value="false" ${selected ? "" : "selected"}>disabled</option>
+              </select>
+            </div>
+          `;
+        }
+
+        const placeholder =
+          manifest.id === "imap" ? (IMAP_FIELD_PLACEHOLDERS[field] ?? "") : "";
+
+        return `
+          <div class="form-row">
+            <label for="cfg-${this.escapeHtml(field)}">${this.escapeHtml(displayLabel)}</label>
+            <input
+              id="cfg-${this.escapeHtml(field)}"
+              data-config-field="${this.escapeHtml(field)}"
+              value="${this.escapeHtml(typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : "")}"
+              placeholder="${this.escapeHtml(placeholder)}"
+            />
+          </div>
+        `;
+      })
+      .join("");
   }
 
   renderConnectionList() {
@@ -320,6 +405,65 @@ export class ShadowClawIntegrations extends ShadowClawElement {
     }
 
     list.append(fragment);
+  }
+
+  resolveImapPreset(selection: string, username: string): ImapPreset | null {
+    if (selection !== "auto") {
+      return IMAP_PRESETS[selection] || null;
+    }
+
+    const domain = username.split("@")[1]?.trim().toLowerCase() || "";
+    if (!domain) {
+      return null;
+    }
+
+    if (
+      domain === "gmail.com" ||
+      domain.endsWith(".gmail.com") ||
+      domain.endsWith(".googlemail.com")
+    ) {
+      return IMAP_PRESETS.gmail;
+    }
+
+    if (
+      domain === "outlook.com" ||
+      domain === "hotmail.com" ||
+      domain === "live.com" ||
+      domain === "msn.com" ||
+      domain.endsWith(".onmicrosoft.com")
+    ) {
+      return IMAP_PRESETS.outlook;
+    }
+
+    if (domain === "yahoo.com" || domain.endsWith(".yahoo.com")) {
+      return IMAP_PRESETS.yahoo;
+    }
+
+    if (
+      domain === "icloud.com" ||
+      domain === "me.com" ||
+      domain === "mac.com"
+    ) {
+      return IMAP_PRESETS.icloud;
+    }
+
+    if (domain === "fastmail.com" || domain.endsWith(".fastmail.com")) {
+      return IMAP_PRESETS.fastmail;
+    }
+
+    return null;
+  }
+
+  setConfigFieldValue(slot: Element, field: string, value: string) {
+    const node = slot.querySelector(`#cfg-${field}`) as
+      | HTMLInputElement
+      | HTMLSelectElement
+      | null;
+    if (!node) {
+      return;
+    }
+
+    node.value = value;
   }
 
   showForm(connectionId: string | null) {
@@ -527,160 +671,6 @@ export class ShadowClawIntegrations extends ShadowClawElement {
     this.updateOAuthProviderHelp(slot);
   }
 
-  async testConnectionFromForm(slot: Element) {
-    const testButton = slot.querySelector(
-      '[data-action="test-connection"]',
-    ) as HTMLButtonElement | null;
-    if (testButton) {
-      testButton.disabled = true;
-    }
-
-    try {
-      const username = (
-        slot.querySelector("#int-username") as HTMLInputElement | null
-      )?.value.trim();
-      const host = (
-        slot.querySelector("#cfg-host") as HTMLInputElement | null
-      )?.value.trim();
-      const mailboxPath =
-        (
-          slot.querySelector("#cfg-mailboxPath") as HTMLInputElement | null
-        )?.value.trim() || "INBOX";
-      const portRaw = (
-        slot.querySelector("#cfg-port") as HTMLInputElement | null
-      )?.value.trim();
-      const secureRaw = (
-        slot.querySelector("#cfg-secure") as HTMLSelectElement | null
-      )?.value;
-      const unreadOnly = (
-        slot.querySelector("#int-unread-only") as HTMLInputElement | null
-      )?.checked;
-      const authMode = (
-        slot.querySelector("#int-auth-mode") as HTMLSelectElement | null
-      )?.value;
-
-      if (!username) {
-        showError("Auth username (email login) is required.", 4000);
-
-        return;
-      }
-
-      if (!host) {
-        showError("IMAP host is required.", 4000);
-
-        return;
-      }
-
-      const port = Number(portRaw);
-      const resolvedPort = Number.isFinite(port) && port > 0 ? port : 993;
-      const secure = secureRaw === "false" ? false : true;
-
-      let authType: "basic_userpass" | "oauth" = "basic_userpass";
-      let password: string | undefined;
-      let accessToken: string | undefined;
-
-      const existing = this.editingConnectionId
-        ? this.connections.find((item) => item.id === this.editingConnectionId)
-        : null;
-
-      if (authMode === "oauth") {
-        const providerId = (
-          slot.querySelector("#int-oauth-provider") as HTMLSelectElement | null
-        )?.value;
-        const pendingOauthAccessToken =
-          this.pendingOauthResult?.accessToken &&
-          (!providerId || this.pendingOauthResult.providerId === providerId)
-            ? this.pendingOauthResult.accessToken
-            : "";
-
-        const result = resolveConnectionTestAuth({
-          authMode,
-          pendingOauthAccessToken,
-          hasStoredOauthCredential: Boolean(existing?.credentialRef?.accountId),
-        });
-
-        if ("error" in result) {
-          showError(result.error, 6000);
-
-          return;
-        }
-
-        authType = result.authType;
-        if (result.authType === "oauth") {
-          accessToken = result.accessToken;
-        }
-      } else {
-        const passwordInput = (
-          slot.querySelector("#int-password") as HTMLInputElement | null
-        )?.value;
-
-        const result = resolveConnectionTestAuth({
-          authMode,
-          passwordInput,
-          hasStoredPasswordCredential: Boolean(
-            existing?.credentialRef?.encryptedSecret,
-          ),
-        });
-
-        if ("error" in result) {
-          showError(result.error, 6000);
-
-          return;
-        }
-
-        authType = result.authType;
-        if (result.authType === "basic_userpass") {
-          password = result.password;
-        }
-      }
-
-      const response = await fetch("/integrations/email/read", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          authType,
-          host,
-          port: resolvedPort,
-          secure,
-          username,
-          password,
-          accessToken,
-          mailboxPath,
-          limit: 1,
-          unreadOnly: unreadOnly === true,
-        }),
-      });
-
-      const payload = (await response.json().catch(() => ({}))) as {
-        error?: string;
-        count?: number;
-      };
-
-      if (!response.ok) {
-        showError(
-          `Connection test failed (${response.status}): ${payload.error || response.statusText}`,
-          7000,
-        );
-
-        return;
-      }
-
-      showSuccess(
-        `Connection test passed. IMAP login succeeded${typeof payload.count === "number" ? ` (${payload.count} messages returned).` : "."}`,
-        4500,
-      );
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      showError(`Connection test failed: ${message}`, 7000);
-    } finally {
-      if (testButton) {
-        testButton.disabled = false;
-      }
-    }
-  }
-
   updateAuthModeVisibility(slot: Element) {
     const authMode = (
       slot.querySelector("#int-auth-mode") as HTMLSelectElement | null
@@ -732,6 +722,80 @@ export class ShadowClawIntegrations extends ShadowClawElement {
     if (connectBtn) {
       connectBtn.textContent = provider.connectButtonLabel;
     }
+  }
+
+  async buildCredentialRef(
+    slot: Element,
+    savedConnection: EmailConnectionRecord,
+  ): Promise<EmailCredentialRef | null> {
+    const authMode = (
+      slot.querySelector("#int-auth-mode") as HTMLSelectElement | null
+    )?.value;
+    const usernameInput = slot.querySelector(
+      "#int-username",
+    ) as HTMLInputElement | null;
+    const passwordInput = slot.querySelector(
+      "#int-password",
+    ) as HTMLInputElement | null;
+
+    const username = usernameInput?.value.trim() || "";
+    const passwordRaw = passwordInput?.value.trim() || "";
+
+    const existing = this.connections.find(
+      (item) => item.id === savedConnection.id,
+    );
+
+    if (authMode === "oauth") {
+      if (!username) {
+        throw new Error(
+          "Email login address is required for OAuth authentication.",
+        );
+      }
+
+      const linkedAccount = await this.upsertLinkedOAuthAccount(
+        slot,
+        savedConnection,
+      );
+
+      return {
+        serviceType: "http_api",
+        authType: "oauth",
+        providerId: linkedAccount.oauthProviderId || "google",
+        accountId: linkedAccount.id,
+        username,
+      };
+    }
+
+    let encryptedSecret: string | undefined;
+    if (passwordRaw) {
+      encryptedSecret = (await encryptValue(passwordRaw)) || undefined;
+      if (!encryptedSecret) {
+        throw new Error("Could not encrypt email password.");
+      }
+    } else {
+      encryptedSecret = existing?.credentialRef?.encryptedSecret;
+    }
+
+    if (!username && !encryptedSecret) {
+      return null;
+    }
+
+    if (!username) {
+      throw new Error(
+        "Auth username is required when a password is configured.",
+      );
+    }
+
+    if (!encryptedSecret) {
+      throw new Error("Auth password is required when username is configured.");
+    }
+
+    return {
+      serviceType: "http_api",
+      authType: "basic_userpass",
+      username,
+      encryptedSecret,
+    };
   }
 
   async connectOAuthFromForm(slot: Element) {
@@ -898,161 +962,69 @@ export class ShadowClawIntegrations extends ShadowClawElement {
     }
   }
 
-  getInitialPluginId(existing: EmailConnectionRecord | null): string {
-    if (existing?.pluginId) {
-      return existing.pluginId;
+  async deleteConnection(id: string) {
+    if (!this.db) {
+      return;
     }
 
-    if (this.manifests.some((item) => item.id === "imap")) {
-      return "imap";
+    const record = this.connections.find((item) => item.id === id);
+    if (!record) {
+      return;
     }
 
-    return this.manifests[0]?.id || "";
+    const confirmed = await this.requestConfirmation({
+      title: "Delete Email Connection",
+      message: `Delete email connection \"${record.label}\"?`,
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const ok = await deleteEmailConnection(this.db, id);
+      if (!ok) {
+        showError("Failed to delete email connection.", 5000);
+
+        return;
+      }
+
+      showSuccess("Email connection deleted", 2500);
+      await this.reload();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      showError(`Failed to delete email connection: ${message}`, 6000);
+    }
   }
 
-  renderConfigFieldRows(
-    manifest: EmailPluginManifest,
-    cfg: Record<string, unknown>,
-  ): string {
-    return manifest.configurableFields
-      .map((field) => {
-        const value = cfg[field];
-        const displayLabel =
-          manifest.id === "imap" ? (IMAP_FIELD_LABELS[field] ?? field) : field;
+  async reload() {
+    if (!this.db) {
+      return;
+    }
 
-        if (field === "secure" || field === "smtpSecure") {
-          const selected = typeof value === "boolean" ? value : true;
-
-          return `
-            <div class="form-row">
-              <label for="cfg-${this.escapeHtml(field)}">${this.escapeHtml(displayLabel)}</label>
-              <select id="cfg-${this.escapeHtml(field)}" data-config-field="${this.escapeHtml(field)}">
-                <option value="true" ${selected ? "selected" : ""}>enabled</option>
-                <option value="false" ${selected ? "" : "selected"}>disabled</option>
-              </select>
-            </div>
-          `;
-        }
-
-        const placeholder =
-          manifest.id === "imap" ? (IMAP_FIELD_PLACEHOLDERS[field] ?? "") : "";
-
-        return `
-          <div class="form-row">
-            <label for="cfg-${this.escapeHtml(field)}">${this.escapeHtml(displayLabel)}</label>
-            <input
-              id="cfg-${this.escapeHtml(field)}"
-              data-config-field="${this.escapeHtml(field)}"
-              value="${this.escapeHtml(typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? String(value) : "")}"
-              placeholder="${this.escapeHtml(placeholder)}"
-            />
-          </div>
-        `;
-      })
-      .join("");
-  }
-
-  applyImapPreset(slot: Element) {
-    const presetSelect = slot.querySelector(
-      "#int-imap-preset",
-    ) as HTMLSelectElement | null;
-    const usernameInput = slot.querySelector(
-      "#int-username",
-    ) as HTMLInputElement | null;
-
-    const selectedPreset = presetSelect?.value || "auto";
-    const preset = this.resolveImapPreset(
-      selectedPreset,
-      usernameInput?.value || "",
+    this.manifests = listEmailPluginManifests().filter(
+      (manifest) => manifest.id === "imap",
     );
-    if (!preset) {
-      showError(
-        "Could not auto-detect IMAP settings from this email domain. Choose a preset or enter settings manually.",
-        5000,
-      );
-
-      return;
-    }
-
-    this.setConfigFieldValue(slot, "host", preset.imapHost);
-    this.setConfigFieldValue(slot, "port", String(preset.imapPort));
-    this.setConfigFieldValue(slot, "secure", String(preset.imapSecure));
-    this.setConfigFieldValue(slot, "smtpHost", preset.smtpHost);
-    this.setConfigFieldValue(slot, "smtpPort", String(preset.smtpPort));
-    this.setConfigFieldValue(slot, "smtpSecure", String(preset.smtpSecure));
-
-    const fromAddress = (usernameInput?.value || "").trim();
-    if (fromAddress) {
-      this.setConfigFieldValue(slot, "fromAddress", fromAddress);
-    }
-
-    const mailboxInput = slot.querySelector(
-      "#cfg-mailboxPath",
-    ) as HTMLInputElement | null;
-    if (mailboxInput && !mailboxInput.value.trim()) {
-      mailboxInput.value = "INBOX";
-    }
-
-    showSuccess("Applied IMAP preset defaults", 2500);
+    this.connections = await listEmailConnections(this.db);
+    const rawAccounts = await getConfig(this.db, CONFIG_KEYS.SERVICE_ACCOUNTS);
+    this.accounts = Array.isArray(rawAccounts) ? rawAccounts : [];
+    this.renderConnectionList();
   }
 
-  setConfigFieldValue(slot: Element, field: string, value: string) {
-    const node = slot.querySelector(`#cfg-${field}`) as
-      | HTMLInputElement
-      | HTMLSelectElement
-      | null;
-    if (!node) {
-      return;
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
     }
 
-    node.value = value;
-  }
-
-  resolveImapPreset(selection: string, username: string): ImapPreset | null {
-    if (selection !== "auto") {
-      return IMAP_PRESETS[selection] || null;
-    }
-
-    const domain = username.split("@")[1]?.trim().toLowerCase() || "";
-    if (!domain) {
-      return null;
-    }
-
-    if (
-      domain === "gmail.com" ||
-      domain.endsWith(".gmail.com") ||
-      domain.endsWith(".googlemail.com")
-    ) {
-      return IMAP_PRESETS.gmail;
-    }
-
-    if (
-      domain === "outlook.com" ||
-      domain === "hotmail.com" ||
-      domain === "live.com" ||
-      domain === "msn.com" ||
-      domain.endsWith(".onmicrosoft.com")
-    ) {
-      return IMAP_PRESETS.outlook;
-    }
-
-    if (domain === "yahoo.com" || domain.endsWith(".yahoo.com")) {
-      return IMAP_PRESETS.yahoo;
-    }
-
-    if (
-      domain === "icloud.com" ||
-      domain === "me.com" ||
-      domain === "mac.com"
-    ) {
-      return IMAP_PRESETS.icloud;
-    }
-
-    if (domain === "fastmail.com" || domain.endsWith(".fastmail.com")) {
-      return IMAP_PRESETS.fastmail;
-    }
-
-    return null;
+    return false;
   }
 
   async saveForm() {
@@ -1170,78 +1142,187 @@ export class ShadowClawIntegrations extends ShadowClawElement {
     }
   }
 
-  async buildCredentialRef(
-    slot: Element,
-    savedConnection: EmailConnectionRecord,
-  ): Promise<EmailCredentialRef | null> {
-    const authMode = (
-      slot.querySelector("#int-auth-mode") as HTMLSelectElement | null
-    )?.value;
-    const usernameInput = slot.querySelector(
-      "#int-username",
-    ) as HTMLInputElement | null;
-    const passwordInput = slot.querySelector(
-      "#int-password",
-    ) as HTMLInputElement | null;
+  async testConnectionFromForm(slot: Element) {
+    const testButton = slot.querySelector(
+      '[data-action="test-connection"]',
+    ) as HTMLButtonElement | null;
+    if (testButton) {
+      testButton.disabled = true;
+    }
 
-    const username = usernameInput?.value.trim() || "";
-    const passwordRaw = passwordInput?.value.trim() || "";
+    try {
+      const username = (
+        slot.querySelector("#int-username") as HTMLInputElement | null
+      )?.value.trim();
+      const host = (
+        slot.querySelector("#cfg-host") as HTMLInputElement | null
+      )?.value.trim();
+      const mailboxPath =
+        (
+          slot.querySelector("#cfg-mailboxPath") as HTMLInputElement | null
+        )?.value.trim() || "INBOX";
+      const portRaw = (
+        slot.querySelector("#cfg-port") as HTMLInputElement | null
+      )?.value.trim();
+      const secureRaw = (
+        slot.querySelector("#cfg-secure") as HTMLSelectElement | null
+      )?.value;
+      const unreadOnly = (
+        slot.querySelector("#int-unread-only") as HTMLInputElement | null
+      )?.checked;
+      const authMode = (
+        slot.querySelector("#int-auth-mode") as HTMLSelectElement | null
+      )?.value;
 
-    const existing = this.connections.find(
-      (item) => item.id === savedConnection.id,
-    );
-
-    if (authMode === "oauth") {
       if (!username) {
-        throw new Error(
-          "Email login address is required for OAuth authentication.",
-        );
+        showError("Auth username (email login) is required.", 4000);
+
+        return;
       }
 
-      const linkedAccount = await this.upsertLinkedOAuthAccount(
-        slot,
-        savedConnection,
-      );
+      if (!host) {
+        showError("IMAP host is required.", 4000);
 
-      return {
-        serviceType: "http_api",
-        authType: "oauth",
-        providerId: linkedAccount.oauthProviderId || "google",
-        accountId: linkedAccount.id,
-        username,
+        return;
+      }
+
+      const port = Number(portRaw);
+      const resolvedPort = Number.isFinite(port) && port > 0 ? port : 993;
+      const secure = secureRaw === "false" ? false : true;
+
+      let authType: "basic_userpass" | "oauth" = "basic_userpass";
+      let password: string | undefined;
+      let accessToken: string | undefined;
+
+      const existing = this.editingConnectionId
+        ? this.connections.find((item) => item.id === this.editingConnectionId)
+        : null;
+
+      if (authMode === "oauth") {
+        const providerId = (
+          slot.querySelector("#int-oauth-provider") as HTMLSelectElement | null
+        )?.value;
+        const pendingOauthAccessToken =
+          this.pendingOauthResult?.accessToken &&
+          (!providerId || this.pendingOauthResult.providerId === providerId)
+            ? this.pendingOauthResult.accessToken
+            : "";
+
+        const result = resolveConnectionTestAuth({
+          authMode,
+          pendingOauthAccessToken,
+          hasStoredOauthCredential: Boolean(existing?.credentialRef?.accountId),
+        });
+
+        if ("error" in result) {
+          showError(result.error, 6000);
+
+          return;
+        }
+
+        authType = result.authType;
+        if (result.authType === "oauth") {
+          accessToken = result.accessToken;
+        }
+      } else {
+        const passwordInput = (
+          slot.querySelector("#int-password") as HTMLInputElement | null
+        )?.value;
+
+        const result = resolveConnectionTestAuth({
+          authMode,
+          passwordInput,
+          hasStoredPasswordCredential: Boolean(
+            existing?.credentialRef?.encryptedSecret,
+          ),
+        });
+
+        if ("error" in result) {
+          showError(result.error, 6000);
+
+          return;
+        }
+
+        authType = result.authType;
+        if (result.authType === "basic_userpass") {
+          password = result.password;
+        }
+      }
+
+      const response = await fetch("/integrations/email/read", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          authType,
+          host,
+          port: resolvedPort,
+          secure,
+          username,
+          password,
+          accessToken,
+          mailboxPath,
+          limit: 1,
+          unreadOnly: unreadOnly === true,
+        }),
+      });
+
+      const payload = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        count?: number;
       };
-    }
 
-    let encryptedSecret: string | undefined;
-    if (passwordRaw) {
-      encryptedSecret = (await encryptValue(passwordRaw)) || undefined;
-      if (!encryptedSecret) {
-        throw new Error("Could not encrypt email password.");
+      if (!response.ok) {
+        showError(
+          `Connection test failed (${response.status}): ${payload.error || response.statusText}`,
+          7000,
+        );
+
+        return;
       }
-    } else {
-      encryptedSecret = existing?.credentialRef?.encryptedSecret;
-    }
 
-    if (!username && !encryptedSecret) {
-      return null;
-    }
-
-    if (!username) {
-      throw new Error(
-        "Auth username is required when a password is configured.",
+      showSuccess(
+        `Connection test passed. IMAP login succeeded${typeof payload.count === "number" ? ` (${payload.count} messages returned).` : "."}`,
+        4500,
       );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      showError(`Connection test failed: ${message}`, 7000);
+    } finally {
+      if (testButton) {
+        testButton.disabled = false;
+      }
+    }
+  }
+
+  async toggleConnection(id: string) {
+    if (!this.db) {
+      return;
     }
 
-    if (!encryptedSecret) {
-      throw new Error("Auth password is required when username is configured.");
+    const record = this.connections.find((item) => item.id === id);
+    if (!record) {
+      showError("Email connection not found.", 4000);
+
+      return;
     }
 
-    return {
-      serviceType: "http_api",
-      authType: "basic_userpass",
-      username,
-      encryptedSecret,
-    };
+    try {
+      await upsertEmailConnection(this.db, {
+        id: record.id,
+        label: record.label,
+        pluginId: record.pluginId,
+        enabled: !record.enabled,
+        config: record.config,
+      });
+
+      showSuccess(`Email ${!record.enabled ? "enabled" : "disabled"}`, 2500);
+      await this.reload();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      showError(`Failed to update email connection: ${message}`, 6000);
+    }
   }
 
   async upsertLinkedOAuthAccount(
@@ -1379,81 +1460,6 @@ export class ShadowClawIntegrations extends ShadowClawElement {
     this.accounts = accounts;
 
     return account;
-  }
-
-  async toggleConnection(id: string) {
-    if (!this.db) {
-      return;
-    }
-
-    const record = this.connections.find((item) => item.id === id);
-    if (!record) {
-      showError("Email connection not found.", 4000);
-
-      return;
-    }
-
-    try {
-      await upsertEmailConnection(this.db, {
-        id: record.id,
-        label: record.label,
-        pluginId: record.pluginId,
-        enabled: !record.enabled,
-        config: record.config,
-      });
-
-      showSuccess(`Email ${!record.enabled ? "enabled" : "disabled"}`, 2500);
-      await this.reload();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      showError(`Failed to update email connection: ${message}`, 6000);
-    }
-  }
-
-  async deleteConnection(id: string) {
-    if (!this.db) {
-      return;
-    }
-
-    const record = this.connections.find((item) => item.id === id);
-    if (!record) {
-      return;
-    }
-
-    const confirmed = await this.requestConfirmation({
-      title: "Delete Email Connection",
-      message: `Delete email connection \"${record.label}\"?`,
-      confirmLabel: "Delete",
-      cancelLabel: "Cancel",
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      const ok = await deleteEmailConnection(this.db, id);
-      if (!ok) {
-        showError("Failed to delete email connection.", 5000);
-
-        return;
-      }
-
-      showSuccess("Email connection deleted", 2500);
-      await this.reload();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      showError(`Failed to delete email connection: ${message}`, 6000);
-    }
-  }
-
-  escapeHtml(value: string): string {
-    return value
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/\"/g, "&quot;")
-      .replace(/'/g, "&#39;");
   }
 }
 

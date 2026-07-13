@@ -5,13 +5,14 @@ import {
   DEFAULT_VM_BOOT_HOST,
 } from "../../../config/config.js";
 
-import { getConfig } from "../../../db/getConfig.js";
-import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
-import type { ShadowClawDatabase } from "../../../db/types.js";
-import type { Orchestrator } from "../../../core/orchestrator.js";
-import { getDb } from "../../../db/db.js";
-import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { effect } from "../../../core/effect.js";
+import { getDb } from "../../../db/db.js";
+import { getConfig } from "../../../db/getConfig.js";
+import { orchestratorStore } from "../../../stores/orchestrator.js";
+import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
+
+import type { Orchestrator } from "../../../core/orchestrator.js";
+import type { ShadowClawDatabase } from "../../../db/types.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 
@@ -46,21 +47,6 @@ export class ShadowClawWebvm extends ShadowClawElement {
   }
 
   /**
-   * Set up reactive effects.
-   */
-  setupEffects() {
-    effect(() => {
-      if (orchestratorStore.ready) {
-        void (async () => {
-          this.db = await getDb();
-          this.orchestrator = orchestratorStore.orchestrator;
-          await this.render();
-        })();
-      }
-    });
-  }
-
-  /**
    * Bind all event listeners.
    */
   bindEventListeners() {
@@ -84,6 +70,21 @@ export class ShadowClawWebvm extends ShadowClawElement {
     root
       .querySelector('[data-action="save-vm-network-relay-url"]')
       ?.addEventListener("click", () => this.saveVMNetworkRelayURL());
+  }
+
+  /**
+   * Set up reactive effects.
+   */
+  setupEffects() {
+    effect(() => {
+      if (orchestratorStore.ready) {
+        void (async () => {
+          this.db = await getDb();
+          this.orchestrator = orchestratorStore.orchestrator;
+          await this.render();
+        })();
+      }
+    });
   }
 
   /**
@@ -160,40 +161,6 @@ export class ShadowClawWebvm extends ShadowClawElement {
       }
     } catch (e) {
       console.warn("Could not load WebVM settings:", e);
-    }
-  }
-
-  /**
-   * Save VM boot mode.
-   */
-  async saveVMBootMode() {
-    if (!this.orchestrator || !this.db) {
-      return;
-    }
-
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const select = root.querySelector(
-      '[data-setting="vm-boot-mode-select"]',
-    ) as HTMLSelectElement | null;
-    const selected = select?.value || "disabled";
-    const mode =
-      selected === "disabled" ||
-      selected === "9p" ||
-      selected === "ext2" ||
-      selected === "auto"
-        ? selected
-        : "disabled";
-
-    try {
-      await this.orchestrator.setVMBootMode(this.db, mode);
-      showSuccess("WebVM boot mode saved", 3000);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError("Error saving WebVM mode: " + errorMsg, 6000);
     }
   }
 
@@ -275,6 +242,40 @@ export class ShadowClawWebvm extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving WebVM boot host: " + errorMsg, 6000);
+    }
+  }
+
+  /**
+   * Save VM boot mode.
+   */
+  async saveVMBootMode() {
+    if (!this.orchestrator || !this.db) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const select = root.querySelector(
+      '[data-setting="vm-boot-mode-select"]',
+    ) as HTMLSelectElement | null;
+    const selected = select?.value || "disabled";
+    const mode =
+      selected === "disabled" ||
+      selected === "9p" ||
+      selected === "ext2" ||
+      selected === "auto"
+        ? selected
+        : "disabled";
+
+    try {
+      await this.orchestrator.setVMBootMode(this.db, mode);
+      showSuccess("WebVM boot mode saved", 3000);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving WebVM mode: " + errorMsg, 6000);
     }
   }
 

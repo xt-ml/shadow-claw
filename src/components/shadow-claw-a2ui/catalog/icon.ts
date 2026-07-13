@@ -1,5 +1,5 @@
 import type { IconSpec } from "../../../ui/a2ui.js";
-import type { SurfaceState } from "./types.js";
+import type { SurfaceState } from "../../types.js";
 import { applyWeight } from "./shared.js";
 
 export function renderIcon(

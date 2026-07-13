@@ -14,9 +14,16 @@ export type ChannelRegistrationOptions = {
   badge?: string;
 };
 
+export type ChannelType = KnownChannelType | (string & {});
+
 export type ChannelTypingCallback = (groupId: string, typing: boolean) => void;
 
-export type ChannelType = KnownChannelType | (string & {});
+export type KnownChannelType =
+  | "browser"
+  | "imessage"
+  | "peerjs"
+  | "room"
+  | "telegram";
 
 export interface Channel {
   onMessage(callback: ChannelMessageCallback): void;
@@ -31,13 +38,6 @@ export interface Channel {
   stop(): void;
   type: ChannelType;
 }
-
-export type KnownChannelType =
-  | "browser"
-  | "imessage"
-  | "peerjs"
-  | "room"
-  | "telegram";
 
 export interface InboundMessage {
   id: string;

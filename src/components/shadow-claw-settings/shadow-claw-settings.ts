@@ -1,3 +1,21 @@
+import { ASSISTANT_NAME, CONFIG_KEYS } from "../../config/config.js";
+
+import {
+  createSettingsBackupBlob,
+  parseSettingsBackupPayload,
+  reapplyPlaintextPasswords,
+} from "../../config/settings-backup.js";
+
+import { getDb } from "../../db/db.js";
+import { orchestratorStore } from "../../stores/orchestrator.js";
+import { showError, showInfo, showSuccess } from "../../ui/toast.js";
+import { formatDateForFilename } from "../../utils/utils.js";
+
+import type { ConfigEntryRecord } from "../../config/settings-backup.js";
+import type { Orchestrator } from "../../core/orchestrator.js";
+import type { ShadowClawDatabase } from "../../db/types.js";
+
+import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../settings/shadow-claw-accounts/shadow-claw-accounts.js";
 import "../settings/shadow-claw-git/shadow-claw-git.js";
 import "../settings/shadow-claw-integrations/shadow-claw-integrations.js";
@@ -10,21 +28,7 @@ import "../settings/shadow-claw-task-server/shadow-claw-task-server.js";
 import "../settings/shadow-claw-webvm/shadow-claw-webvm.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
-import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 
-import { ASSISTANT_NAME, CONFIG_KEYS } from "../../config/config.js";
-import type { Orchestrator } from "../../core/orchestrator.js";
-import type { ShadowClawDatabase } from "../../db/types.js";
-import { getDb } from "../../db/db.js";
-import {
-  createSettingsBackupBlob,
-  parseSettingsBackupPayload,
-  reapplyPlaintextPasswords,
-  type ConfigEntryRecord,
-} from "../../config/settings-backup.js";
-import { orchestratorStore } from "../../stores/orchestrator.js";
-import { showError, showInfo, showSuccess } from "../../ui/toast.js";
-import { formatDateForFilename } from "../../utils/utils.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
 const elementName = "shadow-claw-settings";
@@ -47,9 +51,9 @@ export class ShadowClawSettings extends ShadowClawElement {
   static styles = `${ShadowClawSettings.componentPath}/${elementName}.css`;
   static template = `${ShadowClawSettings.componentPath}/${elementName}.html`;
 
+  activeTab = "ai";
   db: ShadowClawDatabase | null = null;
   orchestrator: Orchestrator | null = null;
-  activeTab = "ai";
   pendingRestoreFile: File | null = null;
 
   constructor() {
@@ -70,125 +74,35 @@ export class ShadowClawSettings extends ShadowClawElement {
     await this.render();
   }
 
-  async render() {
+  activateTab(tabId: string | undefined) {
+    if (!tabId || this.activeTab === tabId) {
+      return;
+    }
+
+    this.activeTab = tabId;
+    this.applyTabState();
+  }
+
+  applyTabState() {
     const root = this.shadowRoot;
     if (!root) {
       return;
     }
 
-    const showChannelsConfigButton = root.querySelector(
-      '[data-action="show-channels-config"]',
-    );
-    showChannelsConfigButton?.addEventListener("click", () => {
-      this.dispatchEvent(
-        new CustomEvent("navigate", {
-          detail: { page: "channels" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    });
-
-    const showToolsConfigButton = root.querySelector(
-      '[data-action="show-tools-config"]',
-    );
-    showToolsConfigButton?.addEventListener("click", () => {
-      this.dispatchEvent(
-        new CustomEvent("navigate", {
-          detail: { page: "tools" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    });
-
     const tabButtons =
       root.querySelectorAll<HTMLButtonElement>("[data-tab-target]");
     tabButtons.forEach((tabButton) => {
-      tabButton.addEventListener("click", () => {
-        this.activateTab(tabButton.dataset.tabTarget);
-      });
-
-      tabButton.addEventListener("keydown", (event) => {
-        this.handleTabKeydown(event, tabButton);
-      });
+      const isActive = tabButton.dataset.tabTarget === this.activeTab;
+      tabButton.classList.toggle("active", isActive);
+      tabButton.setAttribute("aria-selected", String(isActive));
+      tabButton.tabIndex = isActive ? 0 : -1;
     });
-    this.applyTabState();
 
-    this.bindSettingsActions();
-
-    const revisionEl = root.querySelector('[data-info="deployed-revision"]');
-    if (revisionEl) {
-      const revision =
-        document
-          .querySelector('meta[name="revision"]')
-          ?.getAttribute("content")
-          ?.trim() || "";
-      revisionEl.textContent = `Deployed revision: ${revision || "unknown"}`;
-    }
-
-    await this.populateAssistantSettings();
-  }
-
-  async populateAssistantSettings() {
-    const root = this.shadowRoot;
-    if (!root || !this.db) {
-      return;
-    }
-
-    const nameInput = root.querySelector(
-      '[data-setting="assistant-name-input"]',
-    ) as HTMLInputElement | null;
-    if (nameInput) {
-      const { getConfig } = await import("../../db/getConfig.js");
-      const storedAssistantName = await getConfig(
-        this.db,
-        CONFIG_KEYS.ASSISTANT_NAME,
-      );
-      const orchestratorName =
-        this.orchestrator?.getAssistantName() ||
-        orchestratorStore.orchestrator?.getAssistantName();
-
-      nameInput.value =
-        (typeof storedAssistantName === "string" && storedAssistantName) ||
-        orchestratorName ||
-        ASSISTANT_NAME;
-    }
-
-    const { getConfig } = await import("../../db/getConfig.js");
-    const rawActivityLogDiskLoggingEnabled = (await getConfig(
-      this.db,
-      CONFIG_KEYS.ACTIVITY_LOG_DISK_LOGGING_ENABLED,
-    )) as unknown;
-    const activityLogDiskLoggingEnabled =
-      rawActivityLogDiskLoggingEnabled === true ||
-      rawActivityLogDiskLoggingEnabled === "true" ||
-      rawActivityLogDiskLoggingEnabled === 1 ||
-      rawActivityLogDiskLoggingEnabled === "1";
-
-    const activityLogToggle = root.querySelector(
-      '[data-setting="activity-log-disk-logging-toggle"]',
-    ) as HTMLInputElement | null;
-    if (activityLogToggle) {
-      activityLogToggle.checked = activityLogDiskLoggingEnabled;
-    }
-
-    const rawSidebarPagesHidden = (await getConfig(
-      this.db,
-      CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN,
-    )) as unknown;
-    const sidebarPagesHidden =
-      rawSidebarPagesHidden === true ||
-      rawSidebarPagesHidden === "true" ||
-      rawSidebarPagesHidden === 1 ||
-      rawSidebarPagesHidden === "1";
-
-    const sidebarHidePagesToggle = root.querySelector(
-      '[data-setting="sidebar-hide-pages-toggle"]',
-    ) as HTMLInputElement | null;
-    if (sidebarHidePagesToggle) {
-      sidebarHidePagesToggle.checked = sidebarPagesHidden;
-    }
+    const tabPanels = root.querySelectorAll<HTMLElement>("[data-tab-panel]");
+    tabPanels.forEach((tabPanel) => {
+      const isActive = tabPanel.dataset.tabPanel === this.activeTab;
+      tabPanel.hidden = !isActive;
+    });
   }
 
   bindSettingsActions() {
@@ -293,37 +207,8 @@ export class ShadowClawSettings extends ShadowClawElement {
       });
   }
 
-  async promptForPlaintextBackupHandle(): Promise<FileSystemFileHandle | null> {
-    const pickerMaybe = Reflect.get(globalThis, "showSaveFilePicker");
-    const picker =
-      typeof pickerMaybe === "function" ? pickerMaybe.bind(globalThis) : null;
-
-    if (!picker) {
-      throw new Error(
-        "Plaintext settings backup requires the File System Access API.",
-      );
-    }
-
-    try {
-      return await picker({
-        id: "shadowclaw-settings-backup",
-        suggestedName: `shadowclaw-settings-backup-${formatDateForFilename()}.json`,
-        types: [
-          {
-            description: "JSON Files",
-            accept: {
-              "application/json": [".json"],
-            },
-          },
-        ],
-      });
-    } catch (error) {
-      if (error instanceof Error && error.name === "AbortError") {
-        return null;
-      }
-
-      throw error;
-    }
+  closeDialog(selector: string) {
+    this.getDialog(selector)?.close();
   }
 
   getDialog(selector: string): HTMLDialogElement | null {
@@ -340,23 +225,50 @@ export class ShadowClawSettings extends ShadowClawElement {
     return dialog;
   }
 
-  closeDialog(selector: string) {
-    this.getDialog(selector)?.close();
-  }
-
-  showDialog(selector: string) {
-    const dialog = this.getDialog(selector);
-    if (!dialog) {
+  handleTabKeydown(event: KeyboardEvent, currentButton: HTMLButtonElement) {
+    const root = this.shadowRoot;
+    if (!root) {
       return;
     }
 
-    if (typeof dialog.showModal === "function") {
-      dialog.showModal();
+    const tabButtons = Array.from(
+      root.querySelectorAll<HTMLButtonElement>("[data-tab-target]"),
+    );
 
+    const currentIndex = tabButtons.indexOf(currentButton);
+    if (currentIndex < 0) {
       return;
     }
 
-    dialog.setAttribute("open", "");
+    let nextIndex = -1;
+
+    switch (event.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+        nextIndex = (currentIndex + 1) % tabButtons.length;
+
+        break;
+      case "ArrowLeft":
+      case "ArrowUp":
+        nextIndex = (currentIndex - 1 + tabButtons.length) % tabButtons.length;
+
+        break;
+      case "Home":
+        nextIndex = 0;
+
+        break;
+      case "End":
+        nextIndex = tabButtons.length - 1;
+
+        break;
+      default:
+        return;
+    }
+
+    event.preventDefault();
+    const nextButton = tabButtons[nextIndex];
+    nextButton.focus();
+    this.activateTab(nextButton.dataset.tabTarget);
   }
 
   openBackupDialog() {
@@ -372,6 +284,10 @@ export class ShadowClawSettings extends ShadowClawElement {
     this.showDialog(".settings__backup-dialog");
   }
 
+  openClearDialog() {
+    this.showDialog(".settings__clear-dialog");
+  }
+
   openRestoreDialog(fileName: string) {
     const root = this.shadowRoot;
     const info = root?.querySelector('[data-info="restore-filename"]');
@@ -382,74 +298,19 @@ export class ShadowClawSettings extends ShadowClawElement {
     this.showDialog(".settings__restore-dialog");
   }
 
-  openClearDialog() {
-    this.showDialog(".settings__clear-dialog");
-  }
-
-  async getAllConfigEntries(): Promise<ConfigEntryRecord[]> {
-    if (!this.db) {
-      throw new Error("Database is unavailable");
+  showDialog(selector: string) {
+    const dialog = this.getDialog(selector);
+    if (!dialog) {
+      return;
     }
 
-    return await new Promise((resolve, reject) => {
-      try {
-        const tx = this.db?.transaction("config", "readonly");
-        if (!tx) {
-          reject(new Error("Failed to open read transaction"));
+    if (typeof dialog.showModal === "function") {
+      dialog.showModal();
 
-          return;
-        }
-
-        const store = tx.objectStore("config");
-        const request = store.getAll();
-
-        request.onsuccess = () => {
-          const rows = Array.isArray(request.result) ? request.result : [];
-          resolve(
-            rows
-              .filter((row) => row && typeof row.key === "string")
-              .map((row) => ({ key: row.key, value: row.value })),
-          );
-        };
-
-        request.onerror = () => {
-          reject(request.error || new Error("Failed to read settings config"));
-        };
-      } catch (error) {
-        reject(error);
-      }
-    });
-  }
-
-  async replaceConfigEntries(entries: ConfigEntryRecord[]): Promise<void> {
-    if (!this.db) {
-      throw new Error("Database is unavailable");
+      return;
     }
 
-    await new Promise<void>((resolve, reject) => {
-      try {
-        const tx = this.db?.transaction("config", "readwrite");
-        if (!tx) {
-          reject(new Error("Failed to open write transaction"));
-
-          return;
-        }
-
-        const store = tx.objectStore("config");
-        store.clear();
-        for (const entry of entries) {
-          store.put({ key: entry.key, value: entry.value });
-        }
-
-        tx.oncomplete = () => resolve();
-        tx.onerror = () =>
-          reject(tx.error || new Error("Failed to update config"));
-        tx.onabort = () =>
-          reject(tx.error || new Error("Config update aborted"));
-      } catch (error) {
-        reject(error);
-      }
-    });
+    dialog.setAttribute("open", "");
   }
 
   async confirmBackup() {
@@ -515,6 +376,27 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
+  async confirmClear() {
+    if (!this.db) {
+      showError("Settings database is unavailable", 5000);
+
+      return;
+    }
+
+    try {
+      await this.replaceConfigEntries([]);
+      this.closeDialog(".settings__clear-dialog");
+      showInfo("Settings cleared. Reloading app...", 3200);
+
+      setTimeout(() => {
+        window.location.reload();
+      }, 250);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      showError(`Failed to clear settings: ${message}`, 6000);
+    }
+  }
+
   async confirmRestore() {
     if (!this.db) {
       showError("Settings database is unavailable", 5000);
@@ -551,68 +433,39 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
-  async confirmClear() {
+  async getAllConfigEntries(): Promise<ConfigEntryRecord[]> {
     if (!this.db) {
-      showError("Settings database is unavailable", 5000);
-
-      return;
+      throw new Error("Database is unavailable");
     }
 
-    try {
-      await this.replaceConfigEntries([]);
-      this.closeDialog(".settings__clear-dialog");
-      showInfo("Settings cleared. Reloading app...", 3200);
+    return await new Promise((resolve, reject) => {
+      try {
+        const tx = this.db?.transaction("config", "readonly");
+        if (!tx) {
+          reject(new Error("Failed to open read transaction"));
 
-      setTimeout(() => {
-        window.location.reload();
-      }, 250);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      showError(`Failed to clear settings: ${message}`, 6000);
-    }
-  }
+          return;
+        }
 
-  async saveAssistantName() {
-    if (!this.db) {
-      return;
-    }
+        const store = tx.objectStore("config");
+        const request = store.getAll();
 
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
+        request.onsuccess = () => {
+          const rows = Array.isArray(request.result) ? request.result : [];
+          resolve(
+            rows
+              .filter((row) => row && typeof row.key === "string")
+              .map((row) => ({ key: row.key, value: row.value })),
+          );
+        };
 
-    const nameInput = root.querySelector(
-      '[data-setting="assistant-name-input"]',
-    ) as HTMLInputElement | null;
-    if (!nameInput) {
-      return;
-    }
-
-    const name = nameInput.value.trim();
-    if (!name) {
-      const { showWarning } = await import("../../ui/toast.js");
-      showWarning("Please enter a name", 3000);
-
-      return;
-    }
-
-    localStorage.setItem("assistantName", name);
-
-    try {
-      const orchestrator = this.orchestrator || orchestratorStore.orchestrator;
-      if (orchestrator) {
-        this.orchestrator = orchestrator;
-        await orchestrator.setAssistantName(this.db, name);
-      } else {
-        const { setConfig } = await import("../../db/setConfig.js");
-        await setConfig(this.db, CONFIG_KEYS.ASSISTANT_NAME, name);
+        request.onerror = () => {
+          reject(request.error || new Error("Failed to read settings config"));
+        };
+      } catch (error) {
+        reject(error);
       }
-    } catch (e) {
-      console.warn("Could not update orchestrator:", e);
-    }
-
-    showSuccess("Assistant name saved", 3000);
+    });
   }
 
   async onActivityLogDiskLoggingToggle(enabled: boolean) {
@@ -674,81 +527,232 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
-  applyTabState() {
+  async populateAssistantSettings() {
+    const root = this.shadowRoot;
+    if (!root || !this.db) {
+      return;
+    }
+
+    const nameInput = root.querySelector(
+      '[data-setting="assistant-name-input"]',
+    ) as HTMLInputElement | null;
+    if (nameInput) {
+      const { getConfig } = await import("../../db/getConfig.js");
+      const storedAssistantName = await getConfig(
+        this.db,
+        CONFIG_KEYS.ASSISTANT_NAME,
+      );
+      const orchestratorName =
+        this.orchestrator?.getAssistantName() ||
+        orchestratorStore.orchestrator?.getAssistantName();
+
+      nameInput.value =
+        (typeof storedAssistantName === "string" && storedAssistantName) ||
+        orchestratorName ||
+        ASSISTANT_NAME;
+    }
+
+    const { getConfig } = await import("../../db/getConfig.js");
+    const rawActivityLogDiskLoggingEnabled = (await getConfig(
+      this.db,
+      CONFIG_KEYS.ACTIVITY_LOG_DISK_LOGGING_ENABLED,
+    )) as unknown;
+    const activityLogDiskLoggingEnabled =
+      rawActivityLogDiskLoggingEnabled === true ||
+      rawActivityLogDiskLoggingEnabled === "true" ||
+      rawActivityLogDiskLoggingEnabled === 1 ||
+      rawActivityLogDiskLoggingEnabled === "1";
+
+    const activityLogToggle = root.querySelector(
+      '[data-setting="activity-log-disk-logging-toggle"]',
+    ) as HTMLInputElement | null;
+    if (activityLogToggle) {
+      activityLogToggle.checked = activityLogDiskLoggingEnabled;
+    }
+
+    const rawSidebarPagesHidden = (await getConfig(
+      this.db,
+      CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN,
+    )) as unknown;
+    const sidebarPagesHidden =
+      rawSidebarPagesHidden === true ||
+      rawSidebarPagesHidden === "true" ||
+      rawSidebarPagesHidden === 1 ||
+      rawSidebarPagesHidden === "1";
+
+    const sidebarHidePagesToggle = root.querySelector(
+      '[data-setting="sidebar-hide-pages-toggle"]',
+    ) as HTMLInputElement | null;
+    if (sidebarHidePagesToggle) {
+      sidebarHidePagesToggle.checked = sidebarPagesHidden;
+    }
+  }
+
+  async promptForPlaintextBackupHandle(): Promise<FileSystemFileHandle | null> {
+    const pickerMaybe = Reflect.get(globalThis, "showSaveFilePicker");
+    const picker =
+      typeof pickerMaybe === "function" ? pickerMaybe.bind(globalThis) : null;
+
+    if (!picker) {
+      throw new Error(
+        "Plaintext settings backup requires the File System Access API.",
+      );
+    }
+
+    try {
+      return await picker({
+        id: "shadowclaw-settings-backup",
+        suggestedName: `shadowclaw-settings-backup-${formatDateForFilename()}.json`,
+        types: [
+          {
+            description: "JSON Files",
+            accept: {
+              "application/json": [".json"],
+            },
+          },
+        ],
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        return null;
+      }
+
+      throw error;
+    }
+  }
+
+  async render() {
     const root = this.shadowRoot;
     if (!root) {
       return;
     }
+
+    const showChannelsConfigButton = root.querySelector(
+      '[data-action="show-channels-config"]',
+    );
+    showChannelsConfigButton?.addEventListener("click", () => {
+      this.dispatchEvent(
+        new CustomEvent("navigate", {
+          detail: { page: "channels" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    });
+
+    const showToolsConfigButton = root.querySelector(
+      '[data-action="show-tools-config"]',
+    );
+    showToolsConfigButton?.addEventListener("click", () => {
+      this.dispatchEvent(
+        new CustomEvent("navigate", {
+          detail: { page: "tools" },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    });
 
     const tabButtons =
       root.querySelectorAll<HTMLButtonElement>("[data-tab-target]");
     tabButtons.forEach((tabButton) => {
-      const isActive = tabButton.dataset.tabTarget === this.activeTab;
-      tabButton.classList.toggle("active", isActive);
-      tabButton.setAttribute("aria-selected", String(isActive));
-      tabButton.tabIndex = isActive ? 0 : -1;
-    });
+      tabButton.addEventListener("click", () => {
+        this.activateTab(tabButton.dataset.tabTarget);
+      });
 
-    const tabPanels = root.querySelectorAll<HTMLElement>("[data-tab-panel]");
-    tabPanels.forEach((tabPanel) => {
-      const isActive = tabPanel.dataset.tabPanel === this.activeTab;
-      tabPanel.hidden = !isActive;
+      tabButton.addEventListener("keydown", (event) => {
+        this.handleTabKeydown(event, tabButton);
+      });
+    });
+    this.applyTabState();
+
+    this.bindSettingsActions();
+
+    const revisionEl = root.querySelector('[data-info="deployed-revision"]');
+    if (revisionEl) {
+      const revision =
+        document
+          .querySelector('meta[name="revision"]')
+          ?.getAttribute("content")
+          ?.trim() || "";
+      revisionEl.textContent = `Deployed revision: ${revision || "unknown"}`;
+    }
+
+    await this.populateAssistantSettings();
+  }
+
+  async replaceConfigEntries(entries: ConfigEntryRecord[]): Promise<void> {
+    if (!this.db) {
+      throw new Error("Database is unavailable");
+    }
+
+    await new Promise<void>((resolve, reject) => {
+      try {
+        const tx = this.db?.transaction("config", "readwrite");
+        if (!tx) {
+          reject(new Error("Failed to open write transaction"));
+
+          return;
+        }
+
+        const store = tx.objectStore("config");
+        store.clear();
+        for (const entry of entries) {
+          store.put({ key: entry.key, value: entry.value });
+        }
+
+        tx.oncomplete = () => resolve();
+        tx.onerror = () =>
+          reject(tx.error || new Error("Failed to update config"));
+        tx.onabort = () =>
+          reject(tx.error || new Error("Config update aborted"));
+      } catch (error) {
+        reject(error);
+      }
     });
   }
 
-  activateTab(tabId: string | undefined) {
-    if (!tabId || this.activeTab === tabId) {
+  async saveAssistantName() {
+    if (!this.db) {
       return;
     }
 
-    this.activeTab = tabId;
-    this.applyTabState();
-  }
-
-  handleTabKeydown(event: KeyboardEvent, currentButton: HTMLButtonElement) {
     const root = this.shadowRoot;
     if (!root) {
       return;
     }
 
-    const tabButtons = Array.from(
-      root.querySelectorAll<HTMLButtonElement>("[data-tab-target]"),
-    );
-
-    const currentIndex = tabButtons.indexOf(currentButton);
-    if (currentIndex < 0) {
+    const nameInput = root.querySelector(
+      '[data-setting="assistant-name-input"]',
+    ) as HTMLInputElement | null;
+    if (!nameInput) {
       return;
     }
 
-    let nextIndex = -1;
+    const name = nameInput.value.trim();
+    if (!name) {
+      const { showWarning } = await import("../../ui/toast.js");
+      showWarning("Please enter a name", 3000);
 
-    switch (event.key) {
-      case "ArrowRight":
-      case "ArrowDown":
-        nextIndex = (currentIndex + 1) % tabButtons.length;
-
-        break;
-      case "ArrowLeft":
-      case "ArrowUp":
-        nextIndex = (currentIndex - 1 + tabButtons.length) % tabButtons.length;
-
-        break;
-      case "Home":
-        nextIndex = 0;
-
-        break;
-      case "End":
-        nextIndex = tabButtons.length - 1;
-
-        break;
-      default:
-        return;
+      return;
     }
 
-    event.preventDefault();
-    const nextButton = tabButtons[nextIndex];
-    nextButton.focus();
-    this.activateTab(nextButton.dataset.tabTarget);
+    localStorage.setItem("assistantName", name);
+
+    try {
+      const orchestrator = this.orchestrator || orchestratorStore.orchestrator;
+      if (orchestrator) {
+        this.orchestrator = orchestrator;
+        await orchestrator.setAssistantName(this.db, name);
+      } else {
+        const { setConfig } = await import("../../db/setConfig.js");
+        await setConfig(this.db, CONFIG_KEYS.ASSISTANT_NAME, name);
+      }
+    } catch (e) {
+      console.warn("Could not update orchestrator:", e);
+    }
+
+    showSuccess("Assistant name saved", 3000);
   }
 }
 

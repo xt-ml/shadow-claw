@@ -37,7 +37,7 @@ import {
 } from "./catalog/index.js";
 
 import type { A2UIEnvelope, A2UIAction, TextFieldSpec } from "../../ui/a2ui.js";
-import type { SurfaceState } from "./catalog/types.js";
+import type { SurfaceState } from "../types.js";
 
 export class ShadowClawA2UI extends ShadowClawElement {
   static readonly component = "shadow-claw-a2ui";
@@ -45,15 +45,11 @@ export class ShadowClawA2UI extends ShadowClawElement {
   static readonly template =
     "components/shadow-claw-a2ui/shadow-claw-a2ui.html";
 
-  /** Current surface state — set externally by the chat component */
-  #surface: SurfaceState | null = null;
-
   /** groupId of the conversation this surface belongs to */
   groupId: string = "";
 
-  // ---------------------------------------------------------------------------
-  // Public API — called by shadow-claw-chat
-  // ---------------------------------------------------------------------------
+  /** Current surface state — set externally by the chat component */
+  #surface: SurfaceState | null = null;
 
   /**
    * Apply an A2UI envelope. Handles all four envelope types.
@@ -122,13 +118,16 @@ export class ShadowClawA2UI extends ShadowClawElement {
     return this.#surface?.surfaceId ?? null;
   }
 
-  // ---------------------------------------------------------------------------
-  // Rendering
-  // ---------------------------------------------------------------------------
-
   override async render(): Promise<void> {
     if (this.#surface) {
       this.#renderSurface();
+    }
+  }
+
+  #attachModalOverlay(overlay: HTMLElement): void {
+    const surface = this.shadowRoot?.querySelector(".a2ui__surface");
+    if (surface) {
+      surface.appendChild(overlay);
     }
   }
 
@@ -139,26 +138,66 @@ export class ShadowClawA2UI extends ShadowClawElement {
     }
   }
 
-  async #renderSurface(): Promise<void> {
-    const surface = this.#surface;
-    if (!surface) {
-      return;
+  #dispatchAction(actionId: string, surface: SurfaceState): void {
+    // Intercept media playback actions to control local audio/video elements
+    if (actionId === "playTrack" || actionId === "play") {
+      const mediaElements = this.shadowRoot?.querySelectorAll(
+        "audio, video",
+      ) as NodeListOf<HTMLMediaElement> | undefined;
+      mediaElements?.forEach((media) => media.play().catch(console.error));
+
+      return; // Handled locally
     }
 
-    const root = this.shadowRoot?.querySelector(".a2ui__root");
-    if (!(root instanceof HTMLElement)) {
-      return;
+    if (actionId === "pauseTrack" || actionId === "pause") {
+      const mediaElements = this.shadowRoot?.querySelectorAll(
+        "audio, video",
+      ) as NodeListOf<HTMLMediaElement> | undefined;
+      mediaElements?.forEach((media) => media.pause());
+
+      return; // Handled locally
     }
 
-    root.replaceChildren();
+    // Intercept modal close actions to close open modals locally
+    if (actionId === "closeModal" || actionId === "close") {
+      const overlays = this.shadowRoot?.querySelectorAll(
+        ".a2ui__modal-overlay",
+      ) as NodeListOf<HTMLElement> | undefined;
+      let handled = false;
+      overlays?.forEach((overlay) => {
+        if (overlay.style.display !== "none") {
+          overlay.style.display = "none";
+          const content = overlay.querySelector(".a2ui__modal-content");
+          if (content) {
+            content.replaceChildren();
+          }
 
-    const rootEl = this.#renderComponent(surface.rootComponentId, surface);
-    if (rootEl) {
-      root.appendChild(rootEl);
+          handled = true;
+        }
+      });
+      if (handled) {
+        return; // Handled locally;
+      }
     }
 
-    // Resolve deferred workspace images to blob URLs (videos/audio use Service Worker streaming)
-    await this.#resolveWorkspaceImages();
+    // Use this.#surface (current state) not surface param (may be stale)
+    // to ensure form data updates are captured
+    const currentSurface = this.#surface ?? surface;
+    const action: A2UIAction = {
+      type: "a2ui-action",
+      surfaceId: currentSurface.surfaceId,
+      actionId,
+      dataModel: { ...currentSurface.dataModel },
+    };
+
+    // Bubble up to shadow-claw-chat
+    this.dispatchEvent(
+      new CustomEvent("shadow-claw-a2ui-action", {
+        bubbles: true,
+        composed: true,
+        detail: { groupId: this.groupId, action },
+      }),
+    );
   }
 
   #renderComponent(id: string, surface: SurfaceState): HTMLElement | null {
@@ -256,123 +295,6 @@ export class ShadowClawA2UI extends ShadowClawElement {
     }
   }
 
-  #attachModalOverlay(overlay: HTMLElement): void {
-    const surface = this.shadowRoot?.querySelector(".a2ui__surface");
-    if (surface) {
-      surface.appendChild(overlay);
-    }
-  }
-
-  // ── Basic components ───────────────────────────────────────────────────
-
-  // ---------------------------------------------------------------------------
-  // Generic helper to set a data model pointer on the current surface
-  // ---------------------------------------------------------------------------
-
-  #updateDataModelPointer(pointer: string, value: unknown): void {
-    if (!this.#surface) {
-      return;
-    }
-
-    const key = pointer.replace(/^\//, "");
-    this.#surface = {
-      ...this.#surface,
-      dataModel: { ...this.#surface.dataModel, [key]: value },
-    };
-  }
-
-  // ---------------------------------------------------------------------------
-  // Data model mutation (from field input events)
-  // ---------------------------------------------------------------------------
-
-  #updateDataModelKey(spec: TextFieldSpec, newValue: string): void {
-    if (!this.#surface || !spec.value) {
-      return;
-    }
-
-    if (typeof spec.value === "object" && "$dataModel" in spec.value) {
-      const key = spec.value.$dataModel.replace(/^\//, "");
-      this.#surface = {
-        ...this.#surface,
-        dataModel: {
-          ...this.#surface.dataModel,
-          [key]: newValue,
-        },
-      };
-      // No full re-render needed — the input owns its own value
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Action dispatch
-  // ---------------------------------------------------------------------------
-
-  #dispatchAction(actionId: string, surface: SurfaceState): void {
-    // Intercept media playback actions to control local audio/video elements
-    if (actionId === "playTrack" || actionId === "play") {
-      const mediaElements = this.shadowRoot?.querySelectorAll(
-        "audio, video",
-      ) as NodeListOf<HTMLMediaElement> | undefined;
-      mediaElements?.forEach((media) => media.play().catch(console.error));
-
-      return; // Handled locally
-    }
-
-    if (actionId === "pauseTrack" || actionId === "pause") {
-      const mediaElements = this.shadowRoot?.querySelectorAll(
-        "audio, video",
-      ) as NodeListOf<HTMLMediaElement> | undefined;
-      mediaElements?.forEach((media) => media.pause());
-
-      return; // Handled locally
-    }
-
-    // Intercept modal close actions to close open modals locally
-    if (actionId === "closeModal" || actionId === "close") {
-      const overlays = this.shadowRoot?.querySelectorAll(
-        ".a2ui__modal-overlay",
-      ) as NodeListOf<HTMLElement> | undefined;
-      let handled = false;
-      overlays?.forEach((overlay) => {
-        if (overlay.style.display !== "none") {
-          overlay.style.display = "none";
-          const content = overlay.querySelector(".a2ui__modal-content");
-          if (content) {
-            content.replaceChildren();
-          }
-
-          handled = true;
-        }
-      });
-      if (handled) {
-        return; // Handled locally;
-      }
-    }
-
-    // Use this.#surface (current state) not surface param (may be stale)
-    // to ensure form data updates are captured
-    const currentSurface = this.#surface ?? surface;
-    const action: A2UIAction = {
-      type: "a2ui-action",
-      surfaceId: currentSurface.surfaceId,
-      actionId,
-      dataModel: { ...currentSurface.dataModel },
-    };
-
-    // Bubble up to shadow-claw-chat
-    this.dispatchEvent(
-      new CustomEvent("shadow-claw-a2ui-action", {
-        bubbles: true,
-        composed: true,
-        detail: { groupId: this.groupId, action },
-      }),
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Workspace file resolution
-  // ---------------------------------------------------------------------------
-
   /**
    * Resolve a potential workspace filename to a file URL.
    * If input looks like a remote URL (http/https), return as-is.
@@ -424,40 +346,56 @@ export class ShadowClawA2UI extends ShadowClawElement {
     return resolvedUrl;
   }
 
-  /**
-   * Resolve deferred workspace images, videos, and audio to blob URLs loaded from storage.
-   * Runs asynchronously after rendering to avoid blocking the UI.
-   * Uses Promise.all to parallelize all media loading.
-   */
-  async #resolveWorkspaceImages(): Promise<void> {
+  #updateDataModelKey(spec: TextFieldSpec, newValue: string): void {
+    if (!this.#surface || !spec.value) {
+      return;
+    }
+
+    if (typeof spec.value === "object" && "$dataModel" in spec.value) {
+      const key = spec.value.$dataModel.replace(/^\//, "");
+      this.#surface = {
+        ...this.#surface,
+        dataModel: {
+          ...this.#surface.dataModel,
+          [key]: newValue,
+        },
+      };
+      // No full re-render needed — the input owns its own value
+    }
+  }
+
+  #updateDataModelPointer(pointer: string, value: unknown): void {
+    if (!this.#surface) {
+      return;
+    }
+
+    const key = pointer.replace(/^\//, "");
+    this.#surface = {
+      ...this.#surface,
+      dataModel: { ...this.#surface.dataModel, [key]: value },
+    };
+  }
+
+  async #renderSurface(): Promise<void> {
+    const surface = this.#surface;
+    if (!surface) {
+      return;
+    }
+
     const root = this.shadowRoot?.querySelector(".a2ui__root");
     if (!(root instanceof HTMLElement)) {
       return;
     }
 
-    const db = await getDb();
+    root.replaceChildren();
 
-    // Collect all deferred media elements
-    const mediaElements = [
-      ...Array.from(root.querySelectorAll("img[data-a2ui-workspace-src]")),
-      ...Array.from(root.querySelectorAll("video[data-a2ui-workspace-src]")),
-      ...Array.from(root.querySelectorAll("audio[data-a2ui-workspace-src]")),
-    ];
+    const rootEl = this.#renderComponent(surface.rootComponentId, surface);
+    if (rootEl) {
+      root.appendChild(rootEl);
+    }
 
-    // Parallelize all media blob URL conversions using Promise.all
-    await Promise.all(
-      mediaElements.map((el) => this.#resolveSingleMediaToBlobUrl(el, db)),
-    );
-
-    // Also resolve poster URLs for videos
-    const videosWithPoster = Array.from(
-      root.querySelectorAll("video[data-a2ui-workspace-poster]"),
-    );
-    await Promise.all(
-      videosWithPoster.map((el) =>
-        this.#resolveVideoPosterToBlobUrl(el as HTMLVideoElement, db),
-      ),
-    );
+    // Resolve deferred workspace images to blob URLs (videos/audio use Service Worker streaming)
+    await this.#resolveWorkspaceImages();
   }
 
   /**
@@ -612,11 +550,43 @@ export class ShadowClawA2UI extends ShadowClawElement {
       );
     }
   }
-}
 
-// ---------------------------------------------------------------------------
-// Registration
-// ---------------------------------------------------------------------------
+  /**
+   * Resolve deferred workspace images, videos, and audio to blob URLs loaded from storage.
+   * Runs asynchronously after rendering to avoid blocking the UI.
+   * Uses Promise.all to parallelize all media loading.
+   */
+  async #resolveWorkspaceImages(): Promise<void> {
+    const root = this.shadowRoot?.querySelector(".a2ui__root");
+    if (!(root instanceof HTMLElement)) {
+      return;
+    }
+
+    const db = await getDb();
+
+    // Collect all deferred media elements
+    const mediaElements = [
+      ...Array.from(root.querySelectorAll("img[data-a2ui-workspace-src]")),
+      ...Array.from(root.querySelectorAll("video[data-a2ui-workspace-src]")),
+      ...Array.from(root.querySelectorAll("audio[data-a2ui-workspace-src]")),
+    ];
+
+    // Parallelize all media blob URL conversions using Promise.all
+    await Promise.all(
+      mediaElements.map((el) => this.#resolveSingleMediaToBlobUrl(el, db)),
+    );
+
+    // Also resolve poster URLs for videos
+    const videosWithPoster = Array.from(
+      root.querySelectorAll("video[data-a2ui-workspace-poster]"),
+    );
+    await Promise.all(
+      videosWithPoster.map((el) =>
+        this.#resolveVideoPosterToBlobUrl(el as HTMLVideoElement, db),
+      ),
+    );
+  }
+}
 
 if (!customElements.get("shadow-claw-a2ui")) {
   customElements.define("shadow-claw-a2ui", ShadowClawA2UI);

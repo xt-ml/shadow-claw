@@ -63,7 +63,11 @@ import type { StorageStatus } from "../storage/storage.js";
 import { AGUIAdapter } from "../ui/agui-adapter.js";
 import { applyJsonPatch } from "../utils/jsonPatch.js";
 
-export type OrchestratorState = "idle" | "thinking" | "responding" | "error";
+export type OrchestratorDisplayState =
+  | "idle"
+  | "thinking"
+  | "responding"
+  | "error";
 
 type TaskSyncOutboxOperation =
   | {
@@ -260,7 +264,7 @@ async function fetchServerTasksForGroup(
 export interface OrchestratorStoreState {
   isTyping: boolean;
   ready: boolean;
-  state: OrchestratorState;
+  state: OrchestratorDisplayState;
   messages: StoredMessage[];
   contextUsage: ContextUsage | null;
   files: string[];
@@ -307,7 +311,7 @@ export class OrchestratorStore {
   public _toolActivity: Signal.State<ToolActivity | null>;
   public _modelDownloadProgress: Signal.State<ModelDownloadProgressPayload | null>;
   public _activityLog: Signal.State<ThinkingLogEntry[]>;
-  public _state: Signal.State<OrchestratorState>;
+  public _state: Signal.State<OrchestratorDisplayState>;
   public _tokenUsage: Signal.State<TokenUsage | null>;
   public _error: Signal.State<string | null>;
   public _activeGroupId: Signal.State<string>;
@@ -329,7 +333,7 @@ export class OrchestratorStore {
   public _pages: Signal.State<SavedPageRef[]>;
   public _activePinnedPage: Signal.State<SavedPageRef | null>;
   public _remoteAgentStatusByGroup: Signal.State<
-    Map<string, OrchestratorState>
+    Map<string, OrchestratorDisplayState>
   >;
   public _remoteAgentTypingByGroup: Signal.State<Map<string, boolean>>;
   public _peerStateByGroup: Signal.State<Map<string, Record<string, unknown>>>;
@@ -344,7 +348,7 @@ export class OrchestratorStore {
   private _onlineReplayHandler: (() => void) | null;
   private _aguiAdapter: AGUIAdapter | null;
   private _tokenUsageAccumulator: TokenUsage | null = null;
-  private _lastOrchestratorState: OrchestratorState = "idle";
+  private _lastOrchestratorDisplayState: OrchestratorDisplayState = "idle";
 
   private deriveGroupName(groupId: string): string {
     if (groupId.startsWith("tg:")) {
@@ -877,7 +881,7 @@ export class OrchestratorStore {
    * Get the remote agent status for a specific group.
    * Returns "idle" if no remote status is set.
    */
-  getRemoteAgentStatus(groupId: string): OrchestratorState {
+  getRemoteAgentStatus(groupId: string): OrchestratorDisplayState {
     const statusMap = this._remoteAgentStatusByGroup.get();
 
     return statusMap.get(groupId) || "idle";
@@ -886,7 +890,10 @@ export class OrchestratorStore {
   /**
    * Set the remote agent status for a specific group.
    */
-  setRemoteAgentStatus(groupId: string, status: OrchestratorState): void {
+  setRemoteAgentStatus(
+    groupId: string,
+    status: OrchestratorDisplayState,
+  ): void {
     const statusMap = this._remoteAgentStatusByGroup.get();
     const newMap = new Map(statusMap);
     newMap.set(groupId, status);
@@ -1063,8 +1070,8 @@ export class OrchestratorStore {
         return;
       }
 
-      const prev = this._lastOrchestratorState;
-      this._lastOrchestratorState = state;
+      const prev = this._lastOrchestratorDisplayState;
+      this._lastOrchestratorDisplayState = state;
       this._state.set(state);
 
       if (state === "idle") {

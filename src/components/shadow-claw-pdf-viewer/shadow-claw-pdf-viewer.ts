@@ -1,47 +1,16 @@
 import { GlobalWorkerOptions, getDocument } from "pdfjs-dist";
 
+import { installGetOrInsertComputedPolyfill } from "./utils/installGetOrInsertComputedPolyfill.js";
+
+import type { PdfFile } from "../types.js";
+
 import ShadowClawElement from "../shadow-claw-element.js";
-
-/**
- * pdf.js 5.x may call Map/WeakMap#getOrInsertComputed in some builds.
- * Safari versions without that proposal need a tiny shim.
- */
-function installGetOrInsertComputedPolyfill() {
-  const install = (proto) => {
-    if (!proto || typeof proto.getOrInsertComputed === "function") {
-      return;
-    }
-
-    Object.defineProperty(proto, "getOrInsertComputed", {
-      configurable: true,
-      writable: true,
-      value(key, compute) {
-        if (this.has(key)) {
-          return this.get(key);
-        }
-
-        const value = compute();
-        this.set(key, value);
-
-        return value;
-      },
-    });
-  };
-
-  install(Map.prototype);
-  install(WeakMap.prototype);
-}
 
 installGetOrInsertComputedPolyfill();
 
 // Keep worker source aligned with the local bundled worker.
 // pdf.js validates this as a primitive string and throws for object-like values.
 GlobalWorkerOptions.workerSrc = "./pdf.worker.js";
-
-export interface PdfFile {
-  name: string;
-  binaryContent: Uint8Array | null;
-}
 
 const elementName = "shadow-claw-pdf-viewer";
 
@@ -51,22 +20,21 @@ export class ShadowClawPdfViewer extends ShadowClawElement {
   static template = `${ShadowClawPdfViewer.componentPath}/${elementName}.html`;
 
   _file: PdfFile | null = null;
+  _handlePanEndRef: () => void;
+  _handlePanMoveRef: (event: MouseEvent | TouchEvent) => void;
+  _isPanning: boolean = false;
   _loadingTask: any | null = null;
   _pageNumber: number = 1;
+  _panStartScrollLeft: number = 0;
+  _panStartScrollTop: number = 0;
+  _panStartX: number = 0;
+  _panStartY: number = 0;
   _pdfDocument: any | null = null;
   _renderTask: any | null = null;
   _renderVersion: number = 0;
   _resizeObserver: ResizeObserver | null = null;
   _resizeTimer: any | null = null;
   _scale: number = 1;
-  _isPanning: boolean = false;
-  _panStartX: number = 0;
-  _panStartY: number = 0;
-  _panStartScrollLeft: number = 0;
-  _panStartScrollTop: number = 0;
-
-  _handlePanMoveRef: (event: MouseEvent | TouchEvent) => void;
-  _handlePanEndRef: () => void;
 
   constructor() {
     super();
@@ -97,18 +65,6 @@ export class ShadowClawPdfViewer extends ShadowClawElement {
     this.stopPanning();
     this.cleanupResizeHandling();
     this.cleanupPdf();
-  }
-
-  set file(value: PdfFile | null) {
-    this._file = value;
-    this._pageNumber = 1;
-    this._scale = 1;
-
-    this.loadPdf();
-  }
-
-  get file() {
-    return this._file;
   }
 
   bindEvents() {
@@ -166,6 +122,109 @@ export class ShadowClawPdfViewer extends ShadowClawElement {
     }
   }
 
+  cleanupPdf() {
+    this.stopPanning();
+
+    if (this._renderTask) {
+      this._renderTask.cancel();
+      this._renderTask = null;
+    }
+
+    if (this._loadingTask) {
+      this._loadingTask.destroy();
+      this._loadingTask = null;
+    }
+
+    if (this._pdfDocument) {
+      this._pdfDocument.destroy();
+      this._pdfDocument = null;
+    }
+
+    this.updatePanState();
+  }
+
+  cleanupResizeHandling() {
+    if (this._resizeObserver) {
+      this._resizeObserver.disconnect();
+      this._resizeObserver = null;
+    }
+
+    if (this._resizeTimer !== null) {
+      clearTimeout(this._resizeTimer);
+
+      this._resizeTimer = null;
+    }
+  }
+
+  set file(value: PdfFile | null) {
+    this._file = value;
+    this._pageNumber = 1;
+    this._scale = 1;
+
+    this.loadPdf();
+  }
+
+  get file() {
+    return this._file;
+  }
+
+  getEventPoint(
+    event: MouseEvent | TouchEvent,
+  ): { x: number; y: number } | null {
+    if (event instanceof MouseEvent) {
+      return { x: event.clientX, y: event.clientY };
+    }
+
+    const touch = event.touches[0] || event.changedTouches[0];
+    if (!touch) {
+      return null;
+    }
+
+    return { x: touch.clientX, y: touch.clientY };
+  }
+
+  getRenderScale(pageWidthAtScale1: number): number {
+    const root = this.shadowRoot;
+    const wrap = root?.querySelector(".pdf-canvas-wrap");
+
+    if (!(wrap instanceof HTMLElement) || pageWidthAtScale1 <= 0) {
+      return this._scale;
+    }
+
+    const styles = globalThis.getComputedStyle(wrap);
+    const padLeft = parseFloat(styles.paddingLeft) || 0;
+    const padRight = parseFloat(styles.paddingRight) || 0;
+    const availableWidth = Math.max(1, wrap.clientWidth - padLeft - padRight);
+    const fitScale = availableWidth / pageWidthAtScale1;
+
+    return Math.max(0.25, fitScale * this._scale);
+  }
+
+  handlePanMove(event: MouseEvent | TouchEvent) {
+    if (!this._isPanning) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    const wrap = root?.querySelector(".pdf-canvas-wrap");
+    if (!(wrap instanceof HTMLElement)) {
+      return;
+    }
+
+    const point = this.getEventPoint(event);
+    if (!point) {
+      return;
+    }
+
+    const deltaX = point.x - this._panStartX;
+    const deltaY = point.y - this._panStartY;
+
+    wrap.scrollLeft = this._panStartScrollLeft - deltaX;
+    wrap.scrollTop = this._panStartScrollTop - deltaY;
+
+    event.preventDefault();
+  }
+
   handlePanStart(event: MouseEvent | TouchEvent) {
     if (!this._pdfDocument) {
       return;
@@ -205,29 +264,47 @@ export class ShadowClawPdfViewer extends ShadowClawElement {
     event.preventDefault();
   }
 
-  handlePanMove(event: MouseEvent | TouchEvent) {
-    if (!this._isPanning) {
+  setStatus(message: string) {
+    const root = this.shadowRoot;
+    if (!root) {
       return;
     }
 
+    const status = root.querySelector(".pdf-status");
+    if (status) {
+      status.textContent = message;
+    }
+  }
+
+  setupResizeHandling() {
     const root = this.shadowRoot;
     const wrap = root?.querySelector(".pdf-canvas-wrap");
+
     if (!(wrap instanceof HTMLElement)) {
       return;
     }
 
-    const point = this.getEventPoint(event);
-    if (!point) {
-      return;
+    if ("ResizeObserver" in globalThis) {
+      this._resizeObserver = new ResizeObserver(() => {
+        if (this._resizeTimer !== null) {
+          clearTimeout(this._resizeTimer);
+        }
+
+        this._resizeTimer = globalThis.setTimeout(() => {
+          this._resizeTimer = null;
+
+          if (!this._pdfDocument) {
+            return;
+          }
+
+          this.renderCurrentPage().catch((err) => {
+            console.error("PDF resize re-render error", err);
+          });
+        }, 100);
+      });
+
+      this._resizeObserver.observe(wrap);
     }
-
-    const deltaX = point.x - this._panStartX;
-    const deltaY = point.y - this._panStartY;
-
-    wrap.scrollLeft = this._panStartScrollLeft - deltaX;
-    wrap.scrollTop = this._panStartScrollTop - deltaY;
-
-    event.preventDefault();
   }
 
   stopPanning() {
@@ -250,19 +327,41 @@ export class ShadowClawPdfViewer extends ShadowClawElement {
     }
   }
 
-  getEventPoint(
-    event: MouseEvent | TouchEvent,
-  ): { x: number; y: number } | null {
-    if (event instanceof MouseEvent) {
-      return { x: event.clientX, y: event.clientY };
+  updateControls() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
     }
 
-    const touch = event.touches[0] || event.changedTouches[0];
-    if (!touch) {
-      return null;
+    const prevBtn = root.querySelector(".pdf-prev");
+    const nextBtn = root.querySelector(".pdf-next");
+    const page = root.querySelector(".pdf-page");
+
+    const totalPages = this._pdfDocument?.numPages || 1;
+
+    if (page) {
+      page.textContent = `Page ${this._pageNumber} of ${totalPages} (${Math.round(this._scale * 100)}%)`;
     }
 
-    return { x: touch.clientX, y: touch.clientY };
+    if (prevBtn instanceof HTMLButtonElement) {
+      prevBtn.disabled = !this._pdfDocument || this._pageNumber <= 1;
+    }
+
+    if (nextBtn instanceof HTMLButtonElement) {
+      nextBtn.disabled = !this._pdfDocument || this._pageNumber >= totalPages;
+    }
+
+    this.updatePanState();
+  }
+
+  updatePanState() {
+    const root = this.shadowRoot;
+    const wrap = root?.querySelector(".pdf-canvas-wrap");
+    if (!(wrap instanceof HTMLElement)) {
+      return;
+    }
+
+    wrap.classList.toggle("is-pannable", !!this._pdfDocument);
   }
 
   async loadPdf() {
@@ -373,137 +472,6 @@ export class ShadowClawPdfViewer extends ShadowClawElement {
       this.setStatus("Failed to render PDF page.");
       console.error("PDF page render error", err);
     }
-  }
-
-  getRenderScale(pageWidthAtScale1: number): number {
-    const root = this.shadowRoot;
-    const wrap = root?.querySelector(".pdf-canvas-wrap");
-
-    if (!(wrap instanceof HTMLElement) || pageWidthAtScale1 <= 0) {
-      return this._scale;
-    }
-
-    const styles = globalThis.getComputedStyle(wrap);
-    const padLeft = parseFloat(styles.paddingLeft) || 0;
-    const padRight = parseFloat(styles.paddingRight) || 0;
-    const availableWidth = Math.max(1, wrap.clientWidth - padLeft - padRight);
-    const fitScale = availableWidth / pageWidthAtScale1;
-
-    return Math.max(0.25, fitScale * this._scale);
-  }
-
-  setupResizeHandling() {
-    const root = this.shadowRoot;
-    const wrap = root?.querySelector(".pdf-canvas-wrap");
-
-    if (!(wrap instanceof HTMLElement)) {
-      return;
-    }
-
-    if ("ResizeObserver" in globalThis) {
-      this._resizeObserver = new ResizeObserver(() => {
-        if (this._resizeTimer !== null) {
-          clearTimeout(this._resizeTimer);
-        }
-
-        this._resizeTimer = globalThis.setTimeout(() => {
-          this._resizeTimer = null;
-
-          if (!this._pdfDocument) {
-            return;
-          }
-
-          this.renderCurrentPage().catch((err) => {
-            console.error("PDF resize re-render error", err);
-          });
-        }, 100);
-      });
-
-      this._resizeObserver.observe(wrap);
-    }
-  }
-
-  cleanupResizeHandling() {
-    if (this._resizeObserver) {
-      this._resizeObserver.disconnect();
-      this._resizeObserver = null;
-    }
-
-    if (this._resizeTimer !== null) {
-      clearTimeout(this._resizeTimer);
-
-      this._resizeTimer = null;
-    }
-  }
-
-  updateControls() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const prevBtn = root.querySelector(".pdf-prev");
-    const nextBtn = root.querySelector(".pdf-next");
-    const page = root.querySelector(".pdf-page");
-
-    const totalPages = this._pdfDocument?.numPages || 1;
-
-    if (page) {
-      page.textContent = `Page ${this._pageNumber} of ${totalPages} (${Math.round(this._scale * 100)}%)`;
-    }
-
-    if (prevBtn instanceof HTMLButtonElement) {
-      prevBtn.disabled = !this._pdfDocument || this._pageNumber <= 1;
-    }
-
-    if (nextBtn instanceof HTMLButtonElement) {
-      nextBtn.disabled = !this._pdfDocument || this._pageNumber >= totalPages;
-    }
-
-    this.updatePanState();
-  }
-
-  updatePanState() {
-    const root = this.shadowRoot;
-    const wrap = root?.querySelector(".pdf-canvas-wrap");
-    if (!(wrap instanceof HTMLElement)) {
-      return;
-    }
-
-    wrap.classList.toggle("is-pannable", !!this._pdfDocument);
-  }
-
-  setStatus(message: string) {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const status = root.querySelector(".pdf-status");
-    if (status) {
-      status.textContent = message;
-    }
-  }
-
-  cleanupPdf() {
-    this.stopPanning();
-
-    if (this._renderTask) {
-      this._renderTask.cancel();
-      this._renderTask = null;
-    }
-
-    if (this._loadingTask) {
-      this._loadingTask.destroy();
-      this._loadingTask = null;
-    }
-
-    if (this._pdfDocument) {
-      this._pdfDocument.destroy();
-      this._pdfDocument = null;
-    }
-
-    this.updatePanState();
   }
 }
 

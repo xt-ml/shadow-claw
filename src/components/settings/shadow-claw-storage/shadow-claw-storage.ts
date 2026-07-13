@@ -1,21 +1,22 @@
 import { CONFIG_KEYS } from "../../../config/config.js";
-import { getConfig } from "../../../db/getConfig.js";
-
 import { effect } from "../../../core/effect.js";
 
+import { getDb } from "../../../db/db.js";
+import { getConfig } from "../../../db/getConfig.js";
+
+import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import { getStorageEstimate } from "../../../storage/getStorageEstimate.js";
 import { isPersistent } from "../../../storage/isPersistent.js";
 import { requestPersistentStorage } from "../../../storage/requestPersistentStorage.js";
-import { resetStorageDirectory } from "../../../storage/storage.js";
 import { selectStorageDirectory } from "../../../storage/selectStorageDirectory.js";
+import { resetStorageDirectory } from "../../../storage/storage.js";
 
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
-import { getDb } from "../../../db/db.js";
+
 import ShadowClawElement from "../../shadow-claw-element.js";
-import { setSanitizedHtml } from "../../../security/trusted-types.js";
 
 const elementName = "shadow-claw-storage";
 
@@ -85,6 +86,21 @@ export class ShadowClawStorage extends ShadowClawElement {
   }
 
   /**
+   * Format bytes to human readable string.
+   */
+  formatBytes(bytes: number): string {
+    if (bytes === 0) {
+      return "0 B";
+    }
+
+    const k = 1024;
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + units[i];
+  }
+
+  /**
    * Setup reactive effects for storage status from orchestratorStore.
    */
   setupEffects() {
@@ -142,18 +158,102 @@ export class ShadowClawStorage extends ShadowClawElement {
   }
 
   /**
-   * Format bytes to human readable string.
+   * Handle changing storage directory.
    */
-  formatBytes(bytes: number): string {
-    if (bytes === 0) {
-      return "0 B";
+  async handleChangeStorageDir() {
+    if (!this.db) {
+      return;
     }
 
-    const k = 1024;
-    const units = ["B", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    try {
+      const success = await selectStorageDirectory(this.db);
+      if (success) {
+        showSuccess(
+          "Storage location changed. Existing OPFS files were not moved.",
+          4500,
+        );
 
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + units[i];
+        await this.updateStorageInfo();
+        await orchestratorStore.loadFiles(this.db);
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Failed to change storage location: ${errorMsg}`, 6000);
+    }
+  }
+
+  /**
+   * Handle persistent storage request.
+   */
+  async handleRequestPersistent() {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const granted = await requestPersistentStorage();
+      if (granted) {
+        showSuccess("Persistent storage granted", 3500);
+      } else {
+        showWarning(
+          "Persistent storage was not granted. Browsers may deny this based on site usage.",
+          5500,
+        );
+      }
+
+      await this.updateStorageInfo();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Storage request failed: ${errorMsg}`, 6000);
+    }
+  }
+
+  /**
+   * Handle resetting storage directory.
+   */
+  async handleResetStorageDir() {
+    if (!this.db) {
+      return;
+    }
+
+    const confirmed = await this.requestConfirmation({
+      title: "Reset Storage Location",
+      message: "Revert storage to browser-internal (OPFS)?",
+      confirmLabel: "Revert",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await resetStorageDirectory(this.db);
+
+      showSuccess("Reverted to browser-internal storage", 3500);
+
+      await this.updateStorageInfo();
+      await orchestratorStore.loadFiles(this.db);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Failed to reset storage location: ${errorMsg}`, 6000);
+    }
+  }
+
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
+    }
+
+    showWarning(options.message, 4500);
+
+    return false;
   }
 
   /**
@@ -253,105 +353,6 @@ export class ShadowClawStorage extends ShadowClawElement {
       }
     } catch (err) {
       console.warn("Failed to update storage info:", err);
-    }
-  }
-
-  /**
-   * Handle persistent storage request.
-   */
-  async handleRequestPersistent() {
-    if (!this.db) {
-      return;
-    }
-
-    try {
-      const granted = await requestPersistentStorage();
-      if (granted) {
-        showSuccess("Persistent storage granted", 3500);
-      } else {
-        showWarning(
-          "Persistent storage was not granted. Browsers may deny this based on site usage.",
-          5500,
-        );
-      }
-
-      await this.updateStorageInfo();
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError(`Storage request failed: ${errorMsg}`, 6000);
-    }
-  }
-
-  /**
-   * Handle changing storage directory.
-   */
-  async handleChangeStorageDir() {
-    if (!this.db) {
-      return;
-    }
-
-    try {
-      const success = await selectStorageDirectory(this.db);
-      if (success) {
-        showSuccess(
-          "Storage location changed. Existing OPFS files were not moved.",
-          4500,
-        );
-
-        await this.updateStorageInfo();
-        await orchestratorStore.loadFiles(this.db);
-      }
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError(`Failed to change storage location: ${errorMsg}`, 6000);
-    }
-  }
-
-  async requestConfirmation(options: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-  }): Promise<boolean> {
-    const appShell = document.querySelector("shadow-claw") as any;
-    if (appShell && typeof appShell.requestDialog === "function") {
-      return await appShell.requestDialog({ mode: "confirm", ...options });
-    }
-
-    showWarning(options.message, 4500);
-
-    return false;
-  }
-
-  /**
-   * Handle resetting storage directory.
-   */
-  async handleResetStorageDir() {
-    if (!this.db) {
-      return;
-    }
-
-    const confirmed = await this.requestConfirmation({
-      title: "Reset Storage Location",
-      message: "Revert storage to browser-internal (OPFS)?",
-      confirmLabel: "Revert",
-      cancelLabel: "Cancel",
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      await resetStorageDirectory(this.db);
-
-      showSuccess("Reverted to browser-internal storage", 3500);
-
-      await this.updateStorageInfo();
-      await orchestratorStore.loadFiles(this.db);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError(`Failed to reset storage location: ${errorMsg}`, 6000);
     }
   }
 }

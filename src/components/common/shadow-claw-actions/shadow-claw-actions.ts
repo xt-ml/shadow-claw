@@ -6,10 +6,9 @@ type ActionKind = "account" | "connection";
 
 export class ShadowClawActions extends ShadowClawElement {
   static componentPath = `components/common/${elementName}`;
+  static observedAttributes = ["kind", "item-id", "is-default"];
   static styles = `${ShadowClawActions.componentPath}/${elementName}.css`;
   static template = `${ShadowClawActions.componentPath}/${elementName}.html`;
-
-  static observedAttributes = ["kind", "item-id", "is-default"];
 
   attributeChangedCallback() {
     this.render();

@@ -1,34 +1,40 @@
-import type { Config } from "dompurify";
+import hljs from "highlight.js";
 
-import { effect } from "../../core/effect.js";
+import { renderMarkdown } from "../../content/markdown.js";
+
 import {
+  applyBasePath,
   getFileRouteDirPath,
   getWorkspaceRouteRequestPath,
   resolveHrefAgainstRoute,
-  applyBasePath,
 } from "../../core/app-routes.js";
-import { renderMarkdown } from "../../content/markdown.js";
+
+import { effect } from "../../core/effect.js";
+import { getDb } from "../../db/db.js";
+
 import {
   sanitizeSrcdocHtml,
   setSanitizedHtml,
   setTrustedSrcdoc,
   toTrustedHtmlPresanitized,
 } from "../../security/trusted-types.js";
+
+import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
+import { writeGroupFile } from "../../storage/writeGroupFile.js";
+
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { themeStore } from "../../stores/theme.js";
-import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
-import { writeGroupFile } from "../../storage/writeGroupFile.js";
+
 import { showError, showSuccess } from "../../ui/toast.js";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.js";
+
+import type { Config } from "dompurify";
 import type { ShadowClawDatabase } from "../../db/types.js";
-import { getDb } from "../../db/db.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
-
-import hljs from "highlight.js";
 
 const elementName = "shadow-claw-file-viewer";
 const highlightThemePath = `components/${elementName}/highlightjs-atom-one-dark.min.css`;
@@ -49,19 +55,21 @@ export class ShadowClawFileViewer extends ShadowClawElement {
   static styles = `${ShadowClawFileViewer.componentPath}/${elementName}.css`;
   static template = `${ShadowClawFileViewer.componentPath}/${elementName}.html`;
 
-  db: ShadowClawDatabase | null = null;
+  currentImageObjectUrls: string[] = [];
+  currentObjectUrl: string | null = null;
 
-  isFilePreviewMode: boolean = false;
-  isFileEditMode: boolean = false;
-  isFullscreenMode: boolean = false;
-  isEditorDirty: boolean = false;
+  db: ShadowClawDatabase | null = null;
   editorDraftContent: string | null = null;
 
+  isEditorDirty: boolean = false;
+  isFileEditMode: boolean = false;
+
+  isFilePreviewMode: boolean = false;
+  isFullscreenMode: boolean = false;
+
   lastOpenedFileName: string = "";
-  viewRenderToken: number = 0;
-  currentObjectUrl: string | null = null;
-  currentImageObjectUrls: string[] = [];
   previewFrameWindow: Window | null = null;
+  viewRenderToken: number = 0;
 
   constructor() {
     super();
@@ -95,6 +103,28 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       this.handleFullscreenChange,
     );
     this.revokeObjectUrl();
+  }
+
+  applyFullscreenMode(modal: Element) {
+    const modalContent = modal.querySelector(".modal-content");
+    if (modalContent instanceof HTMLElement) {
+      modalContent.classList.toggle(
+        "modal-content--fullscreen",
+        this.isFullscreenMode,
+      );
+    }
+
+    const fullscreenBtn = modal.querySelector(".modal-fullscreen-btn");
+    if (fullscreenBtn instanceof HTMLButtonElement) {
+      fullscreenBtn.setAttribute("aria-pressed", String(this.isFullscreenMode));
+      fullscreenBtn.setAttribute(
+        "aria-label",
+        this.isFullscreenMode ? "Exit fullscreen" : "Enter fullscreen",
+      );
+      fullscreenBtn.title = this.isFullscreenMode
+        ? "Exit fullscreen"
+        : "Fullscreen";
+    }
   }
 
   applyHighlightStyles(hjsCss: string) {
@@ -131,72 +161,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     style.textContent = `${hjsCss}\n${highlightFontOverrideCss}`;
     root.appendChild(style);
   }
-
-  handleFullscreenChange = () => {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const modal = root.querySelector(".file-modal");
-    if (!(modal instanceof HTMLElement)) {
-      return;
-    }
-
-    const fullscreenTarget = this.getFullscreenTarget(modal);
-    this.isFullscreenMode = this.isTargetInFullscreen(fullscreenTarget);
-    this.applyFullscreenMode(modal);
-  };
-
-  handleIframeMessage = (event: MessageEvent) => {
-    if (!this.db || !event.data || typeof event.data !== "object") {
-      return;
-    }
-
-    const payload = event.data as { type?: unknown; href?: unknown };
-    if (
-      payload.type !== "shadow-claw-file-viewer-link" ||
-      typeof payload.href !== "string"
-    ) {
-      return;
-    }
-
-    if (this.previewFrameWindow && event.source !== this.previewFrameWindow) {
-      return;
-    }
-
-    const current = fileViewerStore.file;
-    const filePath = current?.path || current?.name || "";
-    const routeDir = getFileRouteDirPath(
-      orchestratorStore.activeGroupId,
-      filePath,
-    );
-    const resolved = resolveHrefAgainstRoute(
-      payload.href,
-      routeDir,
-      window.location.origin,
-    );
-    if (!resolved) {
-      return;
-    }
-
-    if (resolved.origin !== window.location.origin) {
-      window.open(resolved.href, "_blank", "noopener,noreferrer");
-
-      return;
-    }
-
-    const targetPath = `${resolved.pathname}${resolved.search}${resolved.hash}`;
-    const nav = (window as any).navigation;
-    if (nav && typeof nav.navigate === "function") {
-      nav.navigate(targetPath);
-
-      return;
-    }
-
-    window.history.pushState({}, "", targetPath);
-    window.dispatchEvent(new PopStateEvent("popstate"));
-  };
 
   bindEventListeners() {
     const root = this.shadowRoot;
@@ -289,314 +253,146 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
   }
 
-  updateEditorHighlight(value: string) {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
+  buildWebShareFile(file: any): File | null {
+    if (file?.nativeFile instanceof File) {
+      return file.nativeFile;
     }
 
-    const highlightCode = root.querySelector(".file-editor-overlay code");
-    if (!highlightCode) {
-      return;
+    const bytes = file?.binaryContent;
+    if (!(bytes instanceof Uint8Array) || bytes.length === 0) {
+      return null;
     }
 
-    const file = fileViewerStore.file;
-    const language = this.getLanguageFromFilename(file?.name || "");
-    let highlighted = "";
+    const fileBytes = new Uint8Array(bytes.byteLength);
+    fileBytes.set(bytes);
 
-    try {
-      if (language && hljs.getLanguage(language)) {
-        highlighted = hljs.highlight(value, { language }).value;
-      } else {
-        highlighted = hljs.highlightAuto(value).value;
-      }
-    } catch {
-      highlighted = value
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-    }
-
-    highlightCode.className = language ? `hljs language-${language}` : "hljs";
-    // hljs output is pre-sanitized: user content is entity-escaped and
-    // only generated <span class="hljs-*"> tags are added. Use
-    // toTrustedHtmlPresanitized to satisfy Trusted Types without
-    // running DOMPurify (which would strip the hljs span tokens).
-    highlightCode.innerHTML = toTrustedHtmlPresanitized(
-      highlighted + "<br>",
-    ) as string;
-  }
-
-  hasUnsavedChanges() {
-    return this.isEditorDirty;
-  }
-
-  async requestConfirmation(options: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-  }): Promise<boolean> {
-    const appShell = document.querySelector("shadow-claw") as any;
-    if (appShell && typeof appShell.requestDialog === "function") {
-      return await appShell.requestDialog({ mode: "confirm", ...options });
-    }
-
-    return false;
-  }
-
-  async canDismissViewer() {
-    if (!this.hasUnsavedChanges()) {
-      return true;
-    }
-
-    const confirmed = await this.requestConfirmation({
-      title: "Discard Unsaved Changes",
-      message: "You have unsaved changes. Discard them and close?",
-      confirmLabel: "Discard",
-      cancelLabel: "Keep Editing",
+    return new File([fileBytes], file.name || "shared-file", {
+      type: file?.mimeType || "application/octet-stream",
     });
-
-    if (confirmed) {
-      this.isEditorDirty = false;
-      this.editorDraftContent = null;
-    }
-
-    return confirmed;
   }
 
-  async requestCloseViewer(): Promise<boolean> {
-    if (!(await this.canDismissViewer())) {
+  canShareCurrentFile(file: any) {
+    if (!file || !this.isWebShareAvailable()) {
       return false;
     }
 
-    await this.exitFullscreenIfActive();
-
-    fileViewerStore.closeFile();
-
-    return true;
-  }
-
-  async handlePreviewLinkClick(event: MouseEvent) {
-    if (event.defaultPrevented || event.button !== 0) {
-      return;
+    if (file.kind === "text") {
+      return true;
     }
 
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-      return;
-    }
-
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      return;
-    }
-
-    const link = target.closest("a");
-    if (!(link instanceof HTMLAnchorElement) || !this.db) {
-      return;
-    }
-
-    const current = fileViewerStore.file;
-    const basePath = current?.path || current?.name || "";
-    const href = link.getAttribute("href") || "";
-    const routeDir = getFileRouteDirPath(
-      orchestratorStore.activeGroupId,
-      basePath,
-    );
-    const resolved = resolveHrefAgainstRoute(
-      href,
-      routeDir,
-      window.location.origin,
-    );
-
-    if (resolved && resolved.origin === window.location.origin) {
-      event.preventDefault();
-      const targetPath = `${resolved.pathname}${resolved.search}${resolved.hash}`;
-      const nav = (window as any).navigation;
-      if (nav && typeof nav.navigate === "function") {
-        nav.navigate(targetPath);
-      } else {
-        window.history.pushState({}, "", targetPath);
-        window.dispatchEvent(new PopStateEvent("popstate"));
-      }
-
-      return;
-    }
-
-    const trimmed = href.trim();
-    if (
-      trimmed &&
-      !trimmed.startsWith("#") &&
-      !trimmed.startsWith("javascript:")
-    ) {
-      const targetAttr = link.getAttribute("target") || "_blank";
-      const safeTarget =
-        targetAttr === "_self" ||
-        targetAttr === "_top" ||
-        targetAttr === "_parent"
-          ? "_blank"
-          : targetAttr;
-
-      try {
-        const parsed = new URL(trimmed, window.location.href);
-        const isExternal = parsed.host !== window.location.host;
-        if (isExternal) {
-          event.preventDefault();
-          window.open(trimmed, safeTarget, "noopener,noreferrer");
-        }
-      } catch {
-        if (/^[a-zA-Z][a-zA-Z\d+.-]*:/u.test(trimmed)) {
-          event.preventDefault();
-          window.open(trimmed, safeTarget, "noopener,noreferrer");
-        }
-      }
-    }
-  }
-
-  async openWorkspaceLink(href: string, basePath: string) {
-    if (!this.db) {
-      return;
-    }
-
-    const resolved = this.resolveWorkspaceLinkPath(href, basePath);
-    if (!resolved) {
-      return;
-    }
-
-    const lastSegment = resolved.split("/").filter(Boolean).pop() || "";
-    const hasExtension = /\.[^./]+$/u.test(lastSegment);
-
-    if (!hasExtension) {
-      // Try opening the exact path first (supports extensionless files).
-      try {
-        await fileViewerStore.openFile(
-          this.db,
-          resolved,
-          orchestratorStore.activeGroupId,
-        );
-
-        return;
-      } catch (err) {
-        const isNotFound =
-          err instanceof DOMException && err.name === "NotFoundError";
-        const isDirectory =
-          err instanceof DOMException && err.name === "TypeMismatchError";
-        if (!isNotFound && !isDirectory) {
-          const message = err instanceof Error ? err.message : String(err);
-          showError(`Failed to open linked file: ${message}`, 5000);
-
-          return;
-        }
-      }
-
-      await this.openFolderInFilesView(resolved);
-
-      return;
+    const shareFile = this.buildWebShareFile(file);
+    if (!shareFile || typeof navigator.canShare !== "function") {
+      return false;
     }
 
     try {
-      await fileViewerStore.openFile(
-        this.db,
-        resolved,
-        orchestratorStore.activeGroupId,
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to open linked file: ${message}`, 5000);
+      return navigator.canShare({ files: [shareFile] });
+    } catch {
+      return false;
     }
   }
 
-  async openFolderInFilesView(path: string) {
-    if (!this.db) {
-      return;
-    }
-
-    const normalizedPath = path.replace(/^\/+|\/+$/g, "");
-    if (!normalizedPath) {
-      return;
-    }
-
-    try {
-      await orchestratorStore.setCurrentPath(this.db, normalizedPath);
-      fileViewerStore.closeFile();
-
-      const maybeUi = (window as any)?.shadowclaw?.ui;
-      if (maybeUi && typeof maybeUi.showPage === "function") {
-        maybeUi.showPage("files");
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to open linked folder: ${message}`, 5000);
-    }
+  canUseNativeFullscreen(target: HTMLElement): target is HTMLElement & {
+    requestFullscreen: () => Promise<void>;
+  } {
+    return (
+      document.fullscreenEnabled === true &&
+      (typeof (target as any).requestFullscreen === "function" ||
+        typeof (target as any).webkitRequestFullscreen === "function") &&
+      (typeof document.exitFullscreen === "function" ||
+        typeof (document as any).webkitExitFullscreen === "function")
+    );
   }
 
-  resolveWorkspaceLinkPath(href: string, basePath: string = ""): string | null {
-    const trimmed = href.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
+  getCurrentFullscreenElement(): Element | null {
+    return (
+      document.fullscreenElement ||
+      (document as any).webkitFullscreenElement ||
+      null
+    );
+  }
+
+  getFullscreenTarget(modal: Element): HTMLElement | null {
+    const modalContent = modal.querySelector(".modal-content");
+    if (!(modalContent instanceof HTMLElement)) {
       return null;
     }
 
-    let candidate = trimmed;
-    const hasScheme = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed);
+    return modalContent;
+  }
 
-    if (hasScheme || trimmed.startsWith("//")) {
-      let parsed: URL;
-      try {
-        parsed = new URL(trimmed, window.location.href);
-      } catch {
-        return null;
-      }
+  getIframeBridgeScriptUrl() {
+    return applyBasePath("/assets/file-viewer-preview-bridge.js");
+  }
 
-      const isHttp =
-        parsed.protocol === "http:" || parsed.protocol === "https:";
-      if (!isHttp || parsed.host !== window.location.host) {
-        return null;
-      }
-
-      candidate = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  getIframeSandboxPermissions(fileName: string) {
+    if (/\.svg$/i.test(fileName)) {
+      return "allow-modals allow-popups allow-popups-to-escape-sandbox";
     }
 
-    const workspaceRouteTarget = this.getWorkspaceRouteTarget(candidate);
-    if (workspaceRouteTarget) {
-      return workspaceRouteTarget.path;
+    return "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox allow-same-origin";
+  }
+
+  getLanguageFromFilename(fileName: string) {
+    const extension = fileName.toLowerCase().split(".").pop() || "";
+    const languageMap: Record<string, string> = {
+      bash: "bash",
+      cjs: "javascript",
+      css: "css",
+      html: "xml",
+      java: "java",
+      javascript: "javascript",
+      js: "javascript",
+      json: "json",
+      jsx: "jsx",
+      markdown: "markdown",
+      md: "markdown",
+      mjs: "javascript",
+      php: "php",
+      python: "python",
+      py: "python",
+      ruby: "ruby",
+      rb: "ruby",
+      rust: "rust",
+      rs: "rust",
+      sh: "bash",
+      sql: "sql",
+      svg: "xml",
+      ts: "typescript",
+      tsx: "tsx",
+      xml: "xml",
+      yaml: "yaml",
+      yml: "yaml",
+    };
+
+    return languageMap[extension] || "";
+  }
+
+  getPreviewSourceFile(file: any, modal: HTMLElement) {
+    return this.getWorkingSourceFile(file, modal);
+  }
+
+  getWorkingSourceFile(file: any, modal: HTMLElement) {
+    if (!this.isEditorDirty || file?.kind !== "text") {
+      return file;
     }
 
-    let normalized = candidate.split(/[?#]/, 1)[0].replace(/\\/g, "/");
-    const isAbsolute = normalized.startsWith("/");
-    normalized = normalized.replace(/^\/+/, "");
-
-    if (!normalized) {
-      return null;
+    if (typeof this.editorDraftContent === "string") {
+      return {
+        ...file,
+        content: this.editorDraftContent,
+      };
     }
 
-    const stack: string[] = [];
-
-    if (!isAbsolute) {
-      const baseNormalized = basePath.replace(/\\/g, "/").replace(/^\/+/, "");
-      const baseParts = baseNormalized.split("/").filter(Boolean);
-      baseParts.pop();
-      stack.push(...baseParts);
+    const editor = modal.querySelector(".file-editor");
+    if (!(editor instanceof HTMLTextAreaElement)) {
+      return file;
     }
 
-    for (const part of normalized.split("/")) {
-      if (!part || part === ".") {
-        continue;
-      }
-
-      if (part === "..") {
-        if (stack.length === 0) {
-          return null;
-        }
-
-        stack.pop();
-
-        continue;
-      }
-
-      stack.push(part);
-    }
-
-    return stack.length > 0 ? stack.join("/") : null;
+    return {
+      ...file,
+      content: editor.value,
+    };
   }
 
   getWorkspaceRouteTarget(
@@ -668,581 +464,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     return null;
   }
 
-  resolveRouteGroupId(routeGroupId: string): string | null {
-    const expectedGroupId = orchestratorStore.activeGroupId;
-    if (
-      routeGroupId === expectedGroupId ||
-      this.routeGroupMatches(routeGroupId, expectedGroupId)
-    ) {
-      return expectedGroupId;
-    }
-
-    const groups = Array.isArray(orchestratorStore.groups)
-      ? orchestratorStore.groups
-      : [];
-    const exact = groups.find((group) => group.groupId === routeGroupId);
-    if (exact) {
-      return exact.groupId;
-    }
-
-    const alias = groups.find((group) =>
-      this.routeGroupMatches(routeGroupId, group.groupId),
-    );
-    if (alias) {
-      return alias.groupId;
-    }
-
-    return routeGroupId || null;
-  }
-
-  routeGroupMatches(routeGroupId: string, expectedGroupId: string): boolean {
-    if (routeGroupId === expectedGroupId) {
-      return true;
-    }
-
-    if (!routeGroupId.includes(":") && !expectedGroupId.includes(":")) {
-      return false;
-    }
-
-    const normalize = (value: string) => value.trim().replace(/:/g, "-");
-
-    return normalize(routeGroupId) === normalize(expectedGroupId);
-  }
-
-  setupEffects() {
-    effect(() => {
-      const file = fileViewerStore.file;
-      const renderToken = ++this.viewRenderToken;
-      const root = this.shadowRoot;
-      if (!root) {
-        return;
-      }
-
-      const modal = root.querySelector(".file-modal");
-      if (!(modal instanceof HTMLDialogElement)) {
-        return;
-      }
-
-      if (file) {
-        if (!modal.open) {
-          modal.showModal();
-        }
-
-        const title = modal.querySelector(".modal-title");
-        if (title instanceof HTMLElement) {
-          title.textContent = `File: ${file.name}`;
-        }
-
-        if (this.lastOpenedFileName !== file.name) {
-          this.lastOpenedFileName = file.name;
-          this.isFilePreviewMode = this.shouldAutoPreview(file);
-          this.isFileEditMode = false;
-          this.isEditorDirty = false;
-          this.editorDraftContent = null;
-        }
-
-        // async / await
-        void this.updateView(renderToken);
-      } else {
-        if (modal.open) {
-          modal.close();
-        }
-
-        this.lastOpenedFileName = "";
-        this.isFilePreviewMode = false;
-        this.isEditorDirty = false;
-        this.editorDraftContent = null;
-
-        this.resetContent();
-      }
-    });
-  }
-
-  isRenderTokenCurrent(renderToken: number) {
-    return this.viewRenderToken === renderToken;
-  }
-
-  getFullscreenTarget(modal: Element): HTMLElement | null {
-    const modalContent = modal.querySelector(".modal-content");
-    if (!(modalContent instanceof HTMLElement)) {
-      return null;
-    }
-
-    return modalContent;
-  }
-
-  canUseNativeFullscreen(target: HTMLElement): target is HTMLElement & {
-    requestFullscreen: () => Promise<void>;
-  } {
-    return (
-      document.fullscreenEnabled === true &&
-      (typeof (target as any).requestFullscreen === "function" ||
-        typeof (target as any).webkitRequestFullscreen === "function") &&
-      (typeof document.exitFullscreen === "function" ||
-        typeof (document as any).webkitExitFullscreen === "function")
-    );
-  }
-
-  getCurrentFullscreenElement(): Element | null {
-    return (
-      document.fullscreenElement ||
-      (document as any).webkitFullscreenElement ||
-      null
-    );
-  }
-
-  isNodeInComposedTree(node: Node | null, ancestor: Node): boolean {
-    let current: Node | null = node;
-
-    while (current) {
-      if (current === ancestor) {
-        return true;
-      }
-
-      if (current.parentNode) {
-        current = current.parentNode;
-
-        continue;
-      }
-
-      const root = current.getRootNode?.();
-      if (root instanceof ShadowRoot && root.host) {
-        current = root.host;
-
-        continue;
-      }
-
-      current = null;
-    }
-
-    return false;
-  }
-
-  isTargetInFullscreen(target: HTMLElement | null): boolean {
-    if (!target) {
-      return false;
-    }
-
-    const current = this.getCurrentFullscreenElement();
-    if (!current) {
-      return false;
-    }
-
-    return (
-      current === target ||
-      this.isNodeInComposedTree(target, current) ||
-      this.isNodeInComposedTree(current, target)
-    );
-  }
-
-  async requestNativeFullscreen(target: HTMLElement): Promise<void> {
-    const request =
-      (target as any).requestFullscreen ||
-      (target as any).webkitRequestFullscreen;
-    if (typeof request !== "function") {
-      throw new Error("Native fullscreen unavailable");
-    }
-
-    await Promise.resolve(request.call(target));
-  }
-
-  async exitNativeFullscreen(): Promise<void> {
-    const exit =
-      document.exitFullscreen || (document as any).webkitExitFullscreen;
-    if (typeof exit !== "function") {
-      throw new Error("Native fullscreen exit unavailable");
-    }
-
-    await Promise.resolve(exit.call(document));
-  }
-
-  async exitFullscreenIfActive(modal?: Element): Promise<void> {
-    const root = this.shadowRoot;
-    const activeModal = modal || root?.querySelector(".file-modal");
-    if (!activeModal) {
-      return;
-    }
-
-    const fullscreenTarget = this.getFullscreenTarget(activeModal);
-    if (!fullscreenTarget || !this.isTargetInFullscreen(fullscreenTarget)) {
-      return;
-    }
-
-    try {
-      await this.exitNativeFullscreen();
-    } catch {
-      // Native fullscreen exit can fail if browser blocks it.
-    }
-  }
-
-  async toggleFullscreenMode(modal: Element) {
-    const fullscreenTarget = this.getFullscreenTarget(modal);
-    if (!fullscreenTarget) {
-      return;
-    }
-
-    if (this.canUseNativeFullscreen(fullscreenTarget)) {
-      const isAlreadyFullscreen = this.isTargetInFullscreen(fullscreenTarget);
-
-      try {
-        if (isAlreadyFullscreen) {
-          await this.exitNativeFullscreen();
-          this.isFullscreenMode = false;
-        } else {
-          await this.requestNativeFullscreen(fullscreenTarget);
-          this.isFullscreenMode = true;
-        }
-      } catch {
-        // If native fullscreen fails (permission/user gesture), keep fallback UX.
-        this.isFullscreenMode = !this.isFullscreenMode;
-      }
-
-      this.applyFullscreenMode(modal);
-
-      return;
-    }
-
-    this.isFullscreenMode = !this.isFullscreenMode;
-    this.applyFullscreenMode(modal);
-  }
-
-  applyFullscreenMode(modal: Element) {
-    const modalContent = modal.querySelector(".modal-content");
-    if (modalContent instanceof HTMLElement) {
-      modalContent.classList.toggle(
-        "modal-content--fullscreen",
-        this.isFullscreenMode,
-      );
-    }
-
-    const fullscreenBtn = modal.querySelector(".modal-fullscreen-btn");
-    if (fullscreenBtn instanceof HTMLButtonElement) {
-      fullscreenBtn.setAttribute("aria-pressed", String(this.isFullscreenMode));
-      fullscreenBtn.setAttribute(
-        "aria-label",
-        this.isFullscreenMode ? "Exit fullscreen" : "Enter fullscreen",
-      );
-      fullscreenBtn.title = this.isFullscreenMode
-        ? "Exit fullscreen"
-        : "Fullscreen";
-    }
-  }
-
-  async updateView(renderToken: number = this.viewRenderToken) {
-    const file = fileViewerStore.file;
-    const root = this.shadowRoot;
-    if (!root || !file) {
-      return;
-    }
-
-    const modal = root.querySelector(".file-modal");
-    if (!(modal instanceof HTMLElement)) {
-      return;
-    }
-
-    this.applyFullscreenMode(modal);
-
-    const content = modal.querySelector(".file-content");
-    const previewBtn = modal.querySelector(".modal-preview-btn");
-    const modalBody = modal.querySelector(".modal-body");
-
-    if (!(content instanceof HTMLElement)) {
-      return;
-    }
-
-    content.classList.remove("file-content--iframe");
-
-    const workingFile = this.getWorkingSourceFile(file, modal);
-    const canEdit = file.kind === "text";
-
-    if (previewBtn instanceof HTMLButtonElement) {
-      previewBtn.setAttribute("aria-pressed", String(this.isFilePreviewMode));
-      previewBtn.setAttribute(
-        "aria-label",
-        this.isFilePreviewMode
-          ? "Switch to raw text view"
-          : "Switch to preview mode",
-      );
-    }
-
-    // Get editor elements
-    const editorContainer = modal.querySelector(".file-editor-container");
-    const editBtn = modal.querySelector(".modal-edit-btn");
-    const saveBtn = modal.querySelector(".modal-save-btn");
-    const shareBtn = modal.querySelector(".modal-share-btn");
-    const closeBtn = modal.querySelector(".modal-close-btn");
-    const cancelBtn = modal.querySelector(".modal-cancel-btn");
-
-    if (shareBtn instanceof HTMLButtonElement) {
-      const canShare = this.canShareCurrentFile(file);
-      shareBtn.classList.toggle("hidden", !canShare);
-      shareBtn.disabled = !canShare;
-    }
-
-    if (closeBtn instanceof HTMLButtonElement) {
-      const isDirty = this.hasUnsavedChanges();
-      closeBtn.disabled = false;
-      closeBtn.setAttribute(
-        "aria-label",
-        isDirty ? "Close file viewer (unsaved changes)" : "Close file viewer",
-      );
-      closeBtn.title = isDirty ? "Close (you have unsaved changes)" : "Close";
-    }
-
-    // Save and Cancel are driven purely by dirty state, independent of view mode.
-    const isDirty = this.hasUnsavedChanges();
-    if (saveBtn instanceof HTMLButtonElement) {
-      saveBtn.classList.toggle("hidden", !isDirty);
-    }
-
-    if (cancelBtn instanceof HTMLButtonElement) {
-      cancelBtn.classList.toggle("hidden", !isDirty);
-    }
-
-    if (this.isFilePreviewMode) {
-      modalBody?.classList.remove("modal-body--editing");
-
-      content.classList.remove("hidden");
-      editorContainer?.classList.remove("active");
-
-      if (editBtn instanceof HTMLButtonElement) {
-        editBtn.setAttribute("aria-pressed", "false");
-        editBtn.setAttribute("aria-label", "Edit file");
-        editBtn.classList.toggle("hidden", !canEdit);
-      }
-
-      await this.renderPreview(content, workingFile, renderToken);
-
-      return;
-    }
-
-    if (!this.isRenderTokenCurrent(renderToken)) {
-      return;
-    }
-
-    if (this.isFileEditMode && canEdit) {
-      modalBody?.classList.add("modal-body--editing");
-
-      content.classList.add("hidden");
-      editorContainer?.classList.add("active");
-
-      if (editBtn instanceof HTMLButtonElement) {
-        editBtn.setAttribute("aria-pressed", "true");
-        editBtn.setAttribute("aria-label", "Switch to raw text view");
-        editBtn.classList.remove("hidden");
-      }
-
-      const editor = editorContainer?.querySelector(".file-editor");
-      if (editor instanceof HTMLTextAreaElement) {
-        editor.setAttribute("tab-size", "2");
-
-        const language = this.getLanguageFromFilename(file.name);
-        if (language) {
-          editor.setAttribute("language", language);
-        } else {
-          editor.removeAttribute("language");
-        }
-
-        if (!this.isEditorDirty) {
-          const targetValue = file.content || "";
-          if (editor.value !== targetValue) {
-            editor.value = targetValue;
-          }
-
-          this.updateEditorHighlight(editor.value);
-        } else if (typeof workingFile?.content === "string") {
-          if (editor.value !== workingFile.content) {
-            editor.value = workingFile.content;
-          }
-
-          this.updateEditorHighlight(editor.value);
-        }
-
-        editor.dispatchEvent(new Event("scroll"));
-      }
-    } else {
-      modalBody?.classList.remove("modal-body--editing");
-
-      content.classList.remove("hidden");
-      editorContainer?.classList.remove("active");
-
-      if (editBtn instanceof HTMLButtonElement) {
-        editBtn.setAttribute("aria-pressed", "false");
-        editBtn.setAttribute("aria-label", "Edit file");
-        editBtn.classList.toggle("hidden", !canEdit);
-      }
-
-      content.classList.add("file-content--raw");
-      content.classList.remove("file-content--preview", "file-content--iframe");
-
-      if (file.kind === "binary") {
-        content.textContent = `Binary file (${file.mimeType || "application/octet-stream"}). Switch to Preview to view.`;
-      } else {
-        content.textContent = workingFile.content || "";
-      }
-    }
-  }
-
-  async renderPreview(
-    content: HTMLElement,
-    file: any,
-    renderToken: number = this.viewRenderToken,
-  ) {
-    if (!this.isRenderTokenCurrent(renderToken)) {
-      return;
-    }
-
-    this.revokeObjectUrl();
-    this.previewFrameWindow = null;
-
-    if (file.kind === "pdf") {
-      content.classList.remove(
-        "file-content--raw",
-        "file-content--preview",
-        "file-content--iframe",
-      );
-
-      const pdfViewer = document.createElement(
-        "shadow-claw-pdf-viewer",
-      ) as HTMLElement & {
-        file: any;
-      };
-      pdfViewer.file = file;
-      content.replaceChildren(pdfViewer);
-
-      return;
-    }
-
-    if (file.kind === "binary") {
-      this.renderBinaryPreview(content, file);
-
-      return;
-    }
-
-    if (this.isIframePreviewFile(file.name)) {
-      content.classList.remove("file-content--raw", "file-content--preview");
-      content.classList.add("file-content--iframe");
-
-      const iframe = document.createElement("iframe");
-      iframe.className = "file-content-iframe";
-      iframe.setAttribute("title", `Preview: ${file.name}`);
-      iframe.setAttribute(
-        "sandbox",
-        this.getIframeSandboxPermissions(file.name),
-      );
-
-      iframe.setAttribute("referrerpolicy", "no-referrer");
-      setTrustedSrcdoc(iframe, await this.buildIframePreviewSrcdoc(file));
-      iframe.addEventListener("load", () => {
-        this.previewFrameWindow = iframe.contentWindow;
-      });
-
-      content.replaceChildren(iframe);
-
-      return;
-    }
-
-    content.classList.remove("file-content--raw");
-    content.classList.add("file-content--preview");
-
-    const previewHtml = await renderMarkdown(this.toPreviewMarkdown(file));
-    if (!this.isRenderTokenCurrent(renderToken)) {
-      return;
-    }
-
-    const currentFile = fileViewerStore.file;
-    const basePath = currentFile?.path || currentFile?.name || "";
-    const resolvedPreviewHtml = this.rewriteWorkspacePreviewHtml(
-      previewHtml,
-      basePath,
-    );
-
-    if (!this.isRenderTokenCurrent(renderToken)) {
-      return;
-    }
-
-    setSanitizedHtml(content, resolvedPreviewHtml, previewSanitizeOptions);
-    this.wrapCodeLines(content);
-    await this.resolveMarkdownImages(content, basePath);
-  }
-
-  rewriteWorkspacePreviewHtml(html: string, filePath: string): string {
-    if (!html) {
-      return html;
-    }
-
-    const routeDir = getFileRouteDirPath(
-      orchestratorStore.activeGroupId,
-      filePath,
-    );
-    const parsed = new DOMParser().parseFromString(html, "text/html");
-
-    const rewriteUrlAttribute = (
-      selector: string,
-      attribute: "href" | "src",
-    ) => {
-      const nodes = Array.from(parsed.querySelectorAll(selector));
-      for (const node of nodes) {
-        const currentValue = node.getAttribute(attribute) || "";
-        const trimmed = currentValue.trim();
-        if (
-          !trimmed ||
-          trimmed.startsWith("#") ||
-          trimmed.startsWith("javascript:")
-        ) {
-          continue;
-        }
-
-        const resolved = resolveHrefAgainstRoute(
-          trimmed,
-          routeDir,
-          window.location.origin,
-        );
-        if (!resolved) {
-          continue;
-        }
-
-        if (resolved.origin !== window.location.origin) {
-          continue;
-        }
-
-        node.setAttribute(
-          attribute,
-          `${resolved.pathname}${resolved.search}${resolved.hash}`,
-        );
-      }
-    };
-
-    rewriteUrlAttribute("a[href]", "href");
-    rewriteUrlAttribute("img[src]", "src");
-    rewriteUrlAttribute("audio[src]", "src");
-    rewriteUrlAttribute("video[src]", "src");
-    rewriteUrlAttribute("source[src]", "src");
-
-    return parsed.body.innerHTML;
-  }
-
-  wrapCodeLines(content: HTMLElement) {
-    const codeBlocks = content.querySelectorAll("pre code");
-    codeBlocks.forEach((codeEl) => {
-      const htmlContent = codeEl.innerHTML;
-      const lines = htmlContent.split(/\r?\n/u);
-
-      if (lines.length > 1 && lines[lines.length - 1] === "") {
-        lines.pop();
-      }
-
-      const wrappedHtml = lines
-        .map((line, idx) => {
-          const lineNum = idx + 1;
-
-          return `<span class="code-line" data-line="${lineNum}">${line || "&nbsp;"}</span>`;
-        })
-        .join("\n");
-      setSanitizedHtml(codeEl, wrappedHtml);
-    });
-  }
-
   handleAnchorNavigation(anchor: string): boolean {
     const root = this.shadowRoot;
     if (!root) {
@@ -1301,140 +522,135 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
   }
 
-  async resolveRelativeImagesInHtml(html: string, filePath: string) {
-    if (!this.db || !html) {
-      return html;
+  handleFullscreenChange = () => {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
     }
 
-    const parsed = new DOMParser().parseFromString(html, "text/html");
-    const images = Array.from(parsed.querySelectorAll("img"));
-    if (images.length === 0) {
-      return html;
+    const modal = root.querySelector(".file-modal");
+    if (!(modal instanceof HTMLElement)) {
+      return;
     }
 
-    await Promise.all(
-      images.map(async (img) => {
-        const src = img.getAttribute("src") || "";
-        if (!src || /^(?:blob:|data:|#)/u.test(src)) {
-          return;
-        }
+    const fullscreenTarget = this.getFullscreenTarget(modal);
+    this.isFullscreenMode = this.isTargetInFullscreen(fullscreenTarget);
+    this.applyFullscreenMode(modal);
+  };
 
-        const routeTarget = this.getWorkspaceRouteTarget(src, {
-          allowCrossGroup: true,
-        });
-        const target =
-          routeTarget ||
-          (() => {
-            const path = this.resolveWorkspaceLinkPath(src, filePath);
-            if (!path) {
-              return null;
-            }
+  handleIframeMessage = (event: MessageEvent) => {
+    if (!this.db || !event.data || typeof event.data !== "object") {
+      return;
+    }
 
-            return {
-              groupId: orchestratorStore.activeGroupId,
-              path,
-            };
-          })();
+    const payload = event.data as { type?: unknown; href?: unknown };
+    if (
+      payload.type !== "shadow-claw-file-viewer-link" ||
+      typeof payload.href !== "string"
+    ) {
+      return;
+    }
 
-        if (!target) {
-          return;
-        }
+    if (this.previewFrameWindow && event.source !== this.previewFrameWindow) {
+      return;
+    }
 
-        try {
-          const bytes = await readGroupFileBytes(
-            this.db!,
-            target.groupId,
-            target.path,
-          );
-          const ext = target.path.split(".").pop()?.toLowerCase() || "";
-          const mimeType = this.mimeTypeForImageExt(ext);
-
-          const blobBytes = new Uint8Array(bytes.byteLength);
-          blobBytes.set(bytes);
-
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(new Blob([blobBytes], { type: mimeType }));
-          });
-
-          img.setAttribute("src", dataUrl);
-        } catch {
-          // File not found or unreadable — leave src as-is.
-        }
-      }),
+    const current = fileViewerStore.file;
+    const filePath = current?.path || current?.name || "";
+    const routeDir = getFileRouteDirPath(
+      orchestratorStore.activeGroupId,
+      filePath,
     );
+    const resolved = resolveHrefAgainstRoute(
+      payload.href,
+      routeDir,
+      window.location.origin,
+    );
+    if (!resolved) {
+      return;
+    }
 
-    return parsed.body.innerHTML;
+    if (resolved.origin !== window.location.origin) {
+      window.open(resolved.href, "_blank", "noopener,noreferrer");
+
+      return;
+    }
+
+    const targetPath = `${resolved.pathname}${resolved.search}${resolved.hash}`;
+    const nav = (window as any).navigation;
+    if (nav && typeof nav.navigate === "function") {
+      nav.navigate(targetPath);
+
+      return;
+    }
+
+    window.history.pushState({}, "", targetPath);
+    window.dispatchEvent(new PopStateEvent("popstate"));
+  };
+
+  hasUnsavedChanges() {
+    return this.isEditorDirty;
   }
 
-  /**
-   * Resolves relative image src attributes in rendered markdown by loading the
-   * corresponding files from OPFS and replacing the src with an object URL.
-   */
-  async resolveMarkdownImages(content: HTMLElement, filePath: string) {
-    if (!this.db) {
-      return;
+  isIframePreviewFile(fileName: string) {
+    return /\.(?:html?|svg)$/i.test(fileName);
+  }
+
+  isMarkdownLikeFile(fileName: string) {
+    return /(?:^readme$|\.mdx?$|\.markdown$|\.mdown$)/i.test(fileName);
+  }
+
+  isNodeInComposedTree(node: Node | null, ancestor: Node): boolean {
+    let current: Node | null = node;
+
+    while (current) {
+      if (current === ancestor) {
+        return true;
+      }
+
+      if (current.parentNode) {
+        current = current.parentNode;
+
+        continue;
+      }
+
+      const root = current.getRootNode?.();
+      if (root instanceof ShadowRoot && root.host) {
+        current = root.host;
+
+        continue;
+      }
+
+      current = null;
     }
 
-    const images = Array.from(content.querySelectorAll("img"));
-    if (images.length === 0) {
-      return;
+    return false;
+  }
+
+  isRenderTokenCurrent(renderToken: number) {
+    return this.viewRenderToken === renderToken;
+  }
+
+  isTargetInFullscreen(target: HTMLElement | null): boolean {
+    if (!target) {
+      return false;
     }
 
-    await Promise.all(
-      images.map(async (img) => {
-        const src = img.getAttribute("src") || "";
-        if (!src || /^(?:blob:|data:|#)/u.test(src)) {
-          return;
-        }
+    const current = this.getCurrentFullscreenElement();
+    if (!current) {
+      return false;
+    }
 
-        const routeTarget = this.getWorkspaceRouteTarget(src, {
-          allowCrossGroup: true,
-        });
-        const target =
-          routeTarget ||
-          (() => {
-            const path = this.resolveWorkspaceLinkPath(src, filePath);
-            if (!path) {
-              return null;
-            }
+    return (
+      current === target ||
+      this.isNodeInComposedTree(target, current) ||
+      this.isNodeInComposedTree(current, target)
+    );
+  }
 
-            return {
-              groupId: orchestratorStore.activeGroupId,
-              path,
-            };
-          })();
-
-        if (!target) {
-          return;
-        }
-
-        try {
-          const bytes = await readGroupFileBytes(
-            this.db!,
-            target.groupId,
-            target.path,
-          );
-          const ext = target.path.split(".").pop()?.toLowerCase() || "";
-          const mimeType = this.mimeTypeForImageExt(ext);
-
-          const blobBytes = new Uint8Array(bytes.byteLength);
-          blobBytes.set(bytes);
-
-          const dataUrl = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(reader.result as string);
-            reader.onerror = reject;
-            reader.readAsDataURL(new Blob([blobBytes], { type: mimeType }));
-          });
-
-          img.src = dataUrl;
-        } catch {
-          // File not found or unreadable — leave src as-is.
-        }
-      }),
+  isWebShareAvailable() {
+    return (
+      typeof navigator !== "undefined" && typeof navigator.share === "function"
     );
   }
 
@@ -1451,33 +667,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     };
 
     return map[ext] ?? "image/jpeg";
-  }
-
-  getWorkingSourceFile(file: any, modal: HTMLElement) {
-    if (!this.isEditorDirty || file?.kind !== "text") {
-      return file;
-    }
-
-    if (typeof this.editorDraftContent === "string") {
-      return {
-        ...file,
-        content: this.editorDraftContent,
-      };
-    }
-
-    const editor = modal.querySelector(".file-editor");
-    if (!(editor instanceof HTMLTextAreaElement)) {
-      return file;
-    }
-
-    return {
-      ...file,
-      content: editor.value,
-    };
-  }
-
-  getPreviewSourceFile(file: any, modal: HTMLElement) {
-    return this.getWorkingSourceFile(file, modal);
   }
 
   renderBinaryPreview(content: HTMLElement, file: any) {
@@ -1638,6 +827,102 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     content.textContent = "";
   }
 
+  resolveRouteGroupId(routeGroupId: string): string | null {
+    const expectedGroupId = orchestratorStore.activeGroupId;
+    if (
+      routeGroupId === expectedGroupId ||
+      this.routeGroupMatches(routeGroupId, expectedGroupId)
+    ) {
+      return expectedGroupId;
+    }
+
+    const groups = Array.isArray(orchestratorStore.groups)
+      ? orchestratorStore.groups
+      : [];
+    const exact = groups.find((group) => group.groupId === routeGroupId);
+    if (exact) {
+      return exact.groupId;
+    }
+
+    const alias = groups.find((group) =>
+      this.routeGroupMatches(routeGroupId, group.groupId),
+    );
+    if (alias) {
+      return alias.groupId;
+    }
+
+    return routeGroupId || null;
+  }
+
+  resolveWorkspaceLinkPath(href: string, basePath: string = ""): string | null {
+    const trimmed = href.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      return null;
+    }
+
+    let candidate = trimmed;
+    const hasScheme = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed);
+
+    if (hasScheme || trimmed.startsWith("//")) {
+      let parsed: URL;
+      try {
+        parsed = new URL(trimmed, window.location.href);
+      } catch {
+        return null;
+      }
+
+      const isHttp =
+        parsed.protocol === "http:" || parsed.protocol === "https:";
+      if (!isHttp || parsed.host !== window.location.host) {
+        return null;
+      }
+
+      candidate = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+
+    const workspaceRouteTarget = this.getWorkspaceRouteTarget(candidate);
+    if (workspaceRouteTarget) {
+      return workspaceRouteTarget.path;
+    }
+
+    let normalized = candidate.split(/[?#]/, 1)[0].replace(/\\/g, "/");
+    const isAbsolute = normalized.startsWith("/");
+    normalized = normalized.replace(/^\/+/, "");
+
+    if (!normalized) {
+      return null;
+    }
+
+    const stack: string[] = [];
+
+    if (!isAbsolute) {
+      const baseNormalized = basePath.replace(/\\/g, "/").replace(/^\/+/, "");
+      const baseParts = baseNormalized.split("/").filter(Boolean);
+      baseParts.pop();
+      stack.push(...baseParts);
+    }
+
+    for (const part of normalized.split("/")) {
+      if (!part || part === ".") {
+        continue;
+      }
+
+      if (part === "..") {
+        if (stack.length === 0) {
+          return null;
+        }
+
+        stack.pop();
+
+        continue;
+      }
+
+      stack.push(part);
+    }
+
+    return stack.length > 0 ? stack.join("/") : null;
+  }
+
   revokeObjectUrl() {
     this.previewFrameWindow = null;
 
@@ -1651,6 +936,125 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
 
     this.currentImageObjectUrls = [];
+  }
+
+  rewriteWorkspacePreviewHtml(html: string, filePath: string): string {
+    if (!html) {
+      return html;
+    }
+
+    const routeDir = getFileRouteDirPath(
+      orchestratorStore.activeGroupId,
+      filePath,
+    );
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+
+    const rewriteUrlAttribute = (
+      selector: string,
+      attribute: "href" | "src",
+    ) => {
+      const nodes = Array.from(parsed.querySelectorAll(selector));
+      for (const node of nodes) {
+        const currentValue = node.getAttribute(attribute) || "";
+        const trimmed = currentValue.trim();
+        if (
+          !trimmed ||
+          trimmed.startsWith("#") ||
+          trimmed.startsWith("javascript:")
+        ) {
+          continue;
+        }
+
+        const resolved = resolveHrefAgainstRoute(
+          trimmed,
+          routeDir,
+          window.location.origin,
+        );
+        if (!resolved) {
+          continue;
+        }
+
+        if (resolved.origin !== window.location.origin) {
+          continue;
+        }
+
+        node.setAttribute(
+          attribute,
+          `${resolved.pathname}${resolved.search}${resolved.hash}`,
+        );
+      }
+    };
+
+    rewriteUrlAttribute("a[href]", "href");
+    rewriteUrlAttribute("img[src]", "src");
+    rewriteUrlAttribute("audio[src]", "src");
+    rewriteUrlAttribute("video[src]", "src");
+    rewriteUrlAttribute("source[src]", "src");
+
+    return parsed.body.innerHTML;
+  }
+
+  routeGroupMatches(routeGroupId: string, expectedGroupId: string): boolean {
+    if (routeGroupId === expectedGroupId) {
+      return true;
+    }
+
+    if (!routeGroupId.includes(":") && !expectedGroupId.includes(":")) {
+      return false;
+    }
+
+    const normalize = (value: string) => value.trim().replace(/:/g, "-");
+
+    return normalize(routeGroupId) === normalize(expectedGroupId);
+  }
+
+  setupEffects() {
+    effect(() => {
+      const file = fileViewerStore.file;
+      const renderToken = ++this.viewRenderToken;
+      const root = this.shadowRoot;
+      if (!root) {
+        return;
+      }
+
+      const modal = root.querySelector(".file-modal");
+      if (!(modal instanceof HTMLDialogElement)) {
+        return;
+      }
+
+      if (file) {
+        if (!modal.open) {
+          modal.showModal();
+        }
+
+        const title = modal.querySelector(".modal-title");
+        if (title instanceof HTMLElement) {
+          title.textContent = `File: ${file.name}`;
+        }
+
+        if (this.lastOpenedFileName !== file.name) {
+          this.lastOpenedFileName = file.name;
+          this.isFilePreviewMode = this.shouldAutoPreview(file);
+          this.isFileEditMode = false;
+          this.isEditorDirty = false;
+          this.editorDraftContent = null;
+        }
+
+        // async / await
+        void this.updateView(renderToken);
+      } else {
+        if (modal.open) {
+          modal.close();
+        }
+
+        this.lastOpenedFileName = "";
+        this.isFilePreviewMode = false;
+        this.isEditorDirty = false;
+        this.editorDraftContent = null;
+
+        this.resetContent();
+      }
+    });
   }
 
   shouldAutoPreview(file: any) {
@@ -1670,6 +1074,242 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
 
     return false;
+  }
+
+  toPreviewMarkdown(file: any) {
+    if (this.isMarkdownLikeFile(file.name)) {
+      return file.content;
+    }
+
+    const lang = this.getLanguageFromFilename(file.name);
+
+    return "```" + lang + "\n" + file.content + "\n```";
+  }
+
+  updateEditorHighlight(value: string) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const highlightCode = root.querySelector(".file-editor-overlay code");
+    if (!highlightCode) {
+      return;
+    }
+
+    const file = fileViewerStore.file;
+    const language = this.getLanguageFromFilename(file?.name || "");
+    let highlighted = "";
+
+    try {
+      if (language && hljs.getLanguage(language)) {
+        highlighted = hljs.highlight(value, { language }).value;
+      } else {
+        highlighted = hljs.highlightAuto(value).value;
+      }
+    } catch {
+      highlighted = value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+    }
+
+    highlightCode.className = language ? `hljs language-${language}` : "hljs";
+    // hljs output is pre-sanitized: user content is entity-escaped and
+    // only generated <span class="hljs-*"> tags are added. Use
+    // toTrustedHtmlPresanitized to satisfy Trusted Types without
+    // running DOMPurify (which would strip the hljs span tokens).
+    highlightCode.innerHTML = toTrustedHtmlPresanitized(
+      highlighted + "<br>",
+    ) as string;
+  }
+
+  wrapCodeLines(content: HTMLElement) {
+    const codeBlocks = content.querySelectorAll("pre code");
+    codeBlocks.forEach((codeEl) => {
+      const htmlContent = codeEl.innerHTML;
+      const lines = htmlContent.split(/\r?\n/u);
+
+      if (lines.length > 1 && lines[lines.length - 1] === "") {
+        lines.pop();
+      }
+
+      const wrappedHtml = lines
+        .map((line, idx) => {
+          const lineNum = idx + 1;
+
+          return `<span class="code-line" data-line="${lineNum}">${line || "&nbsp;"}</span>`;
+        })
+        .join("\n");
+      setSanitizedHtml(codeEl, wrappedHtml);
+    });
+  }
+
+  async buildIframePreviewSrcdoc(file: any) {
+    if (/\.svg$/i.test(file.name)) {
+      return file.content;
+    }
+
+    const filePath = file.path || file.name || "";
+    const resolvedHtml = this.rewriteWorkspacePreviewHtml(
+      file.content || "",
+      filePath,
+    );
+    const htmlContent = await this.resolveRelativeImagesInHtml(
+      resolvedHtml,
+      filePath,
+    );
+
+    const safeContent = sanitizeSrcdocHtml(htmlContent, previewSanitizeOptions);
+
+    // A per-render nonce restricts script execution inside the sandboxed iframe
+    // to only the reviewed same-origin bridge script. Inline scripts and any
+    // other external scripts are blocked even though allow-scripts is required
+    // for the bridge to run at all (sandbox cannot be removed without losing
+    // link interception).
+    const nonce = crypto.randomUUID().replace(/-/g, "");
+
+    return (
+      "<!doctype html>" +
+      '<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
+      `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">` +
+      `<base href="${applyBasePath(getFileRouteDirPath(orchestratorStore.activeGroupId, filePath))}" target="_blank">` +
+      `<script src="${this.getIframeBridgeScriptUrl()}" nonce="${nonce}"><\/script>` +
+      "<style>" +
+      `  :root { color-scheme: ${themeStore.resolved}; }` +
+      "  body { font-family: system-ui, -apple-system, sans-serif; color: CanvasText; background-color: Canvas; }" +
+      "  a { color: LinkText; }" +
+      "  img { max-width: 100%; max-height: 100%; }" +
+      "</style>" +
+      "</head><body>" +
+      safeContent +
+      "</body></html>"
+    );
+  }
+
+  async canDismissViewer() {
+    if (!this.hasUnsavedChanges()) {
+      return true;
+    }
+
+    const confirmed = await this.requestConfirmation({
+      title: "Discard Unsaved Changes",
+      message: "You have unsaved changes. Discard them and close?",
+      confirmLabel: "Discard",
+      cancelLabel: "Keep Editing",
+    });
+
+    if (confirmed) {
+      this.isEditorDirty = false;
+      this.editorDraftContent = null;
+    }
+
+    return confirmed;
+  }
+
+  async exitFullscreenIfActive(modal?: Element): Promise<void> {
+    const root = this.shadowRoot;
+    const activeModal = modal || root?.querySelector(".file-modal");
+    if (!activeModal) {
+      return;
+    }
+
+    const fullscreenTarget = this.getFullscreenTarget(activeModal);
+    if (!fullscreenTarget || !this.isTargetInFullscreen(fullscreenTarget)) {
+      return;
+    }
+
+    try {
+      await this.exitNativeFullscreen();
+    } catch {
+      // Native fullscreen exit can fail if browser blocks it.
+    }
+  }
+
+  async exitNativeFullscreen(): Promise<void> {
+    const exit =
+      document.exitFullscreen || (document as any).webkitExitFullscreen;
+    if (typeof exit !== "function") {
+      throw new Error("Native fullscreen exit unavailable");
+    }
+
+    await Promise.resolve(exit.call(document));
+  }
+
+  async handlePreviewLinkClick(event: MouseEvent) {
+    if (event.defaultPrevented || event.button !== 0) {
+      return;
+    }
+
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const link = target.closest("a");
+    if (!(link instanceof HTMLAnchorElement) || !this.db) {
+      return;
+    }
+
+    const current = fileViewerStore.file;
+    const basePath = current?.path || current?.name || "";
+    const href = link.getAttribute("href") || "";
+    const routeDir = getFileRouteDirPath(
+      orchestratorStore.activeGroupId,
+      basePath,
+    );
+    const resolved = resolveHrefAgainstRoute(
+      href,
+      routeDir,
+      window.location.origin,
+    );
+
+    if (resolved && resolved.origin === window.location.origin) {
+      event.preventDefault();
+      const targetPath = `${resolved.pathname}${resolved.search}${resolved.hash}`;
+      const nav = (window as any).navigation;
+      if (nav && typeof nav.navigate === "function") {
+        nav.navigate(targetPath);
+      } else {
+        window.history.pushState({}, "", targetPath);
+        window.dispatchEvent(new PopStateEvent("popstate"));
+      }
+
+      return;
+    }
+
+    const trimmed = href.trim();
+    if (
+      trimmed &&
+      !trimmed.startsWith("#") &&
+      !trimmed.startsWith("javascript:")
+    ) {
+      const targetAttr = link.getAttribute("target") || "_blank";
+      const safeTarget =
+        targetAttr === "_self" ||
+        targetAttr === "_top" ||
+        targetAttr === "_parent"
+          ? "_blank"
+          : targetAttr;
+
+      try {
+        const parsed = new URL(trimmed, window.location.href);
+        const isExternal = parsed.host !== window.location.host;
+        if (isExternal) {
+          event.preventDefault();
+          window.open(trimmed, safeTarget, "noopener,noreferrer");
+        }
+      } catch {
+        if (/^[a-zA-Z][a-zA-Z\d+.-]*:/u.test(trimmed)) {
+          event.preventDefault();
+          window.open(trimmed, safeTarget, "noopener,noreferrer");
+        }
+      }
+    }
   }
 
   async handleSave() {
@@ -1726,51 +1366,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
   }
 
-  isWebShareAvailable() {
-    return (
-      typeof navigator !== "undefined" && typeof navigator.share === "function"
-    );
-  }
-
-  buildWebShareFile(file: any): File | null {
-    if (file?.nativeFile instanceof File) {
-      return file.nativeFile;
-    }
-
-    const bytes = file?.binaryContent;
-    if (!(bytes instanceof Uint8Array) || bytes.length === 0) {
-      return null;
-    }
-
-    const fileBytes = new Uint8Array(bytes.byteLength);
-    fileBytes.set(bytes);
-
-    return new File([fileBytes], file.name || "shared-file", {
-      type: file?.mimeType || "application/octet-stream",
-    });
-  }
-
-  canShareCurrentFile(file: any) {
-    if (!file || !this.isWebShareAvailable()) {
-      return false;
-    }
-
-    if (file.kind === "text") {
-      return true;
-    }
-
-    const shareFile = this.buildWebShareFile(file);
-    if (!shareFile || typeof navigator.canShare !== "function") {
-      return false;
-    }
-
-    try {
-      return navigator.canShare({ files: [shareFile] });
-    } catch {
-      return false;
-    }
-  }
-
   async handleShareFile() {
     const file = fileViewerStore.file;
     if (!file || !this.canShareCurrentFile(file)) {
@@ -1810,111 +1405,524 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
   }
 
-  isIframePreviewFile(fileName: string) {
-    return /\.(?:html?|svg)$/i.test(fileName);
-  }
-
-  getIframeSandboxPermissions(fileName: string) {
-    if (/\.svg$/i.test(fileName)) {
-      return "allow-modals allow-popups allow-popups-to-escape-sandbox";
+  async openFolderInFilesView(path: string) {
+    if (!this.db) {
+      return;
     }
 
-    return "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox allow-same-origin";
-  }
-
-  getIframeBridgeScriptUrl() {
-    return applyBasePath("/assets/file-viewer-preview-bridge.js");
-  }
-
-  async buildIframePreviewSrcdoc(file: any) {
-    if (/\.svg$/i.test(file.name)) {
-      return file.content;
+    const normalizedPath = path.replace(/^\/+|\/+$/g, "");
+    if (!normalizedPath) {
+      return;
     }
 
-    const filePath = file.path || file.name || "";
-    const resolvedHtml = this.rewriteWorkspacePreviewHtml(
-      file.content || "",
-      filePath,
-    );
-    const htmlContent = await this.resolveRelativeImagesInHtml(
-      resolvedHtml,
-      filePath,
-    );
+    try {
+      await orchestratorStore.setCurrentPath(this.db, normalizedPath);
+      fileViewerStore.closeFile();
 
-    const safeContent = sanitizeSrcdocHtml(htmlContent, previewSanitizeOptions);
-
-    // A per-render nonce restricts script execution inside the sandboxed iframe
-    // to only the reviewed same-origin bridge script. Inline scripts and any
-    // other external scripts are blocked even though allow-scripts is required
-    // for the bridge to run at all (sandbox cannot be removed without losing
-    // link interception).
-    const nonce = crypto.randomUUID().replace(/-/g, "");
-
-    return (
-      "<!doctype html>" +
-      '<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">' +
-      `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">` +
-      `<base href="${applyBasePath(getFileRouteDirPath(orchestratorStore.activeGroupId, filePath))}" target="_blank">` +
-      `<script src="${this.getIframeBridgeScriptUrl()}" nonce="${nonce}"><\/script>` +
-      "<style>" +
-      `  :root { color-scheme: ${themeStore.resolved}; }` +
-      "  body { font-family: system-ui, -apple-system, sans-serif; color: CanvasText; background-color: Canvas; }" +
-      "  a { color: LinkText; }" +
-      "  img { max-width: 100%; max-height: 100%; }" +
-      "</style>" +
-      "</head><body>" +
-      safeContent +
-      "</body></html>"
-    );
+      const maybeUi = (window as any)?.shadowclaw?.ui;
+      if (maybeUi && typeof maybeUi.showPage === "function") {
+        maybeUi.showPage("files");
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to open linked folder: ${message}`, 5000);
+    }
   }
 
-  toPreviewMarkdown(file: any) {
-    if (this.isMarkdownLikeFile(file.name)) {
-      return file.content;
+  async openWorkspaceLink(href: string, basePath: string) {
+    if (!this.db) {
+      return;
     }
 
-    const lang = this.getLanguageFromFilename(file.name);
+    const resolved = this.resolveWorkspaceLinkPath(href, basePath);
+    if (!resolved) {
+      return;
+    }
 
-    return "```" + lang + "\n" + file.content + "\n```";
+    const lastSegment = resolved.split("/").filter(Boolean).pop() || "";
+    const hasExtension = /\.[^./]+$/u.test(lastSegment);
+
+    if (!hasExtension) {
+      // Try opening the exact path first (supports extensionless files).
+      try {
+        await fileViewerStore.openFile(
+          this.db,
+          resolved,
+          orchestratorStore.activeGroupId,
+        );
+
+        return;
+      } catch (err) {
+        const isNotFound =
+          err instanceof DOMException && err.name === "NotFoundError";
+        const isDirectory =
+          err instanceof DOMException && err.name === "TypeMismatchError";
+        if (!isNotFound && !isDirectory) {
+          const message = err instanceof Error ? err.message : String(err);
+          showError(`Failed to open linked file: ${message}`, 5000);
+
+          return;
+        }
+      }
+
+      await this.openFolderInFilesView(resolved);
+
+      return;
+    }
+
+    try {
+      await fileViewerStore.openFile(
+        this.db,
+        resolved,
+        orchestratorStore.activeGroupId,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to open linked file: ${message}`, 5000);
+    }
   }
 
-  isMarkdownLikeFile(fileName: string) {
-    return /(?:^readme$|\.mdx?$|\.markdown$|\.mdown$)/i.test(fileName);
+  async renderPreview(
+    content: HTMLElement,
+    file: any,
+    renderToken: number = this.viewRenderToken,
+  ) {
+    if (!this.isRenderTokenCurrent(renderToken)) {
+      return;
+    }
+
+    this.revokeObjectUrl();
+    this.previewFrameWindow = null;
+
+    if (file.kind === "pdf") {
+      content.classList.remove(
+        "file-content--raw",
+        "file-content--preview",
+        "file-content--iframe",
+      );
+
+      const pdfViewer = document.createElement(
+        "shadow-claw-pdf-viewer",
+      ) as HTMLElement & {
+        file: any;
+      };
+      pdfViewer.file = file;
+      content.replaceChildren(pdfViewer);
+
+      return;
+    }
+
+    if (file.kind === "binary") {
+      this.renderBinaryPreview(content, file);
+
+      return;
+    }
+
+    if (this.isIframePreviewFile(file.name)) {
+      content.classList.remove("file-content--raw", "file-content--preview");
+      content.classList.add("file-content--iframe");
+
+      const iframe = document.createElement("iframe");
+      iframe.className = "file-content-iframe";
+      iframe.setAttribute("title", `Preview: ${file.name}`);
+      iframe.setAttribute(
+        "sandbox",
+        this.getIframeSandboxPermissions(file.name),
+      );
+
+      iframe.setAttribute("referrerpolicy", "no-referrer");
+      setTrustedSrcdoc(iframe, await this.buildIframePreviewSrcdoc(file));
+      iframe.addEventListener("load", () => {
+        this.previewFrameWindow = iframe.contentWindow;
+      });
+
+      content.replaceChildren(iframe);
+
+      return;
+    }
+
+    content.classList.remove("file-content--raw");
+    content.classList.add("file-content--preview");
+
+    const previewHtml = await renderMarkdown(this.toPreviewMarkdown(file));
+    if (!this.isRenderTokenCurrent(renderToken)) {
+      return;
+    }
+
+    const currentFile = fileViewerStore.file;
+    const basePath = currentFile?.path || currentFile?.name || "";
+    const resolvedPreviewHtml = this.rewriteWorkspacePreviewHtml(
+      previewHtml,
+      basePath,
+    );
+
+    if (!this.isRenderTokenCurrent(renderToken)) {
+      return;
+    }
+
+    setSanitizedHtml(content, resolvedPreviewHtml, previewSanitizeOptions);
+    this.wrapCodeLines(content);
+    await this.resolveMarkdownImages(content, basePath);
   }
 
-  getLanguageFromFilename(fileName: string) {
-    const extension = fileName.toLowerCase().split(".").pop() || "";
-    const languageMap: Record<string, string> = {
-      bash: "bash",
-      cjs: "javascript",
-      css: "css",
-      html: "xml",
-      java: "java",
-      javascript: "javascript",
-      js: "javascript",
-      json: "json",
-      jsx: "jsx",
-      markdown: "markdown",
-      md: "markdown",
-      mjs: "javascript",
-      php: "php",
-      python: "python",
-      py: "python",
-      ruby: "ruby",
-      rb: "ruby",
-      rust: "rust",
-      rs: "rust",
-      sh: "bash",
-      sql: "sql",
-      svg: "xml",
-      ts: "typescript",
-      tsx: "tsx",
-      xml: "xml",
-      yaml: "yaml",
-      yml: "yaml",
-    };
+  async requestCloseViewer(): Promise<boolean> {
+    if (!(await this.canDismissViewer())) {
+      return false;
+    }
 
-    return languageMap[extension] || "";
+    await this.exitFullscreenIfActive();
+
+    fileViewerStore.closeFile();
+
+    return true;
+  }
+
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
+    }
+
+    return false;
+  }
+
+  async requestNativeFullscreen(target: HTMLElement): Promise<void> {
+    const request =
+      (target as any).requestFullscreen ||
+      (target as any).webkitRequestFullscreen;
+    if (typeof request !== "function") {
+      throw new Error("Native fullscreen unavailable");
+    }
+
+    await Promise.resolve(request.call(target));
+  }
+
+  /**
+   * Resolves relative image src attributes in rendered markdown by loading the
+   * corresponding files from OPFS and replacing the src with an object URL.
+   */
+  async resolveMarkdownImages(content: HTMLElement, filePath: string) {
+    if (!this.db) {
+      return;
+    }
+
+    const images = Array.from(content.querySelectorAll("img"));
+    if (images.length === 0) {
+      return;
+    }
+
+    await Promise.all(
+      images.map(async (img) => {
+        const src = img.getAttribute("src") || "";
+        if (!src || /^(?:blob:|data:|#)/u.test(src)) {
+          return;
+        }
+
+        const routeTarget = this.getWorkspaceRouteTarget(src, {
+          allowCrossGroup: true,
+        });
+        const target =
+          routeTarget ||
+          (() => {
+            const path = this.resolveWorkspaceLinkPath(src, filePath);
+            if (!path) {
+              return null;
+            }
+
+            return {
+              groupId: orchestratorStore.activeGroupId,
+              path,
+            };
+          })();
+
+        if (!target) {
+          return;
+        }
+
+        try {
+          const bytes = await readGroupFileBytes(
+            this.db!,
+            target.groupId,
+            target.path,
+          );
+          const ext = target.path.split(".").pop()?.toLowerCase() || "";
+          const mimeType = this.mimeTypeForImageExt(ext);
+
+          const blobBytes = new Uint8Array(bytes.byteLength);
+          blobBytes.set(bytes);
+
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(new Blob([blobBytes], { type: mimeType }));
+          });
+
+          img.src = dataUrl;
+        } catch {
+          // File not found or unreadable — leave src as-is.
+        }
+      }),
+    );
+  }
+
+  async resolveRelativeImagesInHtml(html: string, filePath: string) {
+    if (!this.db || !html) {
+      return html;
+    }
+
+    const parsed = new DOMParser().parseFromString(html, "text/html");
+    const images = Array.from(parsed.querySelectorAll("img"));
+    if (images.length === 0) {
+      return html;
+    }
+
+    await Promise.all(
+      images.map(async (img) => {
+        const src = img.getAttribute("src") || "";
+        if (!src || /^(?:blob:|data:|#)/u.test(src)) {
+          return;
+        }
+
+        const routeTarget = this.getWorkspaceRouteTarget(src, {
+          allowCrossGroup: true,
+        });
+        const target =
+          routeTarget ||
+          (() => {
+            const path = this.resolveWorkspaceLinkPath(src, filePath);
+            if (!path) {
+              return null;
+            }
+
+            return {
+              groupId: orchestratorStore.activeGroupId,
+              path,
+            };
+          })();
+
+        if (!target) {
+          return;
+        }
+
+        try {
+          const bytes = await readGroupFileBytes(
+            this.db!,
+            target.groupId,
+            target.path,
+          );
+          const ext = target.path.split(".").pop()?.toLowerCase() || "";
+          const mimeType = this.mimeTypeForImageExt(ext);
+
+          const blobBytes = new Uint8Array(bytes.byteLength);
+          blobBytes.set(bytes);
+
+          const dataUrl = await new Promise<string>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result as string);
+            reader.onerror = reject;
+            reader.readAsDataURL(new Blob([blobBytes], { type: mimeType }));
+          });
+
+          img.setAttribute("src", dataUrl);
+        } catch {
+          // File not found or unreadable — leave src as-is.
+        }
+      }),
+    );
+
+    return parsed.body.innerHTML;
+  }
+
+  async toggleFullscreenMode(modal: Element) {
+    const fullscreenTarget = this.getFullscreenTarget(modal);
+    if (!fullscreenTarget) {
+      return;
+    }
+
+    if (this.canUseNativeFullscreen(fullscreenTarget)) {
+      const isAlreadyFullscreen = this.isTargetInFullscreen(fullscreenTarget);
+
+      try {
+        if (isAlreadyFullscreen) {
+          await this.exitNativeFullscreen();
+          this.isFullscreenMode = false;
+        } else {
+          await this.requestNativeFullscreen(fullscreenTarget);
+          this.isFullscreenMode = true;
+        }
+      } catch {
+        // If native fullscreen fails (permission/user gesture), keep fallback UX.
+        this.isFullscreenMode = !this.isFullscreenMode;
+      }
+
+      this.applyFullscreenMode(modal);
+
+      return;
+    }
+
+    this.isFullscreenMode = !this.isFullscreenMode;
+    this.applyFullscreenMode(modal);
+  }
+
+  async updateView(renderToken: number = this.viewRenderToken) {
+    const file = fileViewerStore.file;
+    const root = this.shadowRoot;
+    if (!root || !file) {
+      return;
+    }
+
+    const modal = root.querySelector(".file-modal");
+    if (!(modal instanceof HTMLElement)) {
+      return;
+    }
+
+    this.applyFullscreenMode(modal);
+
+    const content = modal.querySelector(".file-content");
+    const previewBtn = modal.querySelector(".modal-preview-btn");
+    const modalBody = modal.querySelector(".modal-body");
+
+    if (!(content instanceof HTMLElement)) {
+      return;
+    }
+
+    content.classList.remove("file-content--iframe");
+
+    const workingFile = this.getWorkingSourceFile(file, modal);
+    const canEdit = file.kind === "text";
+
+    if (previewBtn instanceof HTMLButtonElement) {
+      previewBtn.setAttribute("aria-pressed", String(this.isFilePreviewMode));
+      previewBtn.setAttribute(
+        "aria-label",
+        this.isFilePreviewMode
+          ? "Switch to raw text view"
+          : "Switch to preview mode",
+      );
+    }
+
+    // Get editor elements
+    const editorContainer = modal.querySelector(".file-editor-container");
+    const editBtn = modal.querySelector(".modal-edit-btn");
+    const saveBtn = modal.querySelector(".modal-save-btn");
+    const shareBtn = modal.querySelector(".modal-share-btn");
+    const closeBtn = modal.querySelector(".modal-close-btn");
+    const cancelBtn = modal.querySelector(".modal-cancel-btn");
+
+    if (shareBtn instanceof HTMLButtonElement) {
+      const canShare = this.canShareCurrentFile(file);
+      shareBtn.classList.toggle("hidden", !canShare);
+      shareBtn.disabled = !canShare;
+    }
+
+    if (closeBtn instanceof HTMLButtonElement) {
+      const isDirty = this.hasUnsavedChanges();
+      closeBtn.disabled = false;
+      closeBtn.setAttribute(
+        "aria-label",
+        isDirty ? "Close file viewer (unsaved changes)" : "Close file viewer",
+      );
+      closeBtn.title = isDirty ? "Close (you have unsaved changes)" : "Close";
+    }
+
+    // Save and Cancel are driven purely by dirty state, independent of view mode.
+    const isDirty = this.hasUnsavedChanges();
+    if (saveBtn instanceof HTMLButtonElement) {
+      saveBtn.classList.toggle("hidden", !isDirty);
+    }
+
+    if (cancelBtn instanceof HTMLButtonElement) {
+      cancelBtn.classList.toggle("hidden", !isDirty);
+    }
+
+    if (this.isFilePreviewMode) {
+      modalBody?.classList.remove("modal-body--editing");
+
+      content.classList.remove("hidden");
+      editorContainer?.classList.remove("active");
+
+      if (editBtn instanceof HTMLButtonElement) {
+        editBtn.setAttribute("aria-pressed", "false");
+        editBtn.setAttribute("aria-label", "Edit file");
+        editBtn.classList.toggle("hidden", !canEdit);
+      }
+
+      await this.renderPreview(content, workingFile, renderToken);
+
+      return;
+    }
+
+    if (!this.isRenderTokenCurrent(renderToken)) {
+      return;
+    }
+
+    if (this.isFileEditMode && canEdit) {
+      modalBody?.classList.add("modal-body--editing");
+
+      content.classList.add("hidden");
+      editorContainer?.classList.add("active");
+
+      if (editBtn instanceof HTMLButtonElement) {
+        editBtn.setAttribute("aria-pressed", "true");
+        editBtn.setAttribute("aria-label", "Switch to raw text view");
+        editBtn.classList.remove("hidden");
+      }
+
+      const editor = editorContainer?.querySelector(".file-editor");
+      if (editor instanceof HTMLTextAreaElement) {
+        editor.setAttribute("tab-size", "2");
+
+        const language = this.getLanguageFromFilename(file.name);
+        if (language) {
+          editor.setAttribute("language", language);
+        } else {
+          editor.removeAttribute("language");
+        }
+
+        if (!this.isEditorDirty) {
+          const targetValue = file.content || "";
+          if (editor.value !== targetValue) {
+            editor.value = targetValue;
+          }
+
+          this.updateEditorHighlight(editor.value);
+        } else if (typeof workingFile?.content === "string") {
+          if (editor.value !== workingFile.content) {
+            editor.value = workingFile.content;
+          }
+
+          this.updateEditorHighlight(editor.value);
+        }
+
+        editor.dispatchEvent(new Event("scroll"));
+      }
+    } else {
+      modalBody?.classList.remove("modal-body--editing");
+
+      content.classList.remove("hidden");
+      editorContainer?.classList.remove("active");
+
+      if (editBtn instanceof HTMLButtonElement) {
+        editBtn.setAttribute("aria-pressed", "false");
+        editBtn.setAttribute("aria-label", "Edit file");
+        editBtn.classList.toggle("hidden", !canEdit);
+      }
+
+      content.classList.add("file-content--raw");
+      content.classList.remove("file-content--preview", "file-content--iframe");
+
+      if (file.kind === "binary") {
+        content.textContent = `Binary file (${file.mimeType || "application/octet-stream"}). Switch to Preview to view.`;
+      } else {
+        content.textContent = workingFile.content || "";
+      }
+    }
   }
 }
 

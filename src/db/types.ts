@@ -26,24 +26,6 @@ export interface SavedPageRef {
   path: string;
 }
 
-export interface TaskToolCall {
-  input: Record<string, any>;
-  name: string;
-  suppressOutput?: boolean;
-}
-
-export interface Task {
-  createdAt: number;
-  enabled: boolean;
-  groupId: string;
-  id: string;
-  lastRun: number | null;
-  prompt: string;
-  schedule?: string;
-  tools?: TaskToolCall[];
-  type?: "prompt" | "tools";
-}
-
 export interface Session {
   groupId: string;
   messages: ConversationMessage[];
@@ -62,4 +44,22 @@ export interface StoredMessage {
   isTrigger: boolean;
   sender: string;
   timestamp: number;
+}
+
+export interface Task {
+  createdAt: number;
+  enabled: boolean;
+  groupId: string;
+  id: string;
+  lastRun: number | null;
+  prompt: string;
+  schedule?: string;
+  tools?: TaskToolCall[];
+  type?: "prompt" | "tools";
+}
+
+export interface TaskToolCall {
+  input: Record<string, any>;
+  name: string;
+  suppressOutput?: boolean;
 }

@@ -2,7 +2,7 @@ import { applyWeight } from "./shared.js";
 import { resolveDynamicString } from "../../../ui/a2ui.js";
 
 import type { AudioPlayerSpec } from "../../../ui/a2ui.js";
-import type { SurfaceState, RenderContext } from "./types.js";
+import type { SurfaceState, RenderContext } from "../../types.js";
 
 export function renderAudioPlayer(
   spec: AudioPlayerSpec,

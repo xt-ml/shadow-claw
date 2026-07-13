@@ -1,6 +1,6 @@
 import type { ImageSpec } from "../../../ui/a2ui.js";
 import { resolveDynamicString } from "../../../ui/a2ui.js";
-import type { SurfaceState, RenderContext } from "./types.js";
+import type { SurfaceState, RenderContext } from "../../types.js";
 import { applyWeight } from "./shared.js";
 
 export function renderImage(

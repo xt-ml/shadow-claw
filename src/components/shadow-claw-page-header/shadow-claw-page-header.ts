@@ -11,18 +11,22 @@ export class ShadowClawPageHeader extends ShadowClawElement {
   static styles = `${ShadowClawPageHeader.componentPath}/${elementName}.css`;
   static template = `${ShadowClawPageHeader.componentPath}/${elementName}.html`;
 
-  actionsLayoutCleanup: () => void = () => {};
-  mainVisibilityCleanup: () => void = () => {};
+  static get observedAttributes() {
+    return ["title", "icon"];
+  }
+
+  mainCollapsed: boolean = false;
   mainVisibilityMediaQuery: MediaQueryList | null = null;
   manualMainCollapsedOverride: boolean | null = null;
-  mainCollapsed: boolean = false;
 
   constructor() {
     super();
   }
 
-  static get observedAttributes() {
-    return ["title", "icon"];
+  attributeChangedCallback(_name, oldValue, newValue) {
+    if (oldValue !== newValue) {
+      this.render();
+    }
   }
 
   async connectedCallback() {
@@ -36,30 +40,51 @@ export class ShadowClawPageHeader extends ShadowClawElement {
     await this.render();
   }
 
-  attributeChangedCallback(_name, oldValue, newValue) {
-    if (oldValue !== newValue) {
-      this.render();
-    }
+  disconnectedCallback() {
+    this.actionsLayoutCleanup();
+    this.mainVisibilityCleanup();
   }
 
-  async render() {
-    await this.onTemplateReady;
-    const root = this.shadowRoot;
-    if (!root) {
+  actionsLayoutCleanup: () => void = () => {};
+
+  applyMainVisibility(root?: ShadowRoot) {
+    const targetRoot = root || this.shadowRoot;
+    if (!targetRoot) {
       return;
     }
 
-    // Set title
-    const titleEl = root.querySelector(".header__title");
-    if (titleEl) {
-      const icon = this.getAttribute("icon") || "";
-      const title = this.getAttribute("title") || "";
-      titleEl.textContent = icon ? `${icon} ${title}` : title;
+    const headerMain = targetRoot.querySelector(".header__main");
+    if (!(headerMain instanceof HTMLElement)) {
+      return;
     }
 
-    this.setupActionsContainer(root);
-    this.setupResponsiveActionsDisclosure(root);
-    this.setupMainVisibility(root);
+    const collapsed = this.getEffectiveMainCollapsed();
+    this.mainCollapsed = collapsed;
+    headerMain.hidden = collapsed;
+  }
+
+  getAutoMainCollapsed() {
+    return false;
+  }
+
+  getEffectiveMainCollapsed() {
+    if (typeof this.manualMainCollapsedOverride === "boolean") {
+      return this.manualMainCollapsedOverride;
+    }
+
+    return this.getAutoMainCollapsed();
+  }
+
+  isMainCollapsed() {
+    return this.mainCollapsed;
+  }
+
+  mainVisibilityCleanup: () => void = () => {};
+
+  setMainCollapsedOverride(collapsed: boolean | null) {
+    this.manualMainCollapsedOverride =
+      typeof collapsed === "boolean" ? collapsed : null;
+    this.applyMainVisibility();
   }
 
   /**
@@ -86,6 +111,13 @@ export class ShadowClawPageHeader extends ShadowClawElement {
 
     actionSlot.addEventListener("slotchange", updateVisibility);
     updateVisibility();
+  }
+
+  setupMainVisibility(root: ShadowRoot) {
+    this.mainVisibilityCleanup();
+    this.mainVisibilityMediaQuery = null;
+    this.mainVisibilityCleanup = () => {};
+    this.applyMainVisibility(root);
   }
 
   /**
@@ -129,60 +161,30 @@ export class ShadowClawPageHeader extends ShadowClawElement {
     };
   }
 
-  setupMainVisibility(root: ShadowRoot) {
-    this.mainVisibilityCleanup();
-    this.mainVisibilityMediaQuery = null;
-    this.mainVisibilityCleanup = () => {};
-    this.applyMainVisibility(root);
-  }
-
-  getAutoMainCollapsed() {
-    return false;
-  }
-
-  getEffectiveMainCollapsed() {
-    if (typeof this.manualMainCollapsedOverride === "boolean") {
-      return this.manualMainCollapsedOverride;
-    }
-
-    return this.getAutoMainCollapsed();
-  }
-
-  applyMainVisibility(root?: ShadowRoot) {
-    const targetRoot = root || this.shadowRoot;
-    if (!targetRoot) {
-      return;
-    }
-
-    const headerMain = targetRoot.querySelector(".header__main");
-    if (!(headerMain instanceof HTMLElement)) {
-      return;
-    }
-
-    const collapsed = this.getEffectiveMainCollapsed();
-    this.mainCollapsed = collapsed;
-    headerMain.hidden = collapsed;
-  }
-
-  setMainCollapsedOverride(collapsed: boolean | null) {
-    this.manualMainCollapsedOverride =
-      typeof collapsed === "boolean" ? collapsed : null;
-    this.applyMainVisibility();
-  }
-
   toggleMainCollapsedOverride() {
     this.setMainCollapsedOverride(!this.isMainCollapsed());
 
     return this.isMainCollapsed();
   }
 
-  isMainCollapsed() {
-    return this.mainCollapsed;
-  }
+  async render() {
+    await this.onTemplateReady;
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
 
-  disconnectedCallback() {
-    this.actionsLayoutCleanup();
-    this.mainVisibilityCleanup();
+    // Set title
+    const titleEl = root.querySelector(".header__title");
+    if (titleEl) {
+      const icon = this.getAttribute("icon") || "";
+      const title = this.getAttribute("title") || "";
+      titleEl.textContent = icon ? `${icon} ${title}` : title;
+    }
+
+    this.setupActionsContainer(root);
+    this.setupResponsiveActionsDisclosure(root);
+    this.setupMainVisibility(root);
   }
 }
 

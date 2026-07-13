@@ -4,10 +4,9 @@ const elementName = "shadow-claw-empty-state";
 
 export class ShadowClawEmptyState extends ShadowClawElement {
   static componentPath = `components/common/${elementName}`;
+  static observedAttributes = ["message", "hint"];
   static styles = `${ShadowClawEmptyState.componentPath}/${elementName}.css`;
   static template = `${ShadowClawEmptyState.componentPath}/${elementName}.html`;
-
-  static observedAttributes = ["message", "hint"];
 
   attributeChangedCallback() {
     this.render();

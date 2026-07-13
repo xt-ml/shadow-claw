@@ -1,3 +1,7 @@
+import { effect } from "../../core/effect.js";
+import { getDb } from "../../db/db.js";
+
+import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { copyGroupEntry } from "../../storage/copyGroupEntry.js";
 import { createGroupDirectory } from "../../storage/createGroupDirectory.js";
 import { deleteAllGroupFiles } from "../../storage/deleteAllGroupFiles.js";
@@ -12,15 +16,12 @@ import { restoreAllGroupFilesFromZip } from "../../storage/restoreAllGroupFilesF
 import { uploadGroupFile } from "../../storage/uploadGroupFile.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
 
-import { effect } from "../../core/effect.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { filesUiStore } from "../../stores/files-ui.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
+
 import { showError, showSuccess, showWarning } from "../../ui/toast.js";
 
-import { getDb } from "../../db/db.js";
-
-import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { ulid } from "../../utils/ulid.js";
 import { escapeHtml } from "../../utils/utils.js";
 
@@ -30,6 +31,7 @@ import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
 import type { ShadowClawDatabase } from "../../db/types.js";
+
 import ShadowClawElement from "../shadow-claw-element.js";
 
 const elementName = "shadow-claw-files";
@@ -39,12 +41,12 @@ export class ShadowClawFiles extends ShadowClawElement {
   static styles = `${ShadowClawFiles.componentPath}/${elementName}.css`;
   static template = `${ShadowClawFiles.componentPath}/${elementName}.html`;
 
-  private _pendingRenamePath: string | null = null;
-  private _pendingRenameName: string | null = null;
-  private _pendingRenameIsDirectory: boolean = false;
   private _isCreatingNewItem: boolean = false;
-  private _isRenamingEntry: boolean = false;
   private _isPastingEntry: boolean = false;
+  private _isRenamingEntry: boolean = false;
+  private _pendingRenameIsDirectory: boolean = false;
+  private _pendingRenameName: string | null = null;
+  private _pendingRenamePath: string | null = null;
 
   constructor() {
     super();
@@ -309,62 +311,318 @@ export class ShadowClawFiles extends ShadowClawElement {
     );
   }
 
-  async requestConfirmation(options: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-  }): Promise<boolean> {
-    const appShell = document.querySelector("shadow-claw") as any;
-    if (appShell && typeof appShell.requestDialog === "function") {
-      return await appShell.requestDialog({ mode: "confirm", ...options });
-    }
+  /**
+   * Escape HTML special characters
+   */
+  escapeHtml(text: string): string {
+    const div = document.createElement("div");
 
-    showWarning(options.message, 4500);
+    div.textContent = text;
 
-    return false;
+    return div.innerHTML;
   }
 
-  async removePageAssignmentIfNeeded(
-    db: ShadowClawDatabase,
-    filePath: string,
-  ): Promise<void> {
-    const groupId = orchestratorStore.activeGroupId;
-    const isSavedPage = orchestratorStore.pages.some((page) => {
-      return page.groupId === groupId && page.path === filePath;
-    });
-
-    if (!isSavedPage) {
+  handleDragEnter(event: DragEvent, _content: HTMLElement) {
+    if (!this.hasDragFiles(event)) {
       return;
     }
 
-    await orchestratorStore.removePage(db, filePath, groupId);
+    event.preventDefault();
+    filesUiStore.setDragActive(true);
   }
 
-  updateSyncButtonsVisibility() {
+  handleDragLeave(event: DragEvent, _content: HTMLElement) {
+    if (!filesUiStore.isDragActive) {
+      return;
+    }
+
+    const related = event.relatedTarget;
+    if (related instanceof Node && _content.contains(related)) {
+      return;
+    }
+
+    filesUiStore.setDragActive(false);
+  }
+
+  handleDragOver(event: DragEvent, _content: HTMLElement) {
+    if (!this.hasDragFiles(event)) {
+      return;
+    }
+
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = "copy";
+    }
+
+    filesUiStore.setDragActive(true);
+  }
+
+  handleSyncHostToVM() {
+    const root = this.shadowRoot;
+    const button = root?.querySelector(".files__sync-host-btn");
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = "Syncing...";
+
+    try {
+      orchestratorStore.syncHostWorkspaceToVM();
+      showSuccess("Requested host → VM workspace sync", 2200);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to request host → VM sync: ${message}`, 5000);
+    } finally {
+      setTimeout(() => {
+        button.disabled = false;
+        button.textContent = "Host → VM";
+      }, 300);
+    }
+  }
+
+  hasDragFiles(event: DragEvent): boolean {
+    const types = event.dataTransfer?.types;
+
+    return Boolean(types && Array.from(types).includes("Files"));
+  }
+
+  isInvalidFolderPasteTarget(
+    clipboard: { sourcePath: string; isDirectory: boolean },
+    destinationDir: string,
+  ): boolean {
+    if (!clipboard.isDirectory) {
+      return false;
+    }
+
+    if (destinationDir === ".") {
+      return false;
+    }
+
+    const sourceDir = clipboard.sourcePath.replace(/\/+$/, "");
+
+    return (
+      destinationDir === sourceDir || destinationDir.startsWith(`${sourceDir}/`)
+    );
+  }
+
+  isPageCandidateFile(path: string, isDirectory: boolean): boolean {
+    if (isDirectory) {
+      return false;
+    }
+
+    return /\.(md|markdown|html?|xhtml)$/iu.test(path);
+  }
+
+  openNewFileDialog() {
     const root = this.shadowRoot;
     if (!root) {
       return;
     }
 
-    const spacer = root.querySelector(".files__breadcrumbs-spacer");
-    const hostBtn = root.querySelector(".files__sync-host-btn");
-    const vmBtn = root.querySelector(".files__sync-vm-btn");
+    const dialog = root.querySelector(".files__new-dialog");
+    const input = root.querySelector(".files__new-input");
+    const isFolderInput = root.querySelector(".files__new-is-folder");
 
-    const vmStatus = orchestratorStore.orchestrator?.getVMStatus?.();
-    const vmMode = vmStatus?.mode;
-    const showSyncButtons = vmMode === "9p";
-
-    if (spacer instanceof HTMLElement) {
-      spacer.hidden = !showSyncButtons;
+    if (!(dialog instanceof HTMLDialogElement)) {
+      return;
     }
 
-    if (hostBtn instanceof HTMLButtonElement) {
-      hostBtn.hidden = !showSyncButtons;
+    this.setNewDialogBusy(false);
+
+    dialog.showModal();
+
+    if (input instanceof HTMLInputElement) {
+      input.value = "";
+      input.focus();
     }
 
-    if (vmBtn instanceof HTMLButtonElement) {
-      vmBtn.hidden = !showSyncButtons;
+    if (isFolderInput instanceof HTMLInputElement) {
+      isFolderInput.checked = false;
+    }
+  }
+
+  openPasteDialog() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const dialog = root.querySelector(".files__paste-dialog");
+    const messageEl = root.querySelector(".files__paste-message");
+    const renameContainer = root.querySelector(
+      ".files__paste-rename-container",
+    );
+    const renameInput = root.querySelector(".files__paste-rename-input");
+    const overwriteBtn = root.querySelector(".files__paste-overwrite");
+
+    if (!(dialog instanceof HTMLDialogElement)) {
+      return;
+    }
+
+    const clipboard = filesUiStore.clipboard;
+    if (!clipboard) {
+      showWarning("Nothing in clipboard to paste", 3000);
+
+      return;
+    }
+
+    if (
+      this.isInvalidFolderPasteTarget(clipboard, orchestratorStore.currentPath)
+    ) {
+      showWarning(
+        "Cannot paste a folder into itself or one of its subfolders",
+        4500,
+      );
+
+      return;
+    }
+
+    this.setPasteDialogBusy(false);
+
+    // Get name of the file/folder being pasted
+    const sourcePath = clipboard.sourcePath.replace(/\/$/, "");
+    const parts = sourcePath.split("/");
+    const name = parts[parts.length - 1];
+    const isDir = clipboard.isDirectory;
+    const fileNameWithSlash = isDir ? `${name}/` : name;
+
+    const targetDirName =
+      orchestratorStore.currentPath === "."
+        ? "Root"
+        : orchestratorStore.currentPath;
+
+    const alreadyExists = orchestratorStore.files.includes(fileNameWithSlash);
+
+    if (messageEl instanceof HTMLElement) {
+      const operation = clipboard.type === "cut" ? "move" : "copy";
+      if (alreadyExists) {
+        messageEl.textContent = `"${name}" already exists in "${targetDirName}". Please rename or choose to overwrite.`;
+      } else {
+        messageEl.textContent = `Are you sure you want to ${operation} "${name}" into "${targetDirName}"?`;
+      }
+    }
+
+    if (renameContainer instanceof HTMLElement) {
+      renameContainer.hidden = !alreadyExists;
+    }
+
+    if (overwriteBtn instanceof HTMLElement) {
+      overwriteBtn.hidden = !alreadyExists;
+    }
+
+    if (renameInput instanceof HTMLInputElement) {
+      renameInput.value = name;
+    }
+
+    dialog.showModal();
+
+    if (alreadyExists && renameInput instanceof HTMLInputElement) {
+      renameInput.select();
+      renameInput.focus();
+    }
+  }
+
+  openRenameDialog(path: string, currentName: string, isDirectory: boolean) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const dialog = root.querySelector(".files__rename-dialog");
+    const input = root.querySelector(".files__rename-input");
+
+    if (!(dialog instanceof HTMLDialogElement)) {
+      return;
+    }
+
+    this.setRenameDialogBusy(false);
+
+    this._pendingRenamePath = path;
+    this._pendingRenameName = currentName;
+    this._pendingRenameIsDirectory = isDirectory;
+
+    dialog.showModal();
+
+    if (input instanceof HTMLInputElement) {
+      input.value = currentName;
+      input.select();
+      input.focus();
+    }
+  }
+
+  setNewDialogBusy(isBusy: boolean) {
+    this._isCreatingNewItem = isBusy;
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const cancelBtn = root.querySelector(".files__new-cancel");
+    const okBtn = root.querySelector(".files__new-ok");
+    const input = root.querySelector(".files__new-input");
+    const isFolderInput = root.querySelector(".files__new-is-folder");
+
+    if (cancelBtn instanceof HTMLButtonElement) {
+      cancelBtn.disabled = isBusy;
+    }
+
+    if (okBtn instanceof HTMLButtonElement) {
+      okBtn.disabled = isBusy;
+    }
+
+    if (input instanceof HTMLInputElement) {
+      input.disabled = isBusy;
+    }
+
+    if (isFolderInput instanceof HTMLInputElement) {
+      isFolderInput.disabled = isBusy;
+    }
+  }
+
+  setPasteDialogBusy(isBusy: boolean) {
+    this._isPastingEntry = isBusy;
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const cancelBtn = root.querySelector(".files__paste-cancel");
+    const okBtn = root.querySelector(".files__paste-ok");
+
+    if (cancelBtn instanceof HTMLButtonElement) {
+      cancelBtn.disabled = isBusy;
+    }
+
+    if (okBtn instanceof HTMLButtonElement) {
+      okBtn.disabled = isBusy;
+    }
+  }
+
+  setRenameDialogBusy(isBusy: boolean) {
+    this._isRenamingEntry = isBusy;
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const cancelBtn = root.querySelector(".files__rename-cancel");
+    const okBtn = root.querySelector(".files__rename-ok");
+    const input = root.querySelector(".files__rename-input");
+
+    if (cancelBtn instanceof HTMLButtonElement) {
+      cancelBtn.disabled = isBusy;
+    }
+
+    if (okBtn instanceof HTMLButtonElement) {
+      okBtn.disabled = isBusy;
+    }
+
+    if (input instanceof HTMLInputElement) {
+      input.disabled = isBusy;
     }
   }
 
@@ -424,55 +682,6 @@ export class ShadowClawFiles extends ShadowClawElement {
 
         breadcrumbs.appendChild(btn);
       });
-    }
-  }
-
-  handleSyncHostToVM() {
-    const root = this.shadowRoot;
-    const button = root?.querySelector(".files__sync-host-btn");
-    if (!(button instanceof HTMLButtonElement)) {
-      return;
-    }
-
-    button.disabled = true;
-    button.textContent = "Syncing...";
-
-    try {
-      orchestratorStore.syncHostWorkspaceToVM();
-      showSuccess("Requested host → VM workspace sync", 2200);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to request host → VM sync: ${message}`, 5000);
-    } finally {
-      setTimeout(() => {
-        button.disabled = false;
-        button.textContent = "Host → VM";
-      }, 300);
-    }
-  }
-
-  async handleSyncVMToHost(db: ShadowClawDatabase) {
-    const root = this.shadowRoot;
-    const button = root?.querySelector(".files__sync-vm-btn");
-    if (!(button instanceof HTMLButtonElement)) {
-      return;
-    }
-
-    button.disabled = true;
-    button.textContent = "Syncing...";
-
-    try {
-      orchestratorStore.syncVMWorkspaceToHost();
-      // Give the worker a short moment to emit vm-workspace-synced.
-      await new Promise((resolve) => setTimeout(resolve, 180));
-      await orchestratorStore.loadFiles(db);
-      showSuccess("Requested VM → host workspace sync", 2200);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to request VM → host sync: ${message}`, 5000);
-    } finally {
-      button.disabled = false;
-      button.textContent = "VM → Host";
     }
   }
 
@@ -785,65 +994,47 @@ export class ShadowClawFiles extends ShadowClawElement {
     });
   }
 
-  /**
-   * Escape HTML special characters
-   */
-  escapeHtml(text: string): string {
-    const div = document.createElement("div");
-
-    div.textContent = text;
-
-    return div.innerHTML;
-  }
-
-  async handleUpload(db: ShadowClawDatabase, input: HTMLInputElement) {
-    const files = input.files;
-    if (!files || files.length === 0) {
+  updatePasteButtonVisibility() {
+    const root = this.shadowRoot;
+    if (!root) {
       return;
     }
 
-    await this.uploadFileList(db, files);
-
-    // Clear the input
-    input.value = "";
-  }
-
-  async uploadFileList(db: ShadowClawDatabase, files: FileList | File[]) {
-    const fileList: File[] = Array.from(files) as File[];
-    if (fileList.length === 0) {
+    const clipboard = filesUiStore.clipboard;
+    const pasteBtn = root.querySelector(".files__paste-btn");
+    if (!(pasteBtn instanceof HTMLElement)) {
       return;
     }
 
-    const groupId = orchestratorStore.activeGroupId;
-    const currentPath = orchestratorStore.currentPath;
-    const count = fileList.length;
+    const hasClipboardEntry = Boolean(clipboard);
+    pasteBtn.toggleAttribute("hidden", !hasClipboardEntry);
+    pasteBtn.toggleAttribute("disabled", !hasClipboardEntry);
+  }
 
-    filesUiStore.startUpload(count);
+  updateSyncButtonsVisibility() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
 
-    try {
-      for (let i = 0; i < count; i++) {
-        const file = fileList[i];
-        const filename =
-          currentPath === "."
-            ? `${ulid()}-${file.name}`
-            : `${currentPath}/${ulid()}-${file.name}`;
+    const spacer = root.querySelector(".files__breadcrumbs-spacer");
+    const hostBtn = root.querySelector(".files__sync-host-btn");
+    const vmBtn = root.querySelector(".files__sync-vm-btn");
 
-        await uploadGroupFile(db, groupId, filename, file);
-        filesUiStore.setUploadCompleted(i + 1);
-      }
+    const vmStatus = orchestratorStore.orchestrator?.getVMStatus?.();
+    const vmMode = vmStatus?.mode;
+    const showSyncButtons = vmMode === "9p";
 
-      // Reload files
-      await orchestratorStore.loadFiles(db);
+    if (spacer instanceof HTMLElement) {
+      spacer.hidden = !showSyncButtons;
+    }
 
-      showSuccess(`Uploaded ${count} file${count === 1 ? "" : "s"}`, 3000);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+    if (hostBtn instanceof HTMLButtonElement) {
+      hostBtn.hidden = !showSyncButtons;
+    }
 
-      showError(`Failed to upload files: ${message}`, 6000);
-
-      console.error("Upload error:", err);
-    } finally {
-      filesUiStore.resetUpload();
+    if (vmBtn instanceof HTMLButtonElement) {
+      vmBtn.hidden = !showSyncButtons;
     }
   }
 
@@ -882,207 +1073,83 @@ export class ShadowClawFiles extends ShadowClawElement {
     }
   }
 
-  handleDragEnter(event: DragEvent, _content: HTMLElement) {
-    if (!this.hasDragFiles(event)) {
-      return;
-    }
-
-    event.preventDefault();
-    filesUiStore.setDragActive(true);
-  }
-
-  handleDragOver(event: DragEvent, _content: HTMLElement) {
-    if (!this.hasDragFiles(event)) {
-      return;
-    }
-
-    event.preventDefault();
-    if (event.dataTransfer) {
-      event.dataTransfer.dropEffect = "copy";
-    }
-
-    filesUiStore.setDragActive(true);
-  }
-
-  handleDragLeave(event: DragEvent, _content: HTMLElement) {
-    if (!filesUiStore.isDragActive) {
-      return;
-    }
-
-    const related = event.relatedTarget;
-    if (related instanceof Node && _content.contains(related)) {
-      return;
-    }
-
-    filesUiStore.setDragActive(false);
-  }
-
-  async handleDrop(
-    event: DragEvent,
-    db: ShadowClawDatabase,
-    _content: HTMLElement,
-  ) {
-    if (!this.hasDragFiles(event)) {
-      return;
-    }
-
-    event.preventDefault();
-    filesUiStore.setDragActive(false);
-
-    const dropped = event.dataTransfer?.files;
-    if (!dropped || dropped.length === 0) {
-      return;
-    }
-
-    await this.uploadFileList(db, dropped);
-  }
-
-  hasDragFiles(event: DragEvent): boolean {
-    const types = event.dataTransfer?.types;
-
-    return Boolean(types && Array.from(types).includes("Files"));
-  }
-
-  isPageCandidateFile(path: string, isDirectory: boolean): boolean {
-    if (isDirectory) {
-      return false;
-    }
-
-    return /\.(md|markdown|html?|xhtml)$/iu.test(path);
-  }
-
-  openNewFileDialog() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const dialog = root.querySelector(".files__new-dialog");
-    const input = root.querySelector(".files__new-input");
-    const isFolderInput = root.querySelector(".files__new-is-folder");
-
-    if (!(dialog instanceof HTMLDialogElement)) {
-      return;
-    }
-
-    this.setNewDialogBusy(false);
-
-    dialog.showModal();
-
-    if (input instanceof HTMLInputElement) {
-      input.value = "";
-      input.focus();
-    }
-
-    if (isFolderInput instanceof HTMLInputElement) {
-      isFolderInput.checked = false;
-    }
-  }
-
-  openRenameDialog(path: string, currentName: string, isDirectory: boolean) {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const dialog = root.querySelector(".files__rename-dialog");
-    const input = root.querySelector(".files__rename-input");
-
-    if (!(dialog instanceof HTMLDialogElement)) {
-      return;
-    }
-
-    this.setRenameDialogBusy(false);
-
-    this._pendingRenamePath = path;
-    this._pendingRenameName = currentName;
-    this._pendingRenameIsDirectory = isDirectory;
-
-    dialog.showModal();
-
-    if (input instanceof HTMLInputElement) {
-      input.value = currentName;
-      input.select();
-      input.focus();
-    }
-  }
-
-  _resetPendingRename() {
-    this._pendingRenamePath = null;
-    this._pendingRenameName = null;
-    this._pendingRenameIsDirectory = false;
-  }
-
-  async handleRenameEntry(db: ShadowClawDatabase) {
-    const root = this.shadowRoot;
-    if (!root || !this._pendingRenamePath || !this._pendingRenameName) {
-      return;
-    }
-
-    if (this._isRenamingEntry) {
-      return;
-    }
-
-    const dialog = root.querySelector(".files__rename-dialog");
-    const input = root.querySelector(".files__rename-input");
-    if (!(input instanceof HTMLInputElement)) {
-      return;
-    }
-
-    const nextName = input.value.trim();
-    const currentName = this._pendingRenameName;
-
-    if (!nextName) {
-      showWarning("Please enter a name", 3000);
-
-      return;
-    }
-
-    if (nextName.includes("/") || nextName.includes("\\")) {
-      showWarning("Use only a name, not a path", 3500);
-
-      return;
-    }
-
-    if (nextName === currentName) {
-      if (dialog instanceof HTMLDialogElement) {
-        dialog.close();
-      }
-
-      this._resetPendingRename();
-
-      return;
-    }
-
+  /**
+   * Handle backup (download all files as zip)
+   */
+  async handleBackup(db: ShadowClawDatabase) {
+    const groupId = orchestratorStore.activeGroupId;
     try {
-      this.setRenameDialogBusy(true);
+      const btn = this.shadowRoot?.querySelector(".files__backup-btn");
+      btn?.toggleAttribute("disabled", true);
 
-      await renameGroupEntry(
-        db,
-        orchestratorStore.activeGroupId,
-        this._pendingRenamePath,
-        nextName,
-      );
-
-      await orchestratorStore.loadFiles(db);
-
-      showSuccess(
-        this._pendingRenameIsDirectory
-          ? `Renamed folder: ${currentName} -> ${nextName}`
-          : `Renamed file: ${currentName} -> ${nextName}`,
-        3200,
-      );
-
-      if (dialog instanceof HTMLDialogElement) {
-        dialog.close();
+      if (btn) {
+        btn.textContent = "⏳";
       }
 
-      this._resetPendingRename();
+      await downloadAllGroupFilesAsZip(db, groupId);
+
+      showSuccess("Backup created successfully", 3000);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to rename ${currentName}: ${message}`, 6000);
+
+      showError(`Failed to create backup: ${message}`, 6000);
+
+      console.error("Backup error:", err);
     } finally {
-      this.setRenameDialogBusy(false);
+      const btn = this.shadowRoot?.querySelector(".files__backup-btn");
+
+      btn?.toggleAttribute("disabled", false);
+
+      if (btn) {
+        btn.textContent = "💾 Backup";
+      }
+    }
+  }
+
+  /**
+   * Handle clear all (delete all files)
+   */
+  async handleClearAll(db: ShadowClawDatabase) {
+    const confirmed = await this.requestConfirmation({
+      title: "Clear All Files",
+      message: "Delete ALL files? This cannot be undone!",
+      confirmLabel: "Delete All",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    const groupId = orchestratorStore.activeGroupId;
+
+    try {
+      const btn = this.shadowRoot?.querySelector(".files__clear-btn");
+      btn?.toggleAttribute("disabled", true);
+
+      if (btn) {
+        btn.textContent = "⏳";
+      }
+
+      await deleteAllGroupFiles(db, groupId);
+
+      await orchestratorStore.resetToRootFolder(db);
+      await orchestratorStore.loadFiles(db);
+
+      showSuccess("All files deleted", 3500);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      showError(`Failed to clear files: ${message}`, 6000);
+
+      console.error("Clear error:", err);
+    } finally {
+      const btn = this.shadowRoot?.querySelector(".files__clear-btn");
+      btn?.toggleAttribute("disabled", false);
+
+      if (btn) {
+        btn.textContent = "🗑️ Clear All";
+      }
     }
   }
 
@@ -1153,339 +1220,24 @@ export class ShadowClawFiles extends ShadowClawElement {
     }
   }
 
-  setNewDialogBusy(isBusy: boolean) {
-    this._isCreatingNewItem = isBusy;
-
-    const root = this.shadowRoot;
-    if (!root) {
+  async handleDrop(
+    event: DragEvent,
+    db: ShadowClawDatabase,
+    _content: HTMLElement,
+  ) {
+    if (!this.hasDragFiles(event)) {
       return;
     }
 
-    const cancelBtn = root.querySelector(".files__new-cancel");
-    const okBtn = root.querySelector(".files__new-ok");
-    const input = root.querySelector(".files__new-input");
-    const isFolderInput = root.querySelector(".files__new-is-folder");
+    event.preventDefault();
+    filesUiStore.setDragActive(false);
 
-    if (cancelBtn instanceof HTMLButtonElement) {
-      cancelBtn.disabled = isBusy;
-    }
-
-    if (okBtn instanceof HTMLButtonElement) {
-      okBtn.disabled = isBusy;
-    }
-
-    if (input instanceof HTMLInputElement) {
-      input.disabled = isBusy;
-    }
-
-    if (isFolderInput instanceof HTMLInputElement) {
-      isFolderInput.disabled = isBusy;
-    }
-  }
-
-  setRenameDialogBusy(isBusy: boolean) {
-    this._isRenamingEntry = isBusy;
-
-    const root = this.shadowRoot;
-    if (!root) {
+    const dropped = event.dataTransfer?.files;
+    if (!dropped || dropped.length === 0) {
       return;
     }
 
-    const cancelBtn = root.querySelector(".files__rename-cancel");
-    const okBtn = root.querySelector(".files__rename-ok");
-    const input = root.querySelector(".files__rename-input");
-
-    if (cancelBtn instanceof HTMLButtonElement) {
-      cancelBtn.disabled = isBusy;
-    }
-
-    if (okBtn instanceof HTMLButtonElement) {
-      okBtn.disabled = isBusy;
-    }
-
-    if (input instanceof HTMLInputElement) {
-      input.disabled = isBusy;
-    }
-  }
-
-  /**
-   * Handle backup (download all files as zip)
-   */
-  async handleBackup(db: ShadowClawDatabase) {
-    const groupId = orchestratorStore.activeGroupId;
-    try {
-      const btn = this.shadowRoot?.querySelector(".files__backup-btn");
-      btn?.toggleAttribute("disabled", true);
-
-      if (btn) {
-        btn.textContent = "⏳";
-      }
-
-      await downloadAllGroupFilesAsZip(db, groupId);
-
-      showSuccess("Backup created successfully", 3000);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-
-      showError(`Failed to create backup: ${message}`, 6000);
-
-      console.error("Backup error:", err);
-    } finally {
-      const btn = this.shadowRoot?.querySelector(".files__backup-btn");
-
-      btn?.toggleAttribute("disabled", false);
-
-      if (btn) {
-        btn.textContent = "💾 Backup";
-      }
-    }
-  }
-
-  /**
-   * Handle restore (upload and extract zip)
-   */
-  async handleRestore(db: ShadowClawDatabase, input: HTMLInputElement) {
-    const files = input.files;
-    if (!files || files.length === 0) {
-      return;
-    }
-
-    const zipFile = files[0];
-    if (!zipFile.name.endsWith(".zip")) {
-      showWarning("Please select a .zip file", 3500);
-
-      return;
-    }
-
-    const groupId = orchestratorStore.activeGroupId;
-
-    const confirmed = await this.requestConfirmation({
-      title: "Restore Files",
-      message: "Restore from backup will replace all current files. Continue?",
-      confirmLabel: "Restore",
-      cancelLabel: "Cancel",
-    });
-
-    if (!confirmed) {
-      input.value = "";
-
-      return;
-    }
-
-    try {
-      const btn = this.shadowRoot?.querySelector(".files__restore-btn");
-      btn?.toggleAttribute("disabled", true);
-
-      if (btn) {
-        btn.textContent = "⏳";
-      }
-
-      await restoreAllGroupFilesFromZip(db, groupId, zipFile);
-
-      input.value = "";
-
-      await orchestratorStore.resetToRootFolder(db);
-      await orchestratorStore.loadFiles(db);
-
-      showSuccess("Files restored successfully", 3500);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-
-      showError(`Failed to restore from backup: ${message}`, 6000);
-
-      console.error("Restore error:", err);
-    } finally {
-      const btn = this.shadowRoot?.querySelector(".files__restore-btn");
-      btn?.toggleAttribute("disabled", false);
-
-      if (btn) {
-        btn.textContent = "♻️ Restore";
-      }
-    }
-  }
-
-  /**
-   * Handle clear all (delete all files)
-   */
-  async handleClearAll(db: ShadowClawDatabase) {
-    const confirmed = await this.requestConfirmation({
-      title: "Clear All Files",
-      message: "Delete ALL files? This cannot be undone!",
-      confirmLabel: "Delete All",
-      cancelLabel: "Cancel",
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    const groupId = orchestratorStore.activeGroupId;
-
-    try {
-      const btn = this.shadowRoot?.querySelector(".files__clear-btn");
-      btn?.toggleAttribute("disabled", true);
-
-      if (btn) {
-        btn.textContent = "⏳";
-      }
-
-      await deleteAllGroupFiles(db, groupId);
-
-      await orchestratorStore.resetToRootFolder(db);
-      await orchestratorStore.loadFiles(db);
-
-      showSuccess("All files deleted", 3500);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-
-      showError(`Failed to clear files: ${message}`, 6000);
-
-      console.error("Clear error:", err);
-    } finally {
-      const btn = this.shadowRoot?.querySelector(".files__clear-btn");
-      btn?.toggleAttribute("disabled", false);
-
-      if (btn) {
-        btn.textContent = "🗑️ Clear All";
-      }
-    }
-  }
-
-  openPasteDialog() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const dialog = root.querySelector(".files__paste-dialog");
-    const messageEl = root.querySelector(".files__paste-message");
-    const renameContainer = root.querySelector(
-      ".files__paste-rename-container",
-    );
-    const renameInput = root.querySelector(".files__paste-rename-input");
-    const overwriteBtn = root.querySelector(".files__paste-overwrite");
-
-    if (!(dialog instanceof HTMLDialogElement)) {
-      return;
-    }
-
-    const clipboard = filesUiStore.clipboard;
-    if (!clipboard) {
-      showWarning("Nothing in clipboard to paste", 3000);
-
-      return;
-    }
-
-    if (
-      this.isInvalidFolderPasteTarget(clipboard, orchestratorStore.currentPath)
-    ) {
-      showWarning(
-        "Cannot paste a folder into itself or one of its subfolders",
-        4500,
-      );
-
-      return;
-    }
-
-    this.setPasteDialogBusy(false);
-
-    // Get name of the file/folder being pasted
-    const sourcePath = clipboard.sourcePath.replace(/\/$/, "");
-    const parts = sourcePath.split("/");
-    const name = parts[parts.length - 1];
-    const isDir = clipboard.isDirectory;
-    const fileNameWithSlash = isDir ? `${name}/` : name;
-
-    const targetDirName =
-      orchestratorStore.currentPath === "."
-        ? "Root"
-        : orchestratorStore.currentPath;
-
-    const alreadyExists = orchestratorStore.files.includes(fileNameWithSlash);
-
-    if (messageEl instanceof HTMLElement) {
-      const operation = clipboard.type === "cut" ? "move" : "copy";
-      if (alreadyExists) {
-        messageEl.textContent = `"${name}" already exists in "${targetDirName}". Please rename or choose to overwrite.`;
-      } else {
-        messageEl.textContent = `Are you sure you want to ${operation} "${name}" into "${targetDirName}"?`;
-      }
-    }
-
-    if (renameContainer instanceof HTMLElement) {
-      renameContainer.hidden = !alreadyExists;
-    }
-
-    if (overwriteBtn instanceof HTMLElement) {
-      overwriteBtn.hidden = !alreadyExists;
-    }
-
-    if (renameInput instanceof HTMLInputElement) {
-      renameInput.value = name;
-    }
-
-    dialog.showModal();
-
-    if (alreadyExists && renameInput instanceof HTMLInputElement) {
-      renameInput.select();
-      renameInput.focus();
-    }
-  }
-
-  isInvalidFolderPasteTarget(
-    clipboard: { sourcePath: string; isDirectory: boolean },
-    destinationDir: string,
-  ): boolean {
-    if (!clipboard.isDirectory) {
-      return false;
-    }
-
-    if (destinationDir === ".") {
-      return false;
-    }
-
-    const sourceDir = clipboard.sourcePath.replace(/\/+$/, "");
-
-    return (
-      destinationDir === sourceDir || destinationDir.startsWith(`${sourceDir}/`)
-    );
-  }
-
-  setPasteDialogBusy(isBusy: boolean) {
-    this._isPastingEntry = isBusy;
-
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const cancelBtn = root.querySelector(".files__paste-cancel");
-    const okBtn = root.querySelector(".files__paste-ok");
-
-    if (cancelBtn instanceof HTMLButtonElement) {
-      cancelBtn.disabled = isBusy;
-    }
-
-    if (okBtn instanceof HTMLButtonElement) {
-      okBtn.disabled = isBusy;
-    }
-  }
-
-  updatePasteButtonVisibility() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const clipboard = filesUiStore.clipboard;
-    const pasteBtn = root.querySelector(".files__paste-btn");
-    if (!(pasteBtn instanceof HTMLElement)) {
-      return;
-    }
-
-    const hasClipboardEntry = Boolean(clipboard);
-    pasteBtn.toggleAttribute("hidden", !hasClipboardEntry);
-    pasteBtn.toggleAttribute("disabled", !hasClipboardEntry);
+    await this.uploadFileList(db, dropped);
   }
 
   async handlePasteEntry(db: ShadowClawDatabase, overwrite: boolean) {
@@ -1617,6 +1369,256 @@ export class ShadowClawFiles extends ShadowClawElement {
     } finally {
       this.setPasteDialogBusy(false);
     }
+  }
+
+  async handleRenameEntry(db: ShadowClawDatabase) {
+    const root = this.shadowRoot;
+    if (!root || !this._pendingRenamePath || !this._pendingRenameName) {
+      return;
+    }
+
+    if (this._isRenamingEntry) {
+      return;
+    }
+
+    const dialog = root.querySelector(".files__rename-dialog");
+    const input = root.querySelector(".files__rename-input");
+    if (!(input instanceof HTMLInputElement)) {
+      return;
+    }
+
+    const nextName = input.value.trim();
+    const currentName = this._pendingRenameName;
+
+    if (!nextName) {
+      showWarning("Please enter a name", 3000);
+
+      return;
+    }
+
+    if (nextName.includes("/") || nextName.includes("\\")) {
+      showWarning("Use only a name, not a path", 3500);
+
+      return;
+    }
+
+    if (nextName === currentName) {
+      if (dialog instanceof HTMLDialogElement) {
+        dialog.close();
+      }
+
+      this._resetPendingRename();
+
+      return;
+    }
+
+    try {
+      this.setRenameDialogBusy(true);
+
+      await renameGroupEntry(
+        db,
+        orchestratorStore.activeGroupId,
+        this._pendingRenamePath,
+        nextName,
+      );
+
+      await orchestratorStore.loadFiles(db);
+
+      showSuccess(
+        this._pendingRenameIsDirectory
+          ? `Renamed folder: ${currentName} -> ${nextName}`
+          : `Renamed file: ${currentName} -> ${nextName}`,
+        3200,
+      );
+
+      if (dialog instanceof HTMLDialogElement) {
+        dialog.close();
+      }
+
+      this._resetPendingRename();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to rename ${currentName}: ${message}`, 6000);
+    } finally {
+      this.setRenameDialogBusy(false);
+    }
+  }
+
+  /**
+   * Handle restore (upload and extract zip)
+   */
+  async handleRestore(db: ShadowClawDatabase, input: HTMLInputElement) {
+    const files = input.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    const zipFile = files[0];
+    if (!zipFile.name.endsWith(".zip")) {
+      showWarning("Please select a .zip file", 3500);
+
+      return;
+    }
+
+    const groupId = orchestratorStore.activeGroupId;
+
+    const confirmed = await this.requestConfirmation({
+      title: "Restore Files",
+      message: "Restore from backup will replace all current files. Continue?",
+      confirmLabel: "Restore",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      input.value = "";
+
+      return;
+    }
+
+    try {
+      const btn = this.shadowRoot?.querySelector(".files__restore-btn");
+      btn?.toggleAttribute("disabled", true);
+
+      if (btn) {
+        btn.textContent = "⏳";
+      }
+
+      await restoreAllGroupFilesFromZip(db, groupId, zipFile);
+
+      input.value = "";
+
+      await orchestratorStore.resetToRootFolder(db);
+      await orchestratorStore.loadFiles(db);
+
+      showSuccess("Files restored successfully", 3500);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      showError(`Failed to restore from backup: ${message}`, 6000);
+
+      console.error("Restore error:", err);
+    } finally {
+      const btn = this.shadowRoot?.querySelector(".files__restore-btn");
+      btn?.toggleAttribute("disabled", false);
+
+      if (btn) {
+        btn.textContent = "♻️ Restore";
+      }
+    }
+  }
+
+  async handleSyncVMToHost(db: ShadowClawDatabase) {
+    const root = this.shadowRoot;
+    const button = root?.querySelector(".files__sync-vm-btn");
+    if (!(button instanceof HTMLButtonElement)) {
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = "Syncing...";
+
+    try {
+      orchestratorStore.syncVMWorkspaceToHost();
+      // Give the worker a short moment to emit vm-workspace-synced.
+      await new Promise((resolve) => setTimeout(resolve, 180));
+      await orchestratorStore.loadFiles(db);
+      showSuccess("Requested VM → host workspace sync", 2200);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to request VM → host sync: ${message}`, 5000);
+    } finally {
+      button.disabled = false;
+      button.textContent = "VM → Host";
+    }
+  }
+
+  async handleUpload(db: ShadowClawDatabase, input: HTMLInputElement) {
+    const files = input.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    await this.uploadFileList(db, files);
+
+    // Clear the input
+    input.value = "";
+  }
+
+  async removePageAssignmentIfNeeded(
+    db: ShadowClawDatabase,
+    filePath: string,
+  ): Promise<void> {
+    const groupId = orchestratorStore.activeGroupId;
+    const isSavedPage = orchestratorStore.pages.some((page) => {
+      return page.groupId === groupId && page.path === filePath;
+    });
+
+    if (!isSavedPage) {
+      return;
+    }
+
+    await orchestratorStore.removePage(db, filePath, groupId);
+  }
+
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
+    }
+
+    showWarning(options.message, 4500);
+
+    return false;
+  }
+
+  async uploadFileList(db: ShadowClawDatabase, files: FileList | File[]) {
+    const fileList: File[] = Array.from(files) as File[];
+    if (fileList.length === 0) {
+      return;
+    }
+
+    const groupId = orchestratorStore.activeGroupId;
+    const currentPath = orchestratorStore.currentPath;
+    const count = fileList.length;
+
+    filesUiStore.startUpload(count);
+
+    try {
+      for (let i = 0; i < count; i++) {
+        const file = fileList[i];
+        const filename =
+          currentPath === "."
+            ? `${ulid()}-${file.name}`
+            : `${currentPath}/${ulid()}-${file.name}`;
+
+        await uploadGroupFile(db, groupId, filename, file);
+        filesUiStore.setUploadCompleted(i + 1);
+      }
+
+      // Reload files
+      await orchestratorStore.loadFiles(db);
+
+      showSuccess(`Uploaded ${count} file${count === 1 ? "" : "s"}`, 3000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+
+      showError(`Failed to upload files: ${message}`, 6000);
+
+      console.error("Upload error:", err);
+    } finally {
+      filesUiStore.resetUpload();
+    }
+  }
+
+  _resetPendingRename() {
+    this._pendingRenamePath = null;
+    this._pendingRenameName = null;
+    this._pendingRenameIsDirectory = false;
   }
 }
 

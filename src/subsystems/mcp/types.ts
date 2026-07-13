@@ -13,12 +13,12 @@ export interface OAuthAccountLike {
   tokenType?: string;
 }
 
-export interface ReconnectMcpOAuthResult {
-  error?: string;
-  success: boolean;
-}
-
 export interface ReconnectMcpOAuthOptions {
   /** When true, only attempt a silent token refresh — do not open a popup. */
   silentOnly?: boolean;
+}
+
+export interface ReconnectMcpOAuthResult {
+  error?: string;
+  success: boolean;
 }

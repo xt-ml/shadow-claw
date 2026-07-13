@@ -155,11 +155,12 @@ jest.mock("../shadow-claw-element.js", () => {
       this.shadowRoot?.appendChild(root);
     }
 
+    connectedCallback() {}
+    disconnectedCallback() {}
+
     addCleanup(_: () => void) {}
     disposeCleanups() {}
     async render() {}
-    connectedCallback() {}
-    disconnectedCallback() {}
   }
 
   return { default: MockBase };

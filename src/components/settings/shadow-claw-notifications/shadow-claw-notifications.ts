@@ -1,8 +1,8 @@
 import {
-  subscribeToPush,
-  unsubscribeFromPush,
   getCurrentSubscription,
   getPushUrl,
+  subscribeToPush,
+  unsubscribeFromPush,
 } from "../../../subsystems/notifications/push-client.js";
 
 import { CONFIG_KEYS } from "../../../config/config.js";
@@ -26,15 +26,14 @@ export class ShadowClawNotifications extends ShadowClawElement {
   static styles = `${ShadowClawNotifications.componentPath}/${elementName}.css`;
   static template = `${ShadowClawNotifications.componentPath}/${elementName}.html`;
 
+  public _backendAvailable: boolean = true;
+  public _selectedId: number | null = null;
   public _subscribed: boolean = false;
   public _subscriptions: Array<{
     id: number;
     endpoint: string;
     created_at: string;
   }> = [];
-
-  public _selectedId: number | null = null;
-  public _backendAvailable: boolean = true;
 
   constructor() {
     super();
@@ -80,118 +79,6 @@ export class ShadowClawNotifications extends ShadowClawElement {
     root
       .querySelector('[data-input="push-proxy-url"]')
       ?.addEventListener("change", (e) => this.handleProxyUrlChange(e));
-  }
-
-  async loadProxyConfig() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const db = await getDb();
-    const proxyUrl = await getConfig(db, CONFIG_KEYS.PUSH_PROXY_URL);
-    const input = root.querySelector(
-      '[data-input="push-proxy-url"]',
-    ) as HTMLInputElement | null;
-
-    if (input) {
-      input.value = proxyUrl || "";
-    }
-  }
-
-  async handleProxyUrlChange(e: Event) {
-    const input = e.target as HTMLInputElement;
-    const value = input.value.trim();
-
-    try {
-      const db = await getDb();
-      await setConfig(db, CONFIG_KEYS.PUSH_PROXY_URL, value);
-      showSuccess("Push proxy URL updated.");
-      await this.loadSubscriptions();
-    } catch (err) {
-      showError(`Failed to save proxy URL: ${(err as Error).message}`);
-    }
-  }
-
-  /**
-   * Check current subscription state and update the toggle.
-   */
-  async refreshState() {
-    try {
-      const sub = await getCurrentSubscription();
-      this._subscribed = !!sub;
-      this.updateToggle();
-    } catch {
-      // Service worker may not be ready
-      this._subscribed = false;
-      this.updateToggle();
-    }
-  }
-
-  updateToggle() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const toggle = root.querySelector('[data-action="toggle-push"]');
-    const status = root.querySelector('[data-info="subscription-status"]');
-
-    if (toggle) {
-      toggle.setAttribute("aria-checked", String(this._subscribed));
-    }
-
-    if (status) {
-      status.textContent = this._subscribed ? "Enabled" : "Disabled";
-    }
-  }
-
-  async handleToggle() {
-    try {
-      if (this._subscribed) {
-        await unsubscribeFromPush();
-        this._subscribed = false;
-        showSuccess("Push notifications disabled.");
-      } else {
-        await subscribeToPush();
-        this._subscribed = true;
-        showSuccess("Push notifications enabled!");
-      }
-
-      this.updateToggle();
-      await this.loadSubscriptions();
-    } catch (err) {
-      showError(`Push notification error: ${(err as Error).message}`);
-    }
-  }
-
-  /**
-   * Load all stored subscriptions from the server.
-   */
-  async loadSubscriptions() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    try {
-      const url = await getPushUrl("/push/subscriptions");
-      const res = await fetch(url);
-
-      if (!res.ok) {
-        return;
-      }
-
-      this._subscriptions = await res.json();
-      this._backendAvailable = true;
-    } catch {
-      this._subscriptions = [];
-      this._backendAvailable = false;
-    }
-
-    this._selectedId = null;
-    this.renderSubscriptionList();
-    this.updateActionButtons();
   }
 
   renderSubscriptionList() {
@@ -275,6 +162,60 @@ export class ShadowClawNotifications extends ShadowClawElement {
     }
   }
 
+  updateToggle() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const toggle = root.querySelector('[data-action="toggle-push"]');
+    const status = root.querySelector('[data-info="subscription-status"]');
+
+    if (toggle) {
+      toggle.setAttribute("aria-checked", String(this._subscribed));
+    }
+
+    if (status) {
+      status.textContent = this._subscribed ? "Enabled" : "Disabled";
+    }
+  }
+
+  async handleDeleteSubscription() {
+    if (this._selectedId == null) {
+      return;
+    }
+
+    try {
+      const url = await getPushUrl(`/push/subscription/${this._selectedId}`);
+      const res = await fetch(url, {
+        method: "DELETE",
+      });
+
+      if (res.ok) {
+        showSuccess("Subscription deleted.");
+        await this.loadSubscriptions();
+      } else {
+        showError("Failed to delete subscription.");
+      }
+    } catch (err) {
+      showError(`Delete failed: ${(err as Error).message}`);
+    }
+  }
+
+  async handleProxyUrlChange(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const value = input.value.trim();
+
+    try {
+      const db = await getDb();
+      await setConfig(db, CONFIG_KEYS.PUSH_PROXY_URL, value);
+      showSuccess("Push proxy URL updated.");
+      await this.loadSubscriptions();
+    } catch (err) {
+      showError(`Failed to save proxy URL: ${(err as Error).message}`);
+    }
+  }
+
   async handleSendNotification() {
     if (this._selectedId == null) {
       return;
@@ -317,25 +258,83 @@ export class ShadowClawNotifications extends ShadowClawElement {
     }
   }
 
-  async handleDeleteSubscription() {
-    if (this._selectedId == null) {
+  async handleToggle() {
+    try {
+      if (this._subscribed) {
+        await unsubscribeFromPush();
+        this._subscribed = false;
+        showSuccess("Push notifications disabled.");
+      } else {
+        await subscribeToPush();
+        this._subscribed = true;
+        showSuccess("Push notifications enabled!");
+      }
+
+      this.updateToggle();
+      await this.loadSubscriptions();
+    } catch (err) {
+      showError(`Push notification error: ${(err as Error).message}`);
+    }
+  }
+
+  async loadProxyConfig() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const db = await getDb();
+    const proxyUrl = await getConfig(db, CONFIG_KEYS.PUSH_PROXY_URL);
+    const input = root.querySelector(
+      '[data-input="push-proxy-url"]',
+    ) as HTMLInputElement | null;
+
+    if (input) {
+      input.value = proxyUrl || "";
+    }
+  }
+
+  /**
+   * Load all stored subscriptions from the server.
+   */
+  async loadSubscriptions() {
+    const root = this.shadowRoot;
+    if (!root) {
       return;
     }
 
     try {
-      const url = await getPushUrl(`/push/subscription/${this._selectedId}`);
-      const res = await fetch(url, {
-        method: "DELETE",
-      });
+      const url = await getPushUrl("/push/subscriptions");
+      const res = await fetch(url);
 
-      if (res.ok) {
-        showSuccess("Subscription deleted.");
-        await this.loadSubscriptions();
-      } else {
-        showError("Failed to delete subscription.");
+      if (!res.ok) {
+        return;
       }
-    } catch (err) {
-      showError(`Delete failed: ${(err as Error).message}`);
+
+      this._subscriptions = await res.json();
+      this._backendAvailable = true;
+    } catch {
+      this._subscriptions = [];
+      this._backendAvailable = false;
+    }
+
+    this._selectedId = null;
+    this.renderSubscriptionList();
+    this.updateActionButtons();
+  }
+
+  /**
+   * Check current subscription state and update the toggle.
+   */
+  async refreshState() {
+    try {
+      const sub = await getCurrentSubscription();
+      this._subscribed = !!sub;
+      this.updateToggle();
+    } catch {
+      // Service worker may not be ready
+      this._subscribed = false;
+      this.updateToggle();
     }
   }
 }

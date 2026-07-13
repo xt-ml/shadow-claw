@@ -3,9 +3,30 @@ export default class ShadowClawElement extends HTMLElement {
   static readonly styles: URL | string;
   static readonly template: URL | string;
 
-  onStylesReady: Promise<void>;
-  onTemplateReady: Promise<void>;
-  private _cleanups: Array<() => void> = [];
+  static getStyles(
+    styles: URL | string = (this as any).styles,
+  ): Promise<CSSStyleSheet> {
+    return fetch(styles)
+      .then((r) => r.text())
+      .then((css) => {
+        const sheet = new CSSStyleSheet();
+
+        sheet.replaceSync(css);
+
+        return sheet;
+      })
+      .catch((err) => {
+        console.error("Failed to load styles", err);
+
+        return Promise.reject(err);
+      });
+  }
+
+  static getStylesSource(
+    styles: URL | string = (this as any).styles,
+  ): Promise<string> {
+    return fetch(styles).then((r) => r.text());
+  }
 
   static getTemplate(
     template: URL | string = (this as any).template,
@@ -42,38 +63,18 @@ export default class ShadowClawElement extends HTMLElement {
     return fetch(template).then((r) => r.text());
   }
 
+  static setStyles(shadowRoot: ShadowRoot, styles: CSSStyleSheet) {
+    shadowRoot.adoptedStyleSheets = [styles];
+  }
+
   static setTemplate(shadowRoot: ShadowRoot, templateChildren: Element[]) {
     shadowRoot.append(...templateChildren);
   }
 
-  static getStyles(
-    styles: URL | string = (this as any).styles,
-  ): Promise<CSSStyleSheet> {
-    return fetch(styles)
-      .then((r) => r.text())
-      .then((css) => {
-        const sheet = new CSSStyleSheet();
+  onStylesReady: Promise<void>;
+  onTemplateReady: Promise<void>;
 
-        sheet.replaceSync(css);
-
-        return sheet;
-      })
-      .catch((err) => {
-        console.error("Failed to load styles", err);
-
-        return Promise.reject(err);
-      });
-  }
-
-  static getStylesSource(
-    styles: URL | string = (this as any).styles,
-  ): Promise<string> {
-    return fetch(styles).then((r) => r.text());
-  }
-
-  static setStyles(shadowRoot: ShadowRoot, styles: CSSStyleSheet) {
-    shadowRoot.adoptedStyleSheets = [styles];
-  }
+  private _cleanups: Array<() => void> = [];
 
   constructor() {
     super();

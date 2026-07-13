@@ -1,7 +1,7 @@
 import { CONFIG_KEYS } from "../../../config/config.js";
-import { encryptValue } from "../../../security/crypto.js";
 import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
 import { getConfig } from "../../../db/getConfig.js";
+import { encryptValue } from "../../../security/crypto.js";
 
 import { reconnectMcpOAuth } from "../../../subsystems/mcp/mcp-reconnect.js";
 import { testRemoteMcpConnection } from "../../../subsystems/mcp/remote-mcp-client.js";
@@ -49,11 +49,11 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
   static styles = `${ShadowClawMcpRemote.componentPath}/${elementName}.css`;
   static template = `${ShadowClawMcpRemote.componentPath}/${elementName}.html`;
 
-  db: ShadowClawDatabase | null = null;
   connections: RemoteMcpConnectionRecord[] = [];
-  serviceAccounts: ServiceAccount[] = [];
-  gitAccounts: GitAccount[] = [];
+  db: ShadowClawDatabase | null = null;
   editingConnectionId: string | null = null;
+  gitAccounts: GitAccount[] = [];
+  serviceAccounts: ServiceAccount[] = [];
 
   constructor() {
     super();
@@ -117,23 +117,69 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
       });
   }
 
-  async render() {
+  describeCredentialRef(ref: RemoteMcpCredentialRef | null): string {
+    if (!ref || ref.authType === "none") {
+      return "No auth";
+    }
+
+    if (ref.authType === "custom_header") {
+      return `Custom header${ref.headerName ? ` (${ref.headerName})` : ""}`;
+    }
+
+    if (ref.accountId) {
+      return `Service account (${ref.authType.toUpperCase()})`;
+    }
+
+    if (ref.gitAccountId) {
+      return `Git account (${ref.authType.toUpperCase()})`;
+    }
+
+    return ref.authType.toUpperCase();
+  }
+
+  getAuthSelectionFromCredentialRef(
+    ref: RemoteMcpCredentialRef | null,
+  ): AuthSelection {
+    if (!ref || ref.authType === "none") {
+      return "none";
+    }
+
+    if (ref.authType === "custom_header") {
+      return "custom_header";
+    }
+
+    if (ref.accountId) {
+      return ref.authType === "oauth" ? "service_oauth" : "service_pat";
+    }
+
+    if (ref.gitAccountId) {
+      return ref.authType === "oauth" ? "git_oauth" : "git_pat";
+    }
+
+    return "none";
+  }
+
+  hideConnectionForm() {
     const root = this.shadowRoot;
-    if (!root || !this.db) {
+    if (!root) {
       return;
     }
 
-    try {
-      this.connections = await listRemoteMcpConnections(this.db);
-      const serviceRaw = await getConfig(this.db, CONFIG_KEYS.SERVICE_ACCOUNTS);
-      this.serviceAccounts = Array.isArray(serviceRaw) ? serviceRaw : [];
-      const gitRaw = await getConfig(this.db, CONFIG_KEYS.GIT_ACCOUNTS);
-      this.gitAccounts = Array.isArray(gitRaw) ? gitRaw : [];
-
-      this.renderConnectionList();
-    } catch (err) {
-      console.warn("Could not load remote MCP connections:", err);
+    const slot = root.querySelector('[data-region="connection-form-slot"]');
+    if (slot) {
+      slot.replaceChildren();
     }
+
+    this.editingConnectionId = null;
+  }
+
+  isOAuthConnection(connection: RemoteMcpConnectionRecord): boolean {
+    const ref = connection.credentialRef;
+    if (!ref) {
+      return false;
+    }
+
+    return ref.authType === "oauth" && !!(ref.accountId || ref.gitAccountId);
   }
 
   renderConnectionList() {
@@ -202,75 +248,74 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
     listEl.append(fragment);
   }
 
-  describeCredentialRef(ref: RemoteMcpCredentialRef | null): string {
-    if (!ref || ref.authType === "none") {
-      return "No auth";
-    }
+  renderDiagnostic(container: HTMLElement, result: McpConnectionTestResult) {
+    const stepsHtml = result.steps
+      .map((step) => {
+        const icon =
+          step.status === "ok"
+            ? "\u2713"
+            : step.status === "error"
+              ? "\u2717"
+              : "\u2014";
+        const cls = `diagnostic-step diagnostic-${step.status}`;
 
-    if (ref.authType === "custom_header") {
-      return `Custom header${ref.headerName ? ` (${ref.headerName})` : ""}`;
-    }
+        return `
+          <div class="${cls}">
+            <span class="diagnostic-icon">${icon}</span>
+            <span class="diagnostic-label">${escapeHtml(step.step)}</span>
+            ${step.detail ? `<span class="diagnostic-detail">${escapeHtml(step.detail)}</span>` : ""}
+          </div>`;
+      })
+      .join("");
 
-    if (ref.accountId) {
-      return `Service account (${ref.authType.toUpperCase()})`;
-    }
+    const toolsHtml =
+      result.success && result.toolNames.length > 0
+        ? `<details class="diagnostic-tools"><summary>${result.toolCount} tool${result.toolCount === 1 ? "" : "s"} available</summary><ul>${result.toolNames.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul></details>`
+        : "";
 
-    if (ref.gitAccountId) {
-      return `Git account (${ref.authType.toUpperCase()})`;
-    }
-
-    return ref.authType.toUpperCase();
-  }
-
-  isOAuthConnection(connection: RemoteMcpConnectionRecord): boolean {
-    const ref = connection.credentialRef;
-    if (!ref) {
-      return false;
-    }
-
-    return ref.authType === "oauth" && !!(ref.accountId || ref.gitAccountId);
-  }
-
-  async reconnectOAuth(connectionId: string) {
-    if (!this.db) {
-      return;
-    }
-
-    const connection = this.connections.find(
-      (item) => item.id === connectionId,
+    setSanitizedHtml(
+      container,
+      `
+      <div class="diagnostic-header diagnostic-${result.success ? "ok" : "error"}">
+        ${result.success ? "\u2713 Connection OK" : "\u2717 Connection Failed"}
+        <button class="diagnostic-close" data-action="close-diagnostic" title="Dismiss">\u00d7</button>
+      </div>
+      <div class="diagnostic-steps">${stepsHtml}</div>
+      ${toolsHtml}
+      `,
     );
 
-    const label = connection?.label || connectionId;
-
-    const result = await reconnectMcpOAuth(this.db, connectionId);
-
-    if (result.success) {
-      showSuccess(`OAuth reconnected for "${label}"`, 4000);
-    } else {
-      showError(`OAuth reconnect failed: ${result.error}`, 6000);
-    }
+    container
+      .querySelector('[data-action="close-diagnostic"]')
+      ?.addEventListener("click", () => container.remove());
   }
 
-  getAuthSelectionFromCredentialRef(
-    ref: RemoteMcpCredentialRef | null,
-  ): AuthSelection {
-    if (!ref || ref.authType === "none") {
-      return "none";
+  renderGitAccountOptions(selectedId?: string): string {
+    if (this.gitAccounts.length === 0) {
+      return '<option value="">No git accounts configured</option>';
     }
 
-    if (ref.authType === "custom_header") {
-      return "custom_header";
+    return this.gitAccounts
+      .map((account) => {
+        const selected = account.id === selectedId ? " selected" : "";
+
+        return `<option value="${account.id}"${selected}>${escapeHtml(account.label)} · ${escapeHtml(account.hostPattern)}</option>`;
+      })
+      .join("");
+  }
+
+  renderServiceAccountOptions(selectedId?: string): string {
+    if (this.serviceAccounts.length === 0) {
+      return '<option value="">No service accounts configured</option>';
     }
 
-    if (ref.accountId) {
-      return ref.authType === "oauth" ? "service_oauth" : "service_pat";
-    }
+    return this.serviceAccounts
+      .map((account) => {
+        const selected = account.id === selectedId ? " selected" : "";
 
-    if (ref.gitAccountId) {
-      return ref.authType === "oauth" ? "git_oauth" : "git_pat";
-    }
-
-    return "none";
+        return `<option value="${account.id}"${selected}>${escapeHtml(account.label)} · ${escapeHtml(account.hostPattern)}</option>`;
+      })
+      .join("");
   }
 
   showConnectionForm(connectionId: string) {
@@ -420,48 +465,6 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
     this.updateAuthFieldsVisibility(slot);
   }
 
-  renderServiceAccountOptions(selectedId?: string): string {
-    if (this.serviceAccounts.length === 0) {
-      return '<option value="">No service accounts configured</option>';
-    }
-
-    return this.serviceAccounts
-      .map((account) => {
-        const selected = account.id === selectedId ? " selected" : "";
-
-        return `<option value="${account.id}"${selected}>${escapeHtml(account.label)} · ${escapeHtml(account.hostPattern)}</option>`;
-      })
-      .join("");
-  }
-
-  renderGitAccountOptions(selectedId?: string): string {
-    if (this.gitAccounts.length === 0) {
-      return '<option value="">No git accounts configured</option>';
-    }
-
-    return this.gitAccounts
-      .map((account) => {
-        const selected = account.id === selectedId ? " selected" : "";
-
-        return `<option value="${account.id}"${selected}>${escapeHtml(account.label)} · ${escapeHtml(account.hostPattern)}</option>`;
-      })
-      .join("");
-  }
-
-  hideConnectionForm() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const slot = root.querySelector('[data-region="connection-form-slot"]');
-    if (slot) {
-      slot.replaceChildren();
-    }
-
-    this.editingConnectionId = null;
-  }
-
   updateAuthFieldsVisibility(slot: Element) {
     const authSelection = (
       slot.querySelector('[data-field="auth-selection"]') as HTMLSelectElement
@@ -502,89 +505,6 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
 
     if (autoReconnectRegion instanceof HTMLElement) {
       autoReconnectRegion.style.display = showAutoReconnect ? "flex" : "none";
-    }
-  }
-
-  async saveConnectionForm() {
-    if (!this.db) {
-      return;
-    }
-
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const slot = root.querySelector('[data-region="connection-form-slot"]');
-    if (!slot) {
-      return;
-    }
-
-    const label = (
-      slot.querySelector('[data-field="connection-label"]') as HTMLInputElement
-    )?.value.trim();
-    const serverUrl = (
-      slot.querySelector('[data-field="connection-url"]') as HTMLInputElement
-    )?.value.trim();
-    const transport = (
-      slot.querySelector(
-        '[data-field="connection-transport"]',
-      ) as HTMLSelectElement
-    )?.value as RemoteMcpTransport;
-    const enabled = (
-      slot.querySelector(
-        '[data-field="connection-enabled"]',
-      ) as HTMLInputElement
-    )?.checked;
-    const autoReconnectOAuth = (
-      slot.querySelector(
-        '[data-field="connection-auto-reconnect"]',
-      ) as HTMLInputElement
-    )?.checked;
-    const authSelection = (
-      slot.querySelector('[data-field="auth-selection"]') as HTMLSelectElement
-    )?.value as AuthSelection;
-
-    if (!label || !serverUrl) {
-      showError("Connection label and server URL are required.", 4000);
-
-      return;
-    }
-
-    const isNew = this.editingConnectionId === "new";
-    const existing = isNew
-      ? null
-      : this.connections.find((item) => item.id === this.editingConnectionId) ||
-        null;
-
-    try {
-      const connection = await upsertRemoteMcpConnection(this.db, {
-        id: isNew ? undefined : existing?.id,
-        label,
-        serviceType: "mcp_remote",
-        serverUrl,
-        transport,
-        enabled,
-        autoReconnectOAuth,
-      });
-
-      const credentialRef = await this.buildCredentialRef(
-        slot,
-        authSelection,
-        existing,
-      );
-
-      await bindRemoteMcpCredentialRef(this.db, connection.id, credentialRef);
-      await this.render();
-      this.hideConnectionForm();
-
-      showSuccess(
-        isNew ? "Remote MCP connection added" : "Remote MCP connection updated",
-        3000,
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to save remote MCP connection: ${message}`, 6000);
     }
   }
 
@@ -702,6 +622,128 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
     }
   }
 
+  async reconnectOAuth(connectionId: string) {
+    if (!this.db) {
+      return;
+    }
+
+    const connection = this.connections.find(
+      (item) => item.id === connectionId,
+    );
+
+    const label = connection?.label || connectionId;
+
+    const result = await reconnectMcpOAuth(this.db, connectionId);
+
+    if (result.success) {
+      showSuccess(`OAuth reconnected for "${label}"`, 4000);
+    } else {
+      showError(`OAuth reconnect failed: ${result.error}`, 6000);
+    }
+  }
+
+  async render() {
+    const root = this.shadowRoot;
+    if (!root || !this.db) {
+      return;
+    }
+
+    try {
+      this.connections = await listRemoteMcpConnections(this.db);
+      const serviceRaw = await getConfig(this.db, CONFIG_KEYS.SERVICE_ACCOUNTS);
+      this.serviceAccounts = Array.isArray(serviceRaw) ? serviceRaw : [];
+      const gitRaw = await getConfig(this.db, CONFIG_KEYS.GIT_ACCOUNTS);
+      this.gitAccounts = Array.isArray(gitRaw) ? gitRaw : [];
+
+      this.renderConnectionList();
+    } catch (err) {
+      console.warn("Could not load remote MCP connections:", err);
+    }
+  }
+
+  async saveConnectionForm() {
+    if (!this.db) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const slot = root.querySelector('[data-region="connection-form-slot"]');
+    if (!slot) {
+      return;
+    }
+
+    const label = (
+      slot.querySelector('[data-field="connection-label"]') as HTMLInputElement
+    )?.value.trim();
+    const serverUrl = (
+      slot.querySelector('[data-field="connection-url"]') as HTMLInputElement
+    )?.value.trim();
+    const transport = (
+      slot.querySelector(
+        '[data-field="connection-transport"]',
+      ) as HTMLSelectElement
+    )?.value as RemoteMcpTransport;
+    const enabled = (
+      slot.querySelector(
+        '[data-field="connection-enabled"]',
+      ) as HTMLInputElement
+    )?.checked;
+    const autoReconnectOAuth = (
+      slot.querySelector(
+        '[data-field="connection-auto-reconnect"]',
+      ) as HTMLInputElement
+    )?.checked;
+    const authSelection = (
+      slot.querySelector('[data-field="auth-selection"]') as HTMLSelectElement
+    )?.value as AuthSelection;
+
+    if (!label || !serverUrl) {
+      showError("Connection label and server URL are required.", 4000);
+
+      return;
+    }
+
+    const isNew = this.editingConnectionId === "new";
+    const existing = isNew
+      ? null
+      : this.connections.find((item) => item.id === this.editingConnectionId) ||
+        null;
+
+    try {
+      const connection = await upsertRemoteMcpConnection(this.db, {
+        id: isNew ? undefined : existing?.id,
+        label,
+        serviceType: "mcp_remote",
+        serverUrl,
+        transport,
+        enabled,
+        autoReconnectOAuth,
+      });
+
+      const credentialRef = await this.buildCredentialRef(
+        slot,
+        authSelection,
+        existing,
+      );
+
+      await bindRemoteMcpCredentialRef(this.db, connection.id, credentialRef);
+      await this.render();
+      this.hideConnectionForm();
+
+      showSuccess(
+        isNew ? "Remote MCP connection added" : "Remote MCP connection updated",
+        3000,
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to save remote MCP connection: ${message}`, 6000);
+    }
+  }
+
   async testConnection(connectionId: string) {
     if (!this.db) {
       return;
@@ -732,48 +774,6 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
 
     const result = await testRemoteMcpConnection(this.db, connectionId);
     this.renderDiagnostic(diagEl, result);
-  }
-
-  renderDiagnostic(container: HTMLElement, result: McpConnectionTestResult) {
-    const stepsHtml = result.steps
-      .map((step) => {
-        const icon =
-          step.status === "ok"
-            ? "\u2713"
-            : step.status === "error"
-              ? "\u2717"
-              : "\u2014";
-        const cls = `diagnostic-step diagnostic-${step.status}`;
-
-        return `
-          <div class="${cls}">
-            <span class="diagnostic-icon">${icon}</span>
-            <span class="diagnostic-label">${escapeHtml(step.step)}</span>
-            ${step.detail ? `<span class="diagnostic-detail">${escapeHtml(step.detail)}</span>` : ""}
-          </div>`;
-      })
-      .join("");
-
-    const toolsHtml =
-      result.success && result.toolNames.length > 0
-        ? `<details class="diagnostic-tools"><summary>${result.toolCount} tool${result.toolCount === 1 ? "" : "s"} available</summary><ul>${result.toolNames.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul></details>`
-        : "";
-
-    setSanitizedHtml(
-      container,
-      `
-      <div class="diagnostic-header diagnostic-${result.success ? "ok" : "error"}">
-        ${result.success ? "\u2713 Connection OK" : "\u2717 Connection Failed"}
-        <button class="diagnostic-close" data-action="close-diagnostic" title="Dismiss">\u00d7</button>
-      </div>
-      <div class="diagnostic-steps">${stepsHtml}</div>
-      ${toolsHtml}
-      `,
-    );
-
-    container
-      .querySelector('[data-action="close-diagnostic"]')
-      ?.addEventListener("click", () => container.remove());
   }
 }
 

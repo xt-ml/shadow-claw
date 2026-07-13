@@ -1,11 +1,7 @@
 import { getProvider } from "../../../config/config.js";
 import type { AppDialogOptions } from "../../../ui/types.js";
 
-export type ProviderHelpType =
-  | "api-key-missing"
-  | "api-key-invalid"
-  | "provider-unreachable"
-  | "rate-limited";
+import type { ProviderHelpType } from "../../types.js";
 
 const PROVIDER_HELP_LINKS: Record<string, { label: string; href: string }> = {
   openrouter: {

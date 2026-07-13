@@ -1,30 +1,33 @@
-import { getDb, ShadowClawDatabase } from "../../db/db.js";
-import { effect } from "../../core/effect.js";
 import { renderMarkdown } from "../../content/markdown.js";
+import { effect } from "../../core/effect.js";
+
+import { getDb, ShadowClawDatabase } from "../../db/db.js";
+import { Task } from "../../db/types.js";
+
 import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
+
 import { showError, showInfo, showSuccess } from "../../ui/toast.js";
-import { Task } from "../../db/types.js";
 import { escapeHtml } from "../../utils/utils.js";
 
-import ShadowClawElement from "../shadow-claw-element.js";
 import "../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
-
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
+import ShadowClawElement from "../shadow-claw-element.js";
+
 const elementName = "shadow-claw-tasks";
+
 export class ShadowClawTasks extends ShadowClawElement {
   static componentPath = `components/${elementName}`;
   static styles = `${ShadowClawTasks.componentPath}/${elementName}.css`;
   static template = `${ShadowClawTasks.componentPath}/${elementName}.html`;
 
-  tasks: any[] = [];
-  cleanup: () => void = () => {};
   editingTask: any | null = null;
   editingTools: any[] = [];
+  tasks: any[] = [];
 
   constructor() {
     super();
@@ -187,6 +190,8 @@ export class ShadowClawTasks extends ShadowClawElement {
     this.cleanup();
   }
 
+  cleanup: () => void = () => {};
+
   dispatchTerminalSlotReady() {
     this.dispatchEvent(
       new CustomEvent("shadow-claw-terminal-slot-ready", {
@@ -196,170 +201,14 @@ export class ShadowClawTasks extends ShadowClawElement {
     );
   }
 
-  async requestConfirmation(options: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-  }): Promise<boolean> {
-    const appShell = document.querySelector("shadow-claw") as any;
-    if (appShell && typeof appShell.requestDialog === "function") {
-      return await appShell.requestDialog({ mode: "confirm", ...options });
-    }
-
-    showInfo(options.message, 4000);
-
-    return false;
-  }
-
-  async updateTaskList(db: ShadowClawDatabase) {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const list = root.querySelector(".tasks__list");
-    if (!list) {
-      return;
-    }
-
-    const tasks = orchestratorStore.tasks;
-
-    if (tasks.length === 0) {
-      setSanitizedHtml(
-        list,
-        `<shadow-claw-empty-state
-          class="tasks__empty"
-          message="No scheduled tasks for this group."
-          hint="Ask the agent to create one using 'create_task'."
-        ></shadow-claw-empty-state>`,
-      );
-
-      return;
-    }
-
-    // Capture render content first to avoid partially cleared list while awaiting
-    const fragment = document.createDocumentFragment();
-
-    for (const task of tasks) {
-      const item = document.createElement("div");
-      item.className = "tasks__item";
-      item.setAttribute("role", "listitem");
-
-      const lastRunStr = task.lastRun
-        ? new Date(task.lastRun).toLocaleString()
-        : "Never";
-
-      const isTools = task.type === "tools";
-      const previewHtml = isTools
-        ? this.renderToolsPreview(task.tools || [], true)
-        : await this.renderPreview(task.prompt, true);
-
-      const scheduleDisplay = task.schedule
-        ? `⏰ ${escapeHtml(task.schedule)}`
-        : "⏸ Unscheduled";
-      const toggleHtml = task.schedule
-        ? `
-            <label class="tasks__toggle">
-              <input type="checkbox" ${task.enabled ? "checked" : ""} data-id="${escapeHtml(task.id)}" class="tasks__toggle-input" aria-label="${task.enabled ? "Disable" : "Enable"} task scheduled ${escapeHtml(task.schedule)}">
-              ${task.enabled ? "Enabled" : "Disabled"}
-            </label>`
-        : "";
-
-      setSanitizedHtml(
-        item,
-        `<div class="tasks__item-header">
-          <div class="tasks__item-info">
-            <div class="tasks__schedule-row">
-              <div class="tasks__schedule">${scheduleDisplay} <span class="tasks__type-badge">(${isTools ? "Tools" : "Prompt"})</span></div>
-            </div>
-            <div class="tasks__prompt-container">
-              ${previewHtml}
-            </div>
-            <div class="tasks__last-run">Last run: ${escapeHtml(lastRunStr)}</div>
-          </div>
-          <div class="tasks__actions">
-            ${toggleHtml}
-            <button type="button" class="tasks__copy-id-btn" data-id="${escapeHtml(task.id)}" aria-label="Copy task ID" title="Copy task ID">
-              <svg xmlns="http://www.w3.org/2000/svg" height="1em" width="1em" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true" style="vertical-align: middle; margin-right: 0.125rem; margin-top: -0.125rem;"><path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z"/></svg> Copy ID
-            </button>
-            <button type="button" class="tasks__run-btn" data-id="${escapeHtml(task.id)}" aria-label="Run task">Run</button>
-            <button type="button" class="tasks__edit-btn" data-id="${escapeHtml(task.id)}" aria-label="Edit task">✎ Edit</button>
-            <button type="button" class="tasks__delete-btn" data-id="${escapeHtml(task.id)}" aria-label="Delete task">Delete</button>
-          </div>
-        </div>`,
-      );
-
-      // Bind events
-      const toggle = item.querySelector(
-        ".tasks__toggle-input",
-      ) as HTMLInputElement | null;
-
-      toggle?.addEventListener("change", (e) => {
-        const target = e.target as HTMLInputElement;
-        orchestratorStore.toggleTask(db, task, target.checked);
-      });
-
-      const copyIdBtn = item.querySelector(".tasks__copy-id-btn");
-      copyIdBtn?.addEventListener("click", () => this.handleCopyId(task.id));
-
-      const runBtn = item.querySelector(".tasks__run-btn");
-      runBtn?.addEventListener("click", () => this.handleRun(task));
-
-      const editBtn = item.querySelector(".tasks__edit-btn");
-      editBtn?.addEventListener("click", () => this.handleEdit(task));
-
-      const deleteBtn = item.querySelector(".tasks__delete-btn");
-      deleteBtn?.addEventListener("click", () =>
-        this.handleDelete(db, task.id),
-      );
-
-      fragment.appendChild(item);
-    }
-
-    list.replaceChildren();
-    list.appendChild(fragment);
-  }
-
   /**
-   * Copy a task's ID to the clipboard
+   * Escape HTML special characters
    */
-  async handleCopyId(id: string) {
-    try {
-      await navigator.clipboard.writeText(id);
-      showSuccess("Task ID copied to clipboard!");
-    } catch (err) {
-      showError("Failed to copy task ID.");
-    }
-  }
+  escapeHtml(text: string) {
+    const div = document.createElement("div");
+    div.textContent = text;
 
-  /**
-   * Run a task
-   */
-  handleRun(task: Task) {
-    orchestratorStore.runTask(task, true);
-  }
-
-  /**
-   * Delete a task
-   */
-  async handleDelete(db: ShadowClawDatabase, id: string) {
-    const confirmed = await this.requestConfirmation({
-      title: "Delete Scheduled Task",
-      message: "Are you sure you want to delete this scheduled task?",
-      confirmLabel: "Delete",
-      cancelLabel: "Cancel",
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      await orchestratorStore.deleteTask(db, id);
-    } catch (err) {
-      console.error("Failed to delete task:", err);
-    }
+    return div.innerHTML;
   }
 
   /**
@@ -486,363 +335,11 @@ export class ShadowClawTasks extends ShadowClawElement {
     dialog?.showModal();
   }
 
-  async handleEditSubmit(db: ShadowClawDatabase, form: HTMLFormElement) {
-    const formData = new FormData(form);
-    const schedule = formData.get("schedule");
-    const prompt = formData.get("prompt");
-    const type = (formData.get("taskType") as "prompt" | "tools") || "prompt";
-
-    const scheduleStr = schedule ? String(schedule).trim() : "";
-
-    if (type === "prompt" && !prompt) {
-      showInfo("Please provide a task prompt.");
-
-      return;
-    }
-
-    try {
-      let taskToSave;
-
-      if (this.editingTask) {
-        // Update existing task
-        taskToSave = {
-          ...this.editingTask,
-          schedule: scheduleStr,
-          type,
-          prompt: String(prompt || ""),
-          tools: JSON.parse(JSON.stringify(this.editingTools)),
-        };
-      } else {
-        // Create new task
-        const currentGroupId = orchestratorStore.activeGroupId;
-        taskToSave = {
-          id: crypto.randomUUID
-            ? crypto.randomUUID()
-            : `task-${Date.now()}-${Math.random()}`,
-          groupId: currentGroupId,
-          schedule: scheduleStr,
-          type,
-          prompt: String(prompt || ""),
-          tools: JSON.parse(JSON.stringify(this.editingTools)),
-          enabled: true,
-          lastRun: null,
-          createdAt: Date.now(),
-        };
-      }
-
-      await orchestratorStore.upsertTask(db, taskToSave);
-
-      const root = this.shadowRoot;
-      const dialog = root?.querySelector("dialog");
-      dialog?.close();
-
-      this.editingTask = null;
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to save task: ${message}`);
-      console.error("Save error:", err);
-    }
-  }
-
-  async renderPreview(prompt: string, allowCollapse = false) {
-    if (!prompt.trim()) {
-      return '<span class="tasks__preview-empty">No content</span>';
-    }
-
-    const lines = prompt.split("\n");
-    const isLong = prompt.length > 120 || lines.length > 1;
-
-    const rendered = await renderMarkdown(prompt, { breaks: true });
-
-    if (allowCollapse && isLong) {
-      const summaryText = prompt.trim();
-
-      return `
-        <details class="tasks__content-details">
-          <summary class="tasks__content-summary">
-            <span class="tasks__summary-text">${escapeHtml(summaryText)}</span>
-            <span class="tasks__summary-label">(View more)</span>
-          </summary>
-          <div class="tasks__prompt">${rendered}</div>
-        </details>
-      `;
-    }
-
-    return `<div class="tasks__prompt">${rendered}</div>`;
-  }
-
-  async handlePreviewLinkClick(event: MouseEvent, db: ShadowClawDatabase) {
-    if (event.defaultPrevented || event.button !== 0) {
-      return;
-    }
-
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-      return;
-    }
-
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      return;
-    }
-
-    const link = target.closest("a");
-    if (!(link instanceof HTMLAnchorElement)) {
-      return;
-    }
-
-    const href = link.getAttribute("href") || "";
-    const resolved = this.resolveWorkspaceLinkPath(href);
-    if (!resolved) {
-      return;
-    }
-
-    event.preventDefault();
-
-    const attempts = [resolved];
-    const lastSegment = resolved.split("/").filter(Boolean).pop() || "";
-    const hasExtension = /\.[^./]+$/u.test(lastSegment);
-
-    if (!hasExtension) {
-      attempts.push(`${resolved}.md`, `${resolved}/index.md`);
-    }
-
-    for (const candidate of attempts) {
-      try {
-        await fileViewerStore.openFile(
-          db,
-          candidate,
-          orchestratorStore.activeGroupId,
-        );
-
-        return;
-      } catch {
-        // Try next candidate path.
-      }
-    }
-
-    showError(`Failed to open linked file: ${resolved}`, 5000);
-  }
-
-  resolveWorkspaceLinkPath(href: string): string | null {
-    const trimmed = href.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      return null;
-    }
-
-    let candidate = trimmed;
-    const hasScheme = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed);
-
-    if (hasScheme || trimmed.startsWith("//")) {
-      let parsed: URL;
-      try {
-        parsed = new URL(trimmed, window.location.href);
-      } catch {
-        return null;
-      }
-
-      const isHttp =
-        parsed.protocol === "http:" || parsed.protocol === "https:";
-      if (!isHttp || parsed.host !== window.location.host) {
-        return null;
-      }
-
-      candidate = `${parsed.pathname}${parsed.search}${parsed.hash}`;
-    }
-
-    let normalized = candidate.split(/[?#]/, 1)[0].replace(/\\/g, "/");
-    normalized = normalized.replace(/^\/+/, "");
-    normalized = normalized.replace(/^\.\//, "");
-
-    if (!normalized) {
-      return null;
-    }
-
-    const parts = normalized.split("/").filter(Boolean);
-    if (parts.some((part) => part === "..")) {
-      return null;
-    }
-
-    return parts.join("/");
-  }
-
   /**
-   * Escape HTML special characters
+   * Run a task
    */
-  escapeHtml(text: string) {
-    const div = document.createElement("div");
-    div.textContent = text;
-
-    return div.innerHTML;
-  }
-
-  /**
-   * Handle backup (download all tasks as JSON)
-   */
-  async handleBackup() {
-    try {
-      const btn = this.shadowRoot?.querySelector(".tasks__backup-btn");
-      btn?.toggleAttribute("disabled", true);
-
-      if (btn) {
-        btn.textContent = "⏳";
-      }
-
-      const tasks = orchestratorStore.getTasksForBackup();
-      const json = JSON.stringify(tasks, null, 2);
-      const blob = new Blob([json], { type: "application/json" });
-
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `shadowclaw-tasks-backup-${Date.now()}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to create backup: ${message}`);
-      console.error("Backup error:", err);
-    } finally {
-      const btn = this.shadowRoot?.querySelector(".tasks__backup-btn");
-      btn?.toggleAttribute("disabled", false);
-
-      if (btn) {
-        btn.textContent = "💾 Backup";
-      }
-    }
-  }
-
-  /**
-   * Handle restore (upload and import JSON)
-   */
-  async handleRestore(db: ShadowClawDatabase, input: HTMLInputElement) {
-    const files = input.files;
-    if (!files || files.length === 0) {
-      return;
-    }
-
-    const jsonFile = files[0];
-    if (!jsonFile.name.endsWith(".json")) {
-      showInfo("Please select a .json file");
-
-      return;
-    }
-
-    const confirmed = await this.requestConfirmation({
-      title: "Restore Tasks",
-      message: "Restore from backup will replace all current tasks. Continue?",
-      confirmLabel: "Restore",
-      cancelLabel: "Cancel",
-    });
-
-    if (!confirmed) {
-      input.value = "";
-
-      return;
-    }
-
-    try {
-      const btn = this.shadowRoot?.querySelector(".tasks__restore-btn");
-      btn?.toggleAttribute("disabled", true);
-
-      if (btn) {
-        btn.textContent = "⏳";
-      }
-
-      const text = await jsonFile.text();
-      const tasks = JSON.parse(text);
-
-      if (!Array.isArray(tasks)) {
-        throw new Error("Invalid backup file format");
-      }
-
-      await orchestratorStore.restoreTasksFromBackup(db, tasks);
-      input.value = "";
-      showSuccess("Tasks restored successfully!");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to restore from backup: ${message}`);
-      console.error("Restore error:", err);
-    } finally {
-      const btn = this.shadowRoot?.querySelector(".tasks__restore-btn");
-      btn?.toggleAttribute("disabled", false);
-
-      if (btn) {
-        btn.textContent = "♻️ Restore";
-      }
-    }
-  }
-
-  /**
-   * Handle clear all (delete all tasks)
-   */
-  async handleClearAll(db: ShadowClawDatabase) {
-    const confirmed = await this.requestConfirmation({
-      title: "Clear All Tasks",
-      message: "Delete ALL tasks? This cannot be undone!",
-      confirmLabel: "Delete All",
-      cancelLabel: "Cancel",
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      const btn = this.shadowRoot?.querySelector(".tasks__clear-btn");
-      btn?.toggleAttribute("disabled", true);
-
-      if (btn) {
-        btn.textContent = "⏳";
-      }
-
-      await orchestratorStore.clearAllTasks(db);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to clear tasks: ${message}`);
-      console.error("Clear error:", err);
-    } finally {
-      const btn = this.shadowRoot?.querySelector(".tasks__clear-btn");
-      btn?.toggleAttribute("disabled", false);
-
-      if (btn) {
-        btn.textContent = "🗑️ Clear All";
-      }
-    }
-  }
-
-  renderToolsPreview(tools: any[], allowCollapse = false) {
-    if (!tools || tools.length === 0) {
-      return '<span class="tasks__preview-empty">No tools configured</span>';
-    }
-
-    const html = tools
-      .map((t, i) => {
-        let params = "{}";
-        try {
-          params = JSON.stringify(t.input, null, 2);
-        } catch (e) {
-          params = "Invalid JSON";
-        }
-
-        return `<div><strong>${i + 1}. ${escapeHtml(t.name || "Unnamed Tool")}</strong><pre><code>${escapeHtml(params)}</code></pre></div>`;
-      })
-      .join("");
-
-    if (allowCollapse && tools.length > 2) {
-      return `
-        <details class="tasks__content-details">
-          <summary class="tasks__content-summary">
-            <span class="tasks__summary-text">${tools.length} Tools configured</span>
-            <span class="tasks__summary-label">(View more)</span>
-          </summary>
-          <div class="tasks__prompt">${html}</div>
-        </details>
-      `;
-    }
-
-    return `<div class="tasks__prompt">${html}</div>`;
+  handleRun(task: Task) {
+    orchestratorStore.runTask(task, true);
   }
 
   renderToolsEditor() {
@@ -965,6 +462,514 @@ export class ShadowClawTasks extends ShadowClawElement {
       item.appendChild(suppressLabel);
       list.appendChild(item);
     });
+  }
+
+  renderToolsPreview(tools: any[], allowCollapse = false) {
+    if (!tools || tools.length === 0) {
+      return '<span class="tasks__preview-empty">No tools configured</span>';
+    }
+
+    const html = tools
+      .map((t, i) => {
+        let params = "{}";
+        try {
+          params = JSON.stringify(t.input, null, 2);
+        } catch (e) {
+          params = "Invalid JSON";
+        }
+
+        return `<div><strong>${i + 1}. ${escapeHtml(t.name || "Unnamed Tool")}</strong><pre><code>${escapeHtml(params)}</code></pre></div>`;
+      })
+      .join("");
+
+    if (allowCollapse && tools.length > 2) {
+      return `
+        <details class="tasks__content-details">
+          <summary class="tasks__content-summary">
+            <span class="tasks__summary-text">${tools.length} Tools configured</span>
+            <span class="tasks__summary-label">(View more)</span>
+          </summary>
+          <div class="tasks__prompt">${html}</div>
+        </details>
+      `;
+    }
+
+    return `<div class="tasks__prompt">${html}</div>`;
+  }
+
+  resolveWorkspaceLinkPath(href: string): string | null {
+    const trimmed = href.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
+      return null;
+    }
+
+    let candidate = trimmed;
+    const hasScheme = /^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed);
+
+    if (hasScheme || trimmed.startsWith("//")) {
+      let parsed: URL;
+      try {
+        parsed = new URL(trimmed, window.location.href);
+      } catch {
+        return null;
+      }
+
+      const isHttp =
+        parsed.protocol === "http:" || parsed.protocol === "https:";
+      if (!isHttp || parsed.host !== window.location.host) {
+        return null;
+      }
+
+      candidate = `${parsed.pathname}${parsed.search}${parsed.hash}`;
+    }
+
+    let normalized = candidate.split(/[?#]/, 1)[0].replace(/\\/g, "/");
+    normalized = normalized.replace(/^\/+/, "");
+    normalized = normalized.replace(/^\.\//, "");
+
+    if (!normalized) {
+      return null;
+    }
+
+    const parts = normalized.split("/").filter(Boolean);
+    if (parts.some((part) => part === "..")) {
+      return null;
+    }
+
+    return parts.join("/");
+  }
+
+  /**
+   * Handle backup (download all tasks as JSON)
+   */
+  async handleBackup() {
+    try {
+      const btn = this.shadowRoot?.querySelector(".tasks__backup-btn");
+      btn?.toggleAttribute("disabled", true);
+
+      if (btn) {
+        btn.textContent = "⏳";
+      }
+
+      const tasks = orchestratorStore.getTasksForBackup();
+      const json = JSON.stringify(tasks, null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `shadowclaw-tasks-backup-${Date.now()}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to create backup: ${message}`);
+      console.error("Backup error:", err);
+    } finally {
+      const btn = this.shadowRoot?.querySelector(".tasks__backup-btn");
+      btn?.toggleAttribute("disabled", false);
+
+      if (btn) {
+        btn.textContent = "💾 Backup";
+      }
+    }
+  }
+
+  /**
+   * Handle clear all (delete all tasks)
+   */
+  async handleClearAll(db: ShadowClawDatabase) {
+    const confirmed = await this.requestConfirmation({
+      title: "Clear All Tasks",
+      message: "Delete ALL tasks? This cannot be undone!",
+      confirmLabel: "Delete All",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const btn = this.shadowRoot?.querySelector(".tasks__clear-btn");
+      btn?.toggleAttribute("disabled", true);
+
+      if (btn) {
+        btn.textContent = "⏳";
+      }
+
+      await orchestratorStore.clearAllTasks(db);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to clear tasks: ${message}`);
+      console.error("Clear error:", err);
+    } finally {
+      const btn = this.shadowRoot?.querySelector(".tasks__clear-btn");
+      btn?.toggleAttribute("disabled", false);
+
+      if (btn) {
+        btn.textContent = "🗑️ Clear All";
+      }
+    }
+  }
+
+  /**
+   * Copy a task's ID to the clipboard
+   */
+  async handleCopyId(id: string) {
+    try {
+      await navigator.clipboard.writeText(id);
+      showSuccess("Task ID copied to clipboard!");
+    } catch (err) {
+      showError("Failed to copy task ID.");
+    }
+  }
+
+  /**
+   * Delete a task
+   */
+  async handleDelete(db: ShadowClawDatabase, id: string) {
+    const confirmed = await this.requestConfirmation({
+      title: "Delete Scheduled Task",
+      message: "Are you sure you want to delete this scheduled task?",
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await orchestratorStore.deleteTask(db, id);
+    } catch (err) {
+      console.error("Failed to delete task:", err);
+    }
+  }
+
+  async handleEditSubmit(db: ShadowClawDatabase, form: HTMLFormElement) {
+    const formData = new FormData(form);
+    const schedule = formData.get("schedule");
+    const prompt = formData.get("prompt");
+    const type = (formData.get("taskType") as "prompt" | "tools") || "prompt";
+
+    const scheduleStr = schedule ? String(schedule).trim() : "";
+
+    if (type === "prompt" && !prompt) {
+      showInfo("Please provide a task prompt.");
+
+      return;
+    }
+
+    try {
+      let taskToSave;
+
+      if (this.editingTask) {
+        // Update existing task
+        taskToSave = {
+          ...this.editingTask,
+          schedule: scheduleStr,
+          type,
+          prompt: String(prompt || ""),
+          tools: JSON.parse(JSON.stringify(this.editingTools)),
+        };
+      } else {
+        // Create new task
+        const currentGroupId = orchestratorStore.activeGroupId;
+        taskToSave = {
+          id: crypto.randomUUID
+            ? crypto.randomUUID()
+            : `task-${Date.now()}-${Math.random()}`,
+          groupId: currentGroupId,
+          schedule: scheduleStr,
+          type,
+          prompt: String(prompt || ""),
+          tools: JSON.parse(JSON.stringify(this.editingTools)),
+          enabled: true,
+          lastRun: null,
+          createdAt: Date.now(),
+        };
+      }
+
+      await orchestratorStore.upsertTask(db, taskToSave);
+
+      const root = this.shadowRoot;
+      const dialog = root?.querySelector("dialog");
+      dialog?.close();
+
+      this.editingTask = null;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to save task: ${message}`);
+      console.error("Save error:", err);
+    }
+  }
+
+  async handlePreviewLinkClick(event: MouseEvent, db: ShadowClawDatabase) {
+    if (event.defaultPrevented || event.button !== 0) {
+      return;
+    }
+
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const link = target.closest("a");
+    if (!(link instanceof HTMLAnchorElement)) {
+      return;
+    }
+
+    const href = link.getAttribute("href") || "";
+    const resolved = this.resolveWorkspaceLinkPath(href);
+    if (!resolved) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const attempts = [resolved];
+    const lastSegment = resolved.split("/").filter(Boolean).pop() || "";
+    const hasExtension = /\.[^./]+$/u.test(lastSegment);
+
+    if (!hasExtension) {
+      attempts.push(`${resolved}.md`, `${resolved}/index.md`);
+    }
+
+    for (const candidate of attempts) {
+      try {
+        await fileViewerStore.openFile(
+          db,
+          candidate,
+          orchestratorStore.activeGroupId,
+        );
+
+        return;
+      } catch {
+        // Try next candidate path.
+      }
+    }
+
+    showError(`Failed to open linked file: ${resolved}`, 5000);
+  }
+
+  /**
+   * Handle restore (upload and import JSON)
+   */
+  async handleRestore(db: ShadowClawDatabase, input: HTMLInputElement) {
+    const files = input.files;
+    if (!files || files.length === 0) {
+      return;
+    }
+
+    const jsonFile = files[0];
+    if (!jsonFile.name.endsWith(".json")) {
+      showInfo("Please select a .json file");
+
+      return;
+    }
+
+    const confirmed = await this.requestConfirmation({
+      title: "Restore Tasks",
+      message: "Restore from backup will replace all current tasks. Continue?",
+      confirmLabel: "Restore",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      input.value = "";
+
+      return;
+    }
+
+    try {
+      const btn = this.shadowRoot?.querySelector(".tasks__restore-btn");
+      btn?.toggleAttribute("disabled", true);
+
+      if (btn) {
+        btn.textContent = "⏳";
+      }
+
+      const text = await jsonFile.text();
+      const tasks = JSON.parse(text);
+
+      if (!Array.isArray(tasks)) {
+        throw new Error("Invalid backup file format");
+      }
+
+      await orchestratorStore.restoreTasksFromBackup(db, tasks);
+      input.value = "";
+      showSuccess("Tasks restored successfully!");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to restore from backup: ${message}`);
+      console.error("Restore error:", err);
+    } finally {
+      const btn = this.shadowRoot?.querySelector(".tasks__restore-btn");
+      btn?.toggleAttribute("disabled", false);
+
+      if (btn) {
+        btn.textContent = "♻️ Restore";
+      }
+    }
+  }
+
+  async renderPreview(prompt: string, allowCollapse = false) {
+    if (!prompt.trim()) {
+      return '<span class="tasks__preview-empty">No content</span>';
+    }
+
+    const lines = prompt.split("\n");
+    const isLong = prompt.length > 120 || lines.length > 1;
+
+    const rendered = await renderMarkdown(prompt, { breaks: true });
+
+    if (allowCollapse && isLong) {
+      const summaryText = prompt.trim();
+
+      return `
+        <details class="tasks__content-details">
+          <summary class="tasks__content-summary">
+            <span class="tasks__summary-text">${escapeHtml(summaryText)}</span>
+            <span class="tasks__summary-label">(View more)</span>
+          </summary>
+          <div class="tasks__prompt">${rendered}</div>
+        </details>
+      `;
+    }
+
+    return `<div class="tasks__prompt">${rendered}</div>`;
+  }
+
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
+    }
+
+    showInfo(options.message, 4000);
+
+    return false;
+  }
+
+  async updateTaskList(db: ShadowClawDatabase) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const list = root.querySelector(".tasks__list");
+    if (!list) {
+      return;
+    }
+
+    const tasks = orchestratorStore.tasks;
+
+    if (tasks.length === 0) {
+      setSanitizedHtml(
+        list,
+        `<shadow-claw-empty-state
+          class="tasks__empty"
+          message="No scheduled tasks for this group."
+          hint="Ask the agent to create one using 'create_task'."
+        ></shadow-claw-empty-state>`,
+      );
+
+      return;
+    }
+
+    // Capture render content first to avoid partially cleared list while awaiting
+    const fragment = document.createDocumentFragment();
+
+    for (const task of tasks) {
+      const item = document.createElement("div");
+      item.className = "tasks__item";
+      item.setAttribute("role", "listitem");
+
+      const lastRunStr = task.lastRun
+        ? new Date(task.lastRun).toLocaleString()
+        : "Never";
+
+      const isTools = task.type === "tools";
+      const previewHtml = isTools
+        ? this.renderToolsPreview(task.tools || [], true)
+        : await this.renderPreview(task.prompt, true);
+
+      const scheduleDisplay = task.schedule
+        ? `⏰ ${escapeHtml(task.schedule)}`
+        : "⏸ Unscheduled";
+      const toggleHtml = task.schedule
+        ? `
+            <label class="tasks__toggle">
+              <input type="checkbox" ${task.enabled ? "checked" : ""} data-id="${escapeHtml(task.id)}" class="tasks__toggle-input" aria-label="${task.enabled ? "Disable" : "Enable"} task scheduled ${escapeHtml(task.schedule)}">
+              ${task.enabled ? "Enabled" : "Disabled"}
+            </label>`
+        : "";
+
+      setSanitizedHtml(
+        item,
+        `<div class="tasks__item-header">
+          <div class="tasks__item-info">
+            <div class="tasks__schedule-row">
+              <div class="tasks__schedule">${scheduleDisplay} <span class="tasks__type-badge">(${isTools ? "Tools" : "Prompt"})</span></div>
+            </div>
+            <div class="tasks__prompt-container">
+              ${previewHtml}
+            </div>
+            <div class="tasks__last-run">Last run: ${escapeHtml(lastRunStr)}</div>
+          </div>
+          <div class="tasks__actions">
+            ${toggleHtml}
+            <button type="button" class="tasks__copy-id-btn" data-id="${escapeHtml(task.id)}" aria-label="Copy task ID" title="Copy task ID">
+              <svg xmlns="http://www.w3.org/2000/svg" height="1em" width="1em" viewBox="0 -960 960 960" fill="currentColor" aria-hidden="true" style="vertical-align: middle; margin-right: 0.125rem; margin-top: -0.125rem;"><path d="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z"/></svg> Copy ID
+            </button>
+            <button type="button" class="tasks__run-btn" data-id="${escapeHtml(task.id)}" aria-label="Run task">Run</button>
+            <button type="button" class="tasks__edit-btn" data-id="${escapeHtml(task.id)}" aria-label="Edit task">✎ Edit</button>
+            <button type="button" class="tasks__delete-btn" data-id="${escapeHtml(task.id)}" aria-label="Delete task">Delete</button>
+          </div>
+        </div>`,
+      );
+
+      // Bind events
+      const toggle = item.querySelector(
+        ".tasks__toggle-input",
+      ) as HTMLInputElement | null;
+
+      toggle?.addEventListener("change", (e) => {
+        const target = e.target as HTMLInputElement;
+        orchestratorStore.toggleTask(db, task, target.checked);
+      });
+
+      const copyIdBtn = item.querySelector(".tasks__copy-id-btn");
+      copyIdBtn?.addEventListener("click", () => this.handleCopyId(task.id));
+
+      const runBtn = item.querySelector(".tasks__run-btn");
+      runBtn?.addEventListener("click", () => this.handleRun(task));
+
+      const editBtn = item.querySelector(".tasks__edit-btn");
+      editBtn?.addEventListener("click", () => this.handleEdit(task));
+
+      const deleteBtn = item.querySelector(".tasks__delete-btn");
+      deleteBtn?.addEventListener("click", () =>
+        this.handleDelete(db, task.id),
+      );
+
+      fragment.appendChild(item);
+    }
+
+    list.replaceChildren();
+    list.appendChild(fragment);
   }
 }
 

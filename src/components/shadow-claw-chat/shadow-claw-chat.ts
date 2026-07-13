@@ -1,33 +1,47 @@
 import JSZip from "jszip";
 
 import { CONFIG_KEYS } from "../../config/config.js";
+
 import {
   formatModelAttachmentCapabilitySummary,
   getAttachmentCategory,
   getModelAttachmentCapabilities,
 } from "../../content/attachment-capabilities.js";
-import { effect } from "../../core/effect.js";
 
-import { getDb } from "../../db/db.js";
-import { exportChatData } from "../../db/exportChatData.js";
-import { importChatData } from "../../db/importChatData.js";
-import { getConfig } from "../../db/getConfig.js";
-import { setConfig } from "../../db/setConfig.js";
-import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
-import { downloadGroupFile } from "../../storage/downloadGroupFile.js";
-import { transferProgressSignal } from "../../subsystems/channels/peerjs.js";
-
-import { chatUiStore } from "../../stores/chat-ui.js";
-import { fileViewerStore } from "../../stores/file-viewer.js";
-import { orchestratorStore } from "../../stores/orchestrator.js";
-import type { OrchestratorState } from "../../stores/orchestrator.js";
+import { renderMarkdown } from "../../content/markdown.js";
 
 import {
   inferAttachmentMimeType,
   shouldInlineAttachmentInChat,
 } from "../../content/message-attachments.js";
-import { renderMarkdown } from "../../content/markdown.js";
+
+import {
+  MessageAttachment,
+  MessageAttachmentSource,
+} from "../../content/types.js";
+
+import { effect } from "../../core/effect.js";
+
+import { getDb } from "../../db/db.js";
+import { exportChatData } from "../../db/exportChatData.js";
+import { getConfig } from "../../db/getConfig.js";
+import { importChatData } from "../../db/importChatData.js";
+import { setConfig } from "../../db/setConfig.js";
+import { StoredMessage } from "../../db/types.js";
+
 import { setSanitizedHtml } from "../../security/trusted-types.js";
+import { downloadGroupFile } from "../../storage/downloadGroupFile.js";
+import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
+
+import { chatUiStore } from "../../stores/chat-ui.js";
+import { fileViewerStore } from "../../stores/file-viewer.js";
+import { orchestratorStore } from "../../stores/orchestrator.js";
+import { transferProgressSignal } from "../../subsystems/channels/peerjs.js";
+
+import {
+  ThinkingLogEntry,
+  ToolActivity,
+} from "../../subsystems/worker/types.js";
 
 import {
   showError,
@@ -35,43 +49,30 @@ import {
   showSuccess,
   showWarning,
 } from "../../ui/toast.js";
-import {
-  MessageAttachment,
-  MessageAttachmentSource,
-} from "../../content/types.js";
-import { StoredMessage } from "../../db/types.js";
-import {
-  ThinkingLogEntry,
-  ToolActivity,
-} from "../../subsystems/worker/types.js";
-import type { AppDialogOptions } from "../../ui/types.js";
-import type { ShadowClawDatabase } from "../../db/types.js";
+
 import {
   formatDateForFilename,
   formatTimestamp,
   handleSpecialLinkNavigation,
 } from "../../utils/utils.js";
 
+import type { ShadowClawDatabase } from "../../db/types.js";
+import type { AppDialogOptions } from "../../ui/types.js";
+
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
-import "../shadow-claw-page-header/shadow-claw-page-header.js";
-import "../shadow-claw-a2ui/shadow-claw-a2ui.js";
 import "../shadow-claw-a2ui-interceptor/shadow-claw-a2ui-interceptor.js";
+import "../shadow-claw-a2ui/shadow-claw-a2ui.js";
+import "../shadow-claw-page-header/shadow-claw-page-header.js";
+
 import ShadowClawElement from "../shadow-claw-element.js";
+import { getPeerChatDisplayStatus } from "./utils/getPeerChatDisplayStatus.js";
+import { escapeHtml } from "./utils/escapeHtml.js";
 
 const AUTO_SCROLL_THRESHOLD = 80;
 const INLINE_ATTACHMENT_MAX_BYTES = 128 * 1024;
 const INLINE_ATTACHMENT_TOTAL_CHAR_BUDGET = 80_000;
 const DEFAULT_CHAT_INPUT_HEIGHT_PX = 40;
 const MIN_CHAT_INPUT_HEIGHT_PX = 40;
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 type QueuedAttachment = {
   id: string;
@@ -86,15 +87,6 @@ type MessageDraftPayload = {
   attachments: MessageAttachment[];
 };
 
-export function getPeerChatDisplayStatus(
-  remoteStatus: OrchestratorState,
-  isRemoteTyping: boolean,
-): OrchestratorState {
-  return remoteStatus === "idle" && isRemoteTyping
-    ? "responding"
-    : remoteStatus;
-}
-
 const elementName = "shadow-claw-chat";
 
 export class ShadowClawChat extends ShadowClawElement {
@@ -102,17 +94,17 @@ export class ShadowClawChat extends ShadowClawElement {
   static styles = `${ShadowClawChat.componentPath}/${elementName}.css`;
   static template = `${ShadowClawChat.componentPath}/${elementName}.html`;
 
+  activityLogCollapsedOverride: boolean | null = null;
+  activityLogVisibilityMediaQuery: MediaQueryList | null = null;
+
   #db: ShadowClawDatabase | null;
+  #dragDepth: number;
+  #queuedAttachments: QueuedAttachment[];
   #renderVersion: number;
+  #responseAutoFollow: boolean;
   #streamRenderVersion: number;
   #suppressScrollTracking: boolean;
   #userScrollEpoch: number;
-  #responseAutoFollow: boolean;
-  #dragDepth: number;
-  #queuedAttachments: QueuedAttachment[];
-  activityLogCollapsedOverride: boolean | null = null;
-  activityLogVisibilityMediaQuery: MediaQueryList | null = null;
-  activityLogVisibilityCleanup: () => void = () => {};
 
   constructor() {
     super();
@@ -126,10 +118,6 @@ export class ShadowClawChat extends ShadowClawElement {
     this.#responseAutoFollow = true;
     this.#dragDepth = 0;
     this.#queuedAttachments = [];
-  }
-
-  get db() {
-    return this.#db;
   }
 
   async connectedCallback() {
@@ -157,39 +145,7 @@ export class ShadowClawChat extends ShadowClawElement {
     super.disconnectedCallback();
   }
 
-  revokeAttachmentObjectUrls() {
-    chatUiStore.revokeAttachmentObjectUrls();
-  }
-
-  setActivityLogCollapsedOverride(collapsed: boolean | null) {
-    this.activityLogCollapsedOverride = collapsed;
-    this.applyActivityLogVisibility();
-  }
-
-  setupActivityLogVisibility() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    if (typeof globalThis.matchMedia === "function") {
-      this.activityLogVisibilityMediaQuery = globalThis.matchMedia(
-        "(min-width: 56rem) and (min-height: 401px)",
-      );
-
-      const onChange = () => this.applyActivityLogVisibility();
-      this.activityLogVisibilityMediaQuery.addEventListener("change", onChange);
-
-      this.activityLogVisibilityCleanup = () => {
-        this.activityLogVisibilityMediaQuery?.removeEventListener(
-          "change",
-          onChange,
-        );
-      };
-    }
-
-    this.applyActivityLogVisibility();
-  }
+  activityLogVisibilityCleanup: () => void = () => {};
 
   applyActivityLogVisibility() {
     const root = this.shadowRoot;
@@ -215,189 +171,6 @@ export class ShadowClawChat extends ShadowClawElement {
       logEl.classList.add("chat__activity-log--collapsed");
     } else {
       logEl.classList.remove("chat__activity-log--collapsed");
-    }
-  }
-
-  dispatchTerminalSlotReady() {
-    this.dispatchEvent(
-      new CustomEvent("shadow-claw-terminal-slot-ready", {
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
-  isLatestRender(version: number): boolean {
-    return version === this.#renderVersion;
-  }
-
-  isContainerNearBottom(container: HTMLElement): boolean {
-    const { scrollTop, scrollHeight, clientHeight } = container;
-
-    return scrollHeight - scrollTop - clientHeight < AUTO_SCROLL_THRESHOLD;
-  }
-
-  getContainerDistanceFromBottom(container: HTMLElement): number {
-    return Math.max(
-      0,
-      container.scrollHeight - container.scrollTop - container.clientHeight,
-    );
-  }
-
-  persistGroupScrollState(container: HTMLElement): void {
-    const groupId = orchestratorStore.activeGroupId;
-    const nearBottom = this.isContainerNearBottom(container);
-    const distanceFromBottom = nearBottom
-      ? 0
-      : this.getContainerDistanceFromBottom(container);
-
-    chatUiStore.setGroupScrollState(groupId, distanceFromBottom, nearBottom);
-  }
-
-  scrollMessagesToBottomIfNeeded() {
-    const messagesEl = this.shadowRoot?.querySelector(".chat__messages");
-    if (!(messagesEl instanceof HTMLElement)) {
-      return;
-    }
-
-    if (!chatUiStore.isNearBottom) {
-      return;
-    }
-
-    this.setMessagesScrollTop(messagesEl, messagesEl.scrollHeight);
-    chatUiStore.setNearBottom(this.isContainerNearBottom(messagesEl));
-    this.persistGroupScrollState(messagesEl);
-  }
-
-  setMessagesScrollTop(container: HTMLElement, value: number) {
-    this.#suppressScrollTracking = true;
-    container.scrollTop = value;
-    requestAnimationFrame(() => {
-      this.#suppressScrollTracking = false;
-    });
-  }
-
-  shouldAutoFollow(container: HTMLElement): boolean {
-    const state = orchestratorStore.state;
-    const isResponseActive = state === "thinking" || state === "responding";
-    const nearBottom = this.isContainerNearBottom(container);
-
-    if (!isResponseActive) {
-      this.#responseAutoFollow = true;
-
-      return chatUiStore.nearBottomSnapshot || nearBottom;
-    }
-
-    if (nearBottom) {
-      this.#responseAutoFollow = true;
-    }
-
-    return this.#responseAutoFollow;
-  }
-
-  scheduleBottomSnap(version: number) {
-    const snap = () => {
-      if (!this.isLatestRender(version)) {
-        return;
-      }
-
-      this.scrollMessagesToBottomIfNeeded();
-    };
-
-    requestAnimationFrame(() => {
-      snap();
-      requestAnimationFrame(snap);
-    });
-
-    setTimeout(snap, 120);
-  }
-
-  getMessagesContainer(): HTMLElement | null {
-    const container = this.shadowRoot?.querySelector(".chat__messages");
-
-    return container instanceof HTMLElement ? container : null;
-  }
-
-  removeStreamingBubble(container: HTMLElement) {
-    container.querySelector(".chat__message--streaming")?.remove();
-  }
-
-  async renderStreamingBubble(streamingText: string | null) {
-    const version = ++this.#streamRenderVersion;
-    const container = this.getMessagesContainer();
-    if (!container) {
-      return;
-    }
-
-    const shouldKeepBottom = this.shouldAutoFollow(container);
-
-    if (!(typeof streamingText === "string" && streamingText.length > 0)) {
-      this.removeStreamingBubble(container);
-
-      return;
-    }
-
-    let streamDiv = container.querySelector(
-      ".chat__message--streaming",
-    ) as HTMLElement | null;
-    let contentEl: HTMLElement | null = null;
-
-    if (!streamDiv) {
-      const assistantName = localStorage.getItem("assistantName") || "example";
-
-      streamDiv = document.createElement("article");
-      streamDiv.className =
-        "chat__message chat__message--assistant chat__message--streaming";
-
-      const headerEl = document.createElement("div");
-      headerEl.className = "chat__message-header";
-
-      const senderEl = document.createElement("div");
-      senderEl.className = "chat__message-sender";
-      senderEl.textContent = assistantName;
-
-      const timestampEl = document.createElement("div");
-      timestampEl.className = "chat__message-timestamp";
-      timestampEl.textContent = "streaming…";
-
-      headerEl.append(senderEl, timestampEl);
-
-      contentEl = document.createElement("div");
-      contentEl.className = "chat__message-content";
-
-      streamDiv.append(headerEl, contentEl);
-      container.appendChild(streamDiv);
-    } else {
-      contentEl = streamDiv.querySelector(".chat__message-content");
-      if (!(contentEl instanceof HTMLElement)) {
-        return;
-      }
-    }
-
-    const renderedContent = escapeHtml(streamingText)
-      .replace(/\n/g, "<br>")
-      .replace(/`([^`]+?)`/g, "<code>$1</code>")
-      .replace(/\*\*([^*]+?)\*\*/g, "<b>$1</b>");
-    if (version !== this.#streamRenderVersion) {
-      return;
-    }
-
-    // Intentional HTML insertion: escaped text for streaming performance and safety.
-    setSanitizedHtml(contentEl, renderedContent);
-
-    const cursorEl = document.createElement("span");
-    cursorEl.setAttribute("aria-hidden", "true");
-    cursorEl.className = "chat__streaming-cursor";
-    contentEl.append(cursorEl);
-
-    streamDiv.querySelector(".chat__msg-copy-btn")?.remove();
-    this.injectMessageCopyButton(streamDiv, streamingText);
-    this.injectCopyButtons(contentEl);
-
-    if (shouldKeepBottom) {
-      this.setMessagesScrollTop(container, container.scrollHeight);
-      chatUiStore.setNearBottom(this.isContainerNearBottom(container));
-      this.persistGroupScrollState(container);
     }
   }
 
@@ -609,72 +382,6 @@ export class ShadowClawChat extends ShadowClawElement {
     }
   }
 
-  clampInputAreaHeight(px: number): number {
-    const viewportMax = Math.floor(window.innerHeight * 0.45);
-
-    return Math.max(
-      MIN_CHAT_INPUT_HEIGHT_PX,
-      Math.min(Math.max(MIN_CHAT_INPUT_HEIGHT_PX, viewportMax), px),
-    );
-  }
-
-  isCollapsedInputAreaHeight(px: number): boolean {
-    return px <= DEFAULT_CHAT_INPUT_HEIGHT_PX + 1;
-  }
-
-  setInputAreaHeight(inputArea: HTMLElement, px: number): void {
-    const clamped = this.clampInputAreaHeight(px);
-
-    if (this.isCollapsedInputAreaHeight(clamped)) {
-      this.resetInputAreaHeight(inputArea);
-
-      return;
-    }
-
-    inputArea.classList.add("chat__input-area--resized");
-    inputArea.style.setProperty("--chat-input-area-height", `${clamped}px`);
-  }
-
-  resetInputAreaHeight(inputArea: HTMLElement): void {
-    inputArea.classList.remove("chat__input-area--resized");
-    inputArea.style.removeProperty("--chat-input-area-height");
-  }
-
-  async persistInputAreaHeight(px: number): Promise<void> {
-    if (!this.#db) {
-      return;
-    }
-
-    try {
-      await setConfig(this.#db, CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT, px);
-    } catch {
-      // Ignore persistence failures so input remains usable when storage is unavailable.
-    }
-  }
-
-  async restoreInputAreaHeight(): Promise<void> {
-    const inputArea = this.shadowRoot?.querySelector(".chat__input-area");
-    if (!(inputArea instanceof HTMLElement)) {
-      return;
-    }
-
-    try {
-      const saved = this.#db
-        ? await getConfig(this.#db, CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT)
-        : undefined;
-
-      if (typeof saved === "number" && Number.isFinite(saved) && saved > 0) {
-        if (this.isCollapsedInputAreaHeight(saved)) {
-          this.resetInputAreaHeight(inputArea);
-        } else {
-          this.setInputAreaHeight(inputArea, saved);
-        }
-      }
-    } catch {
-      // Keep default input height when config retrieval fails.
-    }
-  }
-
   bindInputResizeEvents(inputArea: HTMLElement, handle: HTMLElement): void {
     handle.setAttribute("tabindex", "0");
     handle.setAttribute("role", "separator");
@@ -825,88 +532,6 @@ export class ShadowClawChat extends ShadowClawElement {
     });
   }
 
-  hasDroppableData(dataTransfer: DataTransfer | null): boolean {
-    if (!dataTransfer) {
-      return false;
-    }
-
-    if (dataTransfer.files.length > 0) {
-      return true;
-    }
-
-    const types = Array.from(dataTransfer.types || []);
-
-    return (
-      types.includes("Files") ||
-      types.includes("application/x-moz-file") ||
-      types.includes("text/plain")
-    );
-  }
-
-  setDropOverlayVisible(visible: boolean) {
-    const overlay = this.shadowRoot?.querySelector("[data-drop-overlay]");
-    if (!(overlay instanceof HTMLElement)) {
-      return;
-    }
-
-    overlay.hidden = !visible;
-  }
-
-  async queueDroppedData(dataTransfer: DataTransfer | null) {
-    if (!dataTransfer) {
-      return;
-    }
-
-    const next = this.buildQueuedAttachmentsFromFiles(
-      Array.from(dataTransfer.files || []),
-    );
-
-    const droppedText = await this.readDroppedPlainText(dataTransfer);
-    if (droppedText) {
-      const normalized = droppedText.trim();
-      if (normalized) {
-        const textBlob = new Blob([normalized], { type: "text/plain" });
-        next.push({
-          id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
-          fileName: `dropped-text-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.txt`,
-          mimeType: "text/plain",
-          size: textBlob.size,
-          source: {
-            kind: "local-file",
-            file: textBlob,
-          },
-        });
-      }
-    }
-
-    if (next.length === 0) {
-      return;
-    }
-
-    this.#queuedAttachments = [...this.#queuedAttachments, ...next];
-    this.renderQueuedAttachments();
-    showInfo(
-      `Queued ${next.length} attachment${next.length === 1 ? "" : "s"}.`,
-      2200,
-    );
-  }
-
-  async readDroppedPlainText(dataTransfer: DataTransfer): Promise<string> {
-    const item = Array.from(dataTransfer.items || []).find(
-      (entry) => entry.kind === "string" && entry.type === "text/plain",
-    );
-
-    if (!item) {
-      return "";
-    }
-
-    return await new Promise<string>((resolve) => {
-      item.getAsString((value) => {
-        resolve(value || "");
-      });
-    });
-  }
-
   buildQueuedAttachmentsFromFiles(files: File[]): QueuedAttachment[] {
     return files.map((file) => {
       const fileName = file.name || "attachment.bin";
@@ -924,96 +549,110 @@ export class ShadowClawChat extends ShadowClawElement {
     });
   }
 
-  async queueSelectedFiles(input: HTMLInputElement) {
-    const files = Array.from(input.files || []);
-    if (files.length === 0) {
-      input.value = "";
+  clampInputAreaHeight(px: number): number {
+    const viewportMax = Math.floor(window.innerHeight * 0.45);
 
-      return;
-    }
-
-    const next = this.buildQueuedAttachmentsFromFiles(files);
-    this.#queuedAttachments = [...this.#queuedAttachments, ...next];
-    this.renderQueuedAttachments();
-
-    showInfo(
-      `Queued ${next.length} attachment${next.length === 1 ? "" : "s"}.`,
-      2200,
+    return Math.max(
+      MIN_CHAT_INPUT_HEIGHT_PX,
+      Math.min(Math.max(MIN_CHAT_INPUT_HEIGHT_PX, viewportMax), px),
     );
-
-    input.value = "";
   }
 
-  renderQueuedAttachments() {
-    const container = this.shadowRoot?.querySelector(
-      ".chat__pending-attachments",
+  get db() {
+    return this.#db;
+  }
+
+  deferWorkspaceImageLoads(html: string): string {
+    const container = document.createElement("div");
+    container.innerHTML = html;
+
+    const images = Array.from(container.querySelectorAll("img[src]"));
+    for (const img of images) {
+      const src = img.getAttribute("src");
+      if (!src) {
+        continue;
+      }
+
+      const workspacePath = this.resolveWorkspaceLinkPath(src);
+      if (!workspacePath) {
+        continue;
+      }
+
+      img.setAttribute("data-inline-workspace-src", workspacePath);
+      img.removeAttribute("src");
+    }
+
+    return container.innerHTML;
+  }
+
+  dispatchTerminalSlotReady() {
+    this.dispatchEvent(
+      new CustomEvent("shadow-claw-terminal-slot-ready", {
+        bubbles: true,
+        composed: true,
+      }),
     );
-    if (!(container instanceof HTMLElement)) {
-      return;
+  }
+
+  formatAttachmentSize(size: number): string {
+    if (size < 1024) {
+      return `${size} B`;
     }
 
-    if (this.#queuedAttachments.length === 0) {
-      container.hidden = true;
-      container.replaceChildren();
-
-      return;
+    if (size < 1024 * 1024) {
+      return `${(size / 1024).toFixed(1)} KB`;
     }
 
-    const modelId = (orchestratorStore.orchestrator?.model || "").toLowerCase();
-    const capabilities = getModelAttachmentCapabilities(modelId);
+    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+  }
 
-    container.hidden = false;
-    const fragment = document.createDocumentFragment();
-    for (const attachment of this.#queuedAttachments) {
-      const chip = document.createElement("div");
-      chip.className = "chat__pending-attachment";
-
-      const icon = document.createElement("span");
-      icon.className = "chat__attachment-icon";
-      icon.setAttribute("aria-hidden", "true");
-      icon.textContent = this.getAttachmentIcon(attachment.mimeType);
-
-      const meta = document.createElement("div");
-      meta.className = "chat__pending-attachment-meta";
-
-      const name = document.createElement("span");
-      name.className = "chat__pending-attachment-name";
-      name.textContent = attachment.fileName;
-
-      const detail = document.createElement("span");
-      detail.className = "chat__pending-attachment-detail";
-      detail.textContent = `${attachment.mimeType} · ${this.formatAttachmentSize(attachment.size)}`;
-
-      meta.append(name, detail);
-
-      // Transport badge: indicates how this file will reach the model.
-      const transportLabel = this.getAttachmentTransportLabel(
-        attachment.mimeType,
-        attachment.fileName,
-        capabilities,
-      );
-      const badge = document.createElement("span");
-      badge.className = `chat__transport-badge chat__transport-badge--${transportLabel}`;
-      badge.setAttribute("aria-label", `Transport: ${transportLabel}`);
-      badge.textContent = transportLabel;
-
-      const remove = document.createElement("button");
-      remove.type = "button";
-      remove.className = "chat__pending-attachment-remove";
-      remove.setAttribute("aria-label", `Remove ${attachment.fileName}`);
-      remove.textContent = "x";
-      remove.addEventListener("click", () => {
-        this.#queuedAttachments = this.#queuedAttachments.filter(
-          (candidate) => candidate.id !== attachment.id,
-        );
-        this.renderQueuedAttachments();
-      });
-
-      chip.append(icon, meta, badge, remove);
-      fragment.appendChild(chip);
+  formatAttachmentSubtitle(attachment: MessageAttachment): string {
+    const parts: string[] = [];
+    if (attachment.mimeType) {
+      parts.push(attachment.mimeType);
     }
 
-    container.replaceChildren(fragment);
+    if (typeof attachment.size === "number") {
+      parts.push(this.formatAttachmentSize(attachment.size));
+    }
+
+    return parts.join(" · ") || "Attachment";
+  }
+
+  /**
+   * Format a token count for human-readable display (e.g. 1234 → "1,234").
+   */
+  formatTokenCount(n: number): string {
+    return typeof n === "number" ? n.toLocaleString("en-US") : "–";
+  }
+
+  getAttachmentIcon(mimeType = ""): string {
+    const normalized = mimeType.toLowerCase();
+    if (normalized.startsWith("image/")) {
+      return "IMG";
+    }
+
+    if (normalized.startsWith("video/")) {
+      return "VID";
+    }
+
+    if (normalized.startsWith("audio/")) {
+      return "AUD";
+    }
+
+    if (normalized.includes("pdf")) {
+      return "PDF";
+    }
+
+    if (normalized.startsWith("text/") || normalized.includes("json")) {
+      return "TXT";
+    }
+
+    if (normalized.includes("zip") || normalized.includes("tar")) {
+      return "ZIP";
+    }
+
+    return "BIN";
   }
 
   /**
@@ -1057,16 +696,34 @@ export class ShadowClawChat extends ShadowClawElement {
     return "fallback";
   }
 
-  isInlineTextMimeType(mimeType: string): boolean {
-    const normalized = mimeType.toLowerCase();
-    if (normalized.startsWith("text/")) {
+  getContainerDistanceFromBottom(container: HTMLElement): number {
+    return Math.max(
+      0,
+      container.scrollHeight - container.scrollTop - container.clientHeight,
+    );
+  }
+
+  getMessagesContainer(): HTMLElement | null {
+    const container = this.shadowRoot?.querySelector(".chat__messages");
+
+    return container instanceof HTMLElement ? container : null;
+  }
+
+  hasDroppableData(dataTransfer: DataTransfer | null): boolean {
+    if (!dataTransfer) {
+      return false;
+    }
+
+    if (dataTransfer.files.length > 0) {
       return true;
     }
 
+    const types = Array.from(dataTransfer.types || []);
+
     return (
-      normalized === "application/json" ||
-      normalized === "application/xml" ||
-      normalized === "application/javascript"
+      types.includes("Files") ||
+      types.includes("application/x-moz-file") ||
+      types.includes("text/plain")
     );
   }
 
@@ -1097,226 +754,50 @@ export class ShadowClawChat extends ShadowClawElement {
     });
   }
 
-  renderAttachmentCapabilitySummary() {
-    const summaryEl = this.shadowRoot?.querySelector(
-      ".chat__attachment-capabilities",
-    );
-    if (!(summaryEl instanceof HTMLElement)) {
-      return;
-    }
+  /**
+   * Inject a "Copy" button into every <pre> block inside the given container.
+   * Each button copies the text content of the sibling <code> element.
+   */
+  injectCopyButtons(container: HTMLElement) {
+    const preBlocks = container.querySelectorAll("pre");
 
-    const modelId = orchestratorStore.orchestrator?.model || "";
-    if (!modelId) {
-      summaryEl.textContent = "";
+    preBlocks.forEach((pre) => {
+      // Avoid duplicates if the effect re-runs on the same DOM
+      if (pre.querySelector(".chat__code-copy-btn")) {
+        return;
+      }
 
-      return;
-    }
+      const btn = document.createElement("button");
+      btn.className = "chat__code-copy-btn";
+      btn.type = "button";
+      btn.setAttribute("aria-label", "Copy code to clipboard");
+      btn.textContent = "📋 Copy";
 
-    summaryEl.textContent = `Model attachment support: ${formatModelAttachmentCapabilitySummary(modelId)}`;
-  }
+      btn.addEventListener("click", async () => {
+        const code = pre.querySelector("code");
+        const text = code ? code.textContent || "" : pre.textContent || "";
 
-  async showAttachmentDialog(options: AppDialogOptions): Promise<boolean> {
-    const shadowClaw = document.querySelector("shadow-claw") as any;
-    if (shadowClaw && typeof shadowClaw.requestDialog === "function") {
-      return await shadowClaw.requestDialog(options);
-    }
+        try {
+          await navigator.clipboard.writeText(text);
+          btn.textContent = "✅ Copied";
+          btn.classList.add("chat__code-copy-btn--copied");
 
-    if ((options.mode || "confirm") === "info") {
-      showWarning(options.message, 4500);
+          setTimeout(() => {
+            btn.textContent = "📋 Copy";
+            btn.classList.remove("chat__code-copy-btn--copied");
+          }, 1500);
+        } catch {
+          // Fallback for environments where clipboard API is unavailable
+          btn.textContent = "⚠️ Failed";
 
-      return true;
-    }
-
-    showWarning(`${options.title}: ${options.message}`, 5000);
-
-    return false;
-  }
-
-  async buildMessageDraftPayload(
-    message: string,
-  ): Promise<MessageDraftPayload | null> {
-    const trimmedMessage = message.trim();
-    const attachments: MessageAttachment[] = this.#queuedAttachments.map(
-      (attachment) => {
-        const previewDisposition: "inline" | "file" =
-          attachment.mimeType === "image/png" ? "inline" : "file";
-
-        return {
-          id: attachment.id,
-          fileName: attachment.fileName,
-          mimeType: attachment.mimeType,
-          size: attachment.size,
-          source: attachment.source,
-          previewDisposition,
-        };
-      },
-    );
-
-    if (attachments.length === 0) {
-      return {
-        text: trimmedMessage,
-        attachments,
-      };
-    }
-
-    const binaryCount = attachments.filter(
-      (attachment) => !this.isInlineTextMimeType(attachment.mimeType || ""),
-    ).length;
-
-    if (binaryCount > 0 && !this.inferAttachmentModelSupport(attachments)) {
-      const proceed = await this.showAttachmentDialog({
-        mode: "confirm",
-        title: "Limited Attachment Support",
-        message:
-          "The selected model may not natively read binary attachments (images/audio/video/docs). Files will still be attached to chat history, but responses might be limited.",
-        confirmLabel: "Send Anyway",
-        cancelLabel: "Cancel",
-        details: [
-          "Try a multimodal model for best binary-file results.",
-          "Text files are inlined automatically when they are reasonably small.",
-        ],
+          setTimeout(() => {
+            btn.textContent = "📋 Copy";
+          }, 1500);
+        }
       });
-      if (!proceed) {
-        return null;
-      }
-    }
 
-    const attachmentLines = attachments.map((attachment) => {
-      return `- ${attachment.fileName} (${attachment.mimeType || "application/octet-stream"}, ${this.formatAttachmentSize(attachment.size || 0)})`;
+      pre.appendChild(btn);
     });
-
-    const inlineSections: string[] = [];
-    let inlineCharBudget = 0;
-    for (const attachment of this.#queuedAttachments) {
-      if (!this.isInlineTextMimeType(attachment.mimeType)) {
-        continue;
-      }
-
-      if (attachment.size > INLINE_ATTACHMENT_MAX_BYTES) {
-        inlineSections.push(
-          `File: ${attachment.fileName}\nSkipped inline content because the file is larger than ${this.formatAttachmentSize(INLINE_ATTACHMENT_MAX_BYTES)}.`,
-        );
-
-        continue;
-      }
-
-      if (attachment.source.kind !== "local-file") {
-        continue;
-      }
-
-      const text = await attachment.source.file.text();
-      inlineCharBudget += text.length;
-      if (inlineCharBudget > INLINE_ATTACHMENT_TOTAL_CHAR_BUDGET) {
-        await this.showAttachmentDialog({
-          mode: "info",
-          title: "Attachment Context Too Large",
-          message:
-            "The dropped text content exceeds the safe prompt budget. Remove some files or send them in smaller batches.",
-          details: [
-            `Current inline text budget: ${INLINE_ATTACHMENT_TOTAL_CHAR_BUDGET.toLocaleString()} characters`,
-            "Large text blobs can degrade response quality and exhaust context.",
-          ],
-          confirmLabel: "OK",
-        });
-
-        return null;
-      }
-
-      inlineSections.push(`File: ${attachment.fileName}\n${text}`);
-    }
-
-    const prefix = trimmedMessage ? `${trimmedMessage}\n\n` : "";
-    const manifest = `Attached files:\n${attachmentLines.join("\n")}`;
-    const inlineBlock =
-      inlineSections.length > 0
-        ? `\n\nAttached text excerpts:\n\n${inlineSections.join("\n\n---\n\n")}`
-        : "";
-
-    return {
-      text: `${prefix}${manifest}${inlineBlock}`,
-      attachments,
-    };
-  }
-
-  async handleMessageLinkClick(event: MouseEvent) {
-    if (event.defaultPrevented || event.button !== 0) {
-      return;
-    }
-
-    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
-      return;
-    }
-
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      return;
-    }
-
-    const link = target.closest("a");
-    if (!(link instanceof HTMLAnchorElement)) {
-      return;
-    }
-
-    const href = link.getAttribute("href") || "";
-    const activeGroupId = orchestratorStore.activeGroupId;
-
-    const handled = handleSpecialLinkNavigation(href, "", activeGroupId);
-    if (handled) {
-      event.preventDefault();
-    }
-  }
-
-  resolveWorkspaceLinkPath(href: string): string | null {
-    const trimmed = href.trim();
-    if (!trimmed) {
-      return null;
-    }
-
-    if (trimmed.startsWith("#")) {
-      return null;
-    }
-
-    if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed) || trimmed.startsWith("//")) {
-      return null;
-    }
-
-    let normalized = trimmed.split(/[?#]/, 1)[0].replace(/\\/g, "/");
-    normalized = normalized.replace(/^\/+/, "");
-    normalized = normalized.replace(/^\.\//, "");
-
-    if (!normalized) {
-      return null;
-    }
-
-    const parts = normalized.split("/").filter(Boolean);
-    if (parts.some((part) => part === "..")) {
-      return null;
-    }
-
-    return parts.join("/");
-  }
-
-  deferWorkspaceImageLoads(html: string): string {
-    const container = document.createElement("div");
-    container.innerHTML = html;
-
-    const images = Array.from(container.querySelectorAll("img[src]"));
-    for (const img of images) {
-      const src = img.getAttribute("src");
-      if (!src) {
-        continue;
-      }
-
-      const workspacePath = this.resolveWorkspaceLinkPath(src);
-      if (!workspacePath) {
-        continue;
-      }
-
-      img.setAttribute("data-inline-workspace-src", workspacePath);
-      img.removeAttribute("src");
-    }
-
-    return container.innerHTML;
   }
 
   /**
@@ -1438,57 +919,266 @@ export class ShadowClawChat extends ShadowClawElement {
     content.appendChild(btn);
   }
 
-  /**
-   * Inject a "Copy" button into every <pre> block inside the given container.
-   * Each button copies the text content of the sibling <code> element.
-   */
-  injectCopyButtons(container: HTMLElement) {
-    const preBlocks = container.querySelectorAll("pre");
+  isCollapsedInputAreaHeight(px: number): boolean {
+    return px <= DEFAULT_CHAT_INPUT_HEIGHT_PX + 1;
+  }
 
-    preBlocks.forEach((pre) => {
-      // Avoid duplicates if the effect re-runs on the same DOM
-      if (pre.querySelector(".chat__code-copy-btn")) {
+  isContainerNearBottom(container: HTMLElement): boolean {
+    const { scrollTop, scrollHeight, clientHeight } = container;
+
+    return scrollHeight - scrollTop - clientHeight < AUTO_SCROLL_THRESHOLD;
+  }
+
+  isInlineTextMimeType(mimeType: string): boolean {
+    const normalized = mimeType.toLowerCase();
+    if (normalized.startsWith("text/")) {
+      return true;
+    }
+
+    return (
+      normalized === "application/json" ||
+      normalized === "application/xml" ||
+      normalized === "application/javascript"
+    );
+  }
+
+  isLatestRender(version: number): boolean {
+    return version === this.#renderVersion;
+  }
+
+  persistGroupScrollState(container: HTMLElement): void {
+    const groupId = orchestratorStore.activeGroupId;
+    const nearBottom = this.isContainerNearBottom(container);
+    const distanceFromBottom = nearBottom
+      ? 0
+      : this.getContainerDistanceFromBottom(container);
+
+    chatUiStore.setGroupScrollState(groupId, distanceFromBottom, nearBottom);
+  }
+
+  removeStreamingBubble(container: HTMLElement) {
+    container.querySelector(".chat__message--streaming")?.remove();
+  }
+
+  renderAttachmentCapabilitySummary() {
+    const summaryEl = this.shadowRoot?.querySelector(
+      ".chat__attachment-capabilities",
+    );
+    if (!(summaryEl instanceof HTMLElement)) {
+      return;
+    }
+
+    const modelId = orchestratorStore.orchestrator?.model || "";
+    if (!modelId) {
+      summaryEl.textContent = "";
+
+      return;
+    }
+
+    summaryEl.textContent = `Model attachment support: ${formatModelAttachmentCapabilitySummary(modelId)}`;
+  }
+
+  renderQueuedAttachments() {
+    const container = this.shadowRoot?.querySelector(
+      ".chat__pending-attachments",
+    );
+    if (!(container instanceof HTMLElement)) {
+      return;
+    }
+
+    if (this.#queuedAttachments.length === 0) {
+      container.hidden = true;
+      container.replaceChildren();
+
+      return;
+    }
+
+    const modelId = (orchestratorStore.orchestrator?.model || "").toLowerCase();
+    const capabilities = getModelAttachmentCapabilities(modelId);
+
+    container.hidden = false;
+    const fragment = document.createDocumentFragment();
+    for (const attachment of this.#queuedAttachments) {
+      const chip = document.createElement("div");
+      chip.className = "chat__pending-attachment";
+
+      const icon = document.createElement("span");
+      icon.className = "chat__attachment-icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = this.getAttachmentIcon(attachment.mimeType);
+
+      const meta = document.createElement("div");
+      meta.className = "chat__pending-attachment-meta";
+
+      const name = document.createElement("span");
+      name.className = "chat__pending-attachment-name";
+      name.textContent = attachment.fileName;
+
+      const detail = document.createElement("span");
+      detail.className = "chat__pending-attachment-detail";
+      detail.textContent = `${attachment.mimeType} · ${this.formatAttachmentSize(attachment.size)}`;
+
+      meta.append(name, detail);
+
+      // Transport badge: indicates how this file will reach the model.
+      const transportLabel = this.getAttachmentTransportLabel(
+        attachment.mimeType,
+        attachment.fileName,
+        capabilities,
+      );
+      const badge = document.createElement("span");
+      badge.className = `chat__transport-badge chat__transport-badge--${transportLabel}`;
+      badge.setAttribute("aria-label", `Transport: ${transportLabel}`);
+      badge.textContent = transportLabel;
+
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "chat__pending-attachment-remove";
+      remove.setAttribute("aria-label", `Remove ${attachment.fileName}`);
+      remove.textContent = "x";
+      remove.addEventListener("click", () => {
+        this.#queuedAttachments = this.#queuedAttachments.filter(
+          (candidate) => candidate.id !== attachment.id,
+        );
+        this.renderQueuedAttachments();
+      });
+
+      chip.append(icon, meta, badge, remove);
+      fragment.appendChild(chip);
+    }
+
+    container.replaceChildren(fragment);
+  }
+
+  resetInputAreaHeight(inputArea: HTMLElement): void {
+    inputArea.classList.remove("chat__input-area--resized");
+    inputArea.style.removeProperty("--chat-input-area-height");
+  }
+
+  resolveWorkspaceLinkPath(href: string): string | null {
+    const trimmed = href.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (trimmed.startsWith("#")) {
+      return null;
+    }
+
+    if (/^[a-zA-Z][a-zA-Z\d+.-]*:/.test(trimmed) || trimmed.startsWith("//")) {
+      return null;
+    }
+
+    let normalized = trimmed.split(/[?#]/, 1)[0].replace(/\\/g, "/");
+    normalized = normalized.replace(/^\/+/, "");
+    normalized = normalized.replace(/^\.\//, "");
+
+    if (!normalized) {
+      return null;
+    }
+
+    const parts = normalized.split("/").filter(Boolean);
+    if (parts.some((part) => part === "..")) {
+      return null;
+    }
+
+    return parts.join("/");
+  }
+
+  revokeAttachmentObjectUrls() {
+    chatUiStore.revokeAttachmentObjectUrls();
+  }
+
+  scheduleBottomSnap(version: number) {
+    const snap = () => {
+      if (!this.isLatestRender(version)) {
         return;
       }
 
-      const btn = document.createElement("button");
-      btn.className = "chat__code-copy-btn";
-      btn.type = "button";
-      btn.setAttribute("aria-label", "Copy code to clipboard");
-      btn.textContent = "📋 Copy";
+      this.scrollMessagesToBottomIfNeeded();
+    };
 
-      btn.addEventListener("click", async () => {
-        const code = pre.querySelector("code");
-        const text = code ? code.textContent || "" : pre.textContent || "";
+    requestAnimationFrame(() => {
+      snap();
+      requestAnimationFrame(snap);
+    });
 
-        try {
-          await navigator.clipboard.writeText(text);
-          btn.textContent = "✅ Copied";
-          btn.classList.add("chat__code-copy-btn--copied");
+    setTimeout(snap, 120);
+  }
 
-          setTimeout(() => {
-            btn.textContent = "📋 Copy";
-            btn.classList.remove("chat__code-copy-btn--copied");
-          }, 1500);
-        } catch {
-          // Fallback for environments where clipboard API is unavailable
-          btn.textContent = "⚠️ Failed";
+  scrollMessagesToBottomIfNeeded() {
+    const messagesEl = this.shadowRoot?.querySelector(".chat__messages");
+    if (!(messagesEl instanceof HTMLElement)) {
+      return;
+    }
 
-          setTimeout(() => {
-            btn.textContent = "📋 Copy";
-          }, 1500);
-        }
-      });
+    if (!chatUiStore.isNearBottom) {
+      return;
+    }
 
-      pre.appendChild(btn);
+    this.setMessagesScrollTop(messagesEl, messagesEl.scrollHeight);
+    chatUiStore.setNearBottom(this.isContainerNearBottom(messagesEl));
+    this.persistGroupScrollState(messagesEl);
+  }
+
+  setActivityLogCollapsedOverride(collapsed: boolean | null) {
+    this.activityLogCollapsedOverride = collapsed;
+    this.applyActivityLogVisibility();
+  }
+
+  setDropOverlayVisible(visible: boolean) {
+    const overlay = this.shadowRoot?.querySelector("[data-drop-overlay]");
+    if (!(overlay instanceof HTMLElement)) {
+      return;
+    }
+
+    overlay.hidden = !visible;
+  }
+
+  setInputAreaHeight(inputArea: HTMLElement, px: number): void {
+    const clamped = this.clampInputAreaHeight(px);
+
+    if (this.isCollapsedInputAreaHeight(clamped)) {
+      this.resetInputAreaHeight(inputArea);
+
+      return;
+    }
+
+    inputArea.classList.add("chat__input-area--resized");
+    inputArea.style.setProperty("--chat-input-area-height", `${clamped}px`);
+  }
+
+  setMessagesScrollTop(container: HTMLElement, value: number) {
+    this.#suppressScrollTracking = true;
+    container.scrollTop = value;
+    requestAnimationFrame(() => {
+      this.#suppressScrollTracking = false;
     });
   }
 
-  /**
-   * Format a token count for human-readable display (e.g. 1234 → "1,234").
-   */
-  formatTokenCount(n: number): string {
-    return typeof n === "number" ? n.toLocaleString("en-US") : "–";
+  setupActivityLogVisibility() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    if (typeof globalThis.matchMedia === "function") {
+      this.activityLogVisibilityMediaQuery = globalThis.matchMedia(
+        "(min-width: 56rem) and (min-height: 401px)",
+      );
+
+      const onChange = () => this.applyActivityLogVisibility();
+      this.activityLogVisibilityMediaQuery.addEventListener("change", onChange);
+
+      this.activityLogVisibilityCleanup = () => {
+        this.activityLogVisibilityMediaQuery?.removeEventListener(
+          "change",
+          onChange,
+        );
+      };
+    }
+
+    this.applyActivityLogVisibility();
   }
 
   /**
@@ -2064,6 +1754,417 @@ export class ShadowClawChat extends ShadowClawElement {
     );
   }
 
+  shouldAutoFollow(container: HTMLElement): boolean {
+    const state = orchestratorStore.state;
+    const isResponseActive = state === "thinking" || state === "responding";
+    const nearBottom = this.isContainerNearBottom(container);
+
+    if (!isResponseActive) {
+      this.#responseAutoFollow = true;
+
+      return chatUiStore.nearBottomSnapshot || nearBottom;
+    }
+
+    if (nearBottom) {
+      this.#responseAutoFollow = true;
+    }
+
+    return this.#responseAutoFollow;
+  }
+
+  async buildMessageDraftPayload(
+    message: string,
+  ): Promise<MessageDraftPayload | null> {
+    const trimmedMessage = message.trim();
+    const attachments: MessageAttachment[] = this.#queuedAttachments.map(
+      (attachment) => {
+        const previewDisposition: "inline" | "file" =
+          attachment.mimeType === "image/png" ? "inline" : "file";
+
+        return {
+          id: attachment.id,
+          fileName: attachment.fileName,
+          mimeType: attachment.mimeType,
+          size: attachment.size,
+          source: attachment.source,
+          previewDisposition,
+        };
+      },
+    );
+
+    if (attachments.length === 0) {
+      return {
+        text: trimmedMessage,
+        attachments,
+      };
+    }
+
+    const binaryCount = attachments.filter(
+      (attachment) => !this.isInlineTextMimeType(attachment.mimeType || ""),
+    ).length;
+
+    if (binaryCount > 0 && !this.inferAttachmentModelSupport(attachments)) {
+      const proceed = await this.showAttachmentDialog({
+        mode: "confirm",
+        title: "Limited Attachment Support",
+        message:
+          "The selected model may not natively read binary attachments (images/audio/video/docs). Files will still be attached to chat history, but responses might be limited.",
+        confirmLabel: "Send Anyway",
+        cancelLabel: "Cancel",
+        details: [
+          "Try a multimodal model for best binary-file results.",
+          "Text files are inlined automatically when they are reasonably small.",
+        ],
+      });
+      if (!proceed) {
+        return null;
+      }
+    }
+
+    const attachmentLines = attachments.map((attachment) => {
+      return `- ${attachment.fileName} (${attachment.mimeType || "application/octet-stream"}, ${this.formatAttachmentSize(attachment.size || 0)})`;
+    });
+
+    const inlineSections: string[] = [];
+    let inlineCharBudget = 0;
+    for (const attachment of this.#queuedAttachments) {
+      if (!this.isInlineTextMimeType(attachment.mimeType)) {
+        continue;
+      }
+
+      if (attachment.size > INLINE_ATTACHMENT_MAX_BYTES) {
+        inlineSections.push(
+          `File: ${attachment.fileName}\nSkipped inline content because the file is larger than ${this.formatAttachmentSize(INLINE_ATTACHMENT_MAX_BYTES)}.`,
+        );
+
+        continue;
+      }
+
+      if (attachment.source.kind !== "local-file") {
+        continue;
+      }
+
+      const text = await attachment.source.file.text();
+      inlineCharBudget += text.length;
+      if (inlineCharBudget > INLINE_ATTACHMENT_TOTAL_CHAR_BUDGET) {
+        await this.showAttachmentDialog({
+          mode: "info",
+          title: "Attachment Context Too Large",
+          message:
+            "The dropped text content exceeds the safe prompt budget. Remove some files or send them in smaller batches.",
+          details: [
+            `Current inline text budget: ${INLINE_ATTACHMENT_TOTAL_CHAR_BUDGET.toLocaleString()} characters`,
+            "Large text blobs can degrade response quality and exhaust context.",
+          ],
+          confirmLabel: "OK",
+        });
+
+        return null;
+      }
+
+      inlineSections.push(`File: ${attachment.fileName}\n${text}`);
+    }
+
+    const prefix = trimmedMessage ? `${trimmedMessage}\n\n` : "";
+    const manifest = `Attached files:\n${attachmentLines.join("\n")}`;
+    const inlineBlock =
+      inlineSections.length > 0
+        ? `\n\nAttached text excerpts:\n\n${inlineSections.join("\n\n---\n\n")}`
+        : "";
+
+    return {
+      text: `${prefix}${manifest}${inlineBlock}`,
+      attachments,
+    };
+  }
+
+  async downloadAttachment(groupId: string, attachment: MessageAttachment) {
+    if (!this.#db || !attachment.path) {
+      return;
+    }
+
+    try {
+      await downloadGroupFile(this.#db, groupId, attachment.path);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to download attachment: ${message}`, 5000);
+    }
+  }
+
+  async downloadChat() {
+    if (!this.#db) {
+      return;
+    }
+
+    try {
+      const groupId = orchestratorStore.activeGroupId;
+      const chatData = await exportChatData(this.#db, groupId);
+      if (!chatData) {
+        showError("Failed to export chat data", 6000);
+
+        return;
+      }
+
+      const zip = new JSZip();
+      zip.file("chat-data.json", JSON.stringify(chatData, null, 2));
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = url;
+      link.download = `chat-${formatDateForFilename()}.zip`;
+
+      document.body.appendChild(link);
+
+      link.click();
+
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showSuccess("Chat backup downloaded", 3000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to download chat: ${message}`, 6000);
+    }
+  }
+
+  async handleClearChat() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    if (!this.#db) {
+      return;
+    }
+
+    const container = root.querySelector(".chat__messages");
+    if (container instanceof HTMLElement) {
+      container.replaceChildren();
+    }
+
+    try {
+      await orchestratorStore.newSession(this.#db);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.warn("Failed to clear session:", errorMsg);
+    }
+  }
+
+  async handleCompactChat() {
+    if (!this.#db) {
+      return;
+    }
+
+    const confirmed = await this.showAttachmentDialog({
+      mode: "confirm",
+      title: "Compact Conversation",
+      message:
+        "This will summarize the conversation to reduce token usage. The summary replaces the current history. Continue?",
+      confirmLabel: "Compact",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await orchestratorStore.compactContext(this.#db);
+
+      showInfo("Compacting context...", 2500);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Failed to compact chat: ${errorMsg}`, 6000);
+    }
+  }
+
+  async handleMessageLinkClick(event: MouseEvent) {
+    if (event.defaultPrevented || event.button !== 0) {
+      return;
+    }
+
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const link = target.closest("a");
+    if (!(link instanceof HTMLAnchorElement)) {
+      return;
+    }
+
+    const href = link.getAttribute("href") || "";
+    const activeGroupId = orchestratorStore.activeGroupId;
+
+    const handled = handleSpecialLinkNavigation(href, "", activeGroupId);
+    if (handled) {
+      event.preventDefault();
+    }
+  }
+
+  async handleStopChat() {
+    try {
+      orchestratorStore.stopCurrentRequest();
+      showInfo("Stopped current request", 2200);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Failed to stop request: ${errorMsg}`, 6000);
+    }
+  }
+
+  async openAttachment(groupId: string, attachment: MessageAttachment) {
+    if (!this.#db || !attachment.path) {
+      return;
+    }
+
+    try {
+      await fileViewerStore.openFile(this.#db, attachment.path, groupId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to open attachment: ${message}`, 5000);
+    }
+  }
+
+  async persistInputAreaHeight(px: number): Promise<void> {
+    if (!this.#db) {
+      return;
+    }
+
+    try {
+      await setConfig(this.#db, CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT, px);
+    } catch {
+      // Ignore persistence failures so input remains usable when storage is unavailable.
+    }
+  }
+
+  async queueDroppedData(dataTransfer: DataTransfer | null) {
+    if (!dataTransfer) {
+      return;
+    }
+
+    const next = this.buildQueuedAttachmentsFromFiles(
+      Array.from(dataTransfer.files || []),
+    );
+
+    const droppedText = await this.readDroppedPlainText(dataTransfer);
+    if (droppedText) {
+      const normalized = droppedText.trim();
+      if (normalized) {
+        const textBlob = new Blob([normalized], { type: "text/plain" });
+        next.push({
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+          fileName: `dropped-text-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.txt`,
+          mimeType: "text/plain",
+          size: textBlob.size,
+          source: {
+            kind: "local-file",
+            file: textBlob,
+          },
+        });
+      }
+    }
+
+    if (next.length === 0) {
+      return;
+    }
+
+    this.#queuedAttachments = [...this.#queuedAttachments, ...next];
+    this.renderQueuedAttachments();
+    showInfo(
+      `Queued ${next.length} attachment${next.length === 1 ? "" : "s"}.`,
+      2200,
+    );
+  }
+
+  async queueSelectedFiles(input: HTMLInputElement) {
+    const files = Array.from(input.files || []);
+    if (files.length === 0) {
+      input.value = "";
+
+      return;
+    }
+
+    const next = this.buildQueuedAttachmentsFromFiles(files);
+    this.#queuedAttachments = [...this.#queuedAttachments, ...next];
+    this.renderQueuedAttachments();
+
+    showInfo(
+      `Queued ${next.length} attachment${next.length === 1 ? "" : "s"}.`,
+      2200,
+    );
+
+    input.value = "";
+  }
+
+  async readDroppedPlainText(dataTransfer: DataTransfer): Promise<string> {
+    const item = Array.from(dataTransfer.items || []).find(
+      (entry) => entry.kind === "string" && entry.type === "text/plain",
+    );
+
+    if (!item) {
+      return "";
+    }
+
+    return await new Promise<string>((resolve) => {
+      item.getAsString((value) => {
+        resolve(value || "");
+      });
+    });
+  }
+
+  async renderInlineAttachmentPreview(
+    msg: StoredMessage,
+    attachment: MessageAttachment,
+  ): Promise<HTMLElement | null> {
+    if (!this.#db || !attachment.path) {
+      return null;
+    }
+
+    try {
+      const bytes = await readGroupFileBytes(
+        this.#db,
+        msg.groupId,
+        attachment.path,
+      );
+      const blobBytes = new Uint8Array(bytes.byteLength);
+      blobBytes.set(bytes);
+      const blob = new Blob([blobBytes], {
+        type: attachment.mimeType || "image/png",
+      });
+      const objectUrl = URL.createObjectURL(blob);
+      chatUiStore.registerAttachmentObjectUrl(objectUrl);
+
+      const previewButton = document.createElement("button");
+      previewButton.className = "chat__attachment-preview-btn";
+      previewButton.type = "button";
+      previewButton.setAttribute("aria-label", `Open ${attachment.fileName}`);
+      previewButton.addEventListener("click", () => {
+        void this.openAttachment(msg.groupId, attachment);
+      });
+
+      const image = document.createElement("img");
+      image.className = "chat__attachment-preview";
+      image.alt = attachment.fileName;
+      image.src = objectUrl;
+      previewButton.appendChild(image);
+
+      return previewButton;
+    } catch (err) {
+      const error = document.createElement("div");
+      error.className = "chat__attachment-preview-error";
+      error.textContent =
+        err instanceof Error ? err.message : "Attachment preview unavailable.";
+
+      return error;
+    }
+  }
+
   async renderMessageAttachments(
     msg: StoredMessage,
   ): Promise<HTMLElement | null> {
@@ -2147,50 +2248,82 @@ export class ShadowClawChat extends ShadowClawElement {
     return wrap;
   }
 
-  async renderInlineAttachmentPreview(
-    msg: StoredMessage,
-    attachment: MessageAttachment,
-  ): Promise<HTMLElement | null> {
-    if (!this.#db || !attachment.path) {
-      return null;
+  async renderStreamingBubble(streamingText: string | null) {
+    const version = ++this.#streamRenderVersion;
+    const container = this.getMessagesContainer();
+    if (!container) {
+      return;
     }
 
-    try {
-      const bytes = await readGroupFileBytes(
-        this.#db,
-        msg.groupId,
-        attachment.path,
-      );
-      const blobBytes = new Uint8Array(bytes.byteLength);
-      blobBytes.set(bytes);
-      const blob = new Blob([blobBytes], {
-        type: attachment.mimeType || "image/png",
-      });
-      const objectUrl = URL.createObjectURL(blob);
-      chatUiStore.registerAttachmentObjectUrl(objectUrl);
+    const shouldKeepBottom = this.shouldAutoFollow(container);
 
-      const previewButton = document.createElement("button");
-      previewButton.className = "chat__attachment-preview-btn";
-      previewButton.type = "button";
-      previewButton.setAttribute("aria-label", `Open ${attachment.fileName}`);
-      previewButton.addEventListener("click", () => {
-        void this.openAttachment(msg.groupId, attachment);
-      });
+    if (!(typeof streamingText === "string" && streamingText.length > 0)) {
+      this.removeStreamingBubble(container);
 
-      const image = document.createElement("img");
-      image.className = "chat__attachment-preview";
-      image.alt = attachment.fileName;
-      image.src = objectUrl;
-      previewButton.appendChild(image);
+      return;
+    }
 
-      return previewButton;
-    } catch (err) {
-      const error = document.createElement("div");
-      error.className = "chat__attachment-preview-error";
-      error.textContent =
-        err instanceof Error ? err.message : "Attachment preview unavailable.";
+    let streamDiv = container.querySelector(
+      ".chat__message--streaming",
+    ) as HTMLElement | null;
+    let contentEl: HTMLElement | null = null;
 
-      return error;
+    if (!streamDiv) {
+      const assistantName = localStorage.getItem("assistantName") || "example";
+
+      streamDiv = document.createElement("article");
+      streamDiv.className =
+        "chat__message chat__message--assistant chat__message--streaming";
+
+      const headerEl = document.createElement("div");
+      headerEl.className = "chat__message-header";
+
+      const senderEl = document.createElement("div");
+      senderEl.className = "chat__message-sender";
+      senderEl.textContent = assistantName;
+
+      const timestampEl = document.createElement("div");
+      timestampEl.className = "chat__message-timestamp";
+      timestampEl.textContent = "streaming…";
+
+      headerEl.append(senderEl, timestampEl);
+
+      contentEl = document.createElement("div");
+      contentEl.className = "chat__message-content";
+
+      streamDiv.append(headerEl, contentEl);
+      container.appendChild(streamDiv);
+    } else {
+      contentEl = streamDiv.querySelector(".chat__message-content");
+      if (!(contentEl instanceof HTMLElement)) {
+        return;
+      }
+    }
+
+    const renderedContent = escapeHtml(streamingText)
+      .replace(/\n/g, "<br>")
+      .replace(/`([^`]+?)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+?)\*\*/g, "<b>$1</b>");
+    if (version !== this.#streamRenderVersion) {
+      return;
+    }
+
+    // Intentional HTML insertion: escaped text for streaming performance and safety.
+    setSanitizedHtml(contentEl, renderedContent);
+
+    const cursorEl = document.createElement("span");
+    cursorEl.setAttribute("aria-hidden", "true");
+    cursorEl.className = "chat__streaming-cursor";
+    contentEl.append(cursorEl);
+
+    streamDiv.querySelector(".chat__msg-copy-btn")?.remove();
+    this.injectMessageCopyButton(streamDiv, streamingText);
+    this.injectCopyButtons(contentEl);
+
+    if (shouldKeepBottom) {
+      this.setMessagesScrollTop(container, container.scrollHeight);
+      chatUiStore.setNearBottom(this.isContainerNearBottom(container));
+      this.persistGroupScrollState(container);
     }
   }
 
@@ -2286,229 +2419,6 @@ export class ShadowClawChat extends ShadowClawElement {
     }
   }
 
-  formatAttachmentSubtitle(attachment: MessageAttachment): string {
-    const parts: string[] = [];
-    if (attachment.mimeType) {
-      parts.push(attachment.mimeType);
-    }
-
-    if (typeof attachment.size === "number") {
-      parts.push(this.formatAttachmentSize(attachment.size));
-    }
-
-    return parts.join(" · ") || "Attachment";
-  }
-
-  getAttachmentIcon(mimeType = ""): string {
-    const normalized = mimeType.toLowerCase();
-    if (normalized.startsWith("image/")) {
-      return "IMG";
-    }
-
-    if (normalized.startsWith("video/")) {
-      return "VID";
-    }
-
-    if (normalized.startsWith("audio/")) {
-      return "AUD";
-    }
-
-    if (normalized.includes("pdf")) {
-      return "PDF";
-    }
-
-    if (normalized.startsWith("text/") || normalized.includes("json")) {
-      return "TXT";
-    }
-
-    if (normalized.includes("zip") || normalized.includes("tar")) {
-      return "ZIP";
-    }
-
-    return "BIN";
-  }
-
-  formatAttachmentSize(size: number): string {
-    if (size < 1024) {
-      return `${size} B`;
-    }
-
-    if (size < 1024 * 1024) {
-      return `${(size / 1024).toFixed(1)} KB`;
-    }
-
-    return `${(size / (1024 * 1024)).toFixed(1)} MB`;
-  }
-
-  async openAttachment(groupId: string, attachment: MessageAttachment) {
-    if (!this.#db || !attachment.path) {
-      return;
-    }
-
-    try {
-      await fileViewerStore.openFile(this.#db, attachment.path, groupId);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to open attachment: ${message}`, 5000);
-    }
-  }
-
-  async downloadAttachment(groupId: string, attachment: MessageAttachment) {
-    if (!this.#db || !attachment.path) {
-      return;
-    }
-
-    try {
-      await downloadGroupFile(this.#db, groupId, attachment.path);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to download attachment: ${message}`, 5000);
-    }
-  }
-
-  async sendMessage() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const input = root.querySelector(".chat__input");
-    if (!(input instanceof HTMLTextAreaElement)) {
-      return;
-    }
-
-    const message = input.value.trim();
-
-    if (!message && this.#queuedAttachments.length === 0) {
-      return;
-    }
-
-    if (!orchestratorStore.ready) {
-      showWarning("ShadowClaw is still initializing. Please try again.", 3500);
-
-      return;
-    }
-
-    try {
-      const payload = await this.buildMessageDraftPayload(message);
-      if (!payload) {
-        return;
-      }
-
-      input.value = "";
-
-      // Resume auto-scroll so the user sees their own message and the response
-      this.#responseAutoFollow = true;
-      chatUiStore.setNearBottom(true);
-
-      orchestratorStore.sendMessage(payload.text, payload.attachments);
-      this.#queuedAttachments = [];
-      this.renderQueuedAttachments();
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError(`Error sending message: ${errorMsg}`, 6000);
-    }
-  }
-
-  async handleCompactChat() {
-    if (!this.#db) {
-      return;
-    }
-
-    const confirmed = await this.showAttachmentDialog({
-      mode: "confirm",
-      title: "Compact Conversation",
-      message:
-        "This will summarize the conversation to reduce token usage. The summary replaces the current history. Continue?",
-      confirmLabel: "Compact",
-      cancelLabel: "Cancel",
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      await orchestratorStore.compactContext(this.#db);
-
-      showInfo("Compacting context...", 2500);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError(`Failed to compact chat: ${errorMsg}`, 6000);
-    }
-  }
-
-  async handleClearChat() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    if (!this.#db) {
-      return;
-    }
-
-    const container = root.querySelector(".chat__messages");
-    if (container instanceof HTMLElement) {
-      container.replaceChildren();
-    }
-
-    try {
-      await orchestratorStore.newSession(this.#db);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      console.warn("Failed to clear session:", errorMsg);
-    }
-  }
-
-  async handleStopChat() {
-    try {
-      orchestratorStore.stopCurrentRequest();
-      showInfo("Stopped current request", 2200);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError(`Failed to stop request: ${errorMsg}`, 6000);
-    }
-  }
-
-  async downloadChat() {
-    if (!this.#db) {
-      return;
-    }
-
-    try {
-      const groupId = orchestratorStore.activeGroupId;
-      const chatData = await exportChatData(this.#db, groupId);
-      if (!chatData) {
-        showError("Failed to export chat data", 6000);
-
-        return;
-      }
-
-      const zip = new JSZip();
-      zip.file("chat-data.json", JSON.stringify(chatData, null, 2));
-
-      const blob = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-
-      link.href = url;
-      link.download = `chat-${formatDateForFilename()}.zip`;
-
-      document.body.appendChild(link);
-
-      link.click();
-
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-
-      showSuccess("Chat backup downloaded", 3000);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      showError(`Failed to download chat: ${message}`, 6000);
-    }
-  }
-
   async restoreChat(input: HTMLInputElement) {
     if (!this.#db) {
       return;
@@ -2562,6 +2472,90 @@ export class ShadowClawChat extends ShadowClawElement {
     } finally {
       input.value = "";
     }
+  }
+
+  async restoreInputAreaHeight(): Promise<void> {
+    const inputArea = this.shadowRoot?.querySelector(".chat__input-area");
+    if (!(inputArea instanceof HTMLElement)) {
+      return;
+    }
+
+    try {
+      const saved = this.#db
+        ? await getConfig(this.#db, CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT)
+        : undefined;
+
+      if (typeof saved === "number" && Number.isFinite(saved) && saved > 0) {
+        if (this.isCollapsedInputAreaHeight(saved)) {
+          this.resetInputAreaHeight(inputArea);
+        } else {
+          this.setInputAreaHeight(inputArea, saved);
+        }
+      }
+    } catch {
+      // Keep default input height when config retrieval fails.
+    }
+  }
+
+  async sendMessage() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const input = root.querySelector(".chat__input");
+    if (!(input instanceof HTMLTextAreaElement)) {
+      return;
+    }
+
+    const message = input.value.trim();
+
+    if (!message && this.#queuedAttachments.length === 0) {
+      return;
+    }
+
+    if (!orchestratorStore.ready) {
+      showWarning("ShadowClaw is still initializing. Please try again.", 3500);
+
+      return;
+    }
+
+    try {
+      const payload = await this.buildMessageDraftPayload(message);
+      if (!payload) {
+        return;
+      }
+
+      input.value = "";
+
+      // Resume auto-scroll so the user sees their own message and the response
+      this.#responseAutoFollow = true;
+      chatUiStore.setNearBottom(true);
+
+      orchestratorStore.sendMessage(payload.text, payload.attachments);
+      this.#queuedAttachments = [];
+      this.renderQueuedAttachments();
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Error sending message: ${errorMsg}`, 6000);
+    }
+  }
+
+  async showAttachmentDialog(options: AppDialogOptions): Promise<boolean> {
+    const shadowClaw = document.querySelector("shadow-claw") as any;
+    if (shadowClaw && typeof shadowClaw.requestDialog === "function") {
+      return await shadowClaw.requestDialog(options);
+    }
+
+    if ((options.mode || "confirm") === "info") {
+      showWarning(options.message, 4500);
+
+      return true;
+    }
+
+    showWarning(`${options.title}: ${options.message}`, 5000);
+
+    return false;
   }
 }
 

@@ -6,12 +6,12 @@ import ShadowClawElement from "../shadow-claw-element.js";
 const EXIT_ANIMATION_MS = 150;
 
 const elementName = "shadow-claw-toast";
+
 export class ShadowClawToast extends ShadowClawElement {
   static componentPath = `components/${elementName}`;
   static styles = `${ShadowClawToast.componentPath}/${elementName}.css`;
   static template = `${ShadowClawToast.componentPath}/${elementName}.html`;
 
-  cleanup: () => void = () => {};
   exitingToasts: Set<number> = new Set();
 
   constructor() {
@@ -40,6 +40,66 @@ export class ShadowClawToast extends ShadowClawElement {
     this.cleanup();
 
     this.shadowRoot?.removeEventListener("keydown", this.handleKeyDown);
+  }
+
+  cleanup: () => void = () => {};
+
+  iconForType(type: ToastType): string {
+    if (type === "success") {
+      return "✓";
+    }
+
+    if (type === "error") {
+      return "!";
+    }
+
+    if (type === "warning") {
+      return "⚠";
+    }
+
+    return "i";
+  }
+
+  async dismissWithAnimation(toastId: number) {
+    if (this.exitingToasts.has(toastId)) {
+      return;
+    }
+
+    this.exitingToasts.add(toastId);
+    await this.render();
+
+    globalThis.setTimeout(() => {
+      this.exitingToasts.delete(toastId);
+      toastStore.dismiss(toastId);
+    }, EXIT_ANIMATION_MS);
+  }
+
+  async handleKeyDown(event: Event) {
+    if (!(event instanceof KeyboardEvent)) {
+      return;
+    }
+
+    if (event.key !== "Escape") {
+      return;
+    }
+
+    const target = event.target;
+    if (!(target instanceof Element)) {
+      return;
+    }
+
+    const toastNode = target.closest(".toast");
+    if (!(toastNode instanceof HTMLElement)) {
+      return;
+    }
+
+    const toastId = Number(toastNode.dataset.toastId);
+    if (!Number.isFinite(toastId)) {
+      return;
+    }
+
+    event.preventDefault();
+    await this.dismissWithAnimation(toastId);
   }
 
   async render() {
@@ -117,64 +177,6 @@ export class ShadowClawToast extends ShadowClawElement {
 
       container.appendChild(toastEl);
     });
-  }
-
-  async handleKeyDown(event: Event) {
-    if (!(event instanceof KeyboardEvent)) {
-      return;
-    }
-
-    if (event.key !== "Escape") {
-      return;
-    }
-
-    const target = event.target;
-    if (!(target instanceof Element)) {
-      return;
-    }
-
-    const toastNode = target.closest(".toast");
-    if (!(toastNode instanceof HTMLElement)) {
-      return;
-    }
-
-    const toastId = Number(toastNode.dataset.toastId);
-    if (!Number.isFinite(toastId)) {
-      return;
-    }
-
-    event.preventDefault();
-    await this.dismissWithAnimation(toastId);
-  }
-
-  async dismissWithAnimation(toastId: number) {
-    if (this.exitingToasts.has(toastId)) {
-      return;
-    }
-
-    this.exitingToasts.add(toastId);
-    await this.render();
-
-    globalThis.setTimeout(() => {
-      this.exitingToasts.delete(toastId);
-      toastStore.dismiss(toastId);
-    }, EXIT_ANIMATION_MS);
-  }
-
-  iconForType(type: ToastType): string {
-    if (type === "success") {
-      return "✓";
-    }
-
-    if (type === "error") {
-      return "!";
-    }
-
-    if (type === "warning") {
-      return "⚠";
-    }
-
-    return "i";
   }
 }
 

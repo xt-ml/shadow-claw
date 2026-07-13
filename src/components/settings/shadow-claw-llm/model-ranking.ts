@@ -1,8 +1,4 @@
-export interface LocalModelRankCandidate {
-  id: string;
-  supportsTools: boolean;
-  contextLength: number;
-}
+import type { LocalModelRankCandidate } from "../../types.js";
 
 function parseModelBillionsFromId(modelId: string): number | null {
   const normalized = modelId.toLowerCase();

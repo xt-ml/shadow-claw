@@ -1,23 +1,4 @@
-export interface ResolveConnectionTestAuthInput {
-  authMode: string | null | undefined;
-  pendingOauthAccessToken?: string;
-  passwordInput?: string;
-  hasStoredOauthCredential?: boolean;
-  hasStoredPasswordCredential?: boolean;
-}
-
-export type ResolveConnectionTestAuthResult =
-  | {
-      authType: "oauth";
-      accessToken: string;
-    }
-  | {
-      authType: "basic_userpass";
-      password: string;
-    }
-  | {
-      error: string;
-    };
+import type { ResolveConnectionTestAuthInput, ResolveConnectionTestAuthResult } from "../../types.js";
 
 export function resolveConnectionTestAuth(
   input: ResolveConnectionTestAuthInput,

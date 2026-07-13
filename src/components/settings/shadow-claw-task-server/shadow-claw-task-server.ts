@@ -1,5 +1,5 @@
-import { getDb } from "../../../db/db.js";
 import { effect } from "../../../core/effect.js";
+import { getDb } from "../../../db/db.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
 
@@ -44,15 +44,6 @@ export class ShadowClawTaskServer extends ShadowClawElement {
     await this.render();
   }
 
-  setupEffects() {
-    effect(() => {
-      if (orchestratorStore.ready) {
-        this.orchestrator = orchestratorStore.orchestrator;
-        this.render();
-      }
-    });
-  }
-
   bindEventListeners() {
     const root = this.shadowRoot;
     if (!root) {
@@ -64,6 +55,15 @@ export class ShadowClawTaskServer extends ShadowClawElement {
       ?.addEventListener("click", () => {
         void this.saveTaskServerUrl();
       });
+  }
+
+  setupEffects() {
+    effect(() => {
+      if (orchestratorStore.ready) {
+        this.orchestrator = orchestratorStore.orchestrator;
+        this.render();
+      }
+    });
   }
 
   async render() {

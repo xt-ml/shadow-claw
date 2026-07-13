@@ -1,4 +1,17 @@
-export interface AttachmentContent {
+
+
+export type ContentBlock =
+  | AttachmentContent
+  | TextContent
+  | ToolResultContent
+  | ToolUseContent;
+
+export type MessageAttachmentSource =
+  | InlineTextAttachmentSource
+  | LocalFileAttachmentSource
+  | RemoteUrlAttachmentSource;
+
+export type ToolResultContentBlock = ToolResultImageBlock | ToolResultTextBlock;export interface AttachmentContent {
   data?: string;
   fileName: string;
   mediaType: "audio" | "document" | "file" | "image" | "video";
@@ -34,11 +47,6 @@ export interface MessageAttachment {
   source?: MessageAttachmentSource;
 }
 
-export type MessageAttachmentSource =
-  | InlineTextAttachmentSource
-  | LocalFileAttachmentSource
-  | RemoteUrlAttachmentSource;
-
 export interface RemoteUrlAttachmentSource {
   headers?: Record<string, string>;
   kind: "remote-url";
@@ -55,8 +63,6 @@ export interface ToolResultContent {
   tool_use_id: string;
   type: "tool_result";
 }
-
-export type ToolResultContentBlock = ToolResultImageBlock | ToolResultTextBlock;
 
 export interface ToolResultImageBlock {
   data: string;
@@ -75,9 +81,3 @@ export interface ToolUseContent {
   name: string;
   type: "tool_use";
 }
-
-export type ContentBlock =
-  | AttachmentContent
-  | TextContent
-  | ToolResultContent
-  | ToolUseContent;

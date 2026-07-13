@@ -1,11 +1,12 @@
-import "../shadow-claw-peerjs/shadow-claw-peerjs.js";
-import { getDb } from "../../../db/db.js";
 import { effect } from "../../../core/effect.js";
+import { getDb } from "../../../db/db.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 
 import type { Orchestrator } from "../../../core/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
+
+import "../shadow-claw-peerjs/shadow-claw-peerjs.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 
@@ -21,15 +22,6 @@ export class ShadowClawChannelConfig extends ShadowClawElement {
 
   constructor() {
     super();
-  }
-
-  getOrchestrator(): Orchestrator | null {
-    const current = orchestratorStore.orchestrator;
-    if (current) {
-      this.orchestrator = current;
-    }
-
-    return this.orchestrator;
   }
 
   async connectedCallback() {
@@ -52,19 +44,6 @@ export class ShadowClawChannelConfig extends ShadowClawElement {
     super.disconnectedCallback();
   }
 
-  setupEffects() {
-    this.addCleanup(
-      effect(() => {
-        const ready = orchestratorStore.ready;
-        if (!ready) {
-          return;
-        }
-
-        void this.render();
-      }),
-    );
-  }
-
   bindEventListeners() {
     const root = this.shadowRoot;
     if (!root) {
@@ -82,6 +61,126 @@ export class ShadowClawChannelConfig extends ShadowClawElement {
     root
       .querySelector('[data-action="verify-telegram-config"]')
       ?.addEventListener("click", () => this.verifyTelegramConfig());
+  }
+
+  getOrchestrator(): Orchestrator | null {
+    const current = orchestratorStore.orchestrator;
+    if (current) {
+      this.orchestrator = current;
+    }
+
+    return this.orchestrator;
+  }
+
+  setLoadingState(root: ShadowRoot) {
+    const telegramTokenStatus = root.querySelector(
+      '[data-info="telegram-token-status"]',
+    );
+    if (telegramTokenStatus) {
+      telegramTokenStatus.textContent = "Loading Telegram settings...";
+    }
+
+    const telegramChatIdsStatus = root.querySelector(
+      '[data-info="telegram-chat-ids-status"]',
+    );
+    if (telegramChatIdsStatus) {
+      telegramChatIdsStatus.textContent = "Loading Telegram settings...";
+    }
+
+    const imessageChatIdsStatus = root.querySelector(
+      '[data-info="imessage-chat-ids-status"]',
+    );
+    if (imessageChatIdsStatus) {
+      imessageChatIdsStatus.textContent = "Loading iMessage settings...";
+    }
+  }
+
+  setupEffects() {
+    this.addCleanup(
+      effect(() => {
+        const ready = orchestratorStore.ready;
+        if (!ready) {
+          return;
+        }
+
+        void this.render();
+      }),
+    );
+  }
+
+  updateChannelFieldAvailability(
+    root: ShadowRoot,
+    telegramEnabled: boolean,
+    imessageEnabled: boolean,
+  ) {
+    const telegramTokenInput = root.querySelector(
+      '[data-setting="telegram-token-input"]',
+    ) as HTMLInputElement | null;
+    const telegramChatIdsInput = root.querySelector(
+      '[data-setting="telegram-chat-ids-input"]',
+    ) as HTMLInputElement | null;
+    const telegramUseProxyToggle = root.querySelector(
+      '[data-setting="telegram-use-proxy-toggle"]',
+    ) as HTMLInputElement | null;
+    const verifyTelegramButton = root.querySelector(
+      '[data-action="verify-telegram-config"]',
+    ) as HTMLButtonElement | null;
+
+    if (telegramTokenInput) {
+      telegramTokenInput.disabled = !telegramEnabled;
+    }
+
+    if (telegramChatIdsInput) {
+      telegramChatIdsInput.disabled = !telegramEnabled;
+    }
+
+    if (telegramUseProxyToggle) {
+      telegramUseProxyToggle.disabled = !telegramEnabled;
+    }
+
+    if (verifyTelegramButton) {
+      verifyTelegramButton.disabled = !telegramEnabled;
+    }
+
+    const imessageServerUrlInput = root.querySelector(
+      '[data-setting="imessage-server-url-input"]',
+    ) as HTMLInputElement | null;
+    const imessageApiKeyInput = root.querySelector(
+      '[data-setting="imessage-api-key-input"]',
+    ) as HTMLInputElement | null;
+    const imessageChatIdsInput = root.querySelector(
+      '[data-setting="imessage-chat-ids-input"]',
+    ) as HTMLInputElement | null;
+
+    if (imessageServerUrlInput) {
+      imessageServerUrlInput.disabled = !imessageEnabled;
+    }
+
+    if (imessageApiKeyInput) {
+      imessageApiKeyInput.disabled = !imessageEnabled;
+    }
+
+    if (imessageChatIdsInput) {
+      imessageChatIdsInput.disabled = !imessageEnabled;
+    }
+
+    root
+      .querySelectorAll(".form-group")
+      .forEach((group) => group.classList.remove("form-group--disabled"));
+
+    if (!telegramEnabled) {
+      root
+        .querySelector('[data-setting="telegram-token-input"]')
+        ?.closest(".form-group")
+        ?.classList.add("form-group--disabled");
+    }
+
+    if (!imessageEnabled) {
+      root
+        .querySelector('[data-setting="imessage-server-url-input"]')
+        ?.closest(".form-group")
+        ?.classList.add("form-group--disabled");
+    }
   }
 
   async render() {
@@ -218,101 +317,49 @@ export class ShadowClawChannelConfig extends ShadowClawElement {
     );
   }
 
-  setLoadingState(root: ShadowRoot) {
-    const telegramTokenStatus = root.querySelector(
-      '[data-info="telegram-token-status"]',
-    );
-    if (telegramTokenStatus) {
-      telegramTokenStatus.textContent = "Loading Telegram settings...";
+  async saveIMessageConfig() {
+    const orchestrator = this.getOrchestrator();
+    if (!orchestrator || !this.db) {
+      return;
     }
 
-    const telegramChatIdsStatus = root.querySelector(
-      '[data-info="telegram-chat-ids-status"]',
-    );
-    if (telegramChatIdsStatus) {
-      telegramChatIdsStatus.textContent = "Loading Telegram settings...";
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
     }
 
-    const imessageChatIdsStatus = root.querySelector(
-      '[data-info="imessage-chat-ids-status"]',
-    );
-    if (imessageChatIdsStatus) {
-      imessageChatIdsStatus.textContent = "Loading iMessage settings...";
-    }
-  }
-
-  updateChannelFieldAvailability(
-    root: ShadowRoot,
-    telegramEnabled: boolean,
-    imessageEnabled: boolean,
-  ) {
-    const telegramTokenInput = root.querySelector(
-      '[data-setting="telegram-token-input"]',
-    ) as HTMLInputElement | null;
-    const telegramChatIdsInput = root.querySelector(
-      '[data-setting="telegram-chat-ids-input"]',
-    ) as HTMLInputElement | null;
-    const telegramUseProxyToggle = root.querySelector(
-      '[data-setting="telegram-use-proxy-toggle"]',
-    ) as HTMLInputElement | null;
-    const verifyTelegramButton = root.querySelector(
-      '[data-action="verify-telegram-config"]',
-    ) as HTMLButtonElement | null;
-
-    if (telegramTokenInput) {
-      telegramTokenInput.disabled = !telegramEnabled;
-    }
-
-    if (telegramChatIdsInput) {
-      telegramChatIdsInput.disabled = !telegramEnabled;
-    }
-
-    if (telegramUseProxyToggle) {
-      telegramUseProxyToggle.disabled = !telegramEnabled;
-    }
-
-    if (verifyTelegramButton) {
-      verifyTelegramButton.disabled = !telegramEnabled;
-    }
-
-    const imessageServerUrlInput = root.querySelector(
+    const serverUrlInput = root.querySelector(
       '[data-setting="imessage-server-url-input"]',
     ) as HTMLInputElement | null;
-    const imessageApiKeyInput = root.querySelector(
+    const apiKeyInput = root.querySelector(
       '[data-setting="imessage-api-key-input"]',
     ) as HTMLInputElement | null;
-    const imessageChatIdsInput = root.querySelector(
+    const chatIdsInput = root.querySelector(
       '[data-setting="imessage-chat-ids-input"]',
     ) as HTMLInputElement | null;
+    const enabledToggle = root.querySelector(
+      '[data-setting="imessage-enabled-toggle"]',
+    ) as HTMLInputElement | null;
 
-    if (imessageServerUrlInput) {
-      imessageServerUrlInput.disabled = !imessageEnabled;
-    }
-
-    if (imessageApiKeyInput) {
-      imessageApiKeyInput.disabled = !imessageEnabled;
-    }
-
-    if (imessageChatIdsInput) {
-      imessageChatIdsInput.disabled = !imessageEnabled;
-    }
-
-    root
-      .querySelectorAll(".form-group")
-      .forEach((group) => group.classList.remove("form-group--disabled"));
-
-    if (!telegramEnabled) {
-      root
-        .querySelector('[data-setting="telegram-token-input"]')
-        ?.closest(".form-group")
-        ?.classList.add("form-group--disabled");
-    }
-
-    if (!imessageEnabled) {
-      root
-        .querySelector('[data-setting="imessage-server-url-input"]')
-        ?.closest(".form-group")
-        ?.classList.add("form-group--disabled");
+    try {
+      await orchestrator.configureIMessage(
+        this.db,
+        serverUrlInput?.value || "",
+        apiKeyInput?.value || "",
+        parseCommaSeparatedList(chatIdsInput?.value || ""),
+      );
+      await orchestrator.setChannelEnabled(
+        this.db,
+        "imessage",
+        !!enabledToggle?.checked,
+      );
+      await this.render();
+      showSuccess("iMessage channel settings saved", 3000);
+    } catch (error) {
+      showError(
+        `Error saving iMessage settings: ${error instanceof Error ? error.message : String(error)}`,
+        6000,
+      );
     }
   }
 
@@ -426,52 +473,6 @@ export class ShadowClawChannelConfig extends ShadowClawElement {
       showError(
         `Telegram verification failed: ${error instanceof Error ? error.message : String(error)}`,
         7000,
-      );
-    }
-  }
-
-  async saveIMessageConfig() {
-    const orchestrator = this.getOrchestrator();
-    if (!orchestrator || !this.db) {
-      return;
-    }
-
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const serverUrlInput = root.querySelector(
-      '[data-setting="imessage-server-url-input"]',
-    ) as HTMLInputElement | null;
-    const apiKeyInput = root.querySelector(
-      '[data-setting="imessage-api-key-input"]',
-    ) as HTMLInputElement | null;
-    const chatIdsInput = root.querySelector(
-      '[data-setting="imessage-chat-ids-input"]',
-    ) as HTMLInputElement | null;
-    const enabledToggle = root.querySelector(
-      '[data-setting="imessage-enabled-toggle"]',
-    ) as HTMLInputElement | null;
-
-    try {
-      await orchestrator.configureIMessage(
-        this.db,
-        serverUrlInput?.value || "",
-        apiKeyInput?.value || "",
-        parseCommaSeparatedList(chatIdsInput?.value || ""),
-      );
-      await orchestrator.setChannelEnabled(
-        this.db,
-        "imessage",
-        !!enabledToggle?.checked,
-      );
-      await this.render();
-      showSuccess("iMessage channel settings saved", 3000);
-    } catch (error) {
-      showError(
-        `Error saving iMessage settings: ${error instanceof Error ? error.message : String(error)}`,
-        6000,
       );
     }
   }

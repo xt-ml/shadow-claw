@@ -3,7 +3,9 @@ import type { A2UIAction } from "../../ui/a2ui.js";
 export class ShadowClawA2UIInterceptor extends HTMLElement {
   constructor() {
     super();
+
     this.attachShadow({ mode: "open" });
+
     const slot = document.createElement("slot");
     this.shadowRoot!.appendChild(slot);
   }

@@ -1,7 +1,7 @@
 import { applyWeight } from "./shared.js";
 
 import type { DividerSpec } from "../../../ui/a2ui.js";
-import type { SurfaceState } from "./types.js";
+import type { SurfaceState } from "../../types.js";
 
 export function renderDivider(
   spec: DividerSpec,

@@ -1,20 +1,23 @@
-import { getDb, ShadowClawDatabase } from "../../db/db.js";
 import { getAvailableProviders, getProvider } from "../../config/config.js";
 import { effect } from "../../core/effect.js";
+
+import { getDb, ShadowClawDatabase } from "../../db/db.js";
+
 import { orchestratorStore } from "../../stores/orchestrator.js";
-import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
 import { toolsStore } from "../../stores/tools.js";
+
+import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
 import { showError, showInfo, showSuccess } from "../../ui/toast.js";
 import { ulid } from "../../utils/ulid.js";
 
 import type { Orchestrator } from "../../core/orchestrator.js";
 
+import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
-import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
+
 import ShadowClawElement from "../shadow-claw-element.js";
 
-/** Built-in tool names (non-deletable). */
 const BUILTIN_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((t) => t.name));
 
 const elementName = "shadow-claw-tools";
@@ -41,62 +44,6 @@ export class ShadowClawTools extends ShadowClawElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-  }
-
-  setupEffects(db: ShadowClawDatabase) {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    // Reactive re-render on tool store changes
-    this.addCleanup(
-      effect(() => {
-        toolsStore.enabledToolNames;
-        toolsStore.customTools;
-        toolsStore.systemPromptOverride;
-        toolsStore.profiles;
-        toolsStore.activeProfileId;
-        this.updateToolList(db);
-      }),
-    );
-
-    // WebMCP opt-in toggle
-    const webMcpToggle = root.querySelector(
-      ".tools__webmcp-toggle",
-    ) as HTMLInputElement | null;
-    const internetAccessToggle = root.querySelector(
-      ".tools__internet-access-toggle",
-    ) as HTMLInputElement | null;
-    const webMcpModeSelect = root.querySelector(
-      ".tools__webmcp-mode",
-    ) as HTMLSelectElement | null;
-
-    if (webMcpToggle) {
-      // Sync checked state and mode when orchestrator becomes available
-      this.addCleanup(
-        effect(() => {
-          if (orchestratorStore.ready) {
-            this.orchestrator = orchestratorStore.orchestrator;
-            webMcpToggle.checked =
-              this.orchestrator?.getWebMcpToolsEnabled?.() === true;
-            if (webMcpModeSelect && this.orchestrator?.getWebMcpMode) {
-              webMcpModeSelect.value =
-                this.orchestrator.getWebMcpMode() || "polyfill";
-            }
-          }
-        }),
-      );
-    }
-
-    if (internetAccessToggle) {
-      this.addCleanup(
-        effect(() => {
-          internetAccessToggle.checked =
-            orchestratorStore.vmBashFullInternetAccess;
-        }),
-      );
-    }
   }
 
   bindEventListeners(db: ShadowClawDatabase) {
@@ -425,6 +372,156 @@ export class ShadowClawTools extends ShadowClawElement {
       });
   }
 
+  handleBackup() {
+    const json = toolsStore.exportBackup();
+    const blob = new Blob([json], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `shadowclaw-tools-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showSuccess("Tools config exported");
+  }
+
+  /**
+   * Open the clone tool dialog for a given source tool.
+   */
+  openCloneDialog(sourceToolName: string) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const cloneDialog = root.querySelector(
+      ".tools__clone-dialog",
+    ) as HTMLDialogElement | null;
+    const cloneForm = root.querySelector(
+      ".tools__clone-dialog-form",
+    ) as HTMLFormElement | null;
+    if (!cloneDialog || !cloneForm) {
+      return;
+    }
+
+    cloneForm.reset();
+    const sourceInput = cloneForm.querySelector(
+      '[name="source"]',
+    ) as HTMLInputElement | null;
+    if (sourceInput) {
+      sourceInput.value = sourceToolName;
+    }
+
+    cloneDialog.showModal();
+  }
+
+  setupEffects(db: ShadowClawDatabase) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    // Reactive re-render on tool store changes
+    this.addCleanup(
+      effect(() => {
+        toolsStore.enabledToolNames;
+        toolsStore.customTools;
+        toolsStore.systemPromptOverride;
+        toolsStore.profiles;
+        toolsStore.activeProfileId;
+        this.updateToolList(db);
+      }),
+    );
+
+    // WebMCP opt-in toggle
+    const webMcpToggle = root.querySelector(
+      ".tools__webmcp-toggle",
+    ) as HTMLInputElement | null;
+    const internetAccessToggle = root.querySelector(
+      ".tools__internet-access-toggle",
+    ) as HTMLInputElement | null;
+    const webMcpModeSelect = root.querySelector(
+      ".tools__webmcp-mode",
+    ) as HTMLSelectElement | null;
+
+    if (webMcpToggle) {
+      // Sync checked state and mode when orchestrator becomes available
+      this.addCleanup(
+        effect(() => {
+          if (orchestratorStore.ready) {
+            this.orchestrator = orchestratorStore.orchestrator;
+            webMcpToggle.checked =
+              this.orchestrator?.getWebMcpToolsEnabled?.() === true;
+            if (webMcpModeSelect && this.orchestrator?.getWebMcpMode) {
+              webMcpModeSelect.value =
+                this.orchestrator.getWebMcpMode() || "polyfill";
+            }
+          }
+        }),
+      );
+    }
+
+    if (internetAccessToggle) {
+      this.addCleanup(
+        effect(() => {
+          internetAccessToggle.checked =
+            orchestratorStore.vmBashFullInternetAccess;
+        }),
+      );
+    }
+  }
+
+  /** Update the profile dropdown to reflect current state. */
+  updateProfileSelector() {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const select = root.querySelector(".tools__profile-select");
+    if (!select) {
+      return;
+    }
+
+    const profiles = toolsStore.profiles;
+    const activeId = toolsStore.activeProfileId;
+
+    // Preserve selection
+    select.replaceChildren();
+    const defaultOption = document.createElement("option");
+    defaultOption.value = "";
+    defaultOption.textContent = "— No profile (manual config) —";
+    select.append(defaultOption);
+    for (const p of profiles) {
+      const opt = document.createElement("option");
+      opt.value = p.id;
+      const isBuiltin = p.id.startsWith("__builtin_");
+      const providerLabel = p.providerId
+        ? getProvider(p.providerId)?.name || p.providerId
+        : "any";
+      const modelLabel = p.model || "any";
+      opt.textContent = isBuiltin
+        ? `⚡ ${p.name} (${providerLabel})`
+        : `${p.name} (${providerLabel} / ${modelLabel})`;
+      if (p.id === activeId) {
+        opt.selected = true;
+      }
+
+      select.appendChild(opt);
+    }
+
+    // Disable delete button for built-in profiles
+    const deleteBtn = root.querySelector(
+      ".tools__profile-delete-btn",
+    ) as HTMLButtonElement | null;
+    if (deleteBtn) {
+      const isBuiltinActive = activeId?.startsWith("__builtin_");
+      deleteBtn.disabled = !!isBuiltinActive;
+      deleteBtn.title = isBuiltinActive
+        ? "Built-in profiles cannot be deleted"
+        : "";
+    }
+  }
+
   updateToolList(db: ShadowClawDatabase) {
     const root = this.shadowRoot;
     if (!root) {
@@ -537,88 +634,6 @@ export class ShadowClawTools extends ShadowClawElement {
     this.updateProfileSelector();
   }
 
-  /** Update the profile dropdown to reflect current state. */
-  updateProfileSelector() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const select = root.querySelector(".tools__profile-select");
-    if (!select) {
-      return;
-    }
-
-    const profiles = toolsStore.profiles;
-    const activeId = toolsStore.activeProfileId;
-
-    // Preserve selection
-    select.replaceChildren();
-    const defaultOption = document.createElement("option");
-    defaultOption.value = "";
-    defaultOption.textContent = "— No profile (manual config) —";
-    select.append(defaultOption);
-    for (const p of profiles) {
-      const opt = document.createElement("option");
-      opt.value = p.id;
-      const isBuiltin = p.id.startsWith("__builtin_");
-      const providerLabel = p.providerId
-        ? getProvider(p.providerId)?.name || p.providerId
-        : "any";
-      const modelLabel = p.model || "any";
-      opt.textContent = isBuiltin
-        ? `⚡ ${p.name} (${providerLabel})`
-        : `${p.name} (${providerLabel} / ${modelLabel})`;
-      if (p.id === activeId) {
-        opt.selected = true;
-      }
-
-      select.appendChild(opt);
-    }
-
-    // Disable delete button for built-in profiles
-    const deleteBtn = root.querySelector(
-      ".tools__profile-delete-btn",
-    ) as HTMLButtonElement | null;
-    if (deleteBtn) {
-      const isBuiltinActive = activeId?.startsWith("__builtin_");
-      deleteBtn.disabled = !!isBuiltinActive;
-      deleteBtn.title = isBuiltinActive
-        ? "Built-in profiles cannot be deleted"
-        : "";
-    }
-  }
-
-  /**
-   * Open the clone tool dialog for a given source tool.
-   */
-  openCloneDialog(sourceToolName: string) {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const cloneDialog = root.querySelector(
-      ".tools__clone-dialog",
-    ) as HTMLDialogElement | null;
-    const cloneForm = root.querySelector(
-      ".tools__clone-dialog-form",
-    ) as HTMLFormElement | null;
-    if (!cloneDialog || !cloneForm) {
-      return;
-    }
-
-    cloneForm.reset();
-    const sourceInput = cloneForm.querySelector(
-      '[name="source"]',
-    ) as HTMLInputElement | null;
-    if (sourceInput) {
-      sourceInput.value = sourceToolName;
-    }
-
-    cloneDialog.showModal();
-  }
-
   async handleAddTool(db: ShadowClawDatabase, form: HTMLFormElement) {
     const data = new FormData(form);
     const name = String(data.get("name") || "").trim();
@@ -691,6 +706,25 @@ export class ShadowClawTools extends ShadowClawElement {
     cloneDialog?.close();
   }
 
+  async handleRestore(db: ShadowClawDatabase, input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      await toolsStore.importBackup(db, text);
+      showSuccess("Tools config restored");
+    } catch (err) {
+      showError(
+        `Failed to restore: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    input.value = "";
+  }
+
   async handleSaveProfile(db: ShadowClawDatabase, form: HTMLFormElement) {
     const data = new FormData(form);
     const name = String(data.get("name") || "").trim();
@@ -721,37 +755,6 @@ export class ShadowClawTools extends ShadowClawElement {
       ".tools__profile-dialog",
     ) as HTMLDialogElement | null;
     profileDialog?.close();
-  }
-
-  handleBackup() {
-    const json = toolsStore.exportBackup();
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `shadowclaw-tools-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showSuccess("Tools config exported");
-  }
-
-  async handleRestore(db: ShadowClawDatabase, input: HTMLInputElement) {
-    const file = input.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    try {
-      const text = await file.text();
-      await toolsStore.importBackup(db, text);
-      showSuccess("Tools config restored");
-    } catch (err) {
-      showError(
-        `Failed to restore: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-
-    input.value = "";
   }
 }
 

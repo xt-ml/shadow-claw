@@ -4,10 +4,9 @@ const elementName = "shadow-claw-card";
 
 export class ShadowClawCard extends ShadowClawElement {
   static componentPath = `components/common/${elementName}`;
+  static observedAttributes = ["label", "meta", "badge"];
   static styles = `${ShadowClawCard.componentPath}/${elementName}.css`;
   static template = `${ShadowClawCard.componentPath}/${elementName}.html`;
-
-  static observedAttributes = ["label", "meta", "badge"];
 
   attributeChangedCallback() {
     this.render();

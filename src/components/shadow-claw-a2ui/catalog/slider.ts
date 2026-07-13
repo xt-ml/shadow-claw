@@ -2,7 +2,7 @@ import { applyWeight } from "./shared.js";
 import { resolveDynamicString } from "../../../ui/a2ui.js";
 
 import type { SliderSpec } from "../../../ui/a2ui.js";
-import type { RenderContext, SurfaceState } from "./types.js";
+import type { RenderContext, SurfaceState } from "../../types.js";
 
 export function renderSlider(
   spec: SliderSpec,

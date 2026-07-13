@@ -5,7 +5,8 @@ import { jest } from "@jest/globals";
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { clearGroupMessages } = await import("../../db/clearGroupMessages.js");
 const { setDB } = await import("../../db/db.js");
-const { getPeerChatDisplayStatus } = await import("./shadow-claw-chat.js");
+const { getPeerChatDisplayStatus } =
+  await import("./utils/getPeerChatDisplayStatus.js");
 
 describe("shadow-claw-chat clear functionality", () => {
   let mockDb;

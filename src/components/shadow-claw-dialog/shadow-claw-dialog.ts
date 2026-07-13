@@ -1,25 +1,25 @@
 export class ShadowClawDialog extends HTMLElement {
-  private _dialog: HTMLDialogElement | null = null;
 
   static get observedAttributes(): string[] {
     return ["dialog-class", "aria-label", "aria-labelledby"];
+  }
+
+  private _dialog: HTMLDialogElement | null = null;
+
+  attributeChangedCallback(): void {
+    this.syncDialogAttributes();
   }
 
   connectedCallback(): void {
     this.ensureDialog();
   }
 
-  attributeChangedCallback(): void {
-    this.syncDialogAttributes();
-  }
-
-  showModal(): void {
-    this.ensureDialog();
-    this._dialog?.showModal();
-  }
-
   close(returnValue?: string): void {
     this._dialog?.close(returnValue);
+  }
+
+  get dialog(): HTMLDialogElement | null {
+    return this._dialog;
   }
 
   get open(): boolean {
@@ -36,8 +36,9 @@ export class ShadowClawDialog extends HTMLElement {
     }
   }
 
-  get dialog(): HTMLDialogElement | null {
-    return this._dialog;
+  showModal(): void {
+    this.ensureDialog();
+    this._dialog?.showModal();
   }
 
   private ensureDialog(): void {

@@ -48,11 +48,15 @@ export class AppPage {
       .evaluate((targetPageId) => {
         const app = document.querySelector("shadow-claw") as any;
 
-        if (!app || typeof app.showPage !== "function") {
+        if (!app) {
           return false;
         }
 
-        app.showPage(targetPageId);
+        document.dispatchEvent(
+          new CustomEvent("shadow-claw-navigate", {
+            detail: { page: targetPageId },
+          })
+        );
 
         return true;
       }, pageId)
@@ -61,19 +65,23 @@ export class AppPage {
     if (!switched) {
       await this.waitForReady();
 
-      switched = await this.page
-        .evaluate((targetPageId) => {
-          const app = document.querySelector("shadow-claw") as any;
+        switched = await this.page
+          .evaluate((targetPageId) => {
+            const app = document.querySelector("shadow-claw") as any;
 
-          if (!app || typeof app.showPage !== "function") {
-            return false;
-          }
+            if (!app) {
+              return false;
+            }
 
-          app.showPage(targetPageId);
+            document.dispatchEvent(
+              new CustomEvent("shadow-claw-navigate", {
+                detail: { page: targetPageId },
+              })
+            );
 
-          return true;
-        }, pageId)
-        .catch(() => false);
+            return true;
+          }, pageId)
+          .catch(() => false);
     }
 
     if (!switched) {

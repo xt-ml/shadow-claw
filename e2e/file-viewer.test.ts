@@ -103,7 +103,7 @@ test.describe("File Viewer Modal", () => {
     );
   });
 
-  test("should display file modal on files page and persist when navigating to chat", async ({
+  test("should display file modal on files page and close when navigating to chat", async ({
     app,
     page,
   }) => {
@@ -136,12 +136,8 @@ test.describe("File Viewer Modal", () => {
     // Navigate while the native dialog is open
     await app.navigateToWithOpenDialog("chat");
 
-    // Modal should still be visible on the chat page
-    await expect(modal).toHaveJSProperty("open", true);
-
-    // Content should still be correct
-    const modalTitle = page.locator(".modal-title");
-    await expect(modalTitle).toContainText(testFileName);
+    // Modal should automatically close when navigating away from the file route
+    await expect(modal).toHaveJSProperty("open", false);
   });
 
   test("should close file modal when close button is clicked", async ({
@@ -264,7 +260,7 @@ test.describe("File Viewer Modal", () => {
     await expect(modalContent).toContainText(file2Content);
   });
 
-  test("should display file modal on tasks page when opening a file", async ({
+  test("should close file modal when navigating to tasks page", async ({
     app,
     page,
   }) => {
@@ -296,14 +292,8 @@ test.describe("File Viewer Modal", () => {
     // Navigate while the native dialog is open
     await app.navigateToWithOpenDialog("tasks");
 
-    // Modal should still be visible on tasks page
-    await expect(modal).toHaveJSProperty("open", true);
-
-    // Content should be correct
-    const modalTitle = page.locator(".modal-title");
-    const modalContent = page.locator(".file-content");
-    await expect(modalTitle).toContainText(testFileName);
-    await expect(modalContent).toContainText(testContent);
+    // Modal should automatically close when navigating away from the file route
+    await expect(modal).toHaveJSProperty("open", false);
   });
 
   test("should display file modal with proper accessibility attributes", async ({

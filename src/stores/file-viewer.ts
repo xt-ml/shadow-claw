@@ -158,7 +158,6 @@ export class FileViewerStore {
       tar: "application/x-tar",
       tif: "image/tiff",
       tiff: "image/tiff",
-      ts: "video/mp2t",
       wasm: "application/wasm",
       wav: "audio/wav",
       weba: "audio/webm",

@@ -244,9 +244,18 @@ export class StreamAccumulator {
 
       case "content_block_delta": {
         const idx = chunk.index ?? 0;
-        const block = this._anthropicBlocks.get(idx);
+        let block = this._anthropicBlocks.get(idx);
         if (!block) {
-          break;
+          const inferredType =
+            chunk.delta?.type === "input_json_delta" ? "tool_use" : "text";
+
+          block = {
+            type: inferredType,
+            text: inferredType === "text" ? "" : undefined,
+            partialJson: inferredType === "tool_use" ? "" : undefined,
+          };
+
+          this._anthropicBlocks.set(idx, block);
         }
 
         const delta = chunk.delta;

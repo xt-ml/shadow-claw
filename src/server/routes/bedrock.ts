@@ -16,13 +16,18 @@ import {
 
 import {
   BedrockRuntimeClient,
-  InvokeModelCommand,
-  InvokeModelWithResponseStreamCommand,
+  ConverseCommand,
+  ConverseStreamCommand,
 } from "@aws-sdk/client-bedrock-runtime";
 
 import { fromNodeProviderChain, fromSSO } from "@aws-sdk/credential-providers";
 
 import { getFirstHeaderValue } from "../utils/proxy-helpers.js";
+
+import type {
+  ConverseCommandInput,
+  ConverseStreamCommandInput,
+} from "@aws-sdk/client-bedrock-runtime";
 
 import type { Express } from "express";
 
@@ -76,17 +81,82 @@ function toInferenceProfileId(modelId: string, region: string): string {
 }
 
 /**
- * Convert a Bedrock ResponseStream event into one or more SSE `data:` lines
- * in Anthropic Messages API streaming format.
+ * Map an Anthropic Messages API content array entry to a Bedrock Converse
+ * ContentBlock. Returns undefined for unknown block types so callers can filter.
  */
-function bedrockEventToSSE(event: any): string | null {
-  if (event.chunk?.bytes) {
-    const json = new TextDecoder().decode(event.chunk.bytes);
-
-    return `data: ${json}\n\n`;
+function anthropicContentToConverseBlock(c: any): any {
+  if (c.type === "text") {
+    return { text: c.text };
   }
 
-  return null;
+  if (c.type === "image") {
+    const b64: string = c.source.data;
+    const mediaType: string = c.source.media_type; // e.g. "image/jpeg"
+    const format = mediaType.split("/")[1]; // e.g. "jpeg"
+
+    return {
+      image: {
+        format,
+        source: { bytes: Buffer.from(b64, "base64") },
+      },
+    };
+  }
+
+  if (c.type === "tool_use") {
+    return {
+      toolUse: {
+        toolUseId: c.id,
+        name: c.name,
+        input: c.input,
+      },
+    };
+  }
+
+  if (c.type === "tool_result") {
+    const resultContent =
+      typeof c.content === "string"
+        ? [{ text: c.content }]
+        : Array.isArray(c.content)
+          ? c.content.map((rc: any) =>
+              rc.type === "text"
+                ? { text: rc.text }
+                : { text: JSON.stringify(rc) },
+            )
+          : [{ text: JSON.stringify(c.content) }];
+
+    return {
+      toolResult: {
+        toolUseId: c.tool_use_id,
+        content: resultContent,
+      },
+    };
+  }
+
+  // Fallback: render unknown block types as text so we don't silently drop them.
+
+  return { text: JSON.stringify(c) };
+}
+
+/**
+ * Convert a stop reason from the Bedrock Converse StopReason enum to the
+ * Anthropic Messages API stop_reason string.
+ */
+function toAnthropicStopReason(stopReason: string | undefined): string {
+  switch (stopReason) {
+    case "tool_use":
+      return "tool_use";
+    case "max_tokens":
+      return "max_tokens";
+    case "stop_sequence":
+      return "stop_sequence";
+    case "end_turn":
+    default:
+      return "end_turn";
+  }
+}
+
+function randomMsgId(): string {
+  return "msg_" + Math.random().toString(36).substring(2, 10);
 }
 
 export function registerBedrockRoutes(
@@ -197,11 +267,8 @@ export function registerBedrockRoutes(
       const modelId = toInferenceProfileId(rawModelId, runtime.region);
       const wantsStreaming = body.stream === true;
 
-      // Strip fields not accepted by Bedrock (model, stream)
+      // Strip transport fields not used by the Converse API
       const { model: _model, stream: _stream, ...anthropicBody } = body;
-      if (!anthropicBody.anthropic_version) {
-        anthropicBody.anthropic_version = "bedrock-2023-05-31";
-      }
 
       const client = new BedrockRuntimeClient({
         region: runtime.region,
@@ -211,18 +278,77 @@ export function registerBedrockRoutes(
         ),
       });
 
-      if (wantsStreaming) {
-        // ---- Streaming path: InvokeModelWithResponseStream ----
-        const command = new InvokeModelWithResponseStreamCommand({
-          modelId,
-          contentType: "application/json",
-          accept: "application/json",
-          body: JSON.stringify(anthropicBody),
-        });
+      // --- Build Converse messages ---
+      const messages = (anthropicBody.messages || []).map((m: any) => ({
+        role: m.role as "user" | "assistant",
+        content: Array.isArray(m.content)
+          ? m.content.map(anthropicContentToConverseBlock)
+          : [{ text: m.content as string }],
+      }));
 
+      // --- System prompt ---
+      const system = anthropicBody.system
+        ? [{ text: anthropicBody.system as string }]
+        : undefined;
+
+      // --- Inference config (mapped from Anthropic field names) ---
+      const inferenceConfig: ConverseCommandInput["inferenceConfig"] = {};
+      if (anthropicBody.max_tokens) {
+        inferenceConfig.maxTokens = anthropicBody.max_tokens;
+      }
+
+      if (anthropicBody.temperature !== undefined) {
+        inferenceConfig.temperature = anthropicBody.temperature;
+      }
+
+      if (anthropicBody.top_p !== undefined) {
+        inferenceConfig.topP = anthropicBody.top_p;
+      }
+
+      if (anthropicBody.stop_sequences) {
+        inferenceConfig.stopSequences = anthropicBody.stop_sequences;
+      }
+
+      // --- Tool config ---
+      let toolConfig: ConverseCommandInput["toolConfig"] = undefined;
+      if (anthropicBody.tools && anthropicBody.tools.length > 0) {
+        toolConfig = {
+          tools: anthropicBody.tools.map((t: any) => ({
+            toolSpec: {
+              name: t.name,
+              description: t.description,
+              inputSchema: { json: t.input_schema },
+            },
+          })),
+        };
+        if (anthropicBody.tool_choice) {
+          const tc = anthropicBody.tool_choice;
+          if (tc.type === "tool") {
+            toolConfig.toolChoice = { tool: { name: tc.name } };
+          } else if (tc.type === "any") {
+            toolConfig.toolChoice = { any: {} };
+          } else {
+            toolConfig.toolChoice = { auto: {} };
+          }
+        }
+      }
+
+      const converseParams = {
+        modelId,
+        messages,
+        system,
+        inferenceConfig:
+          Object.keys(inferenceConfig).length > 0 ? inferenceConfig : undefined,
+        toolConfig,
+      };
+
+      if (wantsStreaming) {
+        // ---- Streaming path: ConverseStream ----
+        const command = new ConverseStreamCommand(
+          converseParams as ConverseStreamCommandInput,
+        );
         const response = await client.send(command);
 
-        // Set SSE headers
         res.status(200);
         res.setHeader("Content-Type", "text/event-stream");
         res.setHeader("Cache-Control", "no-cache");
@@ -230,31 +356,172 @@ export function registerBedrockRoutes(
         res.setHeader("Access-Control-Allow-Origin", "*");
         res.flushHeaders();
 
-        if (response.body) {
-          for await (const event of response.body) {
-            const sse = bedrockEventToSSE(event);
-            if (sse) {
-              res.write(sse);
+        // Emit message_start in Anthropic SSE format
+        res.write(
+          `data: ${JSON.stringify({
+            type: "message_start",
+            message: {
+              id: randomMsgId(),
+              type: "message",
+              role: "assistant",
+              model: modelId,
+              content: [],
+              usage: { input_tokens: 0, output_tokens: 0 },
+            },
+          })}\n\n`,
+        );
+
+        if (response.stream) {
+          const startedBlocks = new Set<number>();
+          for await (const event of response.stream) {
+            if (event.contentBlockStart) {
+              // ContentBlockStart has no text member — text blocks emit their
+              // first content via a contentBlockDelta, not a start event.
+              // We emit a content_block_start for tool_use only.
+              const start = event.contentBlockStart.start;
+              const index = event.contentBlockStart.contentBlockIndex ?? 0;
+              startedBlocks.add(index);
+
+              if (start?.toolUse) {
+                res.write(
+                  `data: ${JSON.stringify({
+                    type: "content_block_start",
+                    index,
+                    content_block: {
+                      type: "tool_use",
+                      id: start.toolUse.toolUseId,
+                      name: start.toolUse.name,
+                      input: {},
+                    },
+                  })}\n\n`,
+                );
+              } else {
+                // Text / image / unknown start — emit a generic text block start
+                res.write(
+                  `data: ${JSON.stringify({
+                    type: "content_block_start",
+                    index,
+                    content_block: { type: "text", text: "" },
+                  })}\n\n`,
+                );
+              }
+            } else if (event.contentBlockDelta) {
+              const delta = event.contentBlockDelta.delta;
+              const index = event.contentBlockDelta.contentBlockIndex ?? 0;
+
+              if (!startedBlocks.has(index)) {
+                startedBlocks.add(index);
+
+                const inferredType =
+                  delta?.toolUse !== undefined ? "tool_use" : "text";
+
+                res.write(
+                  `data: ${JSON.stringify({
+                    type: "content_block_start",
+                    index,
+                    content_block:
+                      inferredType === "text"
+                        ? { type: "text", text: "" }
+                        : { type: "tool_use", id: "", name: "", input: {} },
+                  })}\n\n`,
+                );
+              }
+
+              if (delta?.text !== undefined) {
+                res.write(
+                  `data: ${JSON.stringify({
+                    type: "content_block_delta",
+                    index,
+                    delta: { type: "text_delta", text: delta.text },
+                  })}\n\n`,
+                );
+              } else if (delta?.toolUse?.input !== undefined) {
+                res.write(
+                  `data: ${JSON.stringify({
+                    type: "content_block_delta",
+                    index,
+                    delta: {
+                      type: "input_json_delta",
+                      partial_json: delta.toolUse.input,
+                    },
+                  })}\n\n`,
+                );
+              }
+            } else if (event.contentBlockStop) {
+              res.write(
+                `data: ${JSON.stringify({
+                  type: "content_block_stop",
+                  index: event.contentBlockStop.contentBlockIndex ?? 0,
+                })}\n\n`,
+              );
+            } else if (event.messageStop) {
+              const stop_reason = toAnthropicStopReason(
+                event.messageStop.stopReason,
+              );
+              res.write(
+                `data: ${JSON.stringify({
+                  type: "message_delta",
+                  delta: { stop_reason, stop_sequence: null },
+                })}\n\n`,
+              );
+              res.write(
+                `data: ${JSON.stringify({ type: "message_stop" })}\n\n`,
+              );
+            } else if (event.metadata?.usage) {
+              // Emit updated usage in message_start-compatible form (best effort)
+              const usage = event.metadata.usage;
+              res.write(
+                `data: ${JSON.stringify({
+                  type: "message_delta",
+                  usage: {
+                    input_tokens: usage.inputTokens ?? 0,
+                    output_tokens: usage.outputTokens ?? 0,
+                  },
+                })}\n\n`,
+              );
             }
           }
         }
 
         res.end();
       } else {
-        // ---- Non-streaming path: InvokeModel (original behavior) ----
-        const command = new InvokeModelCommand({
-          modelId,
-          contentType: "application/json",
-          accept: "application/json",
-          body: JSON.stringify(anthropicBody),
+        // ---- Non-streaming path: Converse ----
+        const command = new ConverseCommand(
+          converseParams as ConverseCommandInput,
+        );
+        const response = await client.send(command);
+
+        const outMsg = response.output?.message;
+        const content = (outMsg?.content || []).map((c: any) => {
+          if (c.text !== undefined) {
+            return { type: "text", text: c.text };
+          }
+
+          if (c.toolUse) {
+            return {
+              type: "tool_use",
+              id: c.toolUse.toolUseId,
+              name: c.toolUse.name,
+              input: c.toolUse.input,
+            };
+          }
+
+          return { type: "text", text: JSON.stringify(c) };
         });
 
-        const response = await client.send(command);
-        const responseBody = JSON.parse(
-          new TextDecoder().decode(response.body),
-        );
-
-        res.json(responseBody);
+        res.json({
+          id: randomMsgId(),
+          type: "message",
+          role: "assistant",
+          model: modelId,
+          content,
+          stop_reason: toAnthropicStopReason(response.stopReason),
+          stop_sequence: null,
+          usage: {
+            input_tokens: response.usage?.inputTokens ?? 0,
+            output_tokens: response.usage?.outputTokens ?? 0,
+          },
+        });
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -270,9 +537,11 @@ export function registerBedrockRoutes(
           .status(status)
           .json({ error: `Bedrock invocation failed: ${message}` });
       } else {
-        // If we were already streaming, write an SSE error event and close
         res.write(
-          `data: ${JSON.stringify({ type: "error", error: { type: "server_error", message } })}\n\n`,
+          `data: ${JSON.stringify({
+            type: "error",
+            error: { type: "server_error", message },
+          })}\n\n`,
         );
         res.end();
       }

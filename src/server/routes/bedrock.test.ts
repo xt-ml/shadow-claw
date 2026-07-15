@@ -52,8 +52,8 @@ describe("bedrock-routes", () => {
       BedrockRuntimeClient: class {
         send = mockBedrockRuntimeSend;
       },
-      InvokeModelCommand: class {},
-      InvokeModelWithResponseStreamCommand: class {},
+      ConverseCommand: class {},
+      ConverseStreamCommand: class {},
     }));
 
     jest.unstable_mockModule("@aws-sdk/credential-providers", () => ({
@@ -138,14 +138,29 @@ describe("bedrock-routes", () => {
     };
     const res = createResponse();
 
+    // Converse API response shape
     const mockResponse = {
-      body: new TextEncoder().encode(JSON.stringify({ completion: "hi" })),
+      output: {
+        message: {
+          role: "assistant",
+          content: [{ text: "hi" }],
+        },
+      },
+      stopReason: "end_turn",
+      usage: { inputTokens: 10, outputTokens: 5 },
     };
     mockBedrockRuntimeSend.mockResolvedValue(mockResponse);
 
     await handler(req, res);
 
-    expect(res.json).toHaveBeenCalledWith({ completion: "hi" });
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "message",
+        role: "assistant",
+        content: [{ type: "text", text: "hi" }],
+        stop_reason: "end_turn",
+      }),
+    );
   });
 
   it("handles streaming model invocation", async () => {
@@ -156,17 +171,29 @@ describe("bedrock-routes", () => {
     };
     const res = createResponse();
 
+    // ConverseStream event format
     const mockEventStream = (async function* () {
       yield {
-        chunk: {
-          bytes: new TextEncoder().encode(
-            JSON.stringify({ completion: "hello" }),
-          ),
+        contentBlockStart: {
+          contentBlockIndex: 0,
+          start: {},
         },
+      };
+      yield {
+        contentBlockDelta: {
+          contentBlockIndex: 0,
+          delta: { text: "hello" },
+        },
+      };
+      yield {
+        contentBlockStop: { contentBlockIndex: 0 },
+      };
+      yield {
+        messageStop: { stopReason: "end_turn" },
       };
     })();
 
-    mockBedrockRuntimeSend.mockResolvedValue({ body: mockEventStream });
+    mockBedrockRuntimeSend.mockResolvedValue({ stream: mockEventStream });
 
     await handler(req, res);
 

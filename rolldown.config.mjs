@@ -375,6 +375,9 @@ const configs = [
       codeSplitting: false,
     },
     external: [
+      "@aws-sdk/client-bedrock",
+      "@aws-sdk/client-bedrock-runtime",
+      "@aws-sdk/credential-providers",
       "express",
       "compression",
       "cors",

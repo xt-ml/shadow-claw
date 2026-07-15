@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.12.6",
+  "version": "1.12.7",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -44,9 +44,9 @@
     "tsc": "npm -s run tsc:app && npm -s run tsc:agent:worker && npm -s run tsc:transformers:js:worker && npm -s run tsc:service:worker && npm -s run tsc:server && npm -s run tsc:test"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock": "^3.1041.0",
-    "@aws-sdk/client-bedrock-runtime": "^3.1041.0",
-    "@aws-sdk/credential-providers": "^3.1041.0",
+    "@aws-sdk/client-bedrock": "^3.1087.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.1087.0",
+    "@aws-sdk/credential-providers": "^3.1087.0",
     "@azure-rest/ai-inference": "^1.0.0-beta.6",
     "@azure/core-auth": "^1.10.1",
     "@google/genai": "^2.0.1",

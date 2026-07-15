@@ -586,6 +586,21 @@ describe("config.js", () => {
       expect(getModelMaxTokens("anthropic.claude-opus-4-6-v1")).toBe(128000);
       expect(getModelMaxTokens("claude-opus-4-6")).toBe(128000);
       expect(getModelMaxTokens("anthropic/claude-opus-4-6")).toBe(128000);
+      // claude-opus-4-8 must match its own entry before the opus-4 catch-all
+      expect(getModelMaxTokens("anthropic.claude-opus-4-8-v1:0")).toBe(128000);
+      expect(getModelMaxTokens("claude-opus-4-8")).toBe(128000);
+    });
+
+    it("should return 128000 for Claude Fable 5 models", () => {
+      expect(getModelMaxTokens("anthropic.claude-fable-5-v1:0")).toBe(128000);
+      expect(getModelMaxTokens("claude-fable-5")).toBe(128000);
+      expect(getModelMaxTokens("anthropic/claude-fable-5")).toBe(128000);
+    });
+
+    it("should return 128000 for Claude Sonnet 5 models", () => {
+      expect(getModelMaxTokens("anthropic.claude-sonnet-5-v1:0")).toBe(128000);
+      expect(getModelMaxTokens("claude-sonnet-5")).toBe(128000);
+      expect(getModelMaxTokens("anthropic/claude-sonnet-5")).toBe(128000);
     });
 
     it("should return 64000 for Claude Sonnet 4.x models", () => {
@@ -614,6 +629,12 @@ describe("config.js", () => {
     it("should return 16384 for GPT-4o models", () => {
       expect(getModelMaxTokens("gpt-4o")).toBe(16384);
       expect(getModelMaxTokens("gpt-4o-mini")).toBe(16384);
+    });
+
+    it("should return 32768 for GPT-4.1 models (must not fall through to gpt-4 catch-all)", () => {
+      expect(getModelMaxTokens("gpt-4.1")).toBe(32768);
+      expect(getModelMaxTokens("gpt-4.1-mini")).toBe(32768);
+      expect(getModelMaxTokens("openai/gpt-4.1")).toBe(32768);
     });
 
     it("should return 4096 for GPT-4-turbo models", () => {

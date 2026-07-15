@@ -37,6 +37,12 @@ export const MODEL_OUTPUT_LIMITS: Array<{
   pattern: string;
   maxTokens: number;
 }> = [
+  // Anthropic Claude Fable 5 — 128k max output (1M context)
+  { pattern: "claude-fable-5", maxTokens: 128000 },
+  // Anthropic Claude Sonnet 5 — 128k max output (1M context)
+  { pattern: "claude-sonnet-5", maxTokens: 128000 },
+  // Anthropic Claude Opus 4.8 — 128k max output (1M context); must precede claude-opus-4
+  { pattern: "claude-opus-4-8", maxTokens: 128000 },
   // Anthropic Claude Opus 4.x — 128k max output
   { pattern: "claude-opus-4", maxTokens: 128000 },
   // Anthropic Claude Sonnet 4.x — 64k max output
@@ -51,6 +57,8 @@ export const MODEL_OUTPUT_LIMITS: Array<{
   { pattern: "gpt-5", maxTokens: 128000 },
   // OpenAI GPT-4o variants — 16384 max output
   { pattern: "gpt-4o", maxTokens: 16384 },
+  // OpenAI GPT-4.1 — 32768 max output (1M context); must precede gpt-4 catch-all
+  { pattern: "gpt-4.1", maxTokens: 32768 },
   // OpenAI GPT-4 Turbo — 4096 max output
   { pattern: "gpt-4-turbo", maxTokens: 4096 },
   // OpenAI GPT-4 (non-4o) — 8192 max output

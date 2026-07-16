@@ -17,6 +17,8 @@ import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
+import shadowClawStorageStyles from "./shadow-claw-storage.css" with { type: "css" };
+import shadowClawStorageTemplate from "./shadow-claw-storage.html" with { type: "html" };
 
 const elementName = "shadow-claw-storage";
 
@@ -25,9 +27,8 @@ const elementName = "shadow-claw-storage";
  * usage display, persistent storage, directory selection.
  */
 export class ShadowClawStorage extends ShadowClawElement {
-  static componentPath = `components/settings/${elementName}`;
-  static styles = `${ShadowClawStorage.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawStorage.componentPath}/${elementName}.html`;
+  static styles = shadowClawStorageStyles;
+  static template = shadowClawStorageTemplate;
 
   public db: ShadowClawDatabase | null = null;
 
@@ -36,7 +37,6 @@ export class ShadowClawStorage extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -357,4 +357,6 @@ export class ShadowClawStorage extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawStorage);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawStorage);
+}

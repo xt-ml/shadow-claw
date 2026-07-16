@@ -29,6 +29,8 @@ import type { LLMProvider } from "../../../subsystems/providers/types.js";
 import type { AppDialogOptions } from "../../../ui/types.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
+import shadowClawLlmStyles from "./shadow-claw-llm.css" with { type: "css" };
+import shadowClawLlmTemplate from "./shadow-claw-llm.html" with { type: "html" };
 
 const elementName = "shadow-claw-llm";
 
@@ -37,9 +39,8 @@ const elementName = "shadow-claw-llm";
  * and streaming toggle.
  */
 export class ShadowClawLlm extends ShadowClawElement {
-  static componentPath = `components/settings/${elementName}`;
-  static styles = `${ShadowClawLlm.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawLlm.componentPath}/${elementName}.html`;
+  static styles = shadowClawLlmStyles;
+  static template = shadowClawLlmTemplate;
 
   db: ShadowClawDatabase | null;
   lastLlamafileHelpKey: string;
@@ -60,7 +61,6 @@ export class ShadowClawLlm extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -1824,4 +1824,6 @@ export class ShadowClawLlm extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawLlm);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawLlm);
+}

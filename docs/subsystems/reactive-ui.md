@@ -119,6 +119,7 @@ Every component lives in its own subdirectory:
 ```text
 src/components/shadow-claw-chat/
 ├── shadow-claw-chat.ts     # Component class
+├── utils/                  # Extracted helper utilities
 ├── shadow-claw-chat.html   # Shadow DOM template (fetched at runtime)
 └── shadow-claw-chat.css    # Shadow DOM styles (adopted at runtime)
 ```

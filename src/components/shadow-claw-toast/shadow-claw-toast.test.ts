@@ -18,7 +18,6 @@ describe("shadow-claw-toast", () => {
     toastStore.clear();
     el = new ShadowClawToast();
     document.body.appendChild(el);
-    await el.onTemplateReady;
   });
 
   afterEach(() => {

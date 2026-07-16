@@ -33,13 +33,14 @@ import "../shadow-claw-page-header/shadow-claw-page-header.js";
 import type { ShadowClawDatabase } from "../../db/types.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
+import shadowClawFilesStyles from "./shadow-claw-files.css" with { type: "css" };
+import shadowClawFilesTemplate from "./shadow-claw-files.html" with { type: "html" };
 
 const elementName = "shadow-claw-files";
 
 export class ShadowClawFiles extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawFiles.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawFiles.componentPath}/${elementName}.html`;
+  static styles = shadowClawFilesStyles;
+  static template = shadowClawFilesTemplate;
 
   private _isCreatingNewItem: boolean = false;
   private _isPastingEntry: boolean = false;
@@ -53,7 +54,6 @@ export class ShadowClawFiles extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -1622,4 +1622,6 @@ export class ShadowClawFiles extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawFiles);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawFiles);
+}

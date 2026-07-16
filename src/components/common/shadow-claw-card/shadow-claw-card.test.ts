@@ -1,4 +1,4 @@
-const { ShadowClawCard } = await import("./shadow-claw-card.js");
+import { ShadowClawCard } from "./shadow-claw-card.js";
 
 describe("shadow-claw-card", () => {
   it("registers custom element", () => {
@@ -12,7 +12,6 @@ describe("shadow-claw-card", () => {
     el.setAttribute("badge", "Default");
 
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const label = el.shadowRoot?.querySelector(".card__label");

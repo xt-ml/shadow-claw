@@ -6,16 +6,14 @@ import { isNearBottom } from "./utils/isNearBottom.js";
 import { normalizeTerminalText } from "./utils/normalizeTerminalText.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
+import shadowClawTerminalStyles from "./shadow-claw-terminal.css" with { type: "css" };
+import shadowClawTerminalTemplate from "./shadow-claw-terminal.html" with { type: "html" };
 
 export const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 12;
 const MAX_OUTPUT_LENGTH = 80_000;
-
-const elementName = "shadow-claw-terminal";
-
 export class ShadowClawTerminal extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawTerminal.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawTerminal.componentPath}/${elementName}.html`;
+  static styles = shadowClawTerminalStyles;
+  static template = shadowClawTerminalTemplate;
 
   autoScrollEnabled: boolean;
   bootRequested: boolean;
@@ -54,7 +52,6 @@ export class ShadowClawTerminal extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     await this.render();
     this.renderOutput();

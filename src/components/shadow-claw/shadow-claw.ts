@@ -60,12 +60,14 @@ export const DEFAULT_SIDEBAR_WIDTH_PX = 250;
 export const MIN_SIDEBAR_WIDTH_PX = 200;
 export const MAX_SIDEBAR_WIDTH_PX = 560;
 
+import shadowClawStyles from "./shadow-claw.css" with { type: "css" };
+import shadowClawTemplate from "./shadow-claw.html" with { type: "html" };
+
 const elementName = "shadow-claw";
 
 export class ShadowClaw extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClaw.componentPath}/${elementName}.css`;
-  static template = `${ShadowClaw.componentPath}/${elementName}.html`;
+  static styles = shadowClawStyles;
+  static template = shadowClawTemplate;
 
   activityLogCollapsedOverride: boolean | null = null;
   currentPage: string = orchestratorStore.sidebarDefaultPage;
@@ -95,8 +97,6 @@ export class ShadowClaw extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
-
     const root = this.shadowRoot;
     if (!root) {
       throw new Error("shadowRoot not found");
@@ -107,7 +107,6 @@ export class ShadowClaw extends ShadowClawElement {
     // Initialize reactive app store wiring before child components rely on ready state.
     // We do this before setDB() so that components waiting on getDb() find a ready store.
     await orchestratorStore.init(this.db, this.orchestrator);
-
     setDB(this.db);
 
     await this.render();
@@ -182,6 +181,8 @@ export class ShadowClaw extends ShadowClawElement {
   }
 
   disconnectedCallback() {
+    super.disconnectedCallback();
+
     if (this.vmStatusCleanup) {
       this.vmStatusCleanup();
       this.vmStatusCleanup = null;

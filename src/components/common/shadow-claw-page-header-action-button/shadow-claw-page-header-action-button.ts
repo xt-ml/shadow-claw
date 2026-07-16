@@ -1,19 +1,18 @@
 import ShadowClawElement from "../../shadow-claw-element.js";
+import shadowClawPageHeaderActionButtonStyles from "./shadow-claw-page-header-action-button.css" with { type: "css" };
+import shadowClawPageHeaderActionButtonTemplate from "./shadow-claw-page-header-action-button.html" with { type: "html" };
 
 const elementName = "shadow-claw-page-header-action-button";
 
 export class ShadowClawPageHeaderActionButton extends ShadowClawElement {
-  static componentPath = `components/common/${elementName}`;
-  static observedAttributes = ["variant", "disabled"];
-  static styles = `${ShadowClawPageHeaderActionButton.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawPageHeaderActionButton.componentPath}/${elementName}.html`;
+  static styles = shadowClawPageHeaderActionButtonStyles;
+  static template = shadowClawPageHeaderActionButtonTemplate;
 
   attributeChangedCallback() {
     this.render();
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
     await this.render();
   }
 
@@ -34,4 +33,6 @@ export class ShadowClawPageHeaderActionButton extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawPageHeaderActionButton);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawPageHeaderActionButton);
+}

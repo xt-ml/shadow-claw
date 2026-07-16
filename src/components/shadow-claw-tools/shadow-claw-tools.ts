@@ -17,14 +17,15 @@ import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
+import shadowClawToolsStyles from "./shadow-claw-tools.css" with { type: "css" };
+import shadowClawToolsTemplate from "./shadow-claw-tools.html" with { type: "html" };
 
 const BUILTIN_TOOL_NAMES = new Set(TOOL_DEFINITIONS.map((t) => t.name));
 
 const elementName = "shadow-claw-tools";
 export class ShadowClawTools extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawTools.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawTools.componentPath}/${elementName}.html`;
+  static styles = shadowClawToolsStyles;
+  static template = shadowClawToolsTemplate;
 
   orchestrator: Orchestrator | null = null;
 
@@ -33,7 +34,6 @@ export class ShadowClawTools extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const db = await getDb();
     this.orchestrator = orchestratorStore.orchestrator;
@@ -758,4 +758,6 @@ export class ShadowClawTools extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawTools);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawTools);
+}

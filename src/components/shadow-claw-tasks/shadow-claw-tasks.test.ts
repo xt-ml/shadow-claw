@@ -69,7 +69,7 @@ describe("shadow-claw-tasks", () => {
     const previewDiv = document.createElement("div");
     previewDiv.className = "tasks__preview";
 
-    component.shadowRoot?.append(dialog, form, title, submitBtn, previewDiv);
+    component.shadowRoot?.replaceChildren(dialog, form, title, submitBtn, previewDiv);
 
     component.handleEdit({
       id: "task-1",

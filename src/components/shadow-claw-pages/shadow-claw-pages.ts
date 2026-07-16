@@ -34,6 +34,8 @@ import type {
 import ShadowClawElement from "../shadow-claw-element.js";
 
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
+import shadowClawPagesStyles from "./shadow-claw-pages.css" with { type: "css" };
+import shadowClawPagesTemplate from "./shadow-claw-pages.html" with { type: "html" };
 
 const previewSanitizeOptions: Config = {
   // Allow blob URLs for locally resolved OPFS preview assets.
@@ -44,9 +46,8 @@ const previewSanitizeOptions: Config = {
 const elementName = "shadow-claw-pages";
 
 export class ShadowClawPages extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawPages.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawPages.componentPath}/${elementName}.html`;
+  static styles = shadowClawPagesStyles;
+  static template = shadowClawPagesTemplate;
 
   db: ShadowClawDatabase | null = null;
 
@@ -59,7 +60,6 @@ export class ShadowClawPages extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -849,4 +849,6 @@ export class ShadowClawPages extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawPages);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawPages);
+}

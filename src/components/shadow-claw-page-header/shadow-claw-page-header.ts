@@ -1,4 +1,6 @@
 import ShadowClawElement from "../shadow-claw-element.js";
+import shadowClawPageHeaderStyles from "./shadow-claw-page-header.css" with { type: "css" };
+import shadowClawPageHeaderTemplate from "./shadow-claw-page-header.html" with { type: "html" };
 
 const elementName = "shadow-claw-page-header";
 
@@ -7,9 +9,8 @@ const elementName = "shadow-claw-page-header";
  * Supports title, actions, and optional breadcrumbs.
  */
 export class ShadowClawPageHeader extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawPageHeader.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawPageHeader.componentPath}/${elementName}.html`;
+  static styles = shadowClawPageHeaderStyles;
+  static template = shadowClawPageHeaderTemplate;
 
   static get observedAttributes() {
     return ["title", "icon"];
@@ -30,7 +31,6 @@ export class ShadowClawPageHeader extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -168,7 +168,6 @@ export class ShadowClawPageHeader extends ShadowClawElement {
   }
 
   async render() {
-    await this.onTemplateReady;
     const root = this.shadowRoot;
     if (!root) {
       return;
@@ -188,4 +187,6 @@ export class ShadowClawPageHeader extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawPageHeader);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawPageHeader);
+}

@@ -48,7 +48,6 @@ describe("shadow-claw-channels", () => {
   it("dispatches navigate-back event when back button is clicked", async () => {
     const el = new ShadowClawChannels();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     let navigateBack = false;

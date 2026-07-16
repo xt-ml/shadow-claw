@@ -50,7 +50,6 @@ describe("shadow-claw-notifications", () => {
   it("renders state correctly when unsubscribed", async () => {
     const el = new ShadowClawNotifications();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 50));
     await el.refreshState();
 
@@ -71,7 +70,6 @@ describe("shadow-claw-notifications", () => {
 
     const el = new ShadowClawNotifications();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 50));
     await el.refreshState();
 

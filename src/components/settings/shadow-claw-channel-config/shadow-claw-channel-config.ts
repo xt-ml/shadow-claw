@@ -9,13 +9,14 @@ import type { ShadowClawDatabase } from "../../../db/types.js";
 import "../shadow-claw-peerjs/shadow-claw-peerjs.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
+import shadowClawChannelConfigStyles from "./shadow-claw-channel-config.css" with { type: "css" };
+import shadowClawChannelConfigTemplate from "./shadow-claw-channel-config.html" with { type: "html" };
 
 const elementName = "shadow-claw-channel-config";
 
 export class ShadowClawChannelConfig extends ShadowClawElement {
-  static componentPath = `components/settings/${elementName}`;
-  static styles = `${ShadowClawChannelConfig.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawChannelConfig.componentPath}/${elementName}.html`;
+  static styles = shadowClawChannelConfigStyles;
+  static template = shadowClawChannelConfigTemplate;
 
   db: ShadowClawDatabase | null = null;
   orchestrator: Orchestrator | null = null;
@@ -25,7 +26,6 @@ export class ShadowClawChannelConfig extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -489,4 +489,6 @@ function parseCommaSeparatedList(value: string): string[] {
   );
 }
 
-customElements.define(elementName, ShadowClawChannelConfig);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawChannelConfig);
+}

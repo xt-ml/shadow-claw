@@ -90,7 +90,6 @@ describe("shadow-claw-pdf-viewer", () => {
   it("pans the canvas container while dragging", async () => {
     const viewer = new ShadowClawPdfViewer();
     document.body.appendChild(viewer);
-    await Promise.all([viewer.onTemplateReady, viewer.onStylesReady]);
 
     viewer.file = {
       name: "sample.pdf",

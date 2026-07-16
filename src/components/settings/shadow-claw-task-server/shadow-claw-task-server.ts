@@ -7,6 +7,8 @@ import type { Orchestrator } from "../../../core/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
+import shadowClawTaskServerStyles from "./shadow-claw-task-server.css" with { type: "css" };
+import shadowClawTaskServerTemplate from "./shadow-claw-task-server.html" with { type: "html" };
 
 const elementName = "shadow-claw-task-server";
 
@@ -14,9 +16,8 @@ const elementName = "shadow-claw-task-server";
  * Settings sub-component for Task Server URL configuration.
  */
 export class ShadowClawTaskServer extends ShadowClawElement {
-  static componentPath = `components/settings/${elementName}`;
-  static styles = `${ShadowClawTaskServer.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawTaskServer.componentPath}/${elementName}.html`;
+  static styles = shadowClawTaskServerStyles;
+  static template = shadowClawTaskServerTemplate;
 
   db: ShadowClawDatabase | null;
   orchestrator: Orchestrator | null;
@@ -29,7 +30,6 @@ export class ShadowClawTaskServer extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -113,4 +113,6 @@ export class ShadowClawTaskServer extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawTaskServer);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawTaskServer);
+}

@@ -2,15 +2,16 @@ import { effect } from "../../core/effect.js";
 import { toastStore, type Toast, type ToastType } from "../../stores/toast.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
+import shadowClawToastStyles from "./shadow-claw-toast.css" with { type: "css" };
+import shadowClawToastTemplate from "./shadow-claw-toast.html" with { type: "html" };
 
 const EXIT_ANIMATION_MS = 150;
 
 const elementName = "shadow-claw-toast";
 
 export class ShadowClawToast extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawToast.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawToast.componentPath}/${elementName}.html`;
+  static styles = shadowClawToastStyles;
+  static template = shadowClawToastTemplate;
 
   exitingToasts: Set<number> = new Set();
 
@@ -21,7 +22,6 @@ export class ShadowClawToast extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -180,4 +180,6 @@ export class ShadowClawToast extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawToast);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawToast);
+}

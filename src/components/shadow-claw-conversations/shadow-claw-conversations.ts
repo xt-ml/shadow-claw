@@ -13,13 +13,11 @@ import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
-
-const elementName = "shadow-claw-conversations";
-
+import shadowClawConversationsStyles from "./shadow-claw-conversations.css" with { type: "css" };
+import shadowClawConversationsTemplate from "./shadow-claw-conversations.html" with { type: "html" };
 export class ShadowClawConversations extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawConversations.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawConversations.componentPath}/${elementName}.html`;
+  static styles = shadowClawConversationsStyles;
+  static template = shadowClawConversationsTemplate;
 
   public channelRegistry: ChannelRegistry | null = null;
   public db: ShadowClawDatabase | null = null;
@@ -38,7 +36,6 @@ export class ShadowClawConversations extends ShadowClawElement {
   private _touchId: number | null = null;
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {

@@ -152,7 +152,7 @@ jest.mock("../shadow-claw-element.js", () => {
       this.attachShadow({ mode: "open" });
       const root = document.createElement("div");
       root.className = "a2ui__root";
-      this.shadowRoot?.appendChild(root);
+      this.shadowRoot?.replaceChildren(root);
     }
 
     connectedCallback() {}

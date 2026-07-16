@@ -9,9 +9,9 @@
     ]
   },
   "include": [
+    "src/**/*.css",
+    "src/**/*.html",
     "src/**/*.ts",
-    "src/service-worker/init.ts",
-    "src/index.ts"
   ],
   "exclude": [
     "**/*.test.ts",

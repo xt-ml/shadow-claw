@@ -54,13 +54,14 @@ Tests are the source of truth for expected behavior. Before implementing a new f
 - Source files use `.ts` (TypeScript).
 - Tests live **next to** their source file: `src/core/orchestrator.ts` → `src/core/orchestrator.test.ts`.
 - End-to-end tests live in `e2e/` and use Playwright with fixtures + Page Objects. Extensions are `.ts`.
-- Components are in `src/components/shadow-claw-*/shadow-claw-*.ts` (each in its own subdirectory with co-located `.html` and `.css` files).
+- Components are in `src/components/shadow-claw-*/shadow-claw-*.ts` (each in its own subdirectory with co-located `.html` and `.css` files). Many large components extract their logic into co-located `utils/` subdirectories.
 - `src/core/theme-init.ts` is a TypeScript bootstrap script compiled by Rolldown as a self-contained IIFE (`dist/public/theme-init.js`). It must remain free of module-level side effects that depend on the full app being ready.
 
 ### Types & Imports
 
 - Types are declared in `src/types.ts` as explicit TypeScript interfaces and types.
 - External libraries are locally bundled using **Rolldown** and `npm install`. Node-only packages (Express, Jest, Workbox CLI, Electron) belong in `devDependencies`.
+- **JSON Imports:** Always use ES import attributes (`with { type: "json" }`), not the deprecated `assert` syntax.
 
 ### JS Shell Capabilities & Limitations (Bash tool)
 

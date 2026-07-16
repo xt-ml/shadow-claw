@@ -16,7 +16,6 @@ describe("shadow-claw-actions", () => {
     el.addEventListener("settings-action", listener as EventListener);
 
     document.body.appendChild(el);
-    await Promise.all([el.onStylesReady, el.onTemplateReady]);
     await el.render();
 
     const editBtn = el.shadowRoot?.querySelector(

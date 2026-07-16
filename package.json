@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.12.7",
+  "version": "1.12.8",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -85,6 +85,7 @@
     "assert": "^2.1.0",
     "browserify-zlib": "^0.2.0",
     "buffer": "^6.0.3",
+    "canvas": "^3.2.3",
     "concurrently": "^10.0.3",
     "cross-env": "^10.1.0",
     "crypto-browserify": "^3.12.0",

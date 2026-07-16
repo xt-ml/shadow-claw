@@ -163,7 +163,6 @@ describe("shadow-claw-git", () => {
   it("renders correctly after connectedCallback", async () => {
     const el = new ShadowClawGit();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 50));
     await el.render();
 
@@ -180,7 +179,6 @@ describe("shadow-claw-git", () => {
   it("saves global git settings on button click", async () => {
     const el = new ShadowClawGit();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 50));
     await el.render();
 
@@ -207,7 +205,6 @@ describe("shadow-claw-git", () => {
   it("opens account form when Add Account is clicked", async () => {
     const el = new ShadowClawGit();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 50));
     await el.render();
 
@@ -226,7 +223,6 @@ describe("shadow-claw-git", () => {
     const openSpy = jest.spyOn(window, "open").mockReturnValue(null as any);
     const el = new ShadowClawGit();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 50));
     await el.render();
 
@@ -351,7 +347,6 @@ describe("shadow-claw-git", () => {
 
     const el = new ShadowClawGit();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 50));
     await el.render();
 
@@ -368,7 +363,6 @@ describe("shadow-claw-git", () => {
   it("routes showAccountForm innerHTML through the Trusted Types helper", async () => {
     const el = new ShadowClawGit();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
     await el.render();
 

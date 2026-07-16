@@ -7,9 +7,12 @@ export default {
       testEnvironment: "jsdom",
       setupFilesAfterEnv: ["<rootDir>/src/testing/jest-setup.ts"],
       roots: ["<rootDir>/src", "<rootDir>/electron"],
-      resolver: "<rootDir>/jest-ts-resolver.cjs",
+      resolver: "<rootDir>/src/testing/jest-ts-resolver.cjs",
       transform: {
-        "^.+\\.ts$": "<rootDir>/jest-ts-transform.cjs",
+        "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
+        // Support import attributes for CSS and HTML
+        "\\.css$": "<rootDir>/src/testing/jest-css-mock.cjs",
+        "\\.html$": "<rootDir>/src/testing/jest-html-mock.cjs",
       },
       extensionsToTreatAsEsm: [".ts"],
       moduleNameMapper: {
@@ -38,20 +41,20 @@ export default {
       displayName: "server",
       testEnvironment: "node",
       roots: ["<rootDir>/src/server"],
-      resolver: "<rootDir>/jest-ts-resolver.cjs",
+      resolver: "<rootDir>/src/testing/jest-ts-resolver.cjs",
       extensionsToTreatAsEsm: [".ts"],
       transform: {
-        "^.+\\.ts$": "<rootDir>/jest-ts-transform.cjs",
+        "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
       },
     },
     {
       displayName: "notifications",
       testEnvironment: "node",
       roots: ["<rootDir>/src"],
-      resolver: "<rootDir>/jest-ts-resolver.cjs",
+      resolver: "<rootDir>/src/testing/jest-ts-resolver.cjs",
       extensionsToTreatAsEsm: [".ts"],
       transform: {
-        "^.+\\.ts$": "<rootDir>/jest-ts-transform.cjs",
+        "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
       },
       testMatch: [
         "<rootDir>/src/subsystems/notifications/push-store.test.ts",
@@ -67,10 +70,10 @@ export default {
       displayName: "task-schedule",
       testEnvironment: "node",
       roots: ["<rootDir>/src"],
-      resolver: "<rootDir>/jest-ts-resolver.cjs",
+      resolver: "<rootDir>/src/testing/jest-ts-resolver.cjs",
       extensionsToTreatAsEsm: [".ts"],
       transform: {
-        "^.+\\.ts$": "<rootDir>/jest-ts-transform.cjs",
+        "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
       },
       testMatch: [
         "<rootDir>/src/subsystems/notifications/task-schedule-store.test.ts",
@@ -86,10 +89,10 @@ export default {
       displayName: "bin",
       testEnvironment: "node",
       roots: ["<rootDir>/bin"],
-      resolver: "<rootDir>/jest-ts-resolver.cjs",
+      resolver: "<rootDir>/src/testing/jest-ts-resolver.cjs",
       extensionsToTreatAsEsm: [".ts"],
       transform: {
-        "^.+\\.ts$": "<rootDir>/jest-ts-transform.cjs",
+        "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
       },
       testMatch: ["<rootDir>/bin/**/*.test.mjs"],
     },

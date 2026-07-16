@@ -67,6 +67,8 @@ import "../shadow-claw-page-header/shadow-claw-page-header.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 import { getPeerChatDisplayStatus } from "./utils/getPeerChatDisplayStatus.js";
 import { escapeHtml } from "./utils/escapeHtml.js";
+import shadowClawChatStyles from "./shadow-claw-chat.css" with { type: "css" };
+import shadowClawChatTemplate from "./shadow-claw-chat.html" with { type: "html" };
 
 const AUTO_SCROLL_THRESHOLD = 80;
 const INLINE_ATTACHMENT_MAX_BYTES = 128 * 1024;
@@ -90,9 +92,8 @@ type MessageDraftPayload = {
 const elementName = "shadow-claw-chat";
 
 export class ShadowClawChat extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawChat.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawChat.componentPath}/${elementName}.html`;
+  static styles = shadowClawChatStyles;
+  static template = shadowClawChatTemplate;
 
   activityLogCollapsedOverride: boolean | null = null;
   activityLogVisibilityMediaQuery: MediaQueryList | null = null;
@@ -121,7 +122,6 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -2559,4 +2559,6 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawChat);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawChat);
+}

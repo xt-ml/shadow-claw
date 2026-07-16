@@ -1,4 +1,4 @@
-const { ShadowClawPageHeader } = await import("./shadow-claw-page-header.js");
+import { ShadowClawPageHeader } from "./shadow-claw-page-header.js";
 
 describe("shadow-claw-page-header", () => {
   it("registers custom element and renders title/icon", async () => {
@@ -11,7 +11,6 @@ describe("shadow-claw-page-header", () => {
     el.setAttribute("icon", "[icon]");
 
     document.body.appendChild(el);
-    await el.onTemplateReady;
 
     const title = el.shadowRoot?.querySelector(".header__title")?.textContent;
     expect(title).toBe("[icon] Files");
@@ -29,7 +28,6 @@ describe("shadow-claw-page-header", () => {
     el.appendChild(action);
 
     document.body.appendChild(el);
-    await el.onTemplateReady;
 
     const disclosure = el.shadowRoot?.querySelector(
       ".header__actions-disclosure",
@@ -62,7 +60,6 @@ describe("shadow-claw-page-header", () => {
     const el = new ShadowClawPageHeader();
     el.setAttribute("title", "Chat");
     document.body.appendChild(el);
-    await el.onTemplateReady;
 
     expect(el.isMainCollapsed()).toBe(false);
 
@@ -89,7 +86,6 @@ describe("shadow-claw-page-header", () => {
     const el = new ShadowClawPageHeader();
     el.setAttribute("title", "Chat");
     document.body.appendChild(el);
-    await el.onTemplateReady;
 
     expect(el.isMainCollapsed()).toBe(false);
 
@@ -116,7 +112,6 @@ describe("shadow-claw-page-header", () => {
     const el = new ShadowClawPageHeader();
     el.setAttribute("title", "Chat");
     document.body.appendChild(el);
-    await el.onTemplateReady;
 
     expect(el.isMainCollapsed()).toBe(false);
 

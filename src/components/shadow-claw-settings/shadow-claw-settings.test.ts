@@ -231,7 +231,6 @@ describe("shadow-claw-settings", () => {
   it("renders all sub-components", async () => {
     const el = new ShadowClawSettings();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const accounts = el.shadowRoot?.querySelector("shadow-claw-accounts");
@@ -261,7 +260,6 @@ describe("shadow-claw-settings", () => {
   it("renders backup, restore, and clear actions in header", async () => {
     const el = new ShadowClawSettings();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const backupBtn = el.shadowRoot?.querySelector(
@@ -286,7 +284,6 @@ describe("shadow-claw-settings", () => {
   it("renders backup dialog plaintext password toggle unchecked by default", async () => {
     const el = new ShadowClawSettings();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const includePlaintext = el.shadowRoot?.querySelector(
@@ -308,7 +305,6 @@ describe("shadow-claw-settings", () => {
 
     const el = new ShadowClawSettings();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     (el as any).db = {
@@ -360,7 +356,6 @@ describe("shadow-claw-settings", () => {
   it("shows AI tab by default", async () => {
     const el = new ShadowClawSettings();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const aiTab = el.shadowRoot?.querySelector('[data-tab-target="ai"]');
@@ -379,7 +374,6 @@ describe("shadow-claw-settings", () => {
   it("switches visible panel when a tab is selected", async () => {
     const el = new ShadowClawSettings();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const envTab = el.shadowRoot?.querySelector(
@@ -403,7 +397,6 @@ describe("shadow-claw-settings", () => {
   it("renders networking at top of environment panel", async () => {
     const el = new ShadowClawSettings();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const envPanel = el.shadowRoot?.querySelector(
@@ -425,7 +418,6 @@ describe("shadow-claw-settings", () => {
   it("renders all tab panels with collapsible sections collapsed by default", async () => {
     const el = new ShadowClawSettings();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const aiPanel = el.shadowRoot?.querySelector('[data-tab-panel="ai"]');
@@ -453,7 +445,6 @@ describe("shadow-claw-settings", () => {
   it("switches tabs with arrow keys", async () => {
     const el = new ShadowClawSettings();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const aiTab = el.shadowRoot?.querySelector<HTMLButtonElement>(
@@ -482,7 +473,6 @@ describe("shadow-claw-settings", () => {
   it("dispatches navigate event for tools config", async () => {
     const el = new ShadowClawSettings();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     let navigatedPage = null;
@@ -503,7 +493,6 @@ describe("shadow-claw-settings", () => {
   it("dispatches navigate event for channels config", async () => {
     const el = new ShadowClawSettings();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     let navigatedPage = null;
@@ -529,7 +518,6 @@ describe("shadow-claw-settings", () => {
 
     const el = new ShadowClawSettings();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const revisionEl = el.shadowRoot?.querySelector(
@@ -552,7 +540,6 @@ describe("shadow-claw-settings", () => {
     (el as any).orchestrator = orchestrator;
     (el as any).db = {} as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const nameInput = el.shadowRoot?.querySelector<HTMLInputElement>(
@@ -586,7 +573,6 @@ describe("shadow-claw-settings", () => {
     (el as any).orchestrator = orchestrator;
     (el as any).db = {} as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     (orchestratorStore as any).orchestrator = orchestrator;
     await el.render();
 
@@ -617,7 +603,6 @@ describe("shadow-claw-settings", () => {
     const el = new ShadowClawSettings();
     (el as any).db = {} as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const toggle = el.shadowRoot?.querySelector<HTMLInputElement>(
@@ -659,7 +644,6 @@ describe("shadow-claw-settings", () => {
     (el as any).orchestrator = null;
     (el as any).db = {} as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const nameInput = el.shadowRoot?.querySelector<HTMLInputElement>(

@@ -3,20 +3,20 @@ import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-
 import "../settings/shadow-claw-channel-config/shadow-claw-channel-config.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
+import shadowClawChannelsStyles from "./shadow-claw-channels.css" with { type: "css" };
+import shadowClawChannelsTemplate from "./shadow-claw-channels.html" with { type: "html" };
 
 const elementName = "shadow-claw-channels";
 
 export class ShadowClawChannels extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawChannels.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawChannels.componentPath}/${elementName}.html`;
+  static styles = shadowClawChannelsStyles;
+  static template = shadowClawChannelsTemplate;
 
   constructor() {
     super();
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -45,4 +45,6 @@ export class ShadowClawChannels extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawChannels);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawChannels);
+}

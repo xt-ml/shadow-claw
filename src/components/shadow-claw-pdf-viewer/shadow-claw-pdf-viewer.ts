@@ -5,6 +5,8 @@ import { installGetOrInsertComputedPolyfill } from "./utils/installGetOrInsertCo
 import type { PdfFile } from "../types.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
+import shadowClawPdfViewerStyles from "./shadow-claw-pdf-viewer.css" with { type: "css" };
+import shadowClawPdfViewerTemplate from "./shadow-claw-pdf-viewer.html" with { type: "html" };
 
 installGetOrInsertComputedPolyfill();
 
@@ -15,9 +17,8 @@ GlobalWorkerOptions.workerSrc = "./pdf.worker.js";
 const elementName = "shadow-claw-pdf-viewer";
 
 export class ShadowClawPdfViewer extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawPdfViewer.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawPdfViewer.componentPath}/${elementName}.html`;
+  static styles = shadowClawPdfViewerStyles;
+  static template = shadowClawPdfViewerTemplate;
 
   _file: PdfFile | null = null;
   _handlePanEndRef: () => void;
@@ -48,7 +49,6 @@ export class ShadowClawPdfViewer extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -475,4 +475,6 @@ export class ShadowClawPdfViewer extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawPdfViewer);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawPdfViewer);
+}

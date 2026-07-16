@@ -12,9 +12,9 @@
     ]
   },
   "include": [
-    "src/**/*.test.ts",
-    "src/testing/jest-setup.ts",
-    "src/testing/test-types.d.ts"
+    "src/**/*.css",
+    "src/**/*.html",
+    "src/**/*.ts",
   ],
   "exclude": [
     "node_modules",

@@ -1,22 +1,20 @@
 import ShadowClawElement from "../../shadow-claw-element.js";
+import shadowClawActionsStyles from "./shadow-claw-actions.css" with { type: "css" };
+import shadowClawActionsTemplate from "./shadow-claw-actions.html" with { type: "html" };
 
 const elementName = "shadow-claw-actions";
 
 type ActionKind = "account" | "connection";
 
 export class ShadowClawActions extends ShadowClawElement {
-  static componentPath = `components/common/${elementName}`;
-  static observedAttributes = ["kind", "item-id", "is-default"];
-  static styles = `${ShadowClawActions.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawActions.componentPath}/${elementName}.html`;
+  static styles = shadowClawActionsStyles;
+  static template = shadowClawActionsTemplate;
 
   attributeChangedCallback() {
     this.render();
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
-
     this.shadowRoot?.addEventListener("click", (event) => {
       const target = event.target;
       if (!(target instanceof HTMLButtonElement)) {
@@ -89,4 +87,6 @@ export class ShadowClawActions extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawActions);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawActions);
+}

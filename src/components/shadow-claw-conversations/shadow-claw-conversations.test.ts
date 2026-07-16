@@ -83,7 +83,6 @@ describe("ShadowClawConversations", () => {
   it("renders conversation list items", async () => {
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const items = el.shadowRoot?.querySelectorAll(".conversation-item");
@@ -100,7 +99,6 @@ describe("ShadowClawConversations", () => {
 
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const badge = el.shadowRoot?.querySelector(".channel-badge");
@@ -119,7 +117,6 @@ describe("ShadowClawConversations", () => {
 
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
 
     mockOrchStore.orchestrator = originalOrchestrator;
     await el.render();
@@ -133,7 +130,6 @@ describe("ShadowClawConversations", () => {
   it("marks the active group with an active class", async () => {
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const active = el.shadowRoot?.querySelector(".conversation-item.active");
@@ -146,7 +142,6 @@ describe("ShadowClawConversations", () => {
   it("has a create button", async () => {
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const btn = el.shadowRoot?.querySelector("[data-action='create']");
@@ -159,7 +154,6 @@ describe("ShadowClawConversations", () => {
     mockOrchStore.groups = [{ groupId: "br:main", name: "Main", createdAt: 0 }];
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const deleteBtn = el.shadowRoot?.querySelector("[data-action='delete']");
@@ -175,7 +169,6 @@ describe("ShadowClawConversations", () => {
     ];
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const deleteBtns = el.shadowRoot?.querySelectorAll(
@@ -193,7 +186,6 @@ describe("ShadowClawConversations", () => {
     ];
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const cloneBtns = el.shadowRoot?.querySelectorAll("[data-action='clone']");
@@ -210,7 +202,6 @@ describe("ShadowClawConversations", () => {
 
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
     el.db = {} as any;
 
@@ -249,7 +240,6 @@ describe("ShadowClawConversations", () => {
 
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const deleteDialog = el.shadowRoot?.querySelector(
@@ -273,7 +263,6 @@ describe("ShadowClawConversations", () => {
   it("styles delete action with distinct hover/focus colors", async () => {
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const style = el.shadowRoot?.querySelector("style");
@@ -292,7 +281,6 @@ describe("ShadowClawConversations", () => {
     ];
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const handles = el.shadowRoot?.querySelectorAll(".drag-handle");
@@ -304,7 +292,6 @@ describe("ShadowClawConversations", () => {
   it("drag handle has grab cursor style", async () => {
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const style = el.shadowRoot?.querySelector("style");
@@ -316,7 +303,6 @@ describe("ShadowClawConversations", () => {
   it("drag handle has grabbing cursor on :active", async () => {
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const style = el.shadowRoot?.querySelector("style");
@@ -329,7 +315,6 @@ describe("ShadowClawConversations", () => {
     mockOrchStore.groups = [{ groupId: "br:main", name: "Main", createdAt: 0 }];
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const item = el.shadowRoot?.querySelector(".conversation-item");
@@ -343,7 +328,6 @@ describe("ShadowClawConversations", () => {
   it("has an ARIA live region for reorder announcements", async () => {
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const liveRegion = el.shadowRoot?.querySelector("#live-region");
@@ -357,7 +341,6 @@ describe("ShadowClawConversations", () => {
   it("has hidden reorder instructions for screen readers", async () => {
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const instructions = el.shadowRoot?.querySelector("#reorder-instructions");
@@ -373,7 +356,6 @@ describe("ShadowClawConversations", () => {
   it("conversation list has role=list", async () => {
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const list = el.shadowRoot?.querySelector(".conversation-list");
@@ -385,7 +367,6 @@ describe("ShadowClawConversations", () => {
   it("drag handle has touch-action: none for touch support", async () => {
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const style = el.shadowRoot?.querySelector("style");
@@ -401,7 +382,6 @@ describe("ShadowClawConversations", () => {
     ];
     const el = new ShadowClawConversations() as any;
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const cloneBtn = el.shadowRoot?.querySelector("[data-action='clone']");
@@ -420,7 +400,6 @@ describe("ShadowClawConversations", () => {
     it("has a resize handle", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const handle = el.shadowRoot?.querySelector(".resize-handle");
@@ -432,7 +411,6 @@ describe("ShadowClawConversations", () => {
     it("resize handle has row-resize cursor style", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const style = el.shadowRoot?.querySelector("style");
@@ -444,7 +422,6 @@ describe("ShadowClawConversations", () => {
     it("resize handle renders a visible grab affordance", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const style = el.shadowRoot?.querySelector("style");
@@ -457,7 +434,6 @@ describe("ShadowClawConversations", () => {
     it("conversation list has scrollable styling", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const style = el.shadowRoot?.querySelector("style");
@@ -469,7 +445,6 @@ describe("ShadowClawConversations", () => {
     it("host uses flex-direction column", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const style = el.shadowRoot?.querySelector("style");
@@ -481,7 +456,6 @@ describe("ShadowClawConversations", () => {
     it("conversation list has flex: 1 to fill available space", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const style = el.shadowRoot?.querySelector("style");
@@ -503,7 +477,6 @@ describe("ShadowClawConversations", () => {
 
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const items = el.shadowRoot?.querySelectorAll(".conversation-item");
@@ -525,7 +498,6 @@ describe("ShadowClawConversations", () => {
 
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const item = el.shadowRoot?.querySelector("[data-group-id='br:main']");
@@ -537,7 +509,6 @@ describe("ShadowClawConversations", () => {
     it("has pulse animation keyframes in styles", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const style = el.shadowRoot?.querySelector("style");
@@ -549,7 +520,6 @@ describe("ShadowClawConversations", () => {
     it("unread class applies pulse animation", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const style = el.shadowRoot?.querySelector("style");
@@ -574,7 +544,6 @@ describe("ShadowClawConversations", () => {
 
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
       el.db = {} as any;
 
@@ -618,7 +587,6 @@ describe("ShadowClawConversations", () => {
 
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
       el.db = {} as any;
 
@@ -671,7 +639,6 @@ describe("ShadowClawConversations", () => {
 
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
       el.db = {} as any;
 
@@ -724,7 +691,6 @@ describe("ShadowClawConversations", () => {
 
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
       el.db = {} as any;
 
@@ -770,7 +736,6 @@ describe("ShadowClawConversations", () => {
       ];
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const items = el.shadowRoot?.querySelectorAll(".conversation-item");
@@ -802,7 +767,6 @@ describe("ShadowClawConversations", () => {
       ];
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const item = el.shadowRoot?.querySelector(
@@ -836,7 +800,6 @@ describe("ShadowClawConversations", () => {
       ];
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const item = el.shadowRoot?.querySelector(
@@ -862,7 +825,6 @@ describe("ShadowClawConversations", () => {
       ];
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const style = el.shadowRoot?.querySelector("style");
@@ -878,7 +840,6 @@ describe("ShadowClawConversations", () => {
     it("has a create dialog element", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const dialog = el.shadowRoot?.querySelector(
@@ -893,7 +854,6 @@ describe("ShadowClawConversations", () => {
     it("has a details dialog element", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const dialog = el.shadowRoot?.querySelector(
@@ -908,7 +868,6 @@ describe("ShadowClawConversations", () => {
     it("has a delete dialog element", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const dialog = el.shadowRoot?.querySelector(
@@ -923,7 +882,6 @@ describe("ShadowClawConversations", () => {
     it("has a clone dialog element", async () => {
       const el = new ShadowClawConversations() as any;
       document.body.appendChild(el);
-      await el.onTemplateReady;
       await el.render();
 
       const dialog = el.shadowRoot?.querySelector(

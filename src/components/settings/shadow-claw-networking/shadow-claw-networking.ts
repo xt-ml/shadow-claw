@@ -7,6 +7,8 @@ import type { Orchestrator } from "../../../core/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
+import shadowClawNetworkingStyles from "./shadow-claw-networking.css" with { type: "css" };
+import shadowClawNetworkingTemplate from "./shadow-claw-networking.html" with { type: "html" };
 
 const elementName = "shadow-claw-networking";
 
@@ -14,9 +16,8 @@ const elementName = "shadow-claw-networking";
  * Settings sub-component for network proxy configuration.
  */
 export class ShadowClawNetworking extends ShadowClawElement {
-  static componentPath = `components/settings/${elementName}`;
-  static styles = `${ShadowClawNetworking.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawNetworking.componentPath}/${elementName}.html`;
+  static styles = shadowClawNetworkingStyles;
+  static template = shadowClawNetworkingTemplate;
 
   db: ShadowClawDatabase | null;
   orchestrator: Orchestrator | null;
@@ -29,7 +30,6 @@ export class ShadowClawNetworking extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -147,4 +147,6 @@ export class ShadowClawNetworking extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawNetworking);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawNetworking);
+}

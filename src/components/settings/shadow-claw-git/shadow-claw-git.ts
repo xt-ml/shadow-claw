@@ -20,6 +20,8 @@ import "../../common/shadow-claw-actions/shadow-claw-actions.js";
 import "../../common/shadow-claw-card/shadow-claw-card.js";
 
 import { GitAccount } from "../../../subsystems/git/types.js";
+import shadowClawGitStyles from "./shadow-claw-git.css" with { type: "css" };
+import shadowClawGitTemplate from "./shadow-claw-git.html" with { type: "html" };
 
 const elementName = "shadow-claw-git";
 const GIT_OAUTH_PROVIDER_IDS = ["github", "gitlab", "azure_devops"];
@@ -45,9 +47,8 @@ function resolveGitAccountAuthMode(
 }
 
 export class ShadowClawGit extends ShadowClawElement {
-  static componentPath = `components/settings/${elementName}`;
-  static styles = `${ShadowClawGit.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawGit.componentPath}/${elementName}.html`;
+  static styles = shadowClawGitStyles;
+  static template = shadowClawGitTemplate;
 
   accounts: GitAccount[] = [];
   db: ShadowClawDatabase | null = null;
@@ -60,7 +61,6 @@ export class ShadowClawGit extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -1131,4 +1131,6 @@ export class ShadowClawGit extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawGit);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawGit);
+}

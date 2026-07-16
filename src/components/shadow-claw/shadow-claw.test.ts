@@ -366,7 +366,6 @@ describe("shadow-claw", () => {
 
     document.body.appendChild(component);
 
-    await component.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(orchestratorStore.init).toHaveBeenCalledWith(
@@ -391,7 +390,6 @@ describe("shadow-claw", () => {
 
     document.body.appendChild(component);
 
-    await component.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(orchestratorStore.init).toHaveBeenCalled();
@@ -403,7 +401,6 @@ describe("shadow-claw", () => {
 
     document.body.appendChild(component);
 
-    await component.onTemplateReady;
 
     const sunIcon = component.shadowRoot?.querySelector(".sun-icon");
     const moonIcon = component.shadowRoot?.querySelector(".moon-icon");
@@ -443,7 +440,6 @@ describe("shadow-claw", () => {
     const component = new ShadowClaw();
     component.orchestrator = mockOrchestrator;
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     ((await openFileHandler) as any)?.({
@@ -483,7 +479,6 @@ describe("shadow-claw", () => {
     const component = new ShadowClaw();
     component.orchestrator = mockOrchestrator;
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const notFoundErr = new DOMException(
@@ -539,7 +534,6 @@ describe("shadow-claw", () => {
     const component = new ShadowClaw();
     component.orchestrator = mockOrchestrator;
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     toggleTerminalVisibility(component.shadowRoot, component);
@@ -577,7 +571,6 @@ describe("shadow-claw", () => {
 
     document.body.appendChild(component);
 
-    await component.onTemplateReady;
 
     await new Promise((resolve) => setTimeout(resolve, 50));
     await new Promise((resolve) => setTimeout(resolve, 50));
@@ -608,7 +601,6 @@ describe("shadow-claw", () => {
     const component = new ShadowClaw();
     component.orchestrator = createOrchestratorStub();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const pagesNavItem = component.shadowRoot?.querySelector(
@@ -646,7 +638,6 @@ describe("shadow-claw", () => {
     const component = new ShadowClaw();
     component.orchestrator = createOrchestratorStub();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
 
     const pagesPage = component.shadowRoot?.querySelector(

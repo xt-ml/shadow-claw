@@ -91,7 +91,6 @@ describe("shadow-claw-integrations", () => {
 
     const el = new ShadowClawIntegrations();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
     await el.render();
 
@@ -110,7 +109,6 @@ describe("shadow-claw-integrations", () => {
   it("routes showForm slot.innerHTML through the Trusted Types helper", async () => {
     const el = new ShadowClawIntegrations();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
     await el.render();
 

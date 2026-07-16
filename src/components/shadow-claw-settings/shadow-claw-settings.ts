@@ -30,6 +30,8 @@ import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
+import shadowClawSettingsStyles from "./shadow-claw-settings.css" with { type: "css" };
+import shadowClawSettingsTemplate from "./shadow-claw-settings.html" with { type: "html" };
 
 const elementName = "shadow-claw-settings";
 
@@ -47,9 +49,8 @@ const elementName = "shadow-claw-settings";
  *  - Deployed revision footer
  */
 export class ShadowClawSettings extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawSettings.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawSettings.componentPath}/${elementName}.html`;
+  static styles = shadowClawSettingsStyles;
+  static template = shadowClawSettingsTemplate;
 
   activeTab = "ai";
   db: ShadowClawDatabase | null = null;
@@ -61,7 +62,6 @@ export class ShadowClawSettings extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -756,4 +756,6 @@ export class ShadowClawSettings extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawSettings);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawSettings);
+}

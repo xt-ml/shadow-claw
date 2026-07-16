@@ -210,14 +210,14 @@ Three conditions must all be true for streaming to activate:
 
 ## AWS Bedrock Proxy
 
-Bedrock requires AWS SigV4 request signing, which can't happen in the browser (no access to credentials). The Express server's proxy route signs requests server-side using AWS SSO credentials.
+Bedrock requires AWS SigV4 request signing, which can't happen in the browser (no access to credentials). The Express server's proxy route signs requests server-side using AWS credentials.
 
-The Bedrock provider is configured as `format: "anthropic"` since Bedrock models expose Anthropic's API format. The proxy:
+The Bedrock provider is configured as `format: "anthropic"` since the client sends Anthropic-formatted messages. The proxy:
 
-1. Accepts the request from the browser
-2. Adds SigV4 signing headers using `@aws-sdk/credential-providers`
-3. Forwards to the Bedrock endpoint
-4. Passes the SSE response stream through (compression-excluded for real-time delivery)
+1. Accepts the Anthropic-formatted request from the browser
+2. Translates the messages and tools to the native Bedrock `Converse` API format
+3. Invokes Bedrock using `@aws-sdk/client-bedrock-runtime` (`ConverseCommand` / `ConverseStreamCommand`)
+4. Streams the response back to the client in Anthropic SSE format
 
 When `BEDROCK_REGION`/`BEDROCK_PROFILE` environment variables are not set,
 the runtime can provide fallback values via request headers (`x-bedrock-region`,

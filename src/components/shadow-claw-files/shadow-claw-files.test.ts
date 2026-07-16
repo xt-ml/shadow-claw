@@ -131,7 +131,7 @@ describe("shadow-claw-files", () => {
   });
 
   it("includes New button next to toolbar actions", async () => {
-    const template = await ShadowClawFiles.getTemplateSource();
+    const template = await Promise.resolve(ShadowClawFiles.template.map((e: Element) => e.outerHTML).join(""));
 
     expect(template).toContain("files__upload-btn");
 
@@ -150,7 +150,6 @@ describe("shadow-claw-files", () => {
   it("creates a file from New dialog input", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     const input = component.shadowRoot?.querySelector(".files__new-input");
@@ -177,7 +176,6 @@ describe("shadow-claw-files", () => {
   it("creates a folder from New dialog when folder checkbox is enabled", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     const input = component.shadowRoot?.querySelector(".files__new-input");
@@ -214,7 +212,6 @@ describe("shadow-claw-files", () => {
   it("rejects path-style file names in New dialog", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     const input = component.shadowRoot?.querySelector(".files__new-input");
@@ -237,7 +234,6 @@ describe("shadow-claw-files", () => {
   it("hides sync buttons when runtime mode is not 9p", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     (orchestratorStore.orchestrator as any).getVMStatus.mockReturnValue({
@@ -264,7 +260,6 @@ describe("shadow-claw-files", () => {
   it("shows sync buttons when runtime mode is 9p", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     (orchestratorStore.orchestrator as any).getVMStatus.mockReturnValue({
@@ -291,7 +286,6 @@ describe("shadow-claw-files", () => {
   it("renames a file from the Rename dialog", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     (component as any)._pendingRenamePath = "notes.txt";
@@ -326,7 +320,6 @@ describe("shadow-claw-files", () => {
   it("rejects path-style names in Rename dialog", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     (component as any)._pendingRenamePath = "notes.txt";
@@ -355,7 +348,6 @@ describe("shadow-claw-files", () => {
 
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     (component as any)._pendingRenamePath = "notes.txt";
@@ -389,7 +381,6 @@ describe("shadow-claw-files", () => {
 
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     (component as any)._pendingRenamePath = "docs";
@@ -443,7 +434,6 @@ describe("shadow-claw-files", () => {
 
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     (component as any)._pendingRenamePath = "big-dir";
@@ -479,7 +469,6 @@ describe("shadow-claw-files", () => {
 
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     const input = component.shadowRoot?.querySelector(".files__new-input");
@@ -536,7 +525,6 @@ describe("shadow-claw-files", () => {
 
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     const input = component.shadowRoot?.querySelector(".files__new-input");
@@ -560,7 +548,6 @@ describe("shadow-claw-files", () => {
   it("adds markdown files to Pages from file actions", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
 
     (orchestratorStore as any).files = ["README.md"];
     (orchestratorStore as any).currentPath = ".";
@@ -584,7 +571,6 @@ describe("shadow-claw-files", () => {
   it("removes a file from Pages before deleting it", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
 
     jest.spyOn(component, "requestConfirmation").mockResolvedValue(true);
     (orchestratorStore as any).files = ["README.md"];
@@ -622,7 +608,6 @@ describe("shadow-claw-files", () => {
   it("updates clipboard state on Cut or Copy click", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     // Mock orchestrator files to render list items
@@ -671,7 +656,6 @@ describe("shadow-claw-files", () => {
   it("hides and disables Paste button when clipboard is empty", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     filesUiStore.clearClipboard();
@@ -691,7 +675,6 @@ describe("shadow-claw-files", () => {
   it("shows and enables Paste button when clipboard has an entry", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     filesUiStore.setClipboard("test-file.txt", "copy", false, "default");
@@ -711,7 +694,6 @@ describe("shadow-claw-files", () => {
   it("renders more actions toggle before actions container in the DOM to ensure correct tab focus order", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     // Mock orchestrator files to render list items
@@ -742,7 +724,6 @@ describe("shadow-claw-files", () => {
   it("opens paste confirmation dialog and triggers handlePasteEntry on submit for copy type", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     filesUiStore.setClipboard("test-file.txt", "copy", false, "default");
@@ -791,7 +772,6 @@ describe("shadow-claw-files", () => {
   it("opens paste confirmation dialog and triggers handlePasteEntry on submit for cut type", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     filesUiStore.setClipboard("test-folder/", "cut", true, "default");
@@ -849,7 +829,6 @@ describe("shadow-claw-files", () => {
 
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     filesUiStore.setClipboard("test.txt", "copy", false, "default");
@@ -883,7 +862,6 @@ describe("shadow-claw-files", () => {
   it("does not open paste dialog when target folder is the clipboard source folder", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     (orchestratorStore as any).currentPath = "project";
@@ -913,7 +891,6 @@ describe("shadow-claw-files", () => {
   it("blocks paste execution when target folder is inside source folder", async () => {
     const component = new ShadowClawFiles();
     document.body.appendChild(component);
-    await component.onTemplateReady;
     await component.render();
 
     (orchestratorStore as any).currentPath = "project/nested";

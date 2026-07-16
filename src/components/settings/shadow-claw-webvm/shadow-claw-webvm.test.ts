@@ -75,7 +75,6 @@ describe("shadow-claw-webvm", () => {
     (orchestratorStore as any).ready = true;
     const el = new ShadowClawWebvm();
     document.body.appendChild(el);
-    await Promise.all([el.onStylesReady, el.onTemplateReady]);
     await new Promise((r) => setTimeout(r, 50));
     await el.render();
 
@@ -96,7 +95,6 @@ describe("shadow-claw-webvm", () => {
 
     const el = new ShadowClawWebvm();
     document.body.appendChild(el);
-    await Promise.all([el.onStylesReady, el.onTemplateReady]);
     await new Promise((r) => setTimeout(r, 50));
     await el.render();
 

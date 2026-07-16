@@ -91,6 +91,7 @@ Web Components now live in their own subdirectories with co-located `.html` temp
 ```text
 src/components/shadow-claw-chat/
 ├── shadow-claw-chat.ts     # Component logic
+├── utils/                  # Extracted helper utilities
 ├── shadow-claw-chat.html   # Shadow DOM template (fetched at runtime)
 └── shadow-claw-chat.css    # Shadow DOM styles (adopted at runtime)
 ```

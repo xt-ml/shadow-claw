@@ -94,7 +94,6 @@ describe("shadow-claw-channel-config", () => {
 
     const el = new ShadowClawChannelConfig();
     document.body.appendChild(el);
-    await Promise.all([el.onStylesReady, el.onTemplateReady]);
     await el.render();
 
     expect(
@@ -158,7 +157,6 @@ describe("shadow-claw-channel-config", () => {
 
     const el = new ShadowClawChannelConfig();
     document.body.appendChild(el);
-    await Promise.all([el.onStylesReady, el.onTemplateReady]);
     await el.render();
 
     (
@@ -212,7 +210,6 @@ describe("shadow-claw-channel-config", () => {
 
     const el = new ShadowClawChannelConfig();
     document.body.appendChild(el);
-    await Promise.all([el.onStylesReady, el.onTemplateReady]);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
     const orchestrator = createOrchestratorStub();
@@ -271,7 +268,6 @@ describe("shadow-claw-channel-config", () => {
 
     const el = new ShadowClawChannelConfig();
     document.body.appendChild(el);
-    await Promise.all([el.onStylesReady, el.onTemplateReady]);
     await el.render();
 
     (
@@ -352,7 +348,6 @@ describe("shadow-claw-channel-config", () => {
 
     const el = new ShadowClawChannelConfig();
     document.body.appendChild(el);
-    await Promise.all([el.onStylesReady, el.onTemplateReady]);
     await el.render();
 
     el.shadowRoot
@@ -409,7 +404,6 @@ describe("shadow-claw-channel-config", () => {
 
     const el = new ShadowClawChannelConfig();
     document.body.appendChild(el);
-    await Promise.all([el.onStylesReady, el.onTemplateReady]);
     await el.render();
 
     el.shadowRoot
@@ -464,7 +458,6 @@ describe("shadow-claw-channel-config", () => {
 
     const el = new ShadowClawChannelConfig();
     document.body.appendChild(el);
-    await Promise.all([el.onStylesReady, el.onTemplateReady]);
     await el.render();
 
     el.shadowRoot

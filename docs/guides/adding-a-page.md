@@ -157,7 +157,7 @@ In `src/components/shadow-claw/shadow-claw.html`, add a nav entry:
 </nav>
 ```
 
-In `src/components/shadow-claw/shadow-claw.ts`, handle the navigation:
+In `src/components/shadow-claw/utils/handleShadowClawNavigate.ts` (or the equivalent navigation handler), handle the routing:
 
 ```ts
 case "my-page":

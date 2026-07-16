@@ -44,7 +44,6 @@ describe("shadow-claw-networking", () => {
 
     const el = new ShadowClawNetworking();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 50));
     await el.render();
 
@@ -67,7 +66,6 @@ describe("shadow-claw-networking", () => {
 
     const el = new ShadowClawNetworking();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 50));
     await el.render();
 
@@ -94,7 +92,6 @@ describe("shadow-claw-networking", () => {
 
     const el = new ShadowClawNetworking();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 50));
     await el.render();
 

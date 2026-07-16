@@ -1,78 +1,9 @@
 export default class ShadowClawElement extends HTMLElement {
   static readonly component: string;
-  static readonly styles: URL | string;
-  static readonly template: URL | string;
 
-  static getStyles(
-    styles: URL | string = (this as any).styles,
-  ): Promise<CSSStyleSheet> {
-    return fetch(styles)
-      .then((r) => r.text())
-      .then((css) => {
-        const sheet = new CSSStyleSheet();
-
-        sheet.replaceSync(css);
-
-        return sheet;
-      })
-      .catch((err) => {
-        console.error("Failed to load styles", err);
-
-        return Promise.reject(err);
-      });
-  }
-
-  static getStylesSource(
-    styles: URL | string = (this as any).styles,
-  ): Promise<string> {
-    return fetch(styles).then((r) => r.text());
-  }
-
-  static getTemplate(
-    template: URL | string = (this as any).template,
-  ): Promise<Element[]> {
-    return fetch(template)
-      .then((r) => r.text())
-      .then((html) => {
-        const doc = new DOMParser().parseFromString(html, "text/html");
-        const templateEl = doc.querySelector("template");
-
-        if (templateEl) {
-          // return <template> content's children
-
-          return Array.from(templateEl.content.children);
-        }
-
-        // return the parsed document (head + body)
-        const templateChildren = Array.from(doc.head.children).concat(
-          Array.from(doc.body.children),
-        );
-
-        return templateChildren;
-      })
-      .catch((err) => {
-        console.error("Failed to load template", err);
-
-        return Promise.reject(err);
-      });
-  }
-
-  static getTemplateSource(
-    template: URL | string = (this as any).template,
-  ): Promise<string> {
-    return fetch(template).then((r) => r.text());
-  }
-
-  static setStyles(shadowRoot: ShadowRoot, styles: CSSStyleSheet) {
-    shadowRoot.adoptedStyleSheets = [styles];
-  }
-
-  static setTemplate(shadowRoot: ShadowRoot, templateChildren: Element[]) {
-    shadowRoot.append(...templateChildren);
-  }
-
-  onStylesReady: Promise<void>;
-  onTemplateReady: Promise<void>;
+  // These now accept the compiled modules directly
+  static readonly styles: CSSStyleSheet;
+  static readonly template: HTMLElement[];
 
   private _cleanups: Array<() => void> = [];
 
@@ -83,40 +14,27 @@ export default class ShadowClawElement extends HTMLElement {
     const existingShadowRoot = this.shadowRoot;
 
     if (!existingShadowRoot) {
-      this.attachShadow({ mode: "open" });
+      const shadowRoot = this.attachShadow({ mode: "open" });
 
-      this.onTemplateReady = ShadowClawElement.getTemplate(template).then(
-        (el: Element[]) => {
-          if (this.shadowRoot) {
-            ShadowClawElement.setTemplate(this.shadowRoot, el);
-
-            return Promise.resolve();
-          }
-
-          return Promise.reject("Failed to load Shadow DOM");
-        },
-      );
-    } else {
-      this.onTemplateReady = Promise.resolve();
+      // Synchronously apply template elements compiled by Rolldown
+      if (template && Array.isArray(template)) {
+        // We clone nodes to ensure multi-instance reuse works correctly
+        const clonedElements = template.map(
+          (el) => el.cloneNode(true) as HTMLElement,
+        );
+        shadowRoot.append(...clonedElements);
+      }
     }
 
-    this.onStylesReady = ShadowClawElement.getStyles(styles).then(
-      (sheet: CSSStyleSheet) => {
-        if (this.shadowRoot) {
-          ShadowClawElement.setStyles(this.shadowRoot, sheet);
-
-          return Promise.resolve();
-        }
-
-        return Promise.reject("Failed to load Shadow DOM");
-      },
-    );
+    // Synchronously apply stylesheet compiled by Rolldown
+    if (this.shadowRoot && styles instanceof CSSStyleSheet) {
+      this.shadowRoot.adoptedStyleSheets = [styles];
+    }
   }
 
   connectedCallback() {
-    Promise.all([this.onStylesReady, this.onTemplateReady])
-      .then(() => this.render())
-      .catch(console.error);
+    // No more Promise.all syntax needed for setup!
+    this.render();
   }
 
   disconnectedCallback() {
@@ -132,5 +50,5 @@ export default class ShadowClawElement extends HTMLElement {
     this._cleanups = [];
   }
 
-  async render() {}
+  render() {}
 }

@@ -12,6 +12,8 @@ import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { RoomMeta } from "../../../subsystems/channels/types.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
+import shadowClawPeerjsStyles from "./shadow-claw-peerjs.css" with { type: "css" };
+import shadowClawPeerjsTemplate from "./shadow-claw-peerjs.html" with { type: "html" };
 
 const elementName = "shadow-claw-peerjs";
 
@@ -23,9 +25,8 @@ const elementName = "shadow-claw-peerjs";
  * - Manages trusted peer IDs and optional custom signaling server settings
  */
 export class ShadowClawPeerJs extends ShadowClawElement {
-  static componentPath = `components/settings/${elementName}`;
-  static styles = `${ShadowClawPeerJs.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawPeerJs.componentPath}/${elementName}.html`;
+  static styles = shadowClawPeerjsStyles;
+  static template = shadowClawPeerjsTemplate;
 
   db: ShadowClawDatabase | null = null;
   orchestrator: Orchestrator | null = null;
@@ -41,7 +42,6 @@ export class ShadowClawPeerJs extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -887,4 +887,6 @@ export class ShadowClawPeerJs extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawPeerJs);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawPeerJs);
+}

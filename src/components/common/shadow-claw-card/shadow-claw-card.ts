@@ -1,19 +1,18 @@
 import ShadowClawElement from "../../shadow-claw-element.js";
+import shadowClawCardStyles from "./shadow-claw-card.css" with { type: "css" };
+import shadowClawCardTemplate from "./shadow-claw-card.html" with { type: "html" };
 
 const elementName = "shadow-claw-card";
 
 export class ShadowClawCard extends ShadowClawElement {
-  static componentPath = `components/common/${elementName}`;
-  static observedAttributes = ["label", "meta", "badge"];
-  static styles = `${ShadowClawCard.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawCard.componentPath}/${elementName}.html`;
+  static styles = shadowClawCardStyles;
+  static template = shadowClawCardTemplate;
 
   attributeChangedCallback() {
     this.render();
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
     await this.render();
   }
 
@@ -40,4 +39,6 @@ export class ShadowClawCard extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawCard);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawCard);
+}

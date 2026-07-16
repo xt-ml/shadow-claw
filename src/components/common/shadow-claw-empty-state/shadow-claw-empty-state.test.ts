@@ -1,4 +1,4 @@
-const { ShadowClawEmptyState } = await import("./shadow-claw-empty-state.js");
+import { ShadowClawEmptyState } from "./shadow-claw-empty-state.js";
 
 describe("shadow-claw-empty-state", () => {
   it("registers custom element", () => {
@@ -13,7 +13,6 @@ describe("shadow-claw-empty-state", () => {
     el.setAttribute("hint", "Try creating one.");
 
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const message = el.shadowRoot?.querySelector(".empty-state__message");

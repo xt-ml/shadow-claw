@@ -17,13 +17,14 @@ import ShadowClawElement from "../../shadow-claw-element.js";
 import "../../common/shadow-claw-actions/shadow-claw-actions.js";
 import "../../common/shadow-claw-card/shadow-claw-card.js";
 import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
+import shadowClawAccountsStyles from "./shadow-claw-accounts.css" with { type: "css" };
+import shadowClawAccountsTemplate from "./shadow-claw-accounts.html" with { type: "html" };
 
 const elementName = "shadow-claw-accounts";
 
 export class ShadowClawAccounts extends ShadowClawElement {
-  static componentPath = `components/settings/${elementName}`;
-  static styles = `${ShadowClawAccounts.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawAccounts.componentPath}/${elementName}.html`;
+  static styles = shadowClawAccountsStyles;
+  static template = shadowClawAccountsTemplate;
 
   accounts: ServiceAccount[] = [];
   db: ShadowClawDatabase | null = null;
@@ -43,7 +44,6 @@ export class ShadowClawAccounts extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -963,4 +963,6 @@ export class ShadowClawAccounts extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawAccounts);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawAccounts);
+}

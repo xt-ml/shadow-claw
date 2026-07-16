@@ -15,6 +15,8 @@ import type { Orchestrator } from "../../../core/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
+import shadowClawWebvmStyles from "./shadow-claw-webvm.css" with { type: "css" };
+import shadowClawWebvmTemplate from "./shadow-claw-webvm.html" with { type: "html" };
 
 const elementName = "shadow-claw-webvm";
 
@@ -23,9 +25,8 @@ const elementName = "shadow-claw-webvm";
  * boot mode, bash timeout, boot host, network relay URL.
  */
 export class ShadowClawWebvm extends ShadowClawElement {
-  static componentPath = `components/settings/${elementName}`;
-  static styles = `${ShadowClawWebvm.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawWebvm.componentPath}/${elementName}.html`;
+  static styles = shadowClawWebvmStyles;
+  static template = shadowClawWebvmTemplate;
 
   db: ShadowClawDatabase | null = null;
   orchestrator: Orchestrator | null = null;
@@ -35,7 +36,6 @@ export class ShadowClawWebvm extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -324,4 +324,6 @@ export class ShadowClawWebvm extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawWebvm);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawWebvm);
+}

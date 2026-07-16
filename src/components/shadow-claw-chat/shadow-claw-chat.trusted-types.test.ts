@@ -132,7 +132,7 @@ describe("shadow-claw-chat trusted types sinks", () => {
     const component = new ShadowClawChat();
     const messages = document.createElement("div");
     messages.className = "chat__messages";
-    component.shadowRoot?.appendChild(messages);
+    component.shadowRoot?.replaceChildren(messages);
 
     jest
       .spyOn(component, "injectMessageCopyButton")

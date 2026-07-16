@@ -90,14 +90,13 @@ describe("shadow-claw-pages", () => {
   });
 
   it("does not eagerly include the sandboxed preview iframe in template source", async () => {
-    const template = await ShadowClawPages.getTemplateSource();
+    const template = await Promise.resolve(ShadowClawPages.template.map((e: Element) => e.outerHTML).join(""));
 
     expect(template).not.toContain("data-pages-iframe");
   });
 
   it("creates iframe only when rendering an HTML page", async () => {
     const component = new ShadowClawPages();
-    await component.onTemplateReady;
 
     const root = component.shadowRoot;
     expect(root).not.toBeNull();
@@ -122,7 +121,6 @@ describe("shadow-claw-pages", () => {
 
   it("inlines relative html preview images as data URLs", async () => {
     const component = new ShadowClawPages();
-    await component.onTemplateReady;
 
     component.db = {} as any;
     component.selectedPage = { groupId: "group-1", path: "docs/page.html" };
@@ -146,7 +144,6 @@ describe("shadow-claw-pages", () => {
 
   it("inlines workspace-route html image variants", async () => {
     const component = new ShadowClawPages();
-    await component.onTemplateReady;
 
     component.db = {} as any;
     component.selectedPage = { groupId: "group-1", path: "docs/page.html" };
@@ -183,7 +180,6 @@ describe("shadow-claw-pages", () => {
 
   it("inlines workspace-route html image variants for group alias ids", async () => {
     const component = new ShadowClawPages();
-    await component.onTemplateReady;
 
     component.db = {} as any;
     component.selectedPage = { groupId: "br:main", path: "docs/page.html" };
@@ -220,7 +216,6 @@ describe("shadow-claw-pages", () => {
 
   it("removes the preview iframe when rendering markdown", async () => {
     const component = new ShadowClawPages();
-    await component.onTemplateReady;
 
     const root = component.shadowRoot;
     expect(root).not.toBeNull();
@@ -253,7 +248,6 @@ describe("shadow-claw-pages", () => {
 
   it("inlines relative markdown images as data URLs", async () => {
     const component = new ShadowClawPages();
-    await component.onTemplateReady;
 
     component.db = {} as any;
     component.selectedPage = { groupId: "group-1", path: "docs/page.md" };
@@ -282,7 +276,6 @@ describe("shadow-claw-pages", () => {
 
   it("inlines workspace-route markdown image variants", async () => {
     const component = new ShadowClawPages();
-    await component.onTemplateReady;
 
     component.db = {} as any;
 
@@ -328,7 +321,6 @@ describe("shadow-claw-pages", () => {
 
   it("inlines workspace-route markdown image variants for group alias ids", async () => {
     const component = new ShadowClawPages();
-    await component.onTemplateReady;
 
     component.db = {} as any;
 
@@ -364,7 +356,6 @@ describe("shadow-claw-pages", () => {
 
   it("inlines nested cross-group workspace route image URLs", async () => {
     const component = new ShadowClawPages();
-    await component.onTemplateReady;
 
     component.db = {} as any;
     component.selectedPage = {

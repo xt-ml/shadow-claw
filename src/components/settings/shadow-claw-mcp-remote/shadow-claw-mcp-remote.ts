@@ -33,6 +33,8 @@ import ShadowClawElement from "../../shadow-claw-element.js";
 import "../../common/shadow-claw-actions/shadow-claw-actions.js";
 import "../../common/shadow-claw-card/shadow-claw-card.js";
 import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
+import shadowClawMcpRemoteStyles from "./shadow-claw-mcp-remote.css" with { type: "css" };
+import shadowClawMcpRemoteTemplate from "./shadow-claw-mcp-remote.html" with { type: "html" };
 
 const elementName = "shadow-claw-mcp-remote";
 
@@ -45,9 +47,8 @@ type AuthSelection =
   | "custom_header";
 
 export class ShadowClawMcpRemote extends ShadowClawElement {
-  static componentPath = `components/settings/${elementName}`;
-  static styles = `${ShadowClawMcpRemote.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawMcpRemote.componentPath}/${elementName}.html`;
+  static styles = shadowClawMcpRemoteStyles;
+  static template = shadowClawMcpRemoteTemplate;
 
   connections: RemoteMcpConnectionRecord[] = [];
   db: ShadowClawDatabase | null = null;
@@ -60,7 +61,6 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -777,4 +777,6 @@ export class ShadowClawMcpRemote extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawMcpRemote);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawMcpRemote);
+}

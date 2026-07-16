@@ -1,11 +1,15 @@
-import { fileURLToPath } from "node:url";
-import { dirname, resolve, join } from "node:path";
+import fs from "node:fs";
 import { exec } from "node:child_process";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import copy from "rollup-plugin-copy";
+
 import cssnano from "cssnano";
 import htmlnano from "htmlnano";
 import postcss from "postcss";
+
+import copy from "rollup-plugin-copy";
+
 import { defineConfig } from "rolldown";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -188,6 +192,7 @@ const commonResolve = (platform = "browser", extraPlugins = []) => {
     commonjs: true,
     plugins: [
       ...(platform === "browser" ? [injectGlobalShimPlugin()] : []),
+      rolldownImportAttributes(),
       swWatchPlugin(),
       ...extraPlugins,
     ],
@@ -212,6 +217,7 @@ const configs = [
       format: "iife",
       sourcemap: !isProduction,
       codeSplitting: false,
+      minify: isProduction,
       name: "ShadowClawThemeInit",
     },
     ...commonResolve("browser"),
@@ -225,6 +231,7 @@ const configs = [
       format: "esm",
       sourcemap: !isProduction,
       codeSplitting: false,
+      minify: isProduction,
     },
     ...commonResolve("browser", [
       copy({
@@ -295,6 +302,7 @@ const configs = [
       format: "esm",
       sourcemap: !isProduction,
       codeSplitting: false,
+      minify: isProduction,
     },
     ...commonResolve("browser", [aliasTurndownPlugin()]),
   },
@@ -307,6 +315,7 @@ const configs = [
       format: "esm",
       sourcemap: !isProduction,
       codeSplitting: false,
+      minify: isProduction,
     },
     ...commonResolve("browser"),
   },
@@ -319,6 +328,7 @@ const configs = [
       format: "esm",
       sourcemap: !isProduction,
       codeSplitting: false,
+      minify: isProduction,
     },
     ...commonResolve("browser"),
   },
@@ -331,6 +341,7 @@ const configs = [
       format: "iife",
       sourcemap: !isProduction,
       codeSplitting: false,
+      minify: isProduction,
     },
     ...commonResolve("browser"),
   },
@@ -343,6 +354,7 @@ const configs = [
       format: "iife",
       sourcemap: !isProduction,
       codeSplitting: false,
+      minify: isProduction,
     },
     ...commonResolve("browser"),
   },
@@ -355,6 +367,7 @@ const configs = [
       format: "iife",
       sourcemap: !isProduction,
       codeSplitting: false,
+      minify: isProduction,
     },
     ...commonResolve("browser", [
       aliasTurndownPlugin(),
@@ -373,6 +386,7 @@ const configs = [
       format: "esm",
       sourcemap: !isProduction,
       codeSplitting: false,
+      minify: isProduction,
     },
     external: [
       "@aws-sdk/client-bedrock",
@@ -397,10 +411,63 @@ const configs = [
       format: "cjs",
       sourcemap: !isProduction,
       codeSplitting: false,
+      minify: isProduction,
     },
     external: ["electron", "express", "express-urlrewrite", "web-push"],
     ...commonResolve("node"),
   },
 ];
+
+function rolldownImportAttributes() {
+  return {
+    name: "rolldown-import-attributes",
+
+    // process files immediately upon discovery
+    load(id) {
+      if (id.endsWith(".html")) {
+        const rawContent = fs.readFileSync(id, "utf-8");
+        const escaped = rawContent.replace(/`/g, "\\`").replace(/\${/g, "\\${");
+
+        return {
+          code: `
+            const doc = new DOMParser().parseFromString(\`${escaped}\`, 'text/html');
+            const templateEl = doc.querySelector('template');
+            let elements = [];
+            if (templateEl) {
+              elements = Array.from(templateEl.content.children);
+            } else {
+              elements = Array.from(doc.head.children).concat(Array.from(doc.body.children));
+            }
+
+            export default elements;
+          `,
+          moduleType: "js",
+          // no sourcemap
+          map: { mappings: "" },
+        };
+      }
+
+      if (id.endsWith(".css")) {
+        const rawContent = fs.readFileSync(id, "utf-8");
+        const escaped = rawContent.replace(/`/g, "\\`").replace(/\${/g, "\\${");
+
+        return {
+          code: `
+            const sheet = new CSSStyleSheet();
+            sheet.replaceSync(\`${escaped}\`);
+            export default sheet;
+          `,
+          moduleType: "js",
+          // no sourcemap
+          map: { mappings: "" },
+        };
+      }
+
+      // use native parsing pipeline for normal JS, TS, etc.
+
+      return null;
+    },
+  };
+}
 
 export default defineConfig(configs);

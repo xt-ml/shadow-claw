@@ -30,6 +30,8 @@ import type {
 } from "../../../subsystems/email/connections.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
+import shadowClawIntegrationsStyles from "./shadow-claw-integrations.css" with { type: "css" };
+import shadowClawIntegrationsTemplate from "./shadow-claw-integrations.html" with { type: "html" };
 
 const elementName = "shadow-claw-integrations";
 
@@ -160,9 +162,8 @@ const IMAP_FIELD_PLACEHOLDERS: Record<string, string> = {
 };
 
 export class ShadowClawIntegrations extends ShadowClawElement {
-  static componentPath = `components/settings/${elementName}`;
-  static styles = `${ShadowClawIntegrations.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawIntegrations.componentPath}/${elementName}.html`;
+  static styles = shadowClawIntegrationsStyles;
+  static template = shadowClawIntegrationsTemplate;
 
   accounts: ServiceAccount[] = [];
   connections: EmailConnectionRecord[] = [];
@@ -180,7 +181,6 @@ export class ShadowClawIntegrations extends ShadowClawElement {
   } | null = null;
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     this.db = await getDb();
     this.bindEventListeners();
@@ -1463,4 +1463,6 @@ export class ShadowClawIntegrations extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawIntegrations);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawIntegrations);
+}

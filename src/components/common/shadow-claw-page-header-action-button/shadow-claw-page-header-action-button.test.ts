@@ -1,5 +1,4 @@
-const { ShadowClawPageHeaderActionButton } =
-  await import("./shadow-claw-page-header-action-button.js");
+import { ShadowClawPageHeaderActionButton } from "./shadow-claw-page-header-action-button.js";
 
 describe("shadow-claw-page-header-action-button", () => {
   it("registers custom element", () => {
@@ -11,7 +10,6 @@ describe("shadow-claw-page-header-action-button", () => {
   it("renders with default variant by default", async () => {
     const el = new ShadowClawPageHeaderActionButton();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const button = el.shadowRoot?.querySelector(".action-btn");
@@ -24,7 +22,6 @@ describe("shadow-claw-page-header-action-button", () => {
     const el = new ShadowClawPageHeaderActionButton();
     el.setAttribute("variant", "primary");
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const button = el.shadowRoot?.querySelector(".action-btn");
@@ -37,7 +34,6 @@ describe("shadow-claw-page-header-action-button", () => {
     const el = new ShadowClawPageHeaderActionButton();
     el.setAttribute("variant", "danger");
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const button = el.shadowRoot?.querySelector(".action-btn");
@@ -50,7 +46,6 @@ describe("shadow-claw-page-header-action-button", () => {
     const el = new ShadowClawPageHeaderActionButton();
     el.setAttribute("disabled", "");
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     const button =
@@ -63,7 +58,6 @@ describe("shadow-claw-page-header-action-button", () => {
   it("re-renders when variant attribute changes", async () => {
     const el = new ShadowClawPageHeaderActionButton();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     el.setAttribute("variant", "danger");
@@ -79,7 +73,6 @@ describe("shadow-claw-page-header-action-button", () => {
     const el = new ShadowClawPageHeaderActionButton();
     el.setAttribute("disabled", "");
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await el.render();
 
     el.removeAttribute("disabled");

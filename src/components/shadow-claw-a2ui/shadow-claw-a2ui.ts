@@ -38,12 +38,14 @@ import {
 
 import type { A2UIEnvelope, A2UIAction, TextFieldSpec } from "../../ui/a2ui.js";
 import type { SurfaceState } from "../types.js";
+import shadowClawA2uiStyles from "./shadow-claw-a2ui.css" with { type: "css" };
+import shadowClawA2uiTemplate from "./shadow-claw-a2ui.html" with { type: "html" };
+
+const elementName = "shadow-claw-a2ui";
 
 export class ShadowClawA2UI extends ShadowClawElement {
-  static readonly component = "shadow-claw-a2ui";
-  static readonly styles = "components/shadow-claw-a2ui/shadow-claw-a2ui.css";
-  static readonly template =
-    "components/shadow-claw-a2ui/shadow-claw-a2ui.html";
+  static styles = shadowClawA2uiStyles;
+  static template = shadowClawA2uiTemplate;
 
   /** groupId of the conversation this surface belongs to */
   groupId: string = "";
@@ -588,6 +590,6 @@ export class ShadowClawA2UI extends ShadowClawElement {
   }
 }
 
-if (!customElements.get("shadow-claw-a2ui")) {
-  customElements.define("shadow-claw-a2ui", ShadowClawA2UI);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawA2UI);
 }

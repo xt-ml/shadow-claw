@@ -35,6 +35,8 @@ import type { Config } from "dompurify";
 import type { ShadowClawDatabase } from "../../db/types.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
+import shadowClawFileViewerStyles from "./shadow-claw-file-viewer.css" with { type: "css" };
+import shadowClawFileViewerTemplate from "./shadow-claw-file-viewer.html" with { type: "html" };
 
 const elementName = "shadow-claw-file-viewer";
 const highlightThemePath = `components/${elementName}/highlightjs-atom-one-dark.min.css`;
@@ -51,9 +53,8 @@ const previewSanitizeOptions: Config = {
  * ShadowClawFileViewer - component for viewing and editing files
  */
 export class ShadowClawFileViewer extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawFileViewer.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawFileViewer.componentPath}/${elementName}.html`;
+  static styles = shadowClawFileViewerStyles;
+  static template = shadowClawFileViewerTemplate;
 
   currentImageObjectUrls: string[] = [];
   currentObjectUrl: string | null = null;
@@ -76,7 +77,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -1926,4 +1926,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawFileViewer);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawFileViewer);
+}

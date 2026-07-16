@@ -70,7 +70,6 @@ describe("shadow-claw-accounts", () => {
   it("renders correctly after connectedCallback", async () => {
     const el = new ShadowClawAccounts();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
     await el.render();
 
@@ -87,7 +86,6 @@ describe("shadow-claw-accounts", () => {
   it("opens account form when Add Account is clicked", async () => {
     const el = new ShadowClawAccounts();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
     await el.render();
 
@@ -104,7 +102,6 @@ describe("shadow-claw-accounts", () => {
   it("saves an additional account", async () => {
     const el = new ShadowClawAccounts();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
     await el.render();
 
@@ -136,7 +133,6 @@ describe("shadow-claw-accounts", () => {
 
     const el = new ShadowClawAccounts();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
     await el.render();
 
@@ -243,7 +239,6 @@ describe("shadow-claw-accounts", () => {
 
     const el = new ShadowClawAccounts();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
     await el.render();
 
@@ -358,7 +353,6 @@ describe("shadow-claw-accounts", () => {
 
     const el = new ShadowClawAccounts();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
     await el.render();
 
@@ -375,7 +369,6 @@ describe("shadow-claw-accounts", () => {
   it("routes showAccountForm innerHTML through the Trusted Types helper", async () => {
     const el = new ShadowClawAccounts();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((resolve) => setTimeout(resolve, 50));
     await el.render();
 

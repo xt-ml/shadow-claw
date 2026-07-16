@@ -154,7 +154,6 @@ describe("shadow-claw-llm", () => {
 
     const el = new ShadowClawLlm();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     // Allow connectedCallback to proceed
     await new Promise((r) => setTimeout(r, 100));
     await el.render();
@@ -175,7 +174,6 @@ describe("shadow-claw-llm", () => {
 
     const el = new ShadowClawLlm();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 100));
     await el.render();
 
@@ -199,7 +197,6 @@ describe("shadow-claw-llm", () => {
 
     const el = new ShadowClawLlm();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 100));
     await el.render();
 
@@ -232,7 +229,6 @@ describe("shadow-claw-llm", () => {
 
     const el = new ShadowClawLlm();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 100));
     await el.render();
 
@@ -271,7 +267,6 @@ describe("shadow-claw-llm", () => {
 
     const el = new ShadowClawLlm();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 100));
     await el.render();
 
@@ -343,7 +338,6 @@ describe("shadow-claw-llm", () => {
 
     const el = new ShadowClawLlm();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 120));
     await el.render();
     await new Promise((r) => setTimeout(r, 50));
@@ -369,7 +363,6 @@ describe("shadow-claw-llm", () => {
 
     const el = new ShadowClawLlm();
     document.body.appendChild(el);
-    await el.onTemplateReady;
     await new Promise((r) => setTimeout(r, 100));
     await el.render();
 

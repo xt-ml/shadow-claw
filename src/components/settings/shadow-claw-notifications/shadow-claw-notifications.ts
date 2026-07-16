@@ -14,6 +14,8 @@ import { showError, showSuccess } from "../../../ui/toast.js";
 import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
+import shadowClawNotificationsStyles from "./shadow-claw-notifications.css" with { type: "css" };
+import shadowClawNotificationsTemplate from "./shadow-claw-notifications.html" with { type: "html" };
 
 const elementName = "shadow-claw-notifications";
 
@@ -22,9 +24,8 @@ const elementName = "shadow-claw-notifications";
  * subscribe/unsubscribe toggle, subscription list, send test notification.
  */
 export class ShadowClawNotifications extends ShadowClawElement {
-  static componentPath = `components/settings/${elementName}`;
-  static styles = `${ShadowClawNotifications.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawNotifications.componentPath}/${elementName}.html`;
+  static styles = shadowClawNotificationsStyles;
+  static template = shadowClawNotificationsTemplate;
 
   public _backendAvailable: boolean = true;
   public _selectedId: number | null = null;
@@ -40,7 +41,6 @@ export class ShadowClawNotifications extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {

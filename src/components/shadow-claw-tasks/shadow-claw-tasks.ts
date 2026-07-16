@@ -17,13 +17,14 @@ import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
+import shadowClawTasksStyles from "./shadow-claw-tasks.css" with { type: "css" };
+import shadowClawTasksTemplate from "./shadow-claw-tasks.html" with { type: "html" };
 
 const elementName = "shadow-claw-tasks";
 
 export class ShadowClawTasks extends ShadowClawElement {
-  static componentPath = `components/${elementName}`;
-  static styles = `${ShadowClawTasks.componentPath}/${elementName}.css`;
-  static template = `${ShadowClawTasks.componentPath}/${elementName}.html`;
+  static styles = shadowClawTasksStyles;
+  static template = shadowClawTasksTemplate;
 
   editingTask: any | null = null;
   editingTools: any[] = [];
@@ -34,7 +35,6 @@ export class ShadowClawTasks extends ShadowClawElement {
   }
 
   async connectedCallback() {
-    await Promise.all([this.onStylesReady, this.onTemplateReady]);
 
     const root = this.shadowRoot;
     if (!root) {
@@ -973,4 +973,6 @@ export class ShadowClawTasks extends ShadowClawElement {
   }
 }
 
-customElements.define(elementName, ShadowClawTasks);
+if (!customElements.get(elementName)) {
+  customElements.define(elementName, ShadowClawTasks);
+}

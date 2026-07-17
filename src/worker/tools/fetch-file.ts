@@ -97,9 +97,9 @@ interface HttpErrorLike extends Error {
 }
 
 class HttpError extends Error implements HttpErrorLike {
+  public body: string;
   public status: number;
   public statusText: string;
-  public body: string;
 
   constructor(status: number, statusText: string, body: string) {
     super(`HTTP ${status} ${statusText}`);

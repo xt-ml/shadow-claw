@@ -1,32 +1,11 @@
 import {
-  BASH_DEFAULT_TIMEOUT_SEC,
-  BASH_MAX_TIMEOUT_SEC,
   CONFIG_KEYS,
   FETCH_MAX_RESPONSE,
 } from "../config/config.js";
 
-import { getAllTasks } from "../db/getAllTasks.js";
 import { getConfig } from "../db/getConfig.js";
-import {
-  getRoomMetadata,
-  ROOM_PREFIX,
-  roomIdFromGroupId,
-} from "../db/rooms.js";
 
-import { executeShell } from "../shell/shell.js";
-
-import {
-  bootVM,
-  executeInVM,
-  getVMBootModePreference,
-  getVMStatus,
-  isVMReady,
-} from "../shell/vm.js";
-
-import { groupFileExists } from "../storage/groupFileExists.js";
-import { listGroupFiles } from "../storage/listGroupFiles.js";
 import { readGroupFile } from "../storage/readGroupFile.js";
-import { readGroupFileBytes } from "../storage/readGroupFileBytes.js";
 import { uploadGroupFile } from "../storage/uploadGroupFile.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
 
@@ -59,7 +38,6 @@ import {
   gitTag,
   gitUnstage,
 } from "../subsystems/git/git.js";
-import { ulid } from "../utils/ulid.js";
 
 import { resolveServiceCredentials } from "../subsystems/accounts/service-accounts.js";
 import {
@@ -67,10 +45,7 @@ import {
   resolveGitCredentials,
 } from "../subsystems/git/credentials.js";
 import { getGroupDir } from "../storage/getGroupDir.js";
-import { formatShellOutput } from "./formatShellOutput.js";
 import { post } from "./post.js";
-import { sandboxedEval } from "./sandboxedEval.js";
-import { stripHtml } from "./stripHtml.js";
 
 import {
   isRetryableFetchError,
@@ -78,7 +53,7 @@ import {
   withRetry,
 } from "./withRetry.js";
 
-import { ShadowClawDatabase, Task } from "../db/types.js";
+import { ShadowClawDatabase } from "../db/types.js";
 
 import {
   callRemoteMcpTool,
@@ -86,173 +61,61 @@ import {
   McpReauthRequiredError,
 } from "../subsystems/mcp/remote-mcp-client.js";
 
-import { NANO_BUILTIN_PROFILE } from "../subsystems/tools/builtin-profiles.js";
+import { executeBash } from "./tools/bash/bash.js";
 import { executeManageEmailTool } from "./tools/email.js";
 import { executeFetchFileTool } from "./tools/fetch-file.js";
 import { executeFetchUrlTool } from "./tools/fetch-url.js";
 import { executeGitTool } from "./tools/git.js";
 import { executeSpawnSubagentTool } from "./tools/spawn-subagent.js";
 
+import { executeCreateTask } from "./tools/tasks/create-task.js";
+import { executeListTasks } from "./tools/tasks/list-tasks.js";
+import { executeUpdateTask } from "./tools/tasks/update-task.js";
+import { executeEnableTask } from "./tools/tasks/enable-task.js";
+import { executeDisableTask } from "./tools/tasks/disable-task.js";
+import { executeDeleteTask } from "./tools/tasks/delete-task.js";
+import { executeRunTask } from "./tools/tasks/run-task.js";
+
+import { executeCreateRoom } from "./tools/rooms/create-room.js";
+import { executeInviteToRoom } from "./tools/rooms/invite-to-room.js";
+import { executeLeaveRoom } from "./tools/rooms/leave-room.js";
+import { executeListRoomMembers } from "./tools/rooms/list-room-members.js";
+
+import { executeReadFile } from "./tools/workspace/read-file.js";
+import { executeOpenFile } from "./tools/workspace/open-file.js";
+import { executeAttachFile } from "./tools/workspace/attach-file.js";
+import { executeSendFile } from "./tools/workspace/send-file.js";
+import { executeWriteFile } from "./tools/workspace/write-file.js";
+import { executePatchFile } from "./tools/workspace/patch-file.js";
+import { executeListFiles } from "./tools/workspace/list-files.js";
+import { executeSearchFiles } from "./tools/workspace/search-files.js";
+import { executeDiffFiles } from "./tools/workspace/diff-files.js";
+import { executeUpdateMemory } from "./tools/workspace/update-memory.js";
+
+import { executeClearChat } from "./tools/ui/clear-chat.js";
+import { executeManageTools } from "./tools/ui/manage-tools.js";
+import { executeListToolProfiles } from "./tools/ui/list-tool-profiles.js";
+import { executeJavascript } from "./tools/ui/javascript.js";
+import { executeGetCurrentTime } from "./tools/ui/get-current-time.js";
+import { executeWebSearch } from "./tools/ui/web-search.js";
+import { executeShowToast } from "./tools/ui/show-toast.js";
+import { executeSendNotification } from "./tools/ui/send-notification.js";
+import { executeListComponents } from "./tools/ui/list-components.js";
+import { executeRenderComponent } from "./tools/ui/render-component.js";
+import { executeAskUser } from "./tools/ui/ask-user.js";
+
 import {
   executeRemoteMcpCallTool,
   executeRemoteMcpListTools,
 } from "./tools/remote-mcp.js";
 
-import {
-  A2UI_BASIC_CATALOG_ID,
-  A2UI_MINIMAL_CATALOG_ID,
-  BASIC_CATALOG_REFERENCE,
-  MINIMAL_CATALOG_REFERENCE,
-} from "../ui/a2ui.js";
-
-import type { A2UIEnvelope } from "../ui/a2ui.js";
 import type { ToolResultContentBlock } from "../content/types.js";
 import type { SubagentInvokeContext } from "./tools/spawn-subagent.js";
+import { stripHtml } from "./stripHtml.js";
 
 export type { SubagentInvokeContext };
 
 export { resolveMcpReauth } from "./tools/remote-mcp.js";
-
-async function getGroupTasks(
-  db: ShadowClawDatabase,
-  groupId: string,
-): Promise<Task[]> {
-  const all = (await getAllTasks(db)) as Task[];
-
-  return all.filter((task) => task.groupId === groupId);
-}
-
-const VM_READY_POLL_MS = 50;
-
-/**
- * Wait until the VM reports ready, or until timeout elapses.
- */
-async function waitForVMReady(timeoutMs: number): Promise<boolean> {
-  if (isVMReady()) {
-    return true;
-  }
-
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => {
-      setTimeout(resolve, VM_READY_POLL_MS);
-    });
-
-    if (isVMReady()) {
-      return true;
-    }
-  }
-
-  return isVMReady();
-}
-
-/**
- * Execute a command via JS shell emulator.
- */
-async function executeViaShellFallback(
-  db: ShadowClawDatabase,
-  command: string,
-  groupId: string,
-  timeoutSec: number,
-  allowFullInternetAccess: boolean,
-): Promise<string> {
-  const shellResult = await executeShell(
-    db,
-    command,
-    groupId,
-    {},
-    timeoutSec,
-    allowFullInternetAccess,
-  );
-
-  return formatShellOutput(shellResult);
-}
-
-function parseBooleanConfig(value: string | null | undefined): boolean | null {
-  if (value == null) {
-    return null;
-  }
-
-  const normalized = String(value).trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) {
-    return true;
-  }
-
-  if (["0", "false", "no", "off"].includes(normalized)) {
-    return false;
-  }
-
-  return null;
-}
-
-async function getAllowFullInternetAccess(
-  db: ShadowClawDatabase,
-): Promise<boolean> {
-  const configuredInternetAccess = parseBooleanConfig(
-    await getConfig(db, CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS),
-  );
-
-  return configuredInternetAccess ?? false;
-}
-
-function normalizeWorkspacePath(inputPath: string): string {
-  return inputPath
-    .trim()
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/^\.\//, "");
-}
-
-function hasPathTraversal(path: string): boolean {
-  return path
-    .split("/")
-    .filter(Boolean)
-    .some((part) => part === "..");
-}
-
-function escapeMarkdownLabel(label: string): string {
-  return label.replace(/[\[\]\\]/g, "\\$&");
-}
-
-function isImagePath(path: string): boolean {
-  return /\.(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(path);
-}
-
-const IMAGE_MIME_TYPES: Record<string, string> = {
-  avif: "image/avif",
-  bmp: "image/bmp",
-  gif: "image/gif",
-  jpeg: "image/jpeg",
-  jpg: "image/jpeg",
-  png: "image/png",
-  webp: "image/webp",
-};
-
-const MAX_INLINE_IMAGE_BYTES = 10 * 1024 * 1024;
-
-function getImageMimeType(path: string): string | null {
-  const ext = path.toLowerCase().split(".").pop() || "";
-
-  return IMAGE_MIME_TYPES[ext] || null;
-}
-
-function isBinaryContent(bytes: Uint8Array): boolean {
-  const sampleSize = Math.min(bytes.length, 8192);
-  let nonPrintable = 0;
-
-  for (let i = 0; i < sampleSize; i++) {
-    const b = bytes[i];
-    if (b === 0) {
-      return true;
-    }
-
-    if (b < 32 && b !== 9 && b !== 10 && b !== 1) {
-      nonPrintable++;
-    }
-  }
-
-  return nonPrintable / sampleSize > 0.1;
-}
 
 export type ToolResult = string | ToolResultContentBlock[];
 
@@ -302,313 +165,43 @@ export async function executeTool(
 
     switch (name) {
       case "bash": {
-        const configuredTimeoutRaw = await getConfig(
-          db,
-          CONFIG_KEYS.VM_BASH_TIMEOUT_SEC,
-        );
-
-        const configuredTimeout = Number(configuredTimeoutRaw);
-        const defaultTimeoutSec = Number.isFinite(configuredTimeout)
-          ? Math.min(Math.max(configuredTimeout, 1), BASH_MAX_TIMEOUT_SEC)
-          : BASH_DEFAULT_TIMEOUT_SEC;
-
-        const requestedTimeout = Number(input.timeout);
-        const timeoutSec = Number.isFinite(requestedTimeout)
-          ? Math.min(Math.max(requestedTimeout, 1), BASH_MAX_TIMEOUT_SEC)
-          : defaultTimeoutSec;
-
-        const allowFullInternetAccess = await getAllowFullInternetAccess(db);
-
-        // Explicit disabled mode means "always use JS shell emulator".
-        if (getVMBootModePreference() === "disabled") {
-          return await executeViaShellFallback(
-            db,
-            input.command,
-            groupId,
-            timeoutSec,
-            allowFullInternetAccess,
-          );
-        }
-
-        if (!isVMReady()) {
-          await bootVM();
-          const status = getVMStatus();
-
-          // Give the eager boot path a chance to finish before returning an error.
-          if (!isVMReady() && status.booting) {
-            await waitForVMReady(Math.min(timeoutSec * 1000, 30_000));
-          }
-        }
-
-        if (isVMReady()) {
-          return await executeInVM(input.command, timeoutSec, { db, groupId });
-        }
-
-        const status = getVMStatus();
-        const reason = status.error
-          ? `Reason: ${status.error}`
-          : status.booting
-            ? "Reason: WebVM is still booting."
-            : "Reason: WebVM is unavailable.";
-
-        post({
-          type: "show-toast",
-          payload: {
-            duration: 7000,
-            message:
-              `WebVM unavailable for this bash command. ${reason} ` +
-              "Falling back to JavaScript Bash Emulator and retrying WebVM on the next command.",
-            type: "warning",
-          },
-        });
-
-        return await executeViaShellFallback(
-          db,
-          input.command,
-          groupId,
-          timeoutSec,
-          allowFullInternetAccess,
-        );
+        return await executeBash(db, input, groupId);
       }
 
       case "read_file": {
-        const filePaths = input.paths || (input.path ? [input.path] : []);
-        if (filePaths.length === 0) {
-          return "Error: read_file requires path or paths.";
-        }
-
-        if (filePaths.length === 1) {
-          const singlePath = filePaths[0];
-          const mimeType = getImageMimeType(singlePath);
-
-          if (mimeType) {
-            try {
-              const bytes = await readGroupFileBytes(db, groupId, singlePath);
-
-              if (bytes.length > MAX_INLINE_IMAGE_BYTES) {
-                return `Error: image file ${singlePath} is too large to inline (${bytes.length} btes, max  ${MAX_INLINE_IMAGE_BYTES}).`;
-              }
-
-              let binary = "";
-              for (let i = 0; i < bytes.length; i++) {
-                binary += String.fromCharCode(bytes[i]);
-              }
-
-              const base64 = btoa(binary);
-
-              return [
-                { type: "text", text: `Contents of image file: ${singlePath}` },
-                { type: "image", media_type: mimeType, data: base64 },
-              ] as ToolResultContentBlock[];
-            } catch (err: any) {
-              return `Error reading image ${singlePath}: ${err.message}`;
-            }
-          }
-
-          try {
-            const bytes = await readGroupFileBytes(db, groupId, singlePath);
-
-            if (isBinaryContent(bytes)) {
-              return (
-                `Error: ${singlePath} is a binary file and cannot be displayed as text. ` +
-                "Use open_file to view it in the UI, or attach_file_to_chat to share it."
-              );
-            }
-
-            return new TextDecoder("utf-8").decode(bytes);
-          } catch (err: any) {
-            return `Error reading ${singlePath}: ${err.message}`;
-          }
-        }
-
-        const sections = await Promise.all(
-          filePaths.map(async (p: string) => {
-            try {
-              const mimeType = getImageMimeType(p);
-              if (mimeType) {
-                return `--- ${p} ---\n[Image file: use read_file with a single path to see this image]`;
-              }
-
-              const bytes = await readGroupFileBytes(db, groupId, p);
-
-              if (isBinaryContent(bytes)) {
-                return `--- ${p} ---\n[Binary file: cannot display as text]`;
-              }
-
-              const content = new TextDecoder("utf-8").decode(bytes);
-
-              return `--- ${p} ---\n${content}`;
-            } catch (err: any) {
-              return `--- ${p} ---\nError reading ${p}: ${err.message}`;
-            }
-          }),
-        );
-
-        return sections.join("\n\n");
+        return await executeReadFile(db, input, groupId);
       }
 
       case "open_file": {
-        if (!input.path || typeof input.path !== "string") {
-          return "Error: open_file requires a valid path string.";
-        }
-
-        const exists = await groupFileExists(db, groupId, input.path);
-        if (!exists) {
-          return `Error: file not found: ${input.path}`;
-        }
-
-        post({
-          type: "open-file",
-          payload: { groupId, path: input.path },
-        });
-
-        return `Opening file in viewer: ${input.path}`;
+        return await executeOpenFile(db, input, groupId);
       }
 
       case "attach_file_to_chat": {
-        if (!input.path || typeof input.path !== "string") {
-          return "Error: attach_file_to_chat requires a valid path string.";
-        }
-
-        const normalizedPath = normalizeWorkspacePath(input.path);
-        if (!normalizedPath) {
-          return "Error: attach_file_to_chat received an empty file path.";
-        }
-
-        if (hasPathTraversal(normalizedPath)) {
-          return "Error: attach_file_to_chat path cannot contain '..' segments.";
-        }
-
-        try {
-          // Verify the file exists in the current group workspace.
-          await readGroupFile(db, groupId, normalizedPath);
-        } catch (err: any) {
-          return `Error: attach_file_to_chat could not find ${normalizedPath}: ${err?.message || String(err)}`;
-        }
-
-        const defaultLabel = normalizedPath.split("/").pop() || normalizedPath;
-        const labelInput =
-          typeof input.alt === "string" && input.alt.trim()
-            ? input.alt.trim()
-            : defaultLabel;
-
-        const label = escapeMarkdownLabel(labelInput);
-
-        const markdown = isImagePath(normalizedPath)
-          ? `![${label}](${normalizedPath})`
-          : `[${label}](${normalizedPath})`;
-
-        return (
-          `Attachment prepared: ${normalizedPath}\n` +
-          "Please include the following markdown in your response to show it to the user:\n" +
-          markdown
-        );
+        return await executeAttachFile(db, input, groupId);
       }
 
       case "send_file": {
-        if (!input.path || typeof input.path !== "string") {
-          return "Error: send_file requires a valid path string.";
-        }
-
-        if (!groupId.startsWith("peer:")) {
-          return "Error: send_file only works in peer conversations (groupId must start with 'peer:'). The current conversation is not a peer session.";
-        }
-
-        const sfPath = normalizeWorkspacePath(input.path);
-        if (!sfPath) {
-          return "Error: send_file received an empty file path.";
-        }
-
-        if (hasPathTraversal(sfPath)) {
-          return "Error: send_file path cannot contain '..' segments.";
-        }
-
-        const sfExists = await groupFileExists(db, groupId, sfPath);
-        if (!sfExists) {
-          return `Error: send_file could not find ${sfPath} in the workspace.`;
-        }
-
-        post({
-          payload: { groupId, path: sfPath },
-          type: "send-file",
-        });
-
-        return `Sending file to peer: ${sfPath}. The transfer will proceed in the background — you can continue chatting.`;
+        return await executeSendFile(db, input, groupId);
       }
 
-      case "write_file":
-        await writeGroupFile(db, groupId, input.path, input.content);
-
-        return `Written ${input.content.length} bytes to ${input.path}`;
+      case "write_file": {
+        return await executeWriteFile(db, input, groupId);
+      }
 
       case "patch_file": {
-        const content = await readGroupFile(db, groupId, input.path);
-        const idx = content.indexOf(input.old_string);
-
-        if (idx === -1) {
-          return `patch_file failed: old_string not found in ${input.path}`;
-        }
-
-        if (content.indexOf(input.old_string, idx + 1) !== -1) {
-          return `patch_file failed: old_string matches multiple locations in ${input.path}. Include more surrounding context to make the match unique.`;
-        }
-
-        const patched =
-          content.slice(0, idx) +
-          input.new_string +
-          content.slice(idx + input.old_string.length);
-
-        await writeGroupFile(db, groupId, input.path, patched);
-
-        return `Patched ${input.path} (${input.old_string.length} chars replaced with ${input.new_string.length} chars)`;
+        return await executePatchFile(db, input, groupId);
       }
 
       case "list_files": {
-        const entries = (await listGroupFiles(
-          db,
-          groupId,
-          input.path || ".",
-        )) as string[];
-
-        return entries.length > 0 ? entries.join("\n") : "(empty directory)";
+        return await executeListFiles(db, input, groupId);
       }
 
       case "manage_tools": {
-        const { action, tool_names, profile_id } = input;
-        post({
-          type: "manage-tools",
-          payload: {
-            action,
-            groupId,
-            profileId: profile_id,
-            toolNames: tool_names,
-          },
-        });
-
-        return `Tool management request sent: ${action}${profile_id ? " " + profile_id : ""}${tool_names ? " (" + tool_names.join(", ") + ")" : ""}`;
+        return executeManageTools(input, groupId);
       }
 
       case "list_tool_profiles": {
-        const profilesRaw = await getConfig(db, CONFIG_KEYS.TOOL_PROFILES);
-        let profiles: any[] = [];
-        if (typeof profilesRaw === "string") {
-          try {
-            profiles = JSON.parse(profilesRaw);
-          } catch {
-            profiles = [];
-          }
-        } else if (Array.isArray(profilesRaw)) {
-          profiles = profilesRaw;
-        }
-
-        const allProfiles = [NANO_BUILTIN_PROFILE, ...profiles];
-
-        return allProfiles
-          .map(
-            (p) =>
-              `[Profile ID: ${p.id}] ${p.name}\n  Tools: ${p.enabledToolNames.join(", ")}`,
-          )
-          .join("\n\n");
+        return await executeListToolProfiles(db);
       }
 
       case "fetch_url": {
@@ -642,290 +235,68 @@ export async function executeTool(
         });
       }
 
-      case "update_memory":
-        await writeGroupFile(db, groupId, "MEMORY.md", input.content);
-
-        return "Memory updated successfully.";
+      case "update_memory": {
+        return await executeUpdateMemory(db, input, groupId);
+      }
 
       case "create_task": {
-        if (!input.schedule || typeof input.schedule !== "string") {
-          return "Error: Missing or invalid 'schedule' (cron expression) for create_task.";
-        }
-
-        const taskType = input.type === "tools" ? "tools" : "prompt";
-        if (
-          taskType === "prompt" &&
-          (!input.prompt || typeof input.prompt !== "string")
-        ) {
-          return "Error: Missing or invalid 'prompt' for create_task with type 'prompt'.";
-        }
-
-        const taskData = {
-          createdAt: Date.now(),
-          enabled: true,
-          groupId,
-          id: ulid(),
-          lastRun: null,
-          prompt: input.prompt ? input.prompt.trim() : "",
-          schedule: input.schedule.trim(),
-          tools: Array.isArray(input.tools) ? input.tools : [],
-          type: taskType,
-        };
-
-        post({ type: "task-created", payload: { task: taskData } });
-
-        return `Task created successfully.\nID: ${taskData.id}\nSchedule: ${taskData.schedule}\nType: ${taskData.type}`;
+        return executeCreateTask(input, groupId);
       }
 
       case "javascript": {
-        const allowFullInternetAccess = await getAllowFullInternetAccess(db);
-        const result = (await sandboxedEval(
-          input.code,
-          undefined,
-          allowFullInternetAccess,
-        )) as any;
-
-        if (!result.ok) {
-          return `JavaScript error: ${result.error}`;
-        }
-
-        const value = result.value;
-
-        if (value === "__UNDEFINED__" || value === undefined) {
-          return "(no return value)\nHint: Your code did not return a value. Use `return <expression>` as the last statement to see output.";
-        }
-
-        if (value === null) {
-          return "null";
-        }
-
-        if (typeof value === "object") {
-          try {
-            return JSON.stringify(value, null, 2);
-          } catch {
-            /* fall through */
-          }
-        }
-
-        return String(value);
+        return await executeJavascript(db, input);
       }
 
       case "list_tasks": {
-        const tasks = await getGroupTasks(db, groupId);
-        if (tasks.length === 0) {
-          return "No tasks found for this group.";
-        }
-
-        return tasks
-          .map(
-            (t) =>
-              `[ID: ${t.id}] Schedule: ${t.schedule}, Type: ${t.type || "prompt"}, Enabled: ${t.enabled}`,
-          )
-          .join("\n");
+        return await executeListTasks(db, groupId);
       }
 
       case "update_task": {
-        const tasks = await getGroupTasks(db, groupId);
-        const task = tasks.find((t: any) => t.id === input.id);
-
-        if (!task) {
-          return `Error: Task with ID ${input.id} not found.`;
-        }
-
-        if (input.schedule) {
-          task.schedule = input.schedule;
-        }
-
-        if (input.type === "prompt" || input.type === "tools") {
-          task.type = input.type;
-        }
-
-        if (input.prompt) {
-          task.prompt = input.prompt;
-        }
-
-        if (Array.isArray(input.tools)) {
-          task.tools = input.tools;
-        }
-
-        if (input.enabled !== undefined) {
-          task.enabled = !!input.enabled;
-        }
-
-        post({ type: "update-task", payload: { task } });
-
-        return `Task ${input.id} updated successfully.`;
+        return await executeUpdateTask(db, input, groupId);
       }
 
       case "enable_task": {
-        const tasks = await getGroupTasks(db, groupId);
-
-        const task = tasks.find((t: any) => t.id === input.id);
-        if (!task) {
-          return `Error: Task with ID ${input.id} not found.`;
-        }
-
-        task.enabled = true;
-
-        post({ type: "update-task", payload: { task } });
-
-        return `Task ${input.id} enabled successfully.`;
+        return await executeEnableTask(db, input, groupId);
       }
 
       case "disable_task": {
-        const tasks = await getGroupTasks(db, groupId);
-        const task = tasks.find((t: any) => t.id === input.id);
-        if (!task) {
-          return `Error: Task with ID ${input.id} not found.`;
-        }
-
-        task.enabled = false;
-
-        post({ type: "update-task", payload: { task } });
-
-        return `Task ${input.id} disabled successfully.`;
+        return await executeDisableTask(db, input, groupId);
       }
 
       case "delete_task": {
-        if (!input.id) {
-          return "Error: Missing required task ID for deletion.";
-        }
-
-        post({ type: "delete-task", payload: { id: input.id, groupId } });
-
-        return `Task ${input.id} deleted successfully.`;
+        return executeDeleteTask(input, groupId);
       }
 
       case "run_task": {
-        const tasks = await getGroupTasks(db, groupId);
-        const task = tasks.find((t: any) => t.id === input.id);
-
-        if (!task) {
-          return `Error: Task with ID ${input.id} not found.`;
-        }
-
-        post({ type: "run-task", payload: { task } });
-
-        return `Task ${input.id} triggered successfully.`;
+        return await executeRunTask(db, input, groupId);
       }
 
       case "clear_chat": {
-        post({ type: "clear-chat", payload: { groupId } });
-
-        return "Chat history cleared successfully. New session started.";
+        return executeClearChat(groupId);
       }
 
       case "show_toast": {
-        post({
-          type: "show-toast",
-          payload: {
-            duration: input.duration,
-            message: input.message,
-            type: input.type || "info",
-          },
-        });
-
-        return `Toast notification sent: ${input.message}`;
+        return executeShowToast(input);
       }
 
       case "send_notification": {
-        post({
-          type: "send-notification",
-          payload: {
-            body: input.body,
-            groupId,
-            title: input.title || "ShadowClaw",
-          },
-        });
-
-        return `Push notification sent: ${input.body}`;
+        return executeSendNotification(input, groupId);
       }
 
       case "create_room": {
-        const name = String(input.name || "").trim();
-
-        if (!name) {
-          return "Error: a room name is required.";
-        }
-
-        post({
-          type: "room-action",
-          payload: { action: "create", name },
-        });
-
-        return `Creating room "${name}". You will be the host; once it is ready you can invite peers with invite_to_room.`;
+        return executeCreateRoom(input);
       }
 
       case "invite_to_room": {
-        const peerId = String(input.peer_id || "").trim();
-        const roomId =
-          String(input.room_id || "").trim() ||
-          (groupId.startsWith(ROOM_PREFIX) ? roomIdFromGroupId(groupId) : "");
-
-        if (!peerId) {
-          return "Error: peer_id is required to invite a participant.";
-        }
-
-        if (!roomId) {
-          return "Error: no room_id provided and the current conversation is not a room.";
-        }
-
-        post({
-          payload: { action: "invite", roomId, peerId },
-          type: "room-action",
-        });
-
-        return `Invited peer ${peerId} to room ${roomId}.`;
+        return executeInviteToRoom(input, groupId);
       }
 
       case "leave_room": {
-        const roomId =
-          String(input.room_id || "").trim() ||
-          (groupId.startsWith(ROOM_PREFIX) ? roomIdFromGroupId(groupId) : "");
-
-        if (!roomId) {
-          return "Error: no room_id provided and the current conversation is not a room.";
-        }
-
-        post({
-          payload: { action: "leave", roomId },
-          type: "room-action",
-        });
-
-        return `Leaving room ${roomId}.`;
+        return executeLeaveRoom(input, groupId);
       }
 
       case "list_room_members": {
-        const roomId =
-          String(input.room_id || "").trim() ||
-          (groupId.startsWith(ROOM_PREFIX) ? roomIdFromGroupId(groupId) : "");
-
-        if (!roomId) {
-          return "Error: no room_id provided and the current conversation is not a room.";
-        }
-
-        const rooms = await getRoomMetadata(db);
-        const room = rooms.find((r) => r.roomId === roomId);
-
-        if (!room) {
-          return `Error: room ${roomId} was not found.`;
-        }
-
-        if (!room.members.length) {
-          return `Room "${room.name}" (${roomId}) has no members yet.`;
-        }
-
-        const lines = room.members.map((m) => {
-          const label =
-            m.kind === "agent"
-              ? `agent${m.agentName ? ` (@${m.agentName})` : ""}`
-              : "human";
-          const host = m.peerId === room.hostPeerId ? " [host]" : "";
-
-          return `- ${m.alias || m.peerId} — ${label}${host} (peer: ${m.peerId})`;
-        });
-
-        return `Room "${room.name}" (${roomId}) members:\n${lines.join("\n")}`;
+        return await executeListRoomMembers(db, input, groupId);
       }
 
       case "manage_email":
@@ -1038,110 +409,11 @@ export async function executeTool(
       }
 
       case "list_components": {
-        return MINIMAL_CATALOG_REFERENCE + "\n" + BASIC_CATALOG_REFERENCE;
+        return executeListComponents();
       }
 
       case "render_component": {
-        const { action, surfaceId } = input;
-
-        if (input.components && typeof input.components === "object") {
-          for (const key of Object.keys(input.components)) {
-            const spec = input.components[key];
-            if (
-              spec &&
-              typeof spec === "object" &&
-              "properties" in spec &&
-              typeof spec.properties === "object"
-            ) {
-              input.components[key] = { ...spec, ...(spec.properties as any) };
-
-              delete input.components[key].properties;
-            }
-          }
-        }
-
-        if (!surfaceId || typeof surfaceId !== "string") {
-          return "Error: render_component requires a surfaceId string.";
-        }
-
-        let envelope: A2UIEnvelope;
-
-        switch (action) {
-          case "createSurface": {
-            if (!input.rootComponentId) {
-              return "Error: createSurface requires rootComponentId.";
-            }
-
-            if (!input.components || typeof input.components !== "object") {
-              return "Error: createSurface requires a components map.";
-            }
-
-            // Honor agent-supplied catalogId; default to Minimal
-            const resolvedCatalogId =
-              input.catalogId === A2UI_BASIC_CATALOG_ID ||
-              String(input.catalogId ?? "").toLowerCase() === "basic"
-                ? A2UI_BASIC_CATALOG_ID
-                : A2UI_MINIMAL_CATALOG_ID;
-
-            envelope = {
-              catalogId: resolvedCatalogId,
-              components: input.components,
-              dataModel: input.dataModel,
-              rootComponentId: input.rootComponentId,
-              surfaceId,
-              type: "createSurface",
-            };
-
-            break;
-          }
-
-          case "updateComponents": {
-            if (!input.components || typeof input.components !== "object") {
-              return "Error: updateComponents requires a components map.";
-            }
-
-            envelope = {
-              components: input.components,
-              surfaceId,
-              type: "updateComponents",
-            };
-
-            break;
-          }
-
-          case "updateDataModel": {
-            if (!input.patches || typeof input.patches !== "object") {
-              return "Error: updateDataModel requires a patches object (JSON Pointer map).";
-            }
-
-            envelope = {
-              patches: input.patches,
-              surfaceId,
-              type: "updateDataModel",
-            };
-
-            break;
-          }
-
-          case "deleteSurface": {
-            envelope = {
-              surfaceId,
-              type: "deleteSurface",
-            };
-
-            break;
-          }
-
-          default:
-            return `Error: Unknown render_component action "${action}". Valid: createSurface, updateComponents, updateDataModel, deleteSurface.`;
-        }
-
-        post({
-          payload: { groupId, envelope },
-          type: "render-component",
-        });
-
-        return `A2UI surface "${surfaceId}" rendered (action: ${action}).`;
+        return executeRenderComponent(input, groupId);
       }
 
       case "spawn_subagent": {
@@ -1157,223 +429,23 @@ export async function executeTool(
       }
 
       case "get_current_time": {
-        const d = new Date();
-        const tz = input.timezone;
-        if (tz) {
-          try {
-            return new Intl.DateTimeFormat("en-US", {
-              timeZone: tz,
-              timeStyle: "long",
-              dateStyle: "long",
-            }).format(d);
-          } catch (e: any) {
-            return `Error: Invalid timezone ${tz} - ${e.message}`;
-          }
-        }
-
-        return d.toISOString();
+        return executeGetCurrentTime(input);
       }
 
       case "search_files": {
-        const { pattern, path, file_glob, is_regex } = input;
-        if (!pattern) {
-          return "Error: pattern is required.";
-        }
-
-        const searchRegex = is_regex ? new RegExp(pattern) : null;
-
-        const isMatch = (filename: string) => {
-          if (!file_glob) {
-            return true;
-          }
-
-          const glob = file_glob.replace(/\*/g, ".*").replace(/\?/g, ".");
-
-          return new RegExp(`^${glob}$`).test(filename.split("/").pop() || "");
-        };
-
-        const results: string[] = [];
-
-        async function walk(dir: string) {
-          try {
-            const entries = await listGroupFiles(db, groupId, dir);
-            for (const entry of entries) {
-              const fullPath =
-                dir === "." || dir === ""
-                  ? entry
-                  : `${dir}${dir.endsWith("/") ? "" : "/"}${entry}`;
-
-              if (entry.endsWith("/")) {
-                await walk(fullPath.slice(0, -1));
-              } else {
-                if (!isMatch(entry)) {
-                  continue;
-                }
-
-                try {
-                  const content = await readGroupFile(db, groupId, fullPath);
-                  const lines = content.split("\n");
-                  for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i];
-                    const matches = searchRegex
-                      ? searchRegex.test(line)
-                      : line.includes(pattern);
-                    if (matches) {
-                      results.push(`${fullPath}:${i + 1}: ${line}`);
-                      if (results.length > 500) {
-                        results.push("... (results truncated at 500 matches)");
-
-                        return;
-                      }
-                    }
-                  }
-                } catch (err) {
-                  // Ignore read errors
-                }
-              }
-            }
-          } catch (e) {
-            // Ignore list errors
-          }
-        }
-
-        await walk(path || ".");
-        if (results.length === 0) {
-          return "No matches found.";
-        }
-
-        return results.join("\n");
+        return await executeSearchFiles(db, input, groupId);
       }
 
       case "diff_files": {
-        const { path_a, path_b } = input;
-        if (!path_a || !path_b) {
-          return "Error: path_a and path_b are required.";
-        }
-
-        let contentA = "";
-        let contentB = "";
-        try {
-          contentA = await readGroupFile(db, groupId, path_a);
-        } catch (e) {
-          return `Error reading ${path_a}: ${e}`;
-        }
-
-        try {
-          contentB = await readGroupFile(db, groupId, path_b);
-        } catch (e) {
-          return `Error reading ${path_b}: ${e}`;
-        }
-
-        if (contentA === contentB) {
-          return "Files are identical.";
-        }
-
-        const linesA = contentA.split("\n");
-        const linesB = contentB.split("\n");
-
-        const diffLines: string[] = [];
-        const maxLines = Math.max(linesA.length, linesB.length);
-        let differences = 0;
-
-        for (let i = 0; i < maxLines; i++) {
-          const a = linesA[i];
-          const b = linesB[i];
-          if (a !== b) {
-            if (a !== undefined) {
-              diffLines.push(`- [Line ${i + 1}] ${a}`);
-            }
-
-            if (b !== undefined) {
-              diffLines.push(`+ [Line ${i + 1}] ${b}`);
-            }
-
-            differences++;
-            if (differences > 100) {
-              diffLines.push("... (diff truncated at 100 differences)");
-
-              break;
-            }
-          }
-        }
-
-        return diffLines.join("\n");
+        return await executeDiffFiles(db, input, groupId);
       }
 
       case "ask_user": {
-        const { question, options } = input;
-        if (!question) {
-          return "Error: question is required.";
-        }
-
-        const id = ulid();
-        post({
-          type: "ask-user",
-          payload: { id, groupId, question, options },
-        });
-
-        return await new Promise<string>((resolve) => {
-          (globalThis as any).pendingAskUserResolvers =
-            (globalThis as any).pendingAskUserResolvers || {};
-
-          (globalThis as any).pendingAskUserResolvers[id] = resolve;
-        });
+        return await executeAskUser(input, groupId);
       }
 
       case "web_search": {
-        const { query } = input;
-        if (!query) {
-          return "Error: query is required.";
-        }
-
-        const targetUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`;
-        try {
-          const res = await fetch(targetUrl, {
-            method: "GET",
-            headers: {
-              Accept: "text/html",
-            },
-          });
-
-          if (!res.ok) {
-            return `Error fetching search results: ${res.status}`;
-          }
-
-          const html = await res.text();
-
-          const results: string[] = [];
-          const snippetRegex = /<a class="result__snippet[^>]*>(.*?)<\/a>/gi;
-          const urlRegex =
-            /<a class="result__url" href="([^"]+)">([^<]+)<\/a>/gi;
-
-          let snippetMatch;
-          let urlMatch;
-          while (
-            (snippetMatch = snippetRegex.exec(html)) &&
-            (urlMatch = urlRegex.exec(html))
-          ) {
-            const rawUrl = urlMatch[1];
-            let url = rawUrl;
-            if (rawUrl.includes("//duckduckgo.com/l/?uddg=")) {
-              url = decodeURIComponent(rawUrl.split("uddg=")[1].split("&")[0]);
-            }
-
-            const snippet = stripHtml(snippetMatch[1]);
-            const title = stripHtml(urlMatch[2]);
-            results.push(`Title: ${title}\nURL: ${url}\nSnippet: ${snippet}\n`);
-            if (results.length >= 10) {
-              break;
-            }
-          }
-
-          if (results.length === 0) {
-            return "No results found.";
-          }
-
-          return results.join("\n---\n");
-        } catch (e: any) {
-          return `Search error: ${e.message}`;
-        }
+        return await executeWebSearch(input);
       }
 
       default:

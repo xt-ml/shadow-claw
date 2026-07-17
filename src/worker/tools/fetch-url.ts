@@ -97,10 +97,10 @@ export interface FetchUrlDeps {
 }
 
 class HttpError extends Error implements HttpErrorLike {
-  public status: number;
-  public statusText: string;
   public body: string;
   public headers: string;
+  public status: number;
+  public statusText: string;
 
   constructor(status: number, statusText: string, body: string, headers = "") {
     super(`HTTP ${status} ${statusText}`);

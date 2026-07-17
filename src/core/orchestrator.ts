@@ -6,17 +6,13 @@ import { RoomManager } from "../subsystems/channels/room-manager.js";
 import { RoomChannel } from "../subsystems/channels/room.js";
 import { TelegramChannel } from "../subsystems/channels/telegram.js";
 
-import { isLlamafileResolutionError } from "../components/common/help/llamafile.js";
 import { detectProviderHelpType } from "../components/common/help/providers.js";
-import { isTransformersJsResolutionError } from "../components/common/help/transformers.js";
 
 import { buildDynamicContext } from "../context/buildDynamicContext.js";
 import { estimateTokens } from "../context/estimateTokens.js";
 
 import { buildConversationMessages } from "../db/buildConversationMessages.js";
 import { clearGroupMessages } from "../db/clearGroupMessages.js";
-import { deleteTask } from "../db/deleteTask.js";
-import { getAllTasks } from "../db/getAllTasks.js";
 import { getConfig } from "../db/getConfig.js";
 import { listGroups } from "../db/groups.js";
 import { openDatabase } from "../db/openDatabase.js";
@@ -29,7 +25,7 @@ import {
 } from "../db/rooms.js";
 
 import { saveMessage } from "../db/saveMessage.js";
-import { saveTask } from "../db/saveTask.js";
+
 import { setConfig } from "../db/setConfig.js";
 
 import { readGroupFile } from "../storage/readGroupFile.js";
@@ -69,15 +65,14 @@ import {
   isLiteRtLmSupported,
 } from "../subsystems/providers/litert-lm-provider.js";
 
-import { getRemoteMcpConnection } from "../subsystems/mcp/mcp-connections.js";
-import { reconnectMcpOAuth } from "../subsystems/mcp/mcp-reconnect.js";
+
 
 import {
   inferAttachmentMimeType,
   persistMessageAttachments,
 } from "../content/message-attachments.js";
 
-import { getPushUrl } from "../subsystems/notifications/push-client.js";
+
 import { modelRegistry } from "../subsystems/providers/model-registry.js";
 
 import {
@@ -103,6 +98,7 @@ import {
   type WebMcpMode,
 } from "../subsystems/mcp/webmcp.js";
 
+import { handleWorkerMessage } from "./orchestrator/handleWorkerMessage.js";
 import { EventBus } from "./orchestrator/EventBus.js";
 import { normalizeStringList } from "./orchestrator/normalizeStringList.js";
 import { parseDirectToolCommandPolicy } from "./orchestrator/parseDirectToolCommandPolicy.js";
@@ -1790,7 +1786,7 @@ export class Orchestrator {
     return requestId;
   }
 
-  private clearProviderRequest(groupId: string): void {
+  clearProviderRequest(groupId: string): void {
     this.inFlightProviderRequestIds.delete(groupId);
   }
 
@@ -1856,7 +1852,7 @@ export class Orchestrator {
     return "http://localhost:8888/transformers-js-proxy/status";
   }
 
-  private stopTransformersProgressPolling(groupId: string): void {
+  stopTransformersProgressPolling(groupId: string): void {
     const timer = this.transformersProgressPollers.get(groupId);
     if (typeof timer === "number") {
       clearInterval(timer);
@@ -3287,601 +3283,7 @@ export class Orchestrator {
   }
 
   async handleWorkerMessage(db: ShadowClawDatabase, msg: any): Promise<void> {
-    switch (msg.type) {
-      case "response": {
-        const { groupId, text } = msg.payload;
-        this.stopTransformersProgressPolling(groupId);
-        this.clearProviderRequest(groupId);
-        this.inFlightTriggerByGroup.delete(groupId);
-        this.inFlightEffectiveProviderByGroup.delete(groupId);
-
-        await this.deliverResponse(db, groupId, text);
-
-        break;
-      }
-
-      case "streaming-start": {
-        const { groupId } = msg.payload;
-        this.setState("responding", groupId);
-        this.events.emit("streaming-start", { groupId });
-
-        break;
-      }
-
-      case "streaming-chunk": {
-        const { groupId, text } = msg.payload;
-        this.events.emit("streaming-chunk", { groupId, text });
-
-        break;
-      }
-
-      case "intermediate-response": {
-        const { groupId, text } = msg.payload;
-        await this.deliverIntermediateResponse(db, groupId, text);
-
-        break;
-      }
-
-      case "streaming-end": {
-        const { groupId } = msg.payload;
-        this.events.emit("streaming-end", { groupId });
-
-        // Switch back to thinking (tool calls are about to execute)
-        this.setState("thinking", groupId);
-
-        break;
-      }
-
-      case "streaming-done": {
-        const { groupId } = msg.payload;
-        this.events.emit("streaming-done", { groupId });
-
-        break;
-      }
-
-      case "streaming-error": {
-        const { groupId, error } = msg.payload;
-        this.events.emit("streaming-error", { groupId, error });
-
-        break;
-      }
-
-      case "run-task": {
-        const { task } = msg.payload;
-        orchestratorStore.runTask(task, true);
-
-        break;
-      }
-
-      case "task-created": {
-        const { task } = msg.payload;
-
-        if (task.groupId && this._schedulerTriggeredGroups.has(task.groupId)) {
-          showToast(
-            "\u26a0\ufe0f Task creation blocked \u2014 scheduled tasks cannot create new tasks (recursion prevention).",
-            { type: "warning", duration: 8000 },
-          );
-
-          break;
-        }
-
-        try {
-          const serverOk = await this._syncTaskToServer(task);
-
-          if (!serverOk) {
-            showToast("Failed to sync task to server — task was not saved.", {
-              type: "error",
-            });
-
-            break;
-          }
-
-          await saveTask(db, task);
-
-          this.events.emit("task-change", { type: "created", task });
-        } catch (err) {
-          console.error("Failed to save task from agent:", err);
-          showToast("Failed to save task.", { type: "error" });
-        }
-
-        break;
-      }
-
-      case "room-action": {
-        const action = msg.payload?.action;
-
-        try {
-          if (action === "create") {
-            this.createRoom(String(msg.payload.name || "").trim());
-          } else if (action === "invite") {
-            this.inviteToRoom(
-              String(msg.payload.roomId),
-              String(msg.payload.peerId),
-            );
-          } else if (action === "leave") {
-            this.leaveRoom(String(msg.payload.roomId));
-          }
-        } catch (err) {
-          console.error("Failed to handle room action from agent:", err);
-        }
-
-        break;
-      }
-
-      case "error": {
-        const { groupId, error } = msg.payload;
-        this.stopTransformersProgressPolling(groupId);
-        this.clearProviderRequest(groupId);
-        this.inFlightTriggerByGroup.delete(groupId);
-
-        let finalError = error;
-        let hasProviderHelp = false;
-
-        // Use the effective provider that was active when this invocation started
-        const inFlightProvider =
-          this.inFlightEffectiveProviderByGroup.get(groupId);
-
-        this.inFlightEffectiveProviderByGroup.delete(groupId);
-
-        const errorProviderId =
-          inFlightProvider?.providerId ?? this.getProvider();
-
-        const errorProviderConfig =
-          inFlightProvider?.providerConfig ?? this.providerConfig;
-
-        // Detect context limit/request too large errors (HTTP 413 or specific error codes)
-        const isContextError =
-          error.includes("413") ||
-          error.includes("tokens_limit_reached") ||
-          error.includes("context_length_exceeded") ||
-          error.includes("too many tokens");
-
-        if (isContextError) {
-          finalError +=
-            "\n\n\u26a0\ufe0f This model has a small context window. Try clicking **'Compact'** in the header to summarize the conversation and reduce token usage.";
-        }
-
-        if (
-          errorProviderId === "llamafile" &&
-          isLlamafileResolutionError(error)
-        ) {
-          hasProviderHelp = true;
-
-          this.events.emit("provider-help", {
-            providerId: "llamafile",
-            reason: error,
-          });
-        }
-
-        if (
-          errorProviderId === "transformers_js_local" &&
-          isTransformersJsResolutionError(error)
-        ) {
-          hasProviderHelp = true;
-
-          this.events.emit("provider-help", {
-            providerId: "transformers_js_local",
-            reason: error,
-          });
-        }
-
-        if (!hasProviderHelp) {
-          const helpType = detectProviderHelpType(
-            errorProviderId,
-            error,
-            errorProviderConfig?.requiresApiKey !== false,
-          );
-
-          if (helpType) {
-            this.events.emit("provider-help", {
-              providerId: errorProviderId,
-              reason: error,
-              helpType,
-            });
-          }
-        }
-
-        await this.deliverResponse(db, groupId, `⚠️ Error: ${finalError}`);
-
-        break;
-      }
-
-      case "typing": {
-        const { groupId } = msg.payload;
-        this.router?.setTyping(groupId, true);
-        this.events.emit("typing", { groupId, typing: true });
-
-        break;
-      }
-
-      case "tool-activity": {
-        this.events.emit("tool-activity", msg.payload);
-
-        // If a file was written, or bash finished (might have changed files), emit file-change
-        if (
-          (msg.payload.tool === "write_file" &&
-            msg.payload.status === "done") ||
-          (msg.payload.tool === "bash" && msg.payload.status === "done")
-        ) {
-          this.events.emit("file-change", {
-            groupId: msg.payload.groupId,
-          });
-        }
-
-        break;
-      }
-
-      case "model-download-progress": {
-        this.events.emit("model-download-progress", msg.payload);
-
-        break;
-      }
-
-      case "thinking-log": {
-        this.events.emit("thinking-log", msg.payload);
-
-        break;
-      }
-
-      case "compact-done": {
-        this.clearProviderRequest(msg.payload.groupId);
-
-        await this.handleCompactDone(
-          db,
-          msg.payload.groupId,
-          msg.payload.summary,
-        );
-
-        break;
-      }
-
-      case "token-usage": {
-        this.events.emit("token-usage", msg.payload);
-
-        break;
-      }
-
-      case "task-list-request": {
-        const { groupId } = msg.payload;
-        const tasks = await getAllTasks(db);
-        const groupTasks = tasks.filter((t) => t.groupId === groupId);
-
-        this.agentWorker?.postMessage({
-          type: "task-list-response",
-          payload: { groupId, tasks: groupTasks },
-        });
-
-        break;
-      }
-
-      case "update-task": {
-        const { task } = msg.payload;
-
-        if (task.groupId && this._schedulerTriggeredGroups.has(task.groupId)) {
-          showToast(
-            "\u26a0\ufe0f Task update blocked \u2014 scheduled tasks cannot modify tasks (recursion prevention).",
-            { type: "warning", duration: 8000 },
-          );
-
-          break;
-        }
-
-        try {
-          const serverOk = await this._syncTaskToServer(task);
-
-          if (!serverOk) {
-            showToast(
-              "Failed to sync task update to server — task was not updated.",
-              { type: "error" },
-            );
-
-            break;
-          }
-
-          await saveTask(db, task);
-
-          this.events.emit("task-change", { type: "updated", task });
-        } catch (err) {
-          console.error("Failed to update task from agent:", err);
-          showToast("Failed to update task.", { type: "error" });
-        }
-
-        break;
-      }
-
-      case "delete-task": {
-        const { id, groupId: deleteGroupId } = msg.payload;
-
-        if (
-          deleteGroupId &&
-          this._schedulerTriggeredGroups.has(deleteGroupId)
-        ) {
-          showToast(
-            "\u26a0\ufe0f Task deletion blocked \u2014 scheduled tasks cannot delete tasks (recursion prevention).",
-            { type: "warning", duration: 8000 },
-          );
-
-          break;
-        }
-
-        try {
-          const serverOk = await this._deleteTaskFromServer(id);
-
-          if (!serverOk) {
-            showToast(
-              "Failed to delete task from server — task kept in view.",
-              { type: "error" },
-            );
-
-            break;
-          }
-
-          await deleteTask(db, id);
-
-          this.events.emit("task-change", { type: "deleted", id });
-        } catch (err) {
-          console.error("Failed to delete task from agent:", err);
-        }
-
-        break;
-      }
-
-      case "clear-chat": {
-        const { groupId } = msg.payload;
-        try {
-          await this.newSession(db, groupId);
-        } catch (err) {
-          console.error("Failed to clear chat from agent:", err);
-        }
-
-        break;
-      }
-
-      case "show-toast": {
-        const { message, type, duration } = msg.payload;
-        showToast(message, { type: type || "info", duration });
-
-        break;
-      }
-
-      case "mcp-reauth-required": {
-        const { connectionId } = msg.payload;
-
-        const connection = await getRemoteMcpConnection(db, connectionId);
-        const label = connection?.label || connectionId;
-
-        if (connection?.autoReconnectOAuth) {
-          showToast(
-            `🔑 MCP connection "${label}" returned 401 — auto-reconnecting OAuth…`,
-            { type: "info", duration: 5000 },
-          );
-
-          const result = await reconnectMcpOAuth(db, connectionId, {
-            silentOnly: true,
-          });
-
-          if (result.success) {
-            showToast(`🔑 OAuth reconnected for "${label}"`, {
-              type: "success",
-              duration: 5000,
-            });
-          } else {
-            showToast(
-              `🔑 OAuth auto-reconnect failed for "${label}": ${result.error}`,
-              {
-                action: {
-                  label: "Reconnect Now",
-                  onClick: async () => {
-                    const popupResult = await reconnectMcpOAuth(
-                      db,
-                      connectionId,
-                    );
-                    if (popupResult.success) {
-                      showToast(`🔑 OAuth reconnected for "${label}"`, {
-                        type: "success",
-                        duration: 5000,
-                      });
-                    } else {
-                      showToast(
-                        `🔑 OAuth reconnect failed for "${label}": ${popupResult.error}`,
-                        { type: "error", duration: 10000 },
-                      );
-                    }
-                  },
-                },
-                duration: 15000,
-                type: "error",
-              },
-            );
-          }
-
-          this.agentWorker?.postMessage({
-            payload: { connectionId, success: result.success },
-            type: "mcp-reauth-result",
-          });
-        } else {
-          showToast(
-            `🔑 MCP connection "${label}" returned 401 — OAuth re-authentication required. Go to Settings → Remote MCP to reconnect.`,
-            { type: "warning", duration: 10000 },
-          );
-
-          this.agentWorker?.postMessage({
-            payload: { connectionId, success: false },
-            type: "mcp-reauth-result",
-          });
-        }
-
-        this.events.emit("mcp-reauth-required", {
-          connectionId,
-          label,
-        });
-
-        break;
-      }
-
-      case "manage-tools": {
-        const { action, toolNames, profileId } = msg.payload;
-        if (action === "activate_profile" && profileId) {
-          await toolsStore.activateProfile(db, profileId);
-        } else if ((action === "enable" || action === "disable") && toolNames) {
-          const enabled = action === "enable";
-          for (const name of toolNames) {
-            await toolsStore.setToolEnabled(db, name, enabled);
-          }
-        }
-
-        const finalGroupId = msg.payload.groupId || DEFAULT_GROUP_ID;
-        this.agentWorker?.postMessage({
-          type: "update-tools",
-          payload: {
-            enabledTools: toolsStore.enabledTools,
-            groupId: finalGroupId,
-            systemPromptOverride: toolsStore.systemPromptOverride,
-          },
-        });
-
-        break;
-      }
-
-      case "send-notification": {
-        const { title, body, groupId: notifGroupId } = msg.payload;
-
-        // Recursion guard: push-triggered tasks must NEVER send push
-        // notifications — this would create an infinite loop.
-        if (notifGroupId && this._schedulerTriggeredGroups.has(notifGroupId)) {
-          showToast(
-            "⚠️ Notification blocked — scheduled tasks triggered via push cannot send push notifications (recursion prevention).",
-            { type: "warning", duration: 8000 },
-          );
-
-          break;
-        }
-
-        getPushUrl("/push/broadcast").then((url) => {
-          fetch(url, {
-            body: JSON.stringify({ title, body }),
-            headers: { "Content-Type": "application/json" },
-            method: "POST",
-          }).catch((err) =>
-            console.error("Failed to broadcast push notification:", err),
-          );
-        });
-
-        break;
-      }
-
-      case "vm-status": {
-        this.vmStatus = { ...msg.payload };
-        this.events.emit("vm-status", this.vmStatus);
-
-        break;
-      }
-
-      case "vm-terminal-opened": {
-        this.events.emit("vm-terminal-opened", msg.payload);
-
-        break;
-      }
-
-      case "vm-terminal-output": {
-        this.events.emit("vm-terminal-output", msg.payload);
-
-        break;
-      }
-
-      case "vm-terminal-closed": {
-        this.events.emit("vm-terminal-closed", msg.payload);
-
-        break;
-      }
-
-      case "vm-workspace-synced": {
-        this.events.emit("file-change", { groupId: msg.payload?.groupId });
-
-        break;
-      }
-
-      case "vm-terminal-error": {
-        this.events.emit("vm-terminal-error", msg.payload);
-
-        break;
-      }
-
-      case "open-file": {
-        this.events.emit("open-file", msg.payload);
-
-        break;
-      }
-
-      case "send-file": {
-        const { groupId: sfGroupId, path: sfPath } = msg.payload;
-        // Fire-and-forget so we don't block the agent loop.
-        // The file is sent as an attachment over the PeerJS channel.
-        (async () => {
-          // Signal to the remote peer that we are doing something
-          this.router?.setTyping(sfGroupId, true);
-          try {
-            await this.router?.send(sfGroupId, "", [
-              {
-                path: sfPath,
-                fileName: sfPath.split("/").pop() || sfPath,
-                mimeType: "application/octet-stream",
-                size: 0,
-              },
-            ]);
-          } catch (err) {
-            const msg = err instanceof Error ? err.message : String(err);
-
-            console.error("send-file: delivery failed:", err);
-
-            showToast(`Failed to send file to peer: ${msg}`, {
-              type: "error",
-              duration: 6000,
-            });
-          } finally {
-            this.router?.setTyping(sfGroupId, false);
-          }
-        })();
-
-        break;
-      }
-
-      case "render-component": {
-        const { groupId: rcGroupId, envelope } = msg.payload;
-
-        // Always emit locally so the local UI renderer can display the surface.
-        this.events.emit("a2ui-surface", { groupId: rcGroupId, envelope });
-
-        // Forward over the WebRTC channel when targeting a peer conversation.
-        if (rcGroupId.startsWith("peer:")) {
-          const channel = this.router?.findChannel(rcGroupId);
-          if (channel && "sendA2UI" in channel) {
-            (channel as any)
-              .sendA2UI(rcGroupId, envelope)
-              .catch((err: unknown) =>
-                console.error("render-component: peer delivery failed:", err),
-              );
-          }
-        }
-
-        // Broadcast to every member when targeting a multi-party room. The
-        // local peer becomes the owner of this surface (owner-authoritative).
-        if (rcGroupId.startsWith("room:")) {
-          this.roomManager.broadcastA2UI(
-            roomIdFromGroupId(rcGroupId),
-            envelope,
-          );
-        }
-
-        break;
-      }
-
-      case "ask-user": {
-        this.events.emit("ask-user", msg.payload);
-
-        break;
-      }
-    }
+    return handleWorkerMessage(this, db, msg);
   }
 
   async handleCompactDone(

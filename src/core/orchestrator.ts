@@ -67,10 +67,7 @@ import {
 
 
 
-import {
-  inferAttachmentMimeType,
-  persistMessageAttachments,
-} from "../content/message-attachments.js";
+import { inferAttachmentMimeType } from "../content/message-attachments.js";
 
 
 import { modelRegistry } from "../subsystems/providers/model-registry.js";
@@ -98,6 +95,7 @@ import {
   type WebMcpMode,
 } from "../subsystems/mcp/webmcp.js";
 
+import { enqueue, processQueue } from "./orchestrator/enqueue.js";
 import { handleWorkerMessage } from "./orchestrator/handleWorkerMessage.js";
 import { EventBus } from "./orchestrator/EventBus.js";
 import { normalizeStringList } from "./orchestrator/normalizeStringList.js";
@@ -230,7 +228,7 @@ export class Orchestrator {
   peerjsTrustedPeerIds: string[] = [];
 
   /** Peer groupIds where the A2A task has reached a terminal state */
-  private _peerCompletedContexts = new Set<string>();
+  _peerCompletedContexts = new Set<string>();
 
   /** Multi-party room channel + manager (layered on the PeerJS transport). */
   roomChannel: RoomChannel = new RoomChannel();
@@ -777,7 +775,7 @@ export class Orchestrator {
     this.#apiKeyCache = null; // Invalidate cache
   }
 
-  async #getApiKeyForSpecificProvider(
+  async getApiKeyForSpecificProvider(
     db: ShadowClawDatabase,
     providerId: string,
   ): Promise<string> {
@@ -2658,266 +2656,16 @@ export class Orchestrator {
     }
   }
 
-  private clearPeerJsTypingState(groupId: string): void {
+  clearPeerJsTypingState(groupId: string): void {
     orchestratorStore.setRemoteAgentTyping(groupId, false);
   }
 
   async enqueue(db: ShadowClawDatabase, msg: InboundMessage): Promise<void> {
-    // ── A2UI inbound dispatch ────────────────────────────────────────────────
-    // Surface envelopes and actions arrive via the peer channel. Emit them so
-    // the UI layer can render/update surfaces, then fall through to persist the
-    // message normally (so the conversation history is complete).
-    if (msg.a2uiEnvelopes && msg.a2uiEnvelopes.length > 0) {
-      for (const envelope of msg.a2uiEnvelopes) {
-        this.events.emit("a2ui-surface", {
-          groupId: msg.groupId,
-          envelope,
-        });
-      }
-    }
-
-    if (msg.a2uiAction) {
-      this.events.emit("a2ui-action", {
-        groupId: msg.groupId,
-        action: msg.a2uiAction,
-      });
-    }
-
-    // If there's nothing else in the message (no text, no attachments, only
-    // A2UI parts), skip the rest of the enqueue flow.
-    const hasTextContent = !!msg.content;
-    const hasAttachments = (msg.attachments?.length ?? 0) > 0;
-    if (
-      !hasTextContent &&
-      !hasAttachments &&
-      (msg.a2uiEnvelopes?.length ?? 0) > 0
-    ) {
-      return;
-    }
-
-    // ── Normal message handling ──────────────────────────────────────────────
-    const directToolCommand = this.parseDirectToolCommand(msg);
-    const isFromBrowser = msg.channel === "browser"; // Messages submitted in ShadowClaw UI
-    const autoTrigger = this.channelRegistry.shouldAutoTrigger(msg.groupId);
-
-    let hasTrigger = false;
-
-    if (msg.channel === "browser" || msg.groupId.startsWith("room:")) {
-      hasTrigger = this.triggerPattern.test(msg.content.trim());
-    }
-
-    // ── A2A task-state conversation termination ──────────────────────────────
-    // If the local user sends a new message in a completed peer conversation,
-    // reopen it (clear the terminal state) so the agent will respond again.
-    if (isFromBrowser && msg.groupId.startsWith("peer:")) {
-      this._peerCompletedContexts.delete(msg.groupId);
-    }
-
-    const isDirectToolCommand = !!directToolCommand;
-
-    // Check for explicit peer ID mention (works for both local and remote)
-    if (!hasTrigger && this.peerjsMyPeerId) {
-      if (msg.content.includes(`@${this.peerjsMyPeerId}`)) {
-        hasTrigger = true;
-      } else if (
-        this.peerjsMyAlias &&
-        msg.content.includes(`@${this.peerjsMyAlias}`)
-      ) {
-        // Also respond to @<my-alias> so peers can use the friendly name
-        hasTrigger = true;
-      } else {
-        // Also check if any alias maps to this.peerjsMyPeerId
-        for (const [alias, rawId] of Object.entries(this.peerjsPeerAliases)) {
-          if (
-            rawId === this.peerjsMyPeerId &&
-            msg.content.includes(`@${alias}`)
-          ) {
-            hasTrigger = true;
-
-            break;
-          }
-        }
-      }
-    }
-
-    // Always trigger the agent for scheduled tasks
-    if (msg.content.trim().startsWith("[SCHEDULED TASK]")) {
-      hasTrigger = true;
-    }
-
-    // Always trigger the owning agent to process an A2UI surface action. These
-    // `[A2UI ACTION]` messages are only ever constructed on the surface owner's
-    // side (local click on an owned surface, or an inbound `room/a2ui-action`
-    // for a surface we own), so force-triggering here is safe and keeps shared
-    // surfaces owner-authoritative.
-    if (msg.content.trim().startsWith("[A2UI ACTION]")) {
-      hasTrigger = true;
-    }
-
-    let isTrigger = false;
-    if (isDirectToolCommand) {
-      isTrigger = true;
-    } else if (hasTrigger) {
-      isTrigger = true;
-    } else if (isFromBrowser) {
-      // Messages from the local UI trigger the agent by default,
-      // EXCEPT in P2P / room channels where we just want to chat with peers.
-      if (msg.groupId.startsWith("peer:") || msg.groupId.startsWith("room:")) {
-        isTrigger = false;
-      } else {
-        isTrigger = true;
-      }
-    } else {
-      isTrigger = autoTrigger;
-    }
-
-    // ── A2A terminal-state suppression ───────────────────────────────────────
-    // If the peer conversation's task has reached a terminal state (COMPLETED,
-    // FAILED, CANCELED) via A2A protocol, suppress auto-trigger. The human
-    // user can reopen by sending a new message from the browser UI.
-    if (
-      isTrigger &&
-      !isFromBrowser &&
-      msg.groupId.startsWith("peer:") &&
-      this._peerCompletedContexts.has(msg.groupId)
-    ) {
-      isTrigger = false;
-    }
-
-    const attachments = await persistMessageAttachments(
-      db,
-      msg.groupId,
-      msg.attachments || [],
-    );
-
-    const stored = {
-      ...msg,
-      attachments,
-      isFromMe: false,
-      isTrigger,
-    };
-
-    if (isTrigger && !isDirectToolCommand) {
-      this.messageQueue.push(msg);
-    }
-
-    await saveMessage(db, stored);
-    this.events.emit("message", stored);
-
-    // Keep peer typing state in sync, but do not treat every P2P chat message
-    // as an agent response. Normal peer messages should not force the remote
-    // peer into a temporary "responding" state.
-    if (msg.channel === "peerjs") {
-      this.clearPeerJsTypingState(msg.groupId);
-    }
-
-    // Forward browser messages to the P2P / room channel so users can chat directly
-    if (
-      isFromBrowser &&
-      (msg.groupId.startsWith("peer:") || msg.groupId.startsWith("room:"))
-    ) {
-      this.router?.send(msg.groupId, msg.content, attachments).catch((err) => {
-        console.error("Failed to route browser message to peer:", err);
-      });
-    }
-
-    if (directToolCommand && this.agentWorker) {
-      this.agentWorker.postMessage({
-        type: "execute-direct-tool",
-        payload: {
-          groupId: msg.groupId,
-          name: directToolCommand.toolName,
-          input: directToolCommand.input,
-        },
-      });
-
-      return;
-    }
-
-    this.processQueue(db);
+    return enqueue(this, db, msg);
   }
 
   async processQueue(db: ShadowClawDatabase): Promise<void> {
-    if (this.processing) {
-      return;
-    }
-
-    if (this.messageQueue.length === 0) {
-      return;
-    }
-
-    // Look up the effective provider for the next message's group
-    const nextMsg = this.messageQueue[0];
-    const nextGroupId = nextMsg?.groupId;
-
-    let effectiveProviderConfig = this.providerConfig;
-    let effectiveProviderId = this.provider;
-
-    if (nextGroupId) {
-      try {
-        const groups = await listGroups(db);
-        const grp = groups.find((g) => g.groupId === nextGroupId);
-        if (grp?.pinnedProvider) {
-          const pinned = getProvider(grp.pinnedProvider);
-          if (pinned) {
-            effectiveProviderConfig = pinned;
-            effectiveProviderId = grp.pinnedProvider;
-          }
-        }
-      } catch {
-        // best-effort
-      }
-    }
-
-    const requiresApiKey = effectiveProviderConfig?.requiresApiKey !== false;
-    let apiKeyPresent = true;
-    if (requiresApiKey) {
-      if (effectiveProviderId === this.provider) {
-        apiKeyPresent = !!(await this.getApiKeyForRequest());
-      } else {
-        apiKeyPresent = !!(await this.#getApiKeyForSpecificProvider(
-          db,
-          effectiveProviderId,
-        ));
-      }
-    }
-
-    if (requiresApiKey && !apiKeyPresent) {
-      const reason =
-        "API key not configured. Go to Settings to add your API key.";
-
-      this.events.emit("provider-help", {
-        providerId: effectiveProviderId,
-        reason,
-        helpType: detectProviderHelpType(
-          effectiveProviderId,
-          reason,
-          requiresApiKey,
-        ),
-      });
-
-      const msg = this.messageQueue.shift();
-      this.events.emit("error", {
-        groupId: msg.groupId,
-        error: reason,
-      });
-
-      return;
-    }
-
-    this.processing = true;
-    const msg = this.messageQueue.shift();
-
-    try {
-      await this.invokeAgent(db, msg.groupId, msg.content);
-    } catch (err) {
-      console.error("Failed to invoke agent:", err);
-    } finally {
-      this.processing = false;
-      if (this.messageQueue.length > 0) {
-        this.processQueue(db);
-      }
-    }
+    return processQueue(this, db);
   }
 
   async invokeAgent(
@@ -3256,7 +3004,7 @@ export class Orchestrator {
         apiKey:
           effectiveProviderId === this.provider
             ? await this.getApiKeyForRequest()
-            : await this.#getApiKeyForSpecificProvider(db, effectiveProviderId),
+            : await this.getApiKeyForSpecificProvider(db, effectiveProviderId),
         assistantName: this.assistantName,
         contextCompression: this.contextCompressionEnabled,
         contextLimit: getContextLimit(effectiveModel),

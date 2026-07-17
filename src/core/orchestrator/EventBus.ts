@@ -8,19 +8,19 @@ export class EventBus {
     this.listeners = new Map();
   }
 
-  on(event: string, callback: Function) {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-
-    this.listeners.get(event)?.add(callback);
+  emit(event: string, data: any) {
+    this.listeners.get(event)?.forEach((cb) => cb(data));
   }
 
   off(event: string, callback: Function) {
     this.listeners.get(event)?.delete(callback);
   }
 
-  emit(event: string, data: any) {
-    this.listeners.get(event)?.forEach((cb) => cb(data));
+  on(event: string, callback: Function) {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, new Set());
+    }
+
+    this.listeners.get(event)?.add(callback);
   }
 }

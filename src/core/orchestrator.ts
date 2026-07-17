@@ -14,7 +14,7 @@ import { estimateTokens } from "../context/estimateTokens.js";
 import { buildConversationMessages } from "../db/buildConversationMessages.js";
 import { clearGroupMessages } from "../db/clearGroupMessages.js";
 import { getConfig } from "../db/getConfig.js";
-import { listGroups } from "../db/groups.js";
+
 import { openDatabase } from "../db/openDatabase.js";
 
 import {
@@ -35,7 +35,7 @@ import { orchestratorStore } from "../stores/orchestrator.js";
 import { toolsStore } from "../stores/tools.js";
 
 import { getCompactionSystemPrompt } from "../worker/getCompactionSystemPrompt.js";
-import { post as workerPost } from "../worker/post.js";
+
 import { buildSystemPrompt } from "../worker/system-prompt.js";
 
 import { formatA2UIActionPrompt } from "../ui/a2ui.js";
@@ -60,10 +60,7 @@ import {
 import { decryptValue, encryptValue } from "../security/crypto.js";
 import { effect } from "./effect.js";
 
-import {
-  invokeWithLiteRtLm,
-  isLiteRtLmSupported,
-} from "../subsystems/providers/litert-lm-provider.js";
+
 
 
 
@@ -74,14 +71,13 @@ import { modelRegistry } from "../subsystems/providers/model-registry.js";
 
 import {
   compactWithPromptApi,
-  invokeWithPromptApi,
   isPromptApiSupported,
 } from "../subsystems/providers/prompt-api-provider.js";
 
 import { toTrustedScriptUrl } from "../security/trusted-types.js";
 import { VMBootMode, VMStatus } from "../shell/vm.js";
 import { getContextLimit } from "../subsystems/providers/providers.js";
-import { invokeWithTransformersJs } from "../subsystems/providers/transformers-js-provider.js";
+
 import { TaskScheduler } from "../subsystems/tools/task-scheduler.js";
 import { showToast } from "../ui/toast.js";
 import { ulid } from "../utils/ulid.js";
@@ -96,6 +92,7 @@ import {
 } from "../subsystems/mcp/webmcp.js";
 
 import { enqueue, processQueue } from "./orchestrator/enqueue.js";
+import { invokeAgent } from "./orchestrator/invokeAgent.js";
 import { handleWorkerMessage } from "./orchestrator/handleWorkerMessage.js";
 import { EventBus } from "./orchestrator/EventBus.js";
 import { normalizeStringList } from "./orchestrator/normalizeStringList.js";
@@ -110,7 +107,7 @@ import type { RoomTransport } from "../subsystems/channels/room-manager.js";
 import type { LLMProvider } from "../subsystems/providers/types.js";
 import type { ModelDownloadProgressPayload } from "../subsystems/worker/types.js";
 import type { A2UIAction } from "../ui/a2ui.js";
-import type { SubagentInvokeContext } from "../worker/tools/spawn-subagent.js";
+
 
 import type {
   Channel,
@@ -1768,7 +1765,7 @@ export class Orchestrator {
     await setConfig(db, CONFIG_KEYS.BEDROCK_AUTH_MODE, authMode);
   }
 
-  private createProviderRequestId(groupId: string): string {
+  createProviderRequestId(groupId: string): string {
     if (this.provider !== "llamafile") {
       this.inFlightProviderRequestIds.delete(groupId);
 
@@ -1904,7 +1901,7 @@ export class Orchestrator {
     }
   }
 
-  private startTransformersProgressPolling(groupId: string): void {
+  startTransformersProgressPolling(groupId: string): void {
     this.stopTransformersProgressPolling(groupId);
 
     // Show immediate feedback while the first network poll is in flight.
@@ -2673,361 +2670,7 @@ export class Orchestrator {
     groupId: string,
     triggerContent: string,
   ): Promise<void> {
-    this.inFlightTriggerByGroup.set(groupId, triggerContent);
-    this.setState("thinking", groupId);
-    this.router?.setTyping(groupId, true);
-    this.events.emit("typing", { groupId, typing: true });
-
-    // Save scheduled task as client message
-    if (triggerContent.startsWith("[SCHEDULED TASK]")) {
-      this.pendingScheduledTasks.add(groupId);
-
-      const stored = {
-        id: ulid(),
-        groupId,
-        sender: "Scheduler",
-        content: triggerContent,
-        timestamp: Date.now(),
-        channel: this.getChannelTypeForGroup(groupId),
-        isFromMe: false,
-        isTrigger: true,
-      };
-
-      await saveMessage(db, stored);
-
-      this.events.emit("message", stored);
-    }
-
-    // Load group memory
-    let memory = "";
-    try {
-      memory = await readGroupFile(db, groupId, "MEMORY.md");
-    } catch {}
-
-    // Load group metadata to check for conversation-specific pinned tools
-    const groups = await listGroups(db);
-    const group = groups.find((g) => g.groupId === groupId);
-
-    const effectiveProviderId = group?.pinnedProvider ?? this.provider;
-
-    // When a provider is pinned but no specific model is pinned, default to that provider's own defaultModel
-    const effectiveModel =
-      group?.pinnedModel ??
-      (group?.pinnedProvider
-        ? (getProvider(group.pinnedProvider)?.defaultModel ?? this.model)
-        : this.model);
-
-    const effectiveProviderConfig =
-      getProvider(effectiveProviderId) ?? this.providerConfig;
-
-    // Track the effective provider for this group so the error handler
-    // can show the right help UI and avoid showing the wrong provider's error.
-    this.inFlightEffectiveProviderByGroup.set(groupId, {
-      providerId: effectiveProviderId,
-      providerConfig: effectiveProviderConfig,
-    });
-
-    // Use pinned tools if set; otherwise fallback to global enabled tools.
-    const activeTools =
-      group?.toolTags && group.toolTags.length > 0
-        ? toolsStore.allTools.filter((t) => group.toolTags!.includes(t.name))
-        : toolsStore.enabledTools;
-
-    const peerState = orchestratorStore.getPeerState(groupId) || undefined;
-    const systemPrompt = buildSystemPrompt(
-      this.assistantName,
-      memory,
-      activeTools,
-      toolsStore.systemPromptOverride,
-      peerState,
-    );
-
-    // Build conversation context with dynamic token-aware windowing
-    const contextLimit = getContextLimit(effectiveModel);
-    const systemPromptTokens = estimateTokens(systemPrompt);
-    const allMessages = await buildConversationMessages(groupId, 200);
-    const dynamicContext = buildDynamicContext(allMessages, {
-      contextLimit,
-      systemPromptTokens,
-      maxOutputTokens: this.maxTokens,
-      skimTop: this.contextCompressionEnabled,
-    });
-
-    const messages = dynamicContext.messages;
-
-    // Emit context usage for UI display
-    this.events.emit("context-usage", {
-      estimatedTokens: dynamicContext.estimatedTokens + systemPromptTokens,
-      contextLimit,
-      usagePercent: dynamicContext.usagePercent,
-      truncatedCount: dynamicContext.truncatedCount,
-    });
-
-    // Auto-compact when context usage exceeds 80% and there are enough messages
-    if (
-      dynamicContext.usagePercent > 80 &&
-      dynamicContext.truncatedCount > 0 &&
-      allMessages.length > 10
-    ) {
-      this.events.emit("show-toast", {
-        message: `Context ${dynamicContext.usagePercent.toFixed(0)}% full — auto-compacting older messages…`,
-        type: "info",
-        duration: 4000,
-      });
-      // Queue compaction after this invocation completes
-      queueMicrotask(() => this.compactContext(db, groupId));
-    }
-
-    if (effectiveProviderId === "transformers_js_browser") {
-      const controller = new AbortController();
-      this.promptControllers.set(groupId, controller);
-
-      const transformersInvokeContext: SubagentInvokeContext = {
-        apiKey: "",
-        assistantName: this.assistantName,
-        db,
-        enabledTools: activeTools as any,
-        invokeSubagent: async (subPayload) => {
-          await invokeWithTransformersJs(
-            db,
-            subPayload.groupId,
-            subPayload.systemPrompt,
-            subPayload.messages,
-            subPayload.maxTokens,
-            async (msg: any) => {
-              workerPost(msg);
-            },
-            controller.signal,
-            subPayload.enabledTools,
-            subPayload.model,
-          );
-        },
-        maxTokens: this.maxTokens,
-        memory: memory ?? "",
-        model: effectiveModel,
-        provider: effectiveProviderId,
-        providerHeaders: {},
-        streaming: false,
-        systemPrompt,
-      };
-
-      try {
-        await invokeWithTransformersJs(
-          db,
-          groupId,
-          systemPrompt,
-          messages,
-          this.maxTokens,
-          async (msg) => {
-            await this.handleWorkerMessage(db, msg);
-          },
-          controller.signal,
-          activeTools,
-          effectiveModel,
-          transformersInvokeContext,
-        );
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          return;
-        }
-
-        const message = err instanceof Error ? err.message : String(err);
-        await this.deliverResponse(db, groupId, `⚠️ Error: ${message}`);
-      } finally {
-        this.promptControllers.delete(groupId);
-      }
-
-      return;
-    }
-
-    if (effectiveProviderId === "prompt_api") {
-      if (!isPromptApiSupported()) {
-        await this.deliverResponse(
-          db,
-          groupId,
-          "⚠️ Error: Prompt API is not available in this browser. Switch provider or enable experimental browser flags.",
-        );
-
-        return;
-      }
-
-      const controller = new AbortController();
-      this.promptControllers.set(groupId, controller);
-
-      const promptApiInvokeContext: SubagentInvokeContext = {
-        apiKey: "",
-        assistantName: this.assistantName,
-        db,
-        enabledTools: activeTools as any,
-        invokeSubagent: async (subPayload) => {
-          await invokeWithPromptApi(
-            db,
-            subPayload.groupId,
-            subPayload.systemPrompt,
-            subPayload.messages,
-            subPayload.maxTokens,
-            async (msg: any) => {
-              workerPost(msg);
-            },
-            controller.signal,
-            subPayload.enabledTools,
-          );
-        },
-        maxTokens: this.maxTokens,
-        memory: memory ?? "",
-        model: effectiveModel,
-        provider: effectiveProviderId,
-        providerHeaders: {},
-        streaming: false,
-        systemPrompt,
-      };
-
-      try {
-        await invokeWithPromptApi(
-          db,
-          groupId,
-          systemPrompt,
-          messages,
-          this.maxTokens,
-          async (msg) => {
-            await this.handleWorkerMessage(db, msg);
-          },
-          controller.signal,
-          activeTools,
-          promptApiInvokeContext,
-        );
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          return;
-        }
-
-        const message = err instanceof Error ? err.message : String(err);
-        await this.deliverResponse(db, groupId, `⚠️ Error: ${message}`);
-      } finally {
-        this.promptControllers.delete(groupId);
-      }
-
-      return;
-    }
-
-    if (effectiveProviderId === "litert_lm_browser") {
-      if (!isLiteRtLmSupported()) {
-        await this.deliverResponse(
-          db,
-          groupId,
-          "⚠️ LiteRT-LM requires WebGPU and WebAssembly.Suspending. These are not both available in this browser.",
-        );
-
-        return;
-      }
-
-      const controller = new AbortController();
-      this.promptControllers.set(groupId, controller);
-
-      const liteRtInvokeContext: SubagentInvokeContext = {
-        apiKey: "",
-        assistantName: this.assistantName,
-        db,
-        enabledTools: activeTools as any,
-        invokeSubagent: async (subPayload) => {
-          await invokeWithLiteRtLm(
-            db,
-            subPayload.groupId,
-            subPayload.systemPrompt,
-            subPayload.messages,
-            subPayload.maxTokens,
-            async (msg: any) => {
-              workerPost(msg);
-            },
-            controller.signal,
-            subPayload.model,
-            subPayload.enabledTools,
-          );
-        },
-        maxTokens: this.maxTokens,
-        memory: memory ?? "",
-        model: effectiveModel,
-        provider: effectiveProviderId,
-        providerHeaders: {},
-        streaming: false,
-        systemPrompt,
-      };
-
-      try {
-        await invokeWithLiteRtLm(
-          db,
-          groupId,
-          systemPrompt,
-          messages,
-          this.maxTokens,
-          async (msg) => {
-            await this.handleWorkerMessage(db, msg);
-          },
-          controller.signal,
-          effectiveModel,
-          activeTools,
-          liteRtInvokeContext,
-        );
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          return;
-        }
-
-        const message = err instanceof Error ? err.message : String(err);
-        await this.deliverResponse(db, groupId, `⚠️ Error: ${message}`);
-      } finally {
-        this.promptControllers.delete(groupId);
-      }
-
-      return;
-    }
-
-    // Determine whether to stream. The provider must explicitly opt in via
-    // supportsStreaming (proxies like bedrock_proxy use synchronous
-    // InvokeModelCommand and cannot return SSE streams).
-    const shouldStream =
-      this.streamingEnabled &&
-      effectiveProviderConfig.supportsStreaming === true &&
-      (effectiveProviderConfig.format === "openai" ||
-        effectiveProviderConfig.format === "anthropic");
-
-    if (effectiveProviderId === "transformers_js_local") {
-      this.startTransformersProgressPolling(groupId);
-    }
-
-    const providerRequestId = this.createProviderRequestId(groupId);
-
-    // Send to agent worker
-    this.agentWorker?.postMessage({
-      type: "invoke",
-      payload: {
-        apiKey:
-          effectiveProviderId === this.provider
-            ? await this.getApiKeyForRequest()
-            : await this.getApiKeyForSpecificProvider(db, effectiveProviderId),
-        assistantName: this.assistantName,
-        contextCompression: this.contextCompressionEnabled,
-        contextLimit: getContextLimit(effectiveModel),
-        enabledTools: activeTools,
-        groupId,
-        isScheduledTask: this._schedulerTriggeredGroups.has(groupId),
-        maxIterations: this.maxIterations,
-        maxTokens: this.maxTokens,
-        memory,
-        messages,
-        model: effectiveModel,
-        provider: effectiveProviderId,
-        providerHeaders: this.getProviderRuntimeHeaders(
-          effectiveProviderId,
-          providerRequestId,
-        ),
-        rateLimitAutoAdapt: this.rateLimitAutoAdapt,
-        rateLimitCallsPerMinute: this.rateLimitCallsPerMinute,
-        storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
-        streaming: shouldStream,
-        systemPrompt,
-      },
-    });
+    return invokeAgent(this, db, groupId, triggerContent);
   }
 
   async handleWorkerMessage(db: ShadowClawDatabase, msg: any): Promise<void> {

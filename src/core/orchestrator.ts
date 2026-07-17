@@ -77,8 +77,8 @@ import {
   persistMessageAttachments,
 } from "../content/message-attachments.js";
 
-import { modelRegistry } from "../subsystems/providers/model-registry.js";
 import { getPushUrl } from "../subsystems/notifications/push-client.js";
+import { modelRegistry } from "../subsystems/providers/model-registry.js";
 
 import {
   compactWithPromptApi,
@@ -86,14 +86,14 @@ import {
   isPromptApiSupported,
 } from "../subsystems/providers/prompt-api-provider.js";
 
-import { getContextLimit } from "../subsystems/providers/providers.js";
-import { Router } from "./router.js";
 import { toTrustedScriptUrl } from "../security/trusted-types.js";
+import { VMBootMode, VMStatus } from "../shell/vm.js";
+import { getContextLimit } from "../subsystems/providers/providers.js";
+import { invokeWithTransformersJs } from "../subsystems/providers/transformers-js-provider.js";
 import { TaskScheduler } from "../subsystems/tools/task-scheduler.js";
 import { showToast } from "../ui/toast.js";
-import { invokeWithTransformersJs } from "../subsystems/providers/transformers-js-provider.js";
 import { ulid } from "../utils/ulid.js";
-import { VMBootMode, VMStatus } from "../shell/vm.js";
+import { Router } from "./router.js";
 
 import {
   setWebMcpMode as applyWebMcpMode,
@@ -103,13 +103,21 @@ import {
   type WebMcpMode,
 } from "../subsystems/mcp/webmcp.js";
 
-import type { RoomInvitePayload } from "../subsystems/channels/peer-protocol.js";
-import type { RoomTransport } from "../subsystems/channels/room-manager.js";
-import { type ShadowClawDatabase } from "../db/db.js";
-import type { SubagentInvokeContext } from "../worker/tools/spawn-subagent.js";
+import { EventBus } from "./orchestrator/EventBus.js";
+import { normalizeStringList } from "./orchestrator/normalizeStringList.js";
+import { parseDirectToolCommandPolicy } from "./orchestrator/parseDirectToolCommandPolicy.js";
+import { parseStoredStringList } from "./orchestrator/parseStoredStringList.js";
 
 import type { MessageAttachment } from "../content/types.js";
+import type { ShadowClawDatabase } from "../db/db.js";
 import type { Task } from "../db/types.js";
+import type { RoomInvitePayload } from "../subsystems/channels/peer-protocol.js";
+import type { RoomTransport } from "../subsystems/channels/room-manager.js";
+import type { LLMProvider } from "../subsystems/providers/types.js";
+import type { ModelDownloadProgressPayload } from "../subsystems/worker/types.js";
+import type { A2UIAction } from "../ui/a2ui.js";
+import type { SubagentInvokeContext } from "../worker/tools/spawn-subagent.js";
+
 import type {
   Channel,
   ChannelType,
@@ -117,55 +125,15 @@ import type {
   RoomMember,
   RoomMeta,
 } from "../subsystems/channels/types.js";
-import type { ModelDownloadProgressPayload } from "../subsystems/worker/types.js";
-import type { A2UIAction } from "../ui/a2ui.js";
-import type { LLMProvider } from "../subsystems/providers/types.js";
 
-/**
- * Simple event emitter for orchestrator events
- */
-class EventBus {
-  listeners: Map<string, Set<Function>>;
+import {
+  DEFAULT_DIRECT_TOOL_COMMAND_POLICY,
+  type DirectToolCommandPolicy,
+  type OrchestratorState,
+  type ParsedDirectToolCommand,
+} from "./orchestrator/types.js";
 
-  constructor() {
-    this.listeners = new Map();
-  }
-
-  on(event: string, callback: Function) {
-    if (!this.listeners.has(event)) {
-      this.listeners.set(event, new Set());
-    }
-
-    this.listeners.get(event)?.add(callback);
-  }
-
-  off(event: string, callback: Function) {
-    this.listeners.get(event)?.delete(callback);
-  }
-
-  emit(event: string, data: any) {
-    this.listeners.get(event)?.forEach((cb) => cb(data));
-  }
-}
-
-export type OrchestratorState = "idle" | "thinking" | "responding" | "error";
-
-interface DirectToolCommandPolicy {
-  allowedTools: string[];
-  enabledChannelTypes: string[];
-  requireMention: boolean;
-}
-
-const DEFAULT_DIRECT_TOOL_COMMAND_POLICY: DirectToolCommandPolicy = {
-  allowedTools: ["clear_chat", "show_toast"],
-  enabledChannelTypes: ["telegram"],
-  requireMention: true,
-};
-
-type ParsedDirectToolCommand = {
-  input: Record<string, any>;
-  toolName: string;
-};
+export * from "./orchestrator/types.js";
 
 /**
  * Main orchestrator class
@@ -423,17 +391,33 @@ export class Orchestrator {
   }
 
   async init(): Promise<ShadowClawDatabase> {
-    // Open database
     const db = await openDatabase();
     this.db = db;
 
-    // Load config
+    await this.#initCoreConfig(db);
+    await this.#initProviderAndModel(db);
+    await this.#initLlamafileAndMesh(db);
+    await this.#initFeatureFlagsAndLimits(db);
+    await this.#initChannelsAndRooms(db);
+    await this.#initWorkerAndScheduler(db);
+
+    this.browserChat.onDisplay(() => {});
+    this.events.emit("ready", undefined);
+
+    await toolsStore.load(db);
+    this.syncWebMcpRegistration(db);
+
+    return db;
+  }
+
+  async #initCoreConfig(db: ShadowClawDatabase): Promise<void> {
     this.assistantName =
       (await getConfig(db, CONFIG_KEYS.ASSISTANT_NAME)) || ASSISTANT_NAME;
 
     this.triggerPattern = buildTriggerPattern(this.assistantName);
+  }
 
-    // Load provider
+  async #initProviderAndModel(db: ShadowClawDatabase): Promise<void> {
     const storedProvider = await getConfig(db, CONFIG_KEYS.PROVIDER);
     if (storedProvider && getProvider(storedProvider)) {
       this.provider = storedProvider;
@@ -444,7 +428,6 @@ export class Orchestrator {
     // providers that require authentication (e.g. HuggingFace).
     await this.loadApiKeyForProvider(db, this.provider);
 
-    // load config settings
     this.bedrockRegionFallback = (
       (await getConfig(db, CONFIG_KEYS.BEDROCK_REGION_FALLBACK)) || ""
     ).trim();
@@ -464,7 +447,6 @@ export class Orchestrator {
       this.getProviderRuntimeHeaders(this.provider),
     );
 
-    // Load model and max tokens
     const storedModel = await getConfig(db, CONFIG_KEYS.MODEL);
     if (storedModel) {
       this.model = storedModel;
@@ -514,7 +496,9 @@ export class Orchestrator {
     );
 
     this.rateLimitAutoAdapt = storedRateLimitAutoAdapt !== "false";
+  }
 
+  async #initLlamafileAndMesh(db: ShadowClawDatabase): Promise<void> {
     const storedLlamafileMode = await getConfig(db, CONFIG_KEYS.LLAMAFILE_MODE);
     if (storedLlamafileMode === "cli" || storedLlamafileMode === "server") {
       this.llamafileMode = storedLlamafileMode;
@@ -556,7 +540,9 @@ export class Orchestrator {
     }
 
     this.applyMeshLlmHeaders();
+  }
 
+  async #initFeatureFlagsAndLimits(db: ShadowClawDatabase): Promise<void> {
     const storedVMBootMode = await getConfig(db, CONFIG_KEYS.VM_BOOT_MODE);
     this.vmBootMode =
       storedVMBootMode === "disabled" ||
@@ -566,7 +552,6 @@ export class Orchestrator {
         ? storedVMBootMode
         : "disabled";
 
-    // Load streaming preference (default: enabled)
     const storedStreaming = await getConfig(db, CONFIG_KEYS.STREAMING_ENABLED);
     this.streamingEnabled = storedStreaming !== "false";
 
@@ -584,13 +569,11 @@ export class Orchestrator {
 
     this.vmBashFullInternetAccess = storedBashFullInternetAccess === "true";
 
-    // Load WebMCP mode preference (default: polyfill)
     const storedWebMcpMode = await getConfig(db, CONFIG_KEYS.WEBMCP_MODE);
     if (storedWebMcpMode === "native" || storedWebMcpMode === "polyfill") {
       applyWebMcpMode(storedWebMcpMode);
     }
 
-    // Load context compression preference (default: false)
     const storedCompression = await getConfig(
       db,
       CONFIG_KEYS.CONTEXT_COMPRESSION_ENABLED,
@@ -603,22 +586,21 @@ export class Orchestrator {
       CONFIG_KEYS.DIRECT_TOOL_COMMAND_POLICY,
     );
 
-    this.directToolCommandPolicy = this.parseDirectToolCommandPolicy(
+    this.directToolCommandPolicy = parseDirectToolCommandPolicy(
       storedDirectToolPolicy,
     );
 
-    // Load proxy preference (default: disabled)
     const storedUseProxy = await getConfig(db, CONFIG_KEYS.USE_PROXY);
     this.useProxy = storedUseProxy === "true";
 
-    // Load proxy URLs
     this.proxyUrl = (await getConfig(db, CONFIG_KEYS.PROXY_URL)) || "/proxy";
     this.gitProxyUrl =
       (await getConfig(db, CONFIG_KEYS.GIT_PROXY_URL)) || "/git-proxy";
     this.taskServerUrl =
       (await getConfig(db, CONFIG_KEYS.TASK_SERVER_URL)) || "/schedule";
+  }
 
-    // Set up channel registry and router
+  async #initChannelsAndRooms(db: ShadowClawDatabase): Promise<void> {
     this.initializeChannelRegistry();
 
     this.channelRegistry.onMessage((msg: InboundMessage) => {
@@ -644,7 +626,7 @@ export class Orchestrator {
     await this.loadChannelConfigurations(db);
     this.applyAllChannelRunningStates();
 
-    // Restore persisted multi-party rooms.
+    // Restore persisted multi-party rooms
     try {
       const rooms = await getRoomMetadata(db);
 
@@ -652,7 +634,9 @@ export class Orchestrator {
     } catch (err) {
       console.error("Failed to load rooms:", err);
     }
+  }
 
+  async #initWorkerAndScheduler(db: ShadowClawDatabase): Promise<void> {
     this.agentWorker = new Worker(
       toTrustedScriptUrl(
         new URL("./agent.worker.js", import.meta.url).href,
@@ -669,7 +653,6 @@ export class Orchestrator {
       console.error("Agent worker error:", err);
     };
 
-    // Pass storage handle if it exists
     const storageHandle = await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE);
     if (storageHandle) {
       this.agentWorker.postMessage({
@@ -680,7 +663,6 @@ export class Orchestrator {
 
     // Sync proxy config to Service Worker
     this.syncProxyConfigToServiceWorker();
-    // The worker reads persisted VM boot mode and eagerly boots the VM itself.
 
     // Set up task scheduler.
     // When push scheduling is available, the server-side scheduler should be
@@ -699,24 +681,7 @@ export class Orchestrator {
       this.scheduler.start();
     }
 
-    // Listen for scheduled-task-trigger messages from the service worker.
-    // When the server-side scheduler fires, it sends a push notification;
-    // the service worker relays it here so we can invoke the agent.
     this._setupPushTaskListener(db);
-
-    // Wire up browser chat display callback
-    this.browserChat.onDisplay(() => {
-      // Display handled via events.emit('message', ...)
-    });
-
-    this.events.emit("ready", undefined);
-
-    // Load persisted tool configuration before WebMCP registration.
-    await toolsStore.load(db);
-
-    this.syncWebMcpRegistration(db);
-
-    return db;
   }
 
   /**
@@ -2635,40 +2600,6 @@ export class Orchestrator {
     return this.channelRegistry.getChannelType(groupId) ?? "browser";
   }
 
-  parseDirectToolCommandPolicy(
-    raw: string | null | undefined,
-  ): DirectToolCommandPolicy {
-    if (!raw) {
-      return { ...DEFAULT_DIRECT_TOOL_COMMAND_POLICY };
-    }
-
-    try {
-      const parsed = JSON.parse(raw) as Partial<DirectToolCommandPolicy>;
-      const enabledChannelTypes = Array.isArray(parsed.enabledChannelTypes)
-        ? parsed.enabledChannelTypes.filter(
-            (v): v is string => typeof v === "string" && v.trim().length > 0,
-          )
-        : DEFAULT_DIRECT_TOOL_COMMAND_POLICY.enabledChannelTypes;
-
-      const allowedTools = Array.isArray(parsed.allowedTools)
-        ? parsed.allowedTools.filter(
-            (v): v is string => typeof v === "string" && v.trim().length > 0,
-          )
-        : DEFAULT_DIRECT_TOOL_COMMAND_POLICY.allowedTools;
-
-      return {
-        allowedTools,
-        enabledChannelTypes,
-        requireMention:
-          typeof parsed.requireMention === "boolean"
-            ? parsed.requireMention
-            : DEFAULT_DIRECT_TOOL_COMMAND_POLICY.requireMention,
-      };
-    } catch {
-      return { ...DEFAULT_DIRECT_TOOL_COMMAND_POLICY };
-    }
-  }
-
   parseDirectToolCommand(msg: InboundMessage): ParsedDirectToolCommand | null {
     const policy = this.directToolCommandPolicy;
     if (!policy.enabledChannelTypes.includes(msg.channel)) {
@@ -4091,27 +4022,4 @@ export class Orchestrator {
       type: "ask-user-response",
     });
   }
-}
-
-function normalizeStringList(values: string[]): string[] {
-  return Array.from(
-    new Set(values.map((value) => value.trim()).filter(Boolean)),
-  );
-}
-
-function parseStoredStringList(value: string | undefined): string[] {
-  if (!value) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(value);
-    if (Array.isArray(parsed)) {
-      return normalizeStringList(parsed.map((entry) => String(entry)));
-    }
-  } catch {
-    // Fall back to comma-separated input for forward compatibility.
-  }
-
-  return normalizeStringList(value.split(","));
 }

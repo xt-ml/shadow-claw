@@ -101,7 +101,7 @@ export async function handleWorkerMessage(
       }
 
       try {
-        const serverOk = await o._syncTaskToServer(task);
+        const serverOk = await o.syncTaskToServer(task);
 
         if (!serverOk) {
           showToast("Failed to sync task to server — task was not saved.", {
@@ -153,13 +153,11 @@ export async function handleWorkerMessage(
       let hasProviderHelp = false;
 
       // Use the effective provider that was active when this invocation started
-      const inFlightProvider =
-        o.inFlightEffectiveProviderByGroup.get(groupId);
+      const inFlightProvider = o.inFlightEffectiveProviderByGroup.get(groupId);
 
       o.inFlightEffectiveProviderByGroup.delete(groupId);
 
-      const errorProviderId =
-        inFlightProvider?.providerId ?? o.getProvider();
+      const errorProviderId = inFlightProvider?.providerId ?? o.getProvider();
 
       const errorProviderConfig =
         inFlightProvider?.providerConfig ?? o.providerConfig;
@@ -234,8 +232,7 @@ export async function handleWorkerMessage(
 
       // If a file was written, or bash finished (might have changed files), emit file-change
       if (
-        (msg.payload.tool === "write_file" &&
-          msg.payload.status === "done") ||
+        (msg.payload.tool === "write_file" && msg.payload.status === "done") ||
         (msg.payload.tool === "bash" && msg.payload.status === "done")
       ) {
         o.events.emit("file-change", {
@@ -261,11 +258,7 @@ export async function handleWorkerMessage(
     case "compact-done": {
       o.clearProviderRequest(msg.payload.groupId);
 
-      await o.handleCompactDone(
-        db,
-        msg.payload.groupId,
-        msg.payload.summary,
-      );
+      await o.handleCompactDone(db, msg.payload.groupId, msg.payload.summary);
 
       break;
     }
@@ -302,7 +295,7 @@ export async function handleWorkerMessage(
       }
 
       try {
-        const serverOk = await o._syncTaskToServer(task);
+        const serverOk = await o.syncTaskToServer(task);
 
         if (!serverOk) {
           showToast(
@@ -327,10 +320,7 @@ export async function handleWorkerMessage(
     case "delete-task": {
       const { id, groupId: deleteGroupId } = msg.payload;
 
-      if (
-        deleteGroupId &&
-        o._schedulerTriggeredGroups.has(deleteGroupId)
-      ) {
+      if (deleteGroupId && o._schedulerTriggeredGroups.has(deleteGroupId)) {
         showToast(
           "\u26a0\ufe0f Task deletion blocked \u2014 scheduled tasks cannot delete tasks (recursion prevention).",
           { type: "warning", duration: 8000 },
@@ -340,13 +330,12 @@ export async function handleWorkerMessage(
       }
 
       try {
-        const serverOk = await o._deleteTaskFromServer(id);
+        const serverOk = await o.deleteTaskFromServer(id);
 
         if (!serverOk) {
-          showToast(
-            "Failed to delete task from server — task kept in view.",
-            { type: "error" },
-          );
+          showToast("Failed to delete task from server — task kept in view.", {
+            type: "error",
+          });
 
           break;
         }
@@ -407,10 +396,7 @@ export async function handleWorkerMessage(
               action: {
                 label: "Reconnect Now",
                 onClick: async () => {
-                  const popupResult = await reconnectMcpOAuth(
-                    db,
-                    connectionId,
-                  );
+                  const popupResult = await reconnectMcpOAuth(db, connectionId);
                   if (popupResult.success) {
                     showToast(`🔑 OAuth reconnected for "${label}"`, {
                       type: "success",
@@ -602,10 +588,7 @@ export async function handleWorkerMessage(
       // Broadcast to every member when targeting a multi-party room. The
       // local peer becomes the owner of this surface (owner-authoritative).
       if (rcGroupId.startsWith("room:")) {
-        o.roomManager.broadcastA2UI(
-          roomIdFromGroupId(rcGroupId),
-          envelope,
-        );
+        o.roomManager.broadcastA2UI(roomIdFromGroupId(rcGroupId), envelope);
       }
 
       break;

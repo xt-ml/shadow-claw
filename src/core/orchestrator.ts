@@ -749,6 +749,77 @@ export class Orchestrator {
     this.events.emit("state-change", { state, groupId });
   }
 
+  /**
+   * Listen for service worker messages that relay scheduled-task push triggers.
+   * When the server-side scheduler fires a task, it sends a push notification.
+   * The service worker relays it here as a `scheduled-task-trigger` message.
+   */
+  setupPushTaskListener(_db: ShadowClawDatabase): void {
+    if (typeof navigator === "undefined" || !navigator.serviceWorker) {
+      return;
+    }
+
+    navigator.serviceWorker.addEventListener("message", (event) => {
+      if (event.data?.type === "request-proxy-config") {
+        // The service worker just restarted and lost its in-memory proxy config.
+        // Re-sync so fetch interception resumes immediately.
+        this.syncProxyConfigToServiceWorker();
+
+        return;
+      }
+
+      if (event.data?.type !== "scheduled-task-trigger") {
+        return;
+      }
+
+      const { taskId, groupId, prompt, taskType, tools } = event.data;
+      if (!groupId) {
+        return;
+      }
+
+      // Mark this group as scheduler-triggered for recursion prevention
+      this._schedulerTriggeredGroups.add(groupId);
+
+      // Execute the task via the same path as client-side scheduler
+      const runTaskHandler = async () => {
+        const fullTask = orchestratorStore.tasks.find((t) => t.id === taskId);
+        if (fullTask) {
+          orchestratorStore.runTask(fullTask);
+
+          return;
+        }
+
+        if (taskType === "tools" && Array.isArray(tools) && tools.length > 0) {
+          orchestratorStore.runTask({
+            id: taskId || `push-task-${Date.now()}`,
+            groupId,
+            createdAt: Date.now(),
+            enabled: true,
+            prompt: prompt || "",
+            type: "tools",
+            tools,
+            lastRun: null,
+          });
+
+          return;
+        }
+
+        if (prompt) {
+          // Fallback if not found in local store
+          this.submitMessage(prompt, groupId);
+        }
+      };
+
+      runTaskHandler()
+        .catch((err) =>
+          console.error(`Push-triggered task ${taskId} failed:`, err),
+        )
+        .finally(() => {
+          this._schedulerTriggeredGroups.delete(groupId);
+        });
+    });
+  }
+
   shouldRunChannel(channelType: ChannelType): boolean {
     if (channelType === "browser") {
       return true;
@@ -1092,6 +1163,31 @@ export class Orchestrator {
 
     if (normalizedToken && this.getChannelEnabled("telegram")) {
       this.telegram.start();
+    }
+  }
+
+  /**
+   * Delete a task schedule from the server-side SQLite store.
+   * Returns true if the server acknowledged (HTTP 2xx), false otherwise.
+   */
+  async deleteTaskFromServer(id: string): Promise<boolean> {
+    try {
+      const base = this.taskServerUrl.replace(/\/$/, "");
+      const res = await fetch(`${base}/tasks/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+      });
+
+      if (!res.ok) {
+        console.error("Server rejected task deletion:", res.status);
+
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error("Failed to delete task from server:", err);
+
+      return false;
     }
   }
 
@@ -1640,6 +1736,24 @@ export class Orchestrator {
     this.roomManager.broadcastA2UIAction(roomId, action);
   }
 
+  async runTaskAsScheduled(task: Task): Promise<void> {
+    if (!task.groupId) {
+      console.error(
+        "Scheduled task has no groupId — refusing to execute to prevent context pollution.",
+      );
+
+      return;
+    }
+
+    this._schedulerTriggeredGroups.add(task.groupId);
+
+    try {
+      await orchestratorStore.runTask(task);
+    } finally {
+      this._schedulerTriggeredGroups.delete(task.groupId);
+    }
+  }
+
   async saveSecretConfig(
     db: ShadowClawDatabase,
     key: string,
@@ -2017,6 +2131,80 @@ export class Orchestrator {
     this.syncWebMcpRegistration(db);
   }
 
+  async shouldStartLocalScheduler(): Promise<boolean> {
+    if (typeof navigator === "undefined" || !navigator.serviceWorker) {
+      return true;
+    }
+
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+
+      return !sub;
+    } catch {
+      return true;
+    }
+  }
+
+  /**
+   * Sync a task schedule to the server-side SQLite store.
+   * Returns true if the server acknowledged (HTTP 2xx), false otherwise.
+   */
+  async syncTaskToServer(task: Task): Promise<boolean> {
+    try {
+      const base = this.taskServerUrl.replace(/\/$/, "");
+      const res = await fetch(`${base}/tasks`, {
+        body: JSON.stringify(task),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      });
+
+      if (!res.ok) {
+        console.error("Server rejected task sync:", res.status);
+
+        return false;
+      }
+
+      return true;
+    } catch (err) {
+      console.error("Failed to sync task to server:", err);
+
+      return false;
+    } finally {
+      this.warnIfNoPushSubscription();
+    }
+  }
+
+  /**
+   * Check if push notifications are subscribed and warn if not.
+   * Only warns once per session to avoid spamming the user.
+   */
+  async warnIfNoPushSubscription() {
+    if (this._pushSubscriptionWarned) {
+      return;
+    }
+
+    if (typeof navigator === "undefined" || !navigator.serviceWorker) {
+      return;
+    }
+
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+
+      if (!sub) {
+        this._pushSubscriptionWarned = true;
+
+        showToast(
+          "Push notifications are not enabled. Scheduled tasks will only run while the app is open. Enable push in Settings for background execution.",
+          { type: "warning" },
+        );
+      }
+    } catch {
+      // Service worker or Push API not available — ignore
+    }
+  }
+
   /**
    * Build the multi-party {@link RoomManager}, wiring it to the PeerJS channel
    * for transport and to the orchestrator for inbound delivery + persistence.
@@ -2078,77 +2266,6 @@ export class Orchestrator {
   }
 
   /**
-   * Listen for service worker messages that relay scheduled-task push triggers.
-   * When the server-side scheduler fires a task, it sends a push notification.
-   * The service worker relays it here as a `scheduled-task-trigger` message.
-   */
-  _setupPushTaskListener(_db: ShadowClawDatabase): void {
-    if (typeof navigator === "undefined" || !navigator.serviceWorker) {
-      return;
-    }
-
-    navigator.serviceWorker.addEventListener("message", (event) => {
-      if (event.data?.type === "request-proxy-config") {
-        // The service worker just restarted and lost its in-memory proxy config.
-        // Re-sync so fetch interception resumes immediately.
-        this.syncProxyConfigToServiceWorker();
-
-        return;
-      }
-
-      if (event.data?.type !== "scheduled-task-trigger") {
-        return;
-      }
-
-      const { taskId, groupId, prompt, taskType, tools } = event.data;
-      if (!groupId) {
-        return;
-      }
-
-      // Mark this group as scheduler-triggered for recursion prevention
-      this._schedulerTriggeredGroups.add(groupId);
-
-      // Execute the task via the same path as client-side scheduler
-      const runTaskHandler = async () => {
-        const fullTask = orchestratorStore.tasks.find((t) => t.id === taskId);
-        if (fullTask) {
-          orchestratorStore.runTask(fullTask);
-
-          return;
-        }
-
-        if (taskType === "tools" && Array.isArray(tools) && tools.length > 0) {
-          orchestratorStore.runTask({
-            id: taskId || `push-task-${Date.now()}`,
-            groupId,
-            createdAt: Date.now(),
-            enabled: true,
-            prompt: prompt || "",
-            type: "tools",
-            tools,
-            lastRun: null,
-          });
-
-          return;
-        }
-
-        if (prompt) {
-          // Fallback if not found in local store
-          this.submitMessage(prompt, groupId);
-        }
-      };
-
-      runTaskHandler()
-        .catch((err) =>
-          console.error(`Push-triggered task ${taskId} failed:`, err),
-        )
-        .finally(() => {
-          this._schedulerTriggeredGroups.delete(groupId);
-        });
-    });
-  }
-
-  /**
    * Auto-activate the best matching tool profile for the current provider + model.
    * Prefers exact provider+model match, then provider-only, then does nothing.
    */
@@ -2201,31 +2318,6 @@ export class Orchestrator {
       });
     } catch {
       // Best-effort cancellation only.
-    }
-  }
-
-  /**
-   * Delete a task schedule from the server-side SQLite store.
-   * Returns true if the server acknowledged (HTTP 2xx), false otherwise.
-   */
-  async _deleteTaskFromServer(id: string): Promise<boolean> {
-    try {
-      const base = this.taskServerUrl.replace(/\/$/, "");
-      const res = await fetch(`${base}/tasks/${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
-
-      if (!res.ok) {
-        console.error("Server rejected task deletion:", res.status);
-
-        return false;
-      }
-
-      return true;
-    } catch (err) {
-      console.error("Failed to delete task from server:", err);
-
-      return false;
     }
   }
 
@@ -2518,18 +2610,18 @@ export class Orchestrator {
     // when push background execution is unavailable.
     this.scheduler = new TaskScheduler(
       async (task) => {
-        await this._runTaskAsScheduled(task);
+        await this.runTaskAsScheduled(task);
       },
       () => {
         this.events.emit("task-change", { type: "executed" });
       },
     );
 
-    if (await this._shouldStartLocalScheduler()) {
+    if (await this.shouldStartLocalScheduler()) {
       this.scheduler.start();
     }
 
-    this._setupPushTaskListener(db);
+    this.setupPushTaskListener(db);
   }
 
   private async pollTransformersProgress(groupId: string): Promise<void> {
@@ -2574,98 +2666,6 @@ export class Orchestrator {
       }
     } catch {
       // Ignore status polling failures so inference can continue uninterrupted.
-    }
-  }
-
-  async _runTaskAsScheduled(task: Task): Promise<void> {
-    if (!task.groupId) {
-      console.error(
-        "Scheduled task has no groupId — refusing to execute to prevent context pollution.",
-      );
-
-      return;
-    }
-
-    this._schedulerTriggeredGroups.add(task.groupId);
-
-    try {
-      await orchestratorStore.runTask(task);
-    } finally {
-      this._schedulerTriggeredGroups.delete(task.groupId);
-    }
-  }
-
-  async _shouldStartLocalScheduler(): Promise<boolean> {
-    if (typeof navigator === "undefined" || !navigator.serviceWorker) {
-      return true;
-    }
-
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-
-      return !sub;
-    } catch {
-      return true;
-    }
-  }
-
-  /**
-   * Sync a task schedule to the server-side SQLite store.
-   * Returns true if the server acknowledged (HTTP 2xx), false otherwise.
-   */
-  async _syncTaskToServer(task: Task): Promise<boolean> {
-    try {
-      const base = this.taskServerUrl.replace(/\/$/, "");
-      const res = await fetch(`${base}/tasks`, {
-        body: JSON.stringify(task),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
-
-      if (!res.ok) {
-        console.error("Server rejected task sync:", res.status);
-
-        return false;
-      }
-
-      return true;
-    } catch (err) {
-      console.error("Failed to sync task to server:", err);
-
-      return false;
-    } finally {
-      this._warnIfNoPushSubscription();
-    }
-  }
-
-  /**
-   * Check if push notifications are subscribed and warn if not.
-   * Only warns once per session to avoid spamming the user.
-   */
-  async _warnIfNoPushSubscription() {
-    if (this._pushSubscriptionWarned) {
-      return;
-    }
-
-    if (typeof navigator === "undefined" || !navigator.serviceWorker) {
-      return;
-    }
-
-    try {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-
-      if (!sub) {
-        this._pushSubscriptionWarned = true;
-
-        showToast(
-          "Push notifications are not enabled. Scheduled tasks will only run while the app is open. Enable push in Settings for background execution.",
-          { type: "warning" },
-        );
-      }
-    } catch {
-      // Service worker or Push API not available — ignore
     }
   }
 }

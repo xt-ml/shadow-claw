@@ -775,7 +775,7 @@ describe("Orchestrator", () => {
     expect(saved[1].channel).toBe(CHANNEL_IMESSAGE);
   });
 
-  describe("_warnIfNoPushSubscription", () => {
+  describe("warnIfNoPushSubscription", () => {
     let originalServiceWorker: any;
 
     beforeEach(() => {
@@ -804,7 +804,7 @@ describe("Orchestrator", () => {
         },
       });
 
-      await o._warnIfNoPushSubscription();
+      await o.warnIfNoPushSubscription();
       expect(o._pushSubscriptionWarned).toBe(true);
     });
 
@@ -825,7 +825,7 @@ describe("Orchestrator", () => {
         },
       });
 
-      await o._warnIfNoPushSubscription();
+      await o.warnIfNoPushSubscription();
 
       expect(o._pushSubscriptionWarned).toBe(false);
     });
@@ -847,11 +847,11 @@ describe("Orchestrator", () => {
         },
       });
 
-      await o._warnIfNoPushSubscription();
+      await o.warnIfNoPushSubscription();
       expect(o._pushSubscriptionWarned).toBe(true);
 
       mockGetSubscription.mockClear();
-      await o._warnIfNoPushSubscription();
+      await o.warnIfNoPushSubscription();
 
       // Should not call getSubscription again
       expect(mockGetSubscription).not.toHaveBeenCalled();
@@ -865,7 +865,7 @@ describe("Orchestrator", () => {
         value: undefined,
       });
 
-      await o._warnIfNoPushSubscription();
+      await o.warnIfNoPushSubscription();
       expect(o._pushSubscriptionWarned).toBe(false);
     });
 
@@ -883,7 +883,7 @@ describe("Orchestrator", () => {
         },
       });
 
-      const shouldStart = await o._shouldStartLocalScheduler();
+      const shouldStart = await o.shouldStartLocalScheduler();
       expect(shouldStart).toBe(true);
     });
 
@@ -901,7 +901,7 @@ describe("Orchestrator", () => {
         },
       });
 
-      const shouldStart = await o._shouldStartLocalScheduler();
+      const shouldStart = await o.shouldStartLocalScheduler();
       expect(shouldStart).toBe(false);
     });
   });
@@ -965,7 +965,7 @@ describe("Orchestrator", () => {
 
       o.events.on("task-change", (e: any) => events.push(e));
 
-      // Mock fetch so _syncTaskToServer doesn't throw
+      // Mock fetch so syncTaskToServer doesn't throw
       const origFetch = (globalThis as any).fetch;
 
       (globalThis as any).fetch = (jest.fn() as any).mockResolvedValue({
@@ -1075,7 +1075,7 @@ describe("Orchestrator", () => {
       const before = o._schedulerTriggeredGroups.has(task.groupId);
       expect(before).toBe(false);
 
-      await o._runTaskAsScheduled(task as any);
+      await o.runTaskAsScheduled(task as any);
 
       expect(runTaskSpy).toHaveBeenCalledWith(task);
       expect(o._schedulerTriggeredGroups.has(task.groupId)).toBe(false);

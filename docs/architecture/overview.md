@@ -196,6 +196,7 @@ sequenceDiagram
 | `src/subsystems/git/`           | isomorphic-git operations + OPFS sync                                        |
 | `src/subsystems/notifications/` | Web Push + server-side SQLite task scheduling                                |
 | `src/subsystems/tools/`         | Agent tool definitions (modular `.ts` files)                                 |
+| `src/worker/tools/`             | Agent tool execution handlers                                                |
 | `src/worker/`                   | Worker internals (invoke handler, tool executor, stream parser, retry logic) |
 | `electron/`                     | Electron desktop app entry point                                             |
 | `e2e/`                          | Playwright E2E tests (Page Object Model pattern)                             |

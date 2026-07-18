@@ -100,7 +100,7 @@ The agent is instructed to **never** use `bash`, `sed`, or `grep` to resolve mer
 4. `git_add` the resolved file
 5. `git_commit` the merge
 
-This is reflected in the system prompt (`src/core/orchestrator.ts` → `buildSystemPrompt`).
+This is reflected in the system prompt (`src/worker/system-prompt.ts` → `buildSystemPrompt`).
 
 ## Credentials
 

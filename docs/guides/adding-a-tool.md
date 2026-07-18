@@ -87,19 +87,33 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
 
 ## Step 4 — Implement the executor
 
+Create the execution handler in `src/worker/tools/my-tool.ts`:
+
+```ts
+export function executeMyTool(input: Record<string, any>, groupId: string) {
+  const { message } = input as { message: string };
+  return `hello from my_tool! You said: ${message}`;
+}
+```
+
 Open `src/worker/executeTool.ts` and add a case to the `switch` statement:
 
 ```ts
+import { executeMyTool } from "./tools/my-tool.js";
+
+// inside executeTool() switch:
 case "my_tool": {
-  const { message } = input as { message: string };
-  return `hello from my_tool! You said: ${message}`;
+  return executeMyTool(input, groupId);
 }
 ```
 
 For async operations:
 
 ```ts
-case "my_tool": {
+export async function executeMyTool(
+  input: Record<string, any>,
+  groupId: string,
+) {
   const { message } = input as { message: string };
   const result = await doSomethingAsync(message);
   return result;
@@ -108,10 +122,14 @@ case "my_tool": {
 
 ### Accessing the storage layer
 
-The `db` and group context are available:
+The `db` and group context can be passed down to your handler:
 
 ```ts
-case "my_tool": {
+export async function executeMyTool(
+  db: ShadowClawDatabase,
+  input: Record<string, any>,
+  groupId: string,
+) {
   const { path } = input as { path: string };
   const content = await readGroupFile(db, groupId, path);
   await writeGroupFile(db, groupId, path, content.toUpperCase());
@@ -121,10 +139,18 @@ case "my_tool": {
 
 ### Posting UI events
 
+You can import `post` to send events to the UI:
+
 ```ts
-case "my_tool": {
+import { post } from "../post.js";
+
+export function executeMyTool(input: Record<string, any>, groupId: string) {
   // Show a toast notification
-  post({ type: "show-toast", message: "Doing the thing...", toastType: "info" });
+  post({
+    type: "show-toast",
+    message: "Doing the thing...",
+    toastType: "info",
+  });
 
   // Open a file in the viewer
   post({ type: "open-file", groupId, path: "/workspace/result.txt" });
@@ -169,4 +195,4 @@ Fix any TypeScript errors before opening a PR.
 - **Input validation:** Destructure and validate inputs early; return clear error strings for bad inputs.
 - **`read_file` supports batch reads** via a `paths` array — model this pattern for tools that often need multiple inputs.
 - **Lazy imports for heavy dependencies:** If your tool depends on a large library, use `await import()` inside the case block.
-- **Update the system prompt** (`src/core/orchestrator.ts` → `buildSystemPrompt`) if the tool needs explicit agent guidance (e.g., preferred usage patterns or when NOT to use it).
+- **Update the system prompt** (`src/worker/system-prompt.ts` → `buildSystemPrompt`) if the tool needs explicit agent guidance (e.g., preferred usage patterns or when NOT to use it).

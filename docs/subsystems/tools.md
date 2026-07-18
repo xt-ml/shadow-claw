@@ -14,6 +14,7 @@ graph TD
   Orchestrator --> Worker["Worker<br>Formats tools for LLM"]
   Worker --> LLM["LLM<br>Returns tool_use blocks"]
   LLM --> Exec["executeTool.ts<br>Dispatch by tool name"]
+  Exec --> Handlers["src/worker/tools/*<br>Execution Handlers"]
 ```
 
 ## Tool Definition Format
@@ -87,7 +88,7 @@ Saved profiles can specify a `providerId`. When the orchestrator switches to a m
 
 1. Checks recursion guard (scheduled task restrictions)
 2. Switches on tool `name`
-3. Calls the appropriate handler
+3. Calls the appropriate handler in `src/worker/tools/`
 4. Returns result as string or JSON
 
 ### File tools

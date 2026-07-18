@@ -156,5 +156,5 @@ To prevent task cascades:
 - When `isScheduledTask === true` in the invoke payload, the orchestrator blocks:
   - `task-created`, `update-task`, `delete-task` worker messages → warning toast
   - `send-notification` → warning toast instead of push broadcast
-- The guard set `_schedulerTriggeredGroups` tracks in-flight scheduled task groups
+- The guard set `schedulerTriggeredGroups` tracks in-flight scheduled task groups
 - Guard is cleared when the task invocation completes

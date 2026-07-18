@@ -1,22 +1,22 @@
 import { jest } from "@jest/globals";
 
 // In ESM, we must use unstable_mockModule BEFORE importing the module under test
-jest.unstable_mockModule("../security/crypto.js", () => ({
+jest.unstable_mockModule("../../security/crypto.js", () => ({
   encryptValue: jest.fn(async (val: string) => `enc:${val}`),
   decryptValue: jest.fn(async (val: string) => val.replace("enc:", "")),
 }));
 
-jest.unstable_mockModule("../db/setConfig.js", () => ({
+jest.unstable_mockModule("../../db/setConfig.js", () => ({
   setConfig: jest.fn(async () => {}),
 }));
 
-jest.unstable_mockModule("../db/getConfig.js", () => ({
+jest.unstable_mockModule("../../db/getConfig.js", () => ({
   getConfig: jest.fn(async () => null),
 }));
 
 // Now we can import the modules
 const { Orchestrator } = await import("./orchestrator.js");
-const { encryptValue, decryptValue } = await import("../security/crypto.js");
+const { encryptValue, decryptValue } = await import("../../security/crypto.js");
 
 describe("Orchestrator API Key Hardening", () => {
   let orchestrator: any;

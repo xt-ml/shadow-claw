@@ -1,6 +1,6 @@
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { OrchestratorStore } from "../../../stores/orchestrator.js";
-import type { Orchestrator } from "../../../core/orchestrator.js";
+import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
 import { ulid } from "../../../utils/ulid.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
 import { showPage } from "./showPage.js";

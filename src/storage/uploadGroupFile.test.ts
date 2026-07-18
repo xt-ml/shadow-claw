@@ -5,6 +5,7 @@ jest.unstable_mockModule("./getGroupDir.js", () => ({
 }));
 
 jest.unstable_mockModule("./parsePath.js", () => ({ parsePath: jest.fn() }));
+
 jest.unstable_mockModule("./storage.js", () => ({
   getStorageStatus: (jest.fn() as any).mockResolvedValue({
     type: "opfs",
@@ -14,6 +15,7 @@ jest.unstable_mockModule("./storage.js", () => ({
   invalidateStorageRoot: jest.fn(),
   isStaleHandleError: (jest.fn() as any).mockReturnValue(false),
 }));
+
 jest.unstable_mockModule("./writeFileHandle.js", () => ({
   writeFileHandle: (jest.fn() as any).mockResolvedValue(undefined),
 

@@ -4,7 +4,7 @@ import { showPage } from "../utils/showPage.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
 
-import type { Orchestrator } from "../../../core/orchestrator.js";
+import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { ShadowClaw } from "../shadow-claw.js";
 

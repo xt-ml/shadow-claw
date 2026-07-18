@@ -1,24 +1,36 @@
-import { buildDynamicContext } from "../../context/buildDynamicContext.js";
-import { estimateTokens } from "../../context/estimateTokens.js";
-import { buildConversationMessages } from "../../db/buildConversationMessages.js";
-import { listGroups } from "../../db/groups.js";
-import { readGroupFile } from "../../storage/readGroupFile.js";
-import { saveMessage } from "../../db/saveMessage.js";
-import { orchestratorStore } from "../../stores/orchestrator.js";
-import { toolsStore } from "../../stores/tools.js";
-import { buildSystemPrompt } from "../../worker/system-prompt.js";
-import { getProvider, CONFIG_KEYS } from "../../config/config.js";
-import { ulid } from "../../utils/ulid.js";
-import { getContextLimit } from "../../subsystems/providers/providers.js";
-import { invokeWithTransformersJs } from "../../subsystems/providers/transformers-js-provider.js";
-import { invokeWithPromptApi, isPromptApiSupported } from "../../subsystems/providers/prompt-api-provider.js";
-import { invokeWithLiteRtLm, isLiteRtLmSupported } from "../../subsystems/providers/litert-lm-provider.js";
-import { getConfig } from "../../db/getConfig.js";
-import { post as workerPost } from "../../worker/post.js";
+import { CONFIG_KEYS, getProvider } from "../../../config/config.js";
 
-import type { ShadowClawDatabase } from "../../db/db.js";
+import { buildDynamicContext } from "../../../context/buildDynamicContext.js";
+import { estimateTokens } from "../../../context/estimateTokens.js";
+
+import { buildConversationMessages } from "../../../db/buildConversationMessages.js";
+import { getConfig } from "../../../db/getConfig.js";
+import { listGroups } from "../../../db/groups.js";
+import { saveMessage } from "../../../db/saveMessage.js";
+
+import { readGroupFile } from "../../../storage/readGroupFile.js";
+import { orchestratorStore } from "../../../stores/orchestrator.js";
+import { toolsStore } from "../../../stores/tools.js";
+
+import {
+  invokeWithLiteRtLm,
+  isLiteRtLmSupported,
+} from "../../../subsystems/providers/litert-lm-provider.js";
+
+import {
+  invokeWithPromptApi,
+  isPromptApiSupported,
+} from "../../../subsystems/providers/prompt-api-provider.js";
+
+import { getContextLimit } from "../../../subsystems/providers/providers.js";
+import { invokeWithTransformersJs } from "../../../subsystems/providers/transformers-js-provider.js";
+import { ulid } from "../../../utils/ulid.js";
+import { post as workerPost } from "../../../worker/post.js";
+import { buildSystemPrompt } from "../../../worker/system-prompt.js";
+
+import type { ShadowClawDatabase } from "../../../db/db.js";
+import type { SubagentInvokeContext } from "../../../worker/tools/spawn-subagent.js";
 import type { Orchestrator } from "../orchestrator.js";
-import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent.js";
 
 export async function invokeAgent(
   o: Orchestrator,
@@ -363,7 +375,7 @@ export async function invokeAgent(
       contextLimit: getContextLimit(effectiveModel),
       enabledTools: activeTools,
       groupId,
-      isScheduledTask: o._schedulerTriggeredGroups.has(groupId),
+      isScheduledTask: o.schedulerTriggeredGroups.has(groupId),
       maxIterations: o.maxIterations,
       maxTokens: o.maxTokens,
       memory,

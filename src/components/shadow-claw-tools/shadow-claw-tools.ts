@@ -10,7 +10,7 @@ import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
 import { showError, showInfo, showSuccess } from "../../ui/toast.js";
 import { ulid } from "../../utils/ulid.js";
 
-import type { Orchestrator } from "../../core/orchestrator.js";
+import type { Orchestrator } from "../../core/orchestrator/orchestrator.js";
 
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
@@ -34,7 +34,6 @@ export class ShadowClawTools extends ShadowClawElement {
   }
 
   async connectedCallback() {
-
     const db = await getDb();
     this.orchestrator = orchestratorStore.orchestrator;
 

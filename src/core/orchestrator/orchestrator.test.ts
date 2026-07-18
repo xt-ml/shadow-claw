@@ -1,10 +1,10 @@
 import { jest } from "@jest/globals";
 
-import { ASSISTANT_NAME, LLAMAFILE_PROXY_URL } from "../config/config.js";
+import { ASSISTANT_NAME, LLAMAFILE_PROXY_URL } from "../../config/config.js";
 import { Orchestrator } from "./orchestrator.js";
-import { orchestratorStore } from "../stores/orchestrator.js";
-import { toolsStore } from "../stores/tools.js";
-import { buildSystemPrompt } from "../worker/system-prompt.js";
+import { orchestratorStore } from "../../stores/orchestrator.js";
+import { toolsStore } from "../../stores/tools.js";
+import { buildSystemPrompt } from "../../worker/system-prompt.js";
 
 describe("buildSystemPrompt", () => {
   const FETCH_URL_TOOL = "fetch_url";
@@ -789,7 +789,7 @@ describe("Orchestrator", () => {
       });
     });
 
-    it("sets _pushSubscriptionWarned flag when no subscription exists", async () => {
+    it("sets pushSubscriptionWarned flag when no subscription exists", async () => {
       const o = new Orchestrator();
 
       Object.defineProperty(navigator, "serviceWorker", {
@@ -805,7 +805,7 @@ describe("Orchestrator", () => {
       });
 
       await o.warnIfNoPushSubscription();
-      expect(o._pushSubscriptionWarned).toBe(true);
+      expect(o.pushSubscriptionWarned).toBe(true);
     });
 
     it("does NOT warn when a push subscription exists", async () => {
@@ -827,7 +827,7 @@ describe("Orchestrator", () => {
 
       await o.warnIfNoPushSubscription();
 
-      expect(o._pushSubscriptionWarned).toBe(false);
+      expect(o.pushSubscriptionWarned).toBe(false);
     });
 
     it("only warns once per session (deduplication)", async () => {
@@ -848,7 +848,7 @@ describe("Orchestrator", () => {
       });
 
       await o.warnIfNoPushSubscription();
-      expect(o._pushSubscriptionWarned).toBe(true);
+      expect(o.pushSubscriptionWarned).toBe(true);
 
       mockGetSubscription.mockClear();
       await o.warnIfNoPushSubscription();
@@ -866,7 +866,7 @@ describe("Orchestrator", () => {
       });
 
       await o.warnIfNoPushSubscription();
-      expect(o._pushSubscriptionWarned).toBe(false);
+      expect(o.pushSubscriptionWarned).toBe(false);
     });
 
     it("starts local scheduler when push subscription is missing", async () => {
@@ -906,7 +906,7 @@ describe("Orchestrator", () => {
     });
   });
 
-  describe("scheduler recursion guard (_schedulerTriggeredGroups)", () => {
+  describe("scheduler recursion guard (schedulerTriggeredGroups)", () => {
     // returns A minimal fake DB for handleWorkerMessage
     function fakeDb() {
       const fakeRequest: any = {
@@ -933,13 +933,13 @@ describe("Orchestrator", () => {
       };
     }
 
-    it("blocks task-created when groupId is in _schedulerTriggeredGroups", async () => {
+    it("blocks task-created when groupId is in schedulerTriggeredGroups", async () => {
       const o = new Orchestrator();
       const events: any[] = [];
 
       o.events.on("task-change", (e: any) => events.push(e));
 
-      o._schedulerTriggeredGroups.add("br:main");
+      o.schedulerTriggeredGroups.add("br:main");
 
       await o.handleWorkerMessage(fakeDb() as any, {
         payload: {
@@ -959,7 +959,7 @@ describe("Orchestrator", () => {
       expect(events).toHaveLength(0);
     });
 
-    it("allows task-created when groupId is NOT in _schedulerTriggeredGroups", async () => {
+    it("allows task-created when groupId is NOT in schedulerTriggeredGroups", async () => {
       const o = new Orchestrator();
       const events: any[] = [];
 
@@ -992,12 +992,12 @@ describe("Orchestrator", () => {
       (globalThis as any).fetch = origFetch;
     });
 
-    it("blocks update-task when groupId is in _schedulerTriggeredGroups", async () => {
+    it("blocks update-task when groupId is in schedulerTriggeredGroups", async () => {
       const o = new Orchestrator();
       const events: any[] = [];
 
       o.events.on("task-change", (e: any) => events.push(e));
-      o._schedulerTriggeredGroups.add("br:main");
+      o.schedulerTriggeredGroups.add("br:main");
 
       await o.handleWorkerMessage(fakeDb() as any, {
         payload: {
@@ -1016,12 +1016,12 @@ describe("Orchestrator", () => {
       expect(events).toHaveLength(0);
     });
 
-    it("blocks delete-task when groupId is in _schedulerTriggeredGroups", async () => {
+    it("blocks delete-task when groupId is in schedulerTriggeredGroups", async () => {
       const o = new Orchestrator();
       const events: any[] = [];
 
       o.events.on("task-change", (e: any) => events.push(e));
-      o._schedulerTriggeredGroups.add("br:main");
+      o.schedulerTriggeredGroups.add("br:main");
 
       await o.handleWorkerMessage(fakeDb() as any, {
         payload: { id: "t1", groupId: "br:main" },
@@ -1031,10 +1031,10 @@ describe("Orchestrator", () => {
       expect(events).toHaveLength(0);
     });
 
-    it("blocks send-notification when groupId is in _schedulerTriggeredGroups", async () => {
+    it("blocks send-notification when groupId is in schedulerTriggeredGroups", async () => {
       const o = new Orchestrator();
 
-      o._schedulerTriggeredGroups.add("br:main");
+      o.schedulerTriggeredGroups.add("br:main");
 
       // Mock fetch to ensure it's NOT called
       const origFetch = (globalThis as any).fetch;
@@ -1072,13 +1072,13 @@ describe("Orchestrator", () => {
         lastRun: null,
       };
 
-      const before = o._schedulerTriggeredGroups.has(task.groupId);
+      const before = o.schedulerTriggeredGroups.has(task.groupId);
       expect(before).toBe(false);
 
       await o.runTaskAsScheduled(task as any);
 
       expect(runTaskSpy).toHaveBeenCalledWith(task);
-      expect(o._schedulerTriggeredGroups.has(task.groupId)).toBe(false);
+      expect(o.schedulerTriggeredGroups.has(task.groupId)).toBe(false);
 
       runTaskSpy.mockRestore();
     });
@@ -1303,15 +1303,15 @@ describe("Orchestrator", () => {
   });
 
   describe("isScheduledTask flag logic", () => {
-    it("_schedulerTriggeredGroups determines isScheduledTask for a given groupId", () => {
+    it("schedulerTriggeredGroups determines isScheduledTask for a given groupId", () => {
       const o = new Orchestrator();
 
-      o._schedulerTriggeredGroups.add("br:main");
-      expect(o._schedulerTriggeredGroups.has("br:main")).toBe(true);
-      expect(o._schedulerTriggeredGroups.has("br:other")).toBe(false);
+      o.schedulerTriggeredGroups.add("br:main");
+      expect(o.schedulerTriggeredGroups.has("br:main")).toBe(true);
+      expect(o.schedulerTriggeredGroups.has("br:other")).toBe(false);
 
-      o._schedulerTriggeredGroups.delete("br:main");
-      expect(o._schedulerTriggeredGroups.has("br:main")).toBe(false);
+      o.schedulerTriggeredGroups.delete("br:main");
+      expect(o.schedulerTriggeredGroups.has("br:main")).toBe(false);
     });
   });
 });

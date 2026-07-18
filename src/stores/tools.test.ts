@@ -6,6 +6,7 @@ const mockSetConfig = jest.fn();
 jest.unstable_mockModule("../db/setConfig.js", () => ({
   getConfig: mockGetConfig,
 }));
+
 jest.unstable_mockModule("../db/setConfig.js", () => ({
   setConfig: mockSetConfig,
 }));

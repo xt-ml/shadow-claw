@@ -1,11 +1,14 @@
-import { Orchestrator, OrchestratorState } from "../../core/orchestrator.js";
+import { Orchestrator } from "../../core/orchestrator/orchestrator.js";
 
 import { ShadowClawDatabase, setDB } from "../../db/db.js";
 
 import { VMStatus } from "../../shell/vm.js";
 
 import { fileViewerStore } from "../../stores/file-viewer.js";
-import { orchestratorStore } from "../../stores/orchestrator.js";
+import {
+  OrchestratorDisplayState,
+  orchestratorStore,
+} from "../../stores/orchestrator.js";
 import { themeStore } from "../../stores/theme.js";
 import { toolsStore } from "../../stores/tools.js";
 
@@ -78,7 +81,7 @@ export class ShadowClaw extends ShadowClawElement {
   orchestrator: Orchestrator = new Orchestrator();
   pagesSidebarHidden: boolean = false;
   popstateListener: (() => void) | null = null;
-  previousOrchestratorState: OrchestratorState = "idle";
+  previousOrchestratorState: OrchestratorDisplayState = "idle";
   terminalElement: ShadowClawTerminal | null = null;
   terminalPlacementFrame: number | null = null;
   terminalVisible: boolean = false;

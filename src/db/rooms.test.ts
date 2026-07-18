@@ -3,13 +3,16 @@ import { jest } from "@jest/globals";
 jest.unstable_mockModule("./getConfig.js", () => ({
   getConfig: jest.fn(),
 }));
+
 jest.unstable_mockModule("./setConfig.js", () => ({
   setConfig: jest.fn(),
 }));
+
 jest.unstable_mockModule("./groups.js", () => ({
   createGroup: jest.fn(),
   getGroupMetadata: jest.fn(),
 }));
+
 jest.unstable_mockModule("../utils/ulid.js", () => ({
   ulid: jest.fn(() => "ROOMID01"),
 }));

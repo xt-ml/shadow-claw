@@ -11,15 +11,19 @@ const mockSetConfig = jest.fn() as any;
 jest.unstable_mockModule("./groupFileExists.js", () => ({
   groupFileExists: mockGroupFileExists,
 }));
+
 jest.unstable_mockModule("./readGroupFile.js", () => ({
   readGroupFile: mockReadGroupFile,
 }));
+
 jest.unstable_mockModule("./writeGroupFile.js", () => ({
   writeGroupFile: mockWriteGroupFile,
 }));
+
 jest.unstable_mockModule("../db/getConfig.js", () => ({
   getConfig: mockGetConfig,
 }));
+
 jest.unstable_mockModule("../db/setConfig.js", () => ({
   setConfig: mockSetConfig,
 }));

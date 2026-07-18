@@ -1,48 +1,58 @@
 import { Signal } from "signal-polyfill";
 
-import { DEFAULT_GROUP_ID, CONFIG_KEYS } from "../config/config.js";
+import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config/config.js";
 
-import { deleteTask } from "../db/deleteTask.js";
 import { deleteMessage } from "../db/deleteMessage.js";
+import { deleteTask } from "../db/deleteTask.js";
 
-import { getAllTasks } from "../db/getAllTasks.js";
-import { getRecentMessages } from "../db/getRecentMessages.js";
-import { saveTask } from "../db/saveTask.js";
 import { clearGroupMessages } from "../db/clearGroupMessages.js";
-import { updateTaskLastRun } from "../db/updateTaskLastRun.js";
 import { cloneGroupMessages } from "../db/cloneGroupMessages.js";
 import { cloneGroupTasks } from "../db/cloneGroupTasks.js";
+import { getAllTasks } from "../db/getAllTasks.js";
 import { getConfig } from "../db/getConfig.js";
-import { setConfig } from "../db/setConfig.js";
-import { saveMessage } from "../db/saveMessage.js";
-import { ulid } from "../utils/ulid.js";
+import { getRecentMessages } from "../db/getRecentMessages.js";
+
 import {
-  listGroups,
-  createGroup,
-  renameGroup,
-  deleteGroupMetadata,
-  reorderGroups,
   cloneGroup,
+  createGroup,
+  deleteGroupMetadata,
+  listGroups,
+  renameGroup,
+  reorderGroups,
   saveGroupMetadata,
-  updateGroupToolTags,
   updateGroupPinnedProvider,
+  updateGroupToolTags,
 } from "../db/groups.js";
 
-import { listGroupFiles } from "../storage/listGroupFiles.js";
+import { saveMessage } from "../db/saveMessage.js";
+import { saveTask } from "../db/saveTask.js";
+import { setConfig } from "../db/setConfig.js";
+import { updateTaskLastRun } from "../db/updateTaskLastRun.js";
+
+import { ulid } from "../utils/ulid.js";
+
 import { copyGroupDirectory } from "../storage/copyGroupDirectory.js";
+import { ensureMainGroupIndex } from "../storage/ensureMainGroupIndex.js";
+
 import {
   DEFAULT_MAIN_GROUP_MEMORY_PATH,
   ensureMainGroupMemory,
   isMainGroupMemorySuppressed,
   setMainGroupMemorySuppressed,
 } from "../storage/ensureMainGroupMemory.js";
-import { ensureMainGroupIndex } from "../storage/ensureMainGroupIndex.js";
+
+import { listGroupFiles } from "../storage/listGroupFiles.js";
 import { readGroupFile } from "../storage/readGroupFile.js";
 import { requestStorageAccess } from "../storage/requestStorageAccess.js";
 import { getStorageStatus } from "../storage/storage.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
+
+import { AGUIAdapter } from "../ui/agui-adapter.js";
 import { showError } from "../ui/toast.js";
+import { applyJsonPatch } from "../utils/jsonPatch.js";
+
 import type { MessageAttachment } from "../content/types.js";
+
 import type {
   GroupMeta,
   SavedPageRef,
@@ -50,6 +60,7 @@ import type {
   StoredMessage,
   Task,
 } from "../db/types.js";
+
 import type {
   ContextUsage,
   ModelDownloadProgressPayload,
@@ -57,11 +68,10 @@ import type {
   TokenUsage,
   ToolActivity,
 } from "../subsystems/worker/types.js";
-import type { A2UIAction } from "../ui/a2ui.js";
-import type { Orchestrator } from "../core/orchestrator.js";
+
+import type { Orchestrator } from "../core/orchestrator/orchestrator.js";
 import type { StorageStatus } from "../storage/storage.js";
-import { AGUIAdapter } from "../ui/agui-adapter.js";
-import { applyJsonPatch } from "../utils/jsonPatch.js";
+import type { A2UIAction } from "../ui/a2ui.js";
 
 export type OrchestratorDisplayState =
   | "idle"

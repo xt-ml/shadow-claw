@@ -64,6 +64,7 @@ jest.unstable_mockModule("../../storage/moveGroupEntry.js", () => ({
 jest.unstable_mockModule("../../core/effect.js", () => ({
   effect: jest.fn(() => () => {}),
 }));
+
 jest.unstable_mockModule("../../ui/toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
@@ -131,7 +132,9 @@ describe("shadow-claw-files", () => {
   });
 
   it("includes New button next to toolbar actions", async () => {
-    const template = await Promise.resolve(ShadowClawFiles.template.map((e: Element) => e.outerHTML).join(""));
+    const template = await Promise.resolve(
+      ShadowClawFiles.template.map((e: Element) => e.outerHTML).join(""),
+    );
 
     expect(template).toContain("files__upload-btn");
 

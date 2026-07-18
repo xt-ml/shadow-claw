@@ -1,11 +1,11 @@
-import { persistMessageAttachments } from "../../content/message-attachments.js";
-import { saveMessage } from "../../db/saveMessage.js";
-import { listGroups } from "../../db/groups.js";
-import { getProvider } from "../../config/config.js";
-import { detectProviderHelpType } from "../../components/common/help/providers.js";
+import { detectProviderHelpType } from "../../../components/common/help/providers.js";
+import { getProvider } from "../../../config/config.js";
+import { persistMessageAttachments } from "../../../content/message-attachments.js";
+import { listGroups } from "../../../db/groups.js";
+import { saveMessage } from "../../../db/saveMessage.js";
 
-import type { InboundMessage } from "../../subsystems/channels/types.js";
-import type { ShadowClawDatabase } from "../../db/db.js";
+import type { ShadowClawDatabase } from "../../../db/db.js";
+import type { InboundMessage } from "../../../subsystems/channels/types.js";
 import type { Orchestrator } from "../orchestrator.js";
 
 export async function enqueue(
@@ -60,7 +60,7 @@ export async function enqueue(
   // If the local user sends a new message in a completed peer conversation,
   // reopen it (clear the terminal state) so the agent will respond again.
   if (isFromBrowser && msg.groupId.startsWith("peer:")) {
-    o._peerCompletedContexts.delete(msg.groupId);
+    o.peerCompletedContexts.delete(msg.groupId);
   }
 
   const isDirectToolCommand = !!directToolCommand;
@@ -69,19 +69,13 @@ export async function enqueue(
   if (!hasTrigger && o.peerjsMyPeerId) {
     if (msg.content.includes(`@${o.peerjsMyPeerId}`)) {
       hasTrigger = true;
-    } else if (
-      o.peerjsMyAlias &&
-      msg.content.includes(`@${o.peerjsMyAlias}`)
-    ) {
+    } else if (o.peerjsMyAlias && msg.content.includes(`@${o.peerjsMyAlias}`)) {
       // Also respond to @<my-alias> so peers can use the friendly name
       hasTrigger = true;
     } else {
       // Also check if any alias maps to o.peerjsMyPeerId
       for (const [alias, rawId] of Object.entries(o.peerjsPeerAliases)) {
-        if (
-          rawId === o.peerjsMyPeerId &&
-          msg.content.includes(`@${alias}`)
-        ) {
+        if (rawId === o.peerjsMyPeerId && msg.content.includes(`@${alias}`)) {
           hasTrigger = true;
 
           break;
@@ -129,7 +123,7 @@ export async function enqueue(
     isTrigger &&
     !isFromBrowser &&
     msg.groupId.startsWith("peer:") &&
-    o._peerCompletedContexts.has(msg.groupId)
+    o.peerCompletedContexts.has(msg.groupId)
   ) {
     isTrigger = false;
   }

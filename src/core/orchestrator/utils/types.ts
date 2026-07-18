@@ -4,8 +4,6 @@ export const DEFAULT_DIRECT_TOOL_COMMAND_POLICY: DirectToolCommandPolicy = {
   requireMention: true,
 };
 
-export type OrchestratorState = "idle" | "thinking" | "responding" | "error";
-
 export type ParsedDirectToolCommand = {
   input: Record<string, any>;
   toolName: string;

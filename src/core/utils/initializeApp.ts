@@ -1,9 +1,12 @@
 import { orchestratorStore } from "../../stores/orchestrator.js";
-import { installE2eBridge, shouldInstallE2eBridge } from "../../testing/e2e-bridge.js";
+import {
+  installE2eBridge,
+  shouldInstallE2eBridge,
+} from "../../testing/e2e-bridge.js";
 import { clearBootPendingClass } from "./clearBootPendingClass.js";
 
 import { type ShadowClaw } from "../../components/shadow-claw/shadow-claw.js";
-import { type Orchestrator } from "../orchestrator.js";
+import { type Orchestrator } from "../orchestrator/orchestrator.js";
 
 export async function initializeApp(
   doc: Document,

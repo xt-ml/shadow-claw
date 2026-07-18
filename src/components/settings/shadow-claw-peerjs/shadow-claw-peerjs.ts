@@ -7,7 +7,7 @@ import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
 import { ulid } from "../../../utils/ulid.js";
 
-import type { Orchestrator } from "../../../core/orchestrator.js";
+import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { RoomMeta } from "../../../subsystems/channels/types.js";
 
@@ -42,7 +42,6 @@ export class ShadowClawPeerJs extends ShadowClawElement {
   }
 
   async connectedCallback() {
-
     const root = this.shadowRoot;
     if (!root) {
       throw new Error("shadowRoot not found");

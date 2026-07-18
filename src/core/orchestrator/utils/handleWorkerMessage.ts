@@ -1,20 +1,24 @@
-import { deleteTask } from "../../db/deleteTask.js";
-import { getAllTasks } from "../../db/getAllTasks.js";
-import { saveTask } from "../../db/saveTask.js";
+import { isLlamafileResolutionError } from "../../../components/common/help/llamafile.js";
+import { detectProviderHelpType } from "../../../components/common/help/providers.js";
+import { isTransformersJsResolutionError } from "../../../components/common/help/transformers.js";
 
-import { getPushUrl } from "../../subsystems/notifications/push-client.js";
-import { isLlamafileResolutionError } from "../../components/common/help/llamafile.js";
-import { detectProviderHelpType } from "../../components/common/help/providers.js";
-import { isTransformersJsResolutionError } from "../../components/common/help/transformers.js";
-import { getRemoteMcpConnection } from "../../subsystems/mcp/mcp-connections.js";
-import { reconnectMcpOAuth } from "../../subsystems/mcp/mcp-reconnect.js";
-import { orchestratorStore } from "../../stores/orchestrator.js";
-import { toolsStore } from "../../stores/tools.js";
-import { showToast } from "../../ui/toast.js";
-import { DEFAULT_GROUP_ID } from "../../config/config.js";
-import { roomIdFromGroupId } from "../../db/rooms.js";
+import { DEFAULT_GROUP_ID } from "../../../config/config.js";
 
-import type { ShadowClawDatabase } from "../../db/db.js";
+import { deleteTask } from "../../../db/deleteTask.js";
+import { getAllTasks } from "../../../db/getAllTasks.js";
+import { roomIdFromGroupId } from "../../../db/rooms.js";
+import { saveTask } from "../../../db/saveTask.js";
+
+import { orchestratorStore } from "../../../stores/orchestrator.js";
+import { toolsStore } from "../../../stores/tools.js";
+
+import { getRemoteMcpConnection } from "../../../subsystems/mcp/mcp-connections.js";
+import { reconnectMcpOAuth } from "../../../subsystems/mcp/mcp-reconnect.js";
+import { getPushUrl } from "../../../subsystems/notifications/push-client.js";
+
+import { showToast } from "../../../ui/toast.js";
+
+import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { Orchestrator } from "../orchestrator.js";
 
 export async function handleWorkerMessage(
@@ -91,7 +95,7 @@ export async function handleWorkerMessage(
     case "task-created": {
       const { task } = msg.payload;
 
-      if (task.groupId && o._schedulerTriggeredGroups.has(task.groupId)) {
+      if (task.groupId && o.schedulerTriggeredGroups.has(task.groupId)) {
         showToast(
           "\u26a0\ufe0f Task creation blocked \u2014 scheduled tasks cannot create new tasks (recursion prevention).",
           { type: "warning", duration: 8000 },
@@ -285,7 +289,7 @@ export async function handleWorkerMessage(
     case "update-task": {
       const { task } = msg.payload;
 
-      if (task.groupId && o._schedulerTriggeredGroups.has(task.groupId)) {
+      if (task.groupId && o.schedulerTriggeredGroups.has(task.groupId)) {
         showToast(
           "\u26a0\ufe0f Task update blocked \u2014 scheduled tasks cannot modify tasks (recursion prevention).",
           { type: "warning", duration: 8000 },
@@ -320,7 +324,7 @@ export async function handleWorkerMessage(
     case "delete-task": {
       const { id, groupId: deleteGroupId } = msg.payload;
 
-      if (deleteGroupId && o._schedulerTriggeredGroups.has(deleteGroupId)) {
+      if (deleteGroupId && o.schedulerTriggeredGroups.has(deleteGroupId)) {
         showToast(
           "\u26a0\ufe0f Task deletion blocked \u2014 scheduled tasks cannot delete tasks (recursion prevention).",
           { type: "warning", duration: 8000 },
@@ -469,7 +473,7 @@ export async function handleWorkerMessage(
 
       // Recursion guard: push-triggered tasks must NEVER send push
       // notifications — this would create an infinite loop.
-      if (notifGroupId && o._schedulerTriggeredGroups.has(notifGroupId)) {
+      if (notifGroupId && o.schedulerTriggeredGroups.has(notifGroupId)) {
         showToast(
           "⚠️ Notification blocked — scheduled tasks triggered via push cannot send push notifications (recursion prevention).",
           { type: "warning", duration: 8000 },

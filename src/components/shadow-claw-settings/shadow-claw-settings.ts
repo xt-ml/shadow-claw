@@ -12,7 +12,7 @@ import { showError, showInfo, showSuccess } from "../../ui/toast.js";
 import { formatDateForFilename } from "../../utils/utils.js";
 
 import type { ConfigEntryRecord } from "../../config/settings-backup.js";
-import type { Orchestrator } from "../../core/orchestrator.js";
+import type { Orchestrator } from "../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../db/types.js";
 
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
@@ -62,7 +62,6 @@ export class ShadowClawSettings extends ShadowClawElement {
   }
 
   async connectedCallback() {
-
     const root = this.shadowRoot;
     if (!root) {
       throw new Error("shadowRoot not found");

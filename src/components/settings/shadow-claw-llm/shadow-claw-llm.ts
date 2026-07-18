@@ -23,7 +23,7 @@ import {
   isLikelyInstructionModelId,
 } from "./model-ranking.js";
 
-import type { Orchestrator } from "../../../core/orchestrator.js";
+import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { LLMProvider } from "../../../subsystems/providers/types.js";
 import type { AppDialogOptions } from "../../../ui/types.js";
@@ -61,7 +61,6 @@ export class ShadowClawLlm extends ShadowClawElement {
   }
 
   async connectedCallback() {
-
     const root = this.shadowRoot;
     if (!root) {
       throw new Error("shadowRoot not found");

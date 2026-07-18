@@ -5,14 +5,16 @@ const mockListRemoteMcpConnections = jest.fn() as any;
 const mockReconnectMcpOAuth = jest.fn() as any;
 const mockShowToast = jest.fn() as any;
 
-jest.unstable_mockModule("../subsystems/mcp/mcp-connections.js", () => ({
+jest.unstable_mockModule("../../subsystems/mcp/mcp-connections.js", () => ({
   getRemoteMcpConnection: mockGetRemoteMcpConnection,
   listRemoteMcpConnections: mockListRemoteMcpConnections,
 }));
-jest.unstable_mockModule("../subsystems/mcp/mcp-reconnect.js", () => ({
+
+jest.unstable_mockModule("../../subsystems/mcp/mcp-reconnect.js", () => ({
   reconnectMcpOAuth: mockReconnectMcpOAuth,
 }));
-jest.unstable_mockModule("../ui/toast.js", () => ({
+
+jest.unstable_mockModule("../../ui/toast.js", () => ({
   showToast: mockShowToast,
   showError: jest.fn(),
 }));

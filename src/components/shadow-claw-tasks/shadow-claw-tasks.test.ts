@@ -7,7 +7,9 @@ jest.unstable_mockModule("../../db/db.js", () => ({
 jest.unstable_mockModule("../../db/saveTask.js", () => ({
   saveTask: jest.fn(),
 }));
+
 jest.unstable_mockModule("../../core/effect.js", () => ({ effect: jest.fn() }));
+
 jest.unstable_mockModule("../../content/markdown.js", () => ({
   renderMarkdown: jest.fn((x) => x),
 }));
@@ -69,7 +71,13 @@ describe("shadow-claw-tasks", () => {
     const previewDiv = document.createElement("div");
     previewDiv.className = "tasks__preview";
 
-    component.shadowRoot?.replaceChildren(dialog, form, title, submitBtn, previewDiv);
+    component.shadowRoot?.replaceChildren(
+      dialog,
+      form,
+      title,
+      submitBtn,
+      previewDiv,
+    );
 
     component.handleEdit({
       id: "task-1",

@@ -2,7 +2,7 @@ import { jest } from "@jest/globals";
 
 import { toggleTerminalVisibility } from "./utils/toggleTerminalVisibility.js";
 
-jest.unstable_mockModule("../../core/orchestrator.js", () => ({
+jest.unstable_mockModule("../../core/orchestrator/orchestrator.js", () => ({
   Orchestrator: class {
     async init() {
       return {};
@@ -28,7 +28,9 @@ jest.unstable_mockModule("../../core/orchestrator.js", () => ({
 jest.unstable_mockModule("../../core/effect.js", () => ({
   effect: jest.fn(() => () => {}),
 }));
+
 const mockGetConfigByKey = new Map<string, unknown>();
+
 jest.unstable_mockModule("../../db/getConfig.js", () => ({
   getConfig: jest.fn(async (_db: unknown, key: string) => {
     if (mockGetConfigByKey.has(key)) {
@@ -38,6 +40,7 @@ jest.unstable_mockModule("../../db/getConfig.js", () => ({
     return null;
   }),
 }));
+
 jest.unstable_mockModule("../../content/markdown.js", () => ({
   renderMarkdown: jest.fn((value) => String(value)),
 }));

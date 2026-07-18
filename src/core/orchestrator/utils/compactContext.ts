@@ -1,18 +1,27 @@
-import { detectProviderHelpType } from "../../components/common/help/providers.js";
-import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../config/config.js";
-import { buildDynamicContext } from "../../context/buildDynamicContext.js";
-import { estimateTokens } from "../../context/estimateTokens.js";
-import { buildConversationMessages } from "../../db/buildConversationMessages.js";
-import { getConfig } from "../../db/getConfig.js";
-import { readGroupFile } from "../../storage/readGroupFile.js";
-import { orchestratorStore } from "../../stores/orchestrator.js";
-import { toolsStore } from "../../stores/tools.js";
-import { getCompactionSystemPrompt } from "../../worker/getCompactionSystemPrompt.js";
-import { buildSystemPrompt } from "../../worker/system-prompt.js";
-import { compactWithPromptApi, isPromptApiSupported } from "../../subsystems/providers/prompt-api-provider.js";
-import { getContextLimit } from "../../subsystems/providers/providers.js";
+import { detectProviderHelpType } from "../../../components/common/help/providers.js";
+import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../../config/config.js";
 
-import type { ShadowClawDatabase } from "../../db/db.js";
+import { buildDynamicContext } from "../../../context/buildDynamicContext.js";
+import { estimateTokens } from "../../../context/estimateTokens.js";
+
+import { buildConversationMessages } from "../../../db/buildConversationMessages.js";
+import { getConfig } from "../../../db/getConfig.js";
+
+import { readGroupFile } from "../../../storage/readGroupFile.js";
+
+import { orchestratorStore } from "../../../stores/orchestrator.js";
+import { toolsStore } from "../../../stores/tools.js";
+
+import {
+  compactWithPromptApi,
+  isPromptApiSupported,
+} from "../../../subsystems/providers/prompt-api-provider.js";
+
+import { getContextLimit } from "../../../subsystems/providers/providers.js";
+import { getCompactionSystemPrompt } from "../../../worker/getCompactionSystemPrompt.js";
+import { buildSystemPrompt } from "../../../worker/system-prompt.js";
+
+import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { Orchestrator } from "../orchestrator.js";
 
 export async function compactContext(

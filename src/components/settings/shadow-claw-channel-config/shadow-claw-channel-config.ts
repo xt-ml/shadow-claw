@@ -3,7 +3,7 @@ import { getDb } from "../../../db/db.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 
-import type { Orchestrator } from "../../../core/orchestrator.js";
+import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
 import "../shadow-claw-peerjs/shadow-claw-peerjs.js";
@@ -26,7 +26,6 @@ export class ShadowClawChannelConfig extends ShadowClawElement {
   }
 
   async connectedCallback() {
-
     const root = this.shadowRoot;
     if (!root) {
       throw new Error("shadowRoot not found");

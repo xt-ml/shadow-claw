@@ -185,7 +185,7 @@ The orchestrator creates a `TaskScheduler` instance at `init()`:
 ```mermaid
 flowchart TD
   A[Cron tick every 60s] --> B{Task due?}
-  B -->|yes| C[Add groupId to _schedulerTriggeredGroups]
+  B -->|yes| C[Add groupId to schedulerTriggeredGroups]
   C --> D[Invoke agent with SCHEDULED TASK prefix]
   D --> E{Task creates/modifies tasks?}
   E -->|yes| F[BLOCKED — warning toast]

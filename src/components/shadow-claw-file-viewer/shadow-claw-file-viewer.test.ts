@@ -1,6 +1,7 @@
 import { jest } from "@jest/globals";
 
 jest.unstable_mockModule("../../core/effect.js", () => ({ effect: jest.fn() }));
+
 jest.unstable_mockModule("../../content/markdown.js", () => ({
   renderMarkdown: jest.fn((value) => String(value)),
 }));
@@ -97,7 +98,9 @@ describe("shadow-claw-file-viewer", () => {
   });
 
   it("includes preview toggle in template", async () => {
-    const template = await Promise.resolve(ShadowClawFileViewer.template.map((e: Element) => e.outerHTML).join(""));
+    const template = await Promise.resolve(
+      ShadowClawFileViewer.template.map((e: Element) => e.outerHTML).join(""),
+    );
 
     expect(template).toContain("modal-preview-btn");
 
@@ -105,14 +108,18 @@ describe("shadow-claw-file-viewer", () => {
   });
 
   it("includes fullscreen toggle in template", async () => {
-    const template = await Promise.resolve(ShadowClawFileViewer.template.map((e: Element) => e.outerHTML).join(""));
+    const template = await Promise.resolve(
+      ShadowClawFileViewer.template.map((e: Element) => e.outerHTML).join(""),
+    );
 
     expect(template).toContain("modal-fullscreen-btn");
     expect(template).toContain("Fullscreen");
   });
 
   it("includes share button in template", async () => {
-    const template = await Promise.resolve(ShadowClawFileViewer.template.map((e: Element) => e.outerHTML).join(""));
+    const template = await Promise.resolve(
+      ShadowClawFileViewer.template.map((e: Element) => e.outerHTML).join(""),
+    );
 
     expect(template).toContain("modal-share-btn");
   });
@@ -824,13 +831,17 @@ describe("shadow-claw-file-viewer", () => {
   });
 
   it("sets caret-color on file-editor so cursor is visible over syntax-highlight overlay", async () => {
-    const styles = await Promise.resolve((ShadowClawFileViewer.styles as any).cssText ?? "");
+    const styles = await Promise.resolve(
+      (ShadowClawFileViewer.styles as any).cssText ?? "",
+    );
 
     expect(styles).toMatch(/\.file-editor\s*\{[^}]*caret-color\s*:/);
   });
 
   it("uses !important on caret-color so cursor remains light over the dark hljs overlay", async () => {
-    const styles = await Promise.resolve((ShadowClawFileViewer.styles as any).cssText ?? "");
+    const styles = await Promise.resolve(
+      (ShadowClawFileViewer.styles as any).cssText ?? "",
+    );
 
     expect(styles).toMatch(
       /\.file-editor\s*\{[^}]*caret-color\s*:[^;]*!important/,
@@ -838,7 +849,9 @@ describe("shadow-claw-file-viewer", () => {
   });
 
   it("hides cancel/save text labels on compact screens", async () => {
-    const styles = await Promise.resolve((ShadowClawFileViewer.styles as any).cssText ?? "");
+    const styles = await Promise.resolve(
+      (ShadowClawFileViewer.styles as any).cssText ?? "",
+    );
 
     expect(styles).toMatch(
       /@media \(max-width: 640px\)[\s\S]*\.modal-cancel-btn \.btn-label,[\s\S]*\.modal-save-btn \.btn-label[\s\S]*display:\s*none/,

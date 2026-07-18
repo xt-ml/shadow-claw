@@ -27,7 +27,7 @@ interface UpdateFailureState {
 }
 
 interface ShadowClawUiBridge {
-  requestConfirmation?: (options: {
+  requestDialog?: (options: {
     title: string;
     message: string;
     confirmLabel?: string;
@@ -39,11 +39,9 @@ async function waitForShadowClawUiBridge(
   timeoutMs = 5000,
 ): Promise<ShadowClawUiBridge | null> {
   const startedAt = Date.now();
-
   while (Date.now() - startedAt < timeoutMs) {
     const el = document.querySelector("shadow-claw") as any;
-
-    if (el && typeof el.requestConfirmation === "function") {
+    if (el && typeof el.requestDialog === "function") {
       return el as ShadowClawUiBridge;
     }
 
@@ -57,9 +55,8 @@ async function waitForShadowClawUiBridge(
 
 async function confirmServiceWorkerUpdate(): Promise<boolean> {
   const shadowclaw = await waitForShadowClawUiBridge();
-
-  if (shadowclaw?.requestConfirmation) {
-    return await shadowclaw.requestConfirmation({
+  if (shadowclaw?.requestDialog) {
+    return await shadowclaw.requestDialog({
       title: "Update Available",
       message:
         "A new version of ShadowClaw is ready. Reload now to apply the update?",
@@ -75,9 +72,8 @@ async function confirmServiceWorkerUpdate(): Promise<boolean> {
 
 async function notifyUpdateFailure(): Promise<void> {
   const shadowclaw = await waitForShadowClawUiBridge();
-
-  if (shadowclaw?.requestConfirmation) {
-    await shadowclaw.requestConfirmation({
+  if (shadowclaw?.requestDialog) {
+    await shadowclaw.requestDialog({
       title: "Update Failed",
       message:
         "The app update failed to install automatically. Please try restarting your browser to complete the update.",
@@ -85,7 +81,7 @@ async function notifyUpdateFailure(): Promise<void> {
     });
   }
 
-  // UI bridge was not ready or requestConfirmation failed; log to console as fallback.
+  // UI bridge was not ready or requestDialog failed; log to console as fallback.
   console.warn(
     "[ShadowClaw] Service worker update failed. Please restart your browser to complete the update.",
   );

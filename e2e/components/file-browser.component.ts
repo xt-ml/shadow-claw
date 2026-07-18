@@ -7,20 +7,12 @@ export class FileBrowserComponent {
     this.host = filesHost;
   }
 
-  fileList() {
-    return this.host.locator(".files__list");
+  backupButton() {
+    return this.host.getByRole("button", { name: /backup/i });
   }
 
   breadcrumbs() {
     return this.host.locator(".files__breadcrumbs");
-  }
-
-  uploadButton() {
-    return this.host.locator(".files__upload-btn");
-  }
-
-  backupButton() {
-    return this.host.getByRole("button", { name: /backup/i });
   }
 
   fileInput() {
@@ -29,6 +21,14 @@ export class FileBrowserComponent {
 
   fileItem(name: string) {
     return this.host.locator(`[data-file-name="${name}"]`);
+  }
+
+  fileList() {
+    return this.host.locator(".files__list");
+  }
+
+  uploadButton() {
+    return this.host.locator(".files__upload-btn");
   }
 
   async expectCoreUi() {

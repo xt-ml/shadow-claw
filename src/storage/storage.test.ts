@@ -30,19 +30,19 @@ const { writeGroupFile } = await import("./writeGroupFile.js");
 
 // Mock FileSystemDirectoryHandle globally
 class MockFileSystemDirectoryHandle {
-  name;
   kind = "directory";
+  name;
 
   constructor(name = "mock-dir") {
     this.name = name;
   }
 
-  async queryPermission() {
-    return "granted";
-  }
-
   async getDirectoryHandle() {
     return new MockFileSystemDirectoryHandle();
+  }
+
+  async queryPermission() {
+    return "granted";
   }
 }
 

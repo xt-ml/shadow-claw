@@ -304,115 +304,51 @@ export function accumulateTokenUsage(
 
 export class OrchestratorStore {
   private static readonly DEFAULT_PAGE_PATH = "MEMORY.md";
-
-  public _messages: Signal.State<StoredMessage[]>;
-  public _isTyping: Signal.State<boolean>;
-  public _storageStatus: Signal.State<StorageStatus | null>;
-  public _toolActivity: Signal.State<ToolActivity | null>;
-  public _modelDownloadProgress: Signal.State<ModelDownloadProgressPayload | null>;
-  public _activityLog: Signal.State<ThinkingLogEntry[]>;
-  public _state: Signal.State<OrchestratorDisplayState>;
-  public _tokenUsage: Signal.State<TokenUsage | null>;
-  public _error: Signal.State<string | null>;
+  public orchestrator: Orchestrator | null;
   public _activeGroupId: Signal.State<string>;
-  public _ready: Signal.State<boolean>;
-  public _tasks: Signal.State<Task[]>;
-  public _files: Signal.State<string[]>;
-  public _currentPath: Signal.State<string>;
-  public _groups: Signal.State<GroupMeta[]>;
-  public _unreadGroupIds: Signal.State<Set<string>>;
-  public _streamingText: Signal.State<string | null>;
+  public _activePage: Signal.State<string>;
+  public _activePinnedPage: Signal.State<SavedPageRef | null>;
+  public _activityLog: Signal.State<ThinkingLogEntry[]>;
+  private _activityLogSessionStartedAtByGroup: Map<string, string>;
+  private _aguiAdapter: AGUIAdapter | null;
   public _aguiEvent: Signal.State<{ groupId: string; event: any } | null>;
   public _contextUsage: Signal.State<ContextUsage | null>;
-  public _useProxy: Signal.State<boolean>;
-  public _proxyUrl: Signal.State<string>;
+  public _currentPath: Signal.State<string>;
+  private _db: ShadowClawDatabase | null;
+  public _error: Signal.State<string | null>;
+  public _files: Signal.State<string[]>;
   public _gitProxyUrl: Signal.State<string>;
-  public _vmBashFullInternetAccess: Signal.State<boolean>;
-  public _activePage: Signal.State<string>;
-  public _sidebarDefaultPage: Signal.State<"chat" | "tasks" | "files">;
+  public _groups: Signal.State<GroupMeta[]>;
+  private _hadPersistedActivePage: boolean;
+  private _initResolve: (() => void) | null;
+  public _isTyping: Signal.State<boolean>;
+  private _lastOrchestratorDisplayState: OrchestratorDisplayState = "idle";
+
+  public _messages: Signal.State<StoredMessage[]>;
+  public _modelDownloadProgress: Signal.State<ModelDownloadProgressPayload | null>;
+  private _onlineReplayHandler: (() => void) | null;
   public _pages: Signal.State<SavedPageRef[]>;
-  public _activePinnedPage: Signal.State<SavedPageRef | null>;
+  public _peerStateByGroup: Signal.State<Map<string, Record<string, unknown>>>;
+  public _proxyUrl: Signal.State<string>;
+  public _ready: Signal.State<boolean>;
   public _remoteAgentStatusByGroup: Signal.State<
     Map<string, OrchestratorDisplayState>
   >;
   public _remoteAgentTypingByGroup: Signal.State<Map<string, boolean>>;
-  public _peerStateByGroup: Signal.State<Map<string, Record<string, unknown>>>;
-  private _hadPersistedActivePage: boolean;
-  private _initResolve: (() => void) | null;
-  private _whenInitialized: Promise<void>;
-  public orchestrator: Orchestrator | null;
-  private _db: ShadowClawDatabase | null;
-  private _activityLogSessionStartedAtByGroup: Map<string, string>;
-  private _taskSyncOutbox: TaskSyncOutboxOperation[];
   private _replayingTaskSyncOutbox: boolean;
-  private _onlineReplayHandler: (() => void) | null;
-  private _aguiAdapter: AGUIAdapter | null;
+  public _sidebarDefaultPage: Signal.State<"chat" | "tasks" | "files">;
+  public _state: Signal.State<OrchestratorDisplayState>;
+  public _storageStatus: Signal.State<StorageStatus | null>;
+  public _streamingText: Signal.State<string | null>;
+  public _tasks: Signal.State<Task[]>;
+  private _taskSyncOutbox: TaskSyncOutboxOperation[];
+  public _tokenUsage: Signal.State<TokenUsage | null>;
   private _tokenUsageAccumulator: TokenUsage | null = null;
-  private _lastOrchestratorDisplayState: OrchestratorDisplayState = "idle";
-
-  private deriveGroupName(groupId: string): string {
-    if (groupId.startsWith("tg:")) {
-      return `Telegram ${groupId.slice(3)}`;
-    }
-
-    if (groupId.startsWith("im:")) {
-      return `iMessage ${groupId.slice(3)}`;
-    }
-
-    if (groupId.startsWith("br:")) {
-      return groupId === DEFAULT_GROUP_ID ? "Main" : "Browser Conversation";
-    }
-
-    return "Conversation";
-  }
-
-  private normalizeSidebarDefaultPage(
-    value: unknown,
-  ): "chat" | "tasks" | "files" {
-    if (value === "chat" || value === "tasks" || value === "files") {
-      return value;
-    }
-
-    return "chat";
-  }
-
-  private resolveSidebarDefaultPageForActivePage(
-    page: string,
-  ): "chat" | "tasks" | "files" {
-    if (page === "chat" || page === "tasks" || page === "files") {
-      return page;
-    }
-
-    return this._sidebarDefaultPage.get();
-  }
-
-  private async ensureGroupExists(
-    db: ShadowClawDatabase,
-    groupId: string,
-    timestamp?: number,
-  ): Promise<void> {
-    const groups = this._groups.get();
-    if (groups.some((g) => g.groupId === groupId)) {
-      return;
-    }
-
-    const nextGroups = [
-      ...groups,
-      {
-        groupId,
-        name: this.deriveGroupName(groupId),
-        createdAt: timestamp || Date.now(),
-      },
-    ];
-
-    this._groups.set(nextGroups);
-
-    try {
-      await saveGroupMetadata(db, nextGroups);
-    } catch (error) {
-      console.error("Failed to persist new conversation metadata:", error);
-    }
-  }
+  public _toolActivity: Signal.State<ToolActivity | null>;
+  public _unreadGroupIds: Signal.State<Set<string>>;
+  public _useProxy: Signal.State<boolean>;
+  public _vmBashFullInternetAccess: Signal.State<boolean>;
+  private _whenInitialized: Promise<void>;
 
   constructor() {
     this._messages = new Signal.State([]);
@@ -459,308 +395,6 @@ export class OrchestratorStore {
     this._aguiAdapter = null;
   }
 
-  private parseTaskSyncOutbox(raw: string | null | undefined) {
-    if (!raw) {
-      return [] as TaskSyncOutboxOperation[];
-    }
-
-    try {
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) {
-        return [] as TaskSyncOutboxOperation[];
-      }
-
-      const normalized = parsed
-        .filter((entry): entry is any => !!entry && typeof entry === "object")
-        .filter((entry) => entry.type === "upsert" || entry.type === "delete")
-        .filter((entry) => typeof entry.id === "string" && entry.id.length > 0)
-        .map((entry) => ({
-          ...entry,
-          queuedAt:
-            typeof entry.queuedAt === "number" ? entry.queuedAt : Date.now(),
-        })) as TaskSyncOutboxOperation[];
-
-      return this.compactTaskSyncOutbox(normalized);
-    } catch {
-      return [] as TaskSyncOutboxOperation[];
-    }
-  }
-
-  private compactTaskSyncOutbox(
-    ops: TaskSyncOutboxOperation[],
-  ): TaskSyncOutboxOperation[] {
-    const lastIndexById = new Map<string, number>();
-    ops.forEach((op, index) => {
-      lastIndexById.set(op.id, index);
-    });
-
-    return ops.filter((op, index) => lastIndexById.get(op.id) === index);
-  }
-
-  private async persistTaskSyncOutbox(db: ShadowClawDatabase): Promise<void> {
-    await setConfig(
-      db,
-      CONFIG_KEYS.TASK_SYNC_OUTBOX,
-      JSON.stringify(this._taskSyncOutbox),
-    );
-  }
-
-  private parsePagesList(raw: string | null | undefined): SavedPageRef[] {
-    if (!raw) {
-      return [];
-    }
-
-    try {
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) {
-        return [];
-      }
-
-      return parsed
-        .map((entry) => {
-          if (typeof entry === "string") {
-            return {
-              groupId: DEFAULT_GROUP_ID,
-              path: this.normalizePagePath(entry),
-            } satisfies SavedPageRef;
-          }
-
-          if (!entry || typeof entry !== "object") {
-            return null;
-          }
-
-          const page = entry as Partial<SavedPageRef>;
-          if (typeof page.path !== "string") {
-            return null;
-          }
-
-          const normalizedGroupId =
-            typeof page.groupId === "string" && page.groupId.trim().length > 0
-              ? page.groupId
-              : DEFAULT_GROUP_ID;
-
-          const normalizedPath =
-            normalizedGroupId === DEFAULT_GROUP_ID
-              ? this.normalizePagePath(page.path)
-              : page.path.trim();
-
-          if (!normalizedPath) {
-            return null;
-          }
-
-          return {
-            groupId: normalizedGroupId,
-            path: normalizedPath,
-          } satisfies SavedPageRef;
-        })
-        .filter((entry): entry is SavedPageRef => !!entry)
-        .filter((entry, index, arr) => {
-          const key = `${entry.groupId}\u0000${entry.path}`;
-
-          return (
-            index ===
-            arr.findIndex((candidate) => {
-              return `${candidate.groupId}\u0000${candidate.path}` === key;
-            })
-          );
-        });
-    } catch {
-      return [];
-    }
-  }
-
-  private normalizePagePath(path: string): string {
-    const normalized = path.trim().replace(/^\/+/, "").replace(/\/+/g, "/");
-
-    // Migrate legacy default page paths into the current default page.
-    if (normalized === "br-main/memory.md") {
-      return OrchestratorStore.DEFAULT_PAGE_PATH;
-    }
-
-    return normalized;
-  }
-
-  private async persistPages(db: ShadowClawDatabase): Promise<void> {
-    await setConfig(
-      db,
-      CONFIG_KEYS.PAGES_LIST,
-      JSON.stringify(this._pages.get()),
-    );
-  }
-
-  private async ensureDefaultPage(db: ShadowClawDatabase): Promise<void> {
-    if (await isMainGroupMemorySuppressed(db)) {
-      return;
-    }
-
-    const hasWorkspaceReadme = await ensureMainGroupMemory(
-      db,
-      DEFAULT_GROUP_ID,
-    );
-
-    await ensureMainGroupIndex(db, DEFAULT_GROUP_ID);
-
-    if (!hasWorkspaceReadme || this._pages.get().length > 0) {
-      return;
-    }
-
-    this._pages.set([
-      {
-        groupId: DEFAULT_GROUP_ID,
-        path: OrchestratorStore.DEFAULT_PAGE_PATH,
-      },
-    ]);
-    await this.persistPages(db);
-  }
-
-  private async queueTaskSyncOutboxOperation(
-    db: ShadowClawDatabase,
-    op: TaskSyncOutboxOperation,
-  ): Promise<void> {
-    this._taskSyncOutbox = this.compactTaskSyncOutbox([
-      ...this._taskSyncOutbox,
-      op,
-    ]);
-
-    await this.persistTaskSyncOutbox(db);
-  }
-
-  async replayTaskSyncOutbox(db: ShadowClawDatabase): Promise<void> {
-    if (this._replayingTaskSyncOutbox || this._taskSyncOutbox.length === 0) {
-      return;
-    }
-
-    this._replayingTaskSyncOutbox = true;
-
-    try {
-      const remaining: TaskSyncOutboxOperation[] = [];
-
-      for (const op of this._taskSyncOutbox) {
-        const base = this.getTaskServerBaseUrl();
-        const ok =
-          op.type === "upsert"
-            ? await syncTaskToServer(op.task, base)
-            : await deleteTaskFromServer(op.id, base);
-
-        if (!ok) {
-          remaining.push(op);
-        }
-      }
-
-      this._taskSyncOutbox = this.compactTaskSyncOutbox(remaining);
-      await this.persistTaskSyncOutbox(db);
-    } finally {
-      this._replayingTaskSyncOutbox = false;
-    }
-  }
-
-  // --- Getters for reactive state ---
-
-  private getTaskServerBaseUrl(): string {
-    return this.orchestrator?.getTaskServerUrl() ?? "/schedule";
-  }
-
-  private getActivityLogSessionStartedAt(groupId: string): string {
-    const existing = this._activityLogSessionStartedAtByGroup.get(groupId);
-    if (existing) {
-      return existing;
-    }
-
-    const startedAt = new Date().toISOString();
-    this._activityLogSessionStartedAtByGroup.set(groupId, startedAt);
-
-    return startedAt;
-  }
-
-  private async forwardActivityLogEntryToServer(
-    entry: ThinkingLogEntry,
-  ): Promise<void> {
-    if (!this._db) {
-      return;
-    }
-
-    const enabled = isConfigEnabled(
-      await getConfig(this._db, CONFIG_KEYS.ACTIVITY_LOG_DISK_LOGGING_ENABLED),
-    );
-
-    if (!enabled) {
-      return;
-    }
-
-    const groupId =
-      typeof entry.groupId === "string" && entry.groupId
-        ? entry.groupId
-        : this._activeGroupId.get();
-
-    if (!groupId) {
-      return;
-    }
-
-    const message =
-      typeof entry.message === "string" ? entry.message.trim() : "";
-    if (!message) {
-      return;
-    }
-
-    if (entry.level === "info" && entry.label === "Starting") {
-      this._activityLogSessionStartedAtByGroup.set(
-        groupId,
-        new Date().toISOString(),
-      );
-    }
-
-    const sessionStartedAt = this.getActivityLogSessionStartedAt(groupId);
-
-    try {
-      await fetch("/activity-log", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          groupId,
-          level: entry.level,
-          label: entry.label,
-          message,
-          timestamp: new Date().toISOString(),
-          sessionStartedAt,
-        }),
-      });
-    } catch (error) {
-      console.warn("Failed to persist activity log entry to server:", error);
-    }
-  }
-
-  get messages() {
-    return this._messages.get();
-  }
-
-  get isTyping() {
-    return this._isTyping.get();
-  }
-
-  get toolActivity() {
-    return this._toolActivity.get();
-  }
-
-  get activityLog() {
-    return this._activityLog.get();
-  }
-
-  get modelDownloadProgress() {
-    return this._modelDownloadProgress.get();
-  }
-
-  get state() {
-    return this._state.get();
-  }
-
-  get tokenUsage() {
-    return this._tokenUsage.get();
-  }
-
-  get error() {
-    return this._error.get();
-  }
-
   get activeGroupId() {
     return this._activeGroupId.get();
   }
@@ -769,71 +403,12 @@ export class OrchestratorStore {
     return this._activePage.get();
   }
 
-  get hadPersistedActivePage() {
-    return this._hadPersistedActivePage;
-  }
-
-  get whenInitialized(): Promise<void> {
-    return this._whenInitialized;
-  }
-
-  get sidebarDefaultPage() {
-    return this._sidebarDefaultPage.get();
-  }
-
-  get pages() {
-    return this._pages.get();
-  }
-
   get activePinnedPage() {
     return this._activePinnedPage.get();
   }
 
-  async setActivePinnedPage(
-    db: ShadowClawDatabase,
-    page: SavedPageRef | null,
-  ): Promise<void> {
-    this._activePinnedPage.set(page);
-    if (page) {
-      await setConfig(
-        db,
-        CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE,
-        JSON.stringify(page),
-      );
-    } else {
-      await setConfig(db, CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE, null);
-    }
-  }
-
-  get ready() {
-    return this._ready.get();
-  }
-
-  get tasks() {
-    return this._tasks.get();
-  }
-
-  get files() {
-    return this._files.get();
-  }
-
-  get currentPath() {
-    return this._currentPath.get();
-  }
-
-  get groups() {
-    return this._groups.get();
-  }
-
-  get storageStatus() {
-    return this._storageStatus.get();
-  }
-
-  /**
-   * Get the accumulated streaming text, or `null` if no stream is active.
-   */
-  get streamingText(): string | null {
-    return this._streamingText.get();
+  get activityLog() {
+    return this._activityLog.get();
   }
 
   /**
@@ -843,15 +418,14 @@ export class OrchestratorStore {
     return this._aguiEvent.get();
   }
 
-  getPeerState(groupId: string): Record<string, unknown> | null {
-    return this._peerStateByGroup.get().get(groupId) || null;
-  }
-
   /**
-   * Get the set of groupIds with unread messages.
+   * Clear error
    */
-  get unreadGroupIds(): Set<string> {
-    return this._unreadGroupIds.get();
+  clearError() {
+    this._error.set(null);
+    if (this._state.get() === "error") {
+      this._state.set("idle");
+    }
   }
 
   /**
@@ -861,20 +435,20 @@ export class OrchestratorStore {
     return this._contextUsage.get();
   }
 
-  get useProxy() {
-    return this._useProxy.get();
+  get currentPath() {
+    return this._currentPath.get();
   }
 
-  get proxyUrl() {
-    return this._proxyUrl.get();
+  get error() {
+    return this._error.get();
   }
 
-  get gitProxyUrl() {
-    return this._gitProxyUrl.get();
+  get files() {
+    return this._files.get();
   }
 
-  get vmBashFullInternetAccess() {
-    return this._vmBashFullInternetAccess.get();
+  getPeerState(groupId: string): Record<string, unknown> | null {
+    return this._peerStateByGroup.get().get(groupId) || null;
   }
 
   /**
@@ -888,6 +462,140 @@ export class OrchestratorStore {
   }
 
   /**
+   * Get current state
+   */
+  getState(): OrchestratorStoreState {
+    return {
+      messages: this.messages,
+      isTyping: this.isTyping,
+      toolActivity: this.toolActivity,
+      activityLog: this.activityLog,
+      state: this.state,
+      tokenUsage: this.tokenUsage,
+      modelDownloadProgress: this.modelDownloadProgress,
+      error: this.error,
+      activeGroupId: this.activeGroupId,
+      pages: this.pages,
+      ready: this.ready,
+      files: this.files,
+      currentPath: this.currentPath,
+      streamingText: this.streamingText,
+      contextUsage: this.contextUsage,
+    };
+  }
+
+  /**
+   * Get all tasks for backup
+   */
+  getTasksForBackup(): Task[] {
+    return this._tasks.get();
+  }
+
+  get gitProxyUrl() {
+    return this._gitProxyUrl.get();
+  }
+
+  get groups() {
+    return this._groups.get();
+  }
+
+  get hadPersistedActivePage() {
+    return this._hadPersistedActivePage;
+  }
+
+  /**
+   * Get the remote agent typing status for a specific group.
+   */
+  isRemoteAgentTyping(groupId: string): boolean {
+    const typingMap = this._remoteAgentTypingByGroup.get();
+
+    return typingMap.get(groupId) || false;
+  }
+
+  get isTyping() {
+    return this._isTyping.get();
+  }
+
+  get messages() {
+    return this._messages.get();
+  }
+
+  get modelDownloadProgress() {
+    return this._modelDownloadProgress.get();
+  }
+
+  get pages() {
+    return this._pages.get();
+  }
+
+  get proxyUrl() {
+    return this._proxyUrl.get();
+  }
+
+  get ready() {
+    return this._ready.get();
+  }
+
+  /**
+   * Send a message
+   */
+  sendMessage(
+    text: string,
+    attachments: MessageAttachment[] = [],
+    a2uiAction?: A2UIAction,
+  ): void {
+    if (a2uiAction !== undefined) {
+      this.orchestrator?.submitMessage?.(
+        text,
+        this._activeGroupId.get(),
+        attachments,
+        a2uiAction,
+      );
+    } else {
+      this.orchestrator?.submitMessage?.(
+        text,
+        this._activeGroupId.get(),
+        attachments,
+      );
+    }
+  }
+
+  /**
+   * Set active group
+   */
+  setActiveGroup(
+    db: ShadowClawDatabase,
+    groupId: string,
+    clearUnread = this._activePage.get() === "chat",
+  ) {
+    this._activeGroupId.set(groupId);
+    this._messages.set([]);
+    this._activityLog.set([]);
+    this._error.set(null);
+    this._isTyping.set(false);
+    this._toolActivity.set(null);
+    this._modelDownloadProgress.set(null);
+    this._streamingText.set(null);
+    this._currentPath.set(".");
+
+    // Clear unread indicator for the group being viewed
+    if (clearUnread) {
+      const unread = new Set(this._unreadGroupIds.get());
+      if (unread.delete(groupId)) {
+        this._unreadGroupIds.set(unread);
+      }
+    }
+
+    this.loadHistory();
+    this.loadTasks(db);
+    this.loadFiles(db);
+  }
+
+  setReady(ready: boolean = true): void {
+    this._ready.set(ready);
+  }
+
+  /**
    * Set the remote agent status for a specific group.
    */
   setRemoteAgentStatus(
@@ -898,15 +606,6 @@ export class OrchestratorStore {
     const newMap = new Map(statusMap);
     newMap.set(groupId, status);
     this._remoteAgentStatusByGroup.set(newMap);
-  }
-
-  /**
-   * Get the remote agent typing status for a specific group.
-   */
-  isRemoteAgentTyping(groupId: string): boolean {
-    const typingMap = this._remoteAgentTypingByGroup.get();
-
-    return typingMap.get(groupId) || false;
   }
 
   /**
@@ -924,8 +623,316 @@ export class OrchestratorStore {
     this._remoteAgentTypingByGroup.set(newMap);
   }
 
-  setReady(ready: boolean = true): void {
-    this._ready.set(ready);
+  get sidebarDefaultPage() {
+    return this._sidebarDefaultPage.get();
+  }
+
+  get state() {
+    return this._state.get();
+  }
+
+  /**
+   * Stop the active in-flight request for the current group.
+   */
+  stopCurrentRequest() {
+    this.orchestrator?.stopCurrentRequest?.(this._activeGroupId.get());
+  }
+
+  get storageStatus() {
+    return this._storageStatus.get();
+  }
+
+  /**
+   * Get the accumulated streaming text, or `null` if no stream is active.
+   */
+  get streamingText(): string | null {
+    return this._streamingText.get();
+  }
+
+  /**
+   * Request a manual host -> VM workspace sync for the active group.
+   */
+  syncHostWorkspaceToVM() {
+    this.orchestrator?.syncTerminalWorkspace?.(this._activeGroupId.get());
+  }
+
+  /**
+   * Request a manual VM -> host workspace flush for the active group.
+   */
+  syncVMWorkspaceToHost() {
+    this.orchestrator?.flushTerminalWorkspace?.(this._activeGroupId.get());
+  }
+
+  get tasks() {
+    return this._tasks.get();
+  }
+
+  get tokenUsage() {
+    return this._tokenUsage.get();
+  }
+
+  get toolActivity() {
+    return this._toolActivity.get();
+  }
+
+  /**
+   * Get the set of groupIds with unread messages.
+   */
+  get unreadGroupIds(): Set<string> {
+    return this._unreadGroupIds.get();
+  }
+
+  get useProxy() {
+    return this._useProxy.get();
+  }
+
+  get vmBashFullInternetAccess() {
+    return this._vmBashFullInternetAccess.get();
+  }
+
+  get whenInitialized(): Promise<void> {
+    return this._whenInitialized;
+  }
+
+  async addPage(
+    db: ShadowClawDatabase,
+    path: string,
+    groupId: string = this._activeGroupId.get(),
+  ): Promise<void> {
+    const normalized =
+      groupId === DEFAULT_GROUP_ID ? this.normalizePagePath(path) : path.trim();
+    if (!normalized) {
+      return;
+    }
+
+    const pages = this._pages.get();
+    if (
+      pages.some(
+        (entry) => entry.path === normalized && entry.groupId === groupId,
+      )
+    ) {
+      return;
+    }
+
+    this._pages.set([
+      ...pages,
+      {
+        groupId,
+        path: normalized,
+      },
+    ]);
+
+    if (
+      groupId === DEFAULT_GROUP_ID &&
+      normalized === DEFAULT_MAIN_GROUP_MEMORY_PATH
+    ) {
+      await setMainGroupMemorySuppressed(db, false);
+    }
+
+    await this.persistPages(db);
+  }
+
+  /**
+   * Clear all tasks for the current group
+   */
+  async clearAllTasks(db: ShadowClawDatabase): Promise<void> {
+    const allTasks = await getAllTasks(db);
+    const currentGroupId = this._activeGroupId.get();
+    const groupTasks = allTasks.filter((t) => t.groupId === currentGroupId);
+
+    for (const task of groupTasks) {
+      const serverResult = await deleteTaskFromServer(
+        task.id,
+        this.getTaskServerBaseUrl(),
+      );
+      if (serverResult === "failed") {
+        console.warn(
+          `Failed to delete task "${task.id}" from server — queued for replay.`,
+        );
+        await this.queueTaskSyncOutboxOperation(db, {
+          type: "delete",
+          id: task.id,
+          queuedAt: Date.now(),
+        });
+
+        continue;
+      }
+
+      await deleteTask(db, task.id);
+    }
+
+    await this.loadTasks(db);
+  }
+
+  /**
+   * Clone a conversation (metadata + messages + tasks + MEMORY.md)
+   * and switch to the clone.
+   */
+  async cloneConversation(
+    db: ShadowClawDatabase,
+    sourceGroupId: string,
+  ): Promise<GroupMeta | null> {
+    const clone = await cloneGroup(db, sourceGroupId);
+    if (!clone) {
+      return null;
+    }
+
+    await cloneGroupMessages(db, sourceGroupId, clone.groupId);
+    await cloneGroupTasks(db, sourceGroupId, clone.groupId);
+
+    try {
+      const memory = await readGroupFile(db, sourceGroupId, "MEMORY.md");
+      if (memory) {
+        await writeGroupFile(db, clone.groupId, "MEMORY.md", memory);
+      }
+    } catch {
+      // Source has no MEMORY.md — nothing to copy
+    }
+
+    try {
+      await copyGroupDirectory(db, sourceGroupId, clone.groupId, "attachments");
+    } catch {
+      // Source has no attachments directory — nothing to copy
+    }
+
+    await this.loadGroups(db);
+    this.setActiveGroup(db, clone.groupId);
+
+    return clone;
+  }
+
+  /**
+   * Compact context
+   */
+  async compactContext(db: ShadowClawDatabase): Promise<any> {
+    return this.orchestrator?.compactContext?.(db, this._activeGroupId.get());
+  }
+
+  /**
+   * Create a conversation
+   */
+  async createConversation(
+    db: ShadowClawDatabase,
+    name: string,
+  ): Promise<GroupMeta> {
+    const group = await createGroup(db, name);
+    await this.loadGroups(db);
+    this.setActiveGroup(db, group.groupId);
+
+    return group;
+  }
+
+  /**
+   * Delete a conversation. Refuses to delete the last remaining group.
+   * If the deleted group is active, switches to the first remaining group.
+   */
+  async deleteConversation(
+    db: ShadowClawDatabase,
+    groupId: string,
+  ): Promise<void> {
+    const groups = this._groups.get();
+    if (groups.length <= 1) {
+      return;
+    }
+
+    await deleteGroupMetadata(db, groupId);
+    await clearGroupMessages(db, groupId);
+    await this.loadGroups(db);
+
+    if (this._activeGroupId.get() === groupId) {
+      const remaining = this._groups.get();
+      const next = remaining[0]?.groupId || DEFAULT_GROUP_ID;
+      this.setActiveGroup(db, next);
+    }
+  }
+
+  /**
+   * Delete a message
+   */
+  async deleteMessage(db: ShadowClawDatabase, id: string): Promise<void> {
+    await deleteMessage(db, id);
+    await this.loadHistory();
+    if (this.orchestrator?.refreshContextUsage) {
+      await this.orchestrator.refreshContextUsage(
+        db,
+        this._activeGroupId.get(),
+      );
+    }
+  }
+
+  /**
+   * Delete a task
+   */
+  async deleteTask(db: ShadowClawDatabase, id: string): Promise<void> {
+    const serverResult = await deleteTaskFromServer(
+      id,
+      this.getTaskServerBaseUrl(),
+    );
+    if (serverResult === "failed") {
+      console.warn("Failed to delete task from server — queued for replay.");
+      await this.queueTaskSyncOutboxOperation(db, {
+        type: "delete",
+        id,
+        queuedAt: Date.now(),
+      });
+
+      throw new Error(
+        "Failed to delete scheduled task on server; task kept locally.",
+      );
+    }
+
+    await deleteTask(db, id);
+    await this.loadTasks(db);
+  }
+
+  /**
+   * Ensure a PeerJS conversation exists. If not, create it.
+   */
+  async ensurePeerConversation(
+    db: ShadowClawDatabase,
+    remotePeerId: string,
+  ): Promise<string> {
+    const groupId = `peer:${remotePeerId}`;
+    const groups = await listGroups(db);
+    const existing = groups.find((g) => g.groupId === groupId);
+    if (!existing) {
+      const metadata = [...groups];
+      let aliasName = "";
+      if (this.orchestrator?.peerjsPeerAliases) {
+        // Find if any alias matches this remotePeerId
+        for (const [alias, id] of Object.entries(
+          this.orchestrator.peerjsPeerAliases,
+        )) {
+          if (id === remotePeerId) {
+            aliasName = alias;
+
+            break;
+          }
+        }
+      }
+
+      metadata.push({
+        groupId,
+        name: `Peer: ${aliasName ? aliasName : remotePeerId.substring(0, 8)}`,
+        createdAt: Date.now(),
+      });
+      await saveGroupMetadata(db, metadata);
+      await this.loadGroups(db);
+    }
+
+    return groupId;
+  }
+
+  /**
+   * Request storage access
+   */
+  async grantStorageAccess(db: ShadowClawDatabase): Promise<void> {
+    try {
+      await requestStorageAccess(db);
+      await this.loadFiles(db); // Refresh files and status after granting access
+    } catch (err) {
+      console.error("Failed to grant storage access:", err);
+    }
   }
 
   /**
@@ -1288,110 +1295,28 @@ export class OrchestratorStore {
   }
 
   /**
-   * Send a message
+   * Load files
    */
-  sendMessage(
-    text: string,
-    attachments: MessageAttachment[] = [],
-    a2uiAction?: A2UIAction,
-  ): void {
-    if (a2uiAction !== undefined) {
-      this.orchestrator?.submitMessage?.(
-        text,
-        this._activeGroupId.get(),
-        attachments,
-        a2uiAction,
-      );
-    } else {
-      this.orchestrator?.submitMessage?.(
-        text,
-        this._activeGroupId.get(),
-        attachments,
-      );
+  async loadFiles(db: ShadowClawDatabase): Promise<void> {
+    const groupId = this._activeGroupId.get();
+    const currentPath = this._currentPath.get();
+    try {
+      this._storageStatus.set(await getStorageStatus(db));
+
+      const files = await listGroupFiles(db, groupId, currentPath);
+
+      this._files.set(files);
+    } catch (err) {
+      console.error("Failed to load files in store:", err);
     }
   }
 
   /**
-   * Run a task
+   * Load conversations
    */
-  async runTask(task: Task, isManual: boolean = false): Promise<void> {
-    const db = this._db;
-    if (isManual && db) {
-      await updateTaskLastRun(task.id, Date.now());
-      await this.loadTasks(db);
-    }
-
-    if (
-      task.type === "tools" &&
-      Array.isArray(task.tools) &&
-      task.tools.length > 0
-    ) {
-      if (this.orchestrator?.agentWorker) {
-        this.orchestrator.agentWorker.postMessage({
-          type: "execute-task-tools",
-          payload: {
-            groupId: task.groupId,
-            tools: task.tools,
-            isManual,
-          },
-        });
-      } else {
-        console.error("Agent worker not available to execute tool task.");
-      }
-    } else {
-      // Send the prompt directly to the conversation that owns the task,
-      // NOT the currently-visible conversation — scheduled tasks must always
-      // fire in the conversation they were created in.
-      if (!task.groupId) {
-        console.error(
-          `Task ${task.id} has no groupId - refusing to execute in active conversation to prevent context pollution.`,
-        );
-
-        return;
-      }
-
-      this.orchestrator?.submitMessage?.(task.prompt, task.groupId, []);
-    }
-  }
-
-  /**
-   * Start a new session
-   */
-  async newSession(db: ShadowClawDatabase): Promise<void> {
-    await this.orchestrator?.newSession?.(db, this._activeGroupId.get());
-    await this.loadHistory();
-  }
-
-  /**
-   * Compact context
-   */
-  async compactContext(db: ShadowClawDatabase): Promise<any> {
-    return this.orchestrator?.compactContext?.(db, this._activeGroupId.get());
-  }
-
-  /**
-   * Stop the active in-flight request for the current group.
-   */
-  stopCurrentRequest() {
-    this.orchestrator?.stopCurrentRequest?.(this._activeGroupId.get());
-  }
-
-  async restartCurrentRequest(): Promise<boolean> {
-    if (!this.orchestrator?.restartCurrentRequest) {
-      return false;
-    }
-
-    return this.orchestrator.restartCurrentRequest(this._activeGroupId.get());
-  }
-
-  /**
-   * Clear error
-   */
-  clearError() {
-    this._error.set(null);
-    if (this._state.get() === "error") {
-      this._state.set("idle");
-    }
+  async loadGroups(db: ShadowClawDatabase): Promise<void> {
+    const groups = await listGroups(db);
+    this._groups.set(groups);
   }
 
   /**
@@ -1448,208 +1373,21 @@ export class OrchestratorStore {
   }
 
   /**
-   * Toggle a task
+   * Navigate back to parent folder
    */
-  async toggleTask(
-    db: ShadowClawDatabase,
-    task: Task,
-    enabled: boolean,
-  ): Promise<void> {
-    const updatedTask = { ...task, enabled };
-    await saveTask(db, updatedTask);
-    await this.loadTasks(db);
-
-    const serverOk = await syncTaskToServer(
-      updatedTask,
-      this.getTaskServerBaseUrl(),
-    );
-    if (!serverOk) {
-      console.warn("Failed to update task on server — queued for replay.");
-
-      await this.queueTaskSyncOutboxOperation(db, {
-        type: "upsert",
-        id: updatedTask.id,
-        task: updatedTask,
-        queuedAt: Date.now(),
-      });
-    }
-  }
-
-  /**
-   * Save/update a task locally, then sync or queue replay if server is unavailable.
-   */
-  async upsertTask(
-    db: ShadowClawDatabase,
-    task: Task,
-    options?: { reloadTasks?: boolean },
-  ): Promise<void> {
-    const shouldReload = options?.reloadTasks !== false;
-
-    await saveTask(db, task);
-    if (shouldReload) {
-      await this.loadTasks(db);
-    }
-
-    const serverOk = await syncTaskToServer(task, this.getTaskServerBaseUrl());
-    if (!serverOk) {
-      console.warn("Failed to sync task to server — queued for replay.");
-      await this.queueTaskSyncOutboxOperation(db, {
-        type: "upsert",
-        id: task.id,
-        task,
-        queuedAt: Date.now(),
-      });
-    }
-  }
-
-  /**
-   * Delete a task
-   */
-  async deleteTask(db: ShadowClawDatabase, id: string): Promise<void> {
-    const serverResult = await deleteTaskFromServer(
-      id,
-      this.getTaskServerBaseUrl(),
-    );
-    if (serverResult === "failed") {
-      console.warn("Failed to delete task from server — queued for replay.");
-      await this.queueTaskSyncOutboxOperation(db, {
-        type: "delete",
-        id,
-        queuedAt: Date.now(),
-      });
-
-      throw new Error(
-        "Failed to delete scheduled task on server; task kept locally.",
-      );
-    }
-
-    await deleteTask(db, id);
-    await this.loadTasks(db);
-  }
-
-  /**
-   * Clear all tasks for the current group
-   */
-  async clearAllTasks(db: ShadowClawDatabase): Promise<void> {
-    const allTasks = await getAllTasks(db);
-    const currentGroupId = this._activeGroupId.get();
-    const groupTasks = allTasks.filter((t) => t.groupId === currentGroupId);
-
-    for (const task of groupTasks) {
-      const serverResult = await deleteTaskFromServer(
-        task.id,
-        this.getTaskServerBaseUrl(),
-      );
-      if (serverResult === "failed") {
-        console.warn(
-          `Failed to delete task "${task.id}" from server — queued for replay.`,
-        );
-        await this.queueTaskSyncOutboxOperation(db, {
-          type: "delete",
-          id: task.id,
-          queuedAt: Date.now(),
-        });
-
-        continue;
-      }
-
-      await deleteTask(db, task.id);
-    }
-
-    await this.loadTasks(db);
-  }
-
-  /**
-   * Get all tasks for backup
-   */
-  getTasksForBackup(): Task[] {
-    return this._tasks.get();
-  }
-
-  /**
-   * Restore tasks from backup
-   */
-  async restoreTasksFromBackup(
-    db: ShadowClawDatabase,
-    tasks: Task[],
-  ): Promise<void> {
-    // First, clear all existing tasks
-    await this.clearAllTasks(db);
-
-    const currentGroupId = this._activeGroupId.get();
-    // Save each task with current group ID and new IDs
-    for (const task of tasks) {
-      const taskToSave = {
-        ...task,
-        groupId: currentGroupId,
-        id: crypto.randomUUID
-          ? crypto.randomUUID()
-          : `task-${Date.now()}-${Math.random()}`,
-      };
-
-      await this.upsertTask(db, taskToSave, { reloadTasks: false });
-    }
-
-    await this.loadTasks(db);
-  }
-
-  /**
-   * Load files
-   */
-  async loadFiles(db: ShadowClawDatabase): Promise<void> {
-    const groupId = this._activeGroupId.get();
+  async navigateBackFolder(db: ShadowClawDatabase): Promise<void> {
     const currentPath = this._currentPath.get();
-    try {
-      this._storageStatus.set(await getStorageStatus(db));
-
-      const files = await listGroupFiles(db, groupId, currentPath);
-
-      this._files.set(files);
-    } catch (err) {
-      console.error("Failed to load files in store:", err);
+    if (currentPath === ".") {
+      return;
     }
-  }
 
-  /**
-   * Set and load the current file browser path.
-   */
-  async setCurrentPath(db: ShadowClawDatabase, path: string): Promise<void> {
-    const normalizedPath = path.replace(/^\/+|\/+$/g, "");
-    const nextPath = normalizedPath ? normalizedPath : ".";
-    const groupId = this._activeGroupId.get();
+    const parts = currentPath.split("/").filter(Boolean);
 
-    this._storageStatus.set(await getStorageStatus(db));
+    parts.pop();
 
-    const files = await listGroupFiles(db, groupId, nextPath);
+    const newPath = parts.length === 0 ? "." : parts.join("/");
 
-    this._currentPath.set(nextPath);
-    this._files.set(files);
-  }
-
-  /**
-   * Request a manual host -> VM workspace sync for the active group.
-   */
-  syncHostWorkspaceToVM() {
-    this.orchestrator?.syncTerminalWorkspace?.(this._activeGroupId.get());
-  }
-
-  /**
-   * Request a manual VM -> host workspace flush for the active group.
-   */
-  syncVMWorkspaceToHost() {
-    this.orchestrator?.flushTerminalWorkspace?.(this._activeGroupId.get());
-  }
-
-  /**
-   * Request storage access
-   */
-  async grantStorageAccess(db: ShadowClawDatabase): Promise<void> {
-    try {
-      await requestStorageAccess(db);
-      await this.loadFiles(db); // Refresh files and status after granting access
-    } catch (err) {
-      console.error("Failed to grant storage access:", err);
-    }
+    await this.setCurrentPath(db, newPath);
   }
 
   /**
@@ -1675,130 +1413,11 @@ export class OrchestratorStore {
   }
 
   /**
-   * Navigate back to parent folder
+   * Start a new session
    */
-  async navigateBackFolder(db: ShadowClawDatabase): Promise<void> {
-    const currentPath = this._currentPath.get();
-    if (currentPath === ".") {
-      return;
-    }
-
-    const parts = currentPath.split("/").filter(Boolean);
-
-    parts.pop();
-
-    const newPath = parts.length === 0 ? "." : parts.join("/");
-
-    await this.setCurrentPath(db, newPath);
-  }
-
-  /**
-   * Reset to root folder
-   */
-  async resetToRootFolder(db: ShadowClawDatabase): Promise<void> {
-    await this.setCurrentPath(db, ".");
-  }
-
-  /**
-   * Set active group
-   */
-  setActiveGroup(
-    db: ShadowClawDatabase,
-    groupId: string,
-    clearUnread = this._activePage.get() === "chat",
-  ) {
-    this._activeGroupId.set(groupId);
-    this._messages.set([]);
-    this._activityLog.set([]);
-    this._error.set(null);
-    this._isTyping.set(false);
-    this._toolActivity.set(null);
-    this._modelDownloadProgress.set(null);
-    this._streamingText.set(null);
-    this._currentPath.set(".");
-
-    // Clear unread indicator for the group being viewed
-    if (clearUnread) {
-      const unread = new Set(this._unreadGroupIds.get());
-      if (unread.delete(groupId)) {
-        this._unreadGroupIds.set(unread);
-      }
-    }
-
-    this.loadHistory();
-    this.loadTasks(db);
-    this.loadFiles(db);
-  }
-
-  /**
-   * Delete a message
-   */
-  async deleteMessage(db: ShadowClawDatabase, id: string): Promise<void> {
-    await deleteMessage(db, id);
+  async newSession(db: ShadowClawDatabase): Promise<void> {
+    await this.orchestrator?.newSession?.(db, this._activeGroupId.get());
     await this.loadHistory();
-    if (this.orchestrator?.refreshContextUsage) {
-      await this.orchestrator.refreshContextUsage(
-        db,
-        this._activeGroupId.get(),
-      );
-    }
-  }
-
-  /**
-   * Set active page
-   */
-  async setActivePage(db: ShadowClawDatabase, page: string) {
-    this._activePage.set(page);
-    await setConfig(db, CONFIG_KEYS.LAST_ACTIVE_PAGE, page);
-
-    const nextSidebarDefaultPage =
-      this.resolveSidebarDefaultPageForActivePage(page);
-    if (nextSidebarDefaultPage !== this._sidebarDefaultPage.get()) {
-      this._sidebarDefaultPage.set(nextSidebarDefaultPage);
-      await setConfig(
-        db,
-        CONFIG_KEYS.SIDEBAR_DEFAULT_PAGE,
-        nextSidebarDefaultPage,
-      );
-    }
-  }
-
-  async addPage(
-    db: ShadowClawDatabase,
-    path: string,
-    groupId: string = this._activeGroupId.get(),
-  ): Promise<void> {
-    const normalized =
-      groupId === DEFAULT_GROUP_ID ? this.normalizePagePath(path) : path.trim();
-    if (!normalized) {
-      return;
-    }
-
-    const pages = this._pages.get();
-    if (
-      pages.some(
-        (entry) => entry.path === normalized && entry.groupId === groupId,
-      )
-    ) {
-      return;
-    }
-
-    this._pages.set([
-      ...pages,
-      {
-        groupId,
-        path: normalized,
-      },
-    ]);
-
-    if (
-      groupId === DEFAULT_GROUP_ID &&
-      normalized === DEFAULT_MAIN_GROUP_MEMORY_PATH
-    ) {
-      await setMainGroupMemorySuppressed(db, false);
-    }
-
-    await this.persistPages(db);
   }
 
   async removePage(
@@ -1856,66 +1475,6 @@ export class OrchestratorStore {
   }
 
   /**
-   * Load conversations
-   */
-  async loadGroups(db: ShadowClawDatabase): Promise<void> {
-    const groups = await listGroups(db);
-    this._groups.set(groups);
-  }
-
-  /**
-   * Create a conversation
-   */
-  async createConversation(
-    db: ShadowClawDatabase,
-    name: string,
-  ): Promise<GroupMeta> {
-    const group = await createGroup(db, name);
-    await this.loadGroups(db);
-    this.setActiveGroup(db, group.groupId);
-
-    return group;
-  }
-
-  /**
-   * Ensure a PeerJS conversation exists. If not, create it.
-   */
-  async ensurePeerConversation(
-    db: ShadowClawDatabase,
-    remotePeerId: string,
-  ): Promise<string> {
-    const groupId = `peer:${remotePeerId}`;
-    const groups = await listGroups(db);
-    const existing = groups.find((g) => g.groupId === groupId);
-    if (!existing) {
-      const metadata = [...groups];
-      let aliasName = "";
-      if (this.orchestrator?.peerjsPeerAliases) {
-        // Find if any alias matches this remotePeerId
-        for (const [alias, id] of Object.entries(
-          this.orchestrator.peerjsPeerAliases,
-        )) {
-          if (id === remotePeerId) {
-            aliasName = alias;
-
-            break;
-          }
-        }
-      }
-
-      metadata.push({
-        groupId,
-        name: `Peer: ${aliasName ? aliasName : remotePeerId.substring(0, 8)}`,
-        createdAt: Date.now(),
-      });
-      await saveGroupMetadata(db, metadata);
-      await this.loadGroups(db);
-    }
-
-    return groupId;
-  }
-
-  /**
    * Rename a conversation
    */
   async renameConversation(
@@ -1928,51 +1487,225 @@ export class OrchestratorStore {
   }
 
   /**
-   * Update the tool tags pinned to an existing conversation
+   * Reorder conversations
    */
-  async updateConversationToolTags(
+  async reorderConversations(
     db: ShadowClawDatabase,
-    groupId: string,
-    tags: string[],
+    groupIds: string[],
   ): Promise<void> {
-    await updateGroupToolTags(db, groupId, tags);
+    await reorderGroups(db, groupIds);
     await this.loadGroups(db);
   }
 
-  /**
-   * Update the pinned provider and model to an existing conversation
-   */
-  async updateConversationPinnedProvider(
-    db: ShadowClawDatabase,
-    groupId: string,
-    providerId?: string,
-    modelId?: string,
-  ): Promise<void> {
-    await updateGroupPinnedProvider(db, groupId, providerId, modelId);
-    await this.loadGroups(db);
-  }
-
-  /**
-   * Delete a conversation. Refuses to delete the last remaining group.
-   * If the deleted group is active, switches to the first remaining group.
-   */
-  async deleteConversation(
-    db: ShadowClawDatabase,
-    groupId: string,
-  ): Promise<void> {
-    const groups = this._groups.get();
-    if (groups.length <= 1) {
+  async replayTaskSyncOutbox(db: ShadowClawDatabase): Promise<void> {
+    if (this._replayingTaskSyncOutbox || this._taskSyncOutbox.length === 0) {
       return;
     }
 
-    await deleteGroupMetadata(db, groupId);
-    await clearGroupMessages(db, groupId);
-    await this.loadGroups(db);
+    this._replayingTaskSyncOutbox = true;
 
-    if (this._activeGroupId.get() === groupId) {
-      const remaining = this._groups.get();
-      const next = remaining[0]?.groupId || DEFAULT_GROUP_ID;
-      this.setActiveGroup(db, next);
+    try {
+      const remaining: TaskSyncOutboxOperation[] = [];
+
+      for (const op of this._taskSyncOutbox) {
+        const base = this.getTaskServerBaseUrl();
+        const ok =
+          op.type === "upsert"
+            ? await syncTaskToServer(op.task, base)
+            : await deleteTaskFromServer(op.id, base);
+
+        if (!ok) {
+          remaining.push(op);
+        }
+      }
+
+      this._taskSyncOutbox = this.compactTaskSyncOutbox(remaining);
+      await this.persistTaskSyncOutbox(db);
+    } finally {
+      this._replayingTaskSyncOutbox = false;
+    }
+  }
+
+  /**
+   * Reset to root folder
+   */
+  async resetToRootFolder(db: ShadowClawDatabase): Promise<void> {
+    await this.setCurrentPath(db, ".");
+  }
+
+  async restartCurrentRequest(): Promise<boolean> {
+    if (!this.orchestrator?.restartCurrentRequest) {
+      return false;
+    }
+
+    return this.orchestrator.restartCurrentRequest(this._activeGroupId.get());
+  }
+
+  /**
+   * Restore tasks from backup
+   */
+  async restoreTasksFromBackup(
+    db: ShadowClawDatabase,
+    tasks: Task[],
+  ): Promise<void> {
+    // First, clear all existing tasks
+    await this.clearAllTasks(db);
+
+    const currentGroupId = this._activeGroupId.get();
+    // Save each task with current group ID and new IDs
+    for (const task of tasks) {
+      const taskToSave = {
+        ...task,
+        groupId: currentGroupId,
+        id: crypto.randomUUID
+          ? crypto.randomUUID()
+          : `task-${Date.now()}-${Math.random()}`,
+      };
+
+      await this.upsertTask(db, taskToSave, { reloadTasks: false });
+    }
+
+    await this.loadTasks(db);
+  }
+
+  /**
+   * Run a task
+   */
+  async runTask(task: Task, isManual: boolean = false): Promise<void> {
+    const db = this._db;
+    if (isManual && db) {
+      await updateTaskLastRun(task.id, Date.now());
+      await this.loadTasks(db);
+    }
+
+    if (
+      task.type === "tools" &&
+      Array.isArray(task.tools) &&
+      task.tools.length > 0
+    ) {
+      if (this.orchestrator?.agentWorker) {
+        this.orchestrator.agentWorker.postMessage({
+          type: "execute-task-tools",
+          payload: {
+            groupId: task.groupId,
+            tools: task.tools,
+            isManual,
+          },
+        });
+      } else {
+        console.error("Agent worker not available to execute tool task.");
+      }
+    } else {
+      // Send the prompt directly to the conversation that owns the task,
+      // NOT the currently-visible conversation — scheduled tasks must always
+      // fire in the conversation they were created in.
+      if (!task.groupId) {
+        console.error(
+          `Task ${task.id} has no groupId - refusing to execute in active conversation to prevent context pollution.`,
+        );
+
+        return;
+      }
+
+      this.orchestrator?.submitMessage?.(task.prompt, task.groupId, []);
+    }
+  }
+
+  /**
+   * Set active page
+   */
+  async setActivePage(db: ShadowClawDatabase, page: string) {
+    this._activePage.set(page);
+    await setConfig(db, CONFIG_KEYS.LAST_ACTIVE_PAGE, page);
+
+    const nextSidebarDefaultPage =
+      this.resolveSidebarDefaultPageForActivePage(page);
+    if (nextSidebarDefaultPage !== this._sidebarDefaultPage.get()) {
+      this._sidebarDefaultPage.set(nextSidebarDefaultPage);
+      await setConfig(
+        db,
+        CONFIG_KEYS.SIDEBAR_DEFAULT_PAGE,
+        nextSidebarDefaultPage,
+      );
+    }
+  }
+
+  async setActivePinnedPage(
+    db: ShadowClawDatabase,
+    page: SavedPageRef | null,
+  ): Promise<void> {
+    this._activePinnedPage.set(page);
+    if (page) {
+      await setConfig(
+        db,
+        CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE,
+        JSON.stringify(page),
+      );
+    } else {
+      await setConfig(db, CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE, null);
+    }
+  }
+
+  /**
+   * Set and load the current file browser path.
+   */
+  async setCurrentPath(db: ShadowClawDatabase, path: string): Promise<void> {
+    const normalizedPath = path.replace(/^\/+|\/+$/g, "");
+    const nextPath = normalizedPath ? normalizedPath : ".";
+    const groupId = this._activeGroupId.get();
+
+    this._storageStatus.set(await getStorageStatus(db));
+
+    const files = await listGroupFiles(db, groupId, nextPath);
+
+    this._currentPath.set(nextPath);
+    this._files.set(files);
+  }
+
+  /**
+   * Set Git CORS proxy URL
+   */
+  async setGitProxyUrl(db: ShadowClawDatabase, url: string): Promise<void> {
+    if (this.orchestrator) {
+      await this.orchestrator.setGitProxyUrl(db, url);
+      this._gitProxyUrl.set(this.orchestrator.getGitProxyUrl());
+    }
+  }
+
+  /**
+   * Set global CORS proxy URL
+   */
+  async setProxyUrl(db: ShadowClawDatabase, url: string): Promise<void> {
+    if (this.orchestrator) {
+      await this.orchestrator.setProxyUrl(db, url);
+
+      this._proxyUrl.set(this.orchestrator.getProxyUrl());
+    }
+  }
+
+  /**
+   * Toggle global CORS proxy
+   */
+  async setUseProxy(db: ShadowClawDatabase, enabled: boolean): Promise<void> {
+    if (this.orchestrator) {
+      await this.orchestrator.setUseProxy(db, enabled);
+
+      this._useProxy.set(this.orchestrator.getUseProxy());
+    }
+  }
+
+  /**
+   * Toggle shared full internet access for shell/javascript tools.
+   */
+  async setVMBashFullInternetAccess(
+    db: ShadowClawDatabase,
+    enabled: boolean,
+  ): Promise<void> {
+    if (this.orchestrator) {
+      await this.orchestrator.setVMBashFullInternetAccess(db, enabled);
+      this._vmBashFullInternetAccess.set(
+        this.orchestrator.getVMBashFullInternetAccess(),
+      );
     }
   }
 
@@ -1993,121 +1726,388 @@ export class OrchestratorStore {
   }
 
   /**
-   * Reorder conversations
+   * Toggle a task
    */
-  async reorderConversations(
+  async toggleTask(
     db: ShadowClawDatabase,
-    groupIds: string[],
-  ): Promise<void> {
-    await reorderGroups(db, groupIds);
-    await this.loadGroups(db);
-  }
-
-  /**
-   * Clone a conversation (metadata + messages + tasks + MEMORY.md)
-   * and switch to the clone.
-   */
-  async cloneConversation(
-    db: ShadowClawDatabase,
-    sourceGroupId: string,
-  ): Promise<GroupMeta | null> {
-    const clone = await cloneGroup(db, sourceGroupId);
-    if (!clone) {
-      return null;
-    }
-
-    await cloneGroupMessages(db, sourceGroupId, clone.groupId);
-    await cloneGroupTasks(db, sourceGroupId, clone.groupId);
-
-    try {
-      const memory = await readGroupFile(db, sourceGroupId, "MEMORY.md");
-      if (memory) {
-        await writeGroupFile(db, clone.groupId, "MEMORY.md", memory);
-      }
-    } catch {
-      // Source has no MEMORY.md — nothing to copy
-    }
-
-    try {
-      await copyGroupDirectory(db, sourceGroupId, clone.groupId, "attachments");
-    } catch {
-      // Source has no attachments directory — nothing to copy
-    }
-
-    await this.loadGroups(db);
-    this.setActiveGroup(db, clone.groupId);
-
-    return clone;
-  }
-
-  /**
-   * Get current state
-   */
-  getState(): OrchestratorStoreState {
-    return {
-      messages: this.messages,
-      isTyping: this.isTyping,
-      toolActivity: this.toolActivity,
-      activityLog: this.activityLog,
-      state: this.state,
-      tokenUsage: this.tokenUsage,
-      modelDownloadProgress: this.modelDownloadProgress,
-      error: this.error,
-      activeGroupId: this.activeGroupId,
-      pages: this.pages,
-      ready: this.ready,
-      files: this.files,
-      currentPath: this.currentPath,
-      streamingText: this.streamingText,
-      contextUsage: this.contextUsage,
-    };
-  }
-
-  /**
-   * Toggle global CORS proxy
-   */
-  async setUseProxy(db: ShadowClawDatabase, enabled: boolean): Promise<void> {
-    if (this.orchestrator) {
-      await this.orchestrator.setUseProxy(db, enabled);
-
-      this._useProxy.set(this.orchestrator.getUseProxy());
-    }
-  }
-
-  /**
-   * Set global CORS proxy URL
-   */
-  async setProxyUrl(db: ShadowClawDatabase, url: string): Promise<void> {
-    if (this.orchestrator) {
-      await this.orchestrator.setProxyUrl(db, url);
-
-      this._proxyUrl.set(this.orchestrator.getProxyUrl());
-    }
-  }
-
-  /**
-   * Set Git CORS proxy URL
-   */
-  async setGitProxyUrl(db: ShadowClawDatabase, url: string): Promise<void> {
-    if (this.orchestrator) {
-      await this.orchestrator.setGitProxyUrl(db, url);
-      this._gitProxyUrl.set(this.orchestrator.getGitProxyUrl());
-    }
-  }
-
-  /**
-   * Toggle shared full internet access for shell/javascript tools.
-   */
-  async setVMBashFullInternetAccess(
-    db: ShadowClawDatabase,
+    task: Task,
     enabled: boolean,
   ): Promise<void> {
-    if (this.orchestrator) {
-      await this.orchestrator.setVMBashFullInternetAccess(db, enabled);
-      this._vmBashFullInternetAccess.set(
-        this.orchestrator.getVMBashFullInternetAccess(),
+    const updatedTask = { ...task, enabled };
+    await saveTask(db, updatedTask);
+    await this.loadTasks(db);
+
+    const serverOk = await syncTaskToServer(
+      updatedTask,
+      this.getTaskServerBaseUrl(),
+    );
+    if (!serverOk) {
+      console.warn("Failed to update task on server — queued for replay.");
+
+      await this.queueTaskSyncOutboxOperation(db, {
+        type: "upsert",
+        id: updatedTask.id,
+        task: updatedTask,
+        queuedAt: Date.now(),
+      });
+    }
+  }
+
+  /**
+   * Update the pinned provider and model to an existing conversation
+   */
+  async updateConversationPinnedProvider(
+    db: ShadowClawDatabase,
+    groupId: string,
+    providerId?: string,
+    modelId?: string,
+  ): Promise<void> {
+    await updateGroupPinnedProvider(db, groupId, providerId, modelId);
+    await this.loadGroups(db);
+  }
+
+  /**
+   * Update the tool tags pinned to an existing conversation
+   */
+  async updateConversationToolTags(
+    db: ShadowClawDatabase,
+    groupId: string,
+    tags: string[],
+  ): Promise<void> {
+    await updateGroupToolTags(db, groupId, tags);
+    await this.loadGroups(db);
+  }
+
+  /**
+   * Save/update a task locally, then sync or queue replay if server is unavailable.
+   */
+  async upsertTask(
+    db: ShadowClawDatabase,
+    task: Task,
+    options?: { reloadTasks?: boolean },
+  ): Promise<void> {
+    const shouldReload = options?.reloadTasks !== false;
+
+    await saveTask(db, task);
+    if (shouldReload) {
+      await this.loadTasks(db);
+    }
+
+    const serverOk = await syncTaskToServer(task, this.getTaskServerBaseUrl());
+    if (!serverOk) {
+      console.warn("Failed to sync task to server — queued for replay.");
+      await this.queueTaskSyncOutboxOperation(db, {
+        type: "upsert",
+        id: task.id,
+        task,
+        queuedAt: Date.now(),
+      });
+    }
+  }
+
+  private compactTaskSyncOutbox(
+    ops: TaskSyncOutboxOperation[],
+  ): TaskSyncOutboxOperation[] {
+    const lastIndexById = new Map<string, number>();
+    ops.forEach((op, index) => {
+      lastIndexById.set(op.id, index);
+    });
+
+    return ops.filter((op, index) => lastIndexById.get(op.id) === index);
+  }
+
+  private deriveGroupName(groupId: string): string {
+    if (groupId.startsWith("tg:")) {
+      return `Telegram ${groupId.slice(3)}`;
+    }
+
+    if (groupId.startsWith("im:")) {
+      return `iMessage ${groupId.slice(3)}`;
+    }
+
+    if (groupId.startsWith("br:")) {
+      return groupId === DEFAULT_GROUP_ID ? "Main" : "Browser Conversation";
+    }
+
+    return "Conversation";
+  }
+
+  private getActivityLogSessionStartedAt(groupId: string): string {
+    const existing = this._activityLogSessionStartedAtByGroup.get(groupId);
+    if (existing) {
+      return existing;
+    }
+
+    const startedAt = new Date().toISOString();
+    this._activityLogSessionStartedAtByGroup.set(groupId, startedAt);
+
+    return startedAt;
+  }
+
+  // --- Getters for reactive state ---
+
+  private getTaskServerBaseUrl(): string {
+    return this.orchestrator?.getTaskServerUrl() ?? "/schedule";
+  }
+
+  private normalizePagePath(path: string): string {
+    const normalized = path.trim().replace(/^\/+/, "").replace(/\/+/g, "/");
+
+    // Migrate legacy default page paths into the current default page.
+    if (normalized === "br-main/memory.md") {
+      return OrchestratorStore.DEFAULT_PAGE_PATH;
+    }
+
+    return normalized;
+  }
+
+  private normalizeSidebarDefaultPage(
+    value: unknown,
+  ): "chat" | "tasks" | "files" {
+    if (value === "chat" || value === "tasks" || value === "files") {
+      return value;
+    }
+
+    return "chat";
+  }
+
+  private parsePagesList(raw: string | null | undefined): SavedPageRef[] {
+    if (!raw) {
+      return [];
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [];
+      }
+
+      return parsed
+        .map((entry) => {
+          if (typeof entry === "string") {
+            return {
+              groupId: DEFAULT_GROUP_ID,
+              path: this.normalizePagePath(entry),
+            } satisfies SavedPageRef;
+          }
+
+          if (!entry || typeof entry !== "object") {
+            return null;
+          }
+
+          const page = entry as Partial<SavedPageRef>;
+          if (typeof page.path !== "string") {
+            return null;
+          }
+
+          const normalizedGroupId =
+            typeof page.groupId === "string" && page.groupId.trim().length > 0
+              ? page.groupId
+              : DEFAULT_GROUP_ID;
+
+          const normalizedPath =
+            normalizedGroupId === DEFAULT_GROUP_ID
+              ? this.normalizePagePath(page.path)
+              : page.path.trim();
+
+          if (!normalizedPath) {
+            return null;
+          }
+
+          return {
+            groupId: normalizedGroupId,
+            path: normalizedPath,
+          } satisfies SavedPageRef;
+        })
+        .filter((entry): entry is SavedPageRef => !!entry)
+        .filter((entry, index, arr) => {
+          const key = `${entry.groupId}\u0000${entry.path}`;
+
+          return (
+            index ===
+            arr.findIndex((candidate) => {
+              return `${candidate.groupId}\u0000${candidate.path}` === key;
+            })
+          );
+        });
+    } catch {
+      return [];
+    }
+  }
+
+  private parseTaskSyncOutbox(raw: string | null | undefined) {
+    if (!raw) {
+      return [] as TaskSyncOutboxOperation[];
+    }
+
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) {
+        return [] as TaskSyncOutboxOperation[];
+      }
+
+      const normalized = parsed
+        .filter((entry): entry is any => !!entry && typeof entry === "object")
+        .filter((entry) => entry.type === "upsert" || entry.type === "delete")
+        .filter((entry) => typeof entry.id === "string" && entry.id.length > 0)
+        .map((entry) => ({
+          ...entry,
+          queuedAt:
+            typeof entry.queuedAt === "number" ? entry.queuedAt : Date.now(),
+        })) as TaskSyncOutboxOperation[];
+
+      return this.compactTaskSyncOutbox(normalized);
+    } catch {
+      return [] as TaskSyncOutboxOperation[];
+    }
+  }
+
+  private resolveSidebarDefaultPageForActivePage(
+    page: string,
+  ): "chat" | "tasks" | "files" {
+    if (page === "chat" || page === "tasks" || page === "files") {
+      return page;
+    }
+
+    return this._sidebarDefaultPage.get();
+  }
+
+  private async ensureDefaultPage(db: ShadowClawDatabase): Promise<void> {
+    if (await isMainGroupMemorySuppressed(db)) {
+      return;
+    }
+
+    const hasWorkspaceReadme = await ensureMainGroupMemory(
+      db,
+      DEFAULT_GROUP_ID,
+    );
+
+    await ensureMainGroupIndex(db, DEFAULT_GROUP_ID);
+
+    if (!hasWorkspaceReadme || this._pages.get().length > 0) {
+      return;
+    }
+
+    this._pages.set([
+      {
+        groupId: DEFAULT_GROUP_ID,
+        path: OrchestratorStore.DEFAULT_PAGE_PATH,
+      },
+    ]);
+    await this.persistPages(db);
+  }
+
+  private async ensureGroupExists(
+    db: ShadowClawDatabase,
+    groupId: string,
+    timestamp?: number,
+  ): Promise<void> {
+    const groups = this._groups.get();
+    if (groups.some((g) => g.groupId === groupId)) {
+      return;
+    }
+
+    const nextGroups = [
+      ...groups,
+      {
+        groupId,
+        name: this.deriveGroupName(groupId),
+        createdAt: timestamp || Date.now(),
+      },
+    ];
+
+    this._groups.set(nextGroups);
+
+    try {
+      await saveGroupMetadata(db, nextGroups);
+    } catch (error) {
+      console.error("Failed to persist new conversation metadata:", error);
+    }
+  }
+
+  private async forwardActivityLogEntryToServer(
+    entry: ThinkingLogEntry,
+  ): Promise<void> {
+    if (!this._db) {
+      return;
+    }
+
+    const enabled = isConfigEnabled(
+      await getConfig(this._db, CONFIG_KEYS.ACTIVITY_LOG_DISK_LOGGING_ENABLED),
+    );
+
+    if (!enabled) {
+      return;
+    }
+
+    const groupId =
+      typeof entry.groupId === "string" && entry.groupId
+        ? entry.groupId
+        : this._activeGroupId.get();
+
+    if (!groupId) {
+      return;
+    }
+
+    const message =
+      typeof entry.message === "string" ? entry.message.trim() : "";
+    if (!message) {
+      return;
+    }
+
+    if (entry.level === "info" && entry.label === "Starting") {
+      this._activityLogSessionStartedAtByGroup.set(
+        groupId,
+        new Date().toISOString(),
       );
     }
+
+    const sessionStartedAt = this.getActivityLogSessionStartedAt(groupId);
+
+    try {
+      await fetch("/activity-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          groupId,
+          level: entry.level,
+          label: entry.label,
+          message,
+          timestamp: new Date().toISOString(),
+          sessionStartedAt,
+        }),
+      });
+    } catch (error) {
+      console.warn("Failed to persist activity log entry to server:", error);
+    }
+  }
+
+  private async persistPages(db: ShadowClawDatabase): Promise<void> {
+    await setConfig(
+      db,
+      CONFIG_KEYS.PAGES_LIST,
+      JSON.stringify(this._pages.get()),
+    );
+  }
+
+  private async persistTaskSyncOutbox(db: ShadowClawDatabase): Promise<void> {
+    await setConfig(
+      db,
+      CONFIG_KEYS.TASK_SYNC_OUTBOX,
+      JSON.stringify(this._taskSyncOutbox),
+    );
+  }
+
+  private async queueTaskSyncOutboxOperation(
+    db: ShadowClawDatabase,
+    op: TaskSyncOutboxOperation,
+  ): Promise<void> {
+    this._taskSyncOutbox = this.compactTaskSyncOutbox([
+      ...this._taskSyncOutbox,
+      op,
+    ]);
+
+    await this.persistTaskSyncOutbox(db);
   }
 }
 

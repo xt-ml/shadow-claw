@@ -153,6 +153,10 @@ class DirHandleCache {
     this._maxSize = maxSize;
   }
 
+  clear(): void {
+    this._map.clear();
+  }
+
   get(key: string): FileSystemDirectoryHandle | undefined {
     const v = this._map.get(key);
     if (v !== undefined) {
@@ -161,17 +165,6 @@ class DirHandleCache {
     }
 
     return v;
-  }
-
-  set(key: string, handle: FileSystemDirectoryHandle): void {
-    if (this._map.size >= this._maxSize) {
-      const oldest = this._map.keys().next().value;
-      if (oldest !== undefined) {
-        this._map.delete(oldest);
-      }
-    }
-
-    this._map.set(key, handle);
   }
 
   invalidate(prefix: string): void {
@@ -184,8 +177,15 @@ class DirHandleCache {
     }
   }
 
-  clear(): void {
-    this._map.clear();
+  set(key: string, handle: FileSystemDirectoryHandle): void {
+    if (this._map.size >= this._maxSize) {
+      const oldest = this._map.keys().next().value;
+      if (oldest !== undefined) {
+        this._map.delete(oldest);
+      }
+    }
+
+    this._map.set(key, handle);
   }
 }
 

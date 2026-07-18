@@ -3,9 +3,9 @@ import { Page, expect } from "@playwright/test";
 import { NavComponent } from "../components/nav.component.js";
 
 export class AppPage {
+  nav;
   page: Page;
   root;
-  nav;
 
   constructor(page: Page) {
     this.page = page;
@@ -13,30 +13,36 @@ export class AppPage {
     this.nav = new NavComponent(this.root);
   }
 
-  async open() {
-    await this.page.addInitScript(() => {
-      (window as any).__SHADOWCLAW_E2E_ENABLE__ = true;
-    });
-    await this.page.goto("/");
-    await this.waitForReady();
+  activePage() {
+    return this.nav.activePage();
   }
 
-  async waitForReady() {
-    await this.page.waitForFunction(
-      () => {
-        const isDefined = !!customElements.get("shadow-claw");
-        const el = document.querySelector("shadow-claw") as any;
-        const bridge = (window as any).__SHADOWCLAW_E2E__;
+  chatComponent() {
+    return this.root.locator("shadow-claw-chat");
+  }
 
-        return (
-          isDefined && !!el && !!el.shadowRoot && !!bridge && bridge.isReady()
-        );
-      },
-      { timeout: 45000 },
-    );
+  filesComponent() {
+    return this.root.locator("shadow-claw-files");
+  }
 
-    await expect(this.root).toHaveCount(1);
-    await expect(this.nav.activePage()).toHaveCount(1);
+  navItem(pageId: string) {
+    return this.nav.navItem(pageId);
+  }
+
+  navItems() {
+    return this.nav.allNavItems();
+  }
+
+  tasksComponent() {
+    return this.root.locator("shadow-claw-tasks");
+  }
+
+  toastComponent() {
+    return this.root.locator("shadow-claw-toast");
+  }
+
+  async currentPageId() {
+    return this.nav.currentPageId();
   }
 
   async navigateTo(pageId: string) {
@@ -93,35 +99,29 @@ export class AppPage {
     await expect(this.activePage()).toHaveAttribute("data-page-id", pageId);
   }
 
-  async currentPageId() {
-    return this.nav.currentPageId();
+  async open() {
+    await this.page.addInitScript(() => {
+      (window as any).__SHADOWCLAW_E2E_ENABLE__ = true;
+    });
+    await this.page.goto("/");
+    await this.waitForReady();
   }
 
-  navItems() {
-    return this.nav.allNavItems();
-  }
+  async waitForReady() {
+    await this.page.waitForFunction(
+      () => {
+        const isDefined = !!customElements.get("shadow-claw");
+        const el = document.querySelector("shadow-claw") as any;
+        const bridge = (window as any).__SHADOWCLAW_E2E__;
 
-  activePage() {
-    return this.nav.activePage();
-  }
+        return (
+          isDefined && !!el && !!el.shadowRoot && !!bridge && bridge.isReady()
+        );
+      },
+      { timeout: 45000 },
+    );
 
-  navItem(pageId: string) {
-    return this.nav.navItem(pageId);
-  }
-
-  chatComponent() {
-    return this.root.locator("shadow-claw-chat");
-  }
-
-  filesComponent() {
-    return this.root.locator("shadow-claw-files");
-  }
-
-  tasksComponent() {
-    return this.root.locator("shadow-claw-tasks");
-  }
-
-  toastComponent() {
-    return this.root.locator("shadow-claw-toast");
+    await expect(this.root).toHaveCount(1);
+    await expect(this.nav.activePage()).toHaveCount(1);
   }
 }

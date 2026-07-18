@@ -18,11 +18,11 @@ import { DEFAULT_GROUP_ID } from "../../config/config.js";
 import { ulid } from "../../utils/ulid.js";
 
 export class BrowserChatChannel implements Channel {
-  type: Channel["type"];
-  messageCallback: ChannelMessageCallback | null;
-  typingCallback: ChannelTypingCallback | null;
-  displayCallback: ChannelDisplayCallback | null;
   activeGroupId: string;
+  displayCallback: ChannelDisplayCallback | null;
+  messageCallback: ChannelMessageCallback | null;
+  type: Channel["type"];
+  typingCallback: ChannelTypingCallback | null;
 
   constructor() {
     this.type = "browser";
@@ -31,6 +31,48 @@ export class BrowserChatChannel implements Channel {
     this.displayCallback = null;
 
     this.activeGroupId = DEFAULT_GROUP_ID;
+  }
+
+  /**
+   * Get the currently active group.
+   */
+  getActiveGroup(): string {
+    return this.activeGroupId;
+  }
+
+  /**
+   * Register callback for displaying messages in the UI.
+   */
+  onDisplay(callback: ChannelDisplayCallback) {
+    this.displayCallback = callback;
+  }
+
+  /**
+   * Register callback for inbound messages (from UI → orchestrator).
+   */
+  onMessage(callback: ChannelMessageCallback) {
+    this.messageCallback = callback;
+  }
+
+  /**
+   * Register callback for typing indicator changes.
+   */
+  onTyping(callback: ChannelTypingCallback) {
+    this.typingCallback = callback;
+  }
+
+  /**
+   * Set the currently active group (for UI tab switching).
+   */
+  setActiveGroup(groupId: string) {
+    this.activeGroupId = groupId;
+  }
+
+  /**
+   * Show/hide typing indicator in the UI.
+   */
+  setTyping(groupId: string, typing: boolean) {
+    this.typingCallback?.(groupId, typing);
   }
 
   start() {
@@ -74,47 +116,5 @@ export class BrowserChatChannel implements Channel {
     _attachments?: MessageAttachment[],
   ) {
     this.displayCallback?.(groupId, text, true);
-  }
-
-  /**
-   * Show/hide typing indicator in the UI.
-   */
-  setTyping(groupId: string, typing: boolean) {
-    this.typingCallback?.(groupId, typing);
-  }
-
-  /**
-   * Register callback for inbound messages (from UI → orchestrator).
-   */
-  onMessage(callback: ChannelMessageCallback) {
-    this.messageCallback = callback;
-  }
-
-  /**
-   * Register callback for typing indicator changes.
-   */
-  onTyping(callback: ChannelTypingCallback) {
-    this.typingCallback = callback;
-  }
-
-  /**
-   * Register callback for displaying messages in the UI.
-   */
-  onDisplay(callback: ChannelDisplayCallback) {
-    this.displayCallback = callback;
-  }
-
-  /**
-   * Set the currently active group (for UI tab switching).
-   */
-  setActiveGroup(groupId: string) {
-    this.activeGroupId = groupId;
-  }
-
-  /**
-   * Get the currently active group.
-   */
-  getActiveGroup(): string {
-    return this.activeGroupId;
   }
 }

@@ -23,8 +23,22 @@ export interface ModelMetadata {
  * OpenRouter API).
  */
 class ModelRegistry {
-  models: Map<string, ModelMetadata> = new Map();
   loading: boolean = false;
+  models: Map<string, ModelMetadata> = new Map();
+
+  /**
+   * Get metadata for a model ID. Lookup is case-insensitive.
+   */
+  getModelInfo(modelId: string): ModelMetadata | null {
+    return this.models.get(modelId.toLowerCase()) ?? null;
+  }
+
+  /**
+   * Manually register model info. Keys are normalized to lowercase.
+   */
+  registerModelInfo(modelId: string, info: ModelMetadata) {
+    this.models.set(modelId.toLowerCase(), info);
+  }
 
   /**
    * Fetch model info from a provider's modelsUrl and populate the registry.
@@ -167,13 +181,6 @@ class ModelRegistry {
     }
   }
 
-  /**
-   * Manually register model info. Keys are normalized to lowercase.
-   */
-  registerModelInfo(modelId: string, info: ModelMetadata) {
-    this.models.set(modelId.toLowerCase(), info);
-  }
-
   private extractModalities(
     model: any,
     direction: "input" | "output",
@@ -205,6 +212,29 @@ class ModelRegistry {
     return Array.from(new Set(merged));
   }
 
+  private modalitiesInclude(
+    modalities: string[],
+    ...needles: string[]
+  ): boolean | undefined {
+    if (modalities.length === 0) {
+      return undefined;
+    }
+
+    return needles.some((needle) =>
+      modalities.some((modality) => modality.includes(needle)),
+    );
+  }
+
+  private normalizeStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
+
+    return value
+      .filter((entry): entry is string => typeof entry === "string")
+      .map((entry) => entry.toLowerCase());
+  }
+
   private parseArchitectureModality(
     modality: string,
     direction: "input" | "output",
@@ -225,29 +255,6 @@ class ModelRegistry {
       .filter(Boolean);
   }
 
-  private normalizeStringArray(value: unknown): string[] {
-    if (!Array.isArray(value)) {
-      return [];
-    }
-
-    return value
-      .filter((entry): entry is string => typeof entry === "string")
-      .map((entry) => entry.toLowerCase());
-  }
-
-  private modalitiesInclude(
-    modalities: string[],
-    ...needles: string[]
-  ): boolean | undefined {
-    if (modalities.length === 0) {
-      return undefined;
-    }
-
-    return needles.some((needle) =>
-      modalities.some((modality) => modality.includes(needle)),
-    );
-  }
-
   private supportedParametersInclude(
     model: any,
     ...needles: string[]
@@ -259,13 +266,6 @@ class ModelRegistry {
     return needles.some((needle) =>
       parameters.some((parameter) => parameter.includes(needle)),
     );
-  }
-
-  /**
-   * Get metadata for a model ID. Lookup is case-insensitive.
-   */
-  getModelInfo(modelId: string): ModelMetadata | null {
-    return this.models.get(modelId.toLowerCase()) ?? null;
   }
 }
 

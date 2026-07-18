@@ -8,9 +8,11 @@ import { jest } from "@jest/globals";
 type EventHandler = (...args: any[]) => void;
 
 class MockDataConnection {
-  remotePeerId: string;
-  peer: string;
   open = true;
+  peer: string;
+  remotePeerId: string;
+
+  send = jest.fn();
   private handlers: Map<string, EventHandler[]> = new Map();
 
   constructor(remotePeerId: string) {
@@ -18,7 +20,13 @@ class MockDataConnection {
     this.peer = remotePeerId;
   }
 
-  send = jest.fn();
+  close() {
+    this.emit("close");
+  }
+
+  emit(event: string, ...args: any[]) {
+    (this.handlers.get(event) || []).forEach((h) => h(...args));
+  }
 
   on(event: string, handler: EventHandler) {
     const list = this.handlers.get(event) || [];
@@ -27,37 +35,17 @@ class MockDataConnection {
 
     return this;
   }
-
-  emit(event: string, ...args: any[]) {
-    (this.handlers.get(event) || []).forEach((h) => h(...args));
-  }
-
-  close() {
-    this.emit("close");
-  }
 }
 
 class MockPeer {
+  destroyed = false;
   id: string;
   private handlers: Map<string, EventHandler[]> = new Map();
-  destroyed = false;
 
   constructor(id: string, _opts?: unknown) {
     this.id = id;
     // Simulate async "open" event so start() gets our id
     setTimeout(() => this.emit("open", id), 0);
-  }
-
-  on(event: string, handler: EventHandler) {
-    const list = this.handlers.get(event) || [];
-    list.push(handler);
-    this.handlers.set(event, list);
-
-    return this;
-  }
-
-  emit(event: string, ...args: any[]) {
-    (this.handlers.get(event) || []).forEach((h) => h(...args));
   }
 
   connect(remotePeerId: string): MockDataConnection {
@@ -71,6 +59,18 @@ class MockPeer {
   destroy() {
     this.destroyed = true;
     this.emit("disconnected");
+  }
+
+  emit(event: string, ...args: any[]) {
+    (this.handlers.get(event) || []).forEach((h) => h(...args));
+  }
+
+  on(event: string, handler: EventHandler) {
+    const list = this.handlers.get(event) || [];
+    list.push(handler);
+    this.handlers.set(event, list);
+
+    return this;
   }
 }
 

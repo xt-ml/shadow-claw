@@ -18,20 +18,20 @@ describe("service-worker fetch proxy workspace routes", () => {
       }
     }
 
-    get(name: string): string | null {
-      return this.values[name.toLowerCase()] ?? null;
-    }
-
     forEach(callback: (value: string, key: string) => void) {
       for (const [key, value] of Object.entries(this.values)) {
         callback(value, key);
       }
     }
+
+    get(name: string): string | null {
+      return this.values[name.toLowerCase()] ?? null;
+    }
   }
 
   class TestResponse {
-    readonly status: number;
     readonly headers: TestHeaders;
+    readonly status: number;
     private readonly _bodySource: any;
 
     constructor(body?: any, init?: any) {

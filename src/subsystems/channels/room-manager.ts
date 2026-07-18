@@ -76,6 +76,29 @@ function notification(method: string, params: unknown): A2AJsonRpcNotification {
 }
 
 export class RoomManager {
+
+  // ---------------------------------------------------------------------------
+  // Inbound dispatch
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Returns true if the method is a room protocol method this manager handles.
+   */
+  static isRoomMethod(method: string): boolean {
+    return (
+      method === ROOM_METHOD.JOIN ||
+      method === ROOM_METHOD.ROSTER ||
+      method === ROOM_METHOD.LEAVE ||
+      method === ROOM_METHOD.MESSAGE ||
+      method === ROOM_METHOD.INVITE ||
+      method === ROOM_METHOD.RELAY ||
+      method === ROOM_METHOD.A2UI ||
+      method === ROOM_METHOD.A2UI_ACTION
+    );
+  }
+
+  /** Reactive snapshot of joined rooms for the UI. */
+  readonly roomsSignal = new Signal.State<RoomMeta[]>([]);
   private readonly _opts: RoomManagerOptions;
 
   /** Joined rooms keyed by bare room id. */
@@ -93,159 +116,8 @@ export class RoomManager {
    */
   private readonly _surfaceOwners = new Map<string, string>();
 
-  /** Reactive snapshot of joined rooms for the UI. */
-  readonly roomsSignal = new Signal.State<RoomMeta[]>([]);
-
   constructor(opts: RoomManagerOptions) {
     this._opts = opts;
-  }
-
-  private get _myPeerId(): string {
-    return this._opts.transport.myPeerId;
-  }
-
-  // ---------------------------------------------------------------------------
-  // State
-  // ---------------------------------------------------------------------------
-
-  /** Load persisted rooms at startup. */
-  loadRooms(rooms: RoomMeta[]): void {
-    this._rooms.clear();
-    for (const room of rooms) {
-      this._rooms.set(room.roomId, room);
-    }
-
-    this._publish();
-  }
-
-  /** All joined rooms. */
-  list(): RoomMeta[] {
-    return Array.from(this._rooms.values());
-  }
-
-  /** Get a joined room by id. */
-  get(roomId: string): RoomMeta | null {
-    return this._rooms.get(roomId) ?? null;
-  }
-
-  /** Whether the local peer is the host of the given room. */
-  isHost(roomId: string): boolean {
-    const room = this._rooms.get(roomId);
-
-    return !!room && room.hostPeerId === this._myPeerId;
-  }
-
-  private _publish(): void {
-    this.roomsSignal.set(this.list());
-  }
-
-  private _save(room: RoomMeta): void {
-    this._rooms.set(room.roomId, room);
-    this._opts.persistRoom?.(room);
-    this._publish();
-  }
-
-  // ---------------------------------------------------------------------------
-  // Lifecycle (host + member)
-  // ---------------------------------------------------------------------------
-
-  /** Create a new room hosted by the local peer. */
-  createRoom(name: string): RoomMeta {
-    const me = this._opts.getLocalMember();
-    const room: RoomMeta = {
-      roomId: ulid(),
-      name,
-      hostPeerId: me.peerId,
-      members: [me],
-      createdAt: Date.now(),
-    };
-
-    this._save(room);
-
-    return room;
-  }
-
-  /**
-   * Join an existing room hosted by {@link hostPeerId}. Establishes a local
-   * provisional roster (host + self) and sends a join request to the host; the
-   * authoritative roster arrives via a `room/roster` notification.
-   */
-  joinRoom(roomId: string, hostPeerId: string, name: string): RoomMeta {
-    const me = this._opts.getLocalMember();
-    const existing = this._rooms.get(roomId);
-    const room: RoomMeta = existing ?? {
-      roomId,
-      name,
-      hostPeerId,
-      members: [{ peerId: hostPeerId, alias: hostPeerId, kind: "agent" }, me],
-      createdAt: Date.now(),
-    };
-
-    this._save(room);
-
-    const transport = this._opts.transport;
-    transport.connectToPeer(hostPeerId);
-    const payload: RoomJoinPayload = { roomId, member: me };
-    transport.sendToPeer(hostPeerId, notification(ROOM_METHOD.JOIN, payload));
-
-    return room;
-  }
-
-  /**
-   * Leave (member) or disband (host) a room. The host notifies all members that
-   * the room is disbanded; a member notifies the host of its departure.
-   */
-  leaveRoom(roomId: string): void {
-    const room = this._rooms.get(roomId);
-    if (!room) {
-      return;
-    }
-
-    const me = this._myPeerId;
-    if (room.hostPeerId === me) {
-      const payload: RoomLeavePayload = {
-        roomId,
-        peerId: me,
-        disbanded: true,
-      };
-      this._deliverToMembers(room, notification(ROOM_METHOD.LEAVE, payload));
-    } else {
-      const payload: RoomLeavePayload = { roomId, peerId: me };
-      this._opts.transport.sendToPeer(
-        room.hostPeerId,
-        notification(ROOM_METHOD.LEAVE, payload),
-      );
-    }
-
-    this._rooms.delete(roomId);
-    this._seen.delete(roomId);
-    this._opts.removeRoom?.(roomId);
-    this._publish();
-  }
-
-  /** Invite a peer to a room (out-of-band, peer-to-peer). */
-  invite(roomId: string, targetPeerId: string): boolean {
-    const room = this._rooms.get(roomId);
-    if (!room) {
-      return false;
-    }
-
-    const me = this._opts.getLocalMember();
-    const payload: RoomInvitePayload = {
-      roomId,
-      roomName: room.name,
-      hostPeerId: room.hostPeerId,
-      fromPeerId: me.peerId,
-      fromAlias: me.alias,
-    };
-
-    const transport = this._opts.transport;
-    transport.connectToPeer(targetPeerId);
-
-    return transport.sendToPeer(
-      targetPeerId,
-      notification(ROOM_METHOD.INVITE, payload),
-    );
   }
 
   // ---------------------------------------------------------------------------
@@ -287,15 +159,6 @@ export class RoomManager {
     this._deliverToMembers(room, notification(ROOM_METHOD.MESSAGE, envelope));
 
     return messageId;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Shared A2UI surfaces (owner-authoritative)
-  // ---------------------------------------------------------------------------
-
-  /** The peer that owns the given shared surface, if known locally. */
-  getSurfaceOwner(surfaceId: string): string | undefined {
-    return this._surfaceOwners.get(surfaceId);
   }
 
   /**
@@ -362,23 +225,37 @@ export class RoomManager {
   }
 
   // ---------------------------------------------------------------------------
-  // Inbound dispatch
+  // Lifecycle (host + member)
   // ---------------------------------------------------------------------------
 
-  /**
-   * Returns true if the method is a room protocol method this manager handles.
-   */
-  static isRoomMethod(method: string): boolean {
-    return (
-      method === ROOM_METHOD.JOIN ||
-      method === ROOM_METHOD.ROSTER ||
-      method === ROOM_METHOD.LEAVE ||
-      method === ROOM_METHOD.MESSAGE ||
-      method === ROOM_METHOD.INVITE ||
-      method === ROOM_METHOD.RELAY ||
-      method === ROOM_METHOD.A2UI ||
-      method === ROOM_METHOD.A2UI_ACTION
-    );
+  /** Create a new room hosted by the local peer. */
+  createRoom(name: string): RoomMeta {
+    const me = this._opts.getLocalMember();
+    const room: RoomMeta = {
+      roomId: ulid(),
+      name,
+      hostPeerId: me.peerId,
+      members: [me],
+      createdAt: Date.now(),
+    };
+
+    this._save(room);
+
+    return room;
+  }
+
+  /** Get a joined room by id. */
+  get(roomId: string): RoomMeta | null {
+    return this._rooms.get(roomId) ?? null;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Shared A2UI surfaces (owner-authoritative)
+  // ---------------------------------------------------------------------------
+
+  /** The peer that owns the given shared surface, if known locally. */
+  getSurfaceOwner(surfaceId: string): string | undefined {
+    return this._surfaceOwners.get(surfaceId);
   }
 
   /** Dispatch an inbound room notification received from {@link fromPeerId}. */
@@ -423,234 +300,113 @@ export class RoomManager {
     }
   }
 
-  /** Host: a peer requested to join. Add to roster and broadcast it. */
-  private _onJoin(fromPeerId: string, payload: RoomJoinPayload): void {
-    if (!payload || typeof payload.roomId !== "string") {
+  /** Invite a peer to a room (out-of-band, peer-to-peer). */
+  invite(roomId: string, targetPeerId: string): boolean {
+    const room = this._rooms.get(roomId);
+    if (!room) {
+      return false;
+    }
+
+    const me = this._opts.getLocalMember();
+    const payload: RoomInvitePayload = {
+      roomId,
+      roomName: room.name,
+      hostPeerId: room.hostPeerId,
+      fromPeerId: me.peerId,
+      fromAlias: me.alias,
+    };
+
+    const transport = this._opts.transport;
+    transport.connectToPeer(targetPeerId);
+
+    return transport.sendToPeer(
+      targetPeerId,
+      notification(ROOM_METHOD.INVITE, payload),
+    );
+  }
+
+  /** Whether the local peer is the host of the given room. */
+  isHost(roomId: string): boolean {
+    const room = this._rooms.get(roomId);
+
+    return !!room && room.hostPeerId === this._myPeerId;
+  }
+
+  /**
+   * Join an existing room hosted by {@link hostPeerId}. Establishes a local
+   * provisional roster (host + self) and sends a join request to the host; the
+   * authoritative roster arrives via a `room/roster` notification.
+   */
+  joinRoom(roomId: string, hostPeerId: string, name: string): RoomMeta {
+    const me = this._opts.getLocalMember();
+    const existing = this._rooms.get(roomId);
+    const room: RoomMeta = existing ?? {
+      roomId,
+      name,
+      hostPeerId,
+      members: [{ peerId: hostPeerId, alias: hostPeerId, kind: "agent" }, me],
+      createdAt: Date.now(),
+    };
+
+    this._save(room);
+
+    const transport = this._opts.transport;
+    transport.connectToPeer(hostPeerId);
+    const payload: RoomJoinPayload = { roomId, member: me };
+    transport.sendToPeer(hostPeerId, notification(ROOM_METHOD.JOIN, payload));
+
+    return room;
+  }
+
+  /**
+   * Leave (member) or disband (host) a room. The host notifies all members that
+   * the room is disbanded; a member notifies the host of its departure.
+   */
+  leaveRoom(roomId: string): void {
+    const room = this._rooms.get(roomId);
+    if (!room) {
       return;
     }
 
-    const room = this._rooms.get(payload.roomId);
-    if (!room || room.hostPeerId !== this._myPeerId) {
-      return; // Only the host services join requests.
-    }
-
-    const member: RoomMember = payload.member ?? {
-      peerId: fromPeerId,
-      alias: fromPeerId,
-      kind: "human",
-    };
-    // Trust the connection's peer id over any self-reported value.
-    member.peerId = fromPeerId;
-
-    const index = room.members.findIndex((m) => m.peerId === fromPeerId);
-    if (index >= 0) {
-      room.members[index] = member;
+    const me = this._myPeerId;
+    if (room.hostPeerId === me) {
+      const payload: RoomLeavePayload = {
+        roomId,
+        peerId: me,
+        disbanded: true,
+      };
+      this._deliverToMembers(room, notification(ROOM_METHOD.LEAVE, payload));
     } else {
-      room.members.push(member);
-    }
-
-    this._save(room);
-    this._broadcastRoster(room);
-  }
-
-  /** Member: authoritative roster received from the host. */
-  private _onRoster(payload: RoomRosterPayload): void {
-    if (!payload || typeof payload.roomId !== "string") {
-      return;
-    }
-
-    const existing = this._rooms.get(payload.roomId);
-    const room: RoomMeta = {
-      roomId: payload.roomId,
-      name: payload.name ?? existing?.name ?? payload.roomId,
-      hostPeerId: payload.hostPeerId,
-      members: Array.isArray(payload.members) ? payload.members : [],
-      createdAt: existing?.createdAt ?? Date.now(),
-    };
-
-    this._save(room);
-  }
-
-  /** Leave/disband notification. */
-  private _onLeave(fromPeerId: string, payload: RoomLeavePayload): void {
-    if (!payload || typeof payload.roomId !== "string") {
-      return;
-    }
-
-    const room = this._rooms.get(payload.roomId);
-    if (!room) {
-      return;
-    }
-
-    if (payload.disbanded) {
-      // Host disbanded the room for everyone.
-      this._rooms.delete(payload.roomId);
-      this._seen.delete(payload.roomId);
-      this._opts.removeRoom?.(payload.roomId);
-      this._publish();
-
-      return;
-    }
-
-    // Host receives a member's departure: drop them and re-broadcast roster.
-    if (room.hostPeerId === this._myPeerId) {
-      room.members = room.members.filter(
-        (m) => m.peerId !== (payload.peerId || fromPeerId),
+      const payload: RoomLeavePayload = { roomId, peerId: me };
+      this._opts.transport.sendToPeer(
+        room.hostPeerId,
+        notification(ROOM_METHOD.LEAVE, payload),
       );
-      this._save(room);
-      this._broadcastRoster(room);
     }
+
+    this._rooms.delete(roomId);
+    this._seen.delete(roomId);
+    this._opts.removeRoom?.(roomId);
+    this._publish();
   }
 
-  /** Inbound chat message — de-duplicate then deliver to the orchestrator. */
-  private _onMessage(envelope: RoomMessageEnvelope): void {
-    if (
-      !envelope ||
-      typeof envelope.roomId !== "string" ||
-      typeof envelope.messageId !== "string"
-    ) {
-      return;
-    }
-
-    const room = this._rooms.get(envelope.roomId);
-    if (!room) {
-      return; // Not a member of this room.
-    }
-
-    if (this._hasSeen(envelope.roomId, envelope.messageId)) {
-      return;
-    }
-
-    this._markSeen(envelope.roomId, envelope.messageId);
-
-    const inbound: InboundMessage = {
-      id: envelope.messageId,
-      groupId: roomGroupId(envelope.roomId),
-      sender: envelope.senderAlias || envelope.senderPeerId,
-      content: envelope.text ?? "",
-      timestamp: Date.now(),
-      channel: "room",
-      attachments: envelope.attachments?.map((a) => ({
-        fileName: a.fileName,
-        mimeType: a.mimeType,
-        path: a.path,
-        size: a.size,
-      })),
-    };
-
-    this._opts.onMessage(inbound);
+  /** All joined rooms. */
+  list(): RoomMeta[] {
+    return Array.from(this._rooms.values());
   }
 
-  /** Host: forward a relayed notification to its intended target. */
-  private _onRelay(payload: RoomRelayPayload): void {
-    if (
-      !payload ||
-      typeof payload.targetPeerId !== "string" ||
-      !payload.inner
-    ) {
-      return;
+  // ---------------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------------
+
+  /** Load persisted rooms at startup. */
+  loadRooms(rooms: RoomMeta[]): void {
+    this._rooms.clear();
+    for (const room of rooms) {
+      this._rooms.set(room.roomId, room);
     }
 
-    // Only relay for rooms we host.
-    if (!this.isHost(payload.roomId)) {
-      return;
-    }
-
-    this._opts.transport.sendToPeer(payload.targetPeerId, payload.inner);
-  }
-
-  /**
-   * Inbound shared A2UI surface broadcast. De-duplicate, record the surface
-   * owner, then deliver the envelope to the local UI so the surface renders /
-   * updates in lockstep with the rest of the room.
-   */
-  private _onA2UI(payload: RoomA2UIEnvelope): void {
-    if (
-      !payload ||
-      typeof payload.roomId !== "string" ||
-      typeof payload.broadcastId !== "string" ||
-      !payload.envelope
-    ) {
-      return;
-    }
-
-    const room = this._rooms.get(payload.roomId);
-    if (!room) {
-      return; // Not a member of this room.
-    }
-
-    if (this._hasSeen(payload.roomId, payload.broadcastId)) {
-      return;
-    }
-
-    this._markSeen(payload.roomId, payload.broadcastId);
-
-    // Record ownership so any action we fire on this surface routes to its
-    // authoritative owner. Never let an inbound broadcast claim ownership of a
-    // surface we authored locally.
-    const surfaceId = payload.envelope.surfaceId;
-    if (this._surfaceOwners.get(surfaceId) !== this._myPeerId) {
-      this._surfaceOwners.set(surfaceId, payload.ownerPeerId);
-    }
-
-    const inbound: InboundMessage = {
-      id: payload.broadcastId,
-      groupId: roomGroupId(payload.roomId),
-      sender: payload.senderPeerId,
-      content: "",
-      timestamp: Date.now(),
-      channel: "room",
-      a2uiEnvelopes: [payload.envelope],
-    };
-
-    this._opts.onMessage(inbound);
-  }
-
-  /**
-   * Inbound shared A2UI action. De-duplicate, then — only when the local peer
-   * is the authoritative owner of the target surface — deliver a trigger
-   * message so the owner's agent processes the action and broadcasts the
-   * resulting data-model update. Non-owners ignore the action; their surface is
-   * synchronized by the owner's subsequent `room/a2ui` broadcast.
-   */
-  private _onA2UIAction(payload: RoomA2UIActionEnvelope): void {
-    if (
-      !payload ||
-      typeof payload.roomId !== "string" ||
-      typeof payload.broadcastId !== "string" ||
-      !payload.action
-    ) {
-      return;
-    }
-
-    const room = this._rooms.get(payload.roomId);
-    if (!room) {
-      return; // Not a member of this room.
-    }
-
-    if (this._hasSeen(payload.roomId, payload.broadcastId)) {
-      return;
-    }
-
-    this._markSeen(payload.roomId, payload.broadcastId);
-
-    // Owner-authoritative: only process actions for surfaces we locally own.
-    // Trust our own ownership map over any self-reported `ownerPeerId`.
-    if (this._surfaceOwners.get(payload.action.surfaceId) !== this._myPeerId) {
-      return;
-    }
-
-    const inbound: InboundMessage = {
-      id: payload.broadcastId,
-      groupId: roomGroupId(payload.roomId),
-      sender: payload.senderAlias || payload.senderPeerId,
-      content: formatA2UIActionPrompt(payload.action, payload.senderAlias),
-      timestamp: Date.now(),
-      channel: "room",
-      a2uiAction: payload.action,
-    };
-
-    this._opts.onMessage(inbound);
+    this._publish();
   }
 
   // ---------------------------------------------------------------------------
@@ -747,5 +503,249 @@ export class RoomManager {
         set.delete(oldest);
       }
     }
+  }
+
+  private get _myPeerId(): string {
+    return this._opts.transport.myPeerId;
+  }
+
+  /**
+   * Inbound shared A2UI surface broadcast. De-duplicate, record the surface
+   * owner, then deliver the envelope to the local UI so the surface renders /
+   * updates in lockstep with the rest of the room.
+   */
+  private _onA2UI(payload: RoomA2UIEnvelope): void {
+    if (
+      !payload ||
+      typeof payload.roomId !== "string" ||
+      typeof payload.broadcastId !== "string" ||
+      !payload.envelope
+    ) {
+      return;
+    }
+
+    const room = this._rooms.get(payload.roomId);
+    if (!room) {
+      return; // Not a member of this room.
+    }
+
+    if (this._hasSeen(payload.roomId, payload.broadcastId)) {
+      return;
+    }
+
+    this._markSeen(payload.roomId, payload.broadcastId);
+
+    // Record ownership so any action we fire on this surface routes to its
+    // authoritative owner. Never let an inbound broadcast claim ownership of a
+    // surface we authored locally.
+    const surfaceId = payload.envelope.surfaceId;
+    if (this._surfaceOwners.get(surfaceId) !== this._myPeerId) {
+      this._surfaceOwners.set(surfaceId, payload.ownerPeerId);
+    }
+
+    const inbound: InboundMessage = {
+      id: payload.broadcastId,
+      groupId: roomGroupId(payload.roomId),
+      sender: payload.senderPeerId,
+      content: "",
+      timestamp: Date.now(),
+      channel: "room",
+      a2uiEnvelopes: [payload.envelope],
+    };
+
+    this._opts.onMessage(inbound);
+  }
+
+  /**
+   * Inbound shared A2UI action. De-duplicate, then — only when the local peer
+   * is the authoritative owner of the target surface — deliver a trigger
+   * message so the owner's agent processes the action and broadcasts the
+   * resulting data-model update. Non-owners ignore the action; their surface is
+   * synchronized by the owner's subsequent `room/a2ui` broadcast.
+   */
+  private _onA2UIAction(payload: RoomA2UIActionEnvelope): void {
+    if (
+      !payload ||
+      typeof payload.roomId !== "string" ||
+      typeof payload.broadcastId !== "string" ||
+      !payload.action
+    ) {
+      return;
+    }
+
+    const room = this._rooms.get(payload.roomId);
+    if (!room) {
+      return; // Not a member of this room.
+    }
+
+    if (this._hasSeen(payload.roomId, payload.broadcastId)) {
+      return;
+    }
+
+    this._markSeen(payload.roomId, payload.broadcastId);
+
+    // Owner-authoritative: only process actions for surfaces we locally own.
+    // Trust our own ownership map over any self-reported `ownerPeerId`.
+    if (this._surfaceOwners.get(payload.action.surfaceId) !== this._myPeerId) {
+      return;
+    }
+
+    const inbound: InboundMessage = {
+      id: payload.broadcastId,
+      groupId: roomGroupId(payload.roomId),
+      sender: payload.senderAlias || payload.senderPeerId,
+      content: formatA2UIActionPrompt(payload.action, payload.senderAlias),
+      timestamp: Date.now(),
+      channel: "room",
+      a2uiAction: payload.action,
+    };
+
+    this._opts.onMessage(inbound);
+  }
+
+  /** Host: a peer requested to join. Add to roster and broadcast it. */
+  private _onJoin(fromPeerId: string, payload: RoomJoinPayload): void {
+    if (!payload || typeof payload.roomId !== "string") {
+      return;
+    }
+
+    const room = this._rooms.get(payload.roomId);
+    if (!room || room.hostPeerId !== this._myPeerId) {
+      return; // Only the host services join requests.
+    }
+
+    const member: RoomMember = payload.member ?? {
+      peerId: fromPeerId,
+      alias: fromPeerId,
+      kind: "human",
+    };
+    // Trust the connection's peer id over any self-reported value.
+    member.peerId = fromPeerId;
+
+    const index = room.members.findIndex((m) => m.peerId === fromPeerId);
+    if (index >= 0) {
+      room.members[index] = member;
+    } else {
+      room.members.push(member);
+    }
+
+    this._save(room);
+    this._broadcastRoster(room);
+  }
+
+  /** Leave/disband notification. */
+  private _onLeave(fromPeerId: string, payload: RoomLeavePayload): void {
+    if (!payload || typeof payload.roomId !== "string") {
+      return;
+    }
+
+    const room = this._rooms.get(payload.roomId);
+    if (!room) {
+      return;
+    }
+
+    if (payload.disbanded) {
+      // Host disbanded the room for everyone.
+      this._rooms.delete(payload.roomId);
+      this._seen.delete(payload.roomId);
+      this._opts.removeRoom?.(payload.roomId);
+      this._publish();
+
+      return;
+    }
+
+    // Host receives a member's departure: drop them and re-broadcast roster.
+    if (room.hostPeerId === this._myPeerId) {
+      room.members = room.members.filter(
+        (m) => m.peerId !== (payload.peerId || fromPeerId),
+      );
+      this._save(room);
+      this._broadcastRoster(room);
+    }
+  }
+
+  /** Inbound chat message — de-duplicate then deliver to the orchestrator. */
+  private _onMessage(envelope: RoomMessageEnvelope): void {
+    if (
+      !envelope ||
+      typeof envelope.roomId !== "string" ||
+      typeof envelope.messageId !== "string"
+    ) {
+      return;
+    }
+
+    const room = this._rooms.get(envelope.roomId);
+    if (!room) {
+      return; // Not a member of this room.
+    }
+
+    if (this._hasSeen(envelope.roomId, envelope.messageId)) {
+      return;
+    }
+
+    this._markSeen(envelope.roomId, envelope.messageId);
+
+    const inbound: InboundMessage = {
+      id: envelope.messageId,
+      groupId: roomGroupId(envelope.roomId),
+      sender: envelope.senderAlias || envelope.senderPeerId,
+      content: envelope.text ?? "",
+      timestamp: Date.now(),
+      channel: "room",
+      attachments: envelope.attachments?.map((a) => ({
+        fileName: a.fileName,
+        mimeType: a.mimeType,
+        path: a.path,
+        size: a.size,
+      })),
+    };
+
+    this._opts.onMessage(inbound);
+  }
+
+  /** Host: forward a relayed notification to its intended target. */
+  private _onRelay(payload: RoomRelayPayload): void {
+    if (
+      !payload ||
+      typeof payload.targetPeerId !== "string" ||
+      !payload.inner
+    ) {
+      return;
+    }
+
+    // Only relay for rooms we host.
+    if (!this.isHost(payload.roomId)) {
+      return;
+    }
+
+    this._opts.transport.sendToPeer(payload.targetPeerId, payload.inner);
+  }
+
+  /** Member: authoritative roster received from the host. */
+  private _onRoster(payload: RoomRosterPayload): void {
+    if (!payload || typeof payload.roomId !== "string") {
+      return;
+    }
+
+    const existing = this._rooms.get(payload.roomId);
+    const room: RoomMeta = {
+      roomId: payload.roomId,
+      name: payload.name ?? existing?.name ?? payload.roomId,
+      hostPeerId: payload.hostPeerId,
+      members: Array.isArray(payload.members) ? payload.members : [],
+      createdAt: existing?.createdAt ?? Date.now(),
+    };
+
+    this._save(room);
+  }
+
+  private _publish(): void {
+    this.roomsSignal.set(this.list());
+  }
+
+  private _save(room: RoomMeta): void {
+    this._rooms.set(room.roomId, room);
+    this._opts.persistRoom?.(room);
+    this._publish();
   }
 }

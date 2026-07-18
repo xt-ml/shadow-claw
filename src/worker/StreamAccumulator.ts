@@ -36,43 +36,28 @@ export interface ContentBlockAccumulator {
 }
 
 export class StreamAccumulator {
-  public format: StreamFormat;
   public callbacks: StreamCallbacks;
   public contentBlocks: ContentBlockAccumulator[] = [];
+  public format: StreamFormat;
   public stopReason: string = "end_turn";
   public usage: { input_tokens: number; output_tokens: number } = {
     input_tokens: 0,
     output_tokens: 0,
   };
 
+  // -- Anthropic accumulators --
+  private _anthropicBlocks = new Map<number, ContentBlockAccumulator>();
+  private _openaiText: string = "";
+
   // -- OpenAI accumulators --
   private _openaiToolCalls = new Map<
     number,
     { id: string; name: string; args: string }
   >();
-  private _openaiText: string = "";
-
-  // -- Anthropic accumulators --
-  private _anthropicBlocks = new Map<number, ContentBlockAccumulator>();
 
   constructor(format: StreamFormat, callbacks: StreamCallbacks = {}) {
     this.format = format;
     this.callbacks = callbacks;
-  }
-
-  private _sanitize(text: string): string {
-    return sanitizeModelOutput(text, this.callbacks.source ?? this.format);
-  }
-
-  /**
-   * Feed a single parsed SSE chunk into the accumulator.
-   */
-  push(chunk: any): void {
-    if (this.format === "openai" || this.format === "mesh-llm") {
-      this._pushOpenAI(chunk);
-    } else {
-      this._pushAnthropic(chunk);
-    }
   }
 
   /**
@@ -90,82 +75,54 @@ export class StreamAccumulator {
     return this._finalizeAnthropic();
   }
 
-  // ── OpenAI streaming ─────────────────────────────────────────────
-
-  private _pushOpenAI(chunk: any): void {
-    // Handle usage in the final chunk (OpenAI includes it when stream_options.include_usage is set,
-    // or in the last chunk for some providers)
-    if (chunk.usage) {
-      this.usage.input_tokens = chunk.usage.prompt_tokens || 0;
-      this.usage.output_tokens = chunk.usage.completion_tokens || 0;
-      this.callbacks.onUsage?.(this.usage);
+  /**
+   * Feed a single parsed SSE chunk into the accumulator.
+   */
+  push(chunk: any): void {
+    if (this.format === "openai" || this.format === "mesh-llm") {
+      this._pushOpenAI(chunk);
+    } else {
+      this._pushAnthropic(chunk);
     }
+  }
 
-    const choice = chunk.choices?.[0];
-    if (!choice) {
-      return;
-    }
+  private _finalizeAnthropic(): {
+    content: any[];
+    stop_reason: string;
+    usage: { input_tokens: number; output_tokens: number };
+  } {
+    const content: any[] = [];
 
-    const delta = choice.delta;
-    if (!delta) {
-      return;
-    }
+    for (const [, block] of [...this._anthropicBlocks.entries()].sort(
+      (a, b) => a[0] - b[0],
+    )) {
+      if (block.type === "text") {
+        const cleaned = this._sanitize(block.text || "");
+        if (cleaned) {
+          content.push({ type: "text", text: cleaned });
+        }
+      } else if (block.type === "tool_use") {
+        let input;
+        try {
+          input = block.partialJson ? JSON.parse(block.partialJson) : {};
+        } catch {
+          input = {};
+        }
 
-    // Accumulate text content
-    if (typeof delta.content === "string") {
-      const cleaned = this._sanitize(delta.content);
-      if (cleaned) {
-        this._openaiText += cleaned;
-        this.callbacks.onText?.(cleaned);
+        content.push({
+          type: "tool_use",
+          id: block.id || `call_${Date.now()}_${Math.random()}`,
+          name: block.name,
+          input,
+        });
       }
     }
 
-    // Accumulate tool calls
-    if (Array.isArray(delta.tool_calls)) {
-      for (const tc of delta.tool_calls) {
-        const idx = tc.index ?? 0;
-
-        if (!this._openaiToolCalls.has(idx)) {
-          this._openaiToolCalls.set(idx, {
-            id: tc.id || "",
-            name: tc.function?.name || "",
-            args: "",
-          });
-
-          if (tc.function?.name) {
-            this.callbacks.onToolStart?.(tc.function.name);
-          }
-        }
-
-        const existing = this._openaiToolCalls.get(idx);
-        if (!existing) {
-          continue;
-        }
-
-        if (tc.id) {
-          existing.id = tc.id;
-        }
-
-        if (tc.function?.name) {
-          existing.name = tc.function.name;
-        }
-
-        if (tc.function?.arguments) {
-          existing.args += tc.function.arguments;
-        }
-      }
-    }
-
-    // Capture finish reason
-    if (choice.finish_reason) {
-      if (choice.finish_reason === "tool_calls") {
-        this.stopReason = "tool_use";
-      } else if (choice.finish_reason === "stop") {
-        this.stopReason = "end_turn";
-      } else {
-        this.stopReason = choice.finish_reason;
-      }
-    }
+    return {
+      content,
+      stop_reason: this.stopReason,
+      usage: { ...this.usage },
+    };
   }
 
   private _finalizeOpenAI(): {
@@ -311,42 +268,85 @@ export class StreamAccumulator {
     }
   }
 
-  private _finalizeAnthropic(): {
-    content: any[];
-    stop_reason: string;
-    usage: { input_tokens: number; output_tokens: number };
-  } {
-    const content: any[] = [];
+  // ── OpenAI streaming ─────────────────────────────────────────────
 
-    for (const [, block] of [...this._anthropicBlocks.entries()].sort(
-      (a, b) => a[0] - b[0],
-    )) {
-      if (block.type === "text") {
-        const cleaned = this._sanitize(block.text || "");
-        if (cleaned) {
-          content.push({ type: "text", text: cleaned });
-        }
-      } else if (block.type === "tool_use") {
-        let input;
-        try {
-          input = block.partialJson ? JSON.parse(block.partialJson) : {};
-        } catch {
-          input = {};
-        }
+  private _pushOpenAI(chunk: any): void {
+    // Handle usage in the final chunk (OpenAI includes it when stream_options.include_usage is set,
+    // or in the last chunk for some providers)
+    if (chunk.usage) {
+      this.usage.input_tokens = chunk.usage.prompt_tokens || 0;
+      this.usage.output_tokens = chunk.usage.completion_tokens || 0;
+      this.callbacks.onUsage?.(this.usage);
+    }
 
-        content.push({
-          type: "tool_use",
-          id: block.id || `call_${Date.now()}_${Math.random()}`,
-          name: block.name,
-          input,
-        });
+    const choice = chunk.choices?.[0];
+    if (!choice) {
+      return;
+    }
+
+    const delta = choice.delta;
+    if (!delta) {
+      return;
+    }
+
+    // Accumulate text content
+    if (typeof delta.content === "string") {
+      const cleaned = this._sanitize(delta.content);
+      if (cleaned) {
+        this._openaiText += cleaned;
+        this.callbacks.onText?.(cleaned);
       }
     }
 
-    return {
-      content,
-      stop_reason: this.stopReason,
-      usage: { ...this.usage },
-    };
+    // Accumulate tool calls
+    if (Array.isArray(delta.tool_calls)) {
+      for (const tc of delta.tool_calls) {
+        const idx = tc.index ?? 0;
+
+        if (!this._openaiToolCalls.has(idx)) {
+          this._openaiToolCalls.set(idx, {
+            id: tc.id || "",
+            name: tc.function?.name || "",
+            args: "",
+          });
+
+          if (tc.function?.name) {
+            this.callbacks.onToolStart?.(tc.function.name);
+          }
+        }
+
+        const existing = this._openaiToolCalls.get(idx);
+        if (!existing) {
+          continue;
+        }
+
+        if (tc.id) {
+          existing.id = tc.id;
+        }
+
+        if (tc.function?.name) {
+          existing.name = tc.function.name;
+        }
+
+        if (tc.function?.arguments) {
+          existing.args += tc.function.arguments;
+        }
+      }
+    }
+
+    // Capture finish reason
+    if (choice.finish_reason) {
+      if (choice.finish_reason === "tool_calls") {
+        this.stopReason = "tool_use";
+      } else if (choice.finish_reason === "stop") {
+        this.stopReason = "end_turn";
+      } else {
+        this.stopReason = choice.finish_reason;
+      }
+    }
+  }
+
+  private _sanitize(text: string): string {
+    return sanitizeModelOutput(text, this.callbacks.source ?? this.format);
   }
 }

@@ -11,10 +11,10 @@ export interface ClipboardItem {
  * UI-only state for the Files page.
  */
 export class FilesUiStore {
+  private _clipboard: Signal.State<ClipboardItem | null>;
   private _isDragActive: Signal.State<boolean>;
   private _uploadCompleted: Signal.State<number>;
   private _uploadTotal: Signal.State<number>;
-  private _clipboard: Signal.State<ClipboardItem | null>;
 
   constructor() {
     this._isDragActive = new Signal.State(false);
@@ -23,33 +23,16 @@ export class FilesUiStore {
     this._clipboard = new Signal.State<ClipboardItem | null>(null);
   }
 
-  get isDragActive(): boolean {
-    return this._isDragActive.get();
-  }
-
-  get uploadCompleted(): number {
-    return this._uploadCompleted.get();
-  }
-
-  get uploadTotal(): number {
-    return this._uploadTotal.get();
+  clearClipboard(): void {
+    this._clipboard.set(null);
   }
 
   get clipboard(): ClipboardItem | null {
     return this._clipboard.get();
   }
 
-  setDragActive(active: boolean): void {
-    this._isDragActive.set(active);
-  }
-
-  startUpload(total: number): void {
-    this._uploadTotal.set(total);
-    this._uploadCompleted.set(0);
-  }
-
-  setUploadCompleted(completed: number): void {
-    this._uploadCompleted.set(completed);
+  get isDragActive(): boolean {
+    return this._isDragActive.get();
   }
 
   resetUpload(): void {
@@ -66,8 +49,25 @@ export class FilesUiStore {
     this._clipboard.set({ sourcePath, type, isDirectory, sourceGroupId });
   }
 
-  clearClipboard(): void {
-    this._clipboard.set(null);
+  setDragActive(active: boolean): void {
+    this._isDragActive.set(active);
+  }
+
+  setUploadCompleted(completed: number): void {
+    this._uploadCompleted.set(completed);
+  }
+
+  startUpload(total: number): void {
+    this._uploadTotal.set(total);
+    this._uploadCompleted.set(0);
+  }
+
+  get uploadCompleted(): number {
+    return this._uploadCompleted.get();
+  }
+
+  get uploadTotal(): number {
+    return this._uploadTotal.get();
   }
 }
 

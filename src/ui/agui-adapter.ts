@@ -49,8 +49,8 @@ interface RunState {
 
 export class AGUIAdapter {
   private _events: EventBus;
-  private _runs = new Map<string, RunState>();
   private _handlers: Array<{ event: string; handler: Function }> = [];
+  private _runs = new Map<string, RunState>();
 
   constructor(events: EventBus) {
     this._events = events;
@@ -75,6 +75,116 @@ export class AGUIAdapter {
     this._handlers = [];
     this._runs.clear();
   }
+
+  private _emit(groupId: string, event: AGUIEvent): void {
+    window.dispatchEvent(
+      new CustomEvent("shadow-claw-agui-event", {
+        detail: { groupId, event },
+      }),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Internal
+  // ---------------------------------------------------------------------------
+
+  private _listen(event: string, handler: Function): void {
+    this._events.on(event, handler);
+    this._handlers.push({ event, handler });
+  }
+
+  private _onStreamingChunk = ({
+    groupId,
+    text,
+  }: {
+    groupId: string;
+    text: string;
+  }): void => {
+    const run = this._runs.get(groupId);
+    if (!run || !run.messageId) {
+      return;
+    }
+
+    this._emit(groupId, {
+      type: "TEXT_MESSAGE_CONTENT",
+      messageId: run.messageId,
+      delta: text,
+      timestamp: Date.now(),
+    } satisfies AGUITextMessageContent);
+  };
+
+  private _onStreamingDone = ({ groupId }: { groupId: string }): void => {
+    // streaming-done means the entire response cycle is finished
+    const run = this._runs.get(groupId);
+    if (!run) {
+      return;
+    }
+
+    // Close any open message (non-streaming responses skip streaming-end)
+    if (run.messageId) {
+      this._emit(groupId, {
+        type: "TEXT_MESSAGE_END",
+        messageId: run.messageId,
+        timestamp: Date.now(),
+      } satisfies AGUITextMessageEnd);
+    }
+
+    // RUN_FINISHED
+    this._emit(groupId, {
+      type: "RUN_FINISHED",
+      threadId: run.threadId,
+      runId: run.runId,
+      timestamp: Date.now(),
+    } satisfies AGUIRunFinished);
+
+    this._runs.delete(groupId);
+  };
+
+  private _onStreamingEnd = ({ groupId }: { groupId: string }): void => {
+    // streaming-end means text is done but tool calls are about to run
+    const run = this._runs.get(groupId);
+    if (!run || !run.messageId) {
+      return;
+    }
+
+    this._emit(groupId, {
+      type: "TEXT_MESSAGE_END",
+      messageId: run.messageId,
+      timestamp: Date.now(),
+    } satisfies AGUITextMessageEnd);
+
+    run.messageId = null;
+  };
+
+  private _onStreamingError = ({
+    groupId,
+    error,
+  }: {
+    groupId: string;
+    error?: string;
+  }): void => {
+    const run = this._runs.get(groupId);
+    if (!run) {
+      return;
+    }
+
+    // Close open message if any
+    if (run.messageId) {
+      this._emit(groupId, {
+        type: "TEXT_MESSAGE_END",
+        messageId: run.messageId,
+        timestamp: Date.now(),
+      } satisfies AGUITextMessageEnd);
+    }
+
+    this._emit(groupId, {
+      type: "RUN_ERROR",
+      message: error || "Unknown streaming error",
+      timestamp: Date.now(),
+    });
+
+    this._runs.delete(groupId);
+  };
 
   // ---------------------------------------------------------------------------
   // Event Handlers
@@ -107,99 +217,6 @@ export class AGUIAdapter {
       role: "assistant",
       timestamp: Date.now(),
     } satisfies AGUITextMessageStart);
-  };
-
-  private _onStreamingChunk = ({
-    groupId,
-    text,
-  }: {
-    groupId: string;
-    text: string;
-  }): void => {
-    const run = this._runs.get(groupId);
-    if (!run || !run.messageId) {
-      return;
-    }
-
-    this._emit(groupId, {
-      type: "TEXT_MESSAGE_CONTENT",
-      messageId: run.messageId,
-      delta: text,
-      timestamp: Date.now(),
-    } satisfies AGUITextMessageContent);
-  };
-
-  private _onStreamingEnd = ({ groupId }: { groupId: string }): void => {
-    // streaming-end means text is done but tool calls are about to run
-    const run = this._runs.get(groupId);
-    if (!run || !run.messageId) {
-      return;
-    }
-
-    this._emit(groupId, {
-      type: "TEXT_MESSAGE_END",
-      messageId: run.messageId,
-      timestamp: Date.now(),
-    } satisfies AGUITextMessageEnd);
-
-    run.messageId = null;
-  };
-
-  private _onStreamingDone = ({ groupId }: { groupId: string }): void => {
-    // streaming-done means the entire response cycle is finished
-    const run = this._runs.get(groupId);
-    if (!run) {
-      return;
-    }
-
-    // Close any open message (non-streaming responses skip streaming-end)
-    if (run.messageId) {
-      this._emit(groupId, {
-        type: "TEXT_MESSAGE_END",
-        messageId: run.messageId,
-        timestamp: Date.now(),
-      } satisfies AGUITextMessageEnd);
-    }
-
-    // RUN_FINISHED
-    this._emit(groupId, {
-      type: "RUN_FINISHED",
-      threadId: run.threadId,
-      runId: run.runId,
-      timestamp: Date.now(),
-    } satisfies AGUIRunFinished);
-
-    this._runs.delete(groupId);
-  };
-
-  private _onStreamingError = ({
-    groupId,
-    error,
-  }: {
-    groupId: string;
-    error?: string;
-  }): void => {
-    const run = this._runs.get(groupId);
-    if (!run) {
-      return;
-    }
-
-    // Close open message if any
-    if (run.messageId) {
-      this._emit(groupId, {
-        type: "TEXT_MESSAGE_END",
-        messageId: run.messageId,
-        timestamp: Date.now(),
-      } satisfies AGUITextMessageEnd);
-    }
-
-    this._emit(groupId, {
-      type: "RUN_ERROR",
-      message: error || "Unknown streaming error",
-      timestamp: Date.now(),
-    });
-
-    this._runs.delete(groupId);
   };
 
   private _onToolActivity = ({
@@ -243,21 +260,4 @@ export class AGUIAdapter {
       }
     }
   };
-
-  // ---------------------------------------------------------------------------
-  // Internal
-  // ---------------------------------------------------------------------------
-
-  private _listen(event: string, handler: Function): void {
-    this._events.on(event, handler);
-    this._handlers.push({ event, handler });
-  }
-
-  private _emit(groupId: string, event: AGUIEvent): void {
-    window.dispatchEvent(
-      new CustomEvent("shadow-claw-agui-event", {
-        detail: { groupId, event },
-      }),
-    );
-  }
 }

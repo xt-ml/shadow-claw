@@ -70,31 +70,12 @@ const initialResolved = resolveTheme(stored);
 applyTheme(initialResolved);
 
 export class ThemeStore {
-  private _theme: Signal.State<ThemeChoice>;
   private _resolved: Signal.State<ResolvedTheme>;
+  private _theme: Signal.State<ThemeChoice>;
 
   constructor() {
     this._theme = new Signal.State(stored);
     this._resolved = new Signal.State(initialResolved);
-  }
-
-  get theme(): ThemeChoice {
-    return this._theme.get();
-  }
-
-  get resolved(): ResolvedTheme {
-    return this._resolved.get();
-  }
-
-  /**
-   * Set the theme
-   */
-  setTheme(theme: ThemeChoice): void {
-    const resolved = resolveTheme(theme);
-    localStorage.setItem(THEME_KEY, theme);
-    applyTheme(resolved);
-    this._theme.set(theme);
-    this._resolved.set(resolved);
   }
 
   /**
@@ -126,6 +107,25 @@ export class ThemeStore {
         this.setTheme(e.newValue as ThemeChoice);
       }
     });
+  }
+
+  get resolved(): ResolvedTheme {
+    return this._resolved.get();
+  }
+
+  /**
+   * Set the theme
+   */
+  setTheme(theme: ThemeChoice): void {
+    const resolved = resolveTheme(theme);
+    localStorage.setItem(THEME_KEY, theme);
+    applyTheme(resolved);
+    this._theme.set(theme);
+    this._resolved.set(resolved);
+  }
+
+  get theme(): ThemeChoice {
+    return this._theme.get();
   }
 }
 

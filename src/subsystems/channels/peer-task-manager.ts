@@ -124,146 +124,16 @@ const VALID_TRANSITIONS = new Map<TaskState, Set<TaskState>>([
  * 4. Stores task history (recent messages per task)
  * 5. Handles CancelTask requests gracefully
  */
-export class PeerTaskManager {
-  private _tasks = new Map<string, A2ATask>();
-  private _taskOrder: string[] = []; // LRU order (oldest first)
+export class PeerTaskManager { // LRU order (oldest first)
   private _config: Required<TaskManagerConfig>;
-  private _listeners: Set<TaskEventListener> = new Set();
   /** Maps contextId → active (non-terminal) taskId */
   private _contextActiveTask = new Map<string, string>();
+  private _listeners: Set<TaskEventListener> = new Set();
+  private _taskOrder: string[] = [];
+  private _tasks = new Map<string, A2ATask>();
 
   constructor(config?: TaskManagerConfig) {
     this._config = { ...DEFAULT_CONFIG, ...config };
-  }
-
-  // ---------------------------------------------------------------------------
-  // Event Subscription
-  // ---------------------------------------------------------------------------
-
-  /** Subscribe to task events */
-  on(listener: TaskEventListener): void {
-    this._listeners.add(listener);
-  }
-
-  /** Unsubscribe from task events */
-  off(listener: TaskEventListener): void {
-    this._listeners.delete(listener);
-  }
-
-  private _emit(event: TaskEvent): void {
-    for (const listener of this._listeners) {
-      try {
-        listener(event);
-      } catch (err) {
-        console.error("PeerTaskManager: listener error", err);
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Task Lifecycle
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Handle an incoming SendMessage request. Creates or continues a task.
-   * Returns the task in its current state (for the JSON-RPC response).
-   */
-  handleSendMessage(request: SendMessageRequest): SendMessageResponse {
-    const message = request.message;
-    const contextId = message.contextId ?? ulid();
-    const taskId = message.taskId ?? this._contextActiveTask.get(contextId);
-
-    if (taskId && this._tasks.has(taskId)) {
-      // Continue existing task
-
-      return this._continueTask(taskId, message);
-    }
-
-    // Create new task
-
-    return this._createTask(contextId, message);
-  }
-
-  /**
-   * Get a task by ID. Returns undefined if not found.
-   */
-  getTask(taskId: string): A2ATask | undefined {
-    return this._tasks.get(taskId);
-  }
-
-  /**
-   * Cancel a task. Returns true if cancellation was accepted.
-   */
-  cancelTask(taskId: string): boolean {
-    const task = this._tasks.get(taskId);
-    if (!task) {
-      return false;
-    }
-
-    if (TERMINAL_STATES.has(task.status.state)) {
-      return false; // Already terminal, cannot cancel
-    }
-
-    this._transitionState(task, TaskState.CANCELED, {
-      messageId: ulid(),
-      role: Role.AGENT,
-      parts: [{ text: "Task canceled by peer request." }],
-    });
-
-    return true;
-  }
-
-  /**
-   * Transition a task to WORKING state. Called when the local agent
-   * starts processing the task.
-   */
-  markWorking(taskId: string): void {
-    const task = this._tasks.get(taskId);
-    if (!task) {
-      return;
-    }
-
-    this._transitionState(task, TaskState.WORKING);
-  }
-
-  /**
-   * Transition a task to COMPLETED state with an optional final message.
-   */
-  markCompleted(taskId: string, message?: A2AMessage): void {
-    const task = this._tasks.get(taskId);
-    if (!task) {
-      return;
-    }
-
-    this._transitionState(task, TaskState.COMPLETED, message);
-  }
-
-  /**
-   * Transition a task to FAILED state with an error message.
-   */
-  markFailed(taskId: string, errorMessage: string): void {
-    const task = this._tasks.get(taskId);
-    if (!task) {
-      return;
-    }
-
-    this._transitionState(task, TaskState.FAILED, {
-      messageId: ulid(),
-      role: Role.AGENT,
-      parts: [{ text: errorMessage }],
-    });
-  }
-
-  /**
-   * Transition a task to INPUT_REQUIRED state.
-   */
-  markInputRequired(taskId: string, message?: A2AMessage): void {
-    const task = this._tasks.get(taskId);
-    if (!task) {
-      return;
-    }
-
-    this._transitionState(task, TaskState.INPUT_REQUIRED, message);
   }
 
   /**
@@ -308,23 +178,48 @@ export class PeerTaskManager {
     });
   }
 
-  // ---------------------------------------------------------------------------
-  // AG-UI Event Emission Helpers
-  // ---------------------------------------------------------------------------
+  /**
+   * Cancel a task. Returns true if cancellation was accepted.
+   */
+  cancelTask(taskId: string): boolean {
+    const task = this._tasks.get(taskId);
+    if (!task) {
+      return false;
+    }
+
+    if (TERMINAL_STATES.has(task.status.state)) {
+      return false; // Already terminal, cannot cancel
+    }
+
+    this._transitionState(task, TaskState.CANCELED, {
+      messageId: ulid(),
+      role: Role.AGENT,
+      parts: [{ text: "Task canceled by peer request." }],
+    });
+
+    return true;
+  }
+
+  /** Clear all tasks and state */
+  clear(): void {
+    this._tasks.clear();
+    this._taskOrder = [];
+    this._contextActiveTask.clear();
+  }
 
   /**
-   * Emit a RUN_STARTED AG-UI event for a task.
+   * Emit a RUN_ERROR AG-UI event for a task.
    */
-  emitRunStarted(taskId: string): void {
+  emitRunError(taskId: string, message: string, code?: string): void {
     const task = this._tasks.get(taskId);
     if (!task) {
       return;
     }
 
-    const event: AGUIRunStarted = {
-      type: "RUN_STARTED",
-      threadId: task.contextId ?? task.id,
-      runId: task.id,
+    const event: AGUIRunError = {
+      type: "RUN_ERROR",
+      message,
+      code,
       timestamp: Date.now(),
     };
 
@@ -350,19 +245,23 @@ export class PeerTaskManager {
     this._emitAGUI(task, event);
   }
 
+  // ---------------------------------------------------------------------------
+  // AG-UI Event Emission Helpers
+  // ---------------------------------------------------------------------------
+
   /**
-   * Emit a RUN_ERROR AG-UI event for a task.
+   * Emit a RUN_STARTED AG-UI event for a task.
    */
-  emitRunError(taskId: string, message: string, code?: string): void {
+  emitRunStarted(taskId: string): void {
     const task = this._tasks.get(taskId);
     if (!task) {
       return;
     }
 
-    const event: AGUIRunError = {
-      type: "RUN_ERROR",
-      message,
-      code,
+    const event: AGUIRunStarted = {
+      type: "RUN_STARTED",
+      threadId: task.contextId ?? task.id,
+      runId: task.id,
       timestamp: Date.now(),
     };
 
@@ -370,22 +269,17 @@ export class PeerTaskManager {
   }
 
   /**
-   * Emit TEXT_MESSAGE_START AG-UI event.
+   * Emit STATE_SNAPSHOT AG-UI event (shared ground truth).
    */
-  emitTextMessageStart(
-    taskId: string,
-    messageId: string,
-    role: "assistant" | "user" = "assistant",
-  ): void {
+  emitStateSnapshot(taskId: string, snapshot: Record<string, unknown>): void {
     const task = this._tasks.get(taskId);
     if (!task) {
       return;
     }
 
-    const event: AGUITextMessageStart = {
-      type: "TEXT_MESSAGE_START",
-      messageId,
-      role,
+    const event: AGUIStateSnapshot = {
+      type: "STATE_SNAPSHOT",
+      snapshot,
       timestamp: Date.now(),
     };
 
@@ -434,24 +328,22 @@ export class PeerTaskManager {
   }
 
   /**
-   * Emit TOOL_CALL_START AG-UI event.
+   * Emit TEXT_MESSAGE_START AG-UI event.
    */
-  emitToolCallStart(
+  emitTextMessageStart(
     taskId: string,
-    toolCallId: string,
-    toolCallName: string,
-    parentMessageId?: string,
+    messageId: string,
+    role: "assistant" | "user" = "assistant",
   ): void {
     const task = this._tasks.get(taskId);
     if (!task) {
       return;
     }
 
-    const event: AGUIToolCallStart = {
-      type: "TOOL_CALL_START",
-      toolCallId,
-      toolCallName,
-      parentMessageId,
+    const event: AGUITextMessageStart = {
+      type: "TEXT_MESSAGE_START",
+      messageId,
+      role,
       timestamp: Date.now(),
     };
 
@@ -477,37 +369,28 @@ export class PeerTaskManager {
   }
 
   /**
-   * Emit STATE_SNAPSHOT AG-UI event (shared ground truth).
+   * Emit TOOL_CALL_START AG-UI event.
    */
-  emitStateSnapshot(taskId: string, snapshot: Record<string, unknown>): void {
+  emitToolCallStart(
+    taskId: string,
+    toolCallId: string,
+    toolCallName: string,
+    parentMessageId?: string,
+  ): void {
     const task = this._tasks.get(taskId);
     if (!task) {
       return;
     }
 
-    const event: AGUIStateSnapshot = {
-      type: "STATE_SNAPSHOT",
-      snapshot,
+    const event: AGUIToolCallStart = {
+      type: "TOOL_CALL_START",
+      toolCallId,
+      toolCallName,
+      parentMessageId,
       timestamp: Date.now(),
     };
 
     this._emitAGUI(task, event);
-  }
-
-  // ---------------------------------------------------------------------------
-  // Query
-  // ---------------------------------------------------------------------------
-
-  /** Get all tasks (for debugging/introspection) */
-  getAllTasks(): A2ATask[] {
-    return Array.from(this._tasks.values());
-  }
-
-  /** Get active (non-terminal) tasks */
-  getActiveTasks(): A2ATask[] {
-    return Array.from(this._tasks.values()).filter(
-      (t) => !TERMINAL_STATES.has(t.status.state),
-    );
   }
 
   /** Get the active task for a context, if any */
@@ -520,11 +403,170 @@ export class PeerTaskManager {
     return this._tasks.get(taskId);
   }
 
-  /** Clear all tasks and state */
-  clear(): void {
-    this._tasks.clear();
-    this._taskOrder = [];
-    this._contextActiveTask.clear();
+  /** Get active (non-terminal) tasks */
+  getActiveTasks(): A2ATask[] {
+    return Array.from(this._tasks.values()).filter(
+      (t) => !TERMINAL_STATES.has(t.status.state),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Query
+  // ---------------------------------------------------------------------------
+
+  /** Get all tasks (for debugging/introspection) */
+  getAllTasks(): A2ATask[] {
+    return Array.from(this._tasks.values());
+  }
+
+  /**
+   * Get a task by ID. Returns undefined if not found.
+   */
+  getTask(taskId: string): A2ATask | undefined {
+    return this._tasks.get(taskId);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Task Lifecycle
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Handle an incoming SendMessage request. Creates or continues a task.
+   * Returns the task in its current state (for the JSON-RPC response).
+   */
+  handleSendMessage(request: SendMessageRequest): SendMessageResponse {
+    const message = request.message;
+    const contextId = message.contextId ?? ulid();
+    const taskId = message.taskId ?? this._contextActiveTask.get(contextId);
+
+    if (taskId && this._tasks.has(taskId)) {
+      // Continue existing task
+
+      return this._continueTask(taskId, message);
+    }
+
+    // Create new task
+
+    return this._createTask(contextId, message);
+  }
+
+  /**
+   * Transition a task to COMPLETED state with an optional final message.
+   */
+  markCompleted(taskId: string, message?: A2AMessage): void {
+    const task = this._tasks.get(taskId);
+    if (!task) {
+      return;
+    }
+
+    this._transitionState(task, TaskState.COMPLETED, message);
+  }
+
+  /**
+   * Transition a task to FAILED state with an error message.
+   */
+  markFailed(taskId: string, errorMessage: string): void {
+    const task = this._tasks.get(taskId);
+    if (!task) {
+      return;
+    }
+
+    this._transitionState(task, TaskState.FAILED, {
+      messageId: ulid(),
+      role: Role.AGENT,
+      parts: [{ text: errorMessage }],
+    });
+  }
+
+  /**
+   * Transition a task to INPUT_REQUIRED state.
+   */
+  markInputRequired(taskId: string, message?: A2AMessage): void {
+    const task = this._tasks.get(taskId);
+    if (!task) {
+      return;
+    }
+
+    this._transitionState(task, TaskState.INPUT_REQUIRED, message);
+  }
+
+  /**
+   * Transition a task to WORKING state. Called when the local agent
+   * starts processing the task.
+   */
+  markWorking(taskId: string): void {
+    const task = this._tasks.get(taskId);
+    if (!task) {
+      return;
+    }
+
+    this._transitionState(task, TaskState.WORKING);
+  }
+
+  /** Unsubscribe from task events */
+  off(listener: TaskEventListener): void {
+    this._listeners.delete(listener);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Event Subscription
+  // ---------------------------------------------------------------------------
+
+  /** Subscribe to task events */
+  on(listener: TaskEventListener): void {
+    this._listeners.add(listener);
+  }
+
+  private _addTask(task: A2ATask): void {
+    this._tasks.set(task.id, task);
+    this._taskOrder.push(task.id);
+
+    // Evict oldest tasks if over limit
+    while (this._taskOrder.length > this._config.maxTasks) {
+      const oldestId = this._taskOrder.shift()!;
+      const oldest = this._tasks.get(oldestId);
+      // Only evict terminal tasks; keep active ones
+      if (oldest && TERMINAL_STATES.has(oldest.status.state)) {
+        this._tasks.delete(oldestId);
+        if (oldest.contextId) {
+          this._contextActiveTask.delete(oldest.contextId);
+        }
+      } else {
+        // Put it back at the front — we'll try the next one
+        this._taskOrder.unshift(oldestId);
+
+        break;
+      }
+    }
+  }
+
+  private _continueTask(
+    taskId: string,
+    message: A2AMessage,
+  ): SendMessageResponse {
+    const task = this._tasks.get(taskId)!;
+
+    // If the task was in an interrupted state, transition back to WORKING
+    if (INTERRUPTED_STATES.has(task.status.state)) {
+      this._transitionState(task, TaskState.WORKING);
+    }
+
+    // Add to history
+    if (!task.history) {
+      task.history = [];
+    }
+
+    task.history.push(message);
+
+    // Trim history if needed
+    if (task.history.length > this._config.maxHistoryPerTask) {
+      task.history = task.history.slice(-this._config.maxHistoryPerTask);
+    }
+
+    // Touch LRU
+    this._touchTask(taskId);
+
+    return { task };
   }
 
   // ---------------------------------------------------------------------------
@@ -556,33 +598,46 @@ export class PeerTaskManager {
     return { task };
   }
 
-  private _continueTask(
-    taskId: string,
-    message: A2AMessage,
-  ): SendMessageResponse {
-    const task = this._tasks.get(taskId)!;
-
-    // If the task was in an interrupted state, transition back to WORKING
-    if (INTERRUPTED_STATES.has(task.status.state)) {
-      this._transitionState(task, TaskState.WORKING);
+  private _emit(event: TaskEvent): void {
+    for (const listener of this._listeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error("PeerTaskManager: listener error", err);
+      }
     }
+  }
 
-    // Add to history
-    if (!task.history) {
-      task.history = [];
+  private _emitAGUI(task: A2ATask, event: AGUIEvent): void {
+    this._emit({
+      type: "aguiEvent",
+      taskId: task.id,
+      contextId: task.contextId ?? "",
+      payload: event,
+    });
+  }
+
+  private _emitStatusUpdate(task: A2ATask): void {
+    const event: TaskStatusUpdateEvent = {
+      taskId: task.id,
+      contextId: task.contextId ?? "",
+      status: task.status,
+    };
+
+    this._emit({
+      type: "statusUpdate",
+      taskId: task.id,
+      contextId: task.contextId ?? "",
+      payload: event,
+    });
+  }
+
+  private _touchTask(taskId: string): void {
+    const idx = this._taskOrder.indexOf(taskId);
+    if (idx !== -1) {
+      this._taskOrder.splice(idx, 1);
+      this._taskOrder.push(taskId);
     }
-
-    task.history.push(message);
-
-    // Trim history if needed
-    if (task.history.length > this._config.maxHistoryPerTask) {
-      task.history = task.history.slice(-this._config.maxHistoryPerTask);
-    }
-
-    // Touch LRU
-    this._touchTask(taskId);
-
-    return { task };
   }
 
   private _transitionState(
@@ -625,60 +680,5 @@ export class PeerTaskManager {
     }
 
     this._emitStatusUpdate(task);
-  }
-
-  private _emitStatusUpdate(task: A2ATask): void {
-    const event: TaskStatusUpdateEvent = {
-      taskId: task.id,
-      contextId: task.contextId ?? "",
-      status: task.status,
-    };
-
-    this._emit({
-      type: "statusUpdate",
-      taskId: task.id,
-      contextId: task.contextId ?? "",
-      payload: event,
-    });
-  }
-
-  private _emitAGUI(task: A2ATask, event: AGUIEvent): void {
-    this._emit({
-      type: "aguiEvent",
-      taskId: task.id,
-      contextId: task.contextId ?? "",
-      payload: event,
-    });
-  }
-
-  private _addTask(task: A2ATask): void {
-    this._tasks.set(task.id, task);
-    this._taskOrder.push(task.id);
-
-    // Evict oldest tasks if over limit
-    while (this._taskOrder.length > this._config.maxTasks) {
-      const oldestId = this._taskOrder.shift()!;
-      const oldest = this._tasks.get(oldestId);
-      // Only evict terminal tasks; keep active ones
-      if (oldest && TERMINAL_STATES.has(oldest.status.state)) {
-        this._tasks.delete(oldestId);
-        if (oldest.contextId) {
-          this._contextActiveTask.delete(oldest.contextId);
-        }
-      } else {
-        // Put it back at the front — we'll try the next one
-        this._taskOrder.unshift(oldestId);
-
-        break;
-      }
-    }
-  }
-
-  private _touchTask(taskId: string): void {
-    const idx = this._taskOrder.indexOf(taskId);
-    if (idx !== -1) {
-      this._taskOrder.splice(idx, 1);
-      this._taskOrder.push(taskId);
-    }
   }
 }

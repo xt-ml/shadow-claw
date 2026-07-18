@@ -401,7 +401,6 @@ describe("shadow-claw", () => {
 
     document.body.appendChild(component);
 
-
     const sunIcon = component.shadowRoot?.querySelector(".sun-icon");
     const moonIcon = component.shadowRoot?.querySelector(".moon-icon");
 
@@ -570,7 +569,6 @@ describe("shadow-claw", () => {
     component.orchestrator = orchestrator;
 
     document.body.appendChild(component);
-
 
     await new Promise((resolve) => setTimeout(resolve, 50));
     await new Promise((resolve) => setTimeout(resolve, 50));

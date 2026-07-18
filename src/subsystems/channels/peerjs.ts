@@ -86,37 +86,46 @@ export interface PeerJsServerConfig {
  *   When empty, accepts connections from any peer.
  */
 export class PeerJsChannel implements Channel {
-  type: Channel["type"] = "peerjs";
-
-  myPeerId: string = "";
-  trustedPeerIds: Set<string> = new Set();
-  serverConfig: PeerJsServerConfig = {};
-
-  running = false;
-  messageCallback: ChannelMessageCallback | null = null;
-  typingCallback: ChannelTypingCallback | null = null;
-
-  /** Active data connections keyed by remote peer ID */
-  connections: Map<string, DataConnection> = new Map();
+  private static readonly _RECONNECT_BASE_MS = 1000;
+  private static readonly _RECONNECT_MAX_MS = 60_000;
 
   /** Signal of connected remote peer IDs */
   connectedPeersSignal = new Signal.State<string[]>([]);
 
-  /** Maps inbound original canonical filenames to their locally renamed final filenames */
-  private _inboundRemap = new Map<string, string>();
+  /** Active data connections keyed by remote peer ID */
+  connections: Map<string, DataConnection> = new Map();
+  messageCallback: ChannelMessageCallback | null = null;
 
-  /** Delegate to the module-level singleton for reactivity across components */
-  readonly transferProgressSignal = transferProgressSignal;
-
-  private peer: InstanceType<typeof Peer> | null = null;
+  myPeerId: string = "";
 
   // A2A Protocol state
   /** Remote agent cards keyed by peer ID */
   readonly peerCards = new PeerCardStore();
+
+  running = false;
+  serverConfig: PeerJsServerConfig = {};
+
+  /** Delegate to the module-level singleton for reactivity across components */
+  readonly transferProgressSignal = transferProgressSignal;
+  trustedPeerIds: Set<string> = new Set();
+  type: Channel["type"] = "peerjs";
+  typingCallback: ChannelTypingCallback | null = null;
+
+  /** Maps inbound original canonical filenames to their locally renamed final filenames */
+  private _inboundRemap = new Map<string, string>();
   /** Local agent card (constructed on start) */
   private _localCard: AgentCard | null = null;
-  /** Per-connection task managers keyed by remote peer ID */
-  private _taskManagers = new Map<string, PeerTaskManager>();
+
+  /** Callback invoked when a remote peer signals task completion */
+  private _onTaskCompleteCallback: ((groupId: string) => void) | null = null;
+
+  private peer: InstanceType<typeof Peer> | null = null;
+
+  private _pendingInboundFile: {
+    name: string;
+    mimeType: string;
+    size: number;
+  } | null = null;
   /** Pending JSON-RPC response callbacks keyed by request ID */
   private _pendingRequests = new Map<
     string,
@@ -129,16 +138,13 @@ export class PeerJsChannel implements Channel {
   // Reconnection backoff state
   private _reconnectAttempts = 0;
   private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private static readonly _RECONNECT_BASE_MS = 1000;
-  private static readonly _RECONNECT_MAX_MS = 60_000;
-
-  /** Callback invoked when a remote peer signals task completion */
-  private _onTaskCompleteCallback: ((groupId: string) => void) | null = null;
 
   /** Handler for inbound multi-party room notifications (`room/*`). */
   private _roomNotificationHandler:
     | ((fromPeerId: string, method: string, params: unknown) => void)
     | null = null;
+  /** Per-connection task managers keyed by remote peer ID */
+  private _taskManagers = new Map<string, PeerTaskManager>();
 
   constructor() {
     if (typeof globalThis.addEventListener === "function") {
@@ -163,53 +169,30 @@ export class PeerJsChannel implements Channel {
   }
 
   /**
-   * Track outbound send progress by polling RTCDataChannel.bufferedAmount.
-   * Resolves when all queued data has been flushed to the network.
+   * Mark the active task for a peer groupId as COMPLETED.
+   * Sends a terminal `tasks/statusUpdate` notification to the remote peer,
+   * signaling that no further responses are expected.
+   *
+   * @returns true if a task was completed, false if no active task exists.
    */
-  private _trackSendProgress(
-    conn: DataConnection,
-    totalBytes: number,
-  ): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const rawDc = (conn as any)._dc as RTCDataChannel | undefined;
-      if (!rawDc || totalBytes === 0) {
-        this.transferProgressSignal.set(null);
-        resolve();
+  completeActiveTask(groupId: string): boolean {
+    const remotePeerId = groupId.replace(/^peer:/, "");
+    const tm = this._taskManagers.get(remotePeerId);
+    if (!tm) {
+      return false;
+    }
 
-        return;
-      }
+    const activeTasks = tm.getActiveTasks();
+    if (activeTasks.length === 0) {
+      return false;
+    }
 
-      this.transferProgressSignal.set({
-        count: 0,
-        total: totalBytes,
-        direction: "send",
-      });
+    // Complete the most recent active task
+    const task = activeTasks[activeTasks.length - 1];
+    tm.markWorking(task.id);
+    tm.markCompleted(task.id);
 
-      const poll = setInterval(() => {
-        const buffered = rawDc.bufferedAmount;
-        const sent = Math.max(0, totalBytes - buffered);
-        this.transferProgressSignal.set({
-          count: sent,
-          total: totalBytes,
-          direction: "send",
-        });
-
-        if (buffered === 0) {
-          clearInterval(poll);
-          this.transferProgressSignal.set({
-            count: totalBytes,
-            total: totalBytes,
-            direction: "send",
-          });
-          setTimeout(() => this.transferProgressSignal.set(null), 1500);
-          resolve();
-        }
-      }, 80);
-    });
-  }
-
-  private _updateConnectedPeersSignal(): void {
-    this.connectedPeersSignal.set(Array.from(this.connections.keys()));
+    return true;
   }
 
   // ---------------------------------------------------------------------------
@@ -228,8 +211,127 @@ export class PeerJsChannel implements Channel {
     this.serverConfig = serverConfig;
   }
 
+  /** Best-effort: ensure an outbound connection to the peer is opened. */
+  connectPeer(peerId: string): void {
+    this._getOrOpenConnection(peerId);
+  }
+
+  /**
+   * Get the task manager for a peer (creates one if needed).
+   */
+  getTaskManager(remotePeerId: string): PeerTaskManager {
+    let tm = this._taskManagers.get(remotePeerId);
+    if (!tm) {
+      tm = new PeerTaskManager();
+      this._taskManagers.set(remotePeerId, tm);
+      tm.on((event) => {
+        this._forwardTaskEvent(remotePeerId, event);
+      });
+    }
+
+    return tm;
+  }
+
   isConfigured(): boolean {
     return this.myPeerId.length > 0;
+  }
+
+  /** Whether a direct, open DataConnection to the peer currently exists. */
+  isPeerConnected(peerId: string): boolean {
+    const conn = this.connections.get(peerId);
+
+    return !!conn && !!(conn as any).open;
+  }
+
+  onMessage(callback: ChannelMessageCallback): void {
+    this.messageCallback = callback;
+  }
+
+  /**
+   * Register a callback invoked when a remote peer sends a terminal
+   * task status update (COMPLETED, FAILED, CANCELED). This allows the
+   * orchestrator to suppress further auto-triggers for that conversation.
+   */
+  onTaskComplete(callback: (groupId: string) => void): void {
+    this._onTaskCompleteCallback = callback;
+  }
+
+  onTyping(callback: ChannelTypingCallback): void {
+    this.typingCallback = callback;
+  }
+
+  /**
+   * Send a JSON-RPC notification object to a single peer. If the connection is
+   * still opening, the send is deferred until it opens. Returns true when the
+   * send was dispatched or queued, false when no connection could be created.
+   */
+  sendRoomNotification(peerId: string, notification: unknown): boolean {
+    const conn = this._getOrOpenConnection(peerId);
+    if (!conn) {
+      return false;
+    }
+
+    if ((conn as any).open) {
+      try {
+        conn.send(notification);
+
+        return true;
+      } catch (err) {
+        console.error(
+          `PeerJsChannel: failed to send room notification to ${peerId}:`,
+          err,
+        );
+
+        return false;
+      }
+    }
+
+    // Connection still opening — flush once it is ready.
+    this._waitForOpen(conn)
+      .then(() => {
+        try {
+          conn.send(notification);
+        } catch (err) {
+          console.error(
+            `PeerJsChannel: failed to flush room notification to ${peerId}:`,
+            err,
+          );
+        }
+      })
+      .catch(() => {
+        // Connection failed to open; nothing more to do.
+      });
+
+    return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Multi-party room transport
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Register the handler for inbound `room/*` JSON-RPC notifications. The
+   * {@link RoomManager} uses this to receive join/roster/leave/message/invite/
+   * relay traffic carried over the existing DataChannel.
+   */
+  setRoomNotificationHandler(
+    handler: (fromPeerId: string, method: string, params: unknown) => void,
+  ): void {
+    this._roomNotificationHandler = handler;
+  }
+
+  setTyping(groupId: string, typing: boolean): void {
+    const remotePeerId = groupId.replace(/^peer:/, "");
+    const conn = this.connections.get(remotePeerId);
+    if (!conn) {
+      return;
+    }
+
+    try {
+      conn.send({ type: "typing", typing });
+    } catch {
+      // silently ignore typing send errors
+    }
   }
 
   start(): void {
@@ -420,20 +522,6 @@ export class PeerJsChannel implements Channel {
     }
   }
 
-  setTyping(groupId: string, typing: boolean): void {
-    const remotePeerId = groupId.replace(/^peer:/, "");
-    const conn = this.connections.get(remotePeerId);
-    if (!conn) {
-      return;
-    }
-
-    try {
-      conn.send({ type: "typing", typing });
-    } catch {
-      // silently ignore typing send errors
-    }
-  }
-
   /**
    * Send an A2UI surface envelope to a peer as a `kind: "a2ui"` A2A part.
    */
@@ -508,379 +596,211 @@ export class PeerJsChannel implements Channel {
     }
   }
 
-  onMessage(callback: ChannelMessageCallback): void {
-    this.messageCallback = callback;
-  }
-
-  onTyping(callback: ChannelTypingCallback): void {
-    this.typingCallback = callback;
-  }
-
-  /**
-   * Register a callback invoked when a remote peer sends a terminal
-   * task status update (COMPLETED, FAILED, CANCELED). This allows the
-   * orchestrator to suppress further auto-triggers for that conversation.
-   */
-  onTaskComplete(callback: (groupId: string) => void): void {
-    this._onTaskCompleteCallback = callback;
-  }
-
   // ---------------------------------------------------------------------------
-  // Multi-party room transport
+  // A2A Protocol Handlers
   // ---------------------------------------------------------------------------
 
   /**
-   * Register the handler for inbound `room/*` JSON-RPC notifications. The
-   * {@link RoomManager} uses this to receive join/roster/leave/message/invite/
-   * relay traffic carried over the existing DataChannel.
+   * Exchange agent cards on connection open.
+   * Sends our card request and stores the remote peer's card.
    */
-  setRoomNotificationHandler(
-    handler: (fromPeerId: string, method: string, params: unknown) => void,
+  private _exchangeAgentCards(
+    remotePeerId: string,
+    conn: DataConnection,
   ): void {
-    this._roomNotificationHandler = handler;
-  }
-
-  /** Whether a direct, open DataConnection to the peer currently exists. */
-  isPeerConnected(peerId: string): boolean {
-    const conn = this.connections.get(peerId);
-
-    return !!conn && !!(conn as any).open;
-  }
-
-  /** Best-effort: ensure an outbound connection to the peer is opened. */
-  connectPeer(peerId: string): void {
-    this._getOrOpenConnection(peerId);
-  }
-
-  /**
-   * Send a JSON-RPC notification object to a single peer. If the connection is
-   * still opening, the send is deferred until it opens. Returns true when the
-   * send was dispatched or queued, false when no connection could be created.
-   */
-  sendRoomNotification(peerId: string, notification: unknown): boolean {
-    const conn = this._getOrOpenConnection(peerId);
-    if (!conn) {
-      return false;
-    }
-
-    if ((conn as any).open) {
-      try {
-        conn.send(notification);
-
-        return true;
-      } catch (err) {
-        console.error(
-          `PeerJsChannel: failed to send room notification to ${peerId}:`,
-          err,
-        );
-
-        return false;
-      }
-    }
-
-    // Connection still opening — flush once it is ready.
-    this._waitForOpen(conn)
-      .then(() => {
-        try {
-          conn.send(notification);
-        } catch (err) {
-          console.error(
-            `PeerJsChannel: failed to flush room notification to ${peerId}:`,
-            err,
-          );
-        }
-      })
-      .catch(() => {
-        // Connection failed to open; nothing more to do.
-      });
-
-    return true;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Private helpers
-  // ---------------------------------------------------------------------------
-
-  private _initPeer(): void {
-    const opts: Record<string, unknown> = {};
-
-    // Only override defaults when explicitly configured
-    const host = this.serverConfig.host ?? PEERJS_DEFAULT_HOST;
-    const port = this.serverConfig.port ?? PEERJS_DEFAULT_PORT;
-    const path = this.serverConfig.path ?? PEERJS_DEFAULT_PATH;
-    const secure = this.serverConfig.secure ?? PEERJS_DEFAULT_SECURE;
-
-    opts.host = host;
-    opts.port = port;
-    opts.path = path;
-    opts.secure = secure;
-    opts.debug = 3; // Verbose PeerJS logging for connection diagnostics
-
-    // ICE servers for WebRTC connectivity (STUN for NAT traversal)
-    const iceServers: RTCIceServer[] = this.serverConfig.iceServers ?? [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-    ];
-    opts.config = { iceServers };
-
-    this.peer = new Peer(this.myPeerId, opts);
-
-    this.peer.on("open", (id) => {
-      console.log(
-        `PeerJsChannel: connected to signaling server, peer ID: ${id}`,
-      );
-      // Reset backoff on successful connection
-      this._reconnectAttempts = 0;
-    });
-
-    this.peer.on("connection", (conn: DataConnection) => {
-      this._handleIncomingConnection(conn);
-    });
-
-    this.peer.on("error", (err: PeerError<string>) => {
-      console.error(`PeerJsChannel: peer error [${err.type}]:`, err.message);
-
-      if (err.type === "peer-unavailable" || err.type === "unavailable-id") {
-        window.dispatchEvent(
-          new CustomEvent("shadow-claw-peer-error", {
-            detail: {
-              error: err.message,
-            },
-          }),
-        );
-      }
-
-      // Recoverable errors — don't stop the channel
-      if (
-        err.type === "peer-unavailable" ||
-        err.type === "network" ||
-        err.type === "disconnected"
-      ) {
-        return;
-      }
-
-      // Non-recoverable
-      if (err.type === "unavailable-id") {
-        console.warn(
-          "PeerJsChannel: peer ID is already in use. Stop the channel and reconfigure.",
-        );
-      }
-    });
-
-    this.peer.on("disconnected", () => {
-      if (this.running) {
-        this._scheduleReconnect();
-      }
-    });
-
-    this.peer.on("close", () => {
-      console.log("PeerJsChannel: peer closed");
-    });
-  }
-
-  /**
-   * Schedule a reconnection attempt with exponential backoff.
-   * Delay doubles each attempt: 1s, 2s, 4s, 8s, ... up to 60s max.
-   */
-  private _scheduleReconnect(): void {
-    if (this._reconnectTimer !== null) {
-      return; // Already scheduled
-    }
-
-    const delay = Math.min(
-      PeerJsChannel._RECONNECT_BASE_MS * Math.pow(2, this._reconnectAttempts),
-      PeerJsChannel._RECONNECT_MAX_MS,
-    );
-
-    this._reconnectAttempts++;
-
-    console.log(
-      `PeerJsChannel: disconnected from signaling server, reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this._reconnectAttempts})`,
-    );
-
-    this._reconnectTimer = setTimeout(() => {
-      this._reconnectTimer = null;
-      if (!this.running) {
-        return;
-      }
-
-      try {
-        (this.peer as any)?.reconnect?.();
-      } catch {
-        // If reconnect throws, schedule another attempt
-        this._scheduleReconnect();
-      }
-    }, delay);
-  }
-
-  private _handleIncomingConnection(conn: DataConnection): void {
-    const remotePeerId = conn.peer;
-
-    // Reject untrusted peers when a trusted list is configured
-    if (
-      this.trustedPeerIds.size > 0 &&
-      !this.trustedPeerIds.has(remotePeerId)
-    ) {
-      console.warn(
-        `PeerJsChannel: rejecting connection from untrusted peer: ${remotePeerId}`,
-      );
-      try {
-        conn.close();
-      } catch {
-        // ignore
-      }
-
+    if (!this._localCard) {
       return;
     }
 
-    // Register the connection
-    this.connections.set(remotePeerId, conn);
-    this._updateConnectedPeersSignal();
+    const request = createGetAgentCardRequest();
+    conn.send(request);
 
-    conn.on("open", () => {
-      console.log(`PeerJsChannel: connection opened with ${remotePeerId}`);
-      this._exchangeAgentCards(remotePeerId, conn);
+    // Register pending request for the response
+    this._registerPendingRequest(request.id, (response) => {
+      const card = parseAgentCardResponse(response);
+      if (card) {
+        this.peerCards.set(remotePeerId, card);
+        console.log(
+          `PeerJsChannel: received AgentCard from ${remotePeerId}: "${card.name}"`,
+        );
+      }
     });
+  }
 
-    conn.on("data", (data: unknown) => {
-      this._handleInboundData(remotePeerId, data);
-    });
+  /**
+   * Forward task manager events over the DataChannel as notifications.
+   */
+  private _forwardTaskEvent(
+    remotePeerId: string,
+    event: {
+      type: string;
+      taskId: string;
+      contextId: string;
+      payload: unknown;
+    },
+  ): void {
+    const conn = this.connections.get(remotePeerId);
+    if (!conn) {
+      return;
+    }
 
-    conn.on("close", () => {
-      console.log(`PeerJsChannel: connection closed with ${remotePeerId}`);
-      this.connections.delete(remotePeerId);
-      this.peerCards.delete(remotePeerId);
-      this._taskManagers.delete(remotePeerId);
-      this._updateConnectedPeersSignal();
-    });
+    let method: string;
+    switch (event.type) {
+      case "statusUpdate":
+        method = A2A_STREAM_METHOD.STATUS_UPDATE;
 
-    conn.on("error", (err: Error) => {
+        break;
+      case "artifactUpdate":
+        method = A2A_STREAM_METHOD.ARTIFACT_UPDATE;
+
+        break;
+      case "aguiEvent":
+        method = AGUI_METHOD.EVENT;
+
+        break;
+      default:
+        return;
+    }
+
+    const notification: A2AJsonRpcNotification = {
+      jsonrpc: "2.0",
+      method,
+      params: event.payload,
+    };
+
+    try {
+      conn.send(notification);
+    } catch (err) {
       console.error(
-        `PeerJsChannel: connection error with ${remotePeerId}:`,
+        `PeerJsChannel: failed to forward ${event.type} to ${remotePeerId}:`,
         err,
       );
-      this.connections.delete(remotePeerId);
-      this._updateConnectedPeersSignal();
-      window.dispatchEvent(
-        new CustomEvent("shadow-claw-peer-error", {
-          detail: {
-            remotePeerId,
-            error: err.message,
-          },
-        }),
-      );
-    });
-
-    conn.on("iceStateChanged", (state: string) => {
-      if (
-        state === "failed" ||
-        state === "disconnected" ||
-        state === "closed"
-      ) {
-        console.warn(
-          `PeerJsChannel: ICE state changed to ${state} for ${remotePeerId}`,
-        );
-        this.connections.delete(remotePeerId);
-        this._updateConnectedPeersSignal();
-      }
-    });
+    }
   }
 
-  private _pendingInboundFile: {
-    name: string;
-    mimeType: string;
-    size: number;
-  } | null = null;
+  /**
+   * Returns an existing open DataConnection for the given remote peer ID,
+   * or initiates a new outbound connection.
+   */
+  private _getOrOpenConnection(remotePeerId: string): DataConnection | null {
+    const existing = this.connections.get(remotePeerId);
+    if (existing) {
+      return existing;
+    }
 
-  private _handleInboundData(remotePeerId: string, data: unknown): void {
-    if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
-      if (this._pendingInboundFile) {
-        const canonicalName = this._pendingInboundFile.name;
-        const groupId = `peer:${remotePeerId}`;
-        const bytes = new Uint8Array(data as ArrayBuffer);
+    if (!this.peer) {
+      return null;
+    }
 
-        getDb().then(async (db) => {
-          let finalName = canonicalName;
-          let counter = 1;
+    try {
+      const conn = this.peer.connect(remotePeerId, {
+        reliable: true,
+        serialization: "binary",
+      });
 
-          while (await groupFileExists(db, groupId, finalName)) {
-            const lastDotIndex = canonicalName.lastIndexOf(".");
-            const hasExt =
-              lastDotIndex > 0 && lastDotIndex < canonicalName.length - 1;
-
-            if (hasExt) {
-              const base = canonicalName.substring(0, lastDotIndex);
-              const ext = canonicalName.substring(lastDotIndex);
-              finalName = `${base} (${counter})${ext}`;
-            } else {
-              finalName = `${canonicalName} (${counter})`;
-            }
-
-            counter++;
-          }
-
-          if (finalName !== canonicalName) {
-            this._inboundRemap.set(canonicalName, finalName);
-          }
-
-          writeGroupFileBytes(db, groupId, finalName, bytes).catch((err) => {
-            console.error(
-              "PeerJsChannel: failed to write inbound file bytes",
-              err,
-            );
-          });
-        });
-
-        this._pendingInboundFile = null;
+      // PeerJS returns undefined if the peer is disconnected/destroyed
+      if (!conn) {
+        return null;
       }
 
+      this._handleIncomingConnection(conn);
+
+      return conn;
+    } catch (err) {
+      console.error(
+        `PeerJsChannel: failed to connect to ${remotePeerId}:`,
+        err,
+      );
+
+      return null;
+    }
+  }
+
+  /**
+   * Handle A2A CancelTask request.
+   */
+  private _handleA2ACancelTask(
+    remotePeerId: string,
+    request: A2AJsonRpcRequest,
+  ): void {
+    const params = request.params as { taskId?: string } | undefined;
+    if (!params?.taskId) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.INVALID_PARAMS,
+        message: "Missing taskId in CancelTask params",
+      });
+
       return;
     }
 
-    if (!data || typeof data !== "object") {
+    const taskManager = this._taskManagers.get(remotePeerId);
+    if (!taskManager) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.TASK_NOT_FOUND,
+        message: `Task not found: ${params.taskId}`,
+      });
+
       return;
     }
 
-    const msg = data as Record<string, unknown>;
+    const success = taskManager.cancelTask(params.taskId);
+    if (!success) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.TASK_NOT_CANCELABLE,
+        message: `Task not cancelable: ${params.taskId}`,
+      });
 
-    if (msg.type === "__file_header") {
-      this._pendingInboundFile = {
-        name: msg.name as string,
-        mimeType: msg.mimeType as string,
-        size: msg.size as number,
+      return;
+    }
+
+    const conn = this.connections.get(remotePeerId);
+    if (conn) {
+      const task = taskManager.getTask(params.taskId);
+      const rpcResponse: A2AJsonRpcResponse = {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { task },
       };
+      conn.send(rpcResponse);
+    }
+  }
+
+  /**
+   * Handle A2A GetTask request.
+   */
+  private _handleA2AGetTask(
+    remotePeerId: string,
+    request: A2AJsonRpcRequest,
+  ): void {
+    const params = request.params as { taskId?: string } | undefined;
+    if (!params?.taskId) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.INVALID_PARAMS,
+        message: "Missing taskId in GetTask params",
+      });
 
       return;
     }
 
-    if (msg.type === "typing") {
-      this.typingCallback?.(`peer:${remotePeerId}`, !!msg.typing);
+    const taskManager = this._taskManagers.get(remotePeerId);
+    const task = taskManager?.getTask(params.taskId);
+    if (!task) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.TASK_NOT_FOUND,
+        message: `Task not found: ${params.taskId}`,
+      });
 
       return;
     }
 
-    // Support legacy { type: "chat", text }
-    if (msg.type === "chat") {
-      const text = typeof msg.text === "string" ? msg.text.trim() : "";
-      if (text) {
-        this.messageCallback?.({
-          id: ulid(),
-          groupId: `peer:${remotePeerId}`,
-          sender: remotePeerId,
-          content: text,
-          timestamp: Date.now(),
-          channel: "peerjs",
-        });
-      }
-
-      return;
-    }
-
-    // A2A JSON-RPC 2.0 dispatch
-    if (msg.jsonrpc === "2.0") {
-      this._handleA2AJsonRpc(remotePeerId, msg as Record<string, unknown>);
-
-      return;
+    const conn = this.connections.get(remotePeerId);
+    if (conn) {
+      const rpcResponse: A2AJsonRpcResponse = {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: { task },
+      };
+      conn.send(rpcResponse);
     }
   }
 
@@ -995,6 +915,547 @@ export class PeerJsChannel implements Channel {
     }
   }
 
+  /**
+   * Handle A2A SendMessage request — route through task manager.
+   */
+  private _handleA2ASendMessage(
+    remotePeerId: string,
+    request: A2AJsonRpcRequest,
+  ): void {
+    const params = request.params as SendMessageRequest | undefined;
+    if (!params?.message) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.INVALID_PARAMS,
+        message: "Missing message in SendMessage params",
+      });
+
+      return;
+    }
+
+    // Get or create task manager for this peer
+    let taskManager = this._taskManagers.get(remotePeerId);
+    if (!taskManager) {
+      taskManager = new PeerTaskManager();
+      this._taskManagers.set(remotePeerId, taskManager);
+
+      // Wire up task events to emit over the DataChannel
+      taskManager.on((event) => {
+        this._forwardTaskEvent(remotePeerId, event);
+      });
+    }
+
+    // Process through task manager
+    const response = taskManager.handleSendMessage(params);
+
+    // Send JSON-RPC response with task state
+    const conn = this.connections.get(remotePeerId);
+    if (conn) {
+      const rpcResponse: A2AJsonRpcResponse = {
+        jsonrpc: "2.0",
+        id: request.id,
+        result: response,
+      };
+      conn.send(rpcResponse);
+    }
+
+    // Also deliver the message content to the existing chat UI
+    if (params.message.parts && Array.isArray(params.message.parts)) {
+      this._processInboundA2AEnvelope(
+        remotePeerId,
+        params.message.parts,
+        response.task?.id,
+        response.task?.contextId,
+      ).catch((err) =>
+        console.error("PeerJsChannel: failed to process A2A SendMessage", err),
+      );
+    }
+  }
+
+  /**
+   * Handle an inbound AG-UI event notification from a remote peer.
+   */
+  private _handleAGUIEventNotification(
+    remotePeerId: string,
+    params: unknown,
+  ): void {
+    if (!params || typeof params !== "object") {
+      return;
+    }
+
+    const event = params as AGUIEvent;
+
+    // Dispatch a DOM event so UI components can react
+    window.dispatchEvent(
+      new CustomEvent("shadow-claw-agui-event", {
+        detail: { remotePeerId, event },
+      }),
+    );
+  }
+
+  /**
+   * Handle GetAgentCard request — respond with our local card.
+   */
+  private _handleGetAgentCard(
+    remotePeerId: string,
+    request: A2AJsonRpcRequest,
+  ): void {
+    if (!this._localCard) {
+      this._sendJsonRpcError(remotePeerId, request.id, {
+        code: A2A_ERROR_CODE.INTERNAL_ERROR,
+        message: "Agent card not available",
+      });
+
+      return;
+    }
+
+    const response = createGetAgentCardResponse(request.id, this._localCard);
+    const conn = this.connections.get(remotePeerId);
+    if (conn) {
+      conn.send(response);
+    }
+  }
+
+  private _handleInboundData(remotePeerId: string, data: unknown): void {
+    if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
+      if (this._pendingInboundFile) {
+        const canonicalName = this._pendingInboundFile.name;
+        const groupId = `peer:${remotePeerId}`;
+        const bytes = new Uint8Array(data as ArrayBuffer);
+
+        getDb().then(async (db) => {
+          let finalName = canonicalName;
+          let counter = 1;
+
+          while (await groupFileExists(db, groupId, finalName)) {
+            const lastDotIndex = canonicalName.lastIndexOf(".");
+            const hasExt =
+              lastDotIndex > 0 && lastDotIndex < canonicalName.length - 1;
+
+            if (hasExt) {
+              const base = canonicalName.substring(0, lastDotIndex);
+              const ext = canonicalName.substring(lastDotIndex);
+              finalName = `${base} (${counter})${ext}`;
+            } else {
+              finalName = `${canonicalName} (${counter})`;
+            }
+
+            counter++;
+          }
+
+          if (finalName !== canonicalName) {
+            this._inboundRemap.set(canonicalName, finalName);
+          }
+
+          writeGroupFileBytes(db, groupId, finalName, bytes).catch((err) => {
+            console.error(
+              "PeerJsChannel: failed to write inbound file bytes",
+              err,
+            );
+          });
+        });
+
+        this._pendingInboundFile = null;
+      }
+
+      return;
+    }
+
+    if (!data || typeof data !== "object") {
+      return;
+    }
+
+    const msg = data as Record<string, unknown>;
+
+    if (msg.type === "__file_header") {
+      this._pendingInboundFile = {
+        name: msg.name as string,
+        mimeType: msg.mimeType as string,
+        size: msg.size as number,
+      };
+
+      return;
+    }
+
+    if (msg.type === "typing") {
+      this.typingCallback?.(`peer:${remotePeerId}`, !!msg.typing);
+
+      return;
+    }
+
+    // Support legacy { type: "chat", text }
+    if (msg.type === "chat") {
+      const text = typeof msg.text === "string" ? msg.text.trim() : "";
+      if (text) {
+        this.messageCallback?.({
+          id: ulid(),
+          groupId: `peer:${remotePeerId}`,
+          sender: remotePeerId,
+          content: text,
+          timestamp: Date.now(),
+          channel: "peerjs",
+        });
+      }
+
+      return;
+    }
+
+    // A2A JSON-RPC 2.0 dispatch
+    if (msg.jsonrpc === "2.0") {
+      this._handleA2AJsonRpc(remotePeerId, msg as Record<string, unknown>);
+
+      return;
+    }
+  }
+
+  private _handleIncomingConnection(conn: DataConnection): void {
+    const remotePeerId = conn.peer;
+
+    // Reject untrusted peers when a trusted list is configured
+    if (
+      this.trustedPeerIds.size > 0 &&
+      !this.trustedPeerIds.has(remotePeerId)
+    ) {
+      console.warn(
+        `PeerJsChannel: rejecting connection from untrusted peer: ${remotePeerId}`,
+      );
+      try {
+        conn.close();
+      } catch {
+        // ignore
+      }
+
+      return;
+    }
+
+    // Register the connection
+    this.connections.set(remotePeerId, conn);
+    this._updateConnectedPeersSignal();
+
+    conn.on("open", () => {
+      console.log(`PeerJsChannel: connection opened with ${remotePeerId}`);
+      this._exchangeAgentCards(remotePeerId, conn);
+    });
+
+    conn.on("data", (data: unknown) => {
+      this._handleInboundData(remotePeerId, data);
+    });
+
+    conn.on("close", () => {
+      console.log(`PeerJsChannel: connection closed with ${remotePeerId}`);
+      this.connections.delete(remotePeerId);
+      this.peerCards.delete(remotePeerId);
+      this._taskManagers.delete(remotePeerId);
+      this._updateConnectedPeersSignal();
+    });
+
+    conn.on("error", (err: Error) => {
+      console.error(
+        `PeerJsChannel: connection error with ${remotePeerId}:`,
+        err,
+      );
+      this.connections.delete(remotePeerId);
+      this._updateConnectedPeersSignal();
+      window.dispatchEvent(
+        new CustomEvent("shadow-claw-peer-error", {
+          detail: {
+            remotePeerId,
+            error: err.message,
+          },
+        }),
+      );
+    });
+
+    conn.on("iceStateChanged", (state: string) => {
+      if (
+        state === "failed" ||
+        state === "disconnected" ||
+        state === "closed"
+      ) {
+        console.warn(
+          `PeerJsChannel: ICE state changed to ${state} for ${remotePeerId}`,
+        );
+        this.connections.delete(remotePeerId);
+        this._updateConnectedPeersSignal();
+      }
+    });
+  }
+
+  /**
+   * Handle an inbound task status update notification.
+   */
+  private _handleTaskStatusNotification(
+    remotePeerId: string,
+    params: unknown,
+  ): void {
+    if (!params || typeof params !== "object") {
+      return;
+    }
+
+    const statusUpdate = params as TaskStatusUpdateEvent;
+
+    // If the remote peer signaled a terminal state, notify the orchestrator
+    // so it can suppress further auto-triggers for this conversation.
+    if (
+      statusUpdate.status?.state &&
+      TERMINAL_STATES.has(statusUpdate.status.state as any)
+    ) {
+      const groupId = `peer:${remotePeerId}`;
+      this._onTaskCompleteCallback?.(groupId);
+    }
+
+    window.dispatchEvent(
+      new CustomEvent("shadow-claw-task-status", {
+        detail: { remotePeerId, ...statusUpdate },
+      }),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  private _initPeer(): void {
+    const opts: Record<string, unknown> = {};
+
+    // Only override defaults when explicitly configured
+    const host = this.serverConfig.host ?? PEERJS_DEFAULT_HOST;
+    const port = this.serverConfig.port ?? PEERJS_DEFAULT_PORT;
+    const path = this.serverConfig.path ?? PEERJS_DEFAULT_PATH;
+    const secure = this.serverConfig.secure ?? PEERJS_DEFAULT_SECURE;
+
+    opts.host = host;
+    opts.port = port;
+    opts.path = path;
+    opts.secure = secure;
+    opts.debug = 3; // Verbose PeerJS logging for connection diagnostics
+
+    // ICE servers for WebRTC connectivity (STUN for NAT traversal)
+    const iceServers: RTCIceServer[] = this.serverConfig.iceServers ?? [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+    ];
+    opts.config = { iceServers };
+
+    this.peer = new Peer(this.myPeerId, opts);
+
+    this.peer.on("open", (id) => {
+      console.log(
+        `PeerJsChannel: connected to signaling server, peer ID: ${id}`,
+      );
+      // Reset backoff on successful connection
+      this._reconnectAttempts = 0;
+    });
+
+    this.peer.on("connection", (conn: DataConnection) => {
+      this._handleIncomingConnection(conn);
+    });
+
+    this.peer.on("error", (err: PeerError<string>) => {
+      console.error(`PeerJsChannel: peer error [${err.type}]:`, err.message);
+
+      if (err.type === "peer-unavailable" || err.type === "unavailable-id") {
+        window.dispatchEvent(
+          new CustomEvent("shadow-claw-peer-error", {
+            detail: {
+              error: err.message,
+            },
+          }),
+        );
+      }
+
+      // Recoverable errors — don't stop the channel
+      if (
+        err.type === "peer-unavailable" ||
+        err.type === "network" ||
+        err.type === "disconnected"
+      ) {
+        return;
+      }
+
+      // Non-recoverable
+      if (err.type === "unavailable-id") {
+        console.warn(
+          "PeerJsChannel: peer ID is already in use. Stop the channel and reconfigure.",
+        );
+      }
+    });
+
+    this.peer.on("disconnected", () => {
+      if (this.running) {
+        this._scheduleReconnect();
+      }
+    });
+
+    this.peer.on("close", () => {
+      console.log("PeerJsChannel: peer closed");
+    });
+  }
+
+  /**
+   * Register a pending JSON-RPC request (with 10s timeout).
+   */
+  private _registerPendingRequest(
+    requestId: string,
+    callback: (response: A2AJsonRpcResponse) => void,
+  ): void {
+    const timer = setTimeout(() => {
+      this._pendingRequests.delete(requestId);
+      console.warn(
+        `PeerJsChannel: JSON-RPC request ${requestId} timed out (10s)`,
+      );
+    }, 10_000);
+
+    this._pendingRequests.set(requestId, {
+      resolve: callback,
+      timer,
+    });
+  }
+
+  /**
+   * Schedule a reconnection attempt with exponential backoff.
+   * Delay doubles each attempt: 1s, 2s, 4s, 8s, ... up to 60s max.
+   */
+  private _scheduleReconnect(): void {
+    if (this._reconnectTimer !== null) {
+      return; // Already scheduled
+    }
+
+    const delay = Math.min(
+      PeerJsChannel._RECONNECT_BASE_MS * Math.pow(2, this._reconnectAttempts),
+      PeerJsChannel._RECONNECT_MAX_MS,
+    );
+
+    this._reconnectAttempts++;
+
+    console.log(
+      `PeerJsChannel: disconnected from signaling server, reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this._reconnectAttempts})`,
+    );
+
+    this._reconnectTimer = setTimeout(() => {
+      this._reconnectTimer = null;
+      if (!this.running) {
+        return;
+      }
+
+      try {
+        (this.peer as any)?.reconnect?.();
+      } catch {
+        // If reconnect throws, schedule another attempt
+        this._scheduleReconnect();
+      }
+    }, delay);
+  }
+
+  // ---------------------------------------------------------------------------
+  // JSON-RPC Helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Send a JSON-RPC error response to a remote peer.
+   */
+  private _sendJsonRpcError(
+    remotePeerId: string,
+    requestId: string,
+    error: { code: number; message: string; data?: unknown[] },
+  ): void {
+    const conn = this.connections.get(remotePeerId);
+    if (!conn) {
+      return;
+    }
+
+    const response: A2AJsonRpcResponse = {
+      jsonrpc: "2.0",
+      id: requestId,
+      error,
+    };
+
+    try {
+      conn.send(response);
+    } catch {
+      // Ignore send errors for error responses
+    }
+  }
+
+  /**
+   * Track outbound send progress by polling RTCDataChannel.bufferedAmount.
+   * Resolves when all queued data has been flushed to the network.
+   */
+  private _trackSendProgress(
+    conn: DataConnection,
+    totalBytes: number,
+  ): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const rawDc = (conn as any)._dc as RTCDataChannel | undefined;
+      if (!rawDc || totalBytes === 0) {
+        this.transferProgressSignal.set(null);
+        resolve();
+
+        return;
+      }
+
+      this.transferProgressSignal.set({
+        count: 0,
+        total: totalBytes,
+        direction: "send",
+      });
+
+      const poll = setInterval(() => {
+        const buffered = rawDc.bufferedAmount;
+        const sent = Math.max(0, totalBytes - buffered);
+        this.transferProgressSignal.set({
+          count: sent,
+          total: totalBytes,
+          direction: "send",
+        });
+
+        if (buffered === 0) {
+          clearInterval(poll);
+          this.transferProgressSignal.set({
+            count: totalBytes,
+            total: totalBytes,
+            direction: "send",
+          });
+          setTimeout(() => this.transferProgressSignal.set(null), 1500);
+          resolve();
+        }
+      }, 80);
+    });
+  }
+
+  private _updateConnectedPeersSignal(): void {
+    this.connectedPeersSignal.set(Array.from(this.connections.keys()));
+  }
+
+  /**
+   * Waits up to 5s for a DataConnection to open. Resolves immediately if
+   * already open. Rejects if the connection errors or the timeout fires
+   * without the connection opening.
+   */
+  private _waitForOpen(conn: DataConnection): Promise<void> {
+    if ((conn as any).open) {
+      return Promise.resolve();
+    }
+
+    return new Promise<void>((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Connection open timeout (5s)"));
+      }, 5000);
+
+      const openHandler = () => {
+        clearTimeout(timeout);
+        resolve();
+      };
+
+      const errorHandler = (err: Error) => {
+        clearTimeout(timeout);
+        reject(err);
+      };
+
+      conn.on("open", openHandler);
+      conn.on("error", errorHandler);
+    });
+  }
+
   private async _processInboundA2AEnvelope(
     remotePeerId: string,
     parts: any[],
@@ -1072,467 +1533,6 @@ export class PeerJsChannel implements Channel {
       taskId,
       contextId,
     });
-  }
-
-  /**
-   * Returns an existing open DataConnection for the given remote peer ID,
-   * or initiates a new outbound connection.
-   */
-  private _getOrOpenConnection(remotePeerId: string): DataConnection | null {
-    const existing = this.connections.get(remotePeerId);
-    if (existing) {
-      return existing;
-    }
-
-    if (!this.peer) {
-      return null;
-    }
-
-    try {
-      const conn = this.peer.connect(remotePeerId, {
-        reliable: true,
-        serialization: "binary",
-      });
-
-      // PeerJS returns undefined if the peer is disconnected/destroyed
-      if (!conn) {
-        return null;
-      }
-
-      this._handleIncomingConnection(conn);
-
-      return conn;
-    } catch (err) {
-      console.error(
-        `PeerJsChannel: failed to connect to ${remotePeerId}:`,
-        err,
-      );
-
-      return null;
-    }
-  }
-
-  /**
-   * Waits up to 5s for a DataConnection to open. Resolves immediately if
-   * already open. Rejects if the connection errors or the timeout fires
-   * without the connection opening.
-   */
-  private _waitForOpen(conn: DataConnection): Promise<void> {
-    if ((conn as any).open) {
-      return Promise.resolve();
-    }
-
-    return new Promise<void>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error("Connection open timeout (5s)"));
-      }, 5000);
-
-      const openHandler = () => {
-        clearTimeout(timeout);
-        resolve();
-      };
-
-      const errorHandler = (err: Error) => {
-        clearTimeout(timeout);
-        reject(err);
-      };
-
-      conn.on("open", openHandler);
-      conn.on("error", errorHandler);
-    });
-  }
-
-  // ---------------------------------------------------------------------------
-  // A2A Protocol Handlers
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Exchange agent cards on connection open.
-   * Sends our card request and stores the remote peer's card.
-   */
-  private _exchangeAgentCards(
-    remotePeerId: string,
-    conn: DataConnection,
-  ): void {
-    if (!this._localCard) {
-      return;
-    }
-
-    const request = createGetAgentCardRequest();
-    conn.send(request);
-
-    // Register pending request for the response
-    this._registerPendingRequest(request.id, (response) => {
-      const card = parseAgentCardResponse(response);
-      if (card) {
-        this.peerCards.set(remotePeerId, card);
-        console.log(
-          `PeerJsChannel: received AgentCard from ${remotePeerId}: "${card.name}"`,
-        );
-      }
-    });
-  }
-
-  /**
-   * Handle GetAgentCard request — respond with our local card.
-   */
-  private _handleGetAgentCard(
-    remotePeerId: string,
-    request: A2AJsonRpcRequest,
-  ): void {
-    if (!this._localCard) {
-      this._sendJsonRpcError(remotePeerId, request.id, {
-        code: A2A_ERROR_CODE.INTERNAL_ERROR,
-        message: "Agent card not available",
-      });
-
-      return;
-    }
-
-    const response = createGetAgentCardResponse(request.id, this._localCard);
-    const conn = this.connections.get(remotePeerId);
-    if (conn) {
-      conn.send(response);
-    }
-  }
-
-  /**
-   * Handle A2A SendMessage request — route through task manager.
-   */
-  private _handleA2ASendMessage(
-    remotePeerId: string,
-    request: A2AJsonRpcRequest,
-  ): void {
-    const params = request.params as SendMessageRequest | undefined;
-    if (!params?.message) {
-      this._sendJsonRpcError(remotePeerId, request.id, {
-        code: A2A_ERROR_CODE.INVALID_PARAMS,
-        message: "Missing message in SendMessage params",
-      });
-
-      return;
-    }
-
-    // Get or create task manager for this peer
-    let taskManager = this._taskManagers.get(remotePeerId);
-    if (!taskManager) {
-      taskManager = new PeerTaskManager();
-      this._taskManagers.set(remotePeerId, taskManager);
-
-      // Wire up task events to emit over the DataChannel
-      taskManager.on((event) => {
-        this._forwardTaskEvent(remotePeerId, event);
-      });
-    }
-
-    // Process through task manager
-    const response = taskManager.handleSendMessage(params);
-
-    // Send JSON-RPC response with task state
-    const conn = this.connections.get(remotePeerId);
-    if (conn) {
-      const rpcResponse: A2AJsonRpcResponse = {
-        jsonrpc: "2.0",
-        id: request.id,
-        result: response,
-      };
-      conn.send(rpcResponse);
-    }
-
-    // Also deliver the message content to the existing chat UI
-    if (params.message.parts && Array.isArray(params.message.parts)) {
-      this._processInboundA2AEnvelope(
-        remotePeerId,
-        params.message.parts,
-        response.task?.id,
-        response.task?.contextId,
-      ).catch((err) =>
-        console.error("PeerJsChannel: failed to process A2A SendMessage", err),
-      );
-    }
-  }
-
-  /**
-   * Handle A2A CancelTask request.
-   */
-  private _handleA2ACancelTask(
-    remotePeerId: string,
-    request: A2AJsonRpcRequest,
-  ): void {
-    const params = request.params as { taskId?: string } | undefined;
-    if (!params?.taskId) {
-      this._sendJsonRpcError(remotePeerId, request.id, {
-        code: A2A_ERROR_CODE.INVALID_PARAMS,
-        message: "Missing taskId in CancelTask params",
-      });
-
-      return;
-    }
-
-    const taskManager = this._taskManagers.get(remotePeerId);
-    if (!taskManager) {
-      this._sendJsonRpcError(remotePeerId, request.id, {
-        code: A2A_ERROR_CODE.TASK_NOT_FOUND,
-        message: `Task not found: ${params.taskId}`,
-      });
-
-      return;
-    }
-
-    const success = taskManager.cancelTask(params.taskId);
-    if (!success) {
-      this._sendJsonRpcError(remotePeerId, request.id, {
-        code: A2A_ERROR_CODE.TASK_NOT_CANCELABLE,
-        message: `Task not cancelable: ${params.taskId}`,
-      });
-
-      return;
-    }
-
-    const conn = this.connections.get(remotePeerId);
-    if (conn) {
-      const task = taskManager.getTask(params.taskId);
-      const rpcResponse: A2AJsonRpcResponse = {
-        jsonrpc: "2.0",
-        id: request.id,
-        result: { task },
-      };
-      conn.send(rpcResponse);
-    }
-  }
-
-  /**
-   * Handle A2A GetTask request.
-   */
-  private _handleA2AGetTask(
-    remotePeerId: string,
-    request: A2AJsonRpcRequest,
-  ): void {
-    const params = request.params as { taskId?: string } | undefined;
-    if (!params?.taskId) {
-      this._sendJsonRpcError(remotePeerId, request.id, {
-        code: A2A_ERROR_CODE.INVALID_PARAMS,
-        message: "Missing taskId in GetTask params",
-      });
-
-      return;
-    }
-
-    const taskManager = this._taskManagers.get(remotePeerId);
-    const task = taskManager?.getTask(params.taskId);
-    if (!task) {
-      this._sendJsonRpcError(remotePeerId, request.id, {
-        code: A2A_ERROR_CODE.TASK_NOT_FOUND,
-        message: `Task not found: ${params.taskId}`,
-      });
-
-      return;
-    }
-
-    const conn = this.connections.get(remotePeerId);
-    if (conn) {
-      const rpcResponse: A2AJsonRpcResponse = {
-        jsonrpc: "2.0",
-        id: request.id,
-        result: { task },
-      };
-      conn.send(rpcResponse);
-    }
-  }
-
-  /**
-   * Handle an inbound AG-UI event notification from a remote peer.
-   */
-  private _handleAGUIEventNotification(
-    remotePeerId: string,
-    params: unknown,
-  ): void {
-    if (!params || typeof params !== "object") {
-      return;
-    }
-
-    const event = params as AGUIEvent;
-
-    // Dispatch a DOM event so UI components can react
-    window.dispatchEvent(
-      new CustomEvent("shadow-claw-agui-event", {
-        detail: { remotePeerId, event },
-      }),
-    );
-  }
-
-  /**
-   * Handle an inbound task status update notification.
-   */
-  private _handleTaskStatusNotification(
-    remotePeerId: string,
-    params: unknown,
-  ): void {
-    if (!params || typeof params !== "object") {
-      return;
-    }
-
-    const statusUpdate = params as TaskStatusUpdateEvent;
-
-    // If the remote peer signaled a terminal state, notify the orchestrator
-    // so it can suppress further auto-triggers for this conversation.
-    if (
-      statusUpdate.status?.state &&
-      TERMINAL_STATES.has(statusUpdate.status.state as any)
-    ) {
-      const groupId = `peer:${remotePeerId}`;
-      this._onTaskCompleteCallback?.(groupId);
-    }
-
-    window.dispatchEvent(
-      new CustomEvent("shadow-claw-task-status", {
-        detail: { remotePeerId, ...statusUpdate },
-      }),
-    );
-  }
-
-  /**
-   * Forward task manager events over the DataChannel as notifications.
-   */
-  private _forwardTaskEvent(
-    remotePeerId: string,
-    event: {
-      type: string;
-      taskId: string;
-      contextId: string;
-      payload: unknown;
-    },
-  ): void {
-    const conn = this.connections.get(remotePeerId);
-    if (!conn) {
-      return;
-    }
-
-    let method: string;
-    switch (event.type) {
-      case "statusUpdate":
-        method = A2A_STREAM_METHOD.STATUS_UPDATE;
-
-        break;
-      case "artifactUpdate":
-        method = A2A_STREAM_METHOD.ARTIFACT_UPDATE;
-
-        break;
-      case "aguiEvent":
-        method = AGUI_METHOD.EVENT;
-
-        break;
-      default:
-        return;
-    }
-
-    const notification: A2AJsonRpcNotification = {
-      jsonrpc: "2.0",
-      method,
-      params: event.payload,
-    };
-
-    try {
-      conn.send(notification);
-    } catch (err) {
-      console.error(
-        `PeerJsChannel: failed to forward ${event.type} to ${remotePeerId}:`,
-        err,
-      );
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // JSON-RPC Helpers
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Send a JSON-RPC error response to a remote peer.
-   */
-  private _sendJsonRpcError(
-    remotePeerId: string,
-    requestId: string,
-    error: { code: number; message: string; data?: unknown[] },
-  ): void {
-    const conn = this.connections.get(remotePeerId);
-    if (!conn) {
-      return;
-    }
-
-    const response: A2AJsonRpcResponse = {
-      jsonrpc: "2.0",
-      id: requestId,
-      error,
-    };
-
-    try {
-      conn.send(response);
-    } catch {
-      // Ignore send errors for error responses
-    }
-  }
-
-  /**
-   * Register a pending JSON-RPC request (with 10s timeout).
-   */
-  private _registerPendingRequest(
-    requestId: string,
-    callback: (response: A2AJsonRpcResponse) => void,
-  ): void {
-    const timer = setTimeout(() => {
-      this._pendingRequests.delete(requestId);
-      console.warn(
-        `PeerJsChannel: JSON-RPC request ${requestId} timed out (10s)`,
-      );
-    }, 10_000);
-
-    this._pendingRequests.set(requestId, {
-      resolve: callback,
-      timer,
-    });
-  }
-
-  /**
-   * Get the task manager for a peer (creates one if needed).
-   */
-  getTaskManager(remotePeerId: string): PeerTaskManager {
-    let tm = this._taskManagers.get(remotePeerId);
-    if (!tm) {
-      tm = new PeerTaskManager();
-      this._taskManagers.set(remotePeerId, tm);
-      tm.on((event) => {
-        this._forwardTaskEvent(remotePeerId, event);
-      });
-    }
-
-    return tm;
-  }
-
-  /**
-   * Mark the active task for a peer groupId as COMPLETED.
-   * Sends a terminal `tasks/statusUpdate` notification to the remote peer,
-   * signaling that no further responses are expected.
-   *
-   * @returns true if a task was completed, false if no active task exists.
-   */
-  completeActiveTask(groupId: string): boolean {
-    const remotePeerId = groupId.replace(/^peer:/, "");
-    const tm = this._taskManagers.get(remotePeerId);
-    if (!tm) {
-      return false;
-    }
-
-    const activeTasks = tm.getActiveTasks();
-    if (activeTasks.length === 0) {
-      return false;
-    }
-
-    // Complete the most recent active task
-    const task = activeTasks[activeTasks.length - 1];
-    tm.markWorking(task.id);
-    tm.markCompleted(task.id);
-
-    return true;
   }
 }
 

@@ -4,9 +4,9 @@ import { Signal } from "signal-polyfill";
  * UI-only state for the Chat page.
  */
 export class ChatUiStore {
+  private _attachmentObjectUrls: Set<string>;
   private _isNearBottom: Signal.State<boolean>;
   private _nearBottomSnapshot: boolean;
-  private _attachmentObjectUrls: Set<string>;
   private _scrollStateByGroup: Map<
     string,
     { distanceFromBottom: number; nearBottom: boolean }
@@ -19,6 +19,12 @@ export class ChatUiStore {
     this._scrollStateByGroup = new Map();
   }
 
+  getGroupScrollState(
+    groupId: string,
+  ): { distanceFromBottom: number; nearBottom: boolean } | null {
+    return this._scrollStateByGroup.get(groupId) ?? null;
+  }
+
   get isNearBottom(): boolean {
     return this._isNearBottom.get();
   }
@@ -27,14 +33,27 @@ export class ChatUiStore {
     return this._nearBottomSnapshot;
   }
 
-  setNearBottom(nearBottom: boolean): void {
-    this._nearBottomSnapshot = nearBottom;
-    this._isNearBottom.set(nearBottom);
+  registerAttachmentObjectUrl(url: string): void {
+    this._attachmentObjectUrls.add(url);
+  }
+
+  reset(): void {
+    this.revokeAttachmentObjectUrls();
+    this._scrollStateByGroup.clear();
+    this.resetNearBottom();
   }
 
   resetNearBottom(): void {
     this._nearBottomSnapshot = true;
     this._isNearBottom.set(true);
+  }
+
+  revokeAttachmentObjectUrls(): void {
+    for (const objectUrl of this._attachmentObjectUrls) {
+      URL.revokeObjectURL(objectUrl);
+    }
+
+    this._attachmentObjectUrls.clear();
   }
 
   setGroupScrollState(
@@ -48,28 +67,9 @@ export class ChatUiStore {
     });
   }
 
-  getGroupScrollState(
-    groupId: string,
-  ): { distanceFromBottom: number; nearBottom: boolean } | null {
-    return this._scrollStateByGroup.get(groupId) ?? null;
-  }
-
-  registerAttachmentObjectUrl(url: string): void {
-    this._attachmentObjectUrls.add(url);
-  }
-
-  revokeAttachmentObjectUrls(): void {
-    for (const objectUrl of this._attachmentObjectUrls) {
-      URL.revokeObjectURL(objectUrl);
-    }
-
-    this._attachmentObjectUrls.clear();
-  }
-
-  reset(): void {
-    this.revokeAttachmentObjectUrls();
-    this._scrollStateByGroup.clear();
-    this.resetNearBottom();
+  setNearBottom(nearBottom: boolean): void {
+    this._nearBottomSnapshot = nearBottom;
+    this._isNearBottom.set(nearBottom);
   }
 }
 

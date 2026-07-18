@@ -33,75 +33,15 @@ export class FileViewerStore {
     this._file = new Signal.State(null);
   }
 
-  get file(): FileInfo | null {
-    return this._file.get();
-  }
-
-  /**
-   * Open a file
-   */
-  async openFile(
-    db: ShadowClawDatabase,
-    path: string,
-    groupId: string = DEFAULT_GROUP_ID,
-  ): Promise<void> {
-    try {
-      const name = path.split("/").pop() || path;
-      const isPdf = /\.pdf$/i.test(name);
-      const binaryMimeType = this.getPreviewBinaryMimeType(name);
-
-      if (isPdf) {
-        const binaryContent = await readGroupFileBytes(db, groupId, path);
-
-        this._file.set({
-          name,
-          path,
-          content: "",
-          kind: "pdf",
-          binaryContent,
-          mimeType: "application/pdf",
-        });
-
-        return;
-      }
-
-      if (binaryMimeType) {
-        const nativeFile = await getGroupFile(db, groupId, path);
-
-        this._file.set({
-          name,
-          path,
-          content: "",
-          kind: "binary",
-          binaryContent: null,
-          nativeFile,
-          mimeType: binaryMimeType,
-        });
-
-        return;
-      }
-
-      const content = await readGroupFile(db, groupId, path);
-      this._file.set({
-        name,
-        path,
-        content,
-        kind: "text",
-        binaryContent: null,
-        mimeType: "text/plain",
-      });
-    } catch (err) {
-      console.error("Failed to open file:", path, err);
-
-      throw err;
-    }
-  }
-
   /**
    * Close the current file
    */
   closeFile() {
     this._file.set(null);
+  }
+
+  get file(): FileInfo | null {
+    return this._file.get();
   }
 
   /**
@@ -168,6 +108,66 @@ export class FileViewerStore {
     };
 
     return mimeTypes[extension] || "";
+  }
+
+  /**
+   * Open a file
+   */
+  async openFile(
+    db: ShadowClawDatabase,
+    path: string,
+    groupId: string = DEFAULT_GROUP_ID,
+  ): Promise<void> {
+    try {
+      const name = path.split("/").pop() || path;
+      const isPdf = /\.pdf$/i.test(name);
+      const binaryMimeType = this.getPreviewBinaryMimeType(name);
+
+      if (isPdf) {
+        const binaryContent = await readGroupFileBytes(db, groupId, path);
+
+        this._file.set({
+          name,
+          path,
+          content: "",
+          kind: "pdf",
+          binaryContent,
+          mimeType: "application/pdf",
+        });
+
+        return;
+      }
+
+      if (binaryMimeType) {
+        const nativeFile = await getGroupFile(db, groupId, path);
+
+        this._file.set({
+          name,
+          path,
+          content: "",
+          kind: "binary",
+          binaryContent: null,
+          nativeFile,
+          mimeType: binaryMimeType,
+        });
+
+        return;
+      }
+
+      const content = await readGroupFile(db, groupId, path);
+      this._file.set({
+        name,
+        path,
+        content,
+        kind: "text",
+        binaryContent: null,
+        mimeType: "text/plain",
+      });
+    } catch (err) {
+      console.error("Failed to open file:", path, err);
+
+      throw err;
+    }
   }
 }
 

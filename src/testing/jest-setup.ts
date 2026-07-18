@@ -22,13 +22,17 @@ import {
 } from "node:stream/web";
 
 class MockAudioContext {
-  state: "suspended" | "running" = "suspended";
   currentTime: number = 0;
+  state: "suspended" | "running" = "suspended";
 
-  resume(): Promise<void> {
-    this.state = "running";
-
-    return Promise.resolve();
+  createGain() {
+    return {
+      gain: {
+        setValueAtTime: () => {},
+        exponentialRampToValueAtTime: () => {},
+      },
+      connect: () => {},
+    };
   }
 
   createOscillator() {
@@ -41,18 +45,14 @@ class MockAudioContext {
     };
   }
 
-  createGain() {
-    return {
-      gain: {
-        setValueAtTime: () => {},
-        exponentialRampToValueAtTime: () => {},
-      },
-      connect: () => {},
-    };
-  }
-
   get destination() {
     return {};
+  }
+
+  resume(): Promise<void> {
+    this.state = "running";
+
+    return Promise.resolve();
   }
 }
 

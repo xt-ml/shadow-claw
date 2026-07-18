@@ -23,67 +23,6 @@ export class ShadowClawFileSystem extends InMemoryFs {
     this.workspacePrefix = workspacePrefix;
   }
 
-  /**
-   * Map from absolute fs path to database path.
-   */
-  private _toDbPath(path: string): string | null {
-    if (path.startsWith(this.workspacePrefix + "/")) {
-      return path.slice(this.workspacePrefix.length + 1);
-    } else if (path === this.workspacePrefix) {
-      return "";
-    }
-
-    return null;
-  }
-
-  private _basename(path: string): string {
-    const parts = path.split("/").filter(Boolean);
-
-    return parts[parts.length - 1] || "";
-  }
-
-  private _joinPath(dir: string, name: string): string {
-    const normalizedDir = dir.replace(/\/+$/, "");
-    if (!normalizedDir) {
-      return `/${name}`;
-    }
-
-    return `${normalizedDir}/${name}`;
-  }
-
-  private _isDirectoryStat(stat: any): boolean {
-    if (stat && typeof stat.isDirectory === "function") {
-      return !!stat.isDirectory();
-    }
-
-    return !!stat?.isDirectory;
-  }
-
-  private async _readPathContent(path: string): Promise<Uint8Array | string> {
-    try {
-      return await super.readFileBuffer(path);
-    } catch {
-      return await super.readFile(path);
-    }
-  }
-
-  // Hook all methods that mutate file system
-
-  override async writeFile(
-    path: string,
-    content: string | Uint8Array,
-    options?: any,
-  ): Promise<void> {
-    await super.writeFile(path, content, options);
-
-    // Read final state from in-memory and write back to DB
-    const dbPath = this._toDbPath(path);
-    if (dbPath !== null) {
-      const finalContent = await this._readPathContent(path);
-      await writeGroupFile(this.db, this.groupId, dbPath, finalContent);
-    }
-  }
-
   override async appendFile(
     path: string,
     content: string | Uint8Array,
@@ -94,31 +33,6 @@ export class ShadowClawFileSystem extends InMemoryFs {
     if (dbPath !== null) {
       const finalContent = await this._readPathContent(path);
       await writeGroupFile(this.db, this.groupId, dbPath, finalContent);
-    }
-  }
-
-  override async rm(path: string, options?: any): Promise<void> {
-    await super.rm(path, options);
-
-    const dbPath = this._toDbPath(path);
-    if (dbPath !== null) {
-      try {
-        // Best-effort removal of corresponding storage file.
-        // OPFS handles directories, but we primarily care about saving/deleting files.
-        // deleteGroupFile parses the path and removes the entry inside the directory.
-        await deleteGroupFile(this.db, this.groupId, dbPath);
-      } catch {
-        // Ignore if it was a directory or didn't exist
-      }
-    }
-  }
-
-  override async mkdir(path: string, options?: any): Promise<void> {
-    await super.mkdir(path, options);
-
-    const dbPath = this._toDbPath(path);
-    if (dbPath !== null && dbPath !== "") {
-      await createGroupDirectory(this.db, this.groupId, dbPath);
     }
   }
 
@@ -138,6 +52,15 @@ export class ShadowClawFileSystem extends InMemoryFs {
           await writeGroupFile(this.db, this.groupId, dbDest, finalContent);
         }
       } catch {}
+    }
+  }
+
+  override async mkdir(path: string, options?: any): Promise<void> {
+    await super.mkdir(path, options);
+
+    const dbPath = this._toDbPath(path);
+    if (dbPath !== null && dbPath !== "") {
+      await createGroupDirectory(this.db, this.groupId, dbPath);
     }
   }
 
@@ -182,6 +105,83 @@ export class ShadowClawFileSystem extends InMemoryFs {
           await deleteGroupFile(this.db, this.groupId, dbSrc);
         }
       } catch {}
+    }
+  }
+
+  override async rm(path: string, options?: any): Promise<void> {
+    await super.rm(path, options);
+
+    const dbPath = this._toDbPath(path);
+    if (dbPath !== null) {
+      try {
+        // Best-effort removal of corresponding storage file.
+        // OPFS handles directories, but we primarily care about saving/deleting files.
+        // deleteGroupFile parses the path and removes the entry inside the directory.
+        await deleteGroupFile(this.db, this.groupId, dbPath);
+      } catch {
+        // Ignore if it was a directory or didn't exist
+      }
+    }
+  }
+
+  // Hook all methods that mutate file system
+
+  override async writeFile(
+    path: string,
+    content: string | Uint8Array,
+    options?: any,
+  ): Promise<void> {
+    await super.writeFile(path, content, options);
+
+    // Read final state from in-memory and write back to DB
+    const dbPath = this._toDbPath(path);
+    if (dbPath !== null) {
+      const finalContent = await this._readPathContent(path);
+      await writeGroupFile(this.db, this.groupId, dbPath, finalContent);
+    }
+  }
+
+  private _basename(path: string): string {
+    const parts = path.split("/").filter(Boolean);
+
+    return parts[parts.length - 1] || "";
+  }
+
+  private _isDirectoryStat(stat: any): boolean {
+    if (stat && typeof stat.isDirectory === "function") {
+      return !!stat.isDirectory();
+    }
+
+    return !!stat?.isDirectory;
+  }
+
+  private _joinPath(dir: string, name: string): string {
+    const normalizedDir = dir.replace(/\/+$/, "");
+    if (!normalizedDir) {
+      return `/${name}`;
+    }
+
+    return `${normalizedDir}/${name}`;
+  }
+
+  /**
+   * Map from absolute fs path to database path.
+   */
+  private _toDbPath(path: string): string | null {
+    if (path.startsWith(this.workspacePrefix + "/")) {
+      return path.slice(this.workspacePrefix.length + 1);
+    } else if (path === this.workspacePrefix) {
+      return "";
+    }
+
+    return null;
+  }
+
+  private async _readPathContent(path: string): Promise<Uint8Array | string> {
+    try {
+      return await super.readFileBuffer(path);
+    } catch {
+      return await super.readFile(path);
     }
   }
 }

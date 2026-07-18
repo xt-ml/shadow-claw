@@ -34,7 +34,6 @@ class InMemoryFs {
 
   async writeFile() {}
 
-
 }
 
 exports.Bash = Bash;

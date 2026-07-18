@@ -7,28 +7,37 @@ export class MessageInputComponent {
     this.host = chatHost;
   }
 
-  textarea(): Locator {
-    return this.host.locator(".chat__input, textarea").first();
+  attachButton(): Locator {
+    return this.host.locator(".chat__attach-btn").first();
   }
 
   sendButton(): Locator {
     return this.host.locator(".chat__send-btn").first();
   }
 
-  attachButton(): Locator {
-    return this.host.locator(".chat__attach-btn").first();
-  }
-
-  async fill(text: string): Promise<void> {
-    await this.textarea().fill(text);
-  }
-
-  async send(): Promise<void> {
-    await this.sendButton().click();
+  textarea(): Locator {
+    return this.host.locator(".chat__input, textarea").first();
   }
 
   async attach(): Promise<void> {
     await this.attachButton().click();
+  }
+
+  async expectSendDisabled(): Promise<void> {
+    await expect(this.sendButton()).toBeDisabled();
+  }
+
+  async expectSendEnabled(): Promise<void> {
+    await expect(this.sendButton()).toBeEnabled();
+  }
+
+  async expectVisible(): Promise<void> {
+    await expect(this.textarea()).toBeVisible();
+    await expect(this.sendButton()).toBeVisible();
+  }
+
+  async fill(text: string): Promise<void> {
+    await this.textarea().fill(text);
   }
 
   async fillAndSend(text: string): Promise<void> {
@@ -40,16 +49,7 @@ export class MessageInputComponent {
     return this.textarea().getAttribute("placeholder");
   }
 
-  async expectVisible(): Promise<void> {
-    await expect(this.textarea()).toBeVisible();
-    await expect(this.sendButton()).toBeVisible();
-  }
-
-  async expectSendEnabled(): Promise<void> {
-    await expect(this.sendButton()).toBeEnabled();
-  }
-
-  async expectSendDisabled(): Promise<void> {
-    await expect(this.sendButton()).toBeDisabled();
+  async send(): Promise<void> {
+    await this.sendButton().click();
   }
 }

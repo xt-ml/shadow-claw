@@ -18,33 +18,33 @@ interface Sent {
 }
 
 class FakeTransport implements RoomTransport {
-  myPeerId: string;
-  connected = new Set<string>();
-  sent: Sent[] = [];
   connectCalls: string[] = [];
+  connected = new Set<string>();
+  myPeerId: string;
+  sent: Sent[] = [];
 
   constructor(myPeerId: string, connected: string[] = []) {
     this.myPeerId = myPeerId;
     this.connected = new Set(connected);
   }
 
-  sendToPeer(peerId: string, note: A2AJsonRpcNotification): boolean {
-    this.sent.push({ peerId, note });
-
-    return true;
-  }
-
-  isConnected(peerId: string): boolean {
-    return this.connected.has(peerId);
+  /** Filter sent notifications by method. */
+  byMethod(method: string): Sent[] {
+    return this.sent.filter((s) => s.note.method === method);
   }
 
   connectToPeer(peerId: string): void {
     this.connectCalls.push(peerId);
   }
 
-  /** Filter sent notifications by method. */
-  byMethod(method: string): Sent[] {
-    return this.sent.filter((s) => s.note.method === method);
+  isConnected(peerId: string): boolean {
+    return this.connected.has(peerId);
+  }
+
+  sendToPeer(peerId: string, note: A2AJsonRpcNotification): boolean {
+    this.sent.push({ peerId, note });
+
+    return true;
   }
 }
 

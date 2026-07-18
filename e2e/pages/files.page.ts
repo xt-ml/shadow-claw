@@ -4,9 +4,9 @@ import { AppPage } from "./app.page.js";
 
 export class FilesPage {
   app: AppPage;
-  page: Page;
-  host: Locator;
   browser: FileBrowserComponent;
+  host: Locator;
+  page: Page;
 
   constructor(app: AppPage) {
     this.app = app;
@@ -15,9 +15,16 @@ export class FilesPage {
     this.browser = new FileBrowserComponent(this.host);
   }
 
-  async open() {
-    await this.app.navigateTo("files");
-    await expect(this.host).toHaveCount(1);
+  allButtons() {
+    return this.host.locator("button");
+  }
+
+  breadcrumbs() {
+    return this.browser.breadcrumbs();
+  }
+
+  fileInput() {
+    return this.browser.fileInput();
   }
 
   fileList() {
@@ -28,15 +35,8 @@ export class FilesPage {
     return this.browser.uploadButton();
   }
 
-  fileInput() {
-    return this.browser.fileInput();
-  }
-
-  breadcrumbs() {
-    return this.browser.breadcrumbs();
-  }
-
-  allButtons() {
-    return this.host.locator("button");
+  async open() {
+    await this.app.navigateTo("files");
+    await expect(this.host).toHaveCount(1);
   }
 }

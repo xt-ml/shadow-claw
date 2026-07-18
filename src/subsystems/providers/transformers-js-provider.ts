@@ -12,14 +12,66 @@ import { setPostHandler } from "../../worker/post.js";
 import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent.js";
 
 class TransformersJsManager {
-  private worker: Worker | null = null;
-  private pendingResolves = new Map<string, (value: any) => void>();
-  private pendingRejects = new Map<string, (reason: any) => void>();
-  private progressCallbacks = new Map<string, (payload: any) => void>();
   private chunkCallbacks = new Map<string, (payload: any) => void>();
-  private thinkingCallbacks = new Map<string, (text: string) => void>();
-  private loadResolves = new Map<string, () => void>();
   private loadRejects = new Map<string, (reason: any) => void>();
+  private loadResolves = new Map<string, () => void>();
+  private pendingRejects = new Map<string, (reason: any) => void>();
+  private pendingResolves = new Map<string, (value: any) => void>();
+  private progressCallbacks = new Map<string, (payload: any) => void>();
+  private thinkingCallbacks = new Map<string, (text: string) => void>();
+  private worker: Worker | null = null;
+
+  async generate(
+    messages: any[],
+    maxTokens: number,
+    groupId: string,
+    onChunk: (text: string) => void,
+    onThinking?: (text: string) => void,
+  ): Promise<string> {
+    const worker = this.getWorker();
+
+    return new Promise((resolve, reject) => {
+      this.pendingResolves.set(groupId, resolve);
+      this.pendingRejects.set(groupId, reject);
+      this.chunkCallbacks.set(groupId, (payload) => onChunk(payload.text));
+      if (onThinking) {
+        this.thinkingCallbacks.set(groupId, onThinking);
+      }
+
+      worker.postMessage({
+        type: "generate",
+        payload: { messages, maxTokens, groupId },
+      });
+    });
+  }
+
+  async load(
+    modelId: string,
+    device: string,
+    dtypeStrategy: string,
+    groupId: string,
+    onProgress: (payload: any) => void,
+  ): Promise<void> {
+    const worker = this.getWorker();
+
+    return new Promise((resolve, reject) => {
+      this.loadResolves.set(groupId, resolve);
+      this.loadRejects.set(groupId, reject);
+      this.progressCallbacks.set(groupId, onProgress);
+      worker.postMessage({
+        type: "load",
+        payload: { modelId, device, dtypeStrategy, groupId },
+      });
+    });
+  }
+
+  private cleanup(groupId: string) {
+    this.pendingResolves.delete(groupId);
+    this.pendingRejects.delete(groupId);
+    this.progressCallbacks.delete(groupId);
+    this.chunkCallbacks.delete(groupId);
+    this.thinkingCallbacks.delete(groupId);
+  }
 
   private getWorker() {
     if (!this.worker) {
@@ -71,58 +123,6 @@ class TransformersJsManager {
     }
 
     return this.worker;
-  }
-
-  private cleanup(groupId: string) {
-    this.pendingResolves.delete(groupId);
-    this.pendingRejects.delete(groupId);
-    this.progressCallbacks.delete(groupId);
-    this.chunkCallbacks.delete(groupId);
-    this.thinkingCallbacks.delete(groupId);
-  }
-
-  async load(
-    modelId: string,
-    device: string,
-    dtypeStrategy: string,
-    groupId: string,
-    onProgress: (payload: any) => void,
-  ): Promise<void> {
-    const worker = this.getWorker();
-
-    return new Promise((resolve, reject) => {
-      this.loadResolves.set(groupId, resolve);
-      this.loadRejects.set(groupId, reject);
-      this.progressCallbacks.set(groupId, onProgress);
-      worker.postMessage({
-        type: "load",
-        payload: { modelId, device, dtypeStrategy, groupId },
-      });
-    });
-  }
-
-  async generate(
-    messages: any[],
-    maxTokens: number,
-    groupId: string,
-    onChunk: (text: string) => void,
-    onThinking?: (text: string) => void,
-  ): Promise<string> {
-    const worker = this.getWorker();
-
-    return new Promise((resolve, reject) => {
-      this.pendingResolves.set(groupId, resolve);
-      this.pendingRejects.set(groupId, reject);
-      this.chunkCallbacks.set(groupId, (payload) => onChunk(payload.text));
-      if (onThinking) {
-        this.thinkingCallbacks.set(groupId, onThinking);
-      }
-
-      worker.postMessage({
-        type: "generate",
-        payload: { messages, maxTokens, groupId },
-      });
-    });
   }
 }
 

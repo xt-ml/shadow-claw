@@ -20,13 +20,32 @@ export interface TaskRunner {
  * Runs on the main thread via setInterval.
  */
 export class TaskScheduler {
-  runner: TaskRunner;
-  onTaskChange?: () => void;
   interval: ReturnType<typeof setInterval> | null = null;
+  onTaskChange?: () => void;
+  runner: TaskRunner;
 
   constructor(runner: TaskRunner, onTaskChange?: () => void) {
     this.runner = runner;
     this.onTaskChange = onTaskChange;
+  }
+
+  /**
+   * Check if a task already ran in this minute (prevent double-execution).
+   */
+  ranThisMinute(task: Task, now: Date): boolean {
+    if (!task.lastRun) {
+      return false;
+    }
+
+    const last = new Date(task.lastRun);
+
+    return (
+      last.getFullYear() === now.getFullYear() &&
+      last.getMonth() === now.getMonth() &&
+      last.getDate() === now.getDate() &&
+      last.getHours() === now.getHours() &&
+      last.getMinutes() === now.getMinutes()
+    );
   }
 
   /**
@@ -82,24 +101,5 @@ export class TaskScheduler {
     } catch (err) {
       console.error("Scheduler tick error:", err);
     }
-  }
-
-  /**
-   * Check if a task already ran in this minute (prevent double-execution).
-   */
-  ranThisMinute(task: Task, now: Date): boolean {
-    if (!task.lastRun) {
-      return false;
-    }
-
-    const last = new Date(task.lastRun);
-
-    return (
-      last.getFullYear() === now.getFullYear() &&
-      last.getMonth() === now.getMonth() &&
-      last.getDate() === now.getDate() &&
-      last.getHours() === now.getHours() &&
-      last.getMinutes() === now.getMinutes()
-    );
   }
 }

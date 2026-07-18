@@ -31,8 +31,6 @@ export interface ServerTaskSchedulerDeps {
 const SCHEDULER_INTERVAL = 60_000;
 
 export class ServerTaskScheduler {
-  private _getEnabledTasks: () => ScheduledTaskRow[];
-  private _updateLastRun: (id: string, timestamp: number) => void;
   private _broadcastTaskTrigger: (task: {
     id: string;
     groupId: string;
@@ -41,7 +39,9 @@ export class ServerTaskScheduler {
     tools?: unknown[] | null;
     channel?: string | null;
   }) => Promise<{ sent: number; failed: number; noSubscribers?: true }>;
+  private _getEnabledTasks: () => ScheduledTaskRow[];
   private _interval: ReturnType<typeof setInterval> | null;
+  private _updateLastRun: (id: string, timestamp: number) => void;
 
   constructor({
     getEnabledTasks,

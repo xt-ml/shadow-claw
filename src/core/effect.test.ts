@@ -3,11 +3,11 @@ import { jest } from "@jest/globals";
 let watcherInstance: any = null;
 
 class MockWatcher {
+  getPending: any;
   onChange: any;
   pending: any[];
-  watch: any;
   unwatch: any;
-  getPending: any;
+  watch: any;
 
   constructor(onChange: any) {
     this.onChange = onChange;

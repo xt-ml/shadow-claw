@@ -7,6 +7,14 @@ export class ChatActionsComponent {
     this.host = chatHost;
   }
 
+  clearButton() {
+    return this.host.locator('[data-action="clear-chat"]');
+  }
+
+  compactButton() {
+    return this.host.locator('[data-action="compact-chat"]');
+  }
+
   downloadButton() {
     return this.host.locator('[data-action="download-chat"]');
   }
@@ -15,12 +23,16 @@ export class ChatActionsComponent {
     return this.host.locator('[data-action="restore-chat"]');
   }
 
-  compactButton() {
-    return this.host.locator('[data-action="compact-chat"]');
+  async clearChat() {
+    await this.clearButton().click();
   }
 
-  clearButton() {
-    return this.host.locator('[data-action="clear-chat"]');
+  async compactChat() {
+    await this.compactButton().click();
+  }
+
+  async downloadChat() {
+    await this.downloadButton().click();
   }
 
   async expectAllActionsPresent() {
@@ -28,17 +40,5 @@ export class ChatActionsComponent {
     await expect(this.restoreButton()).toHaveCount(1);
     await expect(this.compactButton()).toHaveCount(1);
     await expect(this.clearButton()).toHaveCount(1);
-  }
-
-  async downloadChat() {
-    await this.downloadButton().click();
-  }
-
-  async clearChat() {
-    await this.clearButton().click();
-  }
-
-  async compactChat() {
-    await this.compactButton().click();
   }
 }

@@ -7,31 +7,9 @@ export class ConversationsComponent {
     this.root = root;
   }
 
-  /** Locator for the <shadow-claw-conversations> element */
-  host(): Locator {
-    return this.root.locator("shadow-claw-conversations");
-  }
-
-  /** All conversation items in the list */
-  items(): Locator {
-    return this.host().locator(".conversation-item");
-  }
-
-  /** A specific conversation item by group ID */
-  item(groupId: string): Locator {
-    return this.host().locator(
-      `.conversation-item[data-group-id="${groupId}"]`,
-    );
-  }
-
   /** The active (selected) conversation */
   activeItem(): Locator {
     return this.host().locator(".conversation-item.active");
-  }
-
-  /** Get the name text of a conversation item */
-  itemName(locator: Locator): Locator {
-    return locator.locator(".conversation-name");
   }
 
   /** The "+" create button */
@@ -52,6 +30,27 @@ export class ConversationsComponent {
   createOkButton(): Locator {
     return this.host().locator(
       ".conversations__create-dialog .conversations__ok",
+    );
+  }
+
+  /** Delete button inside a conversation item (visible on hover) */
+  deleteButton(itemLocator: Locator): Locator {
+    return itemLocator.locator('[data-action="delete"]');
+  }
+
+  deleteCancelButton(): Locator {
+    return this.host().locator(
+      ".conversations__delete-dialog .conversations__cancel",
+    );
+  }
+
+  deleteDialog(): Locator {
+    return this.host().locator(".conversations__delete-dialog");
+  }
+
+  deleteOkButton(): Locator {
+    return this.host().locator(
+      ".conversations__delete-dialog .conversations__delete-ok",
     );
   }
 
@@ -76,30 +75,26 @@ export class ConversationsComponent {
     );
   }
 
-  /** Delete button inside a conversation item (visible on hover) */
-  deleteButton(itemLocator: Locator): Locator {
-    return itemLocator.locator('[data-action="delete"]');
+  /** Locator for the <shadow-claw-conversations> element */
+  host(): Locator {
+    return this.root.locator("shadow-claw-conversations");
   }
 
-  deleteDialog(): Locator {
-    return this.host().locator(".conversations__delete-dialog");
-  }
-
-  deleteOkButton(): Locator {
+  /** A specific conversation item by group ID */
+  item(groupId: string): Locator {
     return this.host().locator(
-      ".conversations__delete-dialog .conversations__delete-ok",
+      `.conversation-item[data-group-id="${groupId}"]`,
     );
   }
 
-  deleteCancelButton(): Locator {
-    return this.host().locator(
-      ".conversations__delete-dialog .conversations__cancel",
-    );
+  /** Get the name text of a conversation item */
+  itemName(locator: Locator): Locator {
+    return locator.locator(".conversation-name");
   }
 
-  /** Count of conversations in the list */
-  async count(): Promise<number> {
-    return this.items().count();
+  /** All conversation items in the list */
+  items(): Locator {
+    return this.host().locator(".conversation-item");
   }
 
   /** Get the name of the active conversation */
@@ -109,9 +104,9 @@ export class ConversationsComponent {
     return text?.trim() ?? null;
   }
 
-  /** Wait for a certain number of conversations */
-  async expectCount(count: number) {
-    await expect(this.items()).toHaveCount(count, { timeout: 10000 });
+  /** Count of conversations in the list */
+  async count(): Promise<number> {
+    return this.items().count();
   }
 
   async createConversation(name: string) {
@@ -119,14 +114,6 @@ export class ConversationsComponent {
     await expect(this.createDialog()).toHaveJSProperty("open", true);
     await this.createInput().fill(name);
     await this.createOkButton().click();
-  }
-
-  async editConversationDetails(itemLocator: Locator, name: string) {
-    await itemLocator.hover();
-    await this.detailsButton(itemLocator).click();
-    await expect(this.detailsDialog()).toHaveJSProperty("open", true);
-    await this.detailsInput().fill(name);
-    await this.detailsOkButton().click();
   }
 
   async deleteConversation(itemLocator: Locator, confirmDelete: boolean) {
@@ -141,5 +128,18 @@ export class ConversationsComponent {
     }
 
     await this.deleteCancelButton().click();
+  }
+
+  async editConversationDetails(itemLocator: Locator, name: string) {
+    await itemLocator.hover();
+    await this.detailsButton(itemLocator).click();
+    await expect(this.detailsDialog()).toHaveJSProperty("open", true);
+    await this.detailsInput().fill(name);
+    await this.detailsOkButton().click();
+  }
+
+  /** Wait for a certain number of conversations */
+  async expectCount(count: number) {
+    await expect(this.items()).toHaveCount(count, { timeout: 10000 });
   }
 }

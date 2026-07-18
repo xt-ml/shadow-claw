@@ -31,12 +31,101 @@ export interface ToastTimer {
 const MAX_VISIBLE_TOASTS = 5;
 
 export class ToastStore {
-  #toasts: Signal.State<Toast[]> = new Signal.State([]);
   #nextId: Signal.State<number> = new Signal.State(0);
   #timers: Map<number, ToastTimer> = new Map();
+  #toasts: Signal.State<Toast[]> = new Signal.State([]);
 
-  get toasts() {
-    return this.#toasts.get();
+  clear() {
+    this.#timers.forEach((_, toastId) => this.clearTimer(toastId));
+    this.#timers.clear();
+    this.#toasts.set([]);
+  }
+
+  clearTimer(toastId: number): void {
+    const timer = this.#timers.get(toastId);
+    if (timer?.timeoutId) {
+      clearTimeout(timer.timeoutId);
+    }
+
+    this.#timers.delete(toastId);
+  }
+
+  dismiss(toastId: number) {
+    this.clearTimer(toastId);
+
+    this.#toasts.set(
+      this.#toasts.get().filter((toast) => toast.id !== toastId),
+    );
+  }
+
+  pause(toastId: number) {
+    const timer = this.#timers.get(toastId);
+    if (!timer || !timer.timeoutId) {
+      return;
+    }
+
+    clearTimeout(timer.timeoutId);
+
+    timer.timeoutId = undefined;
+    timer.remaining = Math.max(
+      0,
+      timer.remaining - (Date.now() - timer.startedAt),
+    );
+
+    this.#timers.set(toastId, timer);
+  }
+
+  resolveAction(action: ToastAction | undefined): ToastAction | undefined {
+    if (
+      !action ||
+      typeof action.label !== "string" ||
+      typeof action.onClick !== "function"
+    ) {
+      return undefined;
+    }
+
+    return action;
+  }
+
+  resolveDuration(duration: number | undefined): number {
+    if (
+      typeof duration !== "number" ||
+      Number.isNaN(duration) ||
+      duration < 0
+    ) {
+      return 4000;
+    }
+
+    return duration;
+  }
+
+  resolveType(type: ToastType | undefined): ToastType {
+    return type && ["success", "warning", "error", "info"].includes(type)
+      ? type
+      : "info";
+  }
+
+  resume(toastId: number) {
+    const timer = this.#timers.get(toastId);
+    if (!timer || timer.timeoutId || timer.remaining <= 0) {
+      return;
+    }
+
+    this.scheduleDismiss(toastId, timer.remaining);
+  }
+
+  scheduleDismiss(toastId: number, delay: number): void {
+    this.clearTimer(toastId);
+
+    const timeoutId = globalThis.setTimeout(() => {
+      this.dismiss(toastId);
+    }, delay);
+
+    this.#timers.set(toastId, {
+      timeoutId,
+      remaining: delay,
+      startedAt: Date.now(),
+    });
   }
 
   show(message: string, options: ToastOptions = {}) {
@@ -70,44 +159,8 @@ export class ToastStore {
     return toast.id;
   }
 
-  dismiss(toastId: number) {
-    this.clearTimer(toastId);
-
-    this.#toasts.set(
-      this.#toasts.get().filter((toast) => toast.id !== toastId),
-    );
-  }
-
-  clear() {
-    this.#timers.forEach((_, toastId) => this.clearTimer(toastId));
-    this.#timers.clear();
-    this.#toasts.set([]);
-  }
-
-  pause(toastId: number) {
-    const timer = this.#timers.get(toastId);
-    if (!timer || !timer.timeoutId) {
-      return;
-    }
-
-    clearTimeout(timer.timeoutId);
-
-    timer.timeoutId = undefined;
-    timer.remaining = Math.max(
-      0,
-      timer.remaining - (Date.now() - timer.startedAt),
-    );
-
-    this.#timers.set(toastId, timer);
-  }
-
-  resume(toastId: number) {
-    const timer = this.#timers.get(toastId);
-    if (!timer || timer.timeoutId || timer.remaining <= 0) {
-      return;
-    }
-
-    this.scheduleDismiss(toastId, timer.remaining);
+  get toasts() {
+    return this.#toasts.get();
   }
 
   async runAction(toastId: number): Promise<void> {
@@ -118,59 +171,6 @@ export class ToastStore {
     }
 
     await toast.action.onClick();
-  }
-
-  scheduleDismiss(toastId: number, delay: number): void {
-    this.clearTimer(toastId);
-
-    const timeoutId = globalThis.setTimeout(() => {
-      this.dismiss(toastId);
-    }, delay);
-
-    this.#timers.set(toastId, {
-      timeoutId,
-      remaining: delay,
-      startedAt: Date.now(),
-    });
-  }
-
-  clearTimer(toastId: number): void {
-    const timer = this.#timers.get(toastId);
-    if (timer?.timeoutId) {
-      clearTimeout(timer.timeoutId);
-    }
-
-    this.#timers.delete(toastId);
-  }
-
-  resolveType(type: ToastType | undefined): ToastType {
-    return type && ["success", "warning", "error", "info"].includes(type)
-      ? type
-      : "info";
-  }
-
-  resolveDuration(duration: number | undefined): number {
-    if (
-      typeof duration !== "number" ||
-      Number.isNaN(duration) ||
-      duration < 0
-    ) {
-      return 4000;
-    }
-
-    return duration;
-  }
-
-  resolveAction(action: ToastAction | undefined): ToastAction | undefined {
-    if (
-      !action ||
-      typeof action.label !== "string" ||
-      typeof action.onClick !== "function"
-    ) {
-      return undefined;
-    }
-
-    return action;
   }
 }
 

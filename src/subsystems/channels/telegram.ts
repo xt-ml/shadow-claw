@@ -21,17 +21,37 @@ export type TelegramFileReader = (
 ) => Promise<Blob | null>;
 
 export class TelegramChannel implements Channel {
-  type: Channel["type"] = "telegram";
-  token = "";
-  registeredChatIds: Set<string> = new Set();
-  offset = 0;
   abortController: AbortController | null = null;
+  fileReader: TelegramFileReader | null = null;
   messageCallback: ChannelMessageCallback | null = null;
-  running = false;
-  useProxy = false;
+  offset = 0;
   pollRetryDelayMs = TELEGRAM_POLL_RETRY_MIN_MS;
   pollSessionId = 0;
-  fileReader: TelegramFileReader | null = null;
+  registeredChatIds: Set<string> = new Set();
+  running = false;
+  token = "";
+  type: Channel["type"] = "telegram";
+  useProxy = false;
+
+  buildFileUrl(filePath: string): string {
+    const normalizedPath = filePath
+      .split("/")
+      .filter(Boolean)
+      .map((segment) => encodeURIComponent(segment))
+      .join("/");
+    const base = this.useProxy
+      ? "/telegram/file/bot"
+      : "https://api.telegram.org/file/bot";
+
+    return `${base}${this.token}/${normalizedPath}`;
+  }
+
+  buildMethodUrl(methodOrPath: string): string {
+    const normalized = methodOrPath.replace(/^\/+/, "");
+    const base = this.useProxy ? TELEGRAM_PROXY_BASE : TELEGRAM_API_BASE;
+
+    return `${base}${this.token}/${normalized}`;
+  }
 
   configure(token: string, chatIds: string[], useProxy = false): void {
     this.token = token.trim();
@@ -41,6 +61,24 @@ export class TelegramChannel implements Channel {
     this.useProxy = !!useProxy;
   }
 
+  isConfigured(): boolean {
+    return this.token.length > 0;
+  }
+
+  nextPollRetryDelay(): number {
+    const delay = this.pollRetryDelayMs;
+    this.pollRetryDelayMs = Math.min(
+      this.pollRetryDelayMs * 2,
+      TELEGRAM_POLL_RETRY_MAX_MS,
+    );
+
+    return delay;
+  }
+
+  onMessage(callback: ChannelMessageCallback): void {
+    this.messageCallback = callback;
+  }
+
   registerChatId(chatId: string): void {
     const normalized = chatId.trim();
     if (!normalized) {
@@ -48,6 +86,22 @@ export class TelegramChannel implements Channel {
     }
 
     this.registeredChatIds.add(normalized);
+  }
+
+  resetPollBackoff(): void {
+    this.pollRetryDelayMs = TELEGRAM_POLL_RETRY_MIN_MS;
+  }
+
+  setTyping(groupId: string, typing: boolean): void {
+    if (!typing) {
+      return;
+    }
+
+    const chatId = groupId.replace(/^tg:/, "");
+    void this.apiCall("sendChatAction", {
+      chat_id: chatId,
+      action: "typing",
+    }).catch(() => {});
   }
 
   start(): void {
@@ -71,269 +125,6 @@ export class TelegramChannel implements Channel {
     this.abortController = null;
   }
 
-  async send(
-    groupId: string,
-    text: string,
-    _providedAttachments?: MessageAttachment[],
-  ): Promise<void> {
-    const chatId = groupId.replace(/^tg:/, "");
-
-    // Extract and send inline images and documents as Telegram attachments
-    const { remainingText, attachments: markdownAttachments } =
-      extractMarkdownAttachments(text);
-
-    for (const att of markdownAttachments) {
-      if (this.fileReader) {
-        try {
-          const blob = await this.fileReader(groupId, att.path);
-          if (blob && blob.size > 0) {
-            const lowerPath = att.path.toLowerCase();
-            const isImage =
-              lowerPath.endsWith(".png") ||
-              lowerPath.endsWith(".jpg") ||
-              lowerPath.endsWith(".jpeg") ||
-              lowerPath.endsWith(".gif") ||
-              lowerPath.endsWith(".webp");
-
-            if (isImage) {
-              await this.sendPhoto(chatId, blob, att.alt, att.path);
-            } else {
-              await this.sendDocument(chatId, blob, att.alt, att.path);
-            }
-
-            continue;
-          }
-        } catch (err) {
-          console.warn(
-            `TelegramChannel: failed to read file ${att.path}:`,
-            err,
-          );
-        }
-      }
-
-      // Fallback: send the markdown as text if file reader is unavailable
-      await this.apiCall("sendMessage", {
-        chat_id: chatId,
-        text: `[${att.alt}] (file: ${att.path})`,
-      });
-    }
-
-    // Send remaining text if any
-    const trimmed = remainingText.trim();
-    if (trimmed) {
-      const chunks = splitText(trimmed, TELEGRAM_MAX_LENGTH);
-      for (const chunk of chunks) {
-        await this.apiCall("sendMessage", {
-          chat_id: chatId,
-          text: chunk,
-        });
-      }
-    }
-  }
-
-  async sendPhoto(
-    chatId: string,
-    blob: Blob,
-    caption: string,
-    filename: string,
-  ): Promise<void> {
-    const basename = filename.split("/").pop() || "image.png";
-    const formData = new FormData();
-    formData.append("chat_id", chatId);
-    formData.append("photo", blob, basename);
-    if (caption) {
-      formData.append("caption", caption);
-    }
-
-    const res = await fetch(this.buildMethodUrl("sendPhoto"), {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-
-      throw new Error(`Telegram sendPhoto failed: ${res.status} ${text}`);
-    }
-  }
-
-  async sendDocument(
-    chatId: string,
-    blob: Blob,
-    caption: string,
-    filename: string,
-  ): Promise<void> {
-    const basename = filename.split("/").pop() || "document.file";
-    const formData = new FormData();
-    formData.append("chat_id", chatId);
-    formData.append("document", blob, basename);
-    if (caption) {
-      formData.append("caption", caption);
-    }
-
-    const res = await fetch(this.buildMethodUrl("sendDocument"), {
-      method: "POST",
-      body: formData,
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-
-      throw new Error(`Telegram sendDocument failed: ${res.status} ${text}`);
-    }
-  }
-
-  setTyping(groupId: string, typing: boolean): void {
-    if (!typing) {
-      return;
-    }
-
-    const chatId = groupId.replace(/^tg:/, "");
-    void this.apiCall("sendChatAction", {
-      chat_id: chatId,
-      action: "typing",
-    }).catch(() => {});
-  }
-
-  onMessage(callback: ChannelMessageCallback): void {
-    this.messageCallback = callback;
-  }
-
-  isConfigured(): boolean {
-    return this.token.length > 0;
-  }
-
-  async poll(sessionId: number, controller: AbortController): Promise<void> {
-    while (
-      this.running &&
-      this.pollSessionId === sessionId &&
-      !controller.signal.aborted
-    ) {
-      try {
-        const res = await fetch(
-          this.buildMethodUrl(
-            `getUpdates?offset=${this.offset}&timeout=${TELEGRAM_POLL_TIMEOUT}`,
-          ),
-          { signal: controller.signal },
-        );
-
-        if (!res.ok) {
-          console.error(`Telegram poll error: HTTP ${res.status}`);
-          await this.waitForRetry(this.nextPollRetryDelay());
-
-          continue;
-        }
-
-        const data = (await res.json()) as TelegramApiResponse;
-        if (!data.ok || !Array.isArray(data.result)) {
-          await this.waitForRetry(this.nextPollRetryDelay());
-
-          continue;
-        }
-
-        this.resetPollBackoff();
-
-        for (const update of data.result) {
-          this.offset = update.update_id + 1;
-          await this.handleUpdate(update);
-        }
-      } catch (error) {
-        if (error instanceof Error && error.name === "AbortError") {
-          break;
-        }
-
-        console.error("Telegram poll error:", error);
-        await this.waitForRetry(this.nextPollRetryDelay());
-      }
-    }
-  }
-
-  nextPollRetryDelay(): number {
-    const delay = this.pollRetryDelayMs;
-    this.pollRetryDelayMs = Math.min(
-      this.pollRetryDelayMs * 2,
-      TELEGRAM_POLL_RETRY_MAX_MS,
-    );
-
-    return delay;
-  }
-
-  resetPollBackoff(): void {
-    this.pollRetryDelayMs = TELEGRAM_POLL_RETRY_MIN_MS;
-  }
-
-  async waitForRetry(ms: number): Promise<void> {
-    await sleep(ms);
-  }
-
-  async handleUpdate(update: TelegramUpdate): Promise<void> {
-    const msg = update.message;
-    if (!msg) {
-      return;
-    }
-
-    const chatId = String(msg.chat.id);
-
-    if (msg.text === "/chatid") {
-      void this.apiCall("sendMessage", {
-        chat_id: chatId,
-        text: `Chat ID: ${chatId}\nRegister this ID in ShadowClaw settings.`,
-      }).catch(console.error);
-
-      return;
-    }
-
-    if (msg.text === "/ping") {
-      void this.apiCall("sendMessage", {
-        chat_id: chatId,
-        text: "Pong! ShadowClaw is running.",
-      }).catch(console.error);
-
-      return;
-    }
-
-    if (!this.registeredChatIds.has(chatId)) {
-      return;
-    }
-
-    const attachments = await this.extractAttachments(msg);
-    const textContent = `${msg.text || msg.caption || ""}`.trim();
-
-    const content =
-      textContent ||
-      (msg.photo?.length ? "[Photo]" : null) ||
-      (msg.voice ? "[Voice message]" : null) ||
-      (msg.video ? "[Video]" : null) ||
-      (msg.audio ? "[Audio]" : null) ||
-      (msg.animation ? "[Animation]" : null) ||
-      (msg.document
-        ? `[Document: ${msg.document.file_name || "unnamed"}]`
-        : null) ||
-      (msg.sticker ? `[Sticker: ${msg.sticker.emoji || ""}]` : null) ||
-      (msg.location
-        ? `[Location: ${msg.location.latitude}, ${msg.location.longitude}]`
-        : null) ||
-      (msg.contact ? `[Contact: ${msg.contact.first_name}]` : null) ||
-      "[Unsupported message type]";
-
-    const senderName =
-      msg.from?.first_name ||
-      msg.from?.username ||
-      String(msg.from?.id || "Unknown");
-
-    const inbound: InboundMessage = {
-      id: String(msg.message_id),
-      groupId: `tg:${chatId}`,
-      sender: senderName,
-      content,
-      timestamp: msg.date * 1000,
-      channel: "telegram",
-      attachments,
-    };
-
-    this.messageCallback?.(inbound);
-  }
-
   async apiCall<T = unknown>(
     method: string,
     body: Record<string, unknown>,
@@ -351,26 +142,6 @@ export class TelegramChannel implements Channel {
     }
 
     return (await res.json()) as T;
-  }
-
-  buildMethodUrl(methodOrPath: string): string {
-    const normalized = methodOrPath.replace(/^\/+/, "");
-    const base = this.useProxy ? TELEGRAM_PROXY_BASE : TELEGRAM_API_BASE;
-
-    return `${base}${this.token}/${normalized}`;
-  }
-
-  buildFileUrl(filePath: string): string {
-    const normalizedPath = filePath
-      .split("/")
-      .filter(Boolean)
-      .map((segment) => encodeURIComponent(segment))
-      .join("/");
-    const base = this.useProxy
-      ? "/telegram/file/bot"
-      : "https://api.telegram.org/file/bot";
-
-    return `${base}${this.token}/${normalizedPath}`;
   }
 
   async extractAttachments(msg: TelegramMessage): Promise<MessageAttachment[]> {
@@ -467,6 +238,235 @@ export class TelegramChannel implements Channel {
     }
 
     return response.result;
+  }
+
+  async handleUpdate(update: TelegramUpdate): Promise<void> {
+    const msg = update.message;
+    if (!msg) {
+      return;
+    }
+
+    const chatId = String(msg.chat.id);
+
+    if (msg.text === "/chatid") {
+      void this.apiCall("sendMessage", {
+        chat_id: chatId,
+        text: `Chat ID: ${chatId}\nRegister this ID in ShadowClaw settings.`,
+      }).catch(console.error);
+
+      return;
+    }
+
+    if (msg.text === "/ping") {
+      void this.apiCall("sendMessage", {
+        chat_id: chatId,
+        text: "Pong! ShadowClaw is running.",
+      }).catch(console.error);
+
+      return;
+    }
+
+    if (!this.registeredChatIds.has(chatId)) {
+      return;
+    }
+
+    const attachments = await this.extractAttachments(msg);
+    const textContent = `${msg.text || msg.caption || ""}`.trim();
+
+    const content =
+      textContent ||
+      (msg.photo?.length ? "[Photo]" : null) ||
+      (msg.voice ? "[Voice message]" : null) ||
+      (msg.video ? "[Video]" : null) ||
+      (msg.audio ? "[Audio]" : null) ||
+      (msg.animation ? "[Animation]" : null) ||
+      (msg.document
+        ? `[Document: ${msg.document.file_name || "unnamed"}]`
+        : null) ||
+      (msg.sticker ? `[Sticker: ${msg.sticker.emoji || ""}]` : null) ||
+      (msg.location
+        ? `[Location: ${msg.location.latitude}, ${msg.location.longitude}]`
+        : null) ||
+      (msg.contact ? `[Contact: ${msg.contact.first_name}]` : null) ||
+      "[Unsupported message type]";
+
+    const senderName =
+      msg.from?.first_name ||
+      msg.from?.username ||
+      String(msg.from?.id || "Unknown");
+
+    const inbound: InboundMessage = {
+      id: String(msg.message_id),
+      groupId: `tg:${chatId}`,
+      sender: senderName,
+      content,
+      timestamp: msg.date * 1000,
+      channel: "telegram",
+      attachments,
+    };
+
+    this.messageCallback?.(inbound);
+  }
+
+  async poll(sessionId: number, controller: AbortController): Promise<void> {
+    while (
+      this.running &&
+      this.pollSessionId === sessionId &&
+      !controller.signal.aborted
+    ) {
+      try {
+        const res = await fetch(
+          this.buildMethodUrl(
+            `getUpdates?offset=${this.offset}&timeout=${TELEGRAM_POLL_TIMEOUT}`,
+          ),
+          { signal: controller.signal },
+        );
+
+        if (!res.ok) {
+          console.error(`Telegram poll error: HTTP ${res.status}`);
+          await this.waitForRetry(this.nextPollRetryDelay());
+
+          continue;
+        }
+
+        const data = (await res.json()) as TelegramApiResponse;
+        if (!data.ok || !Array.isArray(data.result)) {
+          await this.waitForRetry(this.nextPollRetryDelay());
+
+          continue;
+        }
+
+        this.resetPollBackoff();
+
+        for (const update of data.result) {
+          this.offset = update.update_id + 1;
+          await this.handleUpdate(update);
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          break;
+        }
+
+        console.error("Telegram poll error:", error);
+        await this.waitForRetry(this.nextPollRetryDelay());
+      }
+    }
+  }
+
+  async send(
+    groupId: string,
+    text: string,
+    _providedAttachments?: MessageAttachment[],
+  ): Promise<void> {
+    const chatId = groupId.replace(/^tg:/, "");
+
+    // Extract and send inline images and documents as Telegram attachments
+    const { remainingText, attachments: markdownAttachments } =
+      extractMarkdownAttachments(text);
+
+    for (const att of markdownAttachments) {
+      if (this.fileReader) {
+        try {
+          const blob = await this.fileReader(groupId, att.path);
+          if (blob && blob.size > 0) {
+            const lowerPath = att.path.toLowerCase();
+            const isImage =
+              lowerPath.endsWith(".png") ||
+              lowerPath.endsWith(".jpg") ||
+              lowerPath.endsWith(".jpeg") ||
+              lowerPath.endsWith(".gif") ||
+              lowerPath.endsWith(".webp");
+
+            if (isImage) {
+              await this.sendPhoto(chatId, blob, att.alt, att.path);
+            } else {
+              await this.sendDocument(chatId, blob, att.alt, att.path);
+            }
+
+            continue;
+          }
+        } catch (err) {
+          console.warn(
+            `TelegramChannel: failed to read file ${att.path}:`,
+            err,
+          );
+        }
+      }
+
+      // Fallback: send the markdown as text if file reader is unavailable
+      await this.apiCall("sendMessage", {
+        chat_id: chatId,
+        text: `[${att.alt}] (file: ${att.path})`,
+      });
+    }
+
+    // Send remaining text if any
+    const trimmed = remainingText.trim();
+    if (trimmed) {
+      const chunks = splitText(trimmed, TELEGRAM_MAX_LENGTH);
+      for (const chunk of chunks) {
+        await this.apiCall("sendMessage", {
+          chat_id: chatId,
+          text: chunk,
+        });
+      }
+    }
+  }
+
+  async sendDocument(
+    chatId: string,
+    blob: Blob,
+    caption: string,
+    filename: string,
+  ): Promise<void> {
+    const basename = filename.split("/").pop() || "document.file";
+    const formData = new FormData();
+    formData.append("chat_id", chatId);
+    formData.append("document", blob, basename);
+    if (caption) {
+      formData.append("caption", caption);
+    }
+
+    const res = await fetch(this.buildMethodUrl("sendDocument"), {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+
+      throw new Error(`Telegram sendDocument failed: ${res.status} ${text}`);
+    }
+  }
+
+  async sendPhoto(
+    chatId: string,
+    blob: Blob,
+    caption: string,
+    filename: string,
+  ): Promise<void> {
+    const basename = filename.split("/").pop() || "image.png";
+    const formData = new FormData();
+    formData.append("chat_id", chatId);
+    formData.append("photo", blob, basename);
+    if (caption) {
+      formData.append("caption", caption);
+    }
+
+    const res = await fetch(this.buildMethodUrl("sendPhoto"), {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+
+      throw new Error(`Telegram sendPhoto failed: ${res.status} ${text}`);
+    }
+  }
+
+  async waitForRetry(ms: number): Promise<void> {
+    await sleep(ms);
   }
 }
 

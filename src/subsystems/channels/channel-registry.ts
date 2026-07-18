@@ -28,6 +28,62 @@ export class ChannelRegistry {
   }
 
   /**
+   * Find the channel that owns a groupId.
+   * Matches the longest registered prefix.
+   */
+  find(groupId: string): Channel | null {
+    return this.resolve(groupId)?.channel ?? null;
+  }
+
+  /**
+   * Get a channel by its exact prefix.
+   */
+  get(prefix: string): Channel | undefined {
+    return this._entries.find((e) => e.prefix === prefix)?.channel;
+  }
+
+  /**
+   * Get a badge label for a groupId based on its prefix.
+   */
+  getBadge(groupId: string): string {
+    return this.resolve(groupId)?.badge ?? "";
+  }
+
+  /**
+   * Resolve a channel type from the group prefix.
+   */
+  getChannelType(groupId: string): ChannelType | null {
+    return this.resolve(groupId)?.channel.type ?? null;
+  }
+
+  /**
+   * Register a message handler on all channels.
+   */
+  onMessage(handler: (msg: InboundMessage) => void) {
+    for (const entry of this._entries) {
+      entry.channel.onMessage(handler);
+    }
+  }
+
+  /**
+   * Register a typing handler on all channels.
+   */
+  onTyping(handler: (groupId: string, typing: boolean) => void) {
+    for (const entry of this._entries) {
+      if (entry.channel.onTyping) {
+        entry.channel.onTyping(handler);
+      }
+    }
+  }
+
+  /**
+   * List all registered prefixes.
+   */
+  prefixes(): string[] {
+    return this._entries.map((e) => e.prefix);
+  }
+
+  /**
    * Register a channel for a given prefix.
    */
   register(
@@ -64,46 +120,10 @@ export class ChannelRegistry {
   }
 
   /**
-   * Find the channel that owns a groupId.
-   * Matches the longest registered prefix.
-   */
-  find(groupId: string): Channel | null {
-    return this.resolve(groupId)?.channel ?? null;
-  }
-
-  /**
-   * Get a channel by its exact prefix.
-   */
-  get(prefix: string): Channel | undefined {
-    return this._entries.find((e) => e.prefix === prefix)?.channel;
-  }
-
-  /**
-   * Get a badge label for a groupId based on its prefix.
-   */
-  getBadge(groupId: string): string {
-    return this.resolve(groupId)?.badge ?? "";
-  }
-
-  /**
-   * Resolve a channel type from the group prefix.
-   */
-  getChannelType(groupId: string): ChannelType | null {
-    return this.resolve(groupId)?.channel.type ?? null;
-  }
-
-  /**
    * Whether this channel should auto-trigger the agent.
    */
   shouldAutoTrigger(groupId: string): boolean {
     return this.resolve(groupId)?.autoTrigger ?? false;
-  }
-
-  /**
-   * List all registered prefixes.
-   */
-  prefixes(): string[] {
-    return this._entries.map((e) => e.prefix);
   }
 
   /**
@@ -121,26 +141,6 @@ export class ChannelRegistry {
   stopAll() {
     for (const entry of this._entries) {
       entry.channel.stop();
-    }
-  }
-
-  /**
-   * Register a message handler on all channels.
-   */
-  onMessage(handler: (msg: InboundMessage) => void) {
-    for (const entry of this._entries) {
-      entry.channel.onMessage(handler);
-    }
-  }
-
-  /**
-   * Register a typing handler on all channels.
-   */
-  onTyping(handler: (groupId: string, typing: boolean) => void) {
-    for (const entry of this._entries) {
-      if (entry.channel.onTyping) {
-        entry.channel.onTyping(handler);
-      }
     }
   }
 }

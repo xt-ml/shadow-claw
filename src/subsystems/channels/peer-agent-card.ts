@@ -141,19 +141,9 @@ export function parseAgentCardResponse(
 export class PeerCardStore {
   private _cards = new Map<string, AgentCard>();
 
-  /** Store a remote peer's agent card */
-  set(peerId: string, card: AgentCard): void {
-    this._cards.set(peerId, card);
-  }
-
-  /** Retrieve a remote peer's agent card */
-  get(peerId: string): AgentCard | undefined {
-    return this._cards.get(peerId);
-  }
-
-  /** Check if we have a card for a peer */
-  has(peerId: string): boolean {
-    return this._cards.has(peerId);
+  /** Clear all stored cards */
+  clear(): void {
+    this._cards.clear();
   }
 
   /** Remove a peer's card (on disconnect) */
@@ -161,21 +151,14 @@ export class PeerCardStore {
     this._cards.delete(peerId);
   }
 
-  /** Clear all stored cards */
-  clear(): void {
-    this._cards.clear();
-  }
-
   /** Get all stored cards */
   entries(): IterableIterator<[string, AgentCard]> {
     return this._cards.entries();
   }
 
-  /** Check if a peer supports streaming */
-  supportsStreaming(peerId: string): boolean {
-    const card = this._cards.get(peerId);
-
-    return card?.capabilities?.streaming ?? false;
+  /** Retrieve a remote peer's agent card */
+  get(peerId: string): AgentCard | undefined {
+    return this._cards.get(peerId);
   }
 
   /** Get the display name for a peer (falls back to peer ID) */
@@ -183,5 +166,22 @@ export class PeerCardStore {
     const card = this._cards.get(peerId);
 
     return card?.name ?? peerId;
+  }
+
+  /** Check if we have a card for a peer */
+  has(peerId: string): boolean {
+    return this._cards.has(peerId);
+  }
+
+  /** Store a remote peer's agent card */
+  set(peerId: string, card: AgentCard): void {
+    this._cards.set(peerId, card);
+  }
+
+  /** Check if a peer supports streaming */
+  supportsStreaming(peerId: string): boolean {
+    const card = this._cards.get(peerId);
+
+    return card?.capabilities?.streaming ?? false;
   }
 }

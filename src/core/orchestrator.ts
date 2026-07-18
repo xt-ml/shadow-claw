@@ -1,5 +1,3 @@
-import { detectProviderHelpType } from "../components/common/help/providers.js";
-
 import {
   ASSISTANT_NAME,
   CONFIG_KEYS,
@@ -15,6 +13,7 @@ import {
   getProvider,
   getProviderApiKeyConfigKey,
 } from "../config/config.js";
+
 import { inferAttachmentMimeType } from "../content/message-attachments.js";
 
 import { buildDynamicContext } from "../context/buildDynamicContext.js";
@@ -62,11 +61,6 @@ import {
 
 import { modelRegistry } from "../subsystems/providers/model-registry.js";
 
-import {
-  compactWithPromptApi,
-  isPromptApiSupported,
-} from "../subsystems/providers/prompt-api-provider.js";
-
 import { getContextLimit } from "../subsystems/providers/providers.js";
 import { TaskScheduler } from "../subsystems/tools/task-scheduler.js";
 
@@ -75,10 +69,11 @@ import { playNotificationChime } from "../ui/audio.js";
 import { showToast } from "../ui/toast.js";
 
 import { ulid } from "../utils/ulid.js";
-import { getCompactionSystemPrompt } from "../worker/getCompactionSystemPrompt.js";
+
 import { buildSystemPrompt } from "../worker/system-prompt.js";
 
 import { effect } from "./effect.js";
+import { compactContext } from "./orchestrator/compactContext.js";
 import { enqueue, processQueue } from "./orchestrator/enqueue.js";
 import { EventBus } from "./orchestrator/EventBus.js";
 import { handleWorkerMessage } from "./orchestrator/handleWorkerMessage.js";
@@ -946,138 +941,7 @@ export class Orchestrator {
     db: ShadowClawDatabase,
     groupId = DEFAULT_GROUP_ID,
   ): Promise<void> {
-    const requiresApiKey = this.providerConfig?.requiresApiKey !== false;
-    const currentApiKey = await this.getApiKeyForRequest();
-    if (requiresApiKey && !currentApiKey) {
-      const reason = "API key not configured. Cannot compact context.";
-
-      this.events.emit("provider-help", {
-        providerId: this.provider,
-        reason,
-        helpType: detectProviderHelpType(this.provider, reason, requiresApiKey),
-      });
-
-      this.events.emit("error", {
-        groupId,
-        error: reason,
-      });
-
-      return;
-    }
-
-    if (this.state !== "idle") {
-      this.events.emit("error", {
-        groupId,
-        error:
-          "Cannot compact while processing. Wait for the current response to finish.",
-      });
-
-      return;
-    }
-
-    this.setState("thinking", groupId);
-    this.events.emit("typing", { groupId, typing: true });
-
-    let memory = "";
-    try {
-      memory = await readGroupFile(db, groupId, "MEMORY.md");
-    } catch {
-      // No memory file yet
-    }
-
-    const compactTools = toolsStore.enabledTools;
-    const peerState = orchestratorStore.getPeerState(groupId) || undefined;
-    const systemPrompt = buildSystemPrompt(
-      this.assistantName,
-      memory,
-      compactTools,
-      toolsStore.systemPromptOverride,
-      peerState,
-    );
-
-    const contextLimit = getContextLimit(this.model);
-    const systemPromptTokens = estimateTokens(systemPrompt);
-    const allMessages = await buildConversationMessages(groupId, 200);
-    const dynamicContext = buildDynamicContext(allMessages, {
-      contextLimit,
-      systemPromptTokens,
-      maxOutputTokens: 4096, // compaction output cap
-      skimTop: this.contextCompressionEnabled,
-    });
-
-    const messages = dynamicContext.messages;
-
-    if (this.provider === "prompt_api") {
-      if (!isPromptApiSupported()) {
-        this.events.emit("error", {
-          groupId,
-          error:
-            "Prompt API is not available in this browser. Switch provider or enable experimental browser flags.",
-        });
-
-        this.events.emit("typing", { groupId, typing: false });
-        this.setState("idle", groupId);
-
-        return;
-      }
-
-      const controller = new AbortController();
-      this.promptControllers.set(groupId, controller);
-
-      try {
-        const summary = await compactWithPromptApi(
-          getCompactionSystemPrompt(systemPrompt),
-          messages,
-          controller.signal,
-          async (msg) => {
-            await this.handleWorkerMessage(db, msg);
-          },
-          groupId,
-        );
-
-        await this.handleCompactDone(db, groupId, summary);
-      } catch (err) {
-        if (err instanceof Error && err.name === "AbortError") {
-          return;
-        }
-
-        const message = err instanceof Error ? err.message : String(err);
-        await this.deliverResponse(
-          db,
-          groupId,
-          `⚠️ Error: Compaction failed: ${message}`,
-        );
-      } finally {
-        this.promptControllers.delete(groupId);
-      }
-
-      return;
-    }
-
-    const providerRequestId = this.createProviderRequestId(groupId);
-
-    this.agentWorker?.postMessage({
-      type: "compact",
-      payload: {
-        apiKey: await this.getApiKeyForRequest(),
-        assistantName: this.assistantName,
-        contextCompression: this.contextCompressionEnabled,
-        contextLimit: getContextLimit(this.model),
-        groupId,
-        memory,
-        messages,
-        model: this.model,
-        provider: this.provider,
-        providerHeaders: this.getProviderRuntimeHeaders(
-          this.provider,
-          providerRequestId,
-        ),
-        rateLimitAutoAdapt: this.rateLimitAutoAdapt,
-        rateLimitCallsPerMinute: this.rateLimitCallsPerMinute,
-        storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
-        systemPrompt,
-      },
-    });
+    return compactContext(this, db, groupId);
   }
 
   async configureIMessage(

@@ -15,6 +15,7 @@ import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 import shadowClawConversationsStyles from "./shadow-claw-conversations.css" with { type: "css" };
 import shadowClawConversationsTemplate from "./shadow-claw-conversations.html" with { type: "html" };
+
 export class ShadowClawConversations extends ShadowClawElement {
   static styles = shadowClawConversationsStyles;
   static template = shadowClawConversationsTemplate;
@@ -36,7 +37,6 @@ export class ShadowClawConversations extends ShadowClawElement {
   private _touchId: number | null = null;
 
   async connectedCallback() {
-
     const root = this.shadowRoot;
     if (!root) {
       throw new Error("shadowRoot not found");

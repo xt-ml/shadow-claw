@@ -56,6 +56,9 @@ import {
   handleSpecialLinkNavigation,
 } from "../../utils/utils.js";
 
+import { escapeHtml } from "./utils/escapeHtml.js";
+import { getPeerChatDisplayStatus } from "./utils/getPeerChatDisplayStatus.js";
+
 import type { ShadowClawDatabase } from "../../db/types.js";
 import type { AppDialogOptions } from "../../ui/types.js";
 
@@ -65,8 +68,6 @@ import "../shadow-claw-a2ui/shadow-claw-a2ui.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
-import { getPeerChatDisplayStatus } from "./utils/getPeerChatDisplayStatus.js";
-import { escapeHtml } from "./utils/escapeHtml.js";
 import shadowClawChatStyles from "./shadow-claw-chat.css" with { type: "css" };
 import shadowClawChatTemplate from "./shadow-claw-chat.html" with { type: "html" };
 
@@ -122,7 +123,6 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 
   async connectedCallback() {
-
     const root = this.shadowRoot;
     if (!root) {
       throw new Error("shadowRoot not found");

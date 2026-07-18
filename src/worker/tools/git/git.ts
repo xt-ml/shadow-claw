@@ -1,108 +1,18 @@
-import type { GitToolDeps } from "../../subsystems/git/types.js";
-import type { ShadowClawDatabase } from "../../db/types.js";
+import { extractConflictPaths } from "./utils/extractConflictPaths.js";
+import { indent } from "./utils/indent.js";
+import { parseConflictRegions } from "./utils/parseConflictRegions.js";
+import { resolveCorsProxy } from "./utils/resolveCorsProxy.js";
+import { truncateSnippet } from "./utils/truncateSnippet.js";
 
-function extractConflictPaths(message: string): string[] {
-  const match = message.match(/conflicts? in the following files?:\s*(.+)/i);
-  if (match) {
-    return match[1]
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-  }
+import type { ShadowClawDatabase } from "../../../db/types.js";
+import type { GitToolDeps } from "../../../subsystems/git/types.js";
 
-  return [];
-}
-
-function indent(text: string, prefix: string): string {
-  return text
-    .split("\n")
-    .map((line) => prefix + line)
-    .join("\n");
-}
-
-function parseConflictRegions(content: string): {
+export interface ConflictRegion {
   ours: string;
   oursLabel: string;
   startLine: number;
   theirs: string;
   theirsLabel: string;
-}[] {
-  const regions: {
-    ours: string;
-    oursLabel: string;
-    startLine: number;
-    theirs: string;
-    theirsLabel: string;
-  }[] = [];
-
-  const lines = content.split("\n");
-
-  let i = 0;
-  while (i < lines.length) {
-    if (lines[i].startsWith("<<<<<<<")) {
-      const oursLabel = lines[i].slice(8).trim();
-      const oursLines: string[] = [];
-      const theirsLines: string[] = [];
-
-      let inTheirs = false;
-
-      const startLine = i + 1;
-
-      i++;
-
-      while (i < lines.length && !lines[i].startsWith(">>>>>>>")) {
-        if (lines[i].startsWith("=======")) {
-          inTheirs = true;
-        } else if (inTheirs) {
-          theirsLines.push(lines[i]);
-        } else {
-          oursLines.push(lines[i]);
-        }
-
-        i++;
-      }
-
-      const theirsLabel = i < lines.length ? lines[i].slice(8).trim() : "";
-      regions.push({
-        ours: oursLines.join("\n"),
-        oursLabel,
-        startLine,
-        theirs: theirsLines.join("\n"),
-        theirsLabel,
-      });
-    }
-
-    i++;
-  }
-
-  return regions;
-}
-
-function truncateSnippet(text: string, maxLines: number): string {
-  const lines = text.split("\n");
-  if (lines.length <= maxLines) {
-    return text;
-  }
-
-  return (
-    lines.slice(0, maxLines).join("\n") +
-    "\n    [... " +
-    (lines.length - maxLines) +
-    " more lines]"
-  );
-}
-
-async function resolveCorsProxy(
-  db: ShadowClawDatabase,
-  deps: GitToolDeps,
-): Promise<string> {
-  const pref = await deps.getConfig(db, deps.configKeys.GIT_CORS_PROXY);
-  const customUrl = await deps.getConfig(db, deps.configKeys.GIT_PROXY_URL);
-
-  return deps.getProxyUrl(
-    pref === "public" ? "public" : pref === "custom" ? "custom" : "local",
-    customUrl,
-  );
 }
 
 export async function executeGitTool(

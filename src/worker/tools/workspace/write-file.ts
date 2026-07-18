@@ -1,5 +1,5 @@
-import { writeGroupFile } from "../../../storage/writeGroupFile.js";
 import { ShadowClawDatabase } from "../../../db/types.js";
+import { writeGroupFile } from "../../../storage/writeGroupFile.js";
 
 export async function executeWriteFile(
   db: ShadowClawDatabase,

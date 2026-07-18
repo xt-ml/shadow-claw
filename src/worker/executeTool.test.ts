@@ -282,7 +282,12 @@ describe("executeTool.js", () => {
 
     const module = await import("./executeTool.js");
     executeTool = module.executeTool;
-    resolveMcpReauth = module.resolveMcpReauth;
+
+    const reauthModule = await import(
+      "./tools/remote-mcp/utils/resolveMcpReauth.js"
+    );
+
+    resolveMcpReauth = reauthModule.resolveMcpReauth;
   });
 
   it("should handle bash tool", async () => {

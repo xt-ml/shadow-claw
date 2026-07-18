@@ -1,9 +1,13 @@
-import type { AccountAuthMode } from "../../subsystems/accounts/service-accounts.js";
-import type { ShadowClawDatabase } from "../../db/types.js";
+import { HttpError } from "./utils/HttpError.js";
+import { parseAuthMode } from "./utils/parseAuthMode.js";
+
+import type { ShadowClawDatabase } from "../../../db/types.js";
+import type { AccountAuthMode } from "../../../subsystems/accounts/service-accounts.js";
+
 import type {
   GitAuthMode,
   ResolvedGitCredentials,
-} from "../../subsystems/git/types.js";
+} from "../../../subsystems/git/types.js";
 
 interface FetchResult {
   status: string;
@@ -13,7 +17,7 @@ interface FetchResult {
   fetchStatus: number;
 }
 
-interface HttpErrorLike extends Error {
+export interface HttpErrorLike extends Error {
   status: number;
   statusText: string;
   body: string;
@@ -94,32 +98,6 @@ export interface FetchUrlDeps {
     };
   }) => void;
   fetchMaxResponse: number;
-}
-
-class HttpError extends Error implements HttpErrorLike {
-  public body: string;
-  public headers: string;
-  public status: number;
-  public statusText: string;
-
-  constructor(status: number, statusText: string, body: string, headers = "") {
-    super(`HTTP ${status} ${statusText}`);
-    this.name = "HttpError";
-    this.status = status;
-    this.statusText = statusText;
-    this.body = body;
-    this.headers = headers;
-  }
-}
-
-function parseAuthMode(
-  value: unknown,
-): AccountAuthMode | GitAuthMode | undefined {
-  if (value === "token" || value === "oauth") {
-    return value;
-  }
-
-  return undefined;
 }
 
 export async function executeFetchUrlTool(

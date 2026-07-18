@@ -7,12 +7,12 @@
 
 ## Built-in Channels
 
-| Channel  | Type       | Prefix  | Source                                 | Purpose                             |
-| -------- | ---------- | ------- | -------------------------------------- | ----------------------------------- |
-| Browser  | `browser`  | `br:`   | `src/subsystems/channels/browser-chat` | In-browser chat UI                  |
-| PeerJS   | `peerjs`   | `peer:` | `src/subsystems/channels/peerjs.ts`    | WebRTC P2P via PeerJS data channels |
-| Telegram | `telegram` | `tg:`   | `src/subsystems/channels/telegram.ts`  | Telegram Bot API integration        |
-| iMessage | `imessage` | `im:`   | `src/subsystems/channels/imessage.ts`  | iMessage bridge via HTTP service    |
+| Channel  | Type       | Prefix  | Source                                    | Purpose                             |
+| -------- | ---------- | ------- | ----------------------------------------- | ----------------------------------- |
+| Browser  | `browser`  | `br:`   | `src/subsystems/channels/browser-chat.ts` | In-browser chat UI                  |
+| PeerJS   | `peerjs`   | `peer:` | `src/subsystems/channels/peerjs.ts`       | WebRTC P2P via PeerJS data channels |
+| Telegram | `telegram` | `tg:`   | `src/subsystems/channels/telegram.ts`     | Telegram Bot API integration        |
+| iMessage | `imessage` | `im:`   | `src/subsystems/channels/imessage.ts`     | iMessage bridge via HTTP service    |
 
 ## Architecture
 
@@ -48,7 +48,7 @@ The `ChannelRegistry` maps groupId prefixes to `Channel` implementations.
 ## Channel Interface
 
 ```ts
-// From src/types.ts
+// From src/subsystems/channels/types.ts
 interface Channel {
   type: string; // Fixed channel type identifier
   submit(text: string, groupId: string): void; // Called when user sends a message

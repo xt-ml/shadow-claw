@@ -29,7 +29,7 @@ import { post as workerPost } from "../../../worker/post.js";
 import { buildSystemPrompt } from "../../../worker/system-prompt.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
-import type { SubagentInvokeContext } from "../../../worker/tools/spawn-subagent.js";
+import type { SubagentInvokeContext } from "../../../worker/tools/spawn-subagent/spawn-subagent.js";
 import type { Orchestrator } from "../orchestrator.js";
 
 export async function invokeAgent(

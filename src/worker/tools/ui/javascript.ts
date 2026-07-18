@@ -1,34 +1,6 @@
-import { getConfig } from "../../../db/getConfig.js";
-import { CONFIG_KEYS } from "../../../config/config.js";
 import { ShadowClawDatabase } from "../../../db/types.js";
 import { sandboxedEval } from "../../sandboxedEval.js";
-
-function parseBooleanConfig(value: string | null | undefined): boolean | null {
-  if (value == null) {
-    return null;
-  }
-
-  const normalized = String(value).trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) {
-    return true;
-  }
-
-  if (["0", "false", "no", "off"].includes(normalized)) {
-    return false;
-  }
-
-  return null;
-}
-
-async function getAllowFullInternetAccess(
-  db: ShadowClawDatabase,
-): Promise<boolean> {
-  const configuredInternetAccess = parseBooleanConfig(
-    await getConfig(db, CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS),
-  );
-
-  return configuredInternetAccess ?? false;
-}
+import { getAllowFullInternetAccess } from "./utils/getAllowFullInternetAccess.js";
 
 export async function executeJavascript(
   db: ShadowClawDatabase,

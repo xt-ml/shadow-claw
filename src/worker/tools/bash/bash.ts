@@ -1,7 +1,12 @@
-import { CONFIG_KEYS, BASH_DEFAULT_TIMEOUT_SEC, BASH_MAX_TIMEOUT_SEC } from "../../../config/config.js";
+import {
+  BASH_DEFAULT_TIMEOUT_SEC,
+  BASH_MAX_TIMEOUT_SEC,
+  CONFIG_KEYS,
+} from "../../../config/config.js";
+
 import { getConfig } from "../../../db/getConfig.js";
 import { ShadowClawDatabase } from "../../../db/types.js";
-import { executeShell } from "../../../shell/shell.js";
+
 import {
   bootVM,
   executeInVM,
@@ -9,75 +14,11 @@ import {
   getVMStatus,
   isVMReady,
 } from "../../../shell/vm.js";
-import { formatShellOutput } from "../../formatShellOutput.js";
+
 import { post } from "../../post.js";
-
-const VM_READY_POLL_MS = 50;
-
-function parseBooleanConfig(value: string | null | undefined): boolean | null {
-  if (value == null) {
-    return null;
-  }
-
-  const normalized = String(value).trim().toLowerCase();
-  if (["1", "true", "yes", "on"].includes(normalized)) {
-    return true;
-  }
-
-  if (["0", "false", "no", "off"].includes(normalized)) {
-    return false;
-  }
-
-  return null;
-}
-
-async function getAllowFullInternetAccess(
-  db: ShadowClawDatabase,
-): Promise<boolean> {
-  const configuredInternetAccess = parseBooleanConfig(
-    await getConfig(db, CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS),
-  );
-
-  return configuredInternetAccess ?? false;
-}
-
-async function waitForVMReady(timeoutMs: number): Promise<boolean> {
-  if (isVMReady()) {
-    return true;
-  }
-
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    await new Promise((resolve) => {
-      setTimeout(resolve, VM_READY_POLL_MS);
-    });
-
-    if (isVMReady()) {
-      return true;
-    }
-  }
-
-  return isVMReady();
-}
-
-async function executeViaShellFallback(
-  db: ShadowClawDatabase,
-  command: string,
-  groupId: string,
-  timeoutSec: number,
-  allowFullInternetAccess: boolean,
-): Promise<string> {
-  const shellResult = await executeShell(
-    db,
-    command,
-    groupId,
-    {},
-    timeoutSec,
-    allowFullInternetAccess,
-  );
-
-  return formatShellOutput(shellResult);
-}
+import { executeViaShellFallback } from "./utils/executeViaShellFallback.js";
+import { getAllowFullInternetAccess } from "./utils/getAllowFullInternetAccess.js";
+import { waitForVMReady } from "./utils/waitForVMReady.js";
 
 export async function executeBash(
   db: ShadowClawDatabase,

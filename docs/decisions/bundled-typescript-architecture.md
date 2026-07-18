@@ -14,7 +14,7 @@ Migrate the entire codebase to **TypeScript (`.ts`)** compiled and bundled with 
 
 ### Key choices:
 
-- **TypeScript** — strict type-checking across the board, shared interfaces via `src/types.ts`, typed messages for the worker protocol
+- **TypeScript** — strict type-checking across the board, shared interfaces via feature-local `*types.ts` modules (for example `src/subsystems/worker/types.ts`), typed messages for the worker protocol
 - **Rolldown** — produces single-file bundles for frontend, worker, service workers, server, and Electron. Handles Node polyfills via `rollup-plugin-polyfill-node` + aliasing
 - **Multiple tsconfig files** — distinct TypeScript configurations for each runtime context:
   - `tsconfig.json` — frontend app (browser, DOM)

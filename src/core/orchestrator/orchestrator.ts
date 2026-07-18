@@ -195,9 +195,9 @@ export class Orchestrator {
   proxyUrl: string = "/proxy";
   pushSubscriptionWarned: boolean = false;
   rateLimitAutoAdapt: boolean = true;
-  reasoningEffort: string = "none";
 
   rateLimitCallsPerMinute: number = 0;
+  reasoningEffort: string = "none";
 
   /** Multi-party room channel + manager (layered on the PeerJS transport). */
   roomChannel: RoomChannel = new RoomChannel();

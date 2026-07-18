@@ -3,8 +3,8 @@ import { jest } from "@jest/globals";
 import {
   executeRemoteMcpCallTool,
   executeRemoteMcpListTools,
-  resolveMcpReauth,
 } from "./remote-mcp.js";
+import { resolveMcpReauth } from "./utils/resolveMcpReauth.js";
 
 class MockMcpReauthRequiredError extends Error {
   connectionId: string;

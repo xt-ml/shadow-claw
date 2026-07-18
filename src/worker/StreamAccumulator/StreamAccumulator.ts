@@ -1,4 +1,6 @@
-import { sanitizeModelOutput } from "../content/chat-template-sanitizer.js";
+import { sanitizeModelOutput } from "../../content/chat-template-sanitizer.js";
+
+import type { ContentBlockAccumulator, StreamCallbacks, StreamFormat } from "./types.js";
 
 /**
  * Accumulates streamed SSE chunks into a unified response object.
@@ -8,55 +10,24 @@ import { sanitizeModelOutput } from "../content/chat-template-sanitizer.js";
  *
  * Emits callbacks for incremental text and tool-call progress.
  */
-
-export interface StreamCallbacks {
-  /** Called with each new text fragment. */
-  onText?: (text: string) => void;
-  /** Called with each new reasoning/thinking fragment. */
-  onThinking?: (text: string) => void;
-  /** Called when a tool_use block begins. */
-  onToolStart?: (name: string) => void;
-  /** Called when final usage data is available. */
-  onUsage?: (usage: { input_tokens?: number; output_tokens?: number }) => void;
-  /**
-   * Provider/context label passed to the sanitizer log message so developers
-   * can identify which model is leaking chat-template control tokens.
-   * Defaults to the stream format ("openai" or "anthropic") when not provided.
-   */
-  source?: string;
-}
-
-export type StreamFormat = "openai" | "anthropic" | "mesh-llm";
-
-export interface ContentBlockAccumulator {
-  type: string;
-  text?: string;
-  id?: string;
-  name?: string;
-  input?: any;
-  partialJson?: string;
-}
-
 export class StreamAccumulator {
-  public callbacks: StreamCallbacks;
-  public contentBlocks: ContentBlockAccumulator[] = [];
-  public format: StreamFormat;
-  public stopReason: string = "end_turn";
-  public usage: { input_tokens: number; output_tokens: number } = {
+  callbacks: StreamCallbacks;
+  contentBlocks: ContentBlockAccumulator[] = [];
+  format: StreamFormat;
+  stopReason: string = "end_turn";
+  usage: { input_tokens: number; output_tokens: number } = {
     input_tokens: 0,
     output_tokens: 0,
   };
 
-  // -- Anthropic accumulators --
-  private _anthropicBlocks = new Map<number, ContentBlockAccumulator>();
-  private _openaiText: string = "";
+  #anthropicBlocks = new Map<number, ContentBlockAccumulator>();
 
-  // -- OpenAI accumulators --
-  private _openaiToolCalls = new Map<
+  #openaiReasoningText: string = "";
+  #openaiText: string = "";
+  #openaiToolCalls = new Map<
     number,
     { id: string; name: string; args: string }
   >();
-  private _openaiReasoningText: string = "";
 
   constructor(format: StreamFormat, callbacks: StreamCallbacks = {}) {
     this.format = format;
@@ -72,10 +43,10 @@ export class StreamAccumulator {
     usage: { input_tokens: number; output_tokens: number };
   } {
     if (this.format === "openai" || this.format === "mesh-llm") {
-      return this._finalizeOpenAI();
+      return this.#finalizeOpenAI();
     }
 
-    return this._finalizeAnthropic();
+    return this.#finalizeAnthropic();
   }
 
   /**
@@ -83,24 +54,24 @@ export class StreamAccumulator {
    */
   push(chunk: any): void {
     if (this.format === "openai" || this.format === "mesh-llm") {
-      this._pushOpenAI(chunk);
+      this.#pushOpenAI(chunk);
     } else {
-      this._pushAnthropic(chunk);
+      this.#pushAnthropic(chunk);
     }
   }
 
-  private _finalizeAnthropic(): {
+  #finalizeAnthropic(): {
     content: any[];
     stop_reason: string;
     usage: { input_tokens: number; output_tokens: number };
   } {
     const content: any[] = [];
 
-    for (const [, block] of [...this._anthropicBlocks.entries()].sort(
+    for (const [, block] of [...this.#anthropicBlocks.entries()].sort(
       (a, b) => a[0] - b[0],
     )) {
       if (block.type === "text") {
-        const cleaned = this._sanitize(block.text || "");
+        const cleaned = this.#sanitize(block.text || "");
         if (cleaned) {
           content.push({ type: "text", text: cleaned });
         }
@@ -143,28 +114,31 @@ export class StreamAccumulator {
     };
   }
 
-  private _finalizeOpenAI(): {
+  #finalizeOpenAI(): {
     content: any[];
     stop_reason: string;
     usage: { input_tokens: number; output_tokens: number };
   } {
     const content: any[] = [];
 
-    if (this._openaiText) {
-      const cleaned = this._sanitize(this._openaiText);
+    if (this.#openaiText) {
+      const cleaned = this.#sanitize(this.#openaiText);
       if (cleaned) {
         content.push({ type: "text", text: cleaned });
       }
     }
 
-    if (this._openaiReasoningText) {
-      content.unshift({ type: "thinking", thinking: this._openaiReasoningText });
+    if (this.#openaiReasoningText) {
+      content.unshift({
+        type: "thinking",
+        thinking: this.#openaiReasoningText,
+      });
     }
 
-    if (this._openaiToolCalls.size > 0) {
+    if (this.#openaiToolCalls.size > 0) {
       this.stopReason = "tool_use";
 
-      for (const [, tc] of [...this._openaiToolCalls.entries()].sort(
+      for (const [, tc] of [...this.#openaiToolCalls.entries()].sort(
         (a, b) => a[0] - b[0],
       )) {
         let input;
@@ -190,9 +164,7 @@ export class StreamAccumulator {
     };
   }
 
-  // ── Anthropic streaming ──────────────────────────────────────────
-
-  private _pushAnthropic(chunk: any): void {
+  #pushAnthropic(chunk: any): void {
     switch (chunk.type) {
       case "message_start": {
         if (chunk.message?.usage) {
@@ -203,10 +175,10 @@ export class StreamAccumulator {
       }
 
       case "content_block_start": {
-        const idx = chunk.index ?? this._anthropicBlocks.size;
+        const idx = chunk.index ?? this.#anthropicBlocks.size;
         const block = chunk.content_block || {};
 
-        this._anthropicBlocks.set(idx, {
+        this.#anthropicBlocks.set(idx, {
           type: block.type || "text",
           id: block.type === "thinking" ? block.signature : block.id,
           name: block.name,
@@ -223,7 +195,7 @@ export class StreamAccumulator {
 
       case "content_block_delta": {
         const idx = chunk.index ?? 0;
-        let block = this._anthropicBlocks.get(idx);
+        let block = this.#anthropicBlocks.get(idx);
         if (!block) {
           const inferredType =
             chunk.delta?.type === "input_json_delta" ? "tool_use" : "text";
@@ -234,7 +206,7 @@ export class StreamAccumulator {
             partialJson: inferredType === "tool_use" ? "" : undefined,
           };
 
-          this._anthropicBlocks.set(idx, block);
+          this.#anthropicBlocks.set(idx, block);
         }
 
         const delta = chunk.delta;
@@ -243,7 +215,7 @@ export class StreamAccumulator {
         }
 
         if (delta.type === "text_delta" && typeof delta.text === "string") {
-          const cleaned = this._sanitize(delta.text);
+          const cleaned = this.#sanitize(delta.text);
           if (!cleaned) {
             break;
           }
@@ -315,9 +287,7 @@ export class StreamAccumulator {
     }
   }
 
-  // ── OpenAI streaming ─────────────────────────────────────────────
-
-  private _pushOpenAI(chunk: any): void {
+  #pushOpenAI(chunk: any): void {
     // Handle usage in the final chunk (OpenAI includes it when stream_options.include_usage is set,
     // or in the last chunk for some providers)
     if (chunk.usage) {
@@ -338,9 +308,9 @@ export class StreamAccumulator {
 
     // Accumulate text content
     if (typeof delta.content === "string") {
-      const cleaned = this._sanitize(delta.content);
+      const cleaned = this.#sanitize(delta.content);
       if (cleaned) {
-        this._openaiText += cleaned;
+        this.#openaiText += cleaned;
         this.callbacks.onText?.(cleaned);
       }
     }
@@ -348,15 +318,15 @@ export class StreamAccumulator {
     // Accumulate reasoning content from OpenAI-compatible providers that expose
     // thought tokens separately from user-visible assistant text.
     if (typeof delta.reasoning === "string") {
-      this._openaiReasoningText += delta.reasoning;
+      this.#openaiReasoningText += delta.reasoning;
       this.callbacks.onThinking?.(delta.reasoning);
     } else if (delta.reasoning && typeof delta.reasoning === "object") {
       const reasoningObj: any = delta.reasoning;
       if (typeof reasoningObj.content === "string") {
-        this._openaiReasoningText += reasoningObj.content;
+        this.#openaiReasoningText += reasoningObj.content;
         this.callbacks.onThinking?.(reasoningObj.content);
       } else if (typeof reasoningObj.text === "string") {
-        this._openaiReasoningText += reasoningObj.text;
+        this.#openaiReasoningText += reasoningObj.text;
         this.callbacks.onThinking?.(reasoningObj.text);
       }
     }
@@ -366,8 +336,8 @@ export class StreamAccumulator {
       for (const tc of delta.tool_calls) {
         const idx = tc.index ?? 0;
 
-        if (!this._openaiToolCalls.has(idx)) {
-          this._openaiToolCalls.set(idx, {
+        if (!this.#openaiToolCalls.has(idx)) {
+          this.#openaiToolCalls.set(idx, {
             id: tc.id || "",
             name: tc.function?.name || "",
             args: "",
@@ -378,7 +348,7 @@ export class StreamAccumulator {
           }
         }
 
-        const existing = this._openaiToolCalls.get(idx);
+        const existing = this.#openaiToolCalls.get(idx);
         if (!existing) {
           continue;
         }
@@ -409,7 +379,7 @@ export class StreamAccumulator {
     }
   }
 
-  private _sanitize(text: string): string {
+  #sanitize(text: string): string {
     return sanitizeModelOutput(text, this.callbacks.source ?? this.format);
   }
 }

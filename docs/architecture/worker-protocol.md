@@ -7,7 +7,7 @@
 
 ## Message Protocol
 
-All communication uses `postMessage()` with typed payloads defined in `src/types.ts`.
+All communication uses `postMessage()` with typed payloads defined in `src/subsystems/worker/types.ts`.
 
 ### Main → Worker
 

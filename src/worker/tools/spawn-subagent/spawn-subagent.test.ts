@@ -16,26 +16,22 @@ describe("executeSpawnSubagentTool", () => {
     mockRegisterSubagentCollector = jest.fn();
     mockUnregisterSubagentCollector = jest.fn();
 
-    jest.unstable_mockModule("../handleInvoke.js", () => ({
-      handleInvoke: mockHandleInvoke,
-    }));
-
-    jest.unstable_mockModule("../../utils/ulid.js", () => ({
+    jest.unstable_mockModule("../../../utils/ulid.js", () => ({
       ulid: mockUlid,
     }));
 
-    jest.unstable_mockModule("../../db/getConfig.js", () => ({
+    jest.unstable_mockModule("../../../db/getConfig.js", () => ({
       getConfig: jest.fn().mockResolvedValue(5),
     }));
 
-    jest.unstable_mockModule("../../config/config.js", () => ({
+    jest.unstable_mockModule("../../../config/config.js", () => ({
       CONFIG_KEYS: {
         SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
       },
       DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
     }));
 
-    jest.unstable_mockModule("../post.js", () => ({
+    jest.unstable_mockModule("../../post.js", () => ({
       post: jest.fn(),
       registerSubagentCollector: mockRegisterSubagentCollector,
       unregisterSubagentCollector: mockUnregisterSubagentCollector,

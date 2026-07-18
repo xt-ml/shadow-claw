@@ -1,9 +1,18 @@
-import type { AccountAuthMode } from "../../subsystems/accounts/service-accounts.js";
-import type { ShadowClawDatabase } from "../../db/types.js";
-import type {
-  GitAuthMode,
-  ResolvedGitCredentials,
-} from "../../subsystems/git/types.js";
+import { hasPathTraversal } from "../workspace/utils/hasPathTraversal.js";
+import { normalizeWorkspacePath } from "../workspace/utils/normalizeWorkspacePath.js";
+
+import { HttpError } from "./utils/HttpError.js";
+import { isBinaryContentType } from "./utils/isBinaryContentType.js";
+import { parseAuthMode } from "./utils/parseAuthMode.js";
+
+import type { ShadowClawDatabase } from "../../../db/types.js";
+import type { AccountAuthMode } from "../../../subsystems/accounts/service-accounts.js";
+import type { GitAuthMode, ResolvedGitCredentials } from "../../../subsystems/git/types.js";
+
+interface FetchFileResult {
+  response: Response;
+  contentType: string;
+}
 
 export interface FetchFileDeps {
   fetchImpl: typeof fetch;
@@ -85,65 +94,10 @@ export interface FetchFileDeps {
   ) => Promise<void>;
 }
 
-interface FetchFileResult {
-  response: Response;
-  contentType: string;
-}
-
-interface HttpErrorLike extends Error {
+export interface HttpErrorLike extends Error {
   status: number;
   statusText: string;
   body: string;
-}
-
-class HttpError extends Error implements HttpErrorLike {
-  public body: string;
-  public status: number;
-  public statusText: string;
-
-  constructor(status: number, statusText: string, body: string) {
-    super(`HTTP ${status} ${statusText}`);
-    this.name = "HttpError";
-    this.status = status;
-    this.statusText = statusText;
-    this.body = body;
-  }
-}
-
-function parseAuthMode(
-  value: unknown,
-): AccountAuthMode | GitAuthMode | undefined {
-  if (value === "token" || value === "oauth") {
-    return value;
-  }
-
-  return undefined;
-}
-
-function normalizeWorkspacePath(inputPath: string): string {
-  return inputPath
-    .trim()
-    .replace(/\\/g, "/")
-    .replace(/^\/+/, "")
-    .replace(/^\.\//, "");
-}
-
-function hasPathTraversal(path: string): boolean {
-  return path
-    .split("/")
-    .filter(Boolean)
-    .some((part) => part === "..");
-}
-
-function isBinaryContentType(contentType: string): boolean {
-  return (
-    contentType.includes("image/") ||
-    contentType.includes("video/") ||
-    contentType.includes("audio/") ||
-    contentType.includes("application/pdf") ||
-    contentType.includes("application/octet-stream") ||
-    contentType.includes("application/zip")
-  );
 }
 
 export async function executeFetchFileTool(

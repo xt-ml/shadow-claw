@@ -1,10 +1,9 @@
-import { post } from "../../post.js";
-import { groupFileExists } from "../../../storage/groupFileExists.js";
 import { ShadowClawDatabase } from "../../../db/types.js";
-import {
-  normalizeWorkspacePath,
-  hasPathTraversal,
-} from "./workspace-utils.js";
+import { groupFileExists } from "../../../storage/groupFileExists.js";
+import { hasPathTraversal } from "./utils/hasPathTraversal.js";
+import { normalizeWorkspacePath } from "./utils/normalizeWorkspacePath.js";
+
+import { post } from "../../post.js";
 
 export async function executeSendFile(
   db: ShadowClawDatabase,

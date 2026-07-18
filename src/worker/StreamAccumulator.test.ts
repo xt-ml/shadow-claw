@@ -1,5 +1,5 @@
 import { describe, it, expect, jest } from "@jest/globals";
-import { StreamAccumulator } from "./StreamAccumulator.js";
+import { StreamAccumulator } from "./StreamAccumulator/StreamAccumulator.js";
 
 // ── OpenAI format ──────────────────────────────────────────────────
 

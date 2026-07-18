@@ -31,7 +31,7 @@ Communication is strictly message-based — the main thread and worker communica
 
 ### What runs on the main thread
 
-- Orchestrator state machine (`src/core/orchestrator.ts`)
+- Orchestrator state machine (`src/core/orchestrator/orchestrator.ts`)
 - UI reactivity and rendering
 - IndexedDB access
 - Task scheduling
@@ -58,7 +58,7 @@ The WebVM (v86) is **worker-owned**. This was an explicit choice:
 
 - **No shared memory** — worker and main thread can't share JavaScript objects; everything must be serialized via `postMessage`
 - **Structured clone limitations** — not all types can be transferred (e.g., OPFS file handles must be re-acquired in the worker)
-- **Message protocol overhead** — adding new worker capabilities requires defining new message types in `src/types.ts` and handlers in `src/worker/handleMessage.ts`
+- **Message protocol overhead** — adding new worker capabilities requires defining new message types in `src/subsystems/worker/types.ts` and handlers in `src/worker/handleMessage.ts`
 - **Debugging complexity** — breakpoints in the worker require separate DevTools targeting
 
 ## Alternatives Considered

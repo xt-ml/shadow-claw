@@ -1,11 +1,11 @@
-import { readGroupFileBytes } from "../../../storage/readGroupFileBytes.js";
 import { ShadowClawDatabase } from "../../../db/types.js";
+import { readGroupFileBytes } from "../../../storage/readGroupFileBytes.js";
+import { getImageMimeType } from "./utils/getImageMimeType.js";
+import { isBinaryContent } from "./utils/isBinaryContent.js";
+
+import { MAX_INLINE_IMAGE_BYTES } from "./types.js";
+
 import type { ToolResultContentBlock } from "../../../content/types.js";
-import {
-  getImageMimeType,
-  isBinaryContent,
-  MAX_INLINE_IMAGE_BYTES,
-} from "./workspace-utils.js";
 
 export async function executeReadFile(
   db: ShadowClawDatabase,

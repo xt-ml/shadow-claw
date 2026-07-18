@@ -1,5 +1,5 @@
-import { readGroupFile } from "../../../storage/readGroupFile.js";
 import { ShadowClawDatabase } from "../../../db/types.js";
+import { readGroupFile } from "../../../storage/readGroupFile.js";
 
 export async function executeDiffFiles(
   db: ShadowClawDatabase,

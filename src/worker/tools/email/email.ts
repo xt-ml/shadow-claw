@@ -1,282 +1,46 @@
-import { decryptValue, encryptValue } from "../../security/crypto.js";
+import { ShadowClawDatabase } from "../../../db/types.js";
+
+import { encryptValue } from "../../../security/crypto.js";
+import { readGroupFileBytes } from "../../../storage/readGroupFileBytes.js";
+import { writeGroupFileBytes } from "../../../storage/writeGroupFileBytes.js";
+
 import {
   getEmailPluginManifest,
   listEmailPluginManifests,
-} from "../../subsystems/email/catalog.js";
+} from "../../../subsystems/email/catalog.js";
+
 import {
   bindEmailCredentialRef,
   deleteEmailConnection,
   getEmailConnection,
   listEmailConnections,
   upsertEmailConnection,
-  type EmailConnectionRecord,
-} from "../../subsystems/email/connections.js";
-import { listRemoteMcpConnections } from "../../subsystems/mcp/mcp-connections.js";
-import { resolveServiceCredentials } from "../../subsystems/accounts/service-accounts.js";
-import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
-import { writeGroupFileBytes } from "../../storage/writeGroupFileBytes.js";
-import { groupFileExists } from "../../storage/groupFileExists.js";
-import { ulid } from "../../utils/ulid.js";
-import type { ShadowClawDatabase } from "../../db/types.js";
+} from "../../../subsystems/email/connections.js";
 
-interface ResolvedIntegrationEmailAuth {
-  authType: "basic_userpass" | "oauth";
-  username: string;
-  password?: string;
-  accessToken?: string;
-}
+import { listRemoteMcpConnections } from "../../../subsystems/mcp/mcp-connections.js";
 
-interface EmailAttachmentInput {
+import { asEmailAttachmentInputs } from "./utils/asEmailAttachmentInputs.js";
+import { asNumber } from "./utils/asNumber.js";
+import { asStringArray } from "./utils/asStringArray.js";
+import { asUidArray } from "./utils/asUidArray.js";
+import { base64ToBytes } from "./utils/base64ToBytes.js";
+import { basename } from "./utils/basename.js";
+import { bytesToBase64 } from "./utils/bytesToBase64.js";
+import { guessMimeTypeFromFilename } from "./utils/guessMimeTypeFromFilename.js";
+import { resolveIntegrationEmailAuth } from "./utils/resolveIntegrationEmailAuth.js";
+import { resolveUniqueAttachmentPath } from "./utils/resolveUniqueAttachmentPath.js";
+
+export interface EmailAttachmentInput {
   path: string;
   filename?: string;
   contentType?: string;
 }
 
-function asStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function asNumber(
-  value: unknown,
-  fallback: number,
-  options?: { min?: number; max?: number },
-): number {
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-
-  let result = parsed;
-  if (typeof options?.min === "number") {
-    result = Math.max(options.min, result);
-  }
-
-  if (typeof options?.max === "number") {
-    result = Math.min(options.max, result);
-  }
-
-  return result;
-}
-
-function asUidArray(value: unknown): number[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const uids = value
-    .map((item) => (typeof item === "number" ? item : Number(item)))
-    .filter((item) => Number.isFinite(item) && item > 0)
-    .map((item) => Math.floor(item));
-
-  return Array.from(new Set(uids));
-}
-
-function asEmailAttachmentInputs(value: unknown): EmailAttachmentInput[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  const parsed: EmailAttachmentInput[] = [];
-  for (const item of value) {
-    if (typeof item === "string") {
-      const path = item.trim();
-      if (path) {
-        parsed.push({ path });
-      }
-
-      continue;
-    }
-
-    if (!item || typeof item !== "object") {
-      continue;
-    }
-
-    const path =
-      typeof (item as { path?: unknown }).path === "string"
-        ? (item as { path: string }).path.trim()
-        : "";
-    if (!path) {
-      continue;
-    }
-
-    const filename =
-      typeof (item as { filename?: unknown }).filename === "string"
-        ? (item as { filename: string }).filename.trim()
-        : "";
-    const contentType =
-      typeof (item as { content_type?: unknown }).content_type === "string"
-        ? (item as { content_type: string }).content_type.trim()
-        : "";
-
-    parsed.push({
-      path,
-      filename: filename || undefined,
-      contentType: contentType || undefined,
-    });
-  }
-
-  return parsed;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-
-  return btoa(binary);
-}
-
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const out = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    out[i] = binary.charCodeAt(i);
-  }
-
-  return out;
-}
-
-function basename(path: string): string {
-  const normalized = path.replace(/\\/g, "/");
-  const parts = normalized.split("/").filter(Boolean);
-
-  return parts[parts.length - 1] || "attachment.bin";
-}
-
-function sanitizeFilename(value: string): string {
-  const sanitized = value.replace(/[\\/:*?"<>|\x00-\x1f]/g, "_").trim();
-
-  return sanitized || "attachment.bin";
-}
-
-function guessMimeTypeFromFilename(filename: string): string | undefined {
-  const lower = filename.toLowerCase();
-  if (lower.endsWith(".png")) {
-    return "image/png";
-  }
-
-  if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) {
-    return "image/jpeg";
-  }
-
-  if (lower.endsWith(".gif")) {
-    return "image/gif";
-  }
-
-  if (lower.endsWith(".webp")) {
-    return "image/webp";
-  }
-
-  if (lower.endsWith(".pdf")) {
-    return "application/pdf";
-  }
-
-  if (lower.endsWith(".txt") || lower.endsWith(".md")) {
-    return "text/plain";
-  }
-
-  return undefined;
-}
-
-async function resolveUniqueAttachmentPath(
-  db: ShadowClawDatabase,
-  groupId: string,
-  directory: string,
-  rawFilename: string,
-): Promise<string> {
-  const filename = sanitizeFilename(rawFilename);
-  const idx = filename.lastIndexOf(".");
-  const stem = idx > 0 ? filename.slice(0, idx) : filename;
-  const ext = idx > 0 ? filename.slice(idx) : "";
-  const baseDirectory = directory.trim().replace(/^\/+|\/+$/g, "");
-
-  for (let i = 0; i < 1000; i++) {
-    const candidateName = i === 0 ? filename : `${stem}-${i + 1}${ext}`;
-    const candidatePath = baseDirectory
-      ? `${baseDirectory}/${candidateName}`
-      : candidateName;
-    const exists = await groupFileExists(db, groupId, candidatePath);
-    if (!exists) {
-      return candidatePath;
-    }
-  }
-
-  return baseDirectory
-    ? `${baseDirectory}/${ulid()}-${filename}`
-    : `${ulid()}-${filename}`;
-}
-
-async function resolveIntegrationEmailAuth(
-  db: ShadowClawDatabase,
-  connection: EmailConnectionRecord,
-  input: Record<string, unknown>,
-  forceRefresh = false,
-): Promise<ResolvedIntegrationEmailAuth | string> {
-  const username =
-    (typeof input.username === "string" ? input.username.trim() : "") ||
-    connection.credentialRef?.username ||
-    (typeof connection.config.username === "string"
-      ? connection.config.username
-      : "");
-
-  if (!username) {
-    return `Error: Integration connection ${connection.id} is missing username credentials.`;
-  }
-
-  if (connection.credentialRef?.authType === "oauth") {
-    const accountId = connection.credentialRef.accountId;
-    if (!accountId) {
-      return `Error: Integration connection ${connection.id} is missing linked OAuth account.`;
-    }
-
-    const creds = await resolveServiceCredentials(db, undefined, {
-      accountId,
-      authMode: "oauth",
-      forceRefresh,
-    });
-
-    if (!creds || creds.reauthRequired || !creds.token) {
-      const providerHint =
-        connection.credentialRef?.providerId || "the configured";
-
-      return (
-        `Error: OAuth account reconnect required for integration ${connection.id}.\n` +
-        `Open Settings -> Integrations, edit this email connection, and click Connect OAuth for ${providerHint} to re-authorize.`
-      );
-    }
-
-    return {
-      authType: "oauth",
-      username,
-      accessToken: creds.token,
-    };
-  }
-
-  const password =
-    (typeof input.password === "string" ? input.password.trim() : "") ||
-    (connection.credentialRef?.encryptedSecret
-      ? (await decryptValue(connection.credentialRef.encryptedSecret)) || ""
-      : "");
-
-  if (!password) {
-    return `Error: Integration connection ${connection.id} is missing password credentials.`;
-  }
-
-  return {
-    authType: "basic_userpass",
-    username,
-    password,
-  };
+export interface ResolvedIntegrationEmailAuth {
+  authType: "basic_userpass" | "oauth";
+  username: string;
+  password?: string;
+  accessToken?: string;
 }
 
 export async function executeManageEmailTool(
@@ -1068,6 +832,7 @@ export async function executeManageEmailTool(
       (typeof connection.config.host === "string"
         ? connection.config.host
         : "");
+
     const port = asNumber(input.port ?? connection.config.port, 993, {
       min: 1,
       max: 65535,
@@ -1079,6 +844,7 @@ export async function executeManageEmailTool(
         : typeof connection.config.secure === "boolean"
           ? connection.config.secure
           : port === 993;
+
     const mailboxPath =
       (typeof input.mailbox_path === "string"
         ? input.mailbox_path.trim()
@@ -1117,6 +883,7 @@ export async function executeManageEmailTool(
         input,
         true,
       );
+
       if (typeof refreshedAuth === "string") {
         return refreshedAuth;
       }

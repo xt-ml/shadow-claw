@@ -16,7 +16,7 @@ Integration plugins implement a common contract:
 - `actions`: declared operations with JSON-schema-like input/output
 - `executeAction(actionName, input, context)`: runtime action dispatch
 
-The current integration contract is implemented by worker tool adapters and server route handlers. For example, email integration is implemented in `src/worker/tools/email.ts` and `src/server/routes/integrations-email.ts`.
+The current integration contract is implemented by worker tool adapters and server route handlers. For example, email integration is implemented in `src/worker/tools/email/email.ts` and `src/server/routes/integrations-email.ts`.
 
 ## Registry
 

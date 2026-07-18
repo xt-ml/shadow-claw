@@ -5,7 +5,7 @@ import { createLogMessage } from "../../worker/createLogMessage.js";
 import { createToolActivityMessage } from "../../worker/createToolActivityMessage.js";
 import { executeTool } from "../../worker/executeTool.js";
 import { setPostHandler } from "../../worker/post.js";
-import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent.js";
+import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent/spawn-subagent.js";
 import { sanitizeModelOutput } from "../../content/chat-template-sanitizer.js";
 import { NANO_BUILTIN_PROFILE } from "../tools/builtin-profiles.js";
 

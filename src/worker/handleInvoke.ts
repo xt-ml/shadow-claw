@@ -30,16 +30,17 @@ import {
   waitForRateLimitSlot,
 } from "./rate-limit.js";
 
-import { StreamAccumulator, StreamFormat } from "./StreamAccumulator.js";
+import { ContentBlock, ToolResultContentBlock } from "../content/types.js";
+
+import { InvokePayload } from "../subsystems/worker/types.js";
+import { StreamAccumulator } from "./StreamAccumulator/StreamAccumulator.js";
+import { StreamFormat } from "./StreamAccumulator/types.js";
+
 import { buildSystemPrompt } from "./system-prompt.js";
 import { clearToolState, getToolState } from "./tool-state.js";
 import { isRetryableHttpError, withRetry } from "./withRetry.js";
 
 import type { SubagentInvokeContext, ToolResult } from "./executeTool.js";
-
-import { ToolResultContentBlock } from "../content/types.js";
-import { InvokePayload } from "../subsystems/worker/types.js";
-import { ContentBlock } from "../content/types.js";
 
 /**
  * Throttle interval (ms) for streaming text chunks sent to the UI.

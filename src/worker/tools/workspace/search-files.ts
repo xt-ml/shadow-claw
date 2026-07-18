@@ -1,6 +1,6 @@
+import { ShadowClawDatabase } from "../../../db/types.js";
 import { listGroupFiles } from "../../../storage/listGroupFiles.js";
 import { readGroupFile } from "../../../storage/readGroupFile.js";
-import { ShadowClawDatabase } from "../../../db/types.js";
 
 export async function executeSearchFiles(
   db: ShadowClawDatabase,

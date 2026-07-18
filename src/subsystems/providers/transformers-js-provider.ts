@@ -9,7 +9,7 @@ import { createToolActivityMessage } from "../../worker/createToolActivityMessag
 import { executeTool } from "../../worker/executeTool.js";
 import { setPostHandler } from "../../worker/post.js";
 
-import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent.js";
+import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent/spawn-subagent.js";
 
 class TransformersJsManager {
   private chunkCallbacks = new Map<string, (payload: any) => void>();

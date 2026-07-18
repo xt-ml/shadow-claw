@@ -1,6 +1,7 @@
-import { post } from "../../post.js";
-import { groupFileExists } from "../../../storage/groupFileExists.js";
 import { ShadowClawDatabase } from "../../../db/types.js";
+import { groupFileExists } from "../../../storage/groupFileExists.js";
+
+import { post } from "../../post.js";
 
 export async function executeOpenFile(
   db: ShadowClawDatabase,

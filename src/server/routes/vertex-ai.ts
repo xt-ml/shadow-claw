@@ -87,6 +87,7 @@ function buildThinkingConfig(
   const isGemini3 = /gemini-3/i.test(modelId);
   if (isGemini3) {
     const thinkingLevel = toGeminiThinkingLevel(reasoning.effort) || "medium";
+
     return {
       thinkingConfig: {
         thinkingLevel,

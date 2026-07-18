@@ -16,11 +16,11 @@ Make sure you understand the [`Channel` interface and `ChannelRegistry`](../subs
 
 ShadowClaw already includes three channel implementations:
 
-| Channel  | Prefix | Source                                 | When to use as reference     |
-| -------- | ------ | -------------------------------------- | ---------------------------- |
-| Browser  | `br:`  | `src/subsystems/channels/browser-chat` | Simple in-app UI pattern     |
-| Telegram | `tg:`  | `src/subsystems/channels/telegram.ts`  | External service integration |
-| iMessage | `im:`  | `src/subsystems/channels/imessage.ts`  | Relay/bridge pattern         |
+| Channel  | Prefix | Source                                    | When to use as reference     |
+| -------- | ------ | ----------------------------------------- | ---------------------------- |
+| Browser  | `br:`  | `src/subsystems/channels/browser-chat.ts` | Simple in-app UI pattern     |
+| Telegram | `tg:`  | `src/subsystems/channels/telegram.ts`     | External service integration |
+| iMessage | `im:`  | `src/subsystems/channels/imessage.ts`     | Relay/bridge pattern         |
 
 Study the implementation style that best matches your use case.
 
@@ -120,14 +120,17 @@ export class MyChannel implements Channel {
 
 ## Step 3 — Register in the orchestrator
 
-Open `src/core/orchestrator.ts` and add your channel to `initChannels()`:
+Open `src/core/orchestrator/orchestrator.ts` and add your channel to `initializeChannelRegistry()`:
 
 ```ts
-import { MyChannel } from "./channels/my-channel.js";
+import { MyChannel } from "../../subsystems/channels/my-channel.js";
 
-// In initChannels():
+// In initializeChannelRegistry():
 const myChannel = new MyChannel();
-this.registry.register("my:", myChannel, "My Channel");
+this.channelRegistry.register("my:", myChannel, {
+  badge: "My Channel",
+  autoTrigger: false,
+});
 ```
 
 That's it — the router, conversation creation, group badges, and CRUD all pick up the new prefix automatically.

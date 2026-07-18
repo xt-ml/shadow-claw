@@ -125,5 +125,5 @@ When a local directory is selected:
 - All structured data goes through `src/db/`
 - All file I/O goes through `src/storage/`
 - The two never mix — DB for structured data, storage for files
-- `openDatabase()` must be called once at startup (done in `src/core/orchestrator.ts`)
+- `openDatabase()` must be called once at startup (done in `src/core/orchestrator/orchestrator.ts`)
 - No direct `indexedDB` or OPFS calls outside their respective layers

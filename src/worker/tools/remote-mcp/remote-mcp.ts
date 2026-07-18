@@ -1,15 +1,19 @@
-import type { ShadowClawDatabase } from "../../db/types.js";
+import { formatListToolsOutput } from "./utils/formatListToolsOutput.js";
+import { isMcpReauthError } from "./utils/isMcpReauthError.js";
+import { requestMcpReauthAndWait } from "./utils/requestMcpReauthAndWait.js";
 
-interface McpReauthErrorLike {
-  name?: string;
-}
+import type { ShadowClawDatabase } from "../../../db/types.js";
 
-interface RemoteMcpTool {
+export interface RemoteMcpTool {
   name: string;
   description?: string;
 }
 
-interface RemoteMcpDeps {
+export interface McpReauthErrorLike {
+  name?: string;
+}
+
+export interface RemoteMcpDeps {
   listRemoteMcpTools: (
     db: ShadowClawDatabase,
     connectionId: string,
@@ -28,100 +32,25 @@ interface RemoteMcpDeps {
 }
 
 /** Pending MCP OAuth reauth requests awaiting main-thread result. */
-const pendingReauthRequests = new Map<string, (success: boolean) => void>();
+export const pendingReauthRequests = new Map<
+  string,
+  (success: boolean) => void
+>();
 
 /**
  * In-flight reauth promises keyed by connectionId. When multiple tool calls
  * fail for the same connection, they share one promise instead of posting
  * duplicate reauth requests.
  */
-const inflightReauthPromises = new Map<string, Promise<boolean>>();
+export const inflightReauthPromises = new Map<string, Promise<boolean>>();
 /** Timeout handles keyed by connectionId. */
-const reauthTimeoutHandles = new Map<string, ReturnType<typeof setTimeout>>();
+export const reauthTimeoutHandles = new Map<
+  string,
+  ReturnType<typeof setTimeout>
+>();
 
 /** Timeout for waiting on main-thread OAuth reauth (90 seconds). */
-const REAUTH_TIMEOUT_MS = 90_000;
-
-export function resolveMcpReauth(connectionId: string, success: boolean): void {
-  const timeoutHandle = reauthTimeoutHandles.get(connectionId);
-  if (timeoutHandle) {
-    clearTimeout(timeoutHandle);
-    reauthTimeoutHandles.delete(connectionId);
-  }
-
-  const resolve = pendingReauthRequests.get(connectionId);
-  if (resolve) {
-    resolve(success);
-    pendingReauthRequests.delete(connectionId);
-  }
-}
-
-async function requestMcpReauthAndWait(
-  connectionId: string,
-  groupId: string,
-  postMessage: RemoteMcpDeps["post"],
-): Promise<boolean> {
-  const existing = inflightReauthPromises.get(connectionId);
-  if (existing) {
-    return existing;
-  }
-
-  const promise = new Promise<boolean>((resolve) => {
-    pendingReauthRequests.set(connectionId, resolve);
-
-    const handle = setTimeout(() => {
-      reauthTimeoutHandles.delete(connectionId);
-      if (pendingReauthRequests.has(connectionId)) {
-        pendingReauthRequests.delete(connectionId);
-        resolve(false);
-      }
-    }, REAUTH_TIMEOUT_MS);
-    reauthTimeoutHandles.set(connectionId, handle);
-  }).finally(() => {
-    inflightReauthPromises.delete(connectionId);
-    reauthTimeoutHandles.delete(connectionId);
-  });
-
-  inflightReauthPromises.set(connectionId, promise);
-
-  postMessage({
-    type: "mcp-reauth-required",
-    payload: { connectionId, groupId },
-  });
-
-  return promise;
-}
-
-function formatListToolsOutput(
-  connectionId: string,
-  tools: RemoteMcpTool[],
-): string {
-  if (!tools.length) {
-    return `No tools exposed by remote MCP connection ${connectionId}.`;
-  }
-
-  return tools
-    .map(
-      (tool) =>
-        `- ${tool.name}${tool.description ? `: ${tool.description}` : ""}`,
-    )
-    .join("\n");
-}
-
-function isMcpReauthError(
-  err: unknown,
-  ReauthErrorCtor: RemoteMcpDeps["McpReauthRequiredError"],
-): err is Error {
-  if (err instanceof ReauthErrorCtor) {
-    return true;
-  }
-
-  return (
-    !!err &&
-    typeof err === "object" &&
-    (err as McpReauthErrorLike).name === "McpReauthRequiredError"
-  );
-}
+export const REAUTH_TIMEOUT_MS = 90_000;
 
 export async function executeRemoteMcpListTools(
   db: ShadowClawDatabase,

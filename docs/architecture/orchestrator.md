@@ -3,7 +3,7 @@
 > The orchestrator is the brain of ShadowClaw's main thread — a state machine
 > that coordinates conversations, the agent worker, task scheduling, and UI updates.
 
-**Source:** `src/core/orchestrator.ts` · `src/core/orchestrator/` · `src/stores/orchestrator.ts`
+**Source:** `src/core/orchestrator/orchestrator.ts` · `src/core/orchestrator/` · `src/stores/orchestrator.ts`
 
 ## State Machine
 

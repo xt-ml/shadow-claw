@@ -1,6 +1,7 @@
-import { getGroupTasks } from "./tasks-utils.js";
-import { post } from "../../post.js";
 import { ShadowClawDatabase } from "../../../db/types.js";
+
+import { post } from "../../post.js";
+import { getGroupTasks } from "./tasks-utils.js";
 
 export async function executeUpdateTask(
   db: ShadowClawDatabase,

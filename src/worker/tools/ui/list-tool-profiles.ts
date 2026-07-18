@@ -1,7 +1,9 @@
-import { getConfig } from "../../../db/getConfig.js";
-import { NANO_BUILTIN_PROFILE } from "../../../subsystems/tools/builtin-profiles.js";
 import { CONFIG_KEYS } from "../../../config/config.js";
+
+import { getConfig } from "../../../db/getConfig.js";
 import { ShadowClawDatabase } from "../../../db/types.js";
+
+import { NANO_BUILTIN_PROFILE } from "../../../subsystems/tools/builtin-profiles.js";
 
 export async function executeListToolProfiles(
   db: ShadowClawDatabase,

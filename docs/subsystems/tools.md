@@ -146,7 +146,7 @@ Profiles allow per-provider/model tool customization and system prompt overrides
 ### Profile definition
 
 ```ts
-// From src/types.ts
+// From src/subsystems/tools/types.ts
 interface ToolProfile {
   id: string; // Unique identifier
   name: string; // Display name

@@ -1,13 +1,19 @@
-import {
-  CONFIG_KEYS,
-  FETCH_MAX_RESPONSE,
-} from "../config/config.js";
+import { CONFIG_KEYS, FETCH_MAX_RESPONSE } from "../config/config.js";
 
 import { getConfig } from "../db/getConfig.js";
+import { ShadowClawDatabase } from "../db/types.js";
 
+import { getGroupDir } from "../storage/getGroupDir.js";
 import { readGroupFile } from "../storage/readGroupFile.js";
 import { uploadGroupFile } from "../storage/uploadGroupFile.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
+
+import { resolveServiceCredentials } from "../subsystems/accounts/service-accounts.js";
+
+import {
+  buildAuthHeaders,
+  resolveGitCredentials,
+} from "../subsystems/git/credentials.js";
 
 import {
   getProxyUrl,
@@ -39,13 +45,59 @@ import {
   gitUnstage,
 } from "../subsystems/git/git.js";
 
-import { resolveServiceCredentials } from "../subsystems/accounts/service-accounts.js";
 import {
-  buildAuthHeaders,
-  resolveGitCredentials,
-} from "../subsystems/git/credentials.js";
-import { getGroupDir } from "../storage/getGroupDir.js";
+  callRemoteMcpTool,
+  listRemoteMcpTools,
+  McpReauthRequiredError,
+} from "../subsystems/mcp/remote-mcp-client.js";
+
 import { post } from "./post.js";
+import { stripHtml } from "./stripHtml.js";
+
+import { executeBash } from "./tools/bash/bash.js";
+import { executeManageEmailTool } from "./tools/email/email.js";
+import { executeFetchFileTool } from "./tools/fetch-file/fetch-file.js";
+import { executeFetchUrlTool } from "./tools/fetch-url/fetch-url.js";
+import { executeGitTool } from "./tools/git/git.js";
+
+import {
+  executeRemoteMcpCallTool,
+  executeRemoteMcpListTools,
+} from "./tools/remote-mcp/remote-mcp.js";
+
+import { executeCreateRoom } from "./tools/rooms/create-room.js";
+import { executeInviteToRoom } from "./tools/rooms/invite-to-room.js";
+import { executeLeaveRoom } from "./tools/rooms/leave-room.js";
+import { executeListRoomMembers } from "./tools/rooms/list-room-members.js";
+import { executeSpawnSubagentTool } from "./tools/spawn-subagent/spawn-subagent.js";
+import { executeCreateTask } from "./tools/tasks/create-task.js";
+import { executeDeleteTask } from "./tools/tasks/delete-task.js";
+import { executeDisableTask } from "./tools/tasks/disable-task.js";
+import { executeEnableTask } from "./tools/tasks/enable-task.js";
+import { executeListTasks } from "./tools/tasks/list-tasks.js";
+import { executeRunTask } from "./tools/tasks/run-task.js";
+import { executeUpdateTask } from "./tools/tasks/update-task.js";
+import { executeAskUser } from "./tools/ui/ask-user.js";
+import { executeClearChat } from "./tools/ui/clear-chat.js";
+import { executeGetCurrentTime } from "./tools/ui/get-current-time.js";
+import { executeJavascript } from "./tools/ui/javascript.js";
+import { executeListComponents } from "./tools/ui/list-components.js";
+import { executeListToolProfiles } from "./tools/ui/list-tool-profiles.js";
+import { executeManageTools } from "./tools/ui/manage-tools.js";
+import { executeRenderComponent } from "./tools/ui/render-component.js";
+import { executeSendNotification } from "./tools/ui/send-notification.js";
+import { executeShowToast } from "./tools/ui/show-toast.js";
+import { executeWebSearch } from "./tools/ui/web-search.js";
+import { executeAttachFile } from "./tools/workspace/attach-file.js";
+import { executeDiffFiles } from "./tools/workspace/diff-files.js";
+import { executeListFiles } from "./tools/workspace/list-files.js";
+import { executeOpenFile } from "./tools/workspace/open-file.js";
+import { executePatchFile } from "./tools/workspace/patch-file.js";
+import { executeReadFile } from "./tools/workspace/read-file.js";
+import { executeSearchFiles } from "./tools/workspace/search-files.js";
+import { executeSendFile } from "./tools/workspace/send-file.js";
+import { executeUpdateMemory } from "./tools/workspace/update-memory.js";
+import { executeWriteFile } from "./tools/workspace/write-file.js";
 
 import {
   isRetryableFetchError,
@@ -53,69 +105,10 @@ import {
   withRetry,
 } from "./withRetry.js";
 
-import { ShadowClawDatabase } from "../db/types.js";
-
-import {
-  callRemoteMcpTool,
-  listRemoteMcpTools,
-  McpReauthRequiredError,
-} from "../subsystems/mcp/remote-mcp-client.js";
-
-import { executeBash } from "./tools/bash/bash.js";
-import { executeManageEmailTool } from "./tools/email.js";
-import { executeFetchFileTool } from "./tools/fetch-file.js";
-import { executeFetchUrlTool } from "./tools/fetch-url.js";
-import { executeGitTool } from "./tools/git.js";
-import { executeSpawnSubagentTool } from "./tools/spawn-subagent.js";
-
-import { executeCreateTask } from "./tools/tasks/create-task.js";
-import { executeListTasks } from "./tools/tasks/list-tasks.js";
-import { executeUpdateTask } from "./tools/tasks/update-task.js";
-import { executeEnableTask } from "./tools/tasks/enable-task.js";
-import { executeDisableTask } from "./tools/tasks/disable-task.js";
-import { executeDeleteTask } from "./tools/tasks/delete-task.js";
-import { executeRunTask } from "./tools/tasks/run-task.js";
-
-import { executeCreateRoom } from "./tools/rooms/create-room.js";
-import { executeInviteToRoom } from "./tools/rooms/invite-to-room.js";
-import { executeLeaveRoom } from "./tools/rooms/leave-room.js";
-import { executeListRoomMembers } from "./tools/rooms/list-room-members.js";
-
-import { executeReadFile } from "./tools/workspace/read-file.js";
-import { executeOpenFile } from "./tools/workspace/open-file.js";
-import { executeAttachFile } from "./tools/workspace/attach-file.js";
-import { executeSendFile } from "./tools/workspace/send-file.js";
-import { executeWriteFile } from "./tools/workspace/write-file.js";
-import { executePatchFile } from "./tools/workspace/patch-file.js";
-import { executeListFiles } from "./tools/workspace/list-files.js";
-import { executeSearchFiles } from "./tools/workspace/search-files.js";
-import { executeDiffFiles } from "./tools/workspace/diff-files.js";
-import { executeUpdateMemory } from "./tools/workspace/update-memory.js";
-
-import { executeClearChat } from "./tools/ui/clear-chat.js";
-import { executeManageTools } from "./tools/ui/manage-tools.js";
-import { executeListToolProfiles } from "./tools/ui/list-tool-profiles.js";
-import { executeJavascript } from "./tools/ui/javascript.js";
-import { executeGetCurrentTime } from "./tools/ui/get-current-time.js";
-import { executeWebSearch } from "./tools/ui/web-search.js";
-import { executeShowToast } from "./tools/ui/show-toast.js";
-import { executeSendNotification } from "./tools/ui/send-notification.js";
-import { executeListComponents } from "./tools/ui/list-components.js";
-import { executeRenderComponent } from "./tools/ui/render-component.js";
-import { executeAskUser } from "./tools/ui/ask-user.js";
-
-import {
-  executeRemoteMcpCallTool,
-  executeRemoteMcpListTools,
-} from "./tools/remote-mcp.js";
-
 import type { ToolResultContentBlock } from "../content/types.js";
-import type { SubagentInvokeContext } from "./tools/spawn-subagent.js";
-import { stripHtml } from "./stripHtml.js";
+import type { SubagentInvokeContext } from "./tools/spawn-subagent/spawn-subagent.js";
 
 export type { SubagentInvokeContext };
-
-export { resolveMcpReauth } from "./tools/remote-mcp.js";
 
 export type ToolResult = string | ToolResultContentBlock[];
 

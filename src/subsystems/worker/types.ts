@@ -96,6 +96,9 @@ export interface CompactPayload {
   model: string;
   provider?: any;
   providerHeaders?: Record<string, string>;
+  reasoning?: {
+    effort?: string;
+  };
   rateLimitAutoAdapt?: boolean;
   rateLimitCallsPerMinute?: number;
   storageHandle?: any;
@@ -129,6 +132,9 @@ export interface InvokePayload {
   model: string;
   provider?: any;
   providerHeaders?: Record<string, string>;
+  reasoning?: {
+    effort?: string;
+  };
   rateLimitAutoAdapt?: boolean;
   rateLimitCallsPerMinute?: number;
   storageHandle?: any;

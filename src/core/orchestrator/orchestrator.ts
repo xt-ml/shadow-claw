@@ -195,6 +195,7 @@ export class Orchestrator {
   proxyUrl: string = "/proxy";
   pushSubscriptionWarned: boolean = false;
   rateLimitAutoAdapt: boolean = true;
+  reasoningEffort: string = "none";
 
   rateLimitCallsPerMinute: number = 0;
 
@@ -564,6 +565,22 @@ export class Orchestrator {
 
   getRateLimitCallsPerMinute(): number {
     return this.rateLimitCallsPerMinute;
+  }
+
+  getReasoningConfig(): { effort: string } | undefined {
+    const effort =
+      typeof this.reasoningEffort === "string"
+        ? this.reasoningEffort.trim().toLowerCase()
+        : "none";
+    if (!effort || effort === "none") {
+      return undefined;
+    }
+
+    return { effort };
+  }
+
+  getReasoningEffort(): string {
+    return this.reasoningEffort;
   }
 
   /**
@@ -1746,6 +1763,17 @@ export class Orchestrator {
       CONFIG_KEYS.RATE_LIMIT_CALLS_PER_MINUTE,
       String(normalized),
     );
+  }
+
+  async setReasoningEffort(
+    db: ShadowClawDatabase,
+    effort: string,
+  ): Promise<void> {
+    const normalized =
+      typeof effort === "string" ? effort.trim().toLowerCase() : "none";
+    this.reasoningEffort = normalized || "none";
+
+    await setConfig(db, CONFIG_KEYS.REASONING_EFFORT, this.reasoningEffort);
   }
 
   async setStreamingEnabled(

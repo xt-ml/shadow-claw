@@ -179,6 +179,53 @@ describe("ModelRegistry", () => {
     }
   });
 
+  it("should parse OpenRouter reasoning metadata when provided", async () => {
+    const mockData: any = {
+      data: [
+        {
+          id: "anthropic/claude-sonnet-5",
+          context_length: 1000000,
+          reasoning: {
+            default_effort: "medium",
+            default_enabled: true,
+            mandatory: false,
+            supported_efforts: ["high", "medium", "low", "minimal"],
+            supports_max_tokens: true,
+          },
+        },
+      ],
+    };
+
+    const originalFetch = (globalThis as any).fetch;
+
+    (globalThis as any).fetch = async () => ({
+      ok: true,
+      json: async () => mockData,
+    });
+
+    try {
+      await modelRegistry.fetchModelInfo({
+        id: "openrouter",
+        modelsUrl: "https://openrouter.ai/api/v1/models",
+        headers: {},
+      } as any);
+
+      expect(modelRegistry.getModelInfo("anthropic/claude-sonnet-5")).toEqual({
+        contextWindow: 1000000,
+        maxOutput: null,
+        reasoning: {
+          defaultEffort: "medium",
+          defaultEnabled: true,
+          mandatory: false,
+          supportedEfforts: ["high", "medium", "low", "minimal"],
+          supportsMaxTokens: true,
+        },
+      });
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+    }
+  });
+
   it("should mark openrouter/free as routing by request features", async () => {
     const mockData: any = {
       data: [

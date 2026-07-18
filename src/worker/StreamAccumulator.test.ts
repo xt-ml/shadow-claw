@@ -192,6 +192,32 @@ describe("StreamAccumulator — OpenAI format", () => {
     const result = acc.finalize();
     expect(result.content[0].input).toEqual({} as any);
   });
+
+  it("accumulates OpenAI reasoning deltas into a thinking block", () => {
+    const acc = new StreamAccumulator("openai");
+
+    acc.push({ choices: [{ delta: { reasoning: "step one" } }] });
+    acc.push({ choices: [{ delta: { reasoning: " + step two" } }] });
+    acc.push({ choices: [{ delta: { content: "Final answer" } }] });
+
+    const result = acc.finalize();
+    expect(result.content).toEqual([
+      { type: "thinking", thinking: "step one + step two" },
+      { type: "text", text: "Final answer" },
+    ]);
+  });
+
+  it("fires onThinking callback for OpenAI reasoning deltas", () => {
+    const onThinking = jest.fn();
+    const acc = new StreamAccumulator("openai", { onThinking });
+
+    acc.push({ choices: [{ delta: { reasoning: "chain " } }] });
+    acc.push({ choices: [{ delta: { reasoning: "of thought" } }] });
+
+    expect(onThinking).toHaveBeenCalledTimes(2);
+    expect(onThinking).toHaveBeenNthCalledWith(1, "chain ");
+    expect(onThinking).toHaveBeenNthCalledWith(2, "of thought");
+  });
 });
 
 // ── Anthropic format ───────────────────────────────────────────────
@@ -328,6 +354,113 @@ describe("StreamAccumulator — Anthropic format", () => {
       name: "bash",
       input: { command: "pwd" },
     });
+  });
+
+  it("accumulates thinking blocks from thinking_delta", () => {
+    const acc = new StreamAccumulator("anthropic");
+
+    acc.push({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "thinking", thinking: "" },
+    });
+    acc.push({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: "step one" },
+    });
+    acc.push({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: " + step two" },
+    });
+
+    const result = acc.finalize();
+    expect(result.content).toEqual([
+      { type: "thinking", thinking: "step one + step two" },
+    ]);
+  });
+
+  it("fires onThinking callback for Anthropic thinking deltas", () => {
+    const onThinking = jest.fn();
+    const acc = new StreamAccumulator("anthropic", { onThinking });
+
+    acc.push({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "thinking", thinking: "" },
+    });
+    acc.push({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: "first" },
+    });
+    acc.push({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: " second" },
+    });
+
+    expect(onThinking).toHaveBeenCalledTimes(2);
+    expect(onThinking).toHaveBeenNthCalledWith(1, "first");
+    expect(onThinking).toHaveBeenNthCalledWith(2, " second");
+  });
+
+  it("preserves Anthropic thinking signatures from signature_delta", () => {
+    const acc = new StreamAccumulator("anthropic");
+
+    acc.push({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "thinking", thinking: "" },
+    });
+    acc.push({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: "intermediate" },
+    });
+    acc.push({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "signature_delta", signature: "sig_stream_42" },
+    });
+
+    const result = acc.finalize();
+    expect(result.content).toEqual([
+      {
+        type: "thinking",
+        thinking: "intermediate",
+        signature: "sig_stream_42",
+      },
+    ]);
+  });
+
+  it("accumulates redacted thinking blocks from redacted_thinking_delta", () => {
+    const acc = new StreamAccumulator("anthropic");
+
+    acc.push({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "redacted_thinking", data: "" },
+    });
+    acc.push({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "redacted_thinking_delta", data: "encrypted_part_1" },
+    });
+    acc.push({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "redacted_thinking_delta", data: "encrypted_part_2" },
+    });
+
+    const result = acc.finalize();
+    expect(result.content).toEqual([
+      {
+        type: "redacted_thinking",
+        data: "encrypted_part_1encrypted_part_2",
+      },
+    ]);
   });
 
   it("fires onText callback for text_delta events", () => {

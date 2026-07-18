@@ -201,6 +201,13 @@ describe("config.js", () => {
       expect(provider.apiKeyHeaderFormat).toBe("Bearer {key}");
       expect(provider.headers).toBeDefined();
       expect(provider.defaultModel).toBeDefined();
+      expect(provider.reasoningParam).toBe("reasoning");
+    });
+
+    it("should declare reasoning transport modes for adaptive-thinking providers", () => {
+      expect(PROVIDERS.bedrock_proxy.reasoningParam).toBe("thinking");
+      expect(PROVIDERS.gemini_proxy.reasoningParam).toBe("thinkingConfig");
+      expect(PROVIDERS.vertex_ai.reasoningParam).toBe("thinkingConfig");
     });
 
     it("copilot proxy provider should have required fields", () => {

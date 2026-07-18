@@ -200,6 +200,27 @@ function mapAnthropicContent(blocks: any[], model: string): any[] {
       continue;
     }
 
+    if (block?.type === "thinking") {
+      content.push({
+        type: "thinking",
+        thinking: block.thinking || "",
+        ...(typeof block.signature === "string" && {
+          signature: block.signature,
+        }),
+      });
+
+      continue;
+    }
+
+    if (block?.type === "redacted_thinking") {
+      content.push({
+        type: "redacted_thinking",
+        data: block.data || "",
+      });
+
+      continue;
+    }
+
     if (block?.type === "tool_result") {
       if (Array.isArray(block.content)) {
         content.push({
@@ -294,6 +315,12 @@ class BaseAdapter {
       maxTokens: number;
       system: string;
       contextCompression?: boolean;
+      reasoning?: {
+        effort?: string;
+        max_tokens?: number;
+        exclude?: boolean;
+        enabled?: boolean;
+      };
     },
   ): any {
     throw new Error("Not implemented");
@@ -316,9 +343,15 @@ class OpenAIAdapter extends BaseAdapter {
       maxTokens: number;
       system: string;
       contextCompression?: boolean;
+      reasoning?: {
+        effort?: string;
+        max_tokens?: number;
+        exclude?: boolean;
+        enabled?: boolean;
+      };
     },
   ): any {
-    const { model, maxTokens, system, contextCompression } = options;
+    const { model, maxTokens, system, contextCompression, reasoning } = options;
     const openaiMessages: any[] = [];
 
     if (system) {
@@ -468,6 +501,14 @@ class OpenAIAdapter extends BaseAdapter {
       ];
     }
 
+    if (
+      (this.provider.reasoningParam === "reasoning" ||
+        this.provider.reasoningParam === "thinkingConfig") &&
+      reasoning
+    ) {
+      payload.reasoning = reasoning;
+    }
+
     return payload;
   }
 
@@ -540,9 +581,15 @@ class AnthropicAdapter extends BaseAdapter {
       maxTokens: number;
       system: string;
       contextCompression?: boolean;
+      reasoning?: {
+        effort?: string;
+        max_tokens?: number;
+        exclude?: boolean;
+        enabled?: boolean;
+      };
     },
   ): any {
-    const { model, maxTokens, system } = options;
+    const { model, maxTokens, system, reasoning } = options;
 
     // Messages are already in Anthropic format internally.
     // Filter out system messages (system is passed separately).
@@ -566,13 +613,37 @@ class AnthropicAdapter extends BaseAdapter {
         input_schema: tool.input_schema,
       })) || [];
 
-    return {
+    const request: any = {
       model,
       max_tokens: maxTokens,
       ...(system && { system }),
       messages: filteredMessages,
       ...(anthropicTools.length > 0 && { tools: anthropicTools }),
     };
+
+    if (
+      this.provider.reasoningParam === "thinking" &&
+      reasoning?.max_tokens &&
+      Number.isFinite(reasoning.max_tokens)
+    ) {
+      request.thinking = {
+        type: "enabled",
+        budget_tokens: Math.max(1024, Math.floor(reasoning.max_tokens)),
+      };
+    } else if (
+      this.provider.reasoningParam === "thinking" &&
+      typeof reasoning?.effort === "string"
+    ) {
+      const ratio = effortToAnthropicBudgetRatio(reasoning.effort);
+      if (ratio > 0) {
+        request.thinking = {
+          type: "enabled",
+          budget_tokens: Math.max(1024, Math.floor(maxTokens * ratio)),
+        };
+      }
+    }
+
+    return request;
   }
 
   parseResponse(response: any): any {
@@ -696,6 +767,12 @@ class GoogleAdapter extends BaseAdapter {
       maxTokens: number;
       system: string;
       contextCompression?: boolean;
+      reasoning?: {
+        effort?: string;
+        max_tokens?: number;
+        exclude?: boolean;
+        enabled?: boolean;
+      };
     },
   ): any {
     const { model, maxTokens, system } = options;
@@ -960,9 +1037,44 @@ export function formatRequest(
     maxTokens: number;
     system: string;
     contextCompression?: boolean;
+    reasoning?: {
+      effort?: string;
+      max_tokens?: number;
+      exclude?: boolean;
+      enabled?: boolean;
+    };
   },
 ): any {
   return getAdapter(provider).formatRequest(messages, tools, options);
+}
+
+function effortToAnthropicBudgetRatio(effort: string): number {
+  const normalized = effort.toLowerCase();
+  if (normalized === "none") {
+    return 0;
+  }
+
+  if (normalized === "max" || normalized === "xhigh") {
+    return 0.95;
+  }
+
+  if (normalized === "high") {
+    return 0.8;
+  }
+
+  if (normalized === "medium") {
+    return 0.5;
+  }
+
+  if (normalized === "low") {
+    return 0.2;
+  }
+
+  if (normalized === "minimal") {
+    return 0.1;
+  }
+
+  return 0;
 }
 
 /**

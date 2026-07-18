@@ -29,6 +29,28 @@ export function writeOpenAiDeltaChunk(
   res.write(`data: ${JSON.stringify(chunk)}\n\n`);
 }
 
+export function writeOpenAiReasoningDeltaChunk(
+  res: ExpressResponse,
+  model: string,
+  reasoning: string,
+) {
+  const chunk = {
+    id: `chatcmpl-${Date.now()}`,
+    object: "chat.completion.chunk",
+    created: Math.floor(Date.now() / 1000),
+    model,
+    choices: [
+      {
+        index: 0,
+        delta: { reasoning },
+        finish_reason: null,
+      },
+    ],
+  };
+
+  res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+}
+
 export function writeOpenAiToolCallChunk(
   res: ExpressResponse,
   model: string,

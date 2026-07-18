@@ -131,6 +131,10 @@ describe("Vertex AI proxy", () => {
         model: "gemini-2.5-flash",
         messages: [{ role: "user", content: "hi" }],
         stream: false,
+        reasoning: {
+          effort: "minimal",
+          max_tokens: 3000,
+        },
       },
       headers: { "x-vertex-project": "test-project" },
     } as any;
@@ -142,7 +146,16 @@ describe("Vertex AI proxy", () => {
 
     await handler(req, res);
 
-    expect(mockGenerateContent).toHaveBeenCalled();
+    expect(mockGenerateContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationConfig: expect.objectContaining({
+          thinkingConfig: {
+            includeThoughts: true,
+            thinkingBudget: 3000,
+          },
+        }),
+      }),
+    );
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         choices: [
@@ -201,6 +214,49 @@ describe("Vertex AI proxy", () => {
       expect.stringContaining("data: [DONE]"),
     );
     expect(res.end).toHaveBeenCalled();
+  });
+
+  it("emits reasoning deltas for thought parts in streaming responses", async () => {
+    const handler = routes.get("POST /vertex-ai-proxy/chat/completions");
+
+    const mockStream = (async function* () {
+      yield {
+        get text() {
+          return "";
+        },
+        candidates: [
+          {
+            content: {
+              parts: [{ thought: true, text: "vertex reasoning" }],
+            },
+          },
+        ],
+      };
+    })();
+
+    mockGenerateContentStream.mockResolvedValue(mockStream);
+
+    const req = {
+      body: {
+        model: "gemini-2.5-flash",
+        messages: [{ role: "user", content: "hi" }],
+        stream: true,
+      },
+      headers: { "x-vertex-project": "test-project" },
+    } as any;
+
+    const res = {
+      setHeader: jest.fn(),
+      flushHeaders: jest.fn(),
+      write: jest.fn(),
+      end: jest.fn(),
+    } as any;
+
+    await handler(req, res);
+
+    expect(res.write).toHaveBeenCalledWith(
+      expect.stringContaining('"reasoning":"vertex reasoning"'),
+    );
   });
 
   it("translates tool calls in non-streaming responses", async () => {
@@ -310,9 +366,60 @@ describe("Vertex AI proxy", () => {
           name: "Gemini 2.5 Flash",
           context_length: 1048576,
           max_completion_tokens: 65536,
+          reasoning: expect.objectContaining({
+            default_effort: "medium",
+            supports_max_tokens: true,
+          }),
         }),
       ],
     });
+  });
+
+  it("uses thinkingLevel for Gemini 3 reasoning requests", async () => {
+    const handler = routes.get("POST /vertex-ai-proxy/chat/completions");
+
+    mockGenerateContent.mockResolvedValue({
+      get text() {
+        return "Hello from Gemini 3 Vertex!";
+      },
+      candidates: [
+        { content: { parts: [{ text: "Hello from Gemini 3 Vertex!" }] } },
+      ],
+      usageMetadata: {
+        promptTokenCount: 10,
+        candidatesTokenCount: 5,
+        totalTokenCount: 15,
+      },
+    });
+
+    const req = {
+      body: {
+        model: "gemini-3-pro",
+        messages: [{ role: "user", content: "hi" }],
+        stream: false,
+        reasoning: {
+          effort: "low",
+        },
+      },
+      headers: { "x-vertex-project": "test-project" },
+    } as any;
+
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as any;
+
+    await handler(req, res);
+
+    expect(mockGenerateContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationConfig: expect.objectContaining({
+          thinkingConfig: {
+            thinkingLevel: "low",
+          },
+        }),
+      }),
+    );
   });
 
   it("returns fallback models when listing fails", async () => {

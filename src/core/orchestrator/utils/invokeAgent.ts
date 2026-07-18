@@ -386,6 +386,7 @@ export async function invokeAgent(
         effectiveProviderId,
         providerRequestId,
       ),
+      reasoning: o.getReasoningConfig(),
       rateLimitAutoAdapt: o.rateLimitAutoAdapt,
       rateLimitCallsPerMinute: o.rateLimitCallsPerMinute,
       storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),

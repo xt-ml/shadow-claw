@@ -3,6 +3,13 @@ import { ProviderConfig } from "../../config/config.js";
 export interface ModelMetadata {
   contextWindow: number;
   maxOutput: number | null;
+  reasoning?: {
+    supportedEfforts?: string[];
+    defaultEffort?: string;
+    defaultEnabled?: boolean;
+    supportsMaxTokens?: boolean;
+    mandatory?: boolean;
+  };
   supportsTools?: boolean;
   inputModalities?: string[];
   outputModalities?: string[];
@@ -143,6 +150,7 @@ class ModelRegistry {
             "tool",
             "structured",
           );
+        const reasoning = this.extractReasoning(model);
 
         // HuggingFace Router structure nests info inside `providers` array
         if (
@@ -162,6 +170,7 @@ class ModelRegistry {
           ...(supportsImageInput !== undefined && { supportsImageInput }),
           ...(supportsAudioInput !== undefined && { supportsAudioInput }),
           ...(supportsVideoInput !== undefined && { supportsVideoInput }),
+          ...(reasoning && { reasoning }),
           ...(routesByRequestFeatures && { routesByRequestFeatures }),
         });
       }
@@ -266,6 +275,53 @@ class ModelRegistry {
     return needles.some((needle) =>
       parameters.some((parameter) => parameter.includes(needle)),
     );
+  }
+
+  private extractReasoning(model: any):
+    | {
+        supportedEfforts?: string[];
+        defaultEffort?: string;
+        defaultEnabled?: boolean;
+        supportsMaxTokens?: boolean;
+        mandatory?: boolean;
+      }
+    | undefined {
+    const raw = model?.reasoning;
+    if (!raw || typeof raw !== "object") {
+      return undefined;
+    }
+
+    const supportedEfforts = this.normalizeStringArray(raw.supported_efforts);
+    const defaultEffort =
+      typeof raw.default_effort === "string"
+        ? raw.default_effort.toLowerCase()
+        : undefined;
+    const defaultEnabled =
+      typeof raw.default_enabled === "boolean" ? raw.default_enabled : undefined;
+    const supportsMaxTokens =
+      typeof raw.supports_max_tokens === "boolean"
+        ? raw.supports_max_tokens
+        : undefined;
+    const mandatory =
+      typeof raw.mandatory === "boolean" ? raw.mandatory : undefined;
+
+    if (
+      supportedEfforts.length === 0 &&
+      defaultEffort === undefined &&
+      defaultEnabled === undefined &&
+      supportsMaxTokens === undefined &&
+      mandatory === undefined
+    ) {
+      return undefined;
+    }
+
+    return {
+      ...(supportedEfforts.length > 0 && { supportedEfforts }),
+      ...(defaultEffort !== undefined && { defaultEffort }),
+      ...(defaultEnabled !== undefined && { defaultEnabled }),
+      ...(supportsMaxTokens !== undefined && { supportsMaxTokens }),
+      ...(mandatory !== undefined && { mandatory }),
+    };
   }
 }
 

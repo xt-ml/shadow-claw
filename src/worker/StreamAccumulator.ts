@@ -12,6 +12,8 @@ import { sanitizeModelOutput } from "../content/chat-template-sanitizer.js";
 export interface StreamCallbacks {
   /** Called with each new text fragment. */
   onText?: (text: string) => void;
+  /** Called with each new reasoning/thinking fragment. */
+  onThinking?: (text: string) => void;
   /** Called when a tool_use block begins. */
   onToolStart?: (name: string) => void;
   /** Called when final usage data is available. */
@@ -54,6 +56,7 @@ export class StreamAccumulator {
     number,
     { id: string; name: string; args: string }
   >();
+  private _openaiReasoningText: string = "";
 
   constructor(format: StreamFormat, callbacks: StreamCallbacks = {}) {
     this.format = format;
@@ -115,6 +118,21 @@ export class StreamAccumulator {
           name: block.name,
           input,
         });
+      } else if (block.type === "thinking") {
+        if (typeof block.text === "string" && block.text.length > 0) {
+          content.push({
+            type: "thinking",
+            thinking: block.text,
+            ...(typeof block.id === "string" ? { signature: block.id } : {}),
+          });
+        }
+      } else if (block.type === "redacted_thinking") {
+        if (typeof block.text === "string" && block.text.length > 0) {
+          content.push({
+            type: "redacted_thinking",
+            data: block.text,
+          });
+        }
       }
     }
 
@@ -137,6 +155,10 @@ export class StreamAccumulator {
       if (cleaned) {
         content.push({ type: "text", text: cleaned });
       }
+    }
+
+    if (this._openaiReasoningText) {
+      content.unshift({ type: "thinking", thinking: this._openaiReasoningText });
     }
 
     if (this._openaiToolCalls.size > 0) {
@@ -186,9 +208,9 @@ export class StreamAccumulator {
 
         this._anthropicBlocks.set(idx, {
           type: block.type || "text",
-          id: block.id,
+          id: block.type === "thinking" ? block.signature : block.id,
           name: block.name,
-          text: block.text || "",
+          text: block.text || block.thinking || block.data || "",
           partialJson: block.type === "tool_use" ? "" : undefined,
         });
 
@@ -228,6 +250,31 @@ export class StreamAccumulator {
 
           block.text = (block.text || "") + cleaned;
           this.callbacks.onText?.(cleaned);
+        }
+
+        if (
+          delta.type === "thinking_delta" &&
+          typeof delta.thinking === "string"
+        ) {
+          block.type = "thinking";
+          block.text = (block.text || "") + delta.thinking;
+          this.callbacks.onThinking?.(delta.thinking);
+        }
+
+        if (
+          delta.type === "signature_delta" &&
+          typeof delta.signature === "string"
+        ) {
+          block.type = "thinking";
+          block.id = delta.signature;
+        }
+
+        if (
+          delta.type === "redacted_thinking_delta" &&
+          typeof delta.data === "string"
+        ) {
+          block.type = "redacted_thinking";
+          block.text = (block.text || "") + delta.data;
         }
 
         if (
@@ -295,6 +342,22 @@ export class StreamAccumulator {
       if (cleaned) {
         this._openaiText += cleaned;
         this.callbacks.onText?.(cleaned);
+      }
+    }
+
+    // Accumulate reasoning content from OpenAI-compatible providers that expose
+    // thought tokens separately from user-visible assistant text.
+    if (typeof delta.reasoning === "string") {
+      this._openaiReasoningText += delta.reasoning;
+      this.callbacks.onThinking?.(delta.reasoning);
+    } else if (delta.reasoning && typeof delta.reasoning === "object") {
+      const reasoningObj: any = delta.reasoning;
+      if (typeof reasoningObj.content === "string") {
+        this._openaiReasoningText += reasoningObj.content;
+        this.callbacks.onThinking?.(reasoningObj.content);
+      } else if (typeof reasoningObj.text === "string") {
+        this._openaiReasoningText += reasoningObj.text;
+        this.callbacks.onThinking?.(reasoningObj.text);
       }
     }
 

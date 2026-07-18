@@ -45,6 +45,7 @@ jest.unstable_mockModule("../../../config/config.js", () => ({
     MAX_ITERATIONS: "max_iterations",
     RATE_LIMIT_CALLS_PER_MINUTE: "rate_limit_calls_per_minute",
     RATE_LIMIT_AUTO_ADAPT: "rate_limit_auto_adapt",
+    REASONING_EFFORT: "reasoning_effort",
     USE_PROXY: "use_proxy",
     CONTEXT_COMPRESSION: "context_compression",
     SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
@@ -110,6 +111,7 @@ function createOrchestratorStub(overrides = {}) {
     setMaxIterations: jest.fn<any>().mockResolvedValue(undefined),
     setRateLimitCallsPerMinute: jest.fn<any>().mockResolvedValue(undefined),
     setRateLimitAutoAdapt: jest.fn<any>().mockResolvedValue(undefined),
+    setReasoningEffort: jest.fn<any>().mockResolvedValue(undefined),
     setStreamingEnabled: jest.fn<any>().mockResolvedValue(undefined),
     setUseProxy: jest.fn<any>().mockResolvedValue(undefined),
     setBedrockSettings: jest.fn<any>().mockResolvedValue(undefined),
@@ -124,6 +126,7 @@ function createOrchestratorStub(overrides = {}) {
     getMaxIterations: jest.fn<any>().mockReturnValue(50),
     getRateLimitCallsPerMinute: jest.fn<any>().mockReturnValue(0),
     getRateLimitAutoAdapt: jest.fn<any>().mockReturnValue(true),
+    getReasoningEffort: jest.fn<any>().mockReturnValue("none"),
     getStreamingEnabled: jest.fn<any>().mockReturnValue(true),
     getApiKeyForRequest: jest.fn<any>().mockResolvedValue(""),
     getApiKeyForHeaders: jest.fn<any>().mockResolvedValue(""),
@@ -295,6 +298,35 @@ describe("shadow-claw-llm", () => {
       true,
     );
     expect(showSuccess).toHaveBeenCalledWith("Rate limit settings saved", 3000);
+
+    document.body.removeChild(el);
+  });
+
+  it("saves reasoning effort from settings", async () => {
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const select = el.shadowRoot?.querySelector(
+      '[data-setting="reasoning-effort-select"]',
+    ) as HTMLSelectElement | null;
+
+    if (!select) {
+      throw new Error("reasoning effort select not found");
+    }
+
+    select.value = "high";
+    await el.saveReasoningEffort();
+
+    expect(orch.setReasoningEffort).toHaveBeenCalledWith(
+      expect.anything(),
+      "high",
+    );
+    expect(showSuccess).toHaveBeenCalledWith("Reasoning effort saved", 3000);
 
     document.body.removeChild(el);
   });

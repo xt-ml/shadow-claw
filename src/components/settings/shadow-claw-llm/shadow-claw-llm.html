@@ -290,6 +290,34 @@
   </div>
 
   <div class="settings-section">
+    <h3>🧠 Reasoning Effort</h3>
+    <div class="form-group">
+      <label class="form-label" for="reasoning-effort-select">
+        Effort Level
+      </label>
+      <select
+        class="form-select"
+        data-setting="reasoning-effort-select"
+        id="reasoning-effort-select"
+      >
+        <option value="none">Off</option>
+        <option value="minimal">Minimal</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+        <option value="xhigh">XHigh</option>
+        <option value="max">Max</option>
+      </select>
+      <div class="form-helper">
+        Controls adaptive thinking depth for compatible models.
+      </div>
+    </div>
+    <button class="save-btn" data-action="save-reasoning-effort">
+      💾 Save Reasoning Effort
+    </button>
+  </div>
+
+  <div class="settings-section">
     <h3>🔄 Max Iterations</h3>
     <div class="form-group">
       <label class="form-label">Limit</label>

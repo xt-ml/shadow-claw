@@ -568,6 +568,40 @@ describe("providers.js", () => {
       expect(result.options?.num_ctx).toBe(131072);
     });
 
+    it("should include reasoning payload for providers configured with reasoningParam=reasoning", () => {
+      const provider: any = {
+        format: "openai",
+        id: "openrouter",
+        reasoningParam: "reasoning",
+      };
+
+      const result = formatRequest(provider, [], [], {
+        maxTokens: 4096,
+        model: "anthropic/claude-sonnet-5",
+        reasoning: { effort: "high" },
+        system: "",
+      } as any);
+
+      expect(result.reasoning).toEqual({ effort: "high" });
+    });
+
+    it("should include reasoning payload for providers configured with reasoningParam=thinkingConfig", () => {
+      const provider: any = {
+        format: "openai",
+        id: "gemini_proxy",
+        reasoningParam: "thinkingConfig",
+      };
+
+      const result = formatRequest(provider, [], [], {
+        maxTokens: 4096,
+        model: "gemini-2.5-flash",
+        reasoning: { effort: "medium", max_tokens: 2048 },
+        system: "",
+      } as any);
+
+      expect(result.reasoning).toEqual({ effort: "medium", max_tokens: 2048 });
+    });
+
     it("should omit tools for Ollama models marked as unsupported", () => {
       const provider: any = {
         format: "openai",
@@ -684,6 +718,7 @@ describe("providers.js", () => {
       apiKeyHeader: "x-api-key",
       format: "anthropic",
       id: "anthropic",
+      reasoningParam: "thinking",
     };
 
     const anthropicOptions: any = {
@@ -762,6 +797,69 @@ describe("providers.js", () => {
         },
         type: "image",
       });
+    });
+
+    it("should map reasoning effort to anthropic thinking budget", () => {
+      const result = formatRequest(
+        anthropicProvider,
+        [],
+        [],
+        {
+          maxTokens: 10000,
+          model: "claude-sonnet-4-20250514",
+          reasoning: { effort: "high" },
+          system: "You are helpful",
+        } as any,
+      );
+
+      expect(result.thinking).toEqual({
+        type: "enabled",
+        budget_tokens: 8000,
+      });
+    });
+
+    it("should preserve anthropic thinking history blocks", () => {
+      const result = formatRequest(
+        anthropicProvider,
+        [
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "thinking",
+                thinking: "intermediate thought",
+                signature: "sig_1",
+              },
+              {
+                type: "redacted_thinking",
+                data: "enc_1",
+              },
+              {
+                type: "text",
+                text: "answer",
+              },
+            ],
+          },
+        ],
+        [],
+        anthropicOptions,
+      );
+
+      expect(result.messages[0].content).toEqual([
+        {
+          type: "thinking",
+          thinking: "intermediate thought",
+          signature: "sig_1",
+        },
+        {
+          type: "redacted_thinking",
+          data: "enc_1",
+        },
+        {
+          type: "text",
+          text: "answer",
+        },
+      ]);
     });
   });
 

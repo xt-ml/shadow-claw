@@ -13,12 +13,121 @@ import { GoogleGenAI } from "@google/genai";
 import { getFirstHeaderValue } from "../utils/proxy-helpers.js";
 import {
   writeOpenAiDeltaChunk,
+  writeOpenAiReasoningDeltaChunk,
   writeOpenAiToolCallChunk,
   writeOpenAiDoneChunk,
   sendStreamingProxyError,
 } from "../utils/openai-sse.js";
 
 import type { Express } from "express";
+
+function toGeminiThinkingLevel(
+  effort: unknown,
+): "low" | "medium" | "high" | undefined {
+  if (typeof effort !== "string") {
+    return undefined;
+  }
+
+  const normalized = effort.toLowerCase();
+  if (normalized === "high" || normalized === "xhigh" || normalized === "max") {
+    return "high";
+  }
+
+  if (normalized === "medium") {
+    return "medium";
+  }
+
+  if (normalized === "low" || normalized === "minimal" || normalized === "none") {
+    return "low";
+  }
+
+  return undefined;
+}
+
+function effortToBudgetRatio(effort: unknown): number {
+  if (typeof effort !== "string") {
+    return 0.5;
+  }
+
+  switch (effort.toLowerCase()) {
+    case "max":
+    case "xhigh":
+      return 0.95;
+    case "high":
+      return 0.8;
+    case "medium":
+      return 0.5;
+    case "low":
+      return 0.2;
+    case "minimal":
+    case "none":
+      return 0.1;
+    default:
+      return 0.5;
+  }
+}
+
+function buildThinkingConfig(
+  reasoning: any,
+  modelId: string,
+  maxTokens: number | undefined,
+): Record<string, unknown> | undefined {
+  if (!reasoning || typeof reasoning !== "object") {
+    return undefined;
+  }
+
+  if (reasoning.exclude === true || reasoning.enabled === false) {
+    return {
+      thinkingConfig: {
+        includeThoughts: false,
+      },
+    };
+  }
+
+  const isGemini3 = /gemini-3/i.test(modelId);
+  if (isGemini3) {
+    const thinkingLevel = toGeminiThinkingLevel(reasoning.effort) || "medium";
+    return {
+      thinkingConfig: {
+        thinkingLevel,
+      },
+    };
+  }
+
+  const explicitBudget =
+    typeof reasoning.max_tokens === "number" && Number.isFinite(reasoning.max_tokens)
+      ? Math.max(1024, Math.floor(reasoning.max_tokens))
+      : null;
+  const fallbackBudget = Math.max(
+    1024,
+    Math.floor((maxTokens || 8192) * effortToBudgetRatio(reasoning.effort)),
+  );
+
+  return {
+    thinkingConfig: {
+      includeThoughts: true,
+      thinkingBudget: explicitBudget ?? fallbackBudget,
+    },
+  };
+}
+
+function supportsReasoning(modelId: string): boolean {
+  return /gemini-(2\.5|3\.|3-|3$)/i.test(modelId) || /thinking/i.test(modelId);
+}
+
+function buildReasoningMetadata(modelId: string): Record<string, unknown> | undefined {
+  if (!supportsReasoning(modelId)) {
+    return undefined;
+  }
+
+  return {
+    supported_efforts: ["minimal", "low", "medium", "high", "xhigh", "max"],
+    default_effort: "medium",
+    default_enabled: true,
+    supports_max_tokens: true,
+    mandatory: false,
+  };
+}
 
 export function registerGeminiRoutes(
   app: Express,
@@ -118,6 +227,7 @@ export function registerGeminiRoutes(
           maxOutputTokens: body.max_tokens,
           temperature: body.temperature,
           topP: body.top_p,
+          ...buildThinkingConfig(body.reasoning, modelId, body.max_tokens),
         },
       };
 
@@ -138,6 +248,10 @@ export function registerGeminiRoutes(
           // Handle tool calls in stream (Gemini typically sends them in the first or last chunk)
           const parts = chunk.candidates?.[0]?.content?.parts || [];
           for (const part of parts) {
+            if (part.thought === true && typeof part.text === "string") {
+              writeOpenAiReasoningDeltaChunk(res, modelId, part.text);
+            }
+
             if (part.functionCall) {
               writeOpenAiToolCallChunk(res, modelId, {
                 name: part.functionCall.name || "",
@@ -242,6 +356,9 @@ export function registerGeminiRoutes(
               context_length: m.inputTokenLimit || 128000,
               max_completion_tokens: m.outputTokenLimit || 8192,
               supports_tools: true,
+              ...(buildReasoningMetadata(modelName.replace("models/", "")) && {
+                reasoning: buildReasoningMetadata(modelName.replace("models/", "")),
+              }),
             });
           }
         }
@@ -270,6 +387,9 @@ export function registerGeminiRoutes(
             context_length: f.ctx,
             max_completion_tokens: 65536,
             supports_tools: true,
+            ...(buildReasoningMetadata(f.id) && {
+              reasoning: buildReasoningMetadata(f.id),
+            }),
           });
         }
       }

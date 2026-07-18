@@ -235,6 +235,7 @@ export async function handleInvoke(
     model,
     provider: providerId,
     providerHeaders = {},
+    reasoning,
     rateLimitAutoAdapt = true,
     rateLimitCallsPerMinute = 0,
     storageHandle,
@@ -361,6 +362,7 @@ export async function handleInvoke(
           contextCompression,
           maxTokens: safeMaxTokens,
           model,
+          reasoning,
           system: currentSystemPrompt,
         },
       );
@@ -757,6 +759,27 @@ async function callWithStreaming(
 
   let lastChunkTime = 0;
   let pendingText = "";
+  let lastReasoningChunkTime = 0;
+  let pendingReasoning = "";
+
+  const flushReasoning = (force = false) => {
+    const now = Date.now();
+    if (!pendingReasoning) {
+      return;
+    }
+
+    if (!force && now - lastReasoningChunkTime < STREAM_THROTTLE_MS) {
+      return;
+    }
+
+    const message = pendingReasoning.length > 400
+      ? `${pendingReasoning.slice(0, 400)}…`
+      : pendingReasoning;
+
+    log(groupId, "info", "Reasoning", message);
+    pendingReasoning = "";
+    lastReasoningChunkTime = now;
+  };
 
   const accumulator = new StreamAccumulator(
     typedProvider.format as StreamFormat,
@@ -785,6 +808,10 @@ async function callWithStreaming(
       onUsage: (usage) => {
         post(createTokenUsageMessage(groupId, usage, getContextLimit(model)));
       },
+      onThinking: (text) => {
+        pendingReasoning += text;
+        flushReasoning(false);
+      },
     },
   );
 
@@ -799,6 +826,8 @@ async function callWithStreaming(
       type: "streaming-chunk",
     });
   }
+
+  flushReasoning(true);
 
   let finalResult = accumulator.finalize();
 

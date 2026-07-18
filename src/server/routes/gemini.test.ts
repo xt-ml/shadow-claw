@@ -60,6 +60,10 @@ describe("Gemini proxy", () => {
         model: "gemini-2.0-flash",
         messages: [{ role: "user", content: "hi" }],
         stream: false,
+        reasoning: {
+          effort: "low",
+          max_tokens: 2048,
+        },
       },
       headers: { "x-goog-api-key": "test-key" },
     } as any;
@@ -71,7 +75,16 @@ describe("Gemini proxy", () => {
 
     await handler(req, res);
 
-    expect(mockGenerateContent).toHaveBeenCalled();
+    expect(mockGenerateContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationConfig: expect.objectContaining({
+          thinkingConfig: {
+            includeThoughts: true,
+            thinkingBudget: 2048,
+          },
+        }),
+      }),
+    );
     expect(res.json).toHaveBeenCalledWith(
       expect.objectContaining({
         choices: [
@@ -130,6 +143,49 @@ describe("Gemini proxy", () => {
       expect.stringContaining("data: [DONE]"),
     );
     expect(res.end).toHaveBeenCalled();
+  });
+
+  it("emits reasoning deltas for thought parts in streaming responses", async () => {
+    const handler = routes.get("POST /gemini-proxy/chat/completions");
+
+    const mockStream = (async function* () {
+      yield {
+        get text() {
+          return "";
+        },
+        candidates: [
+          {
+            content: {
+              parts: [{ thought: true, text: "hidden reasoning" }],
+            },
+          },
+        ],
+      };
+    })();
+
+    mockGenerateContentStream.mockResolvedValue(mockStream);
+
+    const req = {
+      body: {
+        model: "gemini-2.5-flash",
+        messages: [{ role: "user", content: "hi" }],
+        stream: true,
+      },
+      headers: { "x-goog-api-key": "test-key" },
+    } as any;
+
+    const res = {
+      setHeader: jest.fn(),
+      flushHeaders: jest.fn(),
+      write: jest.fn(),
+      end: jest.fn(),
+    } as any;
+
+    await handler(req, res);
+
+    expect(res.write).toHaveBeenCalledWith(
+      expect.stringContaining('"reasoning":"hidden reasoning"'),
+    );
   });
 
   it("translates tool calls in non-streaming responses", async () => {
@@ -203,8 +259,8 @@ describe("Gemini proxy", () => {
 
     const mockResponse = (async function* () {
       yield {
-        name: "models/gemini-2.0-flash",
-        displayName: "Gemini 2.0 Flash",
+        name: "models/gemini-2.5-flash",
+        displayName: "Gemini 2.5 Flash",
         supportedGenerationMethods: ["generateContent"],
       };
       yield {
@@ -228,10 +284,59 @@ describe("Gemini proxy", () => {
     expect(res.json).toHaveBeenCalledWith({
       data: [
         expect.objectContaining({
-          id: "gemini-2.0-flash",
-          name: "Gemini 2.0 Flash",
+          id: "gemini-2.5-flash",
+          name: "Gemini 2.5 Flash",
+          reasoning: expect.objectContaining({
+            default_effort: "medium",
+            supports_max_tokens: true,
+          }),
         }),
       ],
     });
+  });
+
+  it("uses thinkingLevel for Gemini 3 reasoning requests", async () => {
+    const handler = routes.get("POST /gemini-proxy/chat/completions");
+
+    mockGenerateContent.mockResolvedValue({
+      get text() {
+        return "Hello from Gemini 3!";
+      },
+      candidates: [{ content: { parts: [{ text: "Hello from Gemini 3!" }] } }],
+      usageMetadata: {
+        promptTokenCount: 10,
+        candidatesTokenCount: 5,
+        totalTokenCount: 15,
+      },
+    });
+
+    const req = {
+      body: {
+        model: "gemini-3-pro",
+        messages: [{ role: "user", content: "hi" }],
+        stream: false,
+        reasoning: {
+          effort: "high",
+        },
+      },
+      headers: { "x-goog-api-key": "test-key" },
+    } as any;
+
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
+    } as any;
+
+    await handler(req, res);
+
+    expect(mockGenerateContent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        generationConfig: expect.objectContaining({
+          thinkingConfig: {
+            thinkingLevel: "high",
+          },
+        }),
+      }),
+    );
   });
 });

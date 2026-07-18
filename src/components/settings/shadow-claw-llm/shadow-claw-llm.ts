@@ -171,6 +171,10 @@ export class ShadowClawLlm extends ShadowClawElement {
       ?.addEventListener("click", () => this.saveMaxTokens());
 
     root
+      .querySelector('[data-action="save-reasoning-effort"]')
+      ?.addEventListener("click", () => this.saveReasoningEffort());
+
+    root
       .querySelector('[data-action="apply-recommended-max-tokens"]')
       ?.addEventListener("click", () => this.applyRecommendedMaxTokens());
 
@@ -1243,6 +1247,13 @@ export class ShadowClawLlm extends ShadowClawElement {
       ccToggle.checked = this.orchestrator.getContextCompressionEnabled();
     }
 
+    const reasoningSelect = root.querySelector(
+      '[data-setting="reasoning-effort-select"]',
+    ) as HTMLSelectElement | null;
+    if (reasoningSelect) {
+      reasoningSelect.value = this.orchestrator.getReasoningEffort?.() || "none";
+    }
+
     // Load max iterations
     const maxIterInput = root.querySelector(
       '[data-setting="max-iterations-input"]',
@@ -1738,6 +1749,32 @@ export class ShadowClawLlm extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving rate limit settings: " + errorMsg, 6000);
+    }
+  }
+
+  async saveReasoningEffort() {
+    if (!this.orchestrator || !this.db) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const select = root.querySelector(
+      '[data-setting="reasoning-effort-select"]',
+    ) as HTMLSelectElement | null;
+    if (!select) {
+      return;
+    }
+
+    try {
+      await this.orchestrator.setReasoningEffort(this.db, select.value || "none");
+      showSuccess("Reasoning effort saved", 3000);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving reasoning effort: " + errorMsg, 6000);
     }
   }
 

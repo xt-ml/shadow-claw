@@ -266,6 +266,13 @@ export interface ProviderConfig {
    * this flag is explicitly `true`.
    */
   supportsStreaming?: boolean;
+  /**
+   * How this provider accepts reasoning/thinking control.
+   * - `reasoning`: flat payload.reasoning object (OpenRouter style)
+   * - `thinking`: Anthropic payload.thinking block (Bedrock Anthropic style)
+   * - `thinkingConfig`: payload.reasoning translated server-side for Google proxies
+   */
+  reasoningParam?: "reasoning" | "thinking" | "thinkingConfig";
 }
 
 export type ProviderAuthMode = "token" | "basic" | "oauth";
@@ -699,6 +706,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     modelsUrl: "https://openrouter.ai/api/v1/models",
     requiresApiKey: true,
     supportsStreaming: true,
+    reasoningParam: "reasoning",
   },
   huggingface: {
     id: "huggingface",
@@ -748,6 +756,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     modelsUrl: BEDROCK_PROXY_MODELS_URL,
     requiresApiKey: false,
     supportsStreaming: true,
+    reasoningParam: "thinking",
   },
   gemini_proxy: {
     id: "gemini_proxy",
@@ -760,6 +769,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     modelsUrl: "http://localhost:8888/gemini-proxy/models",
     requiresApiKey: true,
     supportsStreaming: true,
+    reasoningParam: "thinkingConfig",
   },
   vertex_ai: {
     id: "vertex_ai",
@@ -772,6 +782,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     modelsUrl: "http://localhost:8888/vertex-ai-proxy/models",
     requiresApiKey: true,
     supportsStreaming: true,
+    reasoningParam: "thinkingConfig",
   },
   "mesh-llm": {
     id: "mesh-llm",
@@ -1035,6 +1046,7 @@ export const CONFIG_KEYS = {
   PUSH_PROXY_URL: "push_proxy_url",
   RATE_LIMIT_AUTO_ADAPT: "rate_limit_auto_adapt",
   RATE_LIMIT_CALLS_PER_MINUTE: "rate_limit_calls_per_minute",
+  REASONING_EFFORT: "reasoning_effort",
   REMOTE_MCP_CONNECTIONS: "remote_mcp_connections",
   SERVICE_ACCOUNTS: "service_accounts",
   SERVICE_DEFAULT_ACCOUNT: "service_default_account",

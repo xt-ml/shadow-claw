@@ -27,7 +27,7 @@ jest.unstable_mockModule("workbox-window", () => ({
 
 describe("service-worker init", () => {
   let setTimeoutSpy: jest.SpiedFunction<typeof globalThis.setTimeout>;
-  let requestConfirmation: jest.Mock<any>;
+  let requestDialog: jest.Mock<any>;
   let querySpy: jest.SpiedFunction<typeof document.querySelector>;
 
   beforeEach(() => {
@@ -55,12 +55,12 @@ describe("service-worker init", () => {
       configurable: true,
     });
 
-    requestConfirmation = jest.fn(async () => true);
+    requestDialog = jest.fn(async () => true);
     querySpy = jest
       .spyOn(document, "querySelector")
       .mockImplementation((selector) => {
         if (selector === "shadow-claw") {
-          return { requestConfirmation } as any;
+          return { requestDialog } as any;
         }
 
         return null;
@@ -112,14 +112,14 @@ describe("service-worker init", () => {
 
     await listeners.waiting?.();
 
-    expect(requestConfirmation).toHaveBeenCalledTimes(1);
+    expect(requestDialog).toHaveBeenCalledTimes(1);
     expect(mockMessageSkipWaiting).toHaveBeenCalledTimes(1);
     expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 3000);
     expect(globalThis.sessionStorage.getItem(UPDATE_INTENT_KEY)).toBeTruthy();
   });
 
   it("does not skip waiting when confirmation is declined", async () => {
-    requestConfirmation.mockResolvedValue(false);
+    requestDialog.mockResolvedValue(false);
 
     await import("./init.js");
     await listeners.waiting?.();
@@ -138,7 +138,7 @@ describe("service-worker init", () => {
     await import("./init.js");
     await listeners.waiting?.();
 
-    expect(requestConfirmation).not.toHaveBeenCalled();
+    expect(requestDialog).not.toHaveBeenCalled();
     expect(mockMessageSkipWaiting).toHaveBeenCalledTimes(1);
   });
 
@@ -180,11 +180,11 @@ describe("service-worker init", () => {
     expect(globalThis.sessionStorage.getItem(UPDATE_FAILURE_KEY)).toBeTruthy();
 
     mockMessageSkipWaiting.mockClear();
-    requestConfirmation.mockClear();
+    requestDialog.mockClear();
 
     await listeners.waiting?.();
 
-    expect(requestConfirmation).not.toHaveBeenCalled();
+    expect(requestDialog).not.toHaveBeenCalled();
     expect(mockMessageSkipWaiting).not.toHaveBeenCalled();
   });
 
@@ -198,13 +198,13 @@ describe("service-worker init", () => {
 
     await listeners.waiting?.();
 
-    expect(requestConfirmation).toHaveBeenCalledWith(
+    expect(requestDialog).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Update Failed",
       }),
     );
 
-    const callArgs = requestConfirmation.mock.calls[0][0] as {
+    const callArgs = requestDialog.mock.calls[0][0] as {
       message?: string;
     };
     expect(callArgs.message).toContain("restarting your browser");

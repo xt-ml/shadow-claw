@@ -1,7 +1,7 @@
 import { applyWeight } from "./shared.js";
 
 import type { CardSpec } from "../../../ui/a2ui.js";
-import type { SurfaceState, RenderContext } from "../../types.js";
+import type { RenderContext, SurfaceState } from "../../types.js";
 
 export function renderCard(
   spec: CardSpec,

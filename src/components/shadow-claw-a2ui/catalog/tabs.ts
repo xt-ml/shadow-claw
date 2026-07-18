@@ -1,8 +1,8 @@
-import { applyWeight } from "./shared.js";
 import { resolveDynamicString } from "../../../ui/a2ui.js";
+import { applyWeight } from "./shared.js";
 
 import type { TabsSpec } from "../../../ui/a2ui.js";
-import type { SurfaceState, RenderContext } from "../../types.js";
+import type { RenderContext, SurfaceState } from "../../types.js";
 
 export function renderTabs(
   spec: TabsSpec,

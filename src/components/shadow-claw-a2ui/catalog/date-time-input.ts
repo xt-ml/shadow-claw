@@ -1,5 +1,5 @@
-import { applyWeight } from "./shared.js";
 import { resolveDynamicString } from "../../../ui/a2ui.js";
+import { applyWeight } from "./shared.js";
 
 import type { DateTimeInputSpec } from "../../../ui/a2ui.js";
 import type { RenderContext, SurfaceState } from "../../types.js";

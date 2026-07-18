@@ -1,5 +1,5 @@
-import { applyWeight, variantToTag } from "./shared.js";
 import { resolveDynamicString } from "../../../ui/a2ui.js";
+import { applyWeight, variantToTag } from "./shared.js";
 
 import type { TextSpec } from "../../../ui/a2ui.js";
 import type { SurfaceState } from "../../types.js";

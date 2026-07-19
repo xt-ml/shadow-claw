@@ -1,5 +1,5 @@
 import { executeShell } from "../../../../shell/shell.js";
-import { formatShellOutput } from "../../../formatShellOutput.js";
+import { formatShellOutput } from "../../../utils/formatShellOutput.js";
 
 import type { ShadowClawDatabase } from "../../../../db/types";
 

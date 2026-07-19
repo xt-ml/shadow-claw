@@ -54,12 +54,12 @@ describe("handleInvoke.js", () => {
     mockClearToolState = jest.fn();
     mockBuildSystemPrompt = jest.fn();
 
-    jest.unstable_mockModule("../config/config.js", () => ({
+    jest.unstable_mockModule("../../config/config.js", () => ({
       DEFAULT_MAX_ITERATIONS: 50,
       getProvider: mockGetProvider,
     }));
 
-    jest.unstable_mockModule("../subsystems/providers/providers.js", () => ({
+    jest.unstable_mockModule("../../subsystems/providers/providers.js", () => ({
       buildHeaders: mockBuildHeaders,
       formatRequest: mockFormatRequest,
       getContextLimit: mockGetContextLimit,
@@ -67,11 +67,11 @@ describe("handleInvoke.js", () => {
       normalizeMeshLlmResult: jest.fn((r) => r),
     }));
 
-    jest.unstable_mockModule("../storage/storage.js", () => ({
+    jest.unstable_mockModule("../../storage/storage.js", () => ({
       setStorageRoot: mockSetStorageRoot,
     }));
 
-    jest.unstable_mockModule("../subsystems/tools/tools.js", () => ({
+    jest.unstable_mockModule("../../subsystems/tools/tools.js", () => ({
       TOOL_DEFINITIONS: [],
     }));
 

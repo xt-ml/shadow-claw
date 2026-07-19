@@ -18,8 +18,8 @@ import {
 } from "../../../subsystems/providers/prompt-api-provider.js";
 
 import { getContextLimit } from "../../../subsystems/providers/providers.js";
-import { getCompactionSystemPrompt } from "../../../worker/getCompactionSystemPrompt.js";
-import { buildSystemPrompt } from "../../../worker/system-prompt.js";
+import { getCompactionSystemPrompt } from "../../../worker/utils/getCompactionSystemPrompt.js";
+import { buildSystemPrompt } from "../../../worker/utils/system-prompt.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { Orchestrator } from "../orchestrator.js";

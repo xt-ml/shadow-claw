@@ -15,7 +15,7 @@ import {
   isVMReady,
 } from "../../../shell/vm.js";
 
-import { post } from "../../post.js";
+import { post } from "../../utils/post.js";
 import { executeViaShellFallback } from "./utils/executeViaShellFallback.js";
 import { getAllowFullInternetAccess } from "./utils/getAllowFullInternetAccess.js";
 import { waitForVMReady } from "./utils/waitForVMReady.js";

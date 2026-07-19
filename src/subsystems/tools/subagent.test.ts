@@ -32,6 +32,18 @@ describe("spawn_subagent tool definition", () => {
     expect(props.model.type).toBe("string");
   });
 
+  it("has optional provider property as string", () => {
+    const props = spawn_subagent.input_schema.properties as Record<string, any>;
+    expect(props.provider).toBeDefined();
+    expect(props.provider.type).toBe("string");
+  });
+
+  it("has optional workspace_group_id property as string", () => {
+    const props = spawn_subagent.input_schema.properties as Record<string, any>;
+    expect(props.workspace_group_id).toBeDefined();
+    expect(props.workspace_group_id.type).toBe("string");
+  });
+
   it("has optional system_prompt property as string", () => {
     const props = spawn_subagent.input_schema.properties as Record<string, any>;
     expect(props.system_prompt).toBeDefined();
@@ -50,6 +62,8 @@ describe("spawn_subagent tool definition", () => {
     expect(items).toBeDefined();
     expect(items.properties.prompt).toBeDefined();
     expect(items.properties.tools).toBeDefined();
+    expect(items.properties.provider).toBeDefined();
+    expect(items.properties.workspace_group_id).toBeDefined();
   });
 
   it("does not require parallel_agents", () => {

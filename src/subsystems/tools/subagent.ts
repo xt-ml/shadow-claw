@@ -4,7 +4,7 @@ export const spawn_subagent: ToolDefinition = {
   name: "spawn_subagent",
   description:
     "Spawn one or more independent agent loops to work on subtasks in parallel and collect their results. " +
-    "Each subagent has its own tool-use loop, inherits the current API key and provider, " +
+    "Each subagent has its own tool-use loop, inherits the current API key, and can optionally override provider/model. " +
     "and runs concurrently with other subagents via Promise.all. " +
     "Use spawn_subagent when a task has independent parallel workstreams — for example: " +
     "researching multiple topics simultaneously, processing a list of items in parallel, " +
@@ -34,6 +34,18 @@ export const spawn_subagent: ToolDefinition = {
         description:
           "Optional model override for the subagent. Defaults to the current model.",
       },
+      provider: {
+        type: "string",
+        description:
+          "Optional provider override for the subagent. Defaults to the current provider.",
+      },
+      workspace_group_id: {
+        type: "string",
+        description:
+          "Optional workspace group id override for subagent file/tool scope. " +
+          "Use 'parent' to reuse the parent workspace in automatic mode. " +
+          "When omitted, subagents use an isolated workspace by default.",
+      },
       system_prompt: {
         type: "string",
         description:
@@ -61,6 +73,15 @@ export const spawn_subagent: ToolDefinition = {
             model: {
               type: "string",
               description: "Optional model override for this subagent.",
+            },
+            provider: {
+              type: "string",
+              description: "Optional provider override for this subagent.",
+            },
+            workspace_group_id: {
+              type: "string",
+              description:
+                "Optional workspace group id for this subagent. Use 'parent' for parent workspace in automatic mode.",
             },
             system_prompt: {
               type: "string",

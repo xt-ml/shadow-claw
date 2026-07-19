@@ -7,12 +7,24 @@ import { setConfig } from "../../db/setConfig.js";
 
 import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
+import { toolsStore } from "../../stores/tools.js";
 import { ChannelRegistry } from "../../subsystems/channels/channel-registry.js";
 import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
+import type { LLMProvider } from "../../subsystems/providers/types.js";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
+import "../common/shadow-claw-provider-model-picker/shadow-claw-provider-model-picker.js";
+import "../common/shadow-claw-provider-module-settings/shadow-claw-provider-module-settings.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
+import type {
+  ProviderModelItem,
+  ShadowClawProviderModelPicker,
+} from "../common/shadow-claw-provider-model-picker/shadow-claw-provider-model-picker.js";
+import type {
+  ProviderRuntimeOverrides,
+  ShadowClawProviderModuleSettings,
+} from "../common/shadow-claw-provider-module-settings/shadow-claw-provider-module-settings.js";
 import shadowClawConversationsStyles from "./shadow-claw-conversations.css" with { type: "css" };
 import shadowClawConversationsTemplate from "./shadow-claw-conversations.html" with { type: "html" };
 
@@ -30,6 +42,11 @@ export class ShadowClawConversations extends ShadowClawElement {
   private _pendingDeleteGroupId: string | null = null;
   private _pendingDetailsPinnedModel: string | null = null;
   private _pendingDetailsPinnedProvider: string | null = null;
+  private _pendingDetailsProviderRuntimeOverrides: ProviderRuntimeOverrides = {};
+  private _pendingDetailsSubagentMaxTokens: number | null = null;
+  private _pendingDetailsSubagentMode: "automatic" | "manual" = "automatic";
+  private _pendingDetailsSubagentModel: string | null = null;
+  private _pendingDetailsSubagentProvider: string | null = null;
   private _pendingDetailsToolTags: string[] | null = null;
   private _pendingRenameGroupId: string | null = null;
   private _pendingRenameName: string | null = null;
@@ -194,15 +211,30 @@ export class ShadowClawConversations extends ShadowClawElement {
     const datalist = root.querySelector(
       "#conversations-available-tools",
     ) as HTMLDataListElement | null;
-    const providerSelect = root.querySelector(
-      "#conversations-details-provider",
-    ) as HTMLSelectElement | null;
-    const modelContainer = root.querySelector(
-      "#conversations-details-model-container",
+    const mainPicker = root.querySelector(
+      "#conversations-main-picker",
+    ) as ShadowClawProviderModelPicker | null;
+    const mainProviderModuleSettings = root.querySelector(
+      "#conversations-main-provider-module-settings",
+    ) as ShadowClawProviderModuleSettings | null;
+    const subagentSettingsContainer = root.querySelector(
+      "#conversations-subagent-settings-container",
     ) as HTMLElement | null;
-    const modelSelect = root.querySelector(
-      "#conversations-details-model",
+    const subagentModeSelect = root.querySelector(
+      "#conversations-subagent-mode",
     ) as HTMLSelectElement | null;
+    const subagentMaxTokensInput = root.querySelector(
+      "#conversations-subagent-max-tokens",
+    ) as HTMLInputElement | null;
+    const subagentManualContainer = root.querySelector(
+      "#conversations-subagent-manual-container",
+    ) as HTMLElement | null;
+    const subagentPicker = root.querySelector(
+      "#conversations-subagent-picker",
+    ) as ShadowClawProviderModelPicker | null;
+    const subagentProviderModuleSettings = root.querySelector(
+      "#conversations-subagent-provider-module-settings",
+    ) as ShadowClawProviderModuleSettings | null;
 
     // Populate Group ID field
     if (groupIdInput) {
@@ -400,6 +432,33 @@ export class ShadowClawConversations extends ShadowClawElement {
       }
 
       updateDatalist();
+
+      if (subagentSettingsContainer && subagentModeSelect) {
+        const showSubagentSettings = this._isSpawnSubagentEnabledInCurrentScope();
+        subagentSettingsContainer.style.display = showSubagentSettings
+          ? "flex"
+          : "none";
+        if (!showSubagentSettings) {
+          this._pendingDetailsSubagentMode = "automatic";
+        }
+
+        if (subagentManualContainer) {
+          subagentManualContainer.style.display =
+            this._pendingDetailsSubagentMode === "manual" &&
+            showSubagentSettings
+              ? "flex"
+              : "none";
+        }
+
+        if (subagentMaxTokensInput) {
+          subagentMaxTokensInput.value =
+            typeof this._pendingDetailsSubagentMaxTokens === "number" &&
+            Number.isFinite(this._pendingDetailsSubagentMaxTokens) &&
+            this._pendingDetailsSubagentMaxTokens > 0
+              ? String(Math.floor(this._pendingDetailsSubagentMaxTokens))
+              : "";
+        }
+      }
     };
 
     if (toolAddBtn && toolInput) {
@@ -438,67 +497,208 @@ export class ShadowClawConversations extends ShadowClawElement {
 
     renderChips();
 
-    if (providerSelect && modelSelect && modelContainer) {
+    if (
+      mainPicker &&
+      mainProviderModuleSettings &&
+      subagentModeSelect &&
+      subagentSettingsContainer &&
+      subagentManualContainer &&
+      subagentPicker &&
+      subagentProviderModuleSettings
+    ) {
       const providers =
-        orchestratorStore.orchestrator?.getAvailableProviders() || [];
+        (orchestratorStore.orchestrator?.getAvailableProviders() as LLMProvider[]) ||
+        [];
 
-      const renderModels = (providerId: string | null) => {
-        modelSelect.replaceChildren();
-        const defaultOption = document.createElement("option");
-        defaultOption.value = "";
-        defaultOption.textContent = "Default Model";
-        modelSelect.appendChild(defaultOption);
+      mainPicker.setLabels({
+        providerLabel: "Pinned Provider",
+        defaultProviderLabel: "Default (Global)",
+        modelLabel: "Pinned Model",
+        defaultModelLabel: "Default Model",
+        customModelPlaceholder: "Custom model id",
+      });
 
-        if (!providerId) {
-          modelContainer.style.display = "none";
+      mainPicker.setModelLoader((provider) => this._loadProviderModels(provider));
+      mainPicker.setProviders(providers);
+      mainPicker.setValue({
+        providerId: this._pendingDetailsPinnedProvider,
+        modelId: this._pendingDetailsPinnedModel,
+      });
 
-          return;
-        }
+      mainProviderModuleSettings.setProvider(this._pendingDetailsPinnedProvider);
+      mainProviderModuleSettings.setOverrides(
+        this._pendingDetailsProviderRuntimeOverrides,
+      );
 
-        const selectedProvider = providers.find((p) => p.id === providerId);
-        if (selectedProvider && selectedProvider.models) {
-          modelContainer.style.display = "block";
-          for (const m of selectedProvider.models) {
-            const option = document.createElement("option");
-            option.value = m;
-            option.textContent = m;
-            modelSelect.appendChild(option);
-          }
-        } else {
-          modelContainer.style.display = "none";
-        }
-      };
+      subagentPicker.setLabels({
+        providerLabel: "Pinned Subagent Provider",
+        defaultProviderLabel: "Default (Parent Provider)",
+        modelLabel: "Pinned Subagent Model",
+        defaultModelLabel: "Default Model",
+        customModelPlaceholder: "Custom subagent model id",
+      });
 
-      // Populate Providers
-      providerSelect.replaceChildren();
-      const defaultProvOption = document.createElement("option");
-      defaultProvOption.value = "";
-      defaultProvOption.textContent = "Default (Global)";
-      providerSelect.appendChild(defaultProvOption);
+      subagentPicker.setModelLoader((provider) =>
+        this._loadProviderModels(provider),
+      );
+      subagentPicker.setProviders(providers);
+      subagentPicker.setValue({
+        providerId: this._pendingDetailsSubagentProvider,
+        modelId: this._pendingDetailsSubagentModel,
+      });
 
-      for (const p of providers) {
-        const option = document.createElement("option");
-        option.value = p.id;
-        option.textContent = p.name;
-        providerSelect.appendChild(option);
+      subagentProviderModuleSettings.setProvider(
+        this._pendingDetailsSubagentProvider,
+      );
+
+      subagentProviderModuleSettings.setOverrides(
+        this._pendingDetailsProviderRuntimeOverrides,
+      );
+
+      if (!mainPicker.hasAttribute("data-bound")) {
+        mainPicker.addEventListener("provider-model-change", (e: Event) => {
+          const detail = (e as CustomEvent).detail || {};
+          this._pendingDetailsPinnedProvider = detail.providerId || null;
+          this._pendingDetailsPinnedModel = detail.modelId || null;
+
+          mainProviderModuleSettings.setProvider(this._pendingDetailsPinnedProvider);
+          mainProviderModuleSettings.setOverrides(
+            this._pendingDetailsProviderRuntimeOverrides,
+          );
+        });
+
+        mainPicker.setAttribute("data-bound", "true");
       }
 
-      providerSelect.value = this._pendingDetailsPinnedProvider || "";
-      renderModels(providerSelect.value);
-      modelSelect.value = this._pendingDetailsPinnedModel || "";
+      if (!mainProviderModuleSettings.hasAttribute("data-bound")) {
+        mainProviderModuleSettings.addEventListener(
+          "provider-module-settings-change",
+          (e: Event) => {
+            const detail = (e as CustomEvent).detail || {};
+            const providerId = detail.providerId as string | undefined;
+            const overrides = detail.overrides as ProviderRuntimeOverrides;
+            if (!providerId) {
+              return;
+            }
 
-      providerSelect.onchange = () => {
-        const val = providerSelect.value;
-        this._pendingDetailsPinnedProvider = val || null;
-        renderModels(val);
-        this._pendingDetailsPinnedModel = null;
-        modelSelect.value = "";
+            const next = JSON.parse(
+              JSON.stringify(this._pendingDetailsProviderRuntimeOverrides || {}),
+            ) as ProviderRuntimeOverrides;
+
+            if (providerId === "llamafile") {
+              next.llamafile = overrides.llamafile;
+            } else if (providerId === "bedrock_proxy") {
+              next.bedrock_proxy = overrides.bedrock_proxy;
+            }
+
+            this._pendingDetailsProviderRuntimeOverrides = next;
+            mainPicker.invalidateProviderModels(providerId);
+            subagentPicker.invalidateProviderModels(providerId);
+          },
+        );
+
+        mainProviderModuleSettings.setAttribute("data-bound", "true");
+      }
+
+      if (!subagentPicker.hasAttribute("data-bound")) {
+        subagentPicker.addEventListener("provider-model-change", (e: Event) => {
+          const detail = (e as CustomEvent).detail || {};
+          this._pendingDetailsSubagentProvider = detail.providerId || null;
+          this._pendingDetailsSubagentModel = detail.modelId || null;
+          subagentProviderModuleSettings.setProvider(
+            this._pendingDetailsSubagentProvider,
+          );
+
+          subagentProviderModuleSettings.setOverrides(
+            this._pendingDetailsProviderRuntimeOverrides,
+          );
+        });
+        subagentPicker.setAttribute("data-bound", "true");
+      }
+
+      if (!subagentProviderModuleSettings.hasAttribute("data-bound")) {
+        subagentProviderModuleSettings.addEventListener(
+          "provider-module-settings-change",
+          (e: Event) => {
+            const detail = (e as CustomEvent).detail || {};
+            const providerId = detail.providerId as string | undefined;
+            const overrides = detail.overrides as ProviderRuntimeOverrides;
+            if (!providerId) {
+              return;
+            }
+
+            const next = JSON.parse(
+              JSON.stringify(this._pendingDetailsProviderRuntimeOverrides || {}),
+            ) as ProviderRuntimeOverrides;
+
+            if (providerId === "llamafile") {
+              next.llamafile = overrides.llamafile;
+            } else if (providerId === "bedrock_proxy") {
+              next.bedrock_proxy = overrides.bedrock_proxy;
+            }
+
+            this._pendingDetailsProviderRuntimeOverrides = next;
+            mainPicker.invalidateProviderModels(providerId);
+            subagentPicker.invalidateProviderModels(providerId);
+          },
+        );
+
+        subagentProviderModuleSettings.setAttribute("data-bound", "true");
+      }
+
+      subagentModeSelect.value = this._pendingDetailsSubagentMode;
+
+      const showSubagentSettings = this._isSpawnSubagentEnabledInCurrentScope();
+      subagentSettingsContainer.style.display = showSubagentSettings
+        ? "flex"
+        : "none";
+
+      mainProviderModuleSettings.style.display = this._pendingDetailsPinnedProvider
+        ? "flex"
+        : "none";
+
+      subagentManualContainer.style.display =
+        showSubagentSettings && this._pendingDetailsSubagentMode === "manual"
+          ? "flex"
+          : "none";
+
+      subagentProviderModuleSettings.style.display =
+        showSubagentSettings &&
+        this._pendingDetailsSubagentMode === "manual" &&
+        !!this._pendingDetailsSubagentProvider
+          ? "flex"
+          : "none";
+
+      subagentModeSelect.onchange = () => {
+        this._pendingDetailsSubagentMode =
+          subagentModeSelect.value === "manual" ? "manual" : "automatic";
+
+        subagentManualContainer.style.display =
+          this._pendingDetailsSubagentMode === "manual" &&
+          this._isSpawnSubagentEnabledInCurrentScope()
+            ? "flex"
+            : "none";
+
+        subagentProviderModuleSettings.style.display =
+          this._pendingDetailsSubagentMode === "manual" &&
+          this._isSpawnSubagentEnabledInCurrentScope() &&
+          !!this._pendingDetailsSubagentProvider
+            ? "flex"
+            : "none";
       };
 
-      modelSelect.onchange = () => {
-        const val = modelSelect.value;
-        this._pendingDetailsPinnedModel = val || null;
-      };
+      if (!subagentMaxTokensInput?.hasAttribute("data-bound")) {
+        subagentMaxTokensInput?.addEventListener("input", () => {
+          const value = Number(subagentMaxTokensInput.value);
+          if (Number.isFinite(value) && value > 0) {
+            this._pendingDetailsSubagentMaxTokens = Math.floor(value);
+          } else {
+            this._pendingDetailsSubagentMaxTokens = null;
+          }
+        });
+
+        subagentMaxTokensInput?.setAttribute("data-bound", "true");
+      }
     }
 
     if (input) {
@@ -555,6 +755,20 @@ export class ShadowClawConversations extends ShadowClawElement {
     this._pendingDetailsToolTags = [...currentTags];
     this._pendingDetailsPinnedProvider = group?.pinnedProvider || null;
     this._pendingDetailsPinnedModel = group?.pinnedModel || null;
+    this._pendingDetailsProviderRuntimeOverrides = JSON.parse(
+      JSON.stringify(group?.providerRuntimeOverrides || {}),
+    );
+    this._pendingDetailsSubagentMode =
+      group?.subagentModelSelectionMode === "manual" ? "manual" : "automatic";
+    this._pendingDetailsSubagentMaxTokens =
+      typeof group?.subagentMaxTokens === "number" &&
+      Number.isFinite(group.subagentMaxTokens) &&
+      group.subagentMaxTokens > 0
+        ? Math.floor(group.subagentMaxTokens)
+        : null;
+    this._pendingDetailsSubagentProvider =
+      group?.subagentPinnedProvider || null;
+    this._pendingDetailsSubagentModel = group?.subagentPinnedModel || null;
     this.openDetailsDialog(currentName, groupId);
   }
 
@@ -1182,6 +1396,17 @@ export class ShadowClawConversations extends ShadowClawElement {
     });
   }
 
+  private _isSpawnSubagentEnabledInCurrentScope(): boolean {
+    if (
+      Array.isArray(this._pendingDetailsToolTags) &&
+      this._pendingDetailsToolTags.length > 0
+    ) {
+      return this._pendingDetailsToolTags.includes("spawn_subagent");
+    }
+
+    return toolsStore.enabledToolNames.has("spawn_subagent");
+  }
+
   _itemAtPoint(x: number, y: number): Element | null {
     // elementFromPoint on shadowRoot for Shadow DOM
     const root = this.shadowRoot;
@@ -1235,6 +1460,11 @@ export class ShadowClawConversations extends ShadowClawElement {
       this._pendingDetailsToolTags = null;
       this._pendingDetailsPinnedProvider = null;
       this._pendingDetailsPinnedModel = null;
+      this._pendingDetailsProviderRuntimeOverrides = {};
+      this._pendingDetailsSubagentMode = "automatic";
+      this._pendingDetailsSubagentMaxTokens = null;
+      this._pendingDetailsSubagentProvider = null;
+      this._pendingDetailsSubagentModel = null;
     });
 
     detailsForm?.addEventListener("submit", async (e) => {
@@ -1283,6 +1513,92 @@ export class ShadowClawConversations extends ShadowClawElement {
       e.preventDefault();
       await this._submitCloneDialog();
     });
+  }
+
+  private async _loadProviderModels(
+    provider: LLMProvider,
+  ): Promise<ProviderModelItem[]> {
+    if (Array.isArray(provider.models) && provider.models.length > 0) {
+      return provider.models as ProviderModelItem[];
+    }
+
+    if (!provider.modelsUrl) {
+      return [];
+    }
+
+    const headers: Record<string, string> = {
+      ...(provider.headers || {}),
+      ...(
+        orchestratorStore.orchestrator?.getProviderRuntimeHeaders(
+          provider.id,
+          "",
+          this._pendingDetailsProviderRuntimeOverrides,
+        ) || {}
+      ),
+    };
+
+    if (this.db && provider.apiKeyHeader && orchestratorStore.orchestrator) {
+      const apiKey = await orchestratorStore.orchestrator.getApiKeyForSpecificProvider(
+        this.db,
+        provider.id,
+      );
+      if (apiKey) {
+        const format = provider.apiKeyHeaderFormat || "{key}";
+        headers[provider.apiKeyHeader] = format.replace("{key}", apiKey);
+      }
+    }
+
+    const response = await fetch(provider.modelsUrl, { headers });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    let items: ProviderModelItem[] = [];
+
+    if (Array.isArray(data)) {
+      items = data as ProviderModelItem[];
+    } else if (data && typeof data === "object") {
+      const dataObject = data as Record<string, unknown>;
+      if (Array.isArray(dataObject.models)) {
+        items = dataObject.models as ProviderModelItem[];
+      } else if (Array.isArray(dataObject.data)) {
+        items = dataObject.data as ProviderModelItem[];
+      } else {
+        for (const value of Object.values(dataObject)) {
+          if (Array.isArray(value) && value.length > 0) {
+            items = value as ProviderModelItem[];
+
+            break;
+          }
+        }
+
+        if (items.length === 0 && (dataObject.id || dataObject.name)) {
+          items = [dataObject as ProviderModelItem];
+        }
+      }
+    }
+
+    if (Array.isArray(provider.models) && provider.models.length > 0) {
+      const dynamicIds = new Set(
+        items
+          .map((item) =>
+            typeof item === "string" ? item : item.id || item.name || "",
+          )
+          .filter(Boolean),
+      );
+      const staticItems = (provider.models as ProviderModelItem[]).filter(
+        (item) => {
+          const modelId =
+            typeof item === "string" ? item : item.id || item.name || "";
+
+          return modelId && !dynamicIds.has(modelId);
+        },
+      );
+      items = [...staticItems, ...items];
+    }
+
+    return items;
   }
 
   /**
@@ -1400,12 +1716,32 @@ export class ShadowClawConversations extends ShadowClawElement {
       this._pendingDetailsPinnedModel || undefined,
     );
 
+    await orchestratorStore.updateConversationProviderRuntimeOverrides(
+      this.db,
+      this._pendingRenameGroupId,
+      this._pendingDetailsProviderRuntimeOverrides,
+    );
+
+    await orchestratorStore.updateConversationSubagentSettings(
+      this.db,
+      this._pendingRenameGroupId,
+      this._pendingDetailsSubagentMode,
+      this._pendingDetailsSubagentProvider || undefined,
+      this._pendingDetailsSubagentModel || undefined,
+      this._pendingDetailsSubagentMaxTokens || undefined,
+    );
+
     dialog?.close();
     this._pendingRenameGroupId = null;
     this._pendingRenameName = null;
     this._pendingDetailsToolTags = null;
     this._pendingDetailsPinnedProvider = null;
     this._pendingDetailsPinnedModel = null;
+    this._pendingDetailsProviderRuntimeOverrides = {};
+    this._pendingDetailsSubagentMode = "automatic";
+    this._pendingDetailsSubagentMaxTokens = null;
+    this._pendingDetailsSubagentProvider = null;
+    this._pendingDetailsSubagentModel = null;
   }
 }
 

@@ -19,6 +19,7 @@ describe("worker and worker/agent.js", () => {
       BASH_DEFAULT_TIMEOUT_SEC: 120,
       BASH_MAX_TIMEOUT_SEC: 1800,
       DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
+      DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
       CONFIG_KEYS: {
         PROVIDER: "provider",
         API_KEY: "api_key",
@@ -27,6 +28,7 @@ describe("worker and worker/agent.js", () => {
         VM_BOOT_MODE: "vm_boot_mode",
         VM_BOOT_HOST: "vm_boot_host",
         SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
+        SUBAGENT_WORKSPACE_MODE: "subagent_workspace_mode",
         VM_NETWORK_RELAY_URL: "vm_network_relay_url",
         VM_BASH_TIMEOUT_SEC: "vm_bash_timeout_sec",
         VM_BASH_FULL_INTERNET_ACCESS: "vm_bash_full_internet_access",
@@ -39,7 +41,11 @@ describe("worker and worker/agent.js", () => {
       DEFAULT_DEV_PORT: 8888,
       GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: {},
       getGeneralAccountProviderCapabilities: jest.fn(() => null),
+      getModelMaxTokens: jest.fn(() => 4096),
       getProvider: jest.fn(),
+      getProviderApiKeyConfigKey: jest.fn(
+        (providerId: string) => `api_key:${providerId}`,
+      ),
       getProviderTokenAuthScheme: jest.fn(() => ({
         headerName: "Authorization",
         headerPrefix: "Bearer ",
@@ -119,7 +125,7 @@ describe("worker and worker/agent.js", () => {
       ulid: jest.fn(() => "01AN4Z07BY79KA1307SR9X4MV3"),
     }));
 
-    jest.unstable_mockModule("./sandboxedEval.js", () => ({
+    jest.unstable_mockModule("./utils/sandboxedEval.js", () => ({
       sandboxedEval: mockSandboxedEval,
     }));
 
@@ -127,7 +133,7 @@ describe("worker and worker/agent.js", () => {
     agentModule = await import("./agent.js");
 
     // Import extracted utilities
-    const stripHtmlModule = await import("./stripHtml.js");
+    const stripHtmlModule = await import("./utils/stripHtml.js");
     stripHtml = stripHtmlModule.stripHtml;
 
     // Import from worker.ts to verify no exports

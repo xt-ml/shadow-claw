@@ -308,7 +308,7 @@ const configs = [
   },
   // Transformers.js Model Worker
   {
-    input: "src/worker/transformers-js.worker.ts",
+    input: "src/worker/utils/transformers-js.worker.ts",
     output: {
       dir: "dist/public",
       entryFileNames: "transformers-js.worker.js",

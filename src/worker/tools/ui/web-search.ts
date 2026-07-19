@@ -1,4 +1,4 @@
-import { stripHtml } from "../../stripHtml.js";
+import { stripHtml } from "../../utils/stripHtml.js";
 
 export async function executeWebSearch(
   input: Record<string, any>,

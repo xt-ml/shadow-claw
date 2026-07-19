@@ -68,12 +68,12 @@ const result = processData(/* ... */);
 return JSON.stringify(result);
 ```
 
-The sandbox in `src/worker/sandboxedEval.ts` restricts:
+The sandbox in `src/worker/utils/sandboxedEval.ts` restricts:
 
 - No `eval`
 - No `new Function`
 - No DOM access
-- No network requests (use `fetch_url` tool instead)
+- No unrestricted network access (network `fetch` is gated by the shared Tool Configuration -> Internet Access toggle; use `fetch_url` when you need explicit request controls)
 
 ## When Should the Agent Use bash vs javascript?
 

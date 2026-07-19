@@ -357,6 +357,31 @@
   </div>
 
   <div class="settings-section">
+    <h3>🗂️ Subagent Workspace Mode</h3>
+    <div class="form-group">
+      <label class="form-label" for="subagent-workspace-mode-select"
+        >Mode</label
+      >
+      <select
+        class="form-select"
+        data-setting="subagent-workspace-mode-select"
+        id="subagent-workspace-mode-select"
+      >
+        <option value="automatic">Automatic (agent decides)</option>
+        <option value="parent">Manual: Parent workspace</option>
+        <option value="isolated">Manual: Isolated workspace</option>
+      </select>
+      <div class="form-helper">
+        Automatic lets spawn_subagent choose via workspace_group_id. Parent and
+        isolated modes force that behavior for all subagents.
+      </div>
+    </div>
+    <button class="save-btn" data-action="save-subagent-workspace-mode">
+      💾 Save Workspace Mode
+    </button>
+  </div>
+
+  <div class="settings-section">
     <h3>🚦 Request Rate Limit</h3>
     <div class="form-group">
       <label class="form-label">Calls per Minute</label>

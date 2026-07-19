@@ -20,7 +20,9 @@ const {
   listGroups,
   reorderGroups,
   cloneGroup,
+  updateGroupProviderRuntimeOverrides,
   updateGroupToolTags,
+  updateGroupSubagentSettings,
 } = await import("./groups.js");
 
 const db: any = {} as any;
@@ -325,6 +327,16 @@ describe("groups", () => {
           name: "Main",
           createdAt: 1000,
           toolTags: ["bash", "fetch_url"],
+          providerRuntimeOverrides: {
+            bedrock_proxy: {
+              authMode: "sso",
+              region: "us-west-2",
+              profile: "team-profile",
+            },
+          },
+          subagentModelSelectionMode: "manual",
+          subagentPinnedProvider: "openai",
+          subagentPinnedModel: "gpt-4o",
         },
       ];
 
@@ -341,6 +353,12 @@ describe("groups", () => {
       expect(clone!.createdAt).toBeGreaterThan(0);
 
       expect(clone!.toolTags).toEqual(["bash", "fetch_url"]);
+      expect(clone!.subagentModelSelectionMode).toBe("manual");
+      expect(clone!.subagentPinnedProvider).toBe("openai");
+      expect(clone!.subagentPinnedModel).toBe("gpt-4o");
+      expect(clone!.providerRuntimeOverrides?.bedrock_proxy?.authMode).toBe(
+        "sso",
+      );
 
       expect(clone!.toolTags).not.toBe(existing[0].toolTags);
 
@@ -348,6 +366,12 @@ describe("groups", () => {
       expect(saved).toHaveLength(2);
       expect(saved[1].name).toBe("Main (copy)");
       expect(saved[1].toolTags).toEqual(["bash", "fetch_url"]);
+      expect(saved[1].subagentModelSelectionMode).toBe("manual");
+      expect(saved[1].subagentPinnedProvider).toBe("openai");
+      expect(saved[1].subagentPinnedModel).toBe("gpt-4o");
+      expect(saved[1].providerRuntimeOverrides?.bedrock_proxy?.profile).toBe(
+        "team-profile",
+      );
     });
 
     it("leaves toolTags undefined when source group has no tags", async () => {
@@ -382,6 +406,106 @@ describe("groups", () => {
       const clone = await cloneGroup(db, "ext:custom123");
 
       expect(clone!.groupId).toMatch(/^ext:/);
+    });
+  });
+
+  describe("updateGroupSubagentSettings", () => {
+    it("updates subagent settings for an existing group", async () => {
+      const existing = [
+        { groupId: "br:main", name: "Main", createdAt: 1000 },
+        { groupId: "br:abc", name: "Tagged", createdAt: 2000 },
+      ];
+
+      (mockGetConfig as any).mockResolvedValue(JSON.stringify(existing));
+
+      await updateGroupSubagentSettings(
+        db,
+        "br:abc",
+        "manual",
+        "openai",
+        "gpt-4o",
+        12345,
+      );
+
+      const saved = JSON.parse((mockSetConfig as any).mock.calls[0][2]);
+      expect(saved[1].subagentModelSelectionMode).toBe("manual");
+      expect(saved[1].subagentPinnedProvider).toBe("openai");
+      expect(saved[1].subagentPinnedModel).toBe("gpt-4o");
+      expect(saved[1].subagentMaxTokens).toBe(12345);
+    });
+
+    it("clears manual provider/model when switching to automatic mode", async () => {
+      const existing = [
+        {
+          groupId: "br:main",
+          name: "Main",
+          createdAt: 1000,
+          subagentModelSelectionMode: "manual",
+          subagentMaxTokens: 2048,
+          subagentPinnedProvider: "openai",
+          subagentPinnedModel: "gpt-4o",
+        },
+      ];
+
+      (mockGetConfig as any).mockResolvedValue(JSON.stringify(existing));
+
+      await updateGroupSubagentSettings(db, "br:main", "automatic");
+
+      const saved = JSON.parse((mockSetConfig as any).mock.calls[0][2]);
+      expect(saved[0].subagentModelSelectionMode).toBe("automatic");
+      expect(saved[0].subagentPinnedProvider).toBeUndefined();
+      expect(saved[0].subagentPinnedModel).toBeUndefined();
+      expect(saved[0].subagentMaxTokens).toBeUndefined();
+    });
+  });
+
+  describe("updateGroupProviderRuntimeOverrides", () => {
+    it("updates provider runtime overrides for a group", async () => {
+      const existing = [
+        { groupId: "br:main", name: "Main", createdAt: 1000 },
+        { groupId: "br:abc", name: "Alt", createdAt: 2000 },
+      ];
+
+      (mockGetConfig as any).mockResolvedValue(JSON.stringify(existing));
+
+      await updateGroupProviderRuntimeOverrides(db, "br:abc", {
+        llamafile: {
+          mode: "server",
+          host: "10.0.0.8",
+          port: 9999,
+          offline: false,
+        },
+      });
+
+      const saved = JSON.parse((mockSetConfig as any).mock.calls[0][2]);
+      expect(saved[1].providerRuntimeOverrides.llamafile).toEqual({
+        mode: "server",
+        host: "10.0.0.8",
+        port: 9999,
+        offline: false,
+      });
+    });
+
+    it("clears provider runtime overrides when empty object is provided", async () => {
+      const existing = [
+        {
+          groupId: "br:main",
+          name: "Main",
+          createdAt: 1000,
+          providerRuntimeOverrides: {
+            bedrock_proxy: {
+              authMode: "provider_chain",
+            },
+          },
+        },
+      ];
+
+      (mockGetConfig as any).mockResolvedValue(JSON.stringify(existing));
+
+      await updateGroupProviderRuntimeOverrides(db, "br:main", {});
+
+      const saved = JSON.parse((mockSetConfig as any).mock.calls[0][2]);
+      expect(saved[0].providerRuntimeOverrides).toBeUndefined();
     });
   });
 });

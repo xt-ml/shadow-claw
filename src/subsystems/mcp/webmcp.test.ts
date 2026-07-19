@@ -47,11 +47,11 @@ describe("webmcp integration", () => {
       openDatabase: mockOpenDatabase,
     }));
 
-    jest.unstable_mockModule("../../worker/executeTool.js", () => ({
+    jest.unstable_mockModule("../../worker/utils/executeTool.js", () => ({
       executeTool: mockExecuteTool,
     }));
 
-    jest.unstable_mockModule("../../worker/post.js", () => ({
+    jest.unstable_mockModule("../../worker/utils/post.js", () => ({
       setPostHandler: mockSetPostHandler,
     }));
 
@@ -79,13 +79,16 @@ describe("webmcp integration", () => {
     jest.unstable_mockModule("@mcp-b/webmcp-polyfill", () => ({
       initializeWebMCPPolyfill: jest.fn(),
     }));
+
     jest.unstable_mockModule("../../db/openDatabase.js", () => ({
       openDatabase: mockOpenDatabase,
     }));
-    jest.unstable_mockModule("../../worker/executeTool.js", () => ({
+
+    jest.unstable_mockModule("../../worker/utils/executeTool.js", () => ({
       executeTool: mockExecuteTool,
     }));
-    jest.unstable_mockModule("../../worker/post.js", () => ({
+
+    jest.unstable_mockModule("../../worker/utils/post.js", () => ({
       setPostHandler: mockSetPostHandler,
     }));
 

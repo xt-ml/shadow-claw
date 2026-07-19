@@ -1,6 +1,7 @@
 import {
   CONFIG_KEYS,
   DEFAULT_SUBAGENT_MAX_PARALLEL,
+  DEFAULT_SUBAGENT_WORKSPACE_MODE,
   getModelMaxTokens,
 } from "../../../config/config.js";
 
@@ -161,6 +162,10 @@ export class ShadowClawLlm extends ShadowClawElement {
     root
       .querySelector('[data-action="save-subagent-max-parallel"]')
       ?.addEventListener("click", () => this.saveSubagentMaxParallel());
+
+    root
+      .querySelector('[data-action="save-subagent-workspace-mode"]')
+      ?.addEventListener("click", () => this.saveSubagentWorkspaceMode());
 
     root
       .querySelector('[data-action="save-rate-limit-settings"]')
@@ -1279,6 +1284,21 @@ export class ShadowClawLlm extends ShadowClawElement {
       );
     }
 
+    const subagentWorkspaceModeSelect = root.querySelector(
+      '[data-setting="subagent-workspace-mode-select"]',
+    ) as HTMLSelectElement | null;
+    if (subagentWorkspaceModeSelect) {
+      const rawMode = await getConfig(
+        this.db,
+        CONFIG_KEYS.SUBAGENT_WORKSPACE_MODE,
+      );
+      const normalizedMode =
+        rawMode === "parent" || rawMode === "isolated" || rawMode === "automatic"
+          ? rawMode
+          : DEFAULT_SUBAGENT_WORKSPACE_MODE;
+      subagentWorkspaceModeSelect.value = normalizedMode;
+    }
+
     const rateLimitInput = root.querySelector(
       '[data-setting="rate-limit-calls-per-minute-input"]',
     ) as HTMLInputElement | null;
@@ -1814,6 +1834,41 @@ export class ShadowClawLlm extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving subagent limit: " + errorMsg, 6000);
+    }
+  }
+
+  async saveSubagentWorkspaceMode() {
+    if (!this.db) {
+      showError("Database not initialized", 3000);
+
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const select = root.querySelector(
+      '[data-setting="subagent-workspace-mode-select"]',
+    ) as HTMLSelectElement | null;
+    if (!select) {
+      return;
+    }
+
+    const value = select.value;
+    if (value !== "automatic" && value !== "parent" && value !== "isolated") {
+      showWarning("Please select a valid subagent workspace mode", 3000);
+
+      return;
+    }
+
+    try {
+      await setConfig(this.db, CONFIG_KEYS.SUBAGENT_WORKSPACE_MODE, value);
+      showSuccess("Subagent workspace mode saved", 3000);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving subagent workspace mode: " + errorMsg, 6000);
     }
   }
 

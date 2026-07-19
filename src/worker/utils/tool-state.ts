@@ -1,4 +1,4 @@
-import { ToolDefinition } from "../subsystems/tools/types.js";
+import { ToolDefinition } from "../../subsystems/tools/types.js";
 
 interface ToolState {
   enabledTools: ToolDefinition[];

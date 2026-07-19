@@ -26,17 +26,17 @@ describe("handleCompact.js", () => {
     mockPost = jest.fn();
     mockSetStorageRoot = jest.fn();
 
-    jest.unstable_mockModule("../config/config.js", () => ({
+    jest.unstable_mockModule("../../config/config.js", () => ({
       getProvider: mockGetProvider,
     }));
 
-    jest.unstable_mockModule("../subsystems/providers/providers.js", () => ({
+    jest.unstable_mockModule("../../subsystems/providers/providers.js", () => ({
       buildHeaders: mockBuildHeaders,
       formatRequest: mockFormatRequest,
       parseResponse: mockParseResponse,
     }));
 
-    jest.unstable_mockModule("../storage/storage.js", () => ({
+    jest.unstable_mockModule("../../storage/storage.js", () => ({
       setStorageRoot: mockSetStorageRoot,
     }));
 

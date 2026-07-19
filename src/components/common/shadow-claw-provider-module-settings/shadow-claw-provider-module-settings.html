@@ -1,0 +1,36 @@
+<template>
+  <div class="module-settings">
+    <div class="module-settings__section" data-role="llamafile-section">
+      <label class="module-settings__label" for="llamafile-mode">Llamafile Mode</label>
+      <select class="module-settings__input" data-role="llamafile-mode" id="llamafile-mode">
+        <option value="cli">CLI</option>
+        <option value="server">Server</option>
+      </select>
+
+      <label class="module-settings__label" for="llamafile-host">Llamafile Host</label>
+      <input class="module-settings__input" data-role="llamafile-host" id="llamafile-host" type="text" />
+
+      <label class="module-settings__label" for="llamafile-port">Llamafile Port</label>
+      <input class="module-settings__input" data-role="llamafile-port" id="llamafile-port" type="number" />
+
+      <label class="module-settings__checkbox">
+        <input data-role="llamafile-offline" type="checkbox" />
+        Offline
+      </label>
+    </div>
+
+    <div class="module-settings__section" data-role="bedrock-section">
+      <label class="module-settings__label" for="bedrock-auth-mode">Bedrock Auth Mode</label>
+      <select class="module-settings__input" data-role="bedrock-auth-mode" id="bedrock-auth-mode">
+        <option value="provider_chain">Provider Chain</option>
+        <option value="sso">SSO</option>
+      </select>
+
+      <label class="module-settings__label" for="bedrock-region">Bedrock Region</label>
+      <input class="module-settings__input" data-role="bedrock-region" id="bedrock-region" type="text" />
+
+      <label class="module-settings__label" for="bedrock-profile">Bedrock Profile</label>
+      <input class="module-settings__input" data-role="bedrock-profile" id="bedrock-profile" type="text" />
+    </div>
+  </div>
+</template>

@@ -124,6 +124,7 @@
   cursor: pointer;
   font-size: var(--shadow-claw-font-size-sm);
   font-weight: 600;
+  margin-top: 1rem;
   padding: 0.625rem 1.5rem;
   transition: background-color 150ms cubic-bezier(0.33, 1, 0.68, 1);
 }

@@ -3,7 +3,7 @@
 > ShadowClaw streams LLM responses token-by-token via Server-Sent Events (SSE)
 > when the provider supports it, rendering a live-updating chat bubble.
 
-**Source:** `src/worker/StreamAccumulator/StreamAccumulator.ts` · `src/worker/parseSSEStream.ts` · `src/worker/handleInvoke.ts` · `src/stores/orchestrator.ts` · `src/server/proxy.ts`
+**Source:** `src/worker/StreamAccumulator/StreamAccumulator.ts` · `src/worker/parseSSEStream.ts` · `src/worker/utils/handleInvoke.ts` · `src/stores/orchestrator.ts` · `src/server/proxy.ts`
 
 ## Three Gates
 

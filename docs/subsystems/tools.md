@@ -2,7 +2,7 @@
 
 > Modular tool definitions giving the agent capabilities, with profiles for per-provider/model customization.
 
-**Source:** `src/subsystems/tools/` · `src/worker/executeTool.ts` · `src/stores/tools.ts`
+**Source:** `src/subsystems/tools/` · `src/worker/utils/executeTool.ts` · `src/stores/tools.ts`
 
 ## Tool Architecture
 
@@ -84,7 +84,7 @@ Saved profiles can specify a `providerId`. When the orchestrator switches to a m
 
 ## Tool Execution Dispatch
 
-`executeTool(db, name, input, groupId, options)` in `src/worker/executeTool.ts` is the single dispatcher. It:
+`executeTool(db, name, input, groupId, options)` in `src/worker/utils/executeTool.ts` is the single dispatcher. It:
 
 1. Checks recursion guard (scheduled task restrictions)
 2. Switches on tool `name`
@@ -105,7 +105,7 @@ Saved profiles can specify a `providerId`. When the orchestrator switches to a m
 ### Execution tools
 
 - **`bash`** — Prefers WebVM, falls back to JS shell (see [WebVM](vm.md) and [Shell](shell.md))
-- **`javascript`** — Sandboxed strict-mode via `sandboxedEval()` (`src/worker/sandboxedEval.ts`). Code **must use `return`** to produce output. No DOM, `eval`, or `Function`. Network `fetch` is enabled/disabled by the shared Tool Configuration -> Internet Access toggle.
+- **`javascript`** — Sandboxed strict-mode via `sandboxedEval()` (`src/worker/utils/sandboxedEval.ts`). Code **must use `return`** to produce output. No DOM, `eval`, or `Function`. Network `fetch` is enabled/disabled by the shared Tool Configuration -> Internet Access toggle.
 
 ### Web tools
 
@@ -138,6 +138,8 @@ When `isScheduledTask === true`, these tools are blocked:
 - `create_room`, `invite_to_room`, `leave_room`
 
 This prevents scheduled tasks from creating cascading tasks or infinite push notification loops.
+
+Additionally, `run_task` is blocked when either `isScheduledTask` **or** `isTaskExecution` is true. This prevents recursive task execution loops from both scheduled and manually-triggered task contexts.
 
 ## Tool Profiles
 

@@ -1,5 +1,5 @@
 import { ulid } from "../../../utils/ulid.js";
-import { post } from "../../post.js";
+import { post } from "../../utils/post.js";
 
 export function executeCreateTask(
   input: Record<string, any>,

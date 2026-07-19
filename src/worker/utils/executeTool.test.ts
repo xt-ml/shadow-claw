@@ -110,10 +110,14 @@ describe("executeTool.js", () => {
     mockListRemoteMcpTools = jest.fn();
     mockCallRemoteMcpTool = jest.fn();
 
-    jest.unstable_mockModule("../config/config.js", () => ({
+    jest.unstable_mockModule("../../config/config.js", () => ({
       ASSISTANT_NAME: "mock-assistant",
       DEFAULT_MAX_ITERATIONS: 10,
+      getModelMaxTokens: jest.fn(() => 4096),
       getProvider: jest.fn(),
+      getProviderApiKeyConfigKey: jest.fn(
+        (providerId: string) => `api_key:${providerId}`,
+      ),
       BASH_DEFAULT_TIMEOUT_SEC: 120,
       BASH_MAX_TIMEOUT_SEC: 1800,
       FETCH_MAX_RESPONSE: 1000,
@@ -127,27 +131,29 @@ describe("executeTool.js", () => {
         VM_BASH_FULL_INTERNET_ACCESS: "vm-bash-full-internet-access",
         TOOL_PROFILES: "tool_profiles",
         SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
+        SUBAGENT_WORKSPACE_MODE: "subagent_workspace_mode",
       },
       DEFAULT_DEV_HOST: "localhost",
       DEFAULT_DEV_PORT: 8888,
       DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
+      DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
       DEFAULT_GROUP_ID: "default",
     }));
 
-    jest.unstable_mockModule("../db/getConfig.js", () => ({
+    jest.unstable_mockModule("../../db/getConfig.js", () => ({
       getConfig: mockGetConfig,
     }));
 
-    jest.unstable_mockModule("../db/getAllTasks.js", () => ({
+    jest.unstable_mockModule("../../db/getAllTasks.js", () => ({
       getAllTasks: mockGetAllTasks,
     }));
 
-    jest.unstable_mockModule("../security/crypto.js", () => ({
+    jest.unstable_mockModule("../../security/crypto.js", () => ({
       decryptValue: mockDecryptValue,
       encryptValue: mockEncryptValue,
     }));
 
-    jest.unstable_mockModule("../subsystems/git/git.js", () => ({
+    jest.unstable_mockModule("../../subsystems/git/git.js", () => ({
       gitAdd: mockGitAdd,
       gitCheckout: mockGitCheckout,
       gitClone: mockGitClone,
@@ -178,13 +184,13 @@ describe("executeTool.js", () => {
     }));
 
     jest.unstable_mockModule(
-      "../subsystems/accounts/service-accounts.js",
+      "../../subsystems/accounts/service-accounts.js",
       () => ({
         resolveServiceCredentials: mockResolveServiceCredentials,
       }),
     );
 
-    jest.unstable_mockModule("../subsystems/git/credentials.js", () => ({
+    jest.unstable_mockModule("../../subsystems/git/credentials.js", () => ({
       resolveGitCredentials: mockResolveGitCredentials,
       buildAuthHeaders: jest.fn((creds: any) => {
         if (creds.token) {
@@ -195,7 +201,7 @@ describe("executeTool.js", () => {
       }),
     }));
 
-    jest.unstable_mockModule("../subsystems/mcp/remote-mcp-client.js", () => ({
+    jest.unstable_mockModule("../../subsystems/mcp/remote-mcp-client.js", () => ({
       listRemoteMcpTools: mockListRemoteMcpTools,
       callRemoteMcpTool: mockCallRemoteMcpTool,
       McpReauthRequiredError: class McpReauthRequiredError extends Error {
@@ -208,7 +214,7 @@ describe("executeTool.js", () => {
       },
     }));
 
-    jest.unstable_mockModule("../shell/vm.js", () => ({
+    jest.unstable_mockModule("../../shell/vm.js", () => ({
       bootVM: mockBootVM,
       executeInVM: mockExecuteInVM,
       getVMBootModePreference: mockGetVMBootModePreference,
@@ -216,38 +222,38 @@ describe("executeTool.js", () => {
       isVMReady: mockIsVMReady,
     }));
 
-    jest.unstable_mockModule("../shell/shell.js", () => ({
+    jest.unstable_mockModule("../../shell/shell.js", () => ({
       executeShell: mockExecuteShell,
     }));
 
-    jest.unstable_mockModule("../storage/listGroupFiles.js", () => ({
+    jest.unstable_mockModule("../../storage/listGroupFiles.js", () => ({
       listGroupFiles: mockListGroupFiles,
     }));
-    jest.unstable_mockModule("../storage/groupFileExists.js", () => ({
+    jest.unstable_mockModule("../../storage/groupFileExists.js", () => ({
       groupFileExists: mockGroupFileExists,
     }));
 
-    jest.unstable_mockModule("../storage/readGroupFile.js", () => ({
+    jest.unstable_mockModule("../../storage/readGroupFile.js", () => ({
       readGroupFile: mockReadGroupFile,
     }));
 
-    jest.unstable_mockModule("../storage/readGroupFileBytes.js", () => ({
+    jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
       readGroupFileBytes: mockReadGroupFileBytes,
     }));
 
-    jest.unstable_mockModule("../storage/getGroupDir.js", () => ({
+    jest.unstable_mockModule("../../storage/getGroupDir.js", () => ({
       getGroupDir: mockGetGroupDir,
     }));
 
-    jest.unstable_mockModule("../storage/writeGroupFile.js", () => ({
+    jest.unstable_mockModule("../../storage/writeGroupFile.js", () => ({
       writeGroupFile: mockWriteGroupFile,
     }));
 
-    jest.unstable_mockModule("../storage/writeGroupFileBytes.js", () => ({
+    jest.unstable_mockModule("../../storage/writeGroupFileBytes.js", () => ({
       writeGroupFileBytes: mockWriteGroupFileBytes,
     }));
 
-    jest.unstable_mockModule("../utils/ulid.js", () => ({
+    jest.unstable_mockModule("../../utils/ulid.js", () => ({
       ulid: mockUlid,
     }));
 
@@ -284,7 +290,7 @@ describe("executeTool.js", () => {
     executeTool = module.executeTool;
 
     const reauthModule = await import(
-      "./tools/remote-mcp/utils/resolveMcpReauth.js"
+      "../tools/remote-mcp/utils/resolveMcpReauth.js"
     );
 
     resolveMcpReauth = reauthModule.resolveMcpReauth;
@@ -2064,7 +2070,7 @@ describe("executeTool.js", () => {
 
   it("should post mcp-reauth-required when remote_mcp_list_tools throws McpReauthRequiredError", async () => {
     const { McpReauthRequiredError } =
-      await import("../subsystems/mcp/remote-mcp-client.js");
+      await import("../../subsystems/mcp/remote-mcp-client.js");
     (mockListRemoteMcpTools as any).mockRejectedValue(
       new McpReauthRequiredError("conn-oauth"),
     );
@@ -2088,7 +2094,7 @@ describe("executeTool.js", () => {
 
   it("should post mcp-reauth-required when remote_mcp_call_tool throws McpReauthRequiredError", async () => {
     const { McpReauthRequiredError } =
-      await import("../subsystems/mcp/remote-mcp-client.js");
+      await import("../../subsystems/mcp/remote-mcp-client.js");
     (mockCallRemoteMcpTool as any).mockRejectedValue(
       new McpReauthRequiredError("conn-oauth-2"),
     );
@@ -2112,7 +2118,7 @@ describe("executeTool.js", () => {
 
   it("should retry remote_mcp_list_tools after successful reauth", async () => {
     const { McpReauthRequiredError } =
-      await import("../subsystems/mcp/remote-mcp-client.js");
+      await import("../../subsystems/mcp/remote-mcp-client.js");
     let callCount = 0;
     (mockListRemoteMcpTools as any).mockImplementation(() => {
       callCount++;
@@ -2139,7 +2145,7 @@ describe("executeTool.js", () => {
 
   it("should deduplicate concurrent reauth requests for the same connectionId", async () => {
     const { McpReauthRequiredError } =
-      await import("../subsystems/mcp/remote-mcp-client.js");
+      await import("../../subsystems/mcp/remote-mcp-client.js");
     (mockListRemoteMcpTools as any).mockRejectedValue(
       new McpReauthRequiredError("conn-dedup"),
     );

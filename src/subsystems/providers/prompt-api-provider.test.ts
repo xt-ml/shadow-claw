@@ -29,7 +29,6 @@ describe("prompt-api-provider", () => {
 
   it("reuses one warm session and clones per request", async () => {
     const clonePrompt = (jest.fn() as any).mockResolvedValue("summary");
-
     const cloneDestroy = (jest.fn() as any).mockResolvedValue(undefined);
     const baseClone = jest.fn(async () => ({
       prompt: clonePrompt,
@@ -37,15 +36,14 @@ describe("prompt-api-provider", () => {
     }));
 
     const baseDestroy = (jest.fn() as any).mockResolvedValue(undefined);
-
     const createMock = jest.fn(async () => ({
       clone: baseClone,
       destroy: baseDestroy,
     }));
+
     setLanguageModelMock(createMock);
 
     const { compactWithPromptApi } = await import("./prompt-api-provider.js");
-
     const first = await compactWithPromptApi(
       "You are concise.",
       [{ role: "user", content: "hello" }],
@@ -65,6 +63,7 @@ describe("prompt-api-provider", () => {
 
     expect(createMock).toHaveBeenCalledTimes(1);
     expect(baseClone).toHaveBeenCalledTimes(2);
+
     expect(clonePrompt).toHaveBeenCalledTimes(2);
     expect(cloneDestroy).toHaveBeenCalledTimes(2);
     expect(baseDestroy).not.toHaveBeenCalled();
@@ -76,13 +75,12 @@ describe("prompt-api-provider", () => {
 
   it("creates fresh session when clone is unavailable", async () => {
     const warmPrompt = (jest.fn() as any).mockResolvedValue("summary");
-
     const warmDestroy = (jest.fn() as any).mockResolvedValue(undefined);
-
     const createMock = jest.fn(async () => ({
       prompt: warmPrompt,
       destroy: warmDestroy,
     }));
+
     setLanguageModelMock(createMock);
 
     const { compactWithPromptApi } = await import("./prompt-api-provider.js");
@@ -114,15 +112,13 @@ describe("prompt-api-provider", () => {
 
   it("resets and destroys the cached warm session", async () => {
     const warmPrompt = (jest.fn() as any).mockResolvedValue("summary");
-
     const warmDestroy = (jest.fn() as any).mockResolvedValue(undefined);
-
     const createMock = jest.fn(async () => ({
       prompt: warmPrompt,
       destroy: warmDestroy,
     }));
-    setLanguageModelMock(createMock);
 
+    setLanguageModelMock(createMock);
     const { compactWithPromptApi, __resetPromptApiSessionCacheForTests } =
       await import("./prompt-api-provider.js");
 
@@ -132,6 +128,7 @@ describe("prompt-api-provider", () => {
       null as any,
       () => {},
     );
+
     await __resetPromptApiSessionCacheForTests();
 
     // Destroy is called during acquirePromptSession (warm→fresh) and possibly
@@ -145,7 +142,6 @@ describe("prompt-api-provider", () => {
     const emitted: any[] = [];
 
     let promptCallCount = 0;
-
     const clonePrompt: any = jest.fn(async () => {
       promptCallCount++;
       if (promptCallCount === 1) {
@@ -182,7 +178,6 @@ describe("prompt-api-provider", () => {
     }));
 
     const baseDestroy = (jest.fn() as any).mockResolvedValue(undefined);
-
     const createMock = jest.fn(async () => ({
       clone: baseClone,
       destroy: baseDestroy,
@@ -190,7 +185,7 @@ describe("prompt-api-provider", () => {
 
     setLanguageModelMock(createMock);
 
-    jest.unstable_mockModule("../../worker/executeTool.js", () => ({
+    jest.unstable_mockModule("../../worker/utils/executeTool.js", () => ({
       executeTool: jest.fn(async (_db, name, _input, _groupId) => {
         emitted.push(`execute:${name}`);
 
@@ -198,7 +193,7 @@ describe("prompt-api-provider", () => {
       }),
     }));
 
-    jest.unstable_mockModule("../../worker/post.js", () => {
+    jest.unstable_mockModule("../../worker/utils/post.js", () => {
       let handler: any = null;
 
       return {
@@ -218,7 +213,6 @@ describe("prompt-api-provider", () => {
     });
 
     const { invokeWithPromptApi } = await import("./prompt-api-provider.js");
-
     const emitFn = jest.fn(async (msg: any) => {
       emitted.push(`emit:${msg?.type}`);
     });
@@ -257,7 +251,6 @@ describe("prompt-api-provider", () => {
     );
 
     // The open-file emit should come AFTER both execute calls
-
     const execOpenIdx = emitted.indexOf("execute:open_file");
 
     const execWriteIdx = emitted.indexOf("execute:write_file");
@@ -265,6 +258,7 @@ describe("prompt-api-provider", () => {
 
     expect(execOpenIdx).toBeGreaterThanOrEqual(0);
     expect(execWriteIdx).toBeGreaterThan(execOpenIdx);
+
     // open-file emit must come after write_file execution
     if (openFileEmitIdx >= 0) {
       expect(openFileEmitIdx).toBeGreaterThan(execWriteIdx);
@@ -318,19 +312,20 @@ describe("prompt-api-provider", () => {
     }));
 
     const baseDestroy = (jest.fn() as any).mockResolvedValue(undefined);
-
     const createMock = jest.fn(async () => ({
       clone: baseClone,
       destroy: baseDestroy,
     }));
+
     setLanguageModelMock(createMock);
 
-    jest.unstable_mockModule("../../worker/executeTool.js", () => ({
+    jest.unstable_mockModule("../../worker/utils/executeTool.js", () => ({
       executeTool: jest.fn(async (_db, _name, input: any, _groupId) => {
         return `toast shown: ${input.message}`;
       }),
     }));
-    jest.unstable_mockModule("../../worker/post.js", () => ({
+
+    jest.unstable_mockModule("../../worker/utils/post.js", () => ({
       setPostHandler: jest.fn(),
       post: jest.fn(),
     }));
@@ -375,6 +370,7 @@ describe("prompt-api-provider", () => {
     const toolCallEmits = emitted.filter(
       (m) => m?.type === "tool-activity" && m?.payload?.tool === "show_toast",
     );
+
     expect(toolCallEmits.length).toBeGreaterThan(0);
 
     // Should NOT have returned "(no response)"

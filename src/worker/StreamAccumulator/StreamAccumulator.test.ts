@@ -406,6 +406,35 @@ describe("StreamAccumulator — Anthropic format", () => {
     expect(onThinking).toHaveBeenNthCalledWith(2, " second");
   });
 
+  it("preserves Anthropic thinking signatures from signature_delta", () => {
+    const acc = new StreamAccumulator("anthropic");
+
+    acc.push({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "thinking", thinking: "" },
+    });
+    acc.push({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "thinking_delta", thinking: "intermediate" },
+    });
+    acc.push({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "signature_delta", signature: "sig_stream_42" },
+    });
+
+    const result = acc.finalize();
+    expect(result.content).toEqual([
+      {
+        type: "thinking",
+        thinking: "intermediate",
+        signature: "sig_stream_42",
+      },
+    ]);
+  });
+
   it("accumulates redacted thinking blocks from redacted_thinking_delta", () => {
     const acc = new StreamAccumulator("anthropic");
 

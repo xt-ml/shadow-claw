@@ -40,6 +40,10 @@ const mockOrchStore: any = {
   switchConversation: jest.fn(),
   reorderConversations: jest.fn(),
   cloneConversation: jest.fn(),
+  updateConversationPinnedProvider: jest.fn(),
+  updateConversationProviderRuntimeOverrides: jest.fn(),
+  updateConversationSubagentSettings: jest.fn(),
+  updateConversationToolTags: jest.fn(),
   orchestrator: {
     channelRegistry: {
       getBadge: (groupId: string) =>
@@ -64,6 +68,7 @@ jest.unstable_mockModule("../../core/effect.js", () => ({
 
 const { ShadowClawConversations } =
   await import("./shadow-claw-conversations.js");
+const { toolsStore } = await import("../../stores/tools.js");
 
 describe("ShadowClawConversations", () => {
   beforeEach(() => {
@@ -676,6 +681,357 @@ describe("ShadowClawConversations", () => {
         (o: any) => o.value,
       );
       expect(options).not.toContain("bash");
+
+      document.body.removeChild(el);
+    });
+  });
+
+  describe("details dialog: provider/model pinning", () => {
+    it("hides subagent settings when pinned tools exclude spawn_subagent", async () => {
+      mockOrchStore.groups = [
+        {
+          groupId: "br:main",
+          name: "Main",
+          createdAt: 0,
+          toolTags: ["git_clone"],
+        },
+      ];
+      mockOrchStore.activeGroupId = "br:main";
+
+      const enabled = toolsStore.enabledToolNames;
+      enabled.add("spawn_subagent");
+
+      const el = new ShadowClawConversations() as any;
+      document.body.appendChild(el);
+      await el.render();
+      el.db = {} as any;
+
+      const dialog = el.shadowRoot?.querySelector(
+        ".conversations__details-dialog",
+      ) as HTMLDialogElement | null;
+      if (dialog) {
+        (dialog as any).showModal = jest.fn();
+      }
+
+      await el.handleDetails("br:main", "Main");
+
+      const subagentSettingsContainer = el.shadowRoot?.querySelector(
+        "#conversations-subagent-settings-container",
+      ) as HTMLElement | null;
+
+      expect(subagentSettingsContainer?.style.display).toBe("none");
+
+      document.body.removeChild(el);
+    });
+
+    it("shows subagent settings when no pinned tools are set and spawn_subagent is globally enabled", async () => {
+      mockOrchStore.groups = [
+        {
+          groupId: "br:main",
+          name: "Main",
+          createdAt: 0,
+          toolTags: [],
+        },
+      ];
+      mockOrchStore.activeGroupId = "br:main";
+
+      const enabled = toolsStore.enabledToolNames;
+      enabled.add("spawn_subagent");
+
+      const el = new ShadowClawConversations() as any;
+      document.body.appendChild(el);
+      await el.render();
+      el.db = {} as any;
+
+      const dialog = el.shadowRoot?.querySelector(
+        ".conversations__details-dialog",
+      ) as HTMLDialogElement | null;
+      if (dialog) {
+        (dialog as any).showModal = jest.fn();
+      }
+
+      await el.handleDetails("br:main", "Main");
+
+      const subagentSettingsContainer = el.shadowRoot?.querySelector(
+        "#conversations-subagent-settings-container",
+      ) as HTMLElement | null;
+
+      expect(subagentSettingsContainer?.style.display).toBe("flex");
+
+      document.body.removeChild(el);
+    });
+
+    it("shows subagent settings when spawn_subagent is pinned even if it is globally disabled", async () => {
+      mockOrchStore.groups = [
+        {
+          groupId: "br:main",
+          name: "Main",
+          createdAt: 0,
+          toolTags: ["spawn_subagent"],
+        },
+      ];
+      mockOrchStore.activeGroupId = "br:main";
+
+      const enabled = toolsStore.enabledToolNames;
+      enabled.delete("spawn_subagent");
+
+      const el = new ShadowClawConversations() as any;
+      document.body.appendChild(el);
+      await el.render();
+      el.db = {} as any;
+
+      const dialog = el.shadowRoot?.querySelector(
+        ".conversations__details-dialog",
+      ) as HTMLDialogElement | null;
+      if (dialog) {
+        (dialog as any).showModal = jest.fn();
+      }
+
+      await el.handleDetails("br:main", "Main");
+
+      const subagentSettingsContainer = el.shadowRoot?.querySelector(
+        "#conversations-subagent-settings-container",
+      ) as HTMLElement | null;
+
+      expect(subagentSettingsContainer?.style.display).toBe("flex");
+
+      document.body.removeChild(el);
+    });
+
+    it("allows custom model id even when provider has no static model list", async () => {
+      mockOrchStore.groups = [
+        {
+          groupId: "br:main",
+          name: "Main",
+          createdAt: 0,
+          pinnedProvider: "provider-no-models",
+          pinnedModel: "custom-model-id",
+          subagentModelSelectionMode: "automatic",
+        },
+      ];
+      mockOrchStore.activeGroupId = "br:main";
+      mockOrchStore.orchestrator.getAvailableProviders.mockReturnValue([
+        {
+          id: "provider-no-models",
+          name: "Provider Without Models",
+        },
+      ]);
+
+      const el = new ShadowClawConversations() as any;
+      document.body.appendChild(el);
+      await el.render();
+      el.db = {} as any;
+
+      const dialog = el.shadowRoot?.querySelector(
+        ".conversations__details-dialog",
+      ) as HTMLDialogElement | null;
+      if (dialog) {
+        (dialog as any).showModal = jest.fn();
+        (dialog as any).close = jest.fn();
+      }
+
+      await el.handleDetails("br:main", "Main");
+
+      const mainPicker = el.shadowRoot?.querySelector(
+        "#conversations-main-picker",
+      ) as HTMLElement | null;
+      const modelSelect = mainPicker?.shadowRoot?.querySelector(
+        '[data-role="model-select"]',
+      ) as HTMLSelectElement | null;
+      const customInput = mainPicker?.shadowRoot?.querySelector(
+        '[data-role="custom-model-input"]',
+      ) as HTMLInputElement | null;
+
+      expect(modelSelect?.value).toBe("__custom__");
+      expect(customInput?.value).toBe("custom-model-id");
+
+      await el._submitDetailsDialog();
+
+      expect(mockOrchStore.updateConversationPinnedProvider).toHaveBeenCalledWith(
+        expect.anything(),
+        "br:main",
+        "provider-no-models",
+        "custom-model-id",
+      );
+
+      document.body.removeChild(el);
+    });
+
+    it("saves subagent manual mode provider/model settings", async () => {
+      mockOrchStore.groups = [
+        {
+          groupId: "br:main",
+          name: "Main",
+          createdAt: 0,
+          toolTags: ["spawn_subagent"],
+          subagentModelSelectionMode: "manual",
+          subagentPinnedProvider: "openai",
+          subagentPinnedModel: "gpt-4o",
+        },
+      ];
+      mockOrchStore.activeGroupId = "br:main";
+      mockOrchStore.orchestrator.getAvailableProviders.mockReturnValue([
+        { id: "openai", name: "OpenAI", models: ["gpt-4o"] },
+      ]);
+
+      const enabled = toolsStore.enabledToolNames;
+      enabled.add("spawn_subagent");
+
+      const el = new ShadowClawConversations() as any;
+      document.body.appendChild(el);
+      await el.render();
+      el.db = {} as any;
+
+      const dialog = el.shadowRoot?.querySelector(
+        ".conversations__details-dialog",
+      ) as HTMLDialogElement | null;
+      if (dialog) {
+        (dialog as any).showModal = jest.fn();
+        (dialog as any).close = jest.fn();
+      }
+
+      await el.handleDetails("br:main", "Main");
+      await el._submitDetailsDialog();
+
+      expect(
+        mockOrchStore.updateConversationSubagentSettings,
+      ).toHaveBeenCalledWith(
+        expect.anything(),
+        "br:main",
+        "manual",
+        "openai",
+        "gpt-4o",
+        undefined,
+      );
+
+      expect(
+        mockOrchStore.updateConversationProviderRuntimeOverrides,
+      ).toHaveBeenCalledWith(expect.anything(), "br:main", expect.any(Object));
+
+      document.body.removeChild(el);
+    });
+
+    it("saves subagent max tokens override from details dialog", async () => {
+      mockOrchStore.groups = [
+        {
+          groupId: "br:main",
+          name: "Main",
+          createdAt: 0,
+          toolTags: ["spawn_subagent"],
+          subagentModelSelectionMode: "automatic",
+          subagentMaxTokens: 4096,
+        },
+      ];
+      mockOrchStore.activeGroupId = "br:main";
+      mockOrchStore.orchestrator.getAvailableProviders.mockReturnValue([
+        { id: "openai", name: "OpenAI", models: ["gpt-4o"] },
+      ]);
+
+      const enabled = toolsStore.enabledToolNames;
+      enabled.add("spawn_subagent");
+
+      const el = new ShadowClawConversations() as any;
+      document.body.appendChild(el);
+      await el.render();
+      el.db = {} as any;
+
+      const dialog = el.shadowRoot?.querySelector(
+        ".conversations__details-dialog",
+      ) as HTMLDialogElement | null;
+      if (dialog) {
+        (dialog as any).showModal = jest.fn();
+        (dialog as any).close = jest.fn();
+      }
+
+      await el.handleDetails("br:main", "Main");
+
+      const maxTokensInput = el.shadowRoot?.querySelector(
+        "#conversations-subagent-max-tokens",
+      ) as HTMLInputElement | null;
+
+      expect(maxTokensInput?.value).toBe("4096");
+
+      if (!maxTokensInput) {
+        throw new Error("subagent max tokens input missing");
+      }
+
+      maxTokensInput.value = "32000";
+      maxTokensInput.dispatchEvent(new Event("input"));
+
+      await el._submitDetailsDialog();
+
+      expect(
+        mockOrchStore.updateConversationSubagentSettings,
+      ).toHaveBeenCalledWith(
+        expect.anything(),
+        "br:main",
+        "automatic",
+        undefined,
+        undefined,
+        32000,
+      );
+
+      document.body.removeChild(el);
+    });
+
+    it("captures bedrock module overrides from shared settings component", async () => {
+      mockOrchStore.groups = [
+        {
+          groupId: "br:main",
+          name: "Main",
+          createdAt: 0,
+          pinnedProvider: "bedrock_proxy",
+          pinnedModel: "anthropic.claude-3-5-sonnet",
+        },
+      ];
+      mockOrchStore.activeGroupId = "br:main";
+      mockOrchStore.orchestrator.getAvailableProviders.mockReturnValue([
+        {
+          id: "bedrock_proxy",
+          name: "AWS Bedrock",
+        },
+      ]);
+
+      const el = new ShadowClawConversations() as any;
+      document.body.appendChild(el);
+      await el.render();
+      el.db = {} as any;
+
+      const dialog = el.shadowRoot?.querySelector(
+        ".conversations__details-dialog",
+      ) as HTMLDialogElement | null;
+      if (dialog) {
+        (dialog as any).showModal = jest.fn();
+        (dialog as any).close = jest.fn();
+      }
+
+      await el.handleDetails("br:main", "Main");
+
+      const moduleSettings = el.shadowRoot?.querySelector(
+        "#conversations-main-provider-module-settings",
+      ) as HTMLElement | null;
+      const authModeSelect = moduleSettings?.shadowRoot?.querySelector(
+        '[data-role="bedrock-auth-mode"]',
+      ) as HTMLSelectElement | null;
+
+      if (!authModeSelect) {
+        throw new Error("bedrock auth mode select missing");
+      }
+
+      authModeSelect.value = "sso";
+      authModeSelect.dispatchEvent(new Event("change"));
+
+      await el._submitDetailsDialog();
+
+      expect(
+        mockOrchStore.updateConversationProviderRuntimeOverrides,
+      ).toHaveBeenCalledWith(
+        expect.anything(),
+        "br:main",
+        expect.objectContaining({
+          bedrock_proxy: expect.objectContaining({ authMode: "sso" }),
+        }),
+      );
 
       document.body.removeChild(el);
     });

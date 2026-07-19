@@ -96,6 +96,19 @@ export interface CompactPayload {
   model: string;
   provider?: any;
   providerHeaders?: Record<string, string>;
+  providerRuntimeOverrides?: {
+    bedrock_proxy?: {
+      authMode?: "provider_chain" | "sso";
+      profile?: string;
+      region?: string;
+    };
+    llamafile?: {
+      host?: string;
+      mode?: "cli" | "server";
+      offline?: boolean;
+      port?: number;
+    };
+  };
   reasoning?: {
     effort?: string;
   };
@@ -132,6 +145,19 @@ export interface InvokePayload {
   model: string;
   provider?: any;
   providerHeaders?: Record<string, string>;
+  providerRuntimeOverrides?: {
+    bedrock_proxy?: {
+      authMode?: "provider_chain" | "sso";
+      profile?: string;
+      region?: string;
+    };
+    llamafile?: {
+      host?: string;
+      mode?: "cli" | "server";
+      offline?: boolean;
+      port?: number;
+    };
+  };
   reasoning?: {
     effort?: string;
   };
@@ -139,7 +165,12 @@ export interface InvokePayload {
   rateLimitCallsPerMinute?: number;
   storageHandle?: any;
   streaming?: boolean;
+  subagentModelSelectionMode?: "automatic" | "manual";
+  subagentMaxTokens?: number;
+  subagentPinnedModel?: string;
+  subagentPinnedProvider?: string;
   systemPrompt: string;
+  workspaceGroupId?: string;
 }
 
 export interface ManageToolsPayload {

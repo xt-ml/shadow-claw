@@ -75,7 +75,12 @@ flowchart LR
     model,           // Selected model ID
     maxTokens,       // Output token limit
     maxIterations,   // Tool-use loop limit (user-configurable, 1–200)
-    provider,        // Provider config object
+    provider,        // Effective provider ID
+    providerHeaders, // Runtime request headers (provider-aware)
+    providerRuntimeOverrides, // Conversation-level runtime overrides
+    subagentModelSelectionMode, // "automatic" | "manual"
+    subagentPinnedProvider, // Optional when mode is manual
+    subagentPinnedModel, // Optional when mode is manual
     storageHandle,   // Optional OPFS directory handle
     enabledTools,    // Array of ToolDefinition objects
     streaming,       // Boolean: enable SSE streaming?

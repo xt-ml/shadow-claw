@@ -1,11 +1,10 @@
 /**
  * ShadowClaw Agent Worker Logic
  */
-
-export { executeTool } from "./executeTool.js";
-export { handleCompact } from "./handleCompact.js";
-export { handleInvoke } from "./handleInvoke.js";
-export { handleMessage } from "./handleMessage.js";
-export { log } from "./log.js";
-export { pendingTasks } from "./pendingTasks.js";
-export { post } from "./post.js";
+export { executeTool } from "./utils/executeTool.js";
+export { handleCompact } from "./utils/handleCompact.js";
+export { handleInvoke } from "./utils/handleInvoke.js";
+export { handleMessage } from "./utils/handleMessage.js";
+export { log } from "./utils/log.js";
+export { pendingTasks } from "./utils/pendingTasks.js";
+export { post } from "./utils/post.js";

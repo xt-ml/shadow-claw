@@ -21,7 +21,7 @@ src/subsystems/tools/
 
 ## Step 1 — Write the test first (TDD)
 
-Create `src/worker/executeTool.test.ts` (or add to the existing one) with a test for your new tool:
+Create `src/worker/utils/executeTool.test.ts` (or add to the existing one) with a test for your new tool:
 
 ```ts
 describe("my_tool", () => {
@@ -96,7 +96,7 @@ export function executeMyTool(input: Record<string, any>, groupId: string) {
 }
 ```
 
-Open `src/worker/executeTool.ts` and add a case to the `switch` statement:
+Open `src/worker/utils/executeTool.ts` and add a case to the `switch` statement:
 
 ```ts
 import { executeMyTool } from "./tools/my-tool.js";

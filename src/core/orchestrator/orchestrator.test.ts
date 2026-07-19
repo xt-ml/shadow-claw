@@ -4,7 +4,7 @@ import { ASSISTANT_NAME, LLAMAFILE_PROXY_URL } from "../../config/config.js";
 import { Orchestrator } from "./orchestrator.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
-import { buildSystemPrompt } from "../../worker/system-prompt.js";
+import { buildSystemPrompt } from "../../worker/utils/system-prompt.js";
 
 describe("buildSystemPrompt", () => {
   const FETCH_URL_TOOL = "fetch_url";

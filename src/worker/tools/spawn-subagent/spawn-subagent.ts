@@ -1,6 +1,7 @@
 import {
   CONFIG_KEYS,
   DEFAULT_SUBAGENT_MAX_PARALLEL,
+  DEFAULT_SUBAGENT_WORKSPACE_MODE,
 } from "../../../config/config.js";
 
 import { getConfig } from "../../../db/getConfig.js";
@@ -19,8 +20,26 @@ export interface SubagentInvokeContext {
   apiKey: string;
   model: string;
   provider: string;
+  subagentModelSelectionMode?: "automatic" | "manual";
+  subagentMaxTokens?: number;
+  subagentPinnedProvider?: string;
+  subagentPinnedModel?: string;
+  providerRuntimeOverrides?: {
+    bedrock_proxy?: {
+      authMode?: "provider_chain" | "sso";
+      profile?: string;
+      region?: string;
+    };
+    llamafile?: {
+      host?: string;
+      mode?: "cli" | "server";
+      offline?: boolean;
+      port?: number;
+    };
+  };
   maxTokens: number;
   providerHeaders: Record<string, string>;
+  storageHandle?: any;
   streaming: boolean;
   enabledTools: ToolDefinition[];
   assistantName: string;
@@ -35,7 +54,30 @@ export interface SubagentSpec {
   prompt: string;
   tools?: string[];
   model?: string;
+  provider?: string;
+  workspace_group_id?: string;
   system_prompt?: string;
+}
+
+export type SubagentWorkspaceMode = "automatic" | "parent" | "isolated";
+
+function normalizeSubagentWorkspaceMode(value: unknown): SubagentWorkspaceMode {
+  if (value === "parent" || value === "isolated" || value === "automatic") {
+    return value;
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (
+      normalized === "parent" ||
+      normalized === "isolated" ||
+      normalized === "automatic"
+    ) {
+      return normalized;
+    }
+  }
+
+  return DEFAULT_SUBAGENT_WORKSPACE_MODE as SubagentWorkspaceMode;
 }
 
 /**
@@ -46,9 +88,15 @@ export interface SubagentSpec {
  */
 export async function executeSpawnSubagentTool(
   input: Record<string, any>,
-  _groupId: string,
+  groupId: string,
   ctx: SubagentInvokeContext,
 ): Promise<string> {
+  const rawWorkspaceMode = await getConfig(
+    ctx.db,
+    CONFIG_KEYS.SUBAGENT_WORKSPACE_MODE,
+  );
+  const workspaceMode = normalizeSubagentWorkspaceMode(rawWorkspaceMode);
+
   // Multi-agent fan-out via parallel_agents
   if (
     Array.isArray(input.parallel_agents) &&
@@ -69,14 +117,27 @@ export async function executeSpawnSubagentTool(
 
     const results = await Promise.all(
       specs.map((spec, i) => {
+        const defaultedProvider =
+          ctx.subagentModelSelectionMode === "manual"
+            ? ctx.subagentPinnedProvider
+            : undefined;
+        const defaultedModel =
+          ctx.subagentModelSelectionMode === "manual"
+            ? ctx.subagentPinnedModel
+            : undefined;
         const fullSpec: SubagentSpec = {
           prompt: spec.prompt ?? "",
           tools: spec.tools,
-          model: spec.model,
+          model: defaultedModel ?? spec.model,
+          provider: defaultedProvider ?? spec.provider,
+          workspace_group_id: spec.workspace_group_id,
           system_prompt: spec.system_prompt,
         };
 
-        return runSingleSubagent(fullSpec, ctx).then((text) => ({
+        return runSingleSubagent(fullSpec, ctx, {
+          parentGroupId: groupId,
+          workspaceMode,
+        }).then((text) => ({
           index: i + 1,
           prompt: spec.prompt,
           text,
@@ -97,12 +158,26 @@ export async function executeSpawnSubagentTool(
   }
 
   // Single subagent
+  const defaultedProvider =
+    ctx.subagentModelSelectionMode === "manual"
+      ? ctx.subagentPinnedProvider
+      : undefined;
+  const defaultedModel =
+    ctx.subagentModelSelectionMode === "manual"
+      ? ctx.subagentPinnedModel
+      : undefined;
+
   const spec: SubagentSpec = {
     prompt: input.prompt ?? "",
     tools: input.tools,
-    model: input.model,
+    model: defaultedModel ?? input.model,
+    provider: defaultedProvider ?? input.provider,
+    workspace_group_id: input.workspace_group_id,
     system_prompt: input.system_prompt,
   };
 
-  return runSingleSubagent(spec, ctx);
+  return runSingleSubagent(spec, ctx, {
+    parentGroupId: groupId,
+    workspaceMode,
+  });
 }

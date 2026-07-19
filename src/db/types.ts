@@ -18,6 +18,23 @@ export interface GroupMeta {
   name: string;
   pinnedModel?: string;
   pinnedProvider?: string;
+  providerRuntimeOverrides?: {
+    bedrock_proxy?: {
+      authMode?: "provider_chain" | "sso";
+      profile?: string;
+      region?: string;
+    };
+    llamafile?: {
+      host?: string;
+      mode?: "cli" | "server";
+      offline?: boolean;
+      port?: number;
+    };
+  };
+  subagentModelSelectionMode?: "automatic" | "manual";
+  subagentMaxTokens?: number;
+  subagentPinnedModel?: string;
+  subagentPinnedProvider?: string;
   toolTags?: string[];
 }
 

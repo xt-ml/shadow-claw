@@ -3,6 +3,8 @@ import { jest } from "@jest/globals";
 
 describe("executeSpawnSubagentTool", () => {
   let executeSpawnSubagentTool: any;
+  let mockGetConfig: any;
+  let mockDecryptValue: any;
   let mockHandleInvoke: any;
   let mockUlid: any;
   let mockRegisterSubagentCollector: any;
@@ -12,6 +14,29 @@ describe("executeSpawnSubagentTool", () => {
     jest.resetModules();
 
     mockHandleInvoke = jest.fn();
+    mockDecryptValue = jest.fn(async (value: string) => {
+      if (value === "enc-openai") {
+        return "openai-key";
+      }
+
+      return "";
+    });
+
+    mockGetConfig = jest.fn(async (_db: any, key: string) => {
+      if (key === "subagent_max_parallel") {
+        return 5;
+      }
+
+      if (key === "subagent_workspace_mode") {
+        return "automatic";
+      }
+
+      if (key === "api_key:openai") {
+        return "enc-openai";
+      }
+
+      return undefined;
+    });
     mockUlid = jest.fn(() => "test-ulid-0001");
     mockRegisterSubagentCollector = jest.fn();
     mockUnregisterSubagentCollector = jest.fn();
@@ -21,17 +46,57 @@ describe("executeSpawnSubagentTool", () => {
     }));
 
     jest.unstable_mockModule("../../../db/getConfig.js", () => ({
-      getConfig: jest.fn().mockResolvedValue(5),
+      getConfig: mockGetConfig,
     }));
 
     jest.unstable_mockModule("../../../config/config.js", () => ({
       CONFIG_KEYS: {
+        API_KEY: "api_key",
+        BEDROCK_AUTH_MODE: "bedrock_auth_mode",
+        BEDROCK_PROFILE_FALLBACK: "bedrock_profile_fallback",
+        BEDROCK_REGION_FALLBACK: "bedrock_region_fallback",
+        LLAMAFILE_HOST: "llamafile_host",
+        LLAMAFILE_MODE: "llamafile_mode",
+        LLAMAFILE_OFFLINE: "llamafile_offline",
+        LLAMAFILE_PORT: "llamafile_port",
+        MESH_LLM_HOST: "mesh_llm_host",
         SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
+        SUBAGENT_WORKSPACE_MODE: "subagent_workspace_mode",
       },
       DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
+      DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
+      getModelMaxTokens: jest.fn((modelId: string) => {
+        if (String(modelId).includes("haiku")) {
+          return 64000;
+        }
+
+        if (String(modelId).includes("opus")) {
+          return 128000;
+        }
+
+        return 8192;
+      }),
+      getProvider: jest.fn((providerId: string) => {
+        if (providerId === "openai") {
+          return { id: "openai", requiresApiKey: true };
+        }
+
+        if (providerId === "bedrock_proxy") {
+          return { id: "bedrock_proxy", requiresApiKey: false };
+        }
+
+        return { id: providerId, requiresApiKey: true };
+      }),
+      getProviderApiKeyConfigKey: jest.fn(
+        (providerId: string) => `api_key:${providerId}`,
+      ),
     }));
 
-    jest.unstable_mockModule("../../post.js", () => ({
+    jest.unstable_mockModule("../../../security/crypto.js", () => ({
+      decryptValue: mockDecryptValue,
+    }));
+
+    jest.unstable_mockModule("../../utils/post.js", () => ({
       post: jest.fn(),
       registerSubagentCollector: mockRegisterSubagentCollector,
       unregisterSubagentCollector: mockUnregisterSubagentCollector,
@@ -56,6 +121,10 @@ describe("executeSpawnSubagentTool", () => {
     assistantName: "TestBot",
     memory: "",
     systemPrompt: "You are a helpful assistant.",
+    subagentModelSelectionMode: "automatic",
+    subagentPinnedProvider: undefined,
+    subagentPinnedModel: undefined,
+    storageHandle: undefined,
     invokeSubagent: (payload: any) => mockHandleInvoke({}, payload),
     ...overrides,
   });
@@ -189,6 +258,332 @@ describe("executeSpawnSubagentTool", () => {
     );
 
     const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.model).toBe("gpt-4o");
+  });
+
+  it("clamps subagent max tokens by selected model limit", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    await executeSpawnSubagentTool(
+      { prompt: "task", model: "anthropic.claude-haiku-4-5" },
+      "parent-group",
+      makeContext({ maxTokens: 128000 }),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.maxTokens).toBe(64000);
+  });
+
+  it("uses conversation subagent max tokens override but keeps model-safe clamp", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    await executeSpawnSubagentTool(
+      { prompt: "task", model: "anthropic.claude-haiku-4-5" },
+      "parent-group",
+      makeContext({ maxTokens: 128000, subagentMaxTokens: 100000 }),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.maxTokens).toBe(64000);
+  });
+
+  it("overrides provider when specified in input", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    await executeSpawnSubagentTool(
+      { prompt: "task", provider: "openai" },
+      "parent-group",
+      makeContext(),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.provider).toBe("openai");
+    expect(payload.apiKey).toBe("openai-key");
+  });
+
+  it("resolves bedrock provider runtime headers when provider is overridden", async () => {
+    mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+      if (key === "subagent_max_parallel") {
+        return 5;
+      }
+
+      if (key === "subagent_workspace_mode") {
+        return "automatic";
+      }
+
+      if (key === "bedrock_region_fallback") {
+        return "us-west-2";
+      }
+
+      if (key === "bedrock_profile_fallback") {
+        return "my-profile";
+      }
+
+      if (key === "bedrock_auth_mode") {
+        return "sso";
+      }
+
+      return undefined;
+    });
+
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    await executeSpawnSubagentTool(
+      { prompt: "task", provider: "bedrock_proxy" },
+      "parent-group",
+      makeContext(),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.providerHeaders).toEqual({
+      "x-bedrock-auth-mode": "sso",
+      "x-bedrock-profile": "my-profile",
+      "x-bedrock-region": "us-west-2",
+    });
+  });
+
+  it("forwards storageHandle from parent context", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    await executeSpawnSubagentTool(
+      { prompt: "task" },
+      "parent-group",
+      makeContext({ storageHandle: { kind: "directory-handle" } }),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.storageHandle).toEqual({ kind: "directory-handle" });
+  });
+
+  it("in automatic mode, uses parent workspace when workspace_group_id is 'parent'", async () => {
+    mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+      if (key === "subagent_max_parallel") {
+        return 5;
+      }
+
+      if (key === "subagent_workspace_mode") {
+        return "automatic";
+      }
+
+      return undefined;
+    });
+
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    await executeSpawnSubagentTool(
+      { prompt: "task", workspace_group_id: "parent" },
+      "parent-group",
+      makeContext(),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.workspaceGroupId).toBe("parent-group");
+  });
+
+  it("manual parent mode forces parent workspace regardless of requested workspace_group_id", async () => {
+    mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+      if (key === "subagent_max_parallel") {
+        return 5;
+      }
+
+      if (key === "subagent_workspace_mode") {
+        return "parent";
+      }
+
+      return undefined;
+    });
+
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    await executeSpawnSubagentTool(
+      { prompt: "task", workspace_group_id: "custom-group" },
+      "parent-group",
+      makeContext(),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.workspaceGroupId).toBe("parent-group");
+  });
+
+  it("manual isolated mode forces isolated workspace even when parent is requested", async () => {
+    mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+      if (key === "subagent_max_parallel") {
+        return 5;
+      }
+
+      if (key === "subagent_workspace_mode") {
+        return "isolated";
+      }
+
+      return undefined;
+    });
+
+    mockUlid.mockReturnValueOnce("iso-123");
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    await executeSpawnSubagentTool(
+      { prompt: "task", workspace_group_id: "parent" },
+      "parent-group",
+      makeContext(),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.workspaceGroupId).toBe("subagent:iso-123");
+  });
+
+  it("uses conversation-level manual subagent provider/model defaults when tool input omits them", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    await executeSpawnSubagentTool(
+      { prompt: "task" },
+      "parent-group",
+      makeContext({
+        subagentModelSelectionMode: "manual",
+        subagentPinnedProvider: "openai",
+        subagentPinnedModel: "gpt-4o",
+      }),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.provider).toBe("openai");
+    expect(payload.model).toBe("gpt-4o");
+  });
+
+  it("manual subagent defaults override per-tool provider/model inputs", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    await executeSpawnSubagentTool(
+      { prompt: "task", provider: "anthropic", model: "claude-3-5" },
+      "parent-group",
+      makeContext({
+        subagentModelSelectionMode: "manual",
+        subagentPinnedProvider: "openai",
+        subagentPinnedModel: "gpt-4o",
+      }),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.provider).toBe("openai");
     expect(payload.model).toBe("gpt-4o");
   });
 

@@ -3,7 +3,7 @@
 > The agent worker runs in a dedicated Web Worker thread, owning the LLM tool-use loop,
 > tool execution, streaming, and the WebVM. All communication is message-based.
 
-**Source:** `src/worker/worker.ts` · `src/worker/handleMessage.ts` · `src/worker/handleInvoke.ts` · `src/worker/executeTool.ts`
+**Source:** `src/worker/worker.ts` · `src/worker/utils/handleMessage.ts` · `src/worker/utils/handleInvoke.ts` · `src/worker/utils/executeTool.ts`
 
 ## Message Protocol
 
@@ -85,7 +85,7 @@ When the worker initializes (`src/worker/worker.ts`):
 
 ## Tool-Use Loop
 
-The core agent loop in `src/worker/handleInvoke.ts`:
+The core agent loop in `src/worker/utils/handleInvoke.ts`:
 
 ```mermaid
 flowchart TD
@@ -145,7 +145,7 @@ SYSTEM ERROR: Tool called 3+ times with same input. Rigid loop detected.
 
 ## Streaming Calls
 
-`callWithStreaming()` in `src/worker/handleInvoke.ts`:
+`callWithStreaming()` in `src/worker/utils/handleInvoke.ts`:
 
 1. Add `stream: true` to request body
 2. Add `stream_options: { include_usage: true }` for OpenAI format
@@ -184,7 +184,7 @@ This keeps UI and worker cancellation behavior consistent while preventing orpha
 
 ## Tool Execution Dispatch
 
-`executeTool(db, name, input, groupId, options)` in `src/worker/executeTool.ts` is the single dispatcher for all tools.
+`executeTool(db, name, input, groupId, options)` in `src/worker/utils/executeTool.ts` is the single dispatcher for all tools.
 
 ### File tools
 
@@ -213,6 +213,9 @@ When `isScheduledTask === true`, these tools are blocked:
 
 - `create_task`, `update_task`, `delete_task`, `enable_task`, `disable_task`
 - `send_notification`
+- `create_room`, `invite_to_room`, `leave_room`
+
+Additionally, `run_task` is blocked in any task execution context (`isScheduledTask` or `isTaskExecution`) to prevent self-triggering loops.
 
 ### Bash tool selection
 

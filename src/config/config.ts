@@ -1056,6 +1056,7 @@ export const CONFIG_KEYS = {
   STORAGE_HANDLE: "storage_handle",
   STREAMING_ENABLED: "streaming_enabled",
   SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
+  SUBAGENT_WORKSPACE_MODE: "subagent_workspace_mode",
   SYSTEM_PROMPT_OVERRIDE: "system_prompt_override",
   TASK_SERVER_URL: "task_server_url",
   TASK_SYNC_OUTBOX: "task_sync_outbox",
@@ -1088,3 +1089,6 @@ export const DEFAULT_DEV_PORT = 8888;
 
 /** Default maximum number of parallel subagents */
 export const DEFAULT_SUBAGENT_MAX_PARALLEL = 5;
+
+/** Default subagent workspace mode */
+export const DEFAULT_SUBAGENT_WORKSPACE_MODE = "automatic";

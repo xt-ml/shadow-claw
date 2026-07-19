@@ -1,4 +1,4 @@
-import { post } from "../../post.js";
+import { post } from "../../utils/post.js";
 
 export function executeClearChat(groupId: string): string {
   post({ type: "clear-chat", payload: { groupId } });

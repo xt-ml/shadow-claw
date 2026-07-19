@@ -1,6 +1,6 @@
 import { ROOM_PREFIX, roomIdFromGroupId } from "../../../db/rooms.js";
 
-import { post } from "../../post.js";
+import { post } from "../../utils/post.js";
 
 export function executeInviteToRoom(
   input: Record<string, any>,

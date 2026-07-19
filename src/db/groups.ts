@@ -178,6 +178,13 @@ export async function cloneGroup(
     groupId: `${prefix}${ulid()}`,
     name: `${source.name} (copy)`,
     createdAt: Date.now(),
+    providerRuntimeOverrides: source.providerRuntimeOverrides
+      ? JSON.parse(JSON.stringify(source.providerRuntimeOverrides))
+      : undefined,
+    subagentModelSelectionMode: source.subagentModelSelectionMode,
+    subagentMaxTokens: source.subagentMaxTokens,
+    subagentPinnedProvider: source.subagentPinnedProvider,
+    subagentPinnedModel: source.subagentPinnedModel,
     toolTags: source.toolTags ? [...source.toolTags] : undefined,
   };
   groups.push(clone);
@@ -208,6 +215,74 @@ export async function updateGroupPinnedProvider(
       group.pinnedModel = modelId;
     } else {
       delete group.pinnedModel;
+    }
+  }
+
+  await saveGroupMetadata(db, groups);
+}
+
+/**
+ * Update group-level defaults for subagent provider/model selection.
+ */
+export async function updateGroupSubagentSettings(
+  db: ShadowClawDatabase,
+  groupId: string,
+  mode: "automatic" | "manual",
+  providerId?: string,
+  modelId?: string,
+  subagentMaxTokens?: number,
+): Promise<void> {
+  const groups = await getGroupMetadata(db);
+  const group = groups.find((g) => g.groupId === groupId);
+  if (group) {
+    group.subagentModelSelectionMode = mode;
+
+    if (mode === "manual") {
+      if (providerId) {
+        group.subagentPinnedProvider = providerId;
+      } else {
+        delete group.subagentPinnedProvider;
+      }
+
+      if (modelId) {
+        group.subagentPinnedModel = modelId;
+      } else {
+        delete group.subagentPinnedModel;
+      }
+    } else {
+      delete group.subagentPinnedProvider;
+      delete group.subagentPinnedModel;
+    }
+
+    if (
+      typeof subagentMaxTokens === "number" &&
+      Number.isFinite(subagentMaxTokens) &&
+      subagentMaxTokens > 0
+    ) {
+      group.subagentMaxTokens = Math.floor(subagentMaxTokens);
+    } else {
+      delete group.subagentMaxTokens;
+    }
+  }
+
+  await saveGroupMetadata(db, groups);
+}
+
+/**
+ * Update group-level provider runtime overrides (for provider module settings).
+ */
+export async function updateGroupProviderRuntimeOverrides(
+  db: ShadowClawDatabase,
+  groupId: string,
+  overrides: GroupMeta["providerRuntimeOverrides"],
+): Promise<void> {
+  const groups = await getGroupMetadata(db);
+  const group = groups.find((g) => g.groupId === groupId);
+  if (group) {
+    if (overrides && Object.keys(overrides).length > 0) {
+      group.providerRuntimeOverrides = JSON.parse(JSON.stringify(overrides));
+    } else {
+      delete group.providerRuntimeOverrides;
     }
   }
 

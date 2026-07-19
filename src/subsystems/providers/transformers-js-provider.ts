@@ -1,13 +1,13 @@
-import { sanitizeModelOutput } from "../../content/chat-template-sanitizer.js";
 import { CONFIG_KEYS } from "../../config/config.js";
+import { sanitizeModelOutput } from "../../content/chat-template-sanitizer.js";
 import { ShadowClawDatabase } from "../../db/db.js";
 import { getConfig } from "../../db/getConfig.js";
 import { toTrustedScriptUrl } from "../../security/trusted-types.js";
+import { createLogMessage } from "../../worker/utils/createLogMessage.js";
+import { createToolActivityMessage } from "../../worker/utils/createToolActivityMessage.js";
+import { executeTool } from "../../worker/utils/executeTool.js";
+import { setPostHandler } from "../../worker/utils/post.js";
 import { ToolDefinition } from "../tools/tools.js";
-import { createLogMessage } from "../../worker/createLogMessage.js";
-import { createToolActivityMessage } from "../../worker/createToolActivityMessage.js";
-import { executeTool } from "../../worker/executeTool.js";
-import { setPostHandler } from "../../worker/post.js";
 
 import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent/spawn-subagent.js";
 

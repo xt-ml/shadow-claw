@@ -58,7 +58,7 @@ import { TaskScheduler } from "../../subsystems/tools/task-scheduler.js";
 import { formatA2UIActionPrompt } from "../../ui/a2ui.js";
 import { showToast } from "../../ui/toast.js";
 import { ulid } from "../../utils/ulid.js";
-import { buildSystemPrompt } from "../../worker/system-prompt.js";
+import { buildSystemPrompt } from "../../worker/utils/system-prompt.js";
 
 import {
   deliverIntermediateResponse,
@@ -521,13 +521,31 @@ export class Orchestrator {
   getProviderRuntimeHeaders(
     providerId: string,
     requestId = "",
+    overrides?: {
+      bedrock_proxy?: {
+        authMode?: "provider_chain" | "sso";
+        profile?: string;
+        region?: string;
+      };
+      llamafile?: {
+        host?: string;
+        mode?: "cli" | "server";
+        offline?: boolean;
+        port?: number;
+      };
+    },
   ): Record<string, string> {
     if (providerId === "llamafile") {
+      const llama = overrides?.llamafile;
       const headers: Record<string, string> = {
-        "x-llamafile-mode": this.llamafileMode,
-        "x-llamafile-host": this.llamafileHost,
-        "x-llamafile-port": String(this.llamafilePort),
-        "x-llamafile-offline": this.llamafileOffline ? "true" : "false",
+        "x-llamafile-mode":
+          llama?.mode === "server" || llama?.mode === "cli"
+            ? llama.mode
+            : this.llamafileMode,
+        "x-llamafile-host": llama?.host || this.llamafileHost,
+        "x-llamafile-port": String(llama?.port || this.llamafilePort),
+        "x-llamafile-offline":
+          (llama?.offline ?? this.llamafileOffline) ? "true" : "false",
       };
 
       if (requestId) {
@@ -538,16 +556,20 @@ export class Orchestrator {
     }
 
     if (providerId === "bedrock_proxy") {
+      const bedrock = overrides?.bedrock_proxy;
       const headers: Record<string, string> = {};
-      if (this.bedrockRegionFallback) {
-        headers["x-bedrock-region"] = this.bedrockRegionFallback;
+      if (bedrock?.region || this.bedrockRegionFallback) {
+        headers["x-bedrock-region"] =
+          bedrock?.region || this.bedrockRegionFallback;
       }
 
-      if (this.bedrockProfileFallback) {
-        headers["x-bedrock-profile"] = this.bedrockProfileFallback;
+      if (bedrock?.profile || this.bedrockProfileFallback) {
+        headers["x-bedrock-profile"] =
+          bedrock?.profile || this.bedrockProfileFallback;
       }
 
-      headers["x-bedrock-auth-mode"] = this.bedrockAuthMode;
+      headers["x-bedrock-auth-mode"] =
+        bedrock?.authMode || this.bedrockAuthMode;
 
       return headers;
     }

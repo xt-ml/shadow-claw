@@ -1,0 +1,26 @@
+<template>
+  <div class="picker">
+    <label class="picker__label" data-role="provider-label" for="provider-select">
+      Pinned Provider
+    </label>
+    <select class="picker__input" data-role="provider-select" id="provider-select">
+      <option value="">Default</option>
+    </select>
+
+    <div class="picker__model" data-role="model-container">
+      <label class="picker__label" data-role="model-label" for="model-select">
+        Pinned Model
+      </label>
+      <select class="picker__input" data-role="model-select" id="model-select">
+        <option value="">Default Model</option>
+      </select>
+      <input
+        autocomplete="off"
+        class="picker__input"
+        data-role="custom-model-input"
+        placeholder="Custom model id"
+        type="text"
+      />
+    </div>
+  </div>
+</template>

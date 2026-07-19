@@ -49,9 +49,11 @@ jest.unstable_mockModule("../../../config/config.js", () => ({
     USE_PROXY: "use_proxy",
     CONTEXT_COMPRESSION: "context_compression",
     SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
+    SUBAGENT_WORKSPACE_MODE: "subagent_workspace_mode",
   },
   DEFAULT_MAX_ITERATIONS: 50,
   DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
+  DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
   DEFAULT_GROUP_ID: "br:main",
   OPFS_ROOT: "shadowclaw",
   PROVIDERS,
@@ -101,6 +103,8 @@ const {
   showWarning: _showWarning,
   showError,
 } = await import("../../../ui/toast.js");
+const { getConfig } = await import("../../../db/getConfig.js");
+const { setConfig } = await import("../../../db/setConfig.js");
 
 function createOrchestratorStub(overrides = {}) {
   return {
@@ -419,6 +423,70 @@ describe("shadow-claw-llm", () => {
       "provider-a",
     );
     expect(section.style.display).toBe("none");
+
+    document.body.removeChild(el);
+  });
+
+  it("loads saved subagent workspace mode into selector", async () => {
+    (getConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "subagent_workspace_mode") {
+        return "parent";
+      }
+
+      if (key === "subagent_max_parallel") {
+        return "7";
+      }
+
+      return undefined;
+    });
+
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const modeSelect = el.shadowRoot?.querySelector(
+      '[data-setting="subagent-workspace-mode-select"]',
+    ) as HTMLSelectElement | null;
+
+    if (!modeSelect) {
+      throw new Error("subagent workspace mode select not found");
+    }
+
+    expect(modeSelect.value).toBe("parent");
+
+    document.body.removeChild(el);
+  });
+
+  it("saves subagent workspace mode", async () => {
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const modeSelect = el.shadowRoot?.querySelector(
+      '[data-setting="subagent-workspace-mode-select"]',
+    ) as HTMLSelectElement | null;
+
+    if (!modeSelect) {
+      throw new Error("subagent workspace mode select not found");
+    }
+
+    modeSelect.value = "isolated";
+    await (el as any).saveSubagentWorkspaceMode();
+
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "subagent_workspace_mode",
+      "isolated",
+    );
+    expect(showSuccess).toHaveBeenCalledWith("Subagent workspace mode saved", 3000);
 
     document.body.removeChild(el);
   });

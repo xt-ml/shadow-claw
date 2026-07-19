@@ -25,8 +25,8 @@ import {
 import { getContextLimit } from "../../../subsystems/providers/providers.js";
 import { invokeWithTransformersJs } from "../../../subsystems/providers/transformers-js-provider.js";
 import { ulid } from "../../../utils/ulid.js";
-import { post as workerPost } from "../../../worker/post.js";
-import { buildSystemPrompt } from "../../../worker/system-prompt.js";
+import { post as workerPost } from "../../../worker/utils/post.js";
+import { buildSystemPrompt } from "../../../worker/utils/system-prompt.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { SubagentInvokeContext } from "../../../worker/tools/spawn-subagent/spawn-subagent.js";
@@ -97,6 +97,13 @@ export async function invokeAgent(
     group?.toolTags && group.toolTags.length > 0
       ? toolsStore.allTools.filter((t) => group.toolTags!.includes(t.name))
       : toolsStore.enabledTools;
+
+  const subagentModelSelectionMode =
+    group?.subagentModelSelectionMode === "manual" ? "manual" : "automatic";
+  const subagentMaxTokens = group?.subagentMaxTokens;
+  const subagentPinnedProvider = group?.subagentPinnedProvider;
+  const subagentPinnedModel = group?.subagentPinnedModel;
+  const providerRuntimeOverrides = group?.providerRuntimeOverrides;
 
   const peerState = orchestratorStore.getPeerState(groupId) || undefined;
   const systemPrompt = buildSystemPrompt(
@@ -171,8 +178,17 @@ export async function invokeAgent(
       memory: memory ?? "",
       model: effectiveModel,
       provider: effectiveProviderId,
-      providerHeaders: {},
+      providerHeaders: o.getProviderRuntimeHeaders(
+        effectiveProviderId,
+        "",
+        providerRuntimeOverrides,
+      ),
+      providerRuntimeOverrides,
       streaming: false,
+      subagentModelSelectionMode,
+      subagentMaxTokens,
+      subagentPinnedProvider,
+      subagentPinnedModel,
       systemPrompt,
     };
 
@@ -242,8 +258,17 @@ export async function invokeAgent(
       memory: memory ?? "",
       model: effectiveModel,
       provider: effectiveProviderId,
-      providerHeaders: {},
+      providerHeaders: o.getProviderRuntimeHeaders(
+        effectiveProviderId,
+        "",
+        providerRuntimeOverrides,
+      ),
+      providerRuntimeOverrides,
       streaming: false,
+      subagentModelSelectionMode,
+      subagentMaxTokens,
+      subagentPinnedProvider,
+      subagentPinnedModel,
       systemPrompt,
     };
 
@@ -313,8 +338,17 @@ export async function invokeAgent(
       memory: memory ?? "",
       model: effectiveModel,
       provider: effectiveProviderId,
-      providerHeaders: {},
+      providerHeaders: o.getProviderRuntimeHeaders(
+        effectiveProviderId,
+        "",
+        providerRuntimeOverrides,
+      ),
+      providerRuntimeOverrides,
       streaming: false,
+      subagentModelSelectionMode,
+      subagentMaxTokens,
+      subagentPinnedProvider,
+      subagentPinnedModel,
       systemPrompt,
     };
 
@@ -385,12 +419,18 @@ export async function invokeAgent(
       providerHeaders: o.getProviderRuntimeHeaders(
         effectiveProviderId,
         providerRequestId,
+        providerRuntimeOverrides,
       ),
+      providerRuntimeOverrides,
       reasoning: o.getReasoningConfig(),
       rateLimitAutoAdapt: o.rateLimitAutoAdapt,
       rateLimitCallsPerMinute: o.rateLimitCallsPerMinute,
       storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),
       streaming: shouldStream,
+      subagentModelSelectionMode,
+      subagentMaxTokens,
+      subagentPinnedProvider,
+      subagentPinnedModel,
       systemPrompt,
     },
   });

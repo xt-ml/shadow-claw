@@ -54,6 +54,8 @@ jest.unstable_mockModule("../storage/requestStorageAccess.js", () => ({
 
 const mockSaveGroupMetadata = jest.fn() as any;
 const mockUpdateGroupToolTags = jest.fn() as any;
+const mockUpdateGroupProviderRuntimeOverrides = jest.fn() as any;
+const mockUpdateGroupSubagentSettings = jest.fn() as any;
 
 jest.unstable_mockModule("../storage/storage.js", () => ({
   getStorageStatus: mockGetStorageStatus,
@@ -73,6 +75,8 @@ jest.unstable_mockModule("../db/groups.js", () => ({
   saveGroupMetadata: mockSaveGroupMetadata,
   updateGroupToolTags: mockUpdateGroupToolTags,
   updateGroupPinnedProvider: jest.fn(),
+  updateGroupSubagentSettings: mockUpdateGroupSubagentSettings,
+  updateGroupProviderRuntimeOverrides: mockUpdateGroupProviderRuntimeOverrides,
 }));
 
 jest.unstable_mockModule("../db/clearGroupMessages.js", () => ({

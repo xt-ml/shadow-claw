@@ -106,34 +106,12 @@
           class="conversations__participants-list"
         ></div>
       </div>
-      <label class="conversations__label" for="conversations-details-provider">
-        Pinned Provider
-      </label>
-      <select
-        class="conversations__input conversations__provider-select"
-        id="conversations-details-provider"
-        name="conversations-details-provider"
+      <shadow-claw-provider-model-picker id="conversations-main-picker">
+      </shadow-claw-provider-model-picker>
+      <shadow-claw-provider-module-settings
+        id="conversations-main-provider-module-settings"
       >
-        <option value="">Default (Global)</option>
-      </select>
-
-      <div
-        id="conversations-details-model-container"
-        class="conversations__model-container"
-      >
-        <label class="conversations__label" for="conversations-details-model">
-          Pinned Model
-        </label>
-        <div class="conversations__model-row">
-          <select
-            class="conversations__input conversations__model-select"
-            id="conversations-details-model"
-            name="conversations-details-model"
-          >
-            <option value="">Default Model</option>
-          </select>
-        </div>
-      </div>
+      </shadow-claw-provider-module-settings>
 
       <label class="conversations__label conversations__label--tools">
         Pinned Tools
@@ -159,6 +137,46 @@
         class="conversations__tool-tags"
         id="conversations-details-tools"
       ></div>
+
+      <div id="conversations-subagent-settings-container">
+        <label class="conversations__label" for="conversations-subagent-mode">
+          Subagent Provider/Model Mode
+        </label>
+        <select
+          class="conversations__input"
+          id="conversations-subagent-mode"
+          name="conversations-subagent-mode"
+        >
+          <option value="automatic">Automatic (parent decides)</option>
+          <option value="manual">Manual (pin provider/model)</option>
+        </select>
+
+        <label
+          class="conversations__label"
+          for="conversations-subagent-max-tokens"
+        >
+          Subagent Max Tokens (optional)
+        </label>
+        <input
+          class="conversations__input"
+          id="conversations-subagent-max-tokens"
+          min="1"
+          name="conversations-subagent-max-tokens"
+          placeholder="Auto (model-aware)"
+          step="1"
+          type="number"
+        />
+
+        <div id="conversations-subagent-manual-container">
+          <shadow-claw-provider-model-picker id="conversations-subagent-picker">
+          </shadow-claw-provider-model-picker>
+          <shadow-claw-provider-module-settings
+            id="conversations-subagent-provider-module-settings"
+          >
+          </shadow-claw-provider-module-settings>
+        </div>
+      </div>
+
       <div class="conversations__actions">
         <button class="conversations__cancel" type="button">Cancel</button>
         <button class="conversations__ok" type="submit">Save</button>

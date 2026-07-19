@@ -58,7 +58,7 @@ The WebVM (v86) is **worker-owned**. This was an explicit choice:
 
 - **No shared memory** — worker and main thread can't share JavaScript objects; everything must be serialized via `postMessage`
 - **Structured clone limitations** — not all types can be transferred (e.g., OPFS file handles must be re-acquired in the worker)
-- **Message protocol overhead** — adding new worker capabilities requires defining new message types in `src/subsystems/worker/types.ts` and handlers in `src/worker/handleMessage.ts`
+- **Message protocol overhead** — adding new worker capabilities requires defining new message types in `src/subsystems/worker/types.ts` and handlers in `src/worker/utils/handleMessage.ts`
 - **Debugging complexity** — breakpoints in the worker require separate DevTools targeting
 
 ## Alternatives Considered
@@ -75,4 +75,4 @@ The WebVM (v86) is **worker-owned**. This was an explicit choice:
 - All LLM calls, tool execution, and VM ops are in `src/worker/`
 - The worker is the **only** non-test runtime importer of `src/shell/vm.ts`
 - Terminal UI components talk to the orchestrator's terminal bridge methods — never directly to `vm.ts`
-- New agent capabilities go in `src/worker/executeTool.ts` (new tools) or `src/worker/handleMessage.ts` (new message types)
+- New agent capabilities go in `src/worker/utils/executeTool.ts` (new tools) or `src/worker/utils/handleMessage.ts` (new message types)

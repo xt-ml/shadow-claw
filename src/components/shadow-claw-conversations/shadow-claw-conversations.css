@@ -28,6 +28,21 @@
   min-height: 0;
 }
 
+#conversations-subagent-settings-container {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+#conversations-subagent-manual-container {
+  flex-direction: column;
+  margin-top: 0.5rem;
+}
+
+#conversations-subagent-picker {
+  width: 100%;
+}
+
 .resize-handle {
   background: transparent;
   cursor: row-resize;
@@ -587,7 +602,7 @@
 
 .conversations__model-container {
   display: none;
-  margin-bottom: 1rem;
+  margin: 1rem 0;
 }
 
 .conversations__model-row {

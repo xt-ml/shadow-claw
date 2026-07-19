@@ -1,5 +1,5 @@
-import { DEFAULT_GROUP_ID } from "../config/config.js";
-import { openDatabase } from "../db/openDatabase.js";
+import { DEFAULT_GROUP_ID } from "../../config/config.js";
+import { openDatabase } from "../../db/openDatabase.js";
 
 import {
   attachTerminalWorkspaceAutoSync,
@@ -14,16 +14,16 @@ import {
   shutdownVM,
   subscribeVMBootOutput,
   syncVMWorkspaceFromHost,
-} from "../shell/vm.js";
+} from "../../shell/vm.js";
 
-import { setStorageRoot } from "../storage/storage.js";
+import { setStorageRoot } from "../../storage/storage.js";
 import { executeTool } from "./executeTool.js";
 import { handleCompact } from "./handleCompact.js";
 import { handleInvoke } from "./handleInvoke.js";
 import { pendingTasks } from "./pendingTasks.js";
 import { post } from "./post.js";
 import { setToolState } from "./tool-state.js";
-import { resolveMcpReauth } from "./tools/remote-mcp/utils/resolveMcpReauth.js";
+import { resolveMcpReauth } from "../tools/remote-mcp/utils/resolveMcpReauth.js";
 
 /** In-flight abort controllers for group tasks */
 const inFlightControllers = new Map<string, AbortController>();

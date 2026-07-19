@@ -50,11 +50,11 @@ describe("handleMessage.js", () => {
     );
     mockExecuteTool = (jest.fn() as any).mockResolvedValue("ok");
 
-    jest.unstable_mockModule("../db/openDatabase.js", () => ({
+    jest.unstable_mockModule("../../db/openDatabase.js", () => ({
       openDatabase: mockOpenDatabase,
     }));
 
-    jest.unstable_mockModule("../storage/storage.js", () => ({
+    jest.unstable_mockModule("../../storage/storage.js", () => ({
       getStorageRoot: (jest.fn() as any).mockResolvedValue({
         name: "mock-root",
       }),
@@ -68,7 +68,7 @@ describe("handleMessage.js", () => {
       setStorageRoot: mockSetStorageRoot,
     }));
 
-    jest.unstable_mockModule("../shell/vm.js", () => ({
+    jest.unstable_mockModule("../../shell/vm.js", () => ({
       attachTerminalWorkspaceAutoSync: mockAttachTerminalWorkspaceAutoSync,
       bootVM: mockBootVM,
       createTerminalSession: mockCreateTerminalSession,

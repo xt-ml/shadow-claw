@@ -21,6 +21,8 @@ import {
   reorderGroups,
   saveGroupMetadata,
   updateGroupPinnedProvider,
+  updateGroupProviderRuntimeOverrides,
+  updateGroupSubagentSettings,
   updateGroupToolTags,
 } from "../db/groups.js";
 
@@ -1773,6 +1775,40 @@ export class OrchestratorStore {
     modelId?: string,
   ): Promise<void> {
     await updateGroupPinnedProvider(db, groupId, providerId, modelId);
+    await this.loadGroups(db);
+  }
+
+  /**
+   * Update provider module runtime overrides for a conversation.
+   */
+  async updateConversationProviderRuntimeOverrides(
+    db: ShadowClawDatabase,
+    groupId: string,
+    overrides: GroupMeta["providerRuntimeOverrides"],
+  ): Promise<void> {
+    await updateGroupProviderRuntimeOverrides(db, groupId, overrides);
+    await this.loadGroups(db);
+  }
+
+  /**
+   * Update subagent provider/model selection policy for a conversation.
+   */
+  async updateConversationSubagentSettings(
+    db: ShadowClawDatabase,
+    groupId: string,
+    mode: "automatic" | "manual",
+    providerId?: string,
+    modelId?: string,
+    subagentMaxTokens?: number,
+  ): Promise<void> {
+    await updateGroupSubagentSettings(
+      db,
+      groupId,
+      mode,
+      providerId,
+      modelId,
+      subagentMaxTokens,
+    );
     await this.loadGroups(db);
   }
 

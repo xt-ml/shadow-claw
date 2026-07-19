@@ -1,6 +1,6 @@
-import { ASSISTANT_NAME } from "../config/config.js";
-import { TOOL_DEFINITIONS } from "../subsystems/tools/tools.js";
-import type { ToolDefinition } from "../subsystems/tools/types.js";
+import { ASSISTANT_NAME } from "../../config/config.js";
+import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
+import type { ToolDefinition } from "../../subsystems/tools/types.js";
 
 /**
  * Build system prompt

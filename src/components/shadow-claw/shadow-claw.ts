@@ -5,10 +5,12 @@ import { ShadowClawDatabase, setDB } from "../../db/db.js";
 import { VMStatus } from "../../shell/vm.js";
 
 import { fileViewerStore } from "../../stores/file-viewer.js";
+
 import {
   OrchestratorDisplayState,
   orchestratorStore,
 } from "../../stores/orchestrator.js";
+
 import { themeStore } from "../../stores/theme.js";
 import { toolsStore } from "../../stores/tools.js";
 

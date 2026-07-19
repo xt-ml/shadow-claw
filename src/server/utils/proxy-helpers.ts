@@ -6,7 +6,7 @@
  * without pulling in unrelated concerns.
  */
 
-import { withRetry, isRetryableHttpError } from "../../worker/withRetry.js";
+import { withRetry, isRetryableHttpError } from "../../worker/utils/withRetry.js";
 
 import type { Request, Response as ExpressResponse } from "express";
 

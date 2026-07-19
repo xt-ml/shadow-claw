@@ -3,7 +3,7 @@ import { groupFileExists } from "../../../storage/groupFileExists.js";
 import { hasPathTraversal } from "./utils/hasPathTraversal.js";
 import { normalizeWorkspacePath } from "./utils/normalizeWorkspacePath.js";
 
-import { post } from "../../post.js";
+import { post } from "../../utils/post.js";
 
 export async function executeSendFile(
   db: ShadowClawDatabase,

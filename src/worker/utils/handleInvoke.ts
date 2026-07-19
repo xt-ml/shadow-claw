@@ -2,10 +2,10 @@ import {
   DEFAULT_MAX_ITERATIONS,
   getProvider,
   ProviderConfig,
-} from "../config/config.js";
+} from "../../config/config.js";
 
-import { buildDynamicContext } from "../context/buildDynamicContext.js";
-import { estimateTokens } from "../context/estimateTokens.js";
+import { buildDynamicContext } from "../../context/buildDynamicContext.js";
+import { estimateTokens } from "../../context/estimateTokens.js";
 
 import {
   buildHeaders,
@@ -13,10 +13,10 @@ import {
   getContextLimit,
   normalizeMeshLlmResult,
   parseResponse,
-} from "../subsystems/providers/providers.js";
+} from "../../subsystems/providers/providers.js";
 
-import { setStorageRoot } from "../storage/storage.js";
-import { TOOL_DEFINITIONS } from "../subsystems/tools/tools.js";
+import { setStorageRoot } from "../../storage/storage.js";
+import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
 import { createTokenUsageMessage } from "./createTokenUsageMessage.js";
 import { createToolActivityMessage } from "./createToolActivityMessage.js";
 import { executeTool } from "./executeTool.js";
@@ -30,11 +30,11 @@ import {
   waitForRateLimitSlot,
 } from "./rate-limit.js";
 
-import { ContentBlock, ToolResultContentBlock } from "../content/types.js";
+import { ContentBlock, ToolResultContentBlock } from "../../content/types.js";
 
-import { InvokePayload } from "../subsystems/worker/types.js";
-import { StreamAccumulator } from "./StreamAccumulator/StreamAccumulator.js";
-import { StreamFormat } from "./StreamAccumulator/types.js";
+import { InvokePayload } from "../../subsystems/worker/types.js";
+import { StreamAccumulator } from "../StreamAccumulator/StreamAccumulator.js";
+import { StreamFormat } from "../StreamAccumulator/types.js";
 
 import { buildSystemPrompt } from "./system-prompt.js";
 import { clearToolState, getToolState } from "./tool-state.js";
@@ -236,13 +236,21 @@ export async function handleInvoke(
     model,
     provider: providerId,
     providerHeaders = {},
+    providerRuntimeOverrides,
     reasoning,
     rateLimitAutoAdapt = true,
     rateLimitCallsPerMinute = 0,
     storageHandle,
     streaming = false,
+    subagentModelSelectionMode,
+    subagentMaxTokens,
+    subagentPinnedModel,
+    subagentPinnedProvider,
     systemPrompt,
+    workspaceGroupId,
   } = payload;
+
+  const effectiveWorkspaceGroupId = workspaceGroupId || groupId;
 
   const rateLimitConfig: RateLimitConfig = {
     autoAdapt: rateLimitAutoAdapt !== false,
@@ -309,7 +317,13 @@ export async function handleInvoke(
       memory: memory ?? "",
       model,
       provider: providerId,
+      subagentModelSelectionMode,
+      subagentMaxTokens,
+      subagentPinnedProvider,
+      subagentPinnedModel,
       providerHeaders,
+      providerRuntimeOverrides,
+      storageHandle,
       streaming: false, // subagents always use non-streaming for clean capture
       systemPrompt: currentSystemPrompt ?? "",
     };
@@ -515,10 +529,16 @@ export async function handleInvoke(
                 toolCallSignature,
               );
             } else {
-              output = await executeTool(db, block.name, block.input, groupId, {
-                isScheduledTask,
-                invokeContext,
-              });
+              output = await executeTool(
+                db,
+                block.name,
+                block.input,
+                effectiveWorkspaceGroupId,
+                {
+                  isScheduledTask,
+                  invokeContext,
+                },
+              );
             }
 
             const outputStr =

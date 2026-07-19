@@ -34,6 +34,8 @@ A fully-functional agent runtime that runs entirely in the browser—no AI proce
 - **Streaming responses** — Token-by-token text updates with live chat bubble
 - **Dynamic context windowing** — Token-aware message history (not fixed-size window)
 - **Tool profiles** — Per-model/provider tool customization and system prompt overrides
+- **Conversation-scoped subagent policy** — Per-conversation subagent mode (`automatic` or `manual`) with optional pinned provider/model
+- **Conversation-scoped provider runtime overrides** — Per-conversation runtime overrides for Bedrock proxy and Llamafile (auth/profile/region/host/mode/offline/port)
 - **Model registry** — Dynamic metadata fetch (context window, modality support)
 - **Attachment capabilities** — Native multimodal delivery with automatic text fallback
 - **Remote MCP** — Discover and execute tools from external MCP servers

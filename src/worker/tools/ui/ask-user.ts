@@ -1,5 +1,5 @@
 import { ulid } from "../../../utils/ulid.js";
-import { post } from "../../post.js";
+import { post } from "../../utils/post.js";
 
 export async function executeAskUser(
   input: Record<string, any>,

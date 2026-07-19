@@ -9,6 +9,6 @@
     ]
   },
   "include": [
-    "src/worker/transformers-js.worker.ts"
+    "src/worker/utils/transformers-js.worker.ts"
   ]
 }

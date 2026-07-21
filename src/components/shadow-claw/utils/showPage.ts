@@ -1,5 +1,3 @@
-import { OrchestratorStore } from "../../../stores/orchestrator.js";
-
 import { resolvePageForVisibility } from "./resolvePageForVisibility.js";
 import { scheduleTerminalPlacement } from "./scheduleTerminalPlacement.js";
 import { syncPageHeaderMainVisibilityOverride } from "./syncPageHeaderMainVisibilityOverride.js";
@@ -8,16 +6,25 @@ import { updateHeaderMainToggle } from "./updateHeaderMainToggle.js";
 import { updateTerminalToggle } from "./updateTerminalToggle.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
+import type { OrchestratorStore } from "../../../stores/orchestrator.js";
 
-import { ShadowClaw } from "../shadow-claw.js";
+export interface ShowPageContext {
+  pagesSidebarHidden: boolean;
+  currentPage: string;
+  terminalElement: any;
+  terminalVisible: boolean;
+  terminalPlacementFrame: number | null;
+  headerMainCollapsedOverride: boolean | null;
+  vmStatus: { ready: boolean; booting: boolean; bootAttempted: boolean };
+}
 
 /**
  * Show a specific page
  */
 export function showPage(
   shadow: ShadowRoot | null,
-  shadowClaw: ShadowClaw,
-  db: ShadowClawDatabase,
+  shadowClaw: ShowPageContext,
+  db: ShadowClawDatabase | undefined,
   oStore: OrchestratorStore,
   page: string,
   persist = true,

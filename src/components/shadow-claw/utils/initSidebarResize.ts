@@ -1,21 +1,26 @@
 import { CONFIG_KEYS } from "../../../config/config.js";
 import { getConfig } from "../../../db/getConfig.js";
+
 import {
   DEFAULT_SIDEBAR_WIDTH_PX,
   MIN_SIDEBAR_WIDTH_PX,
 } from "../shadow-claw.js";
+
 import { clampSidebarWidth } from "./clampSidebarWidth.js";
 import { persistSidebarWidth } from "./persistSidebarWidth.js";
 import { setSidebarWidth } from "./setSidebarWidth.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
-import type { ShadowClaw } from "../shadow-claw.js";
+
+interface SidebarResizeHost {
+  addCleanup: (fn: () => void) => void;
+}
 
 export async function initSidebarResize(
   shadow: ShadowRoot | null,
-  shadowClaw: ShadowClaw,
+  shadowClaw: SidebarResizeHost,
   sidebar: HTMLElement,
-  db: ShadowClawDatabase,
+  db: ShadowClawDatabase | undefined,
 ): Promise<void> {
   if (!shadow) {
     return;
@@ -98,7 +103,7 @@ export async function initSidebarResize(
       const value = parseFloat(
         appBody.style.getPropertyValue("--sidebar-width"),
       );
-      if (Number.isFinite(value) && value > 0) {
+      if (Number.isFinite(value) && value > 0 && db) {
         void persistSidebarWidth(db, value);
       }
     }
@@ -139,7 +144,10 @@ export async function initSidebarResize(
   handle.addEventListener("pointercancel", stopResize);
   handle.addEventListener("dblclick", () => {
     setSidebarWidth(shadow, DEFAULT_SIDEBAR_WIDTH_PX);
-    void persistSidebarWidth(db, DEFAULT_SIDEBAR_WIDTH_PX);
+    if (db) {
+      void persistSidebarWidth(db, DEFAULT_SIDEBAR_WIDTH_PX);
+    }
+
     updateAria();
   });
 
@@ -169,7 +177,12 @@ export async function initSidebarResize(
     event.preventDefault();
     setSidebarWidth(shadow, next);
     updateAria();
-    void persistSidebarWidth(db, clampSidebarWidth(shadow, getCurrentWidth()));
+    if (db) {
+      void persistSidebarWidth(
+        db,
+        clampSidebarWidth(shadow, getCurrentWidth()),
+      );
+    }
   });
 
   updateAria();

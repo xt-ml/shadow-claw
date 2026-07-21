@@ -36,6 +36,8 @@ export async function handleOrchestratorOpenFile(
 
       const message = err instanceof Error ? err.message : String(err);
       showError(`Failed to open file from tool: ${message}`, 5000);
+
+      return;
     }
   }
 }

@@ -1,11 +1,15 @@
 import { requestUserPrompt } from "./requestUserPrompt.js";
 
-import type { ShadowClaw } from "../shadow-claw.js";
+interface AskUserContext {
+  orchestrator: {
+    answerUserPrompt: (id: string, response: string | null) => void;
+  };
+}
 
 export async function handleOrchestratorAskUser(
   doc: Document,
   shadow: ShadowRoot | null,
-  shadowClaw: ShadowClaw,
+  shadowClaw: AskUserContext,
   payload: {
     id: string;
     groupId: string;

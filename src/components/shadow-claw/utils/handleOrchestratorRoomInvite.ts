@@ -5,15 +5,25 @@ import { showPage } from "./showPage.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { OrchestratorStore } from "../../../stores/orchestrator.js";
-import type { ShadowClaw } from "../shadow-claw.js";
+import type { ShowPageContext } from "./showPage.js";
+
+interface RoomInviteContext extends ShowPageContext {
+  orchestrator: {
+    joinRoomViaLink: (
+      roomId: string,
+      hostPeerId: string,
+      roomName: string,
+    ) => void;
+  };
+}
 
 export async function handleOrchestratorRoomInvite(
   doc: Document,
   shadow: ShadowRoot | null,
-  shadowClaw: ShadowClaw,
-  db: ShadowClawDatabase,
+  shadowClaw: RoomInviteContext,
+  db: ShadowClawDatabase | undefined,
   oStore: OrchestratorStore,
-  invite: RoomInvitePayload,
+  invite: RoomInvitePayload | undefined,
 ) {
   if (!db || !invite?.roomId || !invite?.hostPeerId) {
     return;

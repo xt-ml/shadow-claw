@@ -1,8 +1,10 @@
-import type { ShadowClaw } from "../shadow-claw.js";
+interface PagesSidebarContext {
+  pagesSidebarHidden: boolean;
+}
 
 export function applyPagesSidebarVisibility(
   shadow: ShadowRoot | null,
-  shadowClaw: ShadowClaw,
+  shadowClaw: PagesSidebarContext,
 ) {
   if (!shadow) {
     return;

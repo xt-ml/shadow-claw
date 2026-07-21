@@ -7,6 +7,7 @@ const elementName = "shadow-claw-page-header-action-button";
 export class ShadowClawPageHeaderActionButton extends ShadowClawElement {
   static styles = shadowClawPageHeaderActionButtonStyles;
   static template = shadowClawPageHeaderActionButtonTemplate;
+  static observedAttributes = ["disabled", "variant"];
 
   attributeChangedCallback() {
     this.render();

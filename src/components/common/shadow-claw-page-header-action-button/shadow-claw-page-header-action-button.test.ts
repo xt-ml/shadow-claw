@@ -69,6 +69,32 @@ describe("shadow-claw-page-header-action-button", () => {
     el.remove();
   });
 
+  it("auto-reflects disabled via attributeChangedCallback without manual render call", async () => {
+    const el = new ShadowClawPageHeaderActionButton();
+    el.setAttribute("disabled", "");
+    document.body.appendChild(el);
+
+    el.removeAttribute("disabled");
+
+    const button =
+      el.shadowRoot?.querySelector<HTMLButtonElement>(".action-btn");
+    expect(button?.disabled).toBe(false);
+
+    el.remove();
+  });
+
+  it("auto-reflects variant via attributeChangedCallback without manual render call", async () => {
+    const el = new ShadowClawPageHeaderActionButton();
+    document.body.appendChild(el);
+
+    el.setAttribute("variant", "primary");
+
+    const button = el.shadowRoot?.querySelector(".action-btn");
+    expect(button?.classList.contains("action-btn--primary")).toBe(true);
+
+    el.remove();
+  });
+
   it("removes disabled from inner button when attribute is removed", async () => {
     const el = new ShadowClawPageHeaderActionButton();
     el.setAttribute("disabled", "");

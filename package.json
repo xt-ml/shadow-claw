@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.13.1",
+  "version": "1.13.2",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -31,7 +31,7 @@
     "electron:build:win": "npm run build:prerender-main-memory-false && npm run build:service-worker && electron-builder --win",
     "electron:build": "npm run build:prerender-main-memory-false && npm run build:service-worker && electron-builder",
     "electron": "npm run build:prerender-main-memory-false && electron dist/electron/main.cjs",
-    "format": "npx prettier **/*.{html,css,ts,js,mjs} --write",
+    "format": "npx prettier 404.html index.css index.html jest.config.ts playwright.config.ts rolldown.config.mjs \"{bin,e2e,electron,share,src}/**/*.{html,css,ts,js,mjs}\" --write",
     "rolldown": "rolldown -c rolldown.config.mjs",
     "start": "npm run build:prerender-main-memory-false && node dist/server.js",
     "test": "npm run -s tsc && cross-env NODE_OPTIONS=--experimental-vm-modules jest",

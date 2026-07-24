@@ -1,0 +1,214 @@
+# System Overview
+
+> High-level architecture, data flow, and design philosophy of ShadowClaw.
+
+**Source:** `src/core/index.ts` · `src/worker/worker.ts` · `src/server/server.ts` · `electron/main.ts`
+
+## What is ShadowClaw?
+
+ShadowClaw is a **browser-native AI assistant** — a fully functional agent runtime that runs entirely in the browser with zero server-side AI logic. It's built with TypeScript and bundled with Rolldown.
+
+**Stack at a glance:**
+
+| Layer         | Technology                                                          |
+| ------------- | ------------------------------------------------------------------- |
+| Language      | TypeScript (`.ts`) — all source files                               |
+| Build         | Rolldown (frontend, worker, service workers, server, Electron)      |
+| UI            | Native Web Components + Shadow DOM                                  |
+| Reactivity    | TC39 Signals via `signal-polyfill`                                  |
+| State         | IndexedDB (messages, config, tasks, sessions)                       |
+| Files         | OPFS + File System Access API                                       |
+| Agent Runtime | Web Worker (`src/worker/worker.ts` → `dist/public/agent.worker.js`) |
+| Shell         | `just-bash` POSIX emulator + optional WebVM (v86)                   |
+| Git           | isomorphic-git + native filesystem handles (in-browser)             |
+| PWA           | Service Worker (Workbox) + Web Push                                 |
+| Server        | Express (`src/server/` package)                                     |
+| Desktop       | Electron (`electron/main.ts` → `dist/electron/main.cjs`)            |
+| Testing       | Jest (unit, `*.test.ts`) + Playwright (E2E, `e2e/*.test.ts`)        |
+
+## Architecture Diagram
+
+```mermaid
+graph TD
+  User["👤 User"] --> UI["<shadow-claw> Web Component<br>Chat · Files · Tasks · Settings"]
+  UI --> Orchestrator["Orchestrator<br>(main thread, orchestrator.ts)"]
+  Orchestrator --> MessageQueue["Message Queue<br>FIFO per group"]
+  Orchestrator --> StateFSM["State Machine<br>idle → thinking → responding"]
+  Orchestrator --> TaskScheduler["Task Scheduler<br>cron expressions"]
+  Orchestrator --> Router["Router<br>channel dispatch<br>via ChannelRegistry"]
+  MessageQueue --> Worker["Agent Worker<br>(Web Worker, worker.ts)"]
+  Worker --> Provider["☁️ Provider API<br>OpenRouter / Bedrock / Copilot / Prompt API"]
+  Worker --> Capabilities["Model Registry & Capabilities<br>MIME-aware routing"]
+  Worker --> ToolExec["Tool Execution<br>bash · js · files · fetch · git"]
+  ToolExec --> JSShell["JS Shell Emulator<br>just-bash AST · pipes · redirects"]
+  ToolExec --> WebVM["v86 Alpine Linux VM<br>(optional, WASM)"]
+  Orchestrator --> IndexedDB["IndexedDB<br>messages · sessions · tasks · config"]
+  Orchestrator --> OPFS["OPFS / Local Folder<br>per-group workspace<br>MEMORY.md"]
+  UI --> ServiceWorker["Service Worker<br>PWA · offline cache · push"]
+  ServiceWorker --> ServerScheduler["Server Task Scheduler<br>SQLite · cron · push triggers"]
+```
+
+## Design Philosophy
+
+### 1. Browser-native first
+
+Everything runs in the browser. The Express server provides a suite of backend services including:
+
+- CORS proxying for LLM providers (Bedrock, Vertex AI, Gemini, etc.)
+- Web Push notification delivery and VAPID management
+- Server-side task scheduling (SQLite-backed, fires when no tab is open)
+- Static file serving and SPA routing
+- Transformers.js and Llamafile local model runtimes
+
+### 2. TypeScript everywhere, Rolldown for bundling
+
+The entire codebase is TypeScript. Rolldown produces six distinct bundles:
+
+| Bundle                     | Input                                | Output                                       | Purpose                               |
+| -------------------------- | ------------------------------------ | -------------------------------------------- | ------------------------------------- |
+| Frontend                   | `src/core/index.ts`                  | `dist/public/index.js`                       | App bootstrap + all UI                |
+| Agent Worker               | `src/worker/worker.ts`               | `dist/public/agent.worker.js`                | Tool-use loop + VM                    |
+| Service Worker init        | `src/service-worker/init.ts`         | `dist/public/service-worker/init.js`         | PWA cache registration                |
+| Service Worker push        | `src/service-worker/push-handler.ts` | `dist/public/service-worker/push-handler.js` | Push event handler                    |
+| Service Worker fetch proxy | `src/service-worker/fetch-proxy.ts`  | `dist/public/service-worker/fetch-proxy.js`  | Fetch interception                    |
+| Server                     | `src/server/server.ts`               | `dist/server.js`                             | Express server (modular routes/proxy) |
+| Electron                   | `electron/main.ts`                   | `dist/electron/main.cjs`                     | Desktop app entry                     |
+
+External dependencies are installed via `npm install` and bundled by Rolldown — no CDN importmaps.
+
+### 3. Worker-isolated agent
+
+The LLM tool-use loop runs in a dedicated Web Worker. This means:
+
+- The UI thread never blocks during LLM calls or tool execution
+- The VM (v86) runs in the worker, fully isolated from the UI
+- Cancellation is clean — abort the worker's `AbortController`
+
+### 4. Co-located component assets
+
+Web Components now live in their own subdirectories with co-located `.html` templates and `.css` stylesheets:
+
+```text
+src/components/shadow-claw-chat/
+├── shadow-claw-chat.ts     # Component logic
+├── utils/                  # Extracted helper utilities
+├── shadow-claw-chat.html   # Shadow DOM template (fetched at runtime)
+└── shadow-claw-chat.css    # Shadow DOM styles (adopted at runtime)
+```
+
+The `ShadowClawElement` base class (`src/components/shadow-claw-element.ts`) handles fetching and attaching templates and stylesheets via `fetch()` + `adoptedStyleSheets`.
+
+### 5. Conversation isolation
+
+Every conversation (group) has its own:
+
+- Message history (IndexedDB)
+- File workspace (OPFS: `shadowclaw/<groupId>/workspace/`)
+- Persistent memory (`MEMORY.md` at workspace root)
+- Scheduled tasks
+- Streaming state, typing indicators, tool activity
+
+Switching conversations fully resets transient UI state. Background conversations continue processing and persist results to IndexedDB.
+
+## Data Flow
+
+### Message lifecycle
+
+```mermaid
+sequenceDiagram
+  participant U as User
+  participant UI as Web Component
+  participant O as Orchestrator
+  participant IDB as IndexedDB
+  participant W as Agent Worker
+  participant LLM as LLM Provider
+
+  U->>UI: types message
+  UI->>O: submitMessage()
+  O->>IDB: saveMessage(user msg)
+  O->>O: buildSystemPrompt() + buildDynamicContext()
+  O->>W: postMessage({type: 'invoke', ...})
+  W->>LLM: POST /chat/completions
+  LLM-->>W: tool_use response
+  W->>W: executeTool() (file I/O, bash, fetch, git...)
+  W->>LLM: POST (tool results)
+  LLM-->>W: final text response
+  W->>O: postMessage({type: 'response', text})
+  O->>IDB: saveMessage(assistant msg)
+  O->>UI: signal update → re-render
+```
+
+### Streaming flow
+
+When streaming is enabled, the worker sends incremental chunks:
+
+```mermaid
+sequenceDiagram
+  participant W as Worker
+  participant O as Orchestrator
+  participant UI as Chat Component
+
+  W->>O: streaming-start {groupId}
+  O->>UI: state → 'responding', show amber bubble
+  loop every 50ms
+    W->>O: streaming-chunk {groupId, text}
+    O->>UI: update streamingText signal
+  end
+  alt Tool calls follow
+    W->>O: intermediate-response {groupId, text}
+    O->>UI: persist text as permanent bubble
+    W->>O: streaming-end {groupId}
+    O->>UI: state → 'thinking', clear streaming bubble
+  else Final response
+    W->>O: streaming-done {groupId, text}
+    O->>UI: persist as permanent message
+  end
+```
+
+## Entry Points
+
+| File                                 | Thread  | Role                                                                          |
+| ------------------------------------ | ------- | ----------------------------------------------------------------------------- |
+| `src/core/index.ts`                  | Main    | App bootstrap — opens IndexedDB, boots orchestrator, registers service worker |
+| `src/worker/worker.ts`               | Worker  | Agent worker — owns LLM tool-use loop, VM, tool execution                     |
+| `src/server/server.ts`               | Node.js | Express dev/prod server — proxy, push, scheduling, static files               |
+| `electron/main.ts`                   | Node.js | Electron main process — same Express server in-process                        |
+| `src/service-worker/init.ts`         | SW      | Service worker bootstrap — Workbox cache registration                         |
+| `src/service-worker/push-handler.ts` | SW      | Web Push event handler                                                        |
+| `src/service-worker/fetch-proxy.ts`  | SW      | Fetch interception                                                            |
+
+## Key Directories
+
+| Directory                       | Contents                                                                     |
+| ------------------------------- | ---------------------------------------------------------------------------- |
+| `src/`                          | All application source code                                                  |
+| `src/components/`               | Web Components (`<shadow-claw-*>`), each in its own subdirectory             |
+| `src/components/common/`        | Reusable shared components (`empty-state`, `card`, `actions`)                |
+| `src/components/settings/`      | Recommended home for settings feature components (incremental migration)     |
+| `src/context/`                  | Token estimation, dynamic windowing, output truncation                       |
+| `src/db/`                       | IndexedDB layer (granular modules for each DB operation)                     |
+| `src/server/`                   | Express server + proxy routes                                                |
+| `src/service-worker/`           | Service worker modules                                                       |
+| `src/shell/`                    | JS shell emulator + OPFS bridge                                              |
+| `src/storage/`                  | OPFS + File System Access API abstractions                                   |
+| `src/stores/`                   | Reactive signal-based state stores                                           |
+| `src/subsystems/channels/`      | Channel registry + browser chat channel                                      |
+| `src/subsystems/git/`           | isomorphic-git operations + OPFS sync                                        |
+| `src/subsystems/notifications/` | Web Push + server-side SQLite task scheduling                                |
+| `src/subsystems/tools/`         | Agent tool definitions (modular `.ts` files)                                 |
+| `src/worker/tools/`             | Agent tool execution handlers                                                |
+| `src/worker/`                   | Worker internals (invoke handler, tool executor, stream parser, retry logic) |
+| `electron/`                     | Electron desktop app entry point                                             |
+| `e2e/`                          | Playwright E2E tests (Page Object Model pattern)                             |
+
+## Source directory categories
+
+- `src/core/` contains the application bootstrap, orchestrator brain, and main routing wiring.
+- `src/config/` contains configuration keys, provider settings, auth integration settings, and feature flags.
+- `src/content/` contains content sanitization, markdown rendering, attachment handling, and message parsing.
+- `src/security/` contains cryptography, credential helpers, and trusted types wrappers.
+- `src/subsystems/` contains full integrations and cross-cutting feature bundles such as `git`, `mcp`, `providers`, `notifications`, and `channels`.
+- `src/ui/` contains page-level UI glue and view scaffolding that is not a standalone Web Component.
+- `src/utils/` contains generic utilities and reusable helpers used across the application.
+
+Stable root directories also include `src/components/`, `src/stores/`, `src/worker/`, `src/shell/`, `src/storage/`, `src/server/`, `src/service-worker/`, and `electron/`.

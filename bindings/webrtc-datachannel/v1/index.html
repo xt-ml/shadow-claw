@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ShadowClaw A2A WebRTC DataChannel Binding</title>
+    <link rel="stylesheet" href="index.css" />
+  </head>
+  <body>
+    <main>
+      <h1>ShadowClaw A2A WebRTC DataChannel Binding</h1>
+
+      <dl>
+        <dt><strong>Binding URI</strong></dt>
+        <dd>
+          <code
+            >https://xt-ml.github.io/shadow-claw/bindings/webrtc-datachannel/v1</code
+          >
+        </dd>
+
+        <dt><strong>Protocol version</strong></dt>
+        <dd><code>1.0</code></dd>
+
+        <dt><strong>Transport address scheme</strong></dt>
+        <dd><code>webrtc://&lt;peer-id&gt;</code></dd>
+      </dl>
+
+      <h2>AgentInterface</h2>
+      <pre><code>interface AgentInterface {
+  url: string; // e.g. "webrtc://&lt;peer-id&gt;"
+  protocolBinding: "https://xt-ml.github.io/shadow-claw/bindings/webrtc-datachannel/v1";
+  protocolVersion: "1.0";
+}
+</code></pre>
+
+      <h2>ShadowClaw Usage</h2>
+      <ul>
+        <li>
+          <strong><code>url</code></strong> is the logical peer address for this
+          binding. In ShadowClaw, that is a WebRTC-style address such as
+          <code>webrtc://peer-123</code>.
+        </li>
+        <li>
+          <strong><code>protocolBinding</code></strong> declares the transport
+          binding type: A2A over WebRTC DataChannel.
+        </li>
+        <li>
+          <strong><code>protocolVersion</code></strong> is the A2A version
+          supported by this interface.
+        </li>
+      </ul>
+    </main>
+  </body>
+</html>

@@ -1,0 +1,541 @@
+# ShadowClaw E2E Test Architecture
+
+End-to-end test suite for ShadowClaw using Playwright with the Page Object Model pattern.
+
+## Architecture Overview
+
+```text
+e2e/
+├── components/          # Reusable component objects for UI regions
+│   ├── nav.component.ts
+│   ├── message-input.component.ts
+│   ├── chat-actions.component.ts
+│   ├── file-browser.component.ts
+│   └── conversations.component.ts
+├── pages/              # Page objects representing app views
+│   ├── app.page.ts    # Root app + navigation
+│   ├── chat.page.ts   # Chat interface
+│   ├── files.page.ts  # Files browser
+│   ├── tasks.page.ts  # Task scheduler
+│   └── settings.page.ts  # Settings panel
+├── shared/             # Low-level utilities and helpers
+│   └── index.ts       # DB helpers, constants, wait functions
+├── fixtures.ts        # Shared test fixtures (app, chat, files, tasks, settings, conversations)
+├── *.test.ts          # Test suites
+│   └── chat.test.ts           # Chat interface verification
+│   └── conversations.test.ts  # Conversation CRUD + delete-dialog keyboard accessibility
+│   └── files.test.ts          # File browser upload + file/folder creation operations
+│   └── navigation.test.ts     # App-level navigation and page switching
+│   └── settings.test.ts       # Settings persistence (max iterations, streaming, assistant name)
+│   └── streaming-chat.test.ts # Chat flow with mock SSE streaming + non-streaming
+│   └── task-crud.test.ts      # Task CRUD (create, edit, toggle, delete)
+│   └── tasks.test.ts          # Task interface and toggle verification
+│   └── file-viewer.test.ts    # File viewer component integration coverage
+│   └── share-target.test.ts   # Web Share Target import flow
+│   └── orchestrator.test.ts   # System integration coverage
+│   └── storage.test.ts        # System integration coverage
+└── README.md           # This file
+```
+
+## Security and Test Bridge
+
+ShadowClaw production builds are hardened against unauthorized access and environment manipulation. To maintain testability without compromising security, the system uses a dedicated **E2E Test Bridge**.
+
+### Global Hardening
+
+Browser APIs like `fetch` and `crypto.subtle` are locked (`non-configurable`, `non-writable`) to prevent monkey-patching.
+
+### The E2E Bridge (`__SHADOWCLAW_E2E__`)
+
+During testing, Playwright enables the bridge by setting `window.__SHADOWCLAW_E2E_ENABLE__ = true` with `page.addInitScript(...)` before app bootstrap. When enabled, the app installs a secure bridge on `window.__SHADOWCLAW_E2E__`. This bridge is the **exclusive** way for tests to interact with internal state.
+
+Example setup:
+
+```js
+await page.addInitScript(() => {
+  window.__SHADOWCLAW_E2E_ENABLE__ = true;
+});
+```
+
+**Available Bridge Methods:**
+
+- `isReady()`: Returns `store.ready` status.
+- `getDb()`: Returns the live IndexedDB handle.
+- `getActiveGroupId()`: Returns the current conversation ID.
+- `configureProvider(id, key, model, streaming)`: Rapidly configures the orchestrator for testing.
+- `createConversation(name)` / `switchConversation(id)` / `loadTasks()`: High-level store wrappers.
+
+### Testing and Environment Locking
+
+Environment locking is **automatically disabled** during E2E runs to allow Playwright's network interception and mocking. However, tests should still verify that the production security guards are in place where applicable.
+
+## Core Principles
+
+### 1. **Page Object Model (POM)**
+
+- **Page Objects** (`pages/*`) represent full application views and orchestrate component objects
+- **Component Objects** (`components/*`) represent reusable UI regions (nav bar, chat actions, file browser)
+- Tests interact with **intent-based methods** (e.g., `chat.sendMessage()`) rather than raw selectors
+
+### 2. **Fixtures Over Setup Boilerplate**
+
+All tests use shared fixtures from `fixtures.ts`:
+
+```js
+import { test, expect } from "./fixtures.js";
+
+test("example", async ({ app, chat }) => {
+  // app is already initialized and ready
+  await chat.open();
+  await chat.sendMessage("Hello!");
+});
+```
+
+**Available Fixtures:**
+
+- `app` — Root `AppPage`, auto-navigated to `/` and ready
+- `chat` — `ChatPage` instance (requires `.open()` to navigate)
+- `files` — `FilesPage` instance
+- `tasks` — `TasksPage` instance
+- `settings` — `SettingsPage` instance (requires `.open()` to navigate)
+- `conversations` — `ConversationsComponent` instance (sidebar conversation list)
+- `page` — Raw Playwright `Page` (for low-level browser API checks)
+
+### 3. **Component Composition**
+
+Page objects compose smaller component objects for reusability:
+
+```js
+// chat.page.ts
+import { MessageInputComponent } from "../components/message-input.component.ts";
+
+export class ChatPage {
+  constructor(app) {
+    this.messageInput = new MessageInputComponent(this.host);
+  }
+
+  async sendMessage(text) {
+    await this.messageInput.fillAndSend(text);
+  }
+}
+```
+
+### 4. **No Raw `page.evaluate` in Tests**
+
+Avoid `page.evaluate()` for normal DOM interaction and assertions. Instead:
+
+- ✅ Use page object methods: `chat.messageCount()`
+- ✅ Use component locators: `chat.messages()`
+- ❌ Avoid: `page.evaluate(() => document.querySelector(...))`
+
+Use `page.evaluate()` only when you need browser-only APIs or app-internal bridge/state access that page objects cannot represent cleanly (for example IndexedDB/OPFS checks, share-target setup, or orchestrator bridge checks).
+
+## Writing Tests
+
+### Test Structure
+
+```js
+import { test, expect } from "./fixtures.js";
+
+test.describe("Feature Name", () => {
+  test("should do something", async ({ chat }) => {
+    await chat.open();
+    await chat.sendMessage("Test message");
+
+    expect(await chat.messageCount()).toBe(1);
+  });
+});
+```
+
+### Using Components
+
+For granular control, access component objects directly:
+
+```js
+test("should validate input", async ({ chat }) => {
+  await chat.open();
+
+  // Use component directly
+  await chat.messageInput.fill("Draft message");
+  await chat.messageInput.expectSendEnabled();
+
+  // Or use convenience methods
+  await chat.fillMessage("Another message");
+});
+```
+
+### Navigation Patterns
+
+```js
+// Navigate via app fixture
+test("multi-page flow", async ({ app, chat, files }) => {
+  await app.navigateTo("chat");
+  // interact with chat
+
+  await app.navigateTo("files");
+  // interact with files
+});
+
+// Or use page.open()
+test("direct navigation", async ({ chat }) => {
+  await chat.open(); // navigates to chat and waits for ready
+});
+```
+
+## Component Object Guide
+
+### `NavComponent`
+
+Handles app-level navigation and page switching.
+
+**Methods:**
+
+- `navigateTo(pageId)` — Click nav item and wait for page activation
+- `currentPageId()` — Get active page ID
+- `navItemCount()` — Count navigation items
+- `isPageActive(pageId)` — Check if a page is currently active
+
+### `MessageInputComponent`
+
+Manages chat message input, attachment button, and send button.
+
+**Methods:**
+
+- `fill(text)` — Type into textarea
+- `send()` — Click send button
+- `attach()` — Click file attachment button
+- `fillAndSend(text)` — Combined fill + send
+- `placeholder()` — Get placeholder text
+- `expectVisible()` — Assert textarea and buttons are visible
+- `expectSendEnabled()` / `expectSendDisabled()` — Assert button state
+
+### `ChatActionsComponent`
+
+Provides backup/restore/compact/clear operations.
+
+**Methods:**
+
+- `downloadButton()`, `restoreButton()`, `compactButton()`, `clearButton()` — Locators
+- `expectAllActionsPresent()` — Assert all action buttons exist
+- `downloadChat()`, `clearChat()`, `compactChat()` — Action methods
+
+### `ConversationsComponent`
+
+Manages sidebar conversation CRUD operations.
+
+**Methods:**
+
+- `host()` — Locator for `<shadow-claw-conversations>`
+- `items()` — All conversation items in the list
+- `item(groupId)` — Specific conversation item by group ID
+- `activeItem()` — The currently active (selected) conversation
+- `itemName(locator)` — Get name text of a conversation item
+- `createButton()` — The "+" create conversation button
+- `createDialog()` — Create conversation dialog
+- `createInput()` — Create dialog input field
+- `createOkButton()` — Create dialog confirm button
+- `renameButton(itemLocator)` — Rename button (visible on hover)
+- `renameDialog()` — Rename dialog
+- `renameInput()` — Rename dialog input field
+- `renameOkButton()` — Rename dialog confirm button
+- `deleteButton(itemLocator)` — Delete button (visible on hover)
+- `deleteDialog()` — Delete confirm dialog
+- `deleteOkButton()` — Delete confirm button
+- `deleteCancelButton()` — Delete cancel button
+- `count()` — Count of conversations
+- `activeConversationName()` — Name of the active conversation
+- `expectCount(count)` — Assert a specific number of conversations
+- `createConversation(name)` — Create a conversation via the create dialog
+- `renameConversation(itemLocator, name)` — Rename an existing conversation
+- `deleteConversation(itemLocator, confirmDelete)` — Delete or cancel delete
+
+### `FileBrowserComponent`
+
+Handles file list, breadcrumbs, and upload UI.
+
+**Methods:**
+
+- `fileList()`, `breadcrumbs()`, `uploadButton()`, `backupButton()` — Locators
+- `fileItem(name)` — Locate specific file by name
+- `expectCoreUi()` — Assert file list and upload controls are present
+- `navigateToBreadcrumb(index)` — Click breadcrumb link
+
+Behavior notes:
+
+- Files view supports drag-and-drop uploads and shows an in-panel upload progress bar.
+- New-item dialog supports creating either a file or a folder via the `Create as folder` toggle.
+- `Host -> VM` and `VM -> Host` sync buttons are mode-gated; they render only when VM mode is `9p`.
+
+### Tools Configuration Elements
+
+The `<shadow-claw-tools>` component includes interactive controls for managing tool configuration:
+
+- **Internet Access Toggle** (`.tools__internet-access-toggle` / `#toolsInternetAccessOptIn`): A checkbox to toggle the shared full public internet access setting (`vm_bash_full_internet_access`) for both `bash` and `javascript` tools.
+- **WebMCP Toggle** (`.tools__webmcp-toggle`): Toggles integration with browser's Model Context Protocol.
+- **WebMCP Mode selector** (`.tools__webmcp-mode`): Selects the WebMCP execution mode.
+
+## Page Object Guide
+
+### `AppPage`
+
+Root application controller. Automatically initialized by `app` fixture.
+
+**Properties:**
+
+- `page` — Playwright Page
+- `root` — `shadow-claw` root locator
+- `nav` — `NavComponent` instance
+
+**Methods:**
+
+- `open()` — Navigate to `/` and wait for app ready
+- `waitForReady()` — Wait for custom element definition + active page
+- `navigateTo(pageId)` — Delegate to `nav.navigateTo()`
+- `navigateToWithOpenDialog(pageId)` — Navigate via app API when a dialog is open (including wrapped native `<dialog>` usage)
+- `currentPageId()` — Get active page ID
+- `chatComponent()`, `filesComponent()`, `tasksComponent()`, `toolsComponent()`, `toastComponent()` — Component locators
+
+### `ChatPage`
+
+Chat interface controller.
+
+**Properties:**
+
+- `messageInput` — `MessageInputComponent`
+- `actions` — `ChatActionsComponent`
+
+**Methods:**
+
+- `open()` — Navigate to chat page
+- `fillMessage(text)` — Fill message input
+- `sendMessage(text)` — Fill and send message
+- `messageCount()` — Count rendered messages
+- `expectCoreUi()` — Assert input, send button, and message container exist
+
+Behavior notes:
+
+- Chat can show a transient model download progress panel when using Prompt API or Transformers.js Browser providers.
+- Assertions around that panel should be state-based (present/hidden) and not rely on fixed timing.
+- **Transformers.js Testing**: Verify model download progress, local inference, and chat-template sanitization when using local models.
+- **Provider Help Dialogs**: When a provider request fails, the application may display a contextual help dialog. Use `app.navigateToWithOpenDialog()` to test flows that interrupt navigation with dialogs, or verify dialog content via standard locators on the `.app-dialog` component.
+- **Attachment Capabilities**: When testing file attachments, keep in mind that the application dynamically selects native vs. fallback delivery based on model capabilities (`src/content/attachment-capabilities.ts`).
+- **Confirmation Flows**: Destructive chat actions (for example message delete and compact) use app-level dialogs, so tests should assert dialog behavior rather than native `window.confirm()`.
+- **Subagent Testing**: Subagent invocations run in a parallel, isolated worker context. Verify concurrency limits (`SUBAGENT_MAX_PARALLEL`) and correct execution routing without polluting the parent agent's message history.
+- **Subagent Workspace/Model Policy Testing**: Verify `SUBAGENT_WORKSPACE_MODE` behavior (`automatic`, `parent`, `isolated`) and conversation-level subagent selection policy (`automatic` vs `manual` pinned provider/model) route to the expected workspace and model.
+- **Provider Runtime Override Testing**: For conversation-level overrides, verify Bedrock proxy (`authMode`, `profile`, `region`) and Llamafile (`host`, `mode`, `offline`, `port`) values propagate to runtime headers and provider calls.
+- **Shared State Testing**: For Multi-Agent flows, verify that `STATE_SNAPSHOT` and `STATE_DELTA` events correctly synchronize state across participants and properly render in the UI.
+- **`ask_user` Testing**: When the agent calls `ask_user`, the worker blocks on a pending promise until the UI sends back an `ask-user-response` message containing the user's answer. E2E tests that trigger this flow must simulate that postMessage dispatch to unblock the agent; otherwise the invocation will hang.
+
+### `FilesPage`
+
+File browser controller.
+
+**Properties:**
+
+- `browser` — `FileBrowserComponent`
+
+**Methods:**
+
+- `open()` — Navigate to files page
+- `fileList()`, `uploadButton()`, `fileInput()`, `breadcrumbs()` — Delegate to browser component
+- `allButtons()` — Return all file-page buttons
+
+### `TasksPage`
+
+Task scheduler controller.
+
+**Methods:**
+
+- `open()` — Navigate to tasks page
+- `allButtons()`, `textInputs()`, `toggles()` — Locator helpers
+- `taskLikeElements()` — Query task-related DOM nodes
+- `createTask(schedule, prompt)` — Create a task via the add-task dialog
+
+### `SettingsPage`
+
+Settings panel controller.
+
+**Methods:**
+
+- `open()` — Navigate to settings page
+- `expandAiSettings()` — Expand AI section when collapsed
+- `expandModelProviderSettings()` — Expand Model Provider section when collapsed
+- `llm()` — LLM settings sub-component locator
+- `maxIterationsInput()` — Max iterations number input
+- `saveMaxIterationsButton()` — Save max iterations button
+- `streamingToggle()` — Streaming toggle checkbox
+- `providerSelect()` — Provider select dropdown
+- `modelSelect()` — Model select dropdown
+- `apiKeyInput()` — API key input
+- `saveApiKeyButton()` — Save provider / API key button
+- `assistantNameInput()` — Assistant name input
+- `saveAssistantNameButton()` — Save assistant name button
+
+## Shared Utilities (`shared/index.ts`)
+
+### Constants
+
+```js
+export const appUrl = "http://localhost:8888";
+export const TIME_SECONDS_ONE = 1000;
+export const TIME_SECONDS_FIVE = 5000;
+export const TIME_MINUTES_ONE = 60000;
+```
+
+### Helpers
+
+- `getRunId()` — Generate unique run IDs for test artifacts
+- `getAllGroupIds(page)` — Fetch IndexedDB session group IDs
+- `waitForShadowClaw(page)` — Legacy helper (prefer `app.waitForReady()`)
+- `navigateToPage(page, pageId)` — Legacy helper (prefer `app.navigateTo()`)
+
+## Best Practices
+
+### ✅ DO
+
+- Use fixtures (`app`, `chat`, `files`, `tasks`) instead of manual setup
+- Use page object methods for all interactions
+- Compose page objects from component objects
+- Write intent-driven assertions: `expect(await chat.messageCount()).toBe(2)`
+- Use `toHaveCount()` instead of `toBeVisible()` for custom element hosts (they use `display: contents`)
+- For mode-gated controls (for example VM sync buttons), assert hidden/visible state based on runtime VM mode
+- Feature-gate tests that rely on browser-specific APIs (OPFS, IndexedDB)
+- Feature-gate Prompt API flows when `LanguageModel` is unavailable in the browser build
+- Isolate the application's runtime environment from the Service Worker in tests to prevent intermittent failures caused by background reloads or "controlling" state changes.
+- For Prompt API UI checks, assert API-key input disablement and provider helper text in Settings
+- For Provider Help dialogs, mock provider errors to trigger the dialogs and verify the contextual instructions and links.
+- **Remote MCP Testing**: Verify tool discovery, execution, and automatic OAuth reconnection flows by mocking streamable HTTP responses and OAuth failure modes.
+
+### ❌ DON'T
+
+- Hard-code selectors in test files
+- Use `page.evaluate()` for DOM queries (use page objects instead)
+- Call `page.goto()` directly (use `app.open()` or `chat.open()`)
+- Skip tests without a clear, documented reason
+- Use `toBeVisible()` on `<shadow-claw>` or other custom element hosts
+
+## Running Tests
+
+```bash
+# Run all E2E tests
+npm run e2e
+
+# Run specific test file
+npm run e2e -- chat.test.ts
+
+# Run with UI mode (interactive debugging)
+npm run e2e -- --ui
+
+# Run with specific browser
+npm run e2e -- --project=chromium
+
+# Generate HTML report
+npm run e2e -- --reporter=html
+```
+
+## Debugging Tips
+
+### Visual Debugging
+
+```bash
+# Interactive mode with time travel debugging
+npm run e2e -- --ui
+
+# Headed mode (see browser)
+npm run e2e -- --headed
+
+# Slow motion
+npm run e2e -- --headed --slow-mo=500
+```
+
+### Locator Debugging
+
+Use Playwright's inspector:
+
+```js
+await page.pause(); // breakpoint
+```
+
+Or use the `locator.highlight()` method:
+
+```js
+await chat.sendButton().highlight();
+```
+
+### Screenshot on Failure
+
+Screenshots are automatically captured on failure and saved to `e2e-results/`.
+
+## Prompt API and Browser Capability Gates
+
+Some runtime paths are browser-capability dependent and should be handled similarly
+to storage feature gates.
+
+- Prompt API provider depends on `globalThis.LanguageModel` support.
+- WebMCP integration depends on `document.modelContext` support (with `navigator.modelContext` fallback).
+- In unsupported browsers, tests should verify graceful fallback/error messaging,
+  not hard-fail on unavailable platform features.
+
+## Storage Tests (Feature-Gated)
+
+Storage integration tests (`storage.test.ts`) are **feature-gated** at runtime:
+
+- Tests skip if `indexedDB` or `navigator.storage` are unavailable
+- This is intentional — not all browsers/contexts support OPFS
+- Do not remove these skips or force the tests to fail
+
+**Why they skip:**
+
+- WebKit/Safari may not support OPFS `getDirectory()`
+- Security contexts (non-HTTPS, iframes) may block IndexedDB
+- The suite gracefully degrades instead of failing noisily
+
+## Contributing
+
+### Adding a New Page
+
+1. Create page object in `pages/<name>.page.ts`
+2. Add fixture to `fixtures.ts`
+3. Create test suite `<name>.test.ts`
+4. Document selectors and methods in this README
+
+### Adding a New Component
+
+1. Create component in `src/components/shadow-claw-<name>/shadow-claw-<name>.ts`
+2. Import and instantiate in relevant page object
+3. Expose component methods via page object (optional)
+4. Document in this README
+
+### Extending Fixtures
+
+Edit `fixtures.ts`:
+
+```js
+export const test = base.extend({
+  myFixture: async ({ page }, use) => {
+    const instance = new MyPage(page);
+    await instance.setup();
+    await use(instance);
+  },
+});
+```
+
+## Architecture Decisions
+
+### Why Component Objects?
+
+- **Reusability:** `MessageInputComponent` can be used in chat, modals, etc.
+- **Single Responsibility:** Each component handles one UI region
+- **Testability:** Components can be tested in isolation
+
+### Why Not Cucumber/Gherkin?
+
+- ShadowClaw is a developer-first tool; code-based tests match the workflow
+- Page objects already provide human-readable intent (e.g., `chat.sendMessage()`)
+- No need for additional abstraction layer
+
+### Why Feature-Gate Storage Tests?
+
+- Browser APIs vary across engines (Chromium, WebKit, Firefox)
+- Tests document expected behavior but gracefully skip when unsupported
+- Prevents false positives in CI pipelines

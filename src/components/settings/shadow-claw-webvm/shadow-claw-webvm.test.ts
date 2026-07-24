@@ -110,4 +110,94 @@ describe("shadow-claw-webvm", () => {
 
     document.body.removeChild(el);
   });
+
+  it("saves VM bash timeout on button click", async () => {
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+    (orchestratorStore as any).ready = true;
+
+    const el = new ShadowClawWebvm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+    await el.render();
+
+    const input = el.shadowRoot?.querySelector(
+      '[data-setting="vm-bash-timeout-input"]',
+    ) as HTMLInputElement;
+    if (input) input.value = "42";
+
+    const btn = el.shadowRoot?.querySelector(
+      '[data-action="save-vm-bash-timeout"]',
+    );
+    btn?.dispatchEvent(new Event("click"));
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(orch.setVMBashTimeout).toHaveBeenCalledWith(expect.anything(), 42);
+    expect(showSuccess).toHaveBeenCalledWith("WebVM bash timeout saved", 3000);
+
+    document.body.removeChild(el);
+  });
+
+  it("saves VM boot host on button click", async () => {
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+    (orchestratorStore as any).ready = true;
+
+    const el = new ShadowClawWebvm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+    await el.render();
+
+    const input = el.shadowRoot?.querySelector(
+      '[data-setting="vm-boot-host-input"]',
+    ) as HTMLInputElement;
+    if (input) input.value = "https://example.com/boot";
+
+    const btn = el.shadowRoot?.querySelector(
+      '[data-action="save-vm-boot-host"]',
+    );
+    btn?.dispatchEvent(new Event("click"));
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(orch.setVMBootHost).toHaveBeenCalledWith(
+      expect.anything(),
+      "https://example.com/boot",
+    );
+    expect(showSuccess).toHaveBeenCalledWith("WebVM boot host saved", 3000);
+
+    document.body.removeChild(el);
+  });
+
+  it("saves VM network relay URL on button click", async () => {
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+    (orchestratorStore as any).ready = true;
+
+    const el = new ShadowClawWebvm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 50));
+    await el.render();
+
+    const input = el.shadowRoot?.querySelector(
+      '[data-setting="vm-network-relay-url-input"]',
+    ) as HTMLInputElement;
+    if (input) input.value = "wss://relay.example.com";
+
+    const btn = el.shadowRoot?.querySelector(
+      '[data-action="save-vm-network-relay-url"]',
+    );
+    btn?.dispatchEvent(new Event("click"));
+
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(orch.setVMNetworkRelayURL).toHaveBeenCalledWith(
+      expect.anything(),
+      "wss://relay.example.com",
+    );
+    expect(showSuccess).toHaveBeenCalledWith("WebVM relay URL saved", 3000);
+
+    document.body.removeChild(el);
+  });
 });

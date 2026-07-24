@@ -1252,3 +1252,53 @@ describe("ShadowClawConversations", () => {
     });
   });
 });
+
+describe("shadow-claw-conversations dialog submission methods", () => {
+  it("submits create dialog", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.render();
+    el.db = {} as any;
+
+    const dialog = el.shadowRoot?.querySelector(
+      ".conversations__create-dialog",
+    ) as HTMLDialogElement;
+    if (dialog) {
+      (dialog as any).showModal = jest.fn();
+      (dialog as any).close = jest.fn();
+    }
+
+    const input = el.shadowRoot?.querySelector(
+      ".conversations__create-dialog .conversations__input",
+    ) as HTMLInputElement;
+    if (input) input.value = "New Group";
+
+    await el._submitCreateDialog();
+    expect(mockOrchStore.createConversation).toHaveBeenCalledWith(
+      expect.anything(),
+      "New Group",
+    );
+    document.body.removeChild(el);
+  });
+
+  it("submits delete dialog", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.render();
+    el.db = {} as any;
+    el._pendingDeleteGroupId = "br:main";
+
+    const dialog = el.shadowRoot?.querySelector(
+      ".conversations__delete-dialog",
+    ) as HTMLDialogElement;
+    if (dialog) (dialog as any).close = jest.fn();
+
+    await el._submitDeleteDialog();
+    expect(mockOrchStore.deleteConversation).toHaveBeenCalledWith(
+      expect.anything(),
+      "br:main",
+    );
+    expect(el._pendingDeleteGroupId).toBeNull();
+    document.body.removeChild(el);
+  });
+});

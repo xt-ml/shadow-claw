@@ -408,4 +408,122 @@ describe("ShadowClawA2UI action dispatch", () => {
 
     expect(el.shadowRoot?.querySelector(".a2ui__tabs")).toBeTruthy();
   });
+  it("renders catalog components correctly", async () => {
+    const el = document.createElement("shadow-claw-a2ui") as any;
+    el.groupId = "peer:01ktq6kh3bb9nf37a2wpeeb64v";
+
+    await (el as any).onTemplateReady;
+
+    el.applyEnvelope({
+      type: "createSurface",
+      surfaceId: "catalog-surface",
+      catalogId: A2UI_MINIMAL_CATALOG_ID,
+      rootComponentId: "col",
+      components: {
+        col: {
+          id: "col",
+          component: "Column",
+          children: [
+            "btn",
+            "chk",
+            "cp",
+            "dti",
+            "div",
+            "ico",
+            "lst",
+            "mod",
+            "row",
+            "sld",
+            "tf",
+            "vid",
+            "aud",
+            "card",
+          ],
+        },
+        btn: {
+          id: "btn",
+          component: "Button",
+          child: "btn_lbl",
+          action: { id: "click" },
+        },
+        btn_lbl: {
+          id: "btn_lbl",
+          component: "Text",
+          text: "Click",
+        },
+        chk: {
+          id: "chk",
+          component: "CheckBox",
+          label: "Check",
+          value: { $dataModel: "/checked" },
+        },
+        cp: {
+          id: "cp",
+          component: "ChoicePicker",
+          options: [{ value: "1", label: "One" }],
+          value: { $dataModel: "/choice" },
+        },
+        dti: { id: "dti", component: "DateTimeInput", value: "2023-01-01" },
+        div: { id: "div", component: "Divider" },
+        ico: { id: "ico", component: "Icon", name: "check" },
+        lst: { id: "lst", component: "List", children: ["lst_item"] },
+        lst_item: { id: "lst_item", component: "Text", text: "Item 1" },
+        mod: {
+          id: "mod",
+          component: "Modal",
+          trigger: "mod_trig",
+          content: "mod_cont",
+        },
+        mod_trig: { id: "mod_trig", component: "Text", text: "Open" },
+        mod_cont: { id: "mod_cont", component: "Text", text: "Modal Content" },
+        row: { id: "row", component: "Row", children: [] },
+        sld: {
+          id: "sld",
+          component: "Slider",
+          max: 100,
+          value: { $dataModel: "/sliderval" },
+        },
+        tf: {
+          id: "tf",
+          component: "TextField",
+          label: "Text",
+          value: { $dataModel: "/textval" },
+        },
+        vid: { id: "vid", component: "Video", url: "test.mp4" },
+        aud: { id: "aud", component: "AudioPlayer", url: "test.mp3" },
+        card: { id: "card", component: "Card", child: "card_lbl" },
+        card_lbl: { id: "card_lbl", component: "Text", text: "Card content" },
+      },
+      dataModel: {
+        checked: true,
+        choice: "1",
+        date: "2023-01-01",
+        sliderval: 50,
+        textval: "hello",
+      },
+    });
+
+    const root = el.shadowRoot;
+    expect(root?.querySelector("button")).toBeTruthy(); // Button
+    expect(root?.querySelector("input[type='checkbox']")).toBeTruthy(); // Checkbox
+    expect(root?.querySelector(".a2ui__choicepicker")).toBeTruthy(); // ChoicePicker (renders radio/checkbox inputs, not <select>)
+    expect(
+      root?.querySelector("input[type='datetime-local']") ||
+        root?.querySelector("input[type='text']") ||
+        root?.querySelector("input"),
+    ).toBeTruthy(); // DateTimeInput/TextField
+    expect(
+      root?.querySelector("hr") || root?.querySelector(".a2ui__divider"),
+    ).toBeTruthy(); // Divider
+    expect(root?.querySelector(".a2ui__icon")).toBeTruthy(); // Icon
+    expect(root?.querySelector(".a2ui__list")).toBeTruthy(); // List
+    expect(
+      root?.querySelector("dialog") || root?.querySelector(".a2ui__modal"),
+    ).toBeTruthy(); // Modal
+    expect(root?.querySelector(".a2ui__row")).toBeTruthy(); // Row
+    expect(root?.querySelector("input[type='range']")).toBeTruthy(); // Slider
+    expect(root?.querySelector("video")).toBeTruthy(); // Video
+    expect(root?.querySelector("audio")).toBeTruthy(); // AudioPlayer
+    expect(root?.querySelector(".a2ui__card")).toBeTruthy(); // Card
+  });
 });

@@ -1063,3 +1063,88 @@ describe("chat attachment helpers", () => {
     ).toBe("Attachment");
   });
 });
+
+describe("shadow-claw-chat utility methods", () => {
+  let ShadowClawChat: any;
+
+  beforeAll(async () => {
+    const mod = await import("./shadow-claw-chat.js");
+    ShadowClawChat = mod.ShadowClawChat;
+  });
+
+  it("should return the correct attachment icon", () => {
+    const instance = Object.create(ShadowClawChat.prototype);
+    expect(instance.getAttachmentIcon("image/png")).toBe("IMG");
+    expect(instance.getAttachmentIcon("video/mp4")).toBe("VID");
+    expect(instance.getAttachmentIcon("audio/mp3")).toBe("AUD");
+    expect(instance.getAttachmentIcon("application/pdf")).toBe("PDF");
+    expect(instance.getAttachmentIcon("text/plain")).toBe("TXT");
+    expect(instance.getAttachmentIcon("application/json")).toBe("TXT");
+    expect(instance.getAttachmentIcon("application/zip")).toBe("ZIP");
+    expect(instance.getAttachmentIcon("application/octet-stream")).toBe("BIN");
+  });
+
+  it("should format attachment size correctly", () => {
+    const instance = Object.create(ShadowClawChat.prototype);
+    expect(instance.formatAttachmentSize(500)).toBe("500 B");
+    expect(instance.formatAttachmentSize(1500)).toBe("1.5 KB");
+    expect(instance.formatAttachmentSize(1500000)).toBe("1.4 MB");
+  });
+
+  it("should format attachment subtitle correctly", () => {
+    const instance = Object.create(ShadowClawChat.prototype);
+    expect(
+      instance.formatAttachmentSubtitle({
+        mimeType: "image/png",
+        size: 1024,
+      } as any),
+    ).toBe("image/png · 1.0 KB");
+    expect(
+      instance.formatAttachmentSubtitle({ mimeType: "text/plain" } as any),
+    ).toBe("text/plain");
+    expect(instance.formatAttachmentSubtitle({ size: 500 } as any)).toBe(
+      "500 B",
+    );
+    expect(instance.formatAttachmentSubtitle({} as any)).toBe("Attachment");
+  });
+
+  it("should get correct attachment transport label", () => {
+    const instance = Object.create(ShadowClawChat.prototype);
+    const capabilities = {
+      images: true,
+      audio: false,
+      documents: false,
+      routerByFeatures: false,
+    };
+
+    expect(
+      instance.getAttachmentTransportLabel(
+        "text/plain",
+        "file.txt",
+        capabilities,
+      ),
+    ).toBe("text");
+    expect(
+      instance.getAttachmentTransportLabel(
+        "image/png",
+        "file.png",
+        capabilities,
+      ),
+    ).toBe("native");
+    expect(
+      instance.getAttachmentTransportLabel(
+        "audio/mp3",
+        "file.mp3",
+        capabilities,
+      ),
+    ).toBe("fallback");
+  });
+
+  it("should clamp input area height", () => {
+    const instance = Object.create(ShadowClawChat.prototype);
+    const minHeight = 40;
+
+    expect(instance.clampInputAreaHeight(20)).toBe(minHeight);
+    expect(instance.clampInputAreaHeight(100)).toBe(100);
+  });
+});

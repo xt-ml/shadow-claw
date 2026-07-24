@@ -31,7 +31,20 @@ jest.unstable_mockModule("../../stores/file-viewer.js", () => ({
 }));
 
 jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
-  orchestratorStore: { activeGroupId: "default", db: {}, orchestrator: null },
+  orchestratorStore: {
+    activeGroupId: "default",
+    db: {},
+    orchestrator: null,
+    tasks: [],
+    runTask: jest.fn(),
+    getTasksForBackup: jest.fn(() => []),
+    clearAllTasks: jest.fn(),
+    deleteTask: jest.fn(),
+    upsertTask: jest.fn(),
+    toggleTask: jest.fn(),
+    getTasksByGroupId: jest.fn(() => []),
+    getTaskServerTerminalInstance: jest.fn(() => null),
+  },
 }));
 
 jest.unstable_mockModule("../../ui/toast.js", () => ({
@@ -43,6 +56,7 @@ jest.unstable_mockModule("../../ui/toast.js", () => ({
 
 const { ShadowClawTasks } = await import("./shadow-claw-tasks.js");
 const { setSanitizedHtml } = await import("../../security/trusted-types.js");
+const { orchestratorStore } = await import("../../stores/orchestrator.js");
 
 describe("shadow-claw-tasks", () => {
   it("registers custom element", () => {
@@ -122,6 +136,87 @@ describe("shadow-claw-tasks", () => {
       ).toBeNull();
 
       expect(component.resolveWorkspaceLinkPath("../secrets.txt")).toBeNull();
+    });
+
+    it("escapes html correctly", () => {
+      const el = new ShadowClawTasks();
+      expect(el.escapeHtml("<div>")).toBe("&lt;div&gt;");
+    });
+
+    it("runs a task", () => {
+      const el = new ShadowClawTasks();
+      const task = { id: "1" } as any;
+      el.handleRun(task);
+      expect(orchestratorStore.runTask).toHaveBeenCalledWith(task, true);
+    });
+
+    it("copies task id", async () => {
+      const el = new ShadowClawTasks();
+      const mockClipboard = {
+        writeText: jest.fn<any>().mockResolvedValue(undefined),
+      };
+      Object.assign(navigator, { clipboard: mockClipboard });
+      await el.handleCopyId("test-id");
+      expect(mockClipboard.writeText).toHaveBeenCalledWith("test-id");
+    });
+
+    it("renders tools preview", () => {
+      const el = new ShadowClawTasks();
+      const tools = [{ name: "my_tool", input: { key: "val" } }];
+      const html = el.renderToolsPreview(tools, false);
+      expect(html).toContain("my_tool");
+      expect(html).toContain("key");
+      expect(html).toContain("val");
+    });
+
+    it("handles add mode", () => {
+      const el = new ShadowClawTasks();
+      document.body.appendChild(el);
+      const dialog = document.createElement("dialog");
+      dialog.showModal = jest.fn();
+      const form = document.createElement("form");
+      form.className = "tasks__dialog-form";
+      const typeRadio = document.createElement("input");
+      typeRadio.type = "radio";
+      typeRadio.name = "taskType";
+      typeRadio.value = "prompt";
+      form.appendChild(typeRadio);
+
+      el.shadowRoot?.replaceChildren(dialog, form);
+
+      el.handleAdd();
+      expect(el.editingTask).toBeNull();
+      expect(dialog.showModal).toHaveBeenCalled();
+      document.body.removeChild(el);
+    });
+
+    it("handles backup", async () => {
+      const el = new ShadowClawTasks();
+      const mockRevoke = jest.fn();
+      const mockCreateObjectURL = jest.fn(() => "blob:url");
+      global.URL.createObjectURL = mockCreateObjectURL;
+      global.URL.revokeObjectURL = mockRevoke;
+
+      await el.handleBackup();
+      expect(mockCreateObjectURL).toHaveBeenCalled();
+      expect(mockRevoke).toHaveBeenCalled();
+    });
+
+    it("handles clear all when confirmed", async () => {
+      const el = new ShadowClawTasks();
+      el.requestConfirmation = jest.fn<any>().mockResolvedValue(true);
+      await el.handleClearAll({} as any);
+      expect(orchestratorStore.clearAllTasks).toHaveBeenCalled();
+    });
+
+    it("handles delete when confirmed", async () => {
+      const el = new ShadowClawTasks();
+      el.requestConfirmation = jest.fn<any>().mockResolvedValue(true);
+      await el.handleDelete({} as any, "task-1");
+      expect(orchestratorStore.deleteTask).toHaveBeenCalledWith(
+        expect.anything(),
+        "task-1",
+      );
     });
   });
 });

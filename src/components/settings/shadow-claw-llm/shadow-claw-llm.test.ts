@@ -486,7 +486,10 @@ describe("shadow-claw-llm", () => {
       "subagent_workspace_mode",
       "isolated",
     );
-    expect(showSuccess).toHaveBeenCalledWith("Subagent workspace mode saved", 3000);
+    expect(showSuccess).toHaveBeenCalledWith(
+      "Subagent workspace mode saved",
+      3000,
+    );
 
     document.body.removeChild(el);
   });

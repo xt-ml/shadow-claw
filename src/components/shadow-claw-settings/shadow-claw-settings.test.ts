@@ -4,7 +4,6 @@ jest.unstable_mockModule(
   "../settings/shadow-claw-accounts/shadow-claw-accounts.js",
   () => {
     class MockAccounts extends HTMLElement {
-
       render = jest.fn();
       constructor() {
         super();
@@ -22,7 +21,6 @@ jest.unstable_mockModule(
   "../settings/shadow-claw-llm/shadow-claw-llm.js",
   () => {
     class MockLlm extends HTMLElement {
-
       render = jest.fn();
       constructor() {
         super();
@@ -40,7 +38,6 @@ jest.unstable_mockModule(
   "../settings/shadow-claw-git/shadow-claw-git.js",
   () => {
     class MockGit extends HTMLElement {
-
       render = jest.fn();
       constructor() {
         super();
@@ -58,7 +55,6 @@ jest.unstable_mockModule(
   "../settings/shadow-claw-integrations/shadow-claw-integrations.js",
   () => {
     class MockIntegrations extends HTMLElement {
-
       render = jest.fn();
       constructor() {
         super();
@@ -76,7 +72,6 @@ jest.unstable_mockModule(
   "../settings/shadow-claw-storage/shadow-claw-storage.js",
   () => {
     class MockStorage extends HTMLElement {
-
       render = jest.fn();
       constructor() {
         super();
@@ -94,7 +89,6 @@ jest.unstable_mockModule(
   "../settings/shadow-claw-webvm/shadow-claw-webvm.js",
   () => {
     class MockWebvm extends HTMLElement {
-
       render = jest.fn();
       constructor() {
         super();
@@ -112,7 +106,6 @@ jest.unstable_mockModule(
   "../settings/shadow-claw-networking/shadow-claw-networking.js",
   () => {
     class MockNetworking extends HTMLElement {
-
       render = jest.fn();
       constructor() {
         super();
@@ -130,7 +123,6 @@ jest.unstable_mockModule(
   "../settings/shadow-claw-mcp-remote/shadow-claw-mcp-remote.js",
   () => {
     class MockMcpRemote extends HTMLElement {
-
       render = jest.fn();
       constructor() {
         super();
@@ -148,7 +140,6 @@ jest.unstable_mockModule(
   "../settings/shadow-claw-notifications/shadow-claw-notifications.js",
   () => {
     class MockNotifications extends HTMLElement {
-
       render = jest.fn();
       constructor() {
         super();
@@ -166,7 +157,6 @@ jest.unstable_mockModule(
   "../settings/shadow-claw-task-server/shadow-claw-task-server.js",
   () => {
     class MockTaskServer extends HTMLElement {
-
       render = jest.fn();
       constructor() {
         super();

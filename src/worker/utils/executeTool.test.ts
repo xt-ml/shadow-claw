@@ -201,18 +201,21 @@ describe("executeTool.js", () => {
       }),
     }));
 
-    jest.unstable_mockModule("../../subsystems/mcp/remote-mcp-client.js", () => ({
-      listRemoteMcpTools: mockListRemoteMcpTools,
-      callRemoteMcpTool: mockCallRemoteMcpTool,
-      McpReauthRequiredError: class McpReauthRequiredError extends Error {
-        connectionId: string;
-        constructor(connectionId: string) {
-          super("OAuth reconnect required for remote MCP connection");
-          this.name = "McpReauthRequiredError";
-          this.connectionId = connectionId;
-        }
-      },
-    }));
+    jest.unstable_mockModule(
+      "../../subsystems/mcp/remote-mcp-client.js",
+      () => ({
+        listRemoteMcpTools: mockListRemoteMcpTools,
+        callRemoteMcpTool: mockCallRemoteMcpTool,
+        McpReauthRequiredError: class McpReauthRequiredError extends Error {
+          connectionId: string;
+          constructor(connectionId: string) {
+            super("OAuth reconnect required for remote MCP connection");
+            this.name = "McpReauthRequiredError";
+            this.connectionId = connectionId;
+          }
+        },
+      }),
+    );
 
     jest.unstable_mockModule("../../shell/vm.js", () => ({
       bootVM: mockBootVM,
@@ -289,9 +292,8 @@ describe("executeTool.js", () => {
     const module = await import("./executeTool.js");
     executeTool = module.executeTool;
 
-    const reauthModule = await import(
-      "../tools/remote-mcp/utils/resolveMcpReauth.js"
-    );
+    const reauthModule =
+      await import("../tools/remote-mcp/utils/resolveMcpReauth.js");
 
     resolveMcpReauth = reauthModule.resolveMcpReauth;
   });

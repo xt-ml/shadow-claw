@@ -65,7 +65,9 @@ describe("shadow-claw-provider-model-picker", () => {
     const el = new ShadowClawProviderModelPicker();
     document.body.appendChild(el);
 
-    el.setProviders([{ id: "openai", name: "OpenAI", models: ["gpt-4o"] } as any]);
+    el.setProviders([
+      { id: "openai", name: "OpenAI", models: ["gpt-4o"] } as any,
+    ]);
     el.setValue({ providerId: "openai", modelId: null });
     await el.render();
 
@@ -93,16 +95,14 @@ describe("shadow-claw-provider-model-picker", () => {
     const el = new ShadowClawProviderModelPicker();
     document.body.appendChild(el);
 
-    const loader = jest
-      .fn<() => Promise<any[]>>()
-      .mockResolvedValue([
-        {
-          id: "gpt-4.1",
-          displayName: "GPT-4.1",
-          supports_tools: true,
-          context_length: 1048576,
-        },
-      ]);
+    const loader = jest.fn<() => Promise<any[]>>().mockResolvedValue([
+      {
+        id: "gpt-4.1",
+        displayName: "GPT-4.1",
+        supports_tools: true,
+        context_length: 1048576,
+      },
+    ]);
 
     el.setModelLoader(loader as any);
     el.setProviders([
@@ -133,7 +133,9 @@ describe("shadow-claw-provider-model-picker", () => {
     ) as HTMLSelectElement | null;
 
     expect(
-      Array.from(modelSelect?.options || []).some((option) => option.value === "model-a"),
+      Array.from(modelSelect?.options || []).some(
+        (option) => option.value === "model-a",
+      ),
     ).toBe(true);
 
     el.setValue({ providerId: "openrouter", modelId: "gpt-4.1" });
@@ -149,7 +151,9 @@ describe("shadow-claw-provider-model-picker", () => {
       expect.objectContaining({ id: "openrouter" }),
     );
     expect(
-      Array.from(modelSelect?.options || []).some((option) => option.value === "gpt-4.1"),
+      Array.from(modelSelect?.options || []).some(
+        (option) => option.value === "gpt-4.1",
+      ),
     ).toBe(true);
 
     el.remove();

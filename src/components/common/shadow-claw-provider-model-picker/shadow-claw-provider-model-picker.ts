@@ -241,7 +241,10 @@ export class ShadowClawProviderModelPicker extends ShadowClawElement {
       }
 
       option.value = normalizedModelId;
-      option.textContent = this.getModelLabel(modelId, selectedProvider?.id || "");
+      option.textContent = this.getModelLabel(
+        modelId,
+        selectedProvider?.id || "",
+      );
       modelSelect.appendChild(option);
     }
 
@@ -315,7 +318,8 @@ export class ShadowClawProviderModelPicker extends ShadowClawElement {
     modelSelect?.addEventListener("change", () => {
       if (modelSelect.value === "__custom__") {
         this.customModelSelected = true;
-        this.value.modelId = customModelInput?.value.trim() || this.value.modelId || null;
+        this.value.modelId =
+          customModelInput?.value.trim() || this.value.modelId || null;
       } else {
         this.customModelSelected = false;
         this.value.modelId = modelSelect.value || null;
@@ -361,7 +365,10 @@ export class ShadowClawProviderModelPicker extends ShadowClawElement {
     }
 
     if (Array.isArray(model.providers)) {
-      return Math.max(...model.providers.map((provider) => provider.context_length || 0), 0);
+      return Math.max(
+        ...model.providers.map((provider) => provider.context_length || 0),
+        0,
+      );
     }
 
     return 0;
@@ -393,7 +400,8 @@ export class ShadowClawProviderModelPicker extends ShadowClawElement {
           : typeof model.name === "string" && model.name.trim()
             ? model.name.trim()
             : modelId;
-    const label = displayName === modelId ? modelId : `${displayName} - ${modelId}`;
+    const label =
+      displayName === modelId ? modelId : `${displayName} - ${modelId}`;
     const contextLength = this.getContextLength(model);
     const contextSuffix =
       contextLength >= 1000000
@@ -447,11 +455,15 @@ export class ShadowClawProviderModelPicker extends ShadowClawElement {
     }
 
     if (Array.isArray(model.providers)) {
-      if (model.providers.some((provider) => provider.supports_tools === true)) {
+      if (
+        model.providers.some((provider) => provider.supports_tools === true)
+      ) {
         return " 🛠️";
       }
 
-      if (model.providers.some((provider) => provider.supports_tools === false)) {
+      if (
+        model.providers.some((provider) => provider.supports_tools === false)
+      ) {
         return " 🚫🛠️";
       }
     }
@@ -463,7 +475,9 @@ export class ShadowClawProviderModelPicker extends ShadowClawElement {
     return " ❔🛠️";
   }
 
-  private async ensureProviderModelsLoaded(provider: LLMProvider): Promise<void> {
+  private async ensureProviderModelsLoaded(
+    provider: LLMProvider,
+  ): Promise<void> {
     if (
       !provider.modelsUrl ||
       !this.modelLoader ||
@@ -492,7 +506,10 @@ export class ShadowClawProviderModelPicker extends ShadowClawElement {
       this.providerModels.set(provider.id, []);
       this.loadedProviderIds.add(provider.id);
     } finally {
-      if (loadEpoch === this.modelLoadEpoch && this.loadingProviderId === provider.id) {
+      if (
+        loadEpoch === this.modelLoadEpoch &&
+        this.loadingProviderId === provider.id
+      ) {
         this.loadingProviderId = null;
       }
 

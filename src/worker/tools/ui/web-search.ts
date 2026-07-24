@@ -25,8 +25,7 @@ export async function executeWebSearch(
 
     const results: string[] = [];
     const snippetRegex = /<a class="result__snippet[^>]*>(.*?)<\/a>/gi;
-    const urlRegex =
-      /<a class="result__url" href="([^"]+)">([^<]+)<\/a>/gi;
+    const urlRegex = /<a class="result__url" href="([^"]+)">([^<]+)<\/a>/gi;
 
     let snippetMatch;
     let urlMatch;

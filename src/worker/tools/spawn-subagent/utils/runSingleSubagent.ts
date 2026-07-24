@@ -44,7 +44,8 @@ async function resolveProviderRuntimeHeaders(
     const override = providerRuntimeOverrides?.llamafile;
     const mode =
       override?.mode ||
-      (((await getConfig(db, CONFIG_KEYS.LLAMAFILE_MODE)) as string) || "cli");
+      ((await getConfig(db, CONFIG_KEYS.LLAMAFILE_MODE)) as string) ||
+      "cli";
     const host =
       override?.host ||
       ((await getConfig(db, CONFIG_KEYS.LLAMAFILE_HOST)) as string) ||
@@ -67,7 +68,9 @@ async function resolveProviderRuntimeHeaders(
       "x-llamafile-host": host,
       "x-llamafile-mode": mode === "server" ? "server" : "cli",
       "x-llamafile-offline": offline ? "true" : "false",
-      "x-llamafile-port": String(Number.isFinite(port) && port > 0 ? port : 8080),
+      "x-llamafile-port": String(
+        Number.isFinite(port) && port > 0 ? port : 8080,
+      ),
     };
   }
 
@@ -101,7 +104,8 @@ async function resolveProviderRuntimeHeaders(
   }
 
   if (providerId === "mesh-llm") {
-    const host = ((await getConfig(db, CONFIG_KEYS.MESH_LLM_HOST)) as string) || "";
+    const host =
+      ((await getConfig(db, CONFIG_KEYS.MESH_LLM_HOST)) as string) || "";
     if (host) {
       return { "x-mesh-llm-host": host };
     }
@@ -159,7 +163,11 @@ async function resolveSubagentProviderAuth(
 
   const [apiKey, providerHeaders] = await Promise.all([
     resolveProviderApiKey(ctx.db, provider),
-    resolveProviderRuntimeHeaders(ctx.db, provider, ctx.providerRuntimeOverrides),
+    resolveProviderRuntimeHeaders(
+      ctx.db,
+      provider,
+      ctx.providerRuntimeOverrides,
+    ),
   ]);
 
   return {

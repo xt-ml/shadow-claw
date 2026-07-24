@@ -1256,7 +1256,8 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-setting="reasoning-effort-select"]',
     ) as HTMLSelectElement | null;
     if (reasoningSelect) {
-      reasoningSelect.value = this.orchestrator.getReasoningEffort?.() || "none";
+      reasoningSelect.value =
+        this.orchestrator.getReasoningEffort?.() || "none";
     }
 
     // Load max iterations
@@ -1293,7 +1294,9 @@ export class ShadowClawLlm extends ShadowClawElement {
         CONFIG_KEYS.SUBAGENT_WORKSPACE_MODE,
       );
       const normalizedMode =
-        rawMode === "parent" || rawMode === "isolated" || rawMode === "automatic"
+        rawMode === "parent" ||
+        rawMode === "isolated" ||
+        rawMode === "automatic"
           ? rawMode
           : DEFAULT_SUBAGENT_WORKSPACE_MODE;
       subagentWorkspaceModeSelect.value = normalizedMode;
@@ -1790,7 +1793,10 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setReasoningEffort(this.db, select.value || "none");
+      await this.orchestrator.setReasoningEffort(
+        this.db,
+        select.value || "none",
+      );
       showSuccess("Reasoning effort saved", 3000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

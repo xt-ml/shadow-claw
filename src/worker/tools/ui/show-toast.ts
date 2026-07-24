@@ -1,8 +1,6 @@
 import { post } from "../../utils/post.js";
 
-export function executeShowToast(
-  input: Record<string, any>,
-): string {
+export function executeShowToast(input: Record<string, any>): string {
   post({
     type: "show-toast",
     payload: {

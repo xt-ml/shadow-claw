@@ -847,7 +847,9 @@ describe("ShadowClawConversations", () => {
 
       await el._submitDetailsDialog();
 
-      expect(mockOrchStore.updateConversationPinnedProvider).toHaveBeenCalledWith(
+      expect(
+        mockOrchStore.updateConversationPinnedProvider,
+      ).toHaveBeenCalledWith(
         expect.anything(),
         "br:main",
         "provider-no-models",

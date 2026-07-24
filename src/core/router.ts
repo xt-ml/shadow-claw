@@ -3,7 +3,6 @@ import type { Channel } from "../subsystems/channels/types.js";
 import type { MessageAttachment } from "../content/types.js";
 
 export class Router {
-
   /**
    * Format messages in XML for agent context
    */

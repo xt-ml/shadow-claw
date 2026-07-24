@@ -14,8 +14,11 @@ export function registerMeshLlmRoutes(
   const verbose = options.verbose ?? false;
 
   const handleMeshLlmChatCompletions = async (req: any, res: any) => {
-    const headerHost = Array.isArray(req.headers["x-mesh-llm-host"]) ? req.headers["x-mesh-llm-host"][0] : req.headers["x-mesh-llm-host"];
-    const meshHost = headerHost || env.MESH_LLM_HOST || "https://public.meshllm.cloud";
+    const headerHost = Array.isArray(req.headers["x-mesh-llm-host"])
+      ? req.headers["x-mesh-llm-host"][0]
+      : req.headers["x-mesh-llm-host"];
+    const meshHost =
+      headerHost || env.MESH_LLM_HOST || "https://public.meshllm.cloud";
     const targetUrl = `${meshHost}/v1/chat/completions`;
 
     const requestBody =
@@ -57,8 +60,11 @@ export function registerMeshLlmRoutes(
         console.log("[Proxy] Fetching Mesh LLM catalog...");
       }
 
-      const headerHost = Array.isArray(req.headers["x-mesh-llm-host"]) ? req.headers["x-mesh-llm-host"][0] : req.headers["x-mesh-llm-host"];
-      const meshHost = headerHost || env.MESH_LLM_HOST || "https://public.meshllm.cloud";
+      const headerHost = Array.isArray(req.headers["x-mesh-llm-host"])
+        ? req.headers["x-mesh-llm-host"][0]
+        : req.headers["x-mesh-llm-host"];
+      const meshHost =
+        headerHost || env.MESH_LLM_HOST || "https://public.meshllm.cloud";
       const resp = await fetch(`${meshHost}/v1/models`, {
         headers: {
           Accept: "application/json",
@@ -90,7 +96,9 @@ export function registerMeshLlmRoutes(
 
           return {
             ...m,
-            ...(contextLength !== undefined && { context_length: contextLength }),
+            ...(contextLength !== undefined && {
+              context_length: contextLength,
+            }),
           };
         });
       }

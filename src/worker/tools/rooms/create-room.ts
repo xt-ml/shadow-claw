@@ -1,8 +1,6 @@
 import { post } from "../../utils/post.js";
 
-export function executeCreateRoom(
-  input: Record<string, any>,
-): string {
+export function executeCreateRoom(input: Record<string, any>): string {
   const name = String(input.name || "").trim();
 
   if (!name) {

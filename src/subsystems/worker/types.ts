@@ -1,7 +1,7 @@
-
 import type { A2UIEnvelope } from "../../ui/a2ui.js";
 import type { ConversationMessage } from "../../content/types.js";
-import type { TaskToolCall } from "../../db/types.js";import type { ToastType } from "../../stores/toast.js";
+import type { TaskToolCall } from "../../db/types.js";
+import type { ToastType } from "../../stores/toast.js";
 import type { VMBootMode } from "../../shell/vm.js";
 
 export type WorkerInbound =

@@ -42,7 +42,8 @@ export class ShadowClawConversations extends ShadowClawElement {
   private _pendingDeleteGroupId: string | null = null;
   private _pendingDetailsPinnedModel: string | null = null;
   private _pendingDetailsPinnedProvider: string | null = null;
-  private _pendingDetailsProviderRuntimeOverrides: ProviderRuntimeOverrides = {};
+  private _pendingDetailsProviderRuntimeOverrides: ProviderRuntimeOverrides =
+    {};
   private _pendingDetailsSubagentMaxTokens: number | null = null;
   private _pendingDetailsSubagentMode: "automatic" | "manual" = "automatic";
   private _pendingDetailsSubagentModel: string | null = null;
@@ -434,7 +435,8 @@ export class ShadowClawConversations extends ShadowClawElement {
       updateDatalist();
 
       if (subagentSettingsContainer && subagentModeSelect) {
-        const showSubagentSettings = this._isSpawnSubagentEnabledInCurrentScope();
+        const showSubagentSettings =
+          this._isSpawnSubagentEnabledInCurrentScope();
         subagentSettingsContainer.style.display = showSubagentSettings
           ? "flex"
           : "none";
@@ -518,14 +520,18 @@ export class ShadowClawConversations extends ShadowClawElement {
         customModelPlaceholder: "Custom model id",
       });
 
-      mainPicker.setModelLoader((provider) => this._loadProviderModels(provider));
+      mainPicker.setModelLoader((provider) =>
+        this._loadProviderModels(provider),
+      );
       mainPicker.setProviders(providers);
       mainPicker.setValue({
         providerId: this._pendingDetailsPinnedProvider,
         modelId: this._pendingDetailsPinnedModel,
       });
 
-      mainProviderModuleSettings.setProvider(this._pendingDetailsPinnedProvider);
+      mainProviderModuleSettings.setProvider(
+        this._pendingDetailsPinnedProvider,
+      );
       mainProviderModuleSettings.setOverrides(
         this._pendingDetailsProviderRuntimeOverrides,
       );
@@ -561,7 +567,9 @@ export class ShadowClawConversations extends ShadowClawElement {
           this._pendingDetailsPinnedProvider = detail.providerId || null;
           this._pendingDetailsPinnedModel = detail.modelId || null;
 
-          mainProviderModuleSettings.setProvider(this._pendingDetailsPinnedProvider);
+          mainProviderModuleSettings.setProvider(
+            this._pendingDetailsPinnedProvider,
+          );
           mainProviderModuleSettings.setOverrides(
             this._pendingDetailsProviderRuntimeOverrides,
           );
@@ -582,7 +590,9 @@ export class ShadowClawConversations extends ShadowClawElement {
             }
 
             const next = JSON.parse(
-              JSON.stringify(this._pendingDetailsProviderRuntimeOverrides || {}),
+              JSON.stringify(
+                this._pendingDetailsProviderRuntimeOverrides || {},
+              ),
             ) as ProviderRuntimeOverrides;
 
             if (providerId === "llamafile") {
@@ -628,7 +638,9 @@ export class ShadowClawConversations extends ShadowClawElement {
             }
 
             const next = JSON.parse(
-              JSON.stringify(this._pendingDetailsProviderRuntimeOverrides || {}),
+              JSON.stringify(
+                this._pendingDetailsProviderRuntimeOverrides || {},
+              ),
             ) as ProviderRuntimeOverrides;
 
             if (providerId === "llamafile") {
@@ -653,7 +665,8 @@ export class ShadowClawConversations extends ShadowClawElement {
         ? "flex"
         : "none";
 
-      mainProviderModuleSettings.style.display = this._pendingDetailsPinnedProvider
+      mainProviderModuleSettings.style.display = this
+        ._pendingDetailsPinnedProvider
         ? "flex"
         : "none";
 
@@ -1528,20 +1541,19 @@ export class ShadowClawConversations extends ShadowClawElement {
 
     const headers: Record<string, string> = {
       ...(provider.headers || {}),
-      ...(
-        orchestratorStore.orchestrator?.getProviderRuntimeHeaders(
-          provider.id,
-          "",
-          this._pendingDetailsProviderRuntimeOverrides,
-        ) || {}
-      ),
+      ...(orchestratorStore.orchestrator?.getProviderRuntimeHeaders(
+        provider.id,
+        "",
+        this._pendingDetailsProviderRuntimeOverrides,
+      ) || {}),
     };
 
     if (this.db && provider.apiKeyHeader && orchestratorStore.orchestrator) {
-      const apiKey = await orchestratorStore.orchestrator.getApiKeyForSpecificProvider(
-        this.db,
-        provider.id,
-      );
+      const apiKey =
+        await orchestratorStore.orchestrator.getApiKeyForSpecificProvider(
+          this.db,
+          provider.id,
+        );
       if (apiKey) {
         const format = provider.apiKeyHeaderFormat || "{key}";
         headers[provider.apiKeyHeader] = format.replace("{key}", apiKey);

@@ -1,6 +1,10 @@
 import { sanitizeModelOutput } from "../../content/chat-template-sanitizer.js";
 
-import type { ContentBlockAccumulator, StreamCallbacks, StreamFormat } from "./types.js";
+import type {
+  ContentBlockAccumulator,
+  StreamCallbacks,
+  StreamFormat,
+} from "./types.js";
 
 /**
  * Accumulates streamed SSE chunks into a unified response object.

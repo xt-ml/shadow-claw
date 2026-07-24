@@ -90,7 +90,9 @@ describe("shadow-claw-pages", () => {
   });
 
   it("does not eagerly include the sandboxed preview iframe in template source", async () => {
-    const template = await Promise.resolve(ShadowClawPages.template.map((e: Element) => e.outerHTML).join(""));
+    const template = await Promise.resolve(
+      ShadowClawPages.template.map((e: Element) => e.outerHTML).join(""),
+    );
 
     expect(template).not.toContain("data-pages-iframe");
   });

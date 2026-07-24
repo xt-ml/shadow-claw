@@ -1,5 +1,4 @@
 export class ShadowClawDialog extends HTMLElement {
-
   static get observedAttributes(): string[] {
     return ["dialog-class", "aria-label", "aria-labelledby"];
   }

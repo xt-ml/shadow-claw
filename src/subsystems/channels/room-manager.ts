@@ -76,7 +76,6 @@ function notification(method: string, params: unknown): A2AJsonRpcNotification {
 }
 
 export class RoomManager {
-
   // ---------------------------------------------------------------------------
   // Inbound dispatch
   // ---------------------------------------------------------------------------

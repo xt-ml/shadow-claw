@@ -1,4 +1,7 @@
-import type { ResolveConnectionTestAuthInput, ResolveConnectionTestAuthResult } from "../../types.js";
+import type {
+  ResolveConnectionTestAuthInput,
+  ResolveConnectionTestAuthResult,
+} from "../../types.js";
 
 export function resolveConnectionTestAuth(
   input: ResolveConnectionTestAuthInput,

@@ -52,7 +52,6 @@ export class ShadowClawTerminal extends ShadowClawElement {
   }
 
   async connectedCallback() {
-
     await this.render();
     this.renderOutput();
 

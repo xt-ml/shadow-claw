@@ -1,4 +1,6 @@
-export function guessMimeTypeFromFilename(filename: string): string | undefined {
+export function guessMimeTypeFromFilename(
+  filename: string,
+): string | undefined {
   const lower = filename.toLowerCase();
   if (lower.endsWith(".png")) {
     return "image/png";

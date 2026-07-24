@@ -800,17 +800,12 @@ describe("providers.js", () => {
     });
 
     it("should map reasoning effort to anthropic thinking budget", () => {
-      const result = formatRequest(
-        anthropicProvider,
-        [],
-        [],
-        {
-          maxTokens: 10000,
-          model: "claude-sonnet-4-20250514",
-          reasoning: { effort: "high" },
-          system: "You are helpful",
-        } as any,
-      );
+      const result = formatRequest(anthropicProvider, [], [], {
+        maxTokens: 10000,
+        model: "claude-sonnet-4-20250514",
+        reasoning: { effort: "high" },
+        system: "You are helpful",
+      } as any);
 
       expect(result.thinking).toEqual({
         type: "enabled",

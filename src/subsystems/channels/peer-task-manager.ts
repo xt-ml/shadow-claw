@@ -124,7 +124,8 @@ const VALID_TRANSITIONS = new Map<TaskState, Set<TaskState>>([
  * 4. Stores task history (recent messages per task)
  * 5. Handles CancelTask requests gracefully
  */
-export class PeerTaskManager { // LRU order (oldest first)
+export class PeerTaskManager {
+  // LRU order (oldest first)
   private _config: Required<TaskManagerConfig>;
   /** Maps contextId → active (non-terminal) taskId */
   private _contextActiveTask = new Map<string, string>();

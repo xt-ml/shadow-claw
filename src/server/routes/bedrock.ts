@@ -188,13 +188,9 @@ function randomMsgId(): string {
   return "msg_" + Math.random().toString(36).substring(2, 10);
 }
 
-function normalizeAdaptiveEffort(value: unknown):
-  | "low"
-  | "medium"
-  | "high"
-  | "xhigh"
-  | "max"
-  | undefined {
+function normalizeAdaptiveEffort(
+  value: unknown,
+): "low" | "medium" | "high" | "xhigh" | "max" | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
@@ -291,11 +287,17 @@ function cacheAdaptiveThinkingCapability(
   const inferred = byName ?? byId;
 
   if (typeof inferred === "boolean") {
-    ADAPTIVE_THINKING_CAPABILITY_BY_MODEL_ID.set(modelId.toLowerCase(), inferred);
+    ADAPTIVE_THINKING_CAPABILITY_BY_MODEL_ID.set(
+      modelId.toLowerCase(),
+      inferred,
+    );
   }
 }
 
-function supportsAdaptiveThinking(modelId: string, resolvedModelId: string): boolean {
+function supportsAdaptiveThinking(
+  modelId: string,
+  resolvedModelId: string,
+): boolean {
   const raw = modelId.toLowerCase();
   const resolved = resolvedModelId.toLowerCase();
 

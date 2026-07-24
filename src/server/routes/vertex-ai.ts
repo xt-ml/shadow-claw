@@ -37,7 +37,11 @@ function toGeminiThinkingLevel(
     return "medium";
   }
 
-  if (normalized === "low" || normalized === "minimal" || normalized === "none") {
+  if (
+    normalized === "low" ||
+    normalized === "minimal" ||
+    normalized === "none"
+  ) {
     return "low";
   }
 
@@ -96,7 +100,8 @@ function buildThinkingConfig(
   }
 
   const explicitBudget =
-    typeof reasoning.max_tokens === "number" && Number.isFinite(reasoning.max_tokens)
+    typeof reasoning.max_tokens === "number" &&
+    Number.isFinite(reasoning.max_tokens)
       ? Math.max(1024, Math.floor(reasoning.max_tokens))
       : null;
   const fallbackBudget = Math.max(
@@ -116,7 +121,9 @@ function supportsReasoning(modelId: string): boolean {
   return /gemini-(2\.5|3\.|3-|3$)/i.test(modelId) || /thinking/i.test(modelId);
 }
 
-function buildReasoningMetadata(modelId: string): Record<string, unknown> | undefined {
+function buildReasoningMetadata(
+  modelId: string,
+): Record<string, unknown> | undefined {
   if (!supportsReasoning(modelId)) {
     return undefined;
   }
@@ -350,7 +357,9 @@ export function registerVertexAiRoutes(
               max_completion_tokens: m.outputTokenLimit || 65536,
               supports_tools: true,
               ...(buildReasoningMetadata(modelName.replace("models/", "")) && {
-                reasoning: buildReasoningMetadata(modelName.replace("models/", "")),
+                reasoning: buildReasoningMetadata(
+                  modelName.replace("models/", ""),
+                ),
               }),
             });
           }

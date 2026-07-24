@@ -901,7 +901,8 @@ function parseMeshLlmToolCalls(text: string): {
   }>;
   residualText: string;
 } {
-  const TOOL_CALL_RE = /<\|tool_call>call:([a-zA-Z_][a-zA-Z0-9_]*)(\{[\s\S]*?\})?<tool_call\|>/g;
+  const TOOL_CALL_RE =
+    /<\|tool_call>call:([a-zA-Z_][a-zA-Z0-9_]*)(\{[\s\S]*?\})?<tool_call\|>/g;
   const toolBlocks: Array<{
     type: "tool_use";
     id: string;

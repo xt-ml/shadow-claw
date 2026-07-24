@@ -1,5 +1,3 @@
-
-
 export type ContentBlock =
   | AttachmentContent
   | TextContent
@@ -11,7 +9,8 @@ export type MessageAttachmentSource =
   | LocalFileAttachmentSource
   | RemoteUrlAttachmentSource;
 
-export type ToolResultContentBlock = ToolResultImageBlock | ToolResultTextBlock;export interface AttachmentContent {
+export type ToolResultContentBlock = ToolResultImageBlock | ToolResultTextBlock;
+export interface AttachmentContent {
   data?: string;
   fileName: string;
   mediaType: "audio" | "document" | "file" | "image" | "video";

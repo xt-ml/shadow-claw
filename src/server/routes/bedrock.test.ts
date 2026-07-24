@@ -384,7 +384,11 @@ describe("bedrock-routes", () => {
     const handler = routes.get("POST /bedrock-proxy/invoke");
     const req = {
       headers: { "x-bedrock-region": "us-east-1", "x-bedrock-profile": "test" },
-      body: { model: "anthropic.claude-sonnet-5-v1:0", messages: [], stream: false },
+      body: {
+        model: "anthropic.claude-sonnet-5-v1:0",
+        messages: [],
+        stream: false,
+      },
     };
     const res = createResponse();
 
@@ -395,7 +399,10 @@ describe("bedrock-routes", () => {
           content: [
             {
               reasoningContent: {
-                reasoningText: { text: "internal thought", signature: "sig_abc" },
+                reasoningText: {
+                  text: "internal thought",
+                  signature: "sig_abc",
+                },
               },
             },
             {
@@ -435,7 +442,11 @@ describe("bedrock-routes", () => {
     const handler = routes.get("POST /bedrock-proxy/invoke");
     const req = {
       headers: { "x-bedrock-region": "us-east-1", "x-bedrock-profile": "test" },
-      body: { model: "anthropic.claude-sonnet-5-v1:0", messages: [], stream: true },
+      body: {
+        model: "anthropic.claude-sonnet-5-v1:0",
+        messages: [],
+        stream: true,
+      },
     };
     const res = createResponse();
 
@@ -486,10 +497,16 @@ describe("bedrock-routes", () => {
     await handler(req, res);
 
     const writes = res.write.mock.calls.map((c: any[]) => String(c[0]));
-    expect(writes.some((s: string) => s.includes('"type":"thinking_delta"'))).toBe(true);
-    expect(writes.some((s: string) => s.includes('"type":"signature_delta"'))).toBe(true);
     expect(
-      writes.some((s: string) => s.includes('"type":"redacted_thinking_delta"')),
+      writes.some((s: string) => s.includes('"type":"thinking_delta"')),
+    ).toBe(true);
+    expect(
+      writes.some((s: string) => s.includes('"type":"signature_delta"')),
+    ).toBe(true);
+    expect(
+      writes.some((s: string) =>
+        s.includes('"type":"redacted_thinking_delta"'),
+      ),
     ).toBe(true);
   });
 });

@@ -181,7 +181,6 @@ export class ShadowClawIntegrations extends ShadowClawElement {
   } | null = null;
 
   async connectedCallback() {
-
     this.db = await getDb();
     this.bindEventListeners();
     await this.reload();

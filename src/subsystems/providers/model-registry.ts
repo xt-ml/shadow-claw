@@ -241,7 +241,9 @@ class ModelRegistry {
         ? raw.default_effort.toLowerCase()
         : undefined;
     const defaultEnabled =
-      typeof raw.default_enabled === "boolean" ? raw.default_enabled : undefined;
+      typeof raw.default_enabled === "boolean"
+        ? raw.default_enabled
+        : undefined;
     const supportsMaxTokens =
       typeof raw.supports_max_tokens === "boolean"
         ? raw.supports_max_tokens

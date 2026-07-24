@@ -1,4 +1,8 @@
-import { getRoomMetadata, ROOM_PREFIX, roomIdFromGroupId } from "../../../db/rooms.js";
+import {
+  getRoomMetadata,
+  ROOM_PREFIX,
+  roomIdFromGroupId,
+} from "../../../db/rooms.js";
 import { ShadowClawDatabase } from "../../../db/types.js";
 
 export async function executeListRoomMembers(

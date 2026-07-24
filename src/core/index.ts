@@ -39,7 +39,7 @@ if (document.readyState === "loading") {
     try {
       const result = await initializeApp(document, isInitializing);
       isInitializing = Boolean(result?.isInitializing);
-    } catch(e) {
+    } catch (e) {
       console.error("Fatal error during initialization:", e);
       isInitializing = false;
     }

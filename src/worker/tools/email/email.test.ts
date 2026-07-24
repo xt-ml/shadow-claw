@@ -70,17 +70,23 @@ describe("worker/tools/email", () => {
       listEmailPluginManifests: mockListEmailPluginManifests,
     }));
 
-    jest.unstable_mockModule("../../../subsystems/email/connections.js", () => ({
-      bindEmailCredentialRef: mockBindEmailCredentialRef,
-      deleteEmailConnection: mockDeleteEmailConnection,
-      getEmailConnection: mockGetEmailConnection,
-      listEmailConnections: mockListEmailConnections,
-      upsertEmailConnection: mockUpsertEmailConnection,
-    }));
+    jest.unstable_mockModule(
+      "../../../subsystems/email/connections.js",
+      () => ({
+        bindEmailCredentialRef: mockBindEmailCredentialRef,
+        deleteEmailConnection: mockDeleteEmailConnection,
+        getEmailConnection: mockGetEmailConnection,
+        listEmailConnections: mockListEmailConnections,
+        upsertEmailConnection: mockUpsertEmailConnection,
+      }),
+    );
 
-    jest.unstable_mockModule("../../../subsystems/mcp/mcp-connections.js", () => ({
-      listRemoteMcpConnections: mockListRemoteMcpConnections,
-    }));
+    jest.unstable_mockModule(
+      "../../../subsystems/mcp/mcp-connections.js",
+      () => ({
+        listRemoteMcpConnections: mockListRemoteMcpConnections,
+      }),
+    );
 
     jest.unstable_mockModule(
       "../../../subsystems/accounts/service-accounts.js",

@@ -793,9 +793,10 @@ async function callWithStreaming(
       return;
     }
 
-    const message = pendingReasoning.length > 400
-      ? `${pendingReasoning.slice(0, 400)}…`
-      : pendingReasoning;
+    const message =
+      pendingReasoning.length > 400
+        ? `${pendingReasoning.slice(0, 400)}…`
+        : pendingReasoning;
 
     log(groupId, "info", "Reasoning", message);
     pendingReasoning = "";

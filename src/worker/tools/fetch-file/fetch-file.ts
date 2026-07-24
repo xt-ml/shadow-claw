@@ -7,7 +7,10 @@ import { parseAuthMode } from "./utils/parseAuthMode.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { AccountAuthMode } from "../../../subsystems/accounts/service-accounts.js";
-import type { GitAuthMode, ResolvedGitCredentials } from "../../../subsystems/git/types.js";
+import type {
+  GitAuthMode,
+  ResolvedGitCredentials,
+} from "../../../subsystems/git/types.js";
 
 interface FetchFileResult {
   response: Response;

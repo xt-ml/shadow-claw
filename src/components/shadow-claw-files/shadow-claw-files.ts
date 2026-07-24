@@ -54,7 +54,6 @@ export class ShadowClawFiles extends ShadowClawElement {
   }
 
   async connectedCallback() {
-
     const root = this.shadowRoot;
     if (!root) {
       throw new Error("shadowRoot not found");

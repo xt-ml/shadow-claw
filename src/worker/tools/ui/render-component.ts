@@ -1,4 +1,7 @@
-import { A2UI_BASIC_CATALOG_ID, A2UI_MINIMAL_CATALOG_ID } from "../../../ui/a2ui.js";
+import {
+  A2UI_BASIC_CATALOG_ID,
+  A2UI_MINIMAL_CATALOG_ID,
+} from "../../../ui/a2ui.js";
 import { post } from "../../utils/post.js";
 
 import type { A2UIEnvelope } from "../../../ui/a2ui.js";

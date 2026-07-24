@@ -45,7 +45,7 @@ export function updateTerminalToggle(
     "aria-label",
     terminalVisible ? "Hide WebVM terminal" : "Show WebVM terminal",
   );
-  
+
   button.setAttribute(
     "title",
     terminalVisible ? "Hide WebVM terminal" : "Show WebVM terminal",

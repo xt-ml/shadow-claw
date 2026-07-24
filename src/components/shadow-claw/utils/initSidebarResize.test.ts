@@ -242,4 +242,209 @@ describe("initSidebarResize", () => {
       String(clampedValue),
     );
   });
+
+  it("should return early if shadow is null", async () => {
+    await initSidebarResize(null, mockShadowClaw, mockSidebar, {} as any);
+    expect(mockHandle.setAttribute).not.toHaveBeenCalled();
+  });
+
+  it("should return early if handle is not found", async () => {
+    mockShadow.querySelector.mockReturnValue(null);
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, {} as any);
+    expect(mockHandle.setAttribute).not.toHaveBeenCalled();
+  });
+
+  it("should return default width if appBody is not an HTMLElement", async () => {
+    // Force getCurrentWidth to use fallback
+    mockShadow.querySelector.mockImplementation((selector: string) => {
+      if (selector === ".sidebar-resize-handle") return mockHandle;
+      return null; // appBody is null
+    });
+    mockClampSidebarWidth.mockReturnValue(300);
+    const setAttributeSpy = jest.spyOn(mockHandle, "setAttribute");
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, undefined);
+
+    // It should have called aria-valuenow with current width (clamped DEFAULT_SIDEBAR_WIDTH_PX)
+    expect(setAttributeSpy).toHaveBeenCalledWith("aria-valuenow", "300");
+  });
+
+  it("should handle error during DB fetch gracefully", async () => {
+    (mockGetConfig as jest.Mock<any>).mockRejectedValue(new Error("DB Error"));
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, {} as any);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(
+      mockShadow,
+      DEFAULT_SIDEBAR_WIDTH_PX,
+    );
+  });
+
+  it("should handle pointerup and pointercancel to stop resize", async () => {
+    // Need innerWidth large enough
+    Object.defineProperty(window, "innerWidth", {
+      writable: true,
+      configurable: true,
+      value: 1024,
+    });
+    const dummyDb: ShadowClawDatabase = {} as any;
+
+    // Return a finite string for parseFloat
+    mockAppBody.style.getPropertyValue.mockReturnValue("250");
+
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, dummyDb);
+
+    // Start resize
+    const pointerDownEvent = new Event("pointerdown") as any;
+    pointerDownEvent.pointerId = 1;
+    pointerDownEvent.pointerType = "mouse";
+    pointerDownEvent.button = 0;
+    pointerDownEvent.clientX = 50;
+    mockHandle.dispatchEvent(pointerDownEvent);
+
+    // Test pointerup
+    const pointerUpEvent = new Event("pointerup") as any;
+    pointerUpEvent.pointerId = 1;
+    mockHandle.dispatchEvent(pointerUpEvent);
+
+    expect(mockHandle.classList.remove).toHaveBeenCalledWith("active");
+    expect(mockPersistSidebarWidth).toHaveBeenCalledWith(dummyDb, 250);
+  });
+
+  it("should ignore pointermove and pointerup if pointerId does not match", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      writable: true,
+      configurable: true,
+      value: 1024,
+    });
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, {} as any);
+
+    // Start resize
+    const pointerDownEvent = new Event("pointerdown") as any;
+    pointerDownEvent.pointerId = 1;
+    pointerDownEvent.pointerType = "mouse";
+    pointerDownEvent.button = 0;
+    mockHandle.dispatchEvent(pointerDownEvent);
+
+    // Mismatched pointerMove
+    const pointerMoveEvent = new Event("pointermove") as any;
+    pointerMoveEvent.pointerId = 2; // different id
+    document.dispatchEvent(pointerMoveEvent);
+
+    // Ensure setSidebarWidth is not called again by pointerMove
+    mockSetSidebarWidth.mockClear();
+    document.dispatchEvent(pointerMoveEvent);
+    expect(mockSetSidebarWidth).not.toHaveBeenCalled();
+
+    // Mismatched pointerUp
+    mockHandle.classList.remove.mockClear();
+    const pointerUpEvent = new Event("pointerup") as any;
+    pointerUpEvent.pointerId = 2; // different id
+    mockHandle.dispatchEvent(pointerUpEvent);
+    expect(mockHandle.classList.remove).not.toHaveBeenCalled();
+  });
+
+  it("should reset width on dblclick", async () => {
+    const dummyDb: ShadowClawDatabase = {} as any;
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, dummyDb);
+
+    mockHandle.dispatchEvent(new Event("dblclick"));
+
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(
+      mockShadow,
+      DEFAULT_SIDEBAR_WIDTH_PX,
+    );
+    expect(mockPersistSidebarWidth).toHaveBeenCalledWith(
+      dummyDb,
+      DEFAULT_SIDEBAR_WIDTH_PX,
+    );
+  });
+
+  it("should handle keyboard resizing", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      writable: true,
+      configurable: true,
+      value: 1024,
+    });
+    const dummyDb: ShadowClawDatabase = {} as any;
+
+    // Let current width be 300
+    mockAppBody.style.getPropertyValue.mockReturnValue("300");
+    mockClampSidebarWidth.mockImplementation((_s, w) => w);
+
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, dummyDb);
+
+    // ArrowRight
+    mockSetSidebarWidth.mockImplementation((_s, w) => {
+      mockAppBody.style.getPropertyValue.mockReturnValue(String(w));
+    });
+
+    const arrowRight = new KeyboardEvent("keydown", { key: "ArrowRight" });
+    jest.spyOn(arrowRight, "preventDefault");
+    mockHandle.dispatchEvent(arrowRight);
+
+    expect(arrowRight.preventDefault).toHaveBeenCalled();
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(mockShadow, 300 + 12);
+    expect(mockPersistSidebarWidth).toHaveBeenCalledWith(dummyDb, 312);
+
+    // Home
+    mockSetSidebarWidth.mockClear();
+    const home = new KeyboardEvent("keydown", { key: "Home" });
+    mockHandle.dispatchEvent(home);
+    expect(mockSetSidebarWidth).toHaveBeenCalledWith(
+      mockShadow,
+      MIN_SIDEBAR_WIDTH_PX,
+    );
+
+    // End
+    mockSetSidebarWidth.mockClear();
+    const end = new KeyboardEvent("keydown", { key: "End" });
+    mockHandle.dispatchEvent(end);
+    expect(mockSetSidebarWidth).toHaveBeenCalled();
+  });
+
+  it("should ignore events on small screens", async () => {
+    Object.defineProperty(window, "innerWidth", {
+      writable: true,
+      configurable: true,
+      value: 800,
+    });
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, {} as any);
+
+    // Pointerdown
+    const pointerDown = new Event("pointerdown") as any;
+    pointerDown.pointerId = 1;
+    pointerDown.pointerType = "mouse";
+    pointerDown.button = 0;
+    mockHandle.dispatchEvent(pointerDown);
+    expect(mockHandle.setPointerCapture).not.toHaveBeenCalled();
+
+    // Keydown
+    mockSetSidebarWidth.mockClear();
+    const arrowRight = new KeyboardEvent("keydown", { key: "ArrowRight" });
+    mockHandle.dispatchEvent(arrowRight);
+    expect(mockSetSidebarWidth).not.toHaveBeenCalledWith(
+      mockShadow,
+      expect.any(Number),
+    );
+  });
+
+  it("should cleanup event listeners on shadowClaw cleanup", async () => {
+    await initSidebarResize(mockShadow, mockShadowClaw, mockSidebar, {} as any);
+
+    expect(mockShadowClaw.addCleanup).toHaveBeenCalled();
+    const cleanupFn = mockShadowClaw.addCleanup.mock.calls[0][0];
+
+    const removeEventListenerSpy = jest.spyOn(
+      mockHandle,
+      "removeEventListener",
+    );
+    cleanupFn();
+
+    expect(removeEventListenerSpy).toHaveBeenCalledWith(
+      "pointerup",
+      expect.any(Function),
+    );
+    expect(removeEventListenerSpy).toHaveBeenCalledWith(
+      "pointercancel",
+      expect.any(Function),
+    );
+  });
 });

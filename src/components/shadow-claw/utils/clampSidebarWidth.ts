@@ -1,6 +1,9 @@
 import { MAX_SIDEBAR_WIDTH_PX, MIN_SIDEBAR_WIDTH_PX } from "../shadow-claw.js";
 
-export function clampSidebarWidth(shadow: ShadowRoot | null, px: number): number {
+export function clampSidebarWidth(
+  shadow: ShadowRoot | null,
+  px: number,
+): number {
   const appBody = shadow?.querySelector(".app-body");
 
   if (!(appBody instanceof HTMLElement)) {

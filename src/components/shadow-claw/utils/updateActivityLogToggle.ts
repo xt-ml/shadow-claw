@@ -1,4 +1,7 @@
-export function updateActivityLogToggle(shadow: ShadowRoot | null, activityLogCollapsedOverride?: boolean): void {
+export function updateActivityLogToggle(
+  shadow: ShadowRoot | null,
+  activityLogCollapsedOverride?: boolean,
+): void {
   if (!shadow) {
     return;
   }

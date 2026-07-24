@@ -1314,4 +1314,422 @@ describe("Orchestrator", () => {
       expect(o.schedulerTriggeredGroups.has("br:main")).toBe(false);
     });
   });
+
+  describe("getters and setters and basic channel operations", () => {
+    it("returns correct getters for basic properties", () => {
+      const o = new Orchestrator();
+
+      expect(o.getBedrockSettings()).toEqual({
+        authMode: "provider_chain",
+        profile: "",
+        region: "",
+      });
+
+      expect(o.getChannelEnabled("browser")).toBe(true);
+      expect(o.getChannelEnabled("telegram")).toBe(false);
+
+      expect(o.getChannelEnabledConfigKey("telegram")).toBe(
+        "channel_enabled:telegram",
+      );
+
+      expect(o.getChannelTypeForGroup("non-existent")).toBe("browser");
+
+      expect(o.getContextCompressionEnabled()).toBe(false);
+      expect(o.getGitProxyUrl()).toBe("/git-proxy");
+
+      expect(o.getIMessageConfig()).toEqual({
+        apiKey: "",
+        chatIds: [],
+        enabled: false,
+        serverUrl: "",
+      });
+
+      expect(o.getLlamafileSettings()).toEqual({
+        mode: "cli",
+        host: "127.0.0.1",
+        port: 8080,
+        offline: true,
+      });
+
+      expect(o.getMeshLlmSettings()).toEqual({ host: "" });
+      expect(o.getModel()).toBe(o.model);
+
+      expect(o.getPeerJsConfig()).toEqual({
+        enabled: false,
+        myAlias: "",
+        myPeerId: "",
+        peerAliases: {},
+        serverHost: "",
+        serverPath: "",
+        serverPort: 0,
+        serverSecure: true,
+        trustedPeerIds: [],
+      });
+
+      expect(o.getProvider()).toBe("openrouter");
+      expect(o.getProxyUrl()).toBe("/proxy");
+
+      expect(o.getRateLimitAutoAdapt()).toBe(true);
+      expect(o.getRateLimitCallsPerMinute()).toBe(0);
+
+      expect(o.getReasoningConfig()).toBeUndefined();
+      o.reasoningEffort = "high";
+      expect(o.getReasoningConfig()).toEqual({ effort: "high" });
+      expect(o.getReasoningEffort()).toBe("high");
+
+      expect(o.getStreamingEnabled()).toBe(true);
+      expect(o.getTaskServerUrl()).toBe("/schedule");
+
+      expect(o.getTelegramConfig()).toEqual({
+        botToken: "",
+        chatIds: [],
+        enabled: false,
+        useProxy: false,
+      });
+
+      expect(o.getUseProxy()).toBe(false);
+      expect(o.getVMBashFullInternetAccess()).toBe(false);
+      expect(o.getVMBootMode()).toBe("disabled");
+
+      expect(o.getVMStatus()).toEqual({
+        ready: false,
+        booting: false,
+        bootAttempted: false,
+        error: null,
+      });
+
+      expect(o.getWebMcpMode()).toBeDefined();
+      expect(o.getWebMcpToolsEnabled()).toBe(true);
+    });
+
+    it("applies channel running states properly", () => {
+      const o = new Orchestrator();
+
+      const browserSpy = jest.spyOn(o.browserChat, "start");
+      const peerjsSpy = jest.spyOn(o.peerjs, "stop");
+
+      o.applyChannelRunningState("browser");
+      expect(browserSpy).toHaveBeenCalled();
+
+      o.applyChannelRunningState("peerjs");
+      expect(peerjsSpy).toHaveBeenCalled();
+
+      const applySpy = jest.spyOn(o, "applyChannelRunningState");
+      o.applyAllChannelRunningStates();
+      expect(applySpy).toHaveBeenCalledWith("browser");
+      expect(applySpy).toHaveBeenCalledWith("telegram");
+      expect(applySpy).toHaveBeenCalledWith("imessage");
+      expect(applySpy).toHaveBeenCalledWith("peerjs");
+    });
+
+    it("returns null for unknown channel type", () => {
+      const o = new Orchestrator();
+      expect(o.getChannelByType("unknown" as any)).toBeNull();
+    });
+
+    it("applies Llamafile and MeshLlm headers", () => {
+      const o = new Orchestrator();
+
+      // Mesh-llm
+      o.providerConfig = { id: "mesh-llm" } as any;
+      o.meshLlmHost = "localhost:5000";
+      o.applyMeshLlmHeaders();
+      expect(o.providerConfig.headers?.["x-mesh-llm-host"]).toBe(
+        "localhost:5000",
+      );
+
+      // Llamafile
+      o.providerConfig = { id: "llamafile" } as any;
+      o.llamafileMode = "cli";
+      o.llamafileHost = "127.0.0.1";
+      o.llamafilePort = 8080;
+      o.llamafileOffline = true;
+      o.applyLlamafileHeaders();
+      expect(o.providerConfig.headers?.["x-llamafile-mode"]).toBe("cli");
+      expect(o.providerConfig.headers?.["x-llamafile-host"]).toBe("127.0.0.1");
+      expect(o.providerConfig.headers?.["x-llamafile-port"]).toBe("8080");
+      expect(o.providerConfig.headers?.["x-llamafile-offline"]).toBe("true");
+    });
+
+    it("clears peerjs typing state correctly", () => {
+      const o = new Orchestrator();
+      const typingSpy = jest.spyOn(orchestratorStore, "setRemoteAgentTyping");
+
+      o.clearPeerJsTypingState("group-1");
+      expect(typingSpy).toHaveBeenCalledWith("group-1", false);
+    });
+
+    it("creates and clears provider request ids", () => {
+      const o = new Orchestrator();
+      o.provider = "llamafile";
+      const id = o.createProviderRequestId("group-1");
+      expect(id).toMatch(/^group-1:/);
+      expect(o.inFlightProviderRequestIds.has("group-1")).toBe(true);
+
+      o.clearProviderRequest("group-1");
+      expect(o.inFlightProviderRequestIds.has("group-1")).toBe(false);
+
+      // non-llamafile
+      o.provider = "openrouter";
+      const id2 = o.createProviderRequestId("group-1");
+      expect(id2).toBe("");
+    });
+
+    it("creates, joins, and leaves rooms", () => {
+      const o = new Orchestrator();
+      const events: any[] = [];
+      o.events.on("rooms-changed", (payload: any) => events.push(payload));
+
+      const createSpy = jest
+        .spyOn(o.roomManager, "createRoom")
+        .mockReturnValue({ roomId: "room-1" } as any);
+      const room = o.createRoom("test-room");
+      expect(createSpy).toHaveBeenCalledWith("test-room");
+      expect(room.roomId).toBe("room-1");
+      expect(events).toHaveLength(1);
+
+      const joinSpy = jest
+        .spyOn(o.roomManager, "joinRoom")
+        .mockReturnValue({ roomId: "room-2" } as any);
+      const room2 = o.joinRoomViaLink("room-2", "host-1", "test-room-2");
+      expect(joinSpy).toHaveBeenCalledWith("room-2", "host-1", "test-room-2");
+      expect(room2.roomId).toBe("room-2");
+
+      const leaveSpy = jest.spyOn(o.roomManager, "leaveRoom").mockReturnValue();
+      o.leaveRoom("room-2");
+      expect(leaveSpy).toHaveBeenCalledWith("room-2");
+
+      const inviteSpy = jest
+        .spyOn(o.roomManager, "invite")
+        .mockReturnValue(true);
+      expect(o.inviteToRoom("room-1", "peer-1")).toBe(true);
+      expect(inviteSpy).toHaveBeenCalledWith("room-1", "peer-1");
+
+      const listSpy = jest.spyOn(o.roomManager, "list").mockReturnValue([]);
+      expect(o.listRooms()).toEqual([]);
+      expect(listSpy).toHaveBeenCalled();
+    });
+
+    it("emits room invites", () => {
+      const o = new Orchestrator();
+      const events: any[] = [];
+      o.events.on("room-invite", (payload: any) => events.push(payload));
+
+      o.handleRoomInvite({
+        roomId: "room-1",
+        inviterId: "peer-1",
+        name: "room",
+      } as any);
+      expect(events).toHaveLength(1);
+    });
+
+    it("sends close terminal session messages", () => {
+      const o = new Orchestrator();
+      const postMessage = jest.fn();
+      o.agentWorker = { postMessage } as any;
+
+      o.closeTerminalSession("group-1");
+      expect(postMessage).toHaveBeenCalledWith({
+        payload: { groupId: "group-1" },
+        type: "vm-terminal-close",
+      });
+    });
+
+    it("sends open terminal session messages", () => {
+      const o = new Orchestrator();
+      const postMessage = jest.fn();
+      o.agentWorker = { postMessage } as any;
+
+      o.openTerminalSession("group-1");
+      expect(postMessage).toHaveBeenCalledWith({
+        payload: { groupId: "group-1" },
+        type: "vm-terminal-open",
+      });
+    });
+
+    it("sends terminal input messages", () => {
+      const o = new Orchestrator();
+      const postMessage = jest.fn();
+      o.agentWorker = { postMessage } as any;
+
+      o.sendTerminalInput("ls -la");
+      expect(postMessage).toHaveBeenCalledWith({
+        payload: { data: "ls -la" },
+        type: "vm-terminal-input",
+      });
+    });
+
+    it("parses direct tool command", () => {
+      const o = new Orchestrator();
+      const result = o.parseDirectToolCommand({
+        id: "1",
+        channel: "telegram",
+        groupId: "tg:1",
+        sender: "User",
+        timestamp: Date.now(),
+        content: "@assistant /hello",
+      });
+      expect(result).toBeDefined();
+    });
+
+    it("sets state", () => {
+      const o = new Orchestrator();
+      const events: any[] = [];
+      o.events.on("state-change", (payload: any) => events.push(payload));
+      o.setState("thinking");
+      expect(o.getState()).toBe("thinking");
+      expect(events).toHaveLength(1);
+    });
+
+    it("returns correctly for isConfigured", () => {
+      const o = new Orchestrator();
+      expect(o.isConfigured()).toBe(false);
+    });
+
+    it("resolves transformers status url", () => {
+      const o = new Orchestrator();
+      o.providerConfig = { baseUrl: "http://api/chat/completions" } as any;
+      expect(o.getTransformersStatusUrl()).toBe("http://api/status");
+
+      o.providerConfig = { baseUrl: "other" } as any;
+      expect(o.getTransformersStatusUrl()).toBe(
+        "http://localhost:8888/transformers-js-proxy/status",
+      );
+    });
+
+    it("returns runtime headers for bedrock_proxy", () => {
+      const o = new Orchestrator();
+      o.bedrockRegionFallback = "us-east-1";
+      o.bedrockProfileFallback = "default";
+      o.bedrockAuthMode = "provider_chain";
+
+      const headers = o.getProviderRuntimeHeaders("bedrock_proxy");
+      expect(headers["x-bedrock-region"]).toBe("us-east-1");
+      expect(headers["x-bedrock-profile"]).toBe("default");
+      expect(headers["x-bedrock-auth-mode"]).toBe("provider_chain");
+
+      const overrideHeaders = o.getProviderRuntimeHeaders("bedrock_proxy", "", {
+        bedrock_proxy: {
+          region: "us-west-2",
+          profile: "other",
+          authMode: "sso",
+        },
+      });
+      expect(overrideHeaders["x-bedrock-region"]).toBe("us-west-2");
+      expect(overrideHeaders["x-bedrock-profile"]).toBe("other");
+      expect(overrideHeaders["x-bedrock-auth-mode"]).toBe("sso");
+    });
+
+    it("returns runtime headers for llamafile", () => {
+      const o = new Orchestrator();
+      o.llamafileMode = "cli";
+      o.llamafileHost = "127.0.0.1";
+      o.llamafilePort = 8080;
+      o.llamafileOffline = true;
+
+      const headers = o.getProviderRuntimeHeaders("llamafile", "req-1");
+      expect(headers["x-llamafile-mode"]).toBe("cli");
+      expect(headers["x-llamafile-host"]).toBe("127.0.0.1");
+      expect(headers["x-llamafile-port"]).toBe("8080");
+      expect(headers["x-llamafile-offline"]).toBe("true");
+      expect(headers["x-shadowclaw-request-id"]).toBe("req-1");
+
+      const overrideHeaders = o.getProviderRuntimeHeaders("llamafile", "", {
+        llamafile: {
+          mode: "server",
+          host: "192.168.1.1",
+          port: 9090,
+          offline: false,
+        },
+      });
+      expect(overrideHeaders["x-llamafile-mode"]).toBe("server");
+      expect(overrideHeaders["x-llamafile-host"]).toBe("192.168.1.1");
+      expect(overrideHeaders["x-llamafile-port"]).toBe("9090");
+      expect(overrideHeaders["x-llamafile-offline"]).toBe("false");
+    });
+
+    it("answers user prompt", () => {
+      const o = new Orchestrator();
+      const postMessage = jest.fn();
+      o.agentWorker = { postMessage } as any;
+
+      o.answerUserPrompt("prompt-1", "yes");
+      expect(postMessage).toHaveBeenCalledWith({
+        payload: { id: "prompt-1", response: "yes" },
+        type: "ask-user-response",
+      });
+    });
+
+    it("shuts down cleanly", () => {
+      const o = new Orchestrator();
+      const stopAllSpy = jest.spyOn(o.channelRegistry, "stopAll");
+      o.shutdown();
+      expect(stopAllSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe("init functionality", () => {
+    it("calls all init tasks without throwing", async () => {
+      const o = new Orchestrator();
+
+      const fakeRequest: any = {
+        onerror: null,
+        onsuccess: null,
+        result: undefined,
+      };
+
+      const db = {
+        transaction: () => ({
+          objectStore: () => ({
+            put: () => {
+              setTimeout(() => fakeRequest.onsuccess?.(), 0);
+              return fakeRequest;
+            },
+            delete: () => {
+              setTimeout(() => fakeRequest.onsuccess?.(), 0);
+              return fakeRequest;
+            },
+            get: (key: string) => {
+              setTimeout(() => {
+                fakeRequest.result = { value: key };
+                fakeRequest.onsuccess?.();
+              }, 0);
+              return fakeRequest;
+            },
+          }),
+        }),
+      } as any;
+
+      jest.spyOn(o.roomManager, "loadRooms").mockImplementation(() => {});
+      jest.spyOn(o, "loadApiKeyForProvider").mockResolvedValue();
+      jest.spyOn(o, "getApiKeyForHeaders").mockResolvedValue(undefined);
+      jest.spyOn(o, "loadChannelConfigurations").mockResolvedValue();
+
+      jest
+        .spyOn(o, "syncProxyConfigToServiceWorker")
+        .mockImplementation(() => {});
+
+      const origWorker = (globalThis as any).Worker;
+      if (!origWorker) {
+        (globalThis as any).Worker = class {
+          postMessage() {}
+          terminate() {}
+        };
+      }
+
+      await o.initCoreConfig(db);
+      await o.initProviderAndModel(db);
+      await o.initLlamafileAndMesh(db);
+      await o.initFeatureFlagsAndLimits(db);
+      await o.initChannelsAndRooms(db);
+      await o.initWorkerAndScheduler(db);
+
+      expect(o.assistantName).toBeDefined();
+      expect(o.triggerPattern).toBeDefined();
+
+      if (!origWorker) {
+        delete (globalThis as any).Worker;
+      }
+    });
+  });
 });

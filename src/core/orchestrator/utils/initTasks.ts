@@ -165,7 +165,10 @@ export async function initFeatureFlagsAndLimits(
 
   orchestrator.contextCompressionEnabled = storedCompression === "true";
 
-  const storedReasoningEffort = await getConfig(db, CONFIG_KEYS.REASONING_EFFORT);
+  const storedReasoningEffort = await getConfig(
+    db,
+    CONFIG_KEYS.REASONING_EFFORT,
+  );
   orchestrator.reasoningEffort = storedReasoningEffort
     ? storedReasoningEffort.trim().toLowerCase()
     : "none";

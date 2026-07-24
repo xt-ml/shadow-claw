@@ -32,4 +32,8 @@ describe("parseStoredStringList", () => {
   it("coerces non-string JSON array entries to strings", () => {
     expect(parseStoredStringList("[1,2,3]")).toEqual(["1", "2", "3"]);
   });
+
+  it("falls back to comma-separated if JSON is not an array", () => {
+    expect(parseStoredStringList('{"a":1}')).toEqual(['{"a":1}']);
+  });
 });

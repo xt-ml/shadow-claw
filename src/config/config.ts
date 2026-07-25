@@ -41,6 +41,8 @@ export const MODEL_OUTPUT_LIMITS: Array<{
   { pattern: "claude-fable-5", maxTokens: 128000 },
   // Anthropic Claude Sonnet 5 — 128k max output (1M context)
   { pattern: "claude-sonnet-5", maxTokens: 128000 },
+  // Anthropic Claude Opus 5 — 128k max output (1M context); must precede claude-opus-4
+  { pattern: "claude-opus-5", maxTokens: 128000 },
   // Anthropic Claude Opus 4.8 — 128k max output (1M context); must precede claude-opus-4
   { pattern: "claude-opus-4-8", maxTokens: 128000 },
   // Anthropic Claude Opus 4.x — 128k max output

@@ -66,7 +66,10 @@ function createBedrockCredentials(profile: string, authMode: string) {
 }
 
 function toInferenceProfileId(modelId: string, region: string): string {
-  if (/^[a-z]{2}\.anthropic\./.test(modelId)) {
+  // Accept any cross-region inference prefix (us., eu., apac., global., ...),
+  // not just 2-letter geo codes. Bedrock's /models endpoint serves
+  // `global.anthropic.*` profiles whose 6-letter prefix the old
+  if (/^[a-z]+\.anthropic\./.test(modelId)) {
     return modelId;
   }
 
@@ -468,7 +471,7 @@ export function registerBedrockRoutes(
       if (
         typeof rawModelId !== "string" ||
         (!rawModelId.startsWith("anthropic.") &&
-          !/^[a-z]{2}\.anthropic\./.test(rawModelId))
+          !/^[a-z]+\.anthropic\./.test(rawModelId))
       ) {
         return res.status(400).json({
           error: `Invalid model ID: '${String(rawModelId || "")}'. Must be an Anthropic Bedrock model ID.`,
@@ -487,6 +490,9 @@ export function registerBedrockRoutes(
           runtime.profile,
           runtime.authMode,
         ),
+        maxAttempts: 3,
+        retryMode: "adaptive",
+        requestHandler: { requestTimeout: 60_000 },
       });
 
       // --- Build Converse messages ---
@@ -823,13 +829,28 @@ export function registerBedrockRoutes(
         });
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error("Bedrock invoke error:", message);
+      const e = err as {
+        name?: string;
+        $metadata?: { httpStatusCode?: number; requestId?: string };
+      };
 
-      const status =
-        message.includes("expired") || message.includes("credentials")
-          ? 401
-          : 502;
+      const message = err instanceof Error ? err.message : String(err);
+      const name = e?.name ?? "UnknownError";
+      const httpStatus = e?.$metadata?.httpStatusCode;
+      const requestId = e?.$metadata?.requestId;
+
+      console.error(
+        `Bedrock invoke error [${name} http=${httpStatus ?? "?"}] requestId=${
+          requestId ?? "?"
+        }];`,
+        message,
+      );
+
+      const isThrottle = name === "ThrottlingException" || httpStatus === 429;
+      const isAuth =
+        message.includes("expired") || message.includes("credentials");
+
+      const status = isAuth ? 401 : isThrottle ? 429 : 502;
 
       if (!res.headersSent) {
         res

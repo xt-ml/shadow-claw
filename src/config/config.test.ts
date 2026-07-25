@@ -589,6 +589,20 @@ describe("config.js", () => {
   });
 
   describe("getModelMaxTokens", () => {
+    it.each([
+      ["anthropic.claude-fable-5", 128000],
+      ["anthropic.claude-opus-5", 128000],
+      ["anthropic.claude-sonnet-5", 128000],
+      ["global.claude-fable-5", 128000],
+      ["global.claude-opus-5", 128000],
+      ["global.claude-sonnet-5", 128000],
+      ["us.claude-fable-5", 128000],
+      ["us.claude-opus-5", 128000],
+      ["us.claude-sonnet-5", 128000],
+    ])("resolves %s to %d max output tokens", (modelId, expected) => {
+      expect(getModelMaxTokens(modelId as string)).toBe(expected);
+    });
+
     it("should return 128000 for Claude Opus 4.x models", () => {
       expect(getModelMaxTokens("anthropic.claude-opus-4-6-v1")).toBe(128000);
       expect(getModelMaxTokens("claude-opus-4-6")).toBe(128000);
@@ -596,6 +610,12 @@ describe("config.js", () => {
       // claude-opus-4-8 must match its own entry before the opus-4 catch-all
       expect(getModelMaxTokens("anthropic.claude-opus-4-8-v1:0")).toBe(128000);
       expect(getModelMaxTokens("claude-opus-4-8")).toBe(128000);
+    });
+
+    it("should return 128000 for Claude Opus 5 models", () => {
+      expect(getModelMaxTokens("anthropic.claude-opus-5")).toBe(128000);
+      expect(getModelMaxTokens("global.claude-opus-5")).toBe(128000);
+      expect(getModelMaxTokens("us.claude-opus-5")).toBe(128000);
     });
 
     it("should return 128000 for Claude Fable 5 models", () => {

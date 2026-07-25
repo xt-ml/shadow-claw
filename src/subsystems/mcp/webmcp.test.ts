@@ -124,7 +124,7 @@ describe("webmcp integration", () => {
     delete ((globalThis as any).document as any).modelContext;
   });
 
-  it("falls back to navigator.modelContext when document.modelContext is missing", async () => {
+  it("falls back to navigator.modelContext when document.modelContext is missing (backward-compat for Chrome < 152)", async () => {
     setWebMcpMode("native");
 
     delete ((globalThis as any).document as any).modelContext;

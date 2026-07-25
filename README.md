@@ -144,7 +144,7 @@ The agent has access to **50+ tools** including:
 
 ### Testing WebMCP Integration
 
-**WebMCP integration**: When `document.modelContext` is available (with `navigator.modelContext` fallback), tools are also registered through the browser's Model Context Protocol (`@mcp-b/webmcp-polyfill` v3).
+**WebMCP integration**: When `document.modelContext` is available (with `navigator.modelContext` fallback for Chrome < 152), tools are also registered through the browser's Model Context Protocol (`@mcp-b/webmcp-polyfill` v3).
 
 ```ts
 // get available tools
@@ -228,6 +228,8 @@ ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and 
 - **30-second key expiry** for plaintext operations
 - **No plaintext secrets on disk** — encrypted before storage
 - **Trusted Types enforcement** — idempotent `"default"` policy (`src/security/default-trusted-types-policy.ts`) registered at boot via `theme-init.ts`; `getPolicy()` fallback prevents duplicate-creation errors on module reload
+- **SSRF proxy hardening** — `/proxy` blocks non-HTTP/S schemes and private/loopback IP ranges by default; bypassed via `--allow-private-proxy` flag or the authenticated service-worker JSON format
+- **Prompt injection defense** — external tool outputs (`fetch_url`, `web_search`, `remote_mcp_call_tool`) are structurally wrapped in `UNTRUSTED` delimiters; system prompt includes explicit anti-injection instructions when untrusted-content tools are active
 
 **File I/O:**
 

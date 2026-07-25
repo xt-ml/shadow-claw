@@ -25,8 +25,10 @@ WebMCP operates in one of two modes, controlled by `setWebMcpMode()`:
 
 | Mode                   | API surface                                                                      | Notes                                                                            |
 | ---------------------- | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `"polyfill"` (default) | `@mcp-b/webmcp-polyfill` on `navigator.modelContext`                             | Works in all browsers. Safe.                                                     |
+| `"polyfill"` (default) | `@mcp-b/webmcp-polyfill` — surfaces `document.modelContext`                      | Works in all browsers. Safe.                                                     |
 | `"native"`             | Chrome's native `document.modelContext` (with `navigator.modelContext` fallback) | Requires `chrome://flags/#enable-webmcp-testing`. May crash early Canary builds. |
+
+> **`navigator.modelContext` deprecation:** Chrome deprecated `navigator.modelContext` in Chrome 150 and removed it in Chrome 152.0.7943.0. Feature detection follows Chrome's recommended compat pattern: `document.modelContext || navigator.modelContext`. The fallback is retained in ShadowClaw for clients on older Canary builds.
 
 The active mode is readable via `getWebMcpMode()`.
 
@@ -215,7 +217,7 @@ This means while an _agent_ can create a task of composed WebMCP tools, a _task_
 | ------------------ | ------------------------- | ------------------------------------------------------------ |
 | **Stability**      | Stable                    | Experimental (may crash Canary)                              |
 | **Unregistration** | `AbortController.abort()` | `AbortController.abort()`                                    |
-| **API location**   | `navigator.modelContext`  | `document.modelContext` (fallback: `navigator.modelContext`) |
+| **API location**   | `document.modelContext`   | `document.modelContext` (fallback: `navigator.modelContext`) |
 | **Requirement**    | None                      | `chrome://flags/#enable-webmcp-testing`                      |
 
 ---

@@ -223,6 +223,19 @@ When `BEDROCK_REGION`/`BEDROCK_PROFILE` environment variables are not set,
 the runtime can provide fallback values via request headers (`x-bedrock-region`,
 `x-bedrock-profile`) from Settings.
 
+### Cross-region inference prefixes
+
+The proxy accepts **any** cross-region inference prefix — not just two-letter geo codes. Bedrock's `/models` endpoint returns profiles such as `global.anthropic.*`, and those are now routed correctly alongside the standard `us.*`, `eu.*`, and `apac.*` prefixes.
+
+### Retry and throttling
+
+The Bedrock client is initialized with:
+
+- `maxAttempts: 3` and `retryMode: "adaptive"` — automatic backoff on transient failures.
+- `requestTimeout: 60 000 ms` — prevents hanging on slow inference.
+
+On `ThrottlingException` (HTTP 429) the proxy returns `429` to the browser so the client-side rate limiter can apply `retry-after` back-off rather than treating the response as a generic `502`.
+
 ### Gemini and Vertex AI
 
 ShadowClaw utilizes secure server-side proxy routes for Google Gemini and Vertex AI models. These proxies handle:

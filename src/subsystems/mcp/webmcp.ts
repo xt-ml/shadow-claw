@@ -14,11 +14,15 @@ let currentMode: WebMcpMode = "polyfill";
  * Set the WebMCP mode (polyfill vs native).
  *
  * - `"polyfill"` (default): Uses `@mcp-b/webmcp-polyfill` for a pure-JS
- *   `navigator.modelContext` that works in all browsers.
- * - `"native"`: Uses Chrome's native `document.modelContext` (with
- *   `navigator.modelContext` fallback) from
+ *   `document.modelContext` that works in all browsers.
+ * - `"native"`: Uses Chrome's native `document.modelContext` from
  *   `chrome://flags/#enable-webmcp-testing`.  Requires the flag to be
  *   enabled.  May crash in early Canary builds.
+ *
+ * Detection follows Chrome's recommended compat pattern:
+ *   `document.modelContext || navigator.modelContext`
+ * `navigator.modelContext` was deprecated in Chrome 150 and removed in
+ * Chrome 152.0.7943.0, but the fallback keeps older clients working.
  */
 export function setWebMcpMode(mode: WebMcpMode): void {
   currentMode = mode;
@@ -47,9 +51,13 @@ function ensurePolyfill(): void {
 /**
  * Access the WebMCP ModelContext API.
  *
- * In polyfill mode: installs the `@mcp-b/webmcp-polyfill`.
- * In native mode: uses Chrome's native `document.modelContext` with
- * `navigator.modelContext` fallback.
+ * In polyfill mode: installs the `@mcp-b/webmcp-polyfill` which surfaces
+ * `document.modelContext`.
+ * In native mode: follows Chrome's recommended feature-detection pattern:
+ *   `document.modelContext || navigator.modelContext`
+ * `navigator.modelContext` was deprecated in Chrome 150 and removed in
+ * Chrome 152.0.7943.0, but the fallback preserves compatibility with
+ * earlier builds that may still be in the wild.
  */
 function getModelContextApi(): any {
   if (typeof document === "undefined" && typeof navigator === "undefined") {
@@ -62,10 +70,11 @@ function getModelContextApi(): any {
 
   try {
     const modelContext: unknown =
-      // @ts-ignore
-      typeof document.modelContext !== "undefined"
+      typeof document !== "undefined" &&
+      typeof (document as any).modelContext !== "undefined"
         ? Reflect.get(document, "modelContext")
-        : typeof navigator.modelContext !== "undefined"
+        : typeof navigator !== "undefined" &&
+            typeof (navigator as any).modelContext !== "undefined"
           ? Reflect.get(navigator, "modelContext")
           : undefined;
 

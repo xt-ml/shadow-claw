@@ -405,6 +405,7 @@ export const TIME_MINUTES_ONE = 60000;
 - For Prompt API UI checks, assert API-key input disablement and provider helper text in Settings
 - For Provider Help dialogs, mock provider errors to trigger the dialogs and verify the contextual instructions and links.
 - **Remote MCP Testing**: Verify tool discovery, execution, and automatic OAuth reconnection flows by mocking streamable HTTP responses and OAuth failure modes.
+- **Proxy Security Testing**: Verify that the `/proxy` endpoint rejects non-HTTP/S schemes (`file:`, `ftp:`, etc.) with `400` and blocks private/loopback IP targets (`localhost`, `127.*`, `10.*`, `192.168.*`, `169.254.*`) with `403`. Use the unit tests in `src/server/utils/proxy-helpers.test.ts` for scheme and SSRF guard coverage; E2E tests should verify that the authenticated service-worker format (body-based JSON with `Content-Type: application/json`) is still allowed to reach local tool servers.
 
 ### ❌ DON'T
 
@@ -472,7 +473,7 @@ Some runtime paths are browser-capability dependent and should be handled simila
 to storage feature gates.
 
 - Prompt API provider depends on `globalThis.LanguageModel` support.
-- WebMCP integration depends on `document.modelContext` support (with `navigator.modelContext` fallback).
+- WebMCP integration depends on `document.modelContext` support (with `navigator.modelContext` fallback for Chrome < 152, where `navigator.modelContext` was deprecated in Chrome 150 and removed in Chrome 152.0.7943.0).
 - In unsupported browsers, tests should verify graceful fallback/error messaging,
   not hard-fail on unavailable platform features.
 

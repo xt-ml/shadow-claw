@@ -89,13 +89,14 @@ npm start -- 8888
 
 ## Environment Variables
 
-| Variable                          | Purpose                  | Example                       |
-| --------------------------------- | ------------------------ | ----------------------------- |
-| `SHADOWCLAW_HOST`                 | Server host (fallback)   | `0.0.0.0`                     |
-| `SHADOWCLAW_IP`                   | Server host alias        | `192.168.1.100`               |
-| `SHADOWCLAW_BIND_IP`              | Server host alias        | `127.0.0.1`                   |
-| `SHADOWCLAW_CORS_MODE`            | CORS policy              | `private`, `all`, `localhost` |
-| `SHADOWCLAW_CORS_ALLOWED_ORIGINS` | Explicit allowlist (CSV) | `https://a.com,https://b.com` |
+| Variable                          | Purpose                             | Example                       |
+| --------------------------------- | ----------------------------------- | ----------------------------- |
+| `SHADOWCLAW_HOST`                 | Server host (fallback)              | `0.0.0.0`                     |
+| `SHADOWCLAW_IP`                   | Server host alias                   | `192.168.1.100`               |
+| `SHADOWCLAW_BIND_IP`              | Server host alias                   | `127.0.0.1`                   |
+| `SHADOWCLAW_CORS_MODE`            | CORS policy                         | `private`, `all`, `localhost` |
+| `SHADOWCLAW_CORS_ALLOWED_ORIGINS` | Explicit allowlist (CSV)            | `https://a.com,https://b.com` |
+| `SHADOWCLAW_ALLOW_PRIVATE_PROXY`  | Allow `/proxy` to reach private IPs | `1`, `true`, `yes`            |
 
 ## Common Scenarios
 
@@ -180,6 +181,20 @@ Example:
 ```
 
 Use these logs to debug CORS issues when integrating with external apps.
+
+## SSRF Proxy Security
+
+The generic `/proxy` endpoint enforces two layers of protection by default:
+
+1. **Scheme allowlist** — Only `http:` and `https:` URLs are forwarded. Requests using `file:`, `ftp:`, `gopher:`, `data:`, or any other scheme are rejected with `400 Unsupported URL scheme`.
+2. **Private-IP block** — Requests targeting loopback (`localhost`, `127.0.0.0/8`, `::1`), RFC-1918 ranges (`10.*`, `172.16–31.*`, `192.168.*`), and link-local / cloud-metadata addresses (`169.254.0.0/16`) are rejected with `403 Requests to private or internal addresses are blocked`.
+
+Two mechanisms bypass the private-IP block:
+
+- **`--allow-private-proxy` flag** (or `SHADOWCLAW_ALLOW_PRIVATE_PROXY=1`) — Disables the block globally. Use only in trusted, air-gapped environments.
+- **Service-worker JSON format (`headersFromBody` heuristic)** — When the agent's `fetch_url` tool makes a proxy call using the body-based JSON format (identified by `Content-Type: application/json`), the request is treated as originating from the authenticated service worker and is allowed to reach local services (e.g. `localhost:8080` for a locally-running tool server) without requiring the global flag.
+
+> **Warning:** The private-IP guard uses hostname-string matching, which is inherently bypassable via DNS rebinding. For hardened production deployments, add IP-level resolution on top of this guard.
 
 ## Modular Route Architecture
 

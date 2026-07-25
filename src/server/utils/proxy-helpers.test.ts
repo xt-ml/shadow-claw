@@ -1,20 +1,21 @@
-/** @jest-environment node */
 import { jest } from "@jest/globals";
+
 import {
-  getFirstHeaderValue,
   extractBearerToken,
-  parsePositiveInteger,
-  parseNonNegativeInteger,
+  fetchWithTimeout,
+  getFirstHeaderValue,
+  handleProxyRequest,
+  handleStreamingProxyRequest,
+  isPrivateOrLoopback,
   isTelegramProxyPath,
+  ollamaDoesNotSupportTools,
+  parseLooseFunctionCallArgs,
+  parseLooseToolCallInput,
+  parseNonNegativeInteger,
+  parsePositiveInteger,
   redactSensitiveUrl,
   requestHasTools,
   stripToolsFromRequest,
-  ollamaDoesNotSupportTools,
-  parseLooseToolCallInput,
-  parseLooseFunctionCallArgs,
-  fetchWithTimeout,
-  handleProxyRequest,
-  handleStreamingProxyRequest,
 } from "./proxy-helpers.js";
 
 describe("proxy-helpers", () => {
@@ -247,6 +248,405 @@ describe("proxy-helpers", () => {
       );
       expect(res.write).toHaveBeenCalled();
       expect(res.end).toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Scheme allowlist — http: and https: only
+  // ---------------------------------------------------------------------------
+
+  describe("handleProxyRequest — scheme allowlist", () => {
+    function makeMockRes() {
+      const json = jest.fn();
+      const status = jest.fn().mockReturnValue({ json });
+      return { status, json } as any;
+    }
+
+    const blockedSchemes = [
+      "file:///etc/passwd",
+      "ftp://files.example.com/pub/data",
+      "gopher://gopher.example.com/",
+      "data:text/plain,hello",
+    ];
+
+    for (const url of blockedSchemes) {
+      it(`rejects ${url.split(":")[0]}:// scheme with 400`, async () => {
+        const res = makeMockRes();
+
+        await handleProxyRequest({} as any, res, {
+          targetUrl: url,
+          method: "GET",
+          headers: {},
+        });
+
+        expect(res.status).toHaveBeenCalledWith(400);
+        expect(res.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error: expect.stringMatching(/scheme|protocol|unsupported/i),
+          }),
+        );
+      });
+    }
+
+    it("passes http: through", async () => {
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn(),
+        send: jest.fn(),
+      } as any;
+
+      (global.fetch as any).mockResolvedValue({
+        status: 200,
+        headers: new Map(),
+        arrayBuffer: async () => Buffer.from("{}"),
+      });
+
+      await handleProxyRequest({} as any, res, {
+        targetUrl: "http://api.example.com/data",
+        method: "GET",
+        headers: {},
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it("passes https: through", async () => {
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn(),
+        send: jest.fn(),
+      } as any;
+
+      (global.fetch as any).mockResolvedValue({
+        status: 200,
+        headers: new Map(),
+        arrayBuffer: async () => Buffer.from("{}"),
+      });
+
+      await handleProxyRequest({} as any, res, {
+        targetUrl: "https://api.example.com/data",
+        method: "GET",
+        headers: {},
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+  });
+
+  describe("handleStreamingProxyRequest — scheme allowlist", () => {
+    function makeMockRes() {
+      const json = jest.fn();
+      const status = jest.fn().mockReturnValue({ json });
+      return { status, json, headersSent: false } as any;
+    }
+
+    it("rejects ftp:// scheme with 400", async () => {
+      const res = makeMockRes();
+
+      await handleStreamingProxyRequest({} as any, res, {
+        targetUrl: "ftp://files.example.com/data",
+        headers: {},
+      });
+
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          error: expect.stringMatching(/scheme|protocol|unsupported/i),
+        }),
+      );
+    });
+
+    it("passes https: streaming through", async () => {
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn(),
+        flushHeaders: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+      } as any;
+
+      const reader = {
+        read: (jest.fn() as any).mockResolvedValueOnce({ done: true }),
+        releaseLock: jest.fn(),
+      };
+
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { getReader: () => reader },
+      });
+
+      await handleStreamingProxyRequest({} as any, res, {
+        targetUrl: "https://api.example.com/stream",
+        headers: {},
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // isPrivateOrLoopback
+  // ---------------------------------------------------------------------------
+
+  describe("isPrivateOrLoopback", () => {
+    it("identifies loopback hostnames", () => {
+      expect(isPrivateOrLoopback("localhost")).toBe(true);
+      expect(isPrivateOrLoopback("127.0.0.1")).toBe(true);
+      expect(isPrivateOrLoopback("127.1.2.3")).toBe(true);
+      expect(isPrivateOrLoopback("::1")).toBe(true);
+    });
+
+    it("identifies RFC-1918 private ranges", () => {
+      expect(isPrivateOrLoopback("10.0.0.1")).toBe(true);
+      expect(isPrivateOrLoopback("10.255.255.255")).toBe(true);
+      expect(isPrivateOrLoopback("192.168.1.100")).toBe(true);
+      expect(isPrivateOrLoopback("172.16.0.1")).toBe(true);
+      expect(isPrivateOrLoopback("172.31.255.255")).toBe(true);
+    });
+
+    it("identifies link-local and cloud metadata endpoints", () => {
+      expect(isPrivateOrLoopback("169.254.169.254")).toBe(true);
+      expect(isPrivateOrLoopback("169.254.0.1")).toBe(true);
+    });
+
+    it("does not flag legitimate public addresses", () => {
+      expect(isPrivateOrLoopback("example.com")).toBe(false);
+      expect(isPrivateOrLoopback("8.8.8.8")).toBe(false);
+      expect(isPrivateOrLoopback("172.32.0.1")).toBe(false); // just outside RFC-1918 range
+      expect(isPrivateOrLoopback("11.0.0.1")).toBe(false);
+      expect(isPrivateOrLoopback("192.169.1.1")).toBe(false);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // handleProxyRequest — private-IP guard
+  // ---------------------------------------------------------------------------
+
+  describe("handleProxyRequest — private-IP blocking", () => {
+    function makeMockRes() {
+      const json = jest.fn();
+      const status = jest.fn().mockReturnValue({ json });
+      return { status, json } as any;
+    }
+
+    const privateUrls = [
+      "http://localhost/secret",
+      "http://127.0.0.1/etc/passwd",
+      "http://10.0.0.1/admin",
+      "http://192.168.1.1/router",
+      "http://172.16.0.5/internal",
+      "http://169.254.169.254/latest/meta-data/",
+    ];
+
+    for (const url of privateUrls) {
+      it(`blocks ${url} with 403`, async () => {
+        const res = makeMockRes();
+
+        await handleProxyRequest({} as any, res, {
+          targetUrl: url,
+          method: "GET",
+          headers: {},
+        });
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error: expect.stringMatching(/private|internal|blocked/i),
+          }),
+        );
+      });
+    }
+
+    it("does not block a legitimate public URL", async () => {
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn(),
+        send: jest.fn(),
+      } as any;
+
+      (global.fetch as any).mockResolvedValue({
+        status: 200,
+        headers: new Map(),
+        arrayBuffer: async () => Buffer.from("{}"),
+      });
+
+      await handleProxyRequest({} as any, res, {
+        targetUrl: "https://api.example.com/data",
+        method: "GET",
+        headers: {},
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it("allows private URL when allowPrivate: true (--allow-private-proxy flag)", async () => {
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn(),
+        send: jest.fn(),
+      } as any;
+
+      (global.fetch as any).mockResolvedValue({
+        status: 200,
+        headers: new Map(),
+        arrayBuffer: async () => Buffer.from("{}"),
+      });
+
+      await handleProxyRequest({} as any, res, {
+        targetUrl: "http://10.0.0.1/internal-api",
+        method: "GET",
+        headers: {},
+        allowPrivate: true,
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it("allows private URL when fromServiceWorker: true (headersFromBody heuristic)", async () => {
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn(),
+        send: jest.fn(),
+      } as any;
+
+      (global.fetch as any).mockResolvedValue({
+        status: 200,
+        headers: new Map(),
+        arrayBuffer: async () => Buffer.from("{}"),
+      });
+
+      await handleProxyRequest({} as any, res, {
+        targetUrl: "http://localhost:8080/tool-server",
+        method: "GET",
+        headers: {},
+        fromServiceWorker: true,
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // handleStreamingProxyRequest — private-IP guard
+  // ---------------------------------------------------------------------------
+
+  describe("handleStreamingProxyRequest — private-IP blocking", () => {
+    function makeMockRes() {
+      const json = jest.fn();
+      const status = jest.fn().mockReturnValue({ json });
+      const headersSent = false;
+      return { status, json, headersSent } as any;
+    }
+
+    const privateUrls = [
+      "http://localhost/stream",
+      "http://10.0.0.1/stream",
+      "http://169.254.169.254/latest/meta-data/",
+    ];
+
+    for (const url of privateUrls) {
+      it(`blocks streaming ${url} with 403`, async () => {
+        const res = makeMockRes();
+
+        await handleStreamingProxyRequest({} as any, res, {
+          targetUrl: url,
+          headers: {},
+        });
+
+        expect(res.status).toHaveBeenCalledWith(403);
+        expect(res.json).toHaveBeenCalledWith(
+          expect.objectContaining({
+            error: expect.stringMatching(/private|internal|blocked/i),
+          }),
+        );
+      });
+    }
+
+    it("does not block a public streaming URL", async () => {
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn(),
+        flushHeaders: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+      } as any;
+
+      const reader = {
+        read: (jest.fn() as any).mockResolvedValueOnce({ done: true }),
+        releaseLock: jest.fn(),
+      };
+
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { getReader: () => reader },
+      });
+
+      await handleStreamingProxyRequest({} as any, res, {
+        targetUrl: "https://api.example.com/stream",
+        headers: {},
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it("allows private streaming URL when allowPrivate: true", async () => {
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn(),
+        flushHeaders: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+      } as any;
+
+      const reader = {
+        read: (jest.fn() as any).mockResolvedValueOnce({ done: true }),
+        releaseLock: jest.fn(),
+      };
+
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { getReader: () => reader },
+      });
+
+      await handleStreamingProxyRequest({} as any, res, {
+        targetUrl: "http://192.168.1.5/local-llm/stream",
+        headers: {},
+        allowPrivate: true,
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it("allows private streaming URL when fromServiceWorker: true", async () => {
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        setHeader: jest.fn(),
+        flushHeaders: jest.fn(),
+        write: jest.fn(),
+        end: jest.fn(),
+      } as any;
+
+      const reader = {
+        read: (jest.fn() as any).mockResolvedValueOnce({ done: true }),
+        releaseLock: jest.fn(),
+      };
+
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        status: 200,
+        body: { getReader: () => reader },
+      });
+
+      await handleStreamingProxyRequest({} as any, res, {
+        targetUrl: "http://localhost:11435/stream",
+        headers: {},
+        fromServiceWorker: true,
+      });
+
+      expect(res.status).toHaveBeenCalledWith(200);
     });
   });
 });

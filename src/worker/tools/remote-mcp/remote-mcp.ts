@@ -1,3 +1,4 @@
+import { wrapUntrustedContent } from "../../utils/wrapUntrustedContent.js";
 import { formatListToolsOutput } from "./utils/formatListToolsOutput.js";
 import { isMcpReauthError } from "./utils/isMcpReauthError.js";
 import { requestMcpReauthAndWait } from "./utils/requestMcpReauthAndWait.js";
@@ -112,7 +113,12 @@ export async function executeRemoteMcpCallTool(
       args,
     );
 
-    return JSON.stringify(result, null, 2);
+    // Option B: Wrap in UNTRUSTED markers so the LLM treats the external MCP
+    // server response as data, not directives.
+    return wrapUntrustedContent(
+      JSON.stringify(result, null, 2),
+      "remote_mcp_call_tool",
+    );
   } catch (err) {
     if (isMcpReauthError(err, deps.McpReauthRequiredError)) {
       const reconnected = await requestMcpReauthAndWait(
@@ -129,7 +135,10 @@ export async function executeRemoteMcpCallTool(
           args,
         );
 
-        return JSON.stringify(result, null, 2);
+        return wrapUntrustedContent(
+          JSON.stringify(result, null, 2),
+          "remote_mcp_call_tool",
+        );
       }
     }
 

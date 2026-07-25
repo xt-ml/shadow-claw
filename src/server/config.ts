@@ -17,6 +17,12 @@ export interface ServerConfig {
   peerjs: boolean;
   rootPath: string;
   databaseDir: string;
+  /**
+   * When true the private-IP SSRF block in /proxy is disabled,
+   * allowing requests to loopback, RFC-1918, and link-local addresses.
+   * Controlled by --allow-private-proxy (or SHADOWCLAW_ALLOW_PRIVATE_PROXY=1).
+   */
+  allowPrivateProxy: boolean;
 }
 
 export function parseConfig(): ServerConfig {
@@ -43,7 +49,12 @@ export function parseConfig(): ServerConfig {
       },
       [],
     )
-    .option("--peerjs", "Enable built-in PeerJS signaling server", false);
+    .option("--peerjs", "Enable built-in PeerJS signaling server", false)
+    .option(
+      "--allow-private-proxy",
+      "Allow the /proxy endpoint to reach private/loopback addresses (disables SSRF block)",
+      false,
+    );
 
   program.parse();
 
@@ -129,6 +140,13 @@ export function parseConfig(): ServerConfig {
       (env.SHADOWCLAW_PEERJS || "").toLowerCase().trim(),
     );
 
+  // Allow-private-proxy
+  const allowPrivateProxy =
+    options.allowPrivateProxy ||
+    ["1", "true", "yes"].includes(
+      (env.SHADOWCLAW_ALLOW_PRIVATE_PROXY || "").toLowerCase().trim(),
+    );
+
   return {
     port,
     bindHost,
@@ -138,5 +156,6 @@ export function parseConfig(): ServerConfig {
     peerjs,
     rootPath,
     databaseDir,
+    allowPrivateProxy,
   };
 }

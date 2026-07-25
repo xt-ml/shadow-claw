@@ -13,9 +13,10 @@ import type { Express } from "express";
 
 export function registerHttpProxyRoutes(
   app: Express,
-  options: { verbose?: boolean } = {},
+  options: { verbose?: boolean; allowPrivateProxy?: boolean } = {},
 ): void {
   const verbose = options.verbose ?? false;
+  const allowPrivateProxy = options.allowPrivateProxy ?? false;
 
   // ---- generic /proxy endpoint (supports https://cors-anywhere.com/) ----
   // Supports:
@@ -82,6 +83,8 @@ export function registerHttpProxyRoutes(
       body,
       verbose,
       forwardAuth: hasExplicitAuth,
+      fromServiceWorker: headersFromBody,
+      allowPrivate: allowPrivateProxy,
     });
   });
 

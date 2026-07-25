@@ -43,7 +43,7 @@ const llamafileManagerService = createLlamafileManagerService();
 
 export function registerProxyRoutes(
   app: Express,
-  options: { verbose?: boolean } = {},
+  options: { verbose?: boolean; allowPrivateProxy?: boolean } = {},
 ): void {
   // Register generic HTTP proxy
   registerHttpProxyRoutes(app, options);

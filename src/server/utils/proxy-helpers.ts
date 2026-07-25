@@ -96,6 +96,26 @@ export function redactSensitiveUrl(rawUrl: string): string {
   }
 }
 
+/**
+ * Returns true when `hostname` resolves to a loopback, link-local, or
+ * RFC-1918 private address. Used to block SSRF attacks targeting the
+ * host's internal network or cloud-provider metadata endpoints.
+ *
+ * Note: hostname-string checks are inherently bypassable via DNS rebinding.
+ * For a hardened deployment add IP-level resolution on top of this guard.
+ */
+export function isPrivateOrLoopback(hostname: string): boolean {
+  return (
+    hostname === "localhost" ||
+    hostname === "::1" ||
+    /^127\./.test(hostname) || // 127.0.0.0/8  — loopback
+    /^10\./.test(hostname) || // 10.0.0.0/8   — RFC-1918
+    /^192\.168\./.test(hostname) || // 192.168.0.0/16 — RFC-1918
+    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) || // 172.16.0.0/12 — RFC-1918
+    /^169\.254\./.test(hostname) // 169.254.0.0/16 — link-local / metadata
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Fetch with timeout
 // ---------------------------------------------------------------------------
@@ -178,6 +198,15 @@ export async function handleProxyRequest(
     maxRetries?: number;
     requestTimeoutMs?: number;
     forwardAuth?: boolean;
+    /** Skip private-IP block. Set by the --allow-private-proxy CLI flag. */
+    allowPrivate?: boolean;
+    /**
+     * Skip private-IP block when the caller is the service worker using the
+     * body-based JSON proxy format (headersFromBody heuristic). This allows
+     * the agent's fetch_url tool to reach local services (e.g. localhost:8080)
+     * without requiring the blanket --allow-private-proxy flag.
+     */
+    fromServiceWorker?: boolean;
   },
 ): Promise<void> {
   const {
@@ -189,6 +218,8 @@ export async function handleProxyRequest(
     maxRetries,
     requestTimeoutMs,
     forwardAuth,
+    allowPrivate,
+    fromServiceWorker,
   } = opts;
 
   if (verbose) {
@@ -203,6 +234,26 @@ export async function handleProxyRequest(
       target = new URL(targetUrl);
     } catch {
       res.status(400).json({ error: "Invalid URL" });
+
+      return;
+    }
+
+    if (target.protocol !== "http:" && target.protocol !== "https:") {
+      res.status(400).json({
+        error: "Unsupported URL scheme — only http and https are allowed",
+      });
+
+      return;
+    }
+
+    if (
+      isPrivateOrLoopback(target.hostname) &&
+      !allowPrivate &&
+      !fromServiceWorker
+    ) {
+      res.status(403).json({
+        error: "Requests to private or internal addresses are blocked",
+      });
 
       return;
     }
@@ -291,10 +342,25 @@ export async function handleStreamingProxyRequest(
     verbose?: boolean;
     maxRetries?: number;
     requestTimeoutMs?: number;
+    /** Skip private-IP block. Set by the --allow-private-proxy CLI flag. */
+    allowPrivate?: boolean;
+    /**
+     * Skip private-IP block when the caller is the service worker using the
+     * body-based JSON proxy format (headersFromBody heuristic).
+     */
+    fromServiceWorker?: boolean;
   },
 ): Promise<void> {
-  const { targetUrl, headers, body, verbose, maxRetries, requestTimeoutMs } =
-    opts;
+  const {
+    targetUrl,
+    headers,
+    body,
+    verbose,
+    maxRetries,
+    requestTimeoutMs,
+    allowPrivate,
+    fromServiceWorker,
+  } = opts;
 
   if (verbose) {
     console.log(
@@ -308,6 +374,26 @@ export async function handleStreamingProxyRequest(
       target = new URL(targetUrl);
     } catch {
       res.status(400).json({ error: "Invalid URL" });
+
+      return;
+    }
+
+    if (target.protocol !== "http:" && target.protocol !== "https:") {
+      res.status(400).json({
+        error: "Unsupported URL scheme — only http and https are allowed",
+      });
+
+      return;
+    }
+
+    if (
+      isPrivateOrLoopback(target.hostname) &&
+      !allowPrivate &&
+      !fromServiceWorker
+    ) {
+      res.status(403).json({
+        error: "Requests to private or internal addresses are blocked",
+      });
 
       return;
     }

@@ -1,3 +1,4 @@
+import { wrapUntrustedContent } from "../../utils/wrapUntrustedContent.js";
 import { HttpError } from "./utils/HttpError.js";
 import { parseAuthMode } from "./utils/parseAuthMode.js";
 
@@ -425,12 +426,19 @@ export async function executeFetchUrlTool(
     }
 
     const truncated = body.length > deps.fetchMaxResponse;
-    const content = truncated
+    const rawContent = truncated
       ? body.slice(0, deps.fetchMaxResponse) +
         `\n\n--- Response truncated (showed ${deps.fetchMaxResponse.toLocaleString()} of ${body.length.toLocaleString()} chars) ---`
       : body;
 
-    return status + headers + content;
+    // Option B: Wrap in UNTRUSTED markers so the LLM has a structural signal
+    // that this content is external data, not an instruction.
+    const content = wrapUntrustedContent(
+      rawContent,
+      "fetch_url",
+      status + headers,
+    );
+    return content;
   } catch (fetchErr) {
     if (fetchErr instanceof HttpError) {
       return `[HTTP ${fetchErr.status} ${fetchErr.statusText}]\n${fetchErr.headers}Error fetching URL after retries. Content preview:\n${fetchErr.body.slice(0, 1000)}`;

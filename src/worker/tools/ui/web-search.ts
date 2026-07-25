@@ -1,3 +1,4 @@
+import { wrapUntrustedContent } from "../../utils/wrapUntrustedContent.js";
 import { stripHtml } from "../../utils/stripHtml.js";
 
 export async function executeWebSearch(
@@ -51,7 +52,9 @@ export async function executeWebSearch(
       return "No results found.";
     }
 
-    return results.join("\n---\n");
+    // Option B: Wrap in UNTRUSTED markers so the LLM treats these externally-
+    // sourced snippets as data, not instructions.
+    return wrapUntrustedContent(results.join("\n---\n"), "web_search");
   } catch (e: any) {
     return `Search error: ${e.message}`;
   }

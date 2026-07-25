@@ -68,7 +68,10 @@ export function createApp(config: ServerConfig): {
   app.use(express.json({ limit: "1000mb" }));
 
   // ---------------- PROXY ROUTES ----------------
-  registerProxyRoutes(app, { verbose });
+  registerProxyRoutes(app, {
+    verbose,
+    allowPrivateProxy: config.allowPrivateProxy,
+  });
 
   // ---------------- OAUTH ROUTES ----------------
   registerOAuthRoutes(app);

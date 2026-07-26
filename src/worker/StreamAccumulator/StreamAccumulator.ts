@@ -19,7 +19,12 @@ export class StreamAccumulator {
   contentBlocks: ContentBlockAccumulator[] = [];
   format: StreamFormat;
   stopReason: string = "end_turn";
-  usage: { input_tokens: number; output_tokens: number } = {
+  usage: {
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  } = {
     input_tokens: 0,
     output_tokens: 0,
   };
@@ -44,7 +49,12 @@ export class StreamAccumulator {
   finalize(): {
     content: any[];
     stop_reason: string;
-    usage: { input_tokens: number; output_tokens: number };
+    usage: {
+      input_tokens: number;
+      output_tokens: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
   } {
     if (this.format === "openai" || this.format === "mesh-llm") {
       return this.#finalizeOpenAI();
@@ -67,7 +77,12 @@ export class StreamAccumulator {
   #finalizeAnthropic(): {
     content: any[];
     stop_reason: string;
-    usage: { input_tokens: number; output_tokens: number };
+    usage: {
+      input_tokens: number;
+      output_tokens: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
   } {
     const content: any[] = [];
 
@@ -121,7 +136,12 @@ export class StreamAccumulator {
   #finalizeOpenAI(): {
     content: any[];
     stop_reason: string;
-    usage: { input_tokens: number; output_tokens: number };
+    usage: {
+      input_tokens: number;
+      output_tokens: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
   } {
     const content: any[] = [];
 
@@ -173,6 +193,10 @@ export class StreamAccumulator {
       case "message_start": {
         if (chunk.message?.usage) {
           this.usage.input_tokens = chunk.message.usage.input_tokens || 0;
+          this.usage.cache_read_input_tokens =
+            chunk.message.usage.cache_read_input_tokens || 0;
+          this.usage.cache_creation_input_tokens =
+            chunk.message.usage.cache_creation_input_tokens || 0;
         }
 
         break;
@@ -297,6 +321,8 @@ export class StreamAccumulator {
     if (chunk.usage) {
       this.usage.input_tokens = chunk.usage.prompt_tokens || 0;
       this.usage.output_tokens = chunk.usage.completion_tokens || 0;
+      this.usage.cache_read_input_tokens =
+        chunk.usage.prompt_tokens_details?.cached_tokens || 0;
       this.callbacks.onUsage?.(this.usage);
     }
 

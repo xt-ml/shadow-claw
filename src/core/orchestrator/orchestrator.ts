@@ -1429,7 +1429,12 @@ export class Orchestrator {
     );
 
     const contextLimit = getContextLimit(this.model);
-    const systemPromptTokens = estimateTokens(systemPrompt);
+    const systemPromptTokens =
+      estimateTokens(systemPrompt) +
+      (activeTools?.reduce(
+        (acc, t) => acc + estimateTokens(JSON.stringify(t)),
+        0,
+      ) ?? 0);
     const allMessages = await buildConversationMessages(groupId, 200);
     const dynamicContext = buildDynamicContext(allMessages, {
       contextLimit,
@@ -1438,10 +1443,27 @@ export class Orchestrator {
       skimTop: this.contextCompressionEnabled,
     });
 
+    let displayTokens = dynamicContext.estimatedTokens + systemPromptTokens;
+
+    // If we have actual token usage from the most recent request,
+    // and our heuristic is significantly lower, blend it in to provide a more accurate percentage.
+    if (orchestratorStore.tokenUsage?.inputTokens) {
+      displayTokens = Math.max(
+        displayTokens,
+        orchestratorStore.tokenUsage.inputTokens,
+      );
+    }
+
     this.events.emit("context-usage", {
-      estimatedTokens: dynamicContext.estimatedTokens + systemPromptTokens,
+      estimatedTokens: displayTokens,
       contextLimit,
-      usagePercent: dynamicContext.usagePercent,
+      usagePercent: Math.min(
+        100,
+        Math.max(
+          dynamicContext.usagePercent,
+          (displayTokens / contextLimit) * 100,
+        ),
+      ),
       truncatedCount: dynamicContext.truncatedCount,
     });
   }

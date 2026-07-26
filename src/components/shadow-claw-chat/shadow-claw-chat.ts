@@ -56,6 +56,7 @@ import {
   handleSpecialLinkNavigation,
 } from "../../utils/utils.js";
 
+import { computeTokenDisplayValues } from "./utils/computeTokenDisplayValues.js";
 import { escapeHtml } from "./utils/escapeHtml.js";
 import { getPeerChatDisplayStatus } from "./utils/getPeerChatDisplayStatus.js";
 
@@ -1402,17 +1403,14 @@ export class ShadowClawChat extends ShadowClawElement {
         if (usage && (usage.inputTokens || usage.outputTokens)) {
           usageEl.classList.add("chat__token-usage--visible");
 
-          const cacheTokens =
-            (usage.cacheReadTokens || 0) + (usage.cacheCreationTokens || 0);
-          const promptTokens = (usage.inputTokens || 0) + cacheTokens;
-          const totalTokens =
-            usage.totalTokens | (promptTokens + (usage.outputTokens || 0));
+          const { cacheTokens, promptTokens, outputTokens, totalTokens } =
+            computeTokenDisplayValues(usage);
 
           const inEl = document.createElement("span");
           inEl.textContent = `⬆ ${this.formatTokenCount(promptTokens)} in`;
 
           const outEl = document.createElement("span");
-          outEl.textContent = `⬇ ${this.formatTokenCount(totalTokens)} out`;
+          outEl.textContent = `⬇ ${this.formatTokenCount(outputTokens)} out`;
 
           const totalEl = document.createElement("span");
           totalEl.textContent = `Σ ${this.formatTokenCount(totalTokens)}`;

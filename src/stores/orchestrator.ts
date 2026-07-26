@@ -1154,6 +1154,14 @@ export class OrchestratorStore {
 
       this._tokenUsageAccumulator = accumulated;
       this._tokenUsage.set(accumulated);
+
+      // Refresh context usage so the UI reflects the actual token usage from the API
+      if (this.orchestrator?.refreshContextUsage && this._db) {
+        void this.orchestrator.refreshContextUsage(
+          this._db,
+          this._activeGroupId.get(),
+        );
+      }
     });
 
     orch.events.on("context-usage", (usage) => {

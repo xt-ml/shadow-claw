@@ -116,7 +116,12 @@ export async function invokeAgent(
 
   // Build conversation context with dynamic token-aware windowing
   const contextLimit = getContextLimit(effectiveModel);
-  const systemPromptTokens = estimateTokens(systemPrompt);
+  const systemPromptTokens =
+    estimateTokens(systemPrompt) +
+    (activeTools?.reduce(
+      (acc, t) => acc + estimateTokens(JSON.stringify(t)),
+      0,
+    ) ?? 0);
   const allMessages = await buildConversationMessages(groupId, 200);
   const dynamicContext = buildDynamicContext(allMessages, {
     contextLimit,

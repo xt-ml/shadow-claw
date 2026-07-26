@@ -17,7 +17,12 @@ export interface StreamCallbacks {
   /** Called when a tool_use block begins. */
   onToolStart?: (name: string) => void;
   /** Called when final usage data is available. */
-  onUsage?: (usage: { input_tokens?: number; output_tokens?: number }) => void;
+  onUsage?: (usage: {
+    input_tokens?: number;
+    output_tokens?: number;
+    cache_read_input_tokens?: number;
+    cache_creation_input_tokens?: number;
+  }) => void;
   /**
    * Provider/context label passed to the sanitizer log message so developers
    * can identify which model is leaking chat-template control tokens.

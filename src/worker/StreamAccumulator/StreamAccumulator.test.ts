@@ -106,10 +106,15 @@ describe("StreamAccumulator — OpenAI format", () => {
     });
 
     const result = acc.finalize();
-    expect(result.usage).toEqual({ input_tokens: 10, output_tokens: 5 });
+    expect(result.usage).toEqual({
+      input_tokens: 10,
+      output_tokens: 5,
+      cache_read_input_tokens: 0,
+    });
     expect(onUsage).toHaveBeenCalledWith({
       input_tokens: 10,
       output_tokens: 5,
+      cache_read_input_tokens: 0,
     });
   });
 
@@ -256,7 +261,12 @@ describe("StreamAccumulator — Anthropic format", () => {
     const result = acc.finalize();
     expect(result.content).toEqual([{ type: "text", text: "Hello world" }]);
     expect(result.stop_reason).toBe("end_turn");
-    expect(result.usage).toEqual({ input_tokens: 15, output_tokens: 8 });
+    expect(result.usage).toEqual({
+      input_tokens: 15,
+      output_tokens: 8,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+    });
   });
 
   it("accumulates tool_use blocks with streamed JSON input", () => {
@@ -544,10 +554,17 @@ describe("StreamAccumulator — Anthropic format", () => {
     expect(onUsage).toHaveBeenCalledWith({
       input_tokens: 42,
       output_tokens: 7,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
     });
 
     const result = acc.finalize();
-    expect(result.usage).toEqual({ input_tokens: 42, output_tokens: 7 });
+    expect(result.usage).toEqual({
+      input_tokens: 42,
+      output_tokens: 7,
+      cache_read_input_tokens: 0,
+      cache_creation_input_tokens: 0,
+    });
   });
 
   it("falls back when tool_use partial_json is malformed", () => {

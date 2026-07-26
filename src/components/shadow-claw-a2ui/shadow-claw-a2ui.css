@@ -433,7 +433,7 @@ button:hover {
   color: var(--shadow-claw-text-primary);
   font: inherit;
   padding: 0.5rem 0.75rem;
-  width: 100%;
+  width: calc(100% - 1.5rem);
 }
 
 /* ── List ─────────────────────────────────────────────────────────────────- */

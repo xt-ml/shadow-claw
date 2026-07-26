@@ -51,6 +51,8 @@ const mockGit: any = {
   statusMatrix: jest.fn(),
   TREE: jest.fn(() => ({ type: "tree" })),
   walk: jest.fn<any>().mockResolvedValue([]),
+  getConfig: jest.fn(),
+  setConfig: jest.fn(),
 };
 
 // Patch navigator.storage before the module is imported.

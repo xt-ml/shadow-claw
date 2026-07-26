@@ -1,4 +1,3 @@
-import type { DataConnection, PeerError } from "peerjs";
 import { Peer } from "peerjs";
 import { Signal } from "signal-polyfill";
 
@@ -10,52 +9,51 @@ import {
 } from "../../config/config.js";
 
 import { getDb } from "../../db/db.js";
+import { groupFileExists } from "../../storage/groupFileExists.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { writeGroupFileBytes } from "../../storage/writeGroupFileBytes.js";
-import { groupFileExists } from "../../storage/groupFileExists.js";
+import { ulid } from "../../utils/ulid.js";
 
+import type { DataConnection, PeerError } from "peerjs";
 import type { MessageAttachment } from "../../content/types.js";
+import type { A2UIAction, A2UIEnvelope } from "../../ui/a2ui/types.js";
 import type {
   Channel,
   ChannelMessageCallback,
   ChannelTypingCallback,
 } from "./types.js";
 
-import type { A2UIEnvelope, A2UIAction } from "../../ui/a2ui.js";
-
-import { ulid } from "../../utils/ulid.js";
-
 // A2A Protocol imports
-import type {
-  AgentCard,
-  A2AJsonRpcRequest,
-  A2AJsonRpcResponse,
-  A2AJsonRpcNotification,
-  SendMessageRequest,
-  AGUIEvent,
-  TaskStatusUpdateEvent,
-} from "./peer-protocol.js";
+import {
+  PeerCardStore,
+  buildAgentCard,
+  createGetAgentCardRequest,
+  createGetAgentCardResponse,
+  parseAgentCardResponse,
+} from "./peer-agent-card.js";
 
 import {
-  A2A_METHOD,
-  AGUI_METHOD,
-  A2A_STREAM_METHOD,
   A2A_ERROR_CODE,
+  A2A_METHOD,
+  A2A_STREAM_METHOD,
+  AGUI_METHOD,
   Role,
   TERMINAL_STATES,
   isJsonRpcRequest,
   isJsonRpcResponse,
 } from "./peer-protocol.js";
 
-import {
-  buildAgentCard,
-  createGetAgentCardRequest,
-  createGetAgentCardResponse,
-  parseAgentCardResponse,
-  PeerCardStore,
-} from "./peer-agent-card.js";
-
 import { PeerTaskManager } from "./peer-task-manager.js";
+
+import type {
+  A2AJsonRpcNotification,
+  A2AJsonRpcRequest,
+  A2AJsonRpcResponse,
+  AGUIEvent,
+  AgentCard,
+  SendMessageRequest,
+  TaskStatusUpdateEvent,
+} from "./peer-protocol.js";
 
 /**
  * Module-level singleton so the chat UI can import and subscribe to it

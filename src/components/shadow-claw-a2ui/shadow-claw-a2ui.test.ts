@@ -1,26 +1,16 @@
-/**
- * Unit tests for the <shadow-claw-a2ui> renderer.
- *
- * We test the public ShadowClawA2UI class methods directly, bypassing the
- * full ShadowClawElement lifecycle. The class is imported and its
- * applyEnvelope() / getSurfaceId() methods are exercised in isolation.
- *
- * DOM rendering is verified via the JSDOM shadow root the custom element
- * provides once it is defined and instantiated.
- */
-
 import { jest } from "@jest/globals";
-import {
-  resolveDynamicString,
-  applyDataModelPatches,
-  resolveJsonPointer,
-} from "../../ui/a2ui.js";
-import type { A2UICreateSurface } from "../../ui/a2ui.js";
-import { A2UI_MINIMAL_CATALOG_ID } from "../../ui/a2ui.js";
 
-// ---------------------------------------------------------------------------
-// Pure-logic helpers (no DOM needed)
-// ---------------------------------------------------------------------------
+import { registerBasicFunctions } from "../../ui/a2ui/registries/basicFunctions.js";
+import { A2UI_BASIC_CATALOG_ID } from "../../ui/a2ui/types.js";
+import { applyDataModelPatches } from "../../ui/a2ui/utils/applyDataModelUpdate.js";
+import { resolveDynamicString } from "../../ui/a2ui/utils/resolveDynamicString.js";
+import { resolveJsonPointer } from "../../ui/a2ui/utils/resolveJsonPointer.js";
+
+import type { A2UICreateSurface } from "../../ui/a2ui/types.js";
+
+beforeAll(() => {
+  registerBasicFunctions();
+});
 
 describe("resolveDynamicString", () => {
   const model = { greeting: "hello", user: "Alice" };
@@ -167,13 +157,11 @@ jest.mock("../shadow-claw-element.js", () => {
 });
 
 const makeCreateSurface = (surfaceId: string = "s1"): A2UICreateSurface => ({
+  version: "v1.0" as const,
   type: "createSurface",
   surfaceId,
-  catalogId: A2UI_MINIMAL_CATALOG_ID,
-  rootComponentId: "root",
-  components: {
-    root: { id: "root", component: "Text", text: "Hello" },
-  },
+  catalogId: A2UI_BASIC_CATALOG_ID,
+  components: [{ id: "root", component: "Text", text: "Hello" }] as any,
   dataModel: { name: "Alice" },
 });
 
@@ -211,14 +199,22 @@ describe("ShadowClawA2UI state machine", () => {
   it("deleteSurface clears surfaceId", () => {
     const el = new ShadowClawA2UI();
     el.applyEnvelope(makeCreateSurface("to-delete"));
-    el.applyEnvelope({ type: "deleteSurface", surfaceId: "to-delete" });
+    el.applyEnvelope({
+      version: "v1.0" as const,
+      type: "deleteSurface",
+      surfaceId: "to-delete",
+    });
     expect(el.getSurfaceId()).toBeNull();
   });
 
   it("deleteSurface for different surfaceId is a no-op", () => {
     const el = new ShadowClawA2UI();
     el.applyEnvelope(makeCreateSurface("keep"));
-    el.applyEnvelope({ type: "deleteSurface", surfaceId: "other" });
+    el.applyEnvelope({
+      version: "v1.0" as const,
+      type: "deleteSurface",
+      surfaceId: "other",
+    });
     expect(el.getSurfaceId()).toBe("keep");
   });
 
@@ -226,16 +222,15 @@ describe("ShadowClawA2UI state machine", () => {
     const el = new ShadowClawA2UI();
     el.applyEnvelope(makeCreateSurface("s2"));
 
-    // Access internal surface state via a method that exposes it for testing
     el.applyEnvelope({
+      version: "v1.0" as const,
       type: "updateComponents",
       surfaceId: "s2",
-      components: {
-        newNode: { id: "newNode", component: "Text", text: "Updated" },
-      },
+      components: [
+        { id: "newNode", component: "Text", text: "Updated" },
+      ] as any,
     });
 
-    // The surface still exists
     expect(el.getSurfaceId()).toBe("s2");
   });
 
@@ -244,24 +239,26 @@ describe("ShadowClawA2UI state machine", () => {
     el.applyEnvelope(makeCreateSurface("correct"));
     const initialId = el.getSurfaceId();
     el.applyEnvelope({
+      version: "v1.0" as const,
       type: "updateComponents",
       surfaceId: "wrong",
-      components: {},
+      components: [] as any,
     });
     expect(el.getSurfaceId()).toBe(initialId);
   });
 
-  it("updateDataModel patches are applied and do not mutate original dataModel", () => {
+  it("updateDataModel (path+value) is applied and does not mutate original dataModel", () => {
     const el = new ShadowClawA2UI();
     el.applyEnvelope(makeCreateSurface("dm-test"));
 
     el.applyEnvelope({
+      version: "v1.0" as const,
       type: "updateDataModel",
       surfaceId: "dm-test",
-      patches: { "/name": "Bob" },
+      path: "/name",
+      value: "Bob",
     });
 
-    // Surface still exists
     expect(el.getSurfaceId()).toBe("dm-test");
   });
 });
@@ -309,21 +306,20 @@ describe("ShadowClawA2UI action dispatch", () => {
     const el = document.createElement("shadow-claw-a2ui") as any;
     el.groupId = "peer:01ktq6kh3bb9nf37a2wpeeb64v";
 
-    // Wait for template to load before applying envelope
     await (el as any).onTemplateReady;
 
     el.applyEnvelope({
+      version: "v1.0" as const,
       type: "createSurface",
       surfaceId: "image-surface",
-      catalogId: A2UI_MINIMAL_CATALOG_ID,
-      rootComponentId: "root",
-      components: {
-        root: {
+      catalogId: A2UI_BASIC_CATALOG_ID,
+      components: [
+        {
           id: "root",
           component: "Image",
           url: "/files/peer-01ktq6kh3bb9nf37a2wpeeb64v/explorers.jpg",
         },
-      },
+      ] as any,
       dataModel: {},
     });
 
@@ -337,17 +333,20 @@ describe("ShadowClawA2UI action dispatch", () => {
     const el = document.createElement("shadow-claw-a2ui") as any;
     el.groupId = "peer:01ktq6kh3bb9nf37a2wpeeb64v";
 
-    // Wait for template to load before applying envelope
     await (el as any).onTemplateReady;
 
     el.applyEnvelope({
+      version: "v1.0" as const,
       type: "createSurface",
       surfaceId: "image-surface",
-      catalogId: A2UI_MINIMAL_CATALOG_ID,
-      rootComponentId: "root",
-      components: {
-        root: { id: "root", component: "Image", url: "explorers.jpg" },
-      },
+      catalogId: A2UI_BASIC_CATALOG_ID,
+      components: [
+        {
+          id: "root",
+          component: "Image",
+          url: "explorers.jpg",
+        },
+      ] as any,
       dataModel: {},
     });
 
@@ -364,17 +363,17 @@ describe("ShadowClawA2UI action dispatch", () => {
     await (el as any).onTemplateReady;
 
     el.applyEnvelope({
+      version: "v1.0" as const,
       type: "createSurface",
       surfaceId: "image-path-surface",
-      catalogId: A2UI_MINIMAL_CATALOG_ID,
-      rootComponentId: "root",
-      components: {
-        root: {
+      catalogId: A2UI_BASIC_CATALOG_ID,
+      components: [
+        {
           id: "root",
           component: "Image",
           url: { path: "/avatar" },
         },
-      },
+      ] as any,
       dataModel: {
         avatar:
           "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop",
@@ -395,13 +394,11 @@ describe("ShadowClawA2UI action dispatch", () => {
 
     expect(() =>
       el.applyEnvelope({
+        version: "v1.0" as const,
         type: "createSurface",
         surfaceId: "tabs-surface",
-        catalogId: A2UI_MINIMAL_CATALOG_ID,
-        rootComponentId: "root",
-        components: {
-          root: { id: "root", component: "Tabs" },
-        },
+        catalogId: A2UI_BASIC_CATALOG_ID,
+        components: [{ id: "root", component: "Tabs" }] as any,
         dataModel: {},
       }),
     ).not.toThrow();
@@ -415,13 +412,13 @@ describe("ShadowClawA2UI action dispatch", () => {
     await (el as any).onTemplateReady;
 
     el.applyEnvelope({
+      version: "v1.0" as const,
       type: "createSurface",
       surfaceId: "catalog-surface",
-      catalogId: A2UI_MINIMAL_CATALOG_ID,
-      rootComponentId: "col",
-      components: {
-        col: {
-          id: "col",
+      catalogId: A2UI_BASIC_CATALOG_ID,
+      components: [
+        {
+          id: "root",
           component: "Column",
           children: [
             "btn",
@@ -432,7 +429,7 @@ describe("ShadowClawA2UI action dispatch", () => {
             "ico",
             "lst",
             "mod",
-            "row",
+            "row_wrap",
             "sld",
             "tf",
             "vid",
@@ -440,60 +437,56 @@ describe("ShadowClawA2UI action dispatch", () => {
             "card",
           ],
         },
-        btn: {
+        {
           id: "btn",
           component: "Button",
           child: "btn_lbl",
-          action: { id: "click" },
+          action: { event: { name: "click" } },
         },
-        btn_lbl: {
-          id: "btn_lbl",
-          component: "Text",
-          text: "Click",
-        },
-        chk: {
+        { id: "btn_lbl", component: "Text", text: "Click" },
+        {
           id: "chk",
           component: "CheckBox",
           label: "Check",
-          value: { $dataModel: "/checked" },
+          value: { path: "/checked" },
         },
-        cp: {
+        {
           id: "cp",
           component: "ChoicePicker",
           options: [{ value: "1", label: "One" }],
-          value: { $dataModel: "/choice" },
+          value: { path: "/choice" },
         },
-        dti: { id: "dti", component: "DateTimeInput", value: "2023-01-01" },
-        div: { id: "div", component: "Divider" },
-        ico: { id: "ico", component: "Icon", name: "check" },
-        lst: { id: "lst", component: "List", children: ["lst_item"] },
-        lst_item: { id: "lst_item", component: "Text", text: "Item 1" },
-        mod: {
+        { id: "dti", component: "DateTimeInput", value: "2023-01-01" },
+        { id: "div", component: "Divider" },
+        { id: "ico", component: "Icon", name: "check" },
+        { id: "lst", component: "List", children: ["lst_item"] },
+        { id: "lst_item", component: "Text", text: "Item 1" },
+        {
           id: "mod",
           component: "Modal",
           trigger: "mod_trig",
           content: "mod_cont",
         },
-        mod_trig: { id: "mod_trig", component: "Text", text: "Open" },
-        mod_cont: { id: "mod_cont", component: "Text", text: "Modal Content" },
-        row: { id: "row", component: "Row", children: [] },
-        sld: {
+        { id: "mod_trig", component: "Text", text: "Open" },
+        { id: "mod_cont", component: "Text", text: "Modal Content" },
+        { id: "row_wrap", component: "Row", children: [] },
+        {
           id: "sld",
           component: "Slider",
           max: 100,
-          value: { $dataModel: "/sliderval" },
+          value: { path: "/sliderval" },
         },
-        tf: {
+        {
           id: "tf",
           component: "TextField",
           label: "Text",
-          value: { $dataModel: "/textval" },
+          value: { path: "/textval" },
         },
-        vid: { id: "vid", component: "Video", url: "test.mp4" },
-        aud: { id: "aud", component: "AudioPlayer", url: "test.mp3" },
-        card: { id: "card", component: "Card", child: "card_lbl" },
-        card_lbl: { id: "card_lbl", component: "Text", text: "Card content" },
-      },
+        { id: "vid", component: "Video", url: "test.mp4" },
+        { id: "aud", component: "AudioPlayer", url: "test.mp3" },
+        { id: "card", component: "Card", child: "card_lbl" },
+        { id: "card_lbl", component: "Text", text: "Card content" },
+      ] as any,
       dataModel: {
         checked: true,
         choice: "1",
@@ -525,5 +518,119 @@ describe("ShadowClawA2UI action dispatch", () => {
     expect(root?.querySelector("video")).toBeTruthy(); // Video
     expect(root?.querySelector("audio")).toBeTruthy(); // AudioPlayer
     expect(root?.querySelector(".a2ui__card")).toBeTruthy(); // Card
+  });
+
+  it("renders data-bound list items properly with v1.0 canonical pointers", async () => {
+    const el = document.createElement("shadow-claw-a2ui") as any;
+    el.groupId = "peer:01ktq6kh3bb9nf37a2wpeeb64v";
+
+    await (el as any).onTemplateReady;
+
+    el.applyEnvelope({
+      version: "v1.0" as const,
+      type: "createSurface",
+      surfaceId: "forecast-surface",
+      catalogId: A2UI_BASIC_CATALOG_ID,
+      components: [
+        {
+          id: "root",
+          component: "Row",
+          children: {
+            path: "/forecast",
+            componentId: "day-template",
+          },
+        },
+        {
+          id: "day-template",
+          component: "Column",
+          children: ["day-name", "day-icon"],
+        },
+        {
+          id: "day-name",
+          component: "Text",
+          text: {
+            path: "/@item/date",
+          },
+        },
+        {
+          id: "day-icon",
+          component: "Text",
+          text: {
+            path: "/@item/icon",
+          },
+        },
+      ] as any,
+      dataModel: {
+        forecast: [
+          { date: "2025-12-16", icon: "☀️" },
+          { date: "2025-12-17", icon: "⛅" },
+        ],
+      },
+    });
+
+    const root = el.shadowRoot;
+    const texts = Array.from(root?.querySelectorAll(".a2ui__text") || []);
+    expect(texts.length).toBe(4); // 2 days, 2 texts each
+    expect((texts[0] as HTMLElement).textContent?.trim()).toBe("2025-12-16");
+    expect((texts[1] as HTMLElement).textContent?.trim()).toBe("☀️");
+    expect((texts[2] as HTMLElement).textContent?.trim()).toBe("2025-12-17");
+    expect((texts[3] as HTMLElement).textContent?.trim()).toBe("⛅");
+  });
+
+  it("renders data-bound list items properly with legacy relative paths (best effort)", async () => {
+    const el = document.createElement("shadow-claw-a2ui") as any;
+    el.groupId = "peer:01ktq6kh3bb9nf37a2wpeeb64v";
+
+    await (el as any).onTemplateReady;
+
+    el.applyEnvelope({
+      version: "v1.0" as const,
+      type: "createSurface",
+      surfaceId: "forecast-surface-legacy",
+      catalogId: A2UI_BASIC_CATALOG_ID,
+      components: [
+        {
+          id: "root",
+          component: "Row",
+          children: {
+            path: "/forecast",
+            componentId: "day-template",
+          },
+        },
+        {
+          id: "day-template",
+          component: "Column",
+          children: ["day-name", "day-icon"],
+        },
+        {
+          id: "day-name",
+          component: "Text",
+          text: {
+            path: "date",
+          },
+        },
+        {
+          id: "day-icon",
+          component: "Text",
+          text: {
+            path: "icon",
+          },
+        },
+      ] as any,
+      dataModel: {
+        forecast: [
+          { date: "2025-12-16", icon: "☀️" },
+          { date: "2025-12-17", icon: "⛅" },
+        ],
+      },
+    });
+
+    const root = el.shadowRoot;
+    const texts = Array.from(root?.querySelectorAll(".a2ui__text") || []);
+    expect(texts.length).toBe(4); // 2 days, 2 texts each
+    expect((texts[0] as HTMLElement).textContent?.trim()).toBe("2025-12-16");
+    expect((texts[1] as HTMLElement).textContent?.trim()).toBe("☀️");
+    expect((texts[2] as HTMLElement).textContent?.trim()).toBe("2025-12-17");
+    expect((texts[3] as HTMLElement).textContent?.trim()).toBe("⛅");
   });
 });

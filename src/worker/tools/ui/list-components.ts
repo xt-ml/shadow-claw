@@ -1,8 +1,5 @@
-import {
-  BASIC_CATALOG_REFERENCE,
-  MINIMAL_CATALOG_REFERENCE,
-} from "../../../ui/a2ui.js";
+import { BASIC_CATALOG_REFERENCE } from "../../../ui/a2ui/types.js";
 
 export function executeListComponents(): string {
-  return MINIMAL_CATALOG_REFERENCE + "\n" + BASIC_CATALOG_REFERENCE;
+  return BASIC_CATALOG_REFERENCE;
 }

@@ -148,14 +148,11 @@ describe("PeerJsChannel.sendA2UI", () => {
       type: "createSurface" as const,
       surfaceId: "test-surface",
       catalogId:
-        "https://a2ui.org/specification/v1_0/catalogs/minimal/catalog.json" as const,
-      rootComponentId: "root",
-      components: {
-        root: { id: "root", component: "Text" as const, text: "Hello" },
-      },
+        "https://a2ui.org/specification/v1_0/catalogs/basic/catalog.json" as const,
+      components: [{ id: "root", component: "Text" as const, text: "Hello" }],
     };
 
-    await ch.sendA2UI("peer:remote-peer", envelope);
+    await ch.sendA2UI("peer:remote-peer", envelope as any);
 
     expect(conn.send).toHaveBeenCalledWith(
       expect.objectContaining({

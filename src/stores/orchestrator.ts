@@ -73,7 +73,7 @@ import type {
 
 import type { Orchestrator } from "../core/orchestrator/orchestrator.js";
 import type { StorageStatus } from "../storage/storage.js";
-import type { A2UIAction } from "../ui/a2ui.js";
+import type { A2UIAction } from "../ui/a2ui/types.js";
 
 export type OrchestratorDisplayState =
   | "idle"

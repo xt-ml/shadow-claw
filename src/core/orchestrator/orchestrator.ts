@@ -55,7 +55,7 @@ import { modelRegistry } from "../../subsystems/providers/model-registry.js";
 import { getContextLimit } from "../../subsystems/providers/providers.js";
 import { TaskScheduler } from "../../subsystems/tools/task-scheduler.js";
 
-import { formatA2UIActionPrompt } from "../../ui/a2ui.js";
+import { formatA2UIActionPrompt } from "../../ui/a2ui/utils/formatA2UIActionPrompt.js";
 import { showToast } from "../../ui/toast.js";
 import { ulid } from "../../utils/ulid.js";
 import { buildSystemPrompt } from "../../worker/utils/system-prompt.js";
@@ -65,9 +65,9 @@ import {
   deliverResponse,
 } from "./utils/deliverResponse.js";
 
+import { EventBus } from "./utils/EventBus.js";
 import { compactContext } from "./utils/compactContext.js";
 import { enqueue, processQueue } from "./utils/enqueue.js";
-import { EventBus } from "./utils/EventBus.js";
 import { handleWorkerMessage } from "./utils/handleWorkerMessage.js";
 
 import {
@@ -106,7 +106,7 @@ import type {
 import type { WebMcpMode } from "../../subsystems/mcp/webmcp.js";
 import type { LLMProvider } from "../../subsystems/providers/types.js";
 import type { ModelDownloadProgressPayload } from "../../subsystems/worker/types.js";
-import type { A2UIAction } from "../../ui/a2ui.js";
+import type { A2UIAction } from "../../ui/a2ui/types.js";
 
 import type {
   DirectToolCommandPolicy,

@@ -1,4 +1,5 @@
-import type { TextFieldSpec, A2UIComponentSpec } from "../ui/a2ui.js";
+import type { A2UIComponentSpec, TextFieldSpec } from "../ui/a2ui/types.js";
+
 export type AttachModalOverlayFn = (overlay: HTMLElement) => void;
 export type DispatchActionFn = (actionId: string) => void;
 
@@ -13,7 +14,16 @@ export type ProviderHelpType =
   | "provider-unreachable"
   | "rate-limited";
 
-export type RenderComponentFn = (id: string) => HTMLElement | null;
+export interface ScopeContext {
+  arrayPath: string;
+  index: number;
+  itemValue: unknown;
+}
+
+export type RenderComponentFn = (
+  id: string,
+  scopeContext?: ScopeContext,
+) => HTMLElement | null;
 
 export type ResolveConnectionTestAuthResult =
   | {

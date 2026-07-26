@@ -1,16 +1,19 @@
-import { RoomManager } from "./room-manager.js";
-import type { RoomTransport } from "./room-manager.js";
 import { ROOM_METHOD } from "./peer-protocol.js";
+import { RoomManager } from "./room-manager.js";
+
+import { A2UI_BASIC_CATALOG_ID } from "../../ui/a2ui/types.js";
+import type { A2UIAction, A2UIEnvelope } from "../../ui/a2ui/types.js";
+
 import type {
   A2AJsonRpcNotification,
-  RoomA2UIEnvelope,
   RoomA2UIActionEnvelope,
+  RoomA2UIEnvelope,
   RoomMessageEnvelope,
   RoomRosterPayload,
 } from "./peer-protocol.js";
+
+import type { RoomTransport } from "./room-manager.js";
 import type { InboundMessage, RoomMember, RoomMeta } from "./types.js";
-import type { A2UIAction, A2UIEnvelope } from "../../ui/a2ui.js";
-import { A2UI_MINIMAL_CATALOG_ID } from "../../ui/a2ui.js";
 
 interface Sent {
   peerId: string;
@@ -386,11 +389,8 @@ function createSurfaceEnvelope(surfaceId: string): A2UIEnvelope {
   return {
     type: "createSurface",
     surfaceId,
-    catalogId: A2UI_MINIMAL_CATALOG_ID,
-    rootComponentId: "root",
-    components: {
-      root: { component: "Text", text: "shared" } as any,
-    },
+    catalogId: A2UI_BASIC_CATALOG_ID,
+    components: [{ id: "root", component: "Text", text: "shared" } as any],
   };
 }
 

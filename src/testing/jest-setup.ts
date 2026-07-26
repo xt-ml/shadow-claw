@@ -83,7 +83,15 @@ if (typeof globalThis.TextDecoder === "undefined") {
 globalThis.fetch = jest.fn((url: string | URL | Request) => {
   const urlStr = url.toString();
   if (urlStr.startsWith("http")) {
-    return (global as any).fetch(url);
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: () => Promise.resolve(""),
+      json: () => Promise.resolve({}),
+      blob: () => Promise.resolve(new Blob()),
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    } as Response);
   }
 
   // Resolve relative paths from the src directory
@@ -110,8 +118,6 @@ globalThis.fetch = jest.fn((url: string | URL | Request) => {
   }
 
   try {
-    console.log(`[fetch mock] URL: ${urlStr} -> Resolved Path: ${filePath}`);
-
     if (!existsSync(filePath)) {
       console.error(`[fetch mock] File not found: ${filePath}`);
 
@@ -185,3 +191,70 @@ Object.defineProperty(ShadowRoot.prototype, "adoptedStyleSheets", {
     return (this as any)._adoptedStyleSheets || [];
   },
 });
+
+const originalConsoleError = console.error;
+const originalConsoleWarn = console.warn;
+const originalConsoleLog = console.log;
+const originalConsoleInfo = console.info;
+
+const expectedLogs = [
+  "Task t3 has no groupId - refusing to execute",
+  "Failed to delete task from server \u2014 queued for replay",
+  "Server rejected task deletion:",
+  "Failed to delete task from server:",
+  "Server rejected task sync:",
+  "[ModelRegistry] Error fetching models for",
+  "[ShadowClaw] Chat-template control token(s) detected and stripped",
+  "Failed to parse tool arguments:",
+  "[shadow-claw-a2ui] Tab spec is missing or invalid for component id:",
+  "ShadowClaw UI initialized",
+  "[WebVM] Failed to sync host workspace into VM:",
+  "PeerTaskManager: invalid transition",
+  "PeerTaskManager: task",
+  "[ShadowClaw] Failed to load models from",
+  "PeerJsChannel: connected to signaling server",
+  "PeerJsChannel: connection opened with",
+  "PeerJsChannel: rejecting connection from untrusted peer:",
+  "[WebVM] Ignoring invalid VM boot host:",
+  "[WebVM] Ignoring invalid VM relay URL:",
+  "[WebVM:ui] Starting boot - checking assets...",
+  "[WebVM boot] Mode",
+  "[WebVM:ui] Assets not found.",
+  "Failed to fetch Vertex AI models dynamically:",
+  "Vertex AI proxy error:",
+  "Error: Not implemented: navigation (except hash changes)",
+  "GetAgentCard returned error:",
+  "[ShadowClaw] Service worker update failed.",
+  "[ModelRegistry] Registered",
+  "GitHub Models API error",
+  "Copilot models discovery error:",
+  "Failed to ensure main workspace Memory:",
+  "Failed to open file: a/b/c.txt",
+  "Failed to import chat data:",
+];
+
+function isExpectedLog(...args: any[]) {
+  const str = args
+    .map((a) =>
+      typeof a === "object" && a instanceof Error ? a.toString() : String(a),
+    )
+    .join(" ");
+  return expectedLogs.some((expected) => str.includes(expected));
+}
+
+console.error = (...args: any[]) => {
+  if (isExpectedLog(...args)) return;
+  originalConsoleError(...args);
+};
+console.warn = (...args: any[]) => {
+  if (isExpectedLog(...args)) return;
+  originalConsoleWarn(...args);
+};
+console.log = (...args: any[]) => {
+  if (isExpectedLog(...args)) return;
+  originalConsoleLog(...args);
+};
+console.info = (...args: any[]) => {
+  if (isExpectedLog(...args)) return;
+  originalConsoleInfo(...args);
+};

@@ -1,16 +1,11 @@
 import type { ToolDefinition } from "./types.js";
-import {
-  A2UI_MINIMAL_CATALOG_ID,
-  A2UI_BASIC_CATALOG_ID,
-  A2UI_AVAILABLE_CATALOGS,
-} from "../../ui/a2ui.js";
 
-/**
- * Export available A2UI catalogs for agent/tool discovery.
- * Agents can call render_component with any of these catalog IDs.
- */
+import {
+  A2UI_AVAILABLE_CATALOGS,
+  A2UI_BASIC_CATALOG_ID,
+} from "../../ui/a2ui/types.js";
+
 export const availableCatalogs = {
-  minimal: A2UI_MINIMAL_CATALOG_ID,
   basic: A2UI_BASIC_CATALOG_ID,
   all: A2UI_AVAILABLE_CATALOGS,
 };
@@ -18,11 +13,10 @@ export const availableCatalogs = {
 export const list_components: ToolDefinition = {
   name: "list_components",
   description:
-    "List all available A2UI components in the Minimal and Basic catalogs. " +
+    "List all available A2UI v1.0 Basic catalog components and their schemas. " +
     "Returns a human-readable reference of component types, their required/optional properties, " +
-    "and an example showing how to compose them. Call this before render_component to understand " +
-    "what components are available and how to structure the input correctly. For full Basic catalog " +
-    "schema details see the A2UI Basic Catalog (A2UI_BASIC_CATALOG_ID).",
+    "data binding syntax, and examples. Call this before render_component to understand " +
+    "what components are available and how to structure the input correctly.",
   input_schema: {
     type: "object",
     properties: {},
@@ -33,18 +27,17 @@ export const list_components: ToolDefinition = {
 export const render_component: ToolDefinition = {
   name: "render_component",
   description:
-    "Render an interactive A2UI UI surface in the peer's chat window using the Minimal or Basic catalog. " +
+    "Render an interactive A2UI v1.0 UI surface in the peer's chat window using the Basic catalog. " +
     "The surface appears inline in the conversation on the remote peer's side (or locally if no peer). " +
-    "Minimal components: Text, Row, Column, Button, TextField. " +
-    "Basic components: Image, Icon, Video, AudioPlayer, List, Card, Tabs, Modal, Divider, CheckBox, ChoicePicker, Slider, DateTimeInput. " +
+    "Components: Text, Row, Column, Button, TextField, Image, Icon, Video, AudioPlayer, " +
+    "List, Card, Tabs, Modal, Divider, CheckBox, ChoicePicker, Slider, DateTimeInput. " +
     "Use list_components first to understand available components and their schemas. " +
-    "All user input (button clicks, form field changes) automatically updates the dataModel and is routed back to the originating agent. " +
-    "For media components (Image/Video/AudioPlayer), use workspace file paths (e.g. 'song.mp3' or './file.mp4') or HTTPS URLs. " +
-    "Property name aliases: 'url', 'src', 'source', or 'imageUrl'/'videoUrl'/'audioUrl' are all accepted. " +
+    "All user input (button clicks, form field changes) automatically routes back to the agent. " +
+    "For media components (Image/Video/AudioPlayer), use workspace file paths (e.g. 'song.mp3') or HTTPS URLs. " +
     "\n\nactions:\n" +
-    "  createSurface — render a new surface (requires rootComponentId, components, optionally catalogId)\n" +
-    "  updateComponents — patch specific components on an existing surface\n" +
-    "  updateDataModel — patch the data model (re-renders bound components)\n" +
+    "  createSurface — render a new surface (requires components array with a root component)\n" +
+    "  updateComponents — add or replace components on an existing surface\n" +
+    "  updateDataModel — update a single path in the data model (re-renders bound components)\n" +
     "  deleteSurface — remove the surface from the chat",
   input_schema: {
     type: "object",
@@ -64,40 +57,46 @@ export const render_component: ToolDefinition = {
         description:
           "Unique identifier for this surface. Use a stable ID so you can update it later.",
       },
-      rootComponentId: {
-        type: "string",
-        description:
-          "ID of the root component to render (required for createSurface)",
-      },
       components: {
-        type: "object",
+        type: "array",
         description:
-          "Flat map of componentId → component spec (required for createSurface/updateComponents). " +
-          "Each value must have a 'component' field: Text | Row | Column | Button | TextField | Image | Icon | Video | AudioPlayer | " +
+          "Flat array of component objects (required for createSurface/updateComponents). " +
+          "Each object MUST have an 'id' field and a 'component' field. " +
+          "The component with id 'root' is the tree root (required for createSurface). " +
+          "Component field values: Text | Row | Column | Button | TextField | Image | Icon | Video | AudioPlayer | " +
           "List | Card | Tabs | Modal | Divider | CheckBox | ChoicePicker | Slider | DateTimeInput. " +
-          "DO NOT NEST properties under a 'properties' key; put them directly at the top-level of the spec alongside 'component'. " +
-          "Children arrays contain other component IDs (strings), not nested specs.",
-        additionalProperties: true,
+          "Put all properties at the TOP LEVEL alongside 'component' and 'id'. " +
+          "DO NOT nest properties under a 'properties' key. " +
+          "Children arrays contain other component ID strings, not nested objects.",
+        items: {
+          type: "object",
+          additionalProperties: true,
+        },
       },
       dataModel: {
         type: "object",
         description:
           "Initial data model for the surface (used with createSurface). " +
-          'Components can reference values via { "$dataModel": "/key" }.',
+          'Components can reference values via { "path": "/key" }.',
         additionalProperties: true,
       },
-      patches: {
-        type: "object",
-        description:
-          "JSON Pointer patches to apply to the data model (required for updateDataModel). " +
-          'Keys are JSON Pointer strings like "/name" or "/count".',
-        additionalProperties: true,
-      },
-      catalogId: {
+      path: {
         type: "string",
         description:
-          "Optional. The A2UI catalog ID to use. Defaults to Minimal. " +
-          `Available: Minimal (${A2UI_MINIMAL_CATALOG_ID}) or Basic (${A2UI_BASIC_CATALOG_ID})`,
+          "JSON Pointer path to update (required for updateDataModel). " +
+          'Examples: "/result", "/user/name", "/count". ' +
+          'Use "/" to replace the entire data model.',
+      },
+      value: {
+        description:
+          "New value to set at the specified path (used with updateDataModel). " +
+          "Omit to delete the key at the given path.",
+      },
+      surfaceProperties: {
+        type: "object",
+        description:
+          "Optional display/branding properties for this surface (e.g. agentDisplayName).",
+        additionalProperties: true,
       },
     },
     required: ["action", "surfaceId"],

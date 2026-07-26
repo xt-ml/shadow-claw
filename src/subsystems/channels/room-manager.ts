@@ -18,17 +18,17 @@
 
 import { Signal } from "signal-polyfill";
 
-import { ulid } from "../../utils/ulid.js";
 import { roomGroupId } from "../../db/rooms.js";
+import { ulid } from "../../utils/ulid.js";
 
 import type { MessageAttachment } from "../../content/types.js";
+import type { A2UIAction, A2UIEnvelope } from "../../ui/a2ui/types.js";
 import type { InboundMessage, RoomMember, RoomMeta } from "./types.js";
-import type { A2UIAction, A2UIEnvelope } from "../../ui/a2ui.js";
 
 import type {
   A2AJsonRpcNotification,
-  RoomA2UIEnvelope,
   RoomA2UIActionEnvelope,
+  RoomA2UIEnvelope,
   RoomInvitePayload,
   RoomJoinPayload,
   RoomLeavePayload,
@@ -40,7 +40,7 @@ import type {
 import { ROOM_METHOD } from "./peer-protocol.js";
 
 /** Build the `[A2UI ACTION]` prompt that drives owner-side action processing. */
-import { formatA2UIActionPrompt } from "../../ui/a2ui.js";
+import { formatA2UIActionPrompt } from "../../ui/a2ui/utils/formatA2UIActionPrompt.js";
 
 /** Transport surface the {@link RoomManager} depends on. */
 export interface RoomTransport {

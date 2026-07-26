@@ -144,6 +144,8 @@ describe("github-models-routes", () => {
 
   it("returns fallback models when catalog fetch fails", async () => {
     const handler = routes.get("GET /copilot-proxy/azure-openai/models");
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
     globalFetchMock.mockResolvedValue({
       ok: false,
       status: 500,
@@ -155,6 +157,16 @@ describe("github-models-routes", () => {
     const res = createResponse();
 
     await handler(req, res);
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/GitHub Models API error \(500\):/),
+      expect.anything(),
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Copilot models discovery error:",
+      expect.any(Error),
+    );
+    errorSpy.mockRestore();
 
     // Should return fallback models on error
     expect(res.json).toHaveBeenCalledWith(

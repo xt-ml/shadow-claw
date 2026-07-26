@@ -2,8 +2,9 @@ import type {
   ConversationMessage,
   MessageAttachment,
 } from "../content/types.js";
-import type { A2UIAction, A2UIEnvelope } from "../ui/a2ui.js";
+
 import type { ChannelType } from "../subsystems/channels/types.js";
+import type { A2UIAction, A2UIEnvelope } from "../ui/a2ui/types.js";
 
 export type ShadowClawDatabase = IDBDatabase | null;
 

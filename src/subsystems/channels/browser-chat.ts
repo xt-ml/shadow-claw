@@ -1,10 +1,9 @@
-/**
- * ShadowClaw — Browser Chat Channel
- *
- * Bridges the UI chat component with the orchestrator.
- */
+import { DEFAULT_GROUP_ID } from "../../config/config.js";
+import { ulid } from "../../utils/ulid.js";
 
 import type { MessageAttachment } from "../../content/types.js";
+import type { A2UIAction } from "../../ui/a2ui/types.js";
+
 import type {
   Channel,
   ChannelDisplayCallback,
@@ -12,10 +11,6 @@ import type {
   ChannelTypingCallback,
   InboundMessage,
 } from "./types.js";
-import type { A2UIAction } from "../../ui/a2ui.js";
-
-import { DEFAULT_GROUP_ID } from "../../config/config.js";
-import { ulid } from "../../utils/ulid.js";
 
 export class BrowserChatChannel implements Channel {
   activeGroupId: string;

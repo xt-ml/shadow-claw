@@ -15,8 +15,8 @@
  * - https://docs.ag-ui.com/concepts/events
  */
 
+import type { A2UIAction, A2UIEnvelope } from "../../ui/a2ui/types.js";
 import type { RoomMember } from "./types.js";
-import type { A2UIEnvelope, A2UIAction } from "../../ui/a2ui.js";
 
 // =============================================================================
 // A2A v1.0 Protocol Binding Identifier

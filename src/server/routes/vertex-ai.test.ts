@@ -424,6 +424,7 @@ describe("Vertex AI proxy", () => {
 
   it("returns fallback models when listing fails", async () => {
     const handler = routes.get("GET /vertex-ai-proxy/models");
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
     mockListModels.mockRejectedValue(new Error("Permission denied"));
 
@@ -438,6 +439,12 @@ describe("Vertex AI proxy", () => {
 
     await handler(req, res);
 
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Failed to fetch Vertex AI models dynamically:",
+      expect.any(Error),
+    );
+    errorSpy.mockRestore();
+
     const responseData = res.json.mock.calls[0][0];
     expect(responseData.data.length).toBeGreaterThan(0);
     expect(responseData.data[0]).toEqual(
@@ -450,6 +457,7 @@ describe("Vertex AI proxy", () => {
 
   it("surfaces error status codes from SDK errors", async () => {
     const handler = routes.get("POST /vertex-ai-proxy/chat/completions");
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
 
     const sdkError = new Error(
       JSON.stringify({
@@ -481,6 +489,12 @@ describe("Vertex AI proxy", () => {
     } as any;
 
     await handler(req, res);
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      "Vertex AI proxy error:",
+      expect.stringContaining("Quota exceeded"),
+    );
+    errorSpy.mockRestore();
 
     expect(res.status).toHaveBeenCalledWith(429);
     expect(res.json).toHaveBeenCalledWith(

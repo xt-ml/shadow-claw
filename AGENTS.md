@@ -60,6 +60,8 @@ Tests are the source of truth for expected behavior. Before implementing a new f
 ### Types & Imports
 
 - Types are declared in feature-local `*types.ts` modules (for example `src/subsystems/worker/types.ts`, `src/subsystems/tools/types.ts`, and `src/subsystems/channels/types.ts`).
+- **A2UI types** live in `src/ui/a2ui/types.ts`. Utility functions are individual ESM files under `src/ui/a2ui/utils/`. Registries are under `src/ui/a2ui/registries/`. The old monolithic `src/ui/a2ui.ts` has been removed — do not recreate it.
+- **A2UI catalog renderers** live in `src/components/shadow-claw-a2ui/catalog/basic/` (one file per component, co-located tests). Do not add files directly under `catalog/` — always place them inside a named subdirectory (e.g., `basic/`).
 - External libraries are locally bundled using **Rolldown** and `npm install`. Node-only packages (Express, Jest, Workbox CLI, Electron) belong in `devDependencies`.
 - **JSON Imports:** Always use ES import attributes (`with { type: "json" }`), not the deprecated `assert` syntax.
 

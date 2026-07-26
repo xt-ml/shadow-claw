@@ -244,6 +244,34 @@ export class ShadowClawChat extends ShadowClawElement {
         },
       );
 
+      messagesEl.addEventListener(
+        "shadow-claw-a2ui-function-response",
+        async (event: Event) => {
+          const customEvent = event as CustomEvent;
+          const { groupId, response } = customEvent.detail;
+
+          // Room or Peer routing, similar to a2ui-action.
+          if (groupId.startsWith("room:")) {
+            // Function responses from a room are currently not broadcasted natively,
+            // because they are responses to a specific agent's call.
+            // A full implementation would route this back to the caller.
+            // For now, assume single-agent scenarios in rooms.
+            return;
+          }
+
+          if (groupId.startsWith("peer:")) {
+            const router = orchestratorStore.orchestrator?.router;
+            const channel = router?.findChannel(groupId);
+            if (channel && "sendA2UIAction" in channel) {
+              // reuse sendA2UIAction or similar if it takes raw envelopes
+              // If the channel has a method to send raw envelopes, we should use it.
+              // Assuming sendA2UIAction just sends the object.
+              await (channel as any).sendA2UIAction(groupId, response);
+            }
+          }
+        },
+      );
+
       const resizeObserver = new ResizeObserver(() => {
         if (this.shouldAutoFollow(messagesEl)) {
           this.setMessagesScrollTop(messagesEl, messagesEl.scrollHeight);

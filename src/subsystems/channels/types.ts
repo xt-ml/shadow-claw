@@ -1,5 +1,5 @@
-import type { A2UIAction, A2UIEnvelope } from "../../ui/a2ui.js";
 import type { MessageAttachment } from "../../content/types.js";
+import type { A2UIAction, A2UIEnvelope } from "../../ui/a2ui/types.js";
 
 export type ChannelDisplayCallback = (
   groupId: string,

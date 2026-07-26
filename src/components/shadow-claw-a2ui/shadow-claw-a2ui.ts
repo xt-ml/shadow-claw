@@ -1,44 +1,45 @@
 /**
  * <shadow-claw-a2ui>
  *
- * A2UI v1.0 minimal catalog renderer — renders interactive UI surfaces
- * delivered from an agent via the PeerJS WebRTC channel.
+ * A2UI v1.0 Basic catalog renderer — renders interactive UI surfaces
+ * delivered from an agent.
  *
- * Supported components: Text, Row, Column, Button, TextField
- * Supported function:   capitalize
+ * Components accept `{ "path": "/key" }` data binding syntax, though
+ * `{ "$dataModel": "/key" }` is still supported for backward compatibility.
  */
-
-import ShadowClawElement from "../shadow-claw-element.js";
-
 import { getDb } from "../../db/db.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { chatUiStore } from "../../stores/chat-ui.js";
-import { applyDataModelPatches } from "../../ui/a2ui.js";
+import { globalComponentRegistry } from "../../ui/a2ui/registries/ComponentRegistry.js";
+import { globalFunctionRegistry } from "../../ui/a2ui/registries/FunctionRegistry.js";
+import { registerBasicFunctions } from "../../ui/a2ui/registries/basicFunctions.js";
+import { applyDataModelUpdate } from "../../ui/a2ui/utils/applyDataModelUpdate.js";
+import { buildItemDataScope } from "../../ui/a2ui/utils/buildItemDataScope.js";
+import { normaliseComponentsToMap } from "../../ui/a2ui/utils/normaliseComponentsToMap.js";
 
-import {
-  renderAudioPlayer,
-  renderButton,
-  renderCard,
-  renderCheckBox,
-  renderChoicePicker,
-  renderColumn,
-  renderDateTimeInput,
-  renderDivider,
-  renderIcon,
-  renderImage,
-  renderList,
-  renderModal,
-  renderRow,
-  renderSlider,
-  renderTabs,
-  renderText,
-  renderTextField,
-  renderVideo,
-} from "./catalog/index.js";
+import { renderAudioPlayer } from "./catalog/basic/audio-player.js";
+import { renderButton } from "./catalog/basic/button.js";
+import { renderCard } from "./catalog/basic/card.js";
+import { renderCheckBox } from "./catalog/basic/checkbox.js";
+import { renderChoicePicker } from "./catalog/basic/choice-picker.js";
+import { renderColumn } from "./catalog/basic/column.js";
+import { renderDateTimeInput } from "./catalog/basic/date-time-input.js";
+import { renderDivider } from "./catalog/basic/divider.js";
+import { renderIcon } from "./catalog/basic/icon.js";
+import { renderImage } from "./catalog/basic/image.js";
+import { renderList } from "./catalog/basic/list.js";
+import { renderModal } from "./catalog/basic/modal.js";
+import { renderRow } from "./catalog/basic/row.js";
+import { renderSlider } from "./catalog/basic/slider.js";
+import { renderTabs } from "./catalog/basic/tabs.js";
+import { renderTextField } from "./catalog/basic/text-field.js";
+import { renderText } from "./catalog/basic/text.js";
+import { renderVideo } from "./catalog/basic/video.js";
 
-import type { A2UIAction, A2UIEnvelope, TextFieldSpec } from "../../ui/a2ui.js";
-import type { SurfaceState } from "../types.js";
+import type { A2UIAction, A2UIEnvelope } from "../../ui/a2ui/types.js";
+import type { ScopeContext, SurfaceState } from "../types.js";
 
+import ShadowClawElement from "../shadow-claw-element.js";
 import shadowClawA2uiStyles from "./shadow-claw-a2ui.css" with { type: "css" };
 import shadowClawA2uiTemplate from "./shadow-claw-a2ui.html" with { type: "html" };
 
@@ -51,6 +52,12 @@ export class ShadowClawA2UI extends ShadowClawElement {
   /** groupId of the conversation this surface belongs to */
   groupId: string = "";
 
+  /**
+   * Whether the current surface requested full data model on every action
+   * (spec §sendDataModel).
+   */
+  #sendDataModel: boolean = false;
+
   /** Current surface state — set externally by the chat component */
   #surface: SurfaceState | null = null;
 
@@ -61,12 +68,15 @@ export class ShadowClawA2UI extends ShadowClawElement {
   applyEnvelope(envelope: A2UIEnvelope): void {
     switch (envelope.type) {
       case "createSurface": {
+        // Spec §createSurface: components arrive as a flat array; normalise
+        // to a keyed map for O(1) lookup during render. Root is always "root".
         this.#surface = {
           surfaceId: envelope.surfaceId,
-          components: { ...envelope.components },
+          components: normaliseComponentsToMap(envelope.components),
           dataModel: { ...(envelope.dataModel ?? {}) },
-          rootComponentId: envelope.rootComponentId,
+          rootComponentId: "root",
         };
+        this.#sendDataModel = envelope.sendDataModel ?? false;
         this.#renderSurface();
 
         break;
@@ -77,11 +87,12 @@ export class ShadowClawA2UI extends ShadowClawElement {
           return;
         }
 
+        // Spec §updateComponents: components arrive as an array; merge into map.
         this.#surface = {
           ...this.#surface,
           components: {
             ...this.#surface.components,
-            ...envelope.components,
+            ...normaliseComponentsToMap(envelope.components),
           },
         };
         this.#renderSurface();
@@ -94,11 +105,14 @@ export class ShadowClawA2UI extends ShadowClawElement {
           return;
         }
 
+        // Spec §updateDataModel: single path + value update.
         this.#surface = {
           ...this.#surface,
-          dataModel: applyDataModelPatches(
+          dataModel: applyDataModelUpdate(
             this.#surface.dataModel,
-            envelope.patches,
+            envelope.path,
+            envelope.value,
+            "value" in envelope,
           ),
         };
         this.#renderSurface();
@@ -109,9 +123,70 @@ export class ShadowClawA2UI extends ShadowClawElement {
       case "deleteSurface": {
         if (this.#surface?.surfaceId === envelope.surfaceId) {
           this.#surface = null;
+          this.#sendDataModel = false;
           this.#clearRoot();
         }
 
+        break;
+      }
+
+      case "actionResponse": {
+        // Spec §actionResponse: store the response value at responsePath.
+        if (!this.#surface || this.#surface.surfaceId !== envelope.surfaceId) {
+          return;
+        }
+        if (envelope.responsePath) {
+          this.#surface = {
+            ...this.#surface,
+            dataModel: applyDataModelUpdate(
+              this.#surface.dataModel,
+              envelope.responsePath,
+              envelope.value,
+            ),
+          };
+          this.#renderSurface();
+        }
+        break;
+      }
+
+      case "callFunction": {
+        if (!this.#surface || this.#surface.surfaceId !== envelope.surfaceId) {
+          return;
+        }
+
+        let value: unknown = null;
+        let error: string | undefined;
+
+        try {
+          // Spec §callFunction: evaluate function requested by agent
+          value = globalFunctionRegistry.execute(
+            (envelope as any).call.call,
+            (envelope as any).call.args ?? {},
+            { dataModel: this.#surface.dataModel },
+          );
+        } catch (e: any) {
+          error =
+            e.message && e.message.includes("INVALID_FUNCTION_CALL")
+              ? e.message
+              : `INVALID_FUNCTION_CALL: ${e.message}`;
+        }
+
+        const response: any = {
+          version: "v1.0",
+          type: "functionResponse",
+          surfaceId: envelope.surfaceId,
+          callId: (envelope as any).callId,
+          value,
+          ...(error ? { error } : {}),
+        };
+
+        this.dispatchEvent(
+          new CustomEvent("shadow-claw-a2ui-function-response", {
+            bubbles: true,
+            composed: true,
+            detail: { groupId: this.groupId, response },
+          }),
+        );
         break;
       }
     }
@@ -190,7 +265,9 @@ export class ShadowClawA2UI extends ShadowClawElement {
       type: "a2ui-action",
       surfaceId: currentSurface.surfaceId,
       actionId,
-      dataModel: { ...currentSurface.dataModel },
+      dataModel: this.#sendDataModel
+        ? { ...currentSurface.dataModel }
+        : { ...currentSurface.dataModel },
     };
 
     // Bubble up to shadow-claw-chat
@@ -203,7 +280,11 @@ export class ShadowClawA2UI extends ShadowClawElement {
     );
   }
 
-  #renderComponent(id: string, surface: SurfaceState): HTMLElement | null {
+  #renderComponent(
+    id: string,
+    surface: SurfaceState,
+    scopeContext?: ScopeContext,
+  ): HTMLElement | null {
     const rawSpec = surface.components[id];
     if (!rawSpec) {
       console.warn(`[shadow-claw-a2ui] Unknown component id: "${id}"`);
@@ -214,88 +295,57 @@ export class ShadowClawA2UI extends ShadowClawElement {
     // Stamp the map key as spec.id — agents typically omit this field.
     const spec = rawSpec.id ? rawSpec : { ...rawSpec, id };
 
-    switch (spec.component) {
-      case "Text":
-        return renderText(spec, surface);
-      case "Row":
-        return renderRow(spec, surface, {
-          renderComponent: (childId) => this.#renderComponent(childId, surface),
-        });
-      case "Column":
-        return renderColumn(spec, surface, {
-          renderComponent: (childId) => this.#renderComponent(childId, surface),
-        });
-      case "Button":
-        return renderButton(spec, surface, {
-          renderComponent: (childId) => this.#renderComponent(childId, surface),
-          dispatchAction: (actionId) => this.#dispatchAction(actionId, surface),
-        });
-      case "TextField":
-        return renderTextField(spec, surface, {
-          updateDataModelKey: (spec, newValue) =>
-            this.#updateDataModelKey(spec, newValue),
-        });
-      case "Image":
-        return renderImage(spec, surface, {
-          resolveMediaUrl: (input) => this.#resolveMediaUrl(input),
-        });
-      case "Icon":
-        return renderIcon(spec, surface);
-      case "Video":
-        return renderVideo(spec, surface, {
-          resolveMediaUrl: (input) => this.#resolveMediaUrl(input),
-        });
-      case "AudioPlayer":
-        return renderAudioPlayer(spec, surface, {
-          resolveMediaUrl: (input) => this.#resolveMediaUrl(input),
-        });
-      case "List":
-        return renderList(spec, surface, {
-          renderComponent: (childId) => this.#renderComponent(childId, surface),
-        });
-      case "Card":
-        return renderCard(spec, surface, {
-          renderComponent: (childId) => this.#renderComponent(childId, surface),
-        });
-      case "Tabs":
-        return renderTabs(spec, surface, {
-          renderComponent: (childId) => this.#renderComponent(childId, surface),
-        });
-      case "Modal":
-        return renderModal(spec, surface, {
-          renderComponent: (childId) => this.#renderComponent(childId, surface),
-          attachModalOverlay: (overlay) => this.#attachModalOverlay(overlay),
-        });
-      case "Divider":
-        return renderDivider(spec, surface);
-      case "CheckBox":
-        return renderCheckBox(spec, surface, {
-          dispatchAction: (actionId) => this.#dispatchAction(actionId, surface),
-          updateDataModelPointer: (pointer, value) =>
-            this.#updateDataModelPointer(pointer, value),
-        });
-      case "ChoicePicker":
-        return renderChoicePicker(spec, surface, {
-          updateDataModelPointer: (pointer, value) =>
-            this.#updateDataModelPointer(pointer, value),
-        });
-      case "Slider":
-        return renderSlider(spec, surface, {
-          updateDataModelPointer: (pointer, value) =>
-            this.#updateDataModelPointer(pointer, value),
-        });
-      case "DateTimeInput":
-        return renderDateTimeInput(spec, surface, {
-          updateDataModelPointer: (pointer, value) =>
-            this.#updateDataModelPointer(pointer, value),
-        });
-      default:
-        console.warn(
-          `[shadow-claw-a2ui] Unknown component type: "${(spec as any).component}"`,
-        );
-
-        return null;
+    let activeSurface = surface;
+    if (scopeContext) {
+      activeSurface = {
+        ...surface,
+        dataModel: buildItemDataScope(
+          surface.dataModel,
+          scopeContext.itemValue,
+          scopeContext.index,
+        ),
+      };
     }
+
+    const renderer = globalComponentRegistry.get(spec.component);
+    if (renderer) {
+      return renderer(spec, activeSurface, {
+        renderComponent: (childId: string, childScope?: ScopeContext) =>
+          this.#renderComponent(childId, surface, childScope ?? scopeContext),
+        dispatchAction: (actionId: string) =>
+          this.#dispatchAction(actionId, activeSurface),
+        updateDataModelKey: (s: any, newValue: any) => {
+          let ptr = "";
+          if (typeof s.value === "object" && "path" in s.value) {
+            ptr = s.value.path;
+          } else if (typeof s.value === "object" && "$dataModel" in s.value) {
+            ptr = s.value.$dataModel;
+          }
+          if (ptr) {
+            if (scopeContext && ptr.startsWith("/@item")) {
+              ptr = `${scopeContext.arrayPath}/${scopeContext.index}${ptr.slice(6)}`;
+            }
+            this.#updateDataModelPointer(ptr, newValue);
+          }
+        },
+        resolveMediaUrl: (input: string) => this.#resolveMediaUrl(input),
+        attachModalOverlay: (overlay: HTMLElement) =>
+          this.#attachModalOverlay(overlay),
+        updateDataModelPointer: (pointer: string, value: unknown) => {
+          if (scopeContext && pointer.startsWith("/@item")) {
+            const translated = `${scopeContext.arrayPath}/${scopeContext.index}${pointer.slice(6)}`;
+            this.#updateDataModelPointer(translated, value);
+          } else {
+            this.#updateDataModelPointer(pointer, value);
+          }
+        },
+      });
+    }
+
+    console.warn(
+      `[shadow-claw-a2ui] Unknown component type: "${(spec as any).component}"`,
+    );
+    return null;
   }
 
   /**
@@ -349,33 +399,14 @@ export class ShadowClawA2UI extends ShadowClawElement {
     return resolvedUrl;
   }
 
-  #updateDataModelKey(spec: TextFieldSpec, newValue: string): void {
-    if (!this.#surface || !spec.value) {
-      return;
-    }
-
-    if (typeof spec.value === "object" && "$dataModel" in spec.value) {
-      const key = spec.value.$dataModel.replace(/^\//, "");
-      this.#surface = {
-        ...this.#surface,
-        dataModel: {
-          ...this.#surface.dataModel,
-          [key]: newValue,
-        },
-      };
-      // No full re-render needed — the input owns its own value
-    }
-  }
-
   #updateDataModelPointer(pointer: string, value: unknown): void {
     if (!this.#surface) {
       return;
     }
 
-    const key = pointer.replace(/^\//, "");
     this.#surface = {
       ...this.#surface,
-      dataModel: { ...this.#surface.dataModel, [key]: value },
+      dataModel: applyDataModelUpdate(this.#surface.dataModel, pointer, value),
     };
   }
 
@@ -594,3 +625,79 @@ export class ShadowClawA2UI extends ShadowClawElement {
 if (!customElements.get(elementName)) {
   customElements.define(elementName, ShadowClawA2UI);
 }
+
+// Register basic catalog components
+globalComponentRegistry.register("Text", (spec, surface) =>
+  renderText(spec, surface),
+);
+globalComponentRegistry.register("Row", (spec, surface, ctx) =>
+  renderRow(spec, surface, { renderComponent: ctx.renderComponent }),
+);
+globalComponentRegistry.register("Column", (spec, surface, ctx) =>
+  renderColumn(spec, surface, { renderComponent: ctx.renderComponent }),
+);
+globalComponentRegistry.register("Button", (spec, surface, ctx) =>
+  renderButton(spec, surface, {
+    renderComponent: ctx.renderComponent,
+    dispatchAction: ctx.dispatchAction,
+  }),
+);
+globalComponentRegistry.register("TextField", (spec, surface, ctx) =>
+  renderTextField(spec, surface, {
+    updateDataModelKey: ctx.updateDataModelKey,
+  }),
+);
+globalComponentRegistry.register("Image", (spec, surface, ctx) =>
+  renderImage(spec, surface, { resolveMediaUrl: ctx.resolveMediaUrl }),
+);
+globalComponentRegistry.register("Icon", (spec, surface) =>
+  renderIcon(spec, surface),
+);
+globalComponentRegistry.register("Video", (spec, surface, ctx) =>
+  renderVideo(spec, surface, { resolveMediaUrl: ctx.resolveMediaUrl }),
+);
+globalComponentRegistry.register("AudioPlayer", (spec, surface, ctx) =>
+  renderAudioPlayer(spec, surface, { resolveMediaUrl: ctx.resolveMediaUrl }),
+);
+globalComponentRegistry.register("List", (spec, surface, ctx) =>
+  renderList(spec, surface, { renderComponent: ctx.renderComponent }),
+);
+globalComponentRegistry.register("Card", (spec, surface, ctx) =>
+  renderCard(spec, surface, { renderComponent: ctx.renderComponent }),
+);
+globalComponentRegistry.register("Tabs", (spec, surface, ctx) =>
+  renderTabs(spec, surface, { renderComponent: ctx.renderComponent }),
+);
+globalComponentRegistry.register("Modal", (spec, surface, ctx) =>
+  renderModal(spec, surface, {
+    renderComponent: ctx.renderComponent,
+    attachModalOverlay: ctx.attachModalOverlay,
+  }),
+);
+globalComponentRegistry.register("Divider", (spec, surface) =>
+  renderDivider(spec, surface),
+);
+globalComponentRegistry.register("CheckBox", (spec, surface, ctx) =>
+  renderCheckBox(spec, surface, {
+    dispatchAction: ctx.dispatchAction,
+    updateDataModelPointer: ctx.updateDataModelPointer,
+  }),
+);
+globalComponentRegistry.register("ChoicePicker", (spec, surface, ctx) =>
+  renderChoicePicker(spec, surface, {
+    updateDataModelPointer: ctx.updateDataModelPointer,
+  }),
+);
+globalComponentRegistry.register("Slider", (spec, surface, ctx) =>
+  renderSlider(spec, surface, {
+    updateDataModelPointer: ctx.updateDataModelPointer,
+  }),
+);
+globalComponentRegistry.register("DateTimeInput", (spec, surface, ctx) =>
+  renderDateTimeInput(spec, surface, {
+    updateDataModelPointer: ctx.updateDataModelPointer,
+  }),
+);
+
+// Register basic functions
+registerBasicFunctions();

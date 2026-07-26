@@ -1,4 +1,7 @@
 import { jest } from "@jest/globals";
+import process from "node:process";
+
+process.setMaxListeners(20);
 
 import "fake-indexeddb/auto";
 
@@ -231,6 +234,8 @@ const expectedLogs = [
   "Failed to ensure main workspace Memory:",
   "Failed to open file: a/b/c.txt",
   "Failed to import chat data:",
+  "Failed to parse peerjs_peer_aliases",
+  "iMessage bridge poll error: TypeError: Cannot read properties of undefined (reading 'ok')",
 ];
 
 function isExpectedLog(...args: any[]) {

@@ -1,9 +1,8 @@
+import { answerUserPrompt } from "../../../core/orchestrator/utils/operations/vm.js";
 import { requestUserPrompt } from "./requestUserPrompt.js";
 
 interface AskUserContext {
-  orchestrator: {
-    answerUserPrompt: (id: string, response: string | null) => void;
-  };
+  orchestrator: any;
 }
 
 export async function handleOrchestratorAskUser(
@@ -19,5 +18,5 @@ export async function handleOrchestratorAskUser(
 ) {
   const response = await requestUserPrompt(doc, shadow, payload);
 
-  shadowClaw.orchestrator.answerUserPrompt(payload.id, response);
+  answerUserPrompt(shadowClaw.orchestrator, payload.id, response);
 }

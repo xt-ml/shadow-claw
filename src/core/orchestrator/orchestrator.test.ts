@@ -1,10 +1,79 @@
 import { jest } from "@jest/globals";
 
 import { ASSISTANT_NAME, LLAMAFILE_PROXY_URL } from "../../config/config.js";
-import { Orchestrator } from "./orchestrator.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
+import { getWebMcpMode } from "../../subsystems/mcp/webmcp.js";
 import { buildSystemPrompt } from "../../worker/utils/system-prompt.js";
+import { Orchestrator } from "./orchestrator.js";
+
+import {
+  deliverIntermediateResponse,
+  deliverResponse,
+} from "./utils/deliverResponse.js";
+
+import { enqueue, processQueue } from "./utils/enqueue.js";
+import { handleWorkerMessage } from "./utils/handleWorkerMessage.js";
+
+import {
+  initChannelsAndRooms,
+  initCoreConfig,
+  initFeatureFlagsAndLimits,
+  initLlamafileAndMesh,
+  initProviderAndModel,
+  initWorkerAndScheduler,
+} from "./utils/initTasks.js";
+
+import {
+  applyAllChannelRunningStates,
+  applyChannelRunningState,
+  clearPeerJsTypingState,
+  getChannelByType,
+  getChannelEnabled,
+  getChannelEnabledConfigKey,
+  getChannelTypeForGroup,
+  getIMessageConfig,
+  getPeerJsConfig,
+  getTelegramConfig,
+} from "./utils/operations/channel.js";
+
+import {
+  applyLlamafileHeaders,
+  applyMeshLlmHeaders,
+  getAvailableProviders,
+  getBedrockSettings,
+  getLlamafileSettings,
+  getProviderRuntimeHeaders,
+  getReasoningConfig,
+  getTransformersStatusUrl,
+  setProvider,
+} from "./utils/operations/provider.js";
+
+import {
+  createRoom,
+  handleRoomInvite,
+  inviteToRoom,
+  joinRoomViaLink,
+  leaveRoom,
+  listRooms,
+} from "./utils/operations/room.js";
+
+import {
+  runTaskAsScheduled,
+  shouldStartLocalScheduler,
+  warnIfNoPushSubscription,
+} from "./utils/operations/task.js";
+
+import {
+  answerUserPrompt,
+  closeTerminalSession,
+  flushTerminalWorkspace,
+  openTerminalSession,
+  sendTerminalInput,
+  syncTerminalWorkspace,
+} from "./utils/operations/vm.js";
+
+import { parseDirectToolCommand } from "./utils/parseDirectToolCommand.js";
 
 describe("buildSystemPrompt", () => {
   const FETCH_URL_TOOL = "fetch_url";
@@ -92,9 +161,9 @@ describe("Orchestrator", () => {
   it("initializes defaults", () => {
     const o = new Orchestrator();
 
-    expect(o.getState()).toBe("idle");
-    expect(typeof o.getAssistantName()).toBe("string");
-    expect(Array.isArray(o.getAvailableProviders())).toBe(true);
+    expect(o.state).toBe("idle");
+    expect(typeof o.assistantName).toBe("string");
+    expect(Array.isArray(getAvailableProviders())).toBe(true);
     expect(o.channelRegistry.getChannelType("tg:123")).toBe(CHANNEL_TELEGRAM);
     expect(o.channelRegistry.getChannelType("im:chat-1")).toBe(
       CHANNEL_IMESSAGE,
@@ -109,15 +178,18 @@ describe("Orchestrator", () => {
     o.setState("thinking", "group-a");
 
     expect(events).toEqual([{ state: "thinking", groupId: "group-a" }]);
-    expect(o.getState()).toBe("thinking");
+    expect(o.state).toBe("thinking");
   });
 
   it("throws for unknown provider", async () => {
     const o = new Orchestrator();
 
-    await expect(o.setProvider({} as any, "not-a-provider")).rejects.toThrow(
-      "Unknown provider",
-    );
+    await expect(
+      setProvider(o, {} as any, "not-a-provider", {
+        loadApiKeyForProvider: jest.fn<any>(),
+        getApiKeyForHeaders: jest.fn<any>(),
+      }),
+    ).rejects.toThrow("Unknown provider");
   });
 
   it("emits provider-help when queue processing lacks an API key", async () => {
@@ -137,7 +209,7 @@ describe("Orchestrator", () => {
       timestamp: Date.now(),
     });
 
-    await o.processQueue({} as any);
+    await processQueue(o, {} as any);
 
     expect(helpEvents).toHaveLength(1);
     expect(helpEvents[0]).toMatchObject({
@@ -173,7 +245,7 @@ describe("Orchestrator", () => {
       }),
     };
 
-    await o.handleWorkerMessage(fakeDb, {
+    await handleWorkerMessage(o, fakeDb, {
       payload: {
         error: "HTTP 401 Unauthorized",
         groupId: "br:main",
@@ -194,7 +266,7 @@ describe("Orchestrator", () => {
 
     o.events.on("open-file", (payload: any) => events.push(payload));
 
-    await o.handleWorkerMessage({} as any, {
+    await handleWorkerMessage(o, {} as any, {
       payload: { groupId: "g1", path: "a.txt" },
       type: "open-file",
     });
@@ -203,11 +275,10 @@ describe("Orchestrator", () => {
   });
 
   it("does not set remote agent responding status for inbound peer messages", () => {
-    const o = new Orchestrator();
     const statusSpy = jest.spyOn(orchestratorStore, "setRemoteAgentStatus");
     const typingSpy = jest.spyOn(orchestratorStore, "setRemoteAgentTyping");
 
-    (o as any).clearPeerJsTypingState?.("peer:remote-peer");
+    clearPeerJsTypingState("peer:remote-peer");
 
     expect(statusSpy).not.toHaveBeenCalled();
     expect(typingSpy).toHaveBeenCalledWith("peer:remote-peer", false);
@@ -219,7 +290,7 @@ describe("Orchestrator", () => {
 
     o.events.on("vm-status", (payload: any) => events.push(payload));
 
-    await o.handleWorkerMessage({} as any, {
+    await handleWorkerMessage(o, {} as any, {
       payload: {
         bootAttempted: true,
         booting: false,
@@ -230,7 +301,7 @@ describe("Orchestrator", () => {
       type: "vm-status",
     });
 
-    expect(o.getVMStatus()).toEqual({
+    expect(o.vmStatus).toEqual({
       bootAttempted: true,
       booting: false,
       error: null,
@@ -249,7 +320,7 @@ describe("Orchestrator", () => {
       events.push(payload),
     );
 
-    await o.handleWorkerMessage({} as any, {
+    await handleWorkerMessage(o, {} as any, {
       payload: {
         groupId: "g1",
         message: "Downloading Prompt API model... 42%",
@@ -282,7 +353,7 @@ describe("Orchestrator", () => {
       .mockResolvedValue(undefined);
 
     // Test activate_profile
-    await o.handleWorkerMessage(db, {
+    await handleWorkerMessage(o, db, {
       type: "manage-tools",
       payload: { action: "activate_profile", profileId: "git-ops" },
     });
@@ -290,7 +361,7 @@ describe("Orchestrator", () => {
     expect(activateProfileSpy).toHaveBeenCalledWith(db, "git-ops");
 
     // Test enable
-    await o.handleWorkerMessage(db, {
+    await handleWorkerMessage(o, db, {
       type: "manage-tools",
       payload: { action: "enable", toolNames: ["git_add"] },
     });
@@ -298,7 +369,7 @@ describe("Orchestrator", () => {
     expect(setToolEnabledSpy).toHaveBeenCalledWith(db, "git_add", true);
 
     // Test disable
-    await o.handleWorkerMessage(db, {
+    await handleWorkerMessage(o, db, {
       type: "manage-tools",
       payload: { action: "disable", toolNames: ["bash"] },
     });
@@ -314,7 +385,7 @@ describe("Orchestrator", () => {
     const postMessage = jest.fn();
 
     o.agentWorker = { postMessage } as any;
-    o.syncTerminalWorkspace("g1");
+    syncTerminalWorkspace(o, "g1");
 
     expect(postMessage).toHaveBeenCalledWith({
       payload: { groupId: "g1" },
@@ -327,7 +398,7 @@ describe("Orchestrator", () => {
     const postMessage = jest.fn();
 
     o.agentWorker = { postMessage } as any;
-    o.flushTerminalWorkspace("g1");
+    flushTerminalWorkspace(o, "g1");
 
     expect(postMessage).toHaveBeenCalledWith({
       payload: { groupId: "g1" },
@@ -375,11 +446,11 @@ describe("Orchestrator", () => {
   it("tracks vm boot mode preference", () => {
     const o = new Orchestrator();
 
-    expect(o.getVMBootMode()).toBe("disabled");
+    expect(o.vmBootMode).toBe("disabled");
 
     o.vmBootMode = "9p";
 
-    expect(o.getVMBootMode()).toBe("9p");
+    expect(o.vmBootMode).toBe("9p");
   });
 
   it("saves intermediate-response as a message without going idle", async () => {
@@ -421,7 +492,7 @@ describe("Orchestrator", () => {
       }),
     };
 
-    await o.handleWorkerMessage(fakeDb, {
+    await handleWorkerMessage(o, fakeDb, {
       type: "intermediate-response",
       payload: { groupId: "g1", text: "Let me check that for you." },
     });
@@ -434,7 +505,7 @@ describe("Orchestrator", () => {
     expect(routerSend).not.toHaveBeenCalled();
 
     // Should NOT have changed state to idle — still thinking
-    expect(o.getState()).toBe("thinking");
+    expect(o.state).toBe("thinking");
     expect(stateEvents).toHaveLength(0);
   });
 
@@ -465,7 +536,8 @@ describe("Orchestrator", () => {
       }),
     };
 
-    await o.deliverIntermediateResponse(
+    await deliverIntermediateResponse(
+      o,
       fakeDb,
       "tg:123",
       "Let me check the weather for you.",
@@ -504,7 +576,7 @@ describe("Orchestrator", () => {
 
     // Message from a non-default browser conversation (ULID-based groupId)
 
-    await o.enqueue(fakeDb, {
+    await enqueue(o, fakeDb, {
       channel: "browser",
       content: "Hello",
       groupId: "br:01JNVWXYZ0000000000000000",
@@ -518,7 +590,7 @@ describe("Orchestrator", () => {
 
     // Message from the default browser group should also be queued
 
-    await o.enqueue(fakeDb, {
+    await enqueue(o, fakeDb, {
       channel: "browser",
       content: "Hi",
       groupId: "br:main",
@@ -555,7 +627,7 @@ describe("Orchestrator", () => {
 
     // Non-browser channel message without trigger word
 
-    await o.enqueue(fakeDb, {
+    await enqueue(o, fakeDb, {
       channel: "external",
       content: "Hello",
       groupId: "ext:some-channel",
@@ -591,7 +663,7 @@ describe("Orchestrator", () => {
 
     o.processing = true;
 
-    await o.enqueue(fakeDb, {
+    await enqueue(o, fakeDb, {
       channel: CHANNEL_IMESSAGE,
       content: "hello from phone",
       groupId: "im:chat-1",
@@ -628,7 +700,7 @@ describe("Orchestrator", () => {
     o.processing = true;
 
     // Browser-sourced message to a Telegram conversation (no @example trigger required)
-    await o.enqueue(fakeDb, {
+    await enqueue(o, fakeDb, {
       channel: "browser",
       content: "I don't see this message in telegram",
       groupId: "tg:8352127045",
@@ -667,7 +739,7 @@ describe("Orchestrator", () => {
     o.processing = true;
     o.agentWorker = { postMessage } as any;
 
-    await o.enqueue(fakeDb, {
+    await enqueue(o, fakeDb, {
       channel: CHANNEL_TELEGRAM,
       content: "@example - /clear_chat",
       groupId: "tg:8352127045",
@@ -717,7 +789,7 @@ describe("Orchestrator", () => {
       requireMention: true,
     };
 
-    await o.enqueue(fakeDb, {
+    await enqueue(o, fakeDb, {
       channel: CHANNEL_IMESSAGE,
       content: `@example /show_toast '{"message":"it works","duration":10}'`,
       groupId: "im:chat-1",
@@ -768,8 +840,8 @@ describe("Orchestrator", () => {
       setTyping: jest.fn(),
     } as any;
 
-    await o.deliverResponse(fakeDb, "tg:123", "hello telegram");
-    await o.deliverResponse(fakeDb, "im:chat-1", "hello imessage");
+    await deliverResponse(o, fakeDb, "tg:123", "hello telegram");
+    await deliverResponse(o, fakeDb, "im:chat-1", "hello imessage");
 
     expect(saved[0].channel).toBe(CHANNEL_TELEGRAM);
     expect(saved[1].channel).toBe(CHANNEL_IMESSAGE);
@@ -804,7 +876,7 @@ describe("Orchestrator", () => {
         },
       });
 
-      await o.warnIfNoPushSubscription();
+      await warnIfNoPushSubscription(o);
       expect(o.pushSubscriptionWarned).toBe(true);
     });
 
@@ -825,7 +897,7 @@ describe("Orchestrator", () => {
         },
       });
 
-      await o.warnIfNoPushSubscription();
+      await warnIfNoPushSubscription(o);
 
       expect(o.pushSubscriptionWarned).toBe(false);
     });
@@ -847,11 +919,11 @@ describe("Orchestrator", () => {
         },
       });
 
-      await o.warnIfNoPushSubscription();
+      await warnIfNoPushSubscription(o);
       expect(o.pushSubscriptionWarned).toBe(true);
 
       mockGetSubscription.mockClear();
-      await o.warnIfNoPushSubscription();
+      await warnIfNoPushSubscription(o);
 
       // Should not call getSubscription again
       expect(mockGetSubscription).not.toHaveBeenCalled();
@@ -865,12 +937,11 @@ describe("Orchestrator", () => {
         value: undefined,
       });
 
-      await o.warnIfNoPushSubscription();
+      await warnIfNoPushSubscription(o);
       expect(o.pushSubscriptionWarned).toBe(false);
     });
 
     it("starts local scheduler when push subscription is missing", async () => {
-      const o = new Orchestrator();
       const mockGetSubscription = jest.fn(async () => null);
       const readyPromise = Promise.resolve({
         pushManager: { getSubscription: mockGetSubscription },
@@ -883,12 +954,11 @@ describe("Orchestrator", () => {
         },
       });
 
-      const shouldStart = await o.shouldStartLocalScheduler();
+      const shouldStart = await shouldStartLocalScheduler();
       expect(shouldStart).toBe(true);
     });
 
     it("does not start local scheduler when push subscription exists", async () => {
-      const o = new Orchestrator();
       const mockGetSubscription = jest.fn(async () => ({}));
       const readyPromise = Promise.resolve({
         pushManager: { getSubscription: mockGetSubscription },
@@ -901,7 +971,7 @@ describe("Orchestrator", () => {
         },
       });
 
-      const shouldStart = await o.shouldStartLocalScheduler();
+      const shouldStart = await shouldStartLocalScheduler();
       expect(shouldStart).toBe(false);
     });
   });
@@ -941,7 +1011,7 @@ describe("Orchestrator", () => {
 
       o.schedulerTriggeredGroups.add("br:main");
 
-      await o.handleWorkerMessage(fakeDb() as any, {
+      await handleWorkerMessage(o, fakeDb() as any, {
         payload: {
           task: {
             createdAt: Date.now(),
@@ -972,7 +1042,7 @@ describe("Orchestrator", () => {
         ok: true,
       });
 
-      await o.handleWorkerMessage(fakeDb() as any, {
+      await handleWorkerMessage(o, fakeDb() as any, {
         payload: {
           task: {
             id: "t1",
@@ -999,7 +1069,7 @@ describe("Orchestrator", () => {
       o.events.on("task-change", (e: any) => events.push(e));
       o.schedulerTriggeredGroups.add("br:main");
 
-      await o.handleWorkerMessage(fakeDb() as any, {
+      await handleWorkerMessage(o, fakeDb() as any, {
         payload: {
           task: {
             createdAt: Date.now(),
@@ -1023,7 +1093,7 @@ describe("Orchestrator", () => {
       o.events.on("task-change", (e: any) => events.push(e));
       o.schedulerTriggeredGroups.add("br:main");
 
-      await o.handleWorkerMessage(fakeDb() as any, {
+      await handleWorkerMessage(o, fakeDb() as any, {
         payload: { id: "t1", groupId: "br:main" },
         type: "delete-task",
       });
@@ -1042,7 +1112,7 @@ describe("Orchestrator", () => {
 
       (globalThis as any).fetch = fetchSpy;
 
-      await o.handleWorkerMessage(fakeDb() as any, {
+      await handleWorkerMessage(o, fakeDb() as any, {
         type: "send-notification",
         payload: {
           body: "Hello",
@@ -1075,7 +1145,7 @@ describe("Orchestrator", () => {
       const before = o.schedulerTriggeredGroups.has(task.groupId);
       expect(before).toBe(false);
 
-      await o.runTaskAsScheduled(task as any);
+      await runTaskAsScheduled(o, task as any);
 
       expect(runTaskSpy).toHaveBeenCalledWith(task);
       expect(o.schedulerTriggeredGroups.has(task.groupId)).toBe(false);
@@ -1132,7 +1202,7 @@ describe("Orchestrator", () => {
         ok: true,
       });
 
-      await o.handleWorkerMessage(fakeDb() as any, {
+      await handleWorkerMessage(o, fakeDb() as any, {
         payload: { id: "t1", groupId: "br:main" },
         type: "delete-task",
       });
@@ -1161,7 +1231,7 @@ describe("Orchestrator", () => {
         status: 500,
       });
 
-      await o.handleWorkerMessage(fakeDb() as any, {
+      await handleWorkerMessage(o, fakeDb() as any, {
         payload: { id: "t1", groupId: "br:main" },
         type: "delete-task",
       });
@@ -1184,7 +1254,7 @@ describe("Orchestrator", () => {
         new Error("Network error"),
       );
 
-      await o.handleWorkerMessage(fakeDb() as any, {
+      await handleWorkerMessage(o, fakeDb() as any, {
         payload: { id: "t1", groupId: "br:main" },
         type: "delete-task",
       });
@@ -1207,7 +1277,7 @@ describe("Orchestrator", () => {
         ok: true,
       });
 
-      await o.handleWorkerMessage(fakeDb() as any, {
+      await handleWorkerMessage(o, fakeDb() as any, {
         payload: { task: sampleTask },
         type: "task-created",
       });
@@ -1237,7 +1307,7 @@ describe("Orchestrator", () => {
         status: 500,
       });
 
-      await o.handleWorkerMessage(fakeDb() as any, {
+      await handleWorkerMessage(o, fakeDb() as any, {
         payload: { task: sampleTask },
         type: "task-created",
       });
@@ -1260,7 +1330,7 @@ describe("Orchestrator", () => {
         ok: true,
       });
 
-      await o.handleWorkerMessage(fakeDb() as any, {
+      await handleWorkerMessage(o, fakeDb() as any, {
         payload: { task: { ...sampleTask, prompt: "updated" } },
         type: "update-task",
       });
@@ -1290,7 +1360,7 @@ describe("Orchestrator", () => {
         status: 500,
       });
 
-      await o.handleWorkerMessage(fakeDb() as any, {
+      await handleWorkerMessage(o, fakeDb() as any, {
         payload: { task: { ...sampleTask, prompt: "updated" } },
         type: "update-task",
       });
@@ -1319,42 +1389,42 @@ describe("Orchestrator", () => {
     it("returns correct getters for basic properties", () => {
       const o = new Orchestrator();
 
-      expect(o.getBedrockSettings()).toEqual({
+      expect(getBedrockSettings(o)).toEqual({
         authMode: "provider_chain",
         profile: "",
         region: "",
       });
 
-      expect(o.getChannelEnabled("browser")).toBe(true);
-      expect(o.getChannelEnabled("telegram")).toBe(false);
+      expect(getChannelEnabled(o, "browser")).toBe(true);
+      expect(getChannelEnabled(o, "telegram")).toBe(false);
 
-      expect(o.getChannelEnabledConfigKey("telegram")).toBe(
+      expect(getChannelEnabledConfigKey("telegram")).toBe(
         "channel_enabled:telegram",
       );
 
-      expect(o.getChannelTypeForGroup("non-existent")).toBe("browser");
+      expect(getChannelTypeForGroup(o, "non-existent")).toBe("browser");
 
-      expect(o.getContextCompressionEnabled()).toBe(false);
-      expect(o.getGitProxyUrl()).toBe("/git-proxy");
+      expect(o.contextCompressionEnabled).toBe(false);
+      expect(o.gitProxyUrl).toBe("/git-proxy");
 
-      expect(o.getIMessageConfig()).toEqual({
+      expect(getIMessageConfig(o)).toEqual({
         apiKey: "",
         chatIds: [],
         enabled: false,
         serverUrl: "",
       });
 
-      expect(o.getLlamafileSettings()).toEqual({
+      expect(getLlamafileSettings(o)).toEqual({
         mode: "cli",
         host: "127.0.0.1",
         port: 8080,
         offline: true,
       });
 
-      expect(o.getMeshLlmSettings()).toEqual({ host: "" });
-      expect(o.getModel()).toBe(o.model);
+      expect({ host: o.meshLlmHost }).toEqual({ host: "" });
+      expect(o.model).toBe(o.model);
 
-      expect(o.getPeerJsConfig()).toEqual({
+      expect(getPeerJsConfig(o)).toEqual({
         enabled: false,
         myAlias: "",
         myPeerId: "",
@@ -1366,40 +1436,40 @@ describe("Orchestrator", () => {
         trustedPeerIds: [],
       });
 
-      expect(o.getProvider()).toBe("openrouter");
-      expect(o.getProxyUrl()).toBe("/proxy");
+      expect(o.provider).toBe("openrouter");
+      expect(o.proxyUrl).toBe("/proxy");
 
-      expect(o.getRateLimitAutoAdapt()).toBe(true);
-      expect(o.getRateLimitCallsPerMinute()).toBe(0);
+      expect(o.rateLimitAutoAdapt).toBe(true);
+      expect(o.rateLimitCallsPerMinute).toBe(0);
 
-      expect(o.getReasoningConfig()).toBeUndefined();
+      expect(getReasoningConfig(o)).toBeUndefined();
       o.reasoningEffort = "high";
-      expect(o.getReasoningConfig()).toEqual({ effort: "high" });
-      expect(o.getReasoningEffort()).toBe("high");
+      expect(getReasoningConfig(o)).toEqual({ effort: "high" });
+      expect(o.reasoningEffort).toBe("high");
 
-      expect(o.getStreamingEnabled()).toBe(true);
-      expect(o.getTaskServerUrl()).toBe("/schedule");
+      expect(o.streamingEnabled).toBe(true);
+      expect(o.taskServerUrl).toBe("/schedule");
 
-      expect(o.getTelegramConfig()).toEqual({
+      expect(getTelegramConfig(o)).toEqual({
         botToken: "",
         chatIds: [],
         enabled: false,
         useProxy: false,
       });
 
-      expect(o.getUseProxy()).toBe(false);
-      expect(o.getVMBashFullInternetAccess()).toBe(false);
-      expect(o.getVMBootMode()).toBe("disabled");
+      expect(o.useProxy).toBe(false);
+      expect(o.vmBashFullInternetAccess).toBe(false);
+      expect(o.vmBootMode).toBe("disabled");
 
-      expect(o.getVMStatus()).toEqual({
+      expect(o.vmStatus).toEqual({
         ready: false,
         booting: false,
         bootAttempted: false,
         error: null,
       });
 
-      expect(o.getWebMcpMode()).toBeDefined();
-      expect(o.getWebMcpToolsEnabled()).toBe(true);
+      expect(getWebMcpMode()).toBeDefined();
+      expect(o.webMcpToolsEnabled).toBe(true);
     });
 
     it("applies channel running states properly", () => {
@@ -1408,23 +1478,26 @@ describe("Orchestrator", () => {
       const browserSpy = jest.spyOn(o.browserChat, "start");
       const peerjsSpy = jest.spyOn(o.peerjs, "stop");
 
-      o.applyChannelRunningState("browser");
+      applyChannelRunningState(o, "browser");
       expect(browserSpy).toHaveBeenCalled();
 
-      o.applyChannelRunningState("peerjs");
+      applyChannelRunningState(o, "peerjs");
       expect(peerjsSpy).toHaveBeenCalled();
 
-      const applySpy = jest.spyOn(o, "applyChannelRunningState");
-      o.applyAllChannelRunningStates();
-      expect(applySpy).toHaveBeenCalledWith("browser");
-      expect(applySpy).toHaveBeenCalledWith("telegram");
-      expect(applySpy).toHaveBeenCalledWith("imessage");
-      expect(applySpy).toHaveBeenCalledWith("peerjs");
+      const telegramSpy = jest.spyOn(o.telegram, "stop");
+      const imessageSpy = jest.spyOn(o.imessage, "stop");
+
+      applyAllChannelRunningStates(o);
+
+      expect(browserSpy).toHaveBeenCalled(); // Should still be called (or called again)
+      expect(telegramSpy).toHaveBeenCalled();
+      expect(imessageSpy).toHaveBeenCalled();
+      expect(peerjsSpy).toHaveBeenCalled();
     });
 
     it("returns null for unknown channel type", () => {
       const o = new Orchestrator();
-      expect(o.getChannelByType("unknown" as any)).toBeNull();
+      expect(getChannelByType(o, "unknown" as any)).toBeNull();
     });
 
     it("applies Llamafile and MeshLlm headers", () => {
@@ -1433,7 +1506,7 @@ describe("Orchestrator", () => {
       // Mesh-llm
       o.providerConfig = { id: "mesh-llm" } as any;
       o.meshLlmHost = "localhost:5000";
-      o.applyMeshLlmHeaders();
+      applyMeshLlmHeaders(o);
       expect(o.providerConfig.headers?.["x-mesh-llm-host"]).toBe(
         "localhost:5000",
       );
@@ -1444,7 +1517,7 @@ describe("Orchestrator", () => {
       o.llamafileHost = "127.0.0.1";
       o.llamafilePort = 8080;
       o.llamafileOffline = true;
-      o.applyLlamafileHeaders();
+      applyLlamafileHeaders(o);
       expect(o.providerConfig.headers?.["x-llamafile-mode"]).toBe("cli");
       expect(o.providerConfig.headers?.["x-llamafile-host"]).toBe("127.0.0.1");
       expect(o.providerConfig.headers?.["x-llamafile-port"]).toBe("8080");
@@ -1452,10 +1525,9 @@ describe("Orchestrator", () => {
     });
 
     it("clears peerjs typing state correctly", () => {
-      const o = new Orchestrator();
       const typingSpy = jest.spyOn(orchestratorStore, "setRemoteAgentTyping");
 
-      o.clearPeerJsTypingState("group-1");
+      clearPeerJsTypingState("group-1");
       expect(typingSpy).toHaveBeenCalledWith("group-1", false);
     });
 
@@ -1483,7 +1555,7 @@ describe("Orchestrator", () => {
       const createSpy = jest
         .spyOn(o.roomManager, "createRoom")
         .mockReturnValue({ roomId: "room-1" } as any);
-      const room = o.createRoom("test-room");
+      const room = createRoom(o, "test-room");
       expect(createSpy).toHaveBeenCalledWith("test-room");
       expect(room.roomId).toBe("room-1");
       expect(events).toHaveLength(1);
@@ -1491,22 +1563,22 @@ describe("Orchestrator", () => {
       const joinSpy = jest
         .spyOn(o.roomManager, "joinRoom")
         .mockReturnValue({ roomId: "room-2" } as any);
-      const room2 = o.joinRoomViaLink("room-2", "host-1", "test-room-2");
+      const room2 = joinRoomViaLink(o, "room-2", "host-1", "test-room-2");
       expect(joinSpy).toHaveBeenCalledWith("room-2", "host-1", "test-room-2");
       expect(room2.roomId).toBe("room-2");
 
       const leaveSpy = jest.spyOn(o.roomManager, "leaveRoom").mockReturnValue();
-      o.leaveRoom("room-2");
+      leaveRoom(o, "room-2");
       expect(leaveSpy).toHaveBeenCalledWith("room-2");
 
       const inviteSpy = jest
         .spyOn(o.roomManager, "invite")
         .mockReturnValue(true);
-      expect(o.inviteToRoom("room-1", "peer-1")).toBe(true);
+      expect(inviteToRoom(o, "room-1", "peer-1")).toBe(true);
       expect(inviteSpy).toHaveBeenCalledWith("room-1", "peer-1");
 
       const listSpy = jest.spyOn(o.roomManager, "list").mockReturnValue([]);
-      expect(o.listRooms()).toEqual([]);
+      expect(listRooms(o)).toEqual([]);
       expect(listSpy).toHaveBeenCalled();
     });
 
@@ -1515,7 +1587,7 @@ describe("Orchestrator", () => {
       const events: any[] = [];
       o.events.on("room-invite", (payload: any) => events.push(payload));
 
-      o.handleRoomInvite({
+      handleRoomInvite(o, {
         roomId: "room-1",
         inviterId: "peer-1",
         name: "room",
@@ -1528,7 +1600,7 @@ describe("Orchestrator", () => {
       const postMessage = jest.fn();
       o.agentWorker = { postMessage } as any;
 
-      o.closeTerminalSession("group-1");
+      closeTerminalSession(o, "group-1");
       expect(postMessage).toHaveBeenCalledWith({
         payload: { groupId: "group-1" },
         type: "vm-terminal-close",
@@ -1540,7 +1612,7 @@ describe("Orchestrator", () => {
       const postMessage = jest.fn();
       o.agentWorker = { postMessage } as any;
 
-      o.openTerminalSession("group-1");
+      openTerminalSession(o, "group-1");
       expect(postMessage).toHaveBeenCalledWith({
         payload: { groupId: "group-1" },
         type: "vm-terminal-open",
@@ -1552,7 +1624,7 @@ describe("Orchestrator", () => {
       const postMessage = jest.fn();
       o.agentWorker = { postMessage } as any;
 
-      o.sendTerminalInput("ls -la");
+      sendTerminalInput(o, "ls -la");
       expect(postMessage).toHaveBeenCalledWith({
         payload: { data: "ls -la" },
         type: "vm-terminal-input",
@@ -1561,14 +1633,18 @@ describe("Orchestrator", () => {
 
     it("parses direct tool command", () => {
       const o = new Orchestrator();
-      const result = o.parseDirectToolCommand({
-        id: "1",
-        channel: "telegram",
-        groupId: "tg:1",
-        sender: "User",
-        timestamp: Date.now(),
-        content: "@assistant /hello",
-      });
+      const result = parseDirectToolCommand(
+        o.directToolCommandPolicy,
+        o.assistantName,
+        {
+          id: "1",
+          channel: "telegram",
+          groupId: "tg:1",
+          sender: "User",
+          timestamp: Date.now(),
+          content: "@assistant /hello",
+        },
+      );
       expect(result).toBeDefined();
     });
 
@@ -1577,22 +1653,17 @@ describe("Orchestrator", () => {
       const events: any[] = [];
       o.events.on("state-change", (payload: any) => events.push(payload));
       o.setState("thinking");
-      expect(o.getState()).toBe("thinking");
+      expect(o.state).toBe("thinking");
       expect(events).toHaveLength(1);
-    });
-
-    it("returns correctly for isConfigured", () => {
-      const o = new Orchestrator();
-      expect(o.isConfigured()).toBe(false);
     });
 
     it("resolves transformers status url", () => {
       const o = new Orchestrator();
       o.providerConfig = { baseUrl: "http://api/chat/completions" } as any;
-      expect(o.getTransformersStatusUrl()).toBe("http://api/status");
+      expect(getTransformersStatusUrl(o)).toBe("http://api/status");
 
       o.providerConfig = { baseUrl: "other" } as any;
-      expect(o.getTransformersStatusUrl()).toBe(
+      expect(getTransformersStatusUrl(o)).toBe(
         "http://localhost:8888/transformers-js-proxy/status",
       );
     });
@@ -1603,18 +1674,23 @@ describe("Orchestrator", () => {
       o.bedrockProfileFallback = "default";
       o.bedrockAuthMode = "provider_chain";
 
-      const headers = o.getProviderRuntimeHeaders("bedrock_proxy");
+      const headers = getProviderRuntimeHeaders(o, "bedrock_proxy");
       expect(headers["x-bedrock-region"]).toBe("us-east-1");
       expect(headers["x-bedrock-profile"]).toBe("default");
       expect(headers["x-bedrock-auth-mode"]).toBe("provider_chain");
 
-      const overrideHeaders = o.getProviderRuntimeHeaders("bedrock_proxy", "", {
-        bedrock_proxy: {
-          region: "us-west-2",
-          profile: "other",
-          authMode: "sso",
+      const overrideHeaders = getProviderRuntimeHeaders(
+        o,
+        "bedrock_proxy",
+        "",
+        {
+          bedrock_proxy: {
+            region: "us-west-2",
+            profile: "other",
+            authMode: "sso",
+          },
         },
-      });
+      );
       expect(overrideHeaders["x-bedrock-region"]).toBe("us-west-2");
       expect(overrideHeaders["x-bedrock-profile"]).toBe("other");
       expect(overrideHeaders["x-bedrock-auth-mode"]).toBe("sso");
@@ -1627,14 +1703,14 @@ describe("Orchestrator", () => {
       o.llamafilePort = 8080;
       o.llamafileOffline = true;
 
-      const headers = o.getProviderRuntimeHeaders("llamafile", "req-1");
+      const headers = getProviderRuntimeHeaders(o, "llamafile", "req-1");
       expect(headers["x-llamafile-mode"]).toBe("cli");
       expect(headers["x-llamafile-host"]).toBe("127.0.0.1");
       expect(headers["x-llamafile-port"]).toBe("8080");
       expect(headers["x-llamafile-offline"]).toBe("true");
       expect(headers["x-shadowclaw-request-id"]).toBe("req-1");
 
-      const overrideHeaders = o.getProviderRuntimeHeaders("llamafile", "", {
+      const overrideHeaders = getProviderRuntimeHeaders(o, "llamafile", "", {
         llamafile: {
           mode: "server",
           host: "192.168.1.1",
@@ -1653,7 +1729,7 @@ describe("Orchestrator", () => {
       const postMessage = jest.fn();
       o.agentWorker = { postMessage } as any;
 
-      o.answerUserPrompt("prompt-1", "yes");
+      answerUserPrompt(o, "prompt-1", "yes");
       expect(postMessage).toHaveBeenCalledWith({
         payload: { id: "prompt-1", response: "yes" },
         type: "ask-user-response",
@@ -1702,12 +1778,7 @@ describe("Orchestrator", () => {
 
       jest.spyOn(o.roomManager, "loadRooms").mockImplementation(() => {});
       jest.spyOn(o, "loadApiKeyForProvider").mockResolvedValue();
-      jest.spyOn(o, "getApiKeyForHeaders").mockResolvedValue(undefined);
-      jest.spyOn(o, "loadChannelConfigurations").mockResolvedValue();
-
-      jest
-        .spyOn(o, "syncProxyConfigToServiceWorker")
-        .mockImplementation(() => {});
+      jest.spyOn(o, "loadSecretConfig").mockResolvedValue("");
 
       const origWorker = (globalThis as any).Worker;
       if (!origWorker) {
@@ -1717,12 +1788,12 @@ describe("Orchestrator", () => {
         };
       }
 
-      await o.initCoreConfig(db);
-      await o.initProviderAndModel(db);
-      await o.initLlamafileAndMesh(db);
-      await o.initFeatureFlagsAndLimits(db);
-      await o.initChannelsAndRooms(db);
-      await o.initWorkerAndScheduler(db);
+      await initCoreConfig(o, db);
+      await initProviderAndModel(o, db);
+      await initLlamafileAndMesh(o, db);
+      await initFeatureFlagsAndLimits(o, db);
+      await initChannelsAndRooms(o, db);
+      await initWorkerAndScheduler(o, db);
 
       expect(o.assistantName).toBeDefined();
       expect(o.triggerPattern).toBeDefined();

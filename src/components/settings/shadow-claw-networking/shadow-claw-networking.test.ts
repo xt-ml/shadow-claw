@@ -4,22 +4,35 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue({}),
 }));
 
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/settings.js",
+  () => ({
+    setProxyUrl: jest.fn<any>().mockResolvedValue(undefined),
+    setUseProxy: jest.fn<any>().mockResolvedValue(undefined),
+    setGitProxyUrl: jest.fn<any>().mockResolvedValue(undefined),
+    setVMBashFullInternetAccess: jest.fn<any>().mockResolvedValue(undefined),
+  }),
+);
+
 jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
   showWarning: jest.fn(),
+  showToast: jest.fn(),
 }));
 
 const { orchestratorStore } = await import("../../../stores/orchestrator.js");
 const { ShadowClawNetworking } = await import("./shadow-claw-networking.js");
 const { showSuccess, showWarning } = await import("../../../ui/toast.js");
+const { setProxyUrl } =
+  await import("../../../core/orchestrator/utils/settings.js");
 
 function createOrchestratorStub(overrides = {}) {
   return {
-    setUseProxy: jest.fn<any>().mockResolvedValue(undefined),
-    setProxyUrl: jest.fn<any>().mockResolvedValue(undefined),
     getUseProxy: jest.fn<any>().mockReturnValue(false),
     getProxyUrl: jest.fn<any>().mockReturnValue("http://localhost:8888/proxy"),
+    useProxy: false,
+    proxyUrl: "http://localhost:8888/proxy",
     ...overrides,
   };
 }
@@ -39,6 +52,8 @@ describe("shadow-claw-networking", () => {
     const orch = createOrchestratorStub({
       getUseProxy: jest.fn<any>().mockReturnValue(true),
       getProxyUrl: jest.fn<any>().mockReturnValue("/proxy"),
+      useProxy: true,
+      proxyUrl: "/proxy",
     });
     (orchestratorStore as any).orchestrator = orch;
 
@@ -80,7 +95,7 @@ describe("shadow-claw-networking", () => {
     proxyInput.value = "/proxy";
     await el.saveProxyUrl();
 
-    expect(orch.setProxyUrl).toHaveBeenCalledWith(expect.anything(), "/proxy");
+    expect(setProxyUrl).toHaveBeenCalledWith(orch, expect.anything(), "/proxy");
     expect(showSuccess).toHaveBeenCalledWith("Proxy URL saved", 3000);
 
     document.body.removeChild(el);
@@ -106,7 +121,7 @@ describe("shadow-claw-networking", () => {
     proxyInput.value = "   ";
     await el.saveProxyUrl();
 
-    expect(orch.setProxyUrl).not.toHaveBeenCalled();
+    expect(setProxyUrl).not.toHaveBeenCalled();
     expect(showWarning).toHaveBeenCalledWith(
       "Please enter a proxy URL (e.g. /proxy)",
       3000,

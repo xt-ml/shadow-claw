@@ -1,7 +1,32 @@
 import { jest } from "@jest/globals";
-import { installE2eBridge, shouldInstallE2eBridge } from "./e2e-bridge.js";
 
+const mockSetProvider = jest.fn(async () => {});
+const mockSetModel = jest.fn(async () => {});
+const mockSetStreamingEnabled = jest.fn(async () => {});
+
+jest.unstable_mockModule(
+  "../core/orchestrator/utils/operations/provider.js",
+  () => ({
+    setProvider: mockSetProvider,
+    setModel: mockSetModel,
+    getApiKeyForHeaders: jest.fn(async () => "mocked-api-key"),
+    stopTransformersProgressPolling: jest.fn(),
+  }),
+);
+
+jest.unstable_mockModule("../core/orchestrator/utils/settings.js", () => ({
+  setStreamingEnabled: mockSetStreamingEnabled,
+}));
 describe("E2E Bridge", () => {
+  let shouldInstallE2eBridge: any;
+  let installE2eBridge: any;
+
+  beforeAll(async () => {
+    const bridge = await import("./e2e-bridge.js");
+    shouldInstallE2eBridge = bridge.shouldInstallE2eBridge;
+    installE2eBridge = bridge.installE2eBridge;
+  });
+
   afterEach(() => {
     delete (globalThis as any).__SHADOWCLAW_E2E__;
     delete (globalThis as any).__SHADOWCLAW_E2E_ENABLE__;
@@ -29,10 +54,9 @@ describe("E2E Bridge", () => {
         ready: true,
         activeGroupId: "br:main",
         orchestrator: {
-          setProvider: jest.fn(async () => {}),
           setApiKey: jest.fn(async () => {}),
-          setModel: jest.fn(async () => {}),
-          setStreamingEnabled: jest.fn(async () => {}),
+          loadApiKeyForProvider: jest.fn(async () => {}),
+          getApiKeyForHeaders: jest.fn(async () => {}),
         },
         createConversation: jest.fn(async (_db: any, name: string) => ({
           groupId: `br:${name}`,
@@ -146,10 +170,13 @@ describe("E2E Bridge", () => {
       );
 
       const orch = store.orchestrator;
-      expect(orch.setProvider).toHaveBeenCalledWith(ui.db, "openrouter");
+      expect(mockSetProvider).toHaveBeenCalledWith(orch, ui.db, "openrouter", {
+        loadApiKeyForProvider: expect.any(Function),
+        getApiKeyForHeaders: expect.any(Function),
+      });
       expect(orch.setApiKey).toHaveBeenCalledWith(ui.db, "sk-test-123");
-      expect(orch.setModel).toHaveBeenCalledWith(ui.db, "test/model");
-      expect(orch.setStreamingEnabled).toHaveBeenCalledWith(ui.db, true);
+      expect(mockSetModel).toHaveBeenCalledWith(orch, ui.db, "test/model");
+      expect(mockSetStreamingEnabled).toHaveBeenCalledWith(orch, ui.db, true);
     });
 
     it("configureProvider throws when orchestrator is not ready", async () => {

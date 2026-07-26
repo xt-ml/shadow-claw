@@ -1,10 +1,16 @@
-import type { ShadowClawDatabase } from "../../../db/types.js";
-import type { OrchestratorStore } from "../../../stores/orchestrator.js";
-import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
-import { ulid } from "../../../utils/ulid.js";
+import { configurePeerJs } from "../../../core/orchestrator/utils/configurePeerJs.js";
+import {
+  getPeerJsConfig,
+  setChannelEnabled,
+} from "../../../core/orchestrator/utils/operations/channel.js";
+import { joinRoomViaLink } from "../../../core/orchestrator/utils/operations/room.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
+import { ulid } from "../../../utils/ulid.js";
 import { showPage } from "./showPage.js";
 
+import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
+import type { ShadowClawDatabase } from "../../../db/types.js";
+import type { OrchestratorStore } from "../../../stores/orchestrator.js";
 import type { ShadowClaw } from "../shadow-claw.js";
 
 export async function processRoomQueryParam(
@@ -30,7 +36,7 @@ export async function processRoomQueryParam(
 
   try {
     // 1. Ensure PeerJS channel is enabled and the host is trusted
-    const cfg = orchestrator.getPeerJsConfig();
+    const cfg = getPeerJsConfig(orchestrator);
     let myPeerId = cfg.myPeerId;
     if (!myPeerId) {
       myPeerId = ulid().toLowerCase();
@@ -39,7 +45,8 @@ export async function processRoomQueryParam(
     const trusted = new Set(cfg.trustedPeerIds);
     trusted.add(hostPeerId);
 
-    await orchestrator.configurePeerJs(
+    await configurePeerJs(
+      orchestrator,
       db,
       myPeerId,
       Array.from(trusted),
@@ -50,11 +57,11 @@ export async function processRoomQueryParam(
     );
 
     if (!cfg.enabled) {
-      await orchestrator.setChannelEnabled(db, "peerjs", true);
+      await setChannelEnabled(orchestrator, db, "peerjs", true);
     }
 
     // 2. Join the room (connects to host + announces membership)
-    orchestrator.joinRoomViaLink(roomId, hostPeerId, roomName);
+    joinRoomViaLink(orchestrator, roomId, hostPeerId, roomName);
 
     // 3. Navigate to the room conversation
     await oStore.switchConversation(db, `room:${roomId}`);

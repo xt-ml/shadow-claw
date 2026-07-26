@@ -4,6 +4,8 @@ import { jest } from "@jest/globals";
 jest.unstable_mockModule("../../config/config.js", () => ({
   getAvailableProviders: jest.fn(() => ["anthropic", "openai"]),
   getProvider: jest.fn((id) => ({ name: `Provider ${id}` })),
+  DEFAULT_GROUP_ID: "default",
+  CONFIG_KEYS: {},
 }));
 
 jest.unstable_mockModule("../../core/effect.js", () => ({
@@ -12,6 +14,23 @@ jest.unstable_mockModule("../../core/effect.js", () => ({
     return () => {};
   }),
 }));
+
+const mockSetWebMcpToolsEnabled = jest.fn();
+jest.unstable_mockModule(
+  "../../core/orchestrator/utils/syncWebMcpRegistration.js",
+  () => ({
+    setWebMcpToolsEnabled: mockSetWebMcpToolsEnabled,
+    setWebMcpMode: jest.fn(),
+  }),
+);
+
+jest.unstable_mockModule(
+  "../../core/orchestrator/utils/operations/provider.js",
+  () => ({
+    getProviderRuntimeHeaders: jest.fn(),
+    getApiKeyForRequest: jest.fn(),
+  }),
+);
 
 jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn(() => Promise.resolve({})),
@@ -278,9 +297,12 @@ describe("shadow-claw-tools", () => {
       webMcpToggle.dispatchEvent(new Event("change"));
 
       await new Promise((r) => setTimeout(r, 0));
-      expect(
-        orchestratorStore.orchestrator.setWebMcpToolsEnabled,
-      ).toHaveBeenCalledWith(expect.anything(), false);
+      expect(mockSetWebMcpToolsEnabled).toHaveBeenCalledWith(
+        orchestratorStore.orchestrator,
+        expect.anything(),
+        false,
+        { orchestrator: orchestratorStore.orchestrator },
+      );
     }
     document.body.removeChild(el);
   });

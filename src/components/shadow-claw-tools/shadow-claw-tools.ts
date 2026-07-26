@@ -2,6 +2,7 @@ import { getAvailableProviders, getProvider } from "../../config/config.js";
 import { effect } from "../../core/effect.js";
 
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
+import { getWebMcpMode } from "../../subsystems/mcp/webmcp.js";
 
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
@@ -11,6 +12,10 @@ import { showError, showInfo, showSuccess } from "../../ui/toast.js";
 import { ulid } from "../../utils/ulid.js";
 
 import type { Orchestrator } from "../../core/orchestrator/orchestrator.js";
+import {
+  setWebMcpMode,
+  setWebMcpToolsEnabled,
+} from "../../core/orchestrator/utils/syncWebMcpRegistration.js";
 
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
@@ -121,7 +126,7 @@ export class ShadowClawTools extends ShadowClawElement {
 
         const next = webMcpToggle.checked;
         try {
-          await orchestrator.setWebMcpToolsEnabled(db, next);
+          await setWebMcpToolsEnabled(orchestrator, db, next, { orchestrator });
           showInfo(
             next
               ? "WebMCP tool registration enabled"
@@ -177,7 +182,7 @@ export class ShadowClawTools extends ShadowClawElement {
 
         const mode = webMcpModeSelect.value as "polyfill" | "native";
         try {
-          await orchestrator.setWebMcpMode(db, mode);
+          await setWebMcpMode(orchestrator, db, mode, { orchestrator });
           showInfo(`WebMCP mode set to ${mode}`);
         } catch (err) {
           showError(
@@ -449,10 +454,9 @@ export class ShadowClawTools extends ShadowClawElement {
           if (orchestratorStore.ready) {
             this.orchestrator = orchestratorStore.orchestrator;
             webMcpToggle.checked =
-              this.orchestrator?.getWebMcpToolsEnabled?.() === true;
-            if (webMcpModeSelect && this.orchestrator?.getWebMcpMode) {
-              webMcpModeSelect.value =
-                this.orchestrator.getWebMcpMode() || "polyfill";
+              this.orchestrator?.webMcpToolsEnabled === true;
+            if (webMcpModeSelect && this.orchestrator) {
+              webMcpModeSelect.value = getWebMcpMode() || "polyfill";
             }
           }
         }),

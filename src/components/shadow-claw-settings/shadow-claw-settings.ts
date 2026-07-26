@@ -6,6 +6,7 @@ import {
   reapplyPlaintextPasswords,
 } from "../../config/settings-backup.js";
 
+import { setAssistantName } from "../../core/orchestrator/utils/operations/provider.js";
 import { getDb } from "../../db/db.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { showError, showInfo, showSuccess } from "../../ui/toast.js";
@@ -542,8 +543,8 @@ export class ShadowClawSettings extends ShadowClawElement {
         CONFIG_KEYS.ASSISTANT_NAME,
       );
       const orchestratorName =
-        this.orchestrator?.getAssistantName() ||
-        orchestratorStore.orchestrator?.getAssistantName();
+        this.orchestrator?.assistantName ||
+        orchestratorStore.orchestrator?.assistantName;
 
       nameInput.value =
         (typeof storedAssistantName === "string" && storedAssistantName) ||
@@ -742,7 +743,7 @@ export class ShadowClawSettings extends ShadowClawElement {
       const orchestrator = this.orchestrator || orchestratorStore.orchestrator;
       if (orchestrator) {
         this.orchestrator = orchestrator;
-        await orchestrator.setAssistantName(this.db, name);
+        await setAssistantName(orchestrator, this.db, name);
       } else {
         const { setConfig } = await import("../../db/setConfig.js");
         await setConfig(this.db, CONFIG_KEYS.ASSISTANT_NAME, name);

@@ -1,5 +1,94 @@
 import { jest } from "@jest/globals";
 
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/operations/provider.js",
+  () => ({
+    applyLlamafileHeaders: jest.fn(),
+    applyMeshLlmHeaders: jest.fn(),
+    autoActivateProfile: jest.fn(),
+    stopTransformersProgressPolling: jest.fn(),
+    getAvailableProviders: jest.fn(),
+    getProviderRuntimeHeaders: jest.fn(),
+    getReasoningConfig: jest.fn(),
+    getTransformersStatusUrl: jest.fn(),
+    setAssistantName: jest.fn(),
+    setBedrockSettings: jest.fn(),
+    setLlamafileSettings: jest.fn(),
+    setMeshLlmSettings: jest.fn(),
+    setModel: jest.fn(),
+    setPeerjsMyAlias: jest.fn(),
+    setPeerjsPeerAliases: jest.fn(),
+    setProvider: jest.fn(),
+  }),
+);
+
+const mockSetChannelEnabled = jest.fn<any>().mockResolvedValue(undefined);
+
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/operations/channel.js",
+  () => ({
+    applyAllChannelRunningStates: jest.fn(),
+    applyChannelRunningState: jest.fn(),
+    clearPeerJsTypingState: jest.fn(),
+    getChannelByType: jest.fn(),
+    getChannelEnabled: jest.fn(
+      (state: any, type: string) =>
+        state?.channelEnabledByType?.[type] ?? false,
+    ),
+    getChannelEnabledConfigKey: jest.fn(),
+    getIMessageConfig: jest.fn((state: any) => {
+      if (typeof state?.getIMessageConfig === "function") {
+        return state.getIMessageConfig();
+      }
+
+      return {
+        enabled: state?.channelEnabledByType?.imessage ?? false,
+        serverUrl: state?.imessageServerUrl ?? "",
+        apiKey: state?.imessageApiKey ?? "",
+        chatIds: state?.imessageChatIds ? [...state.imessageChatIds] : [],
+      };
+    }),
+    getTelegramConfig: jest.fn((state: any) => {
+      if (typeof state?.getTelegramConfig === "function") {
+        return state.getTelegramConfig();
+      }
+
+      return {
+        enabled: state?.channelEnabledByType?.telegram ?? false,
+        botToken: state?.telegramBotToken ?? "",
+        chatIds: state?.telegramChatIds ? [...state.telegramChatIds] : [],
+        useProxy: state?.telegramUseProxy ?? false,
+      };
+    }),
+    getPeerJsConfig: jest.fn((state: any) => {
+      if (typeof state?.getPeerJsConfig === "function") {
+        return state.getPeerJsConfig();
+      }
+
+      return {
+        enabled: state?.channelEnabledByType?.peerjs ?? false,
+        myAlias: state?.peerjsMyAlias ?? "",
+        myPeerId: state?.peerjsMyPeerId ?? "",
+        peerAliases: state?.peerjsPeerAliases
+          ? { ...state.peerjsPeerAliases }
+          : {},
+        serverHost: state?.peerjsServerHost ?? "",
+        serverPort: state?.peerjsServerPort ?? 0,
+        serverPath: state?.peerjsServerPath ?? "",
+        serverSecure: state?.peerjsServerSecure ?? true,
+        trustedPeerIds: state?.peerjsTrustedPeerIds
+          ? [...state.peerjsTrustedPeerIds]
+          : [],
+      };
+    }),
+    loadChannelEnabled: jest.fn(),
+    setChannelEnabled: mockSetChannelEnabled,
+    shouldRunChannel: jest.fn(),
+    configureIMessage: jest.fn(),
+    configureTelegram: jest.fn(),
+  }),
+);
+
 jest.unstable_mockModule("../../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue({} as any),
 }));
@@ -21,6 +110,8 @@ const { showSuccess } = await import("../../../ui/toast.js");
 const { showError, showWarning } = await import("../../../ui/toast.js");
 const { ShadowClawChannelConfig } =
   await import("./shadow-claw-channel-config.js");
+const { configureIMessage, configureTelegram } =
+  await import("../../../core/orchestrator/utils/operations/channel.js");
 
 const originalFetch = globalThis.fetch;
 
@@ -41,7 +132,6 @@ function createOrchestratorStub() {
     configureTelegram: jest.fn<any>().mockResolvedValue(undefined),
     configureIMessage: jest.fn<any>().mockResolvedValue(undefined),
     configurePeerJs: jest.fn<any>().mockResolvedValue(undefined),
-    setChannelEnabled: jest.fn<any>().mockResolvedValue(undefined),
     getPeerJsConfig: jest.fn(() => ({
       myPeerId: "test-peer-id",
       trustedPeerIds: ["trust-1"],
@@ -53,6 +143,9 @@ function createOrchestratorStub() {
     })),
     peerjs: {
       connections: new Map(),
+    },
+    roomManager: {
+      list: jest.fn().mockReturnValue([]),
     },
   };
 }
@@ -186,13 +279,15 @@ describe("shadow-claw-channel-config", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(orchestrator.configureTelegram).toHaveBeenCalledWith(
-      {},
+    expect(configureTelegram).toHaveBeenCalledWith(
+      orchestrator,
+      expect.anything(),
       "new-token",
       ["1", "2"],
       false,
     );
-    expect(orchestrator.setChannelEnabled).toHaveBeenCalledWith(
+    expect(mockSetChannelEnabled).toHaveBeenCalledWith(
+      orchestrator,
       {},
       "telegram",
       false,
@@ -243,13 +338,15 @@ describe("shadow-claw-channel-config", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(orchestrator.configureTelegram).toHaveBeenCalledWith(
-      {},
+    expect(configureTelegram).toHaveBeenCalledWith(
+      orchestrator,
+      expect.anything(),
       "late-token",
       ["1001", "1002"],
       true,
     );
-    expect(orchestrator.setChannelEnabled).toHaveBeenCalledWith(
+    expect(mockSetChannelEnabled).toHaveBeenCalledWith(
+      orchestrator,
       {},
       "telegram",
       true,
@@ -297,13 +394,15 @@ describe("shadow-claw-channel-config", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(orchestrator.configureIMessage).toHaveBeenCalledWith(
-      {},
+    expect(configureIMessage).toHaveBeenCalledWith(
+      orchestrator,
+      expect.anything(),
       "https://next-bridge.example.com",
       "new-api-key",
       ["chat-1", "chat-2"],
     );
-    expect(orchestrator.setChannelEnabled).toHaveBeenCalledWith(
+    expect(mockSetChannelEnabled).toHaveBeenCalledWith(
+      orchestrator,
       {},
       "imessage",
       false,

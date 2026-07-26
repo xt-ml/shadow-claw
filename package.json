@@ -34,7 +34,7 @@
     "format": "npx prettier 404.html index.css index.html jest.config.ts playwright.config.ts rolldown.config.mjs \"{bin,e2e,electron,share,src}/**/*.{html,css,ts,js,mjs}\" --write",
     "rolldown": "rolldown -c rolldown.config.mjs",
     "start": "npm run build:prerender-main-memory-false && node dist/server.js",
-    "test": "npm run -s tsc && cross-env NODE_OPTIONS=--experimental-vm-modules jest",
+    "test": "npm run -s tsc && cross-env NODE_OPTIONS=\"--experimental-vm-modules\" jest",
     "tsc:agent:worker": "tsc --noEmit -p tsconfig.agent.worker.json",
     "tsc:app": "tsc --noEmit -p tsconfig.json",
     "tsc:server": "tsc --noEmit -p tsconfig.server.json",

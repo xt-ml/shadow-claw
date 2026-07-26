@@ -1020,7 +1020,7 @@ export class ShadowClawFiles extends ShadowClawElement {
     const hostBtn = root.querySelector(".files__sync-host-btn");
     const vmBtn = root.querySelector(".files__sync-vm-btn");
 
-    const vmStatus = orchestratorStore.orchestrator?.getVMStatus?.();
+    const vmStatus = orchestratorStore.orchestrator?.vmStatus;
     const vmMode = vmStatus?.mode;
     const showSyncButtons = vmMode === "9p";
 

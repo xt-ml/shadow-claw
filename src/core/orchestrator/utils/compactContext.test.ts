@@ -1,4 +1,5 @@
 import { jest } from "@jest/globals";
+
 import type { Orchestrator } from "../orchestrator.js";
 
 jest.unstable_mockModule("../../../storage/readGroupFile.js", () => ({
@@ -30,7 +31,7 @@ describe("compactContext", () => {
 
   it("emits error if requires API key and none is set", async () => {
     o.providerConfig = { requiresApiKey: true } as any;
-    jest.spyOn(o, "getApiKeyForRequest").mockResolvedValue("");
+    jest.spyOn(o, "getApiKey").mockResolvedValue("");
 
     const events: any[] = [];
     o.events.on("error", (e: any) => events.push(e));
@@ -42,7 +43,7 @@ describe("compactContext", () => {
   });
 
   it("emits error if state is not idle", async () => {
-    jest.spyOn(o, "getApiKeyForRequest").mockResolvedValue("key");
+    jest.spyOn(o, "getApiKey").mockResolvedValue("key");
     o.setState("thinking");
 
     const events: any[] = [];
@@ -55,7 +56,7 @@ describe("compactContext", () => {
   });
 
   it("sends message to agentWorker", async () => {
-    jest.spyOn(o, "getApiKeyForRequest").mockResolvedValue("key");
+    jest.spyOn(o, "getApiKey").mockResolvedValue("key");
     const postMessage = jest.fn();
     o.agentWorker = { postMessage } as any;
 

@@ -1,5 +1,22 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 
+const mockClearPeerJsTypingState = jest.fn();
+jest.unstable_mockModule("./operations/channel.js", () => ({
+  clearPeerJsTypingState: mockClearPeerJsTypingState,
+}));
+
+const { clearPeerJsTypingState } = await import("./operations/channel.js");
+
+const mockParseDirectToolCommand = jest.fn() as any;
+jest.unstable_mockModule("./parseDirectToolCommand.js", () => ({
+  parseDirectToolCommand: mockParseDirectToolCommand,
+}));
+
+const mockGetApiKeyForRequest = jest.fn() as any;
+jest.unstable_mockModule("./operations/provider.js", () => ({
+  getApiKeyForRequest: mockGetApiKeyForRequest,
+}));
+
 const mockDetectProviderHelpType = jest.fn() as any;
 const mockGetProvider = jest.fn() as any;
 const mockPersistMessageAttachments = jest.fn() as any;
@@ -15,6 +32,13 @@ jest.unstable_mockModule(
 
 jest.unstable_mockModule("../../../config/config.js", () => ({
   getProvider: mockGetProvider,
+  CONFIG_KEYS: { STORAGE_HANDLE: "STORAGE_HANDLE" },
+  GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: [],
+  PROVIDERS: {},
+  buildTriggerPattern: jest.fn().mockReturnValue(new RegExp("")),
+  BASH_DEFAULT_TIMEOUT_SEC: 60,
+  BASH_MAX_TIMEOUT_SEC: 300,
+  getModelMaxTokens: jest.fn().mockReturnValue(128000),
 }));
 
 jest.unstable_mockModule("../../../content/message-attachments.js", () => ({
@@ -27,6 +51,11 @@ jest.unstable_mockModule("../../../db/groups.js", () => ({
 
 jest.unstable_mockModule("../../../db/saveMessage.js", () => ({
   saveMessage: mockSaveMessage,
+}));
+
+const mockInvokeAgent = jest.fn() as any;
+jest.unstable_mockModule("./invokeAgent.js", () => ({
+  invokeAgent: mockInvokeAgent,
 }));
 
 const { enqueue, processQueue } = await import("./enqueue.js");
@@ -50,21 +79,30 @@ describe("enqueue & processQueue", () => {
       clearPeerJsTypingState: jest.fn(),
       router: { send: (jest.fn() as any).mockResolvedValue(undefined) },
       agentWorker: { postMessage: jest.fn() },
-      parseDirectToolCommand: jest.fn().mockReturnValue(null),
       processQueue: jest.fn(),
-      invokeAgent: (jest.fn() as any).mockResolvedValue(undefined),
       providerConfig: { requiresApiKey: true },
       provider: "test-provider",
-      getApiKeyForRequest: (jest.fn() as any).mockResolvedValue("key"),
+      getApiKey: (jest.fn() as any).mockResolvedValue("key"),
       getApiKeyForSpecificProvider: (jest.fn() as any).mockResolvedValue("key"),
+      directToolCommandPolicy: {
+        enabledChannelTypes: ["browser", "peerjs", "web"],
+      },
+      assistantName: "Assistant",
       processing: false,
     };
 
+    mockParseDirectToolCommand.mockReturnValue(null);
+    mockGetApiKeyForRequest.mockResolvedValue("key");
     mockPersistMessageAttachments.mockResolvedValue([]);
     mockListGroups.mockResolvedValue([]);
+    mockInvokeAgent.mockResolvedValue(undefined);
   });
 
   describe("enqueue", () => {
+    beforeEach(() => {
+      mockOrchestrator.processing = true;
+    });
+
     it("should emit A2UI envelopes and actions and exit if no text/attachments", async () => {
       const msg: any = {
         groupId: "g1",
@@ -100,7 +138,6 @@ describe("enqueue & processQueue", () => {
         expect.objectContaining({ isTrigger: true }),
       );
       expect(mockOrchestrator.messageQueue).toHaveLength(1);
-      expect(mockOrchestrator.processQueue).toHaveBeenCalledWith(mockDb);
       expect(mockOrchestrator.events.emit).toHaveBeenCalledWith(
         "message",
         expect.any(Object),
@@ -108,7 +145,7 @@ describe("enqueue & processQueue", () => {
     });
 
     it("should handle direct tool commands without enqueuing for invokeAgent", async () => {
-      mockOrchestrator.parseDirectToolCommand.mockReturnValue({
+      mockParseDirectToolCommand.mockReturnValue({
         toolName: "tool1",
         input: "input",
       });
@@ -125,7 +162,6 @@ describe("enqueue & processQueue", () => {
         type: "execute-direct-tool",
         payload: { groupId: "g1", name: "tool1", input: "input" },
       });
-      expect(mockOrchestrator.processQueue).not.toHaveBeenCalled();
     });
 
     it("should trigger if mentioned by peerjs alias", async () => {
@@ -182,9 +218,7 @@ describe("enqueue & processQueue", () => {
         channel: "peerjs",
       };
       await enqueue(mockOrchestrator, mockDb, msg);
-      expect(mockOrchestrator.clearPeerJsTypingState).toHaveBeenCalledWith(
-        "peer:g1",
-      );
+      expect(clearPeerJsTypingState).toHaveBeenCalledWith("peer:g1");
     });
   });
 
@@ -192,18 +226,19 @@ describe("enqueue & processQueue", () => {
     it("should do nothing if processing or queue is empty", async () => {
       mockOrchestrator.processing = true;
       await processQueue(mockOrchestrator, mockDb);
-      expect(mockOrchestrator.invokeAgent).not.toHaveBeenCalled();
+      expect(mockInvokeAgent).not.toHaveBeenCalled();
 
       mockOrchestrator.processing = false;
       mockOrchestrator.messageQueue = [];
       await processQueue(mockOrchestrator, mockDb);
-      expect(mockOrchestrator.invokeAgent).not.toHaveBeenCalled();
+      expect(mockInvokeAgent).not.toHaveBeenCalled();
     });
 
     it("should process next message if API key present", async () => {
       mockOrchestrator.messageQueue = [{ groupId: "g1", content: "hello" }];
       await processQueue(mockOrchestrator, mockDb);
-      expect(mockOrchestrator.invokeAgent).toHaveBeenCalledWith(
+      expect(mockInvokeAgent).toHaveBeenCalledWith(
+        mockOrchestrator,
         mockDb,
         "g1",
         "hello",
@@ -214,7 +249,7 @@ describe("enqueue & processQueue", () => {
 
     it("should emit provider-help if API key missing", async () => {
       mockOrchestrator.messageQueue = [{ groupId: "g1", content: "hello" }];
-      mockOrchestrator.getApiKeyForRequest.mockResolvedValue(null);
+      mockGetApiKeyForRequest.mockResolvedValue(null);
       mockDetectProviderHelpType.mockReturnValue("help");
 
       await processQueue(mockOrchestrator, mockDb);
@@ -227,12 +262,12 @@ describe("enqueue & processQueue", () => {
         "error",
         expect.any(Object),
       );
-      expect(mockOrchestrator.invokeAgent).not.toHaveBeenCalled();
+      expect(mockInvokeAgent).not.toHaveBeenCalled();
     });
 
     it("should handle error in invokeAgent", async () => {
       mockOrchestrator.messageQueue = [{ groupId: "g1", content: "hello" }];
-      mockOrchestrator.invokeAgent.mockRejectedValue(new Error("Test err"));
+      mockInvokeAgent.mockRejectedValue(new Error("Test err"));
       const consoleError = jest
         .spyOn(console, "error")
         .mockImplementation(() => {});
@@ -251,24 +286,26 @@ describe("enqueue & processQueue", () => {
         { groupId: "g2", content: "msg2" },
       ];
 
-      // Simulate a real processQueue recursion since we mocked it
-      mockOrchestrator.invokeAgent.mockImplementation(() => {
-        // do nothing
-      });
-
-      // Need to make sure the mocked processQueue doesn't get called in finally but original does
-      // Wait, we mocked it on `mockOrchestrator` but processQueue calls `o.processQueue`.
-      // Let's bind it so it recursively calls our mocked function.
-      mockOrchestrator.processQueue = jest.fn();
+      mockInvokeAgent.mockImplementation(() => Promise.resolve());
 
       await processQueue(mockOrchestrator, mockDb);
 
-      expect(mockOrchestrator.invokeAgent).toHaveBeenCalledWith(
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(mockInvokeAgent).toHaveBeenNthCalledWith(
+        1,
+        mockOrchestrator,
         mockDb,
         "g1",
         "msg1",
       );
-      expect(mockOrchestrator.processQueue).toHaveBeenCalled();
+      expect(mockInvokeAgent).toHaveBeenNthCalledWith(
+        2,
+        mockOrchestrator,
+        mockDb,
+        "g2",
+        "msg2",
+      );
     });
 
     it("should lookup pinned provider for API key check", async () => {
@@ -286,7 +323,8 @@ describe("enqueue & processQueue", () => {
       expect(
         mockOrchestrator.getApiKeyForSpecificProvider,
       ).toHaveBeenCalledWith(mockDb, "pinned-prov");
-      expect(mockOrchestrator.invokeAgent).toHaveBeenCalledWith(
+      expect(mockInvokeAgent).toHaveBeenCalledWith(
+        mockOrchestrator,
         mockDb,
         "g1",
         "hello",

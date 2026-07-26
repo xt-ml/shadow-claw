@@ -22,6 +22,11 @@ jest.unstable_mockModule("../../../config/config.js", () => ({
     PEERJS_PEER_ALIASES: "PEERJS_PEER_ALIASES",
     PEERJS_MY_ALIAS: "PEERJS_MY_ALIAS",
   },
+  getModelMaxTokens: jest.fn(),
+}));
+
+jest.unstable_mockModule("./operations/channel.js", () => ({
+  loadChannelEnabled: jest.fn<any>().mockResolvedValue(true),
 }));
 
 jest.unstable_mockModule("../../../content/message-attachments.js", () => ({
@@ -42,6 +47,7 @@ jest.unstable_mockModule("./parseStoredStringList.js", () => ({
 
 const { loadChannelConfigurations } =
   await import("./loadChannelConfigurations.js");
+const { loadChannelEnabled } = await import("./operations/channel.js");
 
 describe("loadChannelConfigurations", () => {
   let mockOrchestrator: any;
@@ -52,7 +58,6 @@ describe("loadChannelConfigurations", () => {
     mockDb = {};
     mockOrchestrator = {
       channelEnabledByType: { telegram: false, imessage: false, peerjs: false },
-      loadChannelEnabled: (jest.fn() as any).mockResolvedValue(true),
       loadSecretConfig: (jest.fn() as any).mockResolvedValue("secret"),
       telegram: { configure: jest.fn(), fileReader: null },
       imessage: { configure: jest.fn(), fileReader: null },
@@ -82,14 +87,8 @@ describe("loadChannelConfigurations", () => {
   it("should configure telegram and imessage correctly", async () => {
     await loadChannelConfigurations(mockOrchestrator, mockDb);
 
-    expect(mockOrchestrator.loadChannelEnabled).toHaveBeenCalledWith(
-      mockDb,
-      "telegram",
-    );
-    expect(mockOrchestrator.loadChannelEnabled).toHaveBeenCalledWith(
-      mockDb,
-      "imessage",
-    );
+    expect(loadChannelEnabled).toHaveBeenCalledWith("telegram", mockDb);
+    expect(loadChannelEnabled).toHaveBeenCalledWith("imessage", mockDb);
     expect(mockOrchestrator.channelEnabledByType.telegram).toBe(true);
     expect(mockOrchestrator.channelEnabledByType.imessage).toBe(true);
 

@@ -1,5 +1,37 @@
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 
+jest.unstable_mockModule("./operations/channel.js", () => ({
+  applyAllChannelRunningStates: jest.fn(),
+  applyChannelRunningState: jest.fn(),
+  clearPeerJsTypingState: jest.fn(),
+  getChannelByType: jest.fn(),
+  getChannelEnabled: jest.fn(),
+  getChannelEnabledConfigKey: jest.fn(),
+  getChannelTypeForGroup: jest.fn(),
+  loadChannelEnabled: jest.fn(),
+  setChannelEnabled: jest.fn(),
+  shouldRunChannel: jest.fn(),
+}));
+
+const mockDeliverResponse = (jest.fn() as any).mockResolvedValue(undefined);
+const mockDeliverIntermediateResponse = (jest.fn() as any).mockResolvedValue(
+  undefined,
+);
+
+jest.unstable_mockModule("./deliverResponse.js", () => ({
+  deliverResponse: mockDeliverResponse,
+  deliverIntermediateResponse: mockDeliverIntermediateResponse,
+}));
+
+jest.unstable_mockModule("./operations/room.js", () => ({
+  createRoom: jest.fn(),
+  handleRoomInvite: jest.fn(),
+  inviteToRoom: jest.fn(),
+  joinRoomViaLink: jest.fn(),
+  leaveRoom: jest.fn(),
+  listRooms: jest.fn(),
+}));
+
 const mockIsLlamafileResolutionError = jest.fn() as any;
 const mockDetectProviderHelpType = jest.fn() as any;
 const mockIsTransformersJsResolutionError = jest.fn() as any;
@@ -8,6 +40,9 @@ const mockDeleteTask = jest.fn() as any;
 const mockGetAllTasks = jest.fn() as any;
 const mockRoomIdFromGroupId = jest.fn() as any;
 const mockSaveTask = jest.fn() as any;
+
+const mockSyncTaskToServer = jest.fn() as any;
+const mockDeleteTaskFromServer = jest.fn() as any;
 
 const mockGetRemoteMcpConnection = jest.fn() as any;
 const mockReconnectMcpOAuth = jest.fn() as any;
@@ -37,7 +72,28 @@ jest.unstable_mockModule(
 );
 
 jest.unstable_mockModule("../../../config/config.js", () => ({
-  DEFAULT_GROUP_ID: "default",
+  getProvider: jest.fn(),
+  GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: [],
+  getGeneralAccountProviderCapabilities: jest.fn(),
+  getProviderTokenAuthScheme: jest.fn(),
+  DEFAULT_DEV_HOST: "http://localhost:8888",
+  DEFAULT_DEV_PORT: 8888,
+  BASH_DEFAULT_TIMEOUT_SEC: 60,
+  BASH_MAX_TIMEOUT_SEC: 300,
+  DEFAULT_VM_NETWORK_RELAY_URL: "",
+  DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
+  DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
+  FETCH_MAX_RESPONSE: 50 * 1024 * 1024,
+  ASSISTANT_NAME: "Assistant",
+  PROVIDERS: {},
+  OAUTH_PROVIDER_DEFINITIONS: {},
+  getProviderApiKeyConfigKey: jest.fn(),
+  CONFIG_KEYS: {},
+  getModelMaxTokens: jest.fn().mockReturnValue(128000),
+  buildTriggerPattern: jest.fn().mockReturnValue(new RegExp("")),
+  DEFAULT_GROUP_ID: "br:main",
+  OPFS_ROOT: "shadowclaw",
+  LLAMAFILE_PROXY_URL: "/proxy/llamafile",
 }));
 
 jest.unstable_mockModule("../../../db/deleteTask.js", () => ({
@@ -61,6 +117,14 @@ jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
     runTask: jest.fn(),
   },
 }));
+
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/operations/task.js",
+  () => ({
+    syncTaskToServer: mockSyncTaskToServer,
+    deleteTaskFromServer: mockDeleteTaskFromServer,
+  }),
+);
 
 const mockToolsStore = {
   activateProfile: jest.fn(),
@@ -93,6 +157,8 @@ jest.unstable_mockModule("../../../ui/toast.js", () => ({
 }));
 
 const { handleWorkerMessage } = await import("./handleWorkerMessage.js");
+const { createRoom, inviteToRoom, leaveRoom } =
+  await import("./operations/room.js");
 
 describe("handleWorkerMessage", () => {
   let mockOrchestrator: any;
@@ -100,9 +166,11 @@ describe("handleWorkerMessage", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSyncTaskToServer.mockResolvedValue(true);
+    mockDeleteTaskFromServer.mockResolvedValue(true);
     mockDb = {};
     mockOrchestrator = {
-      stopTransformersProgressPolling: jest.fn(),
+      transformersProgressPollers: new Map(),
       clearProviderRequest: jest.fn(),
       inFlightTriggerByGroup: new Map(),
       inFlightEffectiveProviderByGroup: new Map(),
@@ -113,8 +181,6 @@ describe("handleWorkerMessage", () => {
       setState: jest.fn(),
       events: { emit: jest.fn() },
       schedulerTriggeredGroups: new Set(),
-      syncTaskToServer: (jest.fn() as any).mockResolvedValue(true),
-      deleteTaskFromServer: (jest.fn() as any).mockResolvedValue(true),
       createRoom: jest.fn(),
       inviteToRoom: jest.fn(),
       leaveRoom: jest.fn(),
@@ -142,7 +208,8 @@ describe("handleWorkerMessage", () => {
   it("handles response", async () => {
     mockOrchestrator.inFlightTriggerByGroup.set("g1", "x");
     await send({ type: "response", payload: { groupId: "g1", text: "hi" } });
-    expect(mockOrchestrator.deliverResponse).toHaveBeenCalledWith(
+    expect(mockDeliverResponse).toHaveBeenCalledWith(
+      mockOrchestrator,
       mockDb,
       "g1",
       "hi",
@@ -167,7 +234,8 @@ describe("handleWorkerMessage", () => {
       type: "intermediate-response",
       payload: { groupId: "g1", text: "b" },
     });
-    expect(mockOrchestrator.deliverIntermediateResponse).toHaveBeenCalledWith(
+    expect(mockDeliverIntermediateResponse).toHaveBeenCalledWith(
+      mockOrchestrator,
       mockDb,
       "g1",
       "b",
@@ -218,19 +286,19 @@ describe("handleWorkerMessage", () => {
       type: "room-action",
       payload: { action: "create", name: "r1" },
     });
-    expect(mockOrchestrator.createRoom).toHaveBeenCalledWith("r1");
+    expect(createRoom).toHaveBeenCalledWith(mockOrchestrator, "r1");
 
     await send({
       type: "room-action",
       payload: { action: "invite", roomId: "r1", peerId: "p1" },
     });
-    expect(mockOrchestrator.inviteToRoom).toHaveBeenCalledWith("r1", "p1");
+    expect(inviteToRoom).toHaveBeenCalledWith(mockOrchestrator, "r1", "p1");
 
     await send({
       type: "room-action",
       payload: { action: "leave", roomId: "r1" },
     });
-    expect(mockOrchestrator.leaveRoom).toHaveBeenCalledWith("r1");
+    expect(leaveRoom).toHaveBeenCalledWith(mockOrchestrator, "r1");
   });
 
   it("handles errors", async () => {
@@ -238,7 +306,8 @@ describe("handleWorkerMessage", () => {
       type: "error",
       payload: { groupId: "g1", error: "tokens_limit_reached" },
     });
-    expect(mockOrchestrator.deliverResponse).toHaveBeenCalledWith(
+    expect(mockDeliverResponse).toHaveBeenCalledWith(
+      mockOrchestrator,
       mockDb,
       "g1",
       expect.stringContaining("context window"),

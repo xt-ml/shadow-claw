@@ -88,13 +88,13 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
     db: {},
     triggerFilesRefresh: jest.fn(),
     orchestrator: {
-      getVMStatus: jest.fn(() => ({
+      vmStatus: {
         ready: false,
         booting: false,
         bootAttempted: false,
         error: null,
         mode: null,
-      })),
+      },
       events: { on: jest.fn(), off: jest.fn() },
     },
   },
@@ -239,13 +239,13 @@ describe("shadow-claw-files", () => {
     document.body.appendChild(component);
     await component.render();
 
-    (orchestratorStore.orchestrator as any).getVMStatus.mockReturnValue({
+    (orchestratorStore.orchestrator as any).vmStatus = {
       ready: true,
       booting: false,
       bootAttempted: true,
       error: null,
       mode: "ext2",
-    });
+    };
 
     component.updateSyncButtonsVisibility();
 
@@ -265,13 +265,13 @@ describe("shadow-claw-files", () => {
     document.body.appendChild(component);
     await component.render();
 
-    (orchestratorStore.orchestrator as any).getVMStatus.mockReturnValue({
+    (orchestratorStore.orchestrator as any).vmStatus = {
       ready: true,
       booting: false,
       bootAttempted: true,
       error: null,
       mode: "9p",
-    });
+    };
 
     component.updateSyncButtonsVisibility();
 

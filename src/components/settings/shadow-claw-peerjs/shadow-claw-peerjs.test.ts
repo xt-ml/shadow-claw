@@ -1,5 +1,22 @@
 import { jest } from "@jest/globals";
 
+const mockCreateRoom = jest
+  .fn()
+  .mockReturnValue({ roomId: "room-2", name: "New Room" });
+const mockListRooms = jest.fn().mockReturnValue([]);
+
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/operations/room.js",
+  () => ({
+    createRoom: mockCreateRoom,
+    handleRoomInvite: jest.fn(),
+    inviteToRoom: jest.fn().mockReturnValue(true),
+    joinRoomViaLink: jest.fn(),
+    leaveRoom: jest.fn(),
+    listRooms: mockListRooms,
+  }),
+);
+
 jest.unstable_mockModule("qrcode", () => ({
   default: {
     toCanvas: jest.fn(() => Promise.resolve()),
@@ -16,10 +33,45 @@ jest.unstable_mockModule("../../../core/effect.js", () => ({
 jest.unstable_mockModule("../../../db/db.js", () => ({
   getDb: jest.fn(() => Promise.resolve({})),
 }));
-
 jest.unstable_mockModule("../../../db/rooms.js", () => ({
   roomGroupId: jest.fn((id: string) => `br:${id}`),
 }));
+
+const mockSetChannelEnabled = jest.fn();
+const mockGetPeerJsConfig = jest.fn(() => ({
+  enabled: true,
+  myPeerId: "test-peer-id",
+  myAlias: "Test Alias",
+  trustedPeerIds: ["trusted-1"],
+  serverHost: "localhost",
+  serverPort: 9000,
+  serverPath: "/myapp",
+  serverSecure: false,
+}));
+const mockConfigurePeerJs = jest.fn();
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/configurePeerJs.js",
+  () => ({
+    configurePeerJs: mockConfigurePeerJs,
+  }),
+);
+
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/operations/channel.js",
+  () => ({
+    getPeerJsConfig: mockGetPeerJsConfig,
+    setChannelEnabled: mockSetChannelEnabled,
+  }),
+);
+
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/operations/provider.js",
+  () => ({
+    setPeerjsMyAlias: jest.fn(),
+    setPeerjsPeerAliases: jest.fn(),
+    stopTransformersProgressPolling: jest.fn(),
+  }),
+);
 
 jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   orchestratorStore: {
@@ -35,12 +87,12 @@ jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
         serverSecure: false,
       })),
       configurePeerJs: jest.fn(),
-      setChannelEnabled: jest.fn(),
       peerjs: {
         connectedPeersSignal: { get: jest.fn(() => ["trusted-1"]) },
       },
       roomManager: {
         roomsSignal: { get: jest.fn(() => []) },
+        list: jest.fn().mockReturnValue([]),
       },
       listRooms: jest.fn(() => [
         {
@@ -111,7 +163,8 @@ describe("shadow-claw-peerjs", () => {
 
     el.createRoom();
 
-    expect(orchestratorStore.orchestrator.createRoom).toHaveBeenCalledWith(
+    expect(mockCreateRoom).toHaveBeenCalledWith(
+      orchestratorStore.orchestrator,
       "New Room",
     );
     expect(showSuccess).toHaveBeenCalled();
@@ -123,8 +176,8 @@ describe("shadow-claw-peerjs", () => {
     await el.connectedCallback();
 
     await el.savePeerJsConfig();
-    expect(orchestratorStore.orchestrator.configurePeerJs).toHaveBeenCalled();
-    expect(orchestratorStore.orchestrator.setChannelEnabled).toHaveBeenCalled();
+    expect(mockConfigurePeerJs).toHaveBeenCalled();
+    expect(mockSetChannelEnabled).toHaveBeenCalled();
   });
 
   it("should copy peer URL", async () => {

@@ -10,6 +10,32 @@ import {
 
 import { CONFIG_KEYS } from "../../../config/config.js";
 
+const mockEnqueue = (jest.fn() as any).mockResolvedValue(undefined);
+jest.unstable_mockModule("./enqueue.js", () => ({
+  enqueue: mockEnqueue,
+}));
+
+jest.unstable_mockModule("./operations/channel.js", () => ({
+  applyAllChannelRunningStates: jest.fn(),
+  applyChannelRunningState: jest.fn(),
+  clearPeerJsTypingState: jest.fn(),
+  getChannelByType: jest.fn(),
+  getChannelEnabled: jest.fn(),
+  getChannelEnabledConfigKey: jest.fn(),
+  getChannelTypeForGroup: jest.fn(),
+  loadChannelEnabled: jest.fn(),
+  setChannelEnabled: jest.fn(),
+  shouldRunChannel: jest.fn(),
+  submitMessage: jest.fn(),
+}));
+jest.unstable_mockModule("./operations/task.js", () => ({
+  deleteTaskFromServer: jest.fn(),
+  runTaskAsScheduled: jest.fn(),
+  shouldStartLocalScheduler: (jest.fn() as any).mockResolvedValue(true),
+  syncTaskToServer: jest.fn(),
+  warnIfNoPushSubscription: jest.fn(),
+}));
+
 const mockDeleteRoom = (jest.fn() as any).mockResolvedValue(undefined);
 const mockFetchModelInfo = (jest.fn() as any).mockResolvedValue(undefined);
 const mockGetConfig = jest.fn() as any;
@@ -39,9 +65,12 @@ jest.unstable_mockModule("../../../db/setConfig.js", () => ({
 }));
 
 jest.unstable_mockModule("../../../db/rooms.js", () => ({
+  ROOM_PREFIX: "room:",
   getRoomMetadata: mockGetRoomMetadata,
   upsertRoom: mockUpsertRoom,
   deleteRoom: mockDeleteRoom,
+  roomIdFromGroupId: jest.fn((id: string) => id.replace("room:", "")),
+  isRoomGroupId: jest.fn((id: string) => id.startsWith("room:")),
 }));
 
 jest.unstable_mockModule(
@@ -77,6 +106,33 @@ jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
 jest.unstable_mockModule("../../../security/trusted-types.js", () => ({
   toTrustedScriptUrl: mockToTrustedScriptUrl,
 }));
+
+jest.unstable_mockModule("./syncProxyConfigToServiceWorker.js", () => ({
+  syncProxyConfigToServiceWorker: jest.fn(),
+}));
+
+jest.unstable_mockModule("./loadChannelConfigurations.js", () => ({
+  loadChannelConfigurations: jest.fn<any>().mockResolvedValue(undefined),
+}));
+
+const mockSetupPushTaskListener = jest.fn();
+jest.unstable_mockModule("./setupPushTaskListener.js", () => ({
+  setupPushTaskListener: mockSetupPushTaskListener,
+}));
+
+const mockHandleWorkerMessage = jest.fn();
+jest.unstable_mockModule("./handleWorkerMessage.js", () => ({
+  handleWorkerMessage: mockHandleWorkerMessage,
+}));
+
+const { syncProxyConfigToServiceWorker } =
+  await import("./syncProxyConfigToServiceWorker.js");
+const { loadChannelConfigurations } =
+  await import("./loadChannelConfigurations.js");
+
+const { applyAllChannelRunningStates } =
+  await import("./operations/channel.js");
+const { runTaskAsScheduled } = await import("./operations/task.js");
 
 const {
   createRoomManager,
@@ -142,18 +198,15 @@ describe("initTasks", () => {
       enqueue: (jest.fn() as any).mockResolvedValue(undefined),
       events: { emit: jest.fn() },
       peerCompletedContexts: new Set(),
-      loadChannelConfigurations: (jest.fn() as any).mockResolvedValue(
-        undefined,
-      ),
       applyAllChannelRunningStates: jest.fn(),
       roomManager: { loadRooms: jest.fn() },
       initializeChannelRegistry: jest.fn(),
       applyLlamafileHeaders: jest.fn(),
       applyMeshLlmHeaders: jest.fn(),
       getApiKeyForHeaders: (jest.fn() as any).mockResolvedValue("key"),
+      getApiKey: (jest.fn() as any).mockResolvedValue("key"),
       getProviderRuntimeHeaders: jest.fn().mockReturnValue({}),
       loadApiKeyForProvider: (jest.fn() as any).mockResolvedValue(undefined),
-      syncProxyConfigToServiceWorker: jest.fn(),
       runTaskAsScheduled: (jest.fn() as any).mockResolvedValue(undefined),
       shouldStartLocalScheduler: (jest.fn() as any).mockResolvedValue(true),
       setupPushTaskListener: jest.fn(),
@@ -205,20 +258,21 @@ describe("initTasks", () => {
 
       await initChannelsAndRooms(mockOrchestrator, mockDb);
 
+      expect(loadChannelConfigurations).toHaveBeenCalledWith(
+        mockOrchestrator,
+        mockDb,
+      );
       expect(mockOrchestrator.initializeChannelRegistry).toHaveBeenCalled();
       expect(mockOrchestrator.channelRegistry.onMessage).toHaveBeenCalled();
       expect(mockOrchestrator.channelRegistry.onTyping).toHaveBeenCalled();
       expect(mockOrchestrator.peerjs.onTaskComplete).toHaveBeenCalled();
-      expect(mockOrchestrator.loadChannelConfigurations).toHaveBeenCalledWith(
-        mockDb,
-      );
-      expect(mockOrchestrator.applyAllChannelRunningStates).toHaveBeenCalled();
+      expect(applyAllChannelRunningStates).toHaveBeenCalled();
 
       // Simulate onMessage callback
       const onMessageCb =
         mockOrchestrator.channelRegistry.onMessage.mock.calls[0][0];
       onMessageCb({ id: "msg1" });
-      expect(mockOrchestrator.enqueue).toHaveBeenCalledWith(mockDb, {
+      expect(mockEnqueue).toHaveBeenCalledWith(mockOrchestrator, mockDb, {
         id: "msg1",
       });
 
@@ -256,7 +310,7 @@ describe("initTasks", () => {
 
   describe("initFeatureFlagsAndLimits", () => {
     it("should load feature flags correctly", async () => {
-      mockGetConfig.mockImplementation(async (_db, key) => {
+      mockGetConfig.mockImplementation(async (_db: any, key: any) => {
         if (key === CONFIG_KEYS.VM_BOOT_MODE) return "ext2";
         if (key === CONFIG_KEYS.STREAMING_ENABLED) return "true";
         if (key === CONFIG_KEYS.WEBMCP_TOOLS_ENABLED) return "false";
@@ -285,7 +339,7 @@ describe("initTasks", () => {
 
   describe("initLlamafileAndMesh", () => {
     it("should set llamafile modes", async () => {
-      mockGetConfig.mockImplementation(async (_db, key) => {
+      mockGetConfig.mockImplementation(async (_db: any, key: any) => {
         if (key === CONFIG_KEYS.LLAMAFILE_MODE) return "cli";
         if (key === CONFIG_KEYS.LLAMAFILE_HOST) return "http://localhost:8080";
         if (key === CONFIG_KEYS.LLAMAFILE_PORT) return "9090";
@@ -306,7 +360,7 @@ describe("initTasks", () => {
 
   describe("initProviderAndModel", () => {
     it("should load provider and model config correctly", async () => {
-      mockGetConfig.mockImplementation(async (_db, key) => {
+      mockGetConfig.mockImplementation(async (_db: any, key: any) => {
         if (key === CONFIG_KEYS.PROVIDER) return "openrouter";
         if (key === CONFIG_KEYS.MODEL) return "gpt-4";
         if (key === CONFIG_KEYS.MAX_TOKENS) return "4096";
@@ -329,7 +383,7 @@ describe("initTasks", () => {
 
   describe("initWorkerAndScheduler", () => {
     it("should spawn worker and start scheduler", async () => {
-      mockGetConfig.mockImplementation(async (_db, key) => {
+      mockGetConfig.mockImplementation(async (_db: any, key: any) => {
         if (key === CONFIG_KEYS.STORAGE_HANDLE) return "handle-123";
         return null;
       });
@@ -337,15 +391,14 @@ describe("initTasks", () => {
       await initWorkerAndScheduler(mockOrchestrator, mockDb);
 
       expect(mockOrchestrator.agentWorker).toBeDefined();
-      expect(
-        mockOrchestrator.syncProxyConfigToServiceWorker,
-      ).toHaveBeenCalled();
+      expect(syncProxyConfigToServiceWorker).toHaveBeenCalled();
       expect(TaskScheduler).toHaveBeenCalled();
 
       const schedulerInstance = (TaskScheduler as jest.Mock).mock.results[0]
         .value;
       expect((schedulerInstance as any).start).toHaveBeenCalled();
-      expect(mockOrchestrator.setupPushTaskListener).toHaveBeenCalledWith(
+      expect(mockSetupPushTaskListener).toHaveBeenCalledWith(
+        mockOrchestrator,
         mockDb,
       );
 
@@ -357,7 +410,8 @@ describe("initTasks", () => {
 
       // Trigger worker message
       mockOrchestrator.agentWorker.onmessage({ data: { type: "test" } } as any);
-      expect(mockOrchestrator.handleWorkerMessage).toHaveBeenCalledWith(
+      expect(mockHandleWorkerMessage).toHaveBeenCalledWith(
+        mockOrchestrator,
         mockDb,
         { type: "test" },
       );
@@ -365,9 +419,12 @@ describe("initTasks", () => {
       // Trigger scheduler task
       const schedulerCb: any = (TaskScheduler as jest.Mock).mock.calls[0][0];
       await schedulerCb({ id: "task1" });
-      expect(mockOrchestrator.runTaskAsScheduled).toHaveBeenCalledWith({
-        id: "task1",
-      });
+      expect(runTaskAsScheduled).toHaveBeenCalledWith(
+        mockOrchestrator,
+        expect.objectContaining({
+          id: "task1",
+        }),
+      );
     });
   });
 });

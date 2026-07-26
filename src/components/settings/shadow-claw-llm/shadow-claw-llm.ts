@@ -6,6 +6,7 @@ import {
 } from "../../../config/config.js";
 
 import { effect } from "../../../core/effect.js";
+import { getBedrockSettings } from "../../../core/orchestrator/utils/operations/provider.js";
 import { getDb } from "../../../db/db.js";
 import { getConfig } from "../../../db/getConfig.js";
 import { setConfig } from "../../../db/setConfig.js";
@@ -23,6 +24,27 @@ import {
   compareLocalModelCandidates,
   isLikelyInstructionModelId,
 } from "./model-ranking.js";
+
+import {
+  getApiKeyForHeaders,
+  getAvailableProviders,
+  getLlamafileSettings,
+  setBedrockSettings,
+  setLlamafileSettings,
+  setMeshLlmSettings,
+  setModel,
+  setProvider,
+} from "../../../core/orchestrator/utils/operations/provider.js";
+
+import {
+  setContextCompressionEnabled,
+  setMaxIterations,
+  setMaxTokens,
+  setRateLimitAutoAdapt,
+  setRateLimitCallsPerMinute,
+  setReasoningEffort,
+  setStreamingEnabled,
+} from "../../../core/orchestrator/utils/settings.js";
 
 import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
@@ -93,8 +115,8 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     const recommendation = getRecommendedMaxTokens(
-      this.orchestrator.getProvider(),
-      this.orchestrator.getModel(),
+      this.orchestrator.provider,
+      this.orchestrator.model,
     );
 
     input.value = String(recommendation.recommended);
@@ -218,7 +240,9 @@ export class ShadowClawLlm extends ShadowClawElement {
       return;
     }
 
-    const settings = this.orchestrator.getBedrockSettings?.();
+    const settings = this.orchestrator
+      ? getBedrockSettings(this.orchestrator)
+      : null;
 
     const regionInput = root.querySelector(
       '[data-setting="bedrock-region-input"]',
@@ -253,7 +277,7 @@ export class ShadowClawLlm extends ShadowClawElement {
       return;
     }
 
-    const settings = this.orchestrator.getLlamafileSettings?.();
+    const settings = getLlamafileSettings(this.orchestrator);
     if (!settings) {
       return;
     }
@@ -352,14 +376,7 @@ export class ShadowClawLlm extends ShadowClawElement {
       return;
     }
 
-    const provider = this.orchestrator.getProvider();
-    if (provider !== "llamafile") {
-      modelSection.style.display = "block";
-
-      return;
-    }
-
-    const llamafileSettings = this.orchestrator.getLlamafileSettings?.();
+    const llamafileSettings = getLlamafileSettings(this.orchestrator);
     modelSection.style.display =
       llamafileSettings?.mode === "server" ? "none" : "block";
   }
@@ -385,10 +402,10 @@ export class ShadowClawLlm extends ShadowClawElement {
       return;
     }
 
-    const provider = this.orchestrator.getProvider();
-    const settings = this.orchestrator.getLlamafileSettings?.();
-    const mode = settings?.mode || "cli";
-    const isServerMode = provider === "llamafile" && mode === "server";
+    const provider = this.orchestrator.provider;
+    const isServerMode =
+      provider === "llamafile" &&
+      getLlamafileSettings(this.orchestrator)?.mode === "server";
 
     if (serverOnly) {
       serverOnly.style.display = isServerMode ? "block" : "none";
@@ -432,9 +449,9 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-setting="max-tokens-helper"]',
     ) as HTMLElement | null;
 
-    const providerId = this.orchestrator.getProvider();
-    const modelId = this.orchestrator.getModel();
-    const currentValue = this.orchestrator.getMaxTokens();
+    const providerId = this.orchestrator.provider;
+    const modelId = this.orchestrator.model;
+    const currentValue = this.orchestrator.maxTokens;
     const recommendation = getRecommendedMaxTokens(providerId, modelId);
 
     if (input) {
@@ -476,8 +493,8 @@ export class ShadowClawLlm extends ShadowClawElement {
       return;
     }
 
-    const provider = this.orchestrator.getProvider();
-    const llamafileSettings = this.orchestrator.getLlamafileSettings?.();
+    const provider = this.orchestrator.provider;
+    const llamafileSettings = getLlamafileSettings(this.orchestrator);
     if (provider !== "llamafile" || llamafileSettings?.mode === "server") {
       helper.hidden = true;
       helper.textContent = "";
@@ -514,8 +531,8 @@ export class ShadowClawLlm extends ShadowClawElement {
       return;
     }
 
-    const providers = this.orchestrator.getAvailableProviders();
-    const currentProvider = this.orchestrator.getProvider();
+    const providers = getAvailableProviders();
+    const currentProvider = this.orchestrator.provider;
     const currentProviderData = providers.find(
       (p: LLMProvider) => p.id === currentProvider,
     ) as LLMProvider | undefined;
@@ -528,7 +545,7 @@ export class ShadowClawLlm extends ShadowClawElement {
 
     let skipModelFetch = false;
     if (currentProvider === "llamafile") {
-      const llamafileSettings = this.orchestrator.getLlamafileSettings?.();
+      const llamafileSettings = getLlamafileSettings(this.orchestrator);
       if (llamafileSettings?.mode === "server") {
         const modelSelect = root.querySelector(
           '[data-setting="model-select"]',
@@ -554,7 +571,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     const customModelInput = root.querySelector(
       '[data-setting="custom-model-input"]',
     ) as HTMLInputElement | null;
-    const currentModel = this.orchestrator.getModel();
+    const currentModel = this.orchestrator.model;
     const localOnlyProviderIds = new Set([
       "transformers_js_local",
       "transformers_js_browser",
@@ -715,7 +732,7 @@ export class ShadowClawLlm extends ShadowClawElement {
       }
 
       if (!Array.isArray(modelItems) || modelItems.length === 0) {
-        const currentValue = this.orchestrator?.getModel() || "";
+        const currentValue = this.orchestrator?.model || "";
         const emptyMessage =
           currentProvider === "llamafile"
             ? `No *.llamafile models found in ${LLAMAFILE_EXPECTED_DIR}`
@@ -897,7 +914,7 @@ export class ShadowClawLlm extends ShadowClawElement {
 
       const headers = { ...currentProviderData.headers };
       if (currentProvider === "llamafile") {
-        const llamafileSettings = this.orchestrator.getLlamafileSettings?.();
+        const llamafileSettings = getLlamafileSettings(this.orchestrator);
         if (llamafileSettings) {
           headers["x-llamafile-mode"] = llamafileSettings.mode;
           headers["x-llamafile-host"] = llamafileSettings.host;
@@ -907,7 +924,9 @@ export class ShadowClawLlm extends ShadowClawElement {
             : "false";
         }
       } else if (currentProvider === "bedrock_proxy") {
-        const bedrockSettings = this.orchestrator.getBedrockSettings?.();
+        const bedrockSettings = this.orchestrator
+          ? getBedrockSettings(this.orchestrator)
+          : null;
         if (bedrockSettings?.region) {
           headers["x-bedrock-region"] = bedrockSettings.region;
         }
@@ -921,7 +940,7 @@ export class ShadowClawLlm extends ShadowClawElement {
         }
       }
 
-      this.orchestrator.getApiKeyForHeaders().then((apiKey) => {
+      getApiKeyForHeaders(this.orchestrator).then((apiKey) => {
         if (apiKey && currentProviderData.apiKeyHeader) {
           const format = currentProviderData.apiKeyHeaderFormat || "{key}";
           const authValue = format.replace("{key}", apiKey);
@@ -945,7 +964,7 @@ export class ShadowClawLlm extends ShadowClawElement {
               return;
             }
 
-            if (this.orchestrator?.getProvider?.() !== currentProvider) {
+            if (this.orchestrator?.provider !== currentProvider) {
               return;
             }
 
@@ -1006,7 +1025,7 @@ export class ShadowClawLlm extends ShadowClawElement {
               return;
             }
 
-            if (this.orchestrator?.getProvider?.() !== currentProvider) {
+            if (this.orchestrator?.provider !== currentProvider) {
               return;
             }
 
@@ -1107,7 +1126,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setContextCompressionEnabled(this.db, enabled);
+      await setContextCompressionEnabled(this.orchestrator, this.db, enabled);
       showSuccess(
         enabled
           ? "Context compression enabled"
@@ -1141,11 +1160,16 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     const providerId = providerSelect.value;
-    const currentProvider = this.orchestrator.getProvider();
+    const currentProvider = this.orchestrator.provider;
 
     if (providerId !== currentProvider) {
       try {
-        await this.orchestrator.setProvider(this.db, providerId);
+        await setProvider(this.orchestrator, this.db, providerId, {
+          loadApiKeyForProvider: this.orchestrator.loadApiKeyForProvider.bind(
+            this.orchestrator,
+          ),
+          getApiKeyForHeaders: () => getApiKeyForHeaders(this.orchestrator!),
+        });
         this.updateModelSelector();
         this.updateMaxTokensUI();
         this.updateLlamafileSettingsVisibility(providerId);
@@ -1178,7 +1202,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setStreamingEnabled(this.db, enabled);
+      await setStreamingEnabled(this.orchestrator, this.db, enabled);
       showSuccess(enabled ? "Streaming enabled" : "Streaming disabled", 2500);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -1203,8 +1227,8 @@ export class ShadowClawLlm extends ShadowClawElement {
     this.bindEventListeners();
 
     // Populate provider selector
-    const providers = this.orchestrator.getAvailableProviders();
-    const currentProvider = this.orchestrator.getProvider();
+    const providers = getAvailableProviders();
+    const currentProvider = this.orchestrator.provider;
     const providerSelect = root.querySelector(
       '[data-setting="provider-select"]',
     ) as HTMLSelectElement | null;
@@ -1241,7 +1265,7 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-setting="streaming-toggle"]',
     ) as HTMLInputElement | null;
     if (streamingToggle) {
-      streamingToggle.checked = this.orchestrator.getStreamingEnabled();
+      streamingToggle.checked = this.orchestrator.streamingEnabled;
     }
 
     // Load context compression toggle
@@ -1249,15 +1273,14 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-setting="context-compression-toggle"]',
     ) as HTMLInputElement | null;
     if (ccToggle) {
-      ccToggle.checked = this.orchestrator.getContextCompressionEnabled();
+      ccToggle.checked = this.orchestrator.contextCompressionEnabled;
     }
 
     const reasoningSelect = root.querySelector(
       '[data-setting="reasoning-effort-select"]',
     ) as HTMLSelectElement | null;
     if (reasoningSelect) {
-      reasoningSelect.value =
-        this.orchestrator.getReasoningEffort?.() || "none";
+      reasoningSelect.value = this.orchestrator.reasoningEffort || "none";
     }
 
     // Load max iterations
@@ -1265,7 +1288,7 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-setting="max-iterations-input"]',
     ) as HTMLInputElement | null;
     if (maxIterInput && this.orchestrator) {
-      maxIterInput.value = String(this.orchestrator.getMaxIterations());
+      maxIterInput.value = String(this.orchestrator.maxIterations);
     }
 
     // Load subagent max parallel
@@ -1307,7 +1330,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     ) as HTMLInputElement | null;
     if (rateLimitInput && this.orchestrator) {
       rateLimitInput.value = String(
-        this.orchestrator.getRateLimitCallsPerMinute?.() || 0,
+        this.orchestrator.rateLimitCallsPerMinute || 0,
       );
     }
 
@@ -1316,7 +1339,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     ) as HTMLInputElement | null;
     if (rateLimitAutoToggle && this.orchestrator) {
       rateLimitAutoToggle.checked =
-        this.orchestrator.getRateLimitAutoAdapt?.() !== false;
+        this.orchestrator.rateLimitAutoAdapt !== false;
     }
 
     this.updateMaxTokensUI();
@@ -1393,14 +1416,19 @@ export class ShadowClawLlm extends ShadowClawElement {
 
     const key = keyInput.value.trim();
     const providerId = providerSelect.value;
-    const selectedProvider = this.orchestrator
-      .getAvailableProviders()
-      .find((p: LLMProvider) => p.id === providerId);
+    const selectedProvider = getAvailableProviders().find(
+      (p: LLMProvider) => p.id === providerId,
+    );
     const requiresApiKey = selectedProvider?.requiresApiKey !== false;
 
     if (!requiresApiKey) {
       try {
-        await this.orchestrator.setProvider(this.db, providerId);
+        await setProvider(this.orchestrator, this.db, providerId, {
+          loadApiKeyForProvider: this.orchestrator.loadApiKeyForProvider.bind(
+            this.orchestrator,
+          ),
+          getApiKeyForHeaders: () => getApiKeyForHeaders(this.orchestrator!),
+        });
         keyInput.value = "";
         showSuccess("Provider saved (no API key required)", 3000);
       } catch (err) {
@@ -1464,20 +1492,14 @@ export class ShadowClawLlm extends ShadowClawElement {
       return;
     }
 
-    if (!this.orchestrator.setBedrockSettings) {
-      showError("Bedrock settings are not available in this build", 5000);
-
-      return;
-    }
-
     try {
-      await this.orchestrator.setBedrockSettings(this.db, {
+      await setBedrockSettings(this.orchestrator, this.db, {
         region,
         profile,
         authMode,
       });
       showSuccess("Bedrock fallback settings saved", 3000);
-      if (this.orchestrator.getProvider() === "bedrock_proxy") {
+      if (this.orchestrator.provider === "bedrock_proxy") {
         this.updateModelSelector();
       }
     } catch (err) {
@@ -1530,7 +1552,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setLlamafileSettings(this.db, {
+      await setLlamafileSettings(this.orchestrator, this.db, {
         mode,
         host,
         port,
@@ -1540,8 +1562,7 @@ export class ShadowClawLlm extends ShadowClawElement {
       this.updateLlamafileModelSectionVisibility();
       this.updateModelSelector();
 
-      const isLlamafileProvider =
-        this.orchestrator.getProvider() === "llamafile";
+      const isLlamafileProvider = this.orchestrator.provider === "llamafile";
       if (isLlamafileProvider) {
         const restarted = await orchestratorStore.restartCurrentRequest();
         showSuccess(
@@ -1590,7 +1611,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setMaxIterations(this.db, value);
+      await setMaxIterations(this.orchestrator, this.db, value);
       showSuccess("Max iterations saved", 3000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -1623,7 +1644,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setMaxTokens(this.db, value);
+      await setMaxTokens(this.orchestrator, this.db, value);
       this.updateMaxTokensUI();
       showSuccess("Max tokens saved", 3000);
     } catch (err) {
@@ -1652,10 +1673,10 @@ export class ShadowClawLlm extends ShadowClawElement {
     const host = hostInput.value.trim();
 
     try {
-      if ((this.orchestrator as any).setMeshLlmSettings) {
-        await (this.orchestrator as any).setMeshLlmSettings(this.db, { host });
+      if (this.orchestrator) {
+        await setMeshLlmSettings(this.orchestrator, this.db, { host });
         showSuccess("Mesh LLM settings saved", 3000);
-        if (this.orchestrator.getProvider() === "mesh-llm") {
+        if (this.orchestrator.provider === "mesh-llm") {
           this.updateModelSelector();
         }
       }
@@ -1695,8 +1716,8 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     const isLlamafileCli =
-      this.orchestrator.getProvider() === "llamafile" &&
-      this.orchestrator.getLlamafileSettings?.().mode === "cli";
+      this.orchestrator.provider === "llamafile" &&
+      getLlamafileSettings(this.orchestrator).mode === "cli";
 
     if (isLlamafileCli && !finalModel) {
       await this.showLlamafileHelpDialog(
@@ -1707,10 +1728,9 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setModel(this.db, finalModel);
+      await setModel(this.orchestrator, this.db, finalModel);
       this.updateMaxTokensUI();
-      const isLlamafileProvider =
-        this.orchestrator.getProvider() === "llamafile";
+      const isLlamafileProvider = this.orchestrator.provider === "llamafile";
       if (isLlamafileProvider) {
         const restarted = await orchestratorStore.restartCurrentRequest();
         showSuccess(
@@ -1760,11 +1780,13 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setRateLimitCallsPerMinute(
+      await setRateLimitCallsPerMinute(
+        this.orchestrator,
         this.db,
         callsPerMinute,
       );
-      await this.orchestrator.setRateLimitAutoAdapt(
+      await setRateLimitAutoAdapt(
+        this.orchestrator,
         this.db,
         autoToggle.checked,
       );
@@ -1793,7 +1815,8 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setReasoningEffort(
+      await setReasoningEffort(
+        this.orchestrator,
         this.db,
         select.value || "none",
       );
@@ -1911,7 +1934,7 @@ export class ShadowClawLlm extends ShadowClawElement {
   }
 
   async showLlamafileHelpDialog(reason?: string): Promise<void> {
-    const key = `${reason || ""}|${this.orchestrator?.getModel() || ""}`;
+    const key = `${reason || ""}|${this.orchestrator?.model || ""}`;
     if (this.lastLlamafileHelpKey === key) {
       return;
     }

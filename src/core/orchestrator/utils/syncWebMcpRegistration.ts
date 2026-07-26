@@ -2,13 +2,20 @@ import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { toolsStore } from "../../../stores/tools.js";
 
 import {
+  setWebMcpMode as applyWebMcpMode,
   registerWebMcpTools,
   unregisterWebMcpTools,
 } from "../../../subsystems/mcp/webmcp.js";
 
 import { effect } from "../../effect.js";
+import { handleWorkerMessage } from "./handleWorkerMessage.js";
+
+import { CONFIG_KEYS } from "../../../config/config.js";
+import { setConfig } from "../../../db/setConfig.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
+import type { WebMcpMode } from "../../../subsystems/mcp/webmcp.js";
+import type { OrchestratorState } from "../orchestrator-state.js";
 import type { Orchestrator } from "../orchestrator.js";
 
 export function syncWebMcpRegistration(
@@ -55,7 +62,7 @@ export function syncWebMcpRegistration(
         await registerWebMcpTools(
           orchestrator.agentWorker,
           async (msg) => {
-            await orchestrator.handleWorkerMessage(db, msg);
+            await handleWorkerMessage(orchestrator, db, msg);
           },
           activeGroupId,
           tools,
@@ -65,4 +72,41 @@ export function syncWebMcpRegistration(
         console.error("WebMCP registration failed:", err);
       });
   });
+}
+export async function setWebMcpMode(
+  _state: Pick<
+    OrchestratorState,
+    "webMcpToolsEnabled" | "webMcpRegistrationLock"
+  > & {
+    webMcpEffectCleanup: (() => void) | null;
+    agentWorker: Worker | null;
+  },
+  db: ShadowClawDatabase,
+  mode: WebMcpMode,
+  syncDeps: { orchestrator: Orchestrator },
+): Promise<void> {
+  // Unregister with old mode, switch, re-register with new mode.
+  unregisterWebMcpTools();
+  applyWebMcpMode(mode);
+
+  await setConfig(db, CONFIG_KEYS.WEBMCP_MODE, mode);
+
+  syncWebMcpRegistration(syncDeps.orchestrator, db);
+}
+
+export async function setWebMcpToolsEnabled(
+  state: Pick<OrchestratorState, "webMcpToolsEnabled">,
+  db: ShadowClawDatabase,
+  enabled: boolean,
+  syncDeps: { orchestrator: Orchestrator },
+): Promise<void> {
+  state.webMcpToolsEnabled = !!enabled;
+
+  await setConfig(
+    db,
+    CONFIG_KEYS.WEBMCP_TOOLS_ENABLED,
+    state.webMcpToolsEnabled ? "true" : "false",
+  );
+
+  syncWebMcpRegistration(syncDeps.orchestrator, db);
 }

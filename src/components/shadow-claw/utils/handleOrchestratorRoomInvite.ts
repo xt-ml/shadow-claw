@@ -1,3 +1,4 @@
+import { joinRoomViaLink } from "../../../core/orchestrator/utils/operations/room.js";
 import { RoomInvitePayload } from "../../../subsystems/channels/peer-protocol.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
 import { requestDialog } from "./requestDialog.js";
@@ -8,13 +9,7 @@ import type { OrchestratorStore } from "../../../stores/orchestrator.js";
 import type { ShowPageContext } from "./showPage.js";
 
 interface RoomInviteContext extends ShowPageContext {
-  orchestrator: {
-    joinRoomViaLink: (
-      roomId: string,
-      hostPeerId: string,
-      roomName: string,
-    ) => void;
-  };
+  orchestrator: any;
 }
 
 export async function handleOrchestratorRoomInvite(
@@ -43,7 +38,8 @@ export async function handleOrchestratorRoomInvite(
   }
 
   try {
-    shadowClaw.orchestrator.joinRoomViaLink(
+    joinRoomViaLink(
+      shadowClaw.orchestrator,
       invite.roomId,
       invite.hostPeerId,
       invite.roomName,

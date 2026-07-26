@@ -18,6 +18,15 @@ import { getPushUrl } from "../../../subsystems/notifications/push-client.js";
 
 import { showToast } from "../../../ui/toast.js";
 
+import {
+  deliverIntermediateResponse,
+  deliverResponse,
+} from "./deliverResponse.js";
+
+import { stopTransformersProgressPolling } from "./operations/provider.js";
+import { createRoom, inviteToRoom, leaveRoom } from "./operations/room.js";
+import { deleteTaskFromServer, syncTaskToServer } from "./operations/task.js";
+
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { Orchestrator } from "../orchestrator.js";
 
@@ -29,12 +38,12 @@ export async function handleWorkerMessage(
   switch (msg.type) {
     case "response": {
       const { groupId, text } = msg.payload;
-      o.stopTransformersProgressPolling(groupId);
+      stopTransformersProgressPolling(o, groupId);
       o.clearProviderRequest(groupId);
       o.inFlightTriggerByGroup.delete(groupId);
       o.inFlightEffectiveProviderByGroup.delete(groupId);
 
-      await o.deliverResponse(db, groupId, text);
+      await deliverResponse(o, db, groupId, text);
 
       break;
     }
@@ -56,7 +65,7 @@ export async function handleWorkerMessage(
 
     case "intermediate-response": {
       const { groupId, text } = msg.payload;
-      await o.deliverIntermediateResponse(db, groupId, text);
+      await deliverIntermediateResponse(o, db, groupId, text);
 
       break;
     }
@@ -105,7 +114,7 @@ export async function handleWorkerMessage(
       }
 
       try {
-        const serverOk = await o.syncTaskToServer(task);
+        const serverOk = await syncTaskToServer(o, task);
 
         if (!serverOk) {
           showToast("Failed to sync task to server — task was not saved.", {
@@ -131,14 +140,15 @@ export async function handleWorkerMessage(
 
       try {
         if (action === "create") {
-          o.createRoom(String(msg.payload.name || "").trim());
+          createRoom(o, String(msg.payload.name || "").trim());
         } else if (action === "invite") {
-          o.inviteToRoom(
+          inviteToRoom(
+            o,
             String(msg.payload.roomId),
             String(msg.payload.peerId),
           );
         } else if (action === "leave") {
-          o.leaveRoom(String(msg.payload.roomId));
+          leaveRoom(o, String(msg.payload.roomId));
         }
       } catch (err) {
         console.error("Failed to handle room action from agent:", err);
@@ -149,7 +159,7 @@ export async function handleWorkerMessage(
 
     case "error": {
       const { groupId, error } = msg.payload;
-      o.stopTransformersProgressPolling(groupId);
+      stopTransformersProgressPolling(o, groupId);
       o.clearProviderRequest(groupId);
       o.inFlightTriggerByGroup.delete(groupId);
 
@@ -161,7 +171,7 @@ export async function handleWorkerMessage(
 
       o.inFlightEffectiveProviderByGroup.delete(groupId);
 
-      const errorProviderId = inFlightProvider?.providerId ?? o.getProvider();
+      const errorProviderId = inFlightProvider?.providerId ?? o.provider;
 
       const errorProviderConfig =
         inFlightProvider?.providerConfig ?? o.providerConfig;
@@ -218,7 +228,7 @@ export async function handleWorkerMessage(
         }
       }
 
-      await o.deliverResponse(db, groupId, `⚠️ Error: ${finalError}`);
+      await deliverResponse(o, db, groupId, `⚠️ Error: ${finalError}`);
 
       break;
     }
@@ -299,7 +309,7 @@ export async function handleWorkerMessage(
       }
 
       try {
-        const serverOk = await o.syncTaskToServer(task);
+        const serverOk = await syncTaskToServer(o, task);
 
         if (!serverOk) {
           showToast(
@@ -334,7 +344,7 @@ export async function handleWorkerMessage(
       }
 
       try {
-        const serverOk = await o.deleteTaskFromServer(id);
+        const serverOk = await deleteTaskFromServer(o, id);
 
         if (!serverOk) {
           showToast("Failed to delete task from server — task kept in view.", {

@@ -1,13 +1,25 @@
 import { Signal } from "signal-polyfill";
 
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config/config.js";
+import { compactContext } from "../core/orchestrator/utils/compactContext.js";
 
-import { deleteMessage } from "../db/deleteMessage.js";
-import { deleteTask } from "../db/deleteTask.js";
+import {
+  flushTerminalWorkspace,
+  syncTerminalWorkspace,
+} from "../core/orchestrator/utils/operations/vm.js";
+
+import {
+  setGitProxyUrl,
+  setProxyUrl,
+  setUseProxy,
+  setVMBashFullInternetAccess,
+} from "../core/orchestrator/utils/settings.js";
 
 import { clearGroupMessages } from "../db/clearGroupMessages.js";
 import { cloneGroupMessages } from "../db/cloneGroupMessages.js";
 import { cloneGroupTasks } from "../db/cloneGroupTasks.js";
+import { deleteMessage } from "../db/deleteMessage.js";
+import { deleteTask } from "../db/deleteTask.js";
 import { getAllTasks } from "../db/getAllTasks.js";
 import { getConfig } from "../db/getConfig.js";
 import { getRecentMessages } from "../db/getRecentMessages.js";
@@ -30,9 +42,6 @@ import { saveMessage } from "../db/saveMessage.js";
 import { saveTask } from "../db/saveTask.js";
 import { setConfig } from "../db/setConfig.js";
 import { updateTaskLastRun } from "../db/updateTaskLastRun.js";
-
-import { ulid } from "../utils/ulid.js";
-
 import { copyGroupDirectory } from "../storage/copyGroupDirectory.js";
 import { ensureMainGroupIndex } from "../storage/ensureMainGroupIndex.js";
 
@@ -48,12 +57,13 @@ import { readGroupFile } from "../storage/readGroupFile.js";
 import { requestStorageAccess } from "../storage/requestStorageAccess.js";
 import { getStorageStatus } from "../storage/storage.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
-
 import { AGUIAdapter } from "../ui/agui-adapter.js";
 import { showError } from "../ui/toast.js";
 import { applyJsonPatch } from "../utils/jsonPatch.js";
+import { ulid } from "../utils/ulid.js";
 
 import type { MessageAttachment } from "../content/types.js";
+import type { Orchestrator } from "../core/orchestrator/orchestrator.js";
 
 import type {
   GroupMeta,
@@ -63,6 +73,8 @@ import type {
   Task,
 } from "../db/types.js";
 
+import type { StorageStatus } from "../storage/storage.js";
+
 import type {
   ContextUsage,
   ModelDownloadProgressPayload,
@@ -71,8 +83,6 @@ import type {
   ToolActivity,
 } from "../subsystems/worker/types.js";
 
-import type { Orchestrator } from "../core/orchestrator/orchestrator.js";
-import type { StorageStatus } from "../storage/storage.js";
 import type { A2UIAction } from "../ui/a2ui/types.js";
 
 export type OrchestratorDisplayState =
@@ -447,6 +457,10 @@ export class OrchestratorStore {
     return this._contextUsage.get();
   }
 
+  get tokenUsageAccumulator(): TokenUsage | null {
+    return this._tokenUsageAccumulator;
+  }
+
   get currentPath() {
     return this._currentPath.get();
   }
@@ -557,14 +571,14 @@ export class OrchestratorStore {
     a2uiAction?: A2UIAction,
   ): void {
     if (a2uiAction !== undefined) {
-      this.orchestrator?.submitMessage?.(
+      this.orchestrator?.browserChat?.submit(
         text,
         this._activeGroupId.get(),
         attachments,
         a2uiAction,
       );
     } else {
-      this.orchestrator?.submitMessage?.(
+      this.orchestrator?.browserChat?.submit(
         text,
         this._activeGroupId.get(),
         attachments,
@@ -665,14 +679,14 @@ export class OrchestratorStore {
    * Request a manual host -> VM workspace sync for the active group.
    */
   syncHostWorkspaceToVM() {
-    this.orchestrator?.syncTerminalWorkspace?.(this._activeGroupId.get());
+    syncTerminalWorkspace(this.orchestrator!, this._activeGroupId.get());
   }
 
   /**
    * Request a manual VM -> host workspace flush for the active group.
    */
   syncVMWorkspaceToHost() {
-    this.orchestrator?.flushTerminalWorkspace?.(this._activeGroupId.get());
+    flushTerminalWorkspace(this.orchestrator!, this._activeGroupId.get());
   }
 
   get tasks() {
@@ -817,7 +831,8 @@ export class OrchestratorStore {
    * Compact context
    */
   async compactContext(db: ShadowClawDatabase): Promise<any> {
-    return this.orchestrator?.compactContext?.(db, this._activeGroupId.get());
+    if (!this.orchestrator) return;
+    return compactContext(this.orchestrator, db, this._activeGroupId.get());
   }
 
   /**
@@ -1105,7 +1120,6 @@ export class OrchestratorStore {
         prev !== "responding"
       ) {
         this._tokenUsageAccumulator = null;
-        this._tokenUsage.set(null);
       }
     });
 
@@ -1135,6 +1149,7 @@ export class OrchestratorStore {
         return;
       }
 
+      this._tokenUsage.set(null);
       this.loadHistory();
     });
 
@@ -1297,11 +1312,11 @@ export class OrchestratorStore {
 
     // Initialize proxy values from orchestrator
     if (this.orchestrator) {
-      this._useProxy.set(this.orchestrator.getUseProxy());
-      this._proxyUrl.set(this.orchestrator.getProxyUrl());
-      this._gitProxyUrl.set(this.orchestrator.getGitProxyUrl());
+      this._useProxy.set(this.orchestrator.useProxy);
+      this._proxyUrl.set(this.orchestrator.proxyUrl);
+      this._gitProxyUrl.set(this.orchestrator.gitProxyUrl);
       this._vmBashFullInternetAccess.set(
-        this.orchestrator.getVMBashFullInternetAccess(),
+        this.orchestrator.vmBashFullInternetAccess,
       );
     }
 
@@ -1627,7 +1642,7 @@ export class OrchestratorStore {
         return;
       }
 
-      this.orchestrator?.submitMessage?.(task.prompt, task.groupId, []);
+      this.orchestrator?.browserChat?.submit(task.prompt, task.groupId, []);
     }
   }
 
@@ -1687,8 +1702,8 @@ export class OrchestratorStore {
    */
   async setGitProxyUrl(db: ShadowClawDatabase, url: string): Promise<void> {
     if (this.orchestrator) {
-      await this.orchestrator.setGitProxyUrl(db, url);
-      this._gitProxyUrl.set(this.orchestrator.getGitProxyUrl());
+      await setGitProxyUrl(this.orchestrator, db, url);
+      this._gitProxyUrl.set(this.orchestrator.gitProxyUrl);
     }
   }
 
@@ -1697,9 +1712,9 @@ export class OrchestratorStore {
    */
   async setProxyUrl(db: ShadowClawDatabase, url: string): Promise<void> {
     if (this.orchestrator) {
-      await this.orchestrator.setProxyUrl(db, url);
+      await setProxyUrl(this.orchestrator, db, url);
 
-      this._proxyUrl.set(this.orchestrator.getProxyUrl());
+      this._proxyUrl.set(this.orchestrator.proxyUrl);
     }
   }
 
@@ -1708,9 +1723,9 @@ export class OrchestratorStore {
    */
   async setUseProxy(db: ShadowClawDatabase, enabled: boolean): Promise<void> {
     if (this.orchestrator) {
-      await this.orchestrator.setUseProxy(db, enabled);
+      await setUseProxy(this.orchestrator, db, enabled);
 
-      this._useProxy.set(this.orchestrator.getUseProxy());
+      this._useProxy.set(this.orchestrator.useProxy);
     }
   }
 
@@ -1722,9 +1737,9 @@ export class OrchestratorStore {
     enabled: boolean,
   ): Promise<void> {
     if (this.orchestrator) {
-      await this.orchestrator.setVMBashFullInternetAccess(db, enabled);
+      await setVMBashFullInternetAccess(this.orchestrator, db, enabled);
       this._vmBashFullInternetAccess.set(
-        this.orchestrator.getVMBashFullInternetAccess(),
+        this.orchestrator.vmBashFullInternetAccess,
       );
     }
   }
@@ -1901,7 +1916,7 @@ export class OrchestratorStore {
   // --- Getters for reactive state ---
 
   private getTaskServerBaseUrl(): string {
-    return this.orchestrator?.getTaskServerUrl() ?? "/schedule";
+    return this.orchestrator?.taskServerUrl ?? "/schedule";
   }
 
   private normalizePagePath(path: string): string {

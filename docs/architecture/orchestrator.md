@@ -220,19 +220,15 @@ The orchestrator provides wrapper methods for VM terminal communication:
 
 ## Public API
 
-Key methods exposed by the Orchestrator class:
+The orchestrator follows a modular, functional utility architecture. The `Orchestrator` instance acts primarily as a state container and is passed as a dependency to independent operational functions.
 
-| Method                              | Purpose                                                            |
-| ----------------------------------- | ------------------------------------------------------------------ |
-| `init()`                            | Initialize: open DB, load config, set up channels, start scheduler |
-| `submitMessage(text, groupId?)`     | Post browser chat message                                          |
-| `invokeAgent(db, groupId, content)` | Trigger agent invocation                                           |
-| `compactContext(db, groupId?)`      | Summarize conversation context                                     |
-| `stopCurrentRequest(groupId?)`      | Abort in-flight agent request                                      |
-| `setProvider(db, providerId)`       | Switch LLM provider                                                |
-| `setModel(db, model)`               | Switch model (auto-activates matching tool profile)                |
-| `setMaxIterations(db, value)`       | Set tool-use loop limit (1–200)                                    |
-| `setStreamingEnabled(db, enabled)`  | Toggle SSE streaming                                               |
-| `setVMBootMode(db, mode)`           | Change VM mode                                                     |
-| `newSession(db, groupId?)`          | Clear message history                                              |
-| `shutdown()`                        | Stop scheduler, terminate worker, cleanup                          |
+Key operations include:
+
+- **Invocation & Context:** `invokeAgent`, `compactContext`, `stopCurrentRequest` (`src/core/orchestrator/utils/`)
+- **Providers:** `setProvider`, `setModel`, `setBedrockSettings`, etc. (`src/core/orchestrator/utils/operations/provider.ts`)
+- **Channels & Rooms:** `submitMessage`, `setChannelEnabled`, `createRoom`, `inviteToRoom` (`src/core/orchestrator/utils/operations/channel.ts`, `room.ts`)
+- **Settings:** `setMaxIterations`, `setStreamingEnabled`, `setProxyUrl` (`src/core/orchestrator/utils/settings.ts`)
+- **VM/Terminal:** `setVMBootMode`, `openTerminalSession`, `sendTerminalInput` (`src/core/orchestrator/utils/operations/vm.ts`)
+- **Tasks:** `syncTaskToServer`, `deleteTaskFromServer`, `shouldStartLocalScheduler` (`src/core/orchestrator/utils/operations/task.ts`)
+
+Initialization is handled by modular setup functions (`initCoreConfig`, `initChannelsAndRooms`, `initWorkerAndScheduler`) coordinated during app startup.

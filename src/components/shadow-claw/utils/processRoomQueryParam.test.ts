@@ -1,5 +1,27 @@
 import { jest } from "@jest/globals";
 
+const mockJoinRoomViaLink = jest.fn();
+const mockConfigurePeerJs = jest.fn();
+
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/configurePeerJs.js",
+  () => ({
+    configurePeerJs: mockConfigurePeerJs,
+  }),
+);
+
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/operations/room.js",
+  () => ({
+    createRoom: jest.fn(),
+    handleRoomInvite: jest.fn(),
+    inviteToRoom: jest.fn(),
+    joinRoomViaLink: mockJoinRoomViaLink,
+    leaveRoom: jest.fn(),
+    listRooms: jest.fn(),
+  }),
+);
+
 describe("processRoomQueryParam", () => {
   let win: Window;
   let shadowRoot: ShadowRoot;
@@ -13,6 +35,8 @@ describe("processRoomQueryParam", () => {
   let mockShowPage: any;
   let mockShowError: any;
   let mockShowSuccess: any;
+  let mockGetPeerJsConfig: any;
+  let mockSetChannelEnabled: any;
   let mockReplaceState: any;
 
   beforeEach(async () => {
@@ -37,9 +61,11 @@ describe("processRoomQueryParam", () => {
     orchestrator = {
       getPeerJsConfig: jest.fn(),
       configurePeerJs: jest.fn(),
-      setChannelEnabled: jest.fn(),
       joinRoomViaLink: jest.fn(),
     };
+
+    mockGetPeerJsConfig = jest.fn();
+    mockSetChannelEnabled = jest.fn();
 
     mockUlid = jest.fn().mockReturnValue("test-ulid");
     mockShowPage = jest.fn();
@@ -48,10 +74,16 @@ describe("processRoomQueryParam", () => {
     mockOrchestratorStore = {
       switchConversation: jest.fn(),
     };
-
     jest.unstable_mockModule("../../../utils/ulid.js", () => ({
       ulid: mockUlid,
     }));
+    jest.unstable_mockModule(
+      "../../../core/orchestrator/utils/operations/channel.js",
+      () => ({
+        getPeerJsConfig: mockGetPeerJsConfig,
+        setChannelEnabled: mockSetChannelEnabled,
+      }),
+    );
     jest.unstable_mockModule("../utils/showPage.js", () => ({
       showPage: mockShowPage,
     }));
@@ -77,7 +109,7 @@ describe("processRoomQueryParam", () => {
       orchestrator,
       mockOrchestratorStore,
     );
-    expect(orchestrator.getPeerJsConfig).not.toHaveBeenCalled();
+    expect(mockGetPeerJsConfig).not.toHaveBeenCalled();
   });
 
   it("should return early if room or host is missing", async () => {
@@ -90,7 +122,7 @@ describe("processRoomQueryParam", () => {
       orchestrator,
       mockOrchestratorStore,
     );
-    expect(orchestrator.getPeerJsConfig).not.toHaveBeenCalled();
+    expect(mockGetPeerJsConfig).not.toHaveBeenCalled();
 
     globalThis.window.history.pushState({}, "", "http://localhost?room=r1");
     await processRoomQueryParam(
@@ -101,7 +133,7 @@ describe("processRoomQueryParam", () => {
       orchestrator,
       mockOrchestratorStore,
     );
-    expect(orchestrator.getPeerJsConfig).not.toHaveBeenCalled();
+    expect(mockGetPeerJsConfig).not.toHaveBeenCalled();
 
     globalThis.window.history.pushState({}, "", "http://localhost?host=h1");
     await processRoomQueryParam(
@@ -112,11 +144,11 @@ describe("processRoomQueryParam", () => {
       orchestrator,
       mockOrchestratorStore,
     );
-    expect(orchestrator.getPeerJsConfig).not.toHaveBeenCalled();
+    expect(mockGetPeerJsConfig).not.toHaveBeenCalled();
   });
 
   it("should process room join successfully", async () => {
-    orchestrator.getPeerJsConfig.mockReturnValue({
+    mockGetPeerJsConfig.mockReturnValue({
       myPeerId: "my-id",
       trustedPeerIds: [],
       serverHost: "host",
@@ -135,7 +167,8 @@ describe("processRoomQueryParam", () => {
       mockOrchestratorStore,
     );
 
-    expect(orchestrator.configurePeerJs).toHaveBeenCalledWith(
+    expect(mockConfigurePeerJs).toHaveBeenCalledWith(
+      orchestrator,
       db,
       "my-id",
       ["h1"],
@@ -144,12 +177,18 @@ describe("processRoomQueryParam", () => {
       "/path",
       true,
     );
-    expect(orchestrator.setChannelEnabled).toHaveBeenCalledWith(
+    expect(mockSetChannelEnabled).toHaveBeenCalledWith(
+      orchestrator,
       db,
       "peerjs",
       true,
     );
-    expect(orchestrator.joinRoomViaLink).toHaveBeenCalledWith("r1", "h1", "n1");
+    expect(mockJoinRoomViaLink).toHaveBeenCalledWith(
+      orchestrator,
+      "r1",
+      "h1",
+      "n1",
+    );
     expect(mockOrchestratorStore.switchConversation).toHaveBeenCalledWith(
       db,
       "room:r1",
@@ -167,7 +206,7 @@ describe("processRoomQueryParam", () => {
   });
 
   it("should generate a new peer ID if one is not configured", async () => {
-    orchestrator.getPeerJsConfig.mockReturnValue({
+    mockGetPeerJsConfig.mockReturnValue({
       trustedPeerIds: [],
       serverHost: "host",
       serverPort: 443,
@@ -185,7 +224,8 @@ describe("processRoomQueryParam", () => {
       mockOrchestratorStore,
     );
 
-    expect(orchestrator.configurePeerJs).toHaveBeenCalledWith(
+    expect(mockConfigurePeerJs).toHaveBeenCalledWith(
+      orchestrator,
       db,
       "test-ulid",
       ["h1"],
@@ -194,11 +234,11 @@ describe("processRoomQueryParam", () => {
       "/path",
       true,
     );
-    expect(orchestrator.setChannelEnabled).not.toHaveBeenCalled();
+    expect(mockSetChannelEnabled).not.toHaveBeenCalled();
   });
 
   it("should handle error", async () => {
-    orchestrator.getPeerJsConfig.mockImplementation(() => {
+    mockGetPeerJsConfig.mockImplementation(() => {
       throw new Error("test error");
     });
 

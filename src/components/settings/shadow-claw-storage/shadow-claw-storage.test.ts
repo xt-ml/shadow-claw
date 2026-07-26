@@ -10,6 +10,7 @@ jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showSuccess: jest.fn(),
   showWarning: jest.fn(),
   showInfo: jest.fn(),
+  showToast: jest.fn(),
 }));
 
 jest.unstable_mockModule("../../../db/getConfig.js", () => ({

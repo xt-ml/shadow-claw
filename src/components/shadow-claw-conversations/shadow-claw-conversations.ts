@@ -1,30 +1,37 @@
 import { CONFIG_KEYS } from "../../config/config.js";
 import { effect } from "../../core/effect.js";
 
+import {
+  getAvailableProviders,
+  getProviderRuntimeHeaders,
+} from "../../core/orchestrator/utils/operations/provider.js";
+
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
 import { getConfig } from "../../db/getConfig.js";
 import { setConfig } from "../../db/setConfig.js";
-
 import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
 import { ChannelRegistry } from "../../subsystems/channels/channel-registry.js";
 import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
+
 import type { LLMProvider } from "../../subsystems/providers/types.js";
 
-import "../shadow-claw-dialog/shadow-claw-dialog.js";
-import "../common/shadow-claw-provider-model-picker/shadow-claw-provider-model-picker.js";
-import "../common/shadow-claw-provider-module-settings/shadow-claw-provider-module-settings.js";
-
-import ShadowClawElement from "../shadow-claw-element.js";
 import type {
   ProviderModelItem,
   ShadowClawProviderModelPicker,
 } from "../common/shadow-claw-provider-model-picker/shadow-claw-provider-model-picker.js";
+
 import type {
   ProviderRuntimeOverrides,
   ShadowClawProviderModuleSettings,
 } from "../common/shadow-claw-provider-module-settings/shadow-claw-provider-module-settings.js";
+
+import "../common/shadow-claw-provider-model-picker/shadow-claw-provider-model-picker.js";
+import "../common/shadow-claw-provider-module-settings/shadow-claw-provider-module-settings.js";
+import "../shadow-claw-dialog/shadow-claw-dialog.js";
+
+import ShadowClawElement from "../shadow-claw-element.js";
 import shadowClawConversationsStyles from "./shadow-claw-conversations.css" with { type: "css" };
 import shadowClawConversationsTemplate from "./shadow-claw-conversations.html" with { type: "html" };
 
@@ -508,9 +515,7 @@ export class ShadowClawConversations extends ShadowClawElement {
       subagentPicker &&
       subagentProviderModuleSettings
     ) {
-      const providers =
-        (orchestratorStore.orchestrator?.getAvailableProviders() as LLMProvider[]) ||
-        [];
+      const providers = (getAvailableProviders() as LLMProvider[]) || [];
 
       mainPicker.setLabels({
         providerLabel: "Pinned Provider",
@@ -1541,11 +1546,14 @@ export class ShadowClawConversations extends ShadowClawElement {
 
     const headers: Record<string, string> = {
       ...(provider.headers || {}),
-      ...(orchestratorStore.orchestrator?.getProviderRuntimeHeaders(
-        provider.id,
-        "",
-        this._pendingDetailsProviderRuntimeOverrides,
-      ) || {}),
+      ...(orchestratorStore.orchestrator
+        ? getProviderRuntimeHeaders(
+            orchestratorStore.orchestrator,
+            provider.id,
+            "",
+            this._pendingDetailsProviderRuntimeOverrides,
+          )
+        : {}),
     };
 
     if (this.db && provider.apiKeyHeader && orchestratorStore.orchestrator) {

@@ -22,9 +22,52 @@ const mockUlid = jest.fn() as any;
 const mockWorkerPost = jest.fn() as any;
 const mockBuildSystemPrompt = jest.fn() as any;
 
+const mockGetChannelTypeForGroup = jest.fn() as any;
+jest.unstable_mockModule("./operations/channel.js", () => ({
+  getChannelTypeForGroup: mockGetChannelTypeForGroup,
+}));
+
+const mockGetApiKeyForRequest = jest.fn() as any;
+const mockGetProviderRuntimeHeaders = jest.fn() as any;
+const mockGetReasoningConfig = jest.fn() as any;
+const mockStartTransformersProgressPolling = jest.fn() as any;
+jest.unstable_mockModule("./operations/provider.js", () => ({
+  getApiKeyForRequest: mockGetApiKeyForRequest,
+  getProviderRuntimeHeaders: mockGetProviderRuntimeHeaders,
+  getReasoningConfig: mockGetReasoningConfig,
+  startTransformersProgressPolling: mockStartTransformersProgressPolling,
+}));
+
+const mockCompactContext = jest.fn() as any;
+jest.unstable_mockModule("./compactContext.js", () => ({
+  compactContext: mockCompactContext,
+}));
+
+const mockDeliverResponse = jest.fn() as any;
+jest.unstable_mockModule("./deliverResponse.js", () => ({
+  deliverResponse: mockDeliverResponse,
+}));
+
+const mockHandleWorkerMessage = jest.fn() as any;
+jest.unstable_mockModule("./handleWorkerMessage.js", () => ({
+  handleWorkerMessage: mockHandleWorkerMessage,
+}));
+
 jest.unstable_mockModule("../../../config/config.js", () => ({
   CONFIG_KEYS: { STORAGE_HANDLE: "STORAGE_HANDLE" },
+  DEFAULT_GROUP_ID: "br:main",
+  DEFAULT_MAX_ITERATIONS: 50,
+  GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: [],
+  getGeneralAccountProviderCapabilities: jest.fn(),
+  PROVIDERS: {},
   getProvider: mockGetProvider,
+  getAvailableProviders: jest.fn().mockReturnValue([]),
+  getModelMaxTokens: jest.fn().mockReturnValue(128000),
+  buildTriggerPattern: jest.fn().mockReturnValue(new RegExp("")),
+  getProviderTokenAuthScheme: jest.fn(),
+  BASH_DEFAULT_TIMEOUT_SEC: 60,
+  BASH_MAX_TIMEOUT_SEC: 300,
+  OAUTH_PROVIDER_DEFINITIONS: {},
 }));
 
 jest.unstable_mockModule("../../../context/buildDynamicContext.js", () => ({
@@ -45,6 +88,7 @@ jest.unstable_mockModule("../../../db/getConfig.js", () => ({
 
 jest.unstable_mockModule("../../../db/groups.js", () => ({
   listGroups: mockListGroups,
+  createGroup: jest.fn(),
 }));
 
 jest.unstable_mockModule("../../../db/saveMessage.js", () => ({
@@ -58,6 +102,7 @@ jest.unstable_mockModule("../../../storage/readGroupFile.js", () => ({
 jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   orchestratorStore: {
     getPeerState: jest.fn(),
+    tokenUsage: null,
   },
 }));
 
@@ -81,6 +126,7 @@ jest.unstable_mockModule(
   () => ({
     invokeWithPromptApi: mockInvokeWithPromptApi,
     isPromptApiSupported: mockIsPromptApiSupported,
+    compactWithPromptApi: jest.fn(),
   }),
 );
 
@@ -124,7 +170,6 @@ describe("invokeAgent", () => {
       setState: jest.fn(),
       router: { setTyping: jest.fn() },
       events: { emit: jest.fn() },
-      getChannelTypeForGroup: jest.fn().mockReturnValue("web"),
       provider: "test-provider",
       model: "test-model",
       providerConfig: { supportsStreaming: true, format: "openai" },
@@ -132,21 +177,23 @@ describe("invokeAgent", () => {
       contextCompressionEnabled: false,
       maxTokens: 1000,
       maxIterations: 5,
-      getApiKeyForRequest: (jest.fn() as any).mockResolvedValue("key"),
       getApiKeyForSpecificProvider: (jest.fn() as any).mockResolvedValue("key"),
-      getProviderRuntimeHeaders: jest.fn().mockReturnValue({}),
-      getReasoningConfig: jest.fn().mockReturnValue({}),
       rateLimitAutoAdapt: false,
       rateLimitCallsPerMinute: 60,
       streamingEnabled: true,
       createProviderRequestId: jest.fn().mockReturnValue("req-123"),
       agentWorker: { postMessage: jest.fn() },
       promptControllers: new Map(),
-      compactContext: jest.fn(),
-      deliverResponse: jest.fn(),
-      handleWorkerMessage: jest.fn(),
-      startTransformersProgressPolling: jest.fn(),
     };
+
+    mockGetChannelTypeForGroup.mockReturnValue("web");
+    mockGetApiKeyForRequest.mockResolvedValue("key");
+    mockGetProviderRuntimeHeaders.mockReturnValue({});
+    mockGetReasoningConfig.mockReturnValue({});
+    mockCompactContext.mockResolvedValue(undefined);
+    mockDeliverResponse.mockResolvedValue(undefined);
+    mockHandleWorkerMessage.mockResolvedValue(undefined);
+    mockStartTransformersProgressPolling.mockReturnValue(undefined);
 
     mockGetConfig.mockResolvedValue("storage-handle");
     mockBuildSystemPrompt.mockReturnValue("system prompt");
@@ -229,10 +276,45 @@ describe("invokeAgent", () => {
 
     // Fast-forward microtasks
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(mockOrchestrator.compactContext).toHaveBeenCalledWith(
+    expect(mockCompactContext).toHaveBeenCalledWith(
+      mockOrchestrator,
       mockDb,
       "group1",
     );
+  });
+
+  it("should blend actual token usage to prevent meter regression", async () => {
+    const { orchestratorStore } =
+      await import("../../../stores/orchestrator.js");
+
+    // Set a baseline heuristic that is low (e.g. 50 + 100 = 150)
+    mockBuildDynamicContext.mockReturnValue({
+      messages: [],
+      estimatedTokens: 50,
+      usagePercent: 5,
+      truncatedCount: 0,
+    });
+
+    // Mock the actual token usage from the API to be much higher (e.g. a huge cached prompt)
+    (orchestratorStore as any).tokenUsage = {
+      inputTokens: 100,
+      cacheReadTokens: 3000,
+      outputTokens: 50,
+    };
+
+    await invokeAgent(mockOrchestrator, mockDb, "group1", "hello");
+
+    // The emitted context usage should use the actual token footprint (100 + 3000 + 50 = 3150)
+    // rather than falling back to the 150 heuristic
+    expect(mockOrchestrator.events.emit).toHaveBeenCalledWith(
+      "context-usage",
+      expect.objectContaining({
+        estimatedTokens: 3150,
+      }),
+    );
+
+    // Cleanup
+    (orchestratorStore as any).tokenUsage = null;
   });
 
   it("should handle transformers_js_browser", async () => {
@@ -257,7 +339,7 @@ describe("invokeAgent", () => {
 
     await invokeAgent(mockOrchestrator, mockDb, "group1", "hello");
 
-    expect(mockOrchestrator.deliverResponse).not.toHaveBeenCalled();
+    expect(mockDeliverResponse).not.toHaveBeenCalled();
   });
 
   it("should handle transformers_js_browser error", async () => {
@@ -270,7 +352,8 @@ describe("invokeAgent", () => {
 
     await invokeAgent(mockOrchestrator, mockDb, "group1", "hello");
 
-    expect(mockOrchestrator.deliverResponse).toHaveBeenCalledWith(
+    expect(mockDeliverResponse).toHaveBeenCalledWith(
+      mockOrchestrator,
       mockDb,
       "group1",
       expect.stringContaining("Transformers error"),
@@ -297,7 +380,8 @@ describe("invokeAgent", () => {
 
     await invokeAgent(mockOrchestrator, mockDb, "group1", "hello");
 
-    expect(mockOrchestrator.deliverResponse).toHaveBeenCalledWith(
+    expect(mockDeliverResponse).toHaveBeenCalledWith(
+      mockOrchestrator,
       mockDb,
       "group1",
       expect.stringContaining("Prompt API is not available"),
@@ -324,7 +408,8 @@ describe("invokeAgent", () => {
 
     await invokeAgent(mockOrchestrator, mockDb, "group1", "hello");
 
-    expect(mockOrchestrator.deliverResponse).toHaveBeenCalledWith(
+    expect(mockDeliverResponse).toHaveBeenCalledWith(
+      mockOrchestrator,
       mockDb,
       "group1",
       expect.stringContaining("LiteRT-LM requires WebGPU"),
@@ -373,9 +458,11 @@ describe("invokeAgent", () => {
 
     await invokeAgent(mockOrchestrator, mockDb, "group1", "hello");
 
-    expect(
-      mockOrchestrator.startTransformersProgressPolling,
-    ).toHaveBeenCalledWith("group1");
+    expect(mockStartTransformersProgressPolling).toHaveBeenCalledWith(
+      mockOrchestrator,
+      mockOrchestrator.events,
+      "group1",
+    );
     expect(mockOrchestrator.agentWorker.postMessage).toHaveBeenCalled();
   });
 });

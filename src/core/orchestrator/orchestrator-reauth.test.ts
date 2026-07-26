@@ -20,6 +20,7 @@ jest.unstable_mockModule("../../ui/toast.js", () => ({
 }));
 
 const { Orchestrator } = await import("./orchestrator.js");
+const { handleWorkerMessage } = await import("./utils/handleWorkerMessage.js");
 
 describe("Orchestrator MCP Reauth Handler", () => {
   let orchestrator: any;
@@ -44,7 +45,7 @@ describe("Orchestrator MCP Reauth Handler", () => {
     });
     mockReconnectMcpOAuth.mockResolvedValue({ success: true });
 
-    await orchestrator.handleWorkerMessage(fakeDb, {
+    await handleWorkerMessage(orchestrator, fakeDb, {
       type: "mcp-reauth-required",
       payload: { connectionId: "conn-1" },
     });
@@ -84,7 +85,7 @@ describe("Orchestrator MCP Reauth Handler", () => {
       error: "Silent login failed",
     });
 
-    await orchestrator.handleWorkerMessage(fakeDb, {
+    await handleWorkerMessage(orchestrator, fakeDb, {
       type: "mcp-reauth-required",
       payload: { connectionId: "conn-1" },
     });
@@ -112,7 +113,7 @@ describe("Orchestrator MCP Reauth Handler", () => {
       autoReconnectOAuth: false,
     });
 
-    await orchestrator.handleWorkerMessage(fakeDb, {
+    await handleWorkerMessage(orchestrator, fakeDb, {
       type: "mcp-reauth-required",
       payload: { connectionId: "conn-1" },
     });
@@ -143,7 +144,7 @@ describe("Orchestrator MCP Reauth Handler", () => {
     const eventSpy = jest.fn();
     orchestrator.events.on("mcp-reauth-required", eventSpy);
 
-    await orchestrator.handleWorkerMessage(fakeDb, {
+    await handleWorkerMessage(orchestrator, fakeDb, {
       type: "mcp-reauth-required",
       payload: { connectionId: "conn-1" },
     });

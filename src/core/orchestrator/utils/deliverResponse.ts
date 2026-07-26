@@ -4,6 +4,7 @@ import { ulid } from "../../../utils/ulid.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { Orchestrator } from "../orchestrator.js";
+import { getChannelTypeForGroup } from "./operations/channel.js";
 
 export async function deliverIntermediateResponse(
   orchestrator: Orchestrator,
@@ -11,7 +12,7 @@ export async function deliverIntermediateResponse(
   groupId: string,
   text: string,
 ): Promise<void> {
-  const channelType = orchestrator.getChannelTypeForGroup(groupId);
+  const channelType = getChannelTypeForGroup(orchestrator, groupId);
   const stored = {
     channel: channelType,
     content: text,
@@ -54,7 +55,7 @@ export async function deliverResponse(
   text: string,
 ): Promise<void> {
   const stored = {
-    channel: orchestrator.getChannelTypeForGroup(groupId),
+    channel: getChannelTypeForGroup(orchestrator, groupId),
     content: text,
     groupId,
     id: ulid(),
@@ -101,7 +102,7 @@ export async function deliverResponse(
   if (deliveryError) {
     orchestrator.events.emit("error", {
       groupId,
-      error: `Failed to deliver response to ${orchestrator.getChannelTypeForGroup(groupId)}: ${deliveryError.message}`,
+      error: `Failed to deliver response to ${getChannelTypeForGroup(orchestrator, groupId)}: ${deliveryError.message}`,
     });
   }
 }

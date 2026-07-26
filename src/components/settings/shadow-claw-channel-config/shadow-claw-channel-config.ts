@@ -1,4 +1,13 @@
 import { effect } from "../../../core/effect.js";
+
+import {
+  configureIMessage,
+  configureTelegram,
+  getIMessageConfig,
+  getTelegramConfig,
+  setChannelEnabled,
+} from "../../../core/orchestrator/utils/operations/channel.js";
+
 import { getDb } from "../../../db/db.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
@@ -195,8 +204,8 @@ export class ShadowClawChannelConfig extends ShadowClawElement {
       return;
     }
 
-    const telegram = orchestrator.getTelegramConfig();
-    const imessage = orchestrator.getIMessageConfig();
+    const telegram = getTelegramConfig(orchestrator);
+    const imessage = getIMessageConfig(orchestrator);
 
     const telegramTokenInput = root.querySelector(
       '[data-setting="telegram-token-input"]',
@@ -341,13 +350,15 @@ export class ShadowClawChannelConfig extends ShadowClawElement {
     ) as HTMLInputElement | null;
 
     try {
-      await orchestrator.configureIMessage(
+      await configureIMessage(
+        orchestrator,
         this.db,
         serverUrlInput?.value || "",
         apiKeyInput?.value || "",
         parseCommaSeparatedList(chatIdsInput?.value || ""),
       );
-      await orchestrator.setChannelEnabled(
+      await setChannelEnabled(
+        orchestrator,
         this.db,
         "imessage",
         !!enabledToggle?.checked,
@@ -387,13 +398,15 @@ export class ShadowClawChannelConfig extends ShadowClawElement {
     ) as HTMLInputElement | null;
 
     try {
-      await orchestrator.configureTelegram(
+      await configureTelegram(
+        orchestrator,
         this.db,
         tokenInput?.value || "",
         parseCommaSeparatedList(chatIdsInput?.value || ""),
         !!useProxyToggle?.checked,
       );
-      await orchestrator.setChannelEnabled(
+      await setChannelEnabled(
+        orchestrator,
         this.db,
         "telegram",
         !!enabledToggle?.checked,

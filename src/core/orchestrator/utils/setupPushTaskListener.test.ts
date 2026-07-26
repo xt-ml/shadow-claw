@@ -12,6 +12,18 @@ jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   orchestratorStore: mockOrchestratorStore,
 }));
 
+jest.unstable_mockModule("./syncProxyConfigToServiceWorker.js", () => ({
+  syncProxyConfigToServiceWorker: jest.fn(),
+}));
+
+const mockSubmitMessage = (jest.fn() as any).mockResolvedValue(undefined);
+
+jest.unstable_mockModule("./operations/channel.js", () => ({
+  submitMessage: mockSubmitMessage,
+}));
+
+const { syncProxyConfigToServiceWorker } =
+  await import("./syncProxyConfigToServiceWorker.js");
 const { setupPushTaskListener } = await import("./setupPushTaskListener.js");
 
 describe("setupPushTaskListener", () => {
@@ -23,8 +35,6 @@ describe("setupPushTaskListener", () => {
 
     mockOrchestrator = {
       schedulerTriggeredGroups: new Set(),
-      syncProxyConfigToServiceWorker: jest.fn(),
-      submitMessage: jest.fn(),
     };
 
     originalNavigator = global.navigator;
@@ -94,7 +104,9 @@ describe("setupPushTaskListener", () => {
     expect(listener).toBeDefined();
 
     listener({ data: { type: "request-proxy-config" } });
-    expect(mockOrchestrator.syncProxyConfigToServiceWorker).toHaveBeenCalled();
+    expect(syncProxyConfigToServiceWorker).toHaveBeenCalledWith(
+      mockOrchestrator,
+    );
   });
 
   describe("scheduled-task-trigger", () => {
@@ -184,7 +196,8 @@ describe("setupPushTaskListener", () => {
 
       await new Promise(process.nextTick);
 
-      expect(mockOrchestrator.submitMessage).toHaveBeenCalledWith(
+      expect(mockSubmitMessage).toHaveBeenCalledWith(
+        mockOrchestrator,
         "hello",
         "g3",
       );
@@ -192,7 +205,7 @@ describe("setupPushTaskListener", () => {
 
     it("should handle error in runTaskHandler", async () => {
       mockOrchestratorStore.tasks = [];
-      mockOrchestrator.submitMessage = jest.fn().mockImplementation(() => {
+      mockSubmitMessage.mockImplementation(() => {
         throw new Error("Test err");
       });
       const consoleError = jest

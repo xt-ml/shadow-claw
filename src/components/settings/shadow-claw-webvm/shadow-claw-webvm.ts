@@ -6,6 +6,14 @@ import {
 } from "../../../config/config.js";
 
 import { effect } from "../../../core/effect.js";
+
+import {
+  setVMBootHost,
+  setVMBootMode,
+  setVMNetworkRelayURL,
+} from "../../../core/orchestrator/utils/operations/vm.js";
+
+import { setVMBashTimeout } from "../../../core/orchestrator/utils/settings.js";
 import { getDb } from "../../../db/db.js";
 import { getConfig } from "../../../db/getConfig.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
@@ -196,7 +204,7 @@ export class ShadowClawWebvm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setVMBashTimeout(this.db, normalized);
+      await setVMBashTimeout(this.orchestrator, this.db, normalized);
       showSuccess("WebVM bash timeout saved", 3000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -236,7 +244,7 @@ export class ShadowClawWebvm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setVMBootHost(this.db, value);
+      await setVMBootHost(this.orchestrator, this.db, value);
       showSuccess("WebVM boot host saved", 3000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -270,7 +278,7 @@ export class ShadowClawWebvm extends ShadowClawElement {
         : "disabled";
 
     try {
-      await this.orchestrator.setVMBootMode(this.db, mode);
+      await setVMBootMode(this.orchestrator, this.db, mode);
       showSuccess("WebVM boot mode saved", 3000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -314,7 +322,7 @@ export class ShadowClawWebvm extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setVMNetworkRelayURL(this.db, value);
+      await setVMNetworkRelayURL(this.orchestrator, this.db, value);
       showSuccess("WebVM relay URL saved", 3000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

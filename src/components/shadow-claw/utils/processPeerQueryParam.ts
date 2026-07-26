@@ -1,8 +1,14 @@
-import { ulid } from "../../../utils/ulid.js";
-import { showPage } from "../utils/showPage.js";
+import { configurePeerJs } from "../../../core/orchestrator/utils/configurePeerJs.js";
+
+import {
+  getPeerJsConfig,
+  setChannelEnabled,
+} from "../../../core/orchestrator/utils/operations/channel.js";
 
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
+import { ulid } from "../../../utils/ulid.js";
+import { showPage } from "../utils/showPage.js";
 
 import type { Orchestrator } from "../../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../../db/db.js";
@@ -31,7 +37,7 @@ export async function processPeerQueryParam(
 
   try {
     // 1. Ensure PeerJS channel is enabled and configured
-    const cfg = orchestrator.getPeerJsConfig();
+    const cfg = getPeerJsConfig(orchestrator);
     let myPeerId = cfg.myPeerId;
     if (!myPeerId) {
       myPeerId = ulid().toLowerCase();
@@ -42,7 +48,8 @@ export async function processPeerQueryParam(
     trusted.add(remotePeerId);
 
     // Save/configure
-    await orchestrator.configurePeerJs(
+    await configurePeerJs(
+      orchestrator,
       db,
       myPeerId,
       Array.from(trusted),
@@ -53,7 +60,7 @@ export async function processPeerQueryParam(
     );
 
     if (!cfg.enabled) {
-      await orchestrator.setChannelEnabled(db, "peerjs", true);
+      await setChannelEnabled(orchestrator, db, "peerjs", true);
     }
 
     // 2. Ensure peer conversation exists in the list

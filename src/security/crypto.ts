@@ -57,18 +57,18 @@ async function getOrCreateKey(): Promise<CryptoKey | null> {
     ["encrypt", "decrypt"],
   );
 
-  // Persist via structured clone (IndexedDB can store CryptoKey objects)
-  await new Promise((resolve: Function, reject: Function) => {
-    const tx = db.transaction(KEYSTORE_STORE, "readwrite");
-    tx.objectStore(KEYSTORE_STORE).put(key, KEY_ID);
-    tx.oncomplete = () => {
-      resolve();
-    };
-
-    tx.onerror = () => reject(tx.error);
-  });
-
-  db.close();
+  // Wrap the save and close sequence
+  try {
+    // Persist via structured clone (IndexedDB can store CryptoKey objects)
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(KEYSTORE_STORE, "readwrite");
+      tx.objectStore(KEYSTORE_STORE).put(key, KEY_ID);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  } finally {
+    db.close();
+  }
 
   return key;
 }

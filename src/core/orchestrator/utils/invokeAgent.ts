@@ -28,6 +28,18 @@ import { ulid } from "../../../utils/ulid.js";
 import { post as workerPost } from "../../../worker/utils/post.js";
 import { buildSystemPrompt } from "../../../worker/utils/system-prompt.js";
 
+import { compactContext } from "./compactContext.js";
+import { deliverResponse } from "./deliverResponse.js";
+import { handleWorkerMessage } from "./handleWorkerMessage.js";
+import { getChannelTypeForGroup } from "./operations/channel.js";
+
+import {
+  getApiKeyForRequest,
+  getProviderRuntimeHeaders,
+  getReasoningConfig,
+  startTransformersProgressPolling,
+} from "./operations/provider.js";
+
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { SubagentInvokeContext } from "../../../worker/tools/spawn-subagent/spawn-subagent.js";
 import type { Orchestrator } from "../orchestrator.js";
@@ -53,7 +65,7 @@ export async function invokeAgent(
       sender: "Scheduler",
       content: triggerContent,
       timestamp: Date.now(),
-      channel: o.getChannelTypeForGroup(groupId),
+      channel: getChannelTypeForGroup(o, groupId),
       isFromMe: false,
       isTrigger: true,
     };
@@ -132,11 +144,27 @@ export async function invokeAgent(
 
   const messages = dynamicContext.messages;
 
+  let displayTokens = dynamicContext.estimatedTokens + systemPromptTokens;
+
+  if (orchestratorStore.tokenUsage) {
+    const u = orchestratorStore.tokenUsage;
+    const actualPrompt =
+      (u.inputTokens || 0) + (u.cacheReadTokens || 0) + (u.outputTokens || 0);
+
+    displayTokens = Math.max(displayTokens, actualPrompt);
+  }
+
   // Emit context usage for UI display
   o.events.emit("context-usage", {
-    estimatedTokens: dynamicContext.estimatedTokens + systemPromptTokens,
+    estimatedTokens: displayTokens,
     contextLimit,
-    usagePercent: dynamicContext.usagePercent,
+    usagePercent: Math.min(
+      100,
+      Math.max(
+        dynamicContext.usagePercent,
+        (displayTokens / contextLimit) * 100,
+      ),
+    ),
     truncatedCount: dynamicContext.truncatedCount,
   });
 
@@ -152,7 +180,7 @@ export async function invokeAgent(
       duration: 4000,
     });
     // Queue compaction after this invocation completes
-    queueMicrotask(() => o.compactContext(db, groupId));
+    queueMicrotask(() => compactContext(o, db, groupId));
   }
 
   if (effectiveProviderId === "transformers_js_browser") {
@@ -183,7 +211,8 @@ export async function invokeAgent(
       memory: memory ?? "",
       model: effectiveModel,
       provider: effectiveProviderId,
-      providerHeaders: o.getProviderRuntimeHeaders(
+      providerHeaders: getProviderRuntimeHeaders(
+        o,
         effectiveProviderId,
         "",
         providerRuntimeOverrides,
@@ -205,7 +234,7 @@ export async function invokeAgent(
         messages,
         o.maxTokens,
         async (msg) => {
-          await o.handleWorkerMessage(db, msg);
+          await handleWorkerMessage(o, db, msg);
         },
         controller.signal,
         activeTools,
@@ -218,7 +247,7 @@ export async function invokeAgent(
       }
 
       const message = err instanceof Error ? err.message : String(err);
-      await o.deliverResponse(db, groupId, `⚠️ Error: ${message}`);
+      await deliverResponse(o, db, groupId, `⚠️ Error: ${message}`);
     } finally {
       o.promptControllers.delete(groupId);
     }
@@ -228,7 +257,8 @@ export async function invokeAgent(
 
   if (effectiveProviderId === "prompt_api") {
     if (!isPromptApiSupported()) {
-      await o.deliverResponse(
+      await deliverResponse(
+        o,
         db,
         groupId,
         "⚠️ Error: Prompt API is not available in this browser. Switch provider or enable experimental browser flags.",
@@ -263,7 +293,8 @@ export async function invokeAgent(
       memory: memory ?? "",
       model: effectiveModel,
       provider: effectiveProviderId,
-      providerHeaders: o.getProviderRuntimeHeaders(
+      providerHeaders: getProviderRuntimeHeaders(
+        o,
         effectiveProviderId,
         "",
         providerRuntimeOverrides,
@@ -285,7 +316,7 @@ export async function invokeAgent(
         messages,
         o.maxTokens,
         async (msg) => {
-          await o.handleWorkerMessage(db, msg);
+          await handleWorkerMessage(o, db, msg);
         },
         controller.signal,
         activeTools,
@@ -297,7 +328,7 @@ export async function invokeAgent(
       }
 
       const message = err instanceof Error ? err.message : String(err);
-      await o.deliverResponse(db, groupId, `⚠️ Error: ${message}`);
+      await deliverResponse(o, db, groupId, `⚠️ Error: ${message}`);
     } finally {
       o.promptControllers.delete(groupId);
     }
@@ -307,7 +338,8 @@ export async function invokeAgent(
 
   if (effectiveProviderId === "litert_lm_browser") {
     if (!isLiteRtLmSupported()) {
-      await o.deliverResponse(
+      await deliverResponse(
+        o,
         db,
         groupId,
         "⚠️ LiteRT-LM requires WebGPU and WebAssembly.Suspending. These are not both available in this browser.",
@@ -343,7 +375,8 @@ export async function invokeAgent(
       memory: memory ?? "",
       model: effectiveModel,
       provider: effectiveProviderId,
-      providerHeaders: o.getProviderRuntimeHeaders(
+      providerHeaders: getProviderRuntimeHeaders(
+        o,
         effectiveProviderId,
         "",
         providerRuntimeOverrides,
@@ -365,7 +398,7 @@ export async function invokeAgent(
         messages,
         o.maxTokens,
         async (msg) => {
-          await o.handleWorkerMessage(db, msg);
+          await handleWorkerMessage(o, db, msg);
         },
         controller.signal,
         effectiveModel,
@@ -378,7 +411,7 @@ export async function invokeAgent(
       }
 
       const message = err instanceof Error ? err.message : String(err);
-      await o.deliverResponse(db, groupId, `⚠️ Error: ${message}`);
+      await deliverResponse(o, db, groupId, `⚠️ Error: ${message}`);
     } finally {
       o.promptControllers.delete(groupId);
     }
@@ -396,7 +429,7 @@ export async function invokeAgent(
       effectiveProviderConfig.format === "anthropic");
 
   if (effectiveProviderId === "transformers_js_local") {
-    o.startTransformersProgressPolling(groupId);
+    startTransformersProgressPolling(o, o.events, groupId);
   }
 
   const providerRequestId = o.createProviderRequestId(groupId);
@@ -407,7 +440,7 @@ export async function invokeAgent(
     payload: {
       apiKey:
         effectiveProviderId === o.provider
-          ? await o.getApiKeyForRequest()
+          ? await getApiKeyForRequest(o)
           : await o.getApiKeyForSpecificProvider(db, effectiveProviderId),
       assistantName: o.assistantName,
       contextCompression: o.contextCompressionEnabled,
@@ -421,13 +454,14 @@ export async function invokeAgent(
       messages,
       model: effectiveModel,
       provider: effectiveProviderId,
-      providerHeaders: o.getProviderRuntimeHeaders(
+      providerHeaders: getProviderRuntimeHeaders(
+        o,
         effectiveProviderId,
         providerRequestId,
         providerRuntimeOverrides,
       ),
       providerRuntimeOverrides,
-      reasoning: o.getReasoningConfig(),
+      reasoning: getReasoningConfig(o),
       rateLimitAutoAdapt: o.rateLimitAutoAdapt,
       rateLimitCallsPerMinute: o.rateLimitCallsPerMinute,
       storageHandle: await getConfig(db, CONFIG_KEYS.STORAGE_HANDLE),

@@ -8,7 +8,6 @@ import { buildConversationMessages } from "../../../db/buildConversationMessages
 import { getConfig } from "../../../db/getConfig.js";
 
 import { readGroupFile } from "../../../storage/readGroupFile.js";
-
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { toolsStore } from "../../../stores/tools.js";
 
@@ -20,6 +19,13 @@ import {
 import { getContextLimit } from "../../../subsystems/providers/providers.js";
 import { getCompactionSystemPrompt } from "../../../worker/utils/getCompactionSystemPrompt.js";
 import { buildSystemPrompt } from "../../../worker/utils/system-prompt.js";
+import { deliverResponse } from "./deliverResponse.js";
+import { handleWorkerMessage } from "./handleWorkerMessage.js";
+
+import {
+  getApiKeyForRequest,
+  getProviderRuntimeHeaders,
+} from "./operations/provider.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { Orchestrator } from "../orchestrator.js";
@@ -30,7 +36,7 @@ export async function compactContext(
   groupId = DEFAULT_GROUP_ID,
 ): Promise<void> {
   const requiresApiKey = o.providerConfig?.requiresApiKey !== false;
-  const currentApiKey = await o.getApiKeyForRequest();
+  const currentApiKey = await getApiKeyForRequest(o);
   if (requiresApiKey && !currentApiKey) {
     const reason = "API key not configured. Cannot compact context.";
 
@@ -113,7 +119,7 @@ export async function compactContext(
         messages,
         controller.signal,
         async (msg) => {
-          await o.handleWorkerMessage(db, msg);
+          await handleWorkerMessage(o, db, msg);
         },
         groupId,
       );
@@ -125,7 +131,8 @@ export async function compactContext(
       }
 
       const message = err instanceof Error ? err.message : String(err);
-      await o.deliverResponse(
+      await deliverResponse(
+        o,
         db,
         groupId,
         `⚠️ Error: Compaction failed: ${message}`,
@@ -142,7 +149,7 @@ export async function compactContext(
   o.agentWorker?.postMessage({
     type: "compact",
     payload: {
-      apiKey: await o.getApiKeyForRequest(),
+      apiKey: await getApiKeyForRequest(o),
       assistantName: o.assistantName,
       contextCompression: o.contextCompressionEnabled,
       contextLimit: getContextLimit(o.model),
@@ -151,7 +158,8 @@ export async function compactContext(
       messages,
       model: o.model,
       provider: o.provider,
-      providerHeaders: o.getProviderRuntimeHeaders(
+      providerHeaders: getProviderRuntimeHeaders(
+        o,
         o.provider,
         providerRequestId,
       ),

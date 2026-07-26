@@ -1,3 +1,9 @@
+import {
+  closeTerminalSession,
+  openTerminalSession,
+  sendTerminalInput,
+} from "../../core/orchestrator/utils/operations/vm.js";
+
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { VMStatusPayload } from "../../subsystems/worker/types.js";
 
@@ -9,8 +15,9 @@ import ShadowClawElement from "../shadow-claw-element.js";
 import shadowClawTerminalStyles from "./shadow-claw-terminal.css" with { type: "css" };
 import shadowClawTerminalTemplate from "./shadow-claw-terminal.html" with { type: "html" };
 
-export const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 12;
 const MAX_OUTPUT_LENGTH = 80_000;
+
+export const AUTO_SCROLL_BOTTOM_THRESHOLD_PX = 12;
 export class ShadowClawTerminal extends ShadowClawElement {
   static styles = shadowClawTerminalStyles;
   static template = shadowClawTerminalTemplate;
@@ -74,7 +81,9 @@ export class ShadowClawTerminal extends ShadowClawElement {
     super.disconnectedCallback();
     this.connectedToWorkerTerminal = false;
     this.terminalAttachRequested = false;
-    this.orchestrator?.closeTerminalSession?.(orchestratorStore.activeGroupId);
+    if (this.orchestrator) {
+      closeTerminalSession(this.orchestrator, orchestratorStore.activeGroupId);
+    }
   }
 
   appendOutput(chunk) {
@@ -118,7 +127,7 @@ export class ShadowClawTerminal extends ShadowClawElement {
     }
 
     this.terminalAttachRequested = true;
-    this.orchestrator.openTerminalSession(orchestratorStore.activeGroupId);
+    openTerminalSession(this.orchestrator, orchestratorStore.activeGroupId);
   }
 
   bindEventListeners() {
@@ -264,7 +273,7 @@ export class ShadowClawTerminal extends ShadowClawElement {
       this.orchestrator?.events?.off?.("vm-terminal-error", errorListener),
     );
 
-    this.vmStatus = this.orchestrator.getVMStatus?.() || this.vmStatus;
+    this.vmStatus = this.orchestrator.vmStatus || this.vmStatus;
     this.updateStatus(this.vmStatus);
   }
 
@@ -294,7 +303,9 @@ export class ShadowClawTerminal extends ShadowClawElement {
   }
 
   interrupt() {
-    this.orchestrator?.sendTerminalInput?.("\u0003");
+    if (this.orchestrator) {
+      sendTerminalInput(this.orchestrator, "\u0003");
+    }
   }
 
   renderOutput() {
@@ -329,7 +340,9 @@ export class ShadowClawTerminal extends ShadowClawElement {
       return;
     }
 
-    this.orchestrator?.sendTerminalInput?.(`${command}\n`);
+    if (this.orchestrator) {
+      sendTerminalInput(this.orchestrator, `${command}\n`);
+    }
     input.value = "";
   }
 

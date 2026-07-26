@@ -1,4 +1,10 @@
 import { effect } from "../../../core/effect.js";
+
+import {
+  setProxyUrl,
+  setUseProxy,
+} from "../../../core/orchestrator/utils/settings.js";
+
 import { getDb } from "../../../db/db.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
@@ -79,7 +85,7 @@ export class ShadowClawNetworking extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setUseProxy(this.db, enabled);
+      await setUseProxy(this.orchestrator, this.db, enabled);
       showSuccess(enabled ? "CORS Proxy enabled" : "CORS Proxy disabled", 2500);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -101,14 +107,14 @@ export class ShadowClawNetworking extends ShadowClawElement {
       '[data-setting="proxy-toggle"]',
     ) as HTMLInputElement | null;
     if (proxyToggle) {
-      proxyToggle.checked = this.orchestrator.getUseProxy();
+      proxyToggle.checked = this.orchestrator.useProxy;
     }
 
     const proxyUrlInput = root.querySelector(
       '[data-setting="proxy-url-input"]',
     ) as HTMLInputElement | null;
     if (proxyUrlInput) {
-      proxyUrlInput.value = this.orchestrator.getProxyUrl();
+      proxyUrlInput.value = this.orchestrator.proxyUrl;
     }
   }
 
@@ -137,7 +143,7 @@ export class ShadowClawNetworking extends ShadowClawElement {
     }
 
     try {
-      await this.orchestrator.setProxyUrl(this.db, url);
+      await setProxyUrl(this.orchestrator, this.db, url);
       showSuccess("Proxy URL saved", 3000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

@@ -35,6 +35,7 @@ const PROVIDERS: any = {
 };
 
 jest.unstable_mockModule("../../../config/config.js", () => ({
+  ASSISTANT_NAME: "example",
   CONFIG_KEYS: {
     PROVIDER: "provider",
     API_KEY: "api_key",
@@ -57,11 +58,24 @@ jest.unstable_mockModule("../../../config/config.js", () => ({
   DEFAULT_GROUP_ID: "br:main",
   OPFS_ROOT: "shadowclaw",
   PROVIDERS,
+  buildTriggerPattern: jest.fn().mockReturnValue(new RegExp("")),
   getModelMaxTokens: jest.fn((modelId: string) =>
-    modelId.includes("thinking") ? 4096 : 8192,
+    (modelId || "").includes("thinking") ? 4096 : 8192,
   ),
   getAvailableProviders: () => Object.keys(PROVIDERS),
   getProvider: (id: string) => (PROVIDERS as any)[id],
+  GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: [],
+  OAUTH_PROVIDER_DEFINITIONS: {},
+  PROVIDER_AUTH_CAPABILITIES: {},
+  getGeneralAccountProviderCapabilities: jest.fn(),
+  getProviderTokenAuthScheme: jest.fn(),
+  DEFAULT_DEV_HOST: "http://localhost:8888",
+  DEFAULT_DEV_PORT: 8888,
+  BASH_DEFAULT_TIMEOUT_SEC: 60,
+  BASH_MAX_TIMEOUT_SEC: 300,
+  DEFAULT_VM_NETWORK_RELAY_URL: "",
+  FETCH_MAX_RESPONSE: 50 * 1024 * 1024,
+  getProviderApiKeyConfigKey: jest.fn(),
 }));
 
 jest.unstable_mockModule("../../../db/setConfig.js", () => ({
@@ -72,11 +86,79 @@ jest.unstable_mockModule("../../../db/getConfig.js", () => ({
   getConfig: jest.fn<any>().mockResolvedValue(undefined),
 }));
 
+const mockSetProvider = jest.fn(async () => {});
+const mockSetBedrockSettings = jest.fn(async () => {});
+const mockSetMaxTokens = jest.fn(async () => {});
+const mockSetRateLimitCallsPerMinute = jest.fn(async () => {});
+const mockSetRateLimitAutoAdapt = jest.fn(async () => {});
+const mockSetReasoningEffort = jest.fn(async () => {});
+
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/operations/provider.js",
+  () => ({
+    getAvailableProviders: jest.fn().mockReturnValue(
+      Object.entries(PROVIDERS).map(([id, p]: [string, any]) => ({
+        id,
+        name: p.name,
+        models: p.models,
+        requiresApiKey: p.requiresApiKey,
+      })),
+    ),
+    getBedrockSettings: jest.fn().mockReturnValue({
+      authMode: "iam_keys",
+      profile: "",
+      region: "us-east-1",
+    }),
+    getLlamafileSettings: jest.fn().mockReturnValue({
+      host: "http://127.0.0.1:8080",
+    }),
+    getMeshLlmSettings: jest.fn().mockReturnValue({
+      host: "http://localhost:11434",
+    }),
+    getReasoningConfig: jest.fn().mockReturnValue(undefined),
+    applyLlamafileHeaders: jest.fn(),
+    applyMeshLlmHeaders: jest.fn(),
+    getTransformersStatusUrl: jest.fn(),
+    getProviderRuntimeHeaders: jest.fn().mockReturnValue({}),
+    setProvider: mockSetProvider,
+    setBedrockSettings: mockSetBedrockSettings,
+    setLlamafileSettings: jest.fn(async () => {}),
+    setMeshLlmSettings: jest.fn(async () => {}),
+    setModel: jest.fn(async () => {}),
+    setAssistantName: jest.fn(async () => {}),
+    setPeerjsMyAlias: jest.fn(async () => {}),
+    setPeerjsPeerAliases: jest.fn(async () => {}),
+    autoActivateProfile: jest.fn(async () => {}),
+    stopTransformersProgressPolling: jest.fn(),
+    getApiKeyForHeaders: jest.fn(),
+    getApiKeyForRequest: jest.fn(),
+  }),
+);
+
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/settings.js",
+  () => ({
+    setMaxTokens: mockSetMaxTokens,
+    setRateLimitCallsPerMinute: mockSetRateLimitCallsPerMinute,
+    setRateLimitAutoAdapt: mockSetRateLimitAutoAdapt,
+    setReasoningEffort: mockSetReasoningEffort,
+    setGitProxyUrl: jest.fn(async () => {}),
+    setProxyUrl: jest.fn(async () => {}),
+    setVmInternetAccess: jest.fn(async () => {}),
+    setStreamingEnabled: jest.fn(async () => {}),
+    setUseProxy: jest.fn(async () => {}),
+    setVMBashFullInternetAccess: jest.fn(async () => {}),
+    setContextCompressionEnabled: jest.fn(async () => {}),
+    setMaxIterations: jest.fn(async () => {}),
+  }),
+);
+
 jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
   showWarning: jest.fn(),
   showInfo: jest.fn(),
+  showToast: jest.fn(),
 }));
 
 jest.unstable_mockModule("../../../db/db.js", () => ({
@@ -107,7 +189,7 @@ const { getConfig } = await import("../../../db/getConfig.js");
 const { setConfig } = await import("../../../db/setConfig.js");
 
 function createOrchestratorStub(overrides = {}) {
-  return {
+  const base = {
     setProvider: jest.fn<any>().mockResolvedValue(undefined),
     setModel: jest.fn<any>().mockResolvedValue(undefined),
     setAssistantName: jest.fn<any>().mockResolvedValue(undefined),
@@ -134,6 +216,7 @@ function createOrchestratorStub(overrides = {}) {
     getStreamingEnabled: jest.fn<any>().mockReturnValue(true),
     getApiKeyForRequest: jest.fn<any>().mockResolvedValue(""),
     getApiKeyForHeaders: jest.fn<any>().mockResolvedValue(""),
+    loadApiKeyForProvider: jest.fn<any>().mockResolvedValue(undefined),
 
     getUseProxy: jest.fn<any>().mockReturnValue(false),
     getCompressionEnabled: jest.fn<any>().mockReturnValue(false),
@@ -144,6 +227,32 @@ function createOrchestratorStub(overrides = {}) {
     getProxyUrl: jest.fn<any>().mockReturnValue(""),
     ...overrides,
   };
+
+  const propertyMapping: Record<string, string> = {
+    provider: "getProvider",
+    model: "getModel",
+    assistantName: "getAssistantName",
+    maxTokens: "getMaxTokens",
+    maxIterations: "getMaxIterations",
+    rateLimitCallsPerMinute: "getRateLimitCallsPerMinute",
+    rateLimitAutoAdapt: "getRateLimitAutoAdapt",
+    reasoningEffort: "getReasoningEffort",
+    streamingEnabled: "getStreamingEnabled",
+    contextCompressionEnabled: "getContextCompressionEnabled",
+  };
+
+  for (const [prop, methodName] of Object.entries(propertyMapping)) {
+    if (!(prop in base)) {
+      Object.defineProperty(base, prop, {
+        get() {
+          return (this as any)[methodName]();
+        },
+        configurable: true,
+      });
+    }
+  }
+
+  return base;
 }
 
 describe("shadow-claw-llm", () => {
@@ -219,7 +328,11 @@ describe("shadow-claw-llm", () => {
     input.value = "2048";
     await el.saveMaxTokens();
 
-    expect(orch.setMaxTokens).toHaveBeenCalledWith(expect.anything(), 2048);
+    expect(mockSetMaxTokens).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      2048,
+    );
     expect(showSuccess).toHaveBeenCalledWith("Max tokens saved", 3000);
 
     document.body.removeChild(el);
@@ -255,11 +368,15 @@ describe("shadow-claw-llm", () => {
 
     await el.saveBedrockSettings();
 
-    expect(orch.setBedrockSettings).toHaveBeenCalledWith(expect.anything(), {
-      region: "us-east-1",
-      profile: "default",
-      authMode: "provider_chain",
-    });
+    expect(mockSetBedrockSettings).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      {
+        region: "us-east-1",
+        profile: "default",
+        authMode: "provider_chain",
+      },
+    );
     expect(showSuccess).toHaveBeenCalledWith(
       "Bedrock fallback settings saved",
       3000,
@@ -293,11 +410,13 @@ describe("shadow-claw-llm", () => {
 
     await el.saveRateLimitSettings();
 
-    expect(orch.setRateLimitCallsPerMinute).toHaveBeenCalledWith(
+    expect(mockSetRateLimitCallsPerMinute).toHaveBeenCalledWith(
+      expect.anything(),
       expect.anything(),
       16,
     );
-    expect(orch.setRateLimitAutoAdapt).toHaveBeenCalledWith(
+    expect(mockSetRateLimitAutoAdapt).toHaveBeenCalledWith(
+      expect.anything(),
       expect.anything(),
       true,
     );
@@ -326,7 +445,8 @@ describe("shadow-claw-llm", () => {
     select.value = "high";
     await el.saveReasoningEffort();
 
-    expect(orch.setReasoningEffort).toHaveBeenCalledWith(
+    expect(mockSetReasoningEffort).toHaveBeenCalledWith(
+      expect.anything(),
       expect.anything(),
       "high",
     );
@@ -415,12 +535,18 @@ describe("shadow-claw-llm", () => {
 
     expect(section.style.display).toBe("block");
 
-    providerSelect.value = "provider-a";
+    const opt = document.createElement("option");
+    opt.value = "openai";
+    providerSelect.appendChild(opt);
+
+    providerSelect.value = "openai";
     await el.onProviderChange();
 
-    expect(orch.setProvider).toHaveBeenCalledWith(
+    expect(mockSetProvider).toHaveBeenCalledWith(
       expect.anything(),
-      "provider-a",
+      expect.anything(),
+      "openai",
+      expect.anything(),
     );
     expect(section.style.display).toBe("none");
 

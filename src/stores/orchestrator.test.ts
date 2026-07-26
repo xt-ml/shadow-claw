@@ -7,7 +7,6 @@ const mockSaveTask = jest.fn() as any;
 const mockListGroupFiles = jest.fn() as any;
 const mockRequestStorageAccess = jest.fn() as any;
 const mockGetStorageStatus = jest.fn() as any;
-const mockShowError = jest.fn() as any;
 const mockListGroups = jest.fn() as any;
 const mockCreateGroup = jest.fn() as any;
 const mockRenameGroup = jest.fn() as any;
@@ -27,6 +26,107 @@ const mockSetMainGroupMemorySuppressed = jest.fn() as any;
 const mockEnsureMainGroupIndex = jest.fn() as any;
 const mockCopyGroupDirectory = jest.fn() as any;
 const mockDeleteMessage = jest.fn() as any;
+
+jest.unstable_mockModule(
+  "../core/orchestrator/utils/operations/provider.js",
+  () => ({
+    applyLlamafileHeaders: jest.fn(),
+    applyMeshLlmHeaders: jest.fn(),
+    autoActivateProfile: jest.fn(),
+    stopTransformersProgressPolling: jest.fn(),
+    getAvailableProviders: jest.fn(),
+    getProviderRuntimeHeaders: jest.fn(),
+    getReasoningConfig: jest.fn(),
+    getTransformersStatusUrl: jest.fn(),
+    setAssistantName: jest.fn(),
+    setBedrockSettings: jest.fn(),
+    setLlamafileSettings: jest.fn(),
+    setMeshLlmSettings: jest.fn(),
+    setModel: jest.fn(),
+    setPeerjsMyAlias: jest.fn(),
+    setPeerjsPeerAliases: jest.fn(),
+    setProvider: jest.fn(),
+    getApiKeyForHeaders: jest.fn(),
+    getApiKeyForRequest: jest.fn(),
+    getLlamafileSettings: jest.fn(),
+    getMeshLlmSettings: jest.fn(),
+    getBedrockSettings: jest.fn(),
+  }),
+);
+
+jest.unstable_mockModule(
+  "../core/orchestrator/utils/operations/channel.js",
+  () => ({
+    applyAllChannelRunningStates: jest.fn(),
+    applyChannelRunningState: jest.fn(),
+    clearPeerJsTypingState: jest.fn(),
+    getChannelByType: jest.fn(),
+    getChannelEnabled: jest.fn(),
+    getChannelEnabledConfigKey: jest.fn(),
+    loadChannelEnabled: jest.fn(),
+    setChannelEnabled: jest.fn(),
+    shouldRunChannel: jest.fn(),
+    getChannelTypeForGroup: jest.fn(),
+  }),
+);
+
+jest.unstable_mockModule(
+  "../core/orchestrator/utils/operations/provider.js",
+  () => ({
+    applyLlamafileHeaders: jest.fn(),
+    applyMeshLlmHeaders: jest.fn(),
+    autoActivateProfile: jest.fn(),
+    stopTransformersProgressPolling: jest.fn(),
+    getAvailableProviders: jest.fn(),
+    getProviderRuntimeHeaders: jest.fn(),
+    getReasoningConfig: jest.fn(),
+    getTransformersStatusUrl: jest.fn(),
+    setAssistantName: jest.fn(),
+    setBedrockSettings: jest.fn(),
+    setLlamafileSettings: jest.fn(),
+    setMeshLlmSettings: jest.fn(),
+    setModel: jest.fn(),
+    setPeerjsMyAlias: jest.fn(),
+    setPeerjsPeerAliases: jest.fn(),
+    setProvider: jest.fn(),
+    getApiKeyForHeaders: jest.fn(),
+    getApiKeyForRequest: jest.fn(),
+    getLlamafileSettings: jest.fn(),
+    getMeshLlmSettings: jest.fn(),
+    getBedrockSettings: jest.fn(),
+  }),
+);
+
+jest.unstable_mockModule(
+  "../core/orchestrator/utils/operations/channel.js",
+  () => ({
+    applyAllChannelRunningStates: jest.fn(),
+    applyChannelRunningState: jest.fn(),
+    clearPeerJsTypingState: jest.fn(),
+    getChannelByType: jest.fn(),
+    getChannelEnabled: jest.fn(),
+    getChannelEnabledConfigKey: jest.fn(),
+    loadChannelEnabled: jest.fn(),
+    setChannelEnabled: jest.fn(),
+    shouldRunChannel: jest.fn(),
+    getChannelTypeForGroup: jest.fn(),
+  }),
+);
+
+const mockSyncTerminalWorkspace = jest.fn();
+const mockFlushTerminalWorkspace = jest.fn();
+
+jest.unstable_mockModule("../core/orchestrator/utils/operations/vm.js", () => ({
+  answerUserPrompt: jest.fn(),
+  closeTerminalSession: jest.fn(),
+  flushTerminalWorkspace: mockFlushTerminalWorkspace,
+  openTerminalSession: jest.fn(),
+  sendTerminalInput: jest.fn(),
+  setVMBootHost: jest.fn(),
+  setVMBootMode: jest.fn(),
+  setVMNetworkRelayURL: jest.fn(),
+  syncTerminalWorkspace: mockSyncTerminalWorkspace,
+}));
 
 jest.unstable_mockModule("../db/deleteTask.js", () => ({
   deleteTask: mockDeleteTask,
@@ -59,10 +159,19 @@ const mockUpdateGroupSubagentSettings = jest.fn() as any;
 
 jest.unstable_mockModule("../storage/storage.js", () => ({
   getStorageStatus: mockGetStorageStatus,
+  getStorageRoot: jest.fn(),
+  clearStorageRootCache: jest.fn(),
+  invalidateStorageRoot: jest.fn(),
+  initializeStorage: jest.fn(),
+  isStaleHandleError: jest.fn(),
 }));
 
 jest.unstable_mockModule("../ui/toast.js", () => ({
-  showError: mockShowError,
+  showError: jest.fn(),
+  showSuccess: jest.fn(),
+  showWarning: jest.fn(),
+  showInfo: jest.fn(),
+  showToast: jest.fn(),
 }));
 
 jest.unstable_mockModule("../db/groups.js", () => ({
@@ -116,6 +225,7 @@ jest.unstable_mockModule("../storage/ensureMainGroupMemory.js", () => ({
 
 jest.unstable_mockModule("../storage/ensureMainGroupIndex.js", () => ({
   ensureMainGroupIndex: mockEnsureMainGroupIndex,
+  setMainGroupIndexSuppressed: jest.fn(),
 }));
 
 jest.unstable_mockModule("../storage/copyGroupDirectory.js", () => ({
@@ -648,11 +758,11 @@ describe("OrchestratorStore", () => {
   it("sendMessage uses active group", () => {
     const store = new OrchestratorStore();
 
-    store.orchestrator = { submitMessage: jest.fn() } as any;
+    store.orchestrator = { browserChat: { submit: jest.fn() } } as any;
 
     store.sendMessage("hello");
 
-    expect((store.orchestrator as any).submitMessage).toHaveBeenCalledWith(
+    expect((store.orchestrator as any).browserChat.submit).toHaveBeenCalledWith(
       "hello",
       DEFAULT_GROUP_ID,
       [],
@@ -661,8 +771,8 @@ describe("OrchestratorStore", () => {
 
   it("runTask sends prompt to the task's own groupId, not the active group", () => {
     const store: any = new OrchestratorStore();
-    const submitMessage = jest.fn();
-    store.orchestrator = { submitMessage } as any;
+    const submit = jest.fn();
+    store.orchestrator = { browserChat: { submit } } as any;
 
     // Active group is different from the task's group
     store._activeGroupId.set("active-group");
@@ -670,8 +780,8 @@ describe("OrchestratorStore", () => {
     store.runTask({ id: "t1", groupId: "task-group", prompt: "do work" });
 
     // Must target the task's groupId, NOT the active group
-    expect(submitMessage).toHaveBeenCalledWith("do work", "task-group", []);
-    expect(submitMessage).not.toHaveBeenCalledWith(
+    expect(submit).toHaveBeenCalledWith("do work", "task-group", []);
+    expect(submit).not.toHaveBeenCalledWith(
       "do work",
       "active-group",
       expect.anything(),
@@ -680,8 +790,8 @@ describe("OrchestratorStore", () => {
 
   it("runTask with no groupId refuses to execute (prevents conversation pollution)", () => {
     const store: any = new OrchestratorStore();
-    const submitMessage = jest.fn();
-    store.orchestrator = { submitMessage } as any;
+    const submit = jest.fn();
+    store.orchestrator = { browserChat: { submit } } as any;
 
     store._activeGroupId.set("active-group");
 
@@ -690,7 +800,7 @@ describe("OrchestratorStore", () => {
     // Task has no groupId - must NOT execute in active conversation
     store.runTask({ id: "t2", prompt: "fallback work" });
 
-    expect(submitMessage).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
     errorSpy.mockRestore();
   });
 
@@ -751,8 +861,8 @@ describe("OrchestratorStore", () => {
 
     it("runTask with empty groupId does NOT fall back to active group", () => {
       const store: any = new OrchestratorStore();
-      const submitMessage = jest.fn();
-      store.orchestrator = { submitMessage } as any;
+      const submit = jest.fn();
+      store.orchestrator = { browserChat: { submit } } as any;
 
       store._activeGroupId.set("conversation-b");
 
@@ -763,7 +873,7 @@ describe("OrchestratorStore", () => {
         enabled: true,
       });
 
-      expect(submitMessage).not.toHaveBeenCalledWith(
+      expect(submit).not.toHaveBeenCalledWith(
         "scheduled work",
         "conversation-b",
         expect.anything(),
@@ -827,14 +937,12 @@ describe("OrchestratorStore", () => {
     });
   });
 
-  it("newSession and compactContext call orchestrator methods", async () => {
+  it("newSession calls orchestrator methods", async () => {
     const store = new OrchestratorStore();
 
     const newSession = (jest.fn() as any).mockResolvedValue(undefined);
 
-    const compactContext = (jest.fn() as any).mockResolvedValue("ok");
-
-    store.orchestrator = { newSession, compactContext } as any;
+    store.orchestrator = { newSession } as any;
 
     const loadSpy = jest
       .spyOn(store, "loadHistory")
@@ -845,10 +953,6 @@ describe("OrchestratorStore", () => {
     expect(newSession).toHaveBeenCalledWith({} as any, DEFAULT_GROUP_ID);
 
     expect(loadSpy).toHaveBeenCalled();
-
-    await expect(store.compactContext({} as any) as any).resolves.toBe("ok");
-
-    expect(compactContext).toHaveBeenCalledWith({} as any, DEFAULT_GROUP_ID);
   });
 
   it("clearError resets error and state", () => {
@@ -1124,22 +1228,20 @@ describe("OrchestratorStore", () => {
 
   it("manual workspace sync helpers call orchestrator bridge", () => {
     const store = new OrchestratorStore();
-
-    store.orchestrator = {
-      syncTerminalWorkspace: jest.fn() as any,
-      flushTerminalWorkspace: jest.fn() as any,
-    } as any;
+    store.orchestrator = {} as any;
 
     store.syncHostWorkspaceToVM();
     store.syncVMWorkspaceToHost();
 
-    expect(
-      (store.orchestrator as any).syncTerminalWorkspace,
-    ).toHaveBeenCalledWith(DEFAULT_GROUP_ID);
+    expect(mockSyncTerminalWorkspace).toHaveBeenCalledWith(
+      store.orchestrator,
+      DEFAULT_GROUP_ID,
+    );
 
-    expect(
-      (store.orchestrator as any).flushTerminalWorkspace,
-    ).toHaveBeenCalledWith(DEFAULT_GROUP_ID);
+    expect(mockFlushTerminalWorkspace).toHaveBeenCalledWith(
+      store.orchestrator,
+      DEFAULT_GROUP_ID,
+    );
   });
 
   it("supports folder navigation and reset", async () => {

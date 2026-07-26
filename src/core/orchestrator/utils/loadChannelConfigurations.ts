@@ -3,6 +3,7 @@ import { CONFIG_KEYS } from "../../../config/config.js";
 import { inferAttachmentMimeType } from "../../../content/message-attachments.js";
 import { getConfig } from "../../../db/getConfig.js";
 import { readGroupFileBytes } from "../../../storage/readGroupFileBytes.js";
+import { loadChannelEnabled } from "./operations/channel.js";
 import { parseStoredStringList } from "./parseStoredStringList.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
@@ -12,11 +13,15 @@ export async function loadChannelConfigurations(
   orchestrator: Orchestrator,
   db: ShadowClawDatabase,
 ): Promise<void> {
-  orchestrator.channelEnabledByType.telegram =
-    await orchestrator.loadChannelEnabled(db, "telegram");
+  orchestrator.channelEnabledByType.telegram = await loadChannelEnabled(
+    "telegram",
+    db,
+  );
 
-  orchestrator.channelEnabledByType.imessage =
-    await orchestrator.loadChannelEnabled(db, "imessage");
+  orchestrator.channelEnabledByType.imessage = await loadChannelEnabled(
+    "imessage",
+    db,
+  );
 
   const telegramToken = await orchestrator.loadSecretConfig(
     db,
@@ -87,8 +92,10 @@ export async function loadChannelConfigurations(
   );
 
   // ---- PeerJS ----
-  orchestrator.channelEnabledByType.peerjs =
-    await orchestrator.loadChannelEnabled(db, "peerjs");
+  orchestrator.channelEnabledByType.peerjs = await loadChannelEnabled(
+    "peerjs",
+    db,
+  );
 
   const peerjsMyPeerId = (
     (await getConfig(db, CONFIG_KEYS.PEERJS_MY_PEER_ID)) || ""

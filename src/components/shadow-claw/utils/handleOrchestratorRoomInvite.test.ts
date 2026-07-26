@@ -1,5 +1,7 @@
 import { jest } from "@jest/globals";
 
+const mockJoinRoomViaLink = jest.fn();
+
 describe("handleOrchestratorRoomInvite", () => {
   let handleOrchestratorRoomInvite: any;
   let mockRequestDialog: jest.Mock<any>;
@@ -24,6 +26,18 @@ describe("handleOrchestratorRoomInvite", () => {
   beforeEach(async () => {
     jest.resetModules();
     jest.clearAllMocks();
+
+    jest.unstable_mockModule(
+      "../../../core/orchestrator/utils/operations/room.js",
+      () => ({
+        createRoom: jest.fn(),
+        handleRoomInvite: jest.fn(),
+        inviteToRoom: jest.fn(),
+        joinRoomViaLink: mockJoinRoomViaLink,
+        leaveRoom: jest.fn(),
+        listRooms: jest.fn(),
+      }),
+    );
 
     jest.unstable_mockModule("./requestDialog.js", () => ({
       requestDialog: jest.fn(),
@@ -52,9 +66,9 @@ describe("handleOrchestratorRoomInvite", () => {
       mockOStore,
       mockInvite,
     );
-    expect(mockShadowClaw.orchestrator.joinRoomViaLink).not.toHaveBeenCalled();
+    expect(mockJoinRoomViaLink).not.toHaveBeenCalled();
     expect(mockOStore.switchConversation).not.toHaveBeenCalled();
-    expect(mockShadowClaw.orchestrator.joinRoomViaLink).not.toHaveBeenCalled();
+    expect(mockJoinRoomViaLink).not.toHaveBeenCalled();
   });
 
   it("should return early if invite is missing", async () => {
@@ -66,7 +80,7 @@ describe("handleOrchestratorRoomInvite", () => {
       mockOStore,
       undefined,
     );
-    expect(mockShadowClaw.orchestrator.joinRoomViaLink).not.toHaveBeenCalled();
+    expect(mockJoinRoomViaLink).not.toHaveBeenCalled();
   });
 
   it("should return early if roomId or hostPeerId is missing", async () => {
@@ -82,7 +96,7 @@ describe("handleOrchestratorRoomInvite", () => {
       mockOStore,
       invalidInvite,
     );
-    expect(mockShadowClaw.orchestrator.joinRoomViaLink).not.toHaveBeenCalled();
+    expect(mockJoinRoomViaLink).not.toHaveBeenCalled();
   });
 
   it("should request confirmation dialog with correct parameters", async () => {
@@ -139,9 +153,9 @@ describe("handleOrchestratorRoomInvite", () => {
     );
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
-    expect(mockShadowClaw.orchestrator.joinRoomViaLink).not.toHaveBeenCalled();
+    expect(mockJoinRoomViaLink).not.toHaveBeenCalled();
     expect(mockOStore.switchConversation).not.toHaveBeenCalled();
-    expect(mockShadowClaw.orchestrator.joinRoomViaLink).not.toHaveBeenCalled();
+    expect(mockJoinRoomViaLink).not.toHaveBeenCalled();
   });
 
   it("should join room and switch conversation on success", async () => {
@@ -168,7 +182,8 @@ describe("handleOrchestratorRoomInvite", () => {
     );
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
-    expect(mockShadowClaw.orchestrator.joinRoomViaLink).toHaveBeenCalledWith(
+    expect(mockJoinRoomViaLink).toHaveBeenCalledWith(
+      mockShadowClaw.orchestrator,
       "room-123",
       "peer-123",
       "Test Room",
@@ -177,14 +192,12 @@ describe("handleOrchestratorRoomInvite", () => {
       mockDb,
       "room:room-123",
     );
-    expect(mockShadowClaw.orchestrator.joinRoomViaLink).toHaveBeenCalledTimes(
-      1,
-    );
+    expect(mockJoinRoomViaLink).toHaveBeenCalledTimes(1);
   });
 
   it("should show error if joinRoomViaLink fails", async () => {
     const error = new Error("Room join failed");
-    mockShadowClaw.orchestrator.joinRoomViaLink.mockImplementationOnce(() => {
+    mockJoinRoomViaLink.mockImplementationOnce(() => {
       throw error;
     });
 
@@ -211,7 +224,7 @@ describe("handleOrchestratorRoomInvite", () => {
     );
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
-    expect(mockShadowClaw.orchestrator.joinRoomViaLink).toHaveBeenCalled();
+    expect(mockJoinRoomViaLink).toHaveBeenCalled();
     expect(mockOStore.switchConversation).not.toHaveBeenCalled();
     const { showError } = await import("../../../ui/toast.js");
     expect(showError).toHaveBeenCalledWith(
@@ -244,7 +257,7 @@ describe("handleOrchestratorRoomInvite", () => {
     );
 
     expect(confirmMock).toHaveBeenCalledTimes(1);
-    expect(mockShadowClaw.orchestrator.joinRoomViaLink).toHaveBeenCalled();
+    expect(mockJoinRoomViaLink).toHaveBeenCalled();
     expect(mockOStore.switchConversation).toHaveBeenCalled();
     const { showSuccess } = await import("../../../ui/toast.js");
     expect(showSuccess).toHaveBeenCalledWith('Joined room "Test Room"');

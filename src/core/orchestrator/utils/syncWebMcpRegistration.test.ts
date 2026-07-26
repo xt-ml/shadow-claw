@@ -6,6 +6,12 @@ const mockUnregisterWebMcpTools = jest.fn() as any;
 jest.unstable_mockModule("../../../subsystems/mcp/webmcp.js", () => ({
   registerWebMcpTools: mockRegisterWebMcpTools,
   unregisterWebMcpTools: mockUnregisterWebMcpTools,
+  setWebMcpMode: jest.fn(),
+}));
+
+const mockHandleWorkerMessage = jest.fn() as any;
+jest.unstable_mockModule("./handleWorkerMessage.js", () => ({
+  handleWorkerMessage: mockHandleWorkerMessage,
 }));
 
 jest.unstable_mockModule("../../effect.js", () => ({
@@ -78,7 +84,8 @@ describe("syncWebMcpRegistration", () => {
     // Call the callback to test coverage of handleWorkerMessage
     const cb = mockRegisterWebMcpTools.mock.calls[0][1];
     await cb("test message");
-    expect(mockOrchestrator.handleWorkerMessage).toHaveBeenCalledWith(
+    expect(mockHandleWorkerMessage).toHaveBeenCalledWith(
+      mockOrchestrator,
       mockDb,
       "test message",
     );

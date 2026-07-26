@@ -1,4 +1,6 @@
 import { orchestratorStore } from "../../../stores/orchestrator.js";
+import { submitMessage } from "./operations/channel.js";
+import { syncProxyConfigToServiceWorker } from "./syncProxyConfigToServiceWorker.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { Orchestrator } from "../orchestrator.js";
@@ -15,7 +17,7 @@ export function setupPushTaskListener(
     if (event.data?.type === "request-proxy-config") {
       // The service worker just restarted and lost its in-memory proxy config.
       // Re-sync so fetch interception resumes immediately.
-      orchestrator.syncProxyConfigToServiceWorker();
+      syncProxyConfigToServiceWorker(orchestrator);
 
       return;
     }
@@ -58,7 +60,7 @@ export function setupPushTaskListener(
 
       if (prompt) {
         // Fallback if not found in local store
-        orchestrator.submitMessage(prompt, groupId);
+        submitMessage(orchestrator, prompt, groupId);
       }
     };
 

@@ -1,15 +1,33 @@
 import { jest } from "@jest/globals";
 
+const mockAnswerUserPrompt = jest.fn();
+
 describe("handleOrchestratorAskUser", () => {
   let handleOrchestratorAskUser: any;
   let mockRequestUserPrompt: jest.Mock<any>;
   let mockDoc: Document;
   let mockShadow: ShadowRoot | null;
   let mockShadowClaw: any;
-  let mockAnswerUserPrompt: jest.Mock;
 
   beforeEach(async () => {
     jest.resetModules();
+    mockAnswerUserPrompt.mockReset();
+
+    jest.unstable_mockModule(
+      "../../../core/orchestrator/utils/operations/vm.js",
+      () => ({
+        answerUserPrompt: mockAnswerUserPrompt,
+        closeTerminalSession: jest.fn(),
+        flushTerminalWorkspace: jest.fn(),
+        openTerminalSession: jest.fn(),
+        sendTerminalInput: jest.fn(),
+        setVMBootHost: jest.fn(),
+        setVMBootMode: jest.fn(),
+        setVMNetworkRelayURL: jest.fn(),
+        syncTerminalWorkspace: jest.fn(),
+      }),
+    );
+
     jest.unstable_mockModule("./requestUserPrompt.js", () => ({
       requestUserPrompt: jest.fn(),
     }));
@@ -21,11 +39,8 @@ describe("handleOrchestratorAskUser", () => {
 
     mockDoc = {} as any;
     mockShadow = {} as any;
-    mockAnswerUserPrompt = jest.fn();
     mockShadowClaw = {
-      orchestrator: {
-        answerUserPrompt: mockAnswerUserPrompt,
-      },
+      orchestrator: {},
     };
   });
 
@@ -52,7 +67,11 @@ describe("handleOrchestratorAskUser", () => {
       mockShadow,
       payload,
     );
-    expect(mockAnswerUserPrompt).toHaveBeenCalledWith(payload.id, mockResponse);
+    expect(mockAnswerUserPrompt).toHaveBeenCalledWith(
+      mockShadowClaw.orchestrator,
+      payload.id,
+      mockResponse,
+    );
   });
 
   it("should call requestUserPrompt with payload containing only required fields (no options)", async () => {
@@ -76,7 +95,11 @@ describe("handleOrchestratorAskUser", () => {
       mockShadow,
       payload,
     );
-    expect(mockAnswerUserPrompt).toHaveBeenCalledWith(payload.id, mockResponse);
+    expect(mockAnswerUserPrompt).toHaveBeenCalledWith(
+      mockShadowClaw.orchestrator,
+      payload.id,
+      mockResponse,
+    );
   });
 
   it("should handle requestUserPrompt rejection and propagate error", async () => {
@@ -121,7 +144,11 @@ describe("handleOrchestratorAskUser", () => {
       mockShadow,
       payload,
     );
-    expect(mockAnswerUserPrompt).toHaveBeenCalledWith(payload.id, null);
+    expect(mockAnswerUserPrompt).toHaveBeenCalledWith(
+      mockShadowClaw.orchestrator,
+      payload.id,
+      null,
+    );
   });
 
   it("should pass shadow as null when appropriate", async () => {
@@ -136,6 +163,10 @@ describe("handleOrchestratorAskUser", () => {
     await handleOrchestratorAskUser(mockDoc, null, mockShadowClaw, payload);
 
     expect(mockRequestUserPrompt).toHaveBeenCalledWith(mockDoc, null, payload);
-    expect(mockAnswerUserPrompt).toHaveBeenCalledWith(payload.id, mockResponse);
+    expect(mockAnswerUserPrompt).toHaveBeenCalledWith(
+      mockShadowClaw.orchestrator,
+      payload.id,
+      mockResponse,
+    );
   });
 });

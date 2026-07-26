@@ -12,6 +12,9 @@ describe("processPeerQueryParam", () => {
   let mockOrchestratorStore: any;
   let mockShowError: any;
   let mockShowSuccess: any;
+  let mockConfigurePeerJs: any;
+  let mockGetPeerJsConfig: any;
+  let mockSetChannelEnabled: any;
 
   let mockReplaceState: any;
 
@@ -24,8 +27,11 @@ describe("processPeerQueryParam", () => {
     orchestrator = {
       getPeerJsConfig: jest.fn(),
       configurePeerJs: jest.fn(),
-      setChannelEnabled: jest.fn(),
     };
+
+    mockConfigurePeerJs = jest.fn();
+    mockGetPeerJsConfig = jest.fn();
+    mockSetChannelEnabled = jest.fn();
 
     mockUlid = jest.fn().mockReturnValue("test-ulid");
     mockShowPage = jest.fn();
@@ -36,12 +42,25 @@ describe("processPeerQueryParam", () => {
       switchConversation: jest.fn(),
     };
 
+    jest.unstable_mockModule(
+      "../../../core/orchestrator/utils/configurePeerJs.js",
+      () => ({
+        configurePeerJs: mockConfigurePeerJs,
+      }),
+    );
     jest.unstable_mockModule("../../../utils/ulid.js", () => ({
       ulid: mockUlid,
     }));
     jest.unstable_mockModule("../utils/showPage.js", () => ({
       showPage: mockShowPage,
     }));
+    jest.unstable_mockModule(
+      "../../../core/orchestrator/utils/operations/channel.js",
+      () => ({
+        getPeerJsConfig: mockGetPeerJsConfig,
+        setChannelEnabled: mockSetChannelEnabled,
+      }),
+    );
     jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
       orchestratorStore: mockOrchestratorStore,
     }));
@@ -69,23 +88,23 @@ describe("processPeerQueryParam", () => {
   });
   it("should return early if db is not provided", async () => {
     await processPeerQueryParam(shadowRoot, shadowClaw, null, orchestrator);
-    expect(orchestrator.getPeerJsConfig).not.toHaveBeenCalled();
+    expect(mockGetPeerJsConfig).not.toHaveBeenCalled();
   });
 
   it("should return early if there is no peer param", async () => {
     globalThis.window.history.pushState({}, "", "http://localhost");
     await processPeerQueryParam(shadowRoot, shadowClaw, db, orchestrator);
-    expect(orchestrator.getPeerJsConfig).not.toHaveBeenCalled();
+    expect(mockGetPeerJsConfig).not.toHaveBeenCalled();
   });
 
   it("should return early if peer param is empty", async () => {
     globalThis.window.history.pushState({}, "", "http://localhost?peer=   ");
     await processPeerQueryParam(shadowRoot, shadowClaw, db, orchestrator);
-    expect(orchestrator.getPeerJsConfig).not.toHaveBeenCalled();
+    expect(mockGetPeerJsConfig).not.toHaveBeenCalled();
   });
 
   it("should process peer connection, switch conversation, and show chat page", async () => {
-    orchestrator.getPeerJsConfig.mockReturnValue({
+    mockGetPeerJsConfig.mockReturnValue({
       myPeerId: "my-id",
       trustedPeerIds: [],
       serverHost: "host",
@@ -98,7 +117,8 @@ describe("processPeerQueryParam", () => {
 
     await processPeerQueryParam(shadowRoot, shadowClaw, db, orchestrator);
 
-    expect(orchestrator.configurePeerJs).toHaveBeenCalledWith(
+    expect(mockConfigurePeerJs).toHaveBeenCalledWith(
+      orchestrator,
       db,
       "my-id",
       ["test-peer"],
@@ -107,7 +127,8 @@ describe("processPeerQueryParam", () => {
       "/path",
       true,
     );
-    expect(orchestrator.setChannelEnabled).toHaveBeenCalledWith(
+    expect(mockSetChannelEnabled).toHaveBeenCalledWith(
+      orchestrator,
       db,
       "peerjs",
       true,
@@ -135,7 +156,7 @@ describe("processPeerQueryParam", () => {
   });
 
   it("should generate a new peer ID if one is not configured", async () => {
-    orchestrator.getPeerJsConfig.mockReturnValue({
+    mockGetPeerJsConfig.mockReturnValue({
       trustedPeerIds: [],
       serverHost: "host",
       serverPort: 443,
@@ -147,7 +168,8 @@ describe("processPeerQueryParam", () => {
 
     await processPeerQueryParam(shadowRoot, shadowClaw, db, orchestrator);
 
-    expect(orchestrator.configurePeerJs).toHaveBeenCalledWith(
+    expect(mockConfigurePeerJs).toHaveBeenCalledWith(
+      orchestrator,
       db,
       "test-ulid",
       ["test-peer"],
@@ -156,11 +178,11 @@ describe("processPeerQueryParam", () => {
       "/path",
       true,
     );
-    expect(orchestrator.setChannelEnabled).not.toHaveBeenCalled(); // Already enabled
+    expect(mockSetChannelEnabled).not.toHaveBeenCalled(); // Already enabled
   });
 
   it("should handle and show error if an exception occurs", async () => {
-    orchestrator.getPeerJsConfig.mockImplementation(() => {
+    mockGetPeerJsConfig.mockImplementation(() => {
       throw new Error("Config error");
     });
 

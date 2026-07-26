@@ -1393,7 +1393,7 @@ export class ShadowClawChat extends ShadowClawElement {
 
     this.addCleanup(
       effect(() => {
-        const usage = orchestratorStore.tokenUsage;
+        const usage = orchestratorStore.tokenUsageAccumulator;
         const usageEl = root.querySelector(".chat__token-usage");
 
         if (!(usageEl instanceof HTMLElement)) {

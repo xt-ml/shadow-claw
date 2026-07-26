@@ -1,8 +1,16 @@
 import { detectProviderHelpType } from "../../../components/common/help/providers.js";
 import { getProvider } from "../../../config/config.js";
 import { persistMessageAttachments } from "../../../content/message-attachments.js";
+
 import { listGroups } from "../../../db/groups.js";
 import { saveMessage } from "../../../db/saveMessage.js";
+
+import { invokeAgent } from "./invokeAgent.js";
+
+import { clearPeerJsTypingState } from "./operations/channel.js";
+import { getApiKeyForRequest } from "./operations/provider.js";
+
+import { parseDirectToolCommand } from "./parseDirectToolCommand.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { InboundMessage } from "../../../subsystems/channels/types.js";
@@ -46,7 +54,11 @@ export async function enqueue(
   }
 
   // ── Normal message handling ──────────────────────────────────────────────
-  const directToolCommand = o.parseDirectToolCommand(msg);
+  const directToolCommand = parseDirectToolCommand(
+    o.directToolCommandPolicy,
+    o.assistantName,
+    msg,
+  );
   const isFromBrowser = msg.channel === "browser"; // Messages submitted in ShadowClaw UI
   const autoTrigger = o.channelRegistry.shouldAutoTrigger(msg.groupId);
 
@@ -152,7 +164,7 @@ export async function enqueue(
   // as an agent response. Normal peer messages should not force the remote
   // peer into a temporary "responding" state.
   if (msg.channel === "peerjs") {
-    o.clearPeerJsTypingState(msg.groupId);
+    clearPeerJsTypingState(msg.groupId);
   }
 
   // Forward browser messages to the P2P / room channel so users can chat directly
@@ -178,7 +190,7 @@ export async function enqueue(
     return;
   }
 
-  o.processQueue(db);
+  processQueue(o, db);
 }
 
 export async function processQueue(
@@ -220,7 +232,7 @@ export async function processQueue(
   let apiKeyPresent = true;
   if (requiresApiKey) {
     if (effectiveProviderId === o.provider) {
-      apiKeyPresent = !!(await o.getApiKeyForRequest());
+      apiKeyPresent = !!(await getApiKeyForRequest(o));
     } else {
       apiKeyPresent = !!(await o.getApiKeyForSpecificProvider(
         db,
@@ -256,13 +268,13 @@ export async function processQueue(
   const msg = o.messageQueue.shift()!;
 
   try {
-    await o.invokeAgent(db, msg.groupId, msg.content);
+    await invokeAgent(o, db, msg.groupId, msg.content);
   } catch (err) {
     console.error("Failed to invoke agent:", err);
   } finally {
     o.processing = false;
     if (o.messageQueue.length > 0) {
-      o.processQueue(db);
+      processQueue(o, db);
     }
   }
 }

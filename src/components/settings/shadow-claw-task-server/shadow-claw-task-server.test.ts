@@ -11,11 +11,18 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
   getDb: jest.fn(() => Promise.resolve({})),
 }));
 
+const mockSetTaskServerUrl = jest.fn(() => Promise.resolve());
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/settings.js",
+  () => ({
+    setTaskServerUrl: mockSetTaskServerUrl,
+  }),
+);
+
 jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   orchestratorStore: {
     orchestrator: {
-      getTaskServerUrl: jest.fn(() => "/test-schedule"),
-      setTaskServerUrl: jest.fn(() => Promise.resolve()),
+      taskServerUrl: "/test-schedule",
     },
     ready: true,
   },
@@ -61,9 +68,11 @@ describe("shadow-claw-task-server", () => {
 
     await el.saveTaskServerUrl();
 
-    expect(
-      orchestratorStore.orchestrator.setTaskServerUrl,
-    ).toHaveBeenCalledWith(expect.anything(), "https://new-server.com");
+    expect(mockSetTaskServerUrl).toHaveBeenCalledWith(
+      orchestratorStore.orchestrator,
+      expect.anything(),
+      "https://new-server.com",
+    );
     expect(showSuccess).toHaveBeenCalled();
   });
 });

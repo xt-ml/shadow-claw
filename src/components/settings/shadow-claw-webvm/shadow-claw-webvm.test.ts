@@ -15,6 +15,26 @@ jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   },
 }));
 
+const mockSetVMBashTimeout = jest.fn<any>().mockResolvedValue(undefined);
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/settings.js",
+  () => ({
+    setVMBashTimeout: mockSetVMBashTimeout,
+  }),
+);
+
+const mockSetVMBootMode = jest.fn<any>().mockResolvedValue(undefined);
+const mockSetVMBootHost = jest.fn<any>().mockResolvedValue(undefined);
+const mockSetVMNetworkRelayURL = jest.fn<any>().mockResolvedValue(undefined);
+jest.unstable_mockModule(
+  "../../../core/orchestrator/utils/operations/vm.js",
+  () => ({
+    setVMBootMode: mockSetVMBootMode,
+    setVMBootHost: mockSetVMBootHost,
+    setVMNetworkRelayURL: mockSetVMNetworkRelayURL,
+  }),
+);
+
 jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showSuccess: jest.fn(),
   showError: jest.fn(),
@@ -53,10 +73,6 @@ const { showSuccess } = await import("../../../ui/toast.js");
 
 function createOrchestratorStub(overrides = {}) {
   return {
-    setVMBootMode: jest.fn<any>().mockResolvedValue(undefined),
-    setVMBashTimeout: jest.fn<any>().mockResolvedValue(undefined),
-    setVMBootHost: jest.fn<any>().mockResolvedValue(undefined),
-    setVMNetworkRelayURL: jest.fn<any>().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -105,7 +121,7 @@ describe("shadow-claw-webvm", () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(orch.setVMBootMode).toHaveBeenCalled();
+    expect(mockSetVMBootMode).toHaveBeenCalled();
     expect(showSuccess).toHaveBeenCalledWith("WebVM boot mode saved", 3000);
 
     document.body.removeChild(el);
@@ -133,7 +149,11 @@ describe("shadow-claw-webvm", () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(orch.setVMBashTimeout).toHaveBeenCalledWith(expect.anything(), 42);
+    expect(mockSetVMBashTimeout).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      42,
+    );
     expect(showSuccess).toHaveBeenCalledWith("WebVM bash timeout saved", 3000);
 
     document.body.removeChild(el);
@@ -161,7 +181,8 @@ describe("shadow-claw-webvm", () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(orch.setVMBootHost).toHaveBeenCalledWith(
+    expect(mockSetVMBootHost).toHaveBeenCalledWith(
+      expect.anything(),
       expect.anything(),
       "https://example.com/boot",
     );
@@ -192,7 +213,8 @@ describe("shadow-claw-webvm", () => {
 
     await new Promise((r) => setTimeout(r, 50));
 
-    expect(orch.setVMNetworkRelayURL).toHaveBeenCalledWith(
+    expect(mockSetVMNetworkRelayURL).toHaveBeenCalledWith(
+      expect.anything(),
       expect.anything(),
       "wss://relay.example.com",
     );

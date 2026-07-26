@@ -32,7 +32,9 @@ describe("deliverResponse", () => {
 
     mockOrchestrator = {
       assistantName: "TestAssistant",
-      getChannelTypeForGroup: jest.fn().mockReturnValue("browser"),
+      channelRegistry: {
+        getChannelType: jest.fn().mockReturnValue("browser"),
+      },
       events: {
         emit: jest.fn(),
       },
@@ -51,7 +53,9 @@ describe("deliverResponse", () => {
 
   describe("deliverIntermediateResponse", () => {
     it("should handle error when router send fails", async () => {
-      mockOrchestrator.getChannelTypeForGroup.mockReturnValue("telegram");
+      mockOrchestrator.channelRegistry.getChannelType.mockReturnValue(
+        "telegram",
+      );
       mockOrchestrator.router.send.mockRejectedValue(new Error("Send failed"));
 
       const consoleSpy = (
@@ -81,7 +85,9 @@ describe("deliverResponse", () => {
 
   describe("deliverResponse", () => {
     it("should handle error when router send fails", async () => {
-      mockOrchestrator.getChannelTypeForGroup.mockReturnValue("telegram");
+      mockOrchestrator.channelRegistry.getChannelType.mockReturnValue(
+        "telegram",
+      );
       mockOrchestrator.router.send.mockRejectedValue(new Error("Send failed"));
 
       const consoleSpy = (
@@ -112,7 +118,7 @@ describe("deliverResponse", () => {
     });
 
     it("should complete active task if group is peer:", async () => {
-      mockOrchestrator.getChannelTypeForGroup.mockReturnValue("peerjs");
+      mockOrchestrator.channelRegistry.getChannelType.mockReturnValue("peerjs");
 
       await deliverResponse(mockOrchestrator, mockDb, "peer:123", "Hello");
 

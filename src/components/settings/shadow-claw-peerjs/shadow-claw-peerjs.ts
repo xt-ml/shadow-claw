@@ -1,6 +1,25 @@
 import QRCode from "qrcode";
 
 import { effect } from "../../../core/effect.js";
+import { configurePeerJs } from "../../../core/orchestrator/utils/configurePeerJs.js";
+
+import {
+  getPeerJsConfig,
+  setChannelEnabled,
+} from "../../../core/orchestrator/utils/operations/channel.js";
+
+import {
+  setPeerjsMyAlias,
+  setPeerjsPeerAliases,
+} from "../../../core/orchestrator/utils/operations/provider.js";
+
+import {
+  createRoom,
+  inviteToRoom,
+  leaveRoom,
+  listRooms,
+} from "../../../core/orchestrator/utils/operations/room.js";
+
 import { getDb } from "../../../db/db.js";
 import { roomGroupId } from "../../../db/rooms.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
@@ -138,7 +157,7 @@ export class ShadowClawPeerJs extends ShadowClawElement {
     }
 
     try {
-      const room = orchestrator.createRoom(name);
+      const room = createRoom(orchestrator!, name);
       if (input) {
         input.value = "";
       }
@@ -188,7 +207,7 @@ export class ShadowClawPeerJs extends ShadowClawElement {
       return;
     }
 
-    const ok = orchestrator.inviteToRoom(room.roomId, peerId);
+    const ok = inviteToRoom(orchestrator, room.roomId, peerId);
     if (ok) {
       showSuccess(`Invited ${peerId.substring(0, 8)} to "${room.name}".`, 2500);
     } else {
@@ -208,11 +227,11 @@ export class ShadowClawPeerJs extends ShadowClawElement {
       return;
     }
 
-    const rooms: RoomMeta[] = orchestrator?.listRooms?.() ?? [];
+    const rooms: RoomMeta[] = listRooms(orchestrator!) ?? [];
     const connectedPeers = new Set(
       orchestrator?.peerjs?.connectedPeersSignal?.get() ?? [],
     );
-    const myPeerId = orchestrator?.getPeerJsConfig?.().myPeerId ?? "";
+    const myPeerId = orchestrator ? getPeerJsConfig(orchestrator).myPeerId : "";
 
     listEl.textContent = "";
 
@@ -334,7 +353,7 @@ export class ShadowClawPeerJs extends ShadowClawElement {
       leaveBtn.className = "save-btn save-btn--danger";
       leaveBtn.textContent = isHost ? "Disband" : "Leave";
       leaveBtn.addEventListener("click", () => {
-        orchestrator?.leaveRoom?.(room.roomId);
+        leaveRoom(orchestrator!, room.roomId);
         showSuccess(isHost ? "Room disbanded." : "Left room.", 2500);
       });
       actions.appendChild(leaveBtn);
@@ -431,7 +450,7 @@ export class ShadowClawPeerJs extends ShadowClawElement {
       return;
     }
 
-    const cfg = orchestrator.getPeerJsConfig();
+    const cfg = getPeerJsConfig(orchestrator);
 
     // Enabled toggle
     const enabledToggle = root.querySelector(
@@ -657,7 +676,8 @@ export class ShadowClawPeerJs extends ShadowClawElement {
 
     // ── Persist ─────────────────────────────────────────────────────────────
     try {
-      await orchestrator.configurePeerJs(
+      await configurePeerJs(
+        orchestrator,
         this.db,
         myPeerId,
         trustedPeerIds,
@@ -667,15 +687,9 @@ export class ShadowClawPeerJs extends ShadowClawElement {
         serverSecure,
       );
 
-      if (orchestrator.setPeerjsMyAlias) {
-        await orchestrator.setPeerjsMyAlias(this.db, myAlias);
-      }
-
-      if (orchestrator.setPeerjsPeerAliases) {
-        await orchestrator.setPeerjsPeerAliases(this.db, peerAliases);
-      }
-
-      await orchestrator.setChannelEnabled(this.db, "peerjs", enabled);
+      await setPeerjsMyAlias(orchestrator, this.db, myAlias);
+      await setPeerjsPeerAliases(orchestrator, this.db, peerAliases);
+      await setChannelEnabled(orchestrator, this.db, "peerjs", enabled);
       await this.render();
       showSuccess("PeerJS settings saved", 3000);
     } catch (error) {
@@ -864,7 +878,7 @@ export class ShadowClawPeerJs extends ShadowClawElement {
 
   private _trustedPeerOptions(): Array<{ id: string; label: string }> {
     const orchestrator = this.getOrchestrator();
-    const cfg = orchestrator?.getPeerJsConfig?.();
+    const cfg = orchestrator ? getPeerJsConfig(orchestrator) : null;
     if (!cfg) {
       return [];
     }

@@ -3,6 +3,24 @@ import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 const mockSetConfig = jest.fn() as any;
 const mockNormalizeStringList = jest.fn() as any;
 
+jest.unstable_mockModule("./operations/room.js", () => ({
+  createRoom: jest.fn(),
+  handleRoomInvite: jest.fn(),
+  inviteToRoom: jest.fn(),
+  joinRoomViaLink: jest.fn(),
+  leaveRoom: jest.fn(),
+  listRooms: jest.fn(),
+}));
+
+jest.unstable_mockModule("./operations/room.js", () => ({
+  createRoom: jest.fn(),
+  handleRoomInvite: jest.fn(),
+  inviteToRoom: jest.fn(),
+  joinRoomViaLink: jest.fn(),
+  leaveRoom: jest.fn(),
+  listRooms: jest.fn(),
+}));
+
 jest.unstable_mockModule("../../../db/setConfig.js", () => ({
   setConfig: mockSetConfig,
 }));
@@ -11,7 +29,23 @@ jest.unstable_mockModule("./normalizeStringList.js", () => ({
   normalizeStringList: mockNormalizeStringList,
 }));
 
-jest.unstable_mockModule("../../../config/config.js", () => ({
+const mockConfig = {
+  getProvider: jest.fn(),
+  GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: [],
+  getGeneralAccountProviderCapabilities: jest.fn(),
+  getProviderTokenAuthScheme: jest.fn(),
+  DEFAULT_DEV_HOST: "http://localhost:8888",
+  DEFAULT_DEV_PORT: 8888,
+  BASH_DEFAULT_TIMEOUT_SEC: 60,
+  BASH_MAX_TIMEOUT_SEC: 300,
+  DEFAULT_VM_NETWORK_RELAY_URL: "",
+  DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
+  DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
+  FETCH_MAX_RESPONSE: 50 * 1024 * 1024,
+  ASSISTANT_NAME: "Assistant",
+  PROVIDERS: {},
+  OAUTH_PROVIDER_DEFINITIONS: {},
+  getProviderApiKeyConfigKey: jest.fn(),
   CONFIG_KEYS: {
     PEERJS_MY_PEER_ID: "PEERJS_MY_PEER_ID",
     PEERJS_TRUSTED_PEER_IDS: "PEERJS_TRUSTED_PEER_IDS",
@@ -20,7 +54,14 @@ jest.unstable_mockModule("../../../config/config.js", () => ({
     PEERJS_SERVER_PATH: "PEERJS_SERVER_PATH",
     PEERJS_SERVER_SECURE: "PEERJS_SERVER_SECURE",
   },
-}));
+  getModelMaxTokens: jest.fn().mockReturnValue(128000),
+  buildTriggerPattern: jest.fn().mockReturnValue(new RegExp("")),
+  DEFAULT_GROUP_ID: "br:main",
+  OPFS_ROOT: "shadowclaw",
+  LLAMAFILE_PROXY_URL: "/proxy/llamafile",
+};
+
+jest.unstable_mockModule("../../../config/config.js", () => mockConfig);
 
 const { configurePeerJs } = await import("./configurePeerJs.js");
 
@@ -38,6 +79,7 @@ describe("configurePeerJs", () => {
         configure: jest.fn(),
         start: jest.fn(),
       },
+      channelEnabledByType: { peerjs: true },
       getChannelEnabled: jest.fn(),
     };
 
@@ -143,7 +185,7 @@ describe("configurePeerJs", () => {
   });
 
   it("should not start peerjs if channel is disabled", async () => {
-    mockOrchestrator.getChannelEnabled.mockReturnValue(false);
+    mockOrchestrator.channelEnabledByType = { peerjs: false };
 
     await configurePeerJs(mockOrchestrator, mockDb, "my-peer", []);
 

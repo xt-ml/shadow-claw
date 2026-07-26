@@ -20,31 +20,47 @@ const createEventBus = () => {
   };
 };
 
+const mockOpenTerminalSession = jest.fn();
+const mockSendTerminalInput = jest.fn();
+const mockCloseTerminalSession = jest.fn();
+
+jest.unstable_mockModule(
+  "../../core/orchestrator/utils/operations/vm.js",
+  () => ({
+    openTerminalSession: mockOpenTerminalSession,
+    sendTerminalInput: mockSendTerminalInput,
+    closeTerminalSession: mockCloseTerminalSession,
+    syncTerminalWorkspace: jest.fn(),
+    flushTerminalWorkspace: jest.fn(),
+    answerUserPrompt: jest.fn(),
+    setVMBootMode: jest.fn(),
+    setVMBootHost: jest.fn(),
+    setVMNetworkRelayURL: jest.fn(),
+  }),
+);
+
 const { ShadowClawTerminal } = await import("./shadow-claw-terminal.js");
 
 function createOrchestratorStub(initialStatus) {
   const events = createEventBus();
 
+  mockOpenTerminalSession.mockImplementation(() => {
+    if (initialStatus.error) {
+      events.emit("vm-terminal-error", { error: initialStatus.error });
+      return;
+    }
+    events.emit("vm-status", {
+      ready: true,
+      booting: false,
+      bootAttempted: true,
+      error: null,
+    });
+    events.emit("vm-terminal-opened", { ok: true });
+  });
+
   return {
     events,
-    getVMStatus: jest.fn(() => ({ ...initialStatus })),
-    openTerminalSession: jest.fn(() => {
-      if (initialStatus.error) {
-        events.emit("vm-terminal-error", { error: initialStatus.error });
-
-        return;
-      }
-
-      events.emit("vm-status", {
-        ready: true,
-        booting: false,
-        bootAttempted: true,
-        error: null,
-      });
-      events.emit("vm-terminal-opened", { ok: true });
-    }),
-    sendTerminalInput: jest.fn(),
-    closeTerminalSession: jest.fn(),
+    vmStatus: { ...initialStatus },
   };
 }
 
@@ -97,9 +113,12 @@ describe("shadow-claw-terminal", () => {
     document.body.appendChild(element);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(orchestrator.openTerminalSession).toHaveBeenCalled();
+    expect(mockOpenTerminalSession).toHaveBeenCalledWith(
+      orchestrator,
+      "br:main",
+    );
 
-    expect(orchestrator.sendTerminalInput).not.toHaveBeenCalledWith("\n");
+    expect(mockSendTerminalInput).not.toHaveBeenCalledWith(orchestrator, "\n");
 
     orchestrator.events.emit("vm-terminal-output", {
       chunk: "echo hi\r\nhi\r\n",
@@ -117,7 +136,7 @@ describe("shadow-claw-terminal", () => {
     input.value = "pwd";
     element.runCommand();
 
-    expect(orchestrator.sendTerminalInput).toHaveBeenCalledWith("pwd\n");
+    expect(mockSendTerminalInput).toHaveBeenCalledWith(orchestrator, "pwd\n");
   });
 
   it("shows boot failure state and keeps input disabled", async () => {
@@ -140,19 +159,19 @@ describe("shadow-claw-terminal", () => {
 
     expect(input).toHaveProperty("disabled", true);
 
-    expect(orchestrator.openTerminalSession).not.toHaveBeenCalled();
+    expect(mockOpenTerminalSession).not.toHaveBeenCalled();
   });
 
   it("opens terminal when VM leaves disabled state and starts booting", async () => {
     const events = createEventBus();
     const orchestrator: any = {
       events,
-      getVMStatus: jest.fn(() => ({
+      vmStatus: {
         ready: false,
         booting: false,
         bootAttempted: true,
         error: "WebVM is disabled. Enable it in Settings to use WebVM.",
-      })),
+      },
       openTerminalSession: jest.fn(),
       sendTerminalInput: jest.fn(),
       closeTerminalSession: jest.fn(),
@@ -163,7 +182,7 @@ describe("shadow-claw-terminal", () => {
     document.body.appendChild(element);
     await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(orchestrator.openTerminalSession).not.toHaveBeenCalled();
+    expect(mockOpenTerminalSession).not.toHaveBeenCalled();
 
     orchestrator.events.emit("vm-status", {
       ready: false,
@@ -172,7 +191,7 @@ describe("shadow-claw-terminal", () => {
       error: null,
     });
 
-    expect(orchestrator.openTerminalSession).toHaveBeenCalledTimes(1);
+    expect(mockOpenTerminalSession).toHaveBeenCalledTimes(1);
   });
 
   it("clears output and sends ctrl-c when requested", async () => {
@@ -196,7 +215,7 @@ describe("shadow-claw-terminal", () => {
 
     expect(output?.textContent).toBe("");
 
-    expect(orchestrator.sendTerminalInput).toHaveBeenCalledWith("\u0003");
+    expect(mockSendTerminalInput).toHaveBeenCalledWith(orchestrator, "\u0003");
   });
 
   it("preserves visible prompt when clear is pressed", async () => {
@@ -256,12 +275,12 @@ describe("shadow-claw-terminal", () => {
     const events = createEventBus();
     const orchestrator: any = {
       events,
-      getVMStatus: jest.fn(() => ({
+      vmStatus: {
         ready: false,
         booting: true,
         bootAttempted: true,
         error: null,
-      })),
+      },
       openTerminalSession: jest.fn(),
       sendTerminalInput: jest.fn(),
       closeTerminalSession: jest.fn(),
@@ -458,7 +477,7 @@ describe("shadow-claw-terminal", () => {
       error: null,
     });
 
-    expect(orchestrator.openTerminalSession).toHaveBeenCalledTimes(2);
+    expect(mockOpenTerminalSession).toHaveBeenCalledTimes(2);
 
     const status = element.shadowRoot?.querySelector('[data-role="status"]');
     const input = element.shadowRoot?.querySelector('[data-role="input"]');

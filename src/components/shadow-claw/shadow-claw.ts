@@ -368,7 +368,7 @@ export class ShadowClaw extends ShadowClawElement {
       );
     };
 
-    this.vmStatus = this.orchestrator.getVMStatus?.() || this.vmStatus;
+    this.vmStatus = this.orchestrator.vmStatus || this.vmStatus;
 
     updateTerminalToggle(
       this.shadowRoot,

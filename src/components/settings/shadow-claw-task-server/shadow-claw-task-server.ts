@@ -1,4 +1,5 @@
 import { effect } from "../../../core/effect.js";
+import { setTaskServerUrl } from "../../../core/orchestrator/utils/settings.js";
 import { getDb } from "../../../db/db.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
@@ -79,7 +80,7 @@ export class ShadowClawTaskServer extends ShadowClawElement {
       '[data-setting="task-server-url-input"]',
     ) as HTMLInputElement | null;
     if (input) {
-      input.value = this.orchestrator.getTaskServerUrl();
+      input.value = this.orchestrator.taskServerUrl;
     }
   }
 
@@ -103,7 +104,7 @@ export class ShadowClawTaskServer extends ShadowClawElement {
     const url = input.value.trim();
 
     try {
-      await this.orchestrator.setTaskServerUrl(this.db, url || "/schedule");
+      await setTaskServerUrl(this.orchestrator, this.db, url || "/schedule");
       showSuccess("Task Server URL saved", 3000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

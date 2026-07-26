@@ -12,9 +12,17 @@
  * - The DB handle on the global scope (would enable arbitrary IDB writes)
  */
 
+import {
+  getApiKeyForHeaders,
+  setModel,
+  setProvider,
+} from "../core/orchestrator/utils/operations/provider.js";
+
+import { setStreamingEnabled } from "../core/orchestrator/utils/settings.js";
+
 import type { ShadowClaw } from "../components/shadow-claw/shadow-claw.js";
-import type { OrchestratorStore } from "../stores/orchestrator.js";
 import type { GroupMeta, ShadowClawDatabase } from "../db/types.js";
+import type { OrchestratorStore } from "../stores/orchestrator.js";
 
 export interface E2eBridge {
   /** Returns true when the orchestrator store is fully initialized. */
@@ -109,10 +117,14 @@ export function installE2eBridge(
         throw new Error("[E2E Bridge] Orchestrator or DB not ready");
       }
 
-      await orchestrator.setProvider(db, providerId);
+      await setProvider(orchestrator, db, providerId, {
+        loadApiKeyForProvider:
+          orchestrator.loadApiKeyForProvider.bind(orchestrator),
+        getApiKeyForHeaders: () => getApiKeyForHeaders(orchestrator),
+      });
       await orchestrator.setApiKey(db, apiKey);
-      await orchestrator.setModel(db, model);
-      await orchestrator.setStreamingEnabled(db, streamingEnabled);
+      await setModel(orchestrator, db, model);
+      await setStreamingEnabled(orchestrator, db, streamingEnabled);
     },
   };
 

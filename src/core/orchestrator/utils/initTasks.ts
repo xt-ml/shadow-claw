@@ -14,13 +14,32 @@ import { setConfig } from "../../../db/setConfig.js";
 
 import { toTrustedScriptUrl } from "../../../security/trusted-types.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
-
 import { RoomManager } from "../../../subsystems/channels/room-manager.js";
 import { setWebMcpMode as applyWebMcpMode } from "../../../subsystems/mcp/webmcp.js";
 import { modelRegistry } from "../../../subsystems/providers/model-registry.js";
 import { TaskScheduler } from "../../../subsystems/tools/task-scheduler.js";
+import { enqueue } from "./enqueue.js";
+import { handleWorkerMessage } from "./handleWorkerMessage.js";
+import { loadChannelConfigurations } from "./loadChannelConfigurations.js";
+import { applyAllChannelRunningStates } from "./operations/channel.js";
+
+import {
+  applyLlamafileHeaders,
+  applyMeshLlmHeaders,
+  getApiKeyForHeaders,
+  getProviderRuntimeHeaders,
+} from "./operations/provider.js";
+
+import { handleRoomInvite } from "./operations/room.js";
+
+import {
+  runTaskAsScheduled,
+  shouldStartLocalScheduler,
+} from "./operations/task.js";
 
 import { parseDirectToolCommandPolicy } from "./parseDirectToolCommandPolicy.js";
+import { setupPushTaskListener } from "./setupPushTaskListener.js";
+import { syncProxyConfigToServiceWorker } from "./syncProxyConfigToServiceWorker.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { RoomTransport } from "../../../subsystems/channels/room-manager.js";
@@ -56,7 +75,7 @@ export function createRoomManager(orchestrator: Orchestrator): RoomManager {
       agentName: orchestrator.assistantName,
     }),
     onMessage: (msg) => orchestrator.roomChannel.deliverInbound(msg),
-    onInvite: (invite) => orchestrator.handleRoomInvite(invite),
+    onInvite: (invite) => handleRoomInvite(orchestrator, invite),
     persistRoom: (room) => {
       if (orchestrator.db) {
         upsertRoom(orchestrator.db, room).catch((err) =>
@@ -81,7 +100,7 @@ export async function initChannelsAndRooms(
   orchestrator.initializeChannelRegistry();
 
   orchestrator.channelRegistry.onMessage((msg: InboundMessage) => {
-    orchestrator.enqueue(db, msg).catch((error) => {
+    enqueue(orchestrator, db, msg).catch((error) => {
       console.error("Failed to enqueue inbound message:", error);
     });
   });
@@ -100,8 +119,8 @@ export async function initChannelsAndRooms(
     orchestrator.peerCompletedContexts.add(groupId);
   });
 
-  await orchestrator.loadChannelConfigurations(db);
-  orchestrator.applyAllChannelRunningStates();
+  await loadChannelConfigurations(orchestrator, db);
+  applyAllChannelRunningStates(orchestrator);
 
   // Restore persisted multi-party rooms
   try {
@@ -226,14 +245,14 @@ export async function initLlamafileAndMesh(
     orchestrator.llamafileOffline = false;
   }
 
-  orchestrator.applyLlamafileHeaders();
+  applyLlamafileHeaders(orchestrator);
 
   const storedmeshLlmHost = await getConfig(db, CONFIG_KEYS.MESH_LLM_HOST);
   if (storedmeshLlmHost) {
     orchestrator.meshLlmHost = storedmeshLlmHost;
   }
 
-  orchestrator.applyMeshLlmHeaders();
+  applyMeshLlmHeaders(orchestrator);
 }
 
 export async function initProviderAndModel(
@@ -266,8 +285,8 @@ export async function initProviderAndModel(
   // Fetch model info for the current provider (passes apiKey for auth).
   await modelRegistry.fetchModelInfo(
     orchestrator.providerConfig,
-    (await orchestrator.getApiKeyForHeaders()) || undefined,
-    orchestrator.getProviderRuntimeHeaders(orchestrator.provider),
+    (await getApiKeyForHeaders(orchestrator)) || undefined,
+    getProviderRuntimeHeaders(orchestrator, orchestrator.provider),
   );
 
   const storedModel = await getConfig(db, CONFIG_KEYS.MODEL);
@@ -335,7 +354,7 @@ export async function initWorkerAndScheduler(
   );
 
   orchestrator.agentWorker.onmessage = (event) =>
-    orchestrator.handleWorkerMessage(db, event.data);
+    handleWorkerMessage(orchestrator, db, event.data);
 
   orchestrator.agentWorker.onerror = (err) => {
     console.error("Agent worker error:", err);
@@ -350,7 +369,7 @@ export async function initWorkerAndScheduler(
   }
 
   // Sync proxy config to Service Worker
-  orchestrator.syncProxyConfigToServiceWorker();
+  syncProxyConfigToServiceWorker(orchestrator);
 
   // Set up task scheduler.
   // When push scheduling is available, the server-side scheduler should be
@@ -358,16 +377,16 @@ export async function initWorkerAndScheduler(
   // when push background execution is unavailable.
   orchestrator.scheduler = new TaskScheduler(
     async (task) => {
-      await orchestrator.runTaskAsScheduled(task);
+      await runTaskAsScheduled(orchestrator, task);
     },
     () => {
       orchestrator.events.emit("task-change", { type: "executed" });
     },
   );
 
-  if (await orchestrator.shouldStartLocalScheduler()) {
+  if (await shouldStartLocalScheduler()) {
     orchestrator.scheduler.start();
   }
 
-  orchestrator.setupPushTaskListener(db);
+  setupPushTaskListener(orchestrator, db);
 }

@@ -210,6 +210,34 @@ jest.unstable_mockModule("../../config/settings-backup.js", () => ({
     (globalThis as any)._mockReapplyPlaintextPasswords(...args),
 }));
 
+const mockSetAssistantName = jest.fn();
+jest.unstable_mockModule(
+  "../../core/orchestrator/utils/operations/provider.js",
+  () => ({
+    setAssistantName: mockSetAssistantName,
+    getApiKeyForHeaders: jest.fn(),
+    getApiKeyForRequest: jest.fn(),
+    getLlamafileSettings: jest.fn(),
+    getMeshLlmSettings: jest.fn(),
+    getBedrockSettings: jest.fn(),
+    getAvailableProviders: jest.fn(),
+    getReasoningConfig: jest.fn(),
+    getProviderRuntimeHeaders: jest.fn(),
+    applyLlamafileHeaders: jest.fn(),
+    applyMeshLlmHeaders: jest.fn(),
+    getTransformersStatusUrl: jest.fn(),
+    setBedrockSettings: jest.fn(),
+    setLlamafileSettings: jest.fn(),
+    setMeshLlmSettings: jest.fn(),
+    setModel: jest.fn(),
+    setPeerjsMyAlias: jest.fn(),
+    setPeerjsPeerAliases: jest.fn(),
+    autoActivateProfile: jest.fn(),
+    stopTransformersProgressPolling: jest.fn(),
+    setProvider: jest.fn(),
+  }),
+);
+
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { ShadowClawSettings } = await import("./shadow-claw-settings.js");
 
@@ -520,11 +548,10 @@ describe("shadow-claw-settings", () => {
   });
 
   it("populates and saves assistant name", async () => {
-    const setAssistantName = jest.fn();
     const orchestrator = {
       getAssistantName: jest.fn().mockReturnValue("example"),
-      setAssistantName,
     };
+    mockSetAssistantName.mockClear();
     (orchestratorStore as any).orchestrator = orchestrator;
     const el = new ShadowClawSettings();
     (el as any).orchestrator = orchestrator;
@@ -547,7 +574,8 @@ describe("shadow-claw-settings", () => {
     );
     saveBtn?.dispatchEvent(new Event("click"));
 
-    expect(setAssistantName).toHaveBeenCalledWith(
+    expect(mockSetAssistantName).toHaveBeenCalledWith(
+      orchestrator,
       expect.anything(),
       "new-name",
     );

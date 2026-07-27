@@ -807,6 +807,53 @@ describe("OrchestratorStore", () => {
     errorSpy.mockRestore();
   });
 
+  it("runTask of type 'tools' sends tools to agent worker", () => {
+    const store: any = new OrchestratorStore();
+    const postMessage = jest.fn();
+    store.orchestrator = { agentWorker: { postMessage } } as any;
+
+    store.runTask({
+      id: "t-tools",
+      groupId: "task-group",
+      type: "tools",
+      tools: [{ name: "bash", input: { command: "ls" } }],
+      prompt: "",
+    });
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: "execute-task-tools",
+      payload: {
+        groupId: "task-group",
+        tools: [{ name: "bash", input: { command: "ls" } }],
+        isManual: false,
+      },
+    });
+  });
+
+  it("runTask of type 'tools' with subagent enabled sends tools with isolated subagent groupId", () => {
+    const store: any = new OrchestratorStore();
+    const postMessage = jest.fn();
+    store.orchestrator = { agentWorker: { postMessage } } as any;
+
+    store.runTask({
+      id: "t-tools-subagent",
+      groupId: "task-group",
+      type: "tools",
+      tools: [{ name: "bash", input: { command: "ls" } }],
+      prompt: "",
+      subagent: true,
+    });
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: "execute-task-tools",
+      payload: {
+        groupId: expect.stringMatching(/^subagent:/),
+        tools: [{ name: "bash", input: { command: "ls" } }],
+        isManual: false,
+      },
+    });
+  });
+
   describe("scheduled task conversation isolation", () => {
     beforeEach(() => {
       (mockListGroups as any).mockResolvedValue([

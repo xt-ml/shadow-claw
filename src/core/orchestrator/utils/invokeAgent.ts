@@ -52,10 +52,12 @@ export async function invokeAgent(
   freshContext = false,
   subagent = false,
 ): Promise<void> {
-  o.inFlightTriggerByGroup.set(groupId, triggerContent);
-  o.setState("thinking", groupId);
-  o.router?.setTyping(groupId, true);
-  o.events.emit("typing", { groupId, typing: true });
+  const executionGroupId = subagent ? `subagent:${ulid()}` : groupId;
+
+  o.inFlightTriggerByGroup.set(executionGroupId, triggerContent);
+  o.setState("thinking", executionGroupId);
+  o.router?.setTyping(executionGroupId, true);
+  o.events.emit("typing", { groupId: executionGroupId, typing: true });
 
   // Save scheduled task as client message
   if (triggerContent.startsWith("[SCHEDULED TASK]")) {
@@ -101,7 +103,7 @@ export async function invokeAgent(
 
   // Track the effective provider for this group so the error handler
   // can show the right help UI and avoid showing the wrong provider's error.
-  o.inFlightEffectiveProviderByGroup.set(groupId, {
+  o.inFlightEffectiveProviderByGroup.set(executionGroupId, {
     providerId: effectiveProviderId,
     providerConfig: effectiveProviderConfig,
   });
@@ -194,7 +196,7 @@ export async function invokeAgent(
 
   if (effectiveProviderId === "transformers_js_browser") {
     const controller = new AbortController();
-    o.promptControllers.set(groupId, controller);
+    o.promptControllers.set(executionGroupId, controller);
 
     const transformersInvokeContext: SubagentInvokeContext = {
       apiKey: "",
@@ -238,7 +240,7 @@ export async function invokeAgent(
     try {
       await invokeWithTransformersJs(
         db,
-        groupId,
+        executionGroupId,
         systemPrompt,
         messages,
         o.maxTokens,
@@ -256,9 +258,9 @@ export async function invokeAgent(
       }
 
       const message = err instanceof Error ? err.message : String(err);
-      await deliverResponse(o, db, groupId, `⚠️ Error: ${message}`);
+      await deliverResponse(o, db, executionGroupId, `⚠️ Error: ${message}`);
     } finally {
-      o.promptControllers.delete(groupId);
+      o.promptControllers.delete(executionGroupId);
     }
 
     return;
@@ -269,7 +271,7 @@ export async function invokeAgent(
       await deliverResponse(
         o,
         db,
-        groupId,
+        executionGroupId,
         "⚠️ Error: Prompt API is not available in this browser. Switch provider or enable experimental browser flags.",
       );
 
@@ -277,7 +279,7 @@ export async function invokeAgent(
     }
 
     const controller = new AbortController();
-    o.promptControllers.set(groupId, controller);
+    o.promptControllers.set(executionGroupId, controller);
 
     const promptApiInvokeContext: SubagentInvokeContext = {
       apiKey: "",
@@ -320,7 +322,7 @@ export async function invokeAgent(
     try {
       await invokeWithPromptApi(
         db,
-        groupId,
+        executionGroupId,
         systemPrompt,
         messages,
         o.maxTokens,
@@ -337,9 +339,9 @@ export async function invokeAgent(
       }
 
       const message = err instanceof Error ? err.message : String(err);
-      await deliverResponse(o, db, groupId, `⚠️ Error: ${message}`);
+      await deliverResponse(o, db, executionGroupId, `⚠️ Error: ${message}`);
     } finally {
-      o.promptControllers.delete(groupId);
+      o.promptControllers.delete(executionGroupId);
     }
 
     return;
@@ -350,7 +352,7 @@ export async function invokeAgent(
       await deliverResponse(
         o,
         db,
-        groupId,
+        executionGroupId,
         "⚠️ LiteRT-LM requires WebGPU and WebAssembly.Suspending. These are not both available in this browser.",
       );
 
@@ -358,7 +360,7 @@ export async function invokeAgent(
     }
 
     const controller = new AbortController();
-    o.promptControllers.set(groupId, controller);
+    o.promptControllers.set(executionGroupId, controller);
 
     const liteRtInvokeContext: SubagentInvokeContext = {
       apiKey: "",
@@ -402,7 +404,7 @@ export async function invokeAgent(
     try {
       await invokeWithLiteRtLm(
         db,
-        groupId,
+        executionGroupId,
         systemPrompt,
         messages,
         o.maxTokens,
@@ -420,9 +422,9 @@ export async function invokeAgent(
       }
 
       const message = err instanceof Error ? err.message : String(err);
-      await deliverResponse(o, db, groupId, `⚠️ Error: ${message}`);
+      await deliverResponse(o, db, executionGroupId, `⚠️ Error: ${message}`);
     } finally {
-      o.promptControllers.delete(groupId);
+      o.promptControllers.delete(executionGroupId);
     }
 
     return;
@@ -438,10 +440,10 @@ export async function invokeAgent(
       effectiveProviderConfig.format === "anthropic");
 
   if (effectiveProviderId === "transformers_js_local") {
-    startTransformersProgressPolling(o, o.events, groupId);
+    startTransformersProgressPolling(o, o.events, executionGroupId);
   }
 
-  const providerRequestId = o.createProviderRequestId(groupId);
+  const providerRequestId = o.createProviderRequestId(executionGroupId);
 
   // Send to agent worker
   o.agentWorker?.postMessage({
@@ -455,7 +457,7 @@ export async function invokeAgent(
       contextCompression: o.contextCompressionEnabled,
       contextLimit: getContextLimit(effectiveModel),
       enabledTools: activeTools,
-      groupId,
+      groupId: executionGroupId,
       isScheduledTask: o.schedulerTriggeredGroups.has(groupId),
       maxIterations: o.maxIterations,
       maxTokens: o.maxTokens,

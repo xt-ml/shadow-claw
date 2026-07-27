@@ -93,6 +93,8 @@ describe("handleInvoke.js", () => {
 
     jest.unstable_mockModule("./post.js", () => ({
       post: mockPost,
+      registerSubagentCollector: jest.fn(),
+      unregisterSubagentCollector: jest.fn(),
     }));
 
     jest.unstable_mockModule("./parseSSEStream.js", () => ({

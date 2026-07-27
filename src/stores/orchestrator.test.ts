@@ -780,10 +780,13 @@ describe("OrchestratorStore", () => {
     store.runTask({ id: "t1", groupId: "task-group", prompt: "do work" });
 
     // Must target the task's groupId, NOT the active group
-    expect(submit).toHaveBeenCalledWith("do work", "task-group", []);
+    expect(submit).toHaveBeenCalledWith("do work", "task-group", [], undefined, undefined, undefined);
     expect(submit).not.toHaveBeenCalledWith(
       "do work",
       "active-group",
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
       expect.anything(),
     );
   });

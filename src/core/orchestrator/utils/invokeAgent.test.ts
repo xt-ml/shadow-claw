@@ -503,12 +503,24 @@ describe("invokeAgent", () => {
     await invokeAgent(mockOrchestrator, mockDb, "group1", "hello", false, true);
 
     // Assert that thinking state and typing indicators are set on the subagent group ID
-    expect(mockOrchestrator.setState).toHaveBeenCalledWith("thinking", "subagent:subagent-ulid");
-    expect(mockOrchestrator.router.setTyping).toHaveBeenCalledWith("subagent:subagent-ulid", true);
+    expect(mockOrchestrator.setState).toHaveBeenCalledWith(
+      "thinking",
+      "subagent:subagent-ulid",
+    );
+    expect(mockOrchestrator.router.setTyping).toHaveBeenCalledWith(
+      "subagent:subagent-ulid",
+      true,
+    );
 
     // Assert that the parent group ID is NOT set to thinking or typing
-    expect(mockOrchestrator.setState).not.toHaveBeenCalledWith("thinking", "group1");
-    expect(mockOrchestrator.router.setTyping).not.toHaveBeenCalledWith("group1", true);
+    expect(mockOrchestrator.setState).not.toHaveBeenCalledWith(
+      "thinking",
+      "group1",
+    );
+    expect(mockOrchestrator.router.setTyping).not.toHaveBeenCalledWith(
+      "group1",
+      true,
+    );
 
     // Assert that the agent worker is invoked with the subagent group ID
     expect(mockOrchestrator.agentWorker.postMessage).toHaveBeenCalledWith({

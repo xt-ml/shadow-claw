@@ -1619,7 +1619,9 @@ export class OrchestratorStore {
       task.tools.length > 0
     ) {
       if (this.orchestrator?.agentWorker) {
-        const executionGroupId = task.subagent ? `subagent:${ulid()}` : task.groupId;
+        const executionGroupId = task.subagent
+          ? `subagent:${ulid()}`
+          : task.groupId;
         this.orchestrator.agentWorker.postMessage({
           type: "execute-task-tools",
           payload: {

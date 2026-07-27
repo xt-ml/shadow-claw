@@ -1730,7 +1730,12 @@ describe("executeTool.js", () => {
       "group1",
     );
 
-    expect(mockSandboxedEval).toHaveBeenCalledWith("1+1", undefined, false);
+    expect(mockSandboxedEval).toHaveBeenCalledWith(
+      "1+1",
+      undefined,
+      false,
+      undefined,
+    );
     expect(result).toBe("2");
   });
 
@@ -1753,6 +1758,7 @@ describe("executeTool.js", () => {
       "undefined",
       undefined,
       false,
+      undefined,
     );
 
     (mockSandboxedEval as any).mockResolvedValue({ ok: true, value: null });
@@ -1761,7 +1767,12 @@ describe("executeTool.js", () => {
       executeTool({} as any, "javascript", { code: "null" }, "group1"),
     ).resolves.toBe("null");
 
-    expect(mockSandboxedEval).toHaveBeenCalledWith("null", undefined, false);
+    expect(mockSandboxedEval).toHaveBeenCalledWith(
+      "null",
+      undefined,
+      false,
+      undefined,
+    );
   });
 
   it("should handle javascript tool errors via sandboxedEval", async () => {
@@ -1777,8 +1788,32 @@ describe("executeTool.js", () => {
       "group1",
     );
 
-    expect(mockSandboxedEval).toHaveBeenCalledWith("x", undefined, false);
+    expect(mockSandboxedEval).toHaveBeenCalledWith(
+      "x",
+      undefined,
+      false,
+      undefined,
+    );
     expect(result).toBe("JavaScript error: x is not defined");
+  });
+
+  it("should handle javascript tool with data parameter", async () => {
+    (mockSandboxedEval as any).mockResolvedValue({ ok: true, value: "hello" });
+
+    const result = await executeTool(
+      {},
+      "javascript",
+      { code: "DATA", data: "hello" },
+      "group1",
+    );
+
+    expect(mockSandboxedEval).toHaveBeenCalledWith(
+      "DATA",
+      undefined,
+      false,
+      "hello",
+    );
+    expect(result).toBe("hello");
   });
 
   it("should disable javascript fetch when shared internet config is false", async () => {
@@ -1793,7 +1828,12 @@ describe("executeTool.js", () => {
 
     await executeTool({}, "javascript", { code: "1+1" }, "group1");
 
-    expect(mockSandboxedEval).toHaveBeenCalledWith("1+1", undefined, false);
+    expect(mockSandboxedEval).toHaveBeenCalledWith(
+      "1+1",
+      undefined,
+      false,
+      undefined,
+    );
   });
 
   it("should handle list_tasks tool", async () => {

@@ -569,4 +569,74 @@ describe("handleMessage.js", () => {
 
     await invokePromise;
   });
+
+  describe("execute-task-tools with $pipe chaining", () => {
+    it("should execute sequential tools and resolve pipe references", async () => {
+      const db: any = {} as any;
+      (mockOpenDatabase as any).mockResolvedValue(db);
+
+      // Track calls to mockExecuteTool
+      const executedCalls: any[] = [];
+      (mockExecuteTool as any).mockImplementation((_db, name, input) => {
+        executedCalls.push({ name, input });
+        if (name === "tool1") return "output1";
+        if (name === "tool2") return "output2";
+        if (name === "tool3") return "output3";
+        return "default";
+      });
+
+      const event: any = {
+        data: {
+          type: "execute-task-tools",
+          payload: {
+            groupId: "tg:123",
+            isManual: true,
+            tools: [
+              {
+                name: "tool1",
+                input: { val: "start" },
+              },
+              {
+                name: "tool2",
+                input: {
+                  prevVal: { $pipe: "prev" },
+                  firstVal: { $pipe: 0 },
+                },
+              },
+              {
+                name: "tool3",
+                input: {
+                  namedVal: { $pipe: "tool1" },
+                },
+              },
+            ],
+          },
+        },
+      };
+
+      await handleMessage(event);
+
+      expect(executedCalls).toHaveLength(3);
+      expect(executedCalls[0]).toEqual({
+        name: "tool1",
+        input: { val: "start" },
+      });
+      expect(executedCalls[1]).toEqual({
+        name: "tool2",
+        input: { prevVal: "output1", firstVal: "output1" },
+      });
+      expect(executedCalls[2]).toEqual({
+        name: "tool3",
+        input: { namedVal: "output1" },
+      });
+
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "response",
+        payload: {
+          groupId: "tg:123",
+          text: "**Tool `tool1`**: output1\n\n**Tool `tool2`**: output2\n\n**Tool `tool3`**: output3",
+        },
+      });
+    });
+  });
 });

@@ -259,7 +259,9 @@ export async function handleInvoke(
 
   const isSubagentTask = !!payload.subagentTask;
   const groupId = isSubagentTask
-    ? (originalGroupId.startsWith("subagent:") ? originalGroupId : `subagent:${ulid()}`)
+    ? originalGroupId.startsWith("subagent:")
+      ? originalGroupId
+      : `subagent:${ulid()}`
     : originalGroupId;
   const effectiveWorkspaceGroupId = workspaceGroupId || originalGroupId;
 

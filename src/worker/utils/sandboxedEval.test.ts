@@ -301,4 +301,13 @@ describe("buildWorkerSource — generated code validity", () => {
 
     expect(blocked).toContain("fetch");
   });
+
+  it("injects data parameter as global constant $PIPE_DATA", () => {
+    const source = buildWorkerSource(
+      "return $PIPE_DATA;",
+      false,
+      "hello world",
+    );
+    expect(source).toContain('const $PIPE_DATA = "hello world";');
+  });
 });

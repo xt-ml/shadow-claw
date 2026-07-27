@@ -1,12 +1,11 @@
-// @ts-nocheck
 import { jest } from "@jest/globals";
 
 const mockSandboxedEval = jest.fn();
 
 describe("worker and worker/agent.js", () => {
-  let agentModule;
-  let workerModule;
-  let stripHtml;
+  let agentModule: any;
+  let workerModule: any;
+  let stripHtml: any;
 
   beforeAll(() => {
     self.postMessage = jest.fn();
@@ -141,6 +140,12 @@ describe("worker and worker/agent.js", () => {
   });
 
   describe("agent utilities (src/worker/agent.mjs)", () => {
+    describe("worker module", () => {
+      it("should have no exports", () => {
+        expect(Object.keys(workerModule)).toEqual([]);
+      });
+    });
+
     describe("stripHtml", () => {
       it("should remove script and style tags", () => {
         const html =
@@ -190,6 +195,7 @@ describe("worker and worker/agent.js", () => {
           "1 + 1",
           undefined,
           false,
+          undefined,
         );
         expect(result).toBe("2");
       });
@@ -210,6 +216,7 @@ describe("worker and worker/agent.js", () => {
           "throw new Error('fail')",
           undefined,
           false,
+          undefined,
         );
         expect(result).toContain("JavaScript error: fail");
       });
@@ -220,7 +227,7 @@ describe("worker and worker/agent.js", () => {
     it("should respond to messages via handleMessage", async () => {
       // Mock self and postMessage
       const postMessageSpy = jest.fn();
-      global.self = {
+      (global.self as any) = {
         postMessage: postMessageSpy,
       };
 
@@ -255,27 +262,27 @@ describe("worker and worker/agent.js", () => {
           }),
         );
       } finally {
-        delete global.self;
+        delete (global as any).self;
       }
     });
   });
 
   describe("Toast helper functions (on globalThis)", () => {
-    let postMessageSpy;
+    let postMessageSpy: any;
 
     beforeEach(() => {
       postMessageSpy = jest.fn();
-      global.self = {
+      (global.self as any) = {
         postMessage: postMessageSpy,
       };
     });
 
     afterEach(() => {
-      delete global.self;
+      delete (global as any).self;
     });
 
     it("should call showToast with default type", () => {
-      globalThis.showToast("Test message");
+      (globalThis as any).showToast("Test message");
       expect(postMessageSpy).toHaveBeenCalledWith({
         type: "show-toast",
         payload: { message: "Test message", type: "info", duration: undefined },
@@ -283,7 +290,7 @@ describe("worker and worker/agent.js", () => {
     });
 
     it("should call showToast with custom type and duration", () => {
-      globalThis.showToast("Warning message", "warning", 5000);
+      (globalThis as any).showToast("Warning message", "warning", 5000);
       expect(postMessageSpy).toHaveBeenCalledWith({
         type: "show-toast",
         payload: {
@@ -295,7 +302,7 @@ describe("worker and worker/agent.js", () => {
     });
 
     it("should call showSuccess", () => {
-      globalThis.showSuccess("Success message", 3000);
+      (globalThis as any).showSuccess("Success message", 3000);
       expect(postMessageSpy).toHaveBeenCalledWith({
         type: "show-toast",
         payload: {
@@ -307,7 +314,7 @@ describe("worker and worker/agent.js", () => {
     });
 
     it("should call showError", () => {
-      globalThis.showError("Error message");
+      (globalThis as any).showError("Error message");
       expect(postMessageSpy).toHaveBeenCalledWith({
         type: "show-toast",
         payload: {
@@ -319,7 +326,7 @@ describe("worker and worker/agent.js", () => {
     });
 
     it("should call showWarning", () => {
-      globalThis.showWarning("Warning message");
+      (globalThis as any).showWarning("Warning message");
       expect(postMessageSpy).toHaveBeenCalledWith({
         type: "show-toast",
         payload: {
@@ -331,7 +338,7 @@ describe("worker and worker/agent.js", () => {
     });
 
     it("should call showInfo", () => {
-      globalThis.showInfo("Info message", 2000);
+      (globalThis as any).showInfo("Info message", 2000);
       expect(postMessageSpy).toHaveBeenCalledWith({
         type: "show-toast",
         payload: { message: "Info message", type: "info", duration: 2000 },

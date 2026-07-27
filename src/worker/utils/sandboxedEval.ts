@@ -94,9 +94,10 @@ export async function sandboxedEval(
   code: string,
   timeoutMs: number = JS_EXEC_TIMEOUT_MS,
   allowFullInternetAccess: boolean = false,
+  data?: string,
 ): Promise<{ ok: true; value: unknown } | { ok: false; error: string }> {
   // Build the worker source inline via a Blob URL
-  const workerSource = buildWorkerSource(code, allowFullInternetAccess);
+  const workerSource = buildWorkerSource(code, allowFullInternetAccess, data);
   const blob = new Blob([workerSource], { type: "application/javascript" });
   const blobUrl = URL.createObjectURL(blob);
 
@@ -153,6 +154,7 @@ export async function sandboxedEval(
 export function buildWorkerSource(
   code: string = "",
   allowFullInternetAccess: boolean = false,
+  data?: string,
 ): string {
   // We JSON-encode the blocked globals list so it's safely embedded.
   const blockedJSON = JSON.stringify(
@@ -263,6 +265,7 @@ const restoreGlobals = applyGlobalShadows();
       const location = undefined;
       const Function = undefined;
       ${allowFullInternetAccess ? "" : "const fetch = undefined;"}
+      const $PIPE_DATA = ${JSON.stringify(data ?? "")};
 
     ${code}
     })();

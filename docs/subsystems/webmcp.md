@@ -151,9 +151,68 @@ be composed into a scheduled `Task` of `type: "tools"`.
 It's important to differentiate how tool composition happens depending on the context:
 
 1. **Dynamic Real-Time Composition (Agent Loop):** An agent (via the standard `prompt` execution path) can evaluate the situation, call `fetch_file`, read the result into context, decide what to do next, and then call `bash`. The agent uses its temporary context window and the OPFS filesystem to bridge the steps dynamically.
-2. **Static Task Chains (Task Scheduler):** A `Task` of `type: "tools"` defines a fixed, pre-determined sequence of tool calls that bypass the LLM entirely. The OPFS-backed workspace filesystem acts as the shared medium between steps: one tool writes a file, the next reads or transforms it blindly.
+2. **Static Task Chains (Task Scheduler):** A `Task` of `type: "tools"` defines a fixed, pre-determined sequence of tool calls that bypass the LLM entirely. Historically, the OPFS-backed workspace filesystem acted as the shared medium between steps: one tool wrote a file, the next read or transformed it blindly.
 
 Agents can bridge these two paradigms: an agent can dynamically decide to automate a workflow by calling `create_task` with a `type: "tools"` payload, effectively writing a static WebMCP tool-chain program for the system to execute on a schedule.
+
+### Piping Tool Outputs
+
+Rather than using the filesystem (OPFS) as a "middleman" to pass data between sequential steps in a static tool chain, you can chain inputs and outputs directly using **pipe references**.
+
+If a tool's `input` configuration contains a special `{ "$pipe": ... }` object, the task runner resolves this placeholder at runtime using the output of a previous step:
+
+- `{ "$pipe": "prev" }` — Resolves to the raw output of the immediately preceding step.
+- `{ "$pipe": <number> }` — Resolves to the raw output of a specific index (0-indexed).
+- `{ "$pipe": "<toolName>" }` — Resolves to the raw output of the most recent step that ran a tool with name `<toolName>`.
+
+#### Example — Piping URL contents to a command without using the filesystem:
+
+```json
+{
+  "type": "tools",
+  "tools": [
+    {
+      "name": "fetch_url",
+      "input": {
+        "url": "https://example.com"
+      }
+    },
+    {
+      "name": "show_toast",
+      "input": {
+        "message": { "$pipe": "prev" }
+      }
+    }
+  ]
+}
+```
+
+If a tool returns structured content (such as `ToolResultContentBlock[]`), the resolver automatically extracts the text fields and flattens them into a clean string, ensuring seamless Unix-like stdout-to-stdin compatibility.
+
+#### Example — Piping to a JavaScript sandbox:
+
+```json
+{
+  "type": "tools",
+  "tools": [
+    {
+      "name": "fetch_url",
+      "input": {
+        "url": "https://api.github.com/repos/xt-ml/shadow-claw/issues"
+      }
+    },
+    {
+      "name": "javascript",
+      "input": {
+        "code": "const match = $PIPE_DATA.match(/--- BEGIN EXTERNAL CONTENT[\\s\\S]*?---\\n([\\s\\S]*?)\\n--- END EXTERNAL CONTENT ---/); const jsonStr = match ? match[1] : $PIPE_DATA; const issues = JSON.parse(jsonStr); return issues.map(i => `#${i.number}: ${i.title}`).join('\\n');",
+        "data": { "$pipe": "prev" }
+      }
+    }
+  ]
+}
+```
+
+Any input passed to the `data` parameter of the `javascript` tool is injected and made available globally within the sandbox via the `$PIPE_DATA` constant.
 
 **Example — Static tool chain to fetch a page and convert it to Markdown:**
 

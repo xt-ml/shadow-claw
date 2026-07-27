@@ -11,6 +11,7 @@ export async function executeJavascript(
     input.code,
     undefined,
     allowFullInternetAccess,
+    input.data,
   )) as any;
 
   if (!result.ok) {

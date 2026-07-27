@@ -20,6 +20,11 @@ export const javascript: ToolDefinition = {
         description:
           "JavaScript code to execute. The return value of the last expression is captured.",
       },
+      data: {
+        type: "string",
+        description:
+          "Optional input data string. Accessible inside the code sandbox via the global constant `$PIPE_DATA`.",
+      },
     },
     required: ["code"],
   },

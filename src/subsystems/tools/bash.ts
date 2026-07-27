@@ -23,6 +23,10 @@ export const bash: ToolDefinition = {
         type: "string",
         description: "The bash command to execute",
       },
+      stdin: {
+        type: "string",
+        description: "Optional standard input (stdin) to pass to the command",
+      },
       timeout: {
         type: "number",
         description:

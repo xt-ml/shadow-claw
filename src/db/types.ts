@@ -84,4 +84,5 @@ export interface TaskToolCall {
   input: Record<string, any>;
   name: string;
   suppressOutput?: boolean;
+  suppressToast?: boolean;
 }

@@ -242,13 +242,15 @@ export async function handleMessage(event: MessageEvent): Promise<void> {
       const rawOutputs: any[] = [];
       for (const tool of tools) {
         try {
-          post({
-            type: "show-toast",
-            payload: {
-              message: `Running task tool: ${tool.name}...`,
-              duration: 3000,
-            },
-          });
+          if (!tool.suppressToast) {
+            post({
+              type: "show-toast",
+              payload: {
+                message: `Running task tool: ${tool.name}...`,
+                duration: 3000,
+              },
+            });
+          }
 
           const resolvedInput = resolvePipeRefs(
             tool.input || {},

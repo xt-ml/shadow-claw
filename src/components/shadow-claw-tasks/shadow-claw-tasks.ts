@@ -465,10 +465,33 @@ export class ShadowClawTasks extends ShadowClawElement {
       suppressLabel.appendChild(suppressInput);
       suppressLabel.appendChild(document.createTextNode(" Suppress Output"));
 
+      const suppressToastLabel = document.createElement("label");
+      suppressToastLabel.className = "tasks__tool-suppress";
+
+      const suppressToastInput = document.createElement("input");
+      suppressToastInput.type = "checkbox";
+      suppressToastInput.checked = !!tool.suppressToast;
+      suppressToastInput.addEventListener("change", (e) => {
+        tool.suppressToast = (e.target as HTMLInputElement).checked;
+        const previewDiv = root.querySelector(".tasks__preview");
+        if (previewDiv) {
+          setSanitizedHtml(
+            previewDiv,
+            this.renderToolsPreview(this.editingTools),
+          );
+        }
+      });
+
+      suppressToastLabel.appendChild(suppressToastInput);
+      suppressToastLabel.appendChild(
+        document.createTextNode(" Suppress Toast"),
+      );
+
       item.appendChild(header);
       item.appendChild(nameInput);
       item.appendChild(paramsInput);
       item.appendChild(suppressLabel);
+      item.appendChild(suppressToastLabel);
       list.appendChild(item);
     });
   }

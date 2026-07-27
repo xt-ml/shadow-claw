@@ -78,14 +78,13 @@ export class BrowserChatChannel implements Channel {
     // No-op
   }
 
-  /**
-   * Called by the UI when the user submits a message.
-   */
   submit(
     text: string,
     groupId?: string,
     attachments: MessageAttachment[] = [],
     a2uiAction?: A2UIAction,
+    freshContext?: boolean,
+    subagent?: boolean,
   ) {
     const gid = groupId || this.activeGroupId;
     const msg: InboundMessage = {
@@ -97,6 +96,8 @@ export class BrowserChatChannel implements Channel {
       channel: "browser",
       attachments,
       a2uiAction,
+      freshContext,
+      subagent,
     };
 
     this.messageCallback?.(msg);

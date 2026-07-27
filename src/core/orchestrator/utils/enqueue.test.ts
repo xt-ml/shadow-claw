@@ -242,6 +242,8 @@ describe("enqueue & processQueue", () => {
         mockDb,
         "g1",
         "hello",
+        undefined,
+        undefined,
       );
       expect(mockOrchestrator.processing).toBe(false);
       expect(mockOrchestrator.messageQueue).toHaveLength(0);
@@ -298,6 +300,8 @@ describe("enqueue & processQueue", () => {
         mockDb,
         "g1",
         "msg1",
+        undefined,
+        undefined,
       );
       expect(mockInvokeAgent).toHaveBeenNthCalledWith(
         2,
@@ -305,6 +309,8 @@ describe("enqueue & processQueue", () => {
         mockDb,
         "g2",
         "msg2",
+        undefined,
+        undefined,
       );
     });
 
@@ -328,6 +334,8 @@ describe("enqueue & processQueue", () => {
         mockDb,
         "g1",
         "hello",
+        undefined,
+        undefined,
       );
     });
   });

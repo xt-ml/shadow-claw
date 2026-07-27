@@ -465,4 +465,36 @@ describe("invokeAgent", () => {
     );
     expect(mockOrchestrator.agentWorker.postMessage).toHaveBeenCalled();
   });
+
+  it("should skip history when freshContext is true", async () => {
+    mockBuildConversationMessages.mockResolvedValue([
+      { role: "user", content: "old message 1" },
+      { role: "assistant", content: "old message 2" },
+      { role: "user", content: "trigger message" },
+    ]);
+
+    await invokeAgent(
+      mockOrchestrator,
+      mockDb,
+      "group1",
+      "trigger message",
+      true,
+    );
+
+    expect(mockBuildDynamicContext).toHaveBeenCalledWith(
+      [{ role: "user", content: "trigger message" }],
+      expect.any(Object),
+    );
+  });
+
+  it("should pass subagentTask true when subagent is true", async () => {
+    await invokeAgent(mockOrchestrator, mockDb, "group1", "hello", false, true);
+
+    expect(mockOrchestrator.agentWorker.postMessage).toHaveBeenCalledWith({
+      type: "invoke",
+      payload: expect.objectContaining({
+        subagentTask: true,
+      }),
+    });
+  });
 });

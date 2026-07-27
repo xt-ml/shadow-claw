@@ -49,6 +49,8 @@ export async function invokeAgent(
   db: ShadowClawDatabase,
   groupId: string,
   triggerContent: string,
+  freshContext = false,
+  subagent = false,
 ): Promise<void> {
   o.inFlightTriggerByGroup.set(groupId, triggerContent);
   o.setState("thinking", groupId);
@@ -134,7 +136,14 @@ export async function invokeAgent(
       (acc, t) => acc + estimateTokens(JSON.stringify(t)),
       0,
     ) ?? 0);
-  const allMessages = await buildConversationMessages(groupId, 200);
+  let allMessages = await buildConversationMessages(groupId, 200);
+  if (freshContext) {
+    if (allMessages.length > 0) {
+      allMessages = [allMessages[allMessages.length - 1]];
+    } else {
+      allMessages = [{ role: "user", content: triggerContent }];
+    }
+  }
   const dynamicContext = buildDynamicContext(allMessages, {
     contextLimit,
     systemPromptTokens,
@@ -471,6 +480,7 @@ export async function invokeAgent(
       subagentPinnedProvider,
       subagentPinnedModel,
       systemPrompt,
+      subagentTask: subagent,
     },
   });
 }

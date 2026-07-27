@@ -51,6 +51,8 @@ export interface InboundMessage {
   a2uiAction?: A2UIAction;
   contextId?: string;
   taskId?: string;
+  freshContext?: boolean;
+  subagent?: boolean;
 }
 
 export interface RoomMember {

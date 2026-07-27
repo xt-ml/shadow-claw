@@ -74,7 +74,13 @@ describe("shadow-claw-tasks", () => {
     scheduleInput.name = "schedule";
     const promptInput = document.createElement("textarea");
     promptInput.name = "prompt";
-    form.append(scheduleInput, promptInput);
+    const freshContextInput = document.createElement("input");
+    freshContextInput.name = "freshContext";
+    freshContextInput.type = "checkbox";
+    const subagentInput = document.createElement("input");
+    subagentInput.name = "subagent";
+    subagentInput.type = "checkbox";
+    form.append(scheduleInput, promptInput, freshContextInput, subagentInput);
 
     const title = document.createElement("h2");
     title.className = "tasks__dialog-title";
@@ -216,6 +222,42 @@ describe("shadow-claw-tasks", () => {
       expect(orchestratorStore.deleteTask).toHaveBeenCalledWith(
         expect.anything(),
         "task-1",
+      );
+    });
+
+    it("saves freshContext and subagent task properties on submit", async () => {
+      const el = new ShadowClawTasks();
+      const form = document.createElement("form");
+      form.className = "tasks__dialog-form";
+      const scheduleInput = document.createElement("input");
+      scheduleInput.name = "schedule";
+      scheduleInput.value = "0 * * * *";
+      const promptInput = document.createElement("textarea");
+      promptInput.name = "prompt";
+      promptInput.value = "my prompt";
+
+      const freshContextInput = document.createElement("input");
+      freshContextInput.name = "freshContext";
+      freshContextInput.type = "checkbox";
+      freshContextInput.checked = true;
+
+      const subagentInput = document.createElement("input");
+      subagentInput.name = "subagent";
+      subagentInput.type = "checkbox";
+      subagentInput.checked = true;
+
+      form.append(scheduleInput, promptInput, freshContextInput, subagentInput);
+
+      await el.handleEditSubmit({} as any, form);
+
+      expect(orchestratorStore.upsertTask).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          schedule: "0 * * * *",
+          prompt: "my prompt",
+          freshContext: true,
+          subagent: true,
+        }),
       );
     });
   });

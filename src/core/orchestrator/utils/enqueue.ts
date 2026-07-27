@@ -268,7 +268,14 @@ export async function processQueue(
   const msg = o.messageQueue.shift()!;
 
   try {
-    await invokeAgent(o, db, msg.groupId, msg.content);
+    await invokeAgent(
+      o,
+      db,
+      msg.groupId,
+      msg.content,
+      msg.freshContext,
+      msg.subagent,
+    );
   } catch (err) {
     console.error("Failed to invoke agent:", err);
   } finally {

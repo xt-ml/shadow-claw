@@ -305,6 +305,16 @@ export class ShadowClawTasks extends ShadowClawElement {
       promptInput.value = task.prompt || "";
     }
 
+    const freshContextInput = form.querySelector("input[name='freshContext']");
+    if (freshContextInput instanceof HTMLInputElement) {
+      freshContextInput.checked = !!task.freshContext;
+    }
+
+    const subagentInput = form.querySelector("input[name='subagent']");
+    if (subagentInput instanceof HTMLInputElement) {
+      subagentInput.checked = !!task.subagent;
+    }
+
     const typeRadio = form.querySelector(
       `input[name='taskType'][value='${task.type || "prompt"}']`,
     ) as HTMLInputElement;
@@ -662,6 +672,9 @@ export class ShadowClawTasks extends ShadowClawElement {
       return;
     }
 
+    const freshContext = !!formData.get("freshContext");
+    const subagent = !!formData.get("subagent");
+
     try {
       let taskToSave;
 
@@ -673,6 +686,8 @@ export class ShadowClawTasks extends ShadowClawElement {
           type,
           prompt: String(prompt || ""),
           tools: JSON.parse(JSON.stringify(this.editingTools)),
+          freshContext,
+          subagent,
         };
       } else {
         // Create new task
@@ -689,6 +704,8 @@ export class ShadowClawTasks extends ShadowClawElement {
           enabled: true,
           lastRun: null,
           createdAt: Date.now(),
+          freshContext,
+          subagent,
         };
       }
 
@@ -916,12 +933,21 @@ export class ShadowClawTasks extends ShadowClawElement {
             </label>`
         : "";
 
+      const badges = [isTools ? "Tools" : "Prompt"];
+      if (task.freshContext) {
+        badges.push("Fresh Context");
+      }
+      if (task.subagent) {
+        badges.push("Subagent");
+      }
+      const badgesDisplay = badges.join(" · ");
+
       setSanitizedHtml(
         item,
         `<div class="tasks__item-header">
           <div class="tasks__item-info">
             <div class="tasks__schedule-row">
-              <div class="tasks__schedule">${scheduleDisplay} <span class="tasks__type-badge">(${isTools ? "Tools" : "Prompt"})</span></div>
+              <div class="tasks__schedule">${scheduleDisplay} <span class="tasks__type-badge">(${escapeHtml(badgesDisplay)})</span></div>
             </div>
             <div class="tasks__prompt-container">
               ${previewHtml}

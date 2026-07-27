@@ -171,6 +171,7 @@ export interface InvokePayload {
   subagentPinnedProvider?: string;
   systemPrompt: string;
   workspaceGroupId?: string;
+  subagentTask?: boolean;
 }
 
 export interface ManageToolsPayload {

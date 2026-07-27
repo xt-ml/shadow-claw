@@ -1642,7 +1642,14 @@ export class OrchestratorStore {
         return;
       }
 
-      this.orchestrator?.browserChat?.submit(task.prompt, task.groupId, []);
+      this.orchestrator?.browserChat?.submit(
+        task.prompt,
+        task.groupId,
+        [],
+        undefined,
+        task.freshContext,
+        task.subagent,
+      );
     }
   }
 

@@ -123,18 +123,20 @@ The server scheduler and client scheduler can both fire for the same task. The `
 
 Tasks are stored in IndexedDB via `src/db/`:
 
-| Field            | Type          | Purpose                          |
-| ---------------- | ------------- | -------------------------------- |
-| `id`             | string (ULID) | Unique identifier                |
-| `groupId`        | string        | Owning conversation              |
-| `name`           | string        | Task display name                |
-| `type`           | string        | `"prompt"` or `"tools"`          |
-| `prompt`         | string        | Instruction sent to the agent    |
-| `tools`          | string        | JSON serialized tool sequence    |
-| `cronExpression` | string        | 5-field cron schedule            |
-| `enabled`        | boolean       | Active/paused                    |
-| `lastRun`        | number        | Unix timestamp of last execution |
-| `createdAt`      | number        | Unix timestamp                   |
+| Field            | Type          | Purpose                              |
+| ---------------- | ------------- | ------------------------------------ |
+| `id`             | string (ULID) | Unique identifier                    |
+| `groupId`        | string        | Owning conversation                  |
+| `name`           | string        | Task display name                    |
+| `type`           | string        | `"prompt"` or `"tools"`              |
+| `prompt`         | string        | Instruction sent to the agent        |
+| `tools`          | string        | JSON serialized tool sequence        |
+| `cronExpression` | string        | 5-field cron schedule                |
+| `enabled`        | boolean       | Active/paused                        |
+| `lastRun`        | number        | Unix timestamp of last execution     |
+| `createdAt`      | number        | Unix timestamp                       |
+| `freshContext`   | boolean       | Skip history (blank slate) execution |
+| `subagent`       | boolean       | Isolated background execution        |
 
 ## Scheduled Task Store (Server)
 

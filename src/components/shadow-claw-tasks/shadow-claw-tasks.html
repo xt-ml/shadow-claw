@@ -115,6 +115,30 @@
             </button>
           </div>
 
+          <div class="tasks__form-group tasks__execution-options-group">
+            <label class="tasks__form-label">Context & Execution Options</label>
+            <div class="tasks__checkbox-option">
+              <label>
+                <input
+                  type="checkbox"
+                  name="freshContext"
+                  id="tasksFreshContextInput"
+                />
+                Fresh Context (Bypass conversation history)
+              </label>
+            </div>
+            <div class="tasks__checkbox-option">
+              <label>
+                <input
+                  type="checkbox"
+                  name="subagent"
+                  id="tasksSubagentInput"
+                />
+                Run as Subagent (Isolated background execution, no UI output)
+              </label>
+            </div>
+          </div>
+
           <div class="tasks__form-group tasks__preview-container">
             <label class="tasks__form-label">Preview</label>
             <div class="tasks__preview tasks__prompt" id="tasksPreview"></div>

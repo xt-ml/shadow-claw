@@ -251,6 +251,7 @@ ShadowClaw supports **cron-based scheduled tasks** with Web Push notifications. 
 - **Web Push integration** — OS-level notifications when tasks trigger
 - **Recursion guard** — prevents infinite task → notification → task loops
 - **Client/Server parity** — Express dev server and Electron both support full scheduling
+- **Fresh Context & Subagent isolation** — Toggle task execution to bypass conversation history (fresh context) or run isolated in the background (subagent)
 
 **Setup & architecture**: [docs/subsystems/notifications.md](docs/subsystems/notifications.md)
 

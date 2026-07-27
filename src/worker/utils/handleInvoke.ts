@@ -22,7 +22,14 @@ import { createToolActivityMessage } from "./createToolActivityMessage.js";
 import { executeTool } from "./executeTool.js";
 import { log } from "./log.js";
 import { parseSSEStream } from "./parseSSEStream.js";
-import { post } from "./post.js";
+
+import {
+  post,
+  registerSubagentCollector,
+  unregisterSubagentCollector,
+} from "./post.js";
+
+import { ulid } from "../../utils/ulid.js";
 
 import {
   RateLimitConfig,
@@ -227,7 +234,7 @@ export async function handleInvoke(
     contextCompression = false,
     contextLimit: payloadContextLimit,
     enabledTools,
-    groupId,
+    groupId: originalGroupId,
     isScheduledTask = false,
     maxIterations: payloadMaxIterations,
     maxTokens,
@@ -250,7 +257,13 @@ export async function handleInvoke(
     workspaceGroupId,
   } = payload;
 
-  const effectiveWorkspaceGroupId = workspaceGroupId || groupId;
+  const isSubagentTask = !!payload.subagentTask;
+  const groupId = isSubagentTask ? `subagent:${ulid()}` : originalGroupId;
+  const effectiveWorkspaceGroupId = workspaceGroupId || originalGroupId;
+
+  if (isSubagentTask) {
+    registerSubagentCollector(groupId, []);
+  }
 
   const rateLimitConfig: RateLimitConfig = {
     autoAdapt: rateLimitAutoAdapt !== false,
@@ -642,6 +655,9 @@ export async function handleInvoke(
     post({ type: "error", payload: { groupId, error: message } });
   } finally {
     clearToolState(groupId);
+    if (isSubagentTask) {
+      unregisterSubagentCollector(groupId);
+    }
   }
 }
 

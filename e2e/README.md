@@ -349,7 +349,7 @@ Task scheduler controller.
 - `open()` — Navigate to tasks page
 - `allButtons()`, `textInputs()`, `toggles()` — Locator helpers
 - `taskLikeElements()` — Query task-related DOM nodes
-- `createTask(schedule, prompt)` — Create a task via the add-task dialog
+- `createTask(schedule, prompt, options)` — Create a task via the add-task dialog (supports `freshContext` and `subagent` options)
 
 ### `SettingsPage`
 

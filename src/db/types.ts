@@ -62,6 +62,8 @@ export interface StoredMessage {
   isTrigger: boolean;
   sender: string;
   timestamp: number;
+  freshContext?: boolean;
+  subagent?: boolean;
 }
 
 export interface Task {
@@ -74,6 +76,8 @@ export interface Task {
   schedule?: string;
   tools?: TaskToolCall[];
   type?: "prompt" | "tools";
+  freshContext?: boolean;
+  subagent?: boolean;
 }
 
 export interface TaskToolCall {

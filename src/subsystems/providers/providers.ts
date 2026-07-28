@@ -183,13 +183,34 @@ function mapOpenAiUserContent(blocks: any[], model: string): any[] {
   return content;
 }
 
+function supportsPromptCaching(model: string): boolean {
+  if (typeof model !== "string" || model.trim().length === 0) {
+    return false;
+  }
+
+  const id = model.toLowerCase();
+
+  return (
+    id.includes("claude-3-5-sonnet") ||
+    id.includes("claude-3-7-sonnet") ||
+    id.includes("claude-opus-4") ||
+    id.includes("claude-sonnet-4") ||
+    id.includes("claude-haiku-4")
+  );
+}
+
 function mapAnthropicContent(blocks: any[], model: string): any[] {
   const content: any[] = [];
   const canSendImages = canSendNativeImage(model);
 
   for (const block of blocks) {
     if (block?.type === "text") {
-      content.push({ type: "text", text: block.text || "" });
+      const text = typeof block.text === "string" ? block.text : "";
+      if (text.trim().length === 0) {
+        continue;
+      }
+
+      content.push({ type: "text", text });
 
       continue;
     }
@@ -581,6 +602,7 @@ class AnthropicAdapter extends BaseAdapter {
       maxTokens: number;
       system: string;
       contextCompression?: boolean;
+      promptCaching?: boolean;
       reasoning?: {
         effort?: string;
         max_tokens?: number;
@@ -590,6 +612,8 @@ class AnthropicAdapter extends BaseAdapter {
     },
   ): any {
     const { model, maxTokens, system, reasoning } = options;
+    const cacheEnabled =
+      options.promptCaching !== false && supportsPromptCaching(model);
 
     // Messages are already in Anthropic format internally.
     // Filter out system messages (system is passed separately).
@@ -613,10 +637,20 @@ class AnthropicAdapter extends BaseAdapter {
         input_schema: tool.input_schema,
       })) || [];
 
+    if (cacheEnabled && anthropicTools.length > 0) {
+      const last = anthropicTools[anthropicTools.length - 1] as any;
+      last.cache_control = { type: "ephemeral" };
+    }
+
+    const systemField =
+      cacheEnabled && typeof system === "string" && system.trim().length > 0
+        ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
+        : system;
+
     const request: any = {
       model,
       max_tokens: maxTokens,
-      ...(system && { system }),
+      ...(system && { system: systemField }),
       messages: filteredMessages,
       ...(anthropicTools.length > 0 && { tools: anthropicTools }),
     };
@@ -674,6 +708,9 @@ class AnthropicAdapter extends BaseAdapter {
       usage: {
         input_tokens: response.usage?.input_tokens || 0,
         output_tokens: response.usage?.output_tokens || 0,
+        cache_read_input_tokens: response.usage?.cache_read_input_tokens || 0,
+        cache_creation_input_tokens:
+          response.usage?.cache_creation_input_tokens || 0,
       },
     };
   }

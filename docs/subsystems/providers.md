@@ -96,11 +96,13 @@ Used by AWS Bedrock and direct Anthropic calls.
 - System prompt passed separately
 - Messages filtered to remove duplicate system entries
 - Tool definitions in Anthropic native format: `{ name, description, input_schema }`
+- Automatically injects `cache_control: { type: "ephemeral" }` on system prompts and tools for supported models when `promptCaching` is enabled
+- Drops empty or whitespace-only text blocks to satisfy strict Converse API requirements
 
 **Response parsing:**
 
 - Content blocks already in internal format
-- Stop reason and token usage extracted directly
+- Stop reason and token usage extracted directly, including `cache_read_input_tokens` and `cache_creation_input_tokens`
 
 ### Google Format (`GoogleAdapter`)
 
@@ -215,9 +217,10 @@ Bedrock requires AWS SigV4 request signing, which can't happen in the browser (n
 The Bedrock provider is configured as `format: "anthropic"` since the client sends Anthropic-formatted messages. The proxy:
 
 1. Accepts the Anthropic-formatted request from the browser
-2. Translates the messages and tools to the native Bedrock `Converse` API format
-3. Invokes Bedrock using `@aws-sdk/client-bedrock-runtime` (`ConverseCommand` / `ConverseStreamCommand`)
-4. Streams the response back to the client in Anthropic SSE format
+2. Sanitizes messages (`sanitizeConverseMessages`) to guarantee strictly alternating roles, strip leading assistant turns, merge adjacent same-role messages, and append a user `(continue)` turn if history ends on an assistant response.
+3. Translates Anthropic `cache_control` blocks into Converse `cachePoint` blocks (capping total checkpoints at 4 across tools, system, and messages while preserving TTL options).
+4. Invokes Bedrock using `@aws-sdk/client-bedrock-runtime` (`ConverseCommand` / `ConverseStreamCommand`)
+5. Streams the response back to the client in Anthropic SSE format, including cache read/write token usage metrics.
 
 When `BEDROCK_REGION`/`BEDROCK_PROFILE` environment variables are not set,
 the runtime can provide fallback values via request headers (`x-bedrock-region`,

@@ -856,10 +856,102 @@ describe("providers.js", () => {
         },
       ]);
     });
+
+    it("should drop empty text blocks that Bedrock Converse would reject", () => {
+      const result = formatRequest(
+        anthropicProvider,
+        [
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: "" },
+              { type: "text", text: "   " },
+              { type: "text", text: "real answer" },
+            ],
+          },
+        ],
+        [],
+        anthropicOptions,
+      );
+
+      expect(result.messages[0].content).toEqual([
+        { type: "text", text: "real answer" },
+      ]);
+    });
+
+    it("should not add cache_control for models without caching support", () => {
+      const tools = [
+        {
+          name: "test_tool",
+          description: "A tool",
+          input_schema: { type: "object" },
+        },
+      ];
+
+      const result = formatRequest(
+        anthropicProvider,
+        [{ role: "user", content: "hello" }],
+        tools,
+        {
+          model: "claude-2.1",
+          maxTokens: 1000,
+          system: "System prompt",
+        },
+      );
+
+      expect(result.tools[0].cache_control).toBeUndefined();
+      expect(result.system).toBe("System prompt");
+    });
+
+    it("should allow prompt caching to be disabled explicitly", () => {
+      const tools = [
+        {
+          name: "test_tool",
+          description: "A tool",
+          input_schema: { type: "object" },
+        },
+      ];
+
+      const result = formatRequest(
+        anthropicProvider,
+        [{ role: "user", content: "hello" }],
+        tools,
+        {
+          model: "claude-3-5-sonnet-20241022",
+          maxTokens: 1000,
+          system: "System prompt",
+          promptCaching: false,
+        } as any,
+      );
+
+      expect(result.tools[0].cache_control).toBeUndefined();
+      expect(result.system).toBe("System prompt");
+    });
   });
 
   describe("Anthropic response parsing", () => {
     const mockProvider: any = { format: "anthropic" };
+
+    it("should surface cache token usage from anthropic responses", () => {
+      const response: any = {
+        stop_reason: "end_turn",
+        usage: {
+          input_tokens: 100,
+          output_tokens: 50,
+          cache_read_input_tokens: 200,
+          cache_creation_input_tokens: 300,
+        },
+        content: [{ type: "text", text: "hello" }],
+      };
+
+      const result = parseResponse(mockProvider, response);
+      expect(result.usage).toEqual({
+        input_tokens: 100,
+        output_tokens: 50,
+        cache_read_input_tokens: 200,
+        cache_creation_input_tokens: 300,
+      });
+    });
 
     it("should strip leaked chat-template tokens from text blocks", () => {
       const response: any = {

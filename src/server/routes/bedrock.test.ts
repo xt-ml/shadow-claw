@@ -144,10 +144,12 @@ describe("bedrock-routes", () => {
 
   it("handles non-streaming model invocation", async () => {
     const handler = routes.get("POST /bedrock-proxy/invoke");
+
     const req = {
       headers: { "x-bedrock-region": "us-east-1", "x-bedrock-profile": "test" },
       body: { model: "anthropic.claude-v2", messages: [], stream: false },
     };
+
     const res = createResponse();
 
     // Converse API response shape
@@ -161,6 +163,7 @@ describe("bedrock-routes", () => {
       stopReason: "end_turn",
       usage: { inputTokens: 10, outputTokens: 5 },
     };
+
     mockBedrockRuntimeSend.mockResolvedValue(mockResponse);
 
     await handler(req, res);
@@ -175,12 +178,94 @@ describe("bedrock-routes", () => {
     );
   });
 
+  it("drops empty text content blocks and empty messages before Converse", async () => {
+    const handler = routes.get("POST /bedrock-proxy/invoke");
+    const req = {
+      headers: { "x-bedrock-region": "us-east-1", "x-bedrock-profile": "test" },
+      body: {
+        model: "anthropic.claude-v2",
+        stream: false,
+        system: "   ",
+        messages: [
+          { role: "user", content: "hello" },
+          // A2UI envelope message persisted with empty content
+          { role: "assistant", content: "" },
+          // whitespace-only + blank text blocks
+          {
+            role: "assistant",
+            content: [
+              { type: "text", text: "" },
+              { type: "text", text: "   " },
+            ],
+          },
+          // thinking-only turn on with no signature -> block dropped -> message dropped
+          {
+            role: "assistant",
+            content: [{ type: "thinking", thinking: "hmm" }],
+          },
+          // user message
+          {
+            role: "user",
+            content: [{ type: "text", text: "still there?" }],
+          },
+        ],
+      },
+    };
+
+    const res = createResponse();
+
+    mockBedrockRuntimeSend.mockResolvedValue({
+      output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+      stopReason: "end_turn",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+
+    await handler(req, res);
+
+    const sent = mockBedrockRuntimeSend.mock.calls[0][0].input;
+
+    expect(sent.messages).toEqual([
+      { role: "user", content: [{ text: "hello" }, { text: "still there?" }] },
+    ]);
+
+    // whitespace-only system prompt must not be sent
+    expect(sent.system).toBeUndefined();
+  });
+
+  it("keeps non-text blocks and substitutes a placeholder if all turns are empty", async () => {
+    const { sanitizeConverseMessages } = await import("./bedrock.js");
+    expect(
+      sanitizeConverseMessages([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "" },
+            { type: "tool_result", tool_use_id: "t1", content: "done" },
+          ],
+        },
+      ]),
+    ).toEqual([
+      {
+        role: "user",
+        content: [
+          { toolResult: { toolUseId: "t1", content: [{ text: "done" }] } },
+        ],
+      },
+    ]);
+
+    expect(
+      sanitizeConverseMessages([{ role: "assistant", content: "" }]),
+    ).toEqual([{ role: "user", content: [{ text: "(continue)" }] }]);
+  });
+
   it("handles streaming model invocation", async () => {
     const handler = routes.get("POST /bedrock-proxy/invoke");
+
     const req = {
       headers: { "x-bedrock-region": "us-east-1", "x-bedrock-profile": "test" },
       body: { model: "anthropic.claude-v2", messages: [], stream: true },
     };
+
     const res = createResponse();
 
     // ConverseStream event format
@@ -221,6 +306,7 @@ describe("bedrock-routes", () => {
         model: "anthropic.claude-sonnet-5-v1:0",
         max_tokens: 4096,
         messages: [
+          { role: "user", content: "hello" },
           {
             role: "assistant",
             content: [
@@ -251,7 +337,7 @@ describe("bedrock-routes", () => {
       thinking: { type: "adaptive" },
       output_config: { effort: "max" },
     });
-    expect(command.input.messages[0].content[0]).toEqual({
+    expect(command.input.messages[1].content[0]).toEqual({
       reasoningContent: {
         reasoningText: {
           text: "I should call the weather tool",
@@ -345,6 +431,7 @@ describe("bedrock-routes", () => {
       body: {
         model: "anthropic.claude-sonnet-5-v1:0",
         messages: [
+          { role: "user", content: "hello" },
           {
             role: "assistant",
             content: [
@@ -373,10 +460,251 @@ describe("bedrock-routes", () => {
     await handler(req, res);
 
     const command = mockBedrockRuntimeSend.mock.calls[0]?.[0];
-    expect(command.input.messages[0].content).toEqual([
+    expect(command.input.messages[1].content).toEqual([
       {
         text: "regular content",
       },
+    ]);
+  });
+
+  it("it appends a user turn when history ends on an assistant message", async () => {
+    const { sanitizeConverseMessages } = await import("./bedrock.js");
+    const result = sanitizeConverseMessages([
+      { role: "user", content: "Hello" },
+      { role: "assistant", content: "Hi there" },
+    ]);
+    expect(result).toEqual([
+      { role: "user", content: [{ text: "Hello" }] },
+      { role: "assistant", content: [{ text: "Hi there" }] },
+      { role: "user", content: [{ text: "(continue)" }] },
+    ]);
+  });
+
+  it("it merges same-role turns left adjacent by dropped blank messages", async () => {
+    const { sanitizeConverseMessages } = await import("./bedrock.js");
+    const result = sanitizeConverseMessages([
+      { role: "user", content: "Part 1" },
+      { role: "user", content: "Part 2" },
+      { role: "assistant", content: "   " },
+      { role: "assistant", content: "Answer" },
+    ]);
+    expect(result).toEqual([
+      { role: "user", content: [{ text: "Part 1" }, { text: "Part 2" }] },
+      { role: "assistant", content: [{ text: "Answer" }] },
+      { role: "user", content: [{ text: "(continue)" }] },
+    ]);
+  });
+
+  it("it drops a leading assistant turn so the conversation starts with user", async () => {
+    const { sanitizeConverseMessages } = await import("./bedrock.js");
+    const result = sanitizeConverseMessages([
+      { role: "assistant", content: "Leading assistant message" },
+      { role: "user", content: "User question" },
+    ]);
+    expect(result).toEqual([
+      { role: "user", content: [{ text: "User question" }] },
+    ]);
+  });
+
+  it("it passes an empty conversation through without inventing a turn", async () => {
+    const { sanitizeConverseMessages } = await import("./bedrock.js");
+    expect(sanitizeConverseMessages([])).toEqual([]);
+  });
+
+  it("it translates cache_control into Converse cachePoint blocks", async () => {
+    const handler = routes.get("POST /bedrock-proxy/invoke");
+    const req = {
+      headers: { "x-bedrock-region": "us-east-1", "x-bedrock-profile": "test" },
+      body: {
+        model: "anthropic.claude-v2",
+        system: [
+          {
+            type: "text",
+            text: "System prompt",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        tools: [
+          {
+            name: "test_tool",
+            description: "test",
+            input_schema: { type: "object" },
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "Cached message",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+        ],
+        stream: false,
+      },
+    };
+    const res = createResponse();
+
+    mockBedrockRuntimeSend.mockResolvedValue({
+      output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+      stopReason: "end_turn",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+
+    await handler(req, res);
+
+    const sent = mockBedrockRuntimeSend.mock.calls[0][0].input;
+    expect(sent.toolConfig.tools).toEqual([
+      {
+        toolSpec: {
+          name: "test_tool",
+          description: "test",
+          inputSchema: { json: { type: "object" } },
+        },
+      },
+      { cachePoint: { type: "default" } },
+    ]);
+    expect(sent.system).toEqual([
+      { text: "System prompt" },
+      { cachePoint: { type: "default" } },
+    ]);
+    expect(sent.messages[0].content).toEqual([
+      { text: "Cached message" },
+      { cachePoint: { type: "default" } },
+    ]);
+  });
+
+  it("it caps cache checkpoints at 4 across tools, system and messages", async () => {
+    const handler = routes.get("POST /bedrock-proxy/invoke");
+    const req = {
+      headers: { "x-bedrock-region": "us-east-1", "x-bedrock-profile": "test" },
+      body: {
+        model: "anthropic.claude-v2",
+        system: [
+          {
+            type: "text",
+            text: "sys1",
+            cache_control: { type: "ephemeral" },
+          },
+          {
+            type: "text",
+            text: "sys2",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        tools: [
+          {
+            name: "t1",
+            description: "d1",
+            input_schema: { type: "object" },
+            cache_control: { type: "ephemeral" },
+          },
+          {
+            name: "t2",
+            description: "d2",
+            input_schema: { type: "object" },
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "msg1",
+                cache_control: { type: "ephemeral" },
+              },
+              {
+                type: "text",
+                text: "msg2",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+        ],
+        stream: false,
+      },
+    };
+    const res = createResponse();
+
+    mockBedrockRuntimeSend.mockResolvedValue({
+      output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+      stopReason: "end_turn",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+
+    await handler(req, res);
+
+    const sent = mockBedrockRuntimeSend.mock.calls[0][0].input;
+    expect(sent.toolConfig.tools).toHaveLength(4);
+    expect(sent.system).toHaveLength(4);
+    expect(sent.messages[0].content).toEqual([
+      { text: "msg1" },
+      { text: "msg2" },
+    ]);
+  });
+
+  it("it passes through cache_control ttl and never leaves a dangling cachePoint", async () => {
+    const handler = routes.get("POST /bedrock-proxy/invoke");
+    const req = {
+      headers: { "x-bedrock-region": "us-east-1", "x-bedrock-profile": "test" },
+      body: {
+        model: "anthropic.claude-v2",
+        system: [
+          {
+            type: "text",
+            text: "   ",
+            cache_control: { type: "ephemeral", ttl: "1h" },
+          },
+          {
+            type: "text",
+            text: "Valid system",
+            cache_control: { type: "ephemeral", ttl: "1h" },
+          },
+        ],
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "",
+                cache_control: { type: "ephemeral", ttl: "5m" },
+              },
+              {
+                type: "text",
+                text: "Valid msg",
+                cache_control: { type: "ephemeral", ttl: "5m" },
+              },
+            ],
+          },
+        ],
+        stream: false,
+      },
+    };
+    const res = createResponse();
+
+    mockBedrockRuntimeSend.mockResolvedValue({
+      output: { message: { role: "assistant", content: [{ text: "ok" }] } },
+      stopReason: "end_turn",
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+
+    await handler(req, res);
+
+    const sent = mockBedrockRuntimeSend.mock.calls[0][0].input;
+    expect(sent.system).toEqual([
+      { text: "Valid system" },
+      { cachePoint: { type: "default", ttl: "1h" } },
+    ]);
+    expect(sent.messages[0].content).toEqual([
+      { text: "Valid msg" },
+      { cachePoint: { type: "default", ttl: "5m" } },
     ]);
   });
 

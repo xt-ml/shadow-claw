@@ -165,8 +165,129 @@ function anthropicContentToConverseBlock(c: any): any {
   }
 
   // Fallback: render unknown block types as text so we don't silently drop them.
-
   return { text: JSON.stringify(c) };
+}
+
+const MAX_CACHE_CHECKPOINTS = 4;
+
+function hasCacheControl(c: any): boolean {
+  return Boolean(c && typeof c === "object" && c.cache_control);
+}
+
+function cachePointBlock(cacheControl: any): any {
+  const ttl = cacheControl?.ttl;
+
+  return {
+    cachePoint: {
+      type: "default",
+      ...(ttl === "1h" || ttl === "5m" ? { ttl } : {}),
+    },
+  };
+}
+
+function createCacheBudget(max = MAX_CACHE_CHECKPOINTS): any {
+  let remaining = max;
+
+  return {
+    take(): boolean {
+      if (remaining <= 0) {
+        return false;
+      }
+
+      remaining -= 1;
+
+      return true;
+    },
+  };
+}
+
+export function sanitizeConverseMessages(
+  rawMessages: any[],
+  cacheBudget?: { take(): boolean },
+): any[] {
+  const CONTINUE_PLACEHOLDER = "(continue)";
+
+  if (!Array.isArray(rawMessages) || rawMessages.length === 0) {
+    return [];
+  }
+
+  const mapped = (rawMessages || []).map((m: any) => {
+    const source = Array.isArray(m.content)
+      ? m.content
+      : [
+          {
+            type: "text",
+            text: typeof m.content === "string" ? m.content : "",
+          },
+        ];
+
+    const blocks = Array.isArray(m.content)
+      ? m.content.map(anthropicContentToConverseBlock)
+      : [{ text: typeof m.content === "string" ? m.content : "" }];
+
+    const content: any[] = [];
+    blocks.forEach((block: any, index: number) => {
+      if (block === undefined) {
+        return;
+      }
+
+      if (block && typeof block.text === "string") {
+        if (block.text.trim().length === 0) {
+          return;
+        }
+      }
+
+      content.push(block);
+
+      const origin = source[index];
+      if (hasCacheControl(origin) && cacheBudget?.take()) {
+        content.push(cachePointBlock(origin.cache_control));
+      }
+    });
+
+    return { role: m.role as "user" | "assistant", content };
+  });
+
+  const messages = mapped.filter((m: any) => m.content.length > 0);
+
+  if (messages.length === 0 && mapped.length > 0) {
+    const last = mapped[mapped.length - 1];
+
+    return [
+      {
+        role: last.role === "assistant" ? "user" : last.role,
+        content: [{ text: CONTINUE_PLACEHOLDER }],
+      },
+    ];
+  }
+
+  const alternating: any[] = [];
+  for (const message of messages) {
+    const previous = alternating[alternating.length - 1];
+    if (previous && previous.role === message.role) {
+      previous.content.push(...message.content);
+      continue;
+    }
+
+    alternating.push(message);
+  }
+
+  if (alternating.length > 0 && alternating[0].role === "assistant") {
+    alternating.shift();
+  }
+
+  if (alternating.length === 0) {
+    return [{ role: "user", content: [{ text: CONTINUE_PLACEHOLDER }] }];
+  }
+
+  if (alternating[alternating.length - 1].role === "assistant") {
+    alternating.push({
+      role: "user",
+      content: [{ text: CONTINUE_PLACEHOLDER }],
+    });
+  }
+
+  return alternating;
 }
 
 /**
@@ -495,20 +616,67 @@ export function registerBedrockRoutes(
         requestHandler: { requestTimeout: 60_000 },
       });
 
-      // --- Build Converse messages ---
-      const messages = (anthropicBody.messages || []).map((m: any) => ({
-        role: m.role as "user" | "assistant",
-        content: Array.isArray(m.content)
-          ? m.content
-              .map(anthropicContentToConverseBlock)
-              .filter((block: any) => block !== undefined)
-          : [{ text: m.content as string }],
-      }));
+      // --- Prompt cache checkpoints ---
+      const cacheBudget = createCacheBudget();
+
+      // --- Tool config ---
+      let toolConfig: ConverseCommandInput["toolConfig"] = undefined;
+      if (anthropicBody.tools && anthropicBody.tools.length > 0) {
+        const toolEntries: any[] = [];
+        for (const t of anthropicBody.tools) {
+          toolEntries.push({
+            toolSpec: {
+              name: t.name,
+              description: t.description,
+              inputSchema: { json: t.input_schema },
+            },
+          });
+
+          if (hasCacheControl(t) && cacheBudget.take()) {
+            toolEntries.push(cachePointBlock(t.cache_control));
+          }
+        }
+
+        toolConfig = { tools: toolEntries };
+
+        if (anthropicBody.tool_choice) {
+          const tc = anthropicBody.tool_choice;
+          if (tc.type === "tool") {
+            toolConfig.toolChoice = { tool: { name: tc.name } };
+          } else if (tc.type === "any") {
+            toolConfig.toolChoice = { any: {} };
+          } else {
+            toolConfig.toolChoice = { auto: {} };
+          }
+        }
+      }
 
       // --- System prompt ---
-      const system = anthropicBody.system
-        ? [{ text: anthropicBody.system as string }]
-        : undefined;
+      const systemBlocks: any[] = [];
+      if (Array.isArray(anthropicBody.system)) {
+        for (const block of anthropicBody.system) {
+          const text = typeof block?.text === "string" ? block.text : "";
+          if (text.trim().length === 0) {
+            continue;
+          }
+
+          systemBlocks.push({ text });
+          if (hasCacheControl(block) && cacheBudget.take()) {
+            systemBlocks.push(cachePointBlock(block.cache_control));
+          }
+        }
+      } else if (typeof anthropicBody.system === "string") {
+        if (anthropicBody.system.trim().length > 0) {
+          systemBlocks.push({ text: anthropicBody.system });
+        }
+      }
+
+      const system = systemBlocks.length > 0 ? systemBlocks : undefined;
+
+      const messages = sanitizeConverseMessages(
+        anthropicBody.messages || [],
+        cacheBudget,
+      );
 
       // --- Inference config (mapped from Anthropic field names) ---
       const inferenceConfig: ConverseCommandInput["inferenceConfig"] = {};
@@ -526,30 +694,6 @@ export function registerBedrockRoutes(
 
       if (anthropicBody.stop_sequences) {
         inferenceConfig.stopSequences = anthropicBody.stop_sequences;
-      }
-
-      // --- Tool config ---
-      let toolConfig: ConverseCommandInput["toolConfig"] = undefined;
-      if (anthropicBody.tools && anthropicBody.tools.length > 0) {
-        toolConfig = {
-          tools: anthropicBody.tools.map((t: any) => ({
-            toolSpec: {
-              name: t.name,
-              description: t.description,
-              inputSchema: { json: t.input_schema },
-            },
-          })),
-        };
-        if (anthropicBody.tool_choice) {
-          const tc = anthropicBody.tool_choice;
-          if (tc.type === "tool") {
-            toolConfig.toolChoice = { tool: { name: tc.name } };
-          } else if (tc.type === "any") {
-            toolConfig.toolChoice = { any: {} };
-          } else {
-            toolConfig.toolChoice = { auto: {} };
-          }
-        }
       }
 
       const converseParams = {
@@ -764,6 +908,9 @@ export function registerBedrockRoutes(
                   usage: {
                     input_tokens: usage.inputTokens ?? 0,
                     output_tokens: usage.outputTokens ?? 0,
+                    cache_read_input_tokens: usage.cacheReadInputTokens ?? 0,
+                    cache_creation_input_tokens:
+                      usage.cacheWriteInputTokens ?? 0,
                   },
                 })}\n\n`,
               );
@@ -825,6 +972,9 @@ export function registerBedrockRoutes(
           usage: {
             input_tokens: response.usage?.inputTokens ?? 0,
             output_tokens: response.usage?.outputTokens ?? 0,
+            cache_read_input_tokens: response.usage?.cacheReadInputTokens ?? 0,
+            cache_creation_input_tokens:
+              response.usage?.cacheWriteInputTokens ?? 0,
           },
         });
       }

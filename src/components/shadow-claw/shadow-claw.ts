@@ -183,6 +183,11 @@ export class ShadowClaw extends ShadowClawElement {
       this.db,
       new URL(window.location.href),
     );
+
+    console.log("ShadowClaw UI initialized");
+
+    // Signal that the UI and initial routing are fully ready
+    orchestratorStore.setReady();
   }
 
   disconnectedCallback() {
@@ -428,11 +433,6 @@ export class ShadowClaw extends ShadowClawElement {
 
     // React to store changes using effect()
     setupEffects(this.shadowRoot, this, this.db, orchestratorStore);
-
-    console.log("ShadowClaw UI initialized");
-
-    // Signal that the UI is fully ready (listeners bound, etc.)
-    orchestratorStore.setReady();
   }
 
   async requestDialog(options: AppDialogOptions): Promise<boolean> {

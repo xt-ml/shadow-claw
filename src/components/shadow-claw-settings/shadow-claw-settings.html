@@ -271,6 +271,26 @@
                   Chat becomes the default landing page.
                 </div>
               </div>
+              <div class="form-group">
+                <div class="form-toggle">
+                  <input
+                    data-setting="override-prerender-skeleton-toggle"
+                    id="override-prerender-skeleton-toggle"
+                    type="checkbox"
+                  />
+                  <label
+                    class="form-label"
+                    for="override-prerender-skeleton-toggle"
+                  >
+                    Override pre-rendered content with workspace skeleton loader
+                  </label>
+                </div>
+                <div class="form-helper">
+                  When enabled, pre-rendered static content is hidden on startup
+                  and replaced with the workspace skeleton loader until app
+                  initialization completes.
+                </div>
+              </div>
             </div>
 
             <shadow-claw-storage></shadow-claw-storage>

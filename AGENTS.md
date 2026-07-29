@@ -98,6 +98,11 @@ To prevent infinite execution loops, the system enforces a strict recursion guar
 - **Default Trusted Types Policy:** Use `ensureDefaultTrustedTypesPolicy()` from `src/security/default-trusted-types-policy.ts` to register the `"default"` Trusted Types policy idempotently. It uses `trustedTypes.getPolicy("default")` before attempting `createPolicy`, so it is safe to call from multiple modules (including after HMR). Use `toDefaultTrustedScriptUrl()` for script URL sinks such as Workbox service worker registration. Both are called as early as possible from `src/core/theme-init.ts`.
 - **Custom Purify Options:** When rendering media resolved relative to the workspace, pass custom DOMPurify configurations extending the standard `ALLOWED_URI_REGEXP` to allow `blob:` URIs safely.
 
+### Static Main Site & Page Suppression
+
+- **Page Seeding & Suppression:** Static main site pages are seeded via `seedStaticMainSite` (`src/storage/staticMainSite.ts`). When removing pages from the Pages sidebar, ensure suppression is recorded via `suppressPage` (`src/storage/suppressedPages.ts`) so they are not automatically re-seeded on app launch. Re-adding a page calls `unsuppressPage` to clear suppression.
+- **Pre-rendered DSD Shell Override:** `OVERRIDE_PRERENDER_SKELETON` (`override_prerender_skeleton`) allows suppressing Declarative Shadow DOM (DSD) shell content on initial load to prevent visual flash before full hydration. Handled during bootstrap in `src/core/theme-init.ts` and `src/components/shadow-claw/shadow-claw.ts`.
+
 ## What to Avoid
 
 - **Do not** add a frontend framework (React, Vue, Svelte, etc.).

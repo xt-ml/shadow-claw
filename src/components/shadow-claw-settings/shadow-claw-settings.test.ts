@@ -686,4 +686,36 @@ describe("shadow-claw-settings", () => {
 
     document.body.removeChild(el);
   });
+
+  it("populates and toggles override pre-rendered content setting", async () => {
+    (globalThis as any)._mockSetConfig.mockClear();
+
+    const el = new ShadowClawSettings();
+    (el as any).db = {} as any;
+    document.body.appendChild(el);
+    await el.render();
+
+    const toggle = el.shadowRoot?.querySelector<HTMLInputElement>(
+      '[data-setting="override-prerender-skeleton-toggle"]',
+    );
+    expect(toggle).not.toBeNull();
+
+    if (toggle) {
+      toggle.checked = true;
+      toggle.dispatchEvent(new Event("change"));
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(
+      localStorage.getItem("shadow-claw-override-prerender-skeleton"),
+    ).toBe("true");
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "override_prerender_skeleton",
+      "true",
+    );
+
+    document.body.removeChild(el);
+  });
 });

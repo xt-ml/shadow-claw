@@ -1,11 +1,25 @@
 <template>
   <section class="pages" aria-label="Pages">
     <shadow-claw-page-header icon="📚" title="Pages">
+      <nav
+        slot="breadcrumbs"
+        class="pages__breadcrumbs"
+        aria-label="Toggle pages sidebar"
+      >
+        <button
+          type="button"
+          class="pages__sidebar-toggle-btn"
+          data-pages-sidebar-toggle
+          title="Toggle pages list"
+        >
+          📁 Pages
+        </button>
+      </nav>
       <div slot="status" class="pages__status" data-pages-status></div>
     </shadow-claw-page-header>
 
-    <div class="pages__content">
-      <aside class="pages__sidebar" aria-label="Saved pages">
+    <div class="pages__content pages__content--sidebar-collapsed">
+      <aside class="pages__sidebar collapsed" aria-label="Saved pages">
         <div class="pages__list" data-pages-list role="list"></div>
       </aside>
 

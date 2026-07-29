@@ -129,11 +129,13 @@ When OPFS main-thread writes fail (`"Writable file streams are not supported"`):
 | List files  | `listGroupFiles()`       | Returns `name` (files) or `name/` (directories)                                                     |
 | Copy entry  | `copyGroupEntry()`       | Copies files or folders; supports inter-group copy; rejects identical source/target paths           |
 | Move entry  | `moveGroupEntry()`       | Copy-then-delete move; supports inter-group move; callers must avoid folder self/descendant targets |
-| Delete file | `deleteGroupFile()`      | `dir.removeEntry(filename)`                                                                         |
+| Delete file | `deleteGroupFile()`      | `dir.removeEntry(filename)`; suppresses memory page when deleting group memory                      |
 | Delete dir  | `deleteGroupDirectory()` | Recursive removal                                                                                   |
 | Delete all  | `deleteAllGroupFiles()`  | Complete workspace wipe (for restore ops)                                                           |
 | Upload file | `uploadGroupFile()`      | Accepts `File` from `<input>`, reads as text or bytes                                               |
 | File exists | `groupFileExists()`      | Non-throwing existence check                                                                        |
+| Seed site   | `seedStaticMainSite()`   | Seeds static pages from manifest into main group workspace, skipping suppressed pages               |
+| Suppress    | `suppressPage()`         | Records page in `SUPPRESSED_PAGES_LIST` to prevent auto-re-seeding upon deletion                    |
 
 ## Zip Export/Import
 

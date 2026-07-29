@@ -20,8 +20,9 @@ import { readGroupFile } from "../../storage/readGroupFile.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 
 import { orchestratorStore } from "../../stores/orchestrator.js";
+import { fileViewerStore } from "../../stores/file-viewer.js";
 
-import { showError, showSuccess } from "../../ui/toast.js";
+import { showError, showSuccess, showWarning } from "../../ui/toast.js";
 
 import type { Config } from "dompurify";
 
@@ -55,6 +56,9 @@ export class ShadowClawPages extends ShadowClawElement {
 
   renderToken: number = 0;
 
+  sidebarOpen: boolean = false;
+  draggedPageIndex: number | null = null;
+
   constructor() {
     super();
   }
@@ -63,6 +67,25 @@ export class ShadowClawPages extends ShadowClawElement {
     const root = this.shadowRoot;
     if (!root) {
       throw new Error("shadowRoot not found");
+    }
+
+    const host = this.closest("shadow-claw");
+    let isOverride = false;
+    try {
+      isOverride =
+        localStorage.getItem("shadow-claw-override-prerender-skeleton") ===
+        "true";
+    } catch {
+      isOverride = false;
+    }
+    const isNoSeed = host?.getAttribute("data-prerender-no-seed") === "true";
+
+    if (isOverride || isNoSeed) {
+      const rendered = root.querySelector("[data-pages-rendered]");
+      if (rendered instanceof HTMLElement) {
+        rendered.hidden = true;
+        rendered.textContent = "";
+      }
     }
 
     this.db = await getDb();
@@ -75,13 +98,121 @@ export class ShadowClawPages extends ShadowClawElement {
       const dropdown = root.querySelector("[data-pages-dropdown]");
       if (dropdown instanceof HTMLDetailsElement && dropdown.open) {
         const target = event.target as HTMLElement;
-        if (!dropdown.contains(target)) {
+        const toggleBtn = root.querySelector("[data-pages-sidebar-toggle]");
+        if (
+          !dropdown.contains(target) &&
+          (!toggleBtn || !toggleBtn.contains(target))
+        ) {
           dropdown.removeAttribute("open");
         }
       }
     });
 
+    const toggleBtn = root.querySelector("[data-pages-sidebar-toggle]");
+    if (toggleBtn) {
+      toggleBtn.addEventListener("click", () => {
+        this.toggleSidebar();
+      });
+    }
+
+    this.toggleSidebar(this.sidebarOpen);
+
     this.setupEffects();
+  }
+
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
+    }
+
+    showWarning(options.message, 4500);
+
+    return false;
+  }
+
+  toggleSidebar(force?: boolean) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const dropdown = root.querySelector("[data-pages-dropdown]");
+    const isDropdownOpen =
+      dropdown instanceof HTMLDetailsElement && dropdown.open;
+
+    let nextOpen: boolean;
+    if (force !== undefined) {
+      nextOpen = force;
+    } else {
+      nextOpen = !(isDropdownOpen || this.sidebarOpen);
+    }
+
+    this.sidebarOpen = nextOpen;
+
+    const sidebar = root.querySelector(".pages__sidebar");
+    const content = root.querySelector(".pages__content");
+
+    if (sidebar) {
+      sidebar.classList.toggle("collapsed", !this.sidebarOpen);
+    }
+    if (content) {
+      content.classList.toggle(
+        "pages__content--sidebar-collapsed",
+        !this.sidebarOpen,
+      );
+    }
+
+    if (dropdown instanceof HTMLDetailsElement) {
+      if (nextOpen) {
+        dropdown.setAttribute("open", "");
+      } else {
+        dropdown.removeAttribute("open");
+      }
+    }
+  }
+
+  async handleReorder(fromIndex: number, toIndex: number) {
+    if (!this.db || fromIndex === toIndex) {
+      return;
+    }
+
+    const pages = [...orchestratorStore.pages];
+    if (
+      fromIndex < 0 ||
+      fromIndex >= pages.length ||
+      toIndex < 0 ||
+      toIndex >= pages.length
+    ) {
+      return;
+    }
+
+    const [moved] = pages.splice(fromIndex, 1);
+    pages.splice(toIndex, 0, moved);
+
+    await orchestratorStore.reorderPages(this.db, pages);
+
+    if (toIndex === 0 && moved) {
+      this.selectedPage = moved;
+      void this.renderSelectedPage();
+
+      document.dispatchEvent(
+        new CustomEvent("shadow-claw-navigate", {
+          detail: {
+            page: "pages",
+            groupId: moved.groupId,
+            path: moved.path,
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }
   }
 
   disconnectedCallback() {
@@ -252,6 +383,10 @@ export class ShadowClawPages extends ShadowClawElement {
 
         groupPages.forEach((page) => {
           const path = page.path;
+          const globalIndex = pages.findIndex(
+            (p) => p.path === page.path && p.groupId === page.groupId,
+          );
+
           const row = document.createElement("div");
           row.className = "pages__list-item";
           if (
@@ -260,6 +395,56 @@ export class ShadowClawPages extends ShadowClawElement {
           ) {
             row.classList.add("active");
           }
+
+          const dragHandle = document.createElement("span");
+          dragHandle.className = "pages__drag-handle";
+          dragHandle.setAttribute("draggable", "true");
+          dragHandle.title = "Drag to reorder";
+          dragHandle.textContent = "⠿";
+
+          dragHandle.addEventListener("dragstart", (e) => {
+            this.draggedPageIndex = globalIndex;
+            row.classList.add("dragging");
+            if (e.dataTransfer) {
+              e.dataTransfer.effectAllowed = "move";
+            }
+          });
+
+          row.addEventListener("dragend", () => {
+            this.draggedPageIndex = null;
+            row.classList.remove("dragging");
+          });
+
+          row.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            if (
+              this.draggedPageIndex !== null &&
+              this.draggedPageIndex !== globalIndex
+            ) {
+              row.classList.add("drag-over");
+            }
+          });
+
+          row.addEventListener("dragleave", () => {
+            row.classList.remove("drag-over");
+          });
+
+          row.addEventListener("drop", (e) => {
+            e.preventDefault();
+            row.classList.remove("drag-over");
+            if (
+              this.draggedPageIndex !== null &&
+              this.draggedPageIndex !== globalIndex
+            ) {
+              void this.handleReorder(this.draggedPageIndex, globalIndex);
+            }
+          });
+
+          const effectiveDefault = orchestratorStore.effectiveDefaultPage;
+          const isDefault =
+            effectiveDefault &&
+            effectiveDefault.path === page.path &&
+            effectiveDefault.groupId === page.groupId;
 
           const selectBtn = document.createElement("button");
           selectBtn.type = "button";
@@ -271,6 +456,54 @@ export class ShadowClawPages extends ShadowClawElement {
           pathSpan.textContent = path;
           selectBtn.appendChild(pathSpan);
 
+          selectBtn.addEventListener("click", () => {
+            this.selectedPage = page;
+            this.renderPageList(
+              orchestratorStore.pages,
+              orchestratorStore.groups,
+            );
+            void this.renderSelectedPage();
+
+            this.sidebarOpen = false;
+            const details = list.closest("details");
+            if (details) {
+              details.removeAttribute("open");
+            }
+
+            document.dispatchEvent(
+              new CustomEvent("shadow-claw-navigate", {
+                detail: {
+                  page: "pages",
+                  groupId: page.groupId,
+                  path: page.path,
+                },
+                bubbles: true,
+                composed: true,
+              }),
+            );
+          });
+
+          const editBtn = document.createElement("button");
+          editBtn.className = "pages__edit";
+          editBtn.type = "button";
+          editBtn.title = "Edit in file editor";
+          editBtn.setAttribute("aria-label", `Edit ${path} in file editor`);
+          editBtn.textContent = "✏️";
+
+          editBtn.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            if (!this.db) {
+              return;
+            }
+            try {
+              await fileViewerStore.openFile(this.db, path, groupId);
+            } catch (error) {
+              const message =
+                error instanceof Error ? error.message : String(error);
+              showError(`Failed to edit file: ${message}`, 4500);
+            }
+          });
+
           const removeBtn = document.createElement("button");
           removeBtn.className = "pages__remove";
           removeBtn.type = "button";
@@ -281,24 +514,20 @@ export class ShadowClawPages extends ShadowClawElement {
           );
           removeBtn.textContent = "✕";
 
-          selectBtn.addEventListener("click", () => {
-            this.selectedPage = page;
-            this.renderPageList(
-              orchestratorStore.pages,
-              orchestratorStore.groups,
-            );
-            void this.renderSelectedPage();
-
-            const details = list.closest("details");
-            if (details) {
-              details.removeAttribute("open");
-            }
-          });
-
           removeBtn.addEventListener("click", async (event) => {
             event.stopPropagation();
-
             if (!this.db) {
+              return;
+            }
+
+            const confirmed = await this.requestConfirmation({
+              title: "Remove Page",
+              message: `Are you sure you want to remove this page from Pages?\n\n${path}`,
+              confirmLabel: "Remove",
+              cancelLabel: "Cancel",
+            });
+
+            if (!confirmed) {
               return;
             }
 
@@ -312,7 +541,16 @@ export class ShadowClawPages extends ShadowClawElement {
             }
           });
 
+          row.appendChild(dragHandle);
+          if (isDefault) {
+            const defaultSpan = document.createElement("span");
+            defaultSpan.className = "pages__default-btn is-default";
+            defaultSpan.title = "Default page";
+            defaultSpan.textContent = "⭐";
+            row.appendChild(defaultSpan);
+          }
           row.appendChild(selectBtn);
+          row.appendChild(editBtn);
           row.appendChild(removeBtn);
           list.appendChild(row);
         });
@@ -549,7 +787,6 @@ export class ShadowClawPages extends ShadowClawElement {
       effect(() => {
         const pages = orchestratorStore.pages;
         const groups = orchestratorStore.groups;
-        const activeGroupId = orchestratorStore.activeGroupId;
         const activePinnedPage = orchestratorStore.activePinnedPage;
         this.renderPageList(pages, groups);
 
@@ -564,10 +801,8 @@ export class ShadowClawPages extends ShadowClawElement {
               this.pageRefKey(page) === this.pageRefKey(activePinnedPage),
           )
         ) {
-          const activeGroupPage = pages.find(
-            (page) => page.groupId === activeGroupId,
-          );
-          this.selectedPage = activeGroupPage || pages[0];
+          this.selectedPage =
+            orchestratorStore.effectiveDefaultPage || pages[0];
         }
 
         void this.renderSelectedPage();

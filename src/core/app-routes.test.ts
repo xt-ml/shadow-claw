@@ -14,15 +14,22 @@ describe("app-routes", () => {
     expect(buildRoutePath({ page: "pages", path: "example.html" })).toBe(
       "/pages/example.html",
     );
+    expect(
+      buildRoutePath({
+        page: "pages",
+        groupId: "br:main",
+        path: "MEMORY.md",
+      }),
+    ).toBe("/pages/br-main/MEMORY.md");
 
     expect(buildRoutePath({ page: "chat" })).toBe("/chat");
     expect(buildRoutePath({ page: "chat", groupId: "br:main" })).toBe(
-      "/chat/br%3Amain/",
+      "/chat/br-main/",
     );
 
     expect(buildRoutePath({ page: "files" })).toBe("/files");
     expect(buildRoutePath({ page: "files", groupId: "br:main" })).toBe(
-      "/files/br%3Amain/",
+      "/files/br-main/",
     );
     expect(
       buildRoutePath({

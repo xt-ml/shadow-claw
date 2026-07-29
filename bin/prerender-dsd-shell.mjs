@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 
-import { readFile, readdir, stat, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { marked } from "marked";
 import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "../src/storage/defaultMemoryContent.mjs";
@@ -404,6 +411,22 @@ function markNoSeedPrerenderHost(indexHtml) {
   );
 }
 
+function injectStaticManifestScript(html, manifestJson) {
+  const scriptTag = `<script id="shadow-claw-static-manifest" type="application/json">${manifestJson}</script>`;
+  if (/id="shadow-claw-static-manifest"/iu.test(html)) {
+    return html.replace(
+      /<script\s+id="shadow-claw-static-manifest"[\s\S]*?<\/script>/iu,
+      scriptTag,
+    );
+  }
+
+  if (html.includes("</head>")) {
+    return html.replace("</head>", `  ${scriptTag}\n</head>`);
+  }
+
+  return `${scriptTag}\n${html}`;
+}
+
 async function main() {
   const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
   const flags = new Set(
@@ -424,10 +447,48 @@ async function main() {
   );
 
   if (noSeed) {
-    const [indexHtml, shadowClawTemplateSource] = await Promise.all([
-      readFile(indexPath, "utf8"),
-      readFile(shadowClawTemplatePath, "utf8"),
-    ]);
+    const [indexHtml, shadowClawTemplateSource, pageSources] =
+      await Promise.all([
+        readFile(indexPath, "utf8"),
+        readFile(shadowClawTemplatePath, "utf8"),
+        collectPageSources(sourcePath),
+      ]);
+
+    const manifestPages = await Promise.all(
+      pageSources.map(async (page) => {
+        const content =
+          typeof page.inlineContent === "string"
+            ? page.inlineContent
+            : await readFile(page.absolutePath, "utf8");
+
+        return {
+          displayPath: page.displayPath,
+          content,
+        };
+      }),
+    );
+
+    const manifest = { pages: manifestPages };
+    const manifestJson = JSON.stringify(manifest);
+
+    const staticManifestPath = path.join(
+      publicDir,
+      "static-main-manifest.json",
+    );
+    await writeFile(
+      staticManifestPath,
+      JSON.stringify(manifest, null, 2),
+      "utf8",
+    );
+
+    try {
+      const sourceStats = await stat(sourcePath);
+      if (sourceStats.isDirectory()) {
+        const targetDir = path.join(publicDir, "static-main");
+        await mkdir(targetDir, { recursive: true });
+        await cp(sourcePath, targetDir, { recursive: true });
+      }
+    } catch {}
 
     const shadowClawTemplateContent = extractTemplateContent(
       shadowClawTemplateSource,
@@ -436,13 +497,14 @@ async function main() {
       shadowClawTemplateContent,
     );
     const markedHtml = markNoSeedPrerenderHost(indexHtml);
-    const nextHtml = injectShadowClawTemplate(
+    const htmlWithDsd = injectShadowClawTemplate(
       markedHtml,
       shadowClawDsdTemplate,
     );
+    const nextHtml = injectStaticManifestScript(htmlWithDsd, manifestJson);
 
     await writeFile(indexPath, nextHtml, "utf8");
-    console.log(`Injected DSD shell into ${indexPath} (pages disabled).`);
+    console.log(`Injected DSD shell into ${indexPath} (pages DSD disabled).`);
 
     return;
   }
@@ -458,6 +520,39 @@ async function main() {
     readFile(pagesTemplatePath, "utf8"),
     collectPageSources(sourcePath),
   ]);
+
+  const manifestPages = await Promise.all(
+    pageSources.map(async (page) => {
+      const content =
+        typeof page.inlineContent === "string"
+          ? page.inlineContent
+          : await readFile(page.absolutePath, "utf8");
+
+      return {
+        displayPath: page.displayPath,
+        content,
+      };
+    }),
+  );
+
+  const manifest = { pages: manifestPages };
+  const manifestJson = JSON.stringify(manifest);
+
+  const staticManifestPath = path.join(publicDir, "static-main-manifest.json");
+  await writeFile(
+    staticManifestPath,
+    JSON.stringify(manifest, null, 2),
+    "utf8",
+  );
+
+  try {
+    const sourceStats = await stat(sourcePath);
+    if (sourceStats.isDirectory()) {
+      const targetDir = path.join(publicDir, "static-main");
+      await mkdir(targetDir, { recursive: true });
+      await cp(sourcePath, targetDir, { recursive: true });
+    }
+  } catch {}
 
   const [selectedPage] = pageSources;
   const selectedContent =
@@ -482,7 +577,11 @@ async function main() {
     shadowClawTemplateContent,
     pagesDsdHost,
   );
-  const nextHtml = injectShadowClawTemplate(indexHtml, shadowClawDsdTemplate);
+  const htmlWithDsd = injectShadowClawTemplate(
+    indexHtml,
+    shadowClawDsdTemplate,
+  );
+  const nextHtml = injectStaticManifestScript(htmlWithDsd, manifestJson);
 
   await writeFile(indexPath, nextHtml, "utf8");
   console.log(

@@ -1,7 +1,7 @@
 import { initializeTrustedTypesTinyfill } from "../security/trusted-types-tinyfill.js";
 import { ensureDefaultTrustedTypesPolicy } from "../security/default-trusted-types-policy.js";
 
-(function handleGithubPages404Redirects() {
+export function handleGithubPages404Redirects() {
   const redirect = sessionStorage.getItem(
     "shadow-claw-github-pages-404-redirect",
   );
@@ -16,9 +16,9 @@ import { ensureDefaultTrustedTypesPolicy } from "../security/default-trusted-typ
   ) {
     history.replaceState(null, "", redirect);
   }
-})();
+}
 
-(function initializeThemeAndBootState() {
+export function initializeThemeAndBootState() {
   // Install Trusted Types tinyfill first (no-op if browser already supports it)
   initializeTrustedTypesTinyfill();
 
@@ -28,13 +28,24 @@ import { ensureDefaultTrustedTypesPolicy } from "../security/default-trusted-typ
   root.classList.add("sc-js-enabled", "sc-js-boot-pending");
   const BOOT_PENDING_ATTR = "data-js-boot-pending";
   const HYDRATION_PENDING_ATTR = "data-hydration-pending";
+  const OVERRIDE_PRERENDER_KEY = "shadow-claw-override-prerender-skeleton";
 
   const markBootPendingHost = (): boolean => {
-    const host = document.querySelector(
-      'shadow-claw[data-prerender-no-seed="true"]',
-    );
+    const host = document.querySelector("shadow-claw");
     if (!host) {
       return false;
+    }
+
+    const shouldOverridePrerender =
+      localStorage.getItem(OVERRIDE_PRERENDER_KEY) === "true";
+    const hasNoSeed = host.getAttribute("data-prerender-no-seed") === "true";
+
+    if (!hasNoSeed && !shouldOverridePrerender) {
+      return false;
+    }
+
+    if (shouldOverridePrerender) {
+      host.setAttribute("data-prerender-no-seed", "true");
     }
 
     host.setAttribute(BOOT_PENDING_ATTR, "true");
@@ -65,4 +76,7 @@ import { ensureDefaultTrustedTypesPolicy } from "../security/default-trusted-typ
     storedTheme === "system" ? (prefersDark ? "dark" : "light") : storedTheme;
 
   document.documentElement.classList.add(`${resolvedTheme}-mode`);
-})();
+}
+
+handleGithubPages404Redirects();
+initializeThemeAndBootState();

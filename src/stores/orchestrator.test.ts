@@ -1736,6 +1736,7 @@ describe("OrchestratorStore", () => {
     });
 
     it("init restores persisted pages list", async () => {
+      (mockIsMainGroupMemorySuppressed as any).mockResolvedValue(true);
       (mockGetConfig as any).mockImplementation(
         async (_db: any, key: string) => {
           if (key === "pages_list") {
@@ -1855,7 +1856,11 @@ describe("OrchestratorStore", () => {
       expect(store.pages).toEqual([
         { groupId: "br:main", path: "docs/guide.md" },
       ]);
-      expect(mockSetConfig).toHaveBeenCalledTimes(1);
+      expect(mockSetConfig).toHaveBeenCalledWith(
+        {} as any,
+        "suppressed_pages_list",
+        expect.any(String),
+      );
     });
 
     it("init seeds default MEMORY.md as first page when missing", async () => {
@@ -1929,6 +1934,7 @@ describe("OrchestratorStore", () => {
     });
 
     it("init does not reseed default page when pages are already configured", async () => {
+      (mockIsMainGroupMemorySuppressed as any).mockResolvedValue(true);
       (mockGetConfig as any).mockImplementation(
         async (_db: any, key: string) => {
           if (key === "pages_list") {
@@ -1957,13 +1963,11 @@ describe("OrchestratorStore", () => {
       expect(store.pages).toEqual([
         { groupId: "br:main", path: "docs/guide.md" },
       ]);
-      expect(mockEnsureMainGroupMemory).toHaveBeenCalledWith(
-        {} as any,
-        DEFAULT_GROUP_ID,
-      );
+      expect(mockEnsureMainGroupMemory).not.toHaveBeenCalled();
     });
 
     it("init migrates legacy string page entries to main conversation refs", async () => {
+      (mockIsMainGroupMemorySuppressed as any).mockResolvedValue(true);
       (mockGetConfig as any).mockImplementation(
         async (_db: any, key: string) => {
           if (key === "pages_list") {

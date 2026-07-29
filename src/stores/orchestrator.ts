@@ -56,6 +56,8 @@ import { listGroupFiles } from "../storage/listGroupFiles.js";
 import { readGroupFile } from "../storage/readGroupFile.js";
 import { requestStorageAccess } from "../storage/requestStorageAccess.js";
 import { getStorageStatus } from "../storage/storage.js";
+import { seedStaticMainSite } from "../storage/staticMainSite.js";
+import { suppressPage, unsuppressPage } from "../storage/suppressedPages.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
 import { AGUIAdapter } from "../ui/agui-adapter.js";
 import { showError } from "../ui/toast.js";
@@ -330,6 +332,7 @@ export class OrchestratorStore {
   public _activeGroupId: Signal.State<string>;
   public _activePage: Signal.State<string>;
   public _activePinnedPage: Signal.State<SavedPageRef | null>;
+  public _defaultPinnedPage: Signal.State<SavedPageRef | null>;
   public _activityLog: Signal.State<ThinkingLogEntry[]>;
   private _activityLogSessionStartedAtByGroup: Map<string, string>;
   private _aguiAdapter: AGUIAdapter | null;
@@ -400,6 +403,7 @@ export class OrchestratorStore {
     this._sidebarDefaultPage = new Signal.State("chat");
     this._pages = new Signal.State([]);
     this._activePinnedPage = new Signal.State(null);
+    this._defaultPinnedPage = new Signal.State(null);
     this._remoteAgentStatusByGroup = new Signal.State(new Map());
     this._remoteAgentTypingByGroup = new Signal.State(new Map());
     this._peerStateByGroup = new Signal.State(new Map());
@@ -427,6 +431,16 @@ export class OrchestratorStore {
 
   get activePinnedPage() {
     return this._activePinnedPage.get();
+  }
+
+  get defaultPinnedPage(): SavedPageRef | null {
+    return this._defaultPinnedPage.get();
+  }
+
+  get effectiveDefaultPage(): SavedPageRef | null {
+    const pages = this._pages.get();
+
+    return pages[0] || null;
   }
 
   get activityLog() {
@@ -747,6 +761,8 @@ export class OrchestratorStore {
         path: normalized,
       },
     ]);
+
+    await unsuppressPage(db, groupId, normalized);
 
     if (
       groupId === DEFAULT_GROUP_ID &&
@@ -1288,10 +1304,22 @@ export class OrchestratorStore {
       this.normalizeSidebarDefaultPage(sidebarDefaultPageRaw),
     );
 
-    this._pages.set(
-      this.parsePagesList(await getConfig(db, CONFIG_KEYS.PAGES_LIST)),
+    const rawPagesList = await getConfig(db, CONFIG_KEYS.PAGES_LIST);
+    const existingPages =
+      rawPagesList !== null && rawPagesList !== undefined
+        ? this.parsePagesList(rawPagesList)
+        : [];
+    const seeded = await seedStaticMainSite(
+      db,
+      DEFAULT_GROUP_ID,
+      existingPages,
     );
-    await this.ensureDefaultPage(db);
+    if (seeded.length > 0) {
+      this._pages.set(seeded);
+      await this.persistPages(db);
+    } else {
+      await this.ensureDefaultPage(db);
+    }
 
     const lastPinnedPageRaw = await getConfig(
       db,
@@ -1478,6 +1506,8 @@ export class OrchestratorStore {
       (entry) => !(entry.path === normalized && entry.groupId === groupId),
     );
 
+    await suppressPage(db, groupId, normalized);
+
     const removingMainMemoryPage =
       groupId === DEFAULT_GROUP_ID &&
       normalized === DEFAULT_MAIN_GROUP_MEMORY_PATH;
@@ -1506,6 +1536,10 @@ export class OrchestratorStore {
     }
 
     this._pages.set(remainingPages);
+    const def = this._defaultPinnedPage.get();
+    if (def && def.path === normalized && def.groupId === groupId) {
+      await this.setDefaultPinnedPage(db, null);
+    }
     await this.persistPages(db);
   }
 
@@ -1689,6 +1723,38 @@ export class OrchestratorStore {
     } else {
       await setConfig(db, CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE, null);
     }
+  }
+
+  async setDefaultPinnedPage(
+    db: ShadowClawDatabase,
+    page: SavedPageRef | null,
+  ): Promise<void> {
+    const current = this._defaultPinnedPage.get();
+    const isSame =
+      current &&
+      page &&
+      current.path === page.path &&
+      current.groupId === page.groupId;
+    const nextValue = isSame ? null : page;
+
+    this._defaultPinnedPage.set(nextValue);
+    if (nextValue) {
+      await setConfig(
+        db,
+        CONFIG_KEYS.DEFAULT_PINNED_PAGE,
+        JSON.stringify(nextValue),
+      );
+    } else {
+      await setConfig(db, CONFIG_KEYS.DEFAULT_PINNED_PAGE, null);
+    }
+  }
+
+  async reorderPages(
+    db: ShadowClawDatabase,
+    pages: SavedPageRef[],
+  ): Promise<void> {
+    this._pages.set(pages);
+    await this.persistPages(db);
   }
 
   /**

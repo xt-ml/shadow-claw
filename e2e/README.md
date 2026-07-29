@@ -370,6 +370,7 @@ Settings panel controller.
 - `saveApiKeyButton()` — Save provider / API key button
 - `assistantNameInput()` — Assistant name input
 - `saveAssistantNameButton()` — Save assistant name button
+- `overridePrerenderSkeletonToggle()` — Override pre-rendered skeleton toggle checkbox (`OVERRIDE_PRERENDER_SKELETON`)
 
 ## Shared Utilities (`shared/index.ts`)
 

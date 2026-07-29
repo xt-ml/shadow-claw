@@ -228,6 +228,7 @@ Key operations include:
 - **Providers:** `setProvider`, `setModel`, `setBedrockSettings`, etc. (`src/core/orchestrator/utils/operations/provider.ts`)
 - **Channels & Rooms:** `submitMessage`, `setChannelEnabled`, `createRoom`, `inviteToRoom` (`src/core/orchestrator/utils/operations/channel.ts`, `room.ts`)
 - **Settings:** `setMaxIterations`, `setStreamingEnabled`, `setProxyUrl` (`src/core/orchestrator/utils/settings.ts`)
+- **Pages & Static Site:** `reorderPages`, `setDefaultPinnedPage`, `effectiveDefaultPage`, `seedStaticMainSite`, `suppressPage`/`unsuppressPage` (`src/stores/orchestrator.ts`, `src/storage/staticMainSite.ts`, `src/storage/suppressedPages.ts`)
 - **VM/Terminal:** `setVMBootMode`, `openTerminalSession`, `sendTerminalInput` (`src/core/orchestrator/utils/operations/vm.ts`)
 - **Tasks:** `syncTaskToServer`, `deleteTaskFromServer`, `shouldStartLocalScheduler` (`src/core/orchestrator/utils/operations/task.ts`)
 

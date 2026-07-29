@@ -30,4 +30,16 @@ export async function deleteGroupFile(
       await setMainGroupIndexSuppressed(db, true);
     }
   }
+
+  try {
+    const { suppressPage } = await import("./suppressedPages.js");
+    await suppressPage(db, groupId, filePath);
+  } catch {}
+
+  try {
+    const { orchestratorStore } = await import("../stores/orchestrator.js");
+    await orchestratorStore.removePage(db, filePath, groupId);
+  } catch {
+    // Orchestrator store might not be instantiated in isolated storage unit test
+  }
 }

@@ -15,6 +15,10 @@ export interface ShadowClawAppRoute {
 }
 
 function encodePathSegment(value: string): string {
+  if (value.startsWith("br:")) {
+    return `br-${value.slice(3)}`;
+  }
+
   return encodeURIComponent(value);
 }
 

@@ -70,12 +70,21 @@ export async function ensureMainGroupMemory(
       return false;
     }
 
-    await writeGroupFile(
-      db,
-      groupId,
-      DEFAULT_MAIN_GROUP_MEMORY_PATH,
-      DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
-    );
+    let content = DEFAULT_MAIN_GROUP_MEMORY_CONTENT;
+    if (typeof fetch === "function") {
+      try {
+        const url = resolveStaticMainGroupMemoryUrl();
+        const res = await fetch(url);
+        if (res.ok) {
+          const text = await res.text();
+          if (text && text.trim().length > 0) {
+            content = text;
+          }
+        }
+      } catch {}
+    }
+
+    await writeGroupFile(db, groupId, DEFAULT_MAIN_GROUP_MEMORY_PATH, content);
 
     return true;
   } catch (error) {

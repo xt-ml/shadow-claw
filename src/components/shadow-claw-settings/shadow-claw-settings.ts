@@ -205,6 +205,15 @@ export class ShadowClawSettings extends ShadowClawElement {
           void this.onSidebarHidePagesToggle(target.checked);
         }
       });
+
+    root
+      .querySelector('[data-setting="override-prerender-skeleton-toggle"]')
+      ?.addEventListener("change", (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        if (target) {
+          void this.onOverridePrerenderSkeletonToggle(target.checked);
+        }
+      });
   }
 
   closeDialog(selector: string) {
@@ -527,6 +536,43 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
+  async onOverridePrerenderSkeletonToggle(enabled: boolean) {
+    try {
+      localStorage.setItem(
+        "shadow-claw-override-prerender-skeleton",
+        enabled ? "true" : "false",
+      );
+    } catch (e) {
+      console.warn("Unable to save setting to localStorage:", e);
+    }
+
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../../db/setConfig.js");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON,
+        enabled ? "true" : "false",
+      );
+
+      showSuccess(
+        enabled
+          ? "Pre-rendered content override enabled"
+          : "Pre-rendered content override disabled",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(
+        "Error saving pre-rendered content override setting: " + errorMsg,
+        6000,
+      );
+    }
+  }
+
   async populateAssistantSettings() {
     const root = this.shadowRoot;
     if (!root || !this.db) {
@@ -585,6 +631,40 @@ export class ShadowClawSettings extends ShadowClawElement {
     ) as HTMLInputElement | null;
     if (sidebarHidePagesToggle) {
       sidebarHidePagesToggle.checked = sidebarPagesHidden;
+    }
+
+    const rawOverridePrerenderSkeleton = (await getConfig(
+      this.db,
+      CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON,
+    )) as unknown;
+    let storedLocalStorage = false;
+    try {
+      storedLocalStorage =
+        localStorage.getItem("shadow-claw-override-prerender-skeleton") ===
+        "true";
+    } catch {
+      storedLocalStorage = false;
+    }
+    const overridePrerenderSkeleton =
+      rawOverridePrerenderSkeleton === true ||
+      rawOverridePrerenderSkeleton === "true" ||
+      rawOverridePrerenderSkeleton === 1 ||
+      rawOverridePrerenderSkeleton === "1" ||
+      storedLocalStorage;
+
+    if (overridePrerenderSkeleton) {
+      try {
+        localStorage.setItem("shadow-claw-override-prerender-skeleton", "true");
+      } catch {
+        // Ignore localStorage quota / access errors
+      }
+    }
+
+    const overridePrerenderSkeletonToggle = root.querySelector(
+      '[data-setting="override-prerender-skeleton-toggle"]',
+    ) as HTMLInputElement | null;
+    if (overridePrerenderSkeletonToggle) {
+      overridePrerenderSkeletonToggle.checked = overridePrerenderSkeleton;
     }
   }
 

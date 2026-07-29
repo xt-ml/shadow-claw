@@ -34,6 +34,7 @@ jest.unstable_mockModule("../../stores/file-viewer.js", () => ({
 
 jest.unstable_mockModule("../../stores/orchestrator.js", () => {
   let mockActivePinnedPage: any = null;
+  let mockDefaultPinnedPage: any = null;
   const mockSetState = jest.fn((val: any) => {
     mockActivePinnedPage = val;
   });
@@ -45,6 +46,18 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => {
       groups: [],
       activeGroupId: "group-1",
       removePage: jest.fn(),
+      reorderPages: jest.fn(),
+      setDefaultPinnedPage: jest.fn(async (_db: any, val: any) => {
+        mockDefaultPinnedPage = val;
+      }),
+      get defaultPinnedPage() {
+        return mockDefaultPinnedPage;
+      },
+      get effectiveDefaultPage() {
+        const pages = (this as any).pages || [];
+
+        return pages[0] || null;
+      },
       get activePinnedPage() {
         return mockActivePinnedPage;
       },
@@ -69,6 +82,7 @@ jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
 jest.unstable_mockModule("../../ui/toast.js", () => ({
   showError: jest.fn(),
   showSuccess: jest.fn(),
+  showWarning: jest.fn(),
 }));
 
 jest.unstable_mockModule("../../db/db.js", () => ({
@@ -418,6 +432,326 @@ describe("shadow-claw-pages", () => {
       );
 
       expect(rewritten).toContain('href="https://example.com/page"');
+    });
+  });
+
+  describe("pages sub-sidebar and list enhancements", () => {
+    it("sidebar is closed by default and toggle button toggles sidebar and dropdown visibility", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      expect(root).not.toBeNull();
+      if (!root) return;
+
+      const toggleBtn = root.querySelector(
+        "[data-pages-sidebar-toggle]",
+      ) as HTMLButtonElement;
+      const dropdown = root.querySelector(
+        "[data-pages-dropdown]",
+      ) as HTMLDetailsElement;
+      const sidebar = root.querySelector(".pages__sidebar");
+      const content = root.querySelector(".pages__content");
+
+      expect(toggleBtn).toBeInstanceOf(HTMLButtonElement);
+      expect(dropdown).toBeInstanceOf(HTMLDetailsElement);
+      expect(component.sidebarOpen).toBe(false);
+      expect(sidebar?.classList.contains("collapsed")).toBe(true);
+      expect(
+        content?.classList.contains("pages__content--sidebar-collapsed"),
+      ).toBe(true);
+      expect(dropdown.hasAttribute("open")).toBe(false);
+
+      // First click: opens both sidebar and dropdown
+      toggleBtn.click();
+      expect(component.sidebarOpen).toBe(true);
+      expect(sidebar?.classList.contains("collapsed")).toBe(false);
+      expect(
+        content?.classList.contains("pages__content--sidebar-collapsed"),
+      ).toBe(false);
+      expect(dropdown.hasAttribute("open")).toBe(true);
+
+      // Second click: closes both sidebar and dropdown
+      toggleBtn.click();
+      expect(component.sidebarOpen).toBe(false);
+      expect(sidebar?.classList.contains("collapsed")).toBe(true);
+      expect(
+        content?.classList.contains("pages__content--sidebar-collapsed"),
+      ).toBe(true);
+      expect(dropdown.hasAttribute("open")).toBe(false);
+    });
+
+    it("clicking outside closes open dropdown but clicking toggle button closes open dropdown", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      expect(root).not.toBeNull();
+      if (!root) return;
+
+      const toggleBtn = root.querySelector(
+        "[data-pages-sidebar-toggle]",
+      ) as HTMLButtonElement;
+      const dropdown = root.querySelector(
+        "[data-pages-dropdown]",
+      ) as HTMLDetailsElement;
+      const empty = root.querySelector("[data-pages-empty]") as HTMLElement;
+
+      toggleBtn.click();
+      expect(dropdown.hasAttribute("open")).toBe(true);
+
+      // Click outside dropdown
+      empty.click();
+      expect(dropdown.hasAttribute("open")).toBe(false);
+    });
+
+    it("clicking X calls requestConfirmation rather than immediately calling removePage", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      component.db = {} as any;
+      const spy = jest
+        .spyOn(component, "requestConfirmation")
+        .mockResolvedValue(false);
+
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+      ];
+      component.renderPageList(pages, []);
+
+      const removeBtn = root.querySelector(
+        ".pages__remove",
+      ) as HTMLButtonElement;
+      expect(removeBtn).not.toBeNull();
+
+      removeBtn.click();
+      await Promise.resolve();
+
+      expect(spy).toHaveBeenCalledWith({
+        title: "Remove Page",
+        message: expect.stringContaining("docs/first.md"),
+        confirmLabel: "Remove",
+        cancelLabel: "Cancel",
+      });
+      expect(orchestratorStore.removePage).not.toHaveBeenCalled();
+    });
+
+    it("removes page when confirmation dialog is accepted", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      component.db = {} as any;
+      jest.spyOn(component, "requestConfirmation").mockResolvedValue(true);
+
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [{ groupId: "group-1", path: "docs/first.md" }];
+      component.renderPageList(pages, []);
+
+      const removeBtn = root.querySelector(
+        ".pages__remove",
+      ) as HTMLButtonElement;
+      removeBtn.click();
+      await Promise.resolve();
+
+      expect(orchestratorStore.removePage).toHaveBeenCalledWith(
+        component.db,
+        "docs/first.md",
+        "group-1",
+      );
+    });
+
+    it("clicking edit icon opens file in fileViewerStore", async () => {
+      const { fileViewerStore } = await import("../../stores/file-viewer.js");
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      component.db = {} as any;
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [{ groupId: "group-1", path: "docs/page.md" }];
+      component.renderPageList(pages, []);
+
+      const editBtn = root.querySelector(".pages__edit") as HTMLButtonElement;
+      expect(editBtn).not.toBeNull();
+
+      editBtn.click();
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(fileViewerStore.openFile).toHaveBeenCalledWith(
+        component.db,
+        "docs/page.md",
+        "group-1",
+      );
+    });
+
+    it("reorders list items and calls orchestratorStore.reorderPages", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+
+      await component.handleReorder(0, 1);
+      expect(orchestratorStore.reorderPages).toHaveBeenCalledWith(
+        component.db,
+        [
+          { groupId: "group-1", path: "docs/second.md" },
+          { groupId: "group-1", path: "docs/first.md" },
+        ],
+      );
+    });
+
+    it("only stars the top-most page as default and inherits star when reordered to top", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+
+      component.renderPageList(pages, []);
+
+      const primaryList = root.querySelector("[data-pages-list]");
+      const listItems =
+        primaryList?.querySelectorAll(".pages__list-item") || [];
+      expect(listItems.length).toBe(2);
+
+      // Top-most page (index 0) has the star element
+      const topStar = listItems[0]?.querySelector(".pages__default-btn");
+      expect(topStar).not.toBeNull();
+      expect(topStar?.textContent).toBe("⭐");
+
+      // Second page (index 1) has no star element
+      const secondStar = listItems[1]?.querySelector(".pages__default-btn");
+      expect(secondStar).toBeNull();
+
+      // When second page is reordered to top position, re-render places star on newly top page
+      const reorderedPages = [
+        { groupId: "group-1", path: "docs/second.md" },
+        { groupId: "group-1", path: "docs/first.md" },
+      ];
+      (orchestratorStore as any).pages = reorderedPages;
+      component.renderPageList(reorderedPages, []);
+
+      const primaryListReordered = root.querySelector("[data-pages-list]");
+      const reorderedItems =
+        primaryListReordered?.querySelectorAll(".pages__list-item") || [];
+      const newTopStar = reorderedItems[0]?.querySelector(
+        ".pages__default-btn",
+      );
+      expect(newTopStar).not.toBeNull();
+      expect(newTopStar?.textContent).toBe("⭐");
+
+      const newSecondStar = reorderedItems[1]?.querySelector(
+        ".pages__default-btn",
+      );
+      expect(newSecondStar).toBeNull();
+      expect(orchestratorStore.effectiveDefaultPage).toEqual({
+        groupId: "group-1",
+        path: "docs/second.md",
+      });
+    });
+
+    it("dispatches shadow-claw-navigate event when a page item in the page list is clicked", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [{ groupId: "br:main", path: "MEMORY.md" }];
+      (orchestratorStore as any).pages = pages;
+
+      component.renderPageList(pages, []);
+
+      const navigateListener = jest.fn();
+      document.addEventListener("shadow-claw-navigate", navigateListener);
+
+      const selectBtn = root.querySelector(
+        ".pages__select",
+      ) as HTMLButtonElement;
+      expect(selectBtn).not.toBeNull();
+
+      selectBtn.click();
+
+      expect(navigateListener).toHaveBeenCalledTimes(1);
+      const event = navigateListener.mock.calls[0][0] as CustomEvent;
+      expect(event.detail).toEqual({
+        page: "pages",
+        groupId: "br:main",
+        path: "MEMORY.md",
+      });
+
+      document.removeEventListener("shadow-claw-navigate", navigateListener);
+    });
+
+    it("puts page into view, selects it, and dispatches navigate event when reordered to top position", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const renderSpy = jest
+        .spyOn(component, "renderSelectedPage")
+        .mockImplementation(async () => {});
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+
+      const navigateListener = jest.fn();
+      document.addEventListener("shadow-claw-navigate", navigateListener);
+
+      await component.handleReorder(1, 0);
+
+      expect(component.selectedPage).toEqual({
+        groupId: "group-1",
+        path: "docs/second.md",
+      });
+      expect(renderSpy).toHaveBeenCalled();
+      expect(navigateListener).toHaveBeenCalledTimes(1);
+      const event = navigateListener.mock.calls[0][0] as CustomEvent;
+      expect(event.detail).toEqual({
+        page: "pages",
+        groupId: "group-1",
+        path: "docs/second.md",
+      });
+
+      document.removeEventListener("shadow-claw-navigate", navigateListener);
+      renderSpy.mockRestore();
+    });
+
+    it("clears static pre-rendered DSD content on connectedCallback when override setting is enabled in localStorage", async () => {
+      localStorage.setItem("shadow-claw-override-prerender-skeleton", "true");
+
+      const component = new ShadowClawPages();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const rendered = root.querySelector(
+        "[data-pages-rendered]",
+      ) as HTMLElement;
+      expect(rendered).not.toBeNull();
+      rendered.textContent = "Welcome to ShadowClaw Pages (DSD seed)";
+      rendered.hidden = false;
+
+      await component.connectedCallback();
+
+      expect(rendered.hidden).toBe(true);
+      expect(rendered.textContent).toBe("");
+
+      localStorage.removeItem("shadow-claw-override-prerender-skeleton");
     });
   });
 });

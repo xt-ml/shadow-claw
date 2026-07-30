@@ -55,6 +55,7 @@ import {
   formatTimestamp,
   handleSpecialLinkNavigation,
 } from "../../utils/utils.js";
+import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
 
 import { computeTokenDisplayValues } from "./utils/computeTokenDisplayValues.js";
 import { escapeHtml } from "./utils/escapeHtml.js";
@@ -77,6 +78,21 @@ const INLINE_ATTACHMENT_MAX_BYTES = 128 * 1024;
 const INLINE_ATTACHMENT_TOTAL_CHAR_BUDGET = 80_000;
 const DEFAULT_CHAT_INPUT_HEIGHT_PX = 40;
 const MIN_CHAT_INPUT_HEIGHT_PX = 40;
+
+async function resolveFrontmatterToggle(
+  db: ShadowClawDatabase | null,
+  key: string,
+): Promise<boolean> {
+  if (!db || typeof (db as any).transaction !== "function") {
+    return true;
+  }
+
+  try {
+    return isTruthyConfigValue(await getConfig(db, key), true);
+  } catch {
+    return true;
+  }
+}
 
 type QueuedAttachment = {
   id: string;
@@ -1249,6 +1265,11 @@ export class ShadowClawChat extends ShadowClawElement {
 
         // Render messages sequentially to ensure order and proper awaiting
         const renderMessages = async () => {
+          const renderFrontmatter = await resolveFrontmatterToggle(
+            this.#db,
+            CONFIG_KEYS.MARKDOWN_FRONTMATTER_CHAT,
+          );
+
           for (const msg of messages) {
             if (!this.isLatestRender(renderVersion)) {
               return false;
@@ -1275,6 +1296,7 @@ export class ShadowClawChat extends ShadowClawElement {
 
             const renderedContent = await renderMarkdown(msg.content, {
               breaks: true,
+              renderFrontmatter,
             });
 
             const headerEl = document.createElement("div");

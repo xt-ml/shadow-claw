@@ -179,6 +179,9 @@ jest.unstable_mockModule("../../db/getConfig.js", () => ({
     if (key === "assistant_name") {
       return Promise.resolve("example");
     }
+    if (key === "allowed_iframe_host_patterns") {
+      return Promise.resolve(undefined);
+    }
 
     return Promise.resolve("true");
   }),
@@ -713,6 +716,97 @@ describe("shadow-claw-settings", () => {
     expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
       expect.anything(),
       "override_prerender_skeleton",
+      "true",
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("populates and saves DOM allowed iframe host patterns setting", async () => {
+    (globalThis as any)._mockSetConfig.mockClear();
+
+    const el = new ShadowClawSettings();
+    (el as any).db = {} as any;
+    document.body.appendChild(el);
+    await el.render();
+
+    const textarea = el.shadowRoot?.querySelector<HTMLTextAreaElement>(
+      '[data-setting="dom-allowed-iframe-hosts"]',
+    );
+    const pagesToggle = el.shadowRoot?.querySelector<HTMLInputElement>(
+      '[data-setting="markdown-frontmatter-pages-toggle"]',
+    );
+    const fileViewerToggle = el.shadowRoot?.querySelector<HTMLInputElement>(
+      '[data-setting="markdown-frontmatter-file-viewer-toggle"]',
+    );
+    const chatToggle = el.shadowRoot?.querySelector<HTMLInputElement>(
+      '[data-setting="markdown-frontmatter-chat-toggle"]',
+    );
+    const tasksToggle = el.shadowRoot?.querySelector<HTMLInputElement>(
+      '[data-setting="markdown-frontmatter-tasks-toggle"]',
+    );
+    const saveBtn = el.shadowRoot?.querySelector<HTMLButtonElement>(
+      '[data-action="save-dom-allowed-iframe-hosts"]',
+    );
+
+    expect(textarea).not.toBeNull();
+    expect(pagesToggle).not.toBeNull();
+    expect(fileViewerToggle).not.toBeNull();
+    expect(chatToggle).not.toBeNull();
+    expect(tasksToggle).not.toBeNull();
+    expect(saveBtn).not.toBeNull();
+    expect(textarea?.value).toContain("youtube.com");
+    expect(textarea?.value).toContain("xt-ml.github.io");
+    expect(textarea?.value).toContain("kherrick.github.io");
+    expect(pagesToggle?.checked).toBe(true);
+    expect(fileViewerToggle?.checked).toBe(true);
+    expect(chatToggle?.checked).toBe(true);
+    expect(tasksToggle?.checked).toBe(true);
+
+    if (textarea) {
+      textarea.value =
+        "youtube.com\nvimeo.com\nxt-ml.github.io\nkherrick.github.io";
+    }
+
+    if (pagesToggle) {
+      pagesToggle.checked = false;
+    }
+    if (fileViewerToggle) {
+      fileViewerToggle.checked = true;
+    }
+    if (chatToggle) {
+      chatToggle.checked = false;
+    }
+    if (tasksToggle) {
+      tasksToggle.checked = true;
+    }
+
+    saveBtn?.dispatchEvent(new Event("click"));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "allowed_iframe_host_patterns",
+      "youtube.com\nvimeo.com\nxt-ml.github.io\nkherrick.github.io",
+    );
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "markdown_frontmatter_pages",
+      "false",
+    );
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "markdown_frontmatter_file_viewer",
+      "true",
+    );
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "markdown_frontmatter_chat",
+      "false",
+    );
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "markdown_frontmatter_tasks",
       "true",
     );
 

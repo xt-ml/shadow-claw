@@ -754,7 +754,7 @@ export class OrchestratorStore {
       return;
     }
 
-    this._pages.set([
+    this.setPages([
       ...pages,
       {
         groupId,
@@ -1315,10 +1315,17 @@ export class OrchestratorStore {
       existingPages,
     );
     if (seeded.length > 0) {
-      this._pages.set(seeded);
+      this.setPages(seeded);
       await this.persistPages(db);
     } else {
       await this.ensureDefaultPage(db);
+    }
+
+    if (seeded.didPurge) {
+      this._activePage.set("pages");
+      this._hadPersistedActivePage = false;
+      await setConfig(db, CONFIG_KEYS.LAST_ACTIVE_PAGE, null);
+      await setConfig(db, CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE, null);
     }
 
     const lastPinnedPageRaw = await getConfig(
@@ -1535,11 +1542,29 @@ export class OrchestratorStore {
       }
     }
 
-    this._pages.set(remainingPages);
+    this.setPages(remainingPages);
     const def = this._defaultPinnedPage.get();
     if (def && def.path === normalized && def.groupId === groupId) {
       await this.setDefaultPinnedPage(db, null);
     }
+    await this.persistPages(db);
+  }
+
+  async removeAllPages(db: ShadowClawDatabase): Promise<void> {
+    const pages = [...this._pages.get()];
+    for (const page of pages) {
+      await suppressPage(db, page.groupId, page.path);
+      if (
+        page.groupId === DEFAULT_GROUP_ID &&
+        page.path === DEFAULT_MAIN_GROUP_MEMORY_PATH
+      ) {
+        await setMainGroupMemorySuppressed(db, true);
+      }
+    }
+
+    this.setPages([]);
+    await this.setDefaultPinnedPage(db, null);
+    await this.setActivePinnedPage(db, null);
     await this.persistPages(db);
   }
 
@@ -1753,7 +1778,7 @@ export class OrchestratorStore {
     db: ShadowClawDatabase,
     pages: SavedPageRef[],
   ): Promise<void> {
-    this._pages.set(pages);
+    this.setPages(pages);
     await this.persistPages(db);
   }
 
@@ -2117,6 +2142,16 @@ export class OrchestratorStore {
     return this._sidebarDefaultPage.get();
   }
 
+  private setPages(pages: SavedPageRef[]): void {
+    const memoryPages = pages.filter(
+      (p) => p.path.toLowerCase() === "memory.md",
+    );
+    const otherPages = pages.filter(
+      (p) => p.path.toLowerCase() !== "memory.md",
+    );
+    this._pages.set([...otherPages, ...memoryPages]);
+  }
+
   private async ensureDefaultPage(db: ShadowClawDatabase): Promise<void> {
     if (await isMainGroupMemorySuppressed(db)) {
       return;
@@ -2133,7 +2168,7 @@ export class OrchestratorStore {
       return;
     }
 
-    this._pages.set([
+    this.setPages([
       {
         groupId: DEFAULT_GROUP_ID,
         path: OrchestratorStore.DEFAULT_PAGE_PATH,

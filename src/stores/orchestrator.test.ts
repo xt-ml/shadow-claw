@@ -1863,6 +1863,32 @@ describe("OrchestratorStore", () => {
       );
     });
 
+    it("removeAllPages suppresses all pages, resets pages list, and clears default/active pinned pages", async () => {
+      const store = new OrchestratorStore();
+
+      await store.addPage({} as any, "README.md", "br:main");
+      await store.addPage({} as any, "docs/guide.md", "br:test");
+
+      await store.removeAllPages({} as any);
+
+      expect(store.pages).toEqual([]);
+      expect(mockSetConfig).toHaveBeenCalledWith(
+        {} as any,
+        "pages_list",
+        JSON.stringify([]),
+      );
+      expect(mockSetConfig).toHaveBeenCalledWith(
+        {} as any,
+        "default_pinned_page",
+        null,
+      );
+      expect(mockSetConfig).toHaveBeenCalledWith(
+        {} as any,
+        "last_selected_pinned_page",
+        null,
+      );
+    });
+
     it("init seeds default MEMORY.md as first page when missing", async () => {
       (mockGetConfig as any).mockImplementation(
         async (_db: any, key: string) => {
@@ -2025,8 +2051,8 @@ describe("OrchestratorStore", () => {
       await store.init({} as any, orch);
 
       expect(store.pages).toEqual([
-        { groupId: "br:main", path: "MEMORY.md" },
         { groupId: "br:main", path: "docs/guide.md" },
+        { groupId: "br:main", path: "MEMORY.md" },
       ]);
     });
 

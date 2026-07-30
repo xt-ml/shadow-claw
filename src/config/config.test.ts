@@ -450,6 +450,18 @@ describe("config.js", () => {
       expect(CONFIG_KEYS.INTEGRATION_CONNECTIONS).toBe(
         "integration_connections",
       );
+      expect(CONFIG_KEYS.MARKDOWN_FRONTMATTER_CHAT).toBe(
+        "markdown_frontmatter_chat",
+      );
+      expect(CONFIG_KEYS.MARKDOWN_FRONTMATTER_FILE_VIEWER).toBe(
+        "markdown_frontmatter_file_viewer",
+      );
+      expect(CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES).toBe(
+        "markdown_frontmatter_pages",
+      );
+      expect(CONFIG_KEYS.MARKDOWN_FRONTMATTER_TASKS).toBe(
+        "markdown_frontmatter_tasks",
+      );
       expect(CONFIG_KEYS.LLAMAFILE_HOST).toBe("llamafile_host");
       expect(CONFIG_KEYS.LLAMAFILE_MODE).toBe("llamafile_mode");
       expect(CONFIG_KEYS.LLAMAFILE_OFFLINE).toBe("llamafile_offline");

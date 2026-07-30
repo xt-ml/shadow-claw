@@ -11,6 +11,8 @@ describe("csp", () => {
     expect(value).toContain("object-src 'none'");
     expect(value).toContain("base-uri 'self'");
     expect(value).toContain("frame-ancestors 'none'");
+    expect(value).toContain("frame-src 'self' https://www.youtube.com");
+    expect(value).not.toContain("youtube-nocookie.com");
     expect(value).toContain("media-src 'self' data: blob:");
     expect(value).toContain(`trusted-types ${getTrustedTypesPolicyName()}`);
     expect(value).toContain("shadowclaw-sandbox");

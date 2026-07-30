@@ -6,9 +6,25 @@
  * code blocks, links, images, etc.
  */
 
-import DOMPurify from "dompurify";
 import hljs from "highlight.js";
 import { marked } from "marked";
+
+import {
+  createFrontmatterDetailsElement,
+  PostFrontmatter,
+  renderFrontmatterMarkup,
+  splitFrontmatter,
+} from "../common/utils/frontmatter.mjs";
+
+import {
+  ensureIframeSanitizerHook,
+  getDOMPurify,
+} from "../security/iframe-sanitizer.js";
+
+export interface MarkdownRenderOptions {
+  breaks?: boolean;
+  renderFrontmatter?: boolean;
+}
 
 function escapeHtml(text: string): string {
   return text
@@ -141,19 +157,25 @@ marked.use({
  */
 export async function renderMarkdown(
   src: string,
-  options?: { breaks?: boolean },
+  options?: MarkdownRenderOptions,
 ): Promise<string> {
   try {
+    const parsed: { data: PostFrontmatter; content: string } =
+      splitFrontmatter(src);
+
     // Parse markdown to HTML
     const headingCounts = new Map<string, number>();
-    const html = await marked.parse(src, {
+    const html = await marked.parse(parsed.content, {
       gfm: true,
       breaks: options?.breaks ?? false,
       headingCounts,
     } as any);
 
+    // Ensure DOMPurify has the iframe sanitizer hook registered
+    ensureIframeSanitizerHook();
+
     // Sanitize with DOMPurify to remove any dangerous content
-    const safe = DOMPurify.sanitize(html, {
+    const safe = getDOMPurify().sanitize(html, {
       ALLOWED_TAGS: [
         "p",
         "br",
@@ -204,6 +226,9 @@ export async function renderMarkdown(
         "stop",
         "div",
         "span",
+        "figure",
+        "figcaption",
+        "iframe",
       ],
       ALLOWED_ATTR: [
         "href",
@@ -243,12 +268,32 @@ export async function renderMarkdown(
         "font-size",
         "font-family",
         "xlink:href",
+        "frameborder",
+        "allow",
+        "allowfullscreen",
+        "referrerpolicy",
+        "sandbox",
+        "scrolling",
+      ],
+      ADD_TAGS: ["iframe", "figure", "figcaption"],
+      ADD_ATTR: [
+        "allow",
+        "allowfullscreen",
+        "frameborder",
+        "scrolling",
+        "referrerpolicy",
+        "loading",
       ],
       ALLOW_DATA_ATTR: false,
       RETURN_DOM: false,
     });
 
-    return safe;
+    const shouldRenderFrontmatter = options?.renderFrontmatter ?? true;
+    if (!shouldRenderFrontmatter || Object.keys(parsed.data).length === 0) {
+      return safe;
+    }
+
+    return `${renderFrontmatterMarkup(parsed.data, createFrontmatterDetailsElement)}${safe}`;
   } catch (err) {
     console.error("Markdown rendering error details:", {
       error: err,

@@ -2,6 +2,7 @@ import hljs from "highlight.js";
 
 import { renderMarkdown } from "../../content/markdown.js";
 
+import { CONFIG_KEYS } from "../../config/config.js";
 import {
   applyBasePath,
   getFileRouteDirPath,
@@ -11,6 +12,7 @@ import {
 
 import { effect } from "../../core/effect.js";
 import { getDb } from "../../db/db.js";
+import { getConfig } from "../../db/getConfig.js";
 
 import {
   sanitizeSrcdocHtml,
@@ -27,6 +29,7 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 import { themeStore } from "../../stores/theme.js";
 
 import { showError, showSuccess } from "../../ui/toast.js";
+import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.js";
@@ -47,7 +50,29 @@ const previewSanitizeOptions: Config = {
   // Allow blob URLs for locally resolved OPFS preview assets.
   ALLOWED_URI_REGEXP:
     /^(?:(?:https?|mailto|ftp|tel|file|blob|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+  ADD_TAGS: ["iframe", "figure", "figcaption"],
+  ADD_ATTR: [
+    "allow",
+    "allowfullscreen",
+    "frameborder",
+    "scrolling",
+    "referrerpolicy",
+    "loading",
+  ],
 };
+
+function resolveFrontmatterToggle(
+  db: ShadowClawDatabase | null,
+  key: string,
+): boolean | Promise<boolean> {
+  if (!db || typeof (db as any).transaction !== "function") {
+    return true;
+  }
+
+  return getConfig(db, key)
+    .then((value) => isTruthyConfigValue(value, true))
+    .catch(() => true);
+}
 
 /**
  * ShadowClawFileViewer - component for viewing and editing files
@@ -329,7 +354,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return "allow-modals allow-popups allow-popups-to-escape-sandbox";
     }
 
-    return "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox allow-same-origin";
+    return "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox";
   }
 
   getLanguageFromFilename(fileName: string) {
@@ -1543,15 +1568,25 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     content.classList.remove("file-content--raw");
     content.classList.add("file-content--preview");
 
-    const previewHtml = await renderMarkdown(this.toPreviewMarkdown(file));
+    const currentFile = fileViewerStore.file;
+    const basePath = currentFile?.path || currentFile?.name || "";
+    const previewMarkdown = this.toPreviewMarkdown(file);
+    const renderFrontmatterValue = resolveFrontmatterToggle(
+      this.db,
+      CONFIG_KEYS.MARKDOWN_FRONTMATTER_FILE_VIEWER,
+    );
+    const renderFrontmatter =
+      typeof renderFrontmatterValue === "boolean"
+        ? renderFrontmatterValue
+        : await renderFrontmatterValue;
+    const previewMarkdownHtml = await renderMarkdown(previewMarkdown, {
+      renderFrontmatter,
+    });
     if (!this.isRenderTokenCurrent(renderToken)) {
       return;
     }
-
-    const currentFile = fileViewerStore.file;
-    const basePath = currentFile?.path || currentFile?.name || "";
     const resolvedPreviewHtml = this.rewriteWorkspacePreviewHtml(
-      previewHtml,
+      previewMarkdownHtml,
       basePath,
     );
 

@@ -46,6 +46,7 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => {
       groups: [],
       activeGroupId: "group-1",
       removePage: jest.fn(),
+      removeAllPages: jest.fn(),
       reorderPages: jest.fn(),
       setDefaultPinnedPage: jest.fn(async (_db: any, val: any) => {
         mockDefaultPinnedPage = val;
@@ -258,7 +259,9 @@ describe("shadow-claw-pages", () => {
     await component.renderSelectedPage();
 
     expect(root.querySelector("[data-pages-iframe]")).toBeNull();
-    expect(renderMarkdown).toHaveBeenCalledWith("# Title");
+    expect(renderMarkdown).toHaveBeenCalledWith("# Title", {
+      renderFrontmatter: true,
+    });
     expect(setSanitizedHtml).toHaveBeenCalledTimes(1);
   });
 
@@ -752,6 +755,68 @@ describe("shadow-claw-pages", () => {
       expect(rendered.textContent).toBe("");
 
       localStorage.removeItem("shadow-claw-override-prerender-skeleton");
+    });
+
+    it("disables Remove All button when pages list is empty and enables it when pages exist", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const clearBtn = root.querySelector(
+        ".pages__remove-all-btn",
+      ) as HTMLElement;
+      expect(clearBtn).not.toBeNull();
+
+      component.renderPageList([], []);
+      expect(clearBtn.hasAttribute("disabled")).toBe(true);
+
+      component.renderPageList(
+        [{ groupId: "group-1", path: "docs/first.md" }],
+        [],
+      );
+      expect(clearBtn.hasAttribute("disabled")).toBe(false);
+    });
+
+    it("clicking Remove All prompts for confirmation and calls removeAllPages when confirmed", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      component.db = {} as any;
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const spy = jest
+        .spyOn(component, "requestConfirmation")
+        .mockResolvedValueOnce(false)
+        .mockResolvedValueOnce(true);
+
+      component.renderPageList(
+        [{ groupId: "group-1", path: "docs/first.md" }],
+        [],
+      );
+
+      const clearBtn = root.querySelector(
+        ".pages__remove-all-btn",
+      ) as HTMLElement;
+
+      // 1. Canceled
+      clearBtn.click();
+      await Promise.resolve();
+      expect(spy).toHaveBeenNthCalledWith(1, {
+        title: "Remove All Pages",
+        message: expect.stringContaining("Remove ALL saved pages"),
+        confirmLabel: "Remove All",
+        cancelLabel: "Cancel",
+      });
+      expect(orchestratorStore.removeAllPages).not.toHaveBeenCalled();
+
+      // 2. Confirmed
+      clearBtn.click();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(orchestratorStore.removeAllPages).toHaveBeenCalledWith(
+        component.db,
+      );
     });
   });
 });

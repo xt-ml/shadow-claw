@@ -8,8 +8,19 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
+
 import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import { DOMImplementation, XMLSerializer } from "@xmldom/xmldom";
+import matter from "gray-matter";
 import { marked } from "marked";
+
+import {
+  createFrontmatterDetailsElement,
+  renderFrontmatterMarkup,
+} from "../src/common/utils/frontmatter.mjs";
+
 import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "../src/storage/defaultMemoryContent.mjs";
 
 const SHADOW_CLAW_TEMPLATE_START =
@@ -22,6 +33,13 @@ const PAGE_EXTENSIONS = new Set([
   ".htm",
   ".xhtml",
 ]);
+
+const frontmatterDom = new DOMImplementation().createDocument(
+  null,
+  "html",
+  null,
+);
+const frontmatterSerializer = new XMLSerializer();
 
 function buildDefaultPageSource() {
   return {
@@ -48,6 +66,17 @@ function sanitizeRenderedHtml(html) {
     .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/giu, "");
 }
 
+function splitFrontmatterWithGrayMatter(src) {
+  const parsed = matter(src);
+  const data =
+    parsed.data && typeof parsed.data === "object" ? parsed.data : {};
+
+  return {
+    data,
+    content: parsed.content || "",
+  };
+}
+
 function extractTemplateContent(html) {
   const templateMatch = html.match(/<template[^>]*>([\s\S]*?)<\/template>/iu);
 
@@ -62,13 +91,36 @@ function toPosixPath(inputPath) {
   return inputPath.split(path.sep).join("/");
 }
 
+function applyPurgePreRenderedStaticPages(
+  purgeTokens,
+  sourcePath,
+  displayPath,
+) {
+  const group = `br-${path.basename(sourcePath)}`;
+  if (!purgeTokens[group]) {
+    purgeTokens[group] = {};
+  }
+
+  const parts = displayPath.split("/");
+  let current = purgeTokens[group];
+
+  for (let i = 0; i < parts.length - 1; i++) {
+    const part = parts[i];
+    if (!current[part]) {
+      current[part] = {};
+    }
+    current = current[part];
+  }
+  current.purgePreRenderedStaticPages = true;
+}
+
 function isPageFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
 
   return PAGE_EXTENSIONS.has(ext);
 }
 
-function sortPagePaths(paths) {
+export function sortPagePaths(paths) {
   return [...paths].sort((left, right) => {
     const leftIsMemory = /^memory\.(md|markdown)$/iu.test(path.basename(left));
     const rightIsMemory = /^memory\.(md|markdown)$/iu.test(
@@ -76,14 +128,14 @@ function sortPagePaths(paths) {
     );
 
     if (leftIsMemory && !rightIsMemory) {
-      return -1;
-    }
-
-    if (!leftIsMemory && rightIsMemory) {
       return 1;
     }
 
-    return left.localeCompare(right, undefined, { sensitivity: "base" });
+    if (!leftIsMemory && rightIsMemory) {
+      return -1;
+    }
+
+    return right.localeCompare(left, undefined, { sensitivity: "base" });
   });
 }
 
@@ -142,7 +194,7 @@ async function collectPageSources(sourcePath) {
   );
 }
 
-async function renderPageHtml(pageContent, pagePath) {
+export async function renderPageHtml(pageContent, pagePath) {
   const ext = path.extname(pagePath).toLowerCase();
   const isHtml = ext === ".html" || ext === ".htm" || ext === ".xhtml";
 
@@ -151,7 +203,22 @@ async function renderPageHtml(pageContent, pagePath) {
   }
 
   try {
-    return sanitizeRenderedHtml(await marked.parse(pageContent));
+    const parsed = splitFrontmatterWithGrayMatter(pageContent);
+    const markdownHtml = await marked.parse(parsed.content);
+    const rendered = sanitizeRenderedHtml(markdownHtml);
+
+    if (Object.keys(parsed.data).length === 0) {
+      return rendered;
+    }
+
+    return `${renderFrontmatterMarkup(
+      parsed.data,
+      createFrontmatterDetailsElement,
+      {
+        documentInstance: frontmatterDom,
+        serializeNode: (node) => frontmatterSerializer.serializeToString(node),
+      },
+    )}${rendered}`;
   } catch {
     return `<p>${escapeHtml(pageContent)}</p>`;
   }
@@ -232,19 +299,22 @@ function applyStaticPagesContent(templateContent, pageSources, renderedHtml) {
   let next = templateContent;
   next = next.replace(
     /<div\s+class="pages__status"\s+data-pages-status><\/div>/iu,
-    `<div class="pages__status" data-pages-status>${escapeHtml(statusText)}</div>`,
+    () =>
+      `<div class="pages__status" data-pages-status>${escapeHtml(statusText)}</div>`,
   );
   next = next.replace(
     /<div\s+class="pages__list"\s+data-pages-list\s+role="list"><\/div>/iu,
-    `<div class="pages__list" data-pages-list role="list">\n${listMarkup}\n</div>`,
+    () =>
+      `<div class="pages__list" data-pages-list role="list">\n${listMarkup}\n</div>`,
   );
   next = next.replace(
     /<div\s+class="pages__empty"\s+data-pages-empty>/iu,
-    '<div class="pages__empty" data-pages-empty hidden>',
+    () => '<div class="pages__empty" data-pages-empty hidden>',
   );
   next = next.replace(
     /<div\s+class="pages__rendered"\s+data-pages-rendered\s+hidden><\/div>/iu,
-    `<div class="pages__rendered" data-pages-rendered>${renderedHtml}</div>`,
+    () =>
+      `<div class="pages__rendered" data-pages-rendered>${renderedHtml}</div>`,
   );
 
   return next;
@@ -318,7 +388,7 @@ function wrapShadowClawDialogContentInTemplate(html) {
 function buildShadowClawDsdTemplate(shadowClawTemplateContent, pagesDsdHost) {
   const withPages = shadowClawTemplateContent.replace(
     /<shadow-claw-pages><\/shadow-claw-pages>/iu,
-    pagesDsdHost,
+    () => pagesDsdHost,
   );
   const content = wrapShadowClawDialogContentInTemplate(withPages);
 
@@ -411,17 +481,27 @@ function markNoSeedPrerenderHost(indexHtml) {
   );
 }
 
-function injectStaticManifestScript(html, manifestJson) {
-  const scriptTag = `<script id="shadow-claw-static-manifest" type="application/json">${manifestJson}</script>`;
+export function escapeJsonForHtmlScript(jsonString) {
+  return jsonString
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/\//g, "\\u002f")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+export function injectStaticManifestScript(html, manifestJson) {
+  const safeManifestJson = escapeJsonForHtmlScript(manifestJson);
+  const scriptTag = `<script id="shadow-claw-static-manifest" type="application/json">${safeManifestJson}</script>`;
   if (/id="shadow-claw-static-manifest"/iu.test(html)) {
     return html.replace(
       /<script\s+id="shadow-claw-static-manifest"[\s\S]*?<\/script>/iu,
-      scriptTag,
+      () => scriptTag,
     );
   }
 
   if (html.includes("</head>")) {
-    return html.replace("</head>", `  ${scriptTag}\n</head>`);
+    return html.replace("</head>", () => `  ${scriptTag}\n</head>`);
   }
 
   return `${scriptTag}\n${html}`;
@@ -454,21 +534,42 @@ async function main() {
         collectPageSources(sourcePath),
       ]);
 
-    const manifestPages = await Promise.all(
+    const pageSourcesWithContent = await Promise.all(
       pageSources.map(async (page) => {
         const content =
           typeof page.inlineContent === "string"
             ? page.inlineContent
             : await readFile(page.absolutePath, "utf8");
-
-        return {
-          displayPath: page.displayPath,
-          content,
-        };
+        return { ...page, content };
       }),
     );
 
+    const purgeTokens = {};
+    const filteredPages = pageSourcesWithContent.filter((page) => {
+      if (
+        page.displayPath.endsWith(".md") &&
+        /^---\r?\n[\s\S]*?slug:\s*"shadow-claw--purge-pages"[\s\S]*?---/mu.test(
+          page.content,
+        )
+      ) {
+        applyPurgePreRenderedStaticPages(
+          purgeTokens,
+          sourcePath,
+          page.displayPath,
+        );
+      }
+      return true;
+    });
+
+    const manifestPages = filteredPages.map((page) => ({
+      displayPath: page.displayPath,
+      content: page.content,
+    }));
+
     const manifest = { pages: manifestPages };
+    if (Object.keys(purgeTokens).length > 0) {
+      manifest.preRenderedStaticPages = purgeTokens;
+    }
     const manifestJson = JSON.stringify(manifest);
 
     const staticManifestPath = path.join(
@@ -521,21 +622,42 @@ async function main() {
     collectPageSources(sourcePath),
   ]);
 
-  const manifestPages = await Promise.all(
+  const pageSourcesWithContent = await Promise.all(
     pageSources.map(async (page) => {
       const content =
         typeof page.inlineContent === "string"
           ? page.inlineContent
           : await readFile(page.absolutePath, "utf8");
-
-      return {
-        displayPath: page.displayPath,
-        content,
-      };
+      return { ...page, content };
     }),
   );
 
+  const purgeTokens = {};
+  const filteredPageSources = pageSourcesWithContent.filter((page) => {
+    if (
+      page.displayPath.endsWith(".md") &&
+      /^---\r?\n[\s\S]*?slug:\s*"shadow-claw--purge-pages"[\s\S]*?---/mu.test(
+        page.content,
+      )
+    ) {
+      applyPurgePreRenderedStaticPages(
+        purgeTokens,
+        sourcePath,
+        page.displayPath,
+      );
+    }
+    return true;
+  });
+
+  const manifestPages = filteredPageSources.map((page) => ({
+    displayPath: page.displayPath,
+    content: page.content,
+  }));
+
   const manifest = { pages: manifestPages };
+  if (Object.keys(purgeTokens).length > 0) {
+    manifest.preRenderedStaticPages = purgeTokens;
+  }
   const manifestJson = JSON.stringify(manifest);
 
   const staticManifestPath = path.join(publicDir, "static-main-manifest.json");
@@ -554,11 +676,8 @@ async function main() {
     }
   } catch {}
 
-  const [selectedPage] = pageSources;
-  const selectedContent =
-    typeof selectedPage.inlineContent === "string"
-      ? selectedPage.inlineContent
-      : await readFile(selectedPage.absolutePath, "utf8");
+  const [selectedPage] = filteredPageSources;
+  const selectedContent = selectedPage.content;
   const rendered = await renderPageHtml(
     selectedContent,
     selectedPage.absolutePath || selectedPage.displayPath,
@@ -570,7 +689,7 @@ async function main() {
   const pagesTemplateContent = extractTemplateContent(pagesTemplateSource);
   const pagesDsdHost = buildPagesDsdHost(
     pagesTemplateContent,
-    pageSources,
+    filteredPageSources,
     rendered,
   );
   const shadowClawDsdTemplate = buildShadowClawDsdTemplate(
@@ -589,7 +708,14 @@ async function main() {
   );
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+const isMainModule =
+  process.argv[1] &&
+  path.resolve(process.argv[1]) ===
+    path.resolve(fileURLToPath(import.meta.url));
+
+if (isMainModule) {
+  main().catch((error) => {
+    console.error(error);
+    process.exit(1);
+  });
+}

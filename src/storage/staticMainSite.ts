@@ -11,6 +11,8 @@ import { writeGroupFile } from "./writeGroupFile.js";
 import { isPageSuppressed, pageRefKey } from "./suppressedPages.js";
 
 import { ensureMainGroupIndex } from "./ensureMainGroupIndex.js";
+import { deleteAllGroupFiles } from "./deleteAllGroupFiles.js";
+import { deleteGroupDirectory } from "./deleteGroupDirectory.js";
 
 import type { SavedPageRef, ShadowClawDatabase } from "../db/types.js";
 
@@ -21,6 +23,7 @@ export interface StaticPageSource {
 
 export interface StaticMainManifest {
   pages: StaticPageSource[];
+  preRenderedStaticPages?: Record<string, any>;
 }
 
 export const STATIC_MAIN_MANIFEST_PATH = "static-main-manifest.json";
@@ -79,28 +82,87 @@ export async function getStaticMainManifest(): Promise<StaticMainManifest> {
   };
 }
 
+async function processPurgeTokens(
+  db: ShadowClawDatabase,
+  node: Record<string, any>,
+  currentPath: string[] = [],
+) {
+  for (const [key, value] of Object.entries(node)) {
+    if (key === "purgePreRenderedStaticPages" && value === true) {
+      if (currentPath.length > 0) {
+        const groupId = currentPath[0];
+        const dirPath = currentPath.slice(1).join("/");
+        try {
+          if (dirPath) {
+            await deleteGroupDirectory(db, groupId, dirPath);
+          } else {
+            await deleteAllGroupFiles(db, groupId);
+          }
+        } catch (error) {
+          console.warn(
+            `Failed to purge pre-rendered static pages for ${groupId}/${dirPath}:`,
+            error,
+          );
+        }
+      }
+    } else if (typeof value === "object" && value !== null) {
+      await processPurgeTokens(db, value, [...currentPath, key]);
+    }
+  }
+}
+
 export async function seedStaticMainSite(
   db: ShadowClawDatabase,
   groupId: string = DEFAULT_GROUP_ID,
   existingPages: SavedPageRef[] = [],
-): Promise<SavedPageRef[]> {
+): Promise<SavedPageRef[] & { didPurge?: boolean }> {
   await ensureMainGroupIndex(db, groupId);
   const manifest = await getStaticMainManifest();
+
+  let didPurge = false;
+  if (manifest.preRenderedStaticPages) {
+    didPurge = true;
+    await processPurgeTokens(db, manifest.preRenderedStaticPages);
+  }
+
+  for (const page of manifest.pages) {
+    if (page.content?.includes('slug: "shadow-claw--purge-pages"')) {
+      if (!didPurge) {
+        didPurge = true;
+        await deleteAllGroupFiles(db, groupId);
+      }
+      break;
+    }
+  }
+
   const isMemorySuppressed =
     groupId === DEFAULT_GROUP_ID
       ? await isMainGroupMemorySuppressed(db)
       : false;
 
-  const resultPages: SavedPageRef[] = [...existingPages];
+  const resultPages: SavedPageRef[] & { didPurge?: boolean } = didPurge
+    ? []
+    : [...existingPages];
 
   for (const page of manifest.pages) {
+    if (page.content?.includes('slug: "shadow-claw--purge-pages"')) {
+      continue;
+    }
+
     const isMemoryPath = /^memory\.(md|markdown)$/iu.test(page.displayPath);
     if (isMemoryPath) {
       if (isMemorySuppressed) {
         continue;
       }
 
-      const ensured = await ensureMainGroupMemory(db, groupId);
+      const customContent =
+        page.content !== DEFAULT_MAIN_GROUP_MEMORY_CONTENT
+          ? page.content
+          : undefined;
+      const ensured =
+        customContent === undefined
+          ? await ensureMainGroupMemory(db, groupId)
+          : await ensureMainGroupMemory(db, groupId, customContent);
       if (ensured) {
         const refKey = pageRefKey(groupId, page.displayPath);
         if (
@@ -138,5 +200,11 @@ export async function seedStaticMainSite(
     }
   }
 
+  Object.defineProperty(resultPages, "didPurge", {
+    value: didPurge,
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  });
   return resultPages;
 }

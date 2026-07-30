@@ -10,6 +10,8 @@ ShadowClaw includes a Pages sidebar for organizing and viewing workspace content
 
 Links and images in pages resolve relative to the workspace. The page state persists across sessions, and the top item in the page list serves as the default page when selecting root Pages.
 
+Markdown pages can optionally surface YAML frontmatter as a visible metadata block before the rendered content. HTML previews use a configurable iframe host allowlist so embedded content stays constrained to trusted hosts.
+
 ---
 
 ## Architecture Overview
@@ -76,16 +78,24 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 #### Markdown (`.md`, `.markdown`)
 
 1. Rendered to HTML via `renderMarkdown()`.
-2. Link paths (`a[href]`) are rewritten to resolve against the active workspace route.
-3. Images (`img[src]`) with relative workspace paths are fetched from OPFS via `readGroupFileBytes()`, converted to `Blob` data URLs based on their mime type, and injected back into the HTML.
-4. Content is sanitized using `setSanitizedHtml` and a custom `DOMPurify` configuration (`previewSanitizeOptions`) that specifically allows `blob:` URIs.
+2. YAML frontmatter is parsed from the document head and can be rendered as a visible metadata/details block when the relevant Settings toggle is enabled.
+3. Link paths (`a[href]`) are rewritten to resolve against the active workspace route.
+4. Images (`img[src]`) with relative workspace paths are fetched from OPFS via `readGroupFileBytes()`, converted to `Blob` data URLs based on their mime type, and injected back into the HTML.
+5. Content is sanitized using `setSanitizedHtml` and a custom `DOMPurify` configuration (`previewSanitizeOptions`) that specifically allows `blob:` URIs.
 
 #### HTML (`.html`, `.xhtml`)
 
 1. The raw HTML content is wrapped in a full document structure and sanitized via `sanitizeSrcdocHtml`.
 2. It is rendered inside a sandboxed `iframe` using `setTrustedSrcdoc`.
 3. To prevent XSS, inline scripts and external scripts are blocked using a nonce-gated Content Security Policy (CSP).
-4. The only permitted script is `file-viewer-preview-bridge.js`. This bridge script intercepts navigation inside the iframe and sends a `shadow-claw-file-viewer-link` `postMessage` to the parent component, which processes the navigation safely via the browser History API.
+4. A DOMPurify iframe hook removes unsafe embeds and only preserves iframe `src` values that match the Settings-backed host allowlist.
+5. The only permitted script is `file-viewer-preview-bridge.js`. This bridge script intercepts navigation inside the iframe and sends a `shadow-claw-file-viewer-link` `postMessage` to the parent component, which processes the navigation safely via the browser History API.
+
+### Frontmatter and Embed Settings
+
+- `CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES`, `CONFIG_KEYS.MARKDOWN_FRONTMATTER_FILE_VIEWER`, `CONFIG_KEYS.MARKDOWN_FRONTMATTER_CHAT`, and `CONFIG_KEYS.MARKDOWN_FRONTMATTER_TASKS` control where frontmatter is rendered.
+- `CONFIG_KEYS.ALLOWED_IFRAME_HOST_PATTERNS` stores the iframe host allowlist used by markdown and HTML previews.
+- Allowlist entries can be plain domains, wildcard domains, or regex patterns; the default list covers common YouTube and ShadowClaw-hosted embeds.
 
 ---
 

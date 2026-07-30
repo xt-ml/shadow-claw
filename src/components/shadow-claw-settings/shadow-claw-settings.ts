@@ -11,6 +11,7 @@ import { getDb } from "../../db/db.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { showError, showInfo, showSuccess } from "../../ui/toast.js";
 import { formatDateForFilename } from "../../utils/utils.js";
+import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
 
 import type { ConfigEntryRecord } from "../../config/settings-backup.js";
 import type { Orchestrator } from "../../core/orchestrator/orchestrator.js";
@@ -213,6 +214,12 @@ export class ShadowClawSettings extends ShadowClawElement {
         if (target) {
           void this.onOverridePrerenderSkeletonToggle(target.checked);
         }
+      });
+
+    root
+      .querySelector('[data-action="save-dom-allowed-iframe-hosts"]')
+      ?.addEventListener("click", () => {
+        void this.saveDomAllowedIframeHosts();
       });
   }
 
@@ -505,37 +512,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
-  async onSidebarHidePagesToggle(hidden: boolean) {
-    if (!this.db) {
-      return;
-    }
-
-    try {
-      const { setConfig } = await import("../../db/setConfig.js");
-      await setConfig(
-        this.db,
-        CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN,
-        hidden ? "true" : "false",
-      );
-
-      this.dispatchEvent(
-        new CustomEvent("sidebar-pages-visibility-change", {
-          detail: { hidden },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-
-      showSuccess(
-        hidden ? "Pages hidden in sidebar" : "Pages shown in sidebar",
-        2500,
-      );
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError("Error saving sidebar Pages visibility: " + errorMsg, 6000);
-    }
-  }
-
   async onOverridePrerenderSkeletonToggle(enabled: boolean) {
     try {
       localStorage.setItem(
@@ -570,6 +546,37 @@ export class ShadowClawSettings extends ShadowClawElement {
         "Error saving pre-rendered content override setting: " + errorMsg,
         6000,
       );
+    }
+  }
+
+  async onSidebarHidePagesToggle(hidden: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../../db/setConfig.js");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN,
+        hidden ? "true" : "false",
+      );
+
+      this.dispatchEvent(
+        new CustomEvent("sidebar-pages-visibility-change", {
+          detail: { hidden },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+
+      showSuccess(
+        hidden ? "Pages hidden in sidebar" : "Pages shown in sidebar",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving sidebar Pages visibility: " + errorMsg, 6000);
     }
   }
 
@@ -646,11 +653,7 @@ export class ShadowClawSettings extends ShadowClawElement {
       storedLocalStorage = false;
     }
     const overridePrerenderSkeleton =
-      rawOverridePrerenderSkeleton === true ||
-      rawOverridePrerenderSkeleton === "true" ||
-      rawOverridePrerenderSkeleton === 1 ||
-      rawOverridePrerenderSkeleton === "1" ||
-      storedLocalStorage;
+      isTruthyConfigValue(rawOverridePrerenderSkeleton) || storedLocalStorage;
 
     if (overridePrerenderSkeleton) {
       try {
@@ -665,6 +668,71 @@ export class ShadowClawSettings extends ShadowClawElement {
     ) as HTMLInputElement | null;
     if (overridePrerenderSkeletonToggle) {
       overridePrerenderSkeletonToggle.checked = overridePrerenderSkeleton;
+    }
+
+    const domHostsTextarea = root.querySelector(
+      '[data-setting="dom-allowed-iframe-hosts"]',
+    ) as HTMLTextAreaElement | null;
+    if (domHostsTextarea) {
+      const storedDomHosts = await getConfig(
+        this.db,
+        CONFIG_KEYS.ALLOWED_IFRAME_HOST_PATTERNS,
+      );
+
+      if (
+        typeof storedDomHosts === "string" &&
+        storedDomHosts.trim().length > 0
+      ) {
+        domHostsTextarea.value = storedDomHosts;
+        const { setAllowedIframeHostPatterns } =
+          await import("../../security/iframe-sanitizer.js");
+        setAllowedIframeHostPatterns(storedDomHosts);
+      } else {
+        const { DEFAULT_ALLOWED_IFRAME_HOST_PATTERNS } =
+          await import("../../security/iframe-sanitizer.js");
+        domHostsTextarea.value =
+          DEFAULT_ALLOWED_IFRAME_HOST_PATTERNS.join("\n");
+      }
+    }
+
+    const markdownFrontmatterPagesToggle = root.querySelector(
+      '[data-setting="markdown-frontmatter-pages-toggle"]',
+    ) as HTMLInputElement | null;
+    if (markdownFrontmatterPagesToggle) {
+      markdownFrontmatterPagesToggle.checked = isTruthyConfigValue(
+        await getConfig(this.db, CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES),
+        true,
+      );
+    }
+
+    const markdownFrontmatterFileViewerToggle = root.querySelector(
+      '[data-setting="markdown-frontmatter-file-viewer-toggle"]',
+    ) as HTMLInputElement | null;
+    if (markdownFrontmatterFileViewerToggle) {
+      markdownFrontmatterFileViewerToggle.checked = isTruthyConfigValue(
+        await getConfig(this.db, CONFIG_KEYS.MARKDOWN_FRONTMATTER_FILE_VIEWER),
+        true,
+      );
+    }
+
+    const markdownFrontmatterChatToggle = root.querySelector(
+      '[data-setting="markdown-frontmatter-chat-toggle"]',
+    ) as HTMLInputElement | null;
+    if (markdownFrontmatterChatToggle) {
+      markdownFrontmatterChatToggle.checked = isTruthyConfigValue(
+        await getConfig(this.db, CONFIG_KEYS.MARKDOWN_FRONTMATTER_CHAT),
+        true,
+      );
+    }
+
+    const markdownFrontmatterTasksToggle = root.querySelector(
+      '[data-setting="markdown-frontmatter-tasks-toggle"]',
+    ) as HTMLInputElement | null;
+    if (markdownFrontmatterTasksToggle) {
+      markdownFrontmatterTasksToggle.checked = isTruthyConfigValue(
+        await getConfig(this.db, CONFIG_KEYS.MARKDOWN_FRONTMATTER_TASKS),
+        true,
+      );
     }
   }
 
@@ -833,6 +901,82 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
 
     showSuccess("Assistant name saved", 3000);
+  }
+
+  async saveDomAllowedIframeHosts() {
+    const root = this.shadowRoot;
+    if (!root || !this.db) {
+      return;
+    }
+
+    const textarea = root.querySelector(
+      '[data-setting="dom-allowed-iframe-hosts"]',
+    ) as HTMLTextAreaElement | null;
+    if (!textarea) {
+      return;
+    }
+
+    const rawText = textarea.value;
+    const lines = rawText
+      .split("\n")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+
+    const markdownFrontmatterPagesToggle = root.querySelector(
+      '[data-setting="markdown-frontmatter-pages-toggle"]',
+    ) as HTMLInputElement | null;
+    const markdownFrontmatterFileViewerToggle = root.querySelector(
+      '[data-setting="markdown-frontmatter-file-viewer-toggle"]',
+    ) as HTMLInputElement | null;
+    const markdownFrontmatterChatToggle = root.querySelector(
+      '[data-setting="markdown-frontmatter-chat-toggle"]',
+    ) as HTMLInputElement | null;
+    const markdownFrontmatterTasksToggle = root.querySelector(
+      '[data-setting="markdown-frontmatter-tasks-toggle"]',
+    ) as HTMLInputElement | null;
+
+    try {
+      const { setConfig } = await import("../../db/setConfig.js");
+      const valueToSave = lines.join("\n");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.ALLOWED_IFRAME_HOST_PATTERNS,
+        valueToSave,
+      );
+
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES,
+        String(markdownFrontmatterPagesToggle?.checked ?? true),
+      );
+
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.MARKDOWN_FRONTMATTER_FILE_VIEWER,
+        String(markdownFrontmatterFileViewerToggle?.checked ?? true),
+      );
+
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.MARKDOWN_FRONTMATTER_CHAT,
+        String(markdownFrontmatterChatToggle?.checked ?? true),
+      );
+
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.MARKDOWN_FRONTMATTER_TASKS,
+        String(markdownFrontmatterTasksToggle?.checked ?? true),
+      );
+
+      const { setAllowedIframeHostPatterns } =
+        await import("../../security/iframe-sanitizer.js");
+      setAllowedIframeHostPatterns(lines);
+
+      showSuccess("DOM iframe embed settings saved", 2500);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving DOM iframe embed settings: " + errorMsg, 6000);
+    }
   }
 }
 

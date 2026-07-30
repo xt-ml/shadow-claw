@@ -994,6 +994,7 @@ export function getOAuthProviderDefinition(
 export const CONFIG_KEYS = {
   ACTIVE_TOOL_PROFILE: "active_tool_profile",
   ACTIVITY_LOG_DISK_LOGGING_ENABLED: "activity_log_disk_logging_enabled",
+  ALLOWED_IFRAME_HOST_PATTERNS: "allowed_iframe_host_patterns",
   API_KEY: "api_key",
   ASSISTANT_NAME: "assistant_name",
   BEDROCK_AUTH_MODE: "bedrock_auth_mode",
@@ -1020,6 +1021,10 @@ export const CONFIG_KEYS = {
   IMESSAGE_CHAT_IDS: "imessage_chat_ids",
   IMESSAGE_SERVER_URL: "imessage_server_url",
   INTEGRATION_CONNECTIONS: "integration_connections",
+  MARKDOWN_FRONTMATTER_CHAT: "markdown_frontmatter_chat",
+  MARKDOWN_FRONTMATTER_FILE_VIEWER: "markdown_frontmatter_file_viewer",
+  MARKDOWN_FRONTMATTER_PAGES: "markdown_frontmatter_pages",
+  MARKDOWN_FRONTMATTER_TASKS: "markdown_frontmatter_tasks",
   LAST_ACTIVE_GROUP: "last_active_group",
   LAST_ACTIVE_PAGE: "last_active_page",
   LAST_SELECTED_PINNED_PAGE: "last_selected_pinned_page",

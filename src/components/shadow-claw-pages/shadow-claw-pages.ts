@@ -1,5 +1,6 @@
 import { renderMarkdown } from "../../content/markdown.js";
 
+import { CONFIG_KEYS } from "../../config/config.js";
 import {
   applyBasePath,
   getFileRouteDirPath,
@@ -9,6 +10,7 @@ import {
 
 import { effect } from "../../core/effect.js";
 import { getDb } from "../../db/db.js";
+import { getConfig } from "../../db/getConfig.js";
 
 import {
   sanitizeSrcdocHtml,
@@ -23,6 +25,7 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 
 import { showError, showSuccess, showWarning } from "../../ui/toast.js";
+import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
 
 import type { Config } from "dompurify";
 
@@ -34,6 +37,7 @@ import type {
 
 import ShadowClawElement from "../shadow-claw-element.js";
 
+import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 import shadowClawPagesStyles from "./shadow-claw-pages.css" with { type: "css" };
 import shadowClawPagesTemplate from "./shadow-claw-pages.html" with { type: "html" };
@@ -42,22 +46,46 @@ const previewSanitizeOptions: Config = {
   // Allow blob URLs for locally resolved OPFS preview assets.
   ALLOWED_URI_REGEXP:
     /^(?:(?:https?|mailto|ftp|tel|file|blob|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+  ADD_TAGS: ["iframe", "figure", "figcaption"],
+  ADD_ATTR: [
+    "allow",
+    "allowfullscreen",
+    "frameborder",
+    "scrolling",
+    "referrerpolicy",
+    "loading",
+  ],
 };
 
 const elementName = "shadow-claw-pages";
+
+async function resolveFrontmatterToggle(
+  db: ShadowClawDatabase | null,
+  key: string,
+): Promise<boolean> {
+  if (!db || typeof (db as any).transaction !== "function") {
+    return true;
+  }
+
+  try {
+    return isTruthyConfigValue(await getConfig(db, key), true);
+  } catch {
+    return true;
+  }
+}
 
 export class ShadowClawPages extends ShadowClawElement {
   static styles = shadowClawPagesStyles;
   static template = shadowClawPagesTemplate;
 
   db: ShadowClawDatabase | null = null;
+  draggedPageIndex: number | null = null;
 
   previewFrameWindow: Window | null = null;
 
   renderToken: number = 0;
 
   sidebarOpen: boolean = false;
-  draggedPageIndex: number | null = null;
 
   constructor() {
     super();
@@ -115,104 +143,16 @@ export class ShadowClawPages extends ShadowClawElement {
       });
     }
 
+    const removeAllBtn = root.querySelector(".pages__remove-all-btn");
+    if (removeAllBtn) {
+      removeAllBtn.addEventListener("click", () => {
+        void this.handleRemoveAll();
+      });
+    }
+
     this.toggleSidebar(this.sidebarOpen);
 
     this.setupEffects();
-  }
-
-  async requestConfirmation(options: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-  }): Promise<boolean> {
-    const appShell = document.querySelector("shadow-claw") as any;
-    if (appShell && typeof appShell.requestDialog === "function") {
-      return await appShell.requestDialog({ mode: "confirm", ...options });
-    }
-
-    showWarning(options.message, 4500);
-
-    return false;
-  }
-
-  toggleSidebar(force?: boolean) {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const dropdown = root.querySelector("[data-pages-dropdown]");
-    const isDropdownOpen =
-      dropdown instanceof HTMLDetailsElement && dropdown.open;
-
-    let nextOpen: boolean;
-    if (force !== undefined) {
-      nextOpen = force;
-    } else {
-      nextOpen = !(isDropdownOpen || this.sidebarOpen);
-    }
-
-    this.sidebarOpen = nextOpen;
-
-    const sidebar = root.querySelector(".pages__sidebar");
-    const content = root.querySelector(".pages__content");
-
-    if (sidebar) {
-      sidebar.classList.toggle("collapsed", !this.sidebarOpen);
-    }
-    if (content) {
-      content.classList.toggle(
-        "pages__content--sidebar-collapsed",
-        !this.sidebarOpen,
-      );
-    }
-
-    if (dropdown instanceof HTMLDetailsElement) {
-      if (nextOpen) {
-        dropdown.setAttribute("open", "");
-      } else {
-        dropdown.removeAttribute("open");
-      }
-    }
-  }
-
-  async handleReorder(fromIndex: number, toIndex: number) {
-    if (!this.db || fromIndex === toIndex) {
-      return;
-    }
-
-    const pages = [...orchestratorStore.pages];
-    if (
-      fromIndex < 0 ||
-      fromIndex >= pages.length ||
-      toIndex < 0 ||
-      toIndex >= pages.length
-    ) {
-      return;
-    }
-
-    const [moved] = pages.splice(fromIndex, 1);
-    pages.splice(toIndex, 0, moved);
-
-    await orchestratorStore.reorderPages(this.db, pages);
-
-    if (toIndex === 0 && moved) {
-      this.selectedPage = moved;
-      void this.renderSelectedPage();
-
-      document.dispatchEvent(
-        new CustomEvent("shadow-claw-navigate", {
-          detail: {
-            page: "pages",
-            groupId: moved.groupId,
-            path: moved.path,
-          },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    }
   }
 
   disconnectedCallback() {
@@ -333,6 +273,11 @@ export class ShadowClawPages extends ShadowClawElement {
         pages.length === 1 ? "1 saved page" : `${pages.length} saved pages`;
     }
 
+    const clearBtn = root.querySelector(".pages__remove-all-btn");
+    if (clearBtn) {
+      clearBtn.toggleAttribute("disabled", pages.length === 0);
+    }
+
     const dropdownSelected = root.querySelector(
       "[data-pages-dropdown-selected]",
     );
@@ -376,10 +321,48 @@ export class ShadowClawPages extends ShadowClawElement {
       }
 
       for (const [groupId, groupPages] of pagesByGroup) {
-        const groupLabel = document.createElement("div");
-        groupLabel.className = "pages__group-label";
-        groupLabel.textContent = groupNameById.get(groupId) || groupId;
-        list.appendChild(groupLabel);
+        const details = document.createElement("details");
+        details.className = "pages__group-details";
+
+        const stateKey = `shadow-claw-pages-group-collapsed-${groupId}`;
+        let isCollapsed = false;
+        try {
+          isCollapsed = localStorage.getItem(stateKey) === "true";
+        } catch {
+          // Ignore
+        }
+        if (!isCollapsed) {
+          details.open = true;
+        }
+
+        details.addEventListener("toggle", () => {
+          try {
+            if (details.open) {
+              localStorage.removeItem(stateKey);
+            } else {
+              localStorage.setItem(stateKey, "true");
+            }
+          } catch {
+            // Ignore
+          }
+        });
+
+        const summary = document.createElement("summary");
+        summary.className = "pages__group-label";
+
+        const labelText = document.createElement("span");
+        labelText.textContent = groupNameById.get(groupId) || groupId;
+
+        const icon = document.createElement("span");
+        icon.className = "pages__group-icon";
+        icon.textContent = "▼";
+
+        summary.appendChild(labelText);
+        summary.appendChild(icon);
+        details.appendChild(summary);
+
+        const groupPagesContainer = document.createElement("div");
+        groupPagesContainer.className = "pages__group-pages";
 
         groupPages.forEach((page) => {
           const path = page.path;
@@ -552,8 +535,11 @@ export class ShadowClawPages extends ShadowClawElement {
           row.appendChild(selectBtn);
           row.appendChild(editBtn);
           row.appendChild(removeBtn);
-          list.appendChild(row);
+          groupPagesContainer.appendChild(row);
         });
+
+        details.appendChild(groupPagesContainer);
+        list.appendChild(details);
       }
     });
   }
@@ -810,6 +796,47 @@ export class ShadowClawPages extends ShadowClawElement {
     );
   }
 
+  toggleSidebar(force?: boolean) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const dropdown = root.querySelector("[data-pages-dropdown]");
+    const isDropdownOpen =
+      dropdown instanceof HTMLDetailsElement && dropdown.open;
+
+    let nextOpen: boolean;
+    if (force !== undefined) {
+      nextOpen = force;
+    } else {
+      nextOpen = !(isDropdownOpen || this.sidebarOpen);
+    }
+
+    this.sidebarOpen = nextOpen;
+
+    const sidebar = root.querySelector(".pages__sidebar");
+    const content = root.querySelector(".pages__content");
+
+    if (sidebar) {
+      sidebar.classList.toggle("collapsed", !this.sidebarOpen);
+    }
+    if (content) {
+      content.classList.toggle(
+        "pages__content--sidebar-collapsed",
+        !this.sidebarOpen,
+      );
+    }
+
+    if (dropdown instanceof HTMLDetailsElement) {
+      if (nextOpen) {
+        dropdown.setAttribute("open", "");
+      } else {
+        dropdown.removeAttribute("open");
+      }
+    }
+  }
+
   async buildHtmlPageSrcdoc(
     content: string,
     filePath: string,
@@ -845,6 +872,82 @@ export class ShadowClawPages extends ShadowClawElement {
       safeContent,
       "</body></html>",
     ].join("");
+  }
+
+  async handleRemoveAll() {
+    if (!this.db) {
+      return;
+    }
+
+    const confirmed = await this.requestConfirmation({
+      title: "Remove All Pages",
+      message: "Remove ALL saved pages from Pages? This cannot be undone!",
+      confirmLabel: "Remove All",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const btn = this.shadowRoot?.querySelector(".pages__remove-all-btn");
+      btn?.toggleAttribute("disabled", true);
+      if (btn) {
+        btn.textContent = "⏳";
+      }
+
+      await orchestratorStore.removeAllPages(this.db);
+      showSuccess("Removed all pages from Pages", 2400);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      showError(`Failed to remove all pages: ${message}`, 4500);
+      console.error("Remove all pages error:", err);
+    } finally {
+      const btn = this.shadowRoot?.querySelector(".pages__remove-all-btn");
+      btn?.toggleAttribute("disabled", false);
+      if (btn) {
+        btn.textContent = "🗑️ Remove All";
+      }
+    }
+  }
+
+  async handleReorder(fromIndex: number, toIndex: number) {
+    if (!this.db || fromIndex === toIndex) {
+      return;
+    }
+
+    const pages = [...orchestratorStore.pages];
+    if (
+      fromIndex < 0 ||
+      fromIndex >= pages.length ||
+      toIndex < 0 ||
+      toIndex >= pages.length
+    ) {
+      return;
+    }
+
+    const [moved] = pages.splice(fromIndex, 1);
+    pages.splice(toIndex, 0, moved);
+
+    await orchestratorStore.reorderPages(this.db, pages);
+
+    if (toIndex === 0 && moved) {
+      this.selectedPage = moved;
+      void this.renderSelectedPage();
+
+      document.dispatchEvent(
+        new CustomEvent("shadow-claw-navigate", {
+          detail: {
+            page: "pages",
+            groupId: moved.groupId,
+            path: moved.path,
+          },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+    }
   }
 
   async readImageAsDataUrl(
@@ -928,7 +1031,13 @@ export class ShadowClawPages extends ShadowClawElement {
       rendered.hidden = false;
 
       if (this.isMarkdownPath(selectedPage.path)) {
-        const html = await renderMarkdown(content);
+        const renderFrontmatter = await resolveFrontmatterToggle(
+          this.db,
+          CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES,
+        );
+        const html = await renderMarkdown(content, {
+          renderFrontmatter,
+        });
         if (token !== this.renderToken) {
           return;
         }
@@ -960,6 +1069,22 @@ export class ShadowClawPages extends ShadowClawElement {
       const message = error instanceof Error ? error.message : String(error);
       showError(`Failed to load page ${selectedPage.path}: ${message}`, 5000);
     }
+  }
+
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
+    }
+
+    showWarning(options.message, 4500);
+
+    return false;
   }
 
   async resolveMarkdownImages(

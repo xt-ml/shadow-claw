@@ -1,7 +1,9 @@
 import { renderMarkdown } from "../../content/markdown.js";
+import { CONFIG_KEYS } from "../../config/config.js";
 import { effect } from "../../core/effect.js";
 
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
+import { getConfig } from "../../db/getConfig.js";
 import { Task } from "../../db/types.js";
 
 import { setSanitizedHtml } from "../../security/trusted-types.js";
@@ -9,6 +11,7 @@ import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 
 import { showError, showInfo, showSuccess } from "../../ui/toast.js";
+import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
 import { escapeHtml } from "../../utils/utils.js";
 
 import "../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
@@ -22,12 +25,28 @@ import shadowClawTasksTemplate from "./shadow-claw-tasks.html" with { type: "htm
 
 const elementName = "shadow-claw-tasks";
 
+async function resolveFrontmatterToggle(
+  db: ShadowClawDatabase | null,
+  key: string,
+): Promise<boolean> {
+  if (!db || typeof (db as any).transaction !== "function") {
+    return true;
+  }
+
+  try {
+    return isTruthyConfigValue(await getConfig(db, key), true);
+  } catch {
+    return true;
+  }
+}
+
 export class ShadowClawTasks extends ShadowClawElement {
   static styles = shadowClawTasksStyles;
   static template = shadowClawTasksTemplate;
 
   editingTask: any | null = null;
   editingTools: any[] = [];
+  renderFrontmatter = true;
   tasks: any[] = [];
 
   constructor() {
@@ -41,6 +60,10 @@ export class ShadowClawTasks extends ShadowClawElement {
     }
 
     const db = await getDb();
+    this.renderFrontmatter = await resolveFrontmatterToggle(
+      db,
+      CONFIG_KEYS.MARKDOWN_FRONTMATTER_TASKS,
+    );
 
     root.addEventListener("click", (event: Event) => {
       if (event instanceof MouseEvent) {
@@ -867,7 +890,10 @@ export class ShadowClawTasks extends ShadowClawElement {
     const lines = prompt.split("\n");
     const isLong = prompt.length > 120 || lines.length > 1;
 
-    const rendered = await renderMarkdown(prompt, { breaks: true });
+    const rendered = await renderMarkdown(prompt, {
+      breaks: true,
+      renderFrontmatter: this.renderFrontmatter,
+    });
 
     if (allowCollapse && isLong) {
       const summaryText = prompt.trim();

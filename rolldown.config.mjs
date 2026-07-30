@@ -131,6 +131,28 @@ function injectGlobalShimPlugin() {
   };
 }
 
+function patchGrayMatterEvalPlugin() {
+  return {
+    name: "patch-gray-matter-direct-eval",
+    transform(code, id) {
+      if (!id.includes("node_modules/gray-matter/lib/engines.js")) {
+        return null;
+      }
+
+      const replaced = code.replace(
+        /return\s+eval\(str\)\s*\|\|\s*\{\s*\};/u,
+        "return (0, eval)(str) || {};",
+      );
+
+      if (replaced === code) {
+        return null;
+      }
+
+      return { code: replaced, map: null };
+    },
+  };
+}
+
 const execAsync = promisify(exec);
 let swBuildTimeout;
 function swWatchPlugin() {
@@ -192,6 +214,7 @@ const commonResolve = (platform = "browser", extraPlugins = []) => {
     commonjs: true,
     plugins: [
       ...(platform === "browser" ? [injectGlobalShimPlugin()] : []),
+      patchGrayMatterEvalPlugin(),
       rolldownImportAttributes(),
       swWatchPlugin(),
       ...extraPlugins,

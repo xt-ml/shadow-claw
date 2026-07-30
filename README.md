@@ -45,7 +45,7 @@ A fully-functional agent runtime that runs entirely in the browser—no AI proce
 - **Web Share Target** — Receive files/URLs directly from OS share sheet
 - **Scheduled tasks** — Cron expressions with server-side persistence and Web Push
 - **Git integration** — Clone, branch, merge (with conflict reports), push/pull
-- **File viewer** — Syntax highlighting (locally bundled CSS, no CDN), PDF preview, media playback, Web Share, native/fallback fullscreen, and relative image workspace resolving; iframe sandbox hardened (no `allow-same-origin`)
+- **File viewer** — Syntax highlighting (locally bundled CSS, no CDN), PDF preview, media playback, Web Share, native/fallback fullscreen, relative image workspace resolving, and configurable iframe embed sanitization; iframe sandbox hardened (no `allow-same-origin`)
 - **Files browser** — Clipboard-driven Cut/Copy/Paste actions, hidden Paste button when empty, folder self-paste protection, inter-group transfers, and conflict resolution (rename/overwrite)
 
 ## Architecture
@@ -198,11 +198,12 @@ Each channel creates isolated conversations with their own message history and w
 
 ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace content.
 
-- **Render markdown & HTML** — Save any markdown or HTML file as a page for structured preview
+- **Render markdown & HTML** — Save any markdown or HTML file as a page for structured preview, including optional visible YAML frontmatter metadata
 - **Workspace-relative links** — Links and images in pages resolve relative to the workspace
 - **Page sidebar** — Persistent list of saved pages with drag-and-drop reordering and responsive mobile sidebar collapse
 - **Static Main Site Seeding** — Automatically seeds default main pages from manifest, respecting page suppression rules
 - **Page Suppression** — Deleting pages suppresses auto-reseeding (`SUPPRESSED_PAGES_LIST`) until re-added
+- **Safe iframe embeds** — HTML previews use a configurable iframe host allowlist in Settings, with safe defaults for common embedded content hosts
 - **Pinned Default Page & URL Sync** — Top page serves as default pinned home page (star indicator); page selection syncs browser URL state (`history.pushState`) for direct bookmarking and refreshes
 - **Pre-rendered Content Override** — Optional setting (`OVERRIDE_PRERENDER_SKELETON`) suppresses Declarative Shadow DOM (DSD) pre-rendered content during boot to eliminate hydration flash
 
@@ -230,6 +231,7 @@ ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and 
 - **30-second key expiry** for plaintext operations
 - **No plaintext secrets on disk** — encrypted before storage
 - **Trusted Types enforcement** — idempotent `"default"` policy (`src/security/default-trusted-types-policy.ts`) registered at boot via `theme-init.ts`; `getPolicy()` fallback prevents duplicate-creation errors on module reload
+- **Iframe embed sanitization** — DOMPurify-based iframe allowlisting protects markdown and HTML previews, with Settings-backed host patterns and a safe default host list
 - **SSRF proxy hardening** — `/proxy` blocks non-HTTP/S schemes and private/loopback IP ranges by default; bypassed via `--allow-private-proxy` flag or the authenticated service-worker JSON format
 - **Prompt injection defense** — external tool outputs (`fetch_url`, `web_search`, `remote_mcp_call_tool`) are structurally wrapped in `UNTRUSTED` delimiters; system prompt includes explicit anti-injection instructions when untrusted-content tools are active
 

@@ -11,6 +11,7 @@ export function buildCspReportOnlyValue(options: CspOptions = {}): string {
     "default-src 'self'",
     "base-uri 'self'",
     "frame-ancestors 'none'",
+    "frame-src 'self' https://www.youtube.com",
     "object-src 'none'",
     "img-src 'self' data: blob: https: http:",
     "media-src 'self' data: blob: https: http:",

@@ -52,6 +52,7 @@ export async function setMainGroupMemorySuppressed(
 export async function ensureMainGroupMemory(
   db: ShadowClawDatabase,
   groupId: string = DEFAULT_GROUP_ID,
+  customContent?: string,
 ): Promise<boolean> {
   try {
     const exists = await groupFileExists(
@@ -70,19 +71,7 @@ export async function ensureMainGroupMemory(
       return false;
     }
 
-    let content = DEFAULT_MAIN_GROUP_MEMORY_CONTENT;
-    if (typeof fetch === "function") {
-      try {
-        const url = resolveStaticMainGroupMemoryUrl();
-        const res = await fetch(url);
-        if (res.ok) {
-          const text = await res.text();
-          if (text && text.trim().length > 0) {
-            content = text;
-          }
-        }
-      } catch {}
-    }
+    const content = customContent ?? DEFAULT_MAIN_GROUP_MEMORY_CONTENT;
 
     await writeGroupFile(db, groupId, DEFAULT_MAIN_GROUP_MEMORY_PATH, content);
 

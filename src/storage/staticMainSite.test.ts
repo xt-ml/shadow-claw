@@ -91,6 +91,33 @@ describe("staticMainSite", () => {
     expect(manifest.pages[1].displayPath).toBe("guide.md");
   });
 
+  it("parses embedded static manifest containing HTML script tags and code blocks safely", async () => {
+    const script = document.createElement("script");
+    script.id = "shadow-claw-static-manifest";
+    script.type = "application/json";
+    const rawContent = JSON.stringify({
+      pages: [
+        {
+          displayPath: "posts/script-post.md",
+          content:
+            "Here is code:\n<script type=\"module\">import 'https://unpkg.com/x-postpress-code@1.0/dist/x-postpress-code.js';</script>\n",
+        },
+      ],
+    });
+    script.textContent = rawContent
+      .replace(/</g, "\\u003c")
+      .replace(/>/g, "\\u003e")
+      .replace(/\//g, "\\u002f");
+    document.head.appendChild(script);
+
+    const manifest = await getStaticMainManifest();
+    expect(manifest.pages).toHaveLength(1);
+    expect(manifest.pages[0].displayPath).toBe("posts/script-post.md");
+    expect(manifest.pages[0].content).toContain(
+      "<script type=\"module\">import 'https://unpkg.com/x-postpress-code@1.0/dist/x-postpress-code.js';",
+    );
+  });
+
   it("fetches static manifest from URL if DOM script tag is missing", async () => {
     mockFetch.mockResolvedValue({
       ok: true,

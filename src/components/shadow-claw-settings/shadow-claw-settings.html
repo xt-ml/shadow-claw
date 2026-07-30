@@ -293,6 +293,95 @@
               </div>
             </div>
 
+            <div class="settings-section">
+              <h3>🖼️ DOM</h3>
+              <div class="settings-section">
+                <h4>📝 Markdown Frontmatter</h4>
+                <div class="form-group">
+                  <div class="form-toggle">
+                    <input
+                      data-setting="markdown-frontmatter-pages-toggle"
+                      id="markdown-frontmatter-pages-toggle"
+                      type="checkbox"
+                    />
+                    <label
+                      class="form-label"
+                      for="markdown-frontmatter-pages-toggle"
+                    >
+                      Render frontmatter in Pages previews
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <div class="form-toggle">
+                    <input
+                      data-setting="markdown-frontmatter-file-viewer-toggle"
+                      id="markdown-frontmatter-file-viewer-toggle"
+                      type="checkbox"
+                    />
+                    <label
+                      class="form-label"
+                      for="markdown-frontmatter-file-viewer-toggle"
+                    >
+                      Render frontmatter in File Viewer previews
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <div class="form-toggle">
+                    <input
+                      data-setting="markdown-frontmatter-chat-toggle"
+                      id="markdown-frontmatter-chat-toggle"
+                      type="checkbox"
+                    />
+                    <label
+                      class="form-label"
+                      for="markdown-frontmatter-chat-toggle"
+                    >
+                      Render frontmatter in Chat messages
+                    </label>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <div class="form-toggle">
+                    <input
+                      data-setting="markdown-frontmatter-tasks-toggle"
+                      id="markdown-frontmatter-tasks-toggle"
+                      type="checkbox"
+                    />
+                    <label
+                      class="form-label"
+                      for="markdown-frontmatter-tasks-toggle"
+                    >
+                      Render frontmatter in Tasks previews
+                    </label>
+                  </div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="dom-allowed-iframe-hosts">
+                  Allowed Iframe Embed Hosts
+                </label>
+                <textarea
+                  class="form-textarea"
+                  id="dom-allowed-iframe-hosts"
+                  data-setting="dom-allowed-iframe-hosts"
+                  rows="5"
+                  placeholder="youtube.com&#10;youtube-nocookie.com&#10;youtu.be&#10;xt-ml.github.io&#10;kherrick.github.io"
+                ></textarea>
+                <div class="form-helper">
+                  Specify hostnames or regex patterns (one per line) allowed for
+                  iframe embeds. Default: YouTube and github.io pages.
+                </div>
+              </div>
+              <button
+                class="save-btn"
+                data-action="save-dom-allowed-iframe-hosts"
+              >
+                💾 Save DOM Settings
+              </button>
+            </div>
+
             <shadow-claw-storage></shadow-claw-storage>
           </div>
         </details>

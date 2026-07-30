@@ -19,20 +19,63 @@ function renderCodeBlock(text, lang) {
   return `<pre><code${languageClass}>${escapeHtml(text)}</code></pre>`;
 }
 
+function renderHeadingBlock(text, depth) {
+  if (typeof activeRenderer.heading === "function") {
+    const token = {
+      text,
+      depth,
+      tokens: [{ type: "text", raw: text, text }],
+    };
+
+    return activeRenderer.heading.call(
+      {
+        parser: {
+          parseInline: (tokens) =>
+            Array.isArray(tokens)
+              ? tokens.map((tokenItem) => tokenItem.text || "").join("")
+              : String(text),
+        },
+        options: { headingCounts: new Map() },
+      },
+      token,
+      depth,
+    );
+  }
+
+  const slug = String(text)
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
+  return `<h${depth} id="${slug}">${escapeHtml(text)}</h${depth}>`;
+}
+
 exports.marked = {
   parse: (val, options) => {
     if (typeof val !== "string") {
       return val;
     }
 
+    let input = val;
+    if (/^---\n[\s\S]*?\n---\n?/.test(input)) {
+      input = input.replace(/^---\n[\s\S]*?\n---\n?/, "");
+    }
+
     const codeBlocks = [];
-    let res = val.replace(/```([^\n`]*)\n([\s\S]*?)\n```/g, (_, lang, text) => {
+    let res = input.replace(/```([^\n`]*)\n([\s\S]*?)\n```/g, (_, lang, text) => {
       const index = codeBlocks.length;
       const normalizedLang = typeof lang === "string" ? lang.trim() : "";
 
       codeBlocks.push(renderCodeBlock(text, normalizedLang || undefined));
 
       return `@@MOCK_CODE_BLOCK_${index}@@`;
+    });
+
+    res = res.replace(/^(#{1,6})\s+(.+)$/gm, (_, hashes, text) => {
+      return renderHeadingBlock(text, hashes.length);
     });
 
     res = res.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");

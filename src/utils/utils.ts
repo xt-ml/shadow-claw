@@ -1,6 +1,10 @@
 /// <reference lib="dom" />
-import DOMPurify, { Config } from "dompurify";
+import type { Config } from "dompurify";
 import { parseRouteFromUrl } from "../core/app-routes.js";
+import {
+  ensureIframeSanitizerHook,
+  getDOMPurify,
+} from "../security/iframe-sanitizer.js";
 
 export type HashInput = File | Blob | ArrayBuffer | ArrayBufferView;
 
@@ -54,7 +58,18 @@ export function sanitizeHtml(
   dirty: string | Node = "",
   options: Config = {},
 ): string {
-  return DOMPurify.sanitize(dirty, {
+  ensureIframeSanitizerHook();
+
+  return getDOMPurify().sanitize(dirty, {
+    ADD_TAGS: ["iframe", "figure", "figcaption"],
+    ADD_ATTR: [
+      "allow",
+      "allowfullscreen",
+      "frameborder",
+      "scrolling",
+      "referrerpolicy",
+      "loading",
+    ],
     CUSTOM_ELEMENT_HANDLING: {
       // any hyphenated custom element
       tagNameCheck: /^.*-.*$/,

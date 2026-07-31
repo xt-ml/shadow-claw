@@ -854,6 +854,66 @@ describe("ShadowClawConversations", () => {
         "br:main",
         "provider-no-models",
         "custom-model-id",
+        undefined,
+      );
+
+      document.body.removeChild(el);
+    });
+
+    it("saves agent max tokens override from details dialog", async () => {
+      mockOrchStore.groups = [
+        {
+          groupId: "br:main",
+          name: "Main",
+          createdAt: 0,
+          pinnedProvider: "openai",
+          pinnedModel: "gpt-4o",
+          pinnedMaxTokens: 4096,
+        },
+      ];
+      mockOrchStore.activeGroupId = "br:main";
+      mockOrchStore.orchestrator.getAvailableProviders.mockReturnValue([
+        { id: "openai", name: "OpenAI", models: ["gpt-4o"] },
+      ]);
+
+      const el = new ShadowClawConversations() as any;
+      document.body.appendChild(el);
+      await el.render();
+      el.db = {} as any;
+
+      const dialog = el.shadowRoot?.querySelector(
+        ".conversations__details-dialog",
+      ) as HTMLDialogElement | null;
+      if (dialog) {
+        (dialog as any).showModal = jest.fn();
+        (dialog as any).close = jest.fn();
+      }
+
+      await el.handleDetails("br:main", "Main");
+
+      const maxTokensInput = el.shadowRoot?.querySelector(
+        "#conversations-agent-max-tokens",
+      ) as HTMLInputElement | null;
+
+      expect(maxTokensInput?.value).toBe("4096");
+
+      if (!maxTokensInput) {
+        throw new Error("agent max tokens input missing");
+      }
+
+      maxTokensInput.value = "32000";
+      maxTokensInput.dispatchEvent(new Event("input"));
+
+      await el._submitDetailsDialog();
+
+      expect(
+        mockOrchStore.updateConversationPinnedProvider,
+      ).toHaveBeenCalledWith(
+        expect.anything(),
+        "br:main",
+        "openai",
+        "gpt-4o",
+        32000,
       );
 
       document.body.removeChild(el);

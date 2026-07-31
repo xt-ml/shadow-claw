@@ -311,6 +311,31 @@ describe("executeSpawnSubagentTool", () => {
     expect(payload.maxTokens).toBe(64000);
   });
 
+  it("uses the selected subagent model limit when auto max tokens is enabled", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    await executeSpawnSubagentTool(
+      { prompt: "task", model: "anthropic.claude-opus-4-8" },
+      "parent-group",
+      makeContext({ maxTokens: 64000, subagentMaxTokens: undefined }),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.maxTokens).toBe(128000);
+  });
+
   it("overrides provider when specified in input", async () => {
     mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;

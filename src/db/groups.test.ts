@@ -20,6 +20,7 @@ const {
   listGroups,
   reorderGroups,
   cloneGroup,
+  updateGroupPinnedProvider,
   updateGroupProviderRuntimeOverrides,
   updateGroupToolTags,
   updateGroupSubagentSettings,
@@ -456,6 +457,44 @@ describe("groups", () => {
       expect(saved[0].subagentPinnedProvider).toBeUndefined();
       expect(saved[0].subagentPinnedModel).toBeUndefined();
       expect(saved[0].subagentMaxTokens).toBeUndefined();
+    });
+  });
+
+  describe("updateGroupPinnedProvider", () => {
+    it("updates pinned provider/model and optional max tokens for an existing group", async () => {
+      const existing = [
+        { groupId: "br:main", name: "Main", createdAt: 1000 },
+        { groupId: "br:abc", name: "Alt", createdAt: 2000 },
+      ];
+
+      (mockGetConfig as any).mockResolvedValue(JSON.stringify(existing));
+
+      await updateGroupPinnedProvider(db, "br:abc", "openai", "gpt-4o", 32000);
+
+      const saved = JSON.parse((mockSetConfig as any).mock.calls[0][2]);
+      expect(saved[1].pinnedProvider).toBe("openai");
+      expect(saved[1].pinnedModel).toBe("gpt-4o");
+      expect(saved[1].pinnedMaxTokens).toBe(32000);
+    });
+
+    it("clears pinned max tokens when omitted", async () => {
+      const existing = [
+        {
+          groupId: "br:main",
+          name: "Main",
+          createdAt: 1000,
+          pinnedProvider: "openai",
+          pinnedModel: "gpt-4o",
+          pinnedMaxTokens: 2048,
+        },
+      ];
+
+      (mockGetConfig as any).mockResolvedValue(JSON.stringify(existing));
+
+      await updateGroupPinnedProvider(db, "br:main", "openai", "gpt-4o");
+
+      const saved = JSON.parse((mockSetConfig as any).mock.calls[0][2]);
+      expect(saved[0].pinnedMaxTokens).toBeUndefined();
     });
   });
 

@@ -20,6 +20,8 @@ const mockGetProvider = jest.fn() as any;
 const mockInvokeWithTransformersJs = jest.fn() as any;
 const mockUlid = jest.fn() as any;
 const mockWorkerPost = jest.fn() as any;
+const mockRegisterSubagentCollector = jest.fn() as any;
+const mockUnregisterSubagentCollector = jest.fn() as any;
 const mockBuildSystemPrompt = jest.fn() as any;
 
 const mockGetChannelTypeForGroup = jest.fn() as any;
@@ -55,16 +57,40 @@ jest.unstable_mockModule("./handleWorkerMessage.js", () => ({
 
 jest.unstable_mockModule("../../../config/config.js", () => ({
   CONFIG_KEYS: { STORAGE_HANDLE: "STORAGE_HANDLE" },
+  OPFS_ROOT: "shadowclaw",
   DEFAULT_GROUP_ID: "br:main",
   DEFAULT_MAX_ITERATIONS: 50,
+  DEFAULT_DEV_HOST: "localhost",
+  DEFAULT_DEV_PORT: 8888,
+  DEFAULT_VM_NETWORK_RELAY_URL: "",
+  DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
+  DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
+  FETCH_MAX_RESPONSE: 50 * 1024 * 1024,
+  ASSISTANT_NAME: "Assistant",
   GENERAL_ACCOUNT_PROVIDER_CAPABILITIES: [],
   getGeneralAccountProviderCapabilities: jest.fn(),
   PROVIDERS: {},
   getProvider: mockGetProvider,
+  getProviderApiKeyConfigKey: jest.fn(),
   getAvailableProviders: jest.fn().mockReturnValue([]),
-  getModelMaxTokens: jest.fn().mockReturnValue(128000),
+  getModelMaxTokens: jest.fn((modelId: string) => {
+    if (String(modelId).includes("haiku-4")) {
+      return 64000;
+    }
+
+    if (String(modelId).includes("sonnet-4")) {
+      return 64000;
+    }
+
+    if (String(modelId).includes("opus-4-8")) {
+      return 128000;
+    }
+
+    return 128000;
+  }),
   buildTriggerPattern: jest.fn().mockReturnValue(new RegExp("")),
   getProviderTokenAuthScheme: jest.fn(),
+  LLAMAFILE_PROXY_URL: "/proxy/llamafile",
   BASH_DEFAULT_TIMEOUT_SEC: 60,
   BASH_MAX_TIMEOUT_SEC: 300,
   OAUTH_PROVIDER_DEFINITIONS: {},
@@ -131,7 +157,11 @@ jest.unstable_mockModule(
 );
 
 jest.unstable_mockModule("../../../subsystems/providers/providers.js", () => ({
+  buildHeaders: jest.fn().mockReturnValue({}),
+  formatRequest: jest.fn().mockReturnValue({}),
   getContextLimit: mockGetContextLimit,
+  normalizeMeshLlmResult: jest.fn().mockImplementation((result) => result),
+  parseResponse: jest.fn().mockImplementation((result) => result),
 }));
 
 jest.unstable_mockModule(
@@ -147,6 +177,8 @@ jest.unstable_mockModule("../../../utils/ulid.js", () => ({
 
 jest.unstable_mockModule("../../../worker/utils/post.js", () => ({
   post: mockWorkerPost,
+  registerSubagentCollector: mockRegisterSubagentCollector,
+  unregisterSubagentCollector: mockUnregisterSubagentCollector,
 }));
 
 jest.unstable_mockModule("../../../worker/utils/system-prompt.js", () => ({
@@ -449,6 +481,55 @@ describe("invokeAgent", () => {
         model: "pinned-model",
       }),
     });
+  });
+
+  it("should clamp max tokens to the conversation model limit", async () => {
+    mockOrchestrator.maxTokens = 128000;
+    mockListGroups.mockResolvedValue([
+      {
+        groupId: "group1",
+        pinnedProvider: "test-provider",
+        pinnedModel: "anthropic.claude-haiku-4-5",
+      },
+    ]);
+    mockGetContextLimit.mockReturnValue(64000);
+
+    await invokeAgent(mockOrchestrator, mockDb, "group1", "hello");
+
+    expect(mockOrchestrator.agentWorker.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "invoke",
+        payload: expect.objectContaining({
+          model: "anthropic.claude-haiku-4-5",
+          maxTokens: 64000,
+        }),
+      }),
+    );
+  });
+
+  it("should use the conversation max tokens override before model clamp", async () => {
+    mockOrchestrator.maxTokens = 64000;
+    mockListGroups.mockResolvedValue([
+      {
+        groupId: "group1",
+        pinnedProvider: "test-provider",
+        pinnedModel: "anthropic.claude-opus-4-8",
+        pinnedMaxTokens: 100000,
+      },
+    ]);
+    mockGetContextLimit.mockReturnValue(128000);
+
+    await invokeAgent(mockOrchestrator, mockDb, "group1", "hello");
+
+    expect(mockOrchestrator.agentWorker.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "invoke",
+        payload: expect.objectContaining({
+          model: "anthropic.claude-opus-4-8",
+          maxTokens: 100000,
+        }),
+      }),
+    );
   });
 
   it("should start transformers local polling", async () => {

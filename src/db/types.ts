@@ -17,6 +17,7 @@ export interface GroupMeta {
   createdAt: number;
   groupId: string;
   name: string;
+  pinnedMaxTokens?: number;
   pinnedModel?: string;
   pinnedProvider?: string;
   providerRuntimeOverrides?: {

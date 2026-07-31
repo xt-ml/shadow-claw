@@ -112,6 +112,28 @@ export type { SubagentInvokeContext };
 
 export type ToolResult = string | ToolResultContentBlock[];
 
+function toAllowedToolNameSet(
+  allowedTools:
+    | ReadonlyArray<string | { name?: unknown } | undefined>
+    | undefined,
+): Set<string> | null {
+  if (!Array.isArray(allowedTools)) {
+    return null;
+  }
+
+  const names = allowedTools
+    .map((tool) =>
+      typeof tool === "string"
+        ? tool
+        : typeof tool?.name === "string"
+          ? tool.name
+          : null,
+    )
+    .filter(Boolean);
+
+  return new Set(names);
+}
+
 /**
  * Execute a tool
  */
@@ -121,12 +143,20 @@ export async function executeTool(
   input: Record<string, any>,
   groupId: string,
   options: {
+    allowedTools?: ReadonlyArray<string | { name?: unknown }>;
     invokeContext?: SubagentInvokeContext;
     isScheduledTask?: boolean;
     isTaskExecution?: boolean;
   } = {},
 ): Promise<ToolResult> {
   try {
+    // Re-validate the requested tool against the active profile. Generation-time
+    // constraints (JSON schema enums) are a hint, not a guarantee.
+    const allowedToolNames = toAllowedToolNameSet(options.allowedTools);
+    if (allowedToolNames && !allowedToolNames.has(name)) {
+      return `Tool "${name}" is not allowed in the current context. Do not call it again. Use one of the available tools or ask for help.`;
+    }
+
     // Block run_task in any task execution context (scheduled OR manual) to
     // prevent runaway self-triggering loops. run_task is only safe from the
     // top-level agent conversation, not from within a task itself.

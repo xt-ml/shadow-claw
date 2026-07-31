@@ -91,6 +91,12 @@ To prevent infinite execution loops, the system enforces a strict recursion guar
 - The `spawn_subagent` tool is explicitly excluded from the subagent's allowed tools to prevent infinite subagent recursion. Furthermore, parallel subagent spawns respect a globally configured limit (`SUBAGENT_MAX_PARALLEL`).
 - The `ask_user` tool **blocks the worker** until the UI sends back an `ask-user-response` message. Never call it from a scheduled task or subagent context (including tasks with the subagent flag enabled) where no human is present to respond — it will deadlock the worker.
 
+### Subagent Dispatch & Tool Allowlisting
+
+- Route subagent invocation through `dispatchSubagentInvoke` (`src/core/orchestrator/utils/dispatchSubagentInvoke.ts`) so provider-specific browser/runtime handling stays centralized.
+- Do not call `executeTool` from provider loops without passing the active enabled tool list (`allowedTools`). Runtime allowlist checks are enforced in `executeTool` and are required even when schemas already constrain generation.
+- Conversation-level `pinnedMaxTokens` overrides are optional and must remain model-aware (clamped to provider/model output limits).
+
 ### HTML Sanitization & Trusted Types
 
 - **Explicit Pre-Sanitization:** All dynamically rendered HTML, inline SVGs, or iframe `srcdoc` values must be sanitized using DOMPurify (e.g., `sanitizeToTrustedHtml` or `sanitizeSrcdocHtml`) **before** being passed to the Trusted Types policy.

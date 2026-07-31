@@ -106,6 +106,7 @@ Every conversation (group) has its own:
 - File workspace (OPFS: `shadowclaw/<groupId>/workspace/`)
 - Persistent memory (`MEMORY.md` at workspace root)
 - Scheduled tasks
+- Optional pinned provider/model and max output token override
 - Streaming state, typing indicators, tool activity
 
 Switching conversations fully resets transient UI state. Background conversations continue processing and persist results to IndexedDB.

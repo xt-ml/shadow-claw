@@ -231,13 +231,15 @@ export async function runSingleSubagent(
   );
   const providerAuth = await resolveSubagentProviderAuth(spec, ctx);
   const resolvedModel = spec.model ?? ctx.model;
+  const modelMaxTokens = getModelMaxTokens(resolvedModel || "");
   const configuredMaxTokens =
     typeof ctx.subagentMaxTokens === "number" &&
     Number.isFinite(ctx.subagentMaxTokens) &&
     ctx.subagentMaxTokens > 0
       ? Math.floor(ctx.subagentMaxTokens)
-      : Math.floor(ctx.maxTokens);
-  const modelMaxTokens = getModelMaxTokens(resolvedModel || "");
+      : Number.isFinite(modelMaxTokens) && modelMaxTokens > 0
+        ? Math.floor(modelMaxTokens)
+        : Math.floor(ctx.maxTokens);
   const subagentMaxTokens =
     Number.isFinite(modelMaxTokens) && modelMaxTokens > 0
       ? Math.max(1, Math.min(configuredMaxTokens, Math.floor(modelMaxTokens)))

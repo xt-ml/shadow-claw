@@ -1176,6 +1176,7 @@ export async function invokeWithLiteRtLm(
         let output: any;
         try {
           output = await executeTool(db, call.name, call.input || {}, groupId, {
+            allowedTools: activeTools,
             invokeContext,
           });
         } catch (err: any) {

@@ -1146,7 +1146,7 @@ export async function invokeWithPromptApi(
             call.name,
             call.input || {},
             groupId,
-            { invokeContext },
+            { allowedTools: activeTools, invokeContext },
           );
         } finally {
           setPostHandler(null);

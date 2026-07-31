@@ -552,6 +552,7 @@ export async function handleInvoke(
                 block.input,
                 effectiveWorkspaceGroupId,
                 {
+                  allowedTools: currentTools,
                   isScheduledTask,
                   invokeContext,
                 },

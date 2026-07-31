@@ -130,6 +130,14 @@ Browser's experimental Prompt API (`window.LanguageModel`). Runs entirely on-dev
   ```
 - `responseConstraint` (JSON schema) may cause Gemini Nano to stall; the provider automatically **retries without the constraint** so the model can generate tool-call JSON freely
 
+### Subagent provider dispatch
+
+Main-thread invocation paths route subagent execution through `dispatchSubagentInvoke` (`src/core/orchestrator/utils/dispatchSubagentInvoke.ts`) instead of hard-coding provider-specific branches in each provider implementation.
+
+- Browser providers are routed explicitly by provider ID (`prompt_api`, `litert_lm_browser`, `transformers_js_browser`).
+- Prompt API and LiteRT browser providers perform environment support checks before invocation.
+- Worker-backed providers are dispatched through the standard worker `handleInvoke` path.
+
 ## Provider Help & UX
 
 **Source:** `src/components/common/help/providers.ts`

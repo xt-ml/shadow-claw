@@ -51,16 +51,19 @@ flowchart LR
 
 1. **Set state to `thinking`**, emit typing event
 2. **Load group memory** — read `MEMORY.md` from the group's OPFS workspace
-3. **Build system prompt** via `buildSystemPrompt(assistantName, memory, activeTools)`
-4. **Build dynamic context** — fetch last 200 messages, call `buildDynamicContext()` with:
+3. **Resolve effective model/provider and output token budget** — apply conversation pinning (`pinnedProvider`, `pinnedModel`) and optional conversation `pinnedMaxTokens` override, then clamp by model max output limit
+4. **Build system prompt** via `buildSystemPrompt(assistantName, memory, activeTools)`
+5. **Build dynamic context** — fetch last 200 messages, call `buildDynamicContext()` with:
    ```text
    availableBudget = contextLimit − systemPromptTokens − maxOutputTokens
    ```
-5. **Emit `context-usage` event** for UI progress bar
-6. **Auto-compact check** — if `usagePercent > 80%` AND messages were truncated AND >10 messages total: queue compaction via `queueMicrotask()`
-7. **Route to provider:**
+6. **Emit `context-usage` event** for UI progress bar
+7. **Auto-compact check** — if `usagePercent > 80%` AND messages were truncated AND >10 messages total: queue compaction via `queueMicrotask()`
+8. **Route to provider:**
    - **Prompt API:** Route through `invokeWithPromptApi()` (main thread, no worker)
    - **All others:** Send `invoke` message to worker
+
+When an invocation path needs to run a subagent from the main-thread provider flows, `dispatchSubagentInvoke()` centralizes provider routing (`prompt_api`, `litert_lm_browser`, `transformers_js_browser`, or worker-backed providers) and validates browser-provider availability before execution.
 
 ### Worker invoke payload
 
@@ -73,7 +76,7 @@ flowchart LR
     systemPrompt,    // Full system instructions + memory
     apiKey,          // Provider API key (decrypted)
     model,           // Selected model ID
-    maxTokens,       // Output token limit
+    maxTokens,       // Effective output token limit after conversation override + model clamp
     maxIterations,   // Tool-use loop limit (user-configurable, 1–200)
     provider,        // Effective provider ID
     providerHeaders, // Runtime request headers (provider-aware)

@@ -86,10 +86,11 @@ Saved profiles can specify a `providerId`. When the orchestrator switches to a m
 
 `executeTool(db, name, input, groupId, options)` in `src/worker/utils/executeTool.ts` is the single dispatcher. It:
 
-1. Checks recursion guard (scheduled task restrictions)
-2. Switches on tool `name`
-3. Calls the appropriate handler in `src/worker/tools/`
-4. Returns result as string or JSON
+1. Re-validates `name` against `options.allowedTools` when provided (runtime allowlist enforcement)
+2. Checks recursion guard (scheduled task restrictions)
+3. Switches on tool `name`
+4. Calls the appropriate handler in `src/worker/tools/`
+5. Returns result as string or JSON
 
 ### File tools
 
@@ -145,7 +146,7 @@ Applied by: `fetch_url`, `web_search`, and `remote_mcp_call_tool`. An optional `
 
 - **`get_current_time`** — Returns the current time as an ISO 8601 string (UTC) or formatted for an IANA `timezone` (e.g. `America/New_York`) via `Intl.DateTimeFormat`; use this instead of relying on `bash`
 - **`ask_user`** — Halts the agent and sends an `ask-user` postMessage to the UI, where the user answers (optionally choosing from predefined `options`). The worker blocks until the main thread sends back an `ask-user-response` message that resolves the pending promise via `globalThis.pendingAskUserResolvers`
-- **`spawn_subagent`** — Delegates a task to a parallel, isolated agent invocation; subject to `SUBAGENT_MAX_PARALLEL` concurrency limit
+- **`spawn_subagent`** — Delegates a task to a parallel, isolated agent invocation; subject to `SUBAGENT_MAX_PARALLEL` concurrency limit. In automatic subagent max-token mode, the default output budget follows the selected subagent model limit (then clamps to that model's maximum).
 
 ### Git tools
 

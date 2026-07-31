@@ -47,6 +47,7 @@ export class ShadowClawConversations extends ShadowClawElement {
   private _keyboardGrabbedId: string | null = null;
   private _pendingCloneGroupId: string | null = null;
   private _pendingDeleteGroupId: string | null = null;
+  private _pendingDetailsPinnedMaxTokens: number | null = null;
   private _pendingDetailsPinnedModel: string | null = null;
   private _pendingDetailsPinnedProvider: string | null = null;
   private _pendingDetailsProviderRuntimeOverrides: ProviderRuntimeOverrides =
@@ -225,6 +226,9 @@ export class ShadowClawConversations extends ShadowClawElement {
     const mainProviderModuleSettings = root.querySelector(
       "#conversations-main-provider-module-settings",
     ) as ShadowClawProviderModuleSettings | null;
+    const agentMaxTokensInput = root.querySelector(
+      "#conversations-agent-max-tokens",
+    ) as HTMLInputElement | null;
     const subagentSettingsContainer = root.querySelector(
       "#conversations-subagent-settings-container",
     ) as HTMLElement | null;
@@ -537,6 +541,14 @@ export class ShadowClawConversations extends ShadowClawElement {
       mainProviderModuleSettings.setProvider(
         this._pendingDetailsPinnedProvider,
       );
+      if (agentMaxTokensInput) {
+        agentMaxTokensInput.value =
+          typeof this._pendingDetailsPinnedMaxTokens === "number" &&
+          Number.isFinite(this._pendingDetailsPinnedMaxTokens) &&
+          this._pendingDetailsPinnedMaxTokens > 0
+            ? String(Math.floor(this._pendingDetailsPinnedMaxTokens))
+            : "";
+      }
       mainProviderModuleSettings.setOverrides(
         this._pendingDetailsProviderRuntimeOverrides,
       );
@@ -581,6 +593,19 @@ export class ShadowClawConversations extends ShadowClawElement {
         });
 
         mainPicker.setAttribute("data-bound", "true");
+      }
+
+      if (!agentMaxTokensInput?.hasAttribute("data-bound")) {
+        agentMaxTokensInput?.addEventListener("input", () => {
+          const value = Number(agentMaxTokensInput.value);
+          if (Number.isFinite(value) && value > 0) {
+            this._pendingDetailsPinnedMaxTokens = Math.floor(value);
+          } else {
+            this._pendingDetailsPinnedMaxTokens = null;
+          }
+        });
+
+        agentMaxTokensInput?.setAttribute("data-bound", "true");
       }
 
       if (!mainProviderModuleSettings.hasAttribute("data-bound")) {
@@ -771,6 +796,12 @@ export class ShadowClawConversations extends ShadowClawElement {
     const currentTags = group?.toolTags || [];
 
     this._pendingDetailsToolTags = [...currentTags];
+    this._pendingDetailsPinnedMaxTokens =
+      typeof group?.pinnedMaxTokens === "number" &&
+      Number.isFinite(group.pinnedMaxTokens) &&
+      group.pinnedMaxTokens > 0
+        ? Math.floor(group.pinnedMaxTokens)
+        : null;
     this._pendingDetailsPinnedProvider = group?.pinnedProvider || null;
     this._pendingDetailsPinnedModel = group?.pinnedModel || null;
     this._pendingDetailsProviderRuntimeOverrides = JSON.parse(
@@ -1734,6 +1765,7 @@ export class ShadowClawConversations extends ShadowClawElement {
       this._pendingRenameGroupId,
       this._pendingDetailsPinnedProvider || undefined,
       this._pendingDetailsPinnedModel || undefined,
+      this._pendingDetailsPinnedMaxTokens || undefined,
     );
 
     await orchestratorStore.updateConversationProviderRuntimeOverrides(
@@ -1755,6 +1787,7 @@ export class ShadowClawConversations extends ShadowClawElement {
     this._pendingRenameGroupId = null;
     this._pendingRenameName = null;
     this._pendingDetailsToolTags = null;
+    this._pendingDetailsPinnedMaxTokens = null;
     this._pendingDetailsPinnedProvider = null;
     this._pendingDetailsPinnedModel = null;
     this._pendingDetailsProviderRuntimeOverrides = {};

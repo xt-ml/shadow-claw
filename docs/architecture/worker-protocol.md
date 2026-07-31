@@ -186,6 +186,8 @@ This keeps UI and worker cancellation behavior consistent while preventing orpha
 
 `executeTool(db, name, input, groupId, options)` in `src/worker/utils/executeTool.ts` is the single dispatcher for all tools.
 
+Before dispatch, `executeTool` re-validates tool names against `options.allowedTools` (when provided) so runtime execution cannot bypass active tool profiles or manual enabled-tool selections.
+
 ### File tools
 
 - `read_file` — Supports single `path` or `paths` array for batch reads (parallel `Promise.all`)

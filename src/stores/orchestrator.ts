@@ -1897,8 +1897,15 @@ export class OrchestratorStore {
     groupId: string,
     providerId?: string,
     modelId?: string,
+    pinnedMaxTokens?: number,
   ): Promise<void> {
-    await updateGroupPinnedProvider(db, groupId, providerId, modelId);
+    await updateGroupPinnedProvider(
+      db,
+      groupId,
+      providerId,
+      modelId,
+      pinnedMaxTokens,
+    );
     await this.loadGroups(db);
   }
 

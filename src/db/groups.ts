@@ -178,6 +178,7 @@ export async function cloneGroup(
     groupId: `${prefix}${ulid()}`,
     name: `${source.name} (copy)`,
     createdAt: Date.now(),
+    pinnedMaxTokens: source.pinnedMaxTokens,
     providerRuntimeOverrides: source.providerRuntimeOverrides
       ? JSON.parse(JSON.stringify(source.providerRuntimeOverrides))
       : undefined,
@@ -201,6 +202,7 @@ export async function updateGroupPinnedProvider(
   groupId: string,
   providerId?: string,
   modelId?: string,
+  pinnedMaxTokens?: number,
 ): Promise<void> {
   const groups = await getGroupMetadata(db);
   const group = groups.find((g) => g.groupId === groupId);
@@ -215,6 +217,16 @@ export async function updateGroupPinnedProvider(
       group.pinnedModel = modelId;
     } else {
       delete group.pinnedModel;
+    }
+
+    if (
+      typeof pinnedMaxTokens === "number" &&
+      Number.isFinite(pinnedMaxTokens) &&
+      pinnedMaxTokens > 0
+    ) {
+      group.pinnedMaxTokens = Math.floor(pinnedMaxTokens);
+    } else {
+      delete group.pinnedMaxTokens;
     }
   }
 

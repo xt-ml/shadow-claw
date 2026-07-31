@@ -35,6 +35,7 @@ A fully-functional agent runtime that runs entirely in the browser—no AI proce
 - **Dynamic context windowing** — Token-aware message history (not fixed-size window)
 - **Tool profiles** — Per-model/provider tool customization and system prompt overrides
 - **Conversation-scoped subagent policy** — Per-conversation subagent mode (`automatic` or `manual`) with optional pinned provider/model
+- **Conversation-scoped agent token budget** — Optional per-conversation max output tokens override (clamped to selected model limits)
 - **Conversation-scoped provider runtime overrides** — Per-conversation runtime overrides for Bedrock proxy and Llamafile (auth/profile/region/host/mode/offline/port)
 - **Model registry** — Dynamic metadata fetch (context window, modality support)
 - **Attachment capabilities** — Native multimodal delivery with automatic text fallback
@@ -92,6 +93,7 @@ Each conversation has:
 - Scheduled tasks
 - Editable `MEMORY.md` (loaded as system context)
 - Optional per-conversation tool tagging
+- Optional per-conversation pinned provider/model and max output tokens
 - Accessible sidebar with drag-and-drop reordering and clone support
 - Unread indicators with pulsing highlights
 
@@ -299,6 +301,7 @@ Create model-specific or task-specific tool profiles to optimize the context win
 - Override system prompt per profile
 - Auto-activate profiles by model
 - Save custom selections
+- **Execution-time allowlist enforcement** — Tool calls are re-validated at runtime against the active enabled tool list (profile/manual), not only generation-time schema hints
 - **Shared internet access control** — Toggles public internet access (`fetch` and shell networking) globally for the `bash` and `javascript` tools
 
 **Full guide**: [docs/subsystems/tools.md](docs/subsystems/tools.md#tool-profiles)

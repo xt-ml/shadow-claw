@@ -1,4 +1,8 @@
-import { CONFIG_KEYS, getProvider } from "../../../config/config.js";
+import {
+  CONFIG_KEYS,
+  getModelMaxTokens,
+  getProvider,
+} from "../../../config/config.js";
 
 import { buildDynamicContext } from "../../../context/buildDynamicContext.js";
 import { estimateTokens } from "../../../context/estimateTokens.js";
@@ -25,11 +29,11 @@ import {
 import { getContextLimit } from "../../../subsystems/providers/providers.js";
 import { invokeWithTransformersJs } from "../../../subsystems/providers/transformers-js-provider.js";
 import { ulid } from "../../../utils/ulid.js";
-import { post as workerPost } from "../../../worker/utils/post.js";
 import { buildSystemPrompt } from "../../../worker/utils/system-prompt.js";
 
 import { compactContext } from "./compactContext.js";
 import { deliverResponse } from "./deliverResponse.js";
+import { dispatchSubagentInvoke } from "./dispatchSubagentInvoke.js";
 import { handleWorkerMessage } from "./handleWorkerMessage.js";
 import { getChannelTypeForGroup } from "./operations/channel.js";
 
@@ -98,6 +102,18 @@ export async function invokeAgent(
       ? (getProvider(group.pinnedProvider)?.defaultModel ?? o.model)
       : o.model);
 
+  const configuredMaxTokens =
+    typeof group?.pinnedMaxTokens === "number" &&
+    Number.isFinite(group.pinnedMaxTokens) &&
+    group.pinnedMaxTokens > 0
+      ? Math.floor(group.pinnedMaxTokens)
+      : o.maxTokens;
+
+  const effectiveMaxTokens = Math.max(
+    1,
+    Math.min(configuredMaxTokens, getModelMaxTokens(effectiveModel)),
+  );
+
   const effectiveProviderConfig =
     getProvider(effectiveProviderId) ?? o.providerConfig;
 
@@ -149,7 +165,7 @@ export async function invokeAgent(
   const dynamicContext = buildDynamicContext(allMessages, {
     contextLimit,
     systemPromptTokens,
-    maxOutputTokens: o.maxTokens,
+    maxOutputTokens: effectiveMaxTokens,
     skimTop: o.contextCompressionEnabled,
   });
 
@@ -204,21 +220,9 @@ export async function invokeAgent(
       db,
       enabledTools: activeTools as any,
       invokeSubagent: async (subPayload) => {
-        await invokeWithTransformersJs(
-          db,
-          subPayload.groupId,
-          subPayload.systemPrompt,
-          subPayload.messages,
-          subPayload.maxTokens,
-          async (msg: any) => {
-            workerPost(msg);
-          },
-          controller.signal,
-          subPayload.enabledTools,
-          subPayload.model,
-        );
+        await dispatchSubagentInvoke(db, subPayload, controller.signal);
       },
-      maxTokens: o.maxTokens,
+      maxTokens: effectiveMaxTokens,
       memory: memory ?? "",
       model: effectiveModel,
       provider: effectiveProviderId,
@@ -243,7 +247,7 @@ export async function invokeAgent(
         executionGroupId,
         systemPrompt,
         messages,
-        o.maxTokens,
+        effectiveMaxTokens,
         async (msg) => {
           await handleWorkerMessage(o, db, msg);
         },
@@ -287,20 +291,9 @@ export async function invokeAgent(
       db,
       enabledTools: activeTools as any,
       invokeSubagent: async (subPayload) => {
-        await invokeWithPromptApi(
-          db,
-          subPayload.groupId,
-          subPayload.systemPrompt,
-          subPayload.messages,
-          subPayload.maxTokens,
-          async (msg: any) => {
-            workerPost(msg);
-          },
-          controller.signal,
-          subPayload.enabledTools,
-        );
+        await dispatchSubagentInvoke(db, subPayload, controller.signal);
       },
-      maxTokens: o.maxTokens,
+      maxTokens: effectiveMaxTokens,
       memory: memory ?? "",
       model: effectiveModel,
       provider: effectiveProviderId,
@@ -325,7 +318,7 @@ export async function invokeAgent(
         executionGroupId,
         systemPrompt,
         messages,
-        o.maxTokens,
+        effectiveMaxTokens,
         async (msg) => {
           await handleWorkerMessage(o, db, msg);
         },
@@ -368,21 +361,9 @@ export async function invokeAgent(
       db,
       enabledTools: activeTools as any,
       invokeSubagent: async (subPayload) => {
-        await invokeWithLiteRtLm(
-          db,
-          subPayload.groupId,
-          subPayload.systemPrompt,
-          subPayload.messages,
-          subPayload.maxTokens,
-          async (msg: any) => {
-            workerPost(msg);
-          },
-          controller.signal,
-          subPayload.model,
-          subPayload.enabledTools,
-        );
+        await dispatchSubagentInvoke(db, subPayload, controller.signal);
       },
-      maxTokens: o.maxTokens,
+      maxTokens: effectiveMaxTokens,
       memory: memory ?? "",
       model: effectiveModel,
       provider: effectiveProviderId,
@@ -407,7 +388,7 @@ export async function invokeAgent(
         executionGroupId,
         systemPrompt,
         messages,
-        o.maxTokens,
+        effectiveMaxTokens,
         async (msg) => {
           await handleWorkerMessage(o, db, msg);
         },
@@ -460,7 +441,7 @@ export async function invokeAgent(
       groupId: executionGroupId,
       isScheduledTask: o.schedulerTriggeredGroups.has(groupId),
       maxIterations: o.maxIterations,
-      maxTokens: o.maxTokens,
+      maxTokens: effectiveMaxTokens,
       memory,
       messages,
       model: effectiveModel,

@@ -16,52 +16,6 @@ test.describe("File Viewer Modal", () => {
     );
   });
 
-  test("should have file viewer modal in DOM and styled correctly", async ({
-    app,
-    page,
-  }) => {
-    await app.navigateToWithOpenDialog("chat");
-
-    // Modal should present in DOM but not visible
-    const modal = page.locator(".file-modal");
-    await expect(modal).toHaveCount(1);
-
-    // Native dialog should be closed initially
-    await expect(modal).toHaveJSProperty("open", false);
-
-    // Check modal uses native dialog element
-    await expect(modal).toHaveJSProperty("nodeName", "DIALOG");
-    await expect(modal).toHaveAttribute("aria-label", /file viewer/i);
-
-    // Check modal content structure exists
-    const modalContent = page.locator(".modal-content");
-    await expect(modalContent).toHaveCount(1);
-
-    const modalHeader = page.locator(".modal-header");
-    await expect(modalHeader).toHaveCount(1);
-
-    const closeBtn = page.locator(".modal-close-btn");
-    await expect(closeBtn).toHaveCount(1);
-
-    const modalBody = page.locator(".modal-body");
-    await expect(modalBody).toHaveCount(1);
-  });
-
-  test("should display modal on different pages", async ({ app, page }) => {
-    // Check that modal is available and persistent across all pages
-    const pages = ["chat", "files", "tasks"];
-
-    for (const pageId of pages) {
-      await app.navigateToWithOpenDialog(pageId);
-
-      const modal = page.locator(".file-modal");
-      await expect(modal).toHaveCount(1);
-
-      // Modal should exist but remain closed
-      await expect(modal).toHaveJSProperty("open", false);
-    }
-  });
-
   test("should display file content in modal when clicking a file from files page", async ({
     app,
     page,

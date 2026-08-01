@@ -53,10 +53,16 @@ async function main() {
   }
 
   // publish documentation
-  await cp("docs", "dist/public/docs", { recursive: true });
-  await cp("e2e/README.md", "dist/public/e2e/README.md");
   await cp("README.md", "dist/public/README.md");
+  await cp("e2e/README.md", "dist/public/e2e/README.md");
+  await cp("docs", "dist/public/docs", { recursive: true });
+
+  // publish index-friendly documentation
   await cp("AGENTS.md", "dist/public/AGENTS.md");
+  await cp("llms.txt", "dist/public/llms.txt");
+
+  // publish robots.txt
+  await cp("robots.txt", "dist/public/robots.txt");
 
   await run("npm run -s rolldown");
 

@@ -16,36 +16,6 @@ import {
 } from "../../subsystems/git/credentials.js";
 
 import {
-  getProxyUrl,
-  getRemoteUrl,
-  gitAdd,
-  gitBranch,
-  gitCheckout,
-  gitClone,
-  gitCommit,
-  gitConfig,
-  gitDeleteBranch,
-  gitDeleteRepo,
-  gitDiff,
-  gitFetch,
-  gitInit,
-  gitListBranches,
-  gitListRepos,
-  gitListTags,
-  gitLog,
-  gitMerge,
-  gitPull,
-  gitPush,
-  gitReadFileAtRef,
-  gitRemote,
-  gitReset,
-  gitShow,
-  gitStatus,
-  gitTag,
-  gitUnstage,
-} from "../../subsystems/git/git.js";
-
-import {
   callRemoteMcpTool,
   listRemoteMcpTools,
   McpReauthRequiredError,
@@ -111,6 +81,18 @@ import type { SubagentInvokeContext } from "../tools/spawn-subagent/spawn-subage
 export type { SubagentInvokeContext };
 
 export type ToolResult = string | ToolResultContentBlock[];
+
+type GitSubsystem = typeof import("../../subsystems/git/git.js");
+
+let gitSubsystemPromise: Promise<GitSubsystem> | null = null;
+
+async function loadGitSubsystem(): Promise<GitSubsystem> {
+  if (!gitSubsystemPromise) {
+    gitSubsystemPromise = import("../../subsystems/git/git.js");
+  }
+
+  return gitSubsystemPromise;
+}
 
 function toAllowedToolNameSet(
   allowedTools:
@@ -390,6 +372,8 @@ export async function executeTool(
       case "git_remote":
       case "git_config":
       case "git_unstage": {
+        const git = await loadGitSubsystem();
+
         return await executeGitTool(db, name, input, groupId, {
           configKeys: {
             GIT_CORS_PROXY: CONFIG_KEYS.GIT_CORS_PROXY,
@@ -399,33 +383,33 @@ export async function executeTool(
           },
           getConfig,
           getGroupDir,
-          getProxyUrl,
-          getRemoteUrl,
-          gitAdd,
-          gitBranch,
-          gitCheckout,
-          gitClone,
-          gitCommit,
-          gitConfig,
-          gitDeleteBranch,
-          gitDeleteRepo,
-          gitDiff,
-          gitFetch,
-          gitInit,
-          gitListBranches,
-          gitListRepos,
-          gitListTags,
-          gitLog,
-          gitMerge,
-          gitPull,
-          gitPush,
-          gitReadFileAtRef,
-          gitRemote,
-          gitReset,
-          gitShow,
-          gitStatus,
-          gitTag,
-          gitUnstage,
+          getProxyUrl: git.getProxyUrl,
+          getRemoteUrl: git.getRemoteUrl,
+          gitAdd: git.gitAdd,
+          gitBranch: git.gitBranch,
+          gitCheckout: git.gitCheckout,
+          gitClone: git.gitClone,
+          gitCommit: git.gitCommit,
+          gitConfig: git.gitConfig,
+          gitDeleteBranch: git.gitDeleteBranch,
+          gitDeleteRepo: git.gitDeleteRepo,
+          gitDiff: git.gitDiff,
+          gitFetch: git.gitFetch,
+          gitInit: git.gitInit,
+          gitListBranches: git.gitListBranches,
+          gitListRepos: git.gitListRepos,
+          gitListTags: git.gitListTags,
+          gitLog: git.gitLog,
+          gitMerge: git.gitMerge,
+          gitPull: git.gitPull,
+          gitPush: git.gitPush,
+          gitReadFileAtRef: git.gitReadFileAtRef,
+          gitRemote: git.gitRemote,
+          gitReset: git.gitReset,
+          gitShow: git.gitShow,
+          gitStatus: git.gitStatus,
+          gitTag: git.gitTag,
+          gitUnstage: git.gitUnstage,
           readGroupFile,
           resolveGitCredentials,
         });

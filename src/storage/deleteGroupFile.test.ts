@@ -20,6 +20,16 @@ jest.unstable_mockModule("../config/config.js", () => ({
   DEFAULT_GROUP_ID: "br-main",
 }));
 
+jest.unstable_mockModule("../stores/orchestrator.js", () => ({
+  orchestratorStore: {
+    removePage: jest.fn(),
+  },
+}));
+
+jest.unstable_mockModule("./suppressedPages.js", () => ({
+  suppressPage: jest.fn(),
+}));
+
 const { deleteGroupFile } = await import("./deleteGroupFile.js");
 const { getGroupDir } = await import("./getGroupDir.js");
 const { parsePath } = await import("./parsePath.js");

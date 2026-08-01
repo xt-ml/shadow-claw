@@ -1,0 +1,25 @@
+# [ShadowClaw](https://xt-ml.github.io/shadow-claw/)
+
+> A browser-native, fully-featured AI assistant (TypeScript + Web Components + IndexedDB + File System API) that runs an agent runtime entirely client-side, with no AI processing on a server.
+
+## Docs
+
+- [README](https://xt-ml.github.io/shadow-claw/README.md): Quick start, feature overview, architecture diagram, provider/tool tables
+- [AGENTS.md](https://xt-ml.github.io/shadow-claw/AGENTS.md): Agent-specific conventions and guardrails for working in this repo
+- [docs/README.md](https://xt-ml.github.io/shadow-claw/docs/README.md): Index of architecture, subsystem, guide, and decision docs
+
+## Architecture
+
+- [System Overview](https://xt-ml.github.io/shadow-claw/docs/architecture/overview.md)
+- [Orchestrator & State Machine](https://xt-ml.github.io/shadow-claw/docs/architecture/orchestrator.md)
+- [Worker Protocol](https://xt-ml.github.io/shadow-claw/docs/architecture/worker-protocol.md)
+- [Storage System](https://xt-ml.github.io/shadow-claw/docs/architecture/storage.md)
+- [Context Management](https://xt-ml.github.io/shadow-claw/docs/architecture/context-management.md)
+- [Streaming](https://xt-ml.github.io/shadow-claw/docs/architecture/streaming.md)
+
+## Optional
+
+- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): Shell, VM, git, channels, tools, providers, notifications, Electron, reactive UI, crypto, and more
+- [Guides](https://xt-ml.github.io/shadow-claw/docs/README.md#guides): Adding a provider/tool/channel/page/shell command
+- [Decisions](https://xt-ml.github.io/shadow-claw/docs/README.md#decisions): ADRs explaining bundled TypeScript, Signals, worker-isolated runtime, IndexedDB/OPFS storage
+- [e2e/README.md](https://xt-ml.github.io/shadow-claw/e2e/README.md): E2E test architecture

@@ -1,5 +1,7 @@
 import DOMPurify from "dompurify";
 import { CONFIG_KEYS } from "../config/config.js";
+import { getDb } from "../db/db.js";
+import { getConfig } from "../db/getConfig.js";
 
 export const DEFAULT_ALLOWED_IFRAME_HOST_PATTERNS: string[] = [
   "youtube.com",
@@ -120,12 +122,11 @@ export async function loadAllowedIframeHostPatternsFromDb(
   db?: any,
 ): Promise<string[]> {
   try {
-    const targetDb = db || (await import("../db/db.js").then((m) => m.getDb()));
+    const targetDb = db || (await getDb());
     if (!targetDb) {
       return getAllowedIframeHostPatterns();
     }
 
-    const { getConfig } = await import("../db/getConfig.js");
     const raw = await getConfig(
       targetDb,
       CONFIG_KEYS.ALLOWED_IFRAME_HOST_PATTERNS,

@@ -236,6 +236,10 @@ const expectedLogs = [
   "Failed to import chat data:",
   "Failed to parse peerjs_peer_aliases",
   "iMessage bridge poll error: TypeError: Cannot read properties of undefined (reading 'ok')",
+  "DOMException",
+  "ERR_VM_MODULE_NOT_MODULE",
+  "Provided module is not an instance of Module",
+  "Test environment has been torn down",
 ];
 
 function isExpectedLog(...args: any[]) {

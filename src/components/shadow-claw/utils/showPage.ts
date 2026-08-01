@@ -5,6 +5,8 @@ import { updateActivityLogToggleVisibility } from "./updateActivityLogToggleVisi
 import { updateHeaderMainToggle } from "./updateHeaderMainToggle.js";
 import { updateTerminalToggle } from "./updateTerminalToggle.js";
 
+import { ensureComponentLoaded } from "./loadComponent.js";
+
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { OrchestratorStore } from "../../../stores/orchestrator.js";
 
@@ -38,6 +40,8 @@ export function showPage(
     page,
     shadowClaw.pagesSidebarHidden,
   );
+
+  ensureComponentLoaded(resolvedPage).catch(console.error);
 
   // Hide all pages
   shadow.querySelectorAll(".page").forEach((p) => {

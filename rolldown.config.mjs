@@ -253,7 +253,7 @@ const configs = [
       entryFileNames: "index.js",
       format: "esm",
       sourcemap: !isProduction,
-      codeSplitting: false,
+      codeSplitting: true,
       minify: isProduction,
     },
     ...commonResolve("browser", [
@@ -324,7 +324,7 @@ const configs = [
       entryFileNames: "agent.worker.js",
       format: "esm",
       sourcemap: !isProduction,
-      codeSplitting: false,
+      codeSplitting: true,
       minify: isProduction,
     },
     ...commonResolve("browser", [aliasTurndownPlugin()]),

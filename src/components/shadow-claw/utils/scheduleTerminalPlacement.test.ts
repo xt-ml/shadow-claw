@@ -3,6 +3,7 @@ import { jest } from "@jest/globals";
 describe("scheduleTerminalPlacement", () => {
   let scheduleTerminalPlacement: any;
   let mockSyncTerminalPlacement: any;
+  let mockEnsureComponentLoaded: any;
   let shadowRoot: any;
   let terminalElement: any;
 
@@ -14,9 +15,13 @@ describe("scheduleTerminalPlacement", () => {
     terminalElement = {};
 
     mockSyncTerminalPlacement = jest.fn();
+    mockEnsureComponentLoaded = (jest.fn() as any).mockResolvedValue(undefined);
 
     jest.unstable_mockModule("./syncTerminalPlacement.js", () => ({
       syncTerminalPlacement: mockSyncTerminalPlacement,
+    }));
+    jest.unstable_mockModule("./loadComponent.js", () => ({
+      ensureComponentLoaded: mockEnsureComponentLoaded,
     }));
 
     // Mock requestAnimationFrame and cancelAnimationFrame

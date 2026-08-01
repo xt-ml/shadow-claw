@@ -59,43 +59,12 @@ export class ShadowClawTasks extends ShadowClawElement {
       throw new Error("shadowRoot not found");
     }
 
-    const db = await getDb();
-    this.renderFrontmatter = await resolveFrontmatterToggle(
-      db,
-      CONFIG_KEYS.MARKDOWN_FRONTMATTER_TASKS,
-    );
-
     root.addEventListener("click", (event: Event) => {
       if (event instanceof MouseEvent) {
-        void this.handlePreviewLinkClick(event, db);
+        getDb()
+          .then((db) => this.handlePreviewLinkClick(event, db))
+          .catch(console.error);
       }
-    });
-
-    // apply highlight.js atom-one-dark.min.css to shadow dom
-    try {
-      const cssText = await (
-        await fetch(
-          "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css",
-        )
-      ).text();
-
-      const sheet = new CSSStyleSheet();
-      sheet.replaceSync(cssText);
-
-      if (this.shadowRoot?.adoptedStyleSheets) {
-        this.shadowRoot.adoptedStyleSheets.push(sheet);
-      }
-    } catch (err) {
-      console.warn("Failed to load highlight.js styles:", err);
-    }
-
-    this.render();
-    this.dispatchTerminalSlotReady();
-
-    // Re-render when tasks change
-    this.cleanup = effect(() => {
-      orchestratorStore.tasks;
-      this.updateTaskList(db);
     });
 
     // Backup button
@@ -113,13 +82,20 @@ export class ShadowClawTasks extends ShadowClawElement {
 
     restoreInput?.addEventListener("change", (e) => {
       if (e.target instanceof HTMLInputElement) {
-        this.handleRestore(db, e.target);
+        const target = e.target;
+        getDb()
+          .then((db) => this.handleRestore(db, target))
+          .catch(console.error);
       }
     });
 
     // Clear all button
     const clearBtn = root.querySelector(".tasks__clear-btn");
-    clearBtn?.addEventListener("click", () => this.handleClearAll(db));
+    clearBtn?.addEventListener("click", () => {
+      getDb()
+        .then((db) => this.handleClearAll(db))
+        .catch(console.error);
+    });
 
     // Add task button
     const addBtn = root.querySelector(".tasks__add-btn");
@@ -144,7 +120,9 @@ export class ShadowClawTasks extends ShadowClawElement {
     form?.addEventListener("submit", (e) => {
       e.preventDefault();
       if (form) {
-        this.handleEditSubmit(db, form);
+        getDb()
+          .then((db) => this.handleEditSubmit(db, form))
+          .catch(console.error);
       }
     });
 
@@ -205,6 +183,39 @@ export class ShadowClawTasks extends ShadowClawElement {
       this.editingTools.push({ name: "", input: {} });
       this.renderToolsEditor();
       updatePreview();
+    });
+
+    const db = await getDb();
+    this.renderFrontmatter = await resolveFrontmatterToggle(
+      db,
+      CONFIG_KEYS.MARKDOWN_FRONTMATTER_TASKS,
+    );
+
+    // apply highlight.js atom-one-dark.min.css to shadow dom
+    try {
+      const cssText = await (
+        await fetch(
+          "https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-dark.min.css",
+        )
+      ).text();
+
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(cssText);
+
+      if (this.shadowRoot?.adoptedStyleSheets) {
+        this.shadowRoot.adoptedStyleSheets.push(sheet);
+      }
+    } catch (err) {
+      console.warn("Failed to load highlight.js styles:", err);
+    }
+
+    this.render();
+    this.dispatchTerminalSlotReady();
+
+    // Re-render when tasks change
+    this.cleanup = effect(() => {
+      orchestratorStore.tasks;
+      this.updateTaskList(db);
     });
   }
 

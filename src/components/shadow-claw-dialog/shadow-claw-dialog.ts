@@ -1,6 +1,6 @@
 export class ShadowClawDialog extends HTMLElement {
   static get observedAttributes(): string[] {
-    return ["dialog-class", "aria-label", "aria-labelledby"];
+    return ["dialog-class", "dialog-aria-label", "dialog-aria-labelledby"];
   }
 
   private _dialog: HTMLDialogElement | null = null;
@@ -75,14 +75,14 @@ export class ShadowClawDialog extends HTMLElement {
     const dialogClass = this.getAttribute("dialog-class") || "";
     this._dialog.className = dialogClass;
 
-    const ariaLabel = this.getAttribute("aria-label");
+    const ariaLabel = this.getAttribute("dialog-aria-label");
     if (ariaLabel) {
       this._dialog.setAttribute("aria-label", ariaLabel);
     } else {
       this._dialog.removeAttribute("aria-label");
     }
 
-    const ariaLabelledBy = this.getAttribute("aria-labelledby");
+    const ariaLabelledBy = this.getAttribute("dialog-aria-labelledby");
     if (ariaLabelledBy) {
       this._dialog.setAttribute("aria-labelledby", ariaLabelledBy);
     } else {

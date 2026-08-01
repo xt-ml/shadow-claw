@@ -13,6 +13,7 @@ describe("showPage", () => {
   let mockUpdateActivityLogToggleVisibility: any;
   let mockUpdateHeaderMainToggle: any;
   let mockUpdateTerminalToggle: any;
+  let mockEnsureComponentLoaded: any;
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -47,6 +48,11 @@ describe("showPage", () => {
     mockUpdateActivityLogToggleVisibility = jest.fn();
     mockUpdateHeaderMainToggle = jest.fn();
     mockUpdateTerminalToggle = jest.fn();
+    mockEnsureComponentLoaded = (jest.fn() as any).mockResolvedValue(undefined);
+
+    jest.unstable_mockModule("./loadComponent.js", () => ({
+      ensureComponentLoaded: mockEnsureComponentLoaded,
+    }));
 
     jest.unstable_mockModule("./resolvePageForVisibility.js", () => ({
       resolvePageForVisibility: mockResolvePageForVisibility,

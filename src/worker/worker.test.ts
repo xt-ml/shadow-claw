@@ -50,6 +50,10 @@ describe("worker and worker/agent.js", () => {
         headerPrefix: "Bearer ",
       })),
       OPFS_ROOT: "shadowclaw",
+      OAUTH_PROVIDER_DEFINITIONS: {},
+      LLAMAFILE_PROXY_URL: "/proxy/llamafile",
+      PROVIDERS: [],
+      buildTriggerPattern: jest.fn(),
     }));
 
     jest.unstable_mockModule("../db/getConfig.js", () => ({

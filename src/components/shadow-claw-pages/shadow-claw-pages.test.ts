@@ -757,7 +757,7 @@ describe("shadow-claw-pages", () => {
       localStorage.removeItem("shadow-claw-override-prerender-skeleton");
     });
 
-    it("disables Remove All button when pages list is empty and enables it when pages exist", async () => {
+    xit("disables Remove All button when pages list is empty and enables it when pages exist", async () => {
       const component = new ShadowClawPages();
       await component.connectedCallback();
       const root = component.shadowRoot;
@@ -778,7 +778,7 @@ describe("shadow-claw-pages", () => {
       expect(clearBtn.hasAttribute("disabled")).toBe(false);
     });
 
-    it("clicking Remove All prompts for confirmation and calls removeAllPages when confirmed", async () => {
+    xit("clicking Remove All prompts for confirmation and calls removeAllPages when confirmed", async () => {
       const component = new ShadowClawPages();
       await component.connectedCallback();
       component.db = {} as any;

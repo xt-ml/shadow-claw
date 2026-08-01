@@ -4,7 +4,7 @@ describe("shadow-claw-dialog", () => {
   it("wraps its light DOM children in a native dialog", () => {
     const el = new ShadowClawDialog();
     el.setAttribute("dialog-class", "test-dialog");
-    el.setAttribute("aria-label", "Example dialog");
+    el.setAttribute("dialog-aria-label", "Example dialog");
     el.innerHTML = '<div class="content">Hello</div>';
 
     document.body.appendChild(el);

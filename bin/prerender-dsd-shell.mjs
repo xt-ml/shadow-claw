@@ -275,35 +275,106 @@ function removeLegacyBootShell(innerHtml) {
 }
 
 function buildStaticPagesListMarkup(pageSources) {
-  return pageSources
+  const rows = pageSources
     .map((page, index) => {
       const isActive = index === 0;
       const activeClass = isActive ? " active" : "";
+      const defaultClass = isActive ? " is-default" : "";
+      const displayPath = escapeHtml(page.displayPath);
 
       return [
-        `<div class="pages__list-item${activeClass}">`,
-        `  <span class="pages__list-path">${escapeHtml(page.displayPath)}</span>`,
-        "</div>",
+        `    <div class="pages__list-item${activeClass}">`,
+        '      <span class="pages__drag-handle" draggable="true" title="Drag to reorder">⠿</span>',
+        `      <span class="pages__default-btn${defaultClass}" title="Default page">⭐</span>`,
+        `      <button type="button" class="pages__select" title="Open ${displayPath}">`,
+        `        <span class="pages__list-path">${displayPath}</span>`,
+        "      </button>",
+        `      <button class="pages__edit" type="button" title="Edit in file editor" aria-label="Edit ${displayPath} in file editor">✏️</button>`,
+        `      <button class="pages__remove" type="button" title="Remove from Pages" aria-label="Remove ${displayPath} from Pages in Main">✕</button>`,
+        "    </div>",
       ].join("\n");
     })
     .join("\n");
+
+  return [
+    '<details class="pages__group-details" open>',
+    '  <summary class="pages__group-label">',
+    '    <span>Main</span><span class="pages__group-icon">▼</span>',
+    "  </summary>",
+    '  <div class="pages__group-pages">',
+    rows,
+    "  </div>",
+    "</details>",
+  ].join("\n");
 }
 
-function applyStaticPagesContent(templateContent, pageSources, renderedHtml) {
+export function injectPageHeaderDsd(pagesContent, pageHeaderTemplateContent) {
+  return pagesContent.replace(
+    /(<shadow-claw-page-header\b[^>]*>)([\s\S]*?)(<\/shadow-claw-page-header>)/iu,
+    (full, openTag, innerContent, closeTag) => {
+      if (/^\s*<template\s+shadowrootmode=/iu.test(innerContent)) {
+        return full;
+      }
+
+      const iconMatch = openTag.match(/\sicon="([^"]*)"/iu);
+      const titleMatch = openTag.match(/\stitle="([^"]*)"/iu);
+      const icon = iconMatch ? iconMatch[1] : "";
+      const title = titleMatch ? titleMatch[1] : "";
+      const renderedTitle = [icon, title].filter(Boolean).join(" ");
+
+      let headerShadowContent = pageHeaderTemplateContent;
+      headerShadowContent = headerShadowContent.replace(
+        /<h2\s+class="header__title"><\/h2>/iu,
+        () => `<h2 class="header__title">${escapeHtml(renderedTitle)}</h2>`,
+      );
+      headerShadowContent = headerShadowContent.replace(
+        /<details\s+class="header__actions-disclosure">/iu,
+        '<details class="header__actions-disclosure" hidden>',
+      );
+      headerShadowContent = headerShadowContent.replace(
+        /<div\s+class="header__actions"\s+id="header-actions-panel">/iu,
+        '<div class="header__actions" id="header-actions-panel" hidden>',
+      );
+
+      return [
+        openTag,
+        '<template shadowrootmode="open" data-shadow-claw-page-header-dsd="true">',
+        '<link rel="stylesheet" href="components/shadow-claw-page-header/shadow-claw-page-header.css" />',
+        headerShadowContent,
+        "</template>",
+        innerContent.trim(),
+        closeTag,
+      ].join("\n");
+    },
+  );
+}
+
+export function applyStaticPagesContent(
+  templateContent,
+  pageSources,
+  renderedHtml,
+  pageHeaderTemplateContent,
+) {
   const statusText =
     pageSources.length === 1
       ? "1 saved page"
       : `${pageSources.length} saved pages`;
   const listMarkup = buildStaticPagesListMarkup(pageSources);
+  const selectedPath = pageSources[0]?.displayPath || "Select a page...";
 
   let next = templateContent;
   next = next.replace(
-    /<div\s+class="pages__status"\s+data-pages-status><\/div>/iu,
+    /<div\b[^>]*\bdata-pages-status\b[^>]*><\/div>/iu,
     () =>
       `<div class="pages__status" data-pages-status>${escapeHtml(statusText)}</div>`,
   );
   next = next.replace(
-    /<div\s+class="pages__list"\s+data-pages-list\s+role="list"><\/div>/iu,
+    /<span\s+class="pages__dropdown-selected"\s+data-pages-dropdown-selected>[\s\S]*?<\/span>/iu,
+    () =>
+      `<span class="pages__dropdown-selected" data-pages-dropdown-selected>${escapeHtml(selectedPath)}</span>`,
+  );
+  next = next.replace(
+    /<div\s+class="pages__list"\s+data-pages-list\s+role="list"><\/div>/giu,
     () =>
       `<div class="pages__list" data-pages-list role="list">\n${listMarkup}\n</div>`,
   );
@@ -317,14 +388,20 @@ function applyStaticPagesContent(templateContent, pageSources, renderedHtml) {
       `<div class="pages__rendered" data-pages-rendered>${renderedHtml}</div>`,
   );
 
-  return next;
+  return injectPageHeaderDsd(next, pageHeaderTemplateContent);
 }
 
-function buildPagesDsdHost(pagesTemplateContent, pageSources, renderedHtml) {
+function buildPagesDsdHost(
+  pagesTemplateContent,
+  pageSources,
+  renderedHtml,
+  pageHeaderTemplateContent,
+) {
   const pagesShadowContent = applyStaticPagesContent(
     pagesTemplateContent,
     pageSources,
     renderedHtml,
+    pageHeaderTemplateContent,
   );
 
   return [
@@ -525,6 +602,10 @@ async function main() {
     publicDir,
     "components/shadow-claw-pages/shadow-claw-pages.html",
   );
+  const pageHeaderTemplatePath = path.join(
+    publicDir,
+    "components/shadow-claw-page-header/shadow-claw-page-header.html",
+  );
 
   if (noSeed) {
     const [indexHtml, shadowClawTemplateSource, pageSources] =
@@ -614,11 +695,13 @@ async function main() {
     indexHtml,
     shadowClawTemplateSource,
     pagesTemplateSource,
+    pageHeaderTemplateSource,
     pageSources,
   ] = await Promise.all([
     readFile(indexPath, "utf8"),
     readFile(shadowClawTemplatePath, "utf8"),
     readFile(pagesTemplatePath, "utf8"),
+    readFile(pageHeaderTemplatePath, "utf8"),
     collectPageSources(sourcePath),
   ]);
 
@@ -687,10 +770,14 @@ async function main() {
     shadowClawTemplateSource,
   );
   const pagesTemplateContent = extractTemplateContent(pagesTemplateSource);
+  const pageHeaderTemplateContent = extractTemplateContent(
+    pageHeaderTemplateSource,
+  );
   const pagesDsdHost = buildPagesDsdHost(
     pagesTemplateContent,
     filteredPageSources,
     rendered,
+    pageHeaderTemplateContent,
   );
   const shadowClawDsdTemplate = buildShadowClawDsdTemplate(
     shadowClawTemplateContent,

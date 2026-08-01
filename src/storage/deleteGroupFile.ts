@@ -3,6 +3,8 @@ import { parsePath } from "./parsePath.js";
 import { setMainGroupMemorySuppressed } from "./ensureMainGroupMemory.js";
 import { setMainGroupIndexSuppressed } from "./ensureMainGroupIndex.js";
 import { DEFAULT_GROUP_ID } from "../config/config.js";
+import { orchestratorStore } from "../stores/orchestrator.js";
+import { suppressPage } from "./suppressedPages.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
@@ -32,12 +34,10 @@ export async function deleteGroupFile(
   }
 
   try {
-    const { suppressPage } = await import("./suppressedPages.js");
     await suppressPage(db, groupId, filePath);
   } catch {}
 
   try {
-    const { orchestratorStore } = await import("../stores/orchestrator.js");
     await orchestratorStore.removePage(db, filePath, groupId);
   } catch {
     // Orchestrator store might not be instantiated in isolated storage unit test

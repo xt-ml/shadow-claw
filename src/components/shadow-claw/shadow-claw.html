@@ -145,7 +145,7 @@
       <div class="sidebar-resize-handle" title="Drag to resize sidebar"></div>
 
       <!-- Main Content -->
-      <div class="main-content">
+      <main class="main-content">
         <div class="main-content-boot-skeleton" aria-hidden="true">
           <svg
             class="boot-loading-svg"
@@ -244,12 +244,12 @@
 
         <shadow-claw-file-viewer id="file-viewer"></shadow-claw-file-viewer>
         <shadow-claw-toast></shadow-claw-toast>
-      </div>
+      </main>
     </div>
 
     <shadow-claw-dialog
       dialog-class="app-dialog"
-      aria-labelledby="appDialogTitle"
+      dialog-aria-labelledby="appDialogTitle"
     >
       <form method="dialog" class="app-confirm-dialog__form">
         <h2 id="appDialogTitle" class="app-dialog__title">Confirm</h2>
@@ -277,7 +277,7 @@
 
     <shadow-claw-dialog
       dialog-class="app-dialog app-prompt-dialog"
-      aria-labelledby="appPromptTitle"
+      dialog-aria-labelledby="appPromptTitle"
     >
       <form method="dialog" class="app-prompt-dialog__form">
         <h2 id="appPromptTitle" class="app-prompt-dialog__title">

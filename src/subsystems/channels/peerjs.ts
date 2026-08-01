@@ -1,4 +1,3 @@
-import { Peer } from "peerjs";
 import { Signal } from "signal-polyfill";
 
 import {
@@ -14,7 +13,7 @@ import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { writeGroupFileBytes } from "../../storage/writeGroupFileBytes.js";
 import { ulid } from "../../utils/ulid.js";
 
-import type { DataConnection, PeerError } from "peerjs";
+import type { DataConnection, Peer, PeerError } from "peerjs";
 import type { MessageAttachment } from "../../content/types.js";
 import type { A2UIAction, A2UIEnvelope } from "../../ui/a2ui/types.js";
 import type {
@@ -1212,7 +1211,8 @@ export class PeerJsChannel implements Channel {
   // Private helpers
   // ---------------------------------------------------------------------------
 
-  private _initPeer(): void {
+  private async _initPeer(): Promise<void> {
+    const { Peer } = await import("peerjs");
     const opts: Record<string, unknown> = {};
 
     // Only override defaults when explicitly configured

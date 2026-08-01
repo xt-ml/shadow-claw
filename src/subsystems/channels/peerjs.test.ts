@@ -148,10 +148,11 @@ describe("PeerJsChannel", () => {
   // ----- start / stop -----
 
   describe("start() / stop()", () => {
-    it("creates a Peer on start", () => {
+    it("creates a Peer on start", async () => {
       const ch = new PeerJsChannel();
       ch.configure("my-id", []);
       ch.start();
+      await new Promise((r) => setTimeout(r, 0));
       expect(lastPeerInstance).not.toBeNull();
     });
 
@@ -160,7 +161,9 @@ describe("PeerJsChannel", () => {
       const ch = new PeerJsChannel();
       ch.configure("my-id", []);
       ch.start();
+      await new Promise((r) => setTimeout(r, 0));
       ch.start();
+      await new Promise((r) => setTimeout(r, 0));
       expect(Peer).toHaveBeenCalledTimes(1);
     });
 
@@ -168,13 +171,15 @@ describe("PeerJsChannel", () => {
       const { Peer } = await import("peerjs");
       const ch = new PeerJsChannel();
       ch.start(); // no myPeerId set — should be a no-op
+      await new Promise((r) => setTimeout(r, 0));
       expect(Peer).not.toHaveBeenCalled();
     });
 
-    it("stops and clears state", () => {
+    it("stops and clears state", async () => {
       const ch = new PeerJsChannel();
       ch.configure("my-id", []);
       ch.start();
+      await new Promise((r) => setTimeout(r, 0));
       ch.stop();
       expect(lastPeerInstance?.destroyed).toBe(true);
       expect(ch.running).toBe(false);

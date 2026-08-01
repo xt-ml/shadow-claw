@@ -60,14 +60,14 @@ describe("setupEffects", () => {
     expect(mockEffect).not.toHaveBeenCalled();
   });
 
-  it("should register three effects", () => {
+  it("should register four effects", () => {
     setupEffects(shadowRoot, shadowClaw, db, oStore);
-    expect(mockEffect).toHaveBeenCalledTimes(3);
+    expect(mockEffect).toHaveBeenCalledTimes(4);
   });
 
   it("orchestrator state effect should showSuccess when transitioning to idle from thinking/responding", () => {
     setupEffects(shadowRoot, shadowClaw, db, oStore);
-    const cb = effectCallbacks[0];
+    const cb = effectCallbacks[1];
 
     // No transition to idle
     cb();
@@ -93,7 +93,7 @@ describe("setupEffects", () => {
 
   it("page change effect should call showPage when page differs", () => {
     setupEffects(shadowRoot, shadowClaw, db, oStore);
-    const cb = effectCallbacks[1];
+    const cb = effectCallbacks[2];
 
     // Same page
     cb();
@@ -114,7 +114,7 @@ describe("setupEffects", () => {
 
   it("activityLog effect should update visibility", () => {
     setupEffects(shadowRoot, shadowClaw, db, oStore);
-    const cb = effectCallbacks[2];
+    const cb = effectCallbacks[3];
 
     oStore.activityLog = [1, 2, 3];
     cb();

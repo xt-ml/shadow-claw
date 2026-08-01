@@ -45,19 +45,9 @@ import type { AppDialogOptions } from "../../ui/types.js";
 import type { ShadowClawTerminal } from "../shadow-claw-terminal/shadow-claw-terminal.js";
 import type { ProviderHelpType } from "../types.js";
 
-import "../shadow-claw-channels/shadow-claw-channels.js";
-import "../shadow-claw-chat/shadow-claw-chat.js";
 import "../shadow-claw-conversations/shadow-claw-conversations.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
-import "../shadow-claw-file-viewer/shadow-claw-file-viewer.js";
-import "../shadow-claw-files/shadow-claw-files.js";
-import "../shadow-claw-pages/shadow-claw-pages.js";
-import "../shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.js";
-import "../shadow-claw-settings/shadow-claw-settings.js";
-import "../shadow-claw-tasks/shadow-claw-tasks.js";
-import "../shadow-claw-terminal/shadow-claw-terminal.js";
 import "../shadow-claw-toast/shadow-claw-toast.js";
-import "../shadow-claw-tools/shadow-claw-tools.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
 

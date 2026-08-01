@@ -4,6 +4,7 @@ import {
   createSettingsBackupBlob,
   parseSettingsBackupPayload,
   reapplyPlaintextPasswords,
+  writeSettingsBackupToFileHandle,
 } from "../../config/settings-backup.js";
 
 import { setAssistantName } from "../../core/orchestrator/utils/operations/provider.js";
@@ -17,19 +18,43 @@ import type { ConfigEntryRecord } from "../../config/settings-backup.js";
 import type { Orchestrator } from "../../core/orchestrator/orchestrator.js";
 import type { ShadowClawDatabase } from "../../db/types.js";
 
-import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
-import "../settings/shadow-claw-accounts/shadow-claw-accounts.js";
-import "../settings/shadow-claw-git/shadow-claw-git.js";
-import "../settings/shadow-claw-integrations/shadow-claw-integrations.js";
-import "../settings/shadow-claw-llm/shadow-claw-llm.js";
-import "../settings/shadow-claw-mcp-remote/shadow-claw-mcp-remote.js";
-import "../settings/shadow-claw-networking/shadow-claw-networking.js";
-import "../settings/shadow-claw-notifications/shadow-claw-notifications.js";
-import "../settings/shadow-claw-storage/shadow-claw-storage.js";
-import "../settings/shadow-claw-task-server/shadow-claw-task-server.js";
-import "../settings/shadow-claw-webvm/shadow-claw-webvm.js";
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
+
+const settingsTabLoaders: Record<string, (() => Promise<unknown>)[]> = {
+  ai: [() => import("../settings/shadow-claw-llm/shadow-claw-llm.js")],
+  environment: [
+    () =>
+      import("../settings/shadow-claw-networking/shadow-claw-networking.js"),
+    () => import("../settings/shadow-claw-webvm/shadow-claw-webvm.js"),
+    () => import("../settings/shadow-claw-storage/shadow-claw-storage.js"),
+  ],
+  integrations: [
+    () => import("../settings/shadow-claw-git/shadow-claw-git.js"),
+    () => import("../settings/shadow-claw-accounts/shadow-claw-accounts.js"),
+    () =>
+      import("../settings/shadow-claw-mcp-remote/shadow-claw-mcp-remote.js"),
+    () =>
+      import("../settings/shadow-claw-integrations/shadow-claw-integrations.js"),
+    () =>
+      import("../settings/shadow-claw-task-server/shadow-claw-task-server.js"),
+    () =>
+      import("../settings/shadow-claw-notifications/shadow-claw-notifications.js"),
+  ],
+};
+
+const loadedSettingsTabs = new Set<string>();
+
+async function ensureSettingsTabLoaded(tabId: string): Promise<void> {
+  if (loadedSettingsTabs.has(tabId)) {
+    return;
+  }
+  const loaders = settingsTabLoaders[tabId];
+  if (loaders) {
+    loadedSettingsTabs.add(tabId);
+    await Promise.all(loaders.map((loader) => loader()));
+  }
+}
 
 import ShadowClawElement from "../shadow-claw-element.js";
 import shadowClawSettingsStyles from "./shadow-claw-settings.css" with { type: "css" };
@@ -85,6 +110,8 @@ export class ShadowClawSettings extends ShadowClawElement {
   }
 
   applyTabState() {
+    ensureSettingsTabLoaded(this.activeTab).catch(console.error);
+
     const root = this.shadowRoot;
     if (!root) {
       return;
@@ -354,8 +381,6 @@ export class ShadowClawSettings extends ShadowClawElement {
         }
 
         const entries = await this.getAllConfigEntries();
-        const { writeSettingsBackupToFileHandle } =
-          await import("../../config/settings-backup.js");
 
         await writeSettingsBackupToFileHandle(
           fileHandle,

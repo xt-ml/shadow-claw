@@ -3,6 +3,8 @@ import { effect } from "../../../core/effect.js";
 import { showSuccess } from "../../../ui/toast.js";
 import { showPage } from "./showPage.js";
 import { updateActivityLogToggleVisibility } from "./updateActivityLogToggleVisibility.js";
+import { ensureComponentLoaded } from "./loadComponent.js";
+import { fileViewerStore } from "../../../stores/file-viewer.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { OrchestratorStore } from "../../../stores/orchestrator.js";
@@ -17,6 +19,17 @@ export function setupEffects(
   if (!shadow) {
     return;
   }
+
+  // React to file viewer state to lazily load viewer components
+  effect(() => {
+    const file = fileViewerStore.file;
+    if (file) {
+      ensureComponentLoaded("file-viewer").catch(console.error);
+      if (file.kind === "pdf") {
+        ensureComponentLoaded("pdf-viewer").catch(console.error);
+      }
+    }
+  });
 
   // React to orchestrator state for completion notifications
   effect(() => {

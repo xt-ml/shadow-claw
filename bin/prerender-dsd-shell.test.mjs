@@ -1,5 +1,7 @@
 import {
+  applyStaticPagesContent,
   escapeJsonForHtmlScript,
+  injectPageHeaderDsd,
   injectStaticManifestScript,
   renderPageHtml,
   sortPagePaths,
@@ -107,5 +109,81 @@ describe("renderPageHtml frontmatter", () => {
     );
     expect(rendered).toContain("<h1>Heading</h1>");
     expect(rendered).not.toContain('slug: "on-developing-loops"');
+  });
+});
+
+describe("pages DSD prerender parity", () => {
+  it("injects page-header declarative shadow root and static title", () => {
+    const pagesMarkup = [
+      '<shadow-claw-page-header icon="📚" title="Pages">',
+      '  <div slot="status" class="pages__status" data-pages-status></div>',
+      "</shadow-claw-page-header>",
+    ].join("\n");
+
+    const pageHeaderTemplate = [
+      '<header class="header">',
+      '  <div class="header__main">',
+      '    <h2 class="header__title"></h2>',
+      '    <details class="header__actions-disclosure">',
+      '      <summary class="header__actions-toggle">Actions</summary>',
+      '      <div class="header__actions" id="header-actions-panel"></div>',
+      "    </details>",
+      "  </div>",
+      "</header>",
+    ].join("\n");
+
+    const next = injectPageHeaderDsd(pagesMarkup, pageHeaderTemplate);
+
+    expect(next).toContain("data-shadow-claw-page-header-dsd");
+    expect(next).toContain('<h2 class="header__title">📚 Pages</h2>');
+    expect(next).toContain('class="header__actions-disclosure" hidden');
+    expect(next).toContain(
+      'class="header__actions" id="header-actions-panel" hidden',
+    );
+  });
+
+  it("renders status, selected path, both static lists, and rendered content", () => {
+    const pagesTemplate = [
+      '<shadow-claw-page-header icon="📚" title="Pages">',
+      '  <div slot="status" class="pages__status" data-pages-status></div>',
+      "</shadow-claw-page-header>",
+      '<span class="pages__dropdown-selected" data-pages-dropdown-selected>Select a page...</span>',
+      '<div class="pages__list" data-pages-list role="list"></div>',
+      '<div class="pages__list" data-pages-list role="list"></div>',
+      '<div class="pages__empty" data-pages-empty>empty</div>',
+      '<div class="pages__rendered" data-pages-rendered hidden></div>',
+    ].join("\n");
+
+    const pageHeaderTemplate = [
+      '<header class="header">',
+      '  <div class="header__main">',
+      '    <h2 class="header__title"></h2>',
+      '    <details class="header__actions-disclosure">',
+      '      <summary class="header__actions-toggle">Actions</summary>',
+      '      <div class="header__actions" id="header-actions-panel"></div>',
+      "    </details>",
+      "  </div>",
+      "</header>",
+    ].join("\n");
+
+    const next = applyStaticPagesContent(
+      pagesTemplate,
+      [{ displayPath: "MEMORY.md" }],
+      "<h1>Hello</h1>",
+      pageHeaderTemplate,
+    );
+
+    expect(next).toContain("data-pages-status>1 saved page</div>");
+    expect(next).toContain(
+      '<span class="pages__dropdown-selected" data-pages-dropdown-selected>MEMORY.md</span>',
+    );
+    expect(next.match(/data-pages-list/g)).toHaveLength(2);
+    expect(next.match(/pages__group-details/g)).toHaveLength(2);
+    expect(next).toContain(
+      '<div class="pages__empty" data-pages-empty hidden>',
+    );
+    expect(next).toContain(
+      '<div class="pages__rendered" data-pages-rendered><h1>Hello</h1></div>',
+    );
   });
 });

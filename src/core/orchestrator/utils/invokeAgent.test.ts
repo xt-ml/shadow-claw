@@ -115,6 +115,7 @@ jest.unstable_mockModule("../../../db/getConfig.js", () => ({
 jest.unstable_mockModule("../../../db/groups.js", () => ({
   listGroups: mockListGroups,
   createGroup: jest.fn(),
+  getGroupMetadata: jest.fn(),
 }));
 
 jest.unstable_mockModule("../../../db/saveMessage.js", () => ({

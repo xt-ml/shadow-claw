@@ -32,7 +32,6 @@ import { showError, showSuccess } from "../../ui/toast.js";
 import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
-import "../shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.js";
 
 import type { Config } from "dompurify";
 import type { ShadowClawDatabase } from "../../db/types.js";
@@ -107,17 +106,21 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       throw new Error("shadowRoot not found");
     }
 
-    this.db = await getDb();
-
-    // Apply highlight.js theme to markdown preview output in this shadow root.
-    const hjsCss = await fetch(highlightThemePath).then((r) => r.text());
-    this.applyHighlightStyles(hjsCss);
+    this.setupEffects();
+    this.bindEventListeners();
 
     window.addEventListener("message", this.handleIframeMessage);
     document.addEventListener("fullscreenchange", this.handleFullscreenChange);
 
-    this.setupEffects();
-    this.bindEventListeners();
+    this.db = await getDb();
+
+    // Apply highlight.js theme to markdown preview output in this shadow root.
+    try {
+      const hjsCss = await fetch(highlightThemePath).then((r) => r.text());
+      this.applyHighlightStyles(hjsCss);
+    } catch (err) {
+      console.warn("Failed to load highlight.js styles:", err);
+    }
   }
 
   disconnectedCallback() {
@@ -1525,13 +1528,17 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         "file-content--iframe",
       );
 
-      const pdfViewer = document.createElement(
-        "shadow-claw-pdf-viewer",
-      ) as HTMLElement & {
-        file: any;
-      };
-      pdfViewer.file = file;
-      content.replaceChildren(pdfViewer);
+      import("../shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.js")
+        .then(() => {
+          const pdfViewer = document.createElement(
+            "shadow-claw-pdf-viewer",
+          ) as HTMLElement & {
+            file: any;
+          };
+          pdfViewer.file = file;
+          content.replaceChildren(pdfViewer);
+        })
+        .catch(console.error);
 
       return;
     }

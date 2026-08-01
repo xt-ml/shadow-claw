@@ -9,7 +9,7 @@
 
 import { getConfig } from "./getConfig.js";
 import { setConfig } from "./setConfig.js";
-import { createGroup } from "./groups.js";
+import { createGroup, getGroupMetadata } from "./groups.js";
 import { ulid } from "../utils/ulid.js";
 import type { ShadowClawDatabase } from "./types.js";
 import type { RoomMember, RoomMeta } from "../subsystems/channels/types.js";
@@ -95,7 +95,6 @@ async function ensureRoomGroup(
   db: ShadowClawDatabase,
   room: RoomMeta,
 ): Promise<void> {
-  const { getGroupMetadata } = await import("./groups.js");
   const groups = await getGroupMetadata(db);
   const groupId = roomGroupId(room.roomId);
   if (groups.some((g) => g.groupId === groupId)) {

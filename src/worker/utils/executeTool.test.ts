@@ -2,6 +2,7 @@ import { jest } from "@jest/globals";
 
 let executeTool: any;
 let resolveMcpReauth: any;
+let gitModuleLoaded: boolean;
 
 describe("executeTool.js", () => {
   let mockBootVM;
@@ -50,6 +51,7 @@ describe("executeTool.js", () => {
 
   beforeEach(async () => {
     jest.resetModules();
+    gitModuleLoaded = false;
 
     mockBootVM = jest.fn();
     mockExecuteInVM = jest.fn();
@@ -122,6 +124,7 @@ describe("executeTool.js", () => {
       BASH_MAX_TIMEOUT_SEC: 1800,
       FETCH_MAX_RESPONSE: 1000,
       OPFS_ROOT: "shadowclaw",
+      OAUTH_PROVIDER_DEFINITIONS: {},
       CONFIG_KEYS: {
         GIT_TOKEN: "git-token",
         GIT_CORS_PROXY: "git-cors-proxy",
@@ -138,6 +141,9 @@ describe("executeTool.js", () => {
       DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
       DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
       DEFAULT_GROUP_ID: "default",
+      LLAMAFILE_PROXY_URL: "/proxy/llamafile",
+      PROVIDERS: [],
+      buildTriggerPattern: jest.fn(),
     }));
 
     jest.unstable_mockModule("../../db/getConfig.js", () => ({
@@ -154,6 +160,7 @@ describe("executeTool.js", () => {
     }));
 
     jest.unstable_mockModule("../../subsystems/git/git.js", () => ({
+      ...((gitModuleLoaded = true), {}),
       gitAdd: mockGitAdd,
       gitCheckout: mockGitCheckout,
       gitClone: mockGitClone,
@@ -206,6 +213,7 @@ describe("executeTool.js", () => {
       () => ({
         listRemoteMcpTools: mockListRemoteMcpTools,
         callRemoteMcpTool: mockCallRemoteMcpTool,
+        clearRemoteMcpSession: jest.fn(),
         McpReauthRequiredError: class McpReauthRequiredError extends Error {
           connectionId: string;
           constructor(connectionId: string) {
@@ -264,6 +272,7 @@ describe("executeTool.js", () => {
       post: mockPost,
       registerSubagentCollector: jest.fn(),
       unregisterSubagentCollector: jest.fn(),
+      setPostHandler: jest.fn(),
     }));
 
     jest.unstable_mockModule("./formatShellOutput.js", () => ({
@@ -2244,6 +2253,26 @@ describe("executeTool.js", () => {
     expect(result).toContain("No git credentials configured");
 
     expect(mockGitPush).not.toHaveBeenCalled();
+  });
+
+  it("should lazy-load git subsystem only for git tools", async () => {
+    expect(gitModuleLoaded).toBe(false);
+
+    await executeTool({} as any, "get_current_time", {}, "group1");
+
+    expect(gitModuleLoaded).toBe(false);
+
+    (mockGitStatus as any).mockResolvedValue({
+      branch: "main",
+      current: "main",
+      clean: true,
+      modified: [],
+      staged: [],
+    });
+
+    await executeTool({} as any, "git_status", { repo: "demo" }, "group1");
+
+    expect(gitModuleLoaded).toBe(true);
   });
 
   it("should clone a repo via git_clone", async () => {

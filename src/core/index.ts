@@ -23,9 +23,8 @@ if (typeof window !== "undefined") {
 }
 
 import { initializeApp } from "./utils/initializeApp.js";
+import { loadAppShell } from "./utils/loadAppShell.js";
 import { resumeAudioContext } from "../ui/audio.js";
-
-import "../components/shadow-claw/shadow-claw.js";
 
 export const BOOT_PENDING_CLASS = "sc-js-boot-pending";
 export const BOOT_PENDING_ATTR = "data-js-boot-pending";
@@ -33,26 +32,27 @@ export const HYDRATION_PENDING_ATTR = "data-hydration-pending";
 
 let isInitializing = false;
 
+async function bootstrapApp() {
+  await loadAppShell();
+  const result = await initializeApp(document, isInitializing);
+  isInitializing = Boolean(result?.isInitializing);
+}
+
 // Initialize on DOM ready
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", async () => {
     try {
-      const result = await initializeApp(document, isInitializing);
-      isInitializing = Boolean(result?.isInitializing);
+      await bootstrapApp();
     } catch (e) {
       console.error("Fatal error during initialization:", e);
       isInitializing = false;
     }
   });
 } else {
-  initializeApp(document, isInitializing)
-    .then((result) => {
-      isInitializing = Boolean(result?.isInitializing);
-    })
-    .catch((err) => {
-      console.error("Fatal error during initialization:", err);
-      isInitializing = false;
-    });
+  bootstrapApp().catch((err) => {
+    console.error("Fatal error during initialization:", err);
+    isInitializing = false;
+  });
 }
 
 // Register user gesture listeners for audio resumption

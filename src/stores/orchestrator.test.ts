@@ -182,6 +182,7 @@ jest.unstable_mockModule("../db/groups.js", () => ({
   reorderGroups: mockReorderGroups,
   cloneGroup: mockCloneGroup,
   saveGroupMetadata: mockSaveGroupMetadata,
+  getGroupMetadata: jest.fn(),
   updateGroupToolTags: mockUpdateGroupToolTags,
   updateGroupPinnedProvider: jest.fn(),
   updateGroupSubagentSettings: mockUpdateGroupSubagentSettings,

@@ -13,6 +13,7 @@ import {
 
 import { getDb, type ShadowClawDatabase } from "../../../db/db.js";
 import { detectProvider } from "../../../subsystems/git/credentials.js";
+import { orchestratorStore } from "../../../stores/orchestrator.js";
 
 import ShadowClawElement from "../../shadow-claw-element.js";
 import "../../common/shadow-claw-empty-state/shadow-claw-empty-state.js";
@@ -688,8 +689,6 @@ export class ShadowClawGit extends ShadowClawElement {
         customRadio.checked = proxyPref === "custom";
       }
 
-      const { orchestratorStore } =
-        await import("../../../stores/orchestrator.js");
       if (customUrlInput) {
         customUrlInput.value = orchestratorStore.gitProxyUrl || "/git-proxy";
       }

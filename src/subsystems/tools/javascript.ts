@@ -10,6 +10,9 @@ export const javascript: ToolDefinition = {
     "self, postMessage, importScripts, navigator, or indexedDB — these are all undefined. " +
     "fetch availability is controlled by Tool Configuration -> Internet Access (shared with bash). " +
     "setTimeout is available but setInterval is blocked. " +
+    "IMPORTANT: You CANNOT call other agent tools (like read_file, write_file, or bash) from inside this sandbox. " +
+    "If you need to process file contents or tool outputs, you must fetch them in a previous turn " +
+    "and pass the data into this tool via the $PIPE_DATA variable. " +
     "Write plain JavaScript expressions and statements — the return value of the " +
     "last expression is captured as the result.",
   input_schema: {

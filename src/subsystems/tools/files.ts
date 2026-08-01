@@ -89,7 +89,8 @@ export const patch_file: ToolDefinition = {
     "Fails if old_string is not found or matches more than once. " +
     "Use this instead of write_file when you only need to change part of a file — " +
     "it is safer and works well with large files. " +
-    "Include enough surrounding context in old_string to make the match unique.",
+    "Include enough surrounding context in old_string to make the match unique. " +
+    "IMPORTANT: You must provide 'path', 'old_string', and 'new_string' parameters.",
   input_schema: {
     type: "object",
     properties: {
@@ -116,9 +117,10 @@ export const read_file: ToolDefinition = {
   name: "read_file",
   description:
     "Read the contents of one or more files from the group workspace. " +
-    "Pass a single path or an array of paths to read multiple files at once. " +
+    "IMPORTANT: You must specify either the 'path' parameter (for a single file) " +
+    "or the 'paths' parameter (an array of file paths for multiple files). " +
     "When paths is provided, returns all file contents concatenated with " +
-    "--- filename --- headers. Prefer paths to batch reads in a single call." +
+    "--- filename --- headers. Prefer paths to batch reads in a single call. " +
     "Image files (png, jpg, gif, webp, etc.) are returned as native image content " +
     "that the model can see directly. Other binary files will be detected and " +
     "an error returned suggesting alternative tools.",
@@ -198,7 +200,8 @@ export const write_file: ToolDefinition = {
   description:
     "Write content to a file in the group workspace. " +
     "Creates the file and any intermediate directories if they don't exist. " +
-    "Overwrites the file if it already exists.",
+    "Overwrites the file if it already exists. " +
+    "IMPORTANT: You must provide both the 'path' and 'content' parameters when calling this tool.",
   input_schema: {
     type: "object",
     properties: {

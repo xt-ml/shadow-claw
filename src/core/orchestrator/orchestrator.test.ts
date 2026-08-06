@@ -1748,29 +1748,34 @@ describe("Orchestrator", () => {
     it("calls all init tasks without throwing", async () => {
       const o = new Orchestrator();
 
-      const fakeRequest: any = {
-        onerror: null,
-        onsuccess: null,
-        result: undefined,
-      };
-
-      const db = {
+      // The fake DB queues callbacks via setTimeout so that each IDB
+      // operation resolves asynchronously. With parallel Promise.all reads,
+      // multiple get() calls may be in-flight at once — each needs its own
+      // request object so they don't stomp each other.
+      const fakeDb = {
         transaction: () => ({
           objectStore: () => ({
             put: () => {
-              setTimeout(() => fakeRequest.onsuccess?.(), 0);
-              return fakeRequest;
+              const req: any = { onerror: null, onsuccess: null };
+              setTimeout(() => req.onsuccess?.(), 0);
+              return req;
             },
             delete: () => {
-              setTimeout(() => fakeRequest.onsuccess?.(), 0);
-              return fakeRequest;
+              const req: any = { onerror: null, onsuccess: null };
+              setTimeout(() => req.onsuccess?.(), 0);
+              return req;
             },
             get: (key: string) => {
+              const req: any = {
+                onerror: null,
+                onsuccess: null,
+                result: undefined,
+              };
               setTimeout(() => {
-                fakeRequest.result = { value: key };
-                fakeRequest.onsuccess?.();
+                req.result = { value: key };
+                req.onsuccess?.();
               }, 0);
-              return fakeRequest;
+              return req;
             },
           }),
         }),
@@ -1788,12 +1793,18 @@ describe("Orchestrator", () => {
         };
       }
 
-      await initCoreConfig(o, db);
-      await initProviderAndModel(o, db);
-      await initLlamafileAndMesh(o, db);
-      await initFeatureFlagsAndLimits(o, db);
-      await initChannelsAndRooms(o, db);
-      await initWorkerAndScheduler(o, db);
+      await initCoreConfig(o, fakeDb);
+      await initProviderAndModel(o, fakeDb);
+      await initLlamafileAndMesh(o, fakeDb);
+      await initFeatureFlagsAndLimits(o, fakeDb);
+      await initChannelsAndRooms(o, fakeDb);
+      await initWorkerAndScheduler(o, fakeDb);
+
+      // shouldStartLocalScheduler() and fetchModelInfo are now background
+      // void-promises. Flush the microtask queue a few ticks so their
+      // .then() chains settle (they resolve via mockResolvedValue, not timers).
+      await Promise.resolve();
+      await Promise.resolve();
 
       expect(o.assistantName).toBeDefined();
       expect(o.triggerPattern).toBeDefined();

@@ -1,4 +1,5 @@
 import ShadowClawElement from "../shadow-claw-element.js";
+import { setSanitizedHtml } from "../../security/trusted-types.js";
 import shadowClawPageHeaderStyles from "./shadow-claw-page-header.css" with { type: "css" };
 import shadowClawPageHeaderTemplate from "./shadow-claw-page-header.html" with { type: "html" };
 
@@ -177,7 +178,7 @@ export class ShadowClawPageHeader extends ShadowClawElement {
     if (titleEl) {
       const icon = this.getAttribute("icon") || "";
       const title = this.getAttribute("title") || "";
-      titleEl.textContent = icon ? `${icon} ${title}` : title;
+      setSanitizedHtml(titleEl, icon ? `${icon} ${title}` : title);
     }
 
     this.setupActionsContainer(root);

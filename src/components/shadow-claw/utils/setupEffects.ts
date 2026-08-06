@@ -20,11 +20,25 @@ export function setupEffects(
     return;
   }
 
-  // React to file viewer state to lazily load viewer components
+  // React to file viewer state to lazily load and stamp viewer components
   effect(() => {
     const file = fileViewerStore.file;
     if (file) {
-      ensureComponentLoaded("file-viewer").catch(console.error);
+      ensureComponentLoaded("file-viewer")
+        .then(() => {
+          // Stamp the file-viewer element into the DOM on first use if it
+          // was not pre-stamped in the static template.
+          if (shadow && !shadow.querySelector("shadow-claw-file-viewer")) {
+            const main = shadow.querySelector(".main-content");
+            if (main) {
+              const viewer = document.createElement("shadow-claw-file-viewer");
+              viewer.id = "file-viewer";
+              main.appendChild(viewer);
+            }
+          }
+        })
+        .catch(console.error);
+
       if (file.kind === "pdf") {
         ensureComponentLoaded("pdf-viewer").catch(console.error);
       }

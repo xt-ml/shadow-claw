@@ -105,13 +105,34 @@ export async function applyRoute(
     }
   }
 
-  if (resolvedPage === "pages" && path) {
-    const pagesComp = shadow?.querySelector("shadow-claw-pages") as any;
-    if (pagesComp) {
-      pagesComp.selectedPage = {
+  if (resolvedPage === "pages") {
+    // The pages component is lazy-loaded via a dynamic import that is
+    // fire-and-forgotten from showPage(). On initial boot the import may
+    // still be in-flight here, leaving the DSD-prerendered element in the
+    // DOM but not yet upgraded. Awaiting whenDefined() guarantees the
+    // element is fully upgraded before clearBootPendingClass() fires —
+    // regardless of whether a specific page path is in the URL. The upgrade
+    // synchronously runs the connectedCallback() preamble which clears stale
+    // SSR content, so the first visible frame after boot always shows CSR.
+    if (typeof customElements !== "undefined") {
+      await customElements.whenDefined("shadow-claw-pages");
+    }
+
+    // When a specific path is in the URL, pin it before rendering.
+    if (path) {
+      await oStore.setActivePinnedPage(db, {
         groupId: groupId || oStore.activeGroupId || DEFAULT_GROUP_ID,
         path: path,
-      };
+      });
+    }
+
+    // Always render the active pinned page (either just-set from path, or the
+    // persisted one from the store). This ensures CSR content is in the DOM
+    // before clearBootPendingClass() removes the skeleton, covering both:
+    //   • /pages/main/posts/xxx.md  — render the URL-specified post
+    //   • /pages                    — render the persisted default post
+    const pagesComp = shadow?.querySelector("shadow-claw-pages") as any;
+    if (pagesComp && typeof pagesComp.renderSelectedPage === "function") {
       await pagesComp.renderSelectedPage();
       if (anchor) {
         await applyAnchorWithRetry(() => {

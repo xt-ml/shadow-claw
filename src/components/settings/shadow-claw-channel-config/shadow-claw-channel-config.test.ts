@@ -453,7 +453,7 @@ describe("shadow-claw-channel-config", () => {
       ?.querySelector('[data-action="verify-telegram-config"]')
       ?.dispatchEvent(new Event("click"));
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 50));
 
     expect(showSuccess).toHaveBeenCalledWith(
       "Telegram setup looks good for @shadow_claw_bot. Token works and no webhook is active.",

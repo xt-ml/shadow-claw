@@ -221,6 +221,15 @@ shadow-claw {
   min-height: 100dvh;
 }
 
+/* Hide the entire shadow-claw host (and its pre-rendered DSD content) before
+   first paint when the "Override pre-rendered skeleton" setting is enabled.
+   The sc-prerender-override class is added synchronously by theme-init.js
+   before <body> is parsed, guaranteeing no SSR flash. It is removed by
+   clearBootPendingClass() once CSR routing has fully completed. */
+html.sc-prerender-override shadow-claw {
+  visibility: hidden;
+}
+
 shadow-claw:not(:defined) {
   background:
     radial-gradient(

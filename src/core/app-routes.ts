@@ -15,6 +15,9 @@ export interface ShadowClawAppRoute {
 }
 
 function encodePathSegment(value: string): string {
+  if (value === "br:main") {
+    return "main";
+  }
   if (value.startsWith("br:")) {
     return `br-${value.slice(3)}`;
   }
@@ -124,6 +127,10 @@ function normalizeRouteGroupId(
 ): string | undefined {
   if (!groupId) {
     return groupId;
+  }
+
+  if (groupId === "main") {
+    return "br:main";
   }
 
   // Accept browser-safe "br-..." route IDs and normalize to canonical "br:...".
@@ -364,7 +371,7 @@ export function getWorkspaceRouteRequestPath(
     return null;
   }
 
-  const groupId = parts[1];
+  const groupId = normalizeRouteGroupId(parts[1]) || parts[1];
   const path = sanitizeWorkspacePath(parts.slice(2).join("/"));
   if (!groupId || !path) {
     return null;

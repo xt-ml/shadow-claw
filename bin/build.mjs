@@ -67,10 +67,11 @@ async function main() {
   await run("npm run -s rolldown");
 
   // Render static DSD shell into index.html for no-JS and first paint.
-  // Pages content seeding from main/ is enabled by default.
-  // Disable with: PRERENDER_MAIN_MEMORY=false
-  if (prerenderMainMemory) {
-    await run("node bin/prerender-dsd-shell.mjs dist/public/index.html main");
+  // Pages content seeding from pages/main/ is enabled by default.
+  if (process.env.PRERENDER_MAIN_MEMORY !== "false") {
+    await run(
+      "node bin/prerender-dsd-shell.mjs dist/public/index.html pages/main",
+    );
   } else {
     await run(
       "node bin/prerender-dsd-shell.mjs dist/public/index.html --no-seed",

@@ -17,7 +17,7 @@ jest.unstable_mockModule("./ensureMainGroupIndex.js", () => ({
 }));
 
 jest.unstable_mockModule("../config/config.js", () => ({
-  DEFAULT_GROUP_ID: "br-main",
+  DEFAULT_GROUP_ID: "br:main",
 }));
 
 jest.unstable_mockModule("../stores/orchestrator.js", () => ({
@@ -72,7 +72,7 @@ describe("deleteGroupFile", () => {
     (getGroupDir as any).mockResolvedValue(root);
 
     (parsePath as any).mockReturnValue({ dirs: [], filename: "index.html" });
-    await deleteGroupFile({} as any, "br-main", "index.html");
+    await deleteGroupFile({} as any, "br:main", "index.html");
 
     expect(root.removeEntry).toHaveBeenCalledWith("index.html");
     expect(setMainGroupIndexSuppressed).toHaveBeenCalledWith(
@@ -84,7 +84,7 @@ describe("deleteGroupFile", () => {
     jest.clearAllMocks();
 
     (parsePath as any).mockReturnValue({ dirs: [], filename: "MEMORY.md" });
-    await deleteGroupFile({} as any, "br-main", "MEMORY.md");
+    await deleteGroupFile({} as any, "br:main", "MEMORY.md");
 
     expect(root.removeEntry).toHaveBeenCalledWith("MEMORY.md");
     expect(setMainGroupMemorySuppressed).toHaveBeenCalledWith(

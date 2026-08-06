@@ -60,6 +60,8 @@ import ShadowClawElement from "../shadow-claw-element.js";
 import shadowClawSettingsStyles from "./shadow-claw-settings.css" with { type: "css" };
 import shadowClawSettingsTemplate from "./shadow-claw-settings.html" with { type: "html" };
 
+declare const __PRERENDER_MAIN_MEMORY__: boolean | undefined;
+
 const elementName = "shadow-claw-settings";
 
 /**
@@ -669,16 +671,32 @@ export class ShadowClawSettings extends ShadowClawElement {
       this.db,
       CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON,
     )) as unknown;
-    let storedLocalStorage = false;
+    let storedLocalStorage: string | null = null;
     try {
-      storedLocalStorage =
-        localStorage.getItem("shadow-claw-override-prerender-skeleton") ===
-        "true";
+      storedLocalStorage = localStorage.getItem(
+        "shadow-claw-override-prerender-skeleton",
+      );
     } catch {
-      storedLocalStorage = false;
+      // Ignore
     }
-    const overridePrerenderSkeleton =
-      isTruthyConfigValue(rawOverridePrerenderSkeleton) || storedLocalStorage;
+
+    // @ts-ignore
+    const defaultOverride =
+      typeof __PRERENDER_MAIN_MEMORY__ !== "undefined"
+        ? __PRERENDER_MAIN_MEMORY__
+        : true;
+
+    let overridePrerenderSkeleton = defaultOverride;
+    if (
+      rawOverridePrerenderSkeleton !== null &&
+      rawOverridePrerenderSkeleton !== undefined
+    ) {
+      overridePrerenderSkeleton = isTruthyConfigValue(
+        rawOverridePrerenderSkeleton,
+      );
+    } else if (storedLocalStorage !== null) {
+      overridePrerenderSkeleton = storedLocalStorage === "true";
+    }
 
     if (overridePrerenderSkeleton) {
       try {

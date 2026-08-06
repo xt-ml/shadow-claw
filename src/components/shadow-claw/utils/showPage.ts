@@ -10,6 +10,38 @@ import { ensureComponentLoaded } from "./loadComponent.js";
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { OrchestratorStore } from "../../../stores/orchestrator.js";
 
+/**
+ * Map from page id to the custom element tag name used for that page.
+ * Entries here must match the componentLoaders map in loadComponent.ts.
+ */
+const PAGE_ELEMENT_TAGS: Record<string, string> = {
+  chat: "shadow-claw-chat",
+  tasks: "shadow-claw-tasks",
+  files: "shadow-claw-files",
+  settings: "shadow-claw-settings",
+  tools: "shadow-claw-tools",
+  channels: "shadow-claw-channels",
+};
+
+/**
+ * Stamp the page's custom element into its container div if the container is
+ * currently empty. This is idempotent — calling it on an already-populated
+ * container is a no-op.
+ */
+function ensurePageElementStamped(shadow: ShadowRoot, pageId: string): void {
+  const tag = PAGE_ELEMENT_TAGS[pageId];
+  if (!tag) {
+    return; // pages is pre-stamped; file-viewer is handled separately
+  }
+
+  const container = shadow.querySelector(`[data-page-id="${pageId}"]`);
+  if (!container || container.children.length > 0) {
+    return; // already stamped
+  }
+
+  container.appendChild(document.createElement(tag));
+}
+
 export interface ShowPageContext {
   pagesSidebarHidden: boolean;
   currentPage: string;
@@ -41,7 +73,21 @@ export function showPage(
     shadowClaw.pagesSidebarHidden,
   );
 
-  ensureComponentLoaded(resolvedPage).catch(console.error);
+  // Ensure the JS module import completes, then stamp the page element.
+  // Stamping only after customElements.define guarantees the element constructor
+  // attaches Shadow DOM synchronously upon creation.
+  const tag = PAGE_ELEMENT_TAGS[resolvedPage];
+  if (tag && customElements.get(tag)) {
+    ensurePageElementStamped(shadow, resolvedPage);
+  } else {
+    void ensureComponentLoaded(resolvedPage)
+      .then(() => {
+        if (shadow) {
+          ensurePageElementStamped(shadow, resolvedPage);
+        }
+      })
+      .catch(console.error);
+  }
 
   // Hide all pages
   shadow.querySelectorAll(".page").forEach((p) => {

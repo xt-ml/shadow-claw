@@ -42,6 +42,7 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => {
   return {
     orchestratorStore: {
       whenInitialized: Promise.resolve(),
+      whenReady: Promise.resolve(),
       pages: [],
       groups: [],
       activeGroupId: "group-1",
@@ -102,6 +103,9 @@ const { setSanitizedHtml, setTrustedSrcdoc } =
 describe("shadow-claw-pages", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    (orchestratorStore as any).pages = [];
+    (orchestratorStore as any).groups = [];
+    orchestratorStore._activePinnedPage.set(null);
   });
 
   it("does not eagerly include the sandboxed preview iframe in template source", async () => {
@@ -206,7 +210,7 @@ describe("shadow-claw-pages", () => {
     ).mockResolvedValue(new Uint8Array([255, 216, 255, 217]));
 
     const srcdoc = await component.buildHtmlPageSrcdoc(
-      '<main><img src="/files/br-main/pic.jpg" /><img src="./files/br-main/pic.jpg" /><img src="files/br-main/pic.jpg" /></main>',
+      '<main><img src="/files/main/pic.jpg" /><img src="./files/main/pic.jpg" /><img src="files/main/pic.jpg" /></main>',
       "docs/page.html",
     );
 
@@ -345,7 +349,7 @@ describe("shadow-claw-pages", () => {
 
     const container = document.createElement("div");
     container.innerHTML =
-      '<img src="/files/br-main/pic.jpg" /><img src="./files/br-main/pic.jpg" /><img src="files/br-main/pic.jpg" />';
+      '<img src="/files/main/pic.jpg" /><img src="./files/main/pic.jpg" /><img src="files/main/pic.jpg" />';
 
     (
       readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
@@ -390,7 +394,7 @@ describe("shadow-claw-pages", () => {
 
     const container = document.createElement("div");
     const origin = window.location.origin;
-    container.innerHTML = `<img src="${origin}/files/br%3A01KT4NGEM3T94M0FGHJYVNGS7M/files/br-main/pic.jpg" />`;
+    container.innerHTML = `<img src="${origin}/files/br%3A01KT4NGEM3T94M0FGHJYVNGS7M/files/main/pic.jpg" />`;
 
     (
       readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
@@ -735,8 +739,12 @@ describe("shadow-claw-pages", () => {
       renderSpy.mockRestore();
     });
 
-    it("clears static pre-rendered DSD content on connectedCallback when override setting is enabled in localStorage", async () => {
-      localStorage.setItem("shadow-claw-override-prerender-skeleton", "true");
+    it("clears static pre-rendered DSD content on connectedCallback when sc-prerender-override class is set on <html>", async () => {
+      // The component now reads the authoritative sc-prerender-override class
+      // set by theme-init.ts rather than checking localStorage directly.
+      // This covers both the explicit "true" case and the null→__PRERENDER_MAIN_MEMORY__
+      // default case.
+      document.documentElement.classList.add("sc-prerender-override");
 
       const component = new ShadowClawPages();
       const root = component.shadowRoot;
@@ -754,7 +762,37 @@ describe("shadow-claw-pages", () => {
       expect(rendered.hidden).toBe(true);
       expect(rendered.textContent).toBe("");
 
-      localStorage.removeItem("shadow-claw-override-prerender-skeleton");
+      document.documentElement.classList.remove("sc-prerender-override");
+    });
+
+    it("does NOT clear SSR content when sc-prerender-override class is absent and data-prerender-no-seed is absent", async () => {
+      // Regression: with localStorage key absent (null), the old code returned
+      // false and left SSR content intact. Now we rely on the class, which is
+      // absent here — so SSR textContent should NOT be cleared by the
+      // isOverride/isNoSeed guard.
+      // We spy on renderSelectedPage to prevent it running (it also clears
+      // textContent when no page is selected) so we can isolate the guard.
+      document.documentElement.classList.remove("sc-prerender-override");
+
+      const component = new ShadowClawPages();
+      jest
+        .spyOn(component, "renderSelectedPage")
+        .mockImplementation(async () => {});
+
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const rendered = root.querySelector(
+        "[data-pages-rendered]",
+      ) as HTMLElement;
+      expect(rendered).not.toBeNull();
+      const originalContent = "SSR seed content";
+      rendered.textContent = originalContent;
+
+      await component.connectedCallback();
+
+      // textContent must not have been cleared by the isOverride branch
+      expect(rendered.textContent).toBe(originalContent);
     });
 
     xit("disables Remove All button when pages list is empty and enables it when pages exist", async () => {
@@ -817,6 +855,117 @@ describe("shadow-claw-pages", () => {
       expect(orchestratorStore.removeAllPages).toHaveBeenCalledWith(
         component.db,
       );
+    });
+  });
+
+  describe("pages prev/next navigation buttons", () => {
+    it("disables both buttons when zero pages exist", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const prevBtn = root.querySelector(
+        "[data-pages-prev]",
+      ) as HTMLButtonElement;
+      const nextBtn = root.querySelector(
+        "[data-pages-next]",
+      ) as HTMLButtonElement;
+
+      (orchestratorStore as any).pages = [];
+      component.renderPageList([], []);
+      await Promise.resolve(); // Wait for effect
+
+      expect(prevBtn.disabled).toBe(true);
+      expect(nextBtn.disabled).toBe(true);
+    });
+
+    it("disables prev button on first page and next button on last page", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+
+      const prevBtn = root.querySelector(
+        "[data-pages-prev]",
+      ) as HTMLButtonElement;
+      const nextBtn = root.querySelector(
+        "[data-pages-next]",
+      ) as HTMLButtonElement;
+
+      component.selectedPage = pages[0];
+      component.renderPageList(pages, []);
+      await Promise.resolve(); // wait for effects
+
+      expect(prevBtn.disabled).toBe(false);
+      expect(nextBtn.disabled).toBe(true);
+
+      component.selectedPage = pages[1];
+      component.renderPageList(pages, []);
+      await Promise.resolve();
+
+      expect(prevBtn.disabled).toBe(true);
+      expect(nextBtn.disabled).toBe(false);
+    });
+
+    it("navigates to correct adjacent page when clicked and dispatches navigation event", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+        { groupId: "group-1", path: "docs/third.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+      component.selectedPage = pages[1]; // middle page
+      component.renderPageList(pages, []);
+      await Promise.resolve();
+
+      const prevBtn = root.querySelector(
+        "[data-pages-prev]",
+      ) as HTMLButtonElement;
+      const nextBtn = root.querySelector(
+        "[data-pages-next]",
+      ) as HTMLButtonElement;
+
+      const navigateListener = jest.fn();
+      document.addEventListener("shadow-claw-navigate", navigateListener);
+
+      // Click next
+      nextBtn.click();
+      expect(component.selectedPage).toEqual(pages[0]);
+      expect(navigateListener).toHaveBeenCalledTimes(1);
+
+      const nextEvent = navigateListener.mock.calls[0][0] as CustomEvent;
+      expect(nextEvent.detail).toEqual({
+        page: "pages",
+        groupId: "group-1",
+        path: "docs/first.md",
+      });
+
+      // Click prev
+      navigateListener.mockClear();
+      prevBtn.click();
+      expect(component.selectedPage).toEqual(pages[1]);
+      expect(navigateListener).toHaveBeenCalledTimes(1);
+
+      const prevEvent = navigateListener.mock.calls[0][0] as CustomEvent;
+      expect(prevEvent.detail).toEqual({
+        page: "pages",
+        groupId: "group-1",
+        path: "docs/second.md",
+      });
+
+      document.removeEventListener("shadow-claw-navigate", navigateListener);
     });
   });
 });

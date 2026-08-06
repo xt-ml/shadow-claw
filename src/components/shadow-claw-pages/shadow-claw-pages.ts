@@ -1,4 +1,6 @@
+import { Signal } from "signal-polyfill";
 import { renderMarkdown } from "../../content/markdown.js";
+import { splitFrontmatter } from "../../common/utils/frontmatter.mjs";
 
 import { CONFIG_KEYS } from "../../config/config.js";
 import {
@@ -80,15 +82,43 @@ export class ShadowClawPages extends ShadowClawElement {
 
   db: ShadowClawDatabase | null = null;
   draggedPageIndex: number | null = null;
+  pageFrontmatter = new Signal.State<Record<string, any> | null>(null);
 
   previewFrameWindow: Window | null = null;
 
   renderToken: number = 0;
 
+  navFadeTimer: ReturnType<typeof setTimeout> | null = null;
   sidebarOpen: boolean = false;
+
+  /** Set to true after initial URL routing is complete. Gates effect-driven renders. */
+  _routingReady: boolean = false;
 
   constructor() {
     super();
+  }
+
+  showNavButtonsTemporarily(durationMs = 2500) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const viewer = root.querySelector(".pages__viewer");
+    if (viewer instanceof HTMLElement) {
+      viewer.classList.add("pages__viewer--nav-visible");
+    }
+
+    if (this.navFadeTimer !== null) {
+      clearTimeout(this.navFadeTimer);
+    }
+
+    this.navFadeTimer = setTimeout(() => {
+      this.navFadeTimer = null;
+      if (viewer instanceof HTMLElement) {
+        viewer.classList.remove("pages__viewer--nav-visible");
+      }
+    }, durationMs);
   }
 
   async connectedCallback() {
@@ -98,14 +128,16 @@ export class ShadowClawPages extends ShadowClawElement {
     }
 
     const host = this.closest("shadow-claw");
-    let isOverride = false;
-    try {
-      isOverride =
-        localStorage.getItem("shadow-claw-override-prerender-skeleton") ===
-        "true";
-    } catch {
-      isOverride = false;
-    }
+    // Use the authoritative class set synchronously by theme-init.ts rather
+    // than re-reading localStorage directly. theme-init.ts applies a
+    // null → __PRERENDER_MAIN_MEMORY__ fallback that a plain
+    // `localStorage.getItem(...) === "true"` check would miss (it would return
+    // false when the key was never explicitly stored). The sc-prerender-override
+    // class on <html> is the single canonical signal for whether SSR content
+    // should be suppressed, so reading it here keeps the two in lockstep.
+    const isOverride = document.documentElement.classList.contains(
+      "sc-prerender-override",
+    );
     const isNoSeed = host?.getAttribute("data-prerender-no-seed") === "true";
 
     if (isOverride || isNoSeed) {
@@ -136,6 +168,36 @@ export class ShadowClawPages extends ShadowClawElement {
       }
     });
 
+    const viewer = root.querySelector(".pages__viewer");
+    const viewerScroll = root.querySelector(".pages__viewer-scroll");
+    const handleViewerInteraction = () => {
+      this.showNavButtonsTemporarily(2000);
+    };
+
+    if (viewer instanceof HTMLElement) {
+      viewer.addEventListener("pointermove", handleViewerInteraction, {
+        passive: true,
+      });
+      viewer.addEventListener("pointerdown", handleViewerInteraction, {
+        passive: true,
+      });
+      viewer.addEventListener("touchstart", handleViewerInteraction, {
+        passive: true,
+      });
+      viewer.addEventListener("click", handleViewerInteraction, {
+        passive: true,
+      });
+      viewer.addEventListener("focusin", handleViewerInteraction, {
+        passive: true,
+      });
+    }
+
+    if (viewerScroll instanceof HTMLElement) {
+      viewerScroll.addEventListener("scroll", handleViewerInteraction, {
+        passive: true,
+      });
+    }
+
     const toggleBtn = root.querySelector("[data-pages-sidebar-toggle]");
     if (toggleBtn) {
       toggleBtn.addEventListener("click", () => {
@@ -150,12 +212,38 @@ export class ShadowClawPages extends ShadowClawElement {
       });
     }
 
+    const prevBtn = root.querySelector("[data-pages-prev]");
+    if (prevBtn) {
+      prevBtn.addEventListener("click", () => {
+        this.goToPreviousPage();
+      });
+    }
+
+    const nextBtn = root.querySelector("[data-pages-next]");
+    if (nextBtn) {
+      nextBtn.addEventListener("click", () => {
+        this.goToNextPage();
+      });
+    }
+
     this.toggleSidebar(this.sidebarOpen);
 
     this.setupEffects();
+
+    // Wait for the parent ShadowClaw to finish URL routing before allowing
+    // the effect to trigger page renders. Without this gate the effect fires
+    // immediately with the store's default (pre-rendered) pinned page, causing
+    // a one-frame flash of SSR content before the URL-requested page loads.
+    await orchestratorStore.whenReady;
+    this._routingReady = true;
+    void this.renderSelectedPage();
   }
 
   disconnectedCallback() {
+    if (this.navFadeTimer !== null) {
+      clearTimeout(this.navFadeTimer);
+      this.navFadeTimer = null;
+    }
     window.removeEventListener("message", this.handleIframeMessage);
     this.previewFrameWindow = null;
     super.disconnectedCallback?.();
@@ -166,6 +254,32 @@ export class ShadowClawPages extends ShadowClawElement {
       this.selectedPage?.groupId || orchestratorStore.activeGroupId;
 
     return applyBasePath(getFileRouteDirPath(groupId, filePath));
+  }
+
+  getSelectedPageIndex(): number {
+    if (!this.selectedPage) {
+      return -1;
+    }
+    const pages = orchestratorStore.pages;
+    return pages.findIndex(
+      (p) => this.pageRefKey(p) === this.pageRefKey(this.selectedPage),
+    );
+  }
+
+  goToNextPage() {
+    const pages = orchestratorStore.pages;
+    const index = this.getSelectedPageIndex();
+    if (index > 0) {
+      this.navigateToPage(pages[index - 1]);
+    }
+  }
+
+  goToPreviousPage() {
+    const pages = orchestratorStore.pages;
+    const index = this.getSelectedPageIndex();
+    if (index >= 0 && index < pages.length - 1) {
+      this.navigateToPage(pages[index + 1]);
+    }
   }
 
   handleAnchorNavigation(anchor: string): boolean {
@@ -261,6 +375,22 @@ export class ShadowClawPages extends ShadowClawElement {
     return map[ext] ?? "image/jpeg";
   }
 
+  navigateToPage(page: SavedPageRef) {
+    this.selectedPage = page;
+    this.showNavButtonsTemporarily(2500);
+    document.dispatchEvent(
+      new CustomEvent("shadow-claw-navigate", {
+        detail: {
+          page: "pages",
+          groupId: page.groupId,
+          path: page.path,
+        },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
   renderPageList(pages: SavedPageRef[], groups: GroupMeta[]) {
     const root = this.shadowRoot;
     if (!root) {
@@ -299,6 +429,39 @@ export class ShadowClawPages extends ShadowClawElement {
         list.replaceChildren();
       }
     });
+
+    const prevBtn = root.querySelector("[data-pages-prev]");
+    const nextBtn = root.querySelector("[data-pages-next]");
+    const header = root.querySelector("shadow-claw-page-header");
+
+    const fm = this.pageFrontmatter.get();
+    if (header) {
+      if (fm && fm.title) {
+        header.setAttribute("title", `Pages — ${fm.title}`);
+      } else {
+        header.setAttribute("title", "Pages");
+      }
+    }
+
+    if (
+      prevBtn instanceof HTMLButtonElement &&
+      nextBtn instanceof HTMLButtonElement
+    ) {
+      if (pages.length === 0) {
+        prevBtn.disabled = true;
+        prevBtn.hidden = true;
+        nextBtn.disabled = true;
+        nextBtn.hidden = true;
+      } else {
+        const idx = this.getSelectedPageIndex();
+        const isPrevDisabled = idx < 0 || idx >= pages.length - 1;
+        const isNextDisabled = idx <= 0;
+        prevBtn.disabled = isPrevDisabled;
+        prevBtn.hidden = isPrevDisabled;
+        nextBtn.disabled = isNextDisabled;
+        nextBtn.hidden = isNextDisabled;
+      }
+    }
 
     if (pages.length === 0) {
       return;
@@ -740,6 +903,13 @@ export class ShadowClawPages extends ShadowClawElement {
       return true;
     }
 
+    if (
+      (routeGroupId === "main" && expectedGroupId === "br:main") ||
+      (routeGroupId === "br:main" && expectedGroupId === "main")
+    ) {
+      return true;
+    }
+
     if (!routeGroupId.includes(":") && !expectedGroupId.includes(":")) {
       return false;
     }
@@ -789,6 +959,13 @@ export class ShadowClawPages extends ShadowClawElement {
         ) {
           this.selectedPage =
             orchestratorStore.effectiveDefaultPage || pages[0];
+        }
+
+        // Guard: skip renders until URL routing has been applied by the parent
+        // ShadowClaw. This prevents the effect from flashing the default
+        // pre-rendered page before applyRouteFromCurrentLocation runs.
+        if (!this._routingReady) {
+          return;
         }
 
         void this.renderSelectedPage();
@@ -995,6 +1172,7 @@ export class ShadowClawPages extends ShadowClawElement {
       empty.hidden = false;
       rendered.hidden = true;
       rendered.textContent = "";
+      this.pageFrontmatter.set(null);
       this.removePreviewIframe(root);
 
       return;
@@ -1023,6 +1201,7 @@ export class ShadowClawPages extends ShadowClawElement {
           iframe,
           await this.buildHtmlPageSrcdoc(content, selectedPage.path),
         );
+        this.showNavButtonsTemporarily(2500);
 
         return;
       }
@@ -1031,6 +1210,13 @@ export class ShadowClawPages extends ShadowClawElement {
       rendered.hidden = false;
 
       if (this.isMarkdownPath(selectedPage.path)) {
+        const parsedFrontmatter = splitFrontmatter(content);
+        if (Object.keys(parsedFrontmatter.data).length > 0) {
+          this.pageFrontmatter.set(parsedFrontmatter.data);
+        } else {
+          this.pageFrontmatter.set(null);
+        }
+
         const renderFrontmatter = await resolveFrontmatterToggle(
           this.db,
           CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES,
@@ -1056,15 +1242,19 @@ export class ShadowClawPages extends ShadowClawElement {
           selectedPage.groupId,
           selectedPage.path,
         );
+        this.showNavButtonsTemporarily(2500);
 
         return;
       }
 
+      this.pageFrontmatter.set(null);
       rendered.textContent = content;
+      this.showNavButtonsTemporarily(2500);
     } catch (error) {
       empty.hidden = false;
       rendered.hidden = true;
       rendered.textContent = "";
+      this.pageFrontmatter.set(null);
       this.removePreviewIframe(root);
       const message = error instanceof Error ? error.message : String(error);
       showError(`Failed to load page ${selectedPage.path}: ${message}`, 5000);
@@ -1194,7 +1384,12 @@ export class ShadowClawPages extends ShadowClawElement {
       return "";
     }
 
-    return `${page.groupId}\u0000${page.path}`;
+    let normalizedGroupId = page.groupId;
+    if (normalizedGroupId === "main") {
+      normalizedGroupId = "br:main";
+    }
+
+    return `${normalizedGroupId}\u0000${page.path}`;
   }
 
   private removePreviewIframe(root: ShadowRoot): void {

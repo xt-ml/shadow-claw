@@ -142,10 +142,19 @@
 }
 
 .pages__viewer {
+  display: flex;
+  flex-direction: row;
   height: 100%;
   min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.pages__viewer-scroll {
+  flex: 1;
+  min-width: 0;
   overflow: auto;
-  padding: 0.75rem;
+  padding: 0.75rem 1.25rem;
 }
 
 .pages__rendered {
@@ -185,12 +194,85 @@
   font-size: var(--shadow-claw-font-size-sm);
 }
 
-/* Premium Dropdown Styles for smaller breakpoints */
 .pages__dropdown-container {
-  display: block;
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
   margin-bottom: 1rem;
   position: relative;
   width: 100%;
+}
+
+/* Ebook-style edge navigation buttons */
+.pages__nav-btn {
+  align-items: center;
+  background: color-mix(
+    in srgb,
+    var(--shadow-claw-bg-secondary) 80%,
+    transparent
+  );
+  backdrop-filter: blur(6px);
+  border: 0.0625rem solid
+    color-mix(in srgb, var(--shadow-claw-border-color) 60%, transparent);
+  border-radius: var(--shadow-claw-radius-m);
+  color: var(--shadow-claw-text-secondary);
+  cursor: pointer;
+  display: flex;
+  flex: none;
+  justify-content: center;
+  min-height: 8rem;
+  opacity: 0;
+  padding: 0.75rem 0.5rem;
+  pointer-events: none;
+  position: absolute;
+  top: calc(50% - 3rem);
+  transform: translateY(-50%);
+  transition:
+    opacity 0.4s var(--shadow-claw-ease-out),
+    color 0.15s var(--shadow-claw-ease-out),
+    border-color 0.15s var(--shadow-claw-ease-out),
+    background 0.15s var(--shadow-claw-ease-out);
+  z-index: 10;
+}
+
+.pages__nav-btn--prev {
+  left: 0.125rem;
+}
+
+.pages__nav-btn--next {
+  right: 0.125rem;
+}
+
+/* Reveal on direct button hover, viewer focus, or temporary JS active state */
+.pages__nav-btn:hover:not(:disabled):not([hidden]),
+.pages__viewer:focus-within .pages__nav-btn:not(:disabled):not([hidden]),
+.pages__viewer.pages__viewer--nav-visible
+  .pages__nav-btn:not(:disabled):not([hidden]) {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Completely hide unclickable (disabled/hidden) buttons */
+.pages__nav-btn:disabled,
+.pages__nav-btn[hidden] {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.pages__nav-btn:hover:not(:disabled) {
+  background: color-mix(
+    in srgb,
+    var(--shadow-claw-accent-primary) 15%,
+    var(--shadow-claw-bg-secondary)
+  );
+  border-color: var(--shadow-claw-accent-primary);
+  color: var(--shadow-claw-accent-primary);
+  opacity: 1;
+}
+
+.pages__nav-btn:disabled {
+  cursor: not-allowed;
 }
 
 .pages__dropdown {
@@ -369,11 +451,7 @@
     display: none !important;
   }
 
-  .pages__dropdown-container {
-    display: none;
-  }
-
-  .pages__dropdown-container.pages__dropdown-container--sidebar-open {
+  .pages__dropdown {
     display: none;
   }
 }

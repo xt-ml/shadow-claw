@@ -4,6 +4,8 @@ import { toggleTerminalVisibility } from "./utils/toggleTerminalVisibility.js";
 
 jest.unstable_mockModule("../../core/orchestrator/orchestrator.js", () => ({
   Orchestrator: class {
+    events = { on: jest.fn(), off: jest.fn(), emit: jest.fn() };
+
     async init() {
       return {};
     }

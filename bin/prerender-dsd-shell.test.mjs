@@ -3,9 +3,33 @@ import {
   escapeJsonForHtmlScript,
   injectPageHeaderDsd,
   injectStaticManifestScript,
+  markNoSeedPrerenderHost,
   renderPageHtml,
   sortPagePaths,
 } from "./prerender-dsd-shell.mjs";
+
+describe("markNoSeedPrerenderHost", () => {
+  it('adds data-prerender-no-seed="true" to shadow-claw element so CSS skeleton rules are active from first paint', () => {
+    // Regression: the seeded prerender path was not calling markNoSeedPrerenderHost,
+    // so data-prerender-no-seed was missing from the HTML. The shadow-claw.css skeleton
+    // CSS rules depend on :host([data-prerender-no-seed="true"]), so without this
+    // attribute being in the HTML the skeleton was inactive until JS set it at runtime —
+    // creating a window where SSR content bled through the skeleton fade-out animation.
+    const html =
+      "<html><head></head><body><shadow-claw></shadow-claw></body></html>";
+    const result = markNoSeedPrerenderHost(html);
+    expect(result).toContain('data-prerender-no-seed="true"');
+    expect(result).toMatch(/<shadow-claw[^>]+data-prerender-no-seed="true"/);
+  });
+
+  it("does not duplicate data-prerender-no-seed if already present", () => {
+    const html =
+      '<html><head></head><body><shadow-claw data-prerender-no-seed="true"></shadow-claw></body></html>';
+    const result = markNoSeedPrerenderHost(html);
+    const matches = result.match(/data-prerender-no-seed/g);
+    expect(matches).toHaveLength(1);
+  });
+});
 
 describe("sortPagePaths", () => {
   it("places MEMORY.md at bottom and sorts remaining pages in reverse alphabetical order", () => {

@@ -24,7 +24,13 @@ export interface StaticPageSource {
 export interface StaticMainManifest {
   pages: StaticPageSource[];
   preRenderedStaticPages?: Record<string, any>;
+  /** One-shot purge guard. Runtime stores this in localStorage after purging;
+   *  subsequent boots skip the purge until the value changes. */
+  purgeId?: string;
 }
+
+/** localStorage key that records the last completed purge run. */
+export const PURGE_STORAGE_KEY = "sc:purge-id";
 
 export const STATIC_MAIN_MANIFEST_PATH = "static-main-manifest.json";
 
@@ -111,6 +117,29 @@ async function processPurgeTokens(
   }
 }
 
+/** Returns true when a purge should be skipped because it already ran for
+ *  this `purgeId` on this client. Updates localStorage when a purge is
+ *  allowed so future boots are skipped. */
+function checkAndMarkPurge(purgeId: string | undefined): boolean {
+  if (!purgeId) {
+    // No purgeId in manifest → always-purge (legacy behaviour).
+    return false;
+  }
+  try {
+    const lastPurgeId = localStorage.getItem(PURGE_STORAGE_KEY);
+    if (lastPurgeId === purgeId) {
+      // Already purged for this deployment — skip.
+      return true;
+    }
+    // Record this purge run so next boot skips it.
+    localStorage.setItem(PURGE_STORAGE_KEY, purgeId);
+  } catch {
+    // localStorage may be unavailable (e.g. private-browsing restrictions).
+    // Fall through and allow the purge so we're never stuck.
+  }
+  return false;
+}
+
 export async function seedStaticMainSite(
   db: ShadowClawDatabase,
   groupId: string = DEFAULT_GROUP_ID,
@@ -121,13 +150,15 @@ export async function seedStaticMainSite(
 
   let didPurge = false;
   if (manifest.preRenderedStaticPages) {
-    didPurge = true;
-    await processPurgeTokens(db, manifest.preRenderedStaticPages);
+    if (!checkAndMarkPurge(manifest.purgeId)) {
+      didPurge = true;
+      await processPurgeTokens(db, manifest.preRenderedStaticPages);
+    }
   }
 
   for (const page of manifest.pages) {
     if (page.content?.includes('slug: "shadow-claw--purge-pages"')) {
-      if (!didPurge) {
+      if (!didPurge && !checkAndMarkPurge(manifest.purgeId)) {
         didPurge = true;
         await deleteAllGroupFiles(db, groupId);
       }
@@ -140,8 +171,16 @@ export async function seedStaticMainSite(
       ? await isMainGroupMemorySuppressed(db)
       : false;
 
+  const manifestKeys = new Set(
+    manifest.pages.map((p) => pageRefKey(groupId, p.displayPath)),
+  );
+
   const resultPages: SavedPageRef[] & { didPurge?: boolean } = didPurge
-    ? []
+    ? existingPages.filter(
+        (ref) =>
+          ref.groupId !== groupId ||
+          manifestKeys.has(pageRefKey(ref.groupId, ref.path)),
+      )
     : [...existingPages];
 
   for (const page of manifest.pages) {

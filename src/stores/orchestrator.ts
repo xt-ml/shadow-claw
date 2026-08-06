@@ -374,6 +374,8 @@ export class OrchestratorStore {
   public _useProxy: Signal.State<boolean>;
   public _vmBashFullInternetAccess: Signal.State<boolean>;
   private _whenInitialized: Promise<void>;
+  private _whenReady: Promise<void>;
+  private _readyResolve: (() => void) | null;
 
   constructor() {
     this._messages = new Signal.State([]);
@@ -411,6 +413,10 @@ export class OrchestratorStore {
     this._initResolve = null;
     this._whenInitialized = new Promise<void>((resolve) => {
       this._initResolve = resolve;
+    });
+    this._readyResolve = null;
+    this._whenReady = new Promise<void>((resolve) => {
+      this._readyResolve = resolve;
     });
     this.orchestrator = null;
     this._db = null;
@@ -633,6 +639,9 @@ export class OrchestratorStore {
 
   setReady(ready: boolean = true): void {
     this._ready.set(ready);
+    if (ready && this._readyResolve) {
+      this._readyResolve();
+    }
   }
 
   /**
@@ -732,6 +741,10 @@ export class OrchestratorStore {
 
   get whenInitialized(): Promise<void> {
     return this._whenInitialized;
+  }
+
+  get whenReady(): Promise<void> {
+    return this._whenReady;
   }
 
   async addPage(
@@ -1319,13 +1332,6 @@ export class OrchestratorStore {
       await this.persistPages(db);
     } else {
       await this.ensureDefaultPage(db);
-    }
-
-    if (seeded.didPurge) {
-      this._activePage.set("pages");
-      this._hadPersistedActivePage = false;
-      await setConfig(db, CONFIG_KEYS.LAST_ACTIVE_PAGE, null);
-      await setConfig(db, CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE, null);
     }
 
     const lastPinnedPageRaw = await getConfig(
@@ -2031,7 +2037,7 @@ export class OrchestratorStore {
     const normalized = path.trim().replace(/^\/+/, "").replace(/\/+/g, "/");
 
     // Migrate legacy default page paths into the current default page.
-    if (normalized === "br-main/memory.md") {
+    if (normalized === "main/memory.md") {
       return OrchestratorStore.DEFAULT_PAGE_PATH;
     }
 

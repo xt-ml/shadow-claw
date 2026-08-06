@@ -28,15 +28,13 @@ describe("workbox runtime caching rules", () => {
 
     expect(allowlist.some((pattern) => pattern.test("/"))).toBe(true);
     expect(
-      allowlist.some((pattern) => pattern.test("/files/br-main/README.md")),
+      allowlist.some((pattern) => pattern.test("/files/main/README.md")),
     ).toBe(true);
     expect(
-      allowlist.some((pattern) => pattern.test("/pages/br-main/index.md")),
+      allowlist.some((pattern) => pattern.test("/pages/main/index.md")),
     ).toBe(true);
     expect(allowlist.some((pattern) => pattern.test("/settings"))).toBe(true);
-    expect(allowlist.some((pattern) => pattern.test("/chat/br-main/"))).toBe(
-      true,
-    );
+    expect(allowlist.some((pattern) => pattern.test("/chat/main/"))).toBe(true);
   });
 
   it("does not allow SPA navigation fallback for non-app routes", () => {

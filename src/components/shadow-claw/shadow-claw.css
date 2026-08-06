@@ -127,6 +127,11 @@ a:hover {
   font-family: var(--shadow-claw-font-sans);
   height: 100vh;
   height: 100dvh;
+  /* Punch through the `visibility: hidden` set on the shadow-claw host
+     by the sc-prerender-override global CSS rule. The existing boot-pending
+     opacity rules still hide the real pre-rendered content; the skeleton
+     overlays and header remain fully visible. */
+  visibility: visible;
   width: 100%;
 }
 
@@ -272,6 +277,7 @@ a:hover {
 .nav-menu {
   flex: none;
   list-style: none;
+  margin: 0;
   padding: 0.5rem;
 }
 

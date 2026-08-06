@@ -435,13 +435,8 @@ describe("bindEventListeners", () => {
     });
   });
 
-  describe("settingsEl navigate event", () => {
-    it("should relay navigate event from settingsEl", () => {
-      const settingsEl = document.createElement("shadow-claw-settings") as any;
-      shadow.querySelector.mockReturnValue(settingsEl);
-
-      jest.spyOn(settingsEl, "addEventListener");
-
+  describe("shadow navigate event", () => {
+    it("should relay navigate event from subcomponents", () => {
       bindEventListeners(
         win,
         doc,
@@ -454,16 +449,19 @@ describe("bindEventListeners", () => {
         url,
       );
 
-      expect(settingsEl.addEventListener).toHaveBeenCalledWith(
+      expect(shadow.addEventListener).toHaveBeenCalledWith(
         "navigate",
         expect.any(Function),
       );
 
-      // Call the listener with a mock event
+      const navigateListener = (shadow.addEventListener as any).mock.calls.find(
+        (call: any) => call[0] === "navigate",
+      )[1];
+
       const mockEvent = new CustomEvent("navigate", {
         detail: { page: "tools" },
       });
-      settingsEl.dispatchEvent(mockEvent);
+      navigateListener(mockEvent);
 
       expect(doc.dispatchEvent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -475,13 +473,8 @@ describe("bindEventListeners", () => {
     });
   });
 
-  describe("settingsEl sidebar-pages-visibility-change event", () => {
+  describe("shadow sidebar-pages-visibility-change event", () => {
     it("should call setPagesSidebarHidden when event received", () => {
-      const settingsEl = document.createElement("shadow-claw-settings") as any;
-      shadow.querySelector.mockReturnValue(settingsEl);
-
-      jest.spyOn(settingsEl, "addEventListener");
-
       bindEventListeners(
         win,
         doc,
@@ -494,15 +487,21 @@ describe("bindEventListeners", () => {
         url,
       );
 
-      expect(settingsEl.addEventListener).toHaveBeenCalledWith(
+      expect(shadow.addEventListener).toHaveBeenCalledWith(
         "sidebar-pages-visibility-change",
         expect.any(Function),
       );
 
+      const visibilityListener = (
+        shadow.addEventListener as any
+      ).mock.calls.find(
+        (call: any) => call[0] === "sidebar-pages-visibility-change",
+      )[1];
+
       const mockEvent = new CustomEvent("sidebar-pages-visibility-change", {
         detail: { hidden: true },
       });
-      settingsEl.dispatchEvent(mockEvent);
+      visibilityListener(mockEvent);
 
       expect(mockSetPagesSidebarHidden).toHaveBeenCalledWith(
         shadow,
@@ -514,13 +513,8 @@ describe("bindEventListeners", () => {
     });
   });
 
-  describe("toolsPage navigate-back event", () => {
-    it("should relay navigate-back event from toolsPage", () => {
-      const toolsPage = document.createElement("shadow-claw-tools") as any;
-      shadow.querySelector.mockReturnValue(toolsPage);
-
-      jest.spyOn(toolsPage, "addEventListener");
-
+  describe("shadow navigate-back event", () => {
+    it("should relay navigate-back event from tools/channels page", () => {
       bindEventListeners(
         win,
         doc,
@@ -533,50 +527,16 @@ describe("bindEventListeners", () => {
         url,
       );
 
-      expect(toolsPage.addEventListener).toHaveBeenCalledWith(
+      expect(shadow.addEventListener).toHaveBeenCalledWith(
         "navigate-back",
         expect.any(Function),
       );
 
-      toolsPage.dispatchEvent(new Event("navigate-back"));
+      const navigateBackListener = (
+        shadow.addEventListener as any
+      ).mock.calls.find((call: any) => call[0] === "navigate-back")[1];
 
-      expect(doc.dispatchEvent).toHaveBeenCalledWith(
-        expect.objectContaining({
-          detail: { page: "settings" },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-    });
-  });
-
-  describe("channelsPage navigate-back event", () => {
-    it("should relay navigate-back event from channelsPage", () => {
-      const channelsPage = document.createElement(
-        "shadow-claw-channels",
-      ) as any;
-      shadow.querySelector.mockReturnValue(channelsPage);
-
-      jest.spyOn(channelsPage, "addEventListener");
-
-      bindEventListeners(
-        win,
-        doc,
-        shadow,
-        shadowClaw,
-        db,
-        oStore,
-        fStore,
-        tStore,
-        url,
-      );
-
-      expect(channelsPage.addEventListener).toHaveBeenCalledWith(
-        "navigate-back",
-        expect.any(Function),
-      );
-
-      channelsPage.dispatchEvent(new Event("navigate-back"));
+      navigateBackListener(new Event("navigate-back"));
 
       expect(doc.dispatchEvent).toHaveBeenCalledWith(
         expect.objectContaining({

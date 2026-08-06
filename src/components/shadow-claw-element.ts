@@ -30,11 +30,28 @@ export default class ShadowClawElement extends HTMLElement {
     if (this.shadowRoot && styles instanceof CSSStyleSheet) {
       this.shadowRoot.adoptedStyleSheets = [styles];
     }
+
+    this.ensureShadowDialogs();
   }
 
   connectedCallback() {
-    // No more Promise.all syntax needed for setup!
+    this.ensureShadowDialogs();
     this.render();
+  }
+
+  protected ensureShadowDialogs(): void {
+    if (!this.shadowRoot) {
+      return;
+    }
+    const dialogs = this.shadowRoot.querySelectorAll("shadow-claw-dialog");
+    for (const dialog of dialogs) {
+      if (dialog instanceof HTMLElement) {
+        customElements.upgrade(dialog);
+      }
+      if (typeof (dialog as any).ensureDialog === "function") {
+        (dialog as any).ensureDialog();
+      }
+    }
   }
 
   disconnectedCallback() {

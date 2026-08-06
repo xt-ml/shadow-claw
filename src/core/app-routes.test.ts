@@ -20,16 +20,16 @@ describe("app-routes", () => {
         groupId: "br:main",
         path: "MEMORY.md",
       }),
-    ).toBe("/pages/br-main/MEMORY.md");
+    ).toBe("/pages/main/MEMORY.md");
 
     expect(buildRoutePath({ page: "chat" })).toBe("/chat");
     expect(buildRoutePath({ page: "chat", groupId: "br:main" })).toBe(
-      "/chat/br-main/",
+      "/chat/main/",
     );
 
     expect(buildRoutePath({ page: "files" })).toBe("/files");
     expect(buildRoutePath({ page: "files", groupId: "br:main" })).toBe(
-      "/files/br-main/",
+      "/files/main/",
     );
     expect(
       buildRoutePath({
@@ -126,6 +126,24 @@ describe("app-routes", () => {
     );
   });
 
+  it("normalizes main and br-main groupId aliases in getWorkspaceRouteRequestPath", () => {
+    // /files/main/... should resolve to the canonical br:main groupId
+    expect(
+      getWorkspaceRouteRequestPath("/files/main/posts/2003-08-27.md"),
+    ).toEqual({
+      groupId: "br:main",
+      path: "posts/2003-08-27.md",
+    });
+
+    // /files/br-main/... (legacy URL form) should also normalize to br:main
+    expect(
+      getWorkspaceRouteRequestPath("/files/br-main/posts/2003-08-27.md"),
+    ).toEqual({
+      groupId: "br:main",
+      path: "posts/2003-08-27.md",
+    });
+  });
+
   describe("applyBasePath", () => {
     // Reset cached base path between tests
     beforeEach(() => {
@@ -163,12 +181,10 @@ describe("app-routes", () => {
     });
 
     it("parses subpath-prefixed URLs correctly", () => {
-      // Simulate GitHub Pages subpath: /shadow-claw/chat/br-main
+      // Simulate GitHub Pages subpath: /shadow-claw/chat/main
       // parseRouteFromUrl should strip the prefix before parsing.
       // Since jsdom has base "/", this tests the raw parser path.
-      expect(
-        parseRouteFromUrl(new URL("http://localhost/chat/br-main")),
-      ).toEqual({
+      expect(parseRouteFromUrl(new URL("http://localhost/chat/main"))).toEqual({
         page: "chat",
         groupId: "br:main",
         anchor: undefined,

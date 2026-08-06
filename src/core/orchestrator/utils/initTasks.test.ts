@@ -372,6 +372,10 @@ describe("initTasks", () => {
 
       await initProviderAndModel(mockOrchestrator, mockDb);
 
+      // fetchModelInfo is now fired as a background promise (fire-and-forget).
+      // Flush the microtask queue so its .then() chain has a chance to run.
+      await Promise.resolve();
+
       expect(mockOrchestrator.provider).toBe("openrouter");
       expect(mockOrchestrator.model).toBe("gpt-4");
       expect(mockOrchestrator.maxIterations).toBe(10);
@@ -389,6 +393,10 @@ describe("initTasks", () => {
       });
 
       await initWorkerAndScheduler(mockOrchestrator, mockDb);
+
+      // shouldStartLocalScheduler() is now deferred as a void promise, so we
+      // must flush the microtask queue before checking scheduler.start().
+      await Promise.resolve();
 
       expect(mockOrchestrator.agentWorker).toBeDefined();
       expect(syncProxyConfigToServiceWorker).toHaveBeenCalled();

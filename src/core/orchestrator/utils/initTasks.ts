@@ -259,44 +259,59 @@ export async function initProviderAndModel(
   orchestrator: Orchestrator,
   db: ShadowClawDatabase,
 ): Promise<void> {
-  const storedProvider = await getConfig(db, CONFIG_KEYS.PROVIDER);
+  // Parallelize all independent IDB reads in this function.
+  const [
+    storedProvider,
+    bedrockRegion,
+    bedrockProfile,
+    bedrockAuthMode,
+    storedModel,
+    storedMaxTokens,
+    storedMaxIterations,
+    storedRateLimitCallsPerMinute,
+    storedRateLimitAutoAdapt,
+  ] = await Promise.all([
+    getConfig(db, CONFIG_KEYS.PROVIDER),
+    getConfig(db, CONFIG_KEYS.BEDROCK_REGION_FALLBACK),
+    getConfig(db, CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK),
+    getConfig(db, CONFIG_KEYS.BEDROCK_AUTH_MODE),
+    getConfig(db, CONFIG_KEYS.MODEL),
+    getConfig(db, CONFIG_KEYS.MAX_TOKENS),
+    getConfig(db, CONFIG_KEYS.MAX_ITERATIONS),
+    getConfig(db, CONFIG_KEYS.RATE_LIMIT_CALLS_PER_MINUTE),
+    getConfig(db, CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT),
+  ]);
+
   if (storedProvider && getProvider(storedProvider)) {
     orchestrator.provider = storedProvider;
     orchestrator.providerConfig =
       getProvider(storedProvider) || getDefaultProvider();
   }
 
-  // Load API key first so we can pass it to fetchModelInfo for
-  // providers that require authentication (e.g. HuggingFace).
+  // Load API key — must happen after provider is set.
   await orchestrator.loadApiKeyForProvider(db, orchestrator.provider);
 
-  orchestrator.bedrockRegionFallback = (
-    (await getConfig(db, CONFIG_KEYS.BEDROCK_REGION_FALLBACK)) || ""
-  ).trim();
+  orchestrator.bedrockRegionFallback = (bedrockRegion || "").trim();
+  orchestrator.bedrockProfileFallback = (bedrockProfile || "").trim();
+  orchestrator.bedrockAuthMode = (bedrockAuthMode || "provider_chain").trim();
 
-  orchestrator.bedrockProfileFallback = (
-    (await getConfig(db, CONFIG_KEYS.BEDROCK_PROFILE_FALLBACK)) || ""
-  ).trim();
-
-  orchestrator.bedrockAuthMode = (
-    (await getConfig(db, CONFIG_KEYS.BEDROCK_AUTH_MODE)) || "provider_chain"
-  ).trim();
-
-  // Fetch model info for the current provider (passes apiKey for auth).
-  await modelRegistry.fetchModelInfo(
-    orchestrator.providerConfig,
-    (await getApiKeyForHeaders(orchestrator)) || undefined,
-    getProviderRuntimeHeaders(orchestrator, orchestrator.provider),
+  // Fetch model info in the background — it is only needed when the user opens
+  // Settings or the model picker. Blocking boot on a network round-trip to
+  // populate a dropdown they may never open is not worth the latency cost.
+  void getApiKeyForHeaders(orchestrator).then((apiKey) =>
+    modelRegistry.fetchModelInfo(
+      orchestrator.providerConfig,
+      apiKey || undefined,
+      getProviderRuntimeHeaders(orchestrator, orchestrator.provider),
+    ),
   );
 
-  const storedModel = await getConfig(db, CONFIG_KEYS.MODEL);
   if (storedModel) {
     orchestrator.model = storedModel;
   } else {
     orchestrator.model = orchestrator.providerConfig.defaultModel;
   }
 
-  const storedMaxTokens = await getConfig(db, CONFIG_KEYS.MAX_TOKENS);
   const dynamicMaxTokens = getModelMaxTokens(orchestrator.model);
 
   // If the stored value is exactly 8192 (our legacy fallback), prioritize the dynamic value
@@ -314,16 +329,10 @@ export async function initProviderAndModel(
     orchestrator.maxTokens = Math.min(parsedStored, dynamicMaxTokens);
   }
 
-  const storedMaxIterations = await getConfig(db, CONFIG_KEYS.MAX_ITERATIONS);
   if (storedMaxIterations) {
     orchestrator.maxIterations =
       parseInt(storedMaxIterations, 10) || DEFAULT_MAX_ITERATIONS;
   }
-
-  const storedRateLimitCallsPerMinute = await getConfig(
-    db,
-    CONFIG_KEYS.RATE_LIMIT_CALLS_PER_MINUTE,
-  );
 
   if (storedRateLimitCallsPerMinute) {
     const parsed = parseInt(storedRateLimitCallsPerMinute, 10);
@@ -331,11 +340,6 @@ export async function initProviderAndModel(
       ? Math.max(0, parsed)
       : 0;
   }
-
-  const storedRateLimitAutoAdapt = await getConfig(
-    db,
-    CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT,
-  );
 
   orchestrator.rateLimitAutoAdapt = storedRateLimitAutoAdapt !== "false";
 }
@@ -384,9 +388,15 @@ export async function initWorkerAndScheduler(
     },
   );
 
-  if (await shouldStartLocalScheduler()) {
-    orchestrator.scheduler.start();
-  }
+  // Start the task scheduler in the background — shouldStartLocalScheduler()
+  // is an async IDB read that doesn't need to block UI readiness.
+  // The scheduler starting one microtask-tick late is harmless because no
+  // scheduled task can fire before the app is fully initialized anyway.
+  void shouldStartLocalScheduler().then((should) => {
+    if (should) {
+      orchestrator.scheduler?.start();
+    }
+  });
 
   setupPushTaskListener(orchestrator, db);
 }

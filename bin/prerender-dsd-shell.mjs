@@ -308,7 +308,11 @@ function buildStaticPagesListMarkup(pageSources) {
   ].join("\n");
 }
 
-export function injectPageHeaderDsd(pagesContent, pageHeaderTemplateContent) {
+export function injectPageHeaderDsd(
+  pagesContent,
+  pageHeaderTemplateContent,
+  frontmatterTitle = "",
+) {
   return pagesContent.replace(
     /(<shadow-claw-page-header\b[^>]*>)([\s\S]*?)(<\/shadow-claw-page-header>)/iu,
     (full, openTag, innerContent, closeTag) => {
@@ -319,7 +323,10 @@ export function injectPageHeaderDsd(pagesContent, pageHeaderTemplateContent) {
       const iconMatch = openTag.match(/\sicon="([^"]*)"/iu);
       const titleMatch = openTag.match(/\stitle="([^"]*)"/iu);
       const icon = iconMatch ? iconMatch[1] : "";
-      const title = titleMatch ? titleMatch[1] : "";
+      let title = titleMatch ? titleMatch[1] : "";
+      if (frontmatterTitle) {
+        title = `${title} — ${frontmatterTitle}`;
+      }
       const renderedTitle = [icon, title].filter(Boolean).join(" ");
 
       let headerShadowContent = pageHeaderTemplateContent;
@@ -354,6 +361,7 @@ export function applyStaticPagesContent(
   pageSources,
   renderedHtml,
   pageHeaderTemplateContent,
+  frontmatterTitle = "",
 ) {
   const statusText =
     pageSources.length === 1
@@ -388,7 +396,7 @@ export function applyStaticPagesContent(
       `<div class="pages__rendered" data-pages-rendered>${renderedHtml}</div>`,
   );
 
-  return injectPageHeaderDsd(next, pageHeaderTemplateContent);
+  return injectPageHeaderDsd(next, pageHeaderTemplateContent, frontmatterTitle);
 }
 
 function buildPagesDsdHost(
@@ -396,12 +404,14 @@ function buildPagesDsdHost(
   pageSources,
   renderedHtml,
   pageHeaderTemplateContent,
+  frontmatterTitle = "",
 ) {
   const pagesShadowContent = applyStaticPagesContent(
     pagesTemplateContent,
     pageSources,
     renderedHtml,
     pageHeaderTemplateContent,
+    frontmatterTitle,
   );
 
   return [
@@ -545,7 +555,7 @@ function injectShadowClawTemplate(indexHtml, dsdTemplate) {
   return `${indexHtml.slice(0, innerStart)}${nextInner}${indexHtml.slice(end)}`;
 }
 
-function markNoSeedPrerenderHost(indexHtml) {
+export function markNoSeedPrerenderHost(indexHtml) {
   return indexHtml.replace(
     /<shadow-claw(\s[^>]*)?>/iu,
     (fullMatch, attrs = "") => {
@@ -625,6 +635,7 @@ async function main() {
       }),
     );
 
+    let manifestPurgeId;
     const purgeTokens = {};
     const filteredPages = pageSourcesWithContent.filter((page) => {
       if (
@@ -638,6 +649,13 @@ async function main() {
           sourcePath,
           page.displayPath,
         );
+        if (!manifestPurgeId) {
+          const parsed = splitFrontmatterWithGrayMatter(page.content);
+          const rawPurgeId = parsed.data["purge-id"];
+          if (rawPurgeId !== undefined && rawPurgeId !== null) {
+            manifestPurgeId = String(rawPurgeId);
+          }
+        }
       }
       return true;
     });
@@ -650,6 +668,9 @@ async function main() {
     const manifest = { pages: manifestPages };
     if (Object.keys(purgeTokens).length > 0) {
       manifest.preRenderedStaticPages = purgeTokens;
+    }
+    if (manifestPurgeId) {
+      manifest.purgeId = manifestPurgeId;
     }
     const manifestJson = JSON.stringify(manifest);
 
@@ -715,6 +736,7 @@ async function main() {
     }),
   );
 
+  let manifestPurgeId;
   const purgeTokens = {};
   const filteredPageSources = pageSourcesWithContent.filter((page) => {
     if (
@@ -728,6 +750,13 @@ async function main() {
         sourcePath,
         page.displayPath,
       );
+      if (!manifestPurgeId) {
+        const parsed = splitFrontmatterWithGrayMatter(page.content);
+        const rawPurgeId = parsed.data["purge-id"];
+        if (rawPurgeId !== undefined && rawPurgeId !== null) {
+          manifestPurgeId = String(rawPurgeId);
+        }
+      }
     }
     return true;
   });
@@ -740,6 +769,9 @@ async function main() {
   const manifest = { pages: manifestPages };
   if (Object.keys(purgeTokens).length > 0) {
     manifest.preRenderedStaticPages = purgeTokens;
+  }
+  if (manifestPurgeId) {
+    manifest.purgeId = manifestPurgeId;
   }
   const manifestJson = JSON.stringify(manifest);
 
@@ -761,6 +793,9 @@ async function main() {
 
   const [selectedPage] = filteredPageSources;
   const selectedContent = selectedPage.content;
+  const parsed = splitFrontmatterWithGrayMatter(selectedContent);
+  const frontmatterTitle =
+    parsed.data && parsed.data.title ? parsed.data.title : "";
   const rendered = await renderPageHtml(
     selectedContent,
     selectedPage.absolutePath || selectedPage.displayPath,
@@ -778,6 +813,7 @@ async function main() {
     filteredPageSources,
     rendered,
     pageHeaderTemplateContent,
+    frontmatterTitle,
   );
   const shadowClawDsdTemplate = buildShadowClawDsdTemplate(
     shadowClawTemplateContent,
@@ -787,7 +823,14 @@ async function main() {
     indexHtml,
     shadowClawDsdTemplate,
   );
-  const nextHtml = injectStaticManifestScript(htmlWithDsd, manifestJson);
+  // Mark the host with data-prerender-no-seed="true" in the HTML so that the
+  // CSS skeleton and content-hide rules in shadow-claw.css are active from the
+  // very first paint — without waiting for JS to set the attribute at runtime.
+  // Previously this was only done for the --no-seed path; the seeded path now
+  // gets it too so the sc-prerender-override visibility:hidden + skeleton CSS
+  // gives complete coverage with zero JS-timing dependency.
+  const markedHtml = markNoSeedPrerenderHost(htmlWithDsd);
+  const nextHtml = injectStaticManifestScript(markedHtml, manifestJson);
 
   await writeFile(indexPath, nextHtml, "utf8");
   console.log(

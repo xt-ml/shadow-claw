@@ -63,6 +63,7 @@ class MockAudioContext {
 globalThis.Response = global.Response;
 globalThis.Request = global.Request;
 globalThis.Headers = global.Headers;
+(globalThis as any).__PRERENDER_MAIN_MEMORY__ = false;
 
 // Patch TextEncoder
 if (typeof globalThis.TextEncoder === "undefined") {

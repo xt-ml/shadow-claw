@@ -11,7 +11,7 @@ import type { ShadowClawDatabase } from "../db/types.js";
 export { DEFAULT_MAIN_GROUP_MEMORY_CONTENT as DEFAULT_MAIN_GROUP_MEMORY_CONTENT };
 
 export const DEFAULT_MAIN_GROUP_MEMORY_PATH = "MEMORY.md";
-export const STATIC_MAIN_GROUP_MEMORY_PATH = "br-main/memory.md";
+export const STATIC_MAIN_GROUP_MEMORY_PATH = "main/memory.md";
 
 export function resolveStaticMainGroupMemoryUrl(): string {
   const fallback = `/${STATIC_MAIN_GROUP_MEMORY_PATH}`;

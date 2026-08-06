@@ -9,7 +9,10 @@ export function clearBootPendingClass(doc: Document): void {
     return;
   }
 
-  doc.documentElement.classList.remove(BOOT_PENDING_CLASS);
+  doc.documentElement.classList.remove(
+    BOOT_PENDING_CLASS,
+    "sc-prerender-override",
+  );
   const host = doc.querySelector("shadow-claw");
   host?.removeAttribute(BOOT_PENDING_ATTR);
   host?.removeAttribute(HYDRATION_PENDING_ATTR);

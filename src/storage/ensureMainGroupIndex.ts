@@ -9,7 +9,7 @@ import { writeGroupFile } from "./writeGroupFile.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 
 export const DEFAULT_MAIN_GROUP_INDEX_PATH = "index.html";
-export const STATIC_MAIN_GROUP_INDEX_PATH = "br-main/index.html";
+export const STATIC_MAIN_GROUP_INDEX_PATH = "main/index.html";
 
 export function resolveStaticMainGroupIndexUrl(): string {
   const fallback = `/${STATIC_MAIN_GROUP_INDEX_PATH}`;

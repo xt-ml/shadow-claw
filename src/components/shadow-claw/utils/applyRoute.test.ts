@@ -75,6 +75,7 @@ describe("applyRoute", () => {
       loadHistory: jest.fn(),
       loadFiles: jest.fn(),
       setCurrentPath: jest.fn(),
+      setActivePinnedPage: jest.fn(),
       activeGroupId: "group1",
     };
 
@@ -90,6 +91,11 @@ describe("applyRoute", () => {
     mockApplyBasePath.mockImplementation((path: any) => path);
     mockApplyAnchorWithRetry.mockResolvedValue(true as any);
     mockShowPage.mockResolvedValue(undefined as any);
+    // customElements.whenDefined resolves to the constructor in real browsers.
+    // Stub it via spyOn so tests don't hang waiting for a definition event.
+    jest
+      .spyOn(globalThis.customElements, "whenDefined")
+      .mockResolvedValue(HTMLElement as any);
   });
 
   describe("when options.replace is true", () => {
@@ -299,14 +305,63 @@ describe("applyRoute", () => {
       }
     });
 
-    it("should set selectedPage and render when pages component exists", async () => {
+    it("should call setActivePinnedPage and render when pages component exists", async () => {
       await applyRoute(shadow, shadowClaw, db, fStore, oStore, route);
 
-      expect(pagesComp.selectedPage).toEqual({
+      expect(oStore.setActivePinnedPage).toHaveBeenCalledWith(db, {
         groupId: "group1",
         path: "/test-page",
       });
 
+      expect(pagesComp.renderSelectedPage).toHaveBeenCalled();
+    });
+
+    it("awaits customElements.whenDefined before querying pages component", async () => {
+      // Simulate the lazy-load race: whenDefined resolves after a microtask.
+      // renderSelectedPage should still be called, proving applyRoute waited.
+      let resolveWhenDefined!: () => void;
+      jest.spyOn(globalThis.customElements, "whenDefined").mockReturnValue(
+        new Promise<CustomElementConstructor>((resolve) => {
+          resolveWhenDefined = () => resolve(HTMLElement as any);
+        }),
+      );
+
+      const routePromise = applyRoute(
+        shadow,
+        shadowClaw,
+        db,
+        fStore,
+        oStore,
+        route,
+      );
+
+      // Pages component not yet accessible — renderSelectedPage not called yet
+      expect(pagesComp.renderSelectedPage).not.toHaveBeenCalled();
+
+      // Simulate dynamic import completing and element becoming defined
+      resolveWhenDefined();
+      await routePromise;
+
+      expect(pagesComp.renderSelectedPage).toHaveBeenCalled();
+    });
+
+    it("awaits whenDefined and renders persisted page when route has no path (e.g. /pages)", async () => {
+      // Navigation to /pages with no specific post — the element must be
+      // upgraded, SSR must be cleared, and the persisted activePinnedPage
+      // must be rendered before clearBootPendingClass fires. setActivePinnedPage
+      // is NOT called (no URL path to pin), but renderSelectedPage IS called
+      // so CSR content is in the DOM before boot state is removed.
+      route.path = undefined;
+
+      const whenDefinedSpy = jest.spyOn(
+        globalThis.customElements,
+        "whenDefined",
+      );
+
+      await applyRoute(shadow, shadowClaw, db, fStore, oStore, route);
+
+      expect(whenDefinedSpy).toHaveBeenCalledWith("shadow-claw-pages");
+      expect(oStore.setActivePinnedPage).not.toHaveBeenCalled();
       expect(pagesComp.renderSelectedPage).toHaveBeenCalled();
     });
 

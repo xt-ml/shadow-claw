@@ -42,13 +42,26 @@ export function bindEventListeners(
     const lItem = item as HTMLLIElement;
     lItem.addEventListener("click", () => {
       const page = lItem.dataset.page || getDefaultSidebarPage(oStore);
-      doc.dispatchEvent(
-        new CustomEvent("shadow-claw-navigate", {
-          detail: { page },
-          bubbles: true,
-          composed: true,
-        }),
-      );
+
+      // Apply the active class immediately so the browser can commit a paint
+      // frame showing the selection highlight (this is the INP "next paint").
+      // The actual page switch — which may create/upgrade a component and read
+      // IndexedDB — is deferred to a separate task via setTimeout so it does
+      // not block that first paint frame.
+      shadow
+        .querySelectorAll(".nav-item")
+        .forEach((n) => n.classList.remove("active"));
+      lItem.classList.add("active");
+
+      setTimeout(() => {
+        doc.dispatchEvent(
+          new CustomEvent("shadow-claw-navigate", {
+            detail: { page },
+            bubbles: true,
+            composed: true,
+          }),
+        );
+      }, 0);
     });
   });
 
@@ -87,7 +100,13 @@ export function bindEventListeners(
     });
 
     // Responsive matchMedia handler for orientation/resizing
-    const matchMedia = globalThis.matchMedia("(min-width: 56rem)");
+    const matchMedia = win.matchMedia
+      ? win.matchMedia("(min-width: 56rem)")
+      : ({
+          matches: false,
+          addEventListener: () => {},
+          removeEventListener: () => {},
+        } as unknown as MediaQueryList);
 
     const handleMediaQuery = (e: MediaQueryListEvent | MediaQueryList) => {
       if (e.matches) {
@@ -128,9 +147,8 @@ export function bindEventListeners(
     toggleActivityLogVisibility(shadowClaw);
   });
 
-  // Listen for navigate events from the settings component (e.g. "tools" button)
-  const settingsEl = shadow.querySelector("shadow-claw-settings");
-  settingsEl?.addEventListener("navigate", (e: Event) => {
+  // Listen for navigate events from subcomponents (e.g. settings "channels" or "tools" buttons)
+  shadow.addEventListener("navigate", (e: Event) => {
     const page = (e as CustomEvent).detail?.page;
     if (page) {
       doc.dispatchEvent(
@@ -143,29 +161,13 @@ export function bindEventListeners(
     }
   });
 
-  settingsEl?.addEventListener(
-    "sidebar-pages-visibility-change",
-    (event: Event) => {
-      const hidden = Boolean((event as CustomEvent).detail?.hidden);
-      setPagesSidebarHidden(shadow, shadowClaw, oStore, db, hidden);
-    },
-  );
+  shadow.addEventListener("sidebar-pages-visibility-change", (event: Event) => {
+    const hidden = Boolean((event as CustomEvent).detail?.hidden);
+    setPagesSidebarHidden(shadow, shadowClaw, oStore, db, hidden);
+  });
 
-  // Tools page "Back to Settings" navigation
-  const toolsPage = shadow.querySelector("shadow-claw-tools");
-  toolsPage?.addEventListener("navigate-back", () =>
-    doc.dispatchEvent(
-      new CustomEvent("shadow-claw-navigate", {
-        detail: { page: "settings" },
-        bubbles: true,
-        composed: true,
-      }),
-    ),
-  );
-
-  // Channels page "Back to Settings" navigation
-  const channelsPage = shadow.querySelector("shadow-claw-channels");
-  channelsPage?.addEventListener("navigate-back", () =>
+  // Tools / Channels page "Back to Settings" navigation
+  shadow.addEventListener("navigate-back", () =>
     doc.dispatchEvent(
       new CustomEvent("shadow-claw-navigate", {
         detail: { page: "settings" },

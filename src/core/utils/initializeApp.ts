@@ -3,7 +3,6 @@ import {
   installE2eBridge,
   shouldInstallE2eBridge,
 } from "../../testing/e2e-bridge.js";
-import { clearBootPendingClass } from "./clearBootPendingClass.js";
 
 import { type ShadowClaw } from "../../components/shadow-claw/shadow-claw.js";
 import { type Orchestrator } from "../orchestrator/orchestrator.js";
@@ -34,14 +33,12 @@ export async function initializeApp(
       installE2eBridge(orchestratorStore, uiElement);
     }
 
-    await orchestratorStore.whenInitialized;
+    await orchestratorStore.whenReady;
 
     return { orchestrator: uiElement.orchestrator, isInitializing };
   } catch (error) {
     console.error("❌ Failed to initialize ShadowClaw:", error);
 
     throw error;
-  } finally {
-    clearBootPendingClass(doc);
   }
 }

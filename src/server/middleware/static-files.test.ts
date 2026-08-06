@@ -131,7 +131,7 @@ describe("static-files-middleware", () => {
 
     const appPaths = [
       "/chat",
-      "/chat/br%3Amain/",
+      "/chat/main/",
       "/files",
       "/files/group-1/docs/notes.md",
       "/files/group-1/folder-of-files",
@@ -198,8 +198,8 @@ describe("static-files-middleware", () => {
         "sec-fetch-mode": "navigate",
         "sec-fetch-user": "?1",
       },
-      originalUrl: "/files/br-main/README.md",
-      url: "/files/br-main/README.md",
+      originalUrl: "/files/main/README.md",
+      url: "/files/main/README.md",
     };
     const res = { setHeader: jest.fn(), sendFile: jest.fn() };
     const next = jest.fn();

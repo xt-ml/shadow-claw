@@ -203,10 +203,10 @@ ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace con
 - **Render markdown & HTML** — Save any markdown or HTML file as a page for structured preview, including optional visible YAML frontmatter metadata
 - **Workspace-relative links** — Links and images in pages resolve relative to the workspace
 - **Page sidebar** — Persistent list of saved pages with drag-and-drop reordering and responsive mobile sidebar collapse
-- **Static Main Site Seeding** — Automatically seeds default main pages from manifest, respecting page suppression rules
+- **Static Main Site Seeding** — Automatically seeds default main pages from the `pages/main/` manifest, respecting page suppression rules
 - **Page Suppression** — Deleting pages suppresses auto-reseeding (`SUPPRESSED_PAGES_LIST`) until re-added
 - **Safe iframe embeds** — HTML previews use a configurable iframe host allowlist in Settings, with safe defaults for common embedded content hosts
-- **Pinned Default Page & URL Sync** — Top page serves as default pinned home page (star indicator); page selection syncs browser URL state (`history.pushState`) for direct bookmarking and refreshes
+- **Ebook-Style Navigation** — Functional Previous/Next pagination controls with HTML-entity decoded frontmatter headers and seamless page transitions
 - **Pre-rendered Content Override** — Optional setting (`OVERRIDE_PRERENDER_SKELETON`) suppresses Declarative Shadow DOM (DSD) pre-rendered content during boot to eliminate hydration flash
 
 Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first setup) which serves as a workspace-scoped system context for the agent.

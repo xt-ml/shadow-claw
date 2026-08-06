@@ -1431,11 +1431,11 @@ describe("shadow-claw-file-viewer", () => {
 
       const container = document.createElement("div");
       const aImg = document.createElement("img");
-      aImg.setAttribute("src", "/files/br-main/pic.jpg");
+      aImg.setAttribute("src", "/files/main/pic.jpg");
       const dImg = document.createElement("img");
-      dImg.setAttribute("src", "./files/br-main/pic.jpg");
+      dImg.setAttribute("src", "./files/main/pic.jpg");
       const eImg = document.createElement("img");
-      eImg.setAttribute("src", "files/br-main/pic.jpg");
+      eImg.setAttribute("src", "files/main/pic.jpg");
       container.append(aImg, dImg, eImg);
 
       await component.resolveMarkdownImages(container, "docs/notes.md");
@@ -1484,7 +1484,7 @@ describe("shadow-claw-file-viewer", () => {
       const origin = window.location.origin;
       img.setAttribute(
         "src",
-        `${origin}/files/br%3A01KT4NGEM3T94M0FGHJYVNGS7M/files/br-main/pic.jpg`,
+        `${origin}/files/br%3A01KT4NGEM3T94M0FGHJYVNGS7M/files/main/pic.jpg`,
       );
       container.appendChild(img);
 

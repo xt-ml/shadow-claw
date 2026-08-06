@@ -107,7 +107,7 @@ To prevent infinite execution loops, the system enforces a strict recursion guar
 
 ### Static Main Site & Page Suppression
 
-- **Page Seeding & Suppression:** Static main site pages are seeded via `seedStaticMainSite` (`src/storage/staticMainSite.ts`). When removing pages from the Pages sidebar, ensure suppression is recorded via `suppressPage` (`src/storage/suppressedPages.ts`) so they are not automatically re-seeded on app launch. Re-adding a page calls `unsuppressPage` to clear suppression.
+- **Page Seeding & Suppression:** Static main site pages are seeded from the `pages/main/` directory via `seedStaticMainSite` (`src/storage/staticMainSite.ts`). When removing pages from the Pages sidebar, ensure suppression is recorded via `suppressPage` (`src/storage/suppressedPages.ts`) so they are not automatically re-seeded on app launch. Re-adding a page calls `unsuppressPage` to clear suppression.
 - **Pre-rendered DSD Shell Override:** `OVERRIDE_PRERENDER_SKELETON` (`override_prerender_skeleton`) allows suppressing Declarative Shadow DOM (DSD) shell content on initial load to prevent visual flash before full hydration. Handled during bootstrap in `src/core/theme-init.ts` and `src/components/shadow-claw/shadow-claw.ts`.
 - **Markdown Frontmatter Visibility:** Markdown preview surfaces can optionally render YAML frontmatter as visible metadata/details blocks. Keep the four frontmatter toggles (`pages`, `file_viewer`, `chat`, `tasks`) and their config keys in sync with the rendering behavior when touching markdown UX.
 

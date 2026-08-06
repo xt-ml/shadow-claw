@@ -14,10 +14,13 @@ export class ShadowClawDialog extends HTMLElement {
   }
 
   close(returnValue?: string): void {
+    this.ensureDialog();
     this._dialog?.close(returnValue);
   }
 
   get dialog(): HTMLDialogElement | null {
+    this.ensureDialog();
+
     return this._dialog;
   }
 
@@ -40,7 +43,7 @@ export class ShadowClawDialog extends HTMLElement {
     this._dialog?.showModal();
   }
 
-  private ensureDialog(): void {
+  ensureDialog(): void {
     if (this._dialog) {
       this.syncDialogAttributes();
 

@@ -128,11 +128,13 @@
           </div>
         </div>
 
-        <nav class="nav-menu">
-          <li class="nav-item active" data-page="pages">📚 Pages</li>
-          <li class="nav-item" data-page="chat">💬 Chat</li>
-          <li class="nav-item" data-page="tasks">&nbsp;✓&nbsp;Tasks</li>
-          <li class="nav-item" data-page="files">📁 Files</li>
+        <nav>
+          <ul class="nav-menu">
+            <li class="nav-item active" data-page="pages">📚 Pages</li>
+            <li class="nav-item" data-page="chat">💬 Chat</li>
+            <li class="nav-item" data-page="tasks">&nbsp;✓&nbsp;Tasks</li>
+            <li class="nav-item" data-page="files">📁 Files</li>
+          </ul>
         </nav>
         <div class="sidebar-spacer"></div>
         <shadow-claw-conversations></shadow-claw-conversations>
@@ -207,42 +209,30 @@
           <div class="boot-loading-text">Preparing workspace...</div>
         </div>
 
-        <!-- Chat Page -->
-        <div class="page chat-page" data-page-id="chat">
-          <shadow-claw-chat></shadow-claw-chat>
-        </div>
+        <!-- Chat Page — element stamped on first navigation via showPage() -->
+        <div class="page chat-page" data-page-id="chat"></div>
 
-        <!-- Tasks Page -->
-        <div class="page" data-page-id="tasks">
-          <shadow-claw-tasks></shadow-claw-tasks>
-        </div>
+        <!-- Tasks Page — element stamped on first navigation via showPage() -->
+        <div class="page" data-page-id="tasks"></div>
 
-        <!-- Files Page -->
-        <div class="page" data-page-id="files">
-          <shadow-claw-files></shadow-claw-files>
-        </div>
+        <!-- Files Page — element stamped on first navigation via showPage() -->
+        <div class="page" data-page-id="files"></div>
 
-        <!-- Pages Page -->
+        <!-- Pages Page — pre-stamped: this is the default landing route -->
         <div class="page active" data-page-id="pages">
           <shadow-claw-pages></shadow-claw-pages>
         </div>
 
-        <!-- Settings Page (delegated to sub-components) -->
-        <div class="page" data-page-id="settings">
-          <shadow-claw-settings></shadow-claw-settings>
-        </div>
+        <!-- Settings Page — element stamped on first navigation via showPage() -->
+        <div class="page" data-page-id="settings"></div>
 
-        <!-- Tools Config Page (hidden from sidebar) -->
-        <div class="page" data-page-id="tools">
-          <shadow-claw-tools></shadow-claw-tools>
-        </div>
+        <!-- Tools Config Page — element stamped on first navigation via showPage() -->
+        <div class="page" data-page-id="tools"></div>
 
-        <!-- Channels Config Page (hidden from sidebar) -->
-        <div class="page" data-page-id="channels">
-          <shadow-claw-channels></shadow-claw-channels>
-        </div>
+        <!-- Channels Config Page — element stamped on first navigation via showPage() -->
+        <div class="page" data-page-id="channels"></div>
 
-        <shadow-claw-file-viewer id="file-viewer"></shadow-claw-file-viewer>
+        <!-- file-viewer is stamped lazily by setupEffects when a file is opened -->
         <shadow-claw-toast></shadow-claw-toast>
       </main>
     </div>
@@ -251,7 +241,12 @@
       dialog-class="app-dialog"
       dialog-aria-labelledby="appDialogTitle"
     >
-      <form method="dialog" class="app-confirm-dialog__form">
+      <form
+        method="dialog"
+        class="app-confirm-dialog__form"
+        toolname="confirmAction"
+        tooldescription="Confirms a pending action or dialogue."
+      >
         <h2 id="appDialogTitle" class="app-dialog__title">Confirm</h2>
         <p class="app-dialog__message"></p>
         <ul class="app-dialog__details" hidden></ul>
@@ -279,7 +274,12 @@
       dialog-class="app-dialog app-prompt-dialog"
       dialog-aria-labelledby="appPromptTitle"
     >
-      <form method="dialog" class="app-prompt-dialog__form">
+      <form
+        method="dialog"
+        class="app-prompt-dialog__form"
+        toolname="answerAgentQuestion"
+        tooldescription="Answers a question or prompt presented by the agent."
+      >
         <h2 id="appPromptTitle" class="app-prompt-dialog__title">
           Agent Question
         </h2>

@@ -10,13 +10,13 @@ This is the default static page for your workspace.
 
 ### What is MEMORY.md?
 
-- "[MEMORY.md](/files/br-main/MEMORY.md)" is a per conversation, per invocation, auto-loaded, persistent agent memory file.
+- "[MEMORY.md](/files/main/MEMORY.md)" is a per conversation, per invocation, auto-loaded, persistent agent memory file.
 - It is designed to be a helpful scratchpad for agents to store important information, notes, and context about the conversation.
 
 ### How to use Files
 
-- Open "[Files](/files/br-main)" to browse your workspace.
-- Edit and preview files with the file viewer: [index.html](/files/br-main/index.html)
+- Open "[Files](/files/main)" to browse your workspace.
+- Edit and preview files with the file viewer: [index.html](/files/main/index.html)
 
 ### How to use Pages
 
@@ -26,7 +26,7 @@ This is the default static page for your workspace.
 ### How to use Chat
 
 - Open "[Settings](/settings)" to configure your agent's system prompt, tools, and more.
-- Open "[Chat](/chat/br-main)" to start a conversation with your agent.
+- Open "[Chat](/chat/main)" to start a conversation with your agent.
 
 ## Further information
 

@@ -13,15 +13,18 @@ const componentLoaders: Record<string, () => Promise<unknown>> = {
     import("../../shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.js"),
 };
 
-const loadedComponents = new Set<string>();
+const loadingPromises = new Map<string, Promise<void>>();
 
 export async function ensureComponentLoaded(name: string): Promise<void> {
-  if (loadedComponents.has(name)) {
-    return;
+  let promise = loadingPromises.get(name);
+  if (!promise) {
+    const loader = componentLoaders[name];
+    if (loader) {
+      promise = loader().then(() => undefined);
+      loadingPromises.set(name, promise);
+    } else {
+      promise = Promise.resolve();
+    }
   }
-  const loader = componentLoaders[name];
-  if (loader) {
-    loadedComponents.add(name);
-    await loader();
-  }
+  await promise;
 }

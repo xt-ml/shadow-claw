@@ -47,9 +47,9 @@ The list of saved pages, default pinned page, and active page are managed centra
 
 ### Static Main Site Seeding (`src/storage/staticMainSite.ts`)
 
-During store initialization, `seedStaticMainSite()` seeds default main workspace pages:
+During store initialization, `seedStaticMainSite()` seeds default pages from the special `pages/main/` directory:
 
-1. Manifest discovery checks `#shadow-claw-static-manifest` JSON script elements or fetches `static-main-manifest.json`.
+1. Manifest discovery checks `#shadow-claw-static-manifest` JSON script elements or fetches `static-main-manifest.json` (which is built from `pages/main/`).
 2. Automatically ensures `MEMORY.md` and default static workspace pages exist unless they are marked as suppressed.
 
 ### Page Suppression (`src/storage/suppressedPages.ts`)
@@ -69,6 +69,8 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 ### Navigation & URL State Synchronization
 
 - **URL Sync**: Selecting or reordering pages dispatches navigation events (`shadow-claw-navigate`) and updates browser URL history via `history.pushState()`, preserving active page state across refreshes.
+- **Ebook-Style Pagination**: Includes Previous (`[data-pages-prev]`) and Next (`[data-pages-next]`) page controls. Navigation buttons are dynamically enabled/disabled and set to `hidden` (`display: none !important`) based on current page index to avoid layout shifts.
+- **Routing Ready Gating**: Renders are gated (`_routingReady`) until `orchestratorStore.whenReady` resolves URL routing, preventing a one-frame flash of the default pre-rendered page.
 - **Pinned Home Page & Reordering**: Users can reorder pages via drag-and-drop or star indicators. The top page acts as the pinned home page (`effectiveDefaultPage`).
 - **Responsive Viewport**: On mobile viewports, the sidebar supports toggle collapse (`pages__content--sidebar-collapsed`).
 - **Confirmation Modals**: Destructive page removals render standardized confirmation dialogs consistent with workspace UI dialogs.
@@ -78,7 +80,7 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 #### Markdown (`.md`, `.markdown`)
 
 1. Rendered to HTML via `renderMarkdown()`.
-2. YAML frontmatter is parsed from the document head and can be rendered as a visible metadata/details block when the relevant Settings toggle is enabled.
+2. YAML frontmatter is parsed from the document head and can be rendered as a visible metadata/details block when the relevant Settings toggle is enabled. Header titles safely decode HTML entities in frontmatter titles (such as `&#8211;` or `&amp;`) before display.
 3. Link paths (`a[href]`) are rewritten to resolve against the active workspace route.
 4. Images (`img[src]`) with relative workspace paths are fetched from OPFS via `readGroupFileBytes()`, converted to `Blob` data URLs based on their mime type, and injected back into the HTML.
 5. Content is sanitized using `setSanitizedHtml` and a custom `DOMPurify` configuration (`previewSanitizeOptions`) that specifically allows `blob:` URIs.

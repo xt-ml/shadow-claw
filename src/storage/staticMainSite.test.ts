@@ -6,6 +6,7 @@ const mockWriteGroupFile = jest.fn() as any;
 const mockGetConfig = jest.fn() as any;
 const mockSetConfig = jest.fn() as any;
 const mockEnsureMainGroupIndex = jest.fn() as any;
+const mockDeleteAllGroupFiles = jest.fn() as any;
 
 jest.unstable_mockModule("./groupFileExists.js", () => ({
   groupFileExists: mockGroupFileExists,
@@ -31,11 +32,16 @@ jest.unstable_mockModule("../db/setConfig.js", () => ({
   setConfig: mockSetConfig,
 }));
 
+jest.unstable_mockModule("./deleteAllGroupFiles.js", () => ({
+  deleteAllGroupFiles: mockDeleteAllGroupFiles,
+}));
+
 const {
   getStaticMainManifest,
   seedStaticMainSite,
   STATIC_MAIN_MANIFEST_PATH,
   resolveStaticMainManifestUrl,
+  PURGE_STORAGE_KEY,
 } = await import("./staticMainSite.js");
 const { DEFAULT_GROUP_ID } = await import("../config/config.js");
 
@@ -323,5 +329,106 @@ describe("staticMainSite", () => {
       {} as any,
       DEFAULT_GROUP_ID,
     );
+  });
+});
+
+// ── localStorage-gated purge ───────────────────────────────────────────────
+
+// mockDeleteAllGroupFiles and PURGE_STORAGE_KEY are hoisted at the top of the
+// file so they are available to both describe blocks.
+
+const PURGE_SLUG_CONTENT =
+  '---\ntitle: "MEMORY"\nslug: "shadow-claw--purge-pages"\npurge-id: "build-001"\n---\n';
+
+function injectManifestScript(manifest: object) {
+  const existing = document.getElementById("shadow-claw-static-manifest");
+  if (existing) existing.remove();
+  const script = document.createElement("script");
+  script.id = "shadow-claw-static-manifest";
+  script.type = "application/json";
+  script.textContent = JSON.stringify(manifest);
+  document.head.appendChild(script);
+}
+
+describe("seedStaticMainSite – localStorage-gated purge", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGroupFileExists.mockResolvedValue(false);
+    mockWriteGroupFile.mockResolvedValue(undefined);
+    mockGetConfig.mockResolvedValue(undefined);
+    mockSetConfig.mockResolvedValue(undefined);
+    mockEnsureMainGroupIndex.mockResolvedValue(true);
+    mockDeleteAllGroupFiles.mockResolvedValue(undefined);
+    localStorage.clear();
+  });
+
+  it("purges on first boot when purgeId is present and localStorage is empty", async () => {
+    injectManifestScript({
+      pages: [{ displayPath: "MEMORY.md", content: PURGE_SLUG_CONTENT }],
+      purgeId: "build-001",
+    });
+
+    await seedStaticMainSite({} as any);
+
+    expect(mockDeleteAllGroupFiles).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(PURGE_STORAGE_KEY)).toBe("build-001");
+  });
+
+  it("skips purge on subsequent boots when localStorage matches purgeId", async () => {
+    localStorage.setItem(PURGE_STORAGE_KEY, "build-001");
+
+    injectManifestScript({
+      pages: [{ displayPath: "MEMORY.md", content: PURGE_SLUG_CONTENT }],
+      purgeId: "build-001",
+    });
+
+    await seedStaticMainSite({} as any);
+
+    expect(mockDeleteAllGroupFiles).not.toHaveBeenCalled();
+  });
+
+  it("re-purges when purgeId changes between deployments", async () => {
+    localStorage.setItem(PURGE_STORAGE_KEY, "build-001");
+
+    const newContent = PURGE_SLUG_CONTENT.replace("build-001", "build-002");
+    injectManifestScript({
+      pages: [{ displayPath: "MEMORY.md", content: newContent }],
+      purgeId: "build-002",
+    });
+
+    await seedStaticMainSite({} as any);
+
+    expect(mockDeleteAllGroupFiles).toHaveBeenCalledTimes(1);
+    expect(localStorage.getItem(PURGE_STORAGE_KEY)).toBe("build-002");
+  });
+
+  it("falls back to always-purge (legacy) when purgeId is absent from manifest", async () => {
+    injectManifestScript({
+      pages: [
+        {
+          displayPath: "MEMORY.md",
+          content: '---\nslug: "shadow-claw--purge-pages"\n---\n',
+        },
+      ],
+      // no purgeId field
+    });
+
+    await seedStaticMainSite({} as any);
+    expect(mockDeleteAllGroupFiles).toHaveBeenCalledTimes(1);
+
+    // Second call – still no purgeId, so purges again (legacy always-purge)
+    const existing = document.getElementById("shadow-claw-static-manifest");
+    if (existing) existing.remove();
+    injectManifestScript({
+      pages: [
+        {
+          displayPath: "MEMORY.md",
+          content: '---\nslug: "shadow-claw--purge-pages"\n---\n',
+        },
+      ],
+    });
+
+    await seedStaticMainSite({} as any);
+    expect(mockDeleteAllGroupFiles).toHaveBeenCalledTimes(2);
   });
 });

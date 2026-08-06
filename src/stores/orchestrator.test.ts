@@ -2024,12 +2024,12 @@ describe("OrchestratorStore", () => {
       ]);
     });
 
-    it("init normalizes br-main/MEMORY.md page entries to MEMORY.md", async () => {
+    it("init normalizes main/MEMORY.md page entries to MEMORY.md", async () => {
       (mockGetConfig as any).mockImplementation(
         async (_db: any, key: string) => {
           if (key === "pages_list") {
             return JSON.stringify([
-              { groupId: "br:main", path: "br-main/memory.md" },
+              { groupId: "br:main", path: "main/memory.md" },
               { groupId: "br:main", path: "docs/guide.md" },
             ]);
           }

@@ -1026,6 +1026,13 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return true;
     }
 
+    if (
+      (routeGroupId === "main" && expectedGroupId === "br:main") ||
+      (routeGroupId === "br:main" && expectedGroupId === "main")
+    ) {
+      return true;
+    }
+
     if (!routeGroupId.includes(":") && !expectedGroupId.includes(":")) {
       return false;
     }
@@ -1044,17 +1051,25 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         return;
       }
 
-      const modal = root.querySelector(".file-modal");
-      if (!(modal instanceof HTMLDialogElement)) {
-        return;
+      const shadowDialog = root.querySelector("shadow-claw-dialog") as any;
+      if (shadowDialog && typeof shadowDialog.ensureDialog === "function") {
+        shadowDialog.ensureDialog();
       }
 
+      const modal = root.querySelector(".file-modal");
+
       if (file) {
-        if (!modal.open) {
+        if (
+          shadowDialog &&
+          typeof shadowDialog.showModal === "function" &&
+          !shadowDialog.open
+        ) {
+          shadowDialog.showModal();
+        } else if (modal instanceof HTMLDialogElement && !modal.open) {
           modal.showModal();
         }
 
-        const title = modal.querySelector(".modal-title");
+        const title = root.querySelector(".modal-title");
         if (title instanceof HTMLElement) {
           title.textContent = `File: ${file.name}`;
         }
@@ -1070,7 +1085,13 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         // async / await
         void this.updateView(renderToken);
       } else {
-        if (modal.open) {
+        if (
+          shadowDialog &&
+          typeof shadowDialog.close === "function" &&
+          shadowDialog.open
+        ) {
+          shadowDialog.close();
+        } else if (modal instanceof HTMLDialogElement && modal.open) {
           modal.close();
         }
 

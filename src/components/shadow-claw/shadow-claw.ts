@@ -12,11 +12,11 @@ import {
 } from "../../stores/orchestrator.js";
 
 import { themeStore } from "../../stores/theme.js";
-import { toolsStore } from "../../stores/tools.js";
 
 import { applyRoute } from "./utils/applyRoute.js";
 import { applyRouteFromCurrentLocation } from "./utils/applyRouteFromCurrentLocation.js";
 import { bindEventListeners } from "./utils/bindEventListeners.js";
+import { clearBootPendingClass } from "../../core/utils/clearBootPendingClass.js";
 import { getDefaultSidebarPage } from "./utils/getDefaultSidebarPage.js";
 import { getRoute } from "./utils/getRoute.js";
 import { getTargetPath } from "./utils/getTargetPath.js";
@@ -97,87 +97,108 @@ export class ShadowClaw extends ShadowClawElement {
       throw new Error("shadowRoot not found");
     }
 
-    this.db = await this.orchestrator.init();
+    try {
+      this.db = await this.orchestrator.init();
 
-    // Initialize reactive app store wiring before child components rely on ready state.
-    // We do this before setDB() so that components waiting on getDb() find a ready store.
-    await orchestratorStore.init(this.db, this.orchestrator);
-    setDB(this.db);
+      // Initialize reactive app store wiring before child components rely on ready state.
+      // We do this before setDB() so that components waiting on getDb() find a ready store.
+      await orchestratorStore.init(this.db, this.orchestrator);
+      setDB(this.db);
 
-    await this.render();
+      await this.render();
 
-    // Ensure initial route state matches persisted store state even when prerender
-    // markup starts on a different page. On a fresh install (no persisted page),
-    // trust the pre-rendered content instead of forcing to Chat — unless the
-    // Pages sidebar is hidden, in which case we must redirect away from it.
-    if (orchestratorStore.hadPersistedActivePage) {
-      showPage(
+      // Ensure initial route state matches persisted store state even when prerender
+      // markup starts on a different page. On a fresh install (no persisted page),
+      // trust the pre-rendered content instead of forcing to Chat — unless the
+      // Pages sidebar is hidden, in which case we must redirect away from it.
+      if (orchestratorStore.hadPersistedActivePage) {
+        showPage(
+          this.shadowRoot,
+          this,
+          this.db,
+          orchestratorStore,
+          orchestratorStore.activePage,
+          false,
+        );
+      } else if (this.pagesSidebarHidden) {
+        showPage(
+          this.shadowRoot,
+          this,
+          this.db,
+          orchestratorStore,
+          getDefaultSidebarPage(orchestratorStore),
+          false,
+        );
+      } else {
+        showPage(
+          this.shadowRoot,
+          this,
+          this.db,
+          orchestratorStore,
+          orchestratorStore.activePage,
+          false,
+        );
+      }
+
+      await applyRouteFromCurrentLocation(
         this.shadowRoot,
         this,
         this.db,
+        fileViewerStore,
         orchestratorStore,
-        orchestratorStore.activePage,
-        false,
+        new URL(window.location.href),
       );
-    } else if (this.pagesSidebarHidden) {
-      showPage(
+
+      await processPeerQueryParam(
         this.shadowRoot,
         this,
         this.db,
-        orchestratorStore,
-        getDefaultSidebarPage(orchestratorStore),
-        false,
+        this.orchestrator,
       );
-    } else {
-      showPage(
+
+      await processRoomQueryParam(
+        window,
         this.shadowRoot,
         this,
         this.db,
+        this.orchestrator,
         orchestratorStore,
-        orchestratorStore.activePage,
-        false,
       );
+
+      await processPendingSharedPayloads(
+        window,
+        this.shadowRoot,
+        this,
+        orchestratorStore,
+        fileViewerStore,
+        this.db,
+        new URL(window.location.href),
+      );
+
+      console.log("ShadowClaw UI initialized");
+
+      // Ensure the active page's component is fully upgraded before revealing the host.
+      // applyRouteFromCurrentLocation only awaits the component if the URL explicitly
+      // matches its route. When the URL is `/`, the route parser returns null, so
+      // applyRoute is skipped. Awaiting here guarantees we never reveal stale SSR
+      // markup (like the default prerendered page) before the CSR component
+      // takes over and clears it, even on root URL loads.
+      if (typeof customElements !== "undefined") {
+        await customElements.whenDefined(`shadow-claw-${this.currentPage}`);
+      }
+
+      // Signal that the UI and initial routing are fully ready.
+      // clearBootPendingClass is called immediately after setReady() so that
+      // sc-prerender-override is removed only AFTER applyRouteFromCurrentLocation
+      // has fully completed (including any await pagesComp.renderSelectedPage())
+      // — eliminating the race where initializeApp's finally block would remove
+      // the class while CSR content was still async-loading.
+      orchestratorStore.setReady();
+    } finally {
+      // Always clear the boot-pending class so the app is never permanently
+      // hidden behind sc-prerender-override, even if init throws.
+      clearBootPendingClass(document);
     }
-
-    await applyRouteFromCurrentLocation(
-      this.shadowRoot,
-      this,
-      this.db,
-      fileViewerStore,
-      orchestratorStore,
-      new URL(window.location.href),
-    );
-
-    await processPeerQueryParam(
-      this.shadowRoot,
-      this,
-      this.db,
-      this.orchestrator,
-    );
-
-    await processRoomQueryParam(
-      window,
-      this.shadowRoot,
-      this,
-      this.db,
-      this.orchestrator,
-      orchestratorStore,
-    );
-
-    await processPendingSharedPayloads(
-      window,
-      this.shadowRoot,
-      this,
-      orchestratorStore,
-      fileViewerStore,
-      this.db,
-      new URL(window.location.href),
-    );
-
-    console.log("ShadowClaw UI initialized");
-
-    // Signal that the UI and initial routing are fully ready
-    orchestratorStore.setReady();
   }
 
   disconnectedCallback() {
@@ -377,9 +398,6 @@ export class ShadowClaw extends ShadowClawElement {
     this.vmStatusCleanup = () => {
       this.orchestrator.events.off?.("vm-status", vmStatusListener);
     };
-
-    // Load persisted tool configuration
-    await toolsStore.load(this.db);
 
     // Bridge worker tool events to UI actions.
     this.orchestrator.events.on("open-file", (payload: OpenFilePayload) =>

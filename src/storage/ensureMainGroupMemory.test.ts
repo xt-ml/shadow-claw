@@ -53,7 +53,7 @@ describe("ensureMainGroupMemory", () => {
     );
   });
 
-  it("creates MEMORY.md when missing, using content that matches br-main/MEMORY.md", async () => {
+  it("creates MEMORY.md when missing, using content that matches main/MEMORY.md", async () => {
     (mockGroupFileExists as any).mockResolvedValue(false);
     (mockWriteGroupFile as any).mockResolvedValue(undefined);
 
@@ -66,7 +66,7 @@ describe("ensureMainGroupMemory", () => {
       DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
     );
 
-    // Fallback content must match what static build renders from br-main/MEMORY.md
+    // Fallback content must match what static build renders from main/MEMORY.md
     expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).toContain(
       "# Welcome to ShadowClaw Pages",
     );
@@ -87,7 +87,7 @@ describe("ensureMainGroupMemory", () => {
     expect(mockWriteGroupFile).not.toHaveBeenCalled();
   });
 
-  it("uses static br-main/MEMORY.md template when available", async () => {
+  it("uses static main/MEMORY.md template when available", async () => {
     (mockGroupFileExists as any).mockResolvedValue(false);
 
     await expect(ensureMainGroupMemory({} as any)).resolves.toBe(true);

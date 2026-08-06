@@ -4,6 +4,7 @@ import { getAllGroupIds } from "./shared/index.js";
 test.describe("Orchestrator Integration", () => {
   test("should initialize orchestrator on page load", async ({ app }) => {
     await expect(app.root).toHaveCount(1);
+    await app.navigateTo("chat");
     await expect(app.chatComponent()).toHaveCount(1);
   });
 

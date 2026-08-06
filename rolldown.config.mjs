@@ -153,6 +153,25 @@ function patchGrayMatterEvalPlugin() {
   };
 }
 
+function replacePrerenderMainMemoryPlugin() {
+  return {
+    name: "replace-prerender-main-memory",
+    transform(code) {
+      if (!code.includes("__PRERENDER_MAIN_MEMORY__")) {
+        return null;
+      }
+
+      const val =
+        process.env.PRERENDER_MAIN_MEMORY !== "false" ? "true" : "false";
+      const replaced = code.replace(
+        /(?<!declare\s+const\s+)__PRERENDER_MAIN_MEMORY__/g,
+        val,
+      );
+      return { code: replaced, map: null };
+    },
+  };
+}
+
 const execAsync = promisify(exec);
 let swBuildTimeout;
 function swWatchPlugin() {
@@ -174,7 +193,7 @@ function swWatchPlugin() {
               process.env.PRERENDER_MAIN_MEMORY !== "false";
             if (prerenderMainMemory) {
               await execAsync(
-                "node bin/prerender-dsd-shell.mjs dist/public/index.html main",
+                "node bin/prerender-dsd-shell.mjs dist/public/index.html pages/main",
               );
             } else {
               await execAsync(
@@ -214,6 +233,7 @@ const commonResolve = (platform = "browser", extraPlugins = []) => {
     commonjs: true,
     plugins: [
       ...(platform === "browser" ? [injectGlobalShimPlugin()] : []),
+      replacePrerenderMainMemoryPlugin(),
       patchGrayMatterEvalPlugin(),
       rolldownImportAttributes(),
       swWatchPlugin(),

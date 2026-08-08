@@ -17,7 +17,7 @@ export function executeCreateTask(
     return "Error: Missing or invalid 'prompt' for create_task with type 'prompt'.";
   }
 
-  const taskData = {
+  const taskData: any = {
     createdAt: Date.now(),
     enabled: true,
     groupId,
@@ -28,6 +28,10 @@ export function executeCreateTask(
     tools: Array.isArray(input.tools) ? input.tools : [],
     type: taskType,
   };
+
+  if (typeof input.name === "string" && input.name.trim()) {
+    taskData.name = input.name.trim();
+  }
 
   post({ type: "task-created", payload: { task: taskData } });
 

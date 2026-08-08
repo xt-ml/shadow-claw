@@ -123,20 +123,21 @@ The server scheduler and client scheduler can both fire for the same task. The `
 
 Tasks are stored in IndexedDB via `src/db/`:
 
-| Field            | Type          | Purpose                              |
-| ---------------- | ------------- | ------------------------------------ |
-| `id`             | string (ULID) | Unique identifier                    |
-| `groupId`        | string        | Owning conversation                  |
-| `name`           | string        | Task display name                    |
-| `type`           | string        | `"prompt"` or `"tools"`              |
-| `prompt`         | string        | Instruction sent to the agent        |
-| `tools`          | string        | JSON serialized tool sequence        |
-| `cronExpression` | string        | 5-field cron schedule                |
-| `enabled`        | boolean       | Active/paused                        |
-| `lastRun`        | number        | Unix timestamp of last execution     |
-| `createdAt`      | number        | Unix timestamp                       |
-| `freshContext`   | boolean       | Skip history (blank slate) execution |
-| `subagent`       | boolean       | Isolated background execution        |
+| Field          | Type          | Purpose                              |
+| -------------- | ------------- | ------------------------------------ |
+| `id`           | string (ULID) | Unique identifier                    |
+| `groupId`      | string        | Owning conversation                  |
+| `name`         | string        | Task display name                    |
+| `type`         | string        | `"prompt"` or `"tools"`              |
+| `prompt`       | string        | Instruction sent to the agent        |
+| `tools`        | string        | JSON serialized tool sequence        |
+| `schedule`     | string        | 5-field cron schedule                |
+| `enabled`      | boolean       | Active/paused                        |
+| `lastRun`      | number        | Unix timestamp of last execution     |
+| `createdAt`    | number        | Unix timestamp                       |
+| `freshContext` | boolean       | Skip history (blank slate) execution |
+| `subagent`     | boolean       | Isolated background execution        |
+| `order`        | number        | Reorder index within the group       |
 
 ## Scheduled Task Store (Server)
 
@@ -144,6 +145,7 @@ Mirrored to SQLite on the Express/Electron server for server-side scheduling. Ro
 
 ```text
 POST   /schedule/tasks                 Create/Update task on server (accepts subscriberId)
+POST   /schedule/tasks/reorder         Reorder tasks in a group (accepts subscriberId)
 GET    /schedule/tasks                 List all tasks (accepts subscriberId)
 GET    /schedule/tasks/:id             Get single task
 DELETE /schedule/tasks/:id             Delete task (enforces subscriberId ownership)
@@ -151,7 +153,7 @@ PATCH  /schedule/tasks/:id/enable      Enable task
 PATCH  /schedule/tasks/:id/disable     Disable task
 ```
 
-Tasks are synced to the server whenever the agent creates/updates/deletes a scheduled task (guarded by recursion check).
+Tasks are synced to the server whenever the agent creates/updates/deletes/reorders a scheduled task (guarded by recursion check).
 
 ## Recursion Guard
 

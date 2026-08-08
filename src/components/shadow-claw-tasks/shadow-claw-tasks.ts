@@ -49,6 +49,13 @@ export class ShadowClawTasks extends ShadowClawElement {
   renderFrontmatter = true;
   tasks: any[] = [];
 
+  private _draggedTaskId: string | null = null;
+  private _touchId: number | null = null;
+  private _touchDraggedTaskId: string | null = null;
+  private _keyboardGrabbedId: string | null = null;
+  private _autoScrollActive = false;
+  private _autoScrollSpeed = 0;
+
   constructor() {
     super();
   }
@@ -209,6 +216,21 @@ export class ShadowClawTasks extends ShadowClawElement {
       console.warn("Failed to load highlight.js styles:", err);
     }
 
+    // Global dragover auto-scroll listener on shadowRoot
+    root.addEventListener("dragover", (e: any) => {
+      if (this._draggedTaskId !== null) {
+        this._updateAutoScrollSpeed(e.clientY);
+      }
+    });
+
+    // Ensure we stop scrolling if the drag ends or leaves
+    root.addEventListener("dragend", () => {
+      this._stopAutoScroll();
+    });
+    root.addEventListener("drop", () => {
+      this._stopAutoScroll();
+    });
+
     this.render();
     this.dispatchTerminalSlotReady();
 
@@ -276,6 +298,11 @@ export class ShadowClawTasks extends ShadowClawElement {
     // Clear form
     form.reset();
 
+    const nameInput = form.querySelector("input[name='name']");
+    if (nameInput instanceof HTMLInputElement) {
+      nameInput.value = "";
+    }
+
     // Reset type toggle
     const promptRadio = form.querySelector(
       "input[name='taskType'][value='prompt']",
@@ -329,6 +356,11 @@ export class ShadowClawTasks extends ShadowClawElement {
     }
 
     // Set form values
+    const nameInput = form.querySelector("input[name='name']");
+    if (nameInput instanceof HTMLInputElement) {
+      nameInput.value = task.name || "";
+    }
+
     const scheduleInput = form.querySelector("input[name='schedule']");
     const promptInput = form.querySelector("textarea[name='prompt']");
     if (scheduleInput instanceof HTMLInputElement) {
@@ -717,10 +749,12 @@ export class ShadowClawTasks extends ShadowClawElement {
 
   async handleEditSubmit(db: ShadowClawDatabase, form: HTMLFormElement) {
     const formData = new FormData(form);
+    const name = formData.get("name");
     const schedule = formData.get("schedule");
     const prompt = formData.get("prompt");
     const type = (formData.get("taskType") as "prompt" | "tools") || "prompt";
 
+    const nameStr = name ? String(name).trim() : "";
     const scheduleStr = schedule ? String(schedule).trim() : "";
 
     if (type === "prompt" && !prompt) {
@@ -739,6 +773,7 @@ export class ShadowClawTasks extends ShadowClawElement {
         // Update existing task
         taskToSave = {
           ...this.editingTask,
+          name: nameStr || undefined,
           schedule: scheduleStr,
           type,
           prompt: String(prompt || ""),
@@ -754,6 +789,7 @@ export class ShadowClawTasks extends ShadowClawElement {
             ? crypto.randomUUID()
             : `task-${Date.now()}-${Math.random()}`,
           groupId: currentGroupId,
+          name: nameStr || undefined,
           schedule: scheduleStr,
           type,
           prompt: String(prompt || ""),
@@ -968,10 +1004,23 @@ export class ShadowClawTasks extends ShadowClawElement {
     // Capture render content first to avoid partially cleared list while awaiting
     const fragment = document.createDocumentFragment();
 
-    for (const task of tasks) {
+    for (let i = 0; i < tasks.length; i++) {
+      const task = tasks[i];
       const item = document.createElement("div");
       item.className = "tasks__item";
       item.setAttribute("role", "listitem");
+      item.setAttribute("tabindex", "0");
+      item.setAttribute("aria-describedby", "reorder-instructions");
+      item.setAttribute(
+        "aria-label",
+        `${task.name || "Task"}, position ${i + 1} of ${tasks.length}`,
+      );
+      item.setAttribute("data-task-id", task.id);
+
+      if (this._keyboardGrabbedId === task.id) {
+        item.classList.add("keyboard-grabbed");
+        item.setAttribute("aria-grabbed", "true");
+      }
 
       const lastRunStr = task.lastRun
         ? new Date(task.lastRun).toLocaleString()
@@ -1002,17 +1051,27 @@ export class ShadowClawTasks extends ShadowClawElement {
       }
       const badgesDisplay = badges.join(" · ");
 
+      const nameHtml = task.name
+        ? `<div class="tasks__name" style="font-weight: 600; font-size: var(--shadow-claw-font-size-md); margin-bottom: 0.25rem;">${escapeHtml(task.name)}</div>`
+        : "";
+
+      const dragHandleHtml = `<span class="tasks__drag-handle" draggable="true" aria-hidden="true" title="Drag to reorder">⠿</span>`;
+
       setSanitizedHtml(
         item,
         `<div class="tasks__item-header">
-          <div class="tasks__item-info">
-            <div class="tasks__schedule-row">
-              <div class="tasks__schedule">${scheduleDisplay} <span class="tasks__type-badge">(${escapeHtml(badgesDisplay)})</span></div>
+          <div style="display: flex; align-items: flex-start; flex: 1; min-width: 0;">
+            ${dragHandleHtml}
+            <div class="tasks__item-info">
+              ${nameHtml}
+              <div class="tasks__schedule-row">
+                <div class="tasks__schedule">${scheduleDisplay} <span class="tasks__type-badge">(${escapeHtml(badgesDisplay)})</span></div>
+              </div>
+              <div class="tasks__prompt-container">
+                ${previewHtml}
+              </div>
+              <div class="tasks__last-run">Last run: ${escapeHtml(lastRunStr)}</div>
             </div>
-            <div class="tasks__prompt-container">
-              ${previewHtml}
-            </div>
-            <div class="tasks__last-run">Last run: ${escapeHtml(lastRunStr)}</div>
           </div>
           <div class="tasks__actions">
             ${toggleHtml}
@@ -1050,11 +1109,443 @@ export class ShadowClawTasks extends ShadowClawElement {
         this.handleDelete(db, task.id),
       );
 
+      const handleEl = item.querySelector(
+        ".tasks__drag-handle",
+      ) as HTMLElement | null;
+
+      handleEl?.addEventListener("dragstart", (e) => {
+        this._draggedTaskId = task.id;
+        item.classList.add("dragging");
+        e.dataTransfer?.setData("text/plain", task.id);
+      });
+
+      handleEl?.addEventListener("dragend", () => {
+        item.classList.remove("dragging");
+        this._draggedTaskId = null;
+        list
+          .querySelectorAll(".drag-over")
+          .forEach((el) => el.classList.remove("drag-over"));
+      });
+
+      handleEl?.addEventListener(
+        "touchstart",
+        (e) => {
+          const touch = e.touches[0];
+          if (!touch) {
+            return;
+          }
+          this._touchId = touch.identifier;
+          this._touchDraggedTaskId = task.id;
+          item.classList.add("dragging");
+          e.preventDefault();
+        },
+        { passive: false },
+      );
+
+      item.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (this._draggedTaskId && this._draggedTaskId !== task.id) {
+          item.classList.add("drag-over");
+        }
+      });
+
+      item.addEventListener("dragleave", () => {
+        item.classList.remove("drag-over");
+      });
+
+      item.addEventListener("drop", (e) => {
+        e.preventDefault();
+        item.classList.remove("drag-over");
+        if (this._draggedTaskId && this._draggedTaskId !== task.id) {
+          this.handleReorder(this._draggedTaskId, task.id);
+        }
+      });
+
+      item.addEventListener("keydown", (e) => {
+        this._handleKeyboard(e, task.id, task.name || "Task");
+      });
+
       fragment.appendChild(item);
     }
 
     list.replaceChildren();
     list.appendChild(fragment);
+
+    this._bindTouchListEvents(list);
+  }
+
+  async handleReorder(
+    draggedId: string,
+    targetId: string,
+    precomputedIds?: string[],
+  ) {
+    const db = await getDb();
+    if (!db) {
+      return;
+    }
+
+    if (precomputedIds) {
+      await orchestratorStore.reorderTasks(
+        db,
+        orchestratorStore.activeGroupId,
+        precomputedIds,
+      );
+      return;
+    }
+
+    const tasks = orchestratorStore.tasks || [];
+    const ids = tasks.map((t) => t.id);
+    const fromIdx = ids.indexOf(draggedId);
+    const toIdx = ids.indexOf(targetId);
+
+    if (fromIdx < 0 || toIdx < 0) {
+      return;
+    }
+
+    ids.splice(fromIdx, 1);
+    ids.splice(toIdx, 0, draggedId);
+
+    await orchestratorStore.reorderTasks(
+      db,
+      orchestratorStore.activeGroupId,
+      ids,
+    );
+  }
+
+  _announce(message: string) {
+    const region = this.shadowRoot?.querySelector("#live-region");
+    if (region) {
+      region.textContent = "";
+      requestAnimationFrame(() => {
+        region.textContent = message;
+      });
+    }
+  }
+
+  _bindTouchListEvents(list: Element) {
+    if ((list as any)._touchBound) {
+      return;
+    }
+    (list as any)._touchBound = true;
+
+    list.addEventListener(
+      "touchmove",
+      (e) => {
+        if (this._touchDraggedTaskId === null) {
+          return;
+        }
+
+        const touch = this._findTouch(e as TouchEvent);
+        if (!touch) {
+          return;
+        }
+
+        e.preventDefault();
+
+        const target = this._itemAtPoint(touch.clientX, touch.clientY);
+        list
+          .querySelectorAll(".drag-over")
+          .forEach((el) => el.classList.remove("drag-over"));
+
+        if (
+          target &&
+          target.getAttribute("data-task-id") !== this._touchDraggedTaskId
+        ) {
+          target.classList.add("drag-over");
+        }
+
+        this._updateAutoScrollSpeed(touch.clientY);
+      },
+      { passive: false },
+    );
+
+    list.addEventListener("touchend", (e) => {
+      if (this._touchDraggedTaskId === null) {
+        return;
+      }
+
+      const touch = this._findChangedTouch(e as TouchEvent);
+      if (!touch) {
+        return;
+      }
+
+      const target = this._itemAtPoint(touch.clientX, touch.clientY);
+      const targetId = target?.getAttribute("data-task-id");
+
+      list
+        .querySelectorAll(".dragging")
+        .forEach((el) => el.classList.remove("dragging"));
+
+      list
+        .querySelectorAll(".drag-over")
+        .forEach((el) => el.classList.remove("drag-over"));
+
+      if (targetId && targetId !== this._touchDraggedTaskId) {
+        this.handleReorder(this._touchDraggedTaskId, targetId);
+      }
+
+      this._stopAutoScroll();
+      this._touchDraggedTaskId = null;
+      this._touchId = null;
+    });
+
+    list.addEventListener("touchcancel", () => {
+      list
+        .querySelectorAll(".dragging")
+        .forEach((el) => el.classList.remove("dragging"));
+
+      list
+        .querySelectorAll(".drag-over")
+        .forEach((el) => el.classList.remove("drag-over"));
+      this._stopAutoScroll();
+      this._touchDraggedTaskId = null;
+      this._touchId = null;
+    });
+  }
+
+  _findChangedTouch(e: TouchEvent): Touch | undefined {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
+      if (t.identifier === this._touchId) {
+        return t;
+      }
+    }
+  }
+
+  _findTouch(e: TouchEvent): Touch | undefined {
+    for (let i = 0; i < e.touches.length; i++) {
+      const t = e.touches[i];
+      if (t.identifier === this._touchId) {
+        return t;
+      }
+    }
+  }
+
+  _itemAtPoint(x: number, y: number): Element | null {
+    const root = this.shadowRoot;
+    if (!root) {
+      return null;
+    }
+
+    const el = root.elementFromPoint(x, y);
+    return el?.closest?.(".tasks__item") || null;
+  }
+
+  _startAutoScroll() {
+    if (this._autoScrollActive) {
+      return;
+    }
+    this._autoScrollActive = true;
+
+    const scrollLoop = () => {
+      if (!this._autoScrollActive) {
+        return;
+      }
+
+      const root = this.shadowRoot;
+      const content = root?.querySelector(
+        ".tasks__content",
+      ) as HTMLElement | null;
+      if (content && this._autoScrollSpeed !== 0) {
+        content.scrollTop += this._autoScrollSpeed;
+      }
+
+      requestAnimationFrame(scrollLoop);
+    };
+
+    requestAnimationFrame(scrollLoop);
+  }
+
+  _stopAutoScroll() {
+    this._autoScrollActive = false;
+    this._autoScrollSpeed = 0;
+  }
+
+  _updateAutoScrollSpeed(clientY: number) {
+    const root = this.shadowRoot;
+    const content = root?.querySelector(
+      ".tasks__content",
+    ) as HTMLElement | null;
+    if (!content) {
+      this._autoScrollSpeed = 0;
+      return;
+    }
+
+    const rect = content.getBoundingClientRect();
+    const threshold = 50; // pixels from top/bottom to start scrolling
+
+    const distTop = clientY - rect.top;
+    const distBottom = rect.bottom - clientY;
+
+    if (distTop >= 0 && distTop < threshold) {
+      // Near the top: scroll up. Speed is faster the closer to the edge.
+      this._autoScrollSpeed = -((threshold - distTop) / threshold) * 8;
+      this._startAutoScroll();
+    } else if (distBottom >= 0 && distBottom < threshold) {
+      // Near the bottom: scroll down.
+      this._autoScrollSpeed = ((threshold - distBottom) / threshold) * 8;
+      this._startAutoScroll();
+    } else {
+      this._autoScrollSpeed = 0;
+    }
+  }
+
+  _focusNext(current: HTMLElement) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const focusables = Array.from(
+      root.querySelectorAll(
+        '.tasks__item[tabindex="0"], button:not([disabled]), input:not([type="hidden"]):not([disabled])',
+      ),
+    ) as HTMLElement[];
+    const idx = focusables.indexOf(current);
+    if (idx !== -1 && idx < focusables.length - 1) {
+      focusables[idx + 1].focus();
+    }
+  }
+
+  _focusNextItem(current: HTMLElement) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const items = Array.from(
+      root.querySelectorAll(".tasks__item"),
+    ) as HTMLElement[];
+    const currentItem = current.closest(".tasks__item") as HTMLElement;
+    const idx = items.indexOf(currentItem);
+    if (idx !== -1 && idx < items.length - 1) {
+      items[idx + 1].focus();
+    }
+  }
+
+  _focusPrev(current: HTMLElement) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const focusables = Array.from(
+      root.querySelectorAll(
+        '.tasks__item[tabindex="0"], button:not([disabled]), input:not([type="hidden"]):not([disabled])',
+      ),
+    ) as HTMLElement[];
+    const idx = focusables.indexOf(current);
+    if (idx > 0) {
+      focusables[idx - 1].focus();
+    }
+  }
+
+  _focusPrevItem(current: HTMLElement) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const items = Array.from(
+      root.querySelectorAll(".tasks__item"),
+    ) as HTMLElement[];
+    const currentItem = current.closest(".tasks__item") as HTMLElement;
+    const idx = items.indexOf(currentItem);
+    if (idx > 0) {
+      items[idx - 1].focus();
+    }
+  }
+
+  _handleKeyboard(e: KeyboardEvent, taskId: string, name: string) {
+    const tasks = orchestratorStore.tasks || [];
+    const ids = tasks.map((t) => t.id);
+    const total = ids.length;
+
+    if (this._keyboardGrabbedId === null) {
+      // Navigation & Selection
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        this._focusNextItem(e.target as HTMLElement);
+        return;
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        this._focusPrevItem(e.target as HTMLElement);
+        return;
+      }
+
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        this._focusNext(e.target as HTMLElement);
+        return;
+      }
+
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        this._focusPrev(e.target as HTMLElement);
+        return;
+      }
+
+      // Grab for reorder
+      if (e.key === "m" || e.key === "M") {
+        e.preventDefault();
+        this._keyboardGrabbedId = taskId;
+        const pos = ids.indexOf(taskId) + 1;
+        this._announce(
+          `${name} grabbed. Current position ${pos} of ${total}. Use Arrow Up and Down to move, Space or Enter to drop.`,
+        );
+        getDb()
+          .then((db) => this.updateTaskList(db))
+          .catch(console.error);
+      }
+
+      return;
+    }
+
+    // Currently grabbed
+    if (e.key === "Escape") {
+      e.preventDefault();
+      this._announce(
+        `Reorder cancelled. ${name} returned to original position.`,
+      );
+      this._keyboardGrabbedId = null;
+      getDb()
+        .then((db) => this.updateTaskList(db))
+        .catch(console.error);
+      return;
+    }
+
+    if (e.key === " " || e.key === "Spacebar" || e.key === "Enter") {
+      // Drop
+      e.preventDefault();
+      const pos = ids.indexOf(this._keyboardGrabbedId) + 1;
+      const droppedName =
+        tasks.find((t) => t.id === this._keyboardGrabbedId)?.name || "Task";
+      this._announce(
+        `${droppedName} dropped at position ${pos} of ${total}. Reordering complete.`,
+      );
+      this._keyboardGrabbedId = null;
+      getDb()
+        .then((db) => this.updateTaskList(db))
+        .catch(console.error);
+      return;
+    }
+
+    if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      e.preventDefault();
+      const currentIdx = ids.indexOf(this._keyboardGrabbedId);
+      const newIdx = e.key === "ArrowUp" ? currentIdx - 1 : currentIdx + 1;
+      if (newIdx < 0 || newIdx >= total) {
+        return;
+      }
+
+      // Swap
+      ids.splice(currentIdx, 1);
+      ids.splice(newIdx, 0, this._keyboardGrabbedId);
+      this._announce(`Moved to position ${newIdx + 1} of ${total}.`);
+      this.handleReorder(this._keyboardGrabbedId, ids[currentIdx], ids);
+    }
   }
 }
 

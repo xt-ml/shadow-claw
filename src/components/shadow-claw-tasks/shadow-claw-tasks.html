@@ -59,6 +59,18 @@
       <form class="tasks__dialog-form">
         <div class="tasks__dialog-body">
           <div class="tasks__form-group">
+            <label class="tasks__form-label" for="tasksNameInput">
+              Task Name
+            </label>
+            <input
+              class="tasks__form-input"
+              id="tasksNameInput"
+              name="name"
+              placeholder="e.g., Daily Report Backup"
+              type="text"
+            />
+          </div>
+          <div class="tasks__form-group">
             <label class="tasks__form-label" for="tasksScheduleInput">
               Schedule (Cron Expression)
             </label>
@@ -152,5 +164,10 @@
         </div>
       </form>
     </shadow-claw-dialog>
+    <div id="live-region" class="sr-only" aria-live="assertive"></div>
+    <div id="reorder-instructions" class="sr-only">
+      Press M to grab this task. Use Up and Down arrows to move, Space or Enter
+      to drop, Escape to cancel.
+    </div>
   </section>
 </template>

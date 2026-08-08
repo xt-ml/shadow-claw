@@ -36,6 +36,11 @@ export const create_task: ToolDefinition = {
           required: ["name", "input"],
         },
       },
+      name: {
+        type: "string",
+        description:
+          "The optional title/name for the task, helping to identify its purpose.",
+      },
     },
     required: ["prompt", "type"],
   },
@@ -91,6 +96,10 @@ export const update_task: ToolDefinition = {
       enabled: {
         type: "boolean",
         description: "Whether the task is enabled (optional)",
+      },
+      name: {
+        type: "string",
+        description: "New name/title for the task (optional).",
       },
     },
     required: ["id"],

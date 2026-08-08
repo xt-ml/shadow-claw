@@ -43,6 +43,7 @@ import { saveMessage } from "../db/saveMessage.js";
 import { saveTask } from "../db/saveTask.js";
 import { setConfig } from "../db/setConfig.js";
 import { updateTaskLastRun } from "../db/updateTaskLastRun.js";
+import { reorderTasks } from "../db/reorderTasks.js";
 import { copyGroupDirectory } from "../storage/copyGroupDirectory.js";
 import { ensureMainGroupIndex } from "../storage/ensureMainGroupIndex.js";
 
@@ -122,6 +123,9 @@ interface ServerScheduledTask {
   lastRun?: number | null;
   created_at?: number;
   createdAt?: number;
+  name?: string | null;
+  order?: number | null;
+  task_order?: number | null;
 }
 
 function parseTaskTools(value: ServerScheduledTask["tools"]): Task["tools"] {
@@ -321,6 +325,13 @@ async function fetchServerTasksForGroup(
             : typeof task.created_at === "number"
               ? task.created_at
               : Date.now(),
+        name: typeof task.name === "string" ? task.name : undefined,
+        order:
+          typeof task.order === "number"
+            ? task.order
+            : typeof task.task_order === "number"
+              ? task.task_order
+              : undefined,
       }));
   } catch {
     return null;
@@ -1469,6 +1480,14 @@ export class OrchestratorStore {
     const localGroupTasks = allLocalTasks.filter(
       (t) => t.groupId === currentGroupId,
     );
+    localGroupTasks.sort((a, b) => {
+      const oA = a.order ?? 0;
+      const oB = b.order ?? 0;
+      if (oA !== oB) {
+        return oA - oB;
+      }
+      return a.createdAt - b.createdAt;
+    });
     this._tasks.set(localGroupTasks);
 
     const subscriberId = await this.getSubscriberId(db);
@@ -1497,7 +1516,16 @@ export class OrchestratorStore {
       await saveTask(db, task);
     }
 
-    this._tasks.set([...localGroupTasks, ...serverOnlyTasks]);
+    const combined = [...localGroupTasks, ...serverOnlyTasks];
+    combined.sort((a, b) => {
+      const oA = a.order ?? 0;
+      const oB = b.order ?? 0;
+      if (oA !== oB) {
+        return oA - oB;
+      }
+      return a.createdAt - b.createdAt;
+    });
+    this._tasks.set(combined);
   }
 
   /**
@@ -1647,6 +1675,36 @@ export class OrchestratorStore {
   ): Promise<void> {
     await reorderGroups(db, groupIds);
     await this.loadGroups(db);
+  }
+
+  /**
+   * Reorder tasks in a group
+   */
+  async reorderTasks(
+    db: ShadowClawDatabase,
+    groupId: string,
+    taskIds: string[],
+  ): Promise<void> {
+    const updatedTasks = await reorderTasks(db, groupId, taskIds);
+    await this.loadTasks(db);
+
+    // Sync all updated tasks to the server
+    const subscriberId = await this.getSubscriberId(db);
+    for (const task of updatedTasks) {
+      const base = this.getTaskServerBaseUrl();
+      const ok = await syncTaskToServer(task, base, subscriberId);
+      if (!ok) {
+        console.warn(
+          `Failed to sync reordered task "${task.id}" to server — queued for replay.`,
+        );
+        await this.queueTaskSyncOutboxOperation(db, {
+          type: "upsert",
+          id: task.id,
+          task,
+          queuedAt: Date.now(),
+        });
+      }
+    }
   }
 
   async replayTaskSyncOutbox(db: ShadowClawDatabase): Promise<void> {

@@ -11,10 +11,19 @@ export async function executeListTasks(
     return "No tasks found for this group.";
   }
 
+  tasks.sort((a, b) => {
+    const oA = a.order ?? 0;
+    const oB = b.order ?? 0;
+    if (oA !== oB) {
+      return oA - oB;
+    }
+    return a.createdAt - b.createdAt;
+  });
+
   return tasks
     .map(
       (t) =>
-        `[ID: ${t.id}] Schedule: ${t.schedule}, Type: ${t.type || "prompt"}, Enabled: ${t.enabled}`,
+        `[ID: ${t.id}] Name: ${t.name || "(none)"}, Schedule: ${t.schedule}, Type: ${t.type || "prompt"}, Enabled: ${t.enabled}`,
     )
     .join("\n");
 }

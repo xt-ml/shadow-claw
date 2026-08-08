@@ -1859,7 +1859,7 @@ describe("executeTool.js", () => {
 
     const result = await executeTool({} as any, "list_tasks", {}, "group1");
     expect(result).toContain(
-      "[ID: 1] Schedule: *, Type: prompt, Enabled: true",
+      "[ID: 1] Name: (none), Schedule: *, Type: prompt, Enabled: true",
     );
     expect(result).not.toContain("ID: 2");
   });

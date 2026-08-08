@@ -79,6 +79,8 @@ export interface Task {
   type?: "prompt" | "tools";
   freshContext?: boolean;
   subagent?: boolean;
+  name?: string;
+  order?: number;
 }
 
 export interface TaskToolCall {

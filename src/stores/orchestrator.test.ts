@@ -237,6 +237,11 @@ jest.unstable_mockModule("../db/deleteMessage.js", () => ({
   deleteMessage: mockDeleteMessage,
 }));
 
+const mockReorderTasks = jest.fn() as any;
+jest.unstable_mockModule("../db/reorderTasks.js", () => ({
+  reorderTasks: mockReorderTasks,
+}));
+
 const { OrchestratorStore, accumulateTokenUsage } =
   await import("./orchestrator.js");
 const { DEFAULT_GROUP_ID } = await import("../config/config.js");
@@ -1041,6 +1046,66 @@ describe("OrchestratorStore", () => {
     expect(mockDeleteTask).toHaveBeenCalledWith({} as any, "t1");
 
     expect(loadSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("reorderTasks reorders tasks, loads them, and triggers sync to server", async () => {
+    const store: any = new OrchestratorStore();
+    const loadSpy = jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
+    mockReorderTasks.mockResolvedValue([
+      {
+        id: "t2",
+        groupId: "group-a",
+        schedule: "0 0 * * *",
+        prompt: "task2",
+        order: 0,
+      },
+      {
+        id: "t1",
+        groupId: "group-a",
+        schedule: "0 0 * * *",
+        prompt: "task1",
+        order: 1,
+      },
+    ]);
+
+    (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "subscriber_id") {
+        return "sub-xyz";
+      }
+      return undefined;
+    });
+
+    const mockFetch = (jest.fn() as any).mockImplementation(
+      async (_url: string, init?: RequestInit) => {
+        if (init?.method === "HEAD") {
+          return { status: 200 } as any;
+        }
+        return { ok: true } as any;
+      },
+    );
+    (global as any).fetch = mockFetch;
+
+    await store.reorderTasks({} as any, "group-a", ["t2", "t1"]);
+
+    expect(mockReorderTasks).toHaveBeenCalledWith({} as any, "group-a", [
+      "t2",
+      "t1",
+    ]);
+    expect(loadSpy).toHaveBeenCalled();
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/tasks$/),
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"id":"t2"'),
+      }),
+    );
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringMatching(/\/tasks$/),
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"id":"t1"'),
+      }),
+    );
   });
 
   it("deleteMessage deletes from DB, reloads history, and refreshes context usage", async () => {

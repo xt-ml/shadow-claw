@@ -61,6 +61,8 @@ export class ShadowClawConversations extends ShadowClawElement {
   private _pendingRenameName: string | null = null;
   private _touchDraggedGroupId: string | null = null;
   private _touchId: number | null = null;
+  private _autoScrollActive = false;
+  private _autoScrollSpeed = 0;
 
   async connectedCallback() {
     const root = this.shadowRoot;
@@ -88,6 +90,22 @@ export class ShadowClawConversations extends ShadowClawElement {
     this._setupDialogListeners();
 
     this._initResizeHandle();
+
+    // Global dragover auto-scroll listener on shadowRoot
+    root.addEventListener("dragover", (e: any) => {
+      if (this._draggedGroupId !== null) {
+        this._updateAutoScrollSpeed(e.clientY);
+      }
+    });
+
+    // Ensure we stop scrolling if the drag ends or leaves
+    root.addEventListener("dragend", () => {
+      this._stopAutoScroll();
+    });
+    root.addEventListener("drop", () => {
+      this._stopAutoScroll();
+    });
+
     this.render();
 
     // Re-render when store state changes
@@ -1126,6 +1144,8 @@ export class ShadowClawConversations extends ShadowClawElement {
         ) {
           target.classList.add("drag-over");
         }
+
+        this._updateAutoScrollSpeed(touch.clientY);
       },
       { passive: false },
     );
@@ -1155,6 +1175,7 @@ export class ShadowClawConversations extends ShadowClawElement {
         this.handleReorder(this._touchDraggedGroupId, targetId);
       }
 
+      this._stopAutoScroll();
       this._touchDraggedGroupId = null;
       this._touchId = null;
     });
@@ -1167,6 +1188,7 @@ export class ShadowClawConversations extends ShadowClawElement {
       list
         .querySelectorAll(".drag-over")
         .forEach((el) => el.classList.remove("drag-over"));
+      this._stopAutoScroll();
       this._touchDraggedGroupId = null;
       this._touchId = null;
     });
@@ -1466,6 +1488,65 @@ export class ShadowClawConversations extends ShadowClawElement {
     const el = root.elementFromPoint(x, y);
 
     return el?.closest?.(".conversation-item") || null;
+  }
+
+  _startAutoScroll() {
+    if (this._autoScrollActive) {
+      return;
+    }
+    this._autoScrollActive = true;
+
+    const scrollLoop = () => {
+      if (!this._autoScrollActive) {
+        return;
+      }
+
+      const root = this.shadowRoot;
+      const content = root?.querySelector(
+        ".conversation-list",
+      ) as HTMLElement | null;
+      if (content && this._autoScrollSpeed !== 0) {
+        content.scrollTop += this._autoScrollSpeed;
+      }
+
+      requestAnimationFrame(scrollLoop);
+    };
+
+    requestAnimationFrame(scrollLoop);
+  }
+
+  _stopAutoScroll() {
+    this._autoScrollActive = false;
+    this._autoScrollSpeed = 0;
+  }
+
+  _updateAutoScrollSpeed(clientY: number) {
+    const root = this.shadowRoot;
+    const content = root?.querySelector(
+      ".conversation-list",
+    ) as HTMLElement | null;
+    if (!content) {
+      this._autoScrollSpeed = 0;
+      return;
+    }
+
+    const rect = content.getBoundingClientRect();
+    const threshold = 50; // pixels from top/bottom to start scrolling
+
+    const distTop = clientY - rect.top;
+    const distBottom = rect.bottom - clientY;
+
+    if (distTop >= 0 && distTop < threshold) {
+      // Near the top: scroll up. Speed is faster the closer to the edge.
+      this._autoScrollSpeed = -((threshold - distTop) / threshold) * 8;
+      this._startAutoScroll();
+    } else if (distBottom >= 0 && distBottom < threshold) {
+      // Near the bottom: scroll down.
+      this._autoScrollSpeed = ((threshold - distBottom) / threshold) * 8;
+      this._startAutoScroll();
+    } else {
+      this._autoScrollSpeed = 0;
+    }
   }
 
   _setupDialogListeners() {

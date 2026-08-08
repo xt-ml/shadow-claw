@@ -36,6 +36,7 @@ describe("executeUpdateTask", () => {
       prompt: "old prompt",
       tools: [],
       enabled: false,
+      name: "old name",
     };
     (getGroupTasks as jest.Mock<any>).mockResolvedValue([mockTask]);
 
@@ -48,6 +49,7 @@ describe("executeUpdateTask", () => {
         prompt: "new prompt",
         tools: ["tool1"],
         enabled: true,
+        name: "new name",
       },
       "group-1",
     );
@@ -57,6 +59,7 @@ describe("executeUpdateTask", () => {
     expect(mockTask.prompt).toBe("new prompt");
     expect(mockTask.tools).toEqual(["tool1"]);
     expect(mockTask.enabled).toBe(true);
+    expect(mockTask.name).toBe("new name");
 
     expect(post).toHaveBeenCalledWith({
       type: "update-task",

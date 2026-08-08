@@ -105,7 +105,12 @@
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
+  min-width: 0;
   width: 100%;
+}
+
+.tasks__item-info:not(:has(.tasks__name)) {
+  padding-top: 0.25rem;
 }
 
 .tasks__schedule {
@@ -146,6 +151,7 @@
   margin: 0.75rem 0;
   overflow-x: auto;
   padding: 0.5rem;
+  max-width: 100%;
 }
 
 .tasks__prompt pre code.hljs {
@@ -696,4 +702,57 @@ dialog::backdrop {
   flex-shrink: 0;
   height: 1rem;
   width: 1rem;
+}
+
+.tasks__drag-handle {
+  align-items: center;
+  cursor: grab;
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  justify-content: center;
+  margin-right: 0.25rem;
+  opacity: 0.4;
+  padding: 0.25rem 0.5rem;
+  touch-action: none;
+  user-select: none;
+}
+
+.tasks__drag-handle:active {
+  cursor: grabbing;
+}
+
+.tasks__item:hover .tasks__drag-handle {
+  opacity: 0.8;
+}
+
+.tasks__item.dragging {
+  opacity: 0.4;
+}
+
+.tasks__item.drag-over {
+  border-top: 2px solid var(--shadow-claw-accent-primary);
+}
+
+.tasks__item:focus-visible {
+  outline: 2px dashed var(--shadow-claw-accent-primary);
+  outline-offset: -0.125rem;
+}
+
+.tasks__item.keyboard-grabbed {
+  background: var(--shadow-claw-bg-tertiary);
+  outline: 2px dashed var(--shadow-claw-accent-primary);
+  outline-offset: -0.125rem;
+}
+
+.sr-only {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 0.0625rem;
+  margin: -0.0625rem;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 0.0625rem;
 }

@@ -35,6 +35,10 @@ export async function executeUpdateTask(
     task.enabled = !!input.enabled;
   }
 
+  if (input.name !== undefined) {
+    task.name = typeof input.name === "string" ? input.name.trim() : undefined;
+  }
+
   post({ type: "update-task", payload: { task } });
 
   return `Task ${input.id} updated successfully.`;

@@ -77,7 +77,7 @@
   min-height: 2rem;
   padding: 0.375rem 0.625rem;
   user-select: none;
-  width: calc(100% - 1.5rem);
+  width: 100%;
 }
 
 .header__actions-toggle::-webkit-details-marker {

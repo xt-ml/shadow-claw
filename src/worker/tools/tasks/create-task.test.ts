@@ -78,6 +78,7 @@ describe("executeCreateTask", () => {
         schedule: "0 0 * * *",
         type: "prompt",
         prompt: " Hello World ",
+        name: " Test Name ",
       },
       "group-1",
     );
@@ -90,6 +91,7 @@ describe("executeCreateTask", () => {
             prompt: "Hello World",
             schedule: "0 0 * * *",
             type: "prompt",
+            name: "Test Name",
           }),
         }),
       }),

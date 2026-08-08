@@ -26,6 +26,8 @@ export interface ScheduledTaskRow {
   created_at: number;
   channel: string | null;
   subscriber_id: string | null;
+  name: string | null;
+  task_order: number | null;
 }
 
 export interface ScheduledTaskInput {
@@ -40,6 +42,8 @@ export interface ScheduledTaskInput {
   createdAt: number;
   channel?: string;
   subscriberId?: string;
+  name?: string;
+  order?: number;
 }
 
 function mapRow(row: any): ScheduledTaskRow {
@@ -55,6 +59,8 @@ function mapRow(row: any): ScheduledTaskRow {
     created_at: Number(row.created_at),
     channel: row.channel ? `${row.channel}` : null,
     subscriber_id: row.subscriber_id ? `${row.subscriber_id}` : null,
+    name: row.name ? `${row.name}` : null,
+    task_order: row.task_order == null ? null : Number(row.task_order),
   };
 }
 
@@ -82,7 +88,9 @@ export function openTaskScheduleStore(
       last_run INTEGER,
       created_at INTEGER NOT NULL,
       channel TEXT,
-      subscriber_id TEXT
+      subscriber_id TEXT,
+      name TEXT,
+      task_order INTEGER
     )
   `);
 
@@ -107,6 +115,18 @@ export function openTaskScheduleStore(
 
   try {
     db.exec("ALTER TABLE scheduled_tasks ADD COLUMN subscriber_id TEXT");
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.exec("ALTER TABLE scheduled_tasks ADD COLUMN name TEXT");
+  } catch {
+    // column already exists
+  }
+
+  try {
+    db.exec("ALTER TABLE scheduled_tasks ADD COLUMN task_order INTEGER");
   } catch {
     // column already exists
   }
@@ -136,8 +156,8 @@ export function saveScheduledTask(task: ScheduledTaskInput): void {
 
   db.prepare(
     `INSERT OR REPLACE INTO scheduled_tasks
-       (id, group_id, schedule, type, prompt, tools, enabled, last_run, created_at, channel, subscriber_id)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, group_id, schedule, type, prompt, tools, enabled, last_run, created_at, channel, subscriber_id, name, task_order)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     task.id,
     task.groupId,
@@ -150,6 +170,8 @@ export function saveScheduledTask(task: ScheduledTaskInput): void {
     task.createdAt,
     task.channel ?? null,
     task.subscriberId ?? null,
+    task.name ?? null,
+    task.order ?? null,
   );
 }
 

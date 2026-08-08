@@ -118,6 +118,8 @@ export function registerTaskScheduleRoutes(app: Express): void {
       createdAt: task.created_at,
       channel: task.channel ?? undefined,
       subscriberId: task.subscriber_id ?? undefined,
+      name: task.name ?? undefined,
+      order: task.task_order ?? undefined,
     });
 
     res.sendStatus(200);
@@ -143,6 +145,8 @@ export function registerTaskScheduleRoutes(app: Express): void {
       createdAt: task.created_at,
       channel: task.channel ?? undefined,
       subscriberId: task.subscriber_id ?? undefined,
+      name: task.name ?? undefined,
+      order: task.task_order ?? undefined,
     });
 
     res.sendStatus(200);

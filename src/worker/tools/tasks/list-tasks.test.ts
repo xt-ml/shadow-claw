@@ -20,17 +20,23 @@ describe("executeListTasks", () => {
 
   it("returns formatted string of tasks", async () => {
     (getGroupTasks as jest.Mock<any>).mockResolvedValue([
-      { id: "task-1", schedule: "* * * * *", type: "prompt", enabled: true },
+      {
+        id: "task-1",
+        schedule: "* * * * *",
+        type: "prompt",
+        enabled: true,
+        name: "Task 1",
+      },
       { id: "task-2", schedule: "0 0 * * *", enabled: false }, // test fallback
     ]);
 
     const result = await executeListTasks({} as any, "group-1");
 
     expect(result).toContain(
-      "[ID: task-1] Schedule: * * * * *, Type: prompt, Enabled: true",
+      "[ID: task-1] Name: Task 1, Schedule: * * * * *, Type: prompt, Enabled: true",
     );
     expect(result).toContain(
-      "[ID: task-2] Schedule: 0 0 * * *, Type: prompt, Enabled: false",
+      "[ID: task-2] Name: (none), Schedule: 0 0 * * *, Type: prompt, Enabled: false",
     );
   });
 });

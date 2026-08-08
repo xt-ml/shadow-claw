@@ -1064,6 +1064,7 @@ export const CONFIG_KEYS = {
   SIDEBAR_PAGES_HIDDEN: "sidebar_pages_hidden",
   SIDEBAR_WIDTH: "sidebar_width",
   STORAGE_HANDLE: "storage_handle",
+  SUBSCRIBER_ID: "subscriber_id",
   STREAMING_ENABLED: "streaming_enabled",
   SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
   SUBAGENT_WORKSPACE_MODE: "subagent_workspace_mode",

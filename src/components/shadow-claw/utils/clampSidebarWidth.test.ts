@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-import { MAX_SIDEBAR_WIDTH_PX, MIN_SIDEBAR_WIDTH_PX } from "../shadow-claw";
+import { MAX_SIDEBAR_WIDTH_PX, MIN_SIDEBAR_WIDTH_PX } from "../constants";
 import { clampSidebarWidth } from "./clampSidebarWidth";
 
 describe("clampSidebarWidth", () => {

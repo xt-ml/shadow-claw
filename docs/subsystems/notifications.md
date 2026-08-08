@@ -19,7 +19,7 @@ graph TD
   subgraph Server ["Express / Electron Server"]
     PR["push-routes.ts<br>/push/* endpoints"]
     PS["push-store.ts<br>SQLite subscriptions"]
-    TSR["task-schedule-routes.ts<br>/tasks/schedule/* endpoints"]
+    TSR["task-schedule-routes.ts<br>/schedule/tasks/* endpoints"]
     TSS["task-schedule-store.ts<br>SQLite scheduled tasks"]
     Sched["ServerTaskScheduler<br>60s cron ticks"]
   end
@@ -143,10 +143,12 @@ Tasks are stored in IndexedDB via `src/db/`:
 Mirrored to SQLite on the Express/Electron server for server-side scheduling. Routes:
 
 ```text
-POST   /tasks/schedule         Create task on server
-PUT    /tasks/schedule/:id     Update task
-DELETE /tasks/schedule/:id     Delete task
-GET    /tasks/schedule         List all tasks
+POST   /schedule/tasks                 Create/Update task on server (accepts subscriberId)
+GET    /schedule/tasks                 List all tasks (accepts subscriberId)
+GET    /schedule/tasks/:id             Get single task
+DELETE /schedule/tasks/:id             Delete task (enforces subscriberId ownership)
+PATCH  /schedule/tasks/:id/enable      Enable task
+PATCH  /schedule/tasks/:id/disable     Disable task
 ```
 
 Tasks are synced to the server whenever the agent creates/updates/deletes a scheduled task (guarded by recursion check).

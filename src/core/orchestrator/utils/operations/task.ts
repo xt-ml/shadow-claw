@@ -7,11 +7,19 @@ import type { OrchestratorState } from "../../orchestrator-state.js";
 export async function syncTaskToServer(
   state: Pick<OrchestratorState, "taskServerUrl">,
   task: Task,
+  subscriberId?: string,
 ): Promise<boolean> {
   try {
     const base = state.taskServerUrl.replace(/\/$/, "");
     const res = await fetch(`${base}/tasks`, {
-      body: JSON.stringify(task),
+      body: JSON.stringify(
+        subscriberId
+          ? {
+              ...task,
+              subscriberId,
+            }
+          : task,
+      ),
       headers: { "Content-Type": "application/json" },
       method: "POST",
     });
@@ -31,12 +39,19 @@ export async function syncTaskToServer(
 export async function deleteTaskFromServer(
   state: Pick<OrchestratorState, "taskServerUrl">,
   id: string,
+  subscriberId?: string,
 ): Promise<boolean> {
   try {
     const base = state.taskServerUrl.replace(/\/$/, "");
-    const res = await fetch(`${base}/tasks/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
+    const suffix = subscriberId
+      ? `?subscriberId=${encodeURIComponent(subscriberId)}`
+      : "";
+    const res = await fetch(
+      `${base}/tasks/${encodeURIComponent(id)}${suffix}`,
+      {
+        method: "DELETE",
+      },
+    );
     if (!res.ok) {
       console.error("Server rejected task deletion:", res.status);
       return false;

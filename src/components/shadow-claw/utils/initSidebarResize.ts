@@ -4,7 +4,7 @@ import { getConfig } from "../../../db/getConfig.js";
 import {
   DEFAULT_SIDEBAR_WIDTH_PX,
   MIN_SIDEBAR_WIDTH_PX,
-} from "../shadow-claw.js";
+} from "../constants.js";
 
 import { clampSidebarWidth } from "./clampSidebarWidth.js";
 import { persistSidebarWidth } from "./persistSidebarWidth.js";

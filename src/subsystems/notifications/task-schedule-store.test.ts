@@ -208,5 +208,29 @@ describe("task-schedule-store", () => {
       expect(tasks).toHaveLength(1);
       expect(tasks[0].id).toBe(MOCK_TASK.id);
     });
+
+    it("includes legacy NULL-subscriber rows when filtering by groupId + subscriberId", () => {
+      saveScheduledTask({
+        ...MOCK_TASK,
+        id: "task-legacy",
+      });
+      saveScheduledTask({
+        ...MOCK_TASK,
+        id: "task-sub",
+        subscriberId: "sub-1",
+      });
+      saveScheduledTask({
+        ...MOCK_TASK,
+        id: "task-other-sub",
+        subscriberId: "sub-2",
+      });
+
+      const tasks = getAllScheduledTasks(MOCK_TASK.groupId, "sub-1");
+      expect(tasks).toHaveLength(2);
+      expect(tasks.map((t) => t.id).sort()).toEqual([
+        "task-legacy",
+        "task-sub",
+      ]);
+    });
   });
 });

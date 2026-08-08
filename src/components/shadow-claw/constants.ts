@@ -1,0 +1,3 @@
+export const DEFAULT_SIDEBAR_WIDTH_PX = 250;
+export const MIN_SIDEBAR_WIDTH_PX = 200;
+export const MAX_SIDEBAR_WIDTH_PX = 560;

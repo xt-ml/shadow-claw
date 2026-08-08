@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.16.5",
+  "version": "1.17.0",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -34,7 +34,7 @@
     "format": "npx prettier 404.html index.css index.html jest.config.ts playwright.config.ts rolldown.config.mjs \"{bin,e2e,electron,share,src}/**/*.{html,css,ts,js,mjs}\" --write",
     "rolldown": "rolldown -c rolldown.config.mjs",
     "start": "npm run build && node dist/server.js",
-    "test": "npm run -s tsc && cross-env NODE_OPTIONS=\"--experimental-vm-modules\" jest",
+    "test": "npm run -s tsc && cross-env NODE_OPTIONS=\"--experimental-vm-modules\" jest --runInBand",
     "tsc:agent:worker": "tsc --noEmit -p tsconfig.agent.worker.json",
     "tsc:app": "tsc --noEmit -p tsconfig.json",
     "tsc:server": "tsc --noEmit -p tsconfig.server.json",

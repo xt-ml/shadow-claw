@@ -33,7 +33,7 @@ export function bindEventListeners(
   tStore: ThemeStore,
   url: URL,
 ): void {
-  if (!shadow) {
+  if (!shadow || !win || !doc) {
     return;
   }
 

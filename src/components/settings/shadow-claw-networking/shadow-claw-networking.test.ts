@@ -27,6 +27,18 @@ const { showSuccess, showWarning } = await import("../../../ui/toast.js");
 const { setProxyUrl } =
   await import("../../../core/orchestrator/utils/settings.js");
 
+async function waitForNetworkingReady(el: any): Promise<void> {
+  for (let i = 0; i < 50; i += 1) {
+    if (el.db && el.orchestrator) {
+      return;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+
+  throw new Error("shadow-claw-networking did not finish async initialization");
+}
+
 function createOrchestratorStub(overrides = {}) {
   return {
     getUseProxy: jest.fn<any>().mockReturnValue(false),
@@ -59,7 +71,7 @@ describe("shadow-claw-networking", () => {
 
     const el = new ShadowClawNetworking();
     document.body.appendChild(el);
-    await new Promise((r) => setTimeout(r, 50));
+    await waitForNetworkingReady(el);
     await el.render();
 
     const proxyToggle = el.shadowRoot?.querySelector(
@@ -81,7 +93,7 @@ describe("shadow-claw-networking", () => {
 
     const el = new ShadowClawNetworking();
     document.body.appendChild(el);
-    await new Promise((r) => setTimeout(r, 50));
+    await waitForNetworkingReady(el);
     await el.render();
 
     const proxyInput = el.shadowRoot?.querySelector(
@@ -107,7 +119,7 @@ describe("shadow-claw-networking", () => {
 
     const el = new ShadowClawNetworking();
     document.body.appendChild(el);
-    await new Promise((r) => setTimeout(r, 50));
+    await waitForNetworkingReady(el);
     await el.render();
 
     const proxyInput = el.shadowRoot?.querySelector(

@@ -1,7 +1,9 @@
 import { jest } from "@jest/globals";
+import { EventEmitter } from "node:events";
 import process from "node:process";
 
 process.setMaxListeners(20);
+EventEmitter.defaultMaxListeners = 20;
 
 import "fake-indexeddb/auto";
 
@@ -18,6 +20,7 @@ jest.unstable_mockModule("peerjs", () => ({
 
 import { existsSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
+import { deserialize, serialize } from "node:v8";
 import {
   ReadableStream,
   TransformStream,
@@ -59,11 +62,32 @@ class MockAudioContext {
   }
 }
 
+class MockWorker {
+  onmessage: ((event: MessageEvent) => void) | null = null;
+
+  addEventListener() {}
+
+  postMessage() {}
+
+  removeEventListener() {}
+
+  terminate() {}
+}
+
 // Add generic Web APIs for JSDOM from Node globals
 globalThis.Response = global.Response;
 globalThis.Request = global.Request;
 globalThis.Headers = global.Headers;
 (globalThis as any).__PRERENDER_MAIN_MEMORY__ = false;
+
+if (typeof (globalThis as any).Worker === "undefined") {
+  (globalThis as any).Worker = MockWorker;
+}
+
+if (typeof globalThis.structuredClone !== "function") {
+  (globalThis as any).structuredClone = <T>(value: T): T =>
+    deserialize(serialize(value));
+}
 
 // Patch TextEncoder
 if (typeof globalThis.TextEncoder === "undefined") {
@@ -237,6 +261,13 @@ const expectedLogs = [
   "Failed to import chat data:",
   "Failed to parse peerjs_peer_aliases",
   "iMessage bridge poll error: TypeError: Cannot read properties of undefined (reading 'ok')",
+  "iMessage bridge poll error: TypeError: response.json is not a function",
+  "Save error: TypeError: dialog?.close is not a function",
+  "Found 1 legacy scheduled task(s) with NULL subscriber_id for group br:main",
+  "🦞 ShadowClaw initializing...",
+  "✅ ShadowClaw initialized successfully",
+  "[fetch mock] File not found:",
+  "Failed to load files in store:",
   "DOMException",
   "ERR_VM_MODULE_NOT_MODULE",
   "Provided module is not an instance of Module",

@@ -1425,6 +1425,8 @@ describe("shadow-claw-file-viewer", () => {
       const previousGroupId = (orchestratorStore as any).activeGroupId;
       (orchestratorStore as any).activeGroupId = "br:main";
 
+      (readGroupFileBytes as jest.Mock).mockClear();
+
       (
         readGroupFileBytes as jest.MockedFunction<typeof readGroupFileBytes>
       ).mockResolvedValue(new Uint8Array([255, 216, 255, 217]));

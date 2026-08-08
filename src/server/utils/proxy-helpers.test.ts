@@ -103,7 +103,12 @@ describe("proxy-helpers", () => {
 
   describe("fetchWithTimeout", () => {
     beforeEach(() => {
+      jest.useRealTimers();
       global.fetch = jest.fn() as any;
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
     });
 
     it("calls fetch normally if no timeout", async () => {
@@ -113,6 +118,7 @@ describe("proxy-helpers", () => {
     });
 
     it("throws if timeout is reached", async () => {
+      jest.useFakeTimers();
       (global.fetch as any).mockImplementation(
         (_url: string, init: any) =>
           new Promise((_resolve, reject) => {
@@ -125,10 +131,13 @@ describe("proxy-helpers", () => {
       );
 
       const promise = fetchWithTimeout("https://example.com", {}, 50);
+      jest.advanceTimersByTime(50);
 
       await expect(promise).rejects.toThrow(
         "Upstream request timed out after 50ms",
       );
+
+      jest.useRealTimers();
     });
   });
 

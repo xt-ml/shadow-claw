@@ -37,7 +37,7 @@ describe("initSidebarResize", () => {
       getConfig: jest.fn(),
     }));
 
-    jest.unstable_mockModule("../shadow-claw.js", () => ({
+    jest.unstable_mockModule("../constants.js", () => ({
       DEFAULT_SIDEBAR_WIDTH_PX: 300,
       MIN_SIDEBAR_WIDTH_PX: 200,
     }));

@@ -25,7 +25,7 @@ export async function processRoomQueryParam(
     return;
   }
 
-  const currentUrl = new URL(window.location.href);
+  const currentUrl = new URL(window.location?.href || "http://localhost/");
   const roomId = (currentUrl.searchParams.get("room") || "").trim();
   const hostPeerId = (currentUrl.searchParams.get("host") || "").trim();
   const roomName = (currentUrl.searchParams.get("name") || "").trim() || "Room";

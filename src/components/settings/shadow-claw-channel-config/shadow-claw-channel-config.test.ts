@@ -115,6 +115,17 @@ const { configureIMessage, configureTelegram } =
 
 const originalFetch = globalThis.fetch;
 
+async function waitForMockCalled(mockFn: jest.Mock<any>, timeoutMs = 500) {
+  const startedAt = Date.now();
+  while (mockFn.mock.calls.length === 0) {
+    if (Date.now() - startedAt > timeoutMs) {
+      throw new Error("Timed out waiting for expected mock call");
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 function createOrchestratorStub() {
   return {
     getTelegramConfig: jest.fn(() => ({
@@ -453,7 +464,7 @@ describe("shadow-claw-channel-config", () => {
       ?.querySelector('[data-action="verify-telegram-config"]')
       ?.dispatchEvent(new Event("click"));
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await waitForMockCalled(showSuccess as jest.Mock<any>, 1000);
 
     expect(showSuccess).toHaveBeenCalledWith(
       "Telegram setup looks good for @shadow_claw_bot. Token works and no webhook is active.",
@@ -509,7 +520,7 @@ describe("shadow-claw-channel-config", () => {
       ?.querySelector('[data-action="verify-telegram-config"]')
       ?.dispatchEvent(new Event("click"));
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitForMockCalled(showWarning as jest.Mock<any>, 1000);
 
     expect(showWarning).toHaveBeenCalledWith(
       "Telegram bot is valid (shadow_claw_bot), but a webhook is enabled. Clear it with deleteWebhook before relying on getUpdates polling.",
@@ -563,7 +574,7 @@ describe("shadow-claw-channel-config", () => {
       ?.querySelector('[data-action="verify-telegram-config"]')
       ?.dispatchEvent(new Event("click"));
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await waitForMockCalled(globalThis.fetch as jest.Mock<any>, 1000);
 
     expect(globalThis.fetch).toHaveBeenCalledWith(
       "https://api.telegram.org/bottg-token/getMe",

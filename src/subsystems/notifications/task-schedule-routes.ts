@@ -51,6 +51,18 @@ export function registerTaskScheduleRoutes(app: Express): void {
     const groupId = req.query.groupId as string | undefined;
     const subscriberId = req.query.subscriberId as string | undefined;
     const tasks = getAllScheduledTasks(groupId, subscriberId);
+
+    if (groupId && subscriberId) {
+      const legacyCount = tasks.filter(
+        (task) => task.subscriber_id === null,
+      ).length;
+      if (legacyCount > 0) {
+        console.warn(
+          `Found ${legacyCount} legacy scheduled task(s) with NULL subscriber_id for group ${groupId}`,
+        );
+      }
+    }
+
     res.json(tasks);
   });
 
@@ -67,7 +79,22 @@ export function registerTaskScheduleRoutes(app: Express): void {
 
   // Delete a scheduled task
   app.delete("/schedule/tasks/:id", (req, res) => {
-    deleteScheduledTask(req.params.id);
+    const subscriberId = req.query.subscriberId as string | undefined;
+    if (subscriberId) {
+      const task = getScheduledTask(req.params.id);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+
+      if (task.subscriber_id !== null && task.subscriber_id !== subscriberId) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+
+      deleteScheduledTask(req.params.id);
+    } else {
+      deleteScheduledTask(req.params.id);
+    }
+
     res.sendStatus(200);
   });
 

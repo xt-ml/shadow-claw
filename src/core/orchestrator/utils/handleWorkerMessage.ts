@@ -6,6 +6,7 @@ import { DEFAULT_GROUP_ID } from "../../../config/config.js";
 
 import { deleteTask } from "../../../db/deleteTask.js";
 import { getAllTasks } from "../../../db/getAllTasks.js";
+import { getOrCreateSubscriberId } from "../../../db/getOrCreateSubscriberId.js";
 import { roomIdFromGroupId } from "../../../db/rooms.js";
 import { saveTask } from "../../../db/saveTask.js";
 
@@ -114,7 +115,8 @@ export async function handleWorkerMessage(
       }
 
       try {
-        const serverOk = await syncTaskToServer(o, task);
+        const subscriberId = await getOrCreateSubscriberId(db);
+        const serverOk = await syncTaskToServer(o, task, subscriberId);
 
         if (!serverOk) {
           showToast("Failed to sync task to server — task was not saved.", {
@@ -309,7 +311,8 @@ export async function handleWorkerMessage(
       }
 
       try {
-        const serverOk = await syncTaskToServer(o, task);
+        const subscriberId = await getOrCreateSubscriberId(db);
+        const serverOk = await syncTaskToServer(o, task, subscriberId);
 
         if (!serverOk) {
           showToast(
@@ -344,7 +347,8 @@ export async function handleWorkerMessage(
       }
 
       try {
-        const serverOk = await deleteTaskFromServer(o, id);
+        const subscriberId = await getOrCreateSubscriberId(db);
+        const serverOk = await deleteTaskFromServer(o, id, subscriberId);
 
         if (!serverOk) {
           showToast("Failed to delete task from server — task kept in view.", {

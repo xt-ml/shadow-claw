@@ -40,6 +40,7 @@ const mockDeleteTask = jest.fn() as any;
 const mockGetAllTasks = jest.fn() as any;
 const mockRoomIdFromGroupId = jest.fn() as any;
 const mockSaveTask = jest.fn() as any;
+const mockGetOrCreateSubscriberId = jest.fn() as any;
 
 const mockSyncTaskToServer = jest.fn() as any;
 const mockDeleteTaskFromServer = jest.fn() as any;
@@ -112,6 +113,10 @@ jest.unstable_mockModule("../../../db/saveTask.js", () => ({
   saveTask: mockSaveTask,
 }));
 
+jest.unstable_mockModule("../../../db/getOrCreateSubscriberId.js", () => ({
+  getOrCreateSubscriberId: mockGetOrCreateSubscriberId,
+}));
+
 jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   orchestratorStore: {
     runTask: jest.fn(),
@@ -168,6 +173,7 @@ describe("handleWorkerMessage", () => {
     jest.clearAllMocks();
     mockSyncTaskToServer.mockResolvedValue(true);
     mockDeleteTaskFromServer.mockResolvedValue(true);
+    mockGetOrCreateSubscriberId.mockResolvedValue("sub-test");
     mockDb = {};
     mockOrchestrator = {
       transformersProgressPollers: new Map(),
@@ -273,12 +279,27 @@ describe("handleWorkerMessage", () => {
 
     await send({ type: "task-created", payload: { task: { groupId: "g2" } } });
     expect(mockSaveTask).toHaveBeenCalled();
+    expect(mockSyncTaskToServer).toHaveBeenLastCalledWith(
+      mockOrchestrator,
+      { groupId: "g2" },
+      "sub-test",
+    );
 
     await send({ type: "update-task", payload: { task: { groupId: "g2" } } });
     expect(mockSaveTask).toHaveBeenCalledTimes(2);
+    expect(mockSyncTaskToServer).toHaveBeenLastCalledWith(
+      mockOrchestrator,
+      { groupId: "g2" },
+      "sub-test",
+    );
 
     await send({ type: "delete-task", payload: { id: "t1", groupId: "g2" } });
     expect(mockDeleteTask).toHaveBeenCalled();
+    expect(mockDeleteTaskFromServer).toHaveBeenCalledWith(
+      mockOrchestrator,
+      "t1",
+      "sub-test",
+    );
   });
 
   it("handles room actions", async () => {

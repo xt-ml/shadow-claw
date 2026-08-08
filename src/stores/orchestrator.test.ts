@@ -1153,7 +1153,7 @@ describe("OrchestratorStore", () => {
     await store.init({} as any, orch);
 
     expect((global as any).fetch).toHaveBeenCalledWith(
-      "/schedule/tasks/queued-1",
+      expect.stringMatching(/^\/schedule\/tasks\/queued-1\?/),
       expect.objectContaining({ method: "DELETE" }),
     );
     expect(mockSetConfig).toHaveBeenCalledWith(
@@ -1179,6 +1179,14 @@ describe("OrchestratorStore", () => {
   it("reconciles server-only tasks into local store", async () => {
     const store = new OrchestratorStore();
 
+    (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "subscriber_id") {
+        return "sub-123";
+      }
+
+      return undefined;
+    });
+
     (mockGetAllTasks as any).mockResolvedValueOnce([]);
 
     (global as any).fetch = (jest.fn() as any).mockResolvedValue({
@@ -1189,6 +1197,9 @@ describe("OrchestratorStore", () => {
           group_id: DEFAULT_GROUP_ID,
           schedule: "*/5 * * * *",
           prompt: "Frequent task",
+          type: "tools",
+          tools: '[{"name":"bash","input":{"command":"ls"}}]',
+          channel: "br:",
 
           enabled: 1,
           last_run: null,
@@ -1199,6 +1210,11 @@ describe("OrchestratorStore", () => {
 
     await store.loadTasks({} as any);
 
+    expect((global as any).fetch).toHaveBeenCalledWith(
+      "/schedule/tasks?groupId=br%3Amain&subscriberId=sub-123",
+      expect.objectContaining({ method: "GET" }),
+    );
+
     expect(mockSaveTask).toHaveBeenCalledWith(
       {} as any,
       expect.objectContaining({
@@ -1206,6 +1222,9 @@ describe("OrchestratorStore", () => {
         groupId: DEFAULT_GROUP_ID,
         schedule: "*/5 * * * *",
         prompt: "Frequent task",
+        type: "tools",
+        tools: [{ name: "bash", input: { command: "ls" } }],
+        channel: "br:",
       }),
     );
     expect(store.tasks).toEqual(
@@ -1213,8 +1232,86 @@ describe("OrchestratorStore", () => {
         expect.objectContaining({
           id: "task-1",
           groupId: DEFAULT_GROUP_ID,
+          type: "tools",
+          tools: [{ name: "bash", input: { command: "ls" } }],
+          channel: "br:",
         }),
       ]),
+    );
+  });
+
+  it("includes subscriberId when syncing task upserts to server", async () => {
+    const store: any = new OrchestratorStore();
+    (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "subscriber_id") {
+        return "sub-xyz";
+      }
+
+      return undefined;
+    });
+
+    (global as any).fetch = (jest.fn() as any).mockImplementation(
+      async (_url: string, init?: RequestInit) => {
+        if (init?.method === "HEAD") {
+          return { status: 200 } as any;
+        }
+
+        return { ok: true } as any;
+      },
+    );
+
+    await store.upsertTask(
+      {} as any,
+      {
+        id: "t-upsert",
+        groupId: DEFAULT_GROUP_ID,
+        schedule: "*/5 * * * *",
+        prompt: "sync me",
+        enabled: true,
+        lastRun: null,
+        createdAt: Date.now(),
+      },
+      { reloadTasks: false },
+    );
+
+    const postCall = (global as any).fetch.mock.calls.find(
+      (call: any[]) => call[1]?.method === "POST",
+    );
+    expect(postCall).toBeDefined();
+    expect(JSON.parse(postCall[1].body)).toEqual(
+      expect.objectContaining({
+        id: "t-upsert",
+        subscriberId: "sub-xyz",
+      }),
+    );
+  });
+
+  it("includes subscriberId when deleting task on server", async () => {
+    const store: any = new OrchestratorStore();
+    jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
+    (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "subscriber_id") {
+        return "sub-del";
+      }
+
+      return undefined;
+    });
+
+    (global as any).fetch = (jest.fn() as any).mockImplementation(
+      async (_url: string, init?: RequestInit) => {
+        if (init?.method === "HEAD") {
+          return { status: 200 } as any;
+        }
+
+        return { ok: true } as any;
+      },
+    );
+
+    await store.deleteTask({} as any, "t-del");
+
+    expect((global as any).fetch).toHaveBeenCalledWith(
+      "/schedule/tasks/t-del?subscriberId=sub-del",
+      expect.objectContaining({ method: "DELETE" }),
     );
   });
 

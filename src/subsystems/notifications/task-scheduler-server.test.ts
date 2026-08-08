@@ -156,9 +156,9 @@ describe("ServerTaskScheduler", () => {
     // Task was still marked as run (to avoid re-trigger loop)
     expect(updateLastRun).toHaveBeenCalled();
 
-    // Wait for the rejected promise to be caught
-    jest.useRealTimers();
-    await new Promise((r) => setTimeout(r, 50));
+    // Flush microtasks so async catch handlers run deterministically.
+    await Promise.resolve();
+    await Promise.resolve();
 
     consoleSpy.mockRestore();
   });
@@ -186,9 +186,9 @@ describe("ServerTaskScheduler", () => {
 
     await scheduler.tick();
 
-    // Give the async .then() a chance to run
-    jest.useRealTimers();
-    await new Promise((r) => setTimeout(r, 50));
+    // Flush microtasks so async .then() handlers run deterministically.
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining("t1"));
     expect(consoleSpy).toHaveBeenCalledWith(

@@ -24,7 +24,7 @@ export async function processPeerQueryParam(
     return;
   }
 
-  const currentUrl = new URL(window.location.href);
+  const currentUrl = new URL(window.location?.href || "http://localhost/");
   const peerParam = currentUrl.searchParams.get("peer");
   if (!peerParam) {
     return;

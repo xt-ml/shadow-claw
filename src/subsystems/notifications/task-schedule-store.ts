@@ -42,6 +42,22 @@ export interface ScheduledTaskInput {
   subscriberId?: string;
 }
 
+function mapRow(row: any): ScheduledTaskRow {
+  return {
+    id: `${row.id}`,
+    group_id: `${row.group_id}`,
+    schedule: `${row.schedule}`,
+    type: row.type ? `${row.type}` : null,
+    prompt: `${row.prompt}`,
+    tools: row.tools ? `${row.tools}` : null,
+    enabled: Number(row.enabled),
+    last_run: row.last_run == null ? null : Number(row.last_run),
+    created_at: Number(row.created_at),
+    channel: row.channel ? `${row.channel}` : null,
+    subscriber_id: row.subscriber_id ? `${row.subscriber_id}` : null,
+  };
+}
+
 /**
  * Open (or create) the scheduled-tasks SQLite database.
  */
@@ -149,6 +165,33 @@ export function deleteScheduledTask(id: string): void {
 }
 
 /**
+ * Delete a scheduled task by subscriber ownership.
+ * Legacy rows with NULL subscriber_id are deletable by any subscriber.
+ */
+export function deleteScheduledTaskForSubscriber(
+  id: string,
+  subscriberId?: string,
+): number {
+  if (!db) {
+    throw new Error("Task schedule store not opened.");
+  }
+
+  if (subscriberId) {
+    const result = db
+      .prepare(
+        "DELETE FROM scheduled_tasks WHERE id = ? AND (subscriber_id = ? OR subscriber_id IS NULL)",
+      )
+      .run(id, subscriberId);
+
+    return Number((result as any)?.changes ?? 0);
+  }
+
+  const result = db.prepare("DELETE FROM scheduled_tasks WHERE id = ?").run(id);
+
+  return Number((result as any)?.changes ?? 0);
+}
+
+/**
  * Get a single scheduled task by ID.
  */
 export function getScheduledTask(id: string): ScheduledTaskRow | undefined {
@@ -160,21 +203,7 @@ export function getScheduledTask(id: string): ScheduledTaskRow | undefined {
     .prepare("SELECT * FROM scheduled_tasks WHERE id = ?")
     .get(id);
 
-  return result
-    ? {
-        id: `${result.id}`,
-        group_id: `${result.group_id}`,
-        schedule: `${result.schedule}`,
-        type: result.type ? `${result.type}` : null,
-        prompt: `${result.prompt}`,
-        tools: result.tools ? `${result.tools}` : null,
-        enabled: Number(result.enabled),
-        last_run: Number(result.last_run),
-        created_at: Number(result.created_at),
-        channel: result.channel ? `${result.channel}` : null,
-        subscriber_id: result.subscriber_id ? `${result.subscriber_id}` : null,
-      }
-    : undefined;
+  return result ? mapRow(result) : undefined;
 }
 
 /**
@@ -191,24 +220,17 @@ export function getAllScheduledTasks(
   if (groupId && subscriberId) {
     const result = db
       .prepare(
-        "SELECT * FROM scheduled_tasks WHERE group_id = ? AND subscriber_id = ? ORDER BY created_at DESC",
+        "SELECT * FROM scheduled_tasks WHERE group_id = ? AND (subscriber_id = ? OR subscriber_id IS NULL) ORDER BY created_at DESC",
       )
       .all(groupId, subscriberId);
 
     return result
-      ? result.map((row) => ({
-          id: `${row.id}`,
-          group_id: `${row.group_id}`,
-          schedule: `${row.schedule}`,
-          type: row.type ? `${row.type}` : null,
-          prompt: `${row.prompt}`,
-          tools: row.tools ? `${row.tools}` : null,
-          enabled: Number(row.enabled),
-          last_run: Number(row.last_run),
-          created_at: Number(row.created_at),
-          channel: row.channel ? `${row.channel}` : null,
-          subscriber_id: row.subscriber_id ? `${row.subscriber_id}` : null,
-        }))
+      ? result
+          .map((row) => mapRow(row))
+          .filter(
+            (row) =>
+              row.subscriber_id === null || row.subscriber_id === subscriberId,
+          )
       : [];
   }
 
@@ -219,21 +241,7 @@ export function getAllScheduledTasks(
       )
       .all(groupId);
 
-    return result
-      ? result.map((row) => ({
-          id: `${row.id}`,
-          group_id: `${row.group_id}`,
-          schedule: `${row.schedule}`,
-          type: row.type ? `${row.type}` : null,
-          prompt: `${row.prompt}`,
-          tools: row.tools ? `${row.tools}` : null,
-          enabled: Number(row.enabled),
-          last_run: Number(row.last_run),
-          created_at: Number(row.created_at),
-          channel: row.channel ? `${row.channel}` : null,
-          subscriber_id: row.subscriber_id ? `${row.subscriber_id}` : null,
-        }))
-      : [];
+    return result ? result.map((row) => mapRow(row)) : [];
   }
 
   if (subscriberId) {
@@ -243,42 +251,14 @@ export function getAllScheduledTasks(
       )
       .all(subscriberId);
 
-    return result
-      ? result.map((row) => ({
-          id: `${row.id}`,
-          group_id: `${row.group_id}`,
-          schedule: `${row.schedule}`,
-          type: row.type ? `${row.type}` : null,
-          prompt: `${row.prompt}`,
-          tools: row.tools ? `${row.tools}` : null,
-          enabled: Number(row.enabled),
-          last_run: Number(row.last_run),
-          created_at: Number(row.created_at),
-          channel: row.channel ? `${row.channel}` : null,
-          subscriber_id: row.subscriber_id ? `${row.subscriber_id}` : null,
-        }))
-      : [];
+    return result ? result.map((row) => mapRow(row)) : [];
   }
 
   const result = db
     .prepare("SELECT * FROM scheduled_tasks ORDER BY created_at DESC")
     .all();
 
-  return result
-    ? result.map((row) => ({
-        id: `${row.id}`,
-        group_id: `${row.group_id}`,
-        schedule: `${row.schedule}`,
-        type: row.type ? `${row.type}` : null,
-        prompt: `${row.prompt}`,
-        tools: row.tools ? `${row.tools}` : null,
-        enabled: Number(row.enabled),
-        last_run: Number(row.last_run),
-        created_at: Number(row.created_at),
-        channel: row.channel ? `${row.channel}` : null,
-        subscriber_id: row.subscriber_id ? `${row.subscriber_id}` : null,
-      }))
-    : [];
+  return result ? result.map((row) => mapRow(row)) : [];
 }
 
 /**
@@ -293,21 +273,7 @@ export function getEnabledScheduledTasks(): ScheduledTaskRow[] {
     .prepare("SELECT * FROM scheduled_tasks WHERE enabled = 1")
     .all();
 
-  return result
-    ? result.map((row) => ({
-        id: `${row.id}`,
-        group_id: `${row.group_id}`,
-        schedule: `${row.schedule}`,
-        type: row.type ? `${row.type}` : null,
-        prompt: `${row.prompt}`,
-        tools: row.tools ? `${row.tools}` : null,
-        enabled: Number(row.enabled),
-        last_run: Number(row.last_run),
-        created_at: Number(row.created_at),
-        channel: row.channel ? `${row.channel}` : null,
-        subscriber_id: row.subscriber_id ? `${row.subscriber_id}` : null,
-      }))
-    : [];
+  return result ? result.map((row) => mapRow(row)) : [];
 }
 
 /**

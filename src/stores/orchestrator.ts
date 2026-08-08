@@ -22,6 +22,7 @@ import { deleteMessage } from "../db/deleteMessage.js";
 import { deleteTask } from "../db/deleteTask.js";
 import { getAllTasks } from "../db/getAllTasks.js";
 import { getConfig } from "../db/getConfig.js";
+import { getOrCreateSubscriberId } from "../db/getOrCreateSubscriberId.js";
 import { getRecentMessages } from "../db/getRecentMessages.js";
 
 import {
@@ -112,12 +113,37 @@ interface ServerScheduledTask {
   groupId?: string;
   schedule: string;
   prompt: string;
+  type?: "prompt" | "tools";
+  tools?: string | Task["tools"] | null;
+  channel?: string | null;
 
   enabled: number | boolean;
   last_run?: number | null;
   lastRun?: number | null;
   created_at?: number;
   createdAt?: number;
+}
+
+function parseTaskTools(value: ServerScheduledTask["tools"]): Task["tools"] {
+  if (!value) {
+    return undefined;
+  }
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    return Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function isConfigEnabled(value: unknown): boolean {
@@ -170,7 +196,11 @@ async function isScheduleServerAvailable(baseUrl: string): Promise<boolean> {
 /**
  * Sync a task to the server-side SQLite store.
  */
-async function syncTaskToServer(task: Task, baseUrl: string): Promise<boolean> {
+async function syncTaskToServer(
+  task: Task,
+  baseUrl: string,
+  subscriberId: string,
+): Promise<boolean> {
   if (!(await isScheduleServerAvailable(baseUrl))) {
     return true; // Silently succeed on static-only deployments.
   }
@@ -180,7 +210,10 @@ async function syncTaskToServer(task: Task, baseUrl: string): Promise<boolean> {
     const res = await fetch(`${base}/tasks`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(task),
+      body: JSON.stringify({
+        ...task,
+        subscriberId,
+      }),
     });
 
     return res.ok;
@@ -197,6 +230,7 @@ type DeleteTaskServerResult = "deleted" | "missing" | "failed";
 async function deleteTaskFromServer(
   id: string,
   baseUrl: string,
+  subscriberId: string,
 ): Promise<DeleteTaskServerResult> {
   if (!(await isScheduleServerAvailable(baseUrl))) {
     return "missing"; // No server to delete from on static-only deployments.
@@ -204,9 +238,13 @@ async function deleteTaskFromServer(
 
   try {
     const base = baseUrl.replace(/\/$/, "");
-    const res = await fetch(`${base}/tasks/${encodeURIComponent(id)}`, {
-      method: "DELETE",
-    });
+    const query = `subscriberId=${encodeURIComponent(subscriberId)}`;
+    const res = await fetch(
+      `${base}/tasks/${encodeURIComponent(id)}?${query}`,
+      {
+        method: "DELETE",
+      },
+    );
 
     if (res.ok) {
       return "deleted";
@@ -227,6 +265,7 @@ async function deleteTaskFromServer(
 async function fetchServerTasksForGroup(
   groupId: string,
   baseUrl: string,
+  subscriberId: string,
 ): Promise<Task[] | null> {
   if (!(await isScheduleServerAvailable(baseUrl))) {
     return null; // No server on static-only deployments.
@@ -235,7 +274,7 @@ async function fetchServerTasksForGroup(
   try {
     const base = baseUrl.replace(/\/$/, "");
     const res = await fetch(
-      `${base}/tasks?groupId=${encodeURIComponent(groupId)}`,
+      `${base}/tasks?groupId=${encodeURIComponent(groupId)}&subscriberId=${encodeURIComponent(subscriberId)}`,
       {
         method: "GET",
       },
@@ -264,7 +303,10 @@ async function fetchServerTasksForGroup(
         id: task.id,
         groupId: task.group_id || task.groupId || groupId,
         schedule: task.schedule,
+        type: task.type,
         prompt: task.prompt,
+        tools: parseTaskTools(task.tools),
+        channel: typeof task.channel === "string" ? task.channel : undefined,
 
         enabled: task.enabled === true || task.enabled === 1,
         lastRun:
@@ -361,6 +403,7 @@ export class OrchestratorStore {
   >;
   public _remoteAgentTypingByGroup: Signal.State<Map<string, boolean>>;
   private _replayingTaskSyncOutbox: boolean;
+  private _subscriberId: string | null;
   public _sidebarDefaultPage: Signal.State<"chat" | "tasks" | "files">;
   public _state: Signal.State<OrchestratorDisplayState>;
   public _storageStatus: Signal.State<StorageStatus | null>;
@@ -423,6 +466,7 @@ export class OrchestratorStore {
     this._activityLogSessionStartedAtByGroup = new Map();
     this._taskSyncOutbox = [];
     this._replayingTaskSyncOutbox = false;
+    this._subscriberId = null;
     this._onlineReplayHandler = null;
     this._aguiAdapter = null;
   }
@@ -795,10 +839,13 @@ export class OrchestratorStore {
     const currentGroupId = this._activeGroupId.get();
     const groupTasks = allTasks.filter((t) => t.groupId === currentGroupId);
 
+    const subscriberId = await this.getSubscriberId(db);
+
     for (const task of groupTasks) {
       const serverResult = await deleteTaskFromServer(
         task.id,
         this.getTaskServerBaseUrl(),
+        subscriberId,
       );
       if (serverResult === "failed") {
         console.warn(
@@ -920,9 +967,11 @@ export class OrchestratorStore {
    * Delete a task
    */
   async deleteTask(db: ShadowClawDatabase, id: string): Promise<void> {
+    const subscriberId = await this.getSubscriberId(db);
     const serverResult = await deleteTaskFromServer(
       id,
       this.getTaskServerBaseUrl(),
+      subscriberId,
     );
     if (serverResult === "failed") {
       console.warn("Failed to delete task from server — queued for replay.");
@@ -1422,11 +1471,14 @@ export class OrchestratorStore {
     );
     this._tasks.set(localGroupTasks);
 
+    const subscriberId = await this.getSubscriberId(db);
+
     // Reconcile server-side scheduled tasks into local IndexedDB so
     // server tasks become visible in the UI and can be deleted.
     const serverGroupTasks = await fetchServerTasksForGroup(
       currentGroupId,
       this.getTaskServerBaseUrl(),
+      subscriberId,
     );
     if (!serverGroupTasks) {
       return;
@@ -1605,14 +1657,15 @@ export class OrchestratorStore {
     this._replayingTaskSyncOutbox = true;
 
     try {
+      const subscriberId = await this.getSubscriberId(db);
       const remaining: TaskSyncOutboxOperation[] = [];
 
       for (const op of this._taskSyncOutbox) {
         const base = this.getTaskServerBaseUrl();
         const ok =
           op.type === "upsert"
-            ? await syncTaskToServer(op.task, base)
-            : await deleteTaskFromServer(op.id, base);
+            ? await syncTaskToServer(op.task, base, subscriberId)
+            : await deleteTaskFromServer(op.id, base, subscriberId);
 
         if (!ok) {
           remaining.push(op);
@@ -1882,6 +1935,7 @@ export class OrchestratorStore {
     const serverOk = await syncTaskToServer(
       updatedTask,
       this.getTaskServerBaseUrl(),
+      await this.getSubscriberId(db),
     );
     if (!serverOk) {
       console.warn("Failed to update task on server — queued for replay.");
@@ -1976,7 +2030,12 @@ export class OrchestratorStore {
       await this.loadTasks(db);
     }
 
-    const serverOk = await syncTaskToServer(task, this.getTaskServerBaseUrl());
+    const subscriberId = await this.getSubscriberId(db);
+    const serverOk = await syncTaskToServer(
+      task,
+      this.getTaskServerBaseUrl(),
+      subscriberId,
+    );
     if (!serverOk) {
       console.warn("Failed to sync task to server — queued for replay.");
       await this.queueTaskSyncOutboxOperation(db, {
@@ -2031,6 +2090,17 @@ export class OrchestratorStore {
 
   private getTaskServerBaseUrl(): string {
     return this.orchestrator?.taskServerUrl ?? "/schedule";
+  }
+
+  private async getSubscriberId(db: ShadowClawDatabase): Promise<string> {
+    if (this._subscriberId) {
+      return this._subscriberId;
+    }
+
+    const subscriberId = await getOrCreateSubscriberId(db);
+    this._subscriberId = subscriberId;
+
+    return subscriberId;
   }
 
   private normalizePagePath(path: string): string {

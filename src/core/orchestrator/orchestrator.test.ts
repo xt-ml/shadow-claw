@@ -988,6 +988,11 @@ describe("Orchestrator", () => {
       return {
         transaction: () => ({
           objectStore: () => ({
+            get: () => {
+              setTimeout(() => fakeRequest.onsuccess?.(), 0);
+
+              return fakeRequest;
+            },
             put: () => {
               setTimeout(() => fakeRequest.onsuccess?.(), 0);
 
@@ -1166,6 +1171,11 @@ describe("Orchestrator", () => {
       return {
         transaction: () => ({
           objectStore: () => ({
+            get: () => {
+              setTimeout(() => fakeRequest.onsuccess?.(), 0);
+
+              return fakeRequest;
+            },
             put: () => {
               setTimeout(() => fakeRequest.onsuccess?.(), 0);
 
@@ -1208,7 +1218,7 @@ describe("Orchestrator", () => {
       });
 
       expect((globalThis as any).fetch).toHaveBeenCalledWith(
-        "/schedule/tasks/t1",
+        expect.stringMatching(/^\/schedule\/tasks\/t1\?subscriberId=/),
         expect.objectContaining({ method: "DELETE" }),
       );
 

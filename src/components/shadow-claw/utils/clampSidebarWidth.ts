@@ -1,4 +1,4 @@
-import { MAX_SIDEBAR_WIDTH_PX, MIN_SIDEBAR_WIDTH_PX } from "../shadow-claw.js";
+import { MAX_SIDEBAR_WIDTH_PX, MIN_SIDEBAR_WIDTH_PX } from "../constants.js";
 
 export function clampSidebarWidth(
   shadow: ShadowRoot | null,

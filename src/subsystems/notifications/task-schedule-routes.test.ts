@@ -1,3 +1,4 @@
+import { jest } from "@jest/globals";
 import {
   openTaskScheduleStore,
   closeTaskScheduleStore,
@@ -124,6 +125,36 @@ describe("task-schedule-routes", () => {
       );
       expect(res._json).toHaveLength(1);
     });
+
+    it("filters by groupId + subscriberId and includes legacy NULL subscriber rows", () => {
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+      app._routes.post["/schedule/tasks"](
+        mockReq({ ...TASK, id: "t-legacy" }),
+        mockRes(),
+      );
+      app._routes.post["/schedule/tasks"](
+        mockReq({ ...TASK, id: "t-sub-1", subscriberId: "sub-1" }),
+        mockRes(),
+      );
+      app._routes.post["/schedule/tasks"](
+        mockReq({ ...TASK, id: "t-sub-2", subscriberId: "sub-2" }),
+        mockRes(),
+      );
+
+      const res = mockRes();
+      app._routes.get["/schedule/tasks"](
+        mockReq({} as any, {}, { groupId: "br:main", subscriberId: "sub-1" }),
+        res,
+      );
+
+      expect(res._json.map((task: any) => task.id).sort()).toEqual([
+        "t-legacy",
+        "t-sub-1",
+      ]);
+
+      warnSpy.mockRestore();
+    });
   });
 
   describe("GET /schedule/tasks/:id", () => {
@@ -163,6 +194,48 @@ describe("task-schedule-routes", () => {
       const listRes = mockRes();
       app._routes.get["/schedule/tasks"](mockReq({} as any, {}, {}), listRes);
       expect(listRes._json).toHaveLength(0);
+    });
+
+    it("enforces subscriber ownership when subscriberId is provided", () => {
+      app._routes.post["/schedule/tasks"](
+        mockReq({ ...TASK, id: "t1", subscriberId: "sub-1" }),
+        mockRes(),
+      );
+
+      const wrongSubDelete = mockRes();
+      app._routes.delete["/schedule/tasks/:id"](
+        mockReq({} as any, { id: "t1" }, { subscriberId: "sub-2" }),
+        wrongSubDelete,
+      );
+      expect(wrongSubDelete._status).toBe(404);
+
+      const listRes = mockRes();
+      app._routes.get["/schedule/tasks"](
+        mockReq({} as any, {}, { groupId: "br:main", subscriberId: "sub-1" }),
+        listRes,
+      );
+      expect(listRes._json).toHaveLength(1);
+
+      const correctSubDelete = mockRes();
+      app._routes.delete["/schedule/tasks/:id"](
+        mockReq({} as any, { id: "t1" }, { subscriberId: "sub-1" }),
+        correctSubDelete,
+      );
+      expect(correctSubDelete._status).toBe(200);
+    });
+
+    it("allows any subscriber to delete legacy NULL-subscriber tasks", () => {
+      app._routes.post["/schedule/tasks"](
+        mockReq({ ...TASK, id: "t-legacy" }),
+        mockRes(),
+      );
+
+      const res = mockRes();
+      app._routes.delete["/schedule/tasks/:id"](
+        mockReq({} as any, { id: "t-legacy" }, { subscriberId: "sub-any" }),
+        res,
+      );
+      expect(res._status).toBe(200);
     });
   });
 

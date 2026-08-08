@@ -51,9 +51,11 @@ import "../shadow-claw-toast/shadow-claw-toast.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
 
-export const DEFAULT_SIDEBAR_WIDTH_PX = 250;
-export const MIN_SIDEBAR_WIDTH_PX = 200;
-export const MAX_SIDEBAR_WIDTH_PX = 560;
+export {
+  DEFAULT_SIDEBAR_WIDTH_PX,
+  MIN_SIDEBAR_WIDTH_PX,
+  MAX_SIDEBAR_WIDTH_PX,
+} from "./constants.js";
 
 import shadowClawStyles from "./shadow-claw.css" with { type: "css" };
 import shadowClawTemplate from "./shadow-claw.html" with { type: "html" };
@@ -241,6 +243,10 @@ export class ShadowClaw extends ShadowClawElement {
   }
 
   fallbackClickListener = (event: MouseEvent) => {
+    if (typeof window === "undefined" || !window.location) {
+      return;
+    }
+
     const targetPath = getTargetPath(window.location, event);
     if (!targetPath) {
       return;

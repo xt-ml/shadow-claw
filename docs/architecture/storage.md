@@ -91,6 +91,8 @@ When OPFS main-thread writes fail (`"Writable file streams are not supported"`):
 3. Worker performs sync write
 4. Posts success/error back
 
+This fallback is applied to both single-file writes/copies and recursive directory copy paths (`copyGroupEntry` and `copyGroupDirectory`) to prevent errors on Safari/iPad when writing or copying inside folders. If a folder copy operation fails midway, the partially created target directory is cleaned up recursively to avoid blocking subsequent retries with "Target already exists" errors.
+
 ## Read Paths
 
 `src/storage/readGroupFile.ts` uses a layered approach:

@@ -65,7 +65,29 @@ export async function copyGroupEntry(
           create: true,
         });
 
-        await copyDirectoryContents(sourceDir, targetDir);
+        const safeId = targetGroupId.replace(/:/g, "-");
+        const currentPathSegments = [
+          OPFS_ROOT,
+          "groups",
+          safeId,
+          ...tgtDirs,
+          tgtName,
+        ];
+
+        try {
+          await copyDirectoryContents(
+            db,
+            targetGroupId,
+            sourceDir,
+            targetDir,
+            currentPathSegments,
+          );
+        } catch (copyErr) {
+          await tgtParent
+            .removeEntry(tgtName, { recursive: true })
+            .catch(() => undefined);
+          throw copyErr;
+        }
 
         return;
       }
@@ -139,15 +161,21 @@ async function tryGetFileHandle(
 }
 
 async function copyDirectoryContents(
+  db: ShadowClawDatabase,
+  targetGroupId: string,
   sourceDir: FileSystemDirectoryHandle,
   targetDir: FileSystemDirectoryHandle,
+  currentPathSegments: string[],
 ): Promise<void> {
   for await (const [name, handle] of (sourceDir as any).entries()) {
     if (handle.kind === "directory") {
       const nextTargetDir = await targetDir.getDirectoryHandle(name, {
         create: true,
       });
-      await copyDirectoryContents(handle, nextTargetDir);
+      await copyDirectoryContents(db, targetGroupId, handle, nextTargetDir, [
+        ...currentPathSegments,
+        name,
+      ]);
 
       continue;
     }
@@ -156,6 +184,21 @@ async function copyDirectoryContents(
     const targetFileHandle = await targetDir.getFileHandle(name, {
       create: true,
     });
-    await writeFileHandle(targetFileHandle, file);
+
+    try {
+      await writeFileHandle(targetFileHandle, file);
+    } catch (writeErr) {
+      const message =
+        writeErr instanceof Error ? writeErr.message : String(writeErr);
+      const needsOpfsWorkerFallback =
+        message.includes("Writable file streams are not supported") &&
+        (await getStorageStatus(db)).type === "opfs";
+
+      if (!needsOpfsWorkerFallback) {
+        throw writeErr;
+      }
+
+      await writeOpfsPathViaWorker([...currentPathSegments, name], file);
+    }
   }
 }

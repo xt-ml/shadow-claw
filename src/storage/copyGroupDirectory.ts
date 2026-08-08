@@ -1,5 +1,7 @@
+import { OPFS_ROOT } from "../config/config.js";
 import { getGroupDir } from "./getGroupDir.js";
-import { writeFileHandle } from "./writeFileHandle.js";
+import { getStorageStatus } from "./storage.js";
+import { writeFileHandle, writeOpfsPathViaWorker } from "./writeFileHandle.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 
 /**
@@ -27,19 +29,48 @@ export async function copyGroupDirectory(
     targetDir = await targetDir.getDirectoryHandle(part, { create: true });
   }
 
-  await copyDirectoryContents(sourceDir, targetDir);
+  const safeTargetGroupId = targetGroupId.replace(/:/g, "-");
+  const initialPathSegments = [
+    OPFS_ROOT,
+    "groups",
+    safeTargetGroupId,
+    ...parts,
+  ];
+
+  try {
+    await copyDirectoryContents(
+      db,
+      targetGroupId,
+      sourceDir,
+      targetDir,
+      initialPathSegments,
+    );
+  } catch (copyErr) {
+    if (parts.length > 0) {
+      await targetRoot
+        .removeEntry(parts[0], { recursive: true })
+        .catch(() => undefined);
+    }
+    throw copyErr;
+  }
 }
 
 async function copyDirectoryContents(
+  db: ShadowClawDatabase,
+  targetGroupId: string,
   sourceDir: FileSystemDirectoryHandle,
   targetDir: FileSystemDirectoryHandle,
+  currentPathSegments: string[],
 ): Promise<void> {
   for await (const [name, handle] of (sourceDir as any).entries()) {
     if (handle.kind === "directory") {
       const nextTargetDir = await targetDir.getDirectoryHandle(name, {
         create: true,
       });
-      await copyDirectoryContents(handle, nextTargetDir);
+      await copyDirectoryContents(db, targetGroupId, handle, nextTargetDir, [
+        ...currentPathSegments,
+        name,
+      ]);
 
       continue;
     }
@@ -48,6 +79,21 @@ async function copyDirectoryContents(
     const targetFileHandle = await targetDir.getFileHandle(name, {
       create: true,
     });
-    await writeFileHandle(targetFileHandle, file);
+
+    try {
+      await writeFileHandle(targetFileHandle, file);
+    } catch (writeErr) {
+      const message =
+        writeErr instanceof Error ? writeErr.message : String(writeErr);
+      const needsOpfsWorkerFallback =
+        message.includes("Writable file streams are not supported") &&
+        (await getStorageStatus(db)).type === "opfs";
+
+      if (!needsOpfsWorkerFallback) {
+        throw writeErr;
+      }
+
+      await writeOpfsPathViaWorker([...currentPathSegments, name], file);
+    }
   }
 }

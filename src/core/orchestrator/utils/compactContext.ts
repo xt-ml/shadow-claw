@@ -20,6 +20,10 @@ import {
   compactWithPromptApi,
   isPromptApiSupported,
 } from "../../../subsystems/providers/prompt-api-provider.js";
+import {
+  ensureBuiltinAiPolyfills,
+  summarizeText,
+} from "../../../subsystems/providers/builtin-ai-tasks.js";
 
 import { getContextLimit } from "../../../subsystems/providers/providers.js";
 import { getCompactionSystemPrompt } from "../../../worker/utils/getCompactionSystemPrompt.js";
@@ -121,7 +125,47 @@ export async function compactContext(
 
   const messages = dynamicContext.messages;
 
+  const compactionPref = await getConfig(
+    db,
+    CONFIG_KEYS.COMPACTION_ENGINE_PREFERENCE,
+  );
+  if (compactionPref === "builtin_task_api") {
+    try {
+      const fullText = messages
+        .map(
+          (m) =>
+            `${m.role.toUpperCase()}: ${
+              typeof m.content === "string"
+                ? m.content
+                : JSON.stringify(m.content)
+            }`,
+        )
+        .join("\n\n");
+
+      const summary = await summarizeText(fullText, {
+        type: "key-points",
+        format: "markdown",
+        length: "medium",
+      });
+
+      await o.handleCompactDone(db, groupId, summary);
+
+      return;
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await deliverResponse(
+        o,
+        db,
+        groupId,
+        `⚠️ Built-in Task API compaction failed, falling back to provider: ${message}`,
+      );
+    }
+  }
+
   if (effectiveProviderId === "prompt_api") {
+    if (!isPromptApiSupported()) {
+      await ensureBuiltinAiPolyfills();
+    }
     if (!isPromptApiSupported()) {
       o.events.emit("error", {
         groupId,

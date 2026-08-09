@@ -290,6 +290,49 @@
   </div>
 
   <div class="settings-section">
+    <h3>⚡ Built-in AI Task Infrastructure</h3>
+    <div class="form-group">
+      <label class="form-label" for="compaction-engine-select">
+        Context Compaction Engine
+      </label>
+      <select
+        class="form-select"
+        data-setting="compaction-engine-select"
+        id="compaction-engine-select"
+      >
+        <option value="auto">Active LLM Provider (Default)</option>
+        <option value="builtin_task_api">
+          Local Task API (Zero Token Cost)
+        </option>
+      </select>
+      <div class="form-helper">
+        Controls how conversation context history is summarized during
+        compaction.
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label" for="builtin-ai-tools-backend-select">
+        Task Tools Backend
+      </label>
+      <select
+        class="form-select"
+        data-setting="builtin-ai-tools-backend-select"
+        id="builtin-ai-tools-backend-select"
+      >
+        <option value="local">Local Browser Task API (Native/Polyfill)</option>
+        <option value="active_provider">Active Conversation LLM</option>
+      </select>
+      <div class="form-helper">
+        Controls whether task tools (summarize, rewrite, translate) run via
+        local browser APIs or the active conversation LLM.
+      </div>
+    </div>
+    <button class="save-btn" data-action="save-builtin-ai-settings">
+      💾 Save Built-in AI Settings
+    </button>
+  </div>
+
+  <div class="settings-section">
     <h3>🧠 Reasoning Effort</h3>
     <div class="form-group">
       <label class="form-label" for="reasoning-effort-select">

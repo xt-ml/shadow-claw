@@ -36,11 +36,12 @@ Tool definitions live in modular files under `src/subsystems/tools/` and are ass
 
 | File               | Tools                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `files.ts`         | `read_file`, `write_file`, `patch_file`, `list_files`, `open_file`, `attach_file_to_chat`, `send_file`, `search_files`, `diff_files`                                                                                                                                                                                                                   |
+| `files.ts`         | `read_file`, `write_file`, `patch_file`, `list_files`, `open_file`, `attach_file_to_chat`, `send_file`, `search_files`, `diff_files`, `delete_file`, `move_file`, `copy_file`, `create_directory`                                                                                                                                                      |
 | `bash.ts`          | `bash`                                                                                                                                                                                                                                                                                                                                                 |
 | `javascript.ts`    | `javascript`                                                                                                                                                                                                                                                                                                                                           |
 | `fetch.ts`         | `fetch_url`, `fetch_file`, `web_search`                                                                                                                                                                                                                                                                                                                |
 | `memory.ts`        | `update_memory`                                                                                                                                                                                                                                                                                                                                        |
+| `builtin-ai.ts`    | `summarize_text`, `write_text`, `rewrite_text`, `detect_language`, `translate_text`                                                                                                                                                                                                                                                                    |
 | `tasks.ts`         | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`, `run_task`                                                                                                                                                                                                                                                   |
 | `chat.ts`          | `clear_chat`, `ask_user`                                                                                                                                                                                                                                                                                                                               |
 | `notifications.ts` | `show_toast`, `send_notification`                                                                                                                                                                                                                                                                                                                      |
@@ -97,6 +98,10 @@ Saved profiles can specify a `providerId`. When the orchestrator switches to a m
 - **`read_file`** — Supports single `path` or `paths` array for batch reads (parallel `Promise.all`)
 - **`write_file`** — Creates intermediate directories automatically
 - **`patch_file`** — In-place string replacement (safer than sed for targeted edits)
+- **`delete_file`** — Deletes a file atomically
+- **`move_file`** — Moves/renames a file atomically
+- **`copy_file`** — Copies a file atomically
+- **`create_directory`** — Creates a new directory
 - **`list_files`** — Returns directory listing with `/` suffix for directories
 - **`open_file`** — Posts `open-file` message to main thread for UI viewer
 - **`send_file`** — Transfers a workspace file to the current peer over PeerJS WebRTC; only works in `peer:` conversations
@@ -141,6 +146,14 @@ The utility in `src/worker/utils/wrapUntrustedContent.ts` wraps externally-sourc
 ```
 
 Applied by: `fetch_url`, `web_search`, and `remote_mcp_call_tool`. An optional `prefix` argument (e.g. an HTTP status line) is placed _before_ the BEGIN marker so provenance metadata remains outside the untrusted region.
+
+### Built-in AI tools
+
+- **`summarize_text`** — Uses native browser AI (or polyfill) to summarize text.
+- **`write_text`** — Uses native browser AI to generate text.
+- **`rewrite_text`** — Uses native browser AI to rewrite text.
+- **`detect_language`** — Detects the language of a text block.
+- **`translate_text`** — Translates text from one language to another using native browser capabilities.
 
 ### Agentic tools
 

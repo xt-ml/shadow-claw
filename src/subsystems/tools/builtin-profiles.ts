@@ -22,6 +22,11 @@ export const NANO_BUILTIN_PROFILE: ToolProfile = {
     "list_tasks",
     "show_toast",
     "send_notification",
+    "summarize_text",
+    "write_text",
+    "rewrite_text",
+    "detect_language",
+    "translate_text",
   ],
   customTools: [],
   systemPromptOverride:

@@ -119,6 +119,7 @@ Used by direct Google Gemini API integrations (`format: "google"`). Note that th
 ### Prompt API format (`src/subsystems/providers/prompt-api-provider.ts`)
 
 Browser's experimental Prompt API (`window.LanguageModel`). Runs entirely on-device.
+Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading. Polyfill fallback for `prompt_api` is transparently enabled for provider invocations and context compaction.
 
 - No network calls
 - No API key

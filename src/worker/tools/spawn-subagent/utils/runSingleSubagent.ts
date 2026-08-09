@@ -15,6 +15,8 @@ import {
   unregisterSubagentCollector,
 } from "../../../utils/post.js";
 
+import { summarizeText } from "../../../../subsystems/providers/builtin-ai-tasks.js";
+
 import type { ToolDefinition } from "../../../../subsystems/tools/types.js";
 import type { InvokePayload } from "../../../../subsystems/worker/types.js";
 import type {
@@ -222,6 +224,39 @@ export async function runSingleSubagent(
   ctx: SubagentInvokeContext,
   options: RunSingleSubagentOptions,
 ): Promise<string> {
+  const subagentRoutingPref = await getConfig(
+    ctx.db,
+    CONFIG_KEYS.BUILTIN_AI_SUBAGENT_ROUTING,
+  );
+  if (subagentRoutingPref !== "disabled") {
+    const promptText = (spec.prompt || "").trim();
+    const promptLower = promptText.toLowerCase();
+
+    const isExplicitSummarize =
+      promptLower.startsWith("summarize:") ||
+      promptLower.startsWith("tldr:") ||
+      (Array.isArray(spec.tools) &&
+        spec.tools.length === 1 &&
+        spec.tools[0] === "summarize_text");
+
+    if (isExplicitSummarize) {
+      try {
+        const textToSummarize = promptText
+          .replace(/^(summarize:|tldr:)/i, "")
+          .trim();
+        const summary = await summarizeText(textToSummarize || promptText, {
+          type: "key-points",
+          format: "markdown",
+          length: "medium",
+        });
+
+        return summary;
+      } catch {
+        // Fall back to standard subagent execution if task API fails
+      }
+    }
+  }
+
   const subagentGroupId = `subagent:${ulid()}`;
   const workspaceGroupId = resolveWorkspaceGroupId(
     spec,

@@ -222,6 +222,10 @@ export class ShadowClawLlm extends ShadowClawElement {
       ?.addEventListener("click", () => this.saveTransformersJsSettings());
 
     root
+      .querySelector('[data-action="save-builtin-ai-settings"]')
+      ?.addEventListener("click", () => this.saveBuiltinAiSettings());
+
+    root
       .querySelector('[data-setting="llamafile-mode"]')
       ?.addEventListener("change", () => {
         this.updateLlamafileModeVisibility();
@@ -328,6 +332,80 @@ export class ShadowClawLlm extends ShadowClawElement {
     ) as HTMLInputElement | null;
     if (hostInput) {
       hostInput.value = settings?.host || "";
+    }
+  }
+
+  async renderBuiltinAiSettings() {
+    if (!this.db) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const compactionSelect = root.querySelector(
+      '[data-setting="compaction-engine-select"]',
+    ) as HTMLSelectElement | null;
+    const toolsBackendSelect = root.querySelector(
+      '[data-setting="builtin-ai-tools-backend-select"]',
+    ) as HTMLSelectElement | null;
+
+    const compactionPref = await getConfig(
+      this.db,
+      CONFIG_KEYS.COMPACTION_ENGINE_PREFERENCE,
+    );
+    const toolsPref = await getConfig(
+      this.db,
+      CONFIG_KEYS.BUILTIN_AI_TOOLS_BACKEND,
+    );
+
+    if (compactionSelect) {
+      compactionSelect.value = compactionPref || "auto";
+    }
+
+    if (toolsBackendSelect) {
+      toolsBackendSelect.value = toolsPref || "local";
+    }
+  }
+
+  async saveBuiltinAiSettings() {
+    if (!this.db) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const compactionSelect = root.querySelector(
+      '[data-setting="compaction-engine-select"]',
+    ) as HTMLSelectElement | null;
+    const toolsBackendSelect = root.querySelector(
+      '[data-setting="builtin-ai-tools-backend-select"]',
+    ) as HTMLSelectElement | null;
+
+    try {
+      if (compactionSelect) {
+        await setConfig(
+          this.db,
+          CONFIG_KEYS.COMPACTION_ENGINE_PREFERENCE,
+          compactionSelect.value,
+        );
+      }
+      if (toolsBackendSelect) {
+        await setConfig(
+          this.db,
+          CONFIG_KEYS.BUILTIN_AI_TOOLS_BACKEND,
+          toolsBackendSelect.value,
+        );
+      }
+      showSuccess("Built-in AI settings saved successfully", 2500);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving Built-in AI settings: " + errorMsg, 5000);
     }
   }
 
@@ -1259,6 +1337,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     this.renderMeshLlmSettings();
     this.updateTransformersJsSettingsVisibility(currentProvider);
     this.renderTransformersJsSettings();
+    void this.renderBuiltinAiSettings();
 
     // Load streaming toggle
     const streamingToggle = root.querySelector(

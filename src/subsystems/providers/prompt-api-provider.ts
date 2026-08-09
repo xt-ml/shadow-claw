@@ -6,6 +6,7 @@ import { executeTool } from "../../worker/utils/executeTool.js";
 import { setPostHandler } from "../../worker/utils/post.js";
 import { NANO_BUILTIN_PROFILE } from "../tools/builtin-profiles.js";
 import { TOOL_DEFINITIONS, ToolDefinition } from "../tools/tools.js";
+import { ensureBuiltinAiPolyfills } from "./builtin-ai-tasks.js";
 
 import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent/spawn-subagent.js";
 
@@ -201,7 +202,11 @@ async function createPromptSessionWithProgress(
   initialPrompts: any[] = [],
   emitErrorOnFailure = true,
 ) {
-  const LanguageModelApi = getLanguageModelApi();
+  let LanguageModelApi = getLanguageModelApi();
+  if (!LanguageModelApi) {
+    await ensureBuiltinAiPolyfills();
+    LanguageModelApi = getLanguageModelApi();
+  }
   if (!LanguageModelApi) {
     throw new Error(
       "Prompt API is unavailable in this browser. Enable Prompt API flags in a supported browser (for example Edge Dev/Canary or Chrome with the required flags) or switch provider.",

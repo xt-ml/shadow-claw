@@ -2,7 +2,7 @@ import {
   BOOT_PENDING_ATTR,
   BOOT_PENDING_CLASS,
   HYDRATION_PENDING_ATTR,
-} from "../index.js";
+} from "../constants.js";
 
 export function clearBootPendingClass(doc: Document): void {
   if (typeof doc === "undefined") {

@@ -79,6 +79,14 @@ import {
   list_room_members,
 } from "./rooms.js";
 
+import {
+  summarize_text,
+  write_text,
+  rewrite_text,
+  detect_language,
+  translate_text,
+} from "./builtin-ai.js";
+
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   ask_user,
   attach_file_to_chat,
@@ -86,6 +94,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   clear_chat,
   create_task,
   delete_task,
+  detect_language,
   disable_task,
   enable_task,
   email_read_messages,
@@ -131,6 +140,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   remote_mcp_call_tool,
   remote_mcp_list_tools,
   render_component,
+  rewrite_text,
   run_task,
   create_room,
   invite_to_room,
@@ -141,8 +151,11 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   send_file,
   show_toast,
   spawn_subagent,
+  summarize_text,
+  translate_text,
   update_memory,
   update_task,
   web_search,
   write_file,
+  write_text,
 ];

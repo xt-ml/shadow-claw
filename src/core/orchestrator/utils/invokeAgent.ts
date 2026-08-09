@@ -25,6 +25,7 @@ import {
   invokeWithPromptApi,
   isPromptApiSupported,
 } from "../../../subsystems/providers/prompt-api-provider.js";
+import { ensureBuiltinAiPolyfills } from "../../../subsystems/providers/builtin-ai-tasks.js";
 
 import { getContextLimit } from "../../../subsystems/providers/providers.js";
 import { invokeWithTransformersJs } from "../../../subsystems/providers/transformers-js-provider.js";
@@ -271,6 +272,9 @@ export async function invokeAgent(
   }
 
   if (effectiveProviderId === "prompt_api") {
+    if (!isPromptApiSupported()) {
+      await ensureBuiltinAiPolyfills();
+    }
     if (!isPromptApiSupported()) {
       await deliverResponse(
         o,

@@ -127,22 +127,23 @@ ShadowClaw supports multiple LLM providers with a unified adapter pattern:
 
 The agent has access to **50+ tools** including:
 
-| Category    | Tools                                                                                                                                   |
-| ----------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| **Files**   | `read_file`, `write_file`, `patch_file`, `list_files`, `open_file`, `attach_file_to_chat`, `send_file`, `search_files`, `diff_files`    |
-| **Shell**   | `bash` (WebVM or just-bash emulator)                                                                                                    |
-| **Git**     | `git_clone`, `git_init`, `git_add`, `git_unstage`, `git_commit`, `git_push`, `git_pull`, `git_fetch`, `git_merge`, `git_diff`, and more |
-| **Web**     | `fetch_url`, `fetch_file`, `web_search` (DuckDuckGo via CORS proxy)                                                                     |
-| **Compute** | `javascript` (sandboxed)                                                                                                                |
-| **Agents**  | `spawn_subagent` (parallel task delegation), `ask_user` (human-in-the-loop pause)                                                       |
-| **Time**    | `get_current_time` (ISO 8601 or IANA timezone)                                                                                          |
-| **Tasks**   | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`, `run_task`                                    |
-| **UI**      | `show_toast`, `send_notification`, `clear_chat`                                                                                         |
-| **Context** | `update_memory` (edits `MEMORY.md`)                                                                                                     |
-| **Remote**  | `remote_mcp_list_tools`, `remote_mcp_call_tool` (external MCP servers)                                                                  |
-| **Email**   | `manage_email`, `email_read_messages`, `email_send_message`                                                                             |
-| **Rooms**   | `create_room`, `invite_to_room`, `leave_room`, `list_room_members`                                                                      |
-| **A2UI**    | `list_components`, `render_component`                                                                                                   |
+| Category        | Tools                                                                                                                                                                                             |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Files**       | `read_file`, `write_file`, `patch_file`, `delete_file`, `move_file`, `copy_file`, `create_directory`, `list_files`, `open_file`, `attach_file_to_chat`, `send_file`, `search_files`, `diff_files` |
+| **Shell**       | `bash` (WebVM or just-bash emulator)                                                                                                                                                              |
+| **Built-in AI** | `summarize_text`, `write_text`, `rewrite_text`, `detect_language`, `translate_text`                                                                                                               |
+| **Git**         | `git_clone`, `git_init`, `git_add`, `git_unstage`, `git_commit`, `git_push`, `git_pull`, `git_fetch`, `git_merge`, `git_diff`, and more                                                           |
+| **Web**         | `fetch_url`, `fetch_file`, `web_search` (DuckDuckGo via CORS proxy)                                                                                                                               |
+| **Compute**     | `javascript` (sandboxed)                                                                                                                                                                          |
+| **Agents**      | `spawn_subagent` (parallel task delegation), `ask_user` (human-in-the-loop pause)                                                                                                                 |
+| **Time**        | `get_current_time` (ISO 8601 or IANA timezone)                                                                                                                                                    |
+| **Tasks**       | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`, `run_task`                                                                                              |
+| **UI**          | `show_toast`, `send_notification`, `clear_chat`                                                                                                                                                   |
+| **Context**     | `update_memory` (edits `MEMORY.md`)                                                                                                                                                               |
+| **Remote**      | `remote_mcp_list_tools`, `remote_mcp_call_tool` (external MCP servers)                                                                                                                            |
+| **Email**       | `manage_email`, `email_read_messages`, `email_send_message`                                                                                                                                       |
+| **Rooms**       | `create_room`, `invite_to_room`, `leave_room`, `list_room_members`                                                                                                                                |
+| **A2UI**        | `list_components`, `render_component`                                                                                                                                                             |
 
 ### Testing WebMCP Integration
 

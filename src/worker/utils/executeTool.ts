@@ -68,6 +68,13 @@ import { executeSearchFiles } from "../tools/workspace/search-files.js";
 import { executeSendFile } from "../tools/workspace/send-file.js";
 import { executeUpdateMemory } from "../tools/workspace/update-memory.js";
 import { executeWriteFile } from "../tools/workspace/write-file.js";
+import {
+  executeDetectLanguage,
+  executeRewriteText,
+  executeSummarizeText,
+  executeTranslateText,
+  executeWriteText,
+} from "../tools/builtin-ai/builtin-ai.js";
 
 import {
   isRetryableFetchError,
@@ -453,6 +460,26 @@ export async function executeTool(
 
       case "web_search": {
         return await executeWebSearch(input);
+      }
+
+      case "summarize_text": {
+        return await executeSummarizeText(input);
+      }
+
+      case "write_text": {
+        return await executeWriteText(input);
+      }
+
+      case "rewrite_text": {
+        return await executeRewriteText(input);
+      }
+
+      case "detect_language": {
+        return await executeDetectLanguage(input);
+      }
+
+      case "translate_text": {
+        return await executeTranslateText(input);
       }
 
       default:

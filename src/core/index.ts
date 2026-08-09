@@ -26,9 +26,11 @@ import { initializeApp } from "./utils/initializeApp.js";
 import { loadAppShell } from "./utils/loadAppShell.js";
 import { resumeAudioContext } from "../ui/audio.js";
 
-export const BOOT_PENDING_CLASS = "sc-js-boot-pending";
-export const BOOT_PENDING_ATTR = "data-js-boot-pending";
-export const HYDRATION_PENDING_ATTR = "data-hydration-pending";
+export {
+  BOOT_PENDING_CLASS,
+  BOOT_PENDING_ATTR,
+  HYDRATION_PENDING_ATTR,
+} from "./constants.js";
 
 let isInitializing = false;
 

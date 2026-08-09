@@ -262,9 +262,7 @@ describe("config.js", () => {
       expect(provider.requiresApiKey).toBe(false);
       expect(Array.isArray(provider.models)).toBe(true);
       expect(provider.defaultModel).toBe("browser-built-in");
-      expect(provider.models).toContain("browser-built-in");
-      expect(provider.models).toContain("gemini-nano");
-      expect(provider.models).toContain("phi-4-mini");
+      expect(provider.models).toEqual(["browser-built-in"]);
     });
 
     describe("supportsStreaming", () => {

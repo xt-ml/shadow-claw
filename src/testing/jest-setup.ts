@@ -272,6 +272,7 @@ const expectedLogs = [
   "ERR_VM_MODULE_NOT_MODULE",
   "Provided module is not an instance of Module",
   "Test environment has been torn down",
+  "Polyfill: window.",
 ];
 
 function isExpectedLog(...args: any[]) {

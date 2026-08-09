@@ -48,6 +48,11 @@ describe("executeTool.js", () => {
   let mockResolveServiceCredentials;
   let mockListRemoteMcpTools;
   let mockCallRemoteMcpTool;
+  let mockDeleteGroupFile;
+  let mockDeleteGroupDirectory;
+  let mockMoveGroupEntry;
+  let mockCopyGroupEntry;
+  let mockCreateGroupDirectory;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -111,6 +116,11 @@ describe("executeTool.js", () => {
     );
     mockListRemoteMcpTools = jest.fn();
     mockCallRemoteMcpTool = jest.fn();
+    mockDeleteGroupFile = jest.fn();
+    mockDeleteGroupDirectory = jest.fn();
+    mockMoveGroupEntry = jest.fn();
+    mockCopyGroupEntry = jest.fn();
+    mockCreateGroupDirectory = jest.fn();
 
     jest.unstable_mockModule("../../config/config.js", () => ({
       ASSISTANT_NAME: "mock-assistant",
@@ -262,6 +272,26 @@ describe("executeTool.js", () => {
 
     jest.unstable_mockModule("../../storage/writeGroupFileBytes.js", () => ({
       writeGroupFileBytes: mockWriteGroupFileBytes,
+    }));
+
+    jest.unstable_mockModule("../../storage/deleteGroupFile.js", () => ({
+      deleteGroupFile: mockDeleteGroupFile,
+    }));
+
+    jest.unstable_mockModule("../../storage/deleteGroupDirectory.js", () => ({
+      deleteGroupDirectory: mockDeleteGroupDirectory,
+    }));
+
+    jest.unstable_mockModule("../../storage/moveGroupEntry.js", () => ({
+      moveGroupEntry: mockMoveGroupEntry,
+    }));
+
+    jest.unstable_mockModule("../../storage/copyGroupEntry.js", () => ({
+      copyGroupEntry: mockCopyGroupEntry,
+    }));
+
+    jest.unstable_mockModule("../../storage/createGroupDirectory.js", () => ({
+      createGroupDirectory: mockCreateGroupDirectory,
     }));
 
     jest.unstable_mockModule("../../utils/ulid.js", () => ({
@@ -3353,6 +3383,117 @@ describe("executeTool.js", () => {
       );
       expect(result).toContain("URL: https://example.com");
       expect(result).toContain("Snippet: This is an example.");
+    });
+
+    it("should handle delete_file tool for a file", async () => {
+      (mockDeleteGroupFile as any).mockResolvedValue(undefined);
+      const result = await executeTool(
+        {},
+        "delete_file",
+        { path: "old.txt" },
+        "group1",
+      );
+      expect(mockDeleteGroupFile).toHaveBeenCalledWith({}, "group1", "old.txt");
+      expect(result).toBe("Deleted file: old.txt");
+    });
+
+    it("should handle delete_file tool falling back to deleteGroupDirectory for a folder", async () => {
+      (mockDeleteGroupFile as any).mockRejectedValue(
+        new Error("Is a directory"),
+      );
+      (mockDeleteGroupDirectory as any).mockResolvedValue(undefined);
+      const result = await executeTool(
+        {},
+        "delete_file",
+        { path: "src/old_dir" },
+        "group1",
+      );
+      expect(mockDeleteGroupFile).toHaveBeenCalledWith(
+        {},
+        "group1",
+        "src/old_dir",
+      );
+      expect(mockDeleteGroupDirectory).toHaveBeenCalledWith(
+        {},
+        "group1",
+        "src/old_dir",
+      );
+      expect(result).toBe("Deleted directory: src/old_dir");
+    });
+
+    it("should handle move_file tool", async () => {
+      (mockMoveGroupEntry as any).mockResolvedValue(undefined);
+      const result = await executeTool(
+        {},
+        "move_file",
+        { source_path: "src/a.ts", target_path: "src/b.ts" },
+        "group1",
+      );
+      expect(mockMoveGroupEntry).toHaveBeenCalledWith(
+        {},
+        "group1",
+        "group1",
+        "src/a.ts",
+        "src/b.ts",
+      );
+      expect(result).toBe("Moved src/a.ts to src/b.ts");
+    });
+
+    it("should handle move_file tool across groups", async () => {
+      (mockMoveGroupEntry as any).mockResolvedValue(undefined);
+      const result = await executeTool(
+        {},
+        "move_file",
+        {
+          source_path: "src/a.ts",
+          target_path: "src/b.ts",
+          source_group_id: "g1",
+          target_group_id: "g2",
+        },
+        "group1",
+      );
+      expect(mockMoveGroupEntry).toHaveBeenCalledWith(
+        {},
+        "g1",
+        "g2",
+        "src/a.ts",
+        "src/b.ts",
+      );
+      expect(result).toBe("Moved src/a.ts to src/b.ts (from g1 to g2)");
+    });
+
+    it("should handle copy_file tool", async () => {
+      (mockCopyGroupEntry as any).mockResolvedValue(undefined);
+      const result = await executeTool(
+        {},
+        "copy_file",
+        { source_path: "src/a.ts", target_path: "src/a_copy.ts" },
+        "group1",
+      );
+      expect(mockCopyGroupEntry).toHaveBeenCalledWith(
+        {},
+        "group1",
+        "group1",
+        "src/a.ts",
+        "src/a_copy.ts",
+      );
+      expect(result).toBe("Copied src/a.ts to src/a_copy.ts");
+    });
+
+    it("should handle create_directory tool", async () => {
+      (mockCreateGroupDirectory as any).mockResolvedValue(undefined);
+      const result = await executeTool(
+        {},
+        "create_directory",
+        { path: "new_folder" },
+        "group1",
+      );
+      expect(mockCreateGroupDirectory).toHaveBeenCalledWith(
+        {},
+        "group1",
+        "new_folder",
+      );
+      expect(result).toBe("Created directory new_folder");
     });
   });
 });

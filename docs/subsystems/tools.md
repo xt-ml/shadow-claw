@@ -36,7 +36,7 @@ Tool definitions live in modular files under `src/subsystems/tools/` and are ass
 
 | File               | Tools                                                                                                                                                                                                                                                                                                                                                  |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `files.ts`         | `read_file`, `write_file`, `patch_file`, `list_files`, `open_file`, `attach_file_to_chat`, `send_file`, `search_files`, `diff_files`, `delete_file`, `move_file`, `copy_file`, `create_directory`                                                                                                                                                      |
+| `files.ts`         | `read_file`, `write_file`, `delete_file`, `move_file`, `copy_file`, `create_directory`, `patch_file`, `list_files`, `open_file`, `attach_file_to_chat`, `send_file`, `search_files`, `diff_files`                                                                                                                                                      |
 | `bash.ts`          | `bash`                                                                                                                                                                                                                                                                                                                                                 |
 | `javascript.ts`    | `javascript`                                                                                                                                                                                                                                                                                                                                           |
 | `fetch.ts`         | `fetch_url`, `fetch_file`, `web_search`                                                                                                                                                                                                                                                                                                                |
@@ -70,7 +70,7 @@ ShadowClaw allows agents to dynamically manage their own toolset via the `manage
 
 - Returns the available profile IDs, names, and enabled tool lists so the agent can pick a profile before calling `manage_tools`.
 
-### Tool Profiles
+### Predefined Profiles
 
 Predefined sets of tools optimized for specific use cases.
 
@@ -97,6 +97,10 @@ Saved profiles can specify a `providerId`. When the orchestrator switches to a m
 
 - **`read_file`** — Supports single `path` or `paths` array for batch reads (parallel `Promise.all`)
 - **`write_file`** — Creates intermediate directories automatically
+- **`delete_file`** — Deletes a file or directory (recursively) from the group workspace
+- **`move_file`** — Moves or renames a file or directory in the workspace (supports cross-group moves via `source_group_id`/`target_group_id`)
+- **`copy_file`** — Copies a file or directory in the workspace (supports cross-group copies via `source_group_id`/`target_group_id`)
+- **`create_directory`** — Creates an empty directory (and intermediate parent directories) in the workspace
 - **`patch_file`** — In-place string replacement (safer than sed for targeted edits)
 - **`delete_file`** — Deletes a file atomically
 - **`move_file`** — Moves/renames a file atomically

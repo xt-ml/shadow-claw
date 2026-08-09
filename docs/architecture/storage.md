@@ -122,22 +122,22 @@ This fallback is applied to both single-file writes/copies and recursive directo
 
 ## File Operations
 
-| Operation   | Function                 | Notes                                                                                               |
-| ----------- | ------------------------ | --------------------------------------------------------------------------------------------------- |
-| Read file   | `readGroupFile()`        | Sync handle preferred for freshness                                                                 |
-| Read bytes  | `readGroupFileBytes()`   | Raw `Uint8Array` for binary files (PDFs, images)                                                    |
-| Create dir  | `createGroupDirectory()` | Creates nested directories with stale-handle retry                                                  |
-| Write file  | `writeGroupFile()`       | Auto-creates directories, two-attempt retry                                                         |
-| List files  | `listGroupFiles()`       | Returns `name` (files) or `name/` (directories)                                                     |
-| Copy entry  | `copyGroupEntry()`       | Copies files or folders; supports inter-group copy; rejects identical source/target paths           |
-| Move entry  | `moveGroupEntry()`       | Copy-then-delete move; supports inter-group move; callers must avoid folder self/descendant targets |
-| Delete file | `deleteGroupFile()`      | `dir.removeEntry(filename)`; suppresses memory page when deleting group memory                      |
-| Delete dir  | `deleteGroupDirectory()` | Recursive removal                                                                                   |
-| Delete all  | `deleteAllGroupFiles()`  | Complete workspace wipe (for restore ops)                                                           |
-| Upload file | `uploadGroupFile()`      | Accepts `File` from `<input>`, reads as text or bytes                                               |
-| File exists | `groupFileExists()`      | Non-throwing existence check                                                                        |
-| Seed site   | `seedStaticMainSite()`   | Seeds static pages from manifest into main group workspace, skipping suppressed pages               |
-| Suppress    | `suppressPage()`         | Records page in `SUPPRESSED_PAGES_LIST` to prevent auto-re-seeding upon deletion                    |
+| Operation   | Function                 | Notes                                                                                              |
+| ----------- | ------------------------ | -------------------------------------------------------------------------------------------------- |
+| Read file   | `readGroupFile()`        | Sync handle preferred for freshness                                                                |
+| Read bytes  | `readGroupFileBytes()`   | Raw `Uint8Array` for binary files (PDFs, images)                                                   |
+| Create dir  | `createGroupDirectory()` | Creates nested directories with stale-handle retry (surfaced to agent via `create_directory` tool) |
+| Write file  | `writeGroupFile()`       | Auto-creates directories, two-attempt retry (surfaced to agent via `write_file` tool)              |
+| List files  | `listGroupFiles()`       | Returns `name` (files) or `name/` (directories) (surfaced to agent via `list_files` tool)          |
+| Copy entry  | `copyGroupEntry()`       | Copies files or folders; supports inter-group copy (surfaced to agent via `copy_file` tool)        |
+| Move entry  | `moveGroupEntry()`       | Copy-then-delete move; supports inter-group move (surfaced to agent via `move_file` tool)          |
+| Delete file | `deleteGroupFile()`      | Deletes file from workspace (surfaced to agent via `delete_file` tool)                             |
+| Delete dir  | `deleteGroupDirectory()` | Recursive directory removal (surfaced to agent via `delete_file` tool)                             |
+| Delete all  | `deleteAllGroupFiles()`  | Complete workspace wipe (for restore ops)                                                          |
+| Upload file | `uploadGroupFile()`      | Accepts `File` from `<input>`, reads as text or bytes                                              |
+| File exists | `groupFileExists()`      | Non-throwing existence check                                                                       |
+| Seed site   | `seedStaticMainSite()`   | Seeds static pages from manifest into main group workspace, skipping suppressed pages              |
+| Suppress    | `suppressPage()`         | Records page in `SUPPRESSED_PAGES_LIST` to prevent auto-re-seeding upon deletion                   |
 
 ## Zip Export/Import
 

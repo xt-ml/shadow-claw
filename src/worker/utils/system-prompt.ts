@@ -87,6 +87,30 @@ export function buildSystemPrompt(
       strategyLines.push("- Prefer write_file over bash for writing files.");
     }
 
+    if (has("delete_file")) {
+      strategyLines.push(
+        "- Prefer delete_file over bash for deleting files or directories.",
+      );
+    }
+
+    if (has("move_file")) {
+      strategyLines.push(
+        "- Prefer move_file over bash for moving or renaming files and directories.",
+      );
+    }
+
+    if (has("copy_file")) {
+      strategyLines.push(
+        "- Prefer copy_file over bash for copying files or directories.",
+      );
+    }
+
+    if (has("create_directory")) {
+      strategyLines.push(
+        "- Prefer create_directory over bash for creating directories.",
+      );
+    }
+
     if (has("patch_file")) {
       strategyLines.push(
         "- Use patch_file for targeted edits in existing files — it finds and replaces a single unique text match, works reliably with large files, and avoids the pitfalls of sed or heredocs. Include 2-3 lines of surrounding context to ensure a unique match.",

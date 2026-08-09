@@ -23,6 +23,73 @@ export const attach_file_to_chat: ToolDefinition = {
   },
 };
 
+export const copy_file: ToolDefinition = {
+  name: "copy_file",
+  description:
+    "Copy a file or directory in the group workspace to a new destination path. " +
+    "Supports copying single files or nested directories. Optionally supports copying between " +
+    "different conversation workspaces via source_group_id or target_group_id.",
+  input_schema: {
+    type: "object",
+    properties: {
+      source_path: {
+        type: "string",
+        description: "Source file or directory path relative to workspace root",
+      },
+      target_path: {
+        type: "string",
+        description:
+          "Destination file or directory path relative to workspace root",
+      },
+      source_group_id: {
+        type: "string",
+        description:
+          "Optional source conversation group ID (defaults to current workspace)",
+      },
+      target_group_id: {
+        type: "string",
+        description:
+          "Optional target conversation group ID (defaults to current workspace)",
+      },
+    },
+    required: ["source_path", "target_path"],
+  },
+};
+
+export const create_directory: ToolDefinition = {
+  name: "create_directory",
+  description:
+    "Create a new directory (and any missing parent directories) in the group workspace.",
+  input_schema: {
+    type: "object",
+    properties: {
+      path: {
+        type: "string",
+        description: "Directory path relative to the group workspace root",
+      },
+    },
+    required: ["path"],
+  },
+};
+
+export const delete_file: ToolDefinition = {
+  name: "delete_file",
+  description:
+    "Delete a file or directory from the group workspace. " +
+    "If the target path is a directory, it will be recursively deleted.",
+  input_schema: {
+    type: "object",
+    properties: {
+      path: {
+        type: "string",
+        description:
+          "File or directory path relative to the group workspace root",
+      },
+    },
+    required: ["path"],
+  },
+};
+
 export const diff_files: ToolDefinition = {
   name: "diff_files",
   description:
@@ -60,6 +127,39 @@ export const list_files: ToolDefinition = {
           "Directory path relative to workspace root (default: root)",
       },
     },
+  },
+};
+
+export const move_file: ToolDefinition = {
+  name: "move_file",
+  description:
+    "Move or rename a file or directory in the group workspace to a target path. " +
+    "Supports moving single files or nested directories. Optionally supports moving between " +
+    "different conversation workspaces via source_group_id or target_group_id.",
+  input_schema: {
+    type: "object",
+    properties: {
+      source_path: {
+        type: "string",
+        description: "Source file or directory path relative to workspace root",
+      },
+      target_path: {
+        type: "string",
+        description:
+          "Destination file or directory path relative to workspace root",
+      },
+      source_group_id: {
+        type: "string",
+        description:
+          "Optional source conversation group ID (defaults to current workspace)",
+      },
+      target_group_id: {
+        type: "string",
+        description:
+          "Optional target conversation group ID (defaults to current workspace)",
+      },
+    },
+    required: ["source_path", "target_path"],
   },
 };
 

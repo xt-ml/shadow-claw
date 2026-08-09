@@ -59,8 +59,12 @@ import { executeSendNotification } from "../tools/ui/send-notification.js";
 import { executeShowToast } from "../tools/ui/show-toast.js";
 import { executeWebSearch } from "../tools/ui/web-search.js";
 import { executeAttachFile } from "../tools/workspace/attach-file.js";
+import { executeCopyFile } from "../tools/workspace/copy-file.js";
+import { executeCreateDirectory } from "../tools/workspace/create-directory.js";
+import { executeDeleteFile } from "../tools/workspace/delete-file.js";
 import { executeDiffFiles } from "../tools/workspace/diff-files.js";
 import { executeListFiles } from "../tools/workspace/list-files.js";
+import { executeMoveFile } from "../tools/workspace/move-file.js";
 import { executeOpenFile } from "../tools/workspace/open-file.js";
 import { executePatchFile } from "../tools/workspace/patch-file.js";
 import { executeReadFile } from "../tools/workspace/read-file.js";
@@ -198,6 +202,22 @@ export async function executeTool(
 
       case "write_file": {
         return await executeWriteFile(db, input, groupId);
+      }
+
+      case "delete_file": {
+        return await executeDeleteFile(db, input, groupId);
+      }
+
+      case "move_file": {
+        return await executeMoveFile(db, input, groupId);
+      }
+
+      case "copy_file": {
+        return await executeCopyFile(db, input, groupId);
+      }
+
+      case "create_directory": {
+        return await executeCreateDirectory(db, input, groupId);
       }
 
       case "patch_file": {

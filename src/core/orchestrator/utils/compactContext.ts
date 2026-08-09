@@ -1,11 +1,16 @@
 import { detectProviderHelpType } from "../../../components/common/help/providers.js";
-import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../../config/config.js";
+import {
+  CONFIG_KEYS,
+  DEFAULT_GROUP_ID,
+  getProvider,
+} from "../../../config/config.js";
 
 import { buildDynamicContext } from "../../../context/buildDynamicContext.js";
 import { estimateTokens } from "../../../context/estimateTokens.js";
 
 import { buildConversationMessages } from "../../../db/buildConversationMessages.js";
 import { getConfig } from "../../../db/getConfig.js";
+import { listGroups } from "../../../db/groups.js";
 
 import { readGroupFile } from "../../../storage/readGroupFile.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
@@ -35,15 +40,35 @@ export async function compactContext(
   db: ShadowClawDatabase,
   groupId = DEFAULT_GROUP_ID,
 ): Promise<void> {
-  const requiresApiKey = o.providerConfig?.requiresApiKey !== false;
-  const currentApiKey = await getApiKeyForRequest(o);
+  const groups = await listGroups(db);
+  const group = groups.find((g) => g.groupId === groupId);
+
+  const effectiveProviderId = group?.pinnedProvider ?? o.provider;
+  const effectiveModel =
+    group?.pinnedModel ??
+    (group?.pinnedProvider
+      ? (getProvider(group.pinnedProvider)?.defaultModel ?? o.model)
+      : o.model);
+  const effectiveProviderConfig =
+    getProvider(effectiveProviderId) ?? o.providerConfig;
+
+  const requiresApiKey = effectiveProviderConfig?.requiresApiKey !== false;
+  const currentApiKey =
+    effectiveProviderId === o.provider
+      ? await getApiKeyForRequest(o)
+      : await o.getApiKeyForSpecificProvider(db, effectiveProviderId);
+
   if (requiresApiKey && !currentApiKey) {
     const reason = "API key not configured. Cannot compact context.";
 
     o.events.emit("provider-help", {
-      providerId: o.provider,
+      providerId: effectiveProviderId,
       reason,
-      helpType: detectProviderHelpType(o.provider, reason, requiresApiKey),
+      helpType: detectProviderHelpType(
+        effectiveProviderId,
+        reason,
+        requiresApiKey,
+      ),
     });
 
     o.events.emit("error", {
@@ -84,7 +109,7 @@ export async function compactContext(
     peerState,
   );
 
-  const contextLimit = getContextLimit(o.model);
+  const contextLimit = getContextLimit(effectiveModel);
   const systemPromptTokens = estimateTokens(systemPrompt);
   const allMessages = await buildConversationMessages(groupId, 200);
   const dynamicContext = buildDynamicContext(allMessages, {
@@ -96,7 +121,7 @@ export async function compactContext(
 
   const messages = dynamicContext.messages;
 
-  if (o.provider === "prompt_api") {
+  if (effectiveProviderId === "prompt_api") {
     if (!isPromptApiSupported()) {
       o.events.emit("error", {
         groupId,
@@ -149,19 +174,20 @@ export async function compactContext(
   o.agentWorker?.postMessage({
     type: "compact",
     payload: {
-      apiKey: await getApiKeyForRequest(o),
+      apiKey: currentApiKey,
       assistantName: o.assistantName,
       contextCompression: o.contextCompressionEnabled,
-      contextLimit: getContextLimit(o.model),
+      contextLimit: getContextLimit(effectiveModel),
       groupId,
       memory,
       messages,
-      model: o.model,
-      provider: o.provider,
+      model: effectiveModel,
+      provider: effectiveProviderId,
       providerHeaders: getProviderRuntimeHeaders(
         o,
-        o.provider,
+        effectiveProviderId,
         providerRequestId,
+        group?.providerRuntimeOverrides,
       ),
       rateLimitAutoAdapt: o.rateLimitAutoAdapt,
       rateLimitCallsPerMinute: o.rateLimitCallsPerMinute,

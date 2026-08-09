@@ -8,7 +8,9 @@ import {
   ProviderConfig,
   buildTriggerPattern,
   getDefaultProvider,
+  getProvider,
   getProviderApiKeyConfigKey,
+  getModelMaxTokens,
 } from "../../config/config.js";
 
 import { buildDynamicContext } from "../../context/buildDynamicContext.js";
@@ -16,6 +18,7 @@ import { estimateTokens } from "../../context/estimateTokens.js";
 import { buildConversationMessages } from "../../db/buildConversationMessages.js";
 import { clearGroupMessages } from "../../db/clearGroupMessages.js";
 import { getConfig } from "../../db/getConfig.js";
+import { listGroups } from "../../db/groups.js";
 import { openDatabase } from "../../db/openDatabase.js";
 import { roomIdFromGroupId } from "../../db/rooms.js";
 import { saveMessage } from "../../db/saveMessage.js";
@@ -518,7 +521,28 @@ export class Orchestrator {
       peerState,
     );
 
-    const contextLimit = getContextLimit(this.model);
+    const groups = await listGroups(db);
+    const group = groups.find((g) => g.groupId === groupId);
+
+    const effectiveModel =
+      group?.pinnedModel ??
+      (group?.pinnedProvider
+        ? (getProvider(group.pinnedProvider)?.defaultModel ?? this.model)
+        : this.model);
+
+    const configuredMaxTokens =
+      typeof group?.pinnedMaxTokens === "number" &&
+      Number.isFinite(group.pinnedMaxTokens) &&
+      group.pinnedMaxTokens > 0
+        ? Math.floor(group.pinnedMaxTokens)
+        : this.maxTokens;
+
+    const effectiveMaxTokens = Math.max(
+      1,
+      Math.min(configuredMaxTokens, getModelMaxTokens(effectiveModel)),
+    );
+
+    const contextLimit = getContextLimit(effectiveModel);
     const systemPromptTokens =
       estimateTokens(systemPrompt) +
       (activeTools?.reduce(
@@ -529,7 +553,7 @@ export class Orchestrator {
     const dynamicContext = buildDynamicContext(allMessages, {
       contextLimit,
       systemPromptTokens,
-      maxOutputTokens: this.maxTokens,
+      maxOutputTokens: effectiveMaxTokens,
       skimTop: this.contextCompressionEnabled,
     });
 

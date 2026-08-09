@@ -1,6 +1,7 @@
 import { jest } from "@jest/globals";
 
 import { ASSISTANT_NAME, LLAMAFILE_PROXY_URL } from "../../config/config.js";
+import { createGroup, updateGroupPinnedProvider } from "../../db/groups.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
 import { getWebMcpMode } from "../../subsystems/mcp/webmcp.js";
@@ -1751,6 +1752,32 @@ describe("Orchestrator", () => {
       const stopAllSpy = jest.spyOn(o.channelRegistry, "stopAll");
       o.shutdown();
       expect(stopAllSpy).toHaveBeenCalled();
+    });
+
+    it("refreshContextUsage uses effective model context limit when group has pinned model", async () => {
+      const o = new Orchestrator();
+      const db = await o.init();
+
+      // Create group first
+      await createGroup(db, "Test Group", "", "group-pinned-usage");
+
+      // Pin a model with a small context limit (Llama-3 model context limit is 8192)
+      await updateGroupPinnedProvider(
+        db,
+        "group-pinned-usage",
+        "transformers_js_local",
+        "onnx-community/Llama-3.2-1B-Instruct-ONNX",
+        1024,
+      );
+
+      let contextLimitResult = 0;
+      o.events.on("context-usage", (e: any) => {
+        contextLimitResult = e.contextLimit;
+      });
+
+      await o.refreshContextUsage(db, "group-pinned-usage");
+
+      expect(contextLimitResult).toBe(8192); // context limit of Llama-3 model is 8192
     });
   });
 

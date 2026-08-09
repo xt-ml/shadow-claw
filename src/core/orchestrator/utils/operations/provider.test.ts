@@ -21,15 +21,54 @@ describe("provider configuration", () => {
 
   it("getTransformersStatusUrl computes correctly", () => {
     const state1 = makeState({
-      providerConfig: { baseUrl: "http://api/chat/completions" } as any,
+      providerConfig: {
+        id: "transformers_js_local",
+        baseUrl: "http://api/chat/completions",
+      } as any,
     });
     expect(getTransformersStatusUrl(state1)).toBe("http://api/status");
 
     const state2 = makeState({
-      providerConfig: { baseUrl: "http://other" } as any,
+      providerConfig: {
+        id: "transformers_js_local",
+        baseUrl: "http://other",
+      } as any,
     });
     expect(getTransformersStatusUrl(state2)).toBe(
       "http://localhost:8888/transformers-js-proxy/status",
+    );
+  });
+
+  it("getTransformersStatusUrl ignores remote provider like openrouter and falls back to transformers_js_local", () => {
+    const state = makeState({
+      providerConfig: {
+        id: "openrouter",
+        baseUrl: "https://openrouter.ai/api/v1/chat/completions",
+      } as any,
+    });
+    expect(getTransformersStatusUrl(state)).toBe(
+      "http://localhost:8888/transformers-js-proxy/status",
+    );
+  });
+
+  it("getTransformersStatusUrl uses inFlightEffectiveProviderByGroup if present", () => {
+    const inFlightMap = new Map();
+    inFlightMap.set("group-123", {
+      providerId: "transformers_js_local",
+      providerConfig: {
+        id: "transformers_js_local",
+        baseUrl: "http://custom-local-host/chat/completions",
+      } as any,
+    });
+    const state = makeState({
+      providerConfig: {
+        id: "openrouter",
+        baseUrl: "https://openrouter.ai/api/v1/chat/completions",
+      } as any,
+      inFlightEffectiveProviderByGroup: inFlightMap,
+    });
+    expect(getTransformersStatusUrl(state, "group-123")).toBe(
+      "http://custom-local-host/status",
     );
   });
 });

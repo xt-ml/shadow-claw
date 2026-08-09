@@ -7,6 +7,7 @@ import {
   getProvider,
 } from "../../../../config/config.js";
 
+import type { ProviderConfig } from "../../../../config/config.js";
 import { setConfig as _defaultSetConfig } from "../../../../db/setConfig.js";
 import { toolsStore } from "../../../../stores/tools.js";
 import { modelRegistry } from "../../../../subsystems/providers/model-registry.js";
@@ -226,9 +227,43 @@ export function applyMeshLlmHeaders(
 }
 
 export function getTransformersStatusUrl(
-  state: Pick<OrchestratorState, "providerConfig">,
+  state: Pick<
+    OrchestratorState,
+    "providerConfig" | "inFlightEffectiveProviderByGroup"
+  > & {
+    inFlightEffectiveProviderByGroup?: Map<
+      string,
+      { providerId: string; providerConfig: ProviderConfig }
+    >;
+  },
+  groupId?: string,
 ): string {
-  const base = state.providerConfig?.baseUrl || "";
+  // If we have a groupId, check if there is an in-flight effective provider config for it
+  if (groupId && state.inFlightEffectiveProviderByGroup) {
+    const info = state.inFlightEffectiveProviderByGroup.get(groupId);
+    if (info?.providerId === "transformers_js_local") {
+      const base = info.providerConfig.baseUrl || "";
+      if (base.includes("/chat/completions")) {
+        return base.replace("/chat/completions", "/status");
+      }
+    }
+  }
+
+  // If the current providerConfig is transformers_js_local (or undefined for mock tests), use its baseUrl
+  const providerConfig = state.providerConfig;
+  if (
+    providerConfig &&
+    (!providerConfig.id || providerConfig.id === "transformers_js_local")
+  ) {
+    const base = providerConfig.baseUrl || "";
+    if (base.includes("/chat/completions")) {
+      return base.replace("/chat/completions", "/status");
+    }
+  }
+
+  // Fallback to local transformers.js proxy status
+  const localProvider = getProvider("transformers_js_local");
+  const base = localProvider?.baseUrl || "";
   if (base.includes("/chat/completions")) {
     return base.replace("/chat/completions", "/status");
   }
@@ -444,13 +479,21 @@ export async function setProvider(
 }
 
 export async function pollTransformersProgress(
-  state: Pick<OrchestratorState, "providerConfig">,
+  state: Pick<
+    OrchestratorState,
+    "providerConfig" | "inFlightEffectiveProviderByGroup"
+  > & {
+    inFlightEffectiveProviderByGroup?: Map<
+      string,
+      { providerId: string; providerConfig: ProviderConfig }
+    >;
+  },
   events: EventBus,
   groupId: string,
   stopPolling: (groupId: string) => void,
 ): Promise<void> {
   try {
-    const url = getTransformersStatusUrl(state);
+    const url = getTransformersStatusUrl(state, groupId);
     const res = await fetch(url, {
       headers: {
         Accept: "application/json",
@@ -495,8 +538,15 @@ export async function pollTransformersProgress(
 }
 
 export function startTransformersProgressPolling(
-  state: Pick<OrchestratorState, "providerConfig"> & {
+  state: Pick<
+    OrchestratorState,
+    "providerConfig" | "inFlightEffectiveProviderByGroup"
+  > & {
     transformersProgressPollers: Map<string, number>;
+    inFlightEffectiveProviderByGroup?: Map<
+      string,
+      { providerId: string; providerConfig: ProviderConfig }
+    >;
   },
   events: EventBus,
   groupId: string,

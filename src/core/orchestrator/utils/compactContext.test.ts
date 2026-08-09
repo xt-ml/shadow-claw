@@ -14,6 +14,29 @@ jest.unstable_mockModule("../../../db/getConfig.js", () => ({
   getConfig: jest.fn<any>().mockResolvedValue(null),
 }));
 
+jest.unstable_mockModule("../../../db/groups.js", () => ({
+  getGroupMetadata: jest.fn<any>().mockResolvedValue([]),
+  saveGroupMetadata: jest.fn<any>().mockResolvedValue(undefined),
+  createGroup: jest.fn<any>().mockResolvedValue({} as any),
+  renameGroup: jest.fn<any>().mockResolvedValue(undefined),
+  updateGroupToolTags: jest.fn<any>().mockResolvedValue(undefined),
+  deleteGroupMetadata: jest.fn<any>().mockResolvedValue(undefined),
+  listGroups: jest.fn<any>().mockResolvedValue([
+    {
+      groupId: "group-pinned",
+      pinnedProvider: "transformers_js_local",
+      pinnedModel: "onnx-community/Llama-3.2-1B-Instruct",
+    },
+  ]),
+  reorderGroups: jest.fn<any>().mockResolvedValue(undefined),
+  cloneGroup: jest.fn<any>().mockResolvedValue({} as any),
+  updateGroupPinnedProvider: jest.fn<any>().mockResolvedValue(undefined),
+  updateGroupSubagentSettings: jest.fn<any>().mockResolvedValue(undefined),
+  updateGroupProviderRuntimeOverrides: jest
+    .fn<any>()
+    .mockResolvedValue(undefined),
+}));
+
 describe("compactContext", () => {
   let db: any;
   let o: Orchestrator;
@@ -66,5 +89,22 @@ describe("compactContext", () => {
     const payload: any = postMessage.mock.calls[0][0];
     expect(payload.type).toBe("compact");
     expect(payload.payload.groupId).toBe("group-1");
+  });
+
+  it("uses effective provider and model when group has pinned provider", async () => {
+    jest.spyOn(o, "getApiKey").mockResolvedValue("key");
+    const postMessage = jest.fn();
+    o.agentWorker = { postMessage } as any;
+
+    o.provider = "openrouter";
+    o.model = "gpt-4o";
+
+    await compactContext(o, db, "group-pinned");
+
+    expect(postMessage).toHaveBeenCalled();
+    const payload: any = postMessage.mock.calls[0][0];
+    expect(payload.type).toBe("compact");
+    expect(payload.payload.provider).toBe("transformers_js_local");
+    expect(payload.payload.model).toBe("onnx-community/Llama-3.2-1B-Instruct");
   });
 });

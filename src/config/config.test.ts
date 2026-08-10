@@ -466,6 +466,9 @@ describe("config.js", () => {
       expect(CONFIG_KEYS.LLAMAFILE_PORT).toBe("llamafile_port");
       expect(CONFIG_KEYS.MAX_TOKENS).toBe("max_tokens");
       expect(CONFIG_KEYS.MODEL).toBe("model");
+      expect(CONFIG_KEYS.PAGES_AUTO_REFRESH_INTERVAL).toBe(
+        "pages_auto_refresh_interval",
+      );
       expect(CONFIG_KEYS.PASSPHRASE_SALT).toBe("passphrase_salt");
       expect(CONFIG_KEYS.PASSPHRASE_VERIFY).toBe("passphrase_verify");
       expect(CONFIG_KEYS.PROVIDER).toBe("provider");

@@ -159,4 +159,15 @@ export function showPage(
   if (resolvedPage === "files" && db) {
     oStore.loadFiles(db).catch(console.error);
   }
+
+  // Auto-refresh pages if switching to the pages tab
+  if (resolvedPage === "pages") {
+    const pagesComp = shadow.querySelector("shadow-claw-pages") as any;
+    if (pagesComp && typeof pagesComp.renderSelectedPage === "function") {
+      void pagesComp.renderSelectedPage();
+      if (typeof pagesComp.setupAutoRefreshTimer === "function") {
+        void pagesComp.setupAutoRefreshTimer();
+      }
+    }
+  }
 }

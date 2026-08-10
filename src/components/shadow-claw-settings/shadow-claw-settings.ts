@@ -237,6 +237,16 @@ export class ShadowClawSettings extends ShadowClawElement {
       });
 
     root
+      .querySelector('[data-setting="pages-auto-refresh-input"]')
+      ?.addEventListener("change", (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        if (target) {
+          const val = parseInt(target.value, 10);
+          void this.onPagesAutoRefreshInputChange(isNaN(val) ? 0 : val);
+        }
+      });
+
+    root
       .querySelector('[data-setting="override-prerender-skeleton-toggle"]')
       ?.addEventListener("change", (e: Event) => {
         const target = e.target as HTMLInputElement;
@@ -607,6 +617,39 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
+  async onPagesAutoRefreshInputChange(valSec: number) {
+    if (!this.db) {
+      return;
+    }
+
+    const sec = Math.max(0, Math.min(valSec, 86400));
+
+    try {
+      const { setConfig } = await import("../../db/setConfig.js");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.PAGES_AUTO_REFRESH_INTERVAL,
+        String(sec),
+      );
+
+      window.dispatchEvent(
+        new CustomEvent("shadow-claw-pages-auto-refresh-change", {
+          detail: { interval: sec },
+        }),
+      );
+
+      showSuccess(
+        sec > 0
+          ? `Pages auto refresh set to ${sec}s`
+          : "Pages auto refresh disabled",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving Pages auto refresh interval: " + errorMsg, 6000);
+    }
+  }
+
   async populateAssistantSettings() {
     const root = this.shadowRoot;
     if (!root || !this.db) {
@@ -665,6 +708,26 @@ export class ShadowClawSettings extends ShadowClawElement {
     ) as HTMLInputElement | null;
     if (sidebarHidePagesToggle) {
       sidebarHidePagesToggle.checked = sidebarPagesHidden;
+    }
+
+    const pagesAutoRefreshInput = root.querySelector(
+      '[data-setting="pages-auto-refresh-input"]',
+    ) as HTMLInputElement | null;
+    if (pagesAutoRefreshInput) {
+      const storedInterval = await getConfig(
+        this.db,
+        CONFIG_KEYS.PAGES_AUTO_REFRESH_INTERVAL,
+      );
+      if (
+        typeof storedInterval === "string" ||
+        typeof storedInterval === "number"
+      ) {
+        const parsed = parseInt(String(storedInterval), 10);
+        pagesAutoRefreshInput.value =
+          !isNaN(parsed) && parsed >= 0 ? String(parsed) : "0";
+      } else {
+        pagesAutoRefreshInput.value = "0";
+      }
     }
 
     const rawOverridePrerenderSkeleton = (await getConfig(

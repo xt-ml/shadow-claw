@@ -345,13 +345,9 @@ describe("applyRoute", () => {
       expect(pagesComp.renderSelectedPage).toHaveBeenCalled();
     });
 
-    it("awaits whenDefined and renders persisted page when route has no path (e.g. /pages)", async () => {
-      // Navigation to /pages with no specific post — the element must be
-      // upgraded, SSR must be cleared, and the persisted activePinnedPage
-      // must be rendered before clearBootPendingClass fires. setActivePinnedPage
-      // is NOT called (no URL path to pin), but renderSelectedPage IS called
-      // so CSR content is in the DOM before boot state is removed.
+    it("awaits whenDefined and sets active pinned page to effective default page when route has no path (e.g. /pages)", async () => {
       route.path = undefined;
+      oStore.effectiveDefaultPage = { groupId: "group1", path: "MEMORY.md" };
 
       const whenDefinedSpy = jest.spyOn(
         globalThis.customElements,
@@ -361,7 +357,10 @@ describe("applyRoute", () => {
       await applyRoute(shadow, shadowClaw, db, fStore, oStore, route);
 
       expect(whenDefinedSpy).toHaveBeenCalledWith("shadow-claw-pages");
-      expect(oStore.setActivePinnedPage).not.toHaveBeenCalled();
+      expect(oStore.setActivePinnedPage).toHaveBeenCalledWith(db, {
+        groupId: "group1",
+        path: "MEMORY.md",
+      });
       expect(pagesComp.renderSelectedPage).toHaveBeenCalled();
     });
 

@@ -91,12 +91,17 @@ jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn(async () => ({})),
 }));
 
+jest.unstable_mockModule("../../db/getConfig.js", () => ({
+  getConfig: jest.fn(async () => "0"),
+}));
+
 const { ShadowClawPages } = await import("./shadow-claw-pages.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { readGroupFile } = await import("../../storage/readGroupFile.js");
 const { readGroupFileBytes } =
   await import("../../storage/readGroupFileBytes.js");
 const { renderMarkdown } = await import("../../content/markdown.js");
+const { getConfig } = await import("../../db/getConfig.js");
 const { setSanitizedHtml, setTrustedSrcdoc } =
   await import("../../security/trusted-types.js");
 
@@ -966,6 +971,148 @@ describe("shadow-claw-pages", () => {
       });
 
       document.removeEventListener("shadow-claw-navigate", navigateListener);
+    });
+  });
+
+  describe("pages auto refresh and dynamic content reload", () => {
+    beforeEach(() => {
+      jest.useFakeTimers();
+    });
+
+    afterEach(() => {
+      jest.useRealTimers();
+    });
+
+    it("starts auto refresh timer when pages_auto_refresh_interval setting is > 0", async () => {
+      (
+        getConfig as jest.MockedFunction<typeof getConfig>
+      ).mockResolvedValueOnce("5");
+
+      const component = new ShadowClawPages();
+      Object.defineProperty(component, "isConnected", {
+        get: () => true,
+        configurable: true,
+      });
+      component.db = {} as any;
+      component.selectedPage = { groupId: "group-1", path: "docs/page.md" };
+
+      const renderSpy = jest
+        .spyOn(component, "renderSelectedPage")
+        .mockResolvedValue();
+
+      await component.setupAutoRefreshTimer();
+      expect(component.autoRefreshIntervalSec).toBe(5);
+      expect(component.autoRefreshTimer).not.toBeNull();
+
+      jest.advanceTimersByTime(5000);
+      expect(renderSpy).toHaveBeenCalledTimes(1);
+
+      jest.advanceTimersByTime(5000);
+      expect(renderSpy).toHaveBeenCalledTimes(2);
+
+      component.disconnectedCallback();
+      expect(component.autoRefreshTimer).toBeNull();
+    });
+
+    it("defaults to interval 0 (disabled) when interval setting is 0 or unset", async () => {
+      (
+        getConfig as jest.MockedFunction<typeof getConfig>
+      ).mockResolvedValueOnce("0");
+
+      const component = new ShadowClawPages();
+      Object.defineProperty(component, "isConnected", {
+        get: () => true,
+        configurable: true,
+      });
+      component.db = {} as any;
+
+      await component.setupAutoRefreshTimer();
+      expect(component.autoRefreshIntervalSec).toBe(0);
+      expect(component.autoRefreshTimer).toBeNull();
+    });
+
+    it("pauses timer when document is hidden and resumes when visible", async () => {
+      const component = new ShadowClawPages();
+      Object.defineProperty(component, "isConnected", {
+        get: () => true,
+        configurable: true,
+      });
+      component.db = {} as any;
+      component.autoRefreshIntervalSec = 2;
+
+      const renderSpy = jest
+        .spyOn(component, "renderSelectedPage")
+        .mockResolvedValue();
+      const setupSpy = jest
+        .spyOn(component, "setupAutoRefreshTimer")
+        .mockImplementation(async () => {});
+
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => true,
+      });
+
+      component.handleVisibilityChange();
+      expect(component.autoRefreshTimer).toBeNull();
+
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => false,
+      });
+
+      component.handleVisibilityChange();
+      expect(renderSpy).toHaveBeenCalled();
+      expect(setupSpy).toHaveBeenCalled();
+
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => false,
+      });
+    });
+
+    it("updates interval dynamically when shadow-claw-pages-auto-refresh-change event is dispatched", async () => {
+      const component = new ShadowClawPages();
+      Object.defineProperty(component, "isConnected", {
+        get: () => true,
+        configurable: true,
+      });
+      component.db = {} as any;
+
+      const setupSpy = jest
+        .spyOn(component, "setupAutoRefreshTimer")
+        .mockImplementation(async () => {});
+
+      const customEvent = new CustomEvent(
+        "shadow-claw-pages-auto-refresh-change",
+        {
+          detail: { interval: 10 },
+        },
+      );
+
+      component.handleAutoRefreshConfigChange(customEvent);
+      expect(component.autoRefreshIntervalSec).toBe(10);
+      expect(setupSpy).toHaveBeenCalled();
+    });
+
+    it("re-renders selected page when window receives focus event", async () => {
+      const component = new ShadowClawPages();
+      Object.defineProperty(component, "isConnected", {
+        get: () => true,
+        configurable: true,
+      });
+      component.db = {} as any;
+
+      const renderSpy = jest
+        .spyOn(component, "renderSelectedPage")
+        .mockResolvedValue();
+
+      Object.defineProperty(document, "hidden", {
+        configurable: true,
+        get: () => false,
+      });
+
+      component.handleWindowFocus();
+      expect(renderSpy).toHaveBeenCalled();
     });
   });
 });

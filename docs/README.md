@@ -43,7 +43,7 @@ Detailed docs for each major subsystem.
 | [Trusted Types Tinyfill](subsystems/trusted-types-tinyfill.md)          | Polyfill for Trusted Types API, browser compatibility, security rationale                                               |
 | [Email Integration](subsystems/email.md)                                | IMAP/SMTP support with encrypted credentials                                                                            |
 | [WebMCP](subsystems/webmcp.md)                                          | Browser's Model Context Protocol integration and tool execution                                                         |
-| [Pages System](subsystems/pages.md)                                     | Workspace-relative pages rendering and sidebar navigation, including markdown frontmatter and safe HTML embeds          |
+| [Pages System](subsystems/pages.md)                                     | Workspace-relative pages rendering and sidebar navigation, markdown frontmatter, HTML embeds, and auto-refresh sync     |
 | [LiteRT Provider](subsystems/providers.md)                              | In-browser WebGPU inference provider using Google LiteRT-LM                                                             |
 
 ### Guides

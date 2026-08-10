@@ -75,6 +75,16 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 - **Responsive Viewport**: On mobile viewports, the sidebar supports toggle collapse (`pages__content--sidebar-collapsed`).
 - **Confirmation Modals**: Destructive page removals render standardized confirmation dialogs consistent with workspace UI dialogs.
 
+### Automatic Refresh & Visibility Synchronization
+
+- **Immediate Activation Refresh**: Switching to the Pages sidebar tab or selecting the root `/pages` route immediately fetches and re-renders the latest file version from workspace storage (`readGroupFile`), guaranteeing up-to-date content without requiring a manual reload.
+- **Visibility & Focus Syncing**: Listens to the Page Visibility API (`visibilitychange`) and window `focus` events. When the browser tab or desktop window regains focus while Pages is active, the active page content is re-rendered immediately.
+- **Configurable Auto-Refresh Interval (`CONFIG_KEYS.PAGES_AUTO_REFRESH_INTERVAL`)**:
+  - Configurable in Settings under **Navigation & Pages** (from `0` to `86,400` seconds / 24 hours).
+  - Defaults to `0` seconds (disabled).
+  - When configured to a value `> 0`, an interval timer periodically re-fetches and renders the latest pinned page content in a billboard-style loop.
+  - Automatically pauses when the document is hidden or the component is disconnected to save CPU and storage I/O.
+
 ### Content Rendering
 
 #### Markdown (`.md`, `.markdown`)

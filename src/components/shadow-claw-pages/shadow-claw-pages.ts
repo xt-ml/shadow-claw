@@ -91,11 +91,78 @@ export class ShadowClawPages extends ShadowClawElement {
   navFadeTimer: ReturnType<typeof setTimeout> | null = null;
   sidebarOpen: boolean = false;
 
+  autoRefreshIntervalSec: number = 0;
+  autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
+
   /** Set to true after initial URL routing is complete. Gates effect-driven renders. */
   _routingReady: boolean = false;
 
   constructor() {
     super();
+  }
+
+  handleVisibilityChange = () => {
+    if (!document.hidden && this.isConnected) {
+      void this.renderSelectedPage();
+      void this.setupAutoRefreshTimer();
+    } else if (document.hidden && this.autoRefreshTimer !== null) {
+      clearInterval(this.autoRefreshTimer);
+      this.autoRefreshTimer = null;
+    }
+  };
+
+  handleWindowFocus = () => {
+    if (!document.hidden && this.isConnected) {
+      void this.renderSelectedPage();
+    }
+  };
+
+  handleAutoRefreshConfigChange = (event: Event) => {
+    const detail = (event as CustomEvent).detail;
+    if (detail && typeof detail.interval === "number") {
+      this.autoRefreshIntervalSec = Math.max(
+        0,
+        Math.min(detail.interval, 86400),
+      );
+    }
+    void this.setupAutoRefreshTimer();
+  };
+
+  async setupAutoRefreshTimer(): Promise<void> {
+    if (this.autoRefreshTimer !== null) {
+      clearInterval(this.autoRefreshTimer);
+      this.autoRefreshTimer = null;
+    }
+
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const stored = await getConfig(
+        this.db,
+        CONFIG_KEYS.PAGES_AUTO_REFRESH_INTERVAL,
+      );
+      let sec = 0;
+      if (typeof stored === "string" || typeof stored === "number") {
+        const parsed = parseInt(String(stored), 10);
+        if (!isNaN(parsed) && parsed >= 0) {
+          sec = Math.min(parsed, 86400);
+        }
+      }
+
+      this.autoRefreshIntervalSec = sec;
+
+      if (sec > 0 && !document.hidden && this.isConnected) {
+        this.autoRefreshTimer = setInterval(() => {
+          if (!document.hidden && this.isConnected) {
+            void this.renderSelectedPage();
+          }
+        }, sec * 1000);
+      }
+    } catch {
+      // Ignore config read failures
+    }
   }
 
   showNavButtonsTemporarily(durationMs = 2500) {
@@ -153,6 +220,12 @@ export class ShadowClawPages extends ShadowClawElement {
     await orchestratorStore.whenInitialized;
 
     window.addEventListener("message", this.handleIframeMessage);
+    document.addEventListener("visibilitychange", this.handleVisibilityChange);
+    window.addEventListener("focus", this.handleWindowFocus);
+    window.addEventListener(
+      "shadow-claw-pages-auto-refresh-change",
+      this.handleAutoRefreshConfigChange,
+    );
 
     root.addEventListener("click", (event: Event) => {
       const dropdown = root.querySelector("[data-pages-dropdown]");
@@ -237,6 +310,7 @@ export class ShadowClawPages extends ShadowClawElement {
     await orchestratorStore.whenReady;
     this._routingReady = true;
     void this.renderSelectedPage();
+    void this.setupAutoRefreshTimer();
   }
 
   disconnectedCallback() {
@@ -244,7 +318,20 @@ export class ShadowClawPages extends ShadowClawElement {
       clearTimeout(this.navFadeTimer);
       this.navFadeTimer = null;
     }
+    if (this.autoRefreshTimer !== null) {
+      clearInterval(this.autoRefreshTimer);
+      this.autoRefreshTimer = null;
+    }
     window.removeEventListener("message", this.handleIframeMessage);
+    document.removeEventListener(
+      "visibilitychange",
+      this.handleVisibilityChange,
+    );
+    window.removeEventListener("focus", this.handleWindowFocus);
+    window.removeEventListener(
+      "shadow-claw-pages-auto-refresh-change",
+      this.handleAutoRefreshConfigChange,
+    );
     this.previewFrameWindow = null;
     super.disconnectedCallback?.();
   }

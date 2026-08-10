@@ -124,16 +124,24 @@ export async function applyRoute(
         groupId: groupId || oStore.activeGroupId || DEFAULT_GROUP_ID,
         path: path,
       });
+    } else {
+      const defaultPage =
+        oStore.effectiveDefaultPage ||
+        (oStore.pages && oStore.pages[0]) ||
+        null;
+      if (defaultPage) {
+        await oStore.setActivePinnedPage(db, defaultPage);
+      }
     }
 
     // Always render the active pinned page (either just-set from path, or the
-    // persisted one from the store). This ensures CSR content is in the DOM
-    // before clearBootPendingClass() removes the skeleton, covering both:
-    //   • /pages/main/posts/xxx.md  — render the URL-specified post
-    //   • /pages                    — render the persisted default post
+    // persisted default page).
     const pagesComp = shadow?.querySelector("shadow-claw-pages") as any;
     if (pagesComp && typeof pagesComp.renderSelectedPage === "function") {
       await pagesComp.renderSelectedPage();
+      if (typeof pagesComp.setupAutoRefreshTimer === "function") {
+        void pagesComp.setupAutoRefreshTimer();
+      }
       if (anchor) {
         await applyAnchorWithRetry(() => {
           if (typeof pagesComp.handleAnchorNavigation === "function") {

@@ -1043,6 +1043,7 @@ export const CONFIG_KEYS = {
   MODEL: "model",
   OAUTH_PROVIDER_DEFINITIONS: "oauth_provider_definitions",
   OVERRIDE_PRERENDER_SKELETON: "override_prerender_skeleton",
+  PAGES_AUTO_REFRESH_INTERVAL: "pages_auto_refresh_interval",
   PAGES_LIST: "pages_list",
   PASSPHRASE_SALT: "passphrase_salt",
   PASSPHRASE_VERIFY: "passphrase_verify",

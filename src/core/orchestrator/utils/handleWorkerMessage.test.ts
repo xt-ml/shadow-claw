@@ -48,6 +48,7 @@ const mockDeleteTaskFromServer = jest.fn() as any;
 const mockGetRemoteMcpConnection = jest.fn() as any;
 const mockReconnectMcpOAuth = jest.fn() as any;
 const mockGetPushUrl = jest.fn() as any;
+const mockGetConfig = jest.fn() as any;
 
 const mockShowToast = jest.fn() as any;
 
@@ -160,6 +161,33 @@ jest.unstable_mockModule(
 jest.unstable_mockModule("../../../ui/toast.js", () => ({
   showToast: mockShowToast,
 }));
+
+jest.unstable_mockModule("../../../db/getConfig.js", () => ({
+  getConfig: mockGetConfig,
+}));
+
+const mockSummarizeText = jest.fn() as any;
+const mockWriteText = jest.fn() as any;
+const mockRewriteText = jest.fn() as any;
+const mockProofreadText = jest.fn() as any;
+const mockDetectLanguage = jest.fn() as any;
+const mockTranslateText = jest.fn() as any;
+const mockEmbedText = jest.fn() as any;
+const mockEnsureBuiltinAiPolyfills = jest.fn() as any;
+
+jest.unstable_mockModule(
+  "../../../subsystems/providers/builtin-ai-tasks.js",
+  () => ({
+    detectLanguage: mockDetectLanguage,
+    embedText: mockEmbedText,
+    ensureBuiltinAiPolyfills: mockEnsureBuiltinAiPolyfills,
+    proofreadText: mockProofreadText,
+    rewriteText: mockRewriteText,
+    summarizeText: mockSummarizeText,
+    translateText: mockTranslateText,
+    writeText: mockWriteText,
+  }),
+);
 
 const { handleWorkerMessage } = await import("./handleWorkerMessage.js");
 const { createRoom, inviteToRoom, leaveRoom } =
@@ -569,6 +597,137 @@ describe("handleWorkerMessage", () => {
     expect(mockOrchestrator.agentWorker.postMessage).toHaveBeenCalledWith({
       type: "mcp-reauth-result",
       payload: { connectionId: "c1", success: false },
+    });
+  });
+
+  describe("request-native-ai-task", () => {
+    it("handles local backend preference and resolves pendingNativeAiResolvers on globalThis", async () => {
+      mockGetConfig.mockResolvedValue("local");
+      mockTranslateText.mockResolvedValue("tres");
+
+      const localResolve = jest.fn();
+      const localReject = jest.fn();
+      (globalThis as any).pendingNativeAiResolvers = {
+        task_123: { resolve: localResolve, reject: localReject },
+      };
+
+      await send({
+        type: "request-native-ai-task",
+        payload: {
+          id: "task_123",
+          groupId: "g1",
+          taskType: "translate",
+          input: {
+            text: "three",
+            sourceLanguage: "en",
+            targetLanguage: "es",
+          },
+        },
+      });
+
+      // Wait for the async IIFE inside handleWorkerMessage
+      await new Promise(process.nextTick);
+
+      expect(mockTranslateText).toHaveBeenCalledWith(
+        "three",
+        expect.objectContaining({
+          sourceLanguage: "en",
+          targetLanguage: "es",
+        }),
+      );
+      expect(localResolve).toHaveBeenCalledWith("tres");
+      expect(
+        (globalThis as any).pendingNativeAiResolvers["task_123"],
+      ).toBeUndefined();
+      expect(mockOrchestrator.agentWorker.postMessage).toHaveBeenCalledWith({
+        type: "native-ai-task-response",
+        payload: { id: "task_123", response: "tres" },
+      });
+    });
+
+    it("handles active_provider preference with Prompt API and resolves local resolvers", async () => {
+      mockGetConfig.mockResolvedValue("active_provider");
+      mockOrchestrator.provider = "prompt_api";
+
+      const mockPrompt = jest.fn(async (_prompt?: string) => "tres");
+      const mockDestroy = jest.fn();
+      const mockCreate = jest.fn(async () => ({
+        prompt: mockPrompt,
+        destroy: mockDestroy,
+      }));
+
+      (globalThis as any).LanguageModel = { create: mockCreate };
+
+      const localResolve = jest.fn();
+      const localReject = jest.fn();
+      (globalThis as any).pendingNativeAiResolvers = {
+        task_456: { resolve: localResolve, reject: localReject },
+      };
+
+      await send({
+        type: "request-native-ai-task",
+        payload: {
+          id: "task_456",
+          groupId: "g1",
+          taskType: "translate",
+          input: {
+            text: "three",
+            sourceLanguage: "en",
+            targetLanguage: "es",
+          },
+        },
+      });
+
+      await new Promise(process.nextTick);
+
+      expect(mockCreate).toHaveBeenCalled();
+      expect(mockPrompt).toHaveBeenCalledWith(
+        expect.stringContaining("Translate the following text"),
+      );
+      expect(mockDestroy).toHaveBeenCalled();
+      expect(localResolve).toHaveBeenCalledWith("tres");
+      expect(mockOrchestrator.agentWorker.postMessage).toHaveBeenCalledWith({
+        type: "native-ai-task-response",
+        payload: { id: "task_456", response: "tres" },
+      });
+
+      delete (globalThis as any).LanguageModel;
+    });
+
+    it("rejects local resolvers and sends error message on failure", async () => {
+      mockGetConfig.mockResolvedValue("local");
+      mockSummarizeText.mockRejectedValue(
+        new Error("Summarizer out of memory"),
+      );
+
+      const localResolve = jest.fn();
+      const localReject = jest.fn();
+      (globalThis as any).pendingNativeAiResolvers = {
+        task_err: { resolve: localResolve, reject: localReject },
+      };
+
+      await send({
+        type: "request-native-ai-task",
+        payload: {
+          id: "task_err",
+          groupId: "g1",
+          taskType: "summarize",
+          input: { text: "Long text" },
+        },
+      });
+
+      await new Promise(process.nextTick);
+
+      expect(localReject).toHaveBeenCalledWith(
+        expect.objectContaining({ message: "Summarizer out of memory" }),
+      );
+      expect(
+        (globalThis as any).pendingNativeAiResolvers["task_err"],
+      ).toBeUndefined();
+      expect(mockOrchestrator.agentWorker.postMessage).toHaveBeenCalledWith({
+        type: "native-ai-task-response",
+        payload: { id: "task_err", error: "Summarizer out of memory" },
+      });
     });
   });
 });

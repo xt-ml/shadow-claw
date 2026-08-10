@@ -38,6 +38,7 @@ import {
 import {
   detectLanguage,
   embedText,
+  ensureBuiltinAiPolyfills,
   proofreadText,
   rewriteText,
   summarizeText,
@@ -648,7 +649,12 @@ export async function handleWorkerMessage(
 
           let result;
           if (toolsBackendPref !== "local") {
-            result = await executeActiveProviderTask(o, taskType, input);
+            result = await executeActiveProviderTask(
+              o,
+              taskType,
+              input,
+              groupId,
+            );
           } else {
             const onProgress = (p: any) => {
               o.events.emit("model-download-progress", {
@@ -704,6 +710,12 @@ export async function handleWorkerMessage(
             });
           }
 
+          const localResolvers = (globalThis as any).pendingNativeAiResolvers;
+          if (localResolvers && localResolvers[id]) {
+            localResolvers[id].resolve(result);
+            delete localResolvers[id];
+          }
+
           o.agentWorker?.postMessage({
             type: "native-ai-task-response",
             payload: { id, response: result },
@@ -717,6 +729,15 @@ export async function handleWorkerMessage(
               message: err?.message || String(err),
             });
           }
+
+          const localResolvers = (globalThis as any).pendingNativeAiResolvers;
+          if (localResolvers && localResolvers[id]) {
+            localResolvers[id].reject(
+              err instanceof Error ? err : new Error(String(err)),
+            );
+            delete localResolvers[id];
+          }
+
           o.agentWorker?.postMessage({
             type: "native-ai-task-response",
             payload: { id, error: err?.message || String(err) },
@@ -738,7 +759,14 @@ async function executeActiveProviderTask(
   o: Orchestrator,
   taskType: string,
   input: Record<string, any>,
+  groupId?: string,
 ): Promise<any> {
+  const inFlightInfo = groupId
+    ? o.inFlightEffectiveProviderByGroup?.get(groupId)
+    : undefined;
+  const effectiveProviderId = inFlightInfo?.providerId || o.provider;
+  const effectiveModel = inFlightInfo?.providerConfig?.defaultModel || o.model;
+
   let prompt = "";
   if (taskType === "translate") {
     prompt = `Translate the following text from ${input.sourceLanguage || "auto"} to ${input.targetLanguage}. Provide ONLY the raw translated text without commentary or quotation marks:\n\n${input.text}`;
@@ -758,28 +786,79 @@ async function executeActiveProviderTask(
     throw new Error(`Unknown task type: ${taskType}`);
   }
 
-  if (o.provider === "prompt_api") {
-    const session = await (globalThis as any).ai?.languageModel?.create?.();
-    if (session) {
+  if (effectiveProviderId === "prompt_api") {
+    await ensureBuiltinAiPolyfills();
+    const g = globalThis as any;
+    const LanguageModelApi = g.LanguageModel || g.ai?.languageModel;
+    if (LanguageModelApi && typeof LanguageModelApi.create === "function") {
+      let session;
       try {
-        return await session.prompt(prompt);
-      } finally {
-        if (typeof session.destroy === "function") {
-          session.destroy();
+        session = await LanguageModelApi.create();
+      } catch (err) {
+        console.warn(
+          "Prompt API session creation failed in active provider task:",
+          err,
+        );
+      }
+      if (session) {
+        try {
+          const raw = await session.prompt(prompt);
+          const textResult = String(raw || "").trim();
+          if (taskType === "detect-language") {
+            try {
+              const parsed = JSON.parse(textResult);
+              return Array.isArray(parsed) ? parsed : [parsed];
+            } catch {
+              return [{ detectedLanguage: "en", confidence: 0.8 }];
+            }
+          }
+          return textResult;
+        } finally {
+          if (typeof session.destroy === "function") {
+            session.destroy();
+          }
         }
       }
     }
   }
 
-  const provider = getProvider(o.provider);
-  if (!provider) {
-    throw new Error(`Provider ${o.provider} not found`);
+  const provider = getProvider(effectiveProviderId);
+  if (
+    !provider ||
+    !provider.baseUrl ||
+    provider.baseUrl.startsWith("builtin://") ||
+    provider.baseUrl.startsWith("local://") ||
+    provider.format === "prompt_api" ||
+    provider.format === "transformers_js"
+  ) {
+    if (taskType === "summarize") {
+      return await summarizeText(input.text, input);
+    } else if (taskType === "write") {
+      return await writeText(input.prompt, input);
+    } else if (taskType === "rewrite") {
+      return await rewriteText(input.text, input);
+    } else if (taskType === "proofread") {
+      return await proofreadText(input.text, input);
+    } else if (taskType === "detect-language") {
+      return await detectLanguage(input.text);
+    } else if (taskType === "translate") {
+      return await translateText(input.text, {
+        sourceLanguage: input.sourceLanguage || "auto",
+        targetLanguage: input.targetLanguage || "en",
+        ...input,
+      });
+    } else if (taskType === "semantic-embedder") {
+      return await embedText(input.text, input);
+    }
+    throw new Error(
+      `Provider ${effectiveProviderId} not found and no local fallback available`,
+    );
   }
 
-  const apiKey = await getApiKeyForRequest(o);
+  const apiKey = (await getApiKeyForRequest(o)) || "";
   const headers = {
     ...buildHeaders(provider, apiKey),
-    ...getProviderRuntimeHeaders(o, o.provider, ""),
+    ...getProviderRuntimeHeaders(o, effectiveProviderId, ""),
   };
 
   const body = formatRequest(
@@ -788,7 +867,7 @@ async function executeActiveProviderTask(
     [],
     {
       maxTokens: o.maxTokens || 2048,
-      model: o.model,
+      model: effectiveModel,
       system:
         "You are a specialized text task assistant. Fulfill the user request directly and accurately without conversational filler.",
     },
@@ -816,7 +895,8 @@ async function executeActiveProviderTask(
 
   if (taskType === "detect-language") {
     try {
-      return JSON.parse(textResult);
+      const detected = JSON.parse(textResult);
+      return Array.isArray(detected) ? detected : [detected];
     } catch {
       return [{ detectedLanguage: "en", confidence: 0.8 }];
     }

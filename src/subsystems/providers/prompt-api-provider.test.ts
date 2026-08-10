@@ -547,6 +547,104 @@ describe("prompt-api-provider", () => {
     );
     expect(availabilityEntry).toBeDefined();
   });
+
+  it("executes pinned native tool and completes second turn without hanging", async () => {
+    let turn = 0;
+    const clonePromptStreaming = jest.fn((_promptText: any) => {
+      turn++;
+      if (turn === 1) {
+        return {
+          [Symbol.asyncIterator]: async function* () {
+            yield JSON.stringify({
+              type: "tool_use",
+              tool_calls: [
+                {
+                  name: "translate_text",
+                  input: {
+                    text: "three",
+                    sourceLanguage: "en",
+                    targetLanguage: "es",
+                  },
+                },
+              ],
+            });
+          },
+        };
+      }
+
+      return {
+        [Symbol.asyncIterator]: async function* () {
+          yield JSON.stringify({
+            type: "response",
+            response: "The translation of 'three' is 'tres'.",
+          });
+        },
+      };
+    });
+
+    const createMock = jest.fn(async () => ({
+      clone: jest.fn(async () => ({
+        promptStreaming: clonePromptStreaming,
+        destroy: jest.fn(),
+      })),
+      destroy: jest.fn(),
+    }));
+
+    setLanguageModelMock(createMock);
+
+    jest.unstable_mockModule("../../worker/utils/executeTool.js", () => ({
+      executeTool: jest.fn(
+        async (_db, name: string, _input: any, _groupId: string) => {
+          if (name === "translate_text") {
+            // Emulate requestNativeTask resolving via pendingNativeAiResolvers
+            return "tres";
+          }
+          return `executed:${name}`;
+        },
+      ),
+    }));
+
+    jest.unstable_mockModule("../../worker/utils/post.js", () => ({
+      setPostHandler: jest.fn(),
+      post: jest.fn(),
+    }));
+
+    const { invokeWithPromptApi } = await import("./prompt-api-provider.js");
+
+    const emitted: any[] = [];
+    await invokeWithPromptApi(
+      {} as any,
+      "g1",
+      "system",
+      [{ role: "user", content: "Translate 'three' to Spanish" }],
+      1024,
+      async (msg: any) => {
+        emitted.push(msg);
+      },
+      null as any,
+      [
+        {
+          name: "translate_text",
+          description: "Translate text",
+          input_schema: {
+            type: "object",
+            properties: {
+              text: { type: "string" },
+              sourceLanguage: { type: "string" },
+              targetLanguage: { type: "string" },
+            },
+            required: ["text", "targetLanguage"],
+          },
+        },
+      ],
+    );
+
+    const responses = emitted.filter((m) => m?.type === "response");
+    expect(responses.length).toBe(1);
+    expect(responses[0]?.payload?.text).toContain(
+      "The translation of 'three' is 'tres'.",
+    );
+  });
 });
 
 describe("prompt-api-provider streaming events", () => {

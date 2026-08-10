@@ -366,7 +366,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     if (toolsBackendSelect) {
-      toolsBackendSelect.value = toolsPref || "local";
+      toolsBackendSelect.value = toolsPref || "active_provider";
     }
   }
 

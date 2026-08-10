@@ -122,10 +122,11 @@ Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading and a M
 
 - No network calls
 - No API key
-- Keyless, zero-cost (when available)
-- Model downloads required (progress surfaced via `model-download-progress` events)
+- Keyless, zero-cost (when native browser APIs are available)
+- Polyfill model downloads cached via Service Worker `CacheFirst` strategy (`huggingface.co`, `cdn.hf.co`, `.onnx`, `.onnx_data` up to 30 days) with progress surfaced via `model-download-progress` events
+- Hardware acceleration probing via **WebNN** (`navigator.ml`) and asynchronous WebGPU feature probing (`isWebGpuAdapterAvailable()`); if adapter/device initialization throws (e.g. iPadOS WebKit WebGPU binding errors), `createTaskInstanceWithFallback()` transparently recovers by switching to WebAssembly CPU (`device: "wasm"`, `dtype: "q8"`)
+- Configurable **Task Tools Backend** (`BUILTIN_AI_TOOLS_BACKEND` setting) — defaults to **Active Conversation LLM** (`active_provider`) so native tasks (summarize, rewrite, translate) route to the main LLM provider, with option to select local browser WebGPU/WASM polyfills (`local`)
 - Supports sampling parameters (`samplingMode`, `temperature`, `topK`) passed to model session initialization per Chrome Built-in AI / W3C Prompt API explainer
-- Hardware acceleration fallback via **WebNN** (`navigator.ml`) when enabled in Chromium via `chrome://flags/#web-machine-learning-neural-network` (automatically configures `device: "webnn"`, `dtype: "q4f16"` before WebGPU/WASM fallback)
 - Supports native `tools` parameter option (`inputSchema` / `parameters`) on session creation alongside JSON envelope fallback parsed by `parseStructured()`:
   ```json
   { "type": "tool_use", "tool_calls": [...] }

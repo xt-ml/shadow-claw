@@ -1,7 +1,9 @@
 import { jest } from "@jest/globals";
 import {
+  createTaskInstanceWithFallback,
   ensureBuiltinAiPolyfills,
   isBuiltinTaskSupported,
+  isWebGpuAdapterAvailable,
   summarizeText,
   writeText,
   rewriteText,
@@ -19,6 +21,7 @@ describe("builtin-ai-tasks subsystem", () => {
     originalGlobals.Rewriter = (globalThis as any).Rewriter;
     originalGlobals.LanguageDetector = (globalThis as any).LanguageDetector;
     originalGlobals.Translator = (globalThis as any).Translator;
+    delete (globalThis as any).TRANSFORMERS_CONFIG;
   });
 
   afterEach(() => {
@@ -28,6 +31,78 @@ describe("builtin-ai-tasks subsystem", () => {
     (globalThis as any).Rewriter = originalGlobals.Rewriter;
     (globalThis as any).LanguageDetector = originalGlobals.LanguageDetector;
     (globalThis as any).Translator = originalGlobals.Translator;
+    delete (globalThis as any).TRANSFORMERS_CONFIG;
+  });
+
+  describe("isWebGpuAdapterAvailable", () => {
+    it("returns false when navigator.gpu is absent or requestAdapter fails", async () => {
+      const originalNavigator = globalThis.navigator;
+      try {
+        Object.defineProperty(globalThis, "navigator", {
+          value: {},
+          configurable: true,
+        });
+
+        expect(await isWebGpuAdapterAvailable()).toBe(false);
+      } finally {
+        Object.defineProperty(globalThis, "navigator", {
+          value: originalNavigator,
+          configurable: true,
+        });
+      }
+    });
+
+    it("returns true when adapter and device creation succeed", async () => {
+      const originalNavigator = globalThis.navigator;
+      try {
+        Object.defineProperty(globalThis, "navigator", {
+          value: {
+            gpu: {
+              requestAdapter: async () => ({
+                requestDevice: async () => ({
+                  destroy: () => {},
+                }),
+              }),
+            },
+          },
+          configurable: true,
+        });
+
+        expect(await isWebGpuAdapterAvailable()).toBe(true);
+      } finally {
+        Object.defineProperty(globalThis, "navigator", {
+          value: originalNavigator,
+          configurable: true,
+        });
+      }
+    });
+  });
+
+  describe("createTaskInstanceWithFallback", () => {
+    it("retries with wasm CPU fallback when WebGPU backend fails during creation", async () => {
+      (globalThis as any).TRANSFORMERS_CONFIG = {
+        device: "webgpu",
+        dtype: "q4f16",
+      };
+
+      let calls = 0;
+      const mockFactory = {
+        create: async () => {
+          calls++;
+          if (calls === 1) {
+            throw new TypeError(
+              "[webgpu] TypeError: O().webgpuInit is not a function.",
+            );
+          }
+          return { ready: true };
+        },
+      };
+
+      const instance = await createTaskInstanceWithFallback(mockFactory, {});
+      expect(instance).toEqual({ ready: true });
+      expect((globalThis as any).TRANSFORMERS_CONFIG.device).toBe("wasm");
+      expect(calls).toBe(2);
+    });
   });
 
   describe("isBuiltinTaskSupported", () => {
@@ -45,6 +120,31 @@ describe("builtin-ai-tasks subsystem", () => {
   describe("ensureBuiltinAiPolyfills", () => {
     it("runs without error and attempts polyfill load when globals are absent", async () => {
       await expect(ensureBuiltinAiPolyfills()).resolves.not.toThrow();
+    });
+
+    it("configures wasm device when WebGPU requestAdapter returns null", async () => {
+      const originalNavigator = globalThis.navigator;
+      try {
+        Object.defineProperty(globalThis, "navigator", {
+          value: {
+            gpu: {
+              requestAdapter: async () => null,
+            },
+          },
+          configurable: true,
+        });
+
+        delete (globalThis as any).LanguageModel;
+        delete (globalThis as any).TRANSFORMERS_CONFIG;
+
+        await ensureBuiltinAiPolyfills();
+        expect((globalThis as any).TRANSFORMERS_CONFIG?.device).toBe("wasm");
+      } finally {
+        Object.defineProperty(globalThis, "navigator", {
+          value: originalNavigator,
+          configurable: true,
+        });
+      }
     });
   });
 

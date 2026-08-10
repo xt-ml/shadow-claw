@@ -2,10 +2,15 @@ import { isLlamafileResolutionError } from "../../../components/common/help/llam
 import { detectProviderHelpType } from "../../../components/common/help/providers.js";
 import { isTransformersJsResolutionError } from "../../../components/common/help/transformers.js";
 
-import { DEFAULT_GROUP_ID } from "../../../config/config.js";
+import {
+  CONFIG_KEYS,
+  DEFAULT_GROUP_ID,
+  getProvider,
+} from "../../../config/config.js";
 
 import { deleteTask } from "../../../db/deleteTask.js";
 import { getAllTasks } from "../../../db/getAllTasks.js";
+import { getConfig } from "../../../db/getConfig.js";
 import { getOrCreateSubscriberId } from "../../../db/getOrCreateSubscriberId.js";
 import { roomIdFromGroupId } from "../../../db/rooms.js";
 import { saveTask } from "../../../db/saveTask.js";
@@ -16,6 +21,12 @@ import { toolsStore } from "../../../stores/tools.js";
 import { getRemoteMcpConnection } from "../../../subsystems/mcp/mcp-connections.js";
 import { reconnectMcpOAuth } from "../../../subsystems/mcp/mcp-reconnect.js";
 import { getPushUrl } from "../../../subsystems/notifications/push-client.js";
+
+import {
+  buildHeaders,
+  formatRequest,
+  parseResponse,
+} from "../../../subsystems/providers/providers.js";
 
 import { showToast } from "../../../ui/toast.js";
 
@@ -34,7 +45,11 @@ import {
   writeText,
 } from "../../../subsystems/providers/builtin-ai-tasks.js";
 
-import { stopTransformersProgressPolling } from "./operations/provider.js";
+import {
+  getApiKeyForRequest,
+  getProviderRuntimeHeaders,
+  stopTransformersProgressPolling,
+} from "./operations/provider.js";
 import { createRoom, inviteToRoom, leaveRoom } from "./operations/room.js";
 import { deleteTaskFromServer, syncTaskToServer } from "./operations/task.js";
 
@@ -627,50 +642,58 @@ export async function handleWorkerMessage(
 
       (async () => {
         try {
-          const onProgress = (p: any) => {
-            o.events.emit("model-download-progress", {
-              groupId,
-              status: p.status,
-              progress: p.progress,
-              message: p.message,
-            });
-          };
+          const toolsBackendPref =
+            (await getConfig(db, CONFIG_KEYS.BUILTIN_AI_TOOLS_BACKEND)) ||
+            "active_provider";
 
           let result;
-          if (taskType === "summarize") {
-            result = await summarizeText(input.text, {
-              ...input,
-              onProgress,
-            });
-          } else if (taskType === "write") {
-            result = await writeText(input.prompt, {
-              ...input,
-              onProgress,
-            });
-          } else if (taskType === "rewrite") {
-            result = await rewriteText(input.text, {
-              ...input,
-              onProgress,
-            });
-          } else if (taskType === "proofread") {
-            result = await proofreadText(input.text, {
-              ...input,
-              onProgress,
-            });
-          } else if (taskType === "detect-language") {
-            result = await detectLanguage(input.text, { onProgress });
-          } else if (taskType === "translate") {
-            result = await translateText(input.text, {
-              ...input,
-              onProgress,
-            });
-          } else if (taskType === "semantic-embedder") {
-            result = await embedText(input.text, {
-              ...input,
-              onProgress,
-            });
+          if (toolsBackendPref !== "local") {
+            result = await executeActiveProviderTask(o, taskType, input);
           } else {
-            throw new Error(`Unknown native AI task: ${taskType}`);
+            const onProgress = (p: any) => {
+              o.events.emit("model-download-progress", {
+                groupId,
+                status: p.status,
+                progress: p.progress,
+                message: p.message,
+              });
+            };
+
+            if (taskType === "summarize") {
+              result = await summarizeText(input.text, {
+                ...input,
+                onProgress,
+              });
+            } else if (taskType === "write") {
+              result = await writeText(input.prompt, {
+                ...input,
+                onProgress,
+              });
+            } else if (taskType === "rewrite") {
+              result = await rewriteText(input.text, {
+                ...input,
+                onProgress,
+              });
+            } else if (taskType === "proofread") {
+              result = await proofreadText(input.text, {
+                ...input,
+                onProgress,
+              });
+            } else if (taskType === "detect-language") {
+              result = await detectLanguage(input.text, { onProgress });
+            } else if (taskType === "translate") {
+              result = await translateText(input.text, {
+                ...input,
+                onProgress,
+              });
+            } else if (taskType === "semantic-embedder") {
+              result = await embedText(input.text, {
+                ...input,
+                onProgress,
+              });
+            } else {
+              throw new Error(`Unknown native AI task: ${taskType}`);
+            }
           }
 
           if (groupId) {
@@ -709,4 +732,95 @@ export async function handleWorkerMessage(
       break;
     }
   }
+}
+
+async function executeActiveProviderTask(
+  o: Orchestrator,
+  taskType: string,
+  input: Record<string, any>,
+): Promise<any> {
+  let prompt = "";
+  if (taskType === "translate") {
+    prompt = `Translate the following text from ${input.sourceLanguage || "auto"} to ${input.targetLanguage}. Provide ONLY the raw translated text without commentary or quotation marks:\n\n${input.text}`;
+  } else if (taskType === "summarize") {
+    prompt = `Summarize the following text (type: ${input.type || "tldr"}, format: ${input.format || "plain-text"}, length: ${input.length || "medium"}). Provide ONLY the summary:\n\n${input.text}`;
+  } else if (taskType === "write") {
+    prompt = `Draft content for the following request (context: ${input.context || "none"}):\n\n${input.prompt}`;
+  } else if (taskType === "rewrite") {
+    prompt = `Rewrite the following text (tone: ${input.tone || "standard"}, length: ${input.length || "as-is"}):\n\n${input.text}`;
+  } else if (taskType === "proofread") {
+    prompt = `Proofread and correct grammar, spelling, and style in the following text. Provide ONLY the corrected text:\n\n${input.text}`;
+  } else if (taskType === "detect-language") {
+    prompt = `Detect the language of the following text. Return ONLY a JSON array of objects with "detectedLanguage" (BCP 47 code) and "confidence" (0.0 - 1.0), e.g. [{"detectedLanguage":"en","confidence":0.99}]:\n\n${input.text}`;
+  } else if (taskType === "semantic-embedder") {
+    prompt = `Provide a concise semantic description/representation for the following content:\n\n${JSON.stringify(input.text)}`;
+  } else {
+    throw new Error(`Unknown task type: ${taskType}`);
+  }
+
+  if (o.provider === "prompt_api") {
+    const session = await (globalThis as any).ai?.languageModel?.create?.();
+    if (session) {
+      try {
+        return await session.prompt(prompt);
+      } finally {
+        if (typeof session.destroy === "function") {
+          session.destroy();
+        }
+      }
+    }
+  }
+
+  const provider = getProvider(o.provider);
+  if (!provider) {
+    throw new Error(`Provider ${o.provider} not found`);
+  }
+
+  const apiKey = await getApiKeyForRequest(o);
+  const headers = {
+    ...buildHeaders(provider, apiKey),
+    ...getProviderRuntimeHeaders(o, o.provider, ""),
+  };
+
+  const body = formatRequest(
+    provider,
+    [{ role: "user", content: prompt }],
+    [],
+    {
+      maxTokens: o.maxTokens || 2048,
+      model: o.model,
+      system:
+        "You are a specialized text task assistant. Fulfill the user request directly and accurately without conversational filler.",
+    },
+  );
+
+  const res = await fetch(provider.baseUrl, {
+    body: JSON.stringify(body),
+    headers,
+    method: "POST",
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Active provider task API error ${res.status}: ${errText}`);
+  }
+
+  const json = await res.json();
+  const parsed = parseResponse(provider, json);
+  const textResult =
+    parsed.content
+      ?.filter((b: any) => b.type === "text")
+      ?.map((b: any) => b.text)
+      ?.join("")
+      ?.trim() || "";
+
+  if (taskType === "detect-language") {
+    try {
+      return JSON.parse(textResult);
+    } catch {
+      return [{ detectedLanguage: "en", confidence: 0.8 }];
+    }
+  }
+
+  return textResult;
 }

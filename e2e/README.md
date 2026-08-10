@@ -271,6 +271,7 @@ Behavior notes:
 The `<shadow-claw-tools>` component includes interactive controls for managing tool configuration:
 
 - **Internet Access Toggle** (`.tools__internet-access-toggle` / `#toolsInternetAccessOptIn`): A checkbox to toggle the shared full public internet access setting (`vm_bash_full_internet_access`) for both `bash` and `javascript` tools.
+- **Web Search Proxy Toggle & Settings**: Checkbox (`.tools__web-search-proxy-toggle`), custom CORS proxy endpoint input (`.tools__web-search-proxy-input`), and custom search URL template input (`.tools__web-search-template-input`) to configure search routing for `web_search`.
 - **WebMCP Toggle** (`.tools__webmcp-toggle`): Toggles integration with browser's Model Context Protocol.
 - **WebMCP Mode selector** (`.tools__webmcp-mode`): Selects the WebMCP execution mode.
 

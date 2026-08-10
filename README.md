@@ -118,8 +118,8 @@ ShadowClaw supports multiple LLM providers with a unified adapter pattern:
 - Adaptive rate limiting with `retry-after` support
 - Dynamic model registry with capability metadata (context, modalities, tool support)
 - Multi-format support (OpenAI, Anthropic, Prompt API)
-- Provider-specific error handling with help dialogs
-- Prompt API session retry loop — automatically retries `LanguageModel.create()` while the model is still downloading, with availability rechecks between attempts
+- Prompt API session retry loop & hardware feature probing — automatically probes WebGPU adapter capabilities, retries `LanguageModel.create()` during downloads, and dynamically falls back to WebAssembly CPU (`device: "wasm"`) if WebGPU initialization fails (e.g. on iPadOS)
+- Polyfill model cache — Service Worker `CacheFirst` caching strategy stores Hugging Face polyfill model binaries (`.onnx`, `.onnx_data`) for offline performance
 
 **Setup & details**: [docs/guides/adding-a-provider.md](docs/guides/adding-a-provider.md) | [docs/subsystems/providers.md](docs/subsystems/providers.md)
 
@@ -131,9 +131,9 @@ The agent has access to **50+ tools** including:
 | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Files**       | `read_file`, `write_file`, `patch_file`, `delete_file`, `move_file`, `copy_file`, `create_directory`, `list_files`, `open_file`, `attach_file_to_chat`, `send_file`, `search_files`, `diff_files` |
 | **Shell**       | `bash` (WebVM or just-bash emulator)                                                                                                                                                              |
-| **Built-in AI** | `summarize_text`, `write_text`, `rewrite_text`, `proofread_text`, `detect_language`, `translate_text`                                                                                             |
+| **Built-in AI** | `summarize_text`, `write_text`, `rewrite_text`, `proofread_text`, `detect_language`, `translate_text` (defaults to Active Conversation LLM backend with opt-in local browser Task API polyfill)   |
 | **Git**         | `git_clone`, `git_init`, `git_add`, `git_unstage`, `git_commit`, `git_push`, `git_pull`, `git_fetch`, `git_merge`, `git_diff`, and more                                                           |
-| **Web**         | `fetch_url`, `fetch_file`, `web_search` (DuckDuckGo via CORS proxy)                                                                                                                               |
+| **Web**         | `fetch_url`, `fetch_file`, `web_search` (DuckDuckGo via configurable CORS search proxy and URL templates)                                                                                         |
 | **Compute**     | `javascript` (sandboxed)                                                                                                                                                                          |
 | **Agents**      | `spawn_subagent` (parallel task delegation), `ask_user` (human-in-the-loop pause)                                                                                                                 |
 | **Time**        | `get_current_time` (ISO 8601 or IANA timezone)                                                                                                                                                    |

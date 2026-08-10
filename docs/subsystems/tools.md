@@ -151,12 +151,12 @@ The utility in `src/worker/utils/wrapUntrustedContent.ts` wraps externally-sourc
 
 ### Built-in AI tools
 
-- **`summarize_text`** — Uses native browser AI (or polyfill) to summarize text (supports performance preferences: `capability`, `speed`, `auto`).
-- **`write_text`** — Uses native browser AI to generate text.
-- **`rewrite_text`** — Uses native browser AI to rewrite text.
-- **`proofread_text`** — Uses native browser AI (or Rewriter fallback) to proofread and correct grammar/spelling.
-- **`detect_language`** — Detects the language of a text block.
-- **`translate_text`** — Translates text from one language to another using native browser capabilities.
+- **`summarize_text`** — Summarizes text via configured Task Tools Backend (`BUILTIN_AI_TOOLS_BACKEND`, defaulting to Active Conversation LLM with opt-in local browser Task API polyfills).
+- **`write_text`** — Drafts content for a prompt via configured Task Tools Backend.
+- **`rewrite_text`** — Rewrites text with specified tone/length parameters via configured Task Tools Backend.
+- **`proofread_text`** — Corrects grammar, spelling, and style via configured Task Tools Backend.
+- **`detect_language`** — Identifies the primary language of a text snippet (returns BCP 47 language codes with confidence scores).
+- **`translate_text`** — Translates text from source to target language via configured Task Tools Backend.
 
 ### Agentic tools
 

@@ -135,6 +135,53 @@ export function getSemanticEmbedderFactory(): any {
   );
 }
 
+export async function isWebGpuAdapterAvailable(): Promise<boolean> {
+  if (typeof navigator === "undefined" || !("gpu" in navigator)) {
+    return false;
+  }
+  try {
+    const adapter = await (navigator as any).gpu.requestAdapter();
+    if (!adapter) return false;
+    const device = await adapter.requestDevice();
+    if (device) {
+      if (typeof device.destroy === "function") {
+        device.destroy();
+      }
+      return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+export async function createTaskInstanceWithFallback<T = any>(
+  factory: { create: (opts?: any) => Promise<T> },
+  createOpts: any,
+): Promise<T> {
+  try {
+    return await factory.create(createOpts);
+  } catch (err: any) {
+    const errMsg = String(err?.message || err);
+    const isWebGpuErr =
+      errMsg.includes("webgpu") ||
+      errMsg.includes("webgpuInit") ||
+      errMsg.includes("no available backend");
+
+    const g = globalThis as any;
+    if (isWebGpuErr && g.TRANSFORMERS_CONFIG?.device === "webgpu") {
+      console.warn(
+        "Built-in AI Polyfill: WebGPU backend initialization failed. Retrying with WASM CPU fallback...",
+        err,
+      );
+      g.TRANSFORMERS_CONFIG.device = "wasm";
+      g.TRANSFORMERS_CONFIG.dtype = "q8";
+      return await factory.create(createOpts);
+    }
+    throw err;
+  }
+}
+
 /**
  * Dynamically import polyfills if native APIs are absent on globalThis or window.ai.
  */
@@ -178,8 +225,11 @@ export async function ensureBuiltinAiPolyfills(): Promise<void> {
           device = "webnn";
           dtype = "q4f16";
         } else if ("gpu" in navigator) {
-          device = "webgpu";
-          dtype = "q4f16";
+          const webgpuOk = await isWebGpuAdapterAvailable();
+          if (webgpuOk) {
+            device = "webgpu";
+            dtype = "q4f16";
+          }
         }
       }
 
@@ -339,7 +389,10 @@ export async function summarizeText(
     ...(options || {}),
     ...(monitor ? { monitor } : {}),
   };
-  const summarizer = await Summarizer.create(createOpts);
+  const summarizer = await createTaskInstanceWithFallback(
+    Summarizer,
+    createOpts,
+  );
   try {
     return await summarizer.summarize(
       text,
@@ -370,7 +423,7 @@ export async function writeText(
     ...(options || {}),
     ...(monitor ? { monitor } : {}),
   };
-  const writer = await Writer.create(createOpts);
+  const writer = await createTaskInstanceWithFallback(Writer, createOpts);
   try {
     return await writer.write(
       prompt,
@@ -401,7 +454,7 @@ export async function rewriteText(
     ...(options || {}),
     ...(monitor ? { monitor } : {}),
   };
-  const rewriter = await Rewriter.create(createOpts);
+  const rewriter = await createTaskInstanceWithFallback(Rewriter, createOpts);
   try {
     return await rewriter.rewrite(
       text,
@@ -432,7 +485,10 @@ export async function detectLanguage(
     ...(options || {}),
     ...(monitor ? { monitor } : {}),
   };
-  const detector = await LanguageDetector.create(createOpts);
+  const detector = await createTaskInstanceWithFallback(
+    LanguageDetector,
+    createOpts,
+  );
   try {
     return await detector.detect(text);
   } finally {
@@ -460,7 +516,10 @@ export async function translateText(
     ...options,
     ...(monitor ? { monitor } : {}),
   };
-  const translator = await Translator.create(createOpts);
+  const translator = await createTaskInstanceWithFallback(
+    Translator,
+    createOpts,
+  );
   try {
     return await translator.translate(text);
   } finally {
@@ -485,7 +544,10 @@ export async function proofreadText(
       ...(options || {}),
       ...(monitor ? { monitor } : {}),
     };
-    const proofreader = await Proofreader.create(createOpts);
+    const proofreader = await createTaskInstanceWithFallback(
+      Proofreader,
+      createOpts,
+    );
     try {
       if (typeof proofreader.proofread === "function") {
         return await proofreader.proofread(
@@ -529,7 +591,10 @@ export async function embedText(
     ...(options?.taskType ? { taskType: options.taskType } : {}),
     ...(monitor ? { monitor } : {}),
   };
-  const embedder = await SemanticEmbedder.create(createOpts);
+  const embedder = await createTaskInstanceWithFallback(
+    SemanticEmbedder,
+    createOpts,
+  );
   try {
     return await embedder.embed(text);
   } finally {

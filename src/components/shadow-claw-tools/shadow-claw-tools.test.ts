@@ -64,6 +64,12 @@ jest.unstable_mockModule("../../stores/tools.js", () => ({
       { id: "custom_profile", name: "Custom Profile" },
     ],
     activeProfileId: "custom_profile",
+    webSearchUseProxy: false,
+    webSearchProxyUrl: "/proxy",
+    webSearchUrl: "https://html.duckduckgo.com/html/?q={query}",
+    setWebSearchUseProxy: jest.fn(),
+    setWebSearchProxyUrl: jest.fn(),
+    setWebSearchUrl: jest.fn(),
     setAllEnabled: jest.fn(),
     setToolEnabled: jest.fn(),
     removeCustomTool: jest.fn(),
@@ -304,6 +310,66 @@ describe("shadow-claw-tools", () => {
         { orchestrator: orchestratorStore.orchestrator },
       );
     }
+    document.body.removeChild(el);
+  });
+
+  it("toggles Web Search proxy setting", async () => {
+    const el = new ShadowClawTools();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const toggle = el.shadowRoot?.querySelector(
+      ".tools__websearch-proxy-toggle",
+    ) as HTMLInputElement;
+    expect(toggle).toBeTruthy();
+
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event("change"));
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(toolsStore.setWebSearchUseProxy).toHaveBeenCalledWith(
+      expect.anything(),
+      true,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("saves Web Search Proxy URL and Search URL settings", async () => {
+    const el = new ShadowClawTools();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const proxyInput = el.shadowRoot?.querySelector(
+      ".tools__websearch-proxy-url-input",
+    ) as HTMLInputElement;
+    const urlInput = el.shadowRoot?.querySelector(
+      ".tools__websearch-url-input",
+    ) as HTMLInputElement;
+    const saveBtn = el.shadowRoot?.querySelector(
+      ".tools__save-websearch-btn",
+    ) as HTMLButtonElement;
+
+    expect(proxyInput).toBeTruthy();
+    expect(urlInput).toBeTruthy();
+    expect(saveBtn).toBeTruthy();
+
+    proxyInput.value = "/custom-proxy";
+    urlInput.value = "https://search.example.com/?q={query}";
+    saveBtn.click();
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(toolsStore.setWebSearchProxyUrl).toHaveBeenCalledWith(
+      expect.anything(),
+      "/custom-proxy",
+    );
+    expect(toolsStore.setWebSearchUrl).toHaveBeenCalledWith(
+      expect.anything(),
+      "https://search.example.com/?q={query}",
+    );
+
     document.body.removeChild(el);
   });
 });

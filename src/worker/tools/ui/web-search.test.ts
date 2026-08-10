@@ -91,4 +91,105 @@ describe("worker/tools/web-search", () => {
     expect(snippet1Index).toBeLessThan(endIndex);
     expect(snippet2Index).toBeLessThan(endIndex);
   });
+
+  // ── Proxy & Custom URL Tests ───────────────────────────────────────────────
+
+  it("uses target search URL directly when proxy is disabled", async () => {
+    const fetchSpy = jest.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      text: async () => makeDdgHtml("Test Title", "https://example.com", "Snippet"),
+    } as any);
+
+    const mockDb = {
+      transaction: jest.fn(() => ({
+        objectStore: jest.fn(() => ({
+          get: jest.fn((key: string) => {
+            const req: { result: any; onsuccess: any } = { result: undefined, onsuccess: null };
+            setTimeout(() => {
+              if (key === "web_search_use_proxy") req.result = { key, value: "false" };
+              if (key === "web_search_url") req.result = { key, value: "https://html.duckduckgo.com/html/?q={query}" };
+              if (req.onsuccess) req.onsuccess();
+            }, 0);
+            return req;
+          }),
+        })),
+      })),
+    } as any;
+
+    await executeWebSearch(mockDb, { query: "hello world" });
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://html.duckduckgo.com/html/?q=hello%20world",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("proxies request when web_search_use_proxy is true", async () => {
+    const fetchSpy = jest.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      text: async () => makeDdgHtml("Test Title", "https://example.com", "Snippet"),
+    } as any);
+
+    const mockDb = {
+      transaction: jest.fn(() => ({
+        objectStore: jest.fn(() => ({
+          get: jest.fn((key: string) => {
+            const req: { result: any; onsuccess: any } = { result: undefined, onsuccess: null };
+            setTimeout(() => {
+              if (key === "web_search_use_proxy") req.result = { key, value: "true" };
+              if (key === "web_search_proxy_url") req.result = { key, value: "/proxy" };
+              if (key === "web_search_url") req.result = { key, value: "https://html.duckduckgo.com/html/?q={query}" };
+              if (req.onsuccess) req.onsuccess();
+            }, 0);
+            return req;
+          }),
+        })),
+      })),
+    } as any;
+
+    await executeWebSearch(mockDb, { query: "test proxy" });
+
+    const expectedTarget = "https://html.duckduckgo.com/html/?q=test%20proxy";
+    const expectedProxyCall = `/proxy?url=${encodeURIComponent(expectedTarget)}`;
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expectedProxyCall,
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("supports custom search URL and custom proxy URL", async () => {
+    const fetchSpy = jest.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      text: async () => makeDdgHtml("Custom Engine", "https://custom.org", "Result"),
+    } as any);
+
+    const mockDb = {
+      transaction: jest.fn(() => ({
+        objectStore: jest.fn(() => ({
+          get: jest.fn((key: string) => {
+            const req: { result: any; onsuccess: any } = { result: undefined, onsuccess: null };
+            setTimeout(() => {
+              if (key === "web_search_use_proxy") req.result = { key, value: "true" };
+              if (key === "web_search_proxy_url") req.result = { key, value: "/my-proxy" };
+              if (key === "web_search_url") req.result = { key, value: "https://search.myengine.com/search?p={query}" };
+              if (req.onsuccess) req.onsuccess();
+            }, 0);
+            return req;
+          }),
+        })),
+      })),
+    } as any;
+
+    await executeWebSearch(mockDb, { query: "custom search" });
+
+    const expectedTarget = "https://search.myengine.com/search?p=custom%20search";
+    const expectedProxyCall = `/my-proxy?url=${encodeURIComponent(expectedTarget)}`;
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expectedProxyCall,
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
 });
+

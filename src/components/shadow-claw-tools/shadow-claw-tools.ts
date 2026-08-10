@@ -168,6 +168,60 @@ export class ShadowClawTools extends ShadowClawElement {
       });
     }
 
+    // Web Search toggle
+    const webSearchUseProxyToggle = root.querySelector(
+      ".tools__websearch-proxy-toggle",
+    ) as HTMLInputElement | null;
+    webSearchUseProxyToggle?.addEventListener("change", async () => {
+      try {
+        await toolsStore.setWebSearchUseProxy(
+          db,
+          webSearchUseProxyToggle.checked,
+        );
+        showInfo(
+          webSearchUseProxyToggle.checked
+            ? "Web Search local proxy enabled"
+            : "Web Search local proxy disabled",
+        );
+      } catch (err) {
+        webSearchUseProxyToggle.checked = !webSearchUseProxyToggle.checked;
+        showError(
+          `Failed to update Web Search proxy setting: ${
+            err instanceof Error ? err.message : String(err)
+          }`,
+        );
+      }
+    });
+
+    // Web Search save button
+    root
+      .querySelector(".tools__save-websearch-btn")
+      ?.addEventListener("click", async () => {
+        const proxyUrlInput = root.querySelector(
+          ".tools__websearch-proxy-url-input",
+        ) as HTMLInputElement | null;
+        const searchUrlInput = root.querySelector(
+          ".tools__websearch-url-input",
+        ) as HTMLInputElement | null;
+
+        const proxyUrl = proxyUrlInput?.value.trim() || "/proxy";
+        const searchUrl =
+          searchUrlInput?.value.trim() ||
+          "https://html.duckduckgo.com/html/?q={query}";
+
+        try {
+          await toolsStore.setWebSearchProxyUrl(db, proxyUrl);
+          await toolsStore.setWebSearchUrl(db, searchUrl);
+          showSuccess("Web Search settings saved");
+        } catch (err) {
+          showError(
+            `Failed to save Web Search settings: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
+      });
+
     // WebMCP mode selector
     const webMcpModeSelect = root.querySelector(
       ".tools__webmcp-mode",
@@ -468,6 +522,51 @@ export class ShadowClawTools extends ShadowClawElement {
         effect(() => {
           internetAccessToggle.checked =
             orchestratorStore.vmBashFullInternetAccess;
+        }),
+      );
+    }
+
+    // Web Search reactive effects
+    const webSearchProxyToggle = root.querySelector(
+      ".tools__websearch-proxy-toggle",
+    ) as HTMLInputElement | null;
+    const webSearchProxyUrlInput = root.querySelector(
+      ".tools__websearch-proxy-url-input",
+    ) as HTMLInputElement | null;
+    const webSearchUrlInput = root.querySelector(
+      ".tools__websearch-url-input",
+    ) as HTMLInputElement | null;
+
+    if (webSearchProxyToggle) {
+      this.addCleanup(
+        effect(() => {
+          webSearchProxyToggle.checked = toolsStore.webSearchUseProxy;
+        }),
+      );
+    }
+
+    if (webSearchProxyUrlInput) {
+      this.addCleanup(
+        effect(() => {
+          if (
+            document.activeElement !== webSearchProxyUrlInput &&
+            !webSearchProxyUrlInput.matches(":focus")
+          ) {
+            webSearchProxyUrlInput.value = toolsStore.webSearchProxyUrl;
+          }
+        }),
+      );
+    }
+
+    if (webSearchUrlInput) {
+      this.addCleanup(
+        effect(() => {
+          if (
+            document.activeElement !== webSearchUrlInput &&
+            !webSearchUrlInput.matches(":focus")
+          ) {
+            webSearchUrlInput.value = toolsStore.webSearchUrl;
+          }
         }),
       );
     }

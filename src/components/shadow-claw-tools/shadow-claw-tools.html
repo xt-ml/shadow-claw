@@ -113,6 +113,49 @@
         </div>
       </div>
 
+      <!-- Web Search -->
+      <div class="tools__section">
+        <h3 class="tools__section-title">🔍 Web Search</h3>
+        <label class="tools__websearch-optin" for="toolsWebSearchUseProxy">
+          <input
+            class="tools__websearch-proxy-toggle"
+            id="toolsWebSearchUseProxy"
+            type="checkbox"
+          />
+          Use local proxy for Web Search
+        </label>
+        <div class="tools__websearch-row">
+          <label for="toolsWebSearchProxyUrl">Proxy URL:</label>
+          <input
+            class="tools__websearch-proxy-url-input"
+            id="toolsWebSearchProxyUrl"
+            placeholder="/proxy"
+            type="text"
+          />
+        </div>
+        <div class="tools__websearch-row">
+          <label for="toolsWebSearchUrl">Web Search URL:</label>
+          <input
+            class="tools__websearch-url-input"
+            id="toolsWebSearchUrl"
+            placeholder="https://html.duckduckgo.com/html/?q={query}"
+            type="text"
+          />
+        </div>
+        <div class="tools__websearch-actions">
+          <button
+            class="tools__save-btn tools__save-websearch-btn"
+            type="button"
+          >
+            💾 Save Web Search Settings
+          </button>
+        </div>
+        <div class="tools__prompt-hint">
+          <strong>Proxy URL:</strong> Endpoint for the local proxy service (default: <code>/proxy</code>).<br />
+          <strong>Web Search URL:</strong> Target search engine URL template. Use <code>{query}</code> as placeholder for search terms (default: <code>https://html.duckduckgo.com/html/?q={query}</code>).
+        </div>
+      </div>
+
       <!-- WebMCP -->
       <div class="tools__section">
         <h3 class="tools__section-title">WebMCP</h3>

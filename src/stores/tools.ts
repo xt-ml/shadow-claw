@@ -17,6 +17,9 @@ export class ToolsStore {
   private _enabledTools: Signal.Computed<ToolDefinition[]>;
   private _profiles: Signal.State<ToolProfile[]>;
   private _systemPromptOverride: Signal.State<string>;
+  private _webSearchProxyUrl: Signal.State<string>;
+  private _webSearchUrl: Signal.State<string>;
+  private _webSearchUseProxy: Signal.State<boolean>;
 
   constructor() {
     this._enabledToolNames = new Signal.State(
@@ -26,6 +29,11 @@ export class ToolsStore {
     this._systemPromptOverride = new Signal.State("");
     this._profiles = new Signal.State([]);
     this._activeProfileId = new Signal.State(null);
+    this._webSearchUseProxy = new Signal.State(false);
+    this._webSearchProxyUrl = new Signal.State("/proxy");
+    this._webSearchUrl = new Signal.State(
+      "https://html.duckduckgo.com/html/?q={query}",
+    );
 
     // Derived signals using Signal.Computed for proper reactive propagation.
     this._allTools = new Signal.Computed(() => [
@@ -90,6 +98,9 @@ export class ToolsStore {
         systemPromptOverride: this._systemPromptOverride.get(),
         profiles: this._profiles.get(),
         activeProfileId: this._activeProfileId.get(),
+        webSearchUseProxy: this._webSearchUseProxy.get(),
+        webSearchProxyUrl: this._webSearchProxyUrl.get(),
+        webSearchUrl: this._webSearchUrl.get(),
       },
       null,
       2,
@@ -116,6 +127,18 @@ export class ToolsStore {
 
   get systemPromptOverride(): string {
     return this._systemPromptOverride.get();
+  }
+
+  get webSearchProxyUrl(): string {
+    return this._webSearchProxyUrl.get();
+  }
+
+  get webSearchUrl(): string {
+    return this._webSearchUrl.get();
+  }
+
+  get webSearchUseProxy(): boolean {
+    return this._webSearchUseProxy.get();
   }
 
   async activateProfile(
@@ -257,6 +280,29 @@ export class ToolsStore {
         data.activeProfileId,
       );
     }
+
+    if (typeof data.webSearchUseProxy === "boolean") {
+      this._webSearchUseProxy.set(data.webSearchUseProxy);
+      await setConfig(
+        db,
+        CONFIG_KEYS.WEB_SEARCH_USE_PROXY,
+        data.webSearchUseProxy ? "true" : "false",
+      );
+    }
+
+    if (typeof data.webSearchProxyUrl === "string") {
+      this._webSearchProxyUrl.set(data.webSearchProxyUrl);
+      await setConfig(
+        db,
+        CONFIG_KEYS.WEB_SEARCH_PROXY_URL,
+        data.webSearchProxyUrl,
+      );
+    }
+
+    if (typeof data.webSearchUrl === "string") {
+      this._webSearchUrl.set(data.webSearchUrl);
+      await setConfig(db, CONFIG_KEYS.WEB_SEARCH_URL, data.webSearchUrl);
+    }
   }
 
   /**
@@ -269,12 +315,18 @@ export class ToolsStore {
       promptOverride,
       profilesRaw,
       activeProfileIdRaw,
+      webSearchUseProxyRaw,
+      webSearchProxyUrlRaw,
+      webSearchUrlRaw,
     ] = await Promise.all([
       getConfig(db, CONFIG_KEYS.ENABLED_TOOLS),
       getConfig(db, CONFIG_KEYS.CUSTOM_TOOLS),
       getConfig(db, CONFIG_KEYS.SYSTEM_PROMPT_OVERRIDE),
       getConfig(db, CONFIG_KEYS.TOOL_PROFILES),
       getConfig(db, CONFIG_KEYS.ACTIVE_TOOL_PROFILE),
+      getConfig(db, CONFIG_KEYS.WEB_SEARCH_USE_PROXY),
+      getConfig(db, CONFIG_KEYS.WEB_SEARCH_PROXY_URL),
+      getConfig(db, CONFIG_KEYS.WEB_SEARCH_URL),
     ]);
 
     if (Array.isArray(enabledRaw)) {
@@ -296,6 +348,57 @@ export class ToolsStore {
     if (typeof activeProfileIdRaw === "string") {
       this._activeProfileId.set(activeProfileIdRaw);
     }
+
+    if (webSearchUseProxyRaw !== null && webSearchUseProxyRaw !== undefined) {
+      const strVal = String(webSearchUseProxyRaw).toLowerCase();
+      this._webSearchUseProxy.set(strVal === "true" || strVal === "1");
+    }
+
+    if (
+      typeof webSearchProxyUrlRaw === "string" &&
+      webSearchProxyUrlRaw.trim().length > 0
+    ) {
+      this._webSearchProxyUrl.set(webSearchProxyUrlRaw.trim());
+    }
+
+    if (
+      typeof webSearchUrlRaw === "string" &&
+      webSearchUrlRaw.trim().length > 0
+    ) {
+      this._webSearchUrl.set(webSearchUrlRaw.trim());
+    }
+  }
+
+  async setWebSearchProxyUrl(
+    db: ShadowClawDatabase,
+    proxyUrl: string,
+  ): Promise<void> {
+    const trimmed = proxyUrl.trim() || "/proxy";
+    this._webSearchProxyUrl.set(trimmed);
+    await setConfig(db, CONFIG_KEYS.WEB_SEARCH_PROXY_URL, trimmed);
+  }
+
+  async setWebSearchUrl(
+    db: ShadowClawDatabase,
+    url: string,
+  ): Promise<void> {
+    const trimmed =
+      url.trim() || "https://html.duckduckgo.com/html/?q={query}";
+    this._webSearchUrl.set(trimmed);
+    await setConfig(db, CONFIG_KEYS.WEB_SEARCH_URL, trimmed);
+  }
+
+  async setWebSearchUseProxy(
+    db: ShadowClawDatabase,
+    useProxy: boolean,
+  ): Promise<void> {
+    const enabled = !!useProxy;
+    this._webSearchUseProxy.set(enabled);
+    await setConfig(
+      db,
+      CONFIG_KEYS.WEB_SEARCH_USE_PROXY,
+      enabled ? "true" : "false",
+    );
   }
 
   async removeCustomTool(

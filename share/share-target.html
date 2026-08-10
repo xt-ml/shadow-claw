@@ -30,22 +30,22 @@
     <link rel="stylesheet" href="index.css" />
   </head>
   <body>
-    <template id="share-target-boot-template">
-      <div aria-hidden="true" class="boot-shell">
-        <header class="boot-shell-header">
-          <div class="boot-shell-brand">🦞 ShadowClaw</div>
-          <div class="boot-shell-status">Importing shared content...</div>
-        </header>
-        <div class="boot-shell-body">
-          <main class="boot-shell-main">
-            <div class="boot-shell-card"></div>
-            <div class="boot-shell-card"></div>
-          </main>
+    <shadow-claw>
+      <template id="share-target-boot-template">
+        <div aria-hidden="true" class="boot-shell">
+          <header class="boot-shell-header">
+            <div class="boot-shell-brand">🦞 ShadowClaw</div>
+            <div class="boot-shell-status">Importing shared content...</div>
+          </header>
+          <div class="boot-shell-body">
+            <main class="boot-shell-main">
+              <div class="boot-shell-card"></div>
+              <div class="boot-shell-card"></div>
+            </main>
+          </div>
         </div>
-      </div>
-    </template>
-
-    <shadow-claw></shadow-claw>
+      </template>
+    </shadow-claw>
 
     <script>
       const host = document.querySelector("shadow-claw");

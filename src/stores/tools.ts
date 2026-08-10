@@ -378,12 +378,8 @@ export class ToolsStore {
     await setConfig(db, CONFIG_KEYS.WEB_SEARCH_PROXY_URL, trimmed);
   }
 
-  async setWebSearchUrl(
-    db: ShadowClawDatabase,
-    url: string,
-  ): Promise<void> {
-    const trimmed =
-      url.trim() || "https://html.duckduckgo.com/html/?q={query}";
+  async setWebSearchUrl(db: ShadowClawDatabase, url: string): Promise<void> {
+    const trimmed = url.trim() || "https://html.duckduckgo.com/html/?q={query}";
     this._webSearchUrl.set(trimmed);
     await setConfig(db, CONFIG_KEYS.WEB_SEARCH_URL, trimmed);
   }

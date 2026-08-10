@@ -31,19 +31,13 @@ export async function executeWebSearch(
 
   if (db) {
     try {
-      const rawUseProxy = await getConfig(
-        db,
-        CONFIG_KEYS.WEB_SEARCH_USE_PROXY,
-      );
+      const rawUseProxy = await getConfig(db, CONFIG_KEYS.WEB_SEARCH_USE_PROXY);
       if (rawUseProxy !== null && rawUseProxy !== undefined) {
         const strVal = String(rawUseProxy).toLowerCase();
         useProxy = strVal === "true" || strVal === "1";
       }
 
-      const rawProxyUrl = await getConfig(
-        db,
-        CONFIG_KEYS.WEB_SEARCH_PROXY_URL,
-      );
+      const rawProxyUrl = await getConfig(db, CONFIG_KEYS.WEB_SEARCH_PROXY_URL);
       const fallbackProxyUrl = await getConfig(db, CONFIG_KEYS.PROXY_URL);
       if (typeof rawProxyUrl === "string" && rawProxyUrl.trim().length > 0) {
         proxyUrl = rawProxyUrl.trim();
@@ -65,10 +59,7 @@ export async function executeWebSearch(
 
   let targetUrl: string;
   if (searchUrlTemplate.includes("{query}")) {
-    targetUrl = searchUrlTemplate.replace(
-      "{query}",
-      encodeURIComponent(query),
-    );
+    targetUrl = searchUrlTemplate.replace("{query}", encodeURIComponent(query));
   } else {
     targetUrl = searchUrlTemplate + encodeURIComponent(query);
   }
@@ -126,4 +117,3 @@ export async function executeWebSearch(
     return `Search error: ${e.message}`;
   }
 }
-

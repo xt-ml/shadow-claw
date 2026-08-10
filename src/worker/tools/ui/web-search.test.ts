@@ -97,17 +97,26 @@ describe("worker/tools/web-search", () => {
   it("uses target search URL directly when proxy is disabled", async () => {
     const fetchSpy = jest.spyOn(globalThis, "fetch").mockResolvedValueOnce({
       ok: true,
-      text: async () => makeDdgHtml("Test Title", "https://example.com", "Snippet"),
+      text: async () =>
+        makeDdgHtml("Test Title", "https://example.com", "Snippet"),
     } as any);
 
     const mockDb = {
       transaction: jest.fn(() => ({
         objectStore: jest.fn(() => ({
           get: jest.fn((key: string) => {
-            const req: { result: any; onsuccess: any } = { result: undefined, onsuccess: null };
+            const req: { result: any; onsuccess: any } = {
+              result: undefined,
+              onsuccess: null,
+            };
             setTimeout(() => {
-              if (key === "web_search_use_proxy") req.result = { key, value: "false" };
-              if (key === "web_search_url") req.result = { key, value: "https://html.duckduckgo.com/html/?q={query}" };
+              if (key === "web_search_use_proxy")
+                req.result = { key, value: "false" };
+              if (key === "web_search_url")
+                req.result = {
+                  key,
+                  value: "https://html.duckduckgo.com/html/?q={query}",
+                };
               if (req.onsuccess) req.onsuccess();
             }, 0);
             return req;
@@ -127,18 +136,28 @@ describe("worker/tools/web-search", () => {
   it("proxies request when web_search_use_proxy is true", async () => {
     const fetchSpy = jest.spyOn(globalThis, "fetch").mockResolvedValueOnce({
       ok: true,
-      text: async () => makeDdgHtml("Test Title", "https://example.com", "Snippet"),
+      text: async () =>
+        makeDdgHtml("Test Title", "https://example.com", "Snippet"),
     } as any);
 
     const mockDb = {
       transaction: jest.fn(() => ({
         objectStore: jest.fn(() => ({
           get: jest.fn((key: string) => {
-            const req: { result: any; onsuccess: any } = { result: undefined, onsuccess: null };
+            const req: { result: any; onsuccess: any } = {
+              result: undefined,
+              onsuccess: null,
+            };
             setTimeout(() => {
-              if (key === "web_search_use_proxy") req.result = { key, value: "true" };
-              if (key === "web_search_proxy_url") req.result = { key, value: "/proxy" };
-              if (key === "web_search_url") req.result = { key, value: "https://html.duckduckgo.com/html/?q={query}" };
+              if (key === "web_search_use_proxy")
+                req.result = { key, value: "true" };
+              if (key === "web_search_proxy_url")
+                req.result = { key, value: "/proxy" };
+              if (key === "web_search_url")
+                req.result = {
+                  key,
+                  value: "https://html.duckduckgo.com/html/?q={query}",
+                };
               if (req.onsuccess) req.onsuccess();
             }, 0);
             return req;
@@ -161,18 +180,28 @@ describe("worker/tools/web-search", () => {
   it("supports custom search URL and custom proxy URL", async () => {
     const fetchSpy = jest.spyOn(globalThis, "fetch").mockResolvedValueOnce({
       ok: true,
-      text: async () => makeDdgHtml("Custom Engine", "https://custom.org", "Result"),
+      text: async () =>
+        makeDdgHtml("Custom Engine", "https://custom.org", "Result"),
     } as any);
 
     const mockDb = {
       transaction: jest.fn(() => ({
         objectStore: jest.fn(() => ({
           get: jest.fn((key: string) => {
-            const req: { result: any; onsuccess: any } = { result: undefined, onsuccess: null };
+            const req: { result: any; onsuccess: any } = {
+              result: undefined,
+              onsuccess: null,
+            };
             setTimeout(() => {
-              if (key === "web_search_use_proxy") req.result = { key, value: "true" };
-              if (key === "web_search_proxy_url") req.result = { key, value: "/my-proxy" };
-              if (key === "web_search_url") req.result = { key, value: "https://search.myengine.com/search?p={query}" };
+              if (key === "web_search_use_proxy")
+                req.result = { key, value: "true" };
+              if (key === "web_search_proxy_url")
+                req.result = { key, value: "/my-proxy" };
+              if (key === "web_search_url")
+                req.result = {
+                  key,
+                  value: "https://search.myengine.com/search?p={query}",
+                };
               if (req.onsuccess) req.onsuccess();
             }, 0);
             return req;
@@ -183,7 +212,8 @@ describe("worker/tools/web-search", () => {
 
     await executeWebSearch(mockDb, { query: "custom search" });
 
-    const expectedTarget = "https://search.myengine.com/search?p=custom%20search";
+    const expectedTarget =
+      "https://search.myengine.com/search?p=custom%20search";
     const expectedProxyCall = `/my-proxy?url=${encodeURIComponent(expectedTarget)}`;
 
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -192,4 +222,3 @@ describe("worker/tools/web-search", () => {
     );
   });
 });
-

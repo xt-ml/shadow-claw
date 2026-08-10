@@ -29,6 +29,7 @@ export const NANO_BUILTIN_PROFILE: ToolProfile = {
     "summarize_text",
     "write_text",
     "rewrite_text",
+    "proofread_text",
     "detect_language",
     "translate_text",
   ],

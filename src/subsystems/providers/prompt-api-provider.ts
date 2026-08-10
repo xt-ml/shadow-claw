@@ -195,12 +195,29 @@ function summarizePromptApiSession(
   ].join(" | ");
 }
 
+export type PromptApiSamplingMode =
+  | "most-predictable"
+  | "predictable"
+  | "slightly-predictable"
+  | "balanced"
+  | "slightly-creative"
+  | "creative"
+  | "most-creative";
+
+export interface PromptApiSamplingOptions {
+  samplingMode?: PromptApiSamplingMode;
+  temperature?: number;
+  topK?: number;
+}
+
 async function createPromptSessionWithProgress(
   emit: (message: any) => Promise<void> | void,
   groupId: string,
   abortSignal: AbortSignal | undefined,
   initialPrompts: any[] = [],
   emitErrorOnFailure = true,
+  samplingOptions?: PromptApiSamplingOptions,
+  tools?: ToolDefinition[],
 ) {
   let LanguageModelApi = getLanguageModelApi();
   if (!LanguageModelApi) {
@@ -213,7 +230,37 @@ async function createPromptSessionWithProgress(
     );
   }
 
-  const availability = await LanguageModelApi.availability(PROMPT_IO_OPTIONS);
+  const samplingParams = {
+    ...(samplingOptions?.samplingMode
+      ? { samplingMode: samplingOptions.samplingMode }
+      : {}),
+    ...(typeof samplingOptions?.temperature === "number" &&
+    Number.isFinite(samplingOptions.temperature)
+      ? { temperature: samplingOptions.temperature }
+      : {}),
+    ...(typeof samplingOptions?.topK === "number" &&
+    Number.isFinite(samplingOptions.topK)
+      ? { topK: Math.floor(samplingOptions.topK) }
+      : {}),
+  };
+
+  const nativeTools =
+    tools && tools.length > 0
+      ? tools.map((t) => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.input_schema,
+          parameters: t.input_schema,
+          ...(typeof (t as any).execute === "function"
+            ? { execute: (t as any).execute }
+            : {}),
+        }))
+      : undefined;
+
+  const availability = await LanguageModelApi.availability({
+    ...PROMPT_IO_OPTIONS,
+    ...samplingParams,
+  });
   await emitPromptApiDiagnostic(
     emit,
     groupId,
@@ -253,6 +300,8 @@ async function createPromptSessionWithProgress(
       try {
         session = await LanguageModelApi.create({
           ...PROMPT_IO_OPTIONS,
+          ...samplingParams,
+          ...(nativeTools ? { tools: nativeTools } : {}),
           ...(initialPrompts.length > 0 ? { initialPrompts } : {}),
           signal: abortSignal,
           monitor(monitorTarget: any) {
@@ -491,6 +540,8 @@ async function getOrCreateWarmSession(
   groupId: string,
   systemPrompt: string,
   abortSignal: AbortSignal | undefined,
+  samplingOptions?: PromptApiSamplingOptions,
+  tools?: ToolDefinition[],
 ) {
   const promptKey = String(systemPrompt || "");
 
@@ -512,12 +563,38 @@ async function getOrCreateWarmSession(
   }
 
   const initialPrompts = buildInitialPrompts(systemPrompt);
+  const samplingParams = {
+    ...(samplingOptions?.samplingMode
+      ? { samplingMode: samplingOptions.samplingMode }
+      : {}),
+    ...(typeof samplingOptions?.temperature === "number" &&
+    Number.isFinite(samplingOptions.temperature)
+      ? { temperature: samplingOptions.temperature }
+      : {}),
+    ...(typeof samplingOptions?.topK === "number" &&
+    Number.isFinite(samplingOptions.topK)
+      ? { topK: Math.floor(samplingOptions.topK) }
+      : {}),
+  };
+
+  const nativeTools =
+    tools && tools.length > 0
+      ? tools.map((t) => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.input_schema,
+          parameters: t.input_schema,
+        }))
+      : undefined;
+
   warmSessionState.session = await createPromptSessionWithProgress(
     emit,
     groupId,
     abortSignal,
     initialPrompts,
     false,
+    samplingOptions,
+    tools,
   ).catch(async (error) => {
     // Fallback to plain creation if monitor-path options fail on this build.
 
@@ -529,6 +606,8 @@ async function getOrCreateWarmSession(
     try {
       fallbackSession = await LanguageModelApi.create({
         ...PROMPT_IO_OPTIONS,
+        ...samplingParams,
+        ...(nativeTools ? { tools: nativeTools } : {}),
         ...(initialPrompts.length > 0 ? { initialPrompts } : {}),
         signal: abortSignal,
       });
@@ -564,12 +643,16 @@ async function acquirePromptSession(
   groupId: string,
   systemPrompt: string,
   abortSignal: AbortSignal | undefined,
+  samplingOptions?: PromptApiSamplingOptions,
+  tools?: ToolDefinition[],
 ) {
   const warmSession = await getOrCreateWarmSession(
     emit,
     groupId,
     systemPrompt,
     abortSignal,
+    samplingOptions,
+    tools,
   );
 
   if (warmSession && typeof warmSession.clone === "function") {
@@ -592,6 +675,9 @@ async function acquirePromptSession(
     groupId,
     abortSignal,
     buildInitialPrompts(systemPrompt),
+    true,
+    samplingOptions,
+    tools,
   );
 
   return { session: freshSession, destroyAfterUse: true };
@@ -699,6 +785,7 @@ export async function invokeWithPromptApi(
   abortSignal: AbortSignal | undefined,
   tools: ToolDefinition[] | undefined,
   invokeContext?: SubagentInvokeContext,
+  samplingOptions?: PromptApiSamplingOptions,
 ) {
   const activeTools = tools || PROMPT_API_TOOLS;
 
@@ -718,6 +805,8 @@ export async function invokeWithPromptApi(
     groupId,
     systemPrompt,
     abortSignal,
+    samplingOptions,
+    activeTools,
   );
 
   const runtimeModel = detectPromptApiModelLabel(session, LanguageModelApi);

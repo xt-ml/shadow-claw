@@ -87,6 +87,7 @@ import {
   summarize_text,
   write_text,
   rewrite_text,
+  proofread_text,
   detect_language,
   translate_text,
 } from "./builtin-ai.js";
@@ -148,6 +149,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   move_file,
   open_file,
   patch_file,
+  proofread_text,
   read_file,
   remote_mcp_call_tool,
   remote_mcp_list_tools,

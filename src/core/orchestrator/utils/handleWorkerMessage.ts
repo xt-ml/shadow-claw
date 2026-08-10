@@ -24,6 +24,16 @@ import {
   deliverResponse,
 } from "./deliverResponse.js";
 
+import {
+  detectLanguage,
+  embedText,
+  proofreadText,
+  rewriteText,
+  summarizeText,
+  translateText,
+  writeText,
+} from "../../../subsystems/providers/builtin-ai-tasks.js";
+
 import { stopTransformersProgressPolling } from "./operations/provider.js";
 import { createRoom, inviteToRoom, leaveRoom } from "./operations/room.js";
 import { deleteTaskFromServer, syncTaskToServer } from "./operations/task.js";
@@ -609,6 +619,87 @@ export async function handleWorkerMessage(
         o.roomManager.broadcastA2UI(roomIdFromGroupId(rcGroupId), envelope);
       }
 
+      break;
+    }
+
+    case "request-native-ai-task": {
+      const { id, groupId, taskType, input } = msg.payload;
+
+      (async () => {
+        try {
+          const onProgress = (p: any) => {
+            o.events.emit("model-download-progress", {
+              groupId,
+              status: p.status,
+              progress: p.progress,
+              message: p.message,
+            });
+          };
+
+          let result;
+          if (taskType === "summarize") {
+            result = await summarizeText(input.text, {
+              ...input,
+              onProgress,
+            });
+          } else if (taskType === "write") {
+            result = await writeText(input.prompt, {
+              ...input,
+              onProgress,
+            });
+          } else if (taskType === "rewrite") {
+            result = await rewriteText(input.text, {
+              ...input,
+              onProgress,
+            });
+          } else if (taskType === "proofread") {
+            result = await proofreadText(input.text, {
+              ...input,
+              onProgress,
+            });
+          } else if (taskType === "detect-language") {
+            result = await detectLanguage(input.text, { onProgress });
+          } else if (taskType === "translate") {
+            result = await translateText(input.text, {
+              ...input,
+              onProgress,
+            });
+          } else if (taskType === "semantic-embedder") {
+            result = await embedText(input.text, {
+              ...input,
+              onProgress,
+            });
+          } else {
+            throw new Error(`Unknown native AI task: ${taskType}`);
+          }
+
+          if (groupId) {
+            o.events.emit("model-download-progress", {
+              groupId,
+              status: "done",
+              progress: 1,
+            });
+          }
+
+          o.agentWorker?.postMessage({
+            type: "native-ai-task-response",
+            payload: { id, response: result },
+          });
+        } catch (err: any) {
+          if (groupId) {
+            o.events.emit("model-download-progress", {
+              groupId,
+              status: "error",
+              progress: null,
+              message: err?.message || String(err),
+            });
+          }
+          o.agentWorker?.postMessage({
+            type: "native-ai-task-response",
+            payload: { id, error: err?.message || String(err) },
+          });
+        }
+      })();
       break;
     }
 

@@ -74,6 +74,7 @@ import { executeUpdateMemory } from "../tools/workspace/update-memory.js";
 import { executeWriteFile } from "../tools/workspace/write-file.js";
 import {
   executeDetectLanguage,
+  executeProofreadText,
   executeRewriteText,
   executeSummarizeText,
   executeTranslateText,
@@ -483,23 +484,27 @@ export async function executeTool(
       }
 
       case "summarize_text": {
-        return await executeSummarizeText(input);
+        return await executeSummarizeText(input, groupId);
       }
 
       case "write_text": {
-        return await executeWriteText(input);
+        return await executeWriteText(input, groupId);
       }
 
       case "rewrite_text": {
-        return await executeRewriteText(input);
+        return await executeRewriteText(input, groupId);
+      }
+
+      case "proofread_text": {
+        return await executeProofreadText(input, groupId);
       }
 
       case "detect_language": {
-        return await executeDetectLanguage(input);
+        return await executeDetectLanguage(input, groupId);
       }
 
       case "translate_text": {
-        return await executeTranslateText(input);
+        return await executeTranslateText(input, groupId);
       }
 
       default:

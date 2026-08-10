@@ -19,7 +19,7 @@
 
 ## Optional
 
-- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): Shell, VM, git, channels, tools, providers, notifications, Electron, reactive UI, crypto, and more
+- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): Shell, VM, git, channels, tools, providers, built-in AI Task APIs, notifications, Electron, reactive UI, crypto, and more
 - [Guides](https://xt-ml.github.io/shadow-claw/docs/README.md#guides): Adding a provider/tool/channel/page/shell command
 - [Decisions](https://xt-ml.github.io/shadow-claw/docs/README.md#decisions): ADRs explaining bundled TypeScript, Signals, worker-isolated runtime, IndexedDB/OPFS storage
 - [e2e/README.md](https://xt-ml.github.io/shadow-claw/e2e/README.md): E2E test architecture

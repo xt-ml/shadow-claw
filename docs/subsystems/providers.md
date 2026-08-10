@@ -118,14 +118,15 @@ Used by direct Google Gemini API integrations (`format: "google"`). Note that th
 
 ### Prompt API format (`src/subsystems/providers/prompt-api-provider.ts`)
 
-Browser's experimental Prompt API (`window.LanguageModel`). Runs entirely on-device.
-Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading. Polyfill fallback for `prompt_api` is transparently enabled for provider invocations and context compaction.
+Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading and a Main-Thread RPC bridge (`request-native-ai-task`) to execute native browser Task APIs (`window.ai.*` / `window.translation.*` and global constructors for Summarizer, Writer, Rewriter, Proofreader, Language Detector, and Translator) off the Web Worker thread. Polyfill fallback for `prompt_api` is transparently enabled for provider invocations and context compaction.
 
 - No network calls
 - No API key
 - Keyless, zero-cost (when available)
 - Model downloads required (progress surfaced via `model-download-progress` events)
-- Tool calls use JSON envelope parsed by `parseStructured()`:
+- Supports sampling parameters (`samplingMode`, `temperature`, `topK`) passed to model session initialization per Chrome Built-in AI / W3C Prompt API explainer
+- Hardware acceleration fallback via **WebNN** (`navigator.ml`) when enabled in Chromium via `chrome://flags/#web-machine-learning-neural-network` (automatically configures `device: "webnn"`, `dtype: "q4f16"` before WebGPU/WASM fallback)
+- Supports native `tools` parameter option (`inputSchema` / `parameters`) on session creation alongside JSON envelope fallback parsed by `parseStructured()`:
   ```json
   { "type": "tool_use", "tool_calls": [...] }
   ```

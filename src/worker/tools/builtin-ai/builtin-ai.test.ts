@@ -1,30 +1,49 @@
 import { jest } from "@jest/globals";
-import {
-  executeSummarizeText,
-  executeWriteText,
-  executeRewriteText,
-  executeDetectLanguage,
-  executeTranslateText,
-} from "./builtin-ai.js";
+
+const mockPost = jest.fn();
+jest.unstable_mockModule("../../utils/post.js", () => ({
+  post: mockPost,
+}));
+
+let executeSummarizeText: any;
+let executeWriteText: any;
+let executeRewriteText: any;
+let executeProofreadText: any;
+let executeDetectLanguage: any;
+let executeTranslateText: any;
 
 describe("builtin-ai worker tools", () => {
-  const originalGlobals: Record<string, any> = {};
+  beforeAll(async () => {
+    const mod = await import("./builtin-ai.js");
+    executeSummarizeText = mod.executeSummarizeText;
+    executeWriteText = mod.executeWriteText;
+    executeRewriteText = mod.executeRewriteText;
+    executeProofreadText = mod.executeProofreadText;
+    executeDetectLanguage = mod.executeDetectLanguage;
+    executeTranslateText = mod.executeTranslateText;
+  });
 
   beforeEach(() => {
-    originalGlobals.Summarizer = (globalThis as any).Summarizer;
-    originalGlobals.Writer = (globalThis as any).Writer;
-    originalGlobals.Rewriter = (globalThis as any).Rewriter;
-    originalGlobals.LanguageDetector = (globalThis as any).LanguageDetector;
-    originalGlobals.Translator = (globalThis as any).Translator;
+    jest.clearAllMocks();
   });
 
   afterEach(() => {
-    (globalThis as any).Summarizer = originalGlobals.Summarizer;
-    (globalThis as any).Writer = originalGlobals.Writer;
-    (globalThis as any).Rewriter = originalGlobals.Rewriter;
-    (globalThis as any).LanguageDetector = originalGlobals.LanguageDetector;
-    (globalThis as any).Translator = originalGlobals.Translator;
+    (globalThis as any).pendingNativeAiResolvers = {};
   });
+
+  // Helper to simulate the main thread immediately resolving the RPC
+  const mockMainThreadResponse = (result: any) => {
+    mockPost.mockImplementationOnce((msg: any) => {
+      if (msg.type === "request-native-ai-task") {
+        setTimeout(() => {
+          const resolvers = (globalThis as any).pendingNativeAiResolvers;
+          if (resolvers && resolvers[msg.payload.id]) {
+            resolvers[msg.payload.id].resolve(result);
+          }
+        }, 0);
+      }
+    });
+  };
 
   describe("executeSummarizeText", () => {
     it("returns error message when text is missing", async () => {
@@ -32,19 +51,24 @@ describe("builtin-ai worker tools", () => {
       expect(res).toBe("Error: text is required for summarize_text");
     });
 
-    it("calls summarizeText and returns output", async () => {
-      (globalThis as any).Summarizer = {
-        create: jest.fn<any>().mockResolvedValue({
-          summarize: jest.fn<any>().mockResolvedValue("Bullet point 1"),
-          destroy: jest.fn<any>(),
-        }),
-      };
+    it("posts request to main thread and returns output", async () => {
+      mockMainThreadResponse("Bullet point 1");
 
       const res = await executeSummarizeText({
         text: "Hello world",
         type: "key-points",
+        preference: "speed",
       });
       expect(res).toBe("Bullet point 1");
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "request-native-ai-task",
+          payload: expect.objectContaining({
+            taskType: "summarize",
+            input: expect.objectContaining({ preference: "speed" }),
+          }),
+        }),
+      );
     });
   });
 
@@ -54,16 +78,17 @@ describe("builtin-ai worker tools", () => {
       expect(res).toBe("Error: prompt is required for write_text");
     });
 
-    it("calls writeText and returns output", async () => {
-      (globalThis as any).Writer = {
-        create: jest.fn<any>().mockResolvedValue({
-          write: jest.fn<any>().mockResolvedValue("Once upon a time"),
-          destroy: jest.fn<any>(),
-        }),
-      };
+    it("posts request to main thread and returns output", async () => {
+      mockMainThreadResponse("Once upon a time");
 
       const res = await executeWriteText({ prompt: "Write a story" });
       expect(res).toBe("Once upon a time");
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "request-native-ai-task",
+          payload: expect.objectContaining({ taskType: "write" }),
+        }),
+      );
     });
   });
 
@@ -73,19 +98,42 @@ describe("builtin-ai worker tools", () => {
       expect(res).toBe("Error: text is required for rewrite_text");
     });
 
-    it("calls rewriteText and returns output", async () => {
-      (globalThis as any).Rewriter = {
-        create: jest.fn<any>().mockResolvedValue({
-          rewrite: jest.fn<any>().mockResolvedValue("Formal greeting"),
-          destroy: jest.fn<any>(),
-        }),
-      };
+    it("posts request to main thread and returns output", async () => {
+      mockMainThreadResponse("Formal greeting");
 
       const res = await executeRewriteText({
         text: "Hey",
         tone: "more-formal",
       });
       expect(res).toBe("Formal greeting");
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "request-native-ai-task",
+          payload: expect.objectContaining({ taskType: "rewrite" }),
+        }),
+      );
+    });
+  });
+
+  describe("executeProofreadText", () => {
+    it("returns error message when text is missing", async () => {
+      const res = await executeProofreadText({});
+      expect(res).toBe("Error: text is required for proofread_text");
+    });
+
+    it("posts request to main thread and returns output", async () => {
+      mockMainThreadResponse("Corrected sentence.");
+
+      const res = await executeProofreadText({
+        text: "Im bad at grammar",
+      });
+      expect(res).toBe("Corrected sentence.");
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "request-native-ai-task",
+          payload: expect.objectContaining({ taskType: "proofread" }),
+        }),
+      );
     });
   });
 
@@ -95,20 +143,19 @@ describe("builtin-ai worker tools", () => {
       expect(res).toBe("Error: text is required for detect_language");
     });
 
-    it("calls detectLanguage and returns JSON output", async () => {
-      (globalThis as any).LanguageDetector = {
-        create: jest.fn<any>().mockResolvedValue({
-          detect: jest
-            .fn<any>()
-            .mockResolvedValue([{ detectedLanguage: "fr", confidence: 0.95 }]),
-          destroy: jest.fn<any>(),
-        }),
-      };
+    it("posts request to main thread and returns JSON output", async () => {
+      mockMainThreadResponse([{ detectedLanguage: "fr", confidence: 0.95 }]);
 
       const res = await executeDetectLanguage({ text: "Bonjour" });
       expect(JSON.parse(res)).toEqual([
         { detectedLanguage: "fr", confidence: 0.95 },
       ]);
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "request-native-ai-task",
+          payload: expect.objectContaining({ taskType: "detect-language" }),
+        }),
+      );
     });
   });
 
@@ -120,13 +167,8 @@ describe("builtin-ai worker tools", () => {
       );
     });
 
-    it("calls translateText and returns output", async () => {
-      (globalThis as any).Translator = {
-        create: jest.fn<any>().mockResolvedValue({
-          translate: jest.fn<any>().mockResolvedValue("Bonjour"),
-          destroy: jest.fn<any>(),
-        }),
-      };
+    it("posts request to main thread and returns output", async () => {
+      mockMainThreadResponse("Bonjour");
 
       const res = await executeTranslateText({
         text: "Hello",
@@ -134,6 +176,12 @@ describe("builtin-ai worker tools", () => {
         targetLanguage: "fr",
       });
       expect(res).toBe("Bonjour");
+      expect(mockPost).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "request-native-ai-task",
+          payload: expect.objectContaining({ taskType: "translate" }),
+        }),
+      );
     });
   });
 });

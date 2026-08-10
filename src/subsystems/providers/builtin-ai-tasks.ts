@@ -1,12 +1,12 @@
 /**
- * ShadowClaw — Chrome Built-in AI Task APIs & Prompt API Polyfills
+ * Provides typed access to
  *
- * Provides typed access to Chrome's built-in AI Task APIs:
- * - Summarizer API
+ * - Summarizer API (supports capability/speed/auto performance preferences)
  * - Writer API
  * - Rewriter API
  * - Language Detector API
  * - Translator API
+ * - Proofreader API (native or Rewriter fallback)
  *
  * Automatically defers to polyfills (`built-in-ai-task-apis-polyfills` and `prompt-api-polyfill`)
  * when native browser support is not present.
@@ -17,31 +17,73 @@ export type BuiltinTaskType =
   | "writer"
   | "rewriter"
   | "language-detector"
-  | "translator";
+  | "translator"
+  | "proofreader"
+  | "semantic-embedder";
 
-export interface SummarizeOptions {
+export interface BuiltinTaskProgress {
+  status: "running" | "done" | "error";
+  progress: number | null;
+  message?: string;
+}
+
+export type BuiltinTaskProgressCallback = (
+  progress: BuiltinTaskProgress,
+) => void;
+
+export interface BaseBuiltinTaskOptions {
+  onProgress?: BuiltinTaskProgressCallback;
+}
+
+export interface SummarizeOptions extends BaseBuiltinTaskOptions {
   type?: "key-points" | "tldr" | "teaser" | "headline";
   format?: "plain-text" | "markdown";
   length?: "short" | "medium" | "long";
   sharedContext?: string;
   context?: string;
+  preference?: "capability" | "speed" | "auto";
 }
 
-export interface WriteOptions {
+export interface WriteOptions extends BaseBuiltinTaskOptions {
   context?: string;
   sharedContext?: string;
 }
 
-export interface RewriteOptions {
+export interface RewriteOptions extends BaseBuiltinTaskOptions {
   context?: string;
   sharedContext?: string;
   tone?: "as-is" | "more-formal" | "more-casual";
   length?: "as-is" | "shorter" | "longer";
 }
 
-export interface TranslateOptions {
+export interface TranslateOptions extends BaseBuiltinTaskOptions {
   sourceLanguage: string;
   targetLanguage: string;
+}
+
+export interface LanguageDetectorOptions extends BaseBuiltinTaskOptions {}
+
+export interface ProofreadOptions extends BaseBuiltinTaskOptions {
+  context?: string;
+}
+
+export interface EmbedTextOptions extends BaseBuiltinTaskOptions {
+  taskType?:
+    | "semantic-similarity"
+    | "retrieval-query"
+    | "retrieval-document"
+    | "classification"
+    | "clustering";
+}
+
+export interface EmbeddingResultItem {
+  values: Float32Array | number[];
+  statistics?: { tokenCount?: number; truncated?: boolean };
+}
+
+export interface EmbeddingResult {
+  embeddings: EmbeddingResultItem[];
+  metadata?: { embeddingSpace?: string; maxInputTokens?: number };
 }
 
 export interface LanguageDetectionResult {
@@ -49,41 +91,167 @@ export interface LanguageDetectionResult {
   confidence: number;
 }
 
+export function getSummarizerFactory(): any {
+  const g = globalThis as any;
+  return g.Summarizer || g.ai?.summarizer;
+}
+
+export function getWriterFactory(): any {
+  const g = globalThis as any;
+  return g.Writer || g.ai?.writer;
+}
+
+export function getRewriterFactory(): any {
+  const g = globalThis as any;
+  return g.Rewriter || g.ai?.rewriter;
+}
+
+export function getLanguageDetectorFactory(): any {
+  const g = globalThis as any;
+  return (
+    g.LanguageDetector ||
+    g.ai?.languageDetector ||
+    g.translation?.languageDetector
+  );
+}
+
+export function getTranslatorFactory(): any {
+  const g = globalThis as any;
+  return g.Translator || g.ai?.translator || g.translation?.translator;
+}
+
+export function getProofreaderFactory(): any {
+  const g = globalThis as any;
+  return g.Proofreader || g.ai?.proofreader;
+}
+
+export function getSemanticEmbedderFactory(): any {
+  const g = globalThis as any;
+  return (
+    g.SemanticEmbedder ||
+    g.TextEmbedder ||
+    g.ai?.semanticEmbedder ||
+    g.ai?.textEmbedder
+  );
+}
+
 /**
- * Dynamically import polyfills if native APIs are absent on globalThis.
+ * Dynamically import polyfills if native APIs are absent on globalThis or window.ai.
  */
 export async function ensureBuiltinAiPolyfills(): Promise<void> {
   const g = globalThis as any;
   const tasks: Promise<any>[] = [];
 
-  if (!("LanguageModel" in g)) {
-    tasks.push(import("prompt-api-polyfill").catch(() => {}));
+  // Web Workers lack document and MutationObserver, which prompt-api-polyfill and built-in-ai-task-apis-polyfills require.
+  if (!("document" in g)) {
+    g.document = {
+      defaultView: g,
+      documentElement: null,
+      querySelector: () => null,
+      querySelectorAll: () => [],
+      createElement: (tag: string) => {
+        if (typeof OffscreenCanvas !== "undefined" && tag === "canvas") {
+          return new OffscreenCanvas(300, 150);
+        }
+        return {};
+      },
+    };
   }
-  if (!("Summarizer" in g)) {
+
+  if (!("MutationObserver" in g)) {
+    g.MutationObserver = class MutationObserver {
+      observe() {}
+      disconnect() {}
+      takeRecords() {
+        return [];
+      }
+    };
+  }
+
+  if (!("LanguageModel" in g) && !g.ai?.languageModel) {
+    if (!g.TRANSFORMERS_CONFIG) {
+      let device = "wasm";
+      let dtype = "q8";
+
+      if (typeof navigator !== "undefined") {
+        if ("ml" in navigator) {
+          device = "webnn";
+          dtype = "q4f16";
+        } else if ("gpu" in navigator) {
+          device = "webgpu";
+          dtype = "q4f16";
+        }
+      }
+
+      g.TRANSFORMERS_CONFIG = {
+        apiKey: "dummy",
+        device,
+        dtype,
+      };
+    }
     tasks.push(
-      import("built-in-ai-task-apis-polyfills/summarizer").catch(() => {}),
+      import("prompt-api-polyfill")
+        .then((mod) => {
+          if (mod?.LanguageModel && !g.LanguageModel) {
+            g.LanguageModel = mod.LanguageModel;
+          }
+        })
+        .catch(() => {}),
     );
   }
-  if (!("Writer" in g)) {
+  if (!getSummarizerFactory()) {
     tasks.push(
-      import("built-in-ai-task-apis-polyfills/writer").catch(() => {}),
+      import("built-in-ai-task-apis-polyfills/summarizer")
+        .then((mod) => {
+          if (mod?.Summarizer && !g.Summarizer) {
+            g.Summarizer = mod.Summarizer;
+          }
+        })
+        .catch(() => {}),
     );
   }
-  if (!("Rewriter" in g)) {
+  if (!getWriterFactory()) {
     tasks.push(
-      import("built-in-ai-task-apis-polyfills/rewriter").catch(() => {}),
+      import("built-in-ai-task-apis-polyfills/writer")
+        .then((mod) => {
+          if (mod?.Writer && !g.Writer) {
+            g.Writer = mod.Writer;
+          }
+        })
+        .catch(() => {}),
     );
   }
-  if (!("LanguageDetector" in g)) {
+  if (!getRewriterFactory()) {
     tasks.push(
-      import("built-in-ai-task-apis-polyfills/language-detector").catch(
-        () => {},
-      ),
+      import("built-in-ai-task-apis-polyfills/rewriter")
+        .then((mod) => {
+          if (mod?.Rewriter && !g.Rewriter) {
+            g.Rewriter = mod.Rewriter;
+          }
+        })
+        .catch(() => {}),
     );
   }
-  if (!("Translator" in g)) {
+  if (!getLanguageDetectorFactory()) {
     tasks.push(
-      import("built-in-ai-task-apis-polyfills/translator").catch(() => {}),
+      import("built-in-ai-task-apis-polyfills/language-detector")
+        .then((mod) => {
+          if (mod?.LanguageDetector && !g.LanguageDetector) {
+            g.LanguageDetector = mod.LanguageDetector;
+          }
+        })
+        .catch(() => {}),
+    );
+  }
+  if (!getTranslatorFactory()) {
+    tasks.push(
+      import("built-in-ai-task-apis-polyfills/translator")
+        .then((mod) => {
+          if (mod?.Translator && !g.Translator) {
+            g.Translator = mod.Translator;
+          }
+        })
+        .catch(() => {}),
     );
   }
 
@@ -96,21 +264,61 @@ export async function ensureBuiltinAiPolyfills(): Promise<void> {
  * Check if a built-in AI task API is currently available (natively or polyfilled).
  */
 export function isBuiltinTaskSupported(task: BuiltinTaskType): boolean {
-  const g = globalThis as any;
   switch (task) {
     case "summarizer":
-      return typeof g.Summarizer !== "undefined";
+      return typeof getSummarizerFactory() !== "undefined";
     case "writer":
-      return typeof g.Writer !== "undefined";
+      return typeof getWriterFactory() !== "undefined";
     case "rewriter":
-      return typeof g.Rewriter !== "undefined";
+      return typeof getRewriterFactory() !== "undefined";
     case "language-detector":
-      return typeof g.LanguageDetector !== "undefined";
+      return typeof getLanguageDetectorFactory() !== "undefined";
     case "translator":
-      return typeof g.Translator !== "undefined";
+      return typeof getTranslatorFactory() !== "undefined";
+    case "proofreader":
+      return typeof getProofreaderFactory() !== "undefined";
+    case "semantic-embedder":
+      return typeof getSemanticEmbedderFactory() !== "undefined";
     default:
       return false;
   }
+}
+
+function createMonitorHandler(
+  taskLabel: string,
+  onProgress?: BuiltinTaskProgressCallback,
+) {
+  if (!onProgress) return undefined;
+  return (monitorTarget: any) => {
+    if (
+      !monitorTarget ||
+      typeof monitorTarget.addEventListener !== "function"
+    ) {
+      return;
+    }
+    onProgress({
+      status: "running",
+      progress: 0,
+      message: `Downloading ${taskLabel} model... 0%`,
+    });
+    monitorTarget.addEventListener("downloadprogress", (e: any) => {
+      const loaded = Number(e?.loaded);
+      const total = Number(e?.total);
+      let ratio: number | null = null;
+      if (Number.isFinite(loaded) && Number.isFinite(total) && total > 0) {
+        ratio = Math.max(0, Math.min(1, loaded / total));
+      } else if (Number.isFinite(loaded) && loaded >= 0 && loaded <= 1) {
+        ratio = Math.max(0, Math.min(1, loaded));
+      }
+      const pct = ratio !== null ? Math.round(ratio * 100) : null;
+      onProgress({
+        status: "running",
+        progress: ratio,
+        message:
+          `Downloading ${taskLabel} model... ${pct !== null ? `${pct}%` : ""}`.trim(),
+      });
+    });
+  };
 }
 
 /**
@@ -121,12 +329,17 @@ export async function summarizeText(
   options?: SummarizeOptions,
 ): Promise<string> {
   await ensureBuiltinAiPolyfills();
-  const Summarizer = (globalThis as any).Summarizer;
+  const Summarizer = getSummarizerFactory();
   if (!Summarizer) {
     throw new Error("Summarizer API is not supported or polyfilled");
   }
 
-  const summarizer = await Summarizer.create(options || {});
+  const monitor = createMonitorHandler("Summarizer", options?.onProgress);
+  const createOpts = {
+    ...(options || {}),
+    ...(monitor ? { monitor } : {}),
+  };
+  const summarizer = await Summarizer.create(createOpts);
   try {
     return await summarizer.summarize(
       text,
@@ -147,12 +360,17 @@ export async function writeText(
   options?: WriteOptions,
 ): Promise<string> {
   await ensureBuiltinAiPolyfills();
-  const Writer = (globalThis as any).Writer;
+  const Writer = getWriterFactory();
   if (!Writer) {
     throw new Error("Writer API is not supported or polyfilled");
   }
 
-  const writer = await Writer.create(options || {});
+  const monitor = createMonitorHandler("Writer", options?.onProgress);
+  const createOpts = {
+    ...(options || {}),
+    ...(monitor ? { monitor } : {}),
+  };
+  const writer = await Writer.create(createOpts);
   try {
     return await writer.write(
       prompt,
@@ -173,12 +391,17 @@ export async function rewriteText(
   options?: RewriteOptions,
 ): Promise<string> {
   await ensureBuiltinAiPolyfills();
-  const Rewriter = (globalThis as any).Rewriter;
+  const Rewriter = getRewriterFactory();
   if (!Rewriter) {
     throw new Error("Rewriter API is not supported or polyfilled");
   }
 
-  const rewriter = await Rewriter.create(options || {});
+  const monitor = createMonitorHandler("Rewriter", options?.onProgress);
+  const createOpts = {
+    ...(options || {}),
+    ...(monitor ? { monitor } : {}),
+  };
+  const rewriter = await Rewriter.create(createOpts);
   try {
     return await rewriter.rewrite(
       text,
@@ -196,14 +419,20 @@ export async function rewriteText(
  */
 export async function detectLanguage(
   text: string,
+  options?: LanguageDetectorOptions,
 ): Promise<LanguageDetectionResult[]> {
   await ensureBuiltinAiPolyfills();
-  const LanguageDetector = (globalThis as any).LanguageDetector;
+  const LanguageDetector = getLanguageDetectorFactory();
   if (!LanguageDetector) {
     throw new Error("Language Detector API is not supported or polyfilled");
   }
 
-  const detector = await LanguageDetector.create();
+  const monitor = createMonitorHandler("LanguageDetector", options?.onProgress);
+  const createOpts = {
+    ...(options || {}),
+    ...(monitor ? { monitor } : {}),
+  };
+  const detector = await LanguageDetector.create(createOpts);
   try {
     return await detector.detect(text);
   } finally {
@@ -221,17 +450,91 @@ export async function translateText(
   options: TranslateOptions,
 ): Promise<string> {
   await ensureBuiltinAiPolyfills();
-  const Translator = (globalThis as any).Translator;
+  const Translator = getTranslatorFactory();
   if (!Translator) {
     throw new Error("Translator API is not supported or polyfilled");
   }
 
-  const translator = await Translator.create(options);
+  const monitor = createMonitorHandler("Translator", options?.onProgress);
+  const createOpts = {
+    ...options,
+    ...(monitor ? { monitor } : {}),
+  };
+  const translator = await Translator.create(createOpts);
   try {
     return await translator.translate(text);
   } finally {
     if (typeof translator.destroy === "function") {
       translator.destroy();
+    }
+  }
+}
+
+/**
+ * Proofread text using Chrome's Proofreader API (or Rewriter fallback).
+ */
+export async function proofreadText(
+  text: string,
+  options?: ProofreadOptions,
+): Promise<string> {
+  await ensureBuiltinAiPolyfills();
+  const Proofreader = getProofreaderFactory();
+  if (Proofreader) {
+    const monitor = createMonitorHandler("Proofreader", options?.onProgress);
+    const createOpts = {
+      ...(options || {}),
+      ...(monitor ? { monitor } : {}),
+    };
+    const proofreader = await Proofreader.create(createOpts);
+    try {
+      if (typeof proofreader.proofread === "function") {
+        return await proofreader.proofread(
+          text,
+          options?.context ? { context: options.context } : undefined,
+        );
+      }
+    } finally {
+      if (typeof proofreader.destroy === "function") {
+        proofreader.destroy();
+      }
+    }
+  }
+
+  // Fallback to Rewriter API with proofreading prompt
+  return await rewriteText(text, {
+    context: options?.context
+      ? `Proofread and correct grammar, spelling, and style errors. ${options.context}`
+      : "Proofread and correct grammar, spelling, and style errors.",
+    onProgress: options?.onProgress,
+  });
+}
+
+/**
+ * Generate semantic embeddings for input text using Chrome's Semantic Embedder API.
+ */
+export async function embedText(
+  text: string | string[],
+  options?: EmbedTextOptions,
+): Promise<EmbeddingResult> {
+  await ensureBuiltinAiPolyfills();
+  const SemanticEmbedder = getSemanticEmbedderFactory();
+  if (!SemanticEmbedder) {
+    throw new Error(
+      "Semantic Embedder API is not supported in this browser environment. Enable #semantic-embedder-api in chrome://flags or Edge Canary.",
+    );
+  }
+
+  const monitor = createMonitorHandler("SemanticEmbedder", options?.onProgress);
+  const createOpts = {
+    ...(options?.taskType ? { taskType: options.taskType } : {}),
+    ...(monitor ? { monitor } : {}),
+  };
+  const embedder = await SemanticEmbedder.create(createOpts);
+  try {
+    return await embedder.embed(text);
+  } finally {
+    if (typeof embedder.destroy === "function") {
+      embedder.destroy();
     }
   }
 }

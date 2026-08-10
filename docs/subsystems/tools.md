@@ -41,7 +41,7 @@ Tool definitions live in modular files under `src/subsystems/tools/` and are ass
 | `javascript.ts`    | `javascript`                                                                                                                                                                                                                                                                                                                                           |
 | `fetch.ts`         | `fetch_url`, `fetch_file`, `web_search`                                                                                                                                                                                                                                                                                                                |
 | `memory.ts`        | `update_memory`                                                                                                                                                                                                                                                                                                                                        |
-| `builtin-ai.ts`    | `summarize_text`, `write_text`, `rewrite_text`, `detect_language`, `translate_text`                                                                                                                                                                                                                                                                    |
+| `builtin-ai.ts`    | `summarize_text`, `write_text`, `rewrite_text`, `proofread_text`, `detect_language`, `translate_text`                                                                                                                                                                                                                                                  |
 | `tasks.ts`         | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`, `run_task`                                                                                                                                                                                                                                                   |
 | `chat.ts`          | `clear_chat`, `ask_user`                                                                                                                                                                                                                                                                                                                               |
 | `notifications.ts` | `show_toast`, `send_notification`                                                                                                                                                                                                                                                                                                                      |
@@ -149,13 +149,12 @@ The utility in `src/worker/utils/wrapUntrustedContent.ts` wraps externally-sourc
 --- END EXTERNAL CONTENT ---
 ```
 
-Applied by: `fetch_url`, `web_search`, and `remote_mcp_call_tool`. An optional `prefix` argument (e.g. an HTTP status line) is placed _before_ the BEGIN marker so provenance metadata remains outside the untrusted region.
-
 ### Built-in AI tools
 
-- **`summarize_text`** — Uses native browser AI (or polyfill) to summarize text.
+- **`summarize_text`** — Uses native browser AI (or polyfill) to summarize text (supports performance preferences: `capability`, `speed`, `auto`).
 - **`write_text`** — Uses native browser AI to generate text.
 - **`rewrite_text`** — Uses native browser AI to rewrite text.
+- **`proofread_text`** — Uses native browser AI (or Rewriter fallback) to proofread and correct grammar/spelling.
 - **`detect_language`** — Detects the language of a text block.
 - **`translate_text`** — Translates text from one language to another using native browser capabilities.
 

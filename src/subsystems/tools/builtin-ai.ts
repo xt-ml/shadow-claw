@@ -3,7 +3,7 @@ import { ToolDefinition } from "./types.js";
 export const summarize_text: ToolDefinition = {
   name: "summarize_text",
   description:
-    "Summarize text using Chrome's Built-in AI Summarizer API (or polyfill fallback). Produces key points, TLDR, teaser, or headline.",
+    "Summarize text using Web Platform's Summarizer API (or polyfill fallback). Produces key points, TLDR, teaser, or headline.",
   input_schema: {
     type: "object",
     properties: {
@@ -26,6 +26,11 @@ export const summarize_text: ToolDefinition = {
         enum: ["short", "medium", "long"],
         description: "Summary length (default: short).",
       },
+      preference: {
+        type: "string",
+        enum: ["capability", "speed", "auto"],
+        description: "Summarizer performance preference (default: auto).",
+      },
       context: {
         type: "string",
         description: "Optional background context for summarization.",
@@ -38,7 +43,7 @@ export const summarize_text: ToolDefinition = {
 export const write_text: ToolDefinition = {
   name: "write_text",
   description:
-    "Generate or draft text using Chrome's Built-in AI Writer API (or polyfill fallback).",
+    "Generate or draft text using Web Platform's Writer API (or polyfill fallback).",
   input_schema: {
     type: "object",
     properties: {
@@ -58,7 +63,7 @@ export const write_text: ToolDefinition = {
 export const rewrite_text: ToolDefinition = {
   name: "rewrite_text",
   description:
-    "Rewrite or rephrase text using Chrome's Built-in AI Rewriter API (or polyfill fallback). Can adjust tone or length.",
+    "Rewrite or rephrase text using Web Platform's Rewriter API (or polyfill fallback). Can adjust tone or length.",
   input_schema: {
     type: "object",
     properties: {
@@ -85,10 +90,30 @@ export const rewrite_text: ToolDefinition = {
   },
 };
 
+export const proofread_text: ToolDefinition = {
+  name: "proofread_text",
+  description:
+    "Proofread and correct grammar, spelling, and phrasing errors using Web Platform's Proofreader API (or polyfill fallback).",
+  input_schema: {
+    type: "object",
+    properties: {
+      text: {
+        type: "string",
+        description: "The text to proofread.",
+      },
+      context: {
+        type: "string",
+        description: "Optional background context for proofreading.",
+      },
+    },
+    required: ["text"],
+  },
+};
+
 export const detect_language: ToolDefinition = {
   name: "detect_language",
   description:
-    "Detect the language of input text using Chrome's Built-in AI Language Detector API (or polyfill fallback).",
+    "Detect the language of input text using Web Platform's Language Detector API (or polyfill fallback).",
   input_schema: {
     type: "object",
     properties: {
@@ -104,7 +129,7 @@ export const detect_language: ToolDefinition = {
 export const translate_text: ToolDefinition = {
   name: "translate_text",
   description:
-    "Translate text using Chrome's Built-in AI Translator API (or polyfill fallback).",
+    "Translate text using Web Platform's Translator API (or polyfill fallback).",
   input_schema: {
     type: "object",
     properties: {
@@ -122,5 +147,35 @@ export const translate_text: ToolDefinition = {
       },
     },
     required: ["text", "sourceLanguage", "targetLanguage"],
+  },
+};
+
+export const embed_text: ToolDefinition = {
+  name: "embed_text",
+  description:
+    "Generate semantic vector embeddings for input text using Web Platform's Semantic Embedder API.",
+  input_schema: {
+    type: "object",
+    properties: {
+      text: {
+        description: "The text string or array of text strings to embed.",
+        oneOf: [
+          { type: "string" },
+          { type: "array", items: { type: "string" } },
+        ],
+      },
+      taskType: {
+        type: "string",
+        enum: [
+          "semantic-similarity",
+          "retrieval-query",
+          "retrieval-document",
+          "classification",
+          "clustering",
+        ],
+        description: "Optional task type optimization hint.",
+      },
+    },
+    required: ["text"],
   },
 };

@@ -1,16 +1,16 @@
 import { jest } from "@jest/globals";
 
-describe("prompt-api-provider", () => {
-  function setLanguageModelMock(
-    createMock: jest.Mock,
-    availabilityMock = (jest.fn() as any).mockResolvedValue("available"),
-  ) {
-    const LanguageModel = function LanguageModel() {};
-    LanguageModel.availability = availabilityMock;
-    LanguageModel.create = createMock;
-    globalThis.LanguageModel = LanguageModel;
-  }
+function setLanguageModelMock(
+  createMock: jest.Mock,
+  availabilityMock = (jest.fn() as any).mockResolvedValue("available"),
+) {
+  const LanguageModel = function LanguageModel() {};
+  (LanguageModel as any).availability = availabilityMock;
+  (LanguageModel as any).create = createMock;
+  (globalThis as any).LanguageModel = LanguageModel;
+}
 
+describe("prompt-api-provider", () => {
   beforeEach(() => {
     jest.resetModules();
     delete globalThis.LanguageModel;
@@ -626,5 +626,132 @@ describe("prompt-api-provider streaming events", () => {
     expect(doneEmit).toBeDefined();
 
     expect(doneEmit.payload.text).toBe("Hello from Nano");
+  });
+
+  it("passes temperature and topK sampling parameters to LanguageModel.create", async () => {
+    const clonePromptStreaming = jest.fn(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield '{"type":"response","response":"sampled response"}';
+      },
+    }));
+
+    const createMock = jest.fn(async () => ({
+      clone: jest.fn(async () => ({
+        promptStreaming: clonePromptStreaming,
+        destroy: jest.fn(),
+      })),
+      destroy: jest.fn(),
+    }));
+
+    setLanguageModelMock(createMock);
+
+    const { invokeWithPromptApi } = await import("./prompt-api-provider.js");
+
+    await invokeWithPromptApi(
+      {} as any,
+      "g1",
+      "system",
+      [{ role: "user", content: "hi" }],
+      1024,
+      async () => {},
+      null as any,
+      [],
+      undefined,
+      { temperature: 0.7, topK: 3 },
+    );
+
+    expect(createMock).toHaveBeenCalled();
+    const createArg = (createMock.mock.calls[0] as any[])[0];
+    expect(createArg?.temperature).toBe(0.7);
+    expect(createArg?.topK).toBe(3);
+  });
+
+  it("passes native tools array to LanguageModel.create when tools are provided", async () => {
+    const clonePromptStreaming = jest.fn(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield '{"type":"response","response":"ok"}';
+      },
+    }));
+
+    const createMock = jest.fn(async () => ({
+      clone: jest.fn(async () => ({
+        promptStreaming: clonePromptStreaming,
+        destroy: jest.fn(),
+      })),
+      destroy: jest.fn(),
+    }));
+
+    setLanguageModelMock(createMock);
+
+    const { invokeWithPromptApi } = await import("./prompt-api-provider.js");
+
+    const sampleTool = {
+      name: "get_weather",
+      description: "Get weather",
+      input_schema: {
+        type: "object",
+        properties: { location: { type: "string" } },
+        required: ["location"],
+      },
+    };
+
+    await invokeWithPromptApi(
+      {} as any,
+      "g1",
+      "system",
+      [{ role: "user", content: "hi" }],
+      1024,
+      async () => {},
+      null as any,
+      [sampleTool as any],
+    );
+
+    expect(createMock).toHaveBeenCalled();
+    const createArg = (createMock.mock.calls[0] as any[])[0];
+    expect(createArg?.tools).toEqual([
+      {
+        name: "get_weather",
+        description: "Get weather",
+        inputSchema: sampleTool.input_schema,
+        parameters: sampleTool.input_schema,
+      },
+    ]);
+  });
+
+  it("passes samplingMode parameter to LanguageModel.create when specified", async () => {
+    const clonePromptStreaming = jest.fn(() => ({
+      [Symbol.asyncIterator]: async function* () {
+        yield '{"type":"response","response":"ok"}';
+      },
+    }));
+
+    const createMock = jest.fn(async () => ({
+      clone: jest.fn(async () => ({
+        promptStreaming: clonePromptStreaming,
+        destroy: jest.fn(),
+      })),
+      destroy: jest.fn(),
+    }));
+
+    setLanguageModelMock(createMock);
+
+    const { invokeWithPromptApi } = await import("./prompt-api-provider.js");
+
+    await invokeWithPromptApi(
+      {} as any,
+      "g1",
+      "system",
+      [{ role: "user", content: "hi" }],
+      1024,
+      async () => {},
+      null as any,
+      [],
+      undefined,
+      { samplingMode: "creative" },
+    );
+
+    expect(createMock).toHaveBeenCalled();
+    const createArg = (createMock.mock.calls[0] as any[])[0];
+    expect(createArg?.samplingMode).toBe("creative");
   });
 });

@@ -590,6 +590,21 @@ export async function handleMessage(event: MessageEvent): Promise<void> {
 
       break;
     }
+
+    case "native-ai-task-response": {
+      const { id, response, error } = payload;
+      const resolvers = (globalThis as any).pendingNativeAiResolvers;
+      if (resolvers && resolvers[id]) {
+        if (error) {
+          resolvers[id].reject(new Error(error));
+        } else {
+          resolvers[id].resolve(response);
+        }
+        delete resolvers[id];
+      }
+
+      break;
+    }
   }
 }
 

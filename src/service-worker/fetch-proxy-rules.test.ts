@@ -28,4 +28,20 @@ describe("shouldBypassFetchProxy", () => {
       true,
     );
   });
+
+  it("bypasses Hugging Face CDN subdomains", () => {
+    expect(
+      shouldBypassFetchProxy(
+        new URL("https://us.aws.cdn.hf.co/onnx-community/gemma-3-1b-it-ONNX-GQA/model.onnx_data"),
+        "http://localhost:8888",
+      ),
+    ).toBe(true);
+
+    expect(
+      shouldBypassFetchProxy(
+        new URL("https://cdn-lfs.huggingface.co/raw/model.bin"),
+        "http://localhost:8888",
+      ),
+    ).toBe(true);
+  });
 });

@@ -23,7 +23,11 @@ export function shouldBypassFetchProxy(
     return true;
   }
 
-  if (BYPASS_HOSTS.includes(requestUrl.hostname)) {
+  if (
+    BYPASS_HOSTS.includes(requestUrl.hostname) ||
+    requestUrl.hostname.endsWith(".huggingface.co") ||
+    requestUrl.hostname.endsWith(".hf.co")
+  ) {
     return true;
   }
 

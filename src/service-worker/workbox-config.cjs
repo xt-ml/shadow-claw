@@ -56,6 +56,34 @@ module.exports = {
       handler: "NetworkOnly",
     },
     {
+      urlPattern: ({ url }) => {
+        const isHfDomain =
+          url.hostname === "huggingface.co" ||
+          url.hostname.endsWith(".huggingface.co") ||
+          url.hostname.endsWith(".hf.co") ||
+          url.hostname === "hf.co";
+
+        if (!isHfDomain) return false;
+
+        return (
+          /\.(onnx|onnx_data|safetensors|bin|json|wasm|model)(\?.*)?$/i.test(
+            url.pathname,
+          ) || url.pathname.includes("/resolve/")
+        );
+      },
+      handler: "CacheFirst",
+      options: {
+        cacheName: "huggingface-models-cache",
+        expiration: {
+          maxEntries: 100,
+          maxAgeSeconds: 365 * 24 * 60 * 60,
+        },
+        cacheableResponse: {
+          statuses: [0, 200],
+        },
+      },
+    },
+    {
       // exclude loopback proxy paths and channel endpoints that should never be cached
       urlPattern: ({ url }) => {
         // Skip VM asset paths to avoid flooding CacheStorage with high-volume chunk requests.

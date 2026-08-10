@@ -203,6 +203,8 @@ html,
 body {
   -moz-osx-font-smoothing: grayscale;
   -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 
   background-color: var(--shadow-claw-bg-primary);
   color: var(--shadow-claw-text-primary);
@@ -213,6 +215,15 @@ body {
   height: 100vh;
   height: 100dvh;
   width: 100%;
+}
+
+/* Prevent Mobile Safari / iPadOS from auto-zooming viewport on input focus */
+@media (max-width: 48rem) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
 }
 
 shadow-claw {

@@ -38,8 +38,13 @@ jest.unstable_mockModule("./deleteAllGroupFiles.js", () => ({
 
 const {
   getStaticMainManifest,
+  getStaticPageContent,
+  fetchStaticMainFile,
+  fetchStaticMainManifest,
+  resolveStaticMainFileUrl,
   seedStaticMainSite,
   STATIC_MAIN_MANIFEST_PATH,
+  STATIC_MAIN_DIR,
   resolveStaticMainManifestUrl,
   PURGE_STORAGE_KEY,
 } = await import("./staticMainSite.js");
@@ -77,6 +82,75 @@ describe("staticMainSite", () => {
         ? new URL(STATIC_MAIN_MANIFEST_PATH, document.baseURI).toString()
         : `/${STATIC_MAIN_MANIFEST_PATH}`;
     expect(resolveStaticMainManifestUrl()).toBe(expected);
+  });
+
+  it("resolves static main file URL correctly", () => {
+    const expected =
+      typeof document !== "undefined" && document.baseURI
+        ? new URL(
+            `${STATIC_MAIN_DIR}/posts/test.md`,
+            document.baseURI,
+          ).toString()
+        : `/${STATIC_MAIN_DIR}/posts/test.md`;
+    expect(resolveStaticMainFileUrl("posts/test.md")).toBe(expected);
+  });
+
+  it("fetches static main file directly via fetchStaticMainFile", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      text: async () => "# Post Content",
+    });
+
+    const content = await fetchStaticMainFile("posts/test.md");
+    expect(content).toBe("# Post Content");
+  });
+
+  it("fetches static main manifest via fetchStaticMainManifest", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        pages: [{ displayPath: "posts/remote.md", content: "# Remote" }],
+      }),
+    });
+
+    const manifest = await fetchStaticMainManifest();
+    expect(manifest?.pages).toHaveLength(1);
+    expect(manifest?.pages[0].displayPath).toBe("posts/remote.md");
+  });
+
+  it("getStaticPageContent checks embedded script first, then static-main file, then remote manifest", async () => {
+    // 1. Embedded script present
+    const script = document.createElement("script");
+    script.id = "shadow-claw-static-manifest";
+    script.type = "application/json";
+    script.textContent = JSON.stringify({
+      pages: [{ displayPath: "page1.md", content: "# Embedded Page 1" }],
+    });
+    document.head.appendChild(script);
+
+    const fromEmbedded = await getStaticPageContent("page1.md");
+    expect(fromEmbedded).toBe("# Embedded Page 1");
+
+    // 2. Not in embedded script -> fetches static-main/file
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => "# Direct File Content",
+    });
+
+    const fromDirectFetch = await getStaticPageContent("page2.md");
+    expect(fromDirectFetch).toBe("# Direct File Content");
+
+    // 3. Direct fetch 404s -> fetches static-main-manifest.json
+    mockFetch.mockResolvedValueOnce({ ok: false }); // direct file 404
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        pages: [{ displayPath: "page3.md", content: "# From Full Manifest" }],
+      }),
+    });
+
+    const fromFullManifest = await getStaticPageContent("page3.md");
+    expect(fromFullManifest).toBe("# From Full Manifest");
   });
 
   it("reads static manifest from embedded DOM script tag if present", async () => {

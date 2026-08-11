@@ -180,6 +180,17 @@ describe("prerenderPrettyPaths", () => {
     expect(prettyHtml).toContain('id="shadow-claw-static-manifest"');
     expect(prettyHtml).toContain('data-shadow-claw-dsd="true"');
 
+    // Check that embedded manifest in pretty path HTML has ONLY the 1 current page by default
+    const manifestMatch = prettyHtml.match(
+      /<script id="shadow-claw-static-manifest"[^>]*>([\s\S]*?)<\/script>/,
+    );
+    expect(manifestMatch).not.toBeNull();
+    const embeddedManifest = JSON.parse(manifestMatch[1]);
+    expect(embeddedManifest.pages).toHaveLength(1);
+    expect(embeddedManifest.pages[0].displayPath).toBe(
+      "posts/2026-07-01_03-37-38.md",
+    );
+
     // Check that static-routing.json was written
     const manifestPath = path.join(publicDir, "static-routing.json");
     const manifestContent = await readFile(manifestPath, "utf8");
@@ -189,8 +200,105 @@ describe("prerenderPrettyPaths", () => {
         .prettyPath,
     ).toBe("/2026/06/30/on-developing-loops/");
 
+    // Check that static-main-manifest.json was written with full manifest
+    const staticMainManifestPath = path.join(
+      publicDir,
+      "static-main-manifest.json",
+    );
+    const staticMainManifestContent = await readFile(
+      staticMainManifestPath,
+      "utf8",
+    );
+    const parsedStaticMainManifest = JSON.parse(staticMainManifestContent);
+    expect(parsedStaticMainManifest.pages).toHaveLength(1);
+
     // Check that root index.html also received the static routing script
     const rootHtml = await readFile(indexPath, "utf8");
     expect(rootHtml).toContain('id="shadow-claw-static-routing"');
+  });
+
+  it("embeds all pages when prerenderPages is 'all'", async () => {
+    const publicDir = path.join(tmpDir, "dist/public");
+    const indexPath = path.join(publicDir, "index.html");
+    const sourcePath = path.join(tmpDir, "pages/main");
+    const routesPath = path.join(tmpDir, "pages/routes.json");
+
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+    await mkdir(path.join(sourcePath, "posts"), { recursive: true });
+    await mkdir(path.dirname(routesPath), { recursive: true });
+
+    await writeFile(
+      indexPath,
+      '<!doctype html><html><head><base href="/"><title>ShadowClaw</title></head><body><shadow-claw></shadow-claw></body></html>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      '<template><div class="app"><shadow-claw-pages></shadow-claw-pages></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      '<template><div class="pages__list" data-pages-list role="list"></div><div class="pages__rendered" data-pages-rendered hidden></div><div class="pages__empty" data-pages-empty></div><shadow-claw-page-header title="Pages"></shadow-claw-page-header></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      '<template><header class="header"><h2 class="header__title"></h2><details class="header__actions-disclosure"></details><div class="header__actions" id="header-actions-panel"></div></header></template>',
+      "utf8",
+    );
+
+    await writeFile(
+      path.join(sourcePath, "posts/post1.md"),
+      '---\ntitle: "Post 1"\n---\n# Post 1',
+      "utf8",
+    );
+    await writeFile(
+      path.join(sourcePath, "posts/post2.md"),
+      '---\ntitle: "Post 2"\n---\n# Post 2',
+      "utf8",
+    );
+
+    const routesJson = {
+      routes: {
+        "/pages/main/posts/post1.md": {
+          prettyPath: "/post-1/",
+        },
+      },
+    };
+    await writeFile(routesPath, JSON.stringify(routesJson, null, 2), "utf8");
+
+    await prerenderPrettyPaths({
+      publicDir,
+      routesPath,
+      sourcePath,
+      indexPath,
+      prerenderPages: "all",
+    });
+
+    const prettyHtml = await readFile(
+      path.join(publicDir, "post-1/index.html"),
+      "utf8",
+    );
+    const manifestMatch = prettyHtml.match(
+      /<script id="shadow-claw-static-manifest"[^>]*>([\s\S]*?)<\/script>/,
+    );
+    expect(manifestMatch).not.toBeNull();
+    const embeddedManifest = JSON.parse(manifestMatch[1]);
+    expect(embeddedManifest.pages).toHaveLength(2);
   });
 });

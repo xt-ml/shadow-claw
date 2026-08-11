@@ -115,10 +115,14 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 
 Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prerender-dsd-shell.mjs` and `bin/prerender-pretty-paths.mjs` support static server-side rendering with pretty path resolution:
 
-- **DSD Pre-rendering**: Builds Declarative Shadow DOM templates for the application shell and individual pages during build time.
+- **Configurable Pre-rendering (`--prerender-pages` / `PRERENDER_PAGES`)**:
+  - Configurable page range option (`all`, `none`/`0`, or a specific number `N`, defaulting to `1` / current page).
+  - Defaults to embedding only the current page in the SSR DSD shell and `#shadow-claw-static-manifest` to minimize bundle size and eliminate redundant SSR overhead.
+  - The build pipeline writes the full manifest to `static-main-manifest.json` and copies all source files to `static-main/` for runtime on-demand fetching.
+- **Dynamic Hydration & Fallback Loading**:
+  - When navigating to pages not embedded in the initial HTML or stored in local storage, `shadow-claw-pages` and `getStaticPageContent()` dynamically fetch individual markdown files from `static-main/` or fallback to `static-main-manifest.json`.
 - **Pretty Paths**: Configured via `pages/routes.json` to map markdown page sources to clean URL paths (e.g. `/2026/06/30/on-developing-loops/`). The pre-render pipeline generates dedicated `index.html` files with page-specific DSD templates.
 - **Static Routing Manifest**: Embedded via `#shadow-claw-static-routing` JSON script tags or fetched via `static-routing.json` (`src/storage/staticRouting.ts`), allowing client-side router (`app-routes.ts`) and pages component to resolve routes seamlessly across Node.js, Electron, and GitHub Pages.
-- **Fallback Rendering**: When page files are not found in storage (e.g. prior to storage initialization or in static-only hosting), `shadow-claw-pages` gracefully falls back to rendering static manifest content.
 - **DSD Shell Override**: Enabled via the "Override pre-rendered content" toggle in Settings (`CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON`). Hides the initial DSD shell on boot, showing the skeleton loader until hydration finishes.
 
 ---

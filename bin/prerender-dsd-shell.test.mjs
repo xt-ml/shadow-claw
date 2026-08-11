@@ -4,6 +4,7 @@ import {
   injectPageHeaderDsd,
   injectStaticManifestScript,
   markNoSeedPrerenderHost,
+  normalizePrerenderPagesOption,
   renderPageHtml,
   sortPagePaths,
 } from "./prerender-dsd-shell.mjs";
@@ -209,5 +210,24 @@ describe("pages DSD prerender parity", () => {
     expect(next).toContain(
       '<div class="pages__rendered" data-pages-rendered><h1>Hello</h1></div>',
     );
+  });
+});
+
+describe("normalizePrerenderPagesOption", () => {
+  it("handles all input variations correctly", () => {
+    expect(normalizePrerenderPagesOption("all")).toBe("all");
+    expect(normalizePrerenderPagesOption("ALL")).toBe("all");
+    expect(normalizePrerenderPagesOption("none")).toBe(0);
+    expect(normalizePrerenderPagesOption("0")).toBe(0);
+    expect(normalizePrerenderPagesOption(0)).toBe(0);
+    expect(normalizePrerenderPagesOption("false")).toBe(0);
+    expect(normalizePrerenderPagesOption(false)).toBe(0);
+    expect(normalizePrerenderPagesOption("1")).toBe(1);
+    expect(normalizePrerenderPagesOption(1)).toBe(1);
+    expect(normalizePrerenderPagesOption("current")).toBe(1);
+    expect(normalizePrerenderPagesOption("single")).toBe(1);
+    expect(normalizePrerenderPagesOption(undefined)).toBe(1);
+    expect(normalizePrerenderPagesOption("5")).toBe(5);
+    expect(normalizePrerenderPagesOption(5)).toBe(5);
   });
 });

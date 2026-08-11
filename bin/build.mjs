@@ -33,7 +33,11 @@ async function run(command, options = {}) {
 async function main() {
   const isProduction = env.NODE_ENV === "production";
   const copyAllAssets = env.COPY_ALL_ASSETS === "true";
-  const prerenderMainMemory = env.PRERENDER_MAIN_MEMORY !== "false";
+  const prerenderPages = env.PRERENDER_PAGES || "1";
+  const prerenderMainMemory =
+    env.PRERENDER_MAIN_MEMORY !== "false" &&
+    prerenderPages !== "none" &&
+    prerenderPages !== "0";
 
   // npm run -s build:clean
   await run("npm run -s build:clean");
@@ -75,10 +79,10 @@ async function main() {
   await run("npm run -s rolldown");
 
   // Render static DSD shell into index.html for no-JS and first paint.
-  // Pages content seeding from pages/main/ is enabled by default.
-  if (process.env.PRERENDER_MAIN_MEMORY !== "false") {
+  // Pages content seeding from pages/main/ is configurable via PRERENDER_PAGES (default "1" for current page).
+  if (prerenderMainMemory) {
     await run(
-      "node bin/prerender-dsd-shell.mjs dist/public/index.html pages/main",
+      `node bin/prerender-dsd-shell.mjs dist/public/index.html pages/main --prerender-pages=${prerenderPages}`,
     );
   } else {
     await run(
@@ -112,7 +116,7 @@ async function main() {
 
   // Prerender static pages for pretty paths defined in pages/routes.json (if present)
   await run(
-    "node bin/prerender-pretty-paths.mjs dist/public pages/routes.json pages/main",
+    `node bin/prerender-pretty-paths.mjs dist/public pages/routes.json pages/main --prerender-pages=${prerenderPages}`,
   );
 
   // build the service worker (all environments)

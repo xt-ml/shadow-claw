@@ -23,7 +23,7 @@ import {
 import { readGroupFile } from "../../storage/readGroupFile.js";
 import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
 import { writeGroupFile } from "../../storage/writeGroupFile.js";
-import { getStaticMainManifest } from "../../storage/staticMainSite.js";
+import { getStaticPageContent } from "../../storage/staticMainSite.js";
 
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
@@ -1279,12 +1279,9 @@ export class ShadowClawPages extends ShadowClawElement {
         );
       } catch (readErr) {
         try {
-          const manifest = await getStaticMainManifest();
-          const found = manifest?.pages?.find(
-            (p) => p.displayPath === selectedPage.path,
-          );
-          if (found && typeof found.content === "string") {
-            content = found.content;
+          const staticContent = await getStaticPageContent(selectedPage.path);
+          if (typeof staticContent === "string") {
+            content = staticContent;
             void Promise.resolve(
               writeGroupFile(
                 this.db,

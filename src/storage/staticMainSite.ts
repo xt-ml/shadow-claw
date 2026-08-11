@@ -33,6 +33,7 @@ export interface StaticMainManifest {
 export const PURGE_STORAGE_KEY = "sc:purge-id";
 
 export const STATIC_MAIN_MANIFEST_PATH = "static-main-manifest.json";
+export const STATIC_MAIN_DIR = "static-main";
 
 export function resolveStaticMainManifestUrl(): string {
   const fallback = `/${STATIC_MAIN_MANIFEST_PATH}`;
@@ -48,8 +49,67 @@ export function resolveStaticMainManifestUrl(): string {
   }
 }
 
-export async function getStaticMainManifest(): Promise<StaticMainManifest> {
-  if (typeof document !== "undefined") {
+export function resolveStaticMainFileUrl(displayPath: string): string {
+  const cleanPath = displayPath.replace(/^\/+/, "");
+  const relativePath = `${STATIC_MAIN_DIR}/${cleanPath}`;
+  const fallback = `/${relativePath}`;
+
+  if (typeof document === "undefined" || !document.baseURI) {
+    return fallback;
+  }
+
+  try {
+    return new URL(relativePath, document.baseURI).toString();
+  } catch {
+    return fallback;
+  }
+}
+
+export async function fetchStaticMainManifest(): Promise<StaticMainManifest | null> {
+  if (typeof fetch !== "function") {
+    return null;
+  }
+
+  try {
+    const url = resolveStaticMainManifestUrl();
+    const res = await fetch(url);
+    if (res.ok) {
+      const parsed = await res.json();
+      if (parsed && Array.isArray(parsed.pages)) {
+        return parsed as StaticMainManifest;
+      }
+    }
+  } catch {
+    // Fetch failed or unavailable
+  }
+
+  return null;
+}
+
+export async function fetchStaticMainFile(
+  displayPath: string,
+): Promise<string | null> {
+  if (typeof fetch !== "function") {
+    return null;
+  }
+
+  try {
+    const url = resolveStaticMainFileUrl(displayPath);
+    const res = await fetch(url);
+    if (res.ok) {
+      return await res.text();
+    }
+  } catch {
+    // Fetch failed or unavailable
+  }
+
+  return null;
+}
+
+export async function getStaticMainManifest(
+  options: { preferEmbedded?: boolean; fetchFallback?: boolean } = {},
+): Promise<StaticMainManifest> {
+  if (options.preferEmbedded !== false && typeof document !== "undefined") {
     const scriptEl = document.getElementById("shadow-claw-static-manifest");
     if (scriptEl && scriptEl.textContent) {
       try {
@@ -63,18 +123,10 @@ export async function getStaticMainManifest(): Promise<StaticMainManifest> {
     }
   }
 
-  if (typeof fetch === "function") {
-    try {
-      const url = resolveStaticMainManifestUrl();
-      const res = await fetch(url);
-      if (res.ok) {
-        const parsed = await res.json();
-        if (parsed && Array.isArray(parsed.pages)) {
-          return parsed as StaticMainManifest;
-        }
-      }
-    } catch {
-      // Fetch failed or unavailable
+  if (options.fetchFallback !== false) {
+    const fetched = await fetchStaticMainManifest();
+    if (fetched) {
+      return fetched;
     }
   }
 
@@ -86,6 +138,42 @@ export async function getStaticMainManifest(): Promise<StaticMainManifest> {
       },
     ],
   };
+}
+
+export async function getStaticPageContent(
+  displayPath: string,
+): Promise<string | null> {
+  if (typeof document !== "undefined") {
+    const scriptEl = document.getElementById("shadow-claw-static-manifest");
+    if (scriptEl && scriptEl.textContent) {
+      try {
+        const parsed = JSON.parse(scriptEl.textContent);
+        if (parsed && Array.isArray(parsed.pages)) {
+          const found = parsed.pages.find(
+            (p: StaticPageSource) => p.displayPath === displayPath,
+          );
+          if (found && typeof found.content === "string") {
+            return found.content;
+          }
+        }
+      } catch {}
+    }
+  }
+
+  const fileContent = await fetchStaticMainFile(displayPath);
+  if (typeof fileContent === "string") {
+    return fileContent;
+  }
+
+  const manifest = await fetchStaticMainManifest();
+  if (manifest && Array.isArray(manifest.pages)) {
+    const found = manifest.pages.find((p) => p.displayPath === displayPath);
+    if (found && typeof found.content === "string") {
+      return found.content;
+    }
+  }
+
+  return null;
 }
 
 async function processPurgeTokens(

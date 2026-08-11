@@ -83,6 +83,7 @@ jest.unstable_mockModule("../../storage/writeGroupFile.js", () => ({
 
 jest.unstable_mockModule("../../storage/staticMainSite.js", () => ({
   getStaticMainManifest: jest.fn(async () => ({ pages: [] })),
+  getStaticPageContent: jest.fn(async () => null),
   seedStaticMainSite: jest.fn(),
 }));
 
@@ -108,7 +109,7 @@ const { ShadowClawPages } = await import("./shadow-claw-pages.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { readGroupFile } = await import("../../storage/readGroupFile.js");
 const { writeGroupFile } = await import("../../storage/writeGroupFile.js");
-const { getStaticMainManifest } =
+const { getStaticPageContent } =
   await import("../../storage/staticMainSite.js");
 const { readGroupFileBytes } =
   await import("../../storage/readGroupFileBytes.js");
@@ -286,7 +287,7 @@ describe("shadow-claw-pages", () => {
     expect(setSanitizedHtml).toHaveBeenCalledTimes(1);
   });
 
-  it("falls back to static main manifest when readGroupFile fails and seeds to storage", async () => {
+  it("falls back to static main manifest/files when readGroupFile fails and seeds to storage", async () => {
     const component = new ShadowClawPages();
     const root = component.shadowRoot;
     if (!root) {
@@ -300,19 +301,13 @@ describe("shadow-claw-pages", () => {
     ).mockRejectedValue(new Error("File not found in storage"));
 
     (
-      getStaticMainManifest as jest.MockedFunction<typeof getStaticMainManifest>
-    ).mockResolvedValue({
-      pages: [
-        {
-          displayPath: "posts/test.md",
-          content: "# Fallback Manifest Content",
-        },
-      ],
-    });
+      getStaticPageContent as jest.MockedFunction<typeof getStaticPageContent>
+    ).mockResolvedValue("# Fallback Manifest Content");
 
     component.selectedPage = { groupId: "br:main", path: "posts/test.md" };
     await component.renderSelectedPage();
 
+    expect(getStaticPageContent).toHaveBeenCalledWith("posts/test.md");
     expect(writeGroupFile).toHaveBeenCalledWith(
       component.db,
       "br:main",

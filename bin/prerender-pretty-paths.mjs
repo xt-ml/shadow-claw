@@ -7,12 +7,14 @@ import { fileURLToPath } from "node:url";
 import {
   buildPagesDsdHost,
   buildShadowClawDsdTemplate,
+  buildShadowClawDsdTemplateWithoutPages,
   collectPageSources,
   escapeJsonForHtmlScript,
   extractTemplateContent,
   injectShadowClawTemplate,
   injectStaticManifestScript,
   markNoSeedPrerenderHost,
+  normalizePrerenderPagesOption,
   renderPageHtml,
   sortPagePaths,
   splitFrontmatterWithGrayMatter,
@@ -31,6 +33,7 @@ import {
  * @property {string} [routesPath]
  * @property {string} [sourcePath]
  * @property {string} [indexPath]
+ * @property {string|number} [prerenderPages]
  */
 
 /**
@@ -112,6 +115,12 @@ export async function prerenderPrettyPaths(options = {}) {
   const indexPath = path.resolve(
     options.indexPath || path.join(publicDir, "index.html"),
   );
+
+  const rawPagesOpt =
+    options.prerenderPages !== undefined
+      ? options.prerenderPages
+      : (process.env.PRERENDER_PAGES ?? 1);
+  const prerenderPages = normalizePrerenderPagesOption(rawPagesOpt);
 
   let routesJsonContent;
   try {
@@ -207,13 +216,28 @@ export async function prerenderPrettyPaths(options = {}) {
     pageHeaderTemplateSource,
   );
 
-  // Manifest of all pages for static fallback
-  const manifestPages = pageSourcesWithContent.map((page) => ({
+  // Manifest of all pages for static-main-manifest.json
+  const allManifestPages = pageSourcesWithContent.map((page) => ({
     displayPath: page.displayPath,
     content: page.content,
   }));
 
-  const manifestJson = JSON.stringify({ pages: manifestPages });
+  const fullManifestPath = path.join(publicDir, "static-main-manifest.json");
+  await writeFile(
+    fullManifestPath,
+    JSON.stringify({ pages: allManifestPages }, null, 2),
+    "utf8",
+  );
+
+  // Ensure static-main directory is populated
+  try {
+    const sourceStats = await stat(sourcePath);
+    if (sourceStats.isDirectory()) {
+      const targetDir = path.join(publicDir, "static-main");
+      await mkdir(targetDir, { recursive: true });
+      await cp(sourcePath, targetDir, { recursive: true });
+    }
+  } catch {}
 
   const generatedPaths = [];
 
@@ -245,12 +269,31 @@ export async function prerenderPrettyPaths(options = {}) {
       }
     }
 
-    // Reorder page sources so the matched page is first (active)
     const otherPages = pageSourcesWithContent.filter(
       (p) => p.displayPath !== matchedPage.displayPath,
     );
 
-    const orderedPages = [matchedPage, ...otherPages];
+    let dsdPages = [];
+    let embeddedManifestPages = [];
+
+    if (prerenderPages === "all") {
+      dsdPages = [matchedPage, ...otherPages];
+      embeddedManifestPages = dsdPages.map((p) => ({
+        displayPath: p.displayPath,
+        content: p.content,
+      }));
+    } else if (typeof prerenderPages === "number") {
+      if (prerenderPages === 0) {
+        dsdPages = [];
+        embeddedManifestPages = [];
+      } else {
+        dsdPages = [matchedPage, ...otherPages.slice(0, prerenderPages - 1)];
+        embeddedManifestPages = dsdPages.map((p) => ({
+          displayPath: p.displayPath,
+          content: p.content,
+        }));
+      }
+    }
 
     const parsed = splitFrontmatterWithGrayMatter(matchedPage.content);
     const frontmatterTitle =
@@ -261,18 +304,24 @@ export async function prerenderPrettyPaths(options = {}) {
       matchedPage.absolutePath || matchedPage.displayPath,
     );
 
-    const pagesDsdHost = buildPagesDsdHost(
-      pagesTemplateContent,
-      orderedPages,
-      rendered,
-      pageHeaderTemplateContent,
-      frontmatterTitle,
-    );
-
-    const shadowClawDsdTemplate = buildShadowClawDsdTemplate(
-      shadowClawTemplateContent,
-      pagesDsdHost,
-    );
+    let shadowClawDsdTemplate;
+    if (prerenderPages === 0) {
+      shadowClawDsdTemplate = buildShadowClawDsdTemplateWithoutPages(
+        shadowClawTemplateContent,
+      );
+    } else {
+      const pagesDsdHost = buildPagesDsdHost(
+        pagesTemplateContent,
+        dsdPages,
+        rendered,
+        pageHeaderTemplateContent,
+        frontmatterTitle,
+      );
+      shadowClawDsdTemplate = buildShadowClawDsdTemplate(
+        shadowClawTemplateContent,
+        pagesDsdHost,
+      );
+    }
 
     const htmlWithDsd = injectShadowClawTemplate(
       indexHtml,
@@ -280,9 +329,12 @@ export async function prerenderPrettyPaths(options = {}) {
     );
 
     const markedHtml = markNoSeedPrerenderHost(htmlWithDsd);
+    const embeddedManifestJson = JSON.stringify({
+      pages: embeddedManifestPages,
+    });
     const htmlWithManifest = injectStaticManifestScript(
       markedHtml,
-      manifestJson,
+      embeddedManifestJson,
     );
 
     const finalHtml = injectStaticRoutingScript(
@@ -306,7 +358,7 @@ export async function prerenderPrettyPaths(options = {}) {
   }
 
   console.log(
-    `Prerendered ${generatedPaths.length} pretty path page${generatedPaths.length === 1 ? "" : "s"} from ${routesPath}.`,
+    `Prerendered ${generatedPaths.length} pretty path page${generatedPaths.length === 1 ? "" : "s"} from ${routesPath} (prerender-pages: ${prerenderPages}).`,
   );
 
   return {
@@ -317,7 +369,18 @@ export async function prerenderPrettyPaths(options = {}) {
 }
 
 async function main() {
-  const args = process.argv.slice(2);
+  const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+  const flags = process.argv.slice(2).filter((a) => a.startsWith("--"));
+
+  let prerenderPages;
+  for (const flag of flags) {
+    if (flag.startsWith("--prerender-pages=")) {
+      prerenderPages = flag.slice("--prerender-pages=".length);
+    } else if (flag.startsWith("--pages=")) {
+      prerenderPages = flag.slice("--pages=".length);
+    }
+  }
+
   const publicDir = args[0] || "dist/public";
   const routesPath = args[1] || "pages/routes.json";
   const sourcePath = args[2] || "pages/main";
@@ -328,6 +391,7 @@ async function main() {
     routesPath,
     sourcePath,
     indexPath,
+    prerenderPages,
   });
 }
 

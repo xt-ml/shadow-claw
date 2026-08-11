@@ -507,7 +507,9 @@ export function buildShadowClawDsdTemplate(
   ].join("\n");
 }
 
-function buildShadowClawDsdTemplateWithoutPages(shadowClawTemplateContent) {
+export function buildShadowClawDsdTemplateWithoutPages(
+  shadowClawTemplateContent,
+) {
   let next = shadowClawTemplateContent;
 
   // Remove "active" from the Pages page div and Pages nav item
@@ -614,16 +616,60 @@ export function injectStaticManifestScript(html, manifestJson) {
   return `${scriptTag}\n${html}`;
 }
 
-async function main() {
-  const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
-  const flags = new Set(
-    process.argv.slice(2).filter((a) => a.startsWith("--")),
-  );
-  const noSeed = flags.has("--no-seed");
+/**
+ * Normalizes prerender-pages option to a number (0, 1, N) or "all".
+ *
+ * @param {string|number|boolean|undefined} val
+ * @returns {number|"all"}
+ */
+export function normalizePrerenderPagesOption(val) {
+  if (val === undefined || val === null || val === "" || val === true) {
+    return 1;
+  }
+  const str = String(val).trim().toLowerCase();
+  if (str === "all") {
+    return "all";
+  }
+  if (str === "none" || str === "0" || str === "false") {
+    return 0;
+  }
+  if (str === "1" || str === "current" || str === "single") {
+    return 1;
+  }
+  const num = parseInt(str, 10);
+  if (!isNaN(num) && num >= 0) {
+    return num;
+  }
+  return 1;
+}
 
-  const [indexPath = "dist/public/index.html", sourcePath = "main"] = args;
+/**
+ * @typedef {Object} PrerenderDsdShellOptions
+ * @property {string} [indexPath]
+ * @property {string} [sourcePath]
+ * @property {string} [publicDir]
+ * @property {boolean} [noSeed]
+ * @property {string|number} [prerenderPages]
+ */
 
-  const publicDir = path.dirname(indexPath);
+/**
+ * Injects Declarative Shadow DOM (DSD) shell and static manifest into index.html.
+ *
+ * @param {PrerenderDsdShellOptions} [options]
+ */
+export async function prerenderDsdShell(options = {}) {
+  const indexPath = path.resolve(options.indexPath || "dist/public/index.html");
+  const sourcePath = path.resolve(options.sourcePath || "pages/main");
+  const publicDir = path.resolve(options.publicDir || path.dirname(indexPath));
+
+  const rawPagesOpt =
+    options.prerenderPages !== undefined
+      ? options.prerenderPages
+      : options.noSeed
+        ? 0
+        : (process.env.PRERENDER_PAGES ?? 1);
+  const prerenderPages = normalizePrerenderPagesOption(rawPagesOpt);
+
   const shadowClawTemplatePath = path.join(
     publicDir,
     "components/shadow-claw/shadow-claw.html",
@@ -637,101 +683,6 @@ async function main() {
     "components/shadow-claw-page-header/shadow-claw-page-header.html",
   );
 
-  if (noSeed) {
-    const [indexHtml, shadowClawTemplateSource, pageSources] =
-      await Promise.all([
-        readFile(indexPath, "utf8"),
-        readFile(shadowClawTemplatePath, "utf8"),
-        collectPageSources(sourcePath),
-      ]);
-
-    const pageSourcesWithContent = await Promise.all(
-      pageSources.map(async (page) => {
-        const content =
-          typeof page.inlineContent === "string"
-            ? page.inlineContent
-            : await readFile(page.absolutePath, "utf8");
-        return { ...page, content };
-      }),
-    );
-
-    let manifestPurgeId;
-    const purgeTokens = {};
-    const filteredPages = pageSourcesWithContent.filter((page) => {
-      if (
-        page.displayPath.endsWith(".md") &&
-        /^---\r?\n[\s\S]*?slug:\s*"shadow-claw--purge-pages"[\s\S]*?---/mu.test(
-          page.content,
-        )
-      ) {
-        applyPurgePreRenderedStaticPages(
-          purgeTokens,
-          sourcePath,
-          page.displayPath,
-        );
-        if (!manifestPurgeId) {
-          const parsed = splitFrontmatterWithGrayMatter(page.content);
-          const rawPurgeId = parsed.data["purge-id"];
-          if (rawPurgeId !== undefined && rawPurgeId !== null) {
-            manifestPurgeId = String(rawPurgeId);
-          }
-        }
-      }
-      return true;
-    });
-
-    const manifestPages = filteredPages.map((page) => ({
-      displayPath: page.displayPath,
-      content: page.content,
-    }));
-
-    const manifest = { pages: manifestPages };
-    if (Object.keys(purgeTokens).length > 0) {
-      manifest.preRenderedStaticPages = purgeTokens;
-    }
-    if (manifestPurgeId) {
-      manifest.purgeId = manifestPurgeId;
-    }
-    const manifestJson = JSON.stringify(manifest);
-
-    const staticManifestPath = path.join(
-      publicDir,
-      "static-main-manifest.json",
-    );
-    await writeFile(
-      staticManifestPath,
-      JSON.stringify(manifest, null, 2),
-      "utf8",
-    );
-
-    try {
-      const sourceStats = await stat(sourcePath);
-      if (sourceStats.isDirectory()) {
-        const targetDir = path.join(publicDir, "static-main");
-        await mkdir(targetDir, { recursive: true });
-        await cp(sourcePath, targetDir, { recursive: true });
-      }
-    } catch {}
-
-    const shadowClawTemplateContent = extractTemplateContent(
-      shadowClawTemplateSource,
-    );
-    const shadowClawDsdTemplate = buildShadowClawDsdTemplateWithoutPages(
-      shadowClawTemplateContent,
-    );
-    const markedHtml = markNoSeedPrerenderHost(indexHtml);
-    const htmlWithDsd = injectShadowClawTemplate(
-      markedHtml,
-      shadowClawDsdTemplate,
-    );
-    const nextHtml = injectStaticManifestScript(htmlWithDsd, manifestJson);
-
-    await writeFile(indexPath, nextHtml, "utf8");
-    console.log(`Injected DSD shell into ${indexPath} (pages DSD disabled).`);
-
-    return;
-  }
-
   const [
     indexHtml,
     shadowClawTemplateSource,
@@ -741,8 +692,8 @@ async function main() {
   ] = await Promise.all([
     readFile(indexPath, "utf8"),
     readFile(shadowClawTemplatePath, "utf8"),
-    readFile(pagesTemplatePath, "utf8"),
-    readFile(pageHeaderTemplatePath, "utf8"),
+    readFile(pagesTemplatePath, "utf8").catch(() => ""),
+    readFile(pageHeaderTemplatePath, "utf8").catch(() => ""),
     collectPageSources(sourcePath),
   ]);
 
@@ -781,27 +732,27 @@ async function main() {
     return true;
   });
 
-  const manifestPages = filteredPageSources.map((page) => ({
+  // Always write full manifest to static-main-manifest.json
+  const fullManifestPages = filteredPageSources.map((page) => ({
     displayPath: page.displayPath,
     content: page.content,
   }));
-
-  const manifest = { pages: manifestPages };
+  const fullManifest = { pages: fullManifestPages };
   if (Object.keys(purgeTokens).length > 0) {
-    manifest.preRenderedStaticPages = purgeTokens;
+    fullManifest.preRenderedStaticPages = purgeTokens;
   }
   if (manifestPurgeId) {
-    manifest.purgeId = manifestPurgeId;
+    fullManifest.purgeId = manifestPurgeId;
   }
-  const manifestJson = JSON.stringify(manifest);
-
   const staticManifestPath = path.join(publicDir, "static-main-manifest.json");
+  await mkdir(publicDir, { recursive: true });
   await writeFile(
     staticManifestPath,
-    JSON.stringify(manifest, null, 2),
+    JSON.stringify(fullManifest, null, 2),
     "utf8",
   );
 
+  // Always copy static-main assets
   try {
     const sourceStats = await stat(sourcePath);
     if (sourceStats.isDirectory()) {
@@ -811,26 +762,57 @@ async function main() {
     }
   } catch {}
 
-  const [selectedPage] = filteredPageSources;
-  const selectedContent = selectedPage.content;
-  const parsed = splitFrontmatterWithGrayMatter(selectedContent);
-  const frontmatterTitle =
-    parsed.data && parsed.data.title ? parsed.data.title : "";
-  const rendered = await renderPageHtml(
-    selectedContent,
-    selectedPage.absolutePath || selectedPage.displayPath,
-  );
-
   const shadowClawTemplateContent = extractTemplateContent(
     shadowClawTemplateSource,
   );
+
+  if (prerenderPages === 0) {
+    const shadowClawDsdTemplate = buildShadowClawDsdTemplateWithoutPages(
+      shadowClawTemplateContent,
+    );
+    const markedHtml = markNoSeedPrerenderHost(indexHtml);
+    const htmlWithDsd = injectShadowClawTemplate(
+      markedHtml,
+      shadowClawDsdTemplate,
+    );
+    const emptyManifestJson = JSON.stringify({ pages: [] });
+    const nextHtml = injectStaticManifestScript(htmlWithDsd, emptyManifestJson);
+    await writeFile(indexPath, nextHtml, "utf8");
+    console.log(`Injected DSD shell into ${indexPath} (pages DSD disabled).`);
+    return;
+  }
+
+  // Determine pages to prerender into DSD and embedded manifest
+  const selectedPage = filteredPageSources[0];
+  let dsdPages = [];
+  let embeddedManifestPages = [];
+
+  if (prerenderPages === "all") {
+    dsdPages = filteredPageSources;
+    embeddedManifestPages = fullManifestPages;
+  } else if (typeof prerenderPages === "number") {
+    dsdPages = filteredPageSources.slice(0, prerenderPages);
+    embeddedManifestPages = fullManifestPages.slice(0, prerenderPages);
+  }
+
+  const selectedContent = selectedPage ? selectedPage.content : "";
+  const parsed = splitFrontmatterWithGrayMatter(selectedContent);
+  const frontmatterTitle =
+    parsed.data && parsed.data.title ? parsed.data.title : "";
+  const rendered = selectedPage
+    ? await renderPageHtml(
+        selectedContent,
+        selectedPage.absolutePath || selectedPage.displayPath,
+      )
+    : "";
+
   const pagesTemplateContent = extractTemplateContent(pagesTemplateSource);
   const pageHeaderTemplateContent = extractTemplateContent(
     pageHeaderTemplateSource,
   );
   const pagesDsdHost = buildPagesDsdHost(
     pagesTemplateContent,
-    filteredPageSources,
+    dsdPages,
     rendered,
     pageHeaderTemplateContent,
     frontmatterTitle,
@@ -843,19 +825,47 @@ async function main() {
     indexHtml,
     shadowClawDsdTemplate,
   );
-  // Mark the host with data-prerender-no-seed="true" in the HTML so that the
-  // CSS skeleton and content-hide rules in shadow-claw.css are active from the
-  // very first paint — without waiting for JS to set the attribute at runtime.
-  // Previously this was only done for the --no-seed path; the seeded path now
-  // gets it too so the sc-prerender-override visibility:hidden + skeleton CSS
-  // gives complete coverage with zero JS-timing dependency.
   const markedHtml = markNoSeedPrerenderHost(htmlWithDsd);
-  const nextHtml = injectStaticManifestScript(markedHtml, manifestJson);
 
+  const embeddedManifest = { pages: embeddedManifestPages };
+  if (Object.keys(purgeTokens).length > 0) {
+    embeddedManifest.preRenderedStaticPages = purgeTokens;
+  }
+  if (manifestPurgeId) {
+    embeddedManifest.purgeId = manifestPurgeId;
+  }
+  const embeddedManifestJson = JSON.stringify(embeddedManifest);
+
+  const nextHtml = injectStaticManifestScript(markedHtml, embeddedManifestJson);
   await writeFile(indexPath, nextHtml, "utf8");
   console.log(
-    `Injected DSD shell into ${indexPath} from ${sourcePath} (${pageSources.length} page${pageSources.length === 1 ? "" : "s"}).`,
+    `Injected DSD shell into ${indexPath} from ${sourcePath} (${dsdPages.length} of ${pageSources.length} page${pageSources.length === 1 ? "" : "s"} prerendered).`,
   );
+}
+
+async function main() {
+  const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
+  const flags = process.argv.slice(2).filter((a) => a.startsWith("--"));
+  const noSeed = flags.includes("--no-seed");
+
+  let prerenderPages;
+  for (const flag of flags) {
+    if (flag.startsWith("--prerender-pages=")) {
+      prerenderPages = flag.slice("--prerender-pages=".length);
+    } else if (flag.startsWith("--pages=")) {
+      prerenderPages = flag.slice("--pages=".length);
+    }
+  }
+
+  const [indexPath = "dist/public/index.html", sourcePath = "pages/main"] =
+    args;
+
+  await prerenderDsdShell({
+    indexPath,
+    sourcePath,
+    noSeed,
+    prerenderPages,
+  });
 }
 
 const isMainModule =

@@ -49,8 +49,9 @@ The list of saved pages, default pinned page, and active page are managed centra
 
 During store initialization, `seedStaticMainSite()` seeds default pages from the special `pages/main/` directory:
 
-1. Manifest discovery checks `#shadow-claw-static-manifest` JSON script elements or fetches `static-main-manifest.json` (which is built from `pages/main/`).
-2. Automatically ensures `MEMORY.md` and default static workspace pages exist unless they are marked as suppressed.
+1. Manifest discovery fetches `static-main-manifest.json` (which contains all static pages built from `pages/main/`), falling back to embedded `#shadow-claw-static-manifest` JSON script elements.
+2. On first boot, seeds all static markdown files (including subdirectories like `posts/`) into the `br:main` workspace file storage and marks seeding as complete in IndexedDB under `CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED`.
+3. Ensures `MEMORY.md` and default static workspace pages exist unless marked as suppressed. Subsequent reloads skip redundant re-seeding unless storage is cleared or a deployment purge is triggered via `purgeId`.
 
 ### Page Suppression (`src/storage/suppressedPages.ts`)
 

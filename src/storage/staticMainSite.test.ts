@@ -43,12 +43,15 @@ const {
   fetchStaticMainManifest,
   resolveStaticMainFileUrl,
   seedStaticMainSite,
+  isStaticMainSiteSeeded,
+  setStaticMainSiteSeeded,
+  staticMainSiteSeededKey,
   STATIC_MAIN_MANIFEST_PATH,
   STATIC_MAIN_DIR,
   resolveStaticMainManifestUrl,
   PURGE_STORAGE_KEY,
 } = await import("./staticMainSite.js");
-const { DEFAULT_GROUP_ID } = await import("../config/config.js");
+const { CONFIG_KEYS, DEFAULT_GROUP_ID } = await import("../config/config.js");
 
 describe("staticMainSite", () => {
   let mockFetch: any;
@@ -402,6 +405,114 @@ describe("staticMainSite", () => {
     expect(mockEnsureMainGroupIndex).toHaveBeenCalledWith(
       {} as any,
       DEFAULT_GROUP_ID,
+    );
+  });
+
+  it("checks and sets static main site seeded status in database config", async () => {
+    mockGetConfig.mockResolvedValueOnce(undefined);
+    const initialStatus = await isStaticMainSiteSeeded(
+      {} as any,
+      DEFAULT_GROUP_ID,
+    );
+    expect(initialStatus).toBe(false);
+    expect(mockGetConfig).toHaveBeenCalledWith(
+      {} as any,
+      CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED,
+    );
+
+    await setStaticMainSiteSeeded({} as any, DEFAULT_GROUP_ID, true);
+    expect(mockSetConfig).toHaveBeenCalledWith(
+      {} as any,
+      CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED,
+      true,
+    );
+
+    expect(staticMainSiteSeededKey("custom-group")).toBe(
+      `${CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED}:custom-group`,
+    );
+  });
+
+  it("fetches full static-main-manifest.json during seedStaticMainSite even if embedded script is partial", async () => {
+    // 1. Partial embedded script with only 1 page
+    const script = document.createElement("script");
+    script.id = "shadow-claw-static-manifest";
+    script.type = "application/json";
+    script.textContent = JSON.stringify({
+      pages: [
+        { displayPath: "posts/single-page.md", content: "# Single Page" },
+      ],
+    });
+    document.head.appendChild(script);
+
+    // 2. Full remote manifest with all pages
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        pages: [
+          { displayPath: "MEMORY.md", content: "# Main Memory" },
+          { displayPath: "posts/page-1.md", content: "# Page 1" },
+          { displayPath: "posts/page-2.md", content: "# Page 2" },
+        ],
+      }),
+    });
+
+    mockGroupFileExists.mockResolvedValue(false);
+    mockWriteGroupFile.mockResolvedValue(undefined);
+
+    const seeded = await seedStaticMainSite({} as any);
+
+    expect(seeded).toEqual([
+      { groupId: DEFAULT_GROUP_ID, path: "MEMORY.md" },
+      { groupId: DEFAULT_GROUP_ID, path: "posts/page-1.md" },
+      { groupId: DEFAULT_GROUP_ID, path: "posts/page-2.md" },
+    ]);
+    expect(mockWriteGroupFile).toHaveBeenCalledWith(
+      {} as any,
+      DEFAULT_GROUP_ID,
+      "posts/page-1.md",
+      "# Page 1",
+    );
+    expect(mockWriteGroupFile).toHaveBeenCalledWith(
+      {} as any,
+      DEFAULT_GROUP_ID,
+      "posts/page-2.md",
+      "# Page 2",
+    );
+    expect(mockSetConfig).toHaveBeenCalledWith(
+      {} as any,
+      CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED,
+      true,
+    );
+  });
+
+  it("fetches individual file content via fetchStaticMainFile during seeding if content is missing in manifest", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        pages: [
+          { displayPath: "posts/remote-file.md" }, // no content property
+        ],
+      }),
+    });
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      text: async () => "# Fetched Content",
+    });
+
+    mockGroupFileExists.mockResolvedValue(false);
+    mockWriteGroupFile.mockResolvedValue(undefined);
+
+    const seeded = await seedStaticMainSite({} as any);
+
+    expect(seeded).toEqual([
+      { groupId: DEFAULT_GROUP_ID, path: "posts/remote-file.md" },
+    ]);
+    expect(mockWriteGroupFile).toHaveBeenCalledWith(
+      {} as any,
+      DEFAULT_GROUP_ID,
+      "posts/remote-file.md",
+      "# Fetched Content",
     );
   });
 });

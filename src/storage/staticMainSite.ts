@@ -1,5 +1,7 @@
 /// <reference lib="dom" />
-import { DEFAULT_GROUP_ID } from "../config/config.js";
+import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config/config.js";
+import { getConfig } from "../db/getConfig.js";
+import { setConfig } from "../db/setConfig.js";
 import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "./defaultMemoryContent.mjs";
 import {
   ensureMainGroupMemory,
@@ -34,6 +36,33 @@ export const PURGE_STORAGE_KEY = "sc:purge-id";
 
 export const STATIC_MAIN_MANIFEST_PATH = "static-main-manifest.json";
 export const STATIC_MAIN_DIR = "static-main";
+
+export function staticMainSiteSeededKey(
+  groupId: string = DEFAULT_GROUP_ID,
+): string {
+  return groupId === DEFAULT_GROUP_ID
+    ? CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED
+    : `${CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED}:${groupId}`;
+}
+
+export async function isStaticMainSiteSeeded(
+  db: ShadowClawDatabase,
+  groupId: string = DEFAULT_GROUP_ID,
+): Promise<boolean> {
+  const key = staticMainSiteSeededKey(groupId);
+  const raw = (await getConfig(db, key)) as unknown;
+
+  return raw === true || raw === "true";
+}
+
+export async function setStaticMainSiteSeeded(
+  db: ShadowClawDatabase,
+  groupId: string = DEFAULT_GROUP_ID,
+  seeded: boolean = true,
+): Promise<void> {
+  const key = staticMainSiteSeededKey(groupId);
+  await setConfig(db, key, seeded);
+}
 
 export function resolveStaticMainManifestUrl(): string {
   const fallback = `/${STATIC_MAIN_MANIFEST_PATH}`;
@@ -109,17 +138,28 @@ export async function fetchStaticMainFile(
 export async function getStaticMainManifest(
   options: { preferEmbedded?: boolean; fetchFallback?: boolean } = {},
 ): Promise<StaticMainManifest> {
-  if (options.preferEmbedded !== false && typeof document !== "undefined") {
-    const scriptEl = document.getElementById("shadow-claw-static-manifest");
-    if (scriptEl && scriptEl.textContent) {
-      try {
-        const parsed = JSON.parse(scriptEl.textContent);
-        if (parsed && Array.isArray(parsed.pages)) {
-          return parsed as StaticMainManifest;
+  const parseEmbedded = (): StaticMainManifest | null => {
+    if (typeof document !== "undefined") {
+      const scriptEl = document.getElementById("shadow-claw-static-manifest");
+      if (scriptEl && scriptEl.textContent) {
+        try {
+          const parsed = JSON.parse(scriptEl.textContent);
+          if (parsed && Array.isArray(parsed.pages)) {
+            return parsed as StaticMainManifest;
+          }
+        } catch (err) {
+          console.warn("Failed to parse embedded static main manifest:", err);
         }
-      } catch (err) {
-        console.warn("Failed to parse embedded static main manifest:", err);
       }
+    }
+
+    return null;
+  };
+
+  if (options.preferEmbedded !== false) {
+    const embedded = parseEmbedded();
+    if (embedded) {
+      return embedded;
     }
   }
 
@@ -127,6 +167,13 @@ export async function getStaticMainManifest(
     const fetched = await fetchStaticMainManifest();
     if (fetched) {
       return fetched;
+    }
+  }
+
+  if (options.preferEmbedded === false) {
+    const embedded = parseEmbedded();
+    if (embedded) {
+      return embedded;
     }
   }
 
@@ -234,7 +281,9 @@ export async function seedStaticMainSite(
   existingPages: SavedPageRef[] = [],
 ): Promise<SavedPageRef[] & { didPurge?: boolean }> {
   await ensureMainGroupIndex(db, groupId);
-  const manifest = await getStaticMainManifest();
+  // When seeding (especially on first boot), prefer fetching the full manifest so all
+  // markdown files from pages/main (posts, MEMORY, etc.) are seeded into the workspace.
+  const manifest = await getStaticMainManifest({ preferEmbedded: false });
 
   let didPurge = false;
   if (manifest.preRenderedStaticPages) {
@@ -310,7 +359,11 @@ export async function seedStaticMainSite(
     try {
       const exists = await groupFileExists(db, groupId, page.displayPath);
       if (!exists) {
-        await writeGroupFile(db, groupId, page.displayPath, page.content);
+        let contentToWrite = page.content;
+        if (typeof contentToWrite !== "string") {
+          contentToWrite = (await fetchStaticMainFile(page.displayPath)) ?? "";
+        }
+        await writeGroupFile(db, groupId, page.displayPath, contentToWrite);
       }
 
       const refKey = pageRefKey(groupId, page.displayPath);
@@ -326,6 +379,8 @@ export async function seedStaticMainSite(
       );
     }
   }
+
+  await setStaticMainSiteSeeded(db, groupId, true);
 
   Object.defineProperty(resultPages, "didPurge", {
     value: didPurge,

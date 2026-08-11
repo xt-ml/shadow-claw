@@ -1067,6 +1067,7 @@ export const CONFIG_KEYS = {
   SIDEBAR_DEFAULT_PAGE: "sidebar_default_page",
   SIDEBAR_PAGES_HIDDEN: "sidebar_pages_hidden",
   SIDEBAR_WIDTH: "sidebar_width",
+  STATIC_MAIN_SITE_SEEDED: "static_main_site_seeded",
   STORAGE_HANDLE: "storage_handle",
   SUBSCRIBER_ID: "subscriber_id",
   STREAMING_ENABLED: "streaming_enabled",

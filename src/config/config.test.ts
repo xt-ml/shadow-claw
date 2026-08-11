@@ -483,6 +483,9 @@ describe("config.js", () => {
       );
       expect(CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN).toBe("sidebar_pages_hidden");
       expect(CONFIG_KEYS.SIDEBAR_WIDTH).toBe("sidebar_width");
+      expect(CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED).toBe(
+        "static_main_site_seeded",
+      );
       expect(CONFIG_KEYS.STORAGE_HANDLE).toBe("storage_handle");
       expect(CONFIG_KEYS.SUBSCRIBER_ID).toBe("subscriber_id");
       expect((CONFIG_KEYS as any).TASK_SYNC_OUTBOX).toBe("task_sync_outbox");

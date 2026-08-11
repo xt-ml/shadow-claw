@@ -255,4 +255,40 @@ describe("static-files-middleware", () => {
     expect(res.sendFile).not.toHaveBeenCalled();
     expect(next).toHaveBeenCalled();
   });
+
+  it("does not serve SPA shell for invalid nested subpaths under pretty URLs", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const invalidPaths = [
+      "/2026/06/30/on-developing-loops/files/main/",
+      "/2026/06/30/on-developing-loops/chat",
+      "/2026/06/30/on-developing-loops/tasks/group-1/",
+      "/2026/06/30/on-developing-loops/settings",
+    ];
+
+    for (const invalidPath of invalidPaths) {
+      const req = {
+        method: "GET",
+        headers: {
+          accept: "text/html",
+          "sec-fetch-mode": "navigate",
+          "sec-fetch-dest": "document",
+        },
+        originalUrl: invalidPath,
+        url: invalidPath,
+      };
+      const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+      const next = jest.fn();
+
+      fsMock.stat.mockImplementation((_path: string, cb: any) =>
+        cb(new Error("ENOENT")),
+      );
+
+      middleware(req, res, next);
+
+      expect(res.sendFile).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalled();
+    }
+  });
 });

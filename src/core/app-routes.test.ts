@@ -273,5 +273,135 @@ describe("app-routes", () => {
         }),
       ).toBe("/2026/06/30/on-developing-loops/#section-1");
     });
+
+    it("maintains root base path and correctly routes to /files from a pretty URL", () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({
+        routes: {
+          "/pages/main/posts/2026-07-01_03-37-38.md": {
+            prettyPath: "/2026/06/30/on-developing-loops/",
+          },
+        },
+      });
+      document.head.appendChild(script);
+
+      // Simulate being on the pretty URL in browser
+      window.history.pushState({}, "", "/2026/06/30/on-developing-loops/");
+      (globalThis as any).__applyBasePathCacheReset?.();
+
+      expect(getAppBasePath()).toBe("/");
+
+      // Navigating to files must yield /files/main/ or /files, NOT /2026/06/30/on-developing-loops/files/main/
+      const filesRoutePath = buildRoutePath({
+        page: "files",
+        groupId: "br:main",
+      });
+      expect(filesRoutePath).toBe("/files/main/");
+      expect(applyBasePath(filesRoutePath)).toBe("/files/main/");
+
+      const filesPagePath = buildRoutePath({ page: "files" });
+      expect(filesPagePath).toBe("/files");
+      expect(applyBasePath(filesPagePath)).toBe("/files");
+
+      // Navigating back to the pretty URL (with and without trailing slash) parses correctly
+      expect(
+        parseRouteFromUrl(
+          new URL("http://localhost/2026/06/30/on-developing-loops/"),
+        ),
+      ).toEqual({
+        page: "pages",
+        groupId: "br:main",
+        path: "posts/2026-07-01_03-37-38.md",
+        anchor: undefined,
+      });
+
+      expect(
+        parseRouteFromUrl(
+          new URL("http://localhost/2026/06/30/on-developing-loops"),
+        ),
+      ).toEqual({
+        page: "pages",
+        groupId: "br:main",
+        path: "posts/2026-07-01_03-37-38.md",
+        anchor: undefined,
+      });
+    });
+
+    it("returns null when parsing invalid nested subpaths under pretty URLs", () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({
+        routes: {
+          "/pages/main/posts/2026-07-01_03-37-38.md": {
+            prettyPath: "/2026/06/30/on-developing-loops/",
+          },
+        },
+      });
+      document.head.appendChild(script);
+
+      // Deep linked invalid nested subpaths should not resolve to routes
+      expect(
+        parseRouteFromUrl(
+          new URL(
+            "http://localhost/2026/06/30/on-developing-loops/files/main/",
+          ),
+        ),
+      ).toBeNull();
+
+      expect(
+        parseRouteFromUrl(
+          new URL("http://localhost/2026/06/30/on-developing-loops/chat"),
+        ),
+      ).toBeNull();
+    });
+
+    it("respects explicit <base href> tag for subpath deployments", () => {
+      const baseEl = document.createElement("base");
+      baseEl.setAttribute("href", "/subpath/");
+      document.head.appendChild(baseEl);
+
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({
+        routes: {
+          "/pages/main/posts/2026-07-01_03-37-38.md": {
+            prettyPath: "/2026/06/30/on-developing-loops/",
+          },
+        },
+      });
+      document.head.appendChild(script);
+
+      window.history.pushState(
+        {},
+        "",
+        "/subpath/2026/06/30/on-developing-loops/",
+      );
+      (globalThis as any).__applyBasePathCacheReset?.();
+
+      expect(getAppBasePath()).toBe("/subpath/");
+
+      const filesRoutePath = buildRoutePath({
+        page: "files",
+        groupId: "br:main",
+      });
+      expect(applyBasePath(filesRoutePath)).toBe("/subpath/files/main/");
+
+      expect(
+        parseRouteFromUrl(
+          new URL("http://localhost/subpath/2026/06/30/on-developing-loops/"),
+        ),
+      ).toEqual({
+        page: "pages",
+        groupId: "br:main",
+        path: "posts/2026-07-01_03-37-38.md",
+        anchor: undefined,
+      });
+
+      baseEl.remove();
+    });
   });
 });

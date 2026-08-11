@@ -50,6 +50,14 @@ const VALID_PAGES = new Set([
   "channels",
 ]);
 
+export function resetAppBasePathCache(): void {
+  cachedBasePath = null;
+}
+
+if (typeof globalThis !== "undefined") {
+  (globalThis as any).__applyBasePathCacheReset = resetAppBasePathCache;
+}
+
 export function getAppBasePath(): string {
   if (cachedBasePath !== null) {
     return cachedBasePath;
@@ -59,16 +67,38 @@ export function getAppBasePath(): string {
     return "/";
   }
 
-  if (document.baseURI) {
-    const baseUriPath = new URL("", document.baseURI).pathname;
-    if (baseUriPath !== "/") {
-      cachedBasePath = baseUriPath;
+  // 1. Check for explicit <base href="..."> element in the DOM
+  if (
+    typeof document !== "undefined" &&
+    typeof document.querySelector === "function"
+  ) {
+    const baseEl = document.querySelector("base[href]");
+    if (baseEl) {
+      const href = baseEl.getAttribute("href");
+      if (href) {
+        try {
+          const baseUriPath = new URL(href, window.location.origin).pathname;
+          let base = baseUriPath;
+          if (!base.endsWith("/")) {
+            base += "/";
+          }
+          cachedBasePath = base;
 
-      return cachedBasePath;
+          return cachedBasePath;
+        } catch {
+          // ignore parsing error, fall through
+        }
+      }
     }
   }
 
-  const pathname = window.location.pathname;
+  const pathname = window.location.pathname || "/";
+  if (pathname === "/") {
+    cachedBasePath = "/";
+
+    return cachedBasePath;
+  }
+
   const parts = pathname.split("/").filter(Boolean);
   const pageIndex = parts.findIndex((part) =>
     VALID_PAGES.has(part.toLowerCase()),
@@ -86,18 +116,23 @@ export function getAppBasePath(): string {
     return cachedBasePath;
   }
 
-  if (pathname === "/") {
+  // 2. Check if the current pathname is a known pretty route
+  const prettyRoute = resolvePrettyPathToRoute(pathname);
+  if (prettyRoute) {
     cachedBasePath = "/";
 
     return cachedBasePath;
   }
 
-  let base = pathname;
-  if (!base.endsWith("/")) {
-    base += "/";
+  // 3. Check for single-segment subpath deployments (e.g. /shadow-claw/ or /my-app/)
+  if (parts.length === 1 && !pathname.includes(".")) {
+    cachedBasePath = "/" + parts[0] + "/";
+
+    return cachedBasePath;
   }
 
-  cachedBasePath = base;
+  // 4. Default to root base path for unhandled multi-segment paths
+  cachedBasePath = "/";
 
   return cachedBasePath;
 }

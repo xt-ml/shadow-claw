@@ -31,7 +31,7 @@ export function bindEventListeners(
   oStore: OrchestratorStore,
   fStore: FileViewerStore,
   tStore: ThemeStore,
-  url: URL,
+  _url?: URL,
 ): void {
   if (!shadow || !win || !doc) {
     return;
@@ -232,7 +232,7 @@ export function bindEventListeners(
         db,
         fStore,
         oStore,
-        url,
+        new URL(win.location.href),
       );
     };
     win.addEventListener("popstate", shadowClaw.popstateListener);

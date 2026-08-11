@@ -14,6 +14,7 @@ describe("bindEventListeners", () => {
   let tStore: any;
   let url: URL;
 
+  let mockApplyRouteFromCurrentLocation: jest.Mock<any>;
   let mockGetDefaultSidebarPage: jest.Mock<any>;
   let mockRequestDialog: jest.Mock<any>;
   let mockScheduleTerminalPlacement: jest.Mock<any>;
@@ -77,6 +78,9 @@ describe("bindEventListeners", () => {
       updateThemeIcons: jest.fn(),
     }));
 
+    mockApplyRouteFromCurrentLocation = (
+      await import("./applyRouteFromCurrentLocation.js")
+    ).applyRouteFromCurrentLocation as jest.Mock<any>;
     mockGetDefaultSidebarPage = (await import("./getDefaultSidebarPage.js"))
       .getDefaultSidebarPage as jest.Mock<any>;
     mockRequestDialog = (await import("./requestDialog.js"))
@@ -793,6 +797,18 @@ describe("bindEventListeners", () => {
       );
       expect(shadowClaw.fallbackClickListenerAttached).toBe(true);
       expect(shadowClaw.popstateListener).toBeInstanceOf(Function);
+
+      // Verify that popstateListener calls applyRouteFromCurrentLocation with the current win.location.href
+      (win as any).location = { href: "https://example.com/files/main/" };
+      shadowClaw.popstateListener();
+      expect(mockApplyRouteFromCurrentLocation).toHaveBeenCalledWith(
+        shadow,
+        shadowClaw,
+        db,
+        fStore,
+        oStore,
+        new URL("https://example.com/files/main/"),
+      );
     });
   });
 

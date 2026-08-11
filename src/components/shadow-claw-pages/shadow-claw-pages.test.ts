@@ -77,6 +77,15 @@ jest.unstable_mockModule("../../storage/readGroupFile.js", () => ({
   readGroupFile: jest.fn(),
 }));
 
+jest.unstable_mockModule("../../storage/writeGroupFile.js", () => ({
+  writeGroupFile: jest.fn(),
+}));
+
+jest.unstable_mockModule("../../storage/staticMainSite.js", () => ({
+  getStaticMainManifest: jest.fn(async () => ({ pages: [] })),
+  seedStaticMainSite: jest.fn(),
+}));
+
 jest.unstable_mockModule("../../storage/readGroupFileBytes.js", () => ({
   readGroupFileBytes: jest.fn(),
 }));
@@ -98,6 +107,9 @@ jest.unstable_mockModule("../../db/getConfig.js", () => ({
 const { ShadowClawPages } = await import("./shadow-claw-pages.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { readGroupFile } = await import("../../storage/readGroupFile.js");
+const { writeGroupFile } = await import("../../storage/writeGroupFile.js");
+const { getStaticMainManifest } =
+  await import("../../storage/staticMainSite.js");
 const { readGroupFileBytes } =
   await import("../../storage/readGroupFileBytes.js");
 const { renderMarkdown } = await import("../../content/markdown.js");
@@ -272,6 +284,44 @@ describe("shadow-claw-pages", () => {
       renderFrontmatter: true,
     });
     expect(setSanitizedHtml).toHaveBeenCalledTimes(1);
+  });
+
+  it("falls back to static main manifest when readGroupFile fails and seeds to storage", async () => {
+    const component = new ShadowClawPages();
+    const root = component.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    component.db = {} as any;
+
+    (
+      readGroupFile as jest.MockedFunction<typeof readGroupFile>
+    ).mockRejectedValue(new Error("File not found in storage"));
+
+    (
+      getStaticMainManifest as jest.MockedFunction<typeof getStaticMainManifest>
+    ).mockResolvedValue({
+      pages: [
+        {
+          displayPath: "posts/test.md",
+          content: "# Fallback Manifest Content",
+        },
+      ],
+    });
+
+    component.selectedPage = { groupId: "br:main", path: "posts/test.md" };
+    await component.renderSelectedPage();
+
+    expect(writeGroupFile).toHaveBeenCalledWith(
+      component.db,
+      "br:main",
+      "posts/test.md",
+      "# Fallback Manifest Content",
+    );
+    expect(renderMarkdown).toHaveBeenCalledWith("# Fallback Manifest Content", {
+      renderFrontmatter: true,
+    });
   });
 
   it("inlines relative markdown images as data URLs", async () => {

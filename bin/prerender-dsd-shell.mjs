@@ -23,6 +23,20 @@ import {
 
 import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "../src/storage/defaultMemoryContent.mjs";
 
+/**
+ * @typedef {import("../src/storage/staticMainSite.js").StaticMainManifest} StaticMainManifest
+ * @typedef {import("../src/storage/staticMainSite.js").StaticPageSource} StaticPageSource
+ */
+
+/**
+ * @typedef {Object} PageSource
+ *
+ * @property {string|null} absolutePath
+ * @property {string} displayPath
+ * @property {string} [inlineContent]
+ * @property {string} [content]
+ */
+
 const SHADOW_CLAW_TEMPLATE_START =
   '<template shadowrootmode="open" data-shadow-claw-dsd="true">';
 
@@ -41,6 +55,9 @@ const frontmatterDom = new DOMImplementation().createDocument(
 );
 const frontmatterSerializer = new XMLSerializer();
 
+/**
+ * @returns {PageSource}
+ */
 function buildDefaultPageSource() {
   return {
     absolutePath: null,
@@ -66,7 +83,7 @@ function sanitizeRenderedHtml(html) {
     .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/giu, "");
 }
 
-function splitFrontmatterWithGrayMatter(src) {
+export function splitFrontmatterWithGrayMatter(src) {
   const parsed = matter(src);
   const data =
     parsed.data && typeof parsed.data === "object" ? parsed.data : {};
@@ -77,7 +94,7 @@ function splitFrontmatterWithGrayMatter(src) {
   };
 }
 
-function extractTemplateContent(html) {
+export function extractTemplateContent(html) {
   const templateMatch = html.match(/<template[^>]*>([\s\S]*?)<\/template>/iu);
 
   if (!templateMatch) {
@@ -139,7 +156,7 @@ export function sortPagePaths(paths) {
   });
 }
 
-async function collectPageSources(sourcePath) {
+export async function collectPageSources(sourcePath) {
   let sourceStats;
   try {
     sourceStats = await stat(sourcePath);
@@ -399,7 +416,7 @@ export function applyStaticPagesContent(
   return injectPageHeaderDsd(next, pageHeaderTemplateContent, frontmatterTitle);
 }
 
-function buildPagesDsdHost(
+export function buildPagesDsdHost(
   pagesTemplateContent,
   pageSources,
   renderedHtml,
@@ -472,7 +489,10 @@ function wrapShadowClawDialogContentInTemplate(html) {
   );
 }
 
-function buildShadowClawDsdTemplate(shadowClawTemplateContent, pagesDsdHost) {
+export function buildShadowClawDsdTemplate(
+  shadowClawTemplateContent,
+  pagesDsdHost,
+) {
   const withPages = shadowClawTemplateContent.replace(
     /<shadow-claw-pages><\/shadow-claw-pages>/iu,
     () => pagesDsdHost,
@@ -528,7 +548,7 @@ function buildShadowClawDsdTemplateWithoutPages(shadowClawTemplateContent) {
   ].join("\n");
 }
 
-function injectShadowClawTemplate(indexHtml, dsdTemplate) {
+export function injectShadowClawTemplate(indexHtml, dsdTemplate) {
   const openTagMatch = indexHtml.match(/<shadow-claw\b[^>]*>/iu);
   const closeTag = "</shadow-claw>";
   const openTag = openTagMatch ? openTagMatch[0] : null;

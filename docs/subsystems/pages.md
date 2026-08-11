@@ -111,12 +111,15 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 
 ---
 
-## Pre-rendered Content Override (`OVERRIDE_PRERENDER_SKELETON`)
+## Pre-rendered Content & Pretty Paths (`OVERRIDE_PRERENDER_SKELETON`)
 
-Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prerender-dsd-shell.mjs` can override initial pre-rendered page content:
+Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prerender-dsd-shell.mjs` and `bin/prerender-pretty-paths.mjs` support static server-side rendering with pretty path resolution:
 
-- Enabled via the "Override pre-rendered content" toggle in Settings (`CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON`).
-- Hides the initial DSD shell on boot, showing the skeleton loader until hydration finishes to eliminate visual flashes.
+- **DSD Pre-rendering**: Builds Declarative Shadow DOM templates for the application shell and individual pages during build time.
+- **Pretty Paths**: Configured via `pages/routes.json` to map markdown page sources to clean URL paths (e.g. `/2026/06/30/on-developing-loops/`). The pre-render pipeline generates dedicated `index.html` files with page-specific DSD templates.
+- **Static Routing Manifest**: Embedded via `#shadow-claw-static-routing` JSON script tags or fetched via `static-routing.json` (`src/storage/staticRouting.ts`), allowing client-side router (`app-routes.ts`) and pages component to resolve routes seamlessly across Node.js, Electron, and GitHub Pages.
+- **Fallback Rendering**: When page files are not found in storage (e.g. prior to storage initialization or in static-only hosting), `shadow-claw-pages` gracefully falls back to rendering static manifest content.
+- **DSD Shell Override**: Enabled via the "Override pre-rendered content" toggle in Settings (`CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON`). Hides the initial DSD shell on boot, showing the skeleton loader until hydration finishes.
 
 ---
 

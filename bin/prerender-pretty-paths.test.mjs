@@ -1,0 +1,196 @@
+import {
+  injectStaticRoutingScript,
+  prerenderPrettyPaths,
+} from "./prerender-pretty-paths.mjs";
+
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+
+import { escapeJsonForHtmlScript } from "./prerender-dsd-shell.mjs";
+
+describe("injectStaticRoutingScript", () => {
+  it("escapes script tags, HTML comments, and special characters in routing JSON", () => {
+    const rawRouting = {
+      routes: {
+        "/pages/main/posts/2026-07-01_03-37-38.md": {
+          prettyPath: "/2026/06/30/on-developing-loops/",
+        },
+      },
+    };
+
+    const routingJson = JSON.stringify(rawRouting);
+    const htmlHost =
+      "<html><head></head><body><shadow-claw></shadow-claw></body></html>";
+    const injectedHtml = injectStaticRoutingScript(htmlHost, routingJson);
+
+    expect(injectedHtml).toContain('id="shadow-claw-static-routing"');
+    const scriptMatch = injectedHtml.match(
+      /<script id="shadow-claw-static-routing"[^>]*>([\s\S]*?)<\/script>/,
+    );
+    expect(scriptMatch).not.toBeNull();
+    const scriptContent = scriptMatch[1];
+    expect(scriptContent).not.toContain("</script>");
+
+    const parsed = JSON.parse(scriptContent);
+    expect(parsed).toEqual(rawRouting);
+  });
+
+  it("replaces existing static routing script tag if already present", () => {
+    const originalRouting = { routes: { "/a": { prettyPath: "/old" } } };
+    const newRouting = { routes: { "/a": { prettyPath: "/new" } } };
+
+    const initialHtml = injectStaticRoutingScript(
+      "<html><head></head><body></body></html>",
+      JSON.stringify(originalRouting),
+    );
+    expect(initialHtml).toContain("\\u002fold");
+
+    const updatedHtml = injectStaticRoutingScript(
+      initialHtml,
+      JSON.stringify(newRouting),
+    );
+    expect(updatedHtml).not.toContain("\\u002fold");
+    expect(updatedHtml).toContain("\\u002fnew");
+    const matches = updatedHtml.match(/id="shadow-claw-static-routing"/g);
+    expect(matches).toHaveLength(1);
+  });
+});
+
+describe("prerenderPrettyPaths", () => {
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = path.join(
+      os.tmpdir(),
+      `sc-pretty-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    await mkdir(tmpDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("handles missing routes.json gracefully without error", async () => {
+    const result = await prerenderPrettyPaths({
+      publicDir: path.join(tmpDir, "dist/public"),
+      routesPath: path.join(tmpDir, "pages/routes.json"),
+      sourcePath: path.join(tmpDir, "pages/main"),
+      indexPath: path.join(tmpDir, "dist/public/index.html"),
+    });
+
+    expect(result.count).toBe(0);
+    expect(result.skipped).toBe(true);
+  });
+
+  it("prerenders static HTML at prettyPath locations for each route in routes.json", async () => {
+    const publicDir = path.join(tmpDir, "dist/public");
+    const indexPath = path.join(publicDir, "index.html");
+    const sourcePath = path.join(tmpDir, "pages/main");
+    const routesPath = path.join(tmpDir, "pages/routes.json");
+
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+    await mkdir(path.join(sourcePath, "posts"), { recursive: true });
+    await mkdir(path.dirname(routesPath), { recursive: true });
+
+    await writeFile(
+      indexPath,
+      '<!doctype html><html><head><base href="/"><title>ShadowClaw</title></head><body><shadow-claw></shadow-claw></body></html>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      '<template><div class="app"><shadow-claw-pages></shadow-claw-pages></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      '<template><div class="pages__list" data-pages-list role="list"></div><div class="pages__rendered" data-pages-rendered hidden></div><div class="pages__empty" data-pages-empty></div><shadow-claw-page-header title="Pages"></shadow-claw-page-header></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      '<template><header class="header"><h2 class="header__title"></h2><details class="header__actions-disclosure"></details><div class="header__actions" id="header-actions-panel"></div></header></template>',
+      "utf8",
+    );
+
+    const postContent = [
+      "---",
+      'title: "On Developing Loops"',
+      'slug: "on-developing-loops"',
+      "---",
+      "# On Developing Loops",
+      "",
+      "This is SSR content for pretty path.",
+    ].join("\n");
+
+    await writeFile(
+      path.join(sourcePath, "posts/2026-07-01_03-37-38.md"),
+      postContent,
+      "utf8",
+    );
+
+    const routesJson = {
+      routes: {
+        "/pages/main/posts/2026-07-01_03-37-38.md": {
+          prettyPath: "/2026/06/30/on-developing-loops/",
+        },
+      },
+    };
+
+    await writeFile(routesPath, JSON.stringify(routesJson, null, 2), "utf8");
+
+    const result = await prerenderPrettyPaths({
+      publicDir,
+      routesPath,
+      sourcePath,
+      indexPath,
+    });
+
+    expect(result.count).toBe(1);
+    expect(result.generatedPaths).toContain(
+      "2026/06/30/on-developing-loops/index.html",
+    );
+
+    // Check that dist/public/2026/06/30/on-developing-loops/index.html exists and has content
+    const prettyHtmlPath = path.join(
+      publicDir,
+      "2026/06/30/on-developing-loops/index.html",
+    );
+    const prettyHtml = await readFile(prettyHtmlPath, "utf8");
+
+    expect(prettyHtml).toContain("On Developing Loops");
+    expect(prettyHtml).toContain("This is SSR content for pretty path.");
+    expect(prettyHtml).toContain('id="shadow-claw-static-routing"');
+    expect(prettyHtml).toContain('id="shadow-claw-static-manifest"');
+    expect(prettyHtml).toContain('data-shadow-claw-dsd="true"');
+
+    // Check that static-routing.json was written
+    const manifestPath = path.join(publicDir, "static-routing.json");
+    const manifestContent = await readFile(manifestPath, "utf8");
+    const parsedManifest = JSON.parse(manifestContent);
+    expect(
+      parsedManifest.routes["/pages/main/posts/2026-07-01_03-37-38.md"]
+        .prettyPath,
+    ).toBe("/2026/06/30/on-developing-loops/");
+
+    // Check that root index.html also received the static routing script
+    const rootHtml = await readFile(indexPath, "utf8");
+    expect(rootHtml).toContain('id="shadow-claw-static-routing"');
+  });
+});

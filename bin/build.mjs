@@ -12,6 +12,14 @@ const projectRoot = join(__dirname, "..");
 
 chdir(projectRoot);
 
+/**
+ * Runs a shell command synchronously and logs it.
+ *
+ * @param {string} command
+ * @param {import("node:child_process").ExecSyncOptions} [options]
+ *
+ * @returns {Promise<void>}
+ */
 async function run(command, options = {}) {
   console.log(`> ${command}`);
   try {
@@ -101,6 +109,11 @@ async function main() {
     }).trim();
     await run(`npm run -s build:pkg:meta "${meta}"`);
   }
+
+  // Prerender static pages for pretty paths defined in pages/routes.json (if present)
+  await run(
+    "node bin/prerender-pretty-paths.mjs dist/public pages/routes.json pages/main",
+  );
 
   // build the service worker (all environments)
   await run("npm run -s build:service-worker");

@@ -105,9 +105,10 @@ To prevent infinite execution loops, the system enforces a strict recursion guar
 - **Custom Purify Options:** When rendering media resolved relative to the workspace, pass custom DOMPurify configurations extending the standard `ALLOWED_URI_REGEXP` to allow `blob:` URIs safely.
 - **Iframe Embed Allowlists:** Markdown and HTML preview work should preserve the Settings-backed iframe host allowlist in `src/security/iframe-sanitizer.ts`; update the sanitizer tests and docs when adding or changing embed hosts.
 
-### Static Main Site & Page Suppression
+### Static Main Site, Routing & Page Suppression
 
 - **Page Seeding & Suppression:** Static main site pages are seeded from the `pages/main/` directory via `seedStaticMainSite` (`src/storage/staticMainSite.ts`). When removing pages from the Pages sidebar, ensure suppression is recorded via `suppressPage` (`src/storage/suppressedPages.ts`) so they are not automatically re-seeded on app launch. Re-adding a page calls `unsuppressPage` to clear suppression.
+- **Static Pretty Paths & Routing:** When `pages/routes.json` is present, `bin/prerender-pretty-paths.mjs` generates physical `index.html` files with DSD shells for pretty paths and injects the routing manifest into `#shadow-claw-static-routing` and `static-routing.json` (`src/storage/staticRouting.ts`). Keep routing resolution environment-agnostic (Node.js, Electron, GitHub Pages).
 - **Pre-rendered DSD Shell Override:** `OVERRIDE_PRERENDER_SKELETON` (`override_prerender_skeleton`) allows suppressing Declarative Shadow DOM (DSD) shell content on initial load to prevent visual flash before full hydration. Handled during bootstrap in `src/core/theme-init.ts` and `src/components/shadow-claw/shadow-claw.ts`.
 - **Markdown Frontmatter Visibility:** Markdown preview surfaces can optionally render YAML frontmatter as visible metadata/details blocks. Keep the four frontmatter toggles (`pages`, `file_viewer`, `chat`, `tasks`) and their config keys in sync with the rendering behavior when touching markdown UX.
 

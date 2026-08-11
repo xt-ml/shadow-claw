@@ -13,6 +13,11 @@ process.chdir(dataProjectRoot);
 
 const [, script, source] = argv;
 
+/**
+ * Recursively deletes a file or directory.
+ * @param {string} path
+ * @returns {Promise<void>}
+ */
 export async function rimraf(path) {
   try {
     await rm(path, { recursive: true, force: true });

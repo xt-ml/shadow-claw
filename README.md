@@ -205,6 +205,7 @@ ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace con
 - **Workspace-relative links** — Links and images in pages resolve relative to the workspace
 - **Page sidebar** — Persistent list of saved pages with drag-and-drop reordering and responsive mobile sidebar collapse
 - **Static Main Site Seeding** — Automatically seeds default main pages from the `pages/main/` manifest, respecting page suppression rules
+- **Static Pretty Paths & DSD Pre-rendering** — Build-time pre-rendering for `pages/routes.json` generates static HTML with Declarative Shadow DOM templates for clean URLs across Node.js, Electron, and GitHub Pages
 - **Page Suppression** — Deleting pages suppresses auto-reseeding (`SUPPRESSED_PAGES_LIST`) until re-added
 - **Safe iframe embeds** — HTML previews use a configurable iframe host allowlist in Settings, with safe defaults for common embedded content hosts
 - **Ebook-Style Navigation** — Functional Previous/Next pagination controls with HTML-entity decoded frontmatter headers and seamless page transitions

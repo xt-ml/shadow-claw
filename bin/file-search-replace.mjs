@@ -11,6 +11,11 @@ const dataProjectRoot = join(__dirname, "..");
 
 chdir(dataProjectRoot);
 
+/**
+ * Reads UTF-8 content from process stdin.
+ *
+ * @returns {Promise<string>}
+ */
 async function readStdin() {
   const chunks = [];
 

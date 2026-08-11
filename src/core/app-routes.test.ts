@@ -191,4 +191,87 @@ describe("app-routes", () => {
       });
     });
   });
+
+  describe("pretty path routing", () => {
+    beforeEach(() => {
+      document
+        .querySelectorAll("script#shadow-claw-static-routing")
+        .forEach((el) => el.remove());
+    });
+
+    afterEach(() => {
+      document
+        .querySelectorAll("script#shadow-claw-static-routing")
+        .forEach((el) => el.remove());
+    });
+
+    it("parses pretty path URL when static routing manifest is present", () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({
+        routes: {
+          "/pages/main/posts/2026-07-01_03-37-38.md": {
+            prettyPath: "/2026/06/30/on-developing-loops/",
+          },
+        },
+      });
+      document.head.appendChild(script);
+
+      expect(
+        parseRouteFromUrl(
+          new URL("http://localhost/2026/06/30/on-developing-loops/"),
+        ),
+      ).toEqual({
+        page: "pages",
+        groupId: "br:main",
+        path: "posts/2026-07-01_03-37-38.md",
+        anchor: undefined,
+      });
+
+      // With anchor
+      expect(
+        parseRouteFromUrl(
+          new URL("http://localhost/2026/06/30/on-developing-loops/#video"),
+        ),
+      ).toEqual({
+        page: "pages",
+        groupId: "br:main",
+        path: "posts/2026-07-01_03-37-38.md",
+        anchor: "video",
+      });
+    });
+
+    it("builds pretty path URL when static route is configured", () => {
+      const script = document.createElement("script");
+      script.id = "shadow-claw-static-routing";
+      script.type = "application/json";
+      script.textContent = JSON.stringify({
+        routes: {
+          "/pages/main/posts/2026-07-01_03-37-38.md": {
+            prettyPath: "/2026/06/30/on-developing-loops/",
+          },
+        },
+      });
+      document.head.appendChild(script);
+
+      expect(
+        buildRoutePath({
+          page: "pages",
+          groupId: "br:main",
+          path: "posts/2026-07-01_03-37-38.md",
+        }),
+      ).toBe("/2026/06/30/on-developing-loops/");
+
+      // With anchor
+      expect(
+        buildRoutePath({
+          page: "pages",
+          groupId: "br:main",
+          path: "posts/2026-07-01_03-37-38.md",
+          anchor: "section-1",
+        }),
+      ).toBe("/2026/06/30/on-developing-loops/#section-1");
+    });
+  });
 });

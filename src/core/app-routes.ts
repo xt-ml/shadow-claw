@@ -1,3 +1,8 @@
+import {
+  resolvePrettyPathToRoute,
+  resolveRouteToPrettyPath,
+} from "../storage/staticRouting.js";
+
 export type ShadowClawPageRoute =
   | "chat"
   | "files"
@@ -166,6 +171,16 @@ function sanitizeWorkspacePath(path: string | undefined): string | undefined {
 export function buildRoutePath(route: ShadowClawAppRoute): string {
   const anchor = route.anchor ? `#${route.anchor.replace(/^#/, "")}` : "";
 
+  const prettyPath = resolveRouteToPrettyPath(route);
+  if (prettyPath) {
+    let clean = prettyPath;
+    if (!clean.startsWith("/")) {
+      clean = `/${clean}`;
+    }
+
+    return `${clean}${anchor}`;
+  }
+
   switch (route.page) {
     case "chat": {
       const path = route.groupId
@@ -230,6 +245,16 @@ export function parseRouteFromUrl(
 
   if (basePath !== "/" && pathname.startsWith(basePath)) {
     pathname = "/" + pathname.slice(basePath.length);
+  }
+
+  const prettyRoute = resolvePrettyPathToRoute(pathname);
+  if (prettyRoute) {
+    const anchor = url.hash ? url.hash.replace(/^#/, "") : undefined;
+
+    return {
+      ...prettyRoute,
+      anchor: anchor || prettyRoute.anchor,
+    };
   }
 
   const parts = pathname

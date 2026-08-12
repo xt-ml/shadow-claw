@@ -189,6 +189,16 @@ export class ShadowClaw extends ShadowClawElement {
         await customElements.whenDefined(`shadow-claw-${this.currentPage}`);
       }
 
+      const { isMemoryStorageFallbackActive } =
+        await import("../../storage/memoryStorage.js");
+      if (isMemoryStorageFallbackActive()) {
+        const { showWarning } = await import("../../ui/toast.js");
+        showWarning(
+          "Private Browsing / Limited Storage: Operating in temporary in-memory mode. Files and changes will not persist across page reloads.",
+          7000,
+        );
+      }
+
       // Signal that the UI and initial routing are fully ready.
       // clearBootPendingClass is called immediately after setReady() so that
       // sc-prerender-override is removed only AFTER applyRouteFromCurrentLocation

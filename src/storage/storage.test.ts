@@ -260,6 +260,58 @@ describe("storage.js", () => {
       );
       consoleSpy.mockRestore();
     });
+
+    it("should gracefully fall back to in-memory root when OPFS throws SecurityError (Firefox Private Browsing)", async () => {
+      const consoleSpy = jest
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+      (getConfig as any).mockResolvedValueOnce(null);
+
+      const securityError = new DOMException(
+        "Security error when calling GetDirectory",
+        "SecurityError",
+      );
+      (global as any).navigator.storage.getDirectory.mockRejectedValueOnce(
+        securityError,
+      );
+
+      const root = await storage.getStorageRoot(db);
+      expect(root).toBeDefined();
+      expect(root.kind).toBe("directory");
+      expect(typeof root.getDirectoryHandle).toBe("function");
+      expect(typeof root.getFileHandle).toBe("function");
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        expect.stringContaining("OPFS is unavailable"),
+        securityError,
+      );
+      consoleSpy.mockRestore();
+    });
+
+    it("should gracefully fall back to in-memory root when navigator.storage is undefined", async () => {
+      const consoleSpy = jest
+        .spyOn(console, "warn")
+        .mockImplementation(() => {});
+      (getConfig as any).mockResolvedValueOnce(null);
+
+      const originalNavigator = (global as any).navigator;
+      Object.defineProperty(global, "navigator", {
+        value: {},
+        configurable: true,
+      });
+
+      try {
+        const root = await storage.getStorageRoot(db);
+        expect(root).toBeDefined();
+        expect(root.kind).toBe("directory");
+      } finally {
+        Object.defineProperty(global, "navigator", {
+          value: originalNavigator,
+          configurable: true,
+        });
+        consoleSpy.mockRestore();
+      }
+    });
   });
 
   describe("getStorageStatus edge cases", () => {

@@ -23,9 +23,10 @@ graph TD
 The storage root is resolved lazily:
 
 1. Check `CONFIG_KEYS.STORAGE_HANDLE` — user-selected directory via `showDirectoryPicker()`
-2. If no local handle: fall back to OPFS root at `/shadowclaw/`
-3. Maintain a cached `explicitRoot` handle (invalidated on stale errors)
-4. Probe handle access with `probeHandleAccess()` — uses capability checks since Electron/browsers may misreport `queryPermission`
+2. If no local handle: fall back to OPFS root at `/shadowclaw/` via `navigator.storage.getDirectory()`
+3. If OPFS is restricted or throws a `SecurityError` (e.g. Firefox Private Browsing mode), transparently fall back to an in-memory `FileSystemDirectoryHandle` implementation (`src/storage/memoryStorage.ts`), keeping the application functional and notifying the user.
+4. Maintain a cached `explicitRoot` handle (invalidated on stale errors)
+5. Probe handle access with `probeHandleAccess()` — uses capability checks since Electron/browsers may misreport `queryPermission`
 
 ## Group Workspace Structure
 

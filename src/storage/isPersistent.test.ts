@@ -19,4 +19,18 @@ describe("isPersistent", () => {
     });
     await expect(isPersistent()).resolves.toBe(false);
   });
+
+  it("returns false when persisted() throws an error", async () => {
+    const spy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    Object.defineProperty(navigator, "storage", {
+      configurable: true,
+      value: {
+        persisted: (jest.fn() as any).mockRejectedValue(
+          new Error("Restricted"),
+        ),
+      },
+    });
+    await expect(isPersistent()).resolves.toBe(false);
+    spy.mockRestore();
+  });
 });

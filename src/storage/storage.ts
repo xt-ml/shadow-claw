@@ -1,6 +1,7 @@
 import { CONFIG_KEYS, OPFS_ROOT } from "../config/config.js";
 import { deleteConfig } from "../db/deleteConfig.js";
 import { getConfig } from "../db/getConfig.js";
+import { getMemoryOpfsRoot } from "./memoryStorage.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 
 export interface StorageStatus {
@@ -33,9 +34,24 @@ async function probeHandleAccess(
 }
 
 async function getOpfsRoot(): Promise<FileSystemDirectoryHandle> {
-  const opfsRoot = await navigator.storage.getDirectory();
+  try {
+    if (
+      typeof navigator !== "undefined" &&
+      navigator.storage &&
+      typeof navigator.storage.getDirectory === "function"
+    ) {
+      const opfsRoot = await navigator.storage.getDirectory();
 
-  return opfsRoot.getDirectoryHandle(OPFS_ROOT, { create: true });
+      return await opfsRoot.getDirectoryHandle(OPFS_ROOT, { create: true });
+    }
+  } catch (err) {
+    console.warn(
+      "OPFS is unavailable (e.g. Firefox Private Browsing). Using in-memory storage fallback:",
+      err,
+    );
+  }
+
+  return getMemoryOpfsRoot();
 }
 
 /**

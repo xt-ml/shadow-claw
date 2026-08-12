@@ -664,4 +664,36 @@ describe("shadow-claw", () => {
     HTMLElement.prototype.scrollTo = originalScrollTo;
     globalThis.matchMedia = originalMatchMedia;
   });
+
+  it("displays warning toast when memory storage fallback is active", async () => {
+    const { getMemoryOpfsRoot, resetMemoryOpfsRoot } =
+      await import("../../storage/memoryStorage.js");
+    const { showWarning } = await import("../../ui/toast.js");
+
+    getMemoryOpfsRoot(); // Activate memory fallback
+
+    const originalMatchMedia = globalThis.matchMedia;
+    globalThis.matchMedia =
+      originalMatchMedia ||
+      (() => ({
+        matches: false,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }));
+
+    try {
+      const component = new ShadowClaw();
+      component.orchestrator = createOrchestratorStub();
+      document.body.appendChild(component);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(showWarning).toHaveBeenCalledWith(
+        expect.stringContaining("Private Browsing / Limited Storage"),
+        7000,
+      );
+    } finally {
+      resetMemoryOpfsRoot();
+      globalThis.matchMedia = originalMatchMedia;
+    }
+  });
 });

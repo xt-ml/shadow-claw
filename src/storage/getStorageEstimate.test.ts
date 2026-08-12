@@ -27,4 +27,16 @@ describe("getStorageEstimate", () => {
     });
     await expect(getStorageEstimate()).resolves.toEqual({ usage: 0, quota: 0 });
   });
+
+  it("returns zeros when estimate() throws an error", async () => {
+    const spy = jest.spyOn(console, "warn").mockImplementation(() => {});
+    Object.defineProperty(navigator, "storage", {
+      configurable: true,
+      value: {
+        estimate: (jest.fn() as any).mockRejectedValue(new Error("Restricted")),
+      },
+    });
+    await expect(getStorageEstimate()).resolves.toEqual({ usage: 0, quota: 0 });
+    spy.mockRestore();
+  });
 });

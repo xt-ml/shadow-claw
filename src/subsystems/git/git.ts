@@ -611,9 +611,18 @@ export async function initGitFs(): Promise<{
       _http = httpClient;
 
       if (!_fs) {
-        // Obtain the OPFS root and use it directly. Workspace-scoped git
-        // operations are routed through groupRoot when available.
-        const opfsRoot = await navigator.storage.getDirectory();
+        let opfsRoot: FileSystemDirectoryHandle;
+        try {
+          opfsRoot = await navigator.storage.getDirectory();
+        } catch (err) {
+          console.warn(
+            "OPFS is unavailable for git root, falling back to memory:",
+            err,
+          );
+          const { getMemoryOpfsRoot } =
+            await import("../../storage/memoryStorage.js");
+          opfsRoot = getMemoryOpfsRoot();
+        }
         _fs = makeDirHandleFs(opfsRoot);
         _pfs = _fs.promises;
       }

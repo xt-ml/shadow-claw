@@ -58,7 +58,10 @@ import { listGroupFiles } from "../storage/listGroupFiles.js";
 import { readGroupFile } from "../storage/readGroupFile.js";
 import { requestStorageAccess } from "../storage/requestStorageAccess.js";
 import { getStorageStatus } from "../storage/storage.js";
-import { seedStaticMainSite } from "../storage/staticMainSite.js";
+import {
+  isStaticMainSiteSeeded,
+  seedStaticMainSite,
+} from "../storage/staticMainSite.js";
 import { suppressPage, unsuppressPage } from "../storage/suppressedPages.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
 import { AGUIAdapter } from "../ui/agui-adapter.js";
@@ -1428,6 +1431,8 @@ export class OrchestratorStore {
     ]);
 
     this._initResolve?.();
+
+    this.scheduleBackgroundStaticMainSiteSeeding(db);
   }
 
   /**
@@ -2400,6 +2405,49 @@ export class OrchestratorStore {
       });
     } catch (error) {
       console.warn("Failed to persist activity log entry to server:", error);
+    }
+  }
+
+  scheduleBackgroundStaticMainSiteSeeding(db: ShadowClawDatabase): void {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const runBackgroundSeed = async () => {
+      try {
+        const isSeeded = await isStaticMainSiteSeeded(db, DEFAULT_GROUP_ID);
+        if (isSeeded) {
+          return;
+        }
+
+        const rawPagesList = await getConfig(db, CONFIG_KEYS.PAGES_LIST);
+        const existingPages =
+          rawPagesList !== null && rawPagesList !== undefined
+            ? this.parsePagesList(rawPagesList)
+            : [];
+
+        const updated = await seedStaticMainSite(
+          db,
+          DEFAULT_GROUP_ID,
+          existingPages,
+          { preferEmbedded: false },
+        );
+
+        if (updated && updated.length > 0) {
+          this.setPages(updated);
+          await this.persistPages(db);
+        }
+      } catch (err) {
+        console.warn("Background static main site seeding failed:", err);
+      }
+    };
+
+    if (typeof (window as any).requestIdleCallback === "function") {
+      (window as any).requestIdleCallback(() => void runBackgroundSeed(), {
+        timeout: 3000,
+      });
+    } else {
+      setTimeout(() => void runBackgroundSeed(), 100);
     }
   }
 

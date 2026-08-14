@@ -193,6 +193,42 @@ export class ShadowClawTools extends ShadowClawElement {
       }
     });
 
+    // Search Files save button
+    root
+      .querySelector(".tools__save-searchfiles-btn")
+      ?.addEventListener("click", async () => {
+        const maxFileBytesInput = root.querySelector(
+          ".tools__searchfiles-max-file-bytes-input",
+        ) as HTMLInputElement | null;
+        const maxFilesVisitedInput = root.querySelector(
+          ".tools__searchfiles-max-files-visited-input",
+        ) as HTMLInputElement | null;
+        const skipDirsInput = root.querySelector(
+          ".tools__searchfiles-skip-dirs-input",
+        ) as HTMLInputElement | null;
+
+        const maxFileBytes = parseInt(maxFileBytesInput?.value || "", 10);
+        const maxFilesVisited = parseInt(maxFilesVisitedInput?.value || "", 10);
+        const skipDirs = skipDirsInput?.value ?? "";
+
+        try {
+          if (!isNaN(maxFileBytes) && maxFileBytes > 0) {
+            await toolsStore.setSearchFilesMaxFileBytes(db, maxFileBytes);
+          }
+          if (!isNaN(maxFilesVisited) && maxFilesVisited > 0) {
+            await toolsStore.setSearchFilesMaxFilesVisited(db, maxFilesVisited);
+          }
+          await toolsStore.setSearchFilesSkipDirs(db, skipDirs);
+          showSuccess("Search Files settings saved");
+        } catch (err) {
+          showError(
+            `Failed to save Search Files settings: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
+      });
+
     // Web Search save button
     root
       .querySelector(".tools__save-websearch-btn")
@@ -566,6 +602,60 @@ export class ShadowClawTools extends ShadowClawElement {
             !webSearchUrlInput.matches(":focus")
           ) {
             webSearchUrlInput.value = toolsStore.webSearchUrl;
+          }
+        }),
+      );
+    }
+
+    // Search Files reactive effects
+    const searchFilesMaxFileBytesInput = root.querySelector(
+      ".tools__searchfiles-max-file-bytes-input",
+    ) as HTMLInputElement | null;
+    const searchFilesMaxFilesVisitedInput = root.querySelector(
+      ".tools__searchfiles-max-files-visited-input",
+    ) as HTMLInputElement | null;
+    const searchFilesSkipDirsInput = root.querySelector(
+      ".tools__searchfiles-skip-dirs-input",
+    ) as HTMLInputElement | null;
+
+    if (searchFilesMaxFileBytesInput) {
+      this.addCleanup(
+        effect(() => {
+          if (
+            document.activeElement !== searchFilesMaxFileBytesInput &&
+            !searchFilesMaxFileBytesInput.matches(":focus")
+          ) {
+            searchFilesMaxFileBytesInput.value = String(
+              toolsStore.searchFilesMaxFileBytes,
+            );
+          }
+        }),
+      );
+    }
+
+    if (searchFilesMaxFilesVisitedInput) {
+      this.addCleanup(
+        effect(() => {
+          if (
+            document.activeElement !== searchFilesMaxFilesVisitedInput &&
+            !searchFilesMaxFilesVisitedInput.matches(":focus")
+          ) {
+            searchFilesMaxFilesVisitedInput.value = String(
+              toolsStore.searchFilesMaxFilesVisited,
+            );
+          }
+        }),
+      );
+    }
+
+    if (searchFilesSkipDirsInput) {
+      this.addCleanup(
+        effect(() => {
+          if (
+            document.activeElement !== searchFilesSkipDirsInput &&
+            !searchFilesSkipDirsInput.matches(":focus")
+          ) {
+            searchFilesSkipDirsInput.value = toolsStore.searchFilesSkipDirs;
           }
         }),
       );

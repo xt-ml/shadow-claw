@@ -202,7 +202,7 @@ The server architecture has been refactored into modular routes and middleware f
 
 ### Core Routes (`src/server/routes/`)
 
-- **LLM Proxies**: `bedrock.ts`, `gemini.ts`, `vertex-ai.ts`, `ollama.ts`, `llamafile.ts`, `github-models.ts`
+- **LLM Proxies**: `bedrock.ts`, `gemini.ts`, `vertex-ai.ts`, `ollama.ts`, `llamafile.ts`, `mesh-llm.ts`
 - **Utility**: `oauth.ts` (OAuth flow), `http-proxy.ts` (generic fetch)
 
 ### Services (`src/server/services/`)

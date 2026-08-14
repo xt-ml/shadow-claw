@@ -287,6 +287,75 @@ describe("shadow-claw-pages", () => {
     expect(setSanitizedHtml).toHaveBeenCalledTimes(1);
   });
 
+  it("is idempotent: skips re-rendering and DOM wiping when called multiple times with identical markdown content", async () => {
+    const component = new ShadowClawPages();
+    const root = component.shadowRoot;
+    expect(root).not.toBeNull();
+    if (!root) {
+      return;
+    }
+
+    component.db = {} as any;
+    component.selectedPage = { groupId: "group-1", path: "docs/page.md" };
+
+    (
+      readGroupFile as jest.MockedFunction<typeof readGroupFile>
+    ).mockResolvedValue("# Unchanged Content");
+
+    // First render: renders and calls setSanitizedHtml
+    await component.renderSelectedPage();
+    expect(setSanitizedHtml).toHaveBeenCalledTimes(1);
+
+    // Second render with identical content: skips setSanitizedHtml
+    await component.renderSelectedPage();
+    expect(setSanitizedHtml).toHaveBeenCalledTimes(1);
+
+    // Third render with identical content: still skipped
+    await component.renderSelectedPage();
+    expect(setSanitizedHtml).toHaveBeenCalledTimes(1);
+
+    // Fourth render with changed content: re-renders
+    (
+      readGroupFile as jest.MockedFunction<typeof readGroupFile>
+    ).mockResolvedValue("# Changed Content");
+    await component.renderSelectedPage();
+    expect(setSanitizedHtml).toHaveBeenCalledTimes(2);
+  });
+
+  it("preserves initial pre-rendered DSD content without re-rendering when DSD page matches on startup", async () => {
+    const component = new ShadowClawPages();
+    const root = component.shadowRoot;
+    expect(root).not.toBeNull();
+    if (!root) {
+      return;
+    }
+
+    // Simulate DSD DOM state
+    const dropdownSelected = root.querySelector(
+      "[data-pages-dropdown-selected]",
+    );
+    if (dropdownSelected) {
+      dropdownSelected.textContent = "docs/page.md";
+    }
+    const rendered = root.querySelector("[data-pages-rendered]") as HTMLElement;
+    rendered.innerHTML = "<p>DSD Pre-rendered Markup</p>";
+    rendered.hidden = false;
+
+    component._dsdInitialPath = "docs/page.md";
+    component.db = {} as any;
+    component.selectedPage = { groupId: "group-1", path: "docs/page.md" };
+
+    (
+      readGroupFile as jest.MockedFunction<typeof readGroupFile>
+    ).mockResolvedValue("Markdown Content");
+
+    await component.renderSelectedPage();
+
+    // setSanitizedHtml should NOT have been called, preserving DSD DOM!
+    expect(setSanitizedHtml).toHaveBeenCalledTimes(0);
+    expect(rendered.innerHTML).toBe("<p>DSD Pre-rendered Markup</p>");
+  });
+
   it("falls back to static main manifest/files when readGroupFile fails and seeds to storage", async () => {
     const component = new ShadowClawPages();
     const root = component.shadowRoot;
@@ -1158,6 +1227,66 @@ describe("shadow-claw-pages", () => {
 
       component.handleWindowFocus();
       expect(renderSpy).toHaveBeenCalled();
+    });
+
+    it("re-renders content when navigating between nested posts", async () => {
+      const component = new ShadowClawPages();
+      const root = component.shadowRoot;
+      expect(root).not.toBeNull();
+      if (!root) return;
+
+      component.db = {} as any;
+
+      const post1 = {
+        groupId: "br:main",
+        path: "posts/2026/07/01/2026-07-01_03-37-38.md",
+      };
+      const post2 = {
+        groupId: "br:main",
+        path: "posts/2025/12/31/2025-12-31_00-08-00.md",
+      };
+
+      (
+        readGroupFile as jest.MockedFunction<typeof readGroupFile>
+      ).mockImplementation(async (_db: any, _groupId: string, path: string) => {
+        if (path === post1.path) return "# Post 1 Content";
+        throw new Error("Not in DB");
+      });
+
+      (
+        getStaticPageContent as jest.MockedFunction<typeof getStaticPageContent>
+      ).mockImplementation(async (path: string) => {
+        if (path === post2.path) return "# Post 2 Static Content";
+        return null;
+      });
+
+      // Navigate to Post 1
+      component.selectedPage = post1;
+      await component.renderSelectedPage();
+
+      const rendered = root.querySelector(
+        "[data-pages-rendered]",
+      ) as HTMLElement;
+      expect(rendered.hidden).toBe(false);
+      expect(renderMarkdown).toHaveBeenCalledWith("# Post 1 Content", {
+        renderFrontmatter: true,
+      });
+
+      // Navigate to Post 2 (triggers fallback to getStaticPageContent and writes to DB)
+      component.selectedPage = post2;
+      await component.renderSelectedPage();
+
+      expect(getStaticPageContent).toHaveBeenCalledWith(post2.path);
+      expect(writeGroupFile).toHaveBeenCalledWith(
+        component.db,
+        "br:main",
+        post2.path,
+        "# Post 2 Static Content",
+      );
+      expect(renderMarkdown).toHaveBeenCalledWith("# Post 2 Static Content", {
+        renderFrontmatter: true,
+      });
+      expect(rendered.hidden).toBe(false);
     });
   });
 });

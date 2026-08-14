@@ -291,4 +291,70 @@ describe("static-files-middleware", () => {
       expect(next).toHaveBeenCalled();
     }
   });
+
+  it("serves fallback asset from pages/main for missing /files/main/ requests", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const req = {
+      method: "GET",
+      headers: { accept: "image/png" },
+      originalUrl: "/files/main/posts/2026/07/01/screenshot.png",
+      url: "/files/main/posts/2026/07/01/screenshot.png",
+    };
+    const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+    const next = jest.fn();
+
+    fsMock.stat.mockImplementation((targetPath: string, cb: any) => {
+      if (targetPath.includes("/root/files/main")) {
+        cb(new Error("ENOENT"));
+      } else if (
+        targetPath.endsWith("pages/main/posts/2026/07/01/screenshot.png")
+      ) {
+        cb(null, { isFile: () => true, isDirectory: () => false });
+      } else {
+        cb(new Error("ENOENT"));
+      }
+    });
+
+    middleware(req, res, next);
+
+    expect(res.sendFile).toHaveBeenCalledWith(
+      expect.stringContaining("pages/main/posts/2026/07/01/screenshot.png"),
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("serves fallback asset from pages/main for missing /static-main/ requests", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const req = {
+      method: "GET",
+      headers: { accept: "image/png" },
+      originalUrl: "/static-main/posts/2026/07/01/screenshot.png",
+      url: "/static-main/posts/2026/07/01/screenshot.png",
+    };
+    const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+    const next = jest.fn();
+
+    fsMock.stat.mockImplementation((targetPath: string, cb: any) => {
+      if (targetPath.includes("/root/static-main")) {
+        cb(new Error("ENOENT"));
+      } else if (
+        targetPath.endsWith("pages/main/posts/2026/07/01/screenshot.png")
+      ) {
+        cb(null, { isFile: () => true, isDirectory: () => false });
+      } else {
+        cb(new Error("ENOENT"));
+      }
+    });
+
+    middleware(req, res, next);
+
+    expect(res.sendFile).toHaveBeenCalledWith(
+      expect.stringContaining("pages/main/posts/2026/07/01/screenshot.png"),
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
 });

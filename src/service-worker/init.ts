@@ -325,5 +325,16 @@ if ("serviceWorker" in navigator) {
     handleServiceWorkerControllerChange();
   });
 
-  wb.register();
+  const registerSW = () => {
+    // Delay registration for 10 seconds to avoid blocking main thread startup.
+    globalThis.setTimeout(() => {
+      wb.register();
+    }, 10_000);
+  };
+
+  if (document.readyState === "complete") {
+    registerSW();
+  } else {
+    globalThis.addEventListener("load", registerSW);
+  }
 }

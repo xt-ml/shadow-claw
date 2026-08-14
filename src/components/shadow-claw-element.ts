@@ -29,6 +29,11 @@ export default class ShadowClawElement extends HTMLElement {
     // Synchronously apply stylesheet compiled by Rolldown
     if (this.shadowRoot && styles instanceof CSSStyleSheet) {
       this.shadowRoot.adoptedStyleSheets = [styles];
+
+      const dsdStyles = this.shadowRoot.querySelectorAll(
+        'style[data-dsd-style], link[rel="stylesheet"]',
+      );
+      dsdStyles.forEach((el) => el.remove());
     }
 
     this.ensureShadowDialogs();

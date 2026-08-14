@@ -1,6 +1,10 @@
 import { jest } from "@jest/globals";
 
-import { ASSISTANT_NAME, LLAMAFILE_PROXY_URL } from "../../config/config.js";
+import {
+  ASSISTANT_NAME,
+  LLAMAFILE_PROXY_URL,
+  getProvider,
+} from "../../config/config.js";
 import { createGroup, updateGroupPinnedProvider } from "../../db/groups.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
@@ -195,6 +199,8 @@ describe("Orchestrator", () => {
 
   it("emits provider-help when queue processing lacks an API key", async () => {
     const o = new Orchestrator();
+    o.provider = "openrouter";
+    o.providerConfig = getProvider("openrouter")!;
     const helpEvents: any[] = [];
     const errorEvents: any[] = [];
 
@@ -210,7 +216,35 @@ describe("Orchestrator", () => {
       timestamp: Date.now(),
     });
 
-    await processQueue(o, {} as any);
+    const fakeRequest: any = {
+      onerror: null,
+      onsuccess: null,
+      result: [],
+    };
+
+    const fakeDb: any = {
+      transaction: () => ({
+        objectStore: () => ({
+          getAll: () => {
+            setTimeout(() => fakeRequest.onsuccess?.(), 0);
+
+            return fakeRequest;
+          },
+          get: () => {
+            setTimeout(() => fakeRequest.onsuccess?.(), 0);
+
+            return fakeRequest;
+          },
+          put: () => {
+            setTimeout(() => fakeRequest.onsuccess?.(), 0);
+
+            return fakeRequest;
+          },
+        }),
+      }),
+    };
+
+    await processQueue(o, fakeDb as any);
 
     expect(helpEvents).toHaveLength(1);
     expect(helpEvents[0]).toMatchObject({
@@ -224,6 +258,8 @@ describe("Orchestrator", () => {
 
   it("emits provider-help for provider auth failures", async () => {
     const o = new Orchestrator();
+    o.provider = "openrouter";
+    o.providerConfig = getProvider("openrouter")!;
     const helpEvents: any[] = [];
 
     o.events.on("provider-help", (payload: any) => helpEvents.push(payload));
@@ -1447,7 +1483,7 @@ describe("Orchestrator", () => {
         trustedPeerIds: [],
       });
 
-      expect(o.provider).toBe("openrouter");
+      expect(o.provider).toBe("prompt_api");
       expect(o.proxyUrl).toBe("/proxy");
 
       expect(o.rateLimitAutoAdapt).toBe(true);

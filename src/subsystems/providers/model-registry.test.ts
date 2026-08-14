@@ -68,11 +68,11 @@ describe("ModelRegistry", () => {
     }
   });
 
-  it("should fetch model info from Copilot Proxy format", async () => {
+  it("should fetch model info from models array payload format", async () => {
     const mockData: any = {
       models: [
         {
-          id: "copilot/gpt-4o",
+          id: "custom/test-model",
           context_window: 8000,
           max_completion_tokens: 4096,
         },
@@ -88,12 +88,12 @@ describe("ModelRegistry", () => {
 
     try {
       await modelRegistry.fetchModelInfo({
-        id: "copilot",
-        modelsUrl: "http://localhost:8888/copilot-proxy/azure-openai/models",
+        id: "custom_provider",
+        modelsUrl: "http://localhost:8888/custom-proxy/models",
         headers: {},
       } as any);
 
-      expect(modelRegistry.getModelInfo("copilot/gpt-4o")).toEqual({
+      expect(modelRegistry.getModelInfo("custom/test-model")).toEqual({
         contextWindow: 8000,
         maxOutput: 4096,
       });

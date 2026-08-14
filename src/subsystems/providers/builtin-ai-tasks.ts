@@ -12,6 +12,11 @@
  * when native browser support is not present.
  */
 
+import { createModelCacheFetch } from "./utils/index.js";
+import { getDb } from "../../db/db.js";
+import { getConfig } from "../../db/getConfig.js";
+import { CONFIG_KEYS } from "../../config/config.js";
+
 export type BuiltinTaskType =
   | "summarizer"
   | "writer"
@@ -155,6 +160,58 @@ export async function isWebGpuAdapterAvailable(): Promise<boolean> {
   }
 }
 
+/**
+ * Returns true when the error indicates the accelerated backend (WebGPU/WebNN)
+ * failed due to a missing operator or unsupported model quantization format,
+ * rather than a recoverable app-level error.
+ *
+ * Covers:
+ * - Generic WebGPU init failures ("webgpu", "webgpuInit", "no available backend")
+ * - ONNX Runtime ORT_NOT_IMPLEMENTED (ERROR_CODE: 9) — fires when a GPU driver
+ *   supports WebGPU/WebNN but lacks a specific kernel (e.g. GatherBlockQuantized
+ *   for block-quantized q4f16 models)
+ * - WebNN backend errors
+ */
+function isAcceleratedBackendError(errMsg: string): boolean {
+  const lower = errMsg.toLowerCase();
+  return (
+    lower.includes("webgpu") ||
+    lower.includes("webgpuinit") ||
+    lower.includes("no available backend") ||
+    lower.includes("webnn") ||
+    // ONNX Runtime ORT_NOT_IMPLEMENTED — unsupported op on this GPU driver
+    lower.includes("error_code: 9") ||
+    lower.includes("could not find an implementation") ||
+    lower.includes("gatherblockquantized") ||
+    lower.includes("ort_not_implemented") ||
+    // ONNX Runtime / GPU memory allocation failures (ORT_ENGINE_ERROR / ORT_FAIL)
+    lower.includes("error_code: 6") ||
+    lower.includes("bad_alloc") ||
+    lower.includes("out of memory") ||
+    lower.includes("allocation failed")
+  );
+}
+
+export let PROMPT_API_POLYFILL_MODEL = "onnx-community/gemma-3-1b-it-ONNX-GQA";
+
+export async function getPromptApiFallbackModel(): Promise<string> {
+  try {
+    const db = await getDb();
+    if (db) {
+      const configured = await getConfig(
+        db,
+        CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+      );
+      if (configured && typeof configured === "string") {
+        return configured;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+  return PROMPT_API_POLYFILL_MODEL;
+}
+
 export async function createTaskInstanceWithFallback<T = any>(
   factory: { create: (opts?: any) => Promise<T> },
   createOpts: any,
@@ -163,19 +220,31 @@ export async function createTaskInstanceWithFallback<T = any>(
     return await factory.create(createOpts);
   } catch (err: any) {
     const errMsg = String(err?.message || err);
-    const isWebGpuErr =
-      errMsg.includes("webgpu") ||
-      errMsg.includes("webgpuInit") ||
-      errMsg.includes("no available backend");
-
     const g = globalThis as any;
-    if (isWebGpuErr && g.TRANSFORMERS_CONFIG?.device === "webgpu") {
+    const currentDevice: string = g.TRANSFORMERS_CONFIG?.device ?? "";
+    const isAccelerated =
+      currentDevice === "webgpu" || currentDevice.startsWith("webnn");
+
+    if (isAccelerated && isAcceleratedBackendError(errMsg)) {
+      let fallbackModel = await getPromptApiFallbackModel();
+
       console.warn(
-        "Built-in AI Polyfill: WebGPU backend initialization failed. Retrying with WASM CPU fallback...",
+        `Built-in AI Polyfill: ${currentDevice} backend failed (${errMsg.slice(0, 120)}). Retrying with WASM/q4 CPU fallback (${fallbackModel})...`,
         err,
       );
+      if (!g.TRANSFORMERS_CONFIG) {
+        g.TRANSFORMERS_CONFIG = { apiKey: "dummy" };
+      }
       g.TRANSFORMERS_CONFIG.device = "wasm";
-      g.TRANSFORMERS_CONFIG.dtype = "q8";
+      g.TRANSFORMERS_CONFIG.dtype = "q4";
+      g.TRANSFORMERS_CONFIG.modelName = fallbackModel;
+      if (!g.TRANSFORMERS_CONFIG.env) {
+        g.TRANSFORMERS_CONFIG.env = {
+          useBrowserCache: false,
+          useWasmCache: true,
+          fetch: createModelCacheFetch(),
+        };
+      }
       return await factory.create(createOpts);
     }
     throw err;
@@ -215,10 +284,14 @@ export async function ensureBuiltinAiPolyfills(): Promise<void> {
     };
   }
 
+  let currentFallbackModel: string | undefined;
+
   if (!("LanguageModel" in g) && !g.ai?.languageModel) {
+    currentFallbackModel = await getPromptApiFallbackModel();
+
     if (!g.TRANSFORMERS_CONFIG) {
       let device = "wasm";
-      let dtype = "q8";
+      let dtype = "q4";
 
       if (typeof navigator !== "undefined") {
         if ("ml" in navigator) {
@@ -237,6 +310,18 @@ export async function ensureBuiltinAiPolyfills(): Promise<void> {
         apiKey: "dummy",
         device,
         dtype,
+        ...(currentFallbackModel ? { modelName: currentFallbackModel } : {}),
+        env: {
+          useBrowserCache: false,
+          useWasmCache: true,
+          fetch: createModelCacheFetch(),
+        },
+      };
+    } else if (!g.TRANSFORMERS_CONFIG.env) {
+      g.TRANSFORMERS_CONFIG.env = {
+        useBrowserCache: false,
+        useWasmCache: true,
+        fetch: createModelCacheFetch(),
       };
     }
     tasks.push(
@@ -248,6 +333,15 @@ export async function ensureBuiltinAiPolyfills(): Promise<void> {
         })
         .catch(() => {}),
     );
+  }
+
+  if (g.TRANSFORMERS_CONFIG) {
+    if (!currentFallbackModel) {
+      currentFallbackModel = await getPromptApiFallbackModel();
+    }
+    if (currentFallbackModel) {
+      g.TRANSFORMERS_CONFIG.modelName = currentFallbackModel;
+    }
   }
   if (!getSummarizerFactory()) {
     tasks.push(
@@ -355,17 +449,23 @@ function createMonitorHandler(
       const loaded = Number(e?.loaded);
       const total = Number(e?.total);
       let ratio: number | null = null;
+      let messageSuffix = "";
+
       if (Number.isFinite(loaded) && Number.isFinite(total) && total > 0) {
         ratio = Math.max(0, Math.min(1, loaded / total));
+        messageSuffix = ` ${Math.round(ratio * 100)}%`;
       } else if (Number.isFinite(loaded) && loaded >= 0 && loaded <= 1) {
         ratio = Math.max(0, Math.min(1, loaded));
+        messageSuffix = ` ${Math.round(ratio * 100)}%`;
+      } else if (Number.isFinite(loaded) && loaded > 1) {
+        const mb = (loaded / 1024 / 1024).toFixed(1);
+        messageSuffix = ` (${mb} MB downloaded)`;
       }
-      const pct = ratio !== null ? Math.round(ratio * 100) : null;
+
       onProgress({
         status: "running",
         progress: ratio,
-        message:
-          `Downloading ${taskLabel} model... ${pct !== null ? `${pct}%` : ""}`.trim(),
+        message: `Downloading ${taskLabel} model...${messageSuffix}`,
       });
     });
   };

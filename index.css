@@ -11,8 +11,8 @@
   --shadow-claw-bg-tertiary: #e2e8f0;
   --shadow-claw-border-color: #e2e8f0;
   --shadow-claw-error-color: #ba1a1a;
-  --shadow-claw-important-color: #ab1515;
-  --shadow-claw-link-hover: #1e3a8a;
+  --shadow-claw-important-color: #334155;
+  --shadow-claw-link-hover: #334155;
   --shadow-claw-link: #1e40af;
   --shadow-claw-on-error: #ffffff;
   --shadow-claw-on-primary: #ffffff;
@@ -84,8 +84,8 @@
     --shadow-claw-bg-tertiary: #334155;
     --shadow-claw-border-color: #334155;
     --shadow-claw-error-color: #ffb4ab;
-    --shadow-claw-link: #60a5fa;
-    --shadow-claw-link-hover: #93c5fd;
+    --shadow-claw-link: #94a3b8;
+    --shadow-claw-link-hover: #94a3b8;
     --shadow-claw-on-error: #690005;
     --shadow-claw-success-color: #34d399;
     --shadow-claw-text-primary: #f1f5f9;
@@ -118,8 +118,8 @@
   --shadow-claw-bg-tertiary: #e2e8f0;
   --shadow-claw-border-color: #e2e8f0;
   --shadow-claw-error-color: #ba1a1a;
-  --shadow-claw-link: #1e40af;
-  --shadow-claw-link-hover: #1e3a8a;
+  --shadow-claw-link: #334155;
+  --shadow-claw-link-hover: #1e293b;
   --shadow-claw-on-error: #ffffff;
   --shadow-claw-success-color: #059669;
   --shadow-claw-warning-color: #d97706;
@@ -139,8 +139,8 @@
   --shadow-claw-bg-tertiary: #334155;
   --shadow-claw-border-color: #334155;
   --shadow-claw-error-color: #ffb4ab;
-  --shadow-claw-link: #60a5fa;
-  --shadow-claw-link-hover: #93c5fd;
+  --shadow-claw-link: #94a3b8;
+  --shadow-claw-link-hover: #cbd5e1;
   --shadow-claw-on-error: #690005;
   --shadow-claw-success-color: #34d399;
   --shadow-claw-text-primary: #f1f5f9;

@@ -490,18 +490,6 @@ class OpenAIAdapter extends BaseAdapter {
       ...(openaiTools.length > 0 && { tools: openaiTools }),
     };
 
-    // Legacy short model IDs (for example "gpt-4o-mini") may require provider
-    // routing hints on some Azure-backed gateways. Canonical GitHub Models IDs
-    // are namespaced (for example "openai/gpt-4.1") and should not include it.
-    if (
-      (this.provider.id === "copilot_azure_openai_proxy" ||
-        this.provider.id === "github_models") &&
-      typeof model === "string" &&
-      !model.includes("/")
-    ) {
-      payload.provider = "azureml";
-    }
-
     // Ollama defaults many models to a 4096 runtime context unless num_ctx is
     // explicitly requested. Reuse discovered model metadata when available.
     if (this.provider.id === "ollama") {

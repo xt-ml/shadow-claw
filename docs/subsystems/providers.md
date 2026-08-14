@@ -27,21 +27,20 @@ Provider (config) → Adapter (format-specific) → Request/Response transformat
 
 All providers are declared in `src/config/config.ts` under `PROVIDERS`:
 
-| Provider ID                  | Format            | Streaming | API Key Required       |
-| ---------------------------- | ----------------- | --------- | ---------------------- |
-| `openrouter`                 | `openai`          | ✅        | ✅                     |
-| `huggingface`                | `openai`          | ✅        | ✅                     |
-| `transformers_js_local`      | `openai`          | ✅        | ❌                     |
-| `transformers_js_browser`    | `transformers_js` | ❌        | ❌                     |
-| `ollama`                     | `openai`          | ✅        | ❌                     |
-| `llamafile`                  | `openai`          | ✅        | ❌                     |
-| `github_models`              | `openai`          | ✅        | ✅                     |
-| `copilot_azure_openai_proxy` | `openai`          | ✅        | ✅                     |
-| `bedrock_proxy`              | `anthropic`       | ✅        | ❌ (AWS SSO via proxy) |
-| `gemini_proxy`               | `openai`          | ✅        | ✅                     |
-| `vertex_ai`                  | `openai`          | ✅        | ✅                     |
-| `mesh-llm`                   | `mesh-llm`        | ✅        | ❌                     |
-| `prompt_api`                 | `prompt_api`      | ❌        | ❌                     |
+| Provider ID               | Format            | Streaming | API Key Required |
+| ------------------------- | ----------------- | --------- | ---------------- |
+| `prompt_api`              | `prompt_api`      | ❌        | ❌ (Default)     |
+| `litert_lm_browser`       | `litert_lm`       | ❌        | ❌               |
+| `transformers_js_browser` | `transformers_js` | ❌        | ❌               |
+| `transformers_js_local`   | `openai`          | ✅        | ❌               |
+| `openrouter`              | `openai`          | ✅        | ✅               |
+| `huggingface`             | `openai`          | ✅        | ✅               |
+| `vertex_ai`               | `openai`          | ✅        | ✅               |
+| `gemini_proxy`            | `openai`          | ✅        | ✅               |
+| `bedrock_proxy`           | `anthropic`       | ✅        | ❌               |
+| `ollama`                  | `openai`          | ✅        | ❌               |
+| `llamafile`               | `openai`          | ✅        | ❌               |
+| `mesh-llm`                | `mesh-llm`        | ✅        | ❌               |
 
 > **Llamafile Note:** The local proxy context size for Llamafile defaults to 8192 tokens but can be configured via the `LLAMAFILE_CTX_SIZE` environment variable (e.g., `LLAMAFILE_CTX_SIZE=32768`).
 
@@ -65,7 +64,7 @@ interface Provider {
 
 ### OpenAI Format (`OpenAIAdapter`)
 
-Used by OpenRouter, Copilot Azure, GitHub Models, and compatible endpoints.
+Used by OpenRouter, HuggingFace, Gemini Proxy, Ollama, Llamafile, and compatible endpoints.
 
 **Endpoint:** `${baseUrl}/chat/completions`
 
@@ -75,7 +74,6 @@ Used by OpenRouter, Copilot Azure, GitHub Models, and compatible endpoints.
 - Messages reformatted to OpenAI structure
 - Tool definitions wrapped as `{ type: "function", function: { name, description, parameters } }`
 - Tool results placed in separate `tool` role messages with `tool_call_id`
-- Special handling for legacy short model IDs (Azure gateway routing)
 - Ollama context window auto-configuration via `num_ctx` option
 - OpenRouter context compression plugin support
 
@@ -120,18 +118,27 @@ Used by direct Google Gemini API integrations (`format: "google"`). Note that th
 
 Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading and a Main-Thread RPC bridge (`request-native-ai-task`) to execute native browser Task APIs (`window.ai.*` / `window.translation.*` and global constructors for Summarizer, Writer, Rewriter, Proofreader, Language Detector, and Translator) off the Web Worker thread. Polyfill fallback for `prompt_api` is transparently enabled for provider invocations and context compaction.
 
-- No network calls
-- No API key
-- Keyless, zero-cost (when native browser APIs are available)
-- Polyfill model downloads cached via Service Worker `CacheFirst` strategy (`huggingface.co`, `cdn.hf.co`, `.onnx`, `.onnx_data` up to 30 days) with progress surfaced via `model-download-progress` events
-- Hardware acceleration probing via **WebNN** (`navigator.ml`) and asynchronous WebGPU feature probing (`isWebGpuAdapterAvailable()`); if adapter/device initialization throws (e.g. iPadOS WebKit WebGPU binding errors), `createTaskInstanceWithFallback()` transparently recovers by switching to WebAssembly CPU (`device: "wasm"`, `dtype: "q8"`)
-- Configurable **Task Tools Backend** (`BUILTIN_AI_TOOLS_BACKEND` setting) — defaults to **Active Conversation LLM** (`active_provider`) so native tasks (summarize, rewrite, translate) route to the main LLM provider, with option to select local browser WebGPU/WASM polyfills (`local`)
-- Supports sampling parameters (`samplingMode`, `temperature`, `topK`) passed to model session initialization per Chrome Built-in AI / W3C Prompt API explainer
-- Supports native `tools` parameter option (`inputSchema` / `parameters`) on session creation alongside JSON envelope fallback parsed by `parseStructured()`:
-  ```json
-  { "type": "tool_use", "tool_calls": [...] }
-  ```
-- `responseConstraint` (JSON schema) may cause Gemini Nano to stall; the provider automatically **retries without the constraint** so the model can generate tool-call JSON freely
+- **Default Provider**: `prompt_api` ("Prompt API (Browser)") is the default provider in ShadowClaw.
+- **Zero Configuration**: Keyless, zero-cost execution with zero network requirements once models are cached.
+- **Dynamic Fallback Architecture**:
+  - Automatically probes hardware acceleration via **WebNN** (`navigator.ml`) and asynchronous WebGPU feature probing (`isWebGpuAdapterAvailable()`).
+  - When accelerated backends encounter unsupported kernels or memory-allocation failures (`ORT_NOT_IMPLEMENTED`, `ERROR_CODE: 9`, `bad_alloc`, `out of memory`, `ERROR_CODE: 6`), `createTaskInstanceWithFallback()` transparently switches execution to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) without interrupting the user with modal prompts.
+  - Default polyfill model is `onnx-community/gemma-3-1b-it-ONNX-GQA`. Users can configure their preferred Prompt API fallback model in Settings (`CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL`, including `onnx-community/Qwen3-0.6B-ONNX`, `onnx-community/Llama-3.2-1B-Instruct-ONNX`, and `onnx-community/SmolLM2-360M-Instruct-ONNX`).
+- **Dynamic Chat Templates & XML Tool Calling**:
+  - Dynamically fetches and parses `tokenizer_config.json` for ONNX models to detect model-native tool calling syntax (such as Qwen/Llama XML `<tool_call>` tags).
+  - Generation loop supports multi-turn session cloning and warm session reuse.
+  - Supports native `tools` parameter option (`inputSchema` / `parameters`) on session creation alongside JSON envelope and XML tool call parsing.
+  - `responseConstraint` (JSON schema) may cause Gemini Nano to stall; the provider automatically **retries without the constraint** so the model can generate tool-call JSON freely.
+- **Chunked Model Download & CacheStorage Engine**:
+  - Shared model caching engine in `src/subsystems/providers/utils/` (`createModelCacheFetch`, `downloadModelToCache`, `loadModelStream`, `assembleChunkedStream`, `flushChunkToCache`).
+  - Downloads are stored directly in `CacheStorage` (`shadow-claw-browser-models` and `shadow-claw-litertlm-models`) with HTTP Range resume and exponential backoff retry.
+  - `Transformers.js` native cache is disabled (`env.useBrowserCache = false`) to avoid redundant double-caching, intercepting fetches via `createModelCacheFetch`.
+  - Service Worker runtime caching bypasses model weights and CDN domains (`*.onnx`, `*.onnx_data`, `huggingface.co`, `hf.co`, `hf-mirror.com`, `litertlm`, etc.) so they are managed directly and reliably by CacheStorage / native fetch.
+  - Model download progress is aggregated via `promptApiProgressAggregator`, dynamically calculating model sizes and suppressing initial false 0% states.
+- **Configurable Task Tools Backend**:
+  - `BUILTIN_AI_TOOLS_BACKEND` setting defaults to **Active Conversation LLM** (`active_provider`) so native tasks (summarize, rewrite, translate) route to the main LLM provider, with option to select local browser WebGPU/WASM polyfills (`local`).
+- **Sampling Parameters**:
+  - Supports sampling parameters (`samplingMode`, `temperature`, `topK`) passed to model session initialization per Chrome Built-in AI / W3C Prompt API explainer.
 
 ### Subagent provider dispatch
 
@@ -211,7 +218,7 @@ The registry provides the backbone for:
 
 ### Dynamic Fetching
 
-Registry info is fetched via `fetchModelInfo(provider, apiKey)`. For authenticated providers, the API key is forwarded to ensure access to the full model list.
+Registry info is fetched via `fetchModelInfo(provider, apiKey)`. For authenticated providers, the API key is forwarded to ensure access to the full model list. Non-critical model registry fetching during initial boot is deferred via `requestIdleCallback` (or `setTimeout` fallback after window load) to prevent blocking the main thread during initial UI paint.
 
 ## Streaming Gates
 
@@ -268,9 +275,11 @@ Models are fetched dynamically via the provider API (e.g., `GET /models`). The m
 
 **Context limits** are resolved per model family via `getContextLimit(model)` — see the [Context Management](../architecture/context-management.md#context-limits-by-model) doc.
 
-**Local Model Ranking:** For browser-based local inference (like `transformers_js_browser`), models are ranked and sorted based on specific heuristics. Smaller, instruction-tuned ONNX models (e.g., <4B parameters) and models with explicit tool support are prioritized to ensure the best performance and compatibility within the browser's constrained execution environment.
+**Local Model Ranking:** For browser-based local inference (like `transformers_js_browser` and `prompt_api`), models are ranked and sorted based on specific heuristics. Smaller, instruction-tuned ONNX models (e.g., <4B parameters) and models with explicit tool support are prioritized to ensure the best performance and compatibility within the browser's constrained execution environment.
 
-**Auto-profile activation:** When a model is selected, the orchestrator checks if any saved tool profile specifies that model. If a match is found, the profile is automatically activated (e.g., the `NANO_BUILTIN_PROFILE` activates when Gemini Nano / Prompt API is selected).
+**Hardware-Aware Token Recommendations:** Token recommendations (`getRecommendedMaxTokens`) scale dynamically based on device memory (`navigator.deviceMemory`), CPU threads (`navigator.hardwareConcurrency`), reasoning model flags, and provider output ceilings for all browser-local providers (`prompt_api`, `transformers_js_browser`, `litert_lm_browser`, and `ollama`).
+
+**Auto-profile activation:** When a model is selected, the orchestrator checks if any saved tool profile specifies that model. If a match is found, the profile is automatically activated (e.g., the `DEFAULT_BUILTIN_PROFILE` activates with safe built-in defaults).
 
 ## Adding a New Provider
 

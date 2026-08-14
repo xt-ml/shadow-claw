@@ -13,7 +13,6 @@
 import type { Express } from "express";
 
 import { registerHttpProxyRoutes } from "./routes/http-proxy.js";
-import { registerGitHubModelsRoutes } from "./routes/github-models.js";
 import { registerBedrockRoutes } from "./routes/bedrock.js";
 import { registerGeminiRoutes } from "./routes/gemini.js";
 import { registerVertexAiRoutes } from "./routes/vertex-ai.js";
@@ -49,7 +48,6 @@ export function registerProxyRoutes(
   registerHttpProxyRoutes(app, options);
 
   // Register provider-specific routes
-  registerGitHubModelsRoutes(app, options);
   registerBedrockRoutes(app, options);
   registerGeminiRoutes(app, options);
   registerVertexAiRoutes(app, options);

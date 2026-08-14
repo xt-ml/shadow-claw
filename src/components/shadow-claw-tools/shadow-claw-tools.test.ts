@@ -67,6 +67,12 @@ jest.unstable_mockModule("../../stores/tools.js", () => ({
     webSearchUseProxy: false,
     webSearchProxyUrl: "/proxy",
     webSearchUrl: "https://html.duckduckgo.com/html/?q={query}",
+    searchFilesMaxFileBytes: 524288,
+    searchFilesMaxFilesVisited: 1000,
+    searchFilesSkipDirs: ".git,node_modules,dist",
+    setSearchFilesMaxFileBytes: jest.fn(),
+    setSearchFilesMaxFilesVisited: jest.fn(),
+    setSearchFilesSkipDirs: jest.fn(),
     setWebSearchUseProxy: jest.fn(),
     setWebSearchProxyUrl: jest.fn(),
     setWebSearchUrl: jest.fn(),
@@ -368,6 +374,52 @@ describe("shadow-claw-tools", () => {
     expect(toolsStore.setWebSearchUrl).toHaveBeenCalledWith(
       expect.anything(),
       "https://search.example.com/?q={query}",
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("saves Search Files settings (maxFileBytes, maxFilesVisited, skipDirs)", async () => {
+    const el = new ShadowClawTools();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const maxBytesInput = el.shadowRoot?.querySelector(
+      ".tools__searchfiles-max-file-bytes-input",
+    ) as HTMLInputElement;
+    const maxVisitedInput = el.shadowRoot?.querySelector(
+      ".tools__searchfiles-max-files-visited-input",
+    ) as HTMLInputElement;
+    const skipDirsInput = el.shadowRoot?.querySelector(
+      ".tools__searchfiles-skip-dirs-input",
+    ) as HTMLInputElement;
+    const saveBtn = el.shadowRoot?.querySelector(
+      ".tools__save-searchfiles-btn",
+    ) as HTMLButtonElement;
+
+    expect(maxBytesInput).toBeTruthy();
+    expect(maxVisitedInput).toBeTruthy();
+    expect(skipDirsInput).toBeTruthy();
+    expect(saveBtn).toBeTruthy();
+
+    maxBytesInput.value = "1048576";
+    maxVisitedInput.value = "2000";
+    skipDirsInput.value = ".git,node_modules,custom_dir";
+    saveBtn.click();
+
+    await new Promise((r) => setTimeout(r, 0));
+    expect(toolsStore.setSearchFilesMaxFileBytes).toHaveBeenCalledWith(
+      expect.anything(),
+      1048576,
+    );
+    expect(toolsStore.setSearchFilesMaxFilesVisited).toHaveBeenCalledWith(
+      expect.anything(),
+      2000,
+    );
+    expect(toolsStore.setSearchFilesSkipDirs).toHaveBeenCalledWith(
+      expect.anything(),
+      ".git,node_modules,custom_dir",
     );
 
     document.body.removeChild(el);

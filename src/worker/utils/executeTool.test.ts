@@ -3032,7 +3032,7 @@ describe("executeTool.js", () => {
     const result = await executeTool({}, "list_tool_profiles", {}, "group1");
 
     expect(mockGetConfig).toHaveBeenCalledWith({}, "tool_profiles");
-    expect(result).toContain("Nano Optimized");
+    expect(result).toContain("Default");
     expect(result).toContain("Profile 1");
     expect(result).toContain("bash");
   });
@@ -3313,8 +3313,8 @@ describe("executeTool.js", () => {
 
     it("should handle search_files", async () => {
       (mockListGroupFiles as any).mockResolvedValue(["file1.txt"]);
-      (mockReadGroupFile as any).mockResolvedValue(
-        "hello world\ntest pattern\nfoo",
+      (mockReadGroupFileBytes as any).mockResolvedValue(
+        Buffer.from("hello world\ntest pattern\nfoo"),
       );
 
       const result = await executeTool(

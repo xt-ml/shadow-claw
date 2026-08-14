@@ -2,7 +2,6 @@ import {
   CONFIG_KEYS,
   DEFAULT_SUBAGENT_MAX_PARALLEL,
   DEFAULT_SUBAGENT_WORKSPACE_MODE,
-  getModelMaxTokens,
 } from "../../../config/config.js";
 
 import { effect } from "../../../core/effect.js";
@@ -534,7 +533,9 @@ export class ShadowClawLlm extends ShadowClawElement {
 
     if (input) {
       input.value = String(currentValue);
-      input.max = String(getModelMaxTokens(modelId));
+      // No max cap — let the user set any value; the model will error at
+      // runtime if it genuinely can't handle the requested length.
+      input.removeAttribute("max");
     }
 
     if (helper) {
@@ -642,6 +643,15 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     this.updateModelProviderHelperText();
+
+    // Toggle Prompt API Fallback Group
+    const promptApiFallbackGroup = root.querySelector(
+      '[data-setting="prompt-api-fallback-group"]',
+    ) as HTMLElement | null;
+    if (promptApiFallbackGroup) {
+      promptApiFallbackGroup.style.display =
+        currentProvider === "prompt_api" ? "block" : "none";
+    }
 
     const modelSelect = root.querySelector(
       '[data-setting="model-select"]',
@@ -1161,13 +1171,11 @@ export class ShadowClawLlm extends ShadowClawElement {
         providerSelect.selectedOptions[0]?.text || "Provider";
       const requiresApiKey = currentProviderData?.requiresApiKey !== false;
       helperText.textContent =
-        currentProvider === "copilot_azure_openai_proxy"
-          ? "Enter your Azure/GitHub Models API key. It is encrypted and stored locally, then forwarded only through your local proxy."
-          : currentProvider === "llamafile"
-            ? "Runs local .llamafile binaries through the local proxy. No API key required."
-            : !requiresApiKey
-              ? "This provider does not require an API key."
-              : `Enter your ${providerName} API key. It is encrypted and stored locally.`;
+        currentProvider === "llamafile"
+          ? "Runs local .llamafile binaries through the local proxy. No API key required."
+          : !requiresApiKey
+            ? "This provider does not require an API key."
+            : `Enter your ${providerName} API key. It is encrypted and stored locally.`;
     }
 
     const keyInput = root.querySelector(
@@ -1338,6 +1346,18 @@ export class ShadowClawLlm extends ShadowClawElement {
     this.updateTransformersJsSettingsVisibility(currentProvider);
     this.renderTransformersJsSettings();
     void this.renderBuiltinAiSettings();
+
+    const promptApiFallbackSelect = root.querySelector(
+      '[data-setting="prompt-api-fallback-select"]',
+    ) as HTMLSelectElement | null;
+    if (promptApiFallbackSelect) {
+      const configuredFallback = await getConfig(
+        this.db,
+        CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+      );
+      promptApiFallbackSelect.value =
+        configuredFallback || "onnx-community/Qwen3-0.6B-ONNX";
+    }
 
     // Load streaming toggle
     const streamingToggle = root.querySelector(
@@ -1804,6 +1824,24 @@ export class ShadowClawLlm extends ShadowClawElement {
       );
 
       return;
+    }
+
+    const promptApiFallbackSelect = root.querySelector(
+      '[data-setting="prompt-api-fallback-select"]',
+    ) as HTMLSelectElement | null;
+    if (
+      promptApiFallbackSelect &&
+      this.orchestrator.provider === "prompt_api"
+    ) {
+      try {
+        await setConfig(
+          this.db,
+          CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+          promptApiFallbackSelect.value,
+        );
+      } catch (err) {
+        console.warn("Error saving prompt api fallback model", err);
+      }
     }
 
     try {

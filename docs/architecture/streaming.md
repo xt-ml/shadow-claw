@@ -142,4 +142,4 @@ Without this, the pre-tool text would be lost when the streaming bubble clears.
 
 The Express dev server (`src/server/server.ts`) uses `compression()` middleware. SSE responses (`Content-Type: text/event-stream`) are **excluded from compression** so that chunks flush to the browser in real time.
 
-Both Bedrock and Copilot Azure proxy routes support SSE passthrough (`src/server/proxy.ts`). If you add new proxy routes that stream SSE, verify they are not buffered by compression — see the filter in `src/server/server.ts`.
+Bedrock, Gemini, Ollama, Llamafile, and Transformers.js proxy routes support SSE passthrough (`src/server/proxy.ts`). If you add new proxy routes that stream SSE, verify they are not buffered by compression — see the filter in `src/server/server.ts`.

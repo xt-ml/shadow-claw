@@ -1,8 +1,6 @@
 import { DEFAULT_GROUP_ID } from "../../../config/config.js";
-import { applyBasePath, buildRoutePath } from "../../../core/app-routes.js";
 
 import { applyAnchorWithRetry } from "./applyAnchorWithRetry.js";
-import { historyState } from "./historyState.js";
 import { showPage } from "./showPage.js";
 
 import type { ShadowClawAppRoute } from "../../../core/app-routes.js";
@@ -17,20 +15,7 @@ export async function applyRoute(
   fStore: FileViewerStore,
   oStore: OrchestratorStore,
   route: ShadowClawAppRoute,
-  options: { replace?: boolean } = { replace: false },
 ) {
-  if (options.replace) {
-    const targetPath = buildRoutePath(route);
-    const finalPath = applyBasePath(targetPath);
-
-    if (finalPath !== window.location.pathname) {
-      historyState(globalThis.history, finalPath, {
-        ...options,
-        useTrailingSlash: false,
-      });
-    }
-  }
-
   const { page, groupId, path, anchor } = route;
   if (!db) {
     return;

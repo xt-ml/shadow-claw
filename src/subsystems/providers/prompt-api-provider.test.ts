@@ -1,5 +1,12 @@
 import { jest } from "@jest/globals";
 
+jest.unstable_mockModule("../../db/db.js", () => ({
+  getDb: jest.fn<any>().mockResolvedValue(null),
+}));
+
+jest.unstable_mockModule("../../db/getConfig.js", () => ({
+  getConfig: jest.fn<any>().mockResolvedValue(null),
+}));
 function setLanguageModelMock(
   createMock: jest.Mock,
   availabilityMock = (jest.fn() as any).mockResolvedValue("available"),
@@ -382,11 +389,11 @@ describe("prompt-api-provider", () => {
     expect(noResponseEmit).toBeUndefined();
   });
 
-  it("includes file-viewer and attachment tools in PROMPT_API_TOOLS", async () => {
+  it("includes file-viewer tools in PROMPT_API_TOOLS", async () => {
     const { PROMPT_API_TOOLS } = await import("./prompt-api-provider.js");
     const names = PROMPT_API_TOOLS.map((t) => t.name);
     expect(names).toContain("open_file");
-    expect(names).toContain("attach_file_to_chat");
+    expect(names).toContain("read_file");
   });
 
   it("emits done download progress when monitor fallback path is used", async () => {
@@ -495,6 +502,143 @@ describe("prompt-api-provider", () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it("aggregates and normalizes polyfill progress events into MB and percentage without getting stuck at 1%", async () => {
+    const clonePrompt = (jest.fn() as any).mockResolvedValue("summary");
+    const cloneDestroy = (jest.fn() as any).mockResolvedValue(undefined);
+    const baseClone = jest.fn(async () => ({
+      prompt: clonePrompt,
+      destroy: cloneDestroy,
+    }));
+    const baseDestroy = (jest.fn() as any).mockResolvedValue(undefined);
+
+    const createMock = jest.fn(async (options: any) => {
+      // Simulate monitor firing non-monotonic events (e.g. tokenizer 100%, then model 1%, 10%, 50%)
+      if (typeof options?.monitor === "function") {
+        const target = new EventTarget();
+        options.monitor(target);
+
+        const makeProgressEvent = (loaded: number, total: number) => {
+          const ev = new Event("downloadprogress");
+          Object.assign(ev, { loaded, total, lengthComputable: true });
+          return ev;
+        };
+
+        target.dispatchEvent(makeProgressEvent(0.01, 1));
+        target.dispatchEvent(makeProgressEvent(0.1, 1));
+        target.dispatchEvent(makeProgressEvent(0.5, 1));
+      }
+
+      return {
+        clone: baseClone,
+        destroy: baseDestroy,
+      };
+    });
+
+    setLanguageModelMock(
+      createMock,
+      (jest.fn() as any).mockResolvedValue("available"),
+    );
+
+    (globalThis as any).TRANSFORMERS_CONFIG = {};
+
+    const { compactWithPromptApi } = await import("./prompt-api-provider.js");
+    const emitted: any[] = [];
+
+    await compactWithPromptApi(
+      "System",
+      [{ role: "user", content: "hello" }],
+      null as any,
+      async (msg: any) => {
+        emitted.push(msg);
+      },
+      "g1",
+    );
+
+    const progressEvents = emitted
+      .filter((m) => m?.type === "model-download-progress")
+      .map((m) => m?.payload);
+
+    expect(progressEvents.length).toBeGreaterThanOrEqual(3);
+    const messages = progressEvents.map((p) => p.message);
+    // Messages must contain MB and percentage formatted monotonically
+    expect(
+      messages.some((m) => m.includes("MB · 1%") || m.includes("MB · 0%")),
+    ).toBe(true);
+    expect(messages.some((m) => m.includes("MB · 10%"))).toBe(true);
+    expect(messages.some((m) => m.includes("MB · 50%"))).toBe(true);
+    expect(messages[messages.length - 1]).toBe("Prompt API model ready.");
+  });
+
+  it("integrates with createModelCacheFetch streaming progress during model download", async () => {
+    const { getModelCacheProgressHook } = await import("./utils/index.js");
+
+    const clonePrompt = (jest.fn() as any).mockResolvedValue("summary");
+    const cloneDestroy = (jest.fn() as any).mockResolvedValue(undefined);
+    const baseClone = jest.fn(async () => ({
+      prompt: clonePrompt,
+      destroy: cloneDestroy,
+    }));
+    const baseDestroy = (jest.fn() as any).mockResolvedValue(undefined);
+
+    const createMock = jest.fn(async (_options: any) => {
+      const hook = getModelCacheProgressHook();
+      if (hook) {
+        // Stream bytes directly from CacheStorage layer
+        hook(
+          "https://example.com/model.onnx_data",
+          100 * 1024 * 1024,
+          763 * 1024 * 1024,
+          false,
+        );
+        hook(
+          "https://example.com/model.onnx_data",
+          400 * 1024 * 1024,
+          763 * 1024 * 1024,
+          false,
+        );
+        hook(
+          "https://example.com/model.onnx_data",
+          763 * 1024 * 1024,
+          763 * 1024 * 1024,
+          true,
+        );
+      }
+
+      return {
+        clone: baseClone,
+        destroy: baseDestroy,
+      };
+    });
+
+    setLanguageModelMock(
+      createMock,
+      (jest.fn() as any).mockResolvedValue("downloadable"),
+    );
+
+    const { compactWithPromptApi } = await import("./prompt-api-provider.js");
+    const emitted: any[] = [];
+
+    await compactWithPromptApi(
+      "System",
+      [{ role: "user", content: "hello" }],
+      null as any,
+      async (msg: any) => {
+        emitted.push(msg);
+      },
+      "g1",
+    );
+
+    const progressEvents = emitted
+      .filter((m) => m?.type === "model-download-progress")
+      .map((m) => m?.payload);
+
+    const messages = progressEvents.map((p) => p.message);
+    expect(
+      messages.some((m) => m.includes("100.0 /") || m.includes("400.0 /")),
+    ).toBe(true);
+    expect(messages[messages.length - 1]).toBe("Prompt API model ready.");
   });
 
   it("logs Gemma 4 in starting message when runtime model id is exposed", async () => {

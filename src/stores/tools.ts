@@ -4,7 +4,7 @@ import { CONFIG_KEYS } from "../config/config.js";
 import { getConfig } from "../db/getConfig.js";
 import { setConfig } from "../db/setConfig.js";
 import { TOOL_DEFINITIONS } from "../subsystems/tools/tools.js";
-import { NANO_BUILTIN_PROFILE } from "../subsystems/tools/builtin-profiles.js";
+import { DEFAULT_BUILTIN_PROFILE } from "../subsystems/tools/builtin-profiles.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 import type { ToolDefinition, ToolProfile } from "../subsystems/tools/tools.js";
 
@@ -20,19 +20,27 @@ export class ToolsStore {
   private _webSearchProxyUrl: Signal.State<string>;
   private _webSearchUrl: Signal.State<string>;
   private _webSearchUseProxy: Signal.State<boolean>;
+  private _searchFilesMaxFileBytes: Signal.State<number>;
+  private _searchFilesMaxFilesVisited: Signal.State<number>;
+  private _searchFilesSkipDirs: Signal.State<string>;
 
   constructor() {
     this._enabledToolNames = new Signal.State(
-      new Set(TOOL_DEFINITIONS.map((t) => t.name)),
+      new Set(DEFAULT_BUILTIN_PROFILE.enabledToolNames),
     );
     this._customTools = new Signal.State([]);
     this._systemPromptOverride = new Signal.State("");
     this._profiles = new Signal.State([]);
-    this._activeProfileId = new Signal.State(null);
+    this._activeProfileId = new Signal.State(DEFAULT_BUILTIN_PROFILE.id);
     this._webSearchUseProxy = new Signal.State(false);
     this._webSearchProxyUrl = new Signal.State("/proxy");
     this._webSearchUrl = new Signal.State(
       "https://html.duckduckgo.com/html/?q={query}",
+    );
+    this._searchFilesMaxFileBytes = new Signal.State(512 * 1024);
+    this._searchFilesMaxFilesVisited = new Signal.State(1000);
+    this._searchFilesSkipDirs = new Signal.State(
+      ".git,node_modules,dist,dist-electron,.cache,.nx,.turbo,__pycache__,.venv,venv",
     );
 
     // Derived signals using Signal.Computed for proper reactive propagation.
@@ -55,8 +63,8 @@ export class ToolsStore {
         return null;
       }
 
-      if (NANO_BUILTIN_PROFILE.id === id) {
-        return NANO_BUILTIN_PROFILE;
+      if (DEFAULT_BUILTIN_PROFILE.id === id) {
+        return DEFAULT_BUILTIN_PROFILE;
       }
 
       return this._profiles.get().find((p: ToolProfile) => p.id === id) || null;
@@ -101,6 +109,9 @@ export class ToolsStore {
         webSearchUseProxy: this._webSearchUseProxy.get(),
         webSearchProxyUrl: this._webSearchProxyUrl.get(),
         webSearchUrl: this._webSearchUrl.get(),
+        searchFilesMaxFileBytes: this._searchFilesMaxFileBytes.get(),
+        searchFilesMaxFilesVisited: this._searchFilesMaxFilesVisited.get(),
+        searchFilesSkipDirs: this._searchFilesSkipDirs.get(),
       },
       null,
       2,
@@ -122,7 +133,7 @@ export class ToolsStore {
   }
 
   get profiles(): ToolProfile[] {
-    return [NANO_BUILTIN_PROFILE, ...this._profiles.get()];
+    return [DEFAULT_BUILTIN_PROFILE, ...this._profiles.get()];
   }
 
   get systemPromptOverride(): string {
@@ -139,6 +150,30 @@ export class ToolsStore {
 
   get webSearchUseProxy(): boolean {
     return this._webSearchUseProxy.get();
+  }
+
+  get searchFilesMaxFileBytes(): number {
+    return this._searchFilesMaxFileBytes.get();
+  }
+
+  get searchFilesMaxFilesVisited(): number {
+    return this._searchFilesMaxFilesVisited.get();
+  }
+
+  /** Comma-separated list of directory names to skip when walking the workspace. */
+  get searchFilesSkipDirs(): string {
+    return this._searchFilesSkipDirs.get();
+  }
+
+  /** Parsed Set of directory names to skip — derived from the comma-separated string. */
+  get searchFilesSkipDirsSet(): Set<string> {
+    return new Set(
+      this._searchFilesSkipDirs
+        .get()
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
   }
 
   async activateProfile(
@@ -229,7 +264,7 @@ export class ToolsStore {
     db: ShadowClawDatabase,
     profileId: string,
   ): Promise<void> {
-    if (profileId === NANO_BUILTIN_PROFILE.id) {
+    if (profileId === DEFAULT_BUILTIN_PROFILE.id) {
       return;
     }
 
@@ -303,6 +338,39 @@ export class ToolsStore {
       this._webSearchUrl.set(data.webSearchUrl);
       await setConfig(db, CONFIG_KEYS.WEB_SEARCH_URL, data.webSearchUrl);
     }
+
+    if (
+      typeof data.searchFilesMaxFileBytes === "number" &&
+      data.searchFilesMaxFileBytes > 0
+    ) {
+      this._searchFilesMaxFileBytes.set(data.searchFilesMaxFileBytes);
+      await setConfig(
+        db,
+        CONFIG_KEYS.SEARCH_FILES_MAX_FILE_BYTES,
+        String(data.searchFilesMaxFileBytes),
+      );
+    }
+
+    if (
+      typeof data.searchFilesMaxFilesVisited === "number" &&
+      data.searchFilesMaxFilesVisited > 0
+    ) {
+      this._searchFilesMaxFilesVisited.set(data.searchFilesMaxFilesVisited);
+      await setConfig(
+        db,
+        CONFIG_KEYS.SEARCH_FILES_MAX_FILES_VISITED,
+        String(data.searchFilesMaxFilesVisited),
+      );
+    }
+
+    if (typeof data.searchFilesSkipDirs === "string") {
+      this._searchFilesSkipDirs.set(data.searchFilesSkipDirs);
+      await setConfig(
+        db,
+        CONFIG_KEYS.SEARCH_FILES_SKIP_DIRS,
+        data.searchFilesSkipDirs,
+      );
+    }
   }
 
   /**
@@ -318,6 +386,9 @@ export class ToolsStore {
       webSearchUseProxyRaw,
       webSearchProxyUrlRaw,
       webSearchUrlRaw,
+      searchFilesMaxFileBytesRaw,
+      searchFilesMaxFilesVisitedRaw,
+      searchFilesSkipDirsRaw,
     ] = await Promise.all([
       getConfig(db, CONFIG_KEYS.ENABLED_TOOLS),
       getConfig(db, CONFIG_KEYS.CUSTOM_TOOLS),
@@ -327,6 +398,9 @@ export class ToolsStore {
       getConfig(db, CONFIG_KEYS.WEB_SEARCH_USE_PROXY),
       getConfig(db, CONFIG_KEYS.WEB_SEARCH_PROXY_URL),
       getConfig(db, CONFIG_KEYS.WEB_SEARCH_URL),
+      getConfig(db, CONFIG_KEYS.SEARCH_FILES_MAX_FILE_BYTES),
+      getConfig(db, CONFIG_KEYS.SEARCH_FILES_MAX_FILES_VISITED),
+      getConfig(db, CONFIG_KEYS.SEARCH_FILES_SKIP_DIRS),
     ]);
 
     if (Array.isArray(enabledRaw)) {
@@ -367,6 +441,33 @@ export class ToolsStore {
     ) {
       this._webSearchUrl.set(webSearchUrlRaw.trim());
     }
+
+    if (
+      searchFilesMaxFileBytesRaw !== null &&
+      searchFilesMaxFileBytesRaw !== undefined
+    ) {
+      const n = Number(searchFilesMaxFileBytesRaw);
+      if (Number.isFinite(n) && n > 0) {
+        this._searchFilesMaxFileBytes.set(n);
+      }
+    }
+
+    if (
+      searchFilesMaxFilesVisitedRaw !== null &&
+      searchFilesMaxFilesVisitedRaw !== undefined
+    ) {
+      const n = Number(searchFilesMaxFilesVisitedRaw);
+      if (Number.isFinite(n) && n > 0) {
+        this._searchFilesMaxFilesVisited.set(n);
+      }
+    }
+
+    if (
+      typeof searchFilesSkipDirsRaw === "string" &&
+      searchFilesSkipDirsRaw.trim().length > 0
+    ) {
+      this._searchFilesSkipDirs.set(searchFilesSkipDirsRaw.trim());
+    }
   }
 
   async setWebSearchProxyUrl(
@@ -395,6 +496,41 @@ export class ToolsStore {
       CONFIG_KEYS.WEB_SEARCH_USE_PROXY,
       enabled ? "true" : "false",
     );
+  }
+
+  async setSearchFilesMaxFileBytes(
+    db: ShadowClawDatabase,
+    bytes: number,
+  ): Promise<void> {
+    const clamped = Math.max(1, Math.round(bytes));
+    this._searchFilesMaxFileBytes.set(clamped);
+    await setConfig(
+      db,
+      CONFIG_KEYS.SEARCH_FILES_MAX_FILE_BYTES,
+      String(clamped),
+    );
+  }
+
+  async setSearchFilesMaxFilesVisited(
+    db: ShadowClawDatabase,
+    count: number,
+  ): Promise<void> {
+    const clamped = Math.max(1, Math.round(count));
+    this._searchFilesMaxFilesVisited.set(clamped);
+    await setConfig(
+      db,
+      CONFIG_KEYS.SEARCH_FILES_MAX_FILES_VISITED,
+      String(clamped),
+    );
+  }
+
+  async setSearchFilesSkipDirs(
+    db: ShadowClawDatabase,
+    dirs: string,
+  ): Promise<void> {
+    const trimmed = dirs.trim();
+    this._searchFilesSkipDirs.set(trimmed);
+    await setConfig(db, CONFIG_KEYS.SEARCH_FILES_SKIP_DIRS, trimmed);
   }
 
   async removeCustomTool(

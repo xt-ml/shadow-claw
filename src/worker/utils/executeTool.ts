@@ -72,6 +72,7 @@ import { executeSearchFiles } from "../tools/workspace/search-files.js";
 import { executeSendFile } from "../tools/workspace/send-file.js";
 import { executeUpdateMemory } from "../tools/workspace/update-memory.js";
 import { executeWriteFile } from "../tools/workspace/write-file.js";
+import { toolsStore } from "../../stores/tools.js";
 import {
   executeDetectLanguage,
   executeProofreadText,
@@ -468,7 +469,11 @@ export async function executeTool(
       }
 
       case "search_files": {
-        return await executeSearchFiles(db, input, groupId);
+        return await executeSearchFiles(db, input, groupId, {
+          maxFileBytes: toolsStore.searchFilesMaxFileBytes,
+          maxFilesVisited: toolsStore.searchFilesMaxFilesVisited,
+          skipDirs: toolsStore.searchFilesSkipDirsSet,
+        });
       }
 
       case "diff_files": {

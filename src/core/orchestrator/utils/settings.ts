@@ -1,4 +1,4 @@
-import { CONFIG_KEYS, getModelMaxTokens } from "../../../config/config.js";
+import { CONFIG_KEYS } from "../../../config/config.js";
 import { setConfig as _defaultSetConfig } from "../../../db/setConfig.js";
 import { syncProxyConfigToServiceWorker } from "./syncProxyConfigToServiceWorker.js";
 
@@ -56,8 +56,10 @@ export async function setMaxTokens(
   value: number,
   _setConfig: SetConfigFn = _defaultSetConfig,
 ): Promise<void> {
-  const dynamicMaxTokens = getModelMaxTokens(state.model);
-  const normalized = Math.max(1, Math.min(value, dynamicMaxTokens));
+  // Allow the user to set any value ≥ 1.  The model will error at runtime if
+  // the value exceeds its actual capacity — this is the correct behaviour for
+  // ONNX community models that have no enforced API cap.
+  const normalized = Math.max(1, value);
 
   state.maxTokens = normalized;
 

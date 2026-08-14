@@ -362,9 +362,15 @@ describe("LiteRT-LM Provider", () => {
       mockFetch.mockResolvedValueOnce(makeFetchResponse(200, modelData) as any);
 
       const onProgress = jest.fn<any>();
-      await loadLiteRtModelStream("http://model", onProgress);
+      const stream = await loadLiteRtModelStream("http://model", onProgress);
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      const reader = stream.getReader();
+      while (true) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
 
       // At least one chunk entry should have been written
       const chunkEntry = cacheStore.get("http://model?__sc_chunk=0");
@@ -417,12 +423,18 @@ describe("LiteRT-LM Provider", () => {
       } as any);
 
       const onProgress = jest.fn<any>();
-      await loadLiteRtModelStream("http://model", onProgress);
+      const stream = await loadLiteRtModelStream("http://model", onProgress);
 
       // Must have issued a Range request
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [, fetchInit] = mockFetch.mock.calls[0] as any[];
       expect(fetchInit.headers["Range"]).toBe("bytes=4-");
+
+      const reader = stream.getReader();
+      while (true) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
 
       // Meta should now be complete
       const metaRaw = cacheStore.get("http://model?__sc_meta=1");
@@ -457,9 +469,15 @@ describe("LiteRT-LM Provider", () => {
       mockFetch.mockResolvedValueOnce(makeFetchResponse(200, fullData) as any);
 
       const onProgress = jest.fn<any>();
-      await loadLiteRtModelStream("http://model", onProgress);
+      const stream = await loadLiteRtModelStream("http://model", onProgress);
 
       expect(mockFetch).toHaveBeenCalledTimes(1);
+
+      const reader = stream.getReader();
+      while (true) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
 
       // Final meta should reflect the full 8 bytes, not 4+4
       const metaRaw = cacheStore.get("http://model?__sc_meta=1");
@@ -477,9 +495,16 @@ describe("LiteRT-LM Provider", () => {
         .mockResolvedValueOnce(makeFetchResponse(200, modelData) as any);
 
       const onProgress = jest.fn<any>();
-      await loadLiteRtModelStream("http://model", onProgress);
+      const stream = await loadLiteRtModelStream("http://model", onProgress);
 
       expect(mockFetch).toHaveBeenCalledTimes(2);
+
+      const reader = stream.getReader();
+      while (true) {
+        const { done } = await reader.read();
+        if (done) break;
+      }
+
       const meta = JSON.parse(
         decodeBytes(cacheStore.get("http://model?__sc_meta=1")!.body!),
       );

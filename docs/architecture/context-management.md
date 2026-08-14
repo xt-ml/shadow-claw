@@ -207,5 +207,17 @@ Context limits are resolved per model family via `getContextLimit(model)` in `sr
 | `phi-4`                                    | 16,384 tokens    |
 | `phi-3.5`                                  | 128,000 tokens   |
 | `phi-3`                                    | 4,096 tokens     |
+| `Qwen3-0.6B-ONNX`                          | 32,768 tokens    |
+| `Llama-3.2-1B-Instruct-ONNX`               | 131,072 tokens   |
+| `SmolLM2-360M-Instruct-ONNX`               | 8,192 tokens     |
 | `gemini-nano`                              | 4,096 tokens     |
 | Default fallback                           | 4,096 tokens     |
+
+## Hardware-Aware Token Recommendations
+
+`getRecommendedMaxTokens` (`src/components/settings/shadow-claw-llm/utils/getRecommendedMaxTokens.ts`) dynamically calculates recommended max output token budgets:
+
+- Evaluates client hardware constraints via `navigator.deviceMemory` (RAM) and `navigator.hardwareConcurrency` (CPU cores).
+- Checks whether the selected model is a deep reasoning model (e.g. `o1`, `o3`, `r1`), provisioning larger default output allowances for internal chain-of-thought tokens.
+- Clamps output limits to model context sizes and provider output ceilings (`MODEL_OUTPUT_LIMITS`).
+- Applies balanced defaults for browser-local inference providers (`prompt_api`, `transformers_js_browser`, `litert_lm_browser`, `ollama`) to prevent browser memory exhaustion.

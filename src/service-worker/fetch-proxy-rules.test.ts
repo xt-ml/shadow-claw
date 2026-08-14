@@ -45,5 +45,23 @@ describe("shouldBypassFetchProxy", () => {
         "http://localhost:8888",
       ),
     ).toBe(true);
+
+    expect(
+      shouldBypassFetchProxy(
+        new URL(
+          "https://hf-mirror.com/onnx-community/Qwen3-0.6B-ONNX/resolve/main/model_q4.onnx",
+        ),
+        "http://localhost:8888",
+      ),
+    ).toBe(true);
+
+    expect(
+      shouldBypassFetchProxy(
+        new URL(
+          "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.3.3/dist/transformers.min.js",
+        ),
+        "http://localhost:8888",
+      ),
+    ).toBe(true);
   });
 });

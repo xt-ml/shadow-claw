@@ -12,14 +12,6 @@ const PROVIDER_HELP_LINKS: Record<string, { label: string; href: string }> = {
     label: "HuggingFace Access Tokens",
     href: "https://huggingface.co/settings/tokens",
   },
-  github_models: {
-    label: "GitHub Personal Access Tokens",
-    href: "https://github.com/settings/personal-access-tokens",
-  },
-  copilot_azure_openai_proxy: {
-    label: "GitHub Models Docs",
-    href: "https://docs.github.com/en/github-models",
-  },
   bedrock_proxy: {
     label: "AWS Bedrock Setup",
     href: "https://docs.aws.amazon.com/bedrock/latest/userguide/what-is-bedrock.html",
@@ -33,8 +25,6 @@ const PROVIDER_HELP_LINKS: Record<string, { label: string; href: string }> = {
 const LOCAL_PROXY_PROVIDER_IDS = new Set([
   "ollama",
   "bedrock_proxy",
-  "github_models",
-  "copilot_azure_openai_proxy",
   "llamafile",
   "transformers_js_local",
 ]);

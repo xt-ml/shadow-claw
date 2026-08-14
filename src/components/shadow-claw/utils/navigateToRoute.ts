@@ -16,7 +16,7 @@ export async function navigateToRoute(
   fStore: FileViewerStore,
   oStore: OrchestratorStore,
   route: ShadowClawAppRoute,
-  options: { replace?: boolean } = { replace: true },
+  options: { replace?: boolean } = { replace: false },
 ): Promise<void> {
   const targetPath = buildRoutePath(route);
   const finalPath = applyBasePath(targetPath);
@@ -25,15 +25,18 @@ export async function navigateToRoute(
     const nav = (window as any).navigation;
 
     nav.navigate(finalPath, {
-      history: options.replace ? "replace" : "auto",
+      history: options.replace ? "replace" : "push",
     });
-
-    historyState(globalThis.history, finalPath, options);
 
     return;
   }
 
-  // historyState(globalThis.history, finalPath, { replace: true });
+  if (finalPath !== window.location.pathname) {
+    historyState(globalThis.history, finalPath, {
+      ...options,
+      useTrailingSlash: false,
+    });
+  }
 
-  await applyRoute(shadow, shadowClaw, db, fStore, oStore, route, options);
+  await applyRoute(shadow, shadowClaw, db, fStore, oStore, route);
 }

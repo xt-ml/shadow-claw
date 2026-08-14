@@ -6,6 +6,7 @@ import {
   env,
 } from "@huggingface/transformers";
 
+import { createModelCacheFetch } from "../../subsystems/providers/utils/index.js";
 import {
   getPreferredDtypes,
   normalizeDtypeStrategy,
@@ -20,35 +21,22 @@ import {
 if (isRemoteEnvironment()) {
   env.allowLocalModels = false;
   env.allowRemoteModels = true;
-  env.useBrowserCache = true;
+  // Disable Transformers.js's own browser cache: createModelCacheFetch handles
+  // all caching via shadow-claw-browser-models (chunked, resumable). Leaving
+  // useBrowserCache=true would write a second copy of every model file into
+  // Transformers.js's own `transformers-cache`, doubling quota usage.
+  env.useBrowserCache = false;
   env.useWasmCache = true;
 
-  // Prevent Range-request cache poisoning: the library's get_file_metadata
-  // does GET with Range:bytes=0-0 (returns 1 byte, e.g. "{"). Without
-  // cache:'no-store', the browser may cache that partial 206 response and
-  // serve it for the subsequent full GET, causing JSON.parse("{") to fail.
-  const nativeFetch = self.fetch.bind(self);
-  (env as any).fetch = (url: string, options: any = {}) => {
-    const hdrs = options.headers;
-    const hasRange =
-      hdrs instanceof Headers
-        ? hdrs.has("Range")
-        : hdrs && typeof hdrs === "object"
-          ? "Range" in hdrs
-          : false;
-
-    if (hasRange) {
-      return nativeFetch(url, { ...options, cache: "no-store" });
-    }
-
-    return nativeFetch(url, options);
-  };
+  // Intercept fetch to use chunked disk-backed CacheStorage and prevent Range-request cache poisoning
+  (env as any).fetch = createModelCacheFetch(self.fetch.bind(self));
 } else {
   // In local dev, we might serve models from a local directory
   env.allowLocalModels = true;
   env.allowRemoteModels = true;
-  env.useBrowserCache = true;
+  env.useBrowserCache = false; // same rationale as above
   env.useWasmCache = true;
+  (env as any).fetch = createModelCacheFetch(self.fetch.bind(self));
 }
 
 // Initialize domain mirroring
@@ -244,6 +232,7 @@ async function generate(
   messages: any[],
   maxTokens: number,
   groupId: string,
+  tools?: any[],
   abortSignal?: AbortSignal,
 ) {
   if (!model || !processor) {
@@ -294,9 +283,22 @@ async function generate(
     };
   });
 
+  const mappedTools =
+    tools && tools.length > 0
+      ? tools.map((t) => ({
+          type: "function",
+          function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.input_schema,
+          },
+        }))
+      : undefined;
+
   const inputs = tokenizer.apply_chat_template(chatMessages, {
     add_generation_prompt: true,
     return_dict: true,
+    ...(mappedTools ? { tools: mappedTools } : {}),
   });
 
   let START_THINKING_TOKEN_ID: number | undefined;
@@ -389,7 +391,12 @@ self.onmessage = async (event) => {
 
         break;
       case "generate":
-        await generate(payload.messages, payload.maxTokens, payload.groupId);
+        await generate(
+          payload.messages,
+          payload.maxTokens,
+          payload.groupId,
+          payload.tools,
+        );
 
         break;
       case "dispose":

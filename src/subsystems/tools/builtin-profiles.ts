@@ -4,34 +4,21 @@ import { ToolProfile } from "./types.js";
  * Built-in profile optimized for Gemini Nano (Prompt API).
  * Minimizes context consumption so Nano has maximum tokens for generation.
  */
-export const NANO_BUILTIN_PROFILE: ToolProfile = {
-  id: "__builtin_nano",
-  name: "Nano Optimized",
+export const DEFAULT_BUILTIN_PROFILE: ToolProfile = {
+  id: "__builtin_default",
+  name: "Default",
   providerId: "prompt_api",
   enabledToolNames: [
-    "bash",
-    "read_file",
-    "write_file",
-    "delete_file",
-    "move_file",
-    "copy_file",
-    "create_directory",
-    "list_files",
-    "attach_file_to_chat",
-    "open_file",
     "fetch_url",
-    "update_memory",
-    "create_task",
     "javascript",
-    "list_tasks",
-    "show_toast",
-    "send_notification",
-    "summarize_text",
-    "write_text",
-    "rewrite_text",
+    "list_files",
+    "open_file",
     "proofread_text",
-    "detect_language",
+    "read_file",
+    "summarize_text",
     "translate_text",
+    "write_file",
+    "write_text",
   ],
   customTools: [],
   systemPromptOverride:

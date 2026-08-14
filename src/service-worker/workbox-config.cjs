@@ -28,6 +28,7 @@ module.exports = {
     "playwright.config.js",
     "tsconfig.json",
     "package-lock.json",
+    "**/routes.json",
   ],
   swDest: "dist/public/service-worker.js",
   sourcemap: false,
@@ -47,44 +48,11 @@ module.exports = {
   // cleanupOutdatedCaches: true,
   // https://developer.chrome.com/docs/workbox/modules/workbox-build#property-BasePartial-maximumFileSizeToCacheInBytes
   // maximumFileSizeToCacheInBytes: 1024 * 1024 * 6, // 6MB
-  maximumFileSizeToCacheInBytes: 1024 * 1024 * 1024, // 1GB
+  maximumFileSizeToCacheInBytes: 1024 * 1024 * 1024 * 10, // 10GB
   // define runtime caching rules
   runtimeCaching: [
     {
-      urlPattern: ({ url }) =>
-        url.hostname === "huggingface.co" && url.pathname.endsWith(".litertlm"),
-      handler: "NetworkOnly",
-    },
-    {
-      urlPattern: ({ url }) => {
-        const isHfDomain =
-          url.hostname === "huggingface.co" ||
-          url.hostname.endsWith(".huggingface.co") ||
-          url.hostname.endsWith(".hf.co") ||
-          url.hostname === "hf.co";
-
-        if (!isHfDomain) return false;
-
-        return (
-          /\.(onnx|onnx_data|safetensors|bin|json|wasm|model)(\?.*)?$/i.test(
-            url.pathname,
-          ) || url.pathname.includes("/resolve/")
-        );
-      },
-      handler: "CacheFirst",
-      options: {
-        cacheName: "huggingface-models-cache",
-        expiration: {
-          maxEntries: 100,
-          maxAgeSeconds: 365 * 24 * 60 * 60,
-        },
-        cacheableResponse: {
-          statuses: [0, 200],
-        },
-      },
-    },
-    {
-      // exclude loopback proxy paths and channel endpoints that should never be cached
+      // exclude loopback proxy paths, Hugging Face / model downloads, CDN hosts, and channel endpoints
       urlPattern: ({ url }) => {
         // Skip VM asset paths to avoid flooding CacheStorage with high-volume chunk requests.
         if (
@@ -94,8 +62,32 @@ module.exports = {
           return false;
         }
 
+        const hostname = url.hostname.toLowerCase();
+
+        const isBypassDomain =
+          hostname === "huggingface.co" ||
+          hostname.endsWith(".huggingface.co") ||
+          hostname.endsWith(".hf.co") ||
+          hostname === "hf.co" ||
+          hostname === "hf-mirror.com" ||
+          hostname.endsWith(".hf-mirror.com") ||
+          hostname === "cdnjs.cloudflare.com" ||
+          hostname === "esm.sh" ||
+          hostname.endsWith(".esm.sh") ||
+          hostname === "unpkg.com" ||
+          hostname === "cdn.jsdelivr.net" ||
+          hostname.endsWith(".jsdelivr.net") ||
+          hostname === "esm.run" ||
+          hostname === "openrouter.ai" ||
+          hostname.endsWith(".openrouter.ai") ||
+          hostname === "api.telegram.org";
+
+        if (isBypassDomain) {
+          return false;
+        }
+
         const isLoopback =
-          url.hostname === "localhost" || url.hostname === "127.0.0.1";
+          hostname === "localhost" || hostname === "127.0.0.1";
 
         const isShareTargetPath = url.pathname.endsWith(
           "/share/share-target.html",

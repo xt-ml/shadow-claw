@@ -11,7 +11,7 @@ describe("applyRoute", () => {
   let mockApplyBasePath: jest.Mock<any>;
   let mockBuildRoutePath: jest.Mock<any>;
   let mockApplyAnchorWithRetry: jest.Mock<any>;
-  let mockHistoryState: jest.Mock<any>;
+
   let mockShowPage: jest.Mock<any>;
 
   beforeEach(async () => {
@@ -31,10 +31,6 @@ describe("applyRoute", () => {
       applyAnchorWithRetry: jest.fn(),
     }));
 
-    jest.unstable_mockModule("./historyState.js", () => ({
-      historyState: jest.fn(),
-    }));
-
     jest.unstable_mockModule("./showPage.js", () => ({
       showPage: jest.fn(),
     }));
@@ -46,9 +42,6 @@ describe("applyRoute", () => {
     const anchorModule = await import("./applyAnchorWithRetry.js");
     mockApplyAnchorWithRetry =
       anchorModule.applyAnchorWithRetry as jest.Mock<any>;
-
-    const historyModule = await import("./historyState.js");
-    mockHistoryState = historyModule.historyState as jest.Mock<any>;
 
     const showPageModule = await import("./showPage.js");
     mockShowPage = showPageModule.showPage as jest.Mock<any>;
@@ -96,42 +89,6 @@ describe("applyRoute", () => {
     jest
       .spyOn(globalThis.customElements, "whenDefined")
       .mockResolvedValue(HTMLElement as any);
-  });
-
-  describe("when options.replace is true", () => {
-    it("should call historyState when finalPath differs from current path", async () => {
-      const originalPath = window.location.pathname;
-      window.history.pushState({}, "", "/current");
-
-      mockApplyBasePath.mockReturnValue("/new");
-
-      await applyRoute(shadow, shadowClaw, db, fStore, oStore, route, {
-        replace: true,
-      });
-
-      expect(mockHistoryState).toHaveBeenCalledWith(
-        globalThis.history,
-        "/new",
-        { replace: true, useTrailingSlash: false },
-      );
-
-      window.history.pushState({}, "", originalPath);
-    });
-
-    it("should not call historyState when finalPath equals current path", async () => {
-      const originalPath = window.location.pathname;
-      window.history.pushState({}, "", "/same");
-
-      mockApplyBasePath.mockReturnValue("/same");
-
-      await applyRoute(shadow, shadowClaw, db, fStore, oStore, route, {
-        replace: true,
-      });
-
-      expect(mockHistoryState).not.toHaveBeenCalled();
-
-      window.history.pushState({}, "", originalPath);
-    });
   });
 
   describe("when db is null", () => {

@@ -105,12 +105,11 @@ Last-active conversation persists across reloads. On first launch, a default "Ma
 
 ShadowClaw supports multiple LLM providers with a unified adapter pattern:
 
-| Category           | Examples                                                             | Notes                              |
-| ------------------ | -------------------------------------------------------------------- | ---------------------------------- |
-| **Cloud**          | OpenRouter, OpenAI, Anthropic, Google Gemini, AWS Bedrock, Vertex AI | API key required                   |
-| **GitHub/Copilot** | GitHub Models, Copilot Azure                                         | Server-side proxy                  |
-| **Local**          | Ollama, Llamafile, Mesh LLM, Transformers.js                         | Runs on local server or in-browser |
-| **Browser**        | Prompt API (`window.LanguageModel`), LiteRT                          | Experimental, keyless, Gemini Nano |
+| Category    | Examples                                                             | Notes                              |
+| ----------- | -------------------------------------------------------------------- | ---------------------------------- |
+| **Cloud**   | OpenRouter, OpenAI, Anthropic, Google Gemini, AWS Bedrock, Vertex AI | API key required                   |
+| **Local**   | Ollama, Llamafile, Mesh LLM, Transformers.js                         | Runs on local server or in-browser |
+| **Browser** | Prompt API (`window.LanguageModel`), LiteRT                          | Experimental, keyless, Gemini Nano |
 
 **Features:**
 

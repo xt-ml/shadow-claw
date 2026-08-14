@@ -295,16 +295,37 @@ export async function initProviderAndModel(
   orchestrator.bedrockProfileFallback = (bedrockProfile || "").trim();
   orchestrator.bedrockAuthMode = (bedrockAuthMode || "provider_chain").trim();
 
-  // Fetch model info in the background — it is only needed when the user opens
-  // Settings or the model picker. Blocking boot on a network round-trip to
-  // populate a dropdown they may never open is not worth the latency cost.
-  void getApiKeyForHeaders(orchestrator).then((apiKey) =>
-    modelRegistry.fetchModelInfo(
-      orchestrator.providerConfig,
-      apiKey || undefined,
-      getProviderRuntimeHeaders(orchestrator, orchestrator.provider),
-    ),
-  );
+  // Fetch model info in the background. While primarily used to populate
+  // the model picker in Settings, it is also required to dynamically resolve
+  // optimal max_tokens limits for scheduled jobs and background tasks.
+  // We defer it until the browser is idle to ensure it doesn't block first paint.
+  const scheduleFetch = () => {
+    const doFetch = () => {
+      void getApiKeyForHeaders(orchestrator).then((apiKey) =>
+        modelRegistry.fetchModelInfo(
+          orchestrator.providerConfig,
+          apiKey || undefined,
+          getProviderRuntimeHeaders(orchestrator, orchestrator.provider),
+        ),
+      );
+    };
+
+    if (typeof (globalThis as any).requestIdleCallback === "function") {
+      (globalThis as any).requestIdleCallback(doFetch, { timeout: 5000 });
+    } else {
+      setTimeout(doFetch, 2000);
+    }
+  };
+
+  if (typeof window !== "undefined" && typeof document !== "undefined") {
+    if (document.readyState === "complete") {
+      scheduleFetch();
+    } else {
+      window.addEventListener("load", scheduleFetch, { once: true });
+    }
+  } else {
+    scheduleFetch();
+  }
 
   if (storedModel) {
     orchestrator.model = storedModel;

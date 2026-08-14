@@ -235,4 +235,4 @@ Key operations include:
 - **VM/Terminal:** `setVMBootMode`, `openTerminalSession`, `sendTerminalInput` (`src/core/orchestrator/utils/operations/vm.ts`)
 - **Tasks:** `syncTaskToServer`, `deleteTaskFromServer`, `shouldStartLocalScheduler` (`src/core/orchestrator/utils/operations/task.ts`)
 
-Initialization is handled by modular setup functions (`initCoreConfig`, `initChannelsAndRooms`, `initWorkerAndScheduler`) coordinated during app startup.
+Initialization is handled by modular setup functions (`initCoreConfig`, `initChannelsAndRooms`, `initWorkerAndScheduler`) coordinated during app startup. Non-critical tasks (such as background model registry fetching and full static site manifest syncing) are deferred via `requestIdleCallback` during `initTasks` (`src/core/orchestrator/utils/initTasks.ts`) to maintain immediate UI responsiveness.

@@ -113,6 +113,66 @@
         </div>
       </div>
 
+      <!-- Search Files -->
+      <div class="tools__section">
+        <h3 class="tools__section-title">🔍 Search Files</h3>
+        <div class="tools__searchfiles-row">
+          <label for="toolsSearchFilesMaxFileBytes"
+            >Max file size (bytes):</label
+          >
+          <input
+            class="tools__searchfiles-max-file-bytes-input"
+            id="toolsSearchFilesMaxFileBytes"
+            min="1"
+            placeholder="524288"
+            type="number"
+          />
+        </div>
+        <div class="tools__searchfiles-row">
+          <label for="toolsSearchFilesMaxFilesVisited"
+            >Max files visited:</label
+          >
+          <input
+            class="tools__searchfiles-max-files-visited-input"
+            id="toolsSearchFilesMaxFilesVisited"
+            min="1"
+            placeholder="1000"
+            type="number"
+          />
+        </div>
+        <div class="tools__searchfiles-row">
+          <label for="toolsSearchFilesSkipDirs"
+            >Skip directories (comma-separated):</label
+          >
+          <input
+            class="tools__searchfiles-skip-dirs-input"
+            id="toolsSearchFilesSkipDirs"
+            placeholder=".git,node_modules,dist,…"
+            type="text"
+          />
+        </div>
+        <div class="tools__searchfiles-actions">
+          <button
+            class="tools__save-btn tools__save-searchfiles-btn"
+            type="button"
+          >
+            💾 Save Search Files Settings
+          </button>
+        </div>
+        <div class="tools__prompt-hint">
+          <strong>Max file size:</strong> Files larger than this (in bytes) are
+          skipped to prevent out-of-memory crashes (default:
+          <code>524288</code> = 512 KB).<br />
+          <strong>Max files visited:</strong> Walk terminates after this many
+          files are read, bounding CPU and memory use (default:
+          <code>1000</code>).<br />
+          <strong>Skip directories:</strong> Comma-separated directory names
+          (not paths) that are never descended into, regardless of
+          <code>path</code> or <code>file_glob</code> (default:
+          <code>.git,node_modules,dist,…</code>).
+        </div>
+      </div>
+
       <!-- Web Search -->
       <div class="tools__section">
         <h3 class="tools__section-title">🔍 Web Search</h3>

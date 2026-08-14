@@ -518,36 +518,6 @@ describe("providers.js", () => {
       expect(result.tools[0].function.name).toBe("test_tool");
     });
 
-    it("should include legacy provider routing hint for short model IDs", () => {
-      const provider: any = {
-        format: "openai",
-        id: "github_models",
-      };
-
-      const result = formatRequest(provider, [], [], {
-        model: "gpt-4o-mini",
-        maxTokens: 2048,
-        system: "",
-      });
-
-      expect(result.provider).toBe("azureml");
-    });
-
-    it("should omit provider routing hint for namespaced GitHub model IDs", () => {
-      const provider: any = {
-        format: "openai",
-        id: "github_models",
-      };
-
-      const result = formatRequest(provider, [], [], {
-        maxTokens: 2048,
-        model: "openai/gpt-4.1",
-        system: "",
-      });
-
-      expect(result.provider).toBeUndefined();
-    });
-
     it("should include num_ctx hint for Ollama when metadata is available", () => {
       const provider: any = {
         format: "openai",

@@ -37,7 +37,7 @@ graph TD
   Orchestrator --> TaskScheduler["Task Scheduler<br>cron expressions"]
   Orchestrator --> Router["Router<br>channel dispatch<br>via ChannelRegistry"]
   MessageQueue --> Worker["Agent Worker<br>(Web Worker, worker.ts)"]
-  Worker --> Provider["☁️ Provider API<br>OpenRouter / Bedrock / Copilot / Prompt API"]
+  Worker --> Provider["☁️ Provider API<br>OpenRouter / Bedrock / Gemini / Prompt API"]
   Worker --> Capabilities["Model Registry & Capabilities<br>MIME-aware routing"]
   Worker --> ToolExec["Tool Execution<br>bash · js · files · fetch · git"]
   ToolExec --> JSShell["JS Shell Emulator<br>just-bash AST · pipes · redirects"]
@@ -62,25 +62,16 @@ Everything runs in the browser. The Express server provides a suite of backend s
 
 ### 2. TypeScript everywhere, Rolldown for bundling
 
-The entire codebase is TypeScript. Rolldown produces six distinct bundles:
+The entire codebase is TypeScript. Rolldown produces modular bundles for the frontend, worker, service worker, server, and Electron.
 
-| Bundle                     | Input                                | Output                                       | Purpose                               |
-| -------------------------- | ------------------------------------ | -------------------------------------------- | ------------------------------------- |
-| Frontend                   | `src/core/index.ts`                  | `dist/public/index.js`                       | App bootstrap + all UI                |
-| Agent Worker               | `src/worker/worker.ts`               | `dist/public/agent.worker.js`                | Tool-use loop + VM                    |
-| Service Worker init        | `src/service-worker/init.ts`         | `dist/public/service-worker/init.js`         | PWA cache registration                |
-| Service Worker push        | `src/service-worker/push-handler.ts` | `dist/public/service-worker/push-handler.js` | Push event handler                    |
-| Service Worker fetch proxy | `src/service-worker/fetch-proxy.ts`  | `dist/public/service-worker/fetch-proxy.js`  | Fetch interception                    |
-| Server                     | `src/server/server.ts`               | `dist/server.js`                             | Express server (modular routes/proxy) |
-| Electron                   | `electron/main.ts`                   | `dist/electron/main.cjs`                     | Desktop app entry                     |
-
-External dependencies are installed via `npm install` and bundled by Rolldown — no CDN importmaps.
+In production builds (`npm run build:prod`), critical assets (`index.css`, `theme-init.js`, and `service-worker/init.js`) are inlined directly into `index.html` alongside pre-rendered Declarative Shadow DOM (DSD) shells, eliminating render-blocking network requests. Production assets are further minified using `htmlnano` and `cssnano`. Service worker initialization is deferred (10-second idle delay) to prioritize immediate user interactivity.
 
 ### 3. Worker-isolated agent
 
 The LLM tool-use loop runs in a dedicated Web Worker. This means:
 
 - The UI thread never blocks during LLM calls or tool execution
+- Default provider (`prompt_api`) executes browser-native inference with transparent CPU/WASM fallback
 - The VM (v86) runs in the worker, fully isolated from the UI
 - Cancellation is clean — abort the worker's `AbortController`
 
@@ -96,7 +87,7 @@ src/components/shadow-claw-chat/
 └── shadow-claw-chat.css    # Shadow DOM styles (adopted at runtime)
 ```
 
-The `ShadowClawElement` base class (`src/components/shadow-claw-element.ts`) handles fetching and attaching templates and stylesheets via `fetch()` + `adoptedStyleSheets`.
+The `ShadowClawElement` base class (`src/components/shadow-claw-element.ts`) handles fetching and attaching templates and stylesheets via `fetch()` + `adoptedStyleSheets`. Dedicated views such as `<shadow-claw-tools>` manage granular tool configurations and execution boundaries.
 
 ### 5. Conversation isolation
 

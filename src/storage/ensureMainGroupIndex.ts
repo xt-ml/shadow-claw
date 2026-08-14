@@ -6,23 +6,25 @@ import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "./defaultIndexContent.mjs";
 import { groupFileExists } from "./groupFileExists.js";
 import { writeGroupFile } from "./writeGroupFile.js";
 
+import { applyBasePath } from "../core/app-routes.js";
+
 import type { ShadowClawDatabase } from "../db/types.js";
 
 export const DEFAULT_MAIN_GROUP_INDEX_PATH = "index.html";
 export const STATIC_MAIN_GROUP_INDEX_PATH = "main/index.html";
 
 export function resolveStaticMainGroupIndexUrl(): string {
-  const fallback = `/${STATIC_MAIN_GROUP_INDEX_PATH}`;
+  const targetPath = applyBasePath(`/${STATIC_MAIN_GROUP_INDEX_PATH}`);
 
-  if (typeof document === "undefined" || !document.baseURI) {
-    return fallback;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    try {
+      return new URL(targetPath, window.location.origin).toString();
+    } catch {
+      return targetPath;
+    }
   }
 
-  try {
-    return new URL(STATIC_MAIN_GROUP_INDEX_PATH, document.baseURI).toString();
-  } catch {
-    return fallback;
-  }
+  return targetPath;
 }
 
 export async function isMainGroupIndexSuppressed(

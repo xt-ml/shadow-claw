@@ -69,6 +69,60 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
           return;
         }
 
+        if (requestPath.startsWith("/files/main/")) {
+          const fallbackPath = path.resolve(
+            "pages/main",
+            requestPath.slice("/files/main/".length),
+          );
+          fs.stat(fallbackPath, (fallbackErr, fallbackStats) => {
+            if (!fallbackErr && fallbackStats && fallbackStats.isFile()) {
+              res.sendFile(fallbackPath);
+
+              return;
+            }
+
+            next();
+          });
+
+          return;
+        }
+
+        if (requestPath.startsWith("/static-main/")) {
+          const fallbackPath = path.resolve(
+            "pages/main",
+            requestPath.slice("/static-main/".length),
+          );
+          fs.stat(fallbackPath, (fallbackErr, fallbackStats) => {
+            if (!fallbackErr && fallbackStats && fallbackStats.isFile()) {
+              res.sendFile(fallbackPath);
+
+              return;
+            }
+
+            next();
+          });
+
+          return;
+        }
+
+        if (requestPath.startsWith("/pages/")) {
+          const fallbackPath = path.resolve(
+            "pages",
+            requestPath.slice("/pages/".length),
+          );
+          fs.stat(fallbackPath, (fallbackErr, fallbackStats) => {
+            if (!fallbackErr && fallbackStats && fallbackStats.isFile()) {
+              res.sendFile(fallbackPath);
+
+              return;
+            }
+
+            next();
+          });
+
+          return;
+        }
+
         next();
 
         return;

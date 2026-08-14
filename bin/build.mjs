@@ -33,7 +33,7 @@ async function run(command, options = {}) {
 async function main() {
   const isProduction = env.NODE_ENV === "production";
   const copyAllAssets = env.COPY_ALL_ASSETS === "true";
-  const prerenderPages = env.PRERENDER_PAGES || "1";
+  const prerenderPages = env.PRERENDER_PAGES || "all";
   const prerenderMainMemory =
     env.PRERENDER_MAIN_MEMORY !== "false" &&
     prerenderPages !== "none" &&
@@ -75,6 +75,26 @@ async function main() {
 
   // publish robots.txt
   await cp("robots.txt", "dist/public/robots.txt");
+
+  // publish pages directory for lazy routing manifests
+  try {
+    await cp("pages", "dist/public/pages", { recursive: true });
+  } catch (e) {
+    // pages directory might not exist
+  }
+
+  // publish pages/main as files/main and static-main so workspace files and assets can be resolved
+  try {
+    await cp("pages/main", "dist/public/files/main", { recursive: true });
+  } catch (e) {
+    // pages/main directory might not exist
+  }
+
+  try {
+    await cp("pages/main", "dist/public/static-main", { recursive: true });
+  } catch (e) {
+    // pages/main directory might not exist
+  }
 
   await run("npm run -s rolldown");
 

@@ -191,3 +191,14 @@ Chrome's File System Access API can cache file references and return stale metad
 2. **Probing** handles with `probeHandleAccess()` instead of trusting `queryPermission`
 3. **Two-attempt retries** on `InvalidStateError` during writes
 4. **Fresh `getFile()` calls** rather than reusing cached File objects
+
+## Browser Model Caching (`CacheStorage`)
+
+ShadowClaw utilizes the browser's `CacheStorage` API for local model weight storage and chunked resumable downloads (`src/subsystems/providers/utils/`):
+
+- **Cache Partitions**:
+  - `shadow-claw-browser-models`: Caches ONNX weights, tokenizers, and configuration files for `prompt_api` and `transformers_js_browser`.
+  - `shadow-claw-litertlm-models`: Caches LiteRT-LM binary models for `litert_lm_browser`.
+- **Chunked Resumable Streaming**: Downloads large model files in chunks, persisting intermediate progress into partial metadata (`readPartialMeta` / `writePartialMeta`). If a download is interrupted, it resumes using HTTP `Range` requests without restarting from 0%.
+- **Single Source of Truth**: Transformers.js native browser caching (`env.useBrowserCache`) is disabled to prevent duplicate storage overhead. Fetch requests for models are routed directly through `createModelCacheFetch`.
+- **Service Worker Bypass**: The Service Worker excludes model binary URLs (`*.onnx`, `*.onnx_data`, `huggingface.co`, `hf.co`, `hf-mirror.com`, `litertlm`) from Workbox runtime caching, delegating model storage entirely to `CacheStorage`.

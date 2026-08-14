@@ -77,6 +77,42 @@ export const MODEL_OUTPUT_LIMITS: Array<{
   { pattern: "qwen3", maxTokens: 32768 },
   // Gemma 4 family (covers unsloth GGUF variants served via Mesh LLM)
   { pattern: "gemma-4", maxTokens: 16384 },
+
+  // ── Browser-native built-in engines ───────────────────────────────────
+  // Chrome Gemini Nano — hard API cap 4,096–6,144 tokens
+  { pattern: "gemini-nano", maxTokens: 4096 },
+  // Edge Phi Mini / Aion — hard API cap ~9,216 tokens
+  { pattern: "phi-mini", maxTokens: 9216 },
+  { pattern: "aion", maxTokens: 9216 },
+
+  // ── ONNX Community models (WebGPU/WASM, no enforced API cap) ──────────
+  // Gemma 3 1B GQA — native 128K context; must precede gemma-3 catch-all
+  { pattern: "gemma-3-1b-it-ONNX-GQA", maxTokens: 32768 },
+  { pattern: "gemma-3-1b-it-ONNX", maxTokens: 32768 },
+  // Gemma 3 catch-all
+  { pattern: "gemma-3", maxTokens: 32768 },
+  // Qwen3 0.6B ONNX — native 32K context
+  { pattern: "Qwen3-0.6B-ONNX", maxTokens: 32768 },
+  // Qwen3.5 ONNX variants
+  { pattern: "Qwen3.5", maxTokens: 32768 },
+  // Llama 3.2 1B/3B Instruct ONNX — native 128K context
+  { pattern: "Llama-3.2", maxTokens: 32768 },
+  // SmolLM2/SmolLM3 — smaller context
+  { pattern: "SmolLM", maxTokens: 8192 },
+  // DeepSeek-R1 Distill Qwen 1.5B — 128K native context
+  { pattern: "DeepSeek-R1", maxTokens: 32768 },
+  // Phi-3.5/Phi-4 mini ONNX — 128K native context
+  { pattern: "Phi-4", maxTokens: 16384 },
+  { pattern: "Phi-3.5", maxTokens: 16384 },
+  // LFM2 1.2B ONNX
+  { pattern: "LFM2", maxTokens: 16384 },
+  // GPT-OSS 20B ONNX
+  { pattern: "gpt-oss", maxTokens: 32768 },
+
+  // ── Prompt API fallback (browser-built-in sentinel model ID) ──────────
+  // Conservative default for unknown native browser models
+  { pattern: "browser-built-in", maxTokens: 4096 },
+
   // Mesh LLM "mesh" routing model (MoA) — API reports context_length 242144
   { pattern: "mesh", maxTokens: 32768 },
   // OpenRouter Free — generous 32k fallback for routing
@@ -138,7 +174,7 @@ export function getModelMaxTokens(modelId: string): number {
 }
 
 /** Default provider */
-export const DEFAULT_PROVIDER = "openrouter";
+export const DEFAULT_PROVIDER = "prompt_api";
 
 /** Task scheduler check interval (ms) */
 export const SCHEDULER_INTERVAL = 60_000;
@@ -212,12 +248,6 @@ export const BEDROCK_PROXY_URL = "http://localhost:8888/bedrock-proxy/invoke";
 /** Bedrock proxy models endpoint */
 export const BEDROCK_PROXY_MODELS_URL =
   "http://localhost:8888/bedrock-proxy/models";
-export const COPILOT_AZURE_OPENAI_PROXY_URL =
-  "http://localhost:8888/copilot-proxy/azure-openai/chat/completions";
-export const GITHUB_MODELS_PROXY_URL =
-  "http://localhost:8888/github-models-proxy/inference/chat/completions";
-export const GITHUB_MODELS_PROXY_MODELS_URL =
-  "http://localhost:8888/github-models-proxy/catalog/models";
 
 /** Transformers.js local proxy endpoint (Node-side inference) */
 export const TRANSFORMERS_JS_PROXY_URL =
@@ -723,30 +753,6 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     requiresApiKey: true,
     supportsStreaming: true,
   },
-  github_models: {
-    id: "github_models",
-    name: "GitHub Models (Local Proxy)",
-    baseUrl: GITHUB_MODELS_PROXY_URL,
-    format: "openai",
-    apiKeyHeader: "api-key",
-    headers: {},
-    defaultModel: "openai/gpt-4.1-mini",
-    modelsUrl: GITHUB_MODELS_PROXY_MODELS_URL,
-    requiresApiKey: true,
-    supportsStreaming: true,
-  },
-  copilot_azure_openai_proxy: {
-    id: "copilot_azure_openai_proxy",
-    name: "Copilot / GitHub Models (Local Proxy)",
-    baseUrl: COPILOT_AZURE_OPENAI_PROXY_URL,
-    format: "openai",
-    apiKeyHeader: "api-key",
-    headers: {},
-    defaultModel: "gpt-4o-mini",
-    modelsUrl: "http://localhost:8888/copilot-proxy/azure-openai/models",
-    requiresApiKey: true,
-    supportsStreaming: true,
-  },
   bedrock_proxy: {
     id: "bedrock_proxy",
     name: "AWS Bedrock (Local Proxy)",
@@ -913,7 +919,7 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
   },
   prompt_api: {
     id: "prompt_api",
-    name: "Web Prompt API (Browser - Experimental)",
+    name: "Prompt API (Browser)",
     baseUrl: "builtin://language-model",
     format: "prompt_api",
     apiKeyHeader: "Authorization",
@@ -1047,6 +1053,7 @@ export const CONFIG_KEYS = {
   PAGES_LIST: "pages_list",
   PASSPHRASE_SALT: "passphrase_salt",
   PASSPHRASE_VERIFY: "passphrase_verify",
+  PROMPT_API_FALLBACK_MODEL: "prompt_api_fallback_model",
   PEERJS_MY_ALIAS: "peerjs_my_alias",
   PEERJS_MY_PEER_ID: "peerjs_my_peer_id",
   PEERJS_PEER_ALIASES: "peerjs_peer_aliases",
@@ -1096,6 +1103,9 @@ export const CONFIG_KEYS = {
   WEB_SEARCH_PROXY_URL: "web_search_proxy_url",
   WEB_SEARCH_URL: "web_search_url",
   WEB_SEARCH_USE_PROXY: "web_search_use_proxy",
+  SEARCH_FILES_MAX_FILE_BYTES: "search_files_max_file_bytes",
+  SEARCH_FILES_MAX_FILES_VISITED: "search_files_max_files_visited",
+  SEARCH_FILES_SKIP_DIRS: "search_files_skip_dirs",
 };
 
 /** Default dev server host */

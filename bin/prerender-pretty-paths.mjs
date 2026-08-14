@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -13,7 +20,10 @@ import {
   extractTemplateContent,
   injectShadowClawTemplate,
   injectStaticManifestScript,
+  inlineCriticalAssets,
+  isPageFile,
   markNoSeedPrerenderHost,
+  minifyDsdTemplateHtml,
   normalizePrerenderPagesOption,
   renderPageHtml,
   sortPagePaths,
@@ -34,6 +44,7 @@ import {
  * @property {string} [sourcePath]
  * @property {string} [indexPath]
  * @property {string|number} [prerenderPages]
+ * @property {boolean} [silent]
  */
 
 /**
@@ -140,15 +151,56 @@ export async function prerenderPrettyPaths(options = {}) {
     return { count: 0, skipped: true, reason: "Invalid JSON in routes.json" };
   }
 
-  if (!routesData || typeof routesData !== "object" || !routesData.routes) {
+  if (!routesData || typeof routesData !== "object") {
     return {
       count: 0,
       skipped: true,
-      reason: "No routes object in routes.json",
+      reason: "Invalid routes.json",
     };
   }
 
-  const routeEntries = Object.entries(routesData.routes);
+  if (!routesData.routes) {
+    routesData.routes = {};
+  }
+
+  const allRoutes = { ...(routesData.routes || {}) };
+  const seenPaths = new Set();
+
+  async function resolveSubRoutes(manifest, currentPath) {
+    if (!manifest.subRoutes) return;
+    const subList = Array.isArray(manifest.subRoutes)
+      ? manifest.subRoutes
+      : Object.values(manifest.subRoutes);
+
+    for (const sub of subList) {
+      let subPath = path.resolve(path.dirname(currentPath), sub);
+      if (sub.startsWith("pages/")) {
+        subPath = path.resolve(sub);
+      }
+      if (seenPaths.has(subPath)) continue;
+      seenPaths.add(subPath);
+      try {
+        const content = await readFile(subPath, "utf8");
+        const parsed = JSON.parse(content);
+        if (parsed.routes) {
+          Object.assign(allRoutes, parsed.routes);
+        }
+        await resolveSubRoutes(parsed, subPath);
+      } catch (err) {
+        console.warn(`Failed to read subRoute: ${subPath}`, err.message);
+      }
+    }
+  }
+
+  await resolveSubRoutes(routesData, routesPath);
+
+  Object.assign(routesData.routes, allRoutes);
+  const isLegacyArraySubRoutes = Array.isArray(routesData.subRoutes);
+  if (isLegacyArraySubRoutes) {
+    delete routesData.subRoutes;
+  }
+
+  const routeEntries = Object.entries(allRoutes);
   if (routeEntries.length === 0) {
     return { count: 0, skipped: true, reason: "Empty routes table" };
   }
@@ -157,6 +209,8 @@ export async function prerenderPrettyPaths(options = {}) {
   const staticRoutingPath = path.join(publicDir, "static-routing.json");
   await mkdir(publicDir, { recursive: true });
   await writeFile(staticRoutingPath, staticRoutingJson, "utf8");
+
+  const embeddedRoutingJson = JSON.stringify(routesData);
 
   // Read base templates
   const shadowClawTemplatePath = path.join(
@@ -174,18 +228,37 @@ export async function prerenderPrettyPaths(options = {}) {
     "components/shadow-claw-page-header/shadow-claw-page-header.html",
   );
 
+  const shadowClawCssPath = path.join(
+    publicDir,
+    "components/shadow-claw/shadow-claw.css",
+  );
+  const pagesCssPath = path.join(
+    publicDir,
+    "components/shadow-claw-pages/shadow-claw-pages.css",
+  );
+  const pageHeaderCssPath = path.join(
+    publicDir,
+    "components/shadow-claw-page-header/shadow-claw-page-header.css",
+  );
+
   const [
     indexHtml,
     shadowClawTemplateSource,
     pagesTemplateSource,
     pageHeaderTemplateSource,
     rawPageSources,
+    shadowClawCssSource,
+    pagesCssSource,
+    pageHeaderCssSource,
   ] = await Promise.all([
     readFile(indexPath, "utf8"),
     readFile(shadowClawTemplatePath, "utf8"),
-    readFile(pagesTemplatePath, "utf8"),
-    readFile(pageHeaderTemplatePath, "utf8"),
+    readFile(pagesTemplatePath, "utf8").catch(() => ""),
+    readFile(pageHeaderTemplatePath, "utf8").catch(() => ""),
     collectPageSources(sourcePath),
+    readFile(shadowClawCssPath, "utf8").catch(() => ""),
+    readFile(pagesCssPath, "utf8").catch(() => ""),
+    readFile(pageHeaderCssPath, "utf8").catch(() => ""),
   ]);
 
   // Load all page contents
@@ -200,9 +273,12 @@ export async function prerenderPrettyPaths(options = {}) {
   );
 
   // Update root index.html with static routing script
-  const updatedRootHtml = injectStaticRoutingScript(
-    indexHtml,
-    staticRoutingJson,
+  const rootHtmlMinified = minifyDsdTemplateHtml(
+    injectStaticRoutingScript(indexHtml, embeddedRoutingJson),
+  );
+  const updatedRootHtml = await inlineCriticalAssets(
+    rootHtmlMinified,
+    publicDir,
   );
 
   await writeFile(indexPath, updatedRootHtml, "utf8");
@@ -229,13 +305,17 @@ export async function prerenderPrettyPaths(options = {}) {
     "utf8",
   );
 
-  // Ensure static-main directory is populated
+  // Ensure static-main and files/main directories are populated
   try {
     const sourceStats = await stat(sourcePath);
     if (sourceStats.isDirectory()) {
       const targetDir = path.join(publicDir, "static-main");
       await mkdir(targetDir, { recursive: true });
       await cp(sourcePath, targetDir, { recursive: true });
+
+      const filesTargetDir = path.join(publicDir, "files/main");
+      await mkdir(filesTargetDir, { recursive: true });
+      await cp(sourcePath, filesTargetDir, { recursive: true });
     }
   } catch {}
 
@@ -301,13 +381,14 @@ export async function prerenderPrettyPaths(options = {}) {
 
     const rendered = await renderPageHtml(
       matchedPage.content,
-      matchedPage.absolutePath || matchedPage.displayPath,
+      matchedPage.displayPath,
     );
 
     let shadowClawDsdTemplate;
     if (prerenderPages === 0) {
       shadowClawDsdTemplate = buildShadowClawDsdTemplateWithoutPages(
         shadowClawTemplateContent,
+        shadowClawCssSource,
       );
     } else {
       const pagesDsdHost = buildPagesDsdHost(
@@ -316,10 +397,13 @@ export async function prerenderPrettyPaths(options = {}) {
         rendered,
         pageHeaderTemplateContent,
         frontmatterTitle,
+        pagesCssSource,
+        pageHeaderCssSource,
       );
       shadowClawDsdTemplate = buildShadowClawDsdTemplate(
         shadowClawTemplateContent,
         pagesDsdHost,
+        shadowClawCssSource,
       );
     }
 
@@ -337,10 +421,10 @@ export async function prerenderPrettyPaths(options = {}) {
       embeddedManifestJson,
     );
 
-    const finalHtml = injectStaticRoutingScript(
-      htmlWithManifest,
-      staticRoutingJson,
+    const minifiedHtml = minifyDsdTemplateHtml(
+      injectStaticRoutingScript(htmlWithManifest, embeddedRoutingJson),
     );
+    const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir);
 
     const cleanPrettyPath = trimSlashes(routeDef.prettyPath);
     let targetRelativePath;
@@ -351,15 +435,40 @@ export async function prerenderPrettyPaths(options = {}) {
     }
 
     const targetFilePath = path.join(publicDir, targetRelativePath);
-    await mkdir(path.dirname(targetFilePath), { recursive: true });
+    const targetDir = path.dirname(targetFilePath);
+    await mkdir(targetDir, { recursive: true });
     await writeFile(targetFilePath, finalHtml, "utf8");
+
+    if (matchedPage && matchedPage.absolutePath) {
+      try {
+        const pageDir = path.dirname(matchedPage.absolutePath);
+        const dirEntries = await readdir(pageDir, { withFileTypes: true });
+        for (const entry of dirEntries) {
+          if (
+            entry.isFile() &&
+            !isPageFile(entry.name) &&
+            entry.name !== "routes.json"
+          ) {
+            await cp(
+              path.join(pageDir, entry.name),
+              path.join(targetDir, entry.name),
+            );
+          }
+        }
+      } catch (err) {
+        console.warn(`Failed to copy co-located assets for ${routeKey}:`, err);
+      }
+    }
 
     generatedPaths.push(targetRelativePath.replace(/\\/g, "/"));
   }
 
-  console.log(
-    `Prerendered ${generatedPaths.length} pretty path page${generatedPaths.length === 1 ? "" : "s"} from ${routesPath} (prerender-pages: ${prerenderPages}).`,
-  );
+  const isSilent = options.silent ?? process.env.NODE_ENV === "test";
+  if (!isSilent) {
+    console.log(
+      `Prerendered ${generatedPaths.length} pretty path page${generatedPaths.length === 1 ? "" : "s"} from ${routesPath} (prerender-pages: ${prerenderPages}).`,
+    );
+  }
 
   return {
     count: generatedPaths.length,

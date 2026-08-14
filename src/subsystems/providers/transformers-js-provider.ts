@@ -27,6 +27,7 @@ class TransformersJsManager {
     groupId: string,
     onChunk: (text: string) => void,
     onThinking?: (text: string) => void,
+    tools?: any[],
   ): Promise<string> {
     const worker = this.getWorker();
 
@@ -40,7 +41,7 @@ class TransformersJsManager {
 
       worker.postMessage({
         type: "generate",
-        payload: { messages, maxTokens, groupId },
+        payload: { messages, maxTokens, groupId, tools },
       });
     });
   }
@@ -128,42 +129,60 @@ class TransformersJsManager {
 
 const manager = new TransformersJsManager();
 
-function buildPromptTranscript(systemPrompt: string, messages: any[]): string {
-  const lines = ["SYSTEM INSTRUCTIONS:", systemPrompt, "", "CONVERSATION:"];
-  for (const msg of messages) {
-    const role = msg?.role === "assistant" ? "ASSISTANT" : "USER";
-    if (typeof msg?.content === "string") {
-      lines.push(`${role}: ${msg.content}`);
-    } else if (Array.isArray(msg?.content)) {
-      const blocks = msg.content
-        .map((block: any) => {
-          if (block?.type === "text") {
-            return block.text || "";
-          }
-
-          if (block?.type === "tool_use") {
-            return `[TOOL_CALL ${block.name}] ${JSON.stringify(block.input || {})}`;
-          }
-
-          if (block?.type === "tool_result") {
-            return `[TOOL_RESULT ${block.tool_use_id}] ${String(block.content || "")}`;
-          }
-
-          return "";
-        })
-        .filter(Boolean)
-        .join("\n");
-      lines.push(`${role}: ${blocks}`);
-    }
+function formatMessageContent(msg: any): string {
+  if (typeof msg?.content === "string") {
+    return msg.content;
   }
 
-  return lines.join("\n");
+  if (Array.isArray(msg?.content)) {
+    return msg.content
+      .map((block: any) => {
+        if (block?.type === "text") {
+          return block.text || "";
+        }
+        if (block?.type === "tool_use") {
+          return `[TOOL_CALL ${block.name}] ${JSON.stringify(block.input || {})}`;
+        }
+        if (block?.type === "tool_result") {
+          return `[TOOL_RESULT ${block.tool_use_id}] ${String(block.content || "")}`;
+        }
+        if (block?.type === "attachment") {
+          return `[ATTACHMENT ${block.mediaType}] ${block.fileName} (${block.mimeType})`;
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return "";
 }
 
 function parseStructured(raw: string) {
   const text = sanitizeModelOutput(String(raw || ""), "transformers_js").trim();
   if (!text) {
     return null;
+  }
+
+  // Check for Qwen/Llama XML-like tool calls: <tool_call>{"name": "...", "arguments": ...}</tool_call>
+  const toolCallMatch = text.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+  if (toolCallMatch) {
+    try {
+      const parsedTool = JSON.parse(toolCallMatch[1]);
+      if (parsedTool.name) {
+        return {
+          type: "tool_use",
+          tool_calls: [
+            {
+              name: parsedTool.name,
+              input: parsedTool.arguments || parsedTool.parameters || {},
+            },
+          ],
+        };
+      }
+    } catch {
+      // fallback to other parsing if invalid JSON
+    }
   }
 
   try {
@@ -214,42 +233,28 @@ export async function invokeWithTransformersJs(
     void emit({ type: "model-download-progress", payload });
   });
 
-  const jsonInstructions = [
-    "Return ONLY valid JSON (no markdown fences).",
-    'To call tools: {"type":"tool_use","tool_calls":[{"name":"<tool>","input":{...}}]}',
-    'To respond:    {"type":"response","response":"<your answer>"}',
-  ].join("\n");
-
-  const toolHints = activeTools
-    .map((t) => {
-      const params = Object.keys(t.input_schema.properties || {}).join(", ");
-      const brief = t.description.split(". ")[0];
-
-      return `${t.name}(${params}): ${brief}`;
-    })
-    .join("\n");
-
   let currentMessages = [...messages];
 
   for (let i = 0; i < 10; i++) {
-    const transcript = buildPromptTranscript(systemPrompt, currentMessages);
-    const fullPrompt = [
-      jsonInstructions,
-      "",
-      "Available tools:",
-      toolHints,
-      "",
-      transcript,
-      "",
-      "ASSISTANT:",
-    ].join("\n");
+    const systemMessage = {
+      role: "system",
+      content: systemPrompt,
+    };
+
+    const structuredMessages = [
+      systemMessage,
+      ...currentMessages.map((m) => ({
+        role: m.role === "assistant" ? "assistant" : "user",
+        content: formatMessageContent(m),
+      })),
+    ];
 
     await emit({ type: "streaming-start", payload: { groupId } });
 
     let thinkingBuffer = "";
     let accumulated = "";
     const response = await manager.generate(
-      [fullPrompt],
+      structuredMessages,
       maxTokens,
       groupId,
       (chunk) => {
@@ -265,6 +270,7 @@ export async function invokeWithTransformersJs(
           createLogMessage(groupId, "text", "Thinking", thinkingBuffer),
         );
       },
+      activeTools,
     );
 
     await emit({ type: "typing", payload: { groupId } });

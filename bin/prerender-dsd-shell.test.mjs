@@ -4,6 +4,7 @@ import {
   injectPageHeaderDsd,
   injectStaticManifestScript,
   markNoSeedPrerenderHost,
+  minifyDsdTemplateHtml,
   normalizePrerenderPagesOption,
   renderPageHtml,
   sortPagePaths,
@@ -229,5 +230,116 @@ describe("normalizePrerenderPagesOption", () => {
     expect(normalizePrerenderPagesOption(undefined)).toBe(1);
     expect(normalizePrerenderPagesOption("5")).toBe(5);
     expect(normalizePrerenderPagesOption(5)).toBe(5);
+  });
+});
+
+describe("minifyDsdTemplateHtml", () => {
+  it("flatly collapses whitespace and elements inside template shadowrootmode tags", () => {
+    const input = [
+      '<shadow-claw data-prerender-no-seed="true">',
+      '  <template shadowrootmode="open" data-shadow-claw-dsd="true">',
+      "    <style data-dsd-style>body { color: red; }</style>",
+      '    <div class="app">',
+      '      <header class="header">',
+      '        <button aria-label="Open menu" id="menu-button">',
+      "          <span>Menu</span>",
+      "        </button>",
+      "      </header>",
+      "    </div>",
+      "  </template>",
+      "</shadow-claw>",
+    ].join("\n");
+
+    const result = minifyDsdTemplateHtml(input);
+
+    expect(result).toContain(
+      '<template shadowrootmode="open" data-shadow-claw-dsd="true"><style data-dsd-style>body { color: red; }</style><div class="app"><header class="header"><button aria-label="Open menu" id="menu-button"><span>Menu</span></button></header></div></template>',
+    );
+    expect(result).not.toContain('    <div class="app">');
+    expect(result).not.toContain("\n    <header");
+  });
+
+  it("handles nested DSD templates correctly without truncating closing tags", () => {
+    const input = [
+      "<shadow-claw>",
+      '  <template shadowrootmode="open" data-shadow-claw-dsd="true">',
+      "    <style data-dsd-style>/* shadow-claw */</style>",
+      '    <div class="app">',
+      "      <shadow-claw-pages>",
+      '        <template shadowrootmode="open" data-shadow-claw-pages-dsd="true">',
+      "          <style data-dsd-style>/* pages */</style>",
+      "          <shadow-claw-page-header>",
+      '            <template shadowrootmode="open" data-shadow-claw-page-header-dsd="true">',
+      "              <style data-dsd-style>/* header */</style>",
+      '              <header class="header">',
+      '                <h2 class="header__title">Pages</h2>',
+      "              </header>",
+      "            </template>",
+      "          </shadow-claw-page-header>",
+      '          <div class="pages__list">',
+      '            <details class="pages__group-details" open>',
+      '              <summary class="pages__group-label">Main</summary>',
+      '              <div class="pages__group-pages">',
+      '                <div class="pages__list-item active">',
+      "                  <span>Item</span>",
+      "                </div>",
+      "              </div>",
+      "            </details>",
+      "          </div>",
+      "        </template>",
+      "      </shadow-claw-pages>",
+      "    </div>",
+      "    <shadow-claw-dialog>",
+      "      <template>",
+      '        <form method="dialog">',
+      "          <h2>Confirm</h2>",
+      "        </form>",
+      "      </template>",
+      "    </shadow-claw-dialog>",
+      "  </template>",
+      "</shadow-claw>",
+    ].join("\n");
+
+    const result = minifyDsdTemplateHtml(input);
+
+    expect(result).toContain(
+      '<template shadowrootmode="open" data-shadow-claw-page-header-dsd="true"><style data-dsd-style>/* header */</style><header class="header"><h2 class="header__title">Pages</h2></header></template>',
+    );
+    expect(result).toContain(
+      '<template shadowrootmode="open" data-shadow-claw-pages-dsd="true"><style data-dsd-style>/* pages */</style><shadow-claw-page-header><template shadowrootmode="open" data-shadow-claw-page-header-dsd="true"><style data-dsd-style>/* header */</style><header class="header"><h2 class="header__title">Pages</h2></header></template></shadow-claw-page-header><div class="pages__list"><details class="pages__group-details" open><summary class="pages__group-label">Main</summary><div class="pages__group-pages"><div class="pages__list-item active"><span>Item</span></div></div></details></div></template>',
+    );
+    expect(result).toContain(
+      '<shadow-claw-dialog><template><form method="dialog"><h2>Confirm</h2></form></template></shadow-claw-dialog>',
+    );
+    expect(result).toMatch(/<\/template>\s*<\/shadow-claw>$/);
+  });
+
+  it("safely preserves formatting and newlines inside <pre> code blocks", () => {
+    const codeContent =
+      "function hello() {\n    const a = 1;\n    return a;\n}";
+    const input = [
+      "<shadow-claw>",
+      '  <template shadowrootmode="open" data-shadow-claw-dsd="true">',
+      '    <div class="pages__rendered" data-pages-rendered>',
+      `      <pre class="code"><code>${codeContent}</code></pre>`,
+      "    </div>",
+      "  </template>",
+      "</shadow-claw>",
+    ].join("\n");
+
+    const result = minifyDsdTemplateHtml(input);
+
+    expect(result).toContain(
+      `<pre class="code"><code>${codeContent}</code></pre>`,
+    );
+    expect(result).toContain(
+      '<div class="pages__rendered" data-pages-rendered>',
+    );
+  });
+
+  it("handles null, undefined, and non-template html gracefully", () => {
+    expect(minifyDsdTemplateHtml(null)).toBeNull();
+    expect(minifyDsdTemplateHtml(undefined)).toBeUndefined();
+    expect(minifyDsdTemplateHtml("<div>hello</div>")).toBe("<div>hello</div>");
   });
 });

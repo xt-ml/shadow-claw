@@ -1,4 +1,4 @@
-import { parseRouteFromUrl } from "../../../core/app-routes.js";
+import { parseRouteFromUrlAsync } from "../../../core/app-routes.js";
 import { applyRoute } from "./applyRoute.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
@@ -14,7 +14,7 @@ export async function applyRouteFromCurrentLocation(
   oStore: OrchestratorStore,
   url: URL,
 ): Promise<void> {
-  const parsed = parseRouteFromUrl(url, oStore.activeGroupId);
+  const parsed = await parseRouteFromUrlAsync(url, oStore.activeGroupId);
   if (!parsed) {
     return;
   }

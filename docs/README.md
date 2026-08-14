@@ -8,43 +8,43 @@
 
 How the core pieces fit together.
 
-| Document                                                     | What it covers                                                                                              |
-| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| [System Overview](architecture/overview.md)                  | High-level architecture, data flow, design philosophy                                                       |
-| [Orchestrator & State Machine](architecture/orchestrator.md) | Main-thread state machine, message queue, invoke/compact lifecycle, EventBus                                |
-| [Worker Protocol](architecture/worker-protocol.md)           | Worker ↔ main thread messages, tool-use loop, streaming, cancellation                                       |
-| [Storage System](architecture/storage.md)                    | OPFS, local folders, write paths, copy/move safeguards, zip export/import, group workspaces, rename support |
-| [Context Management](architecture/context-management.md)     | Token estimation, dynamic windowing, output truncation, auto-compaction                                     |
-| [Streaming](architecture/streaming.md)                       | SSE flow, StreamAccumulator, throttling, intermediate responses, proxy passthrough                          |
+| Document                                                     | What it covers                                                                                                          |
+| ------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| [System Overview](architecture/overview.md)                  | High-level architecture, data flow, design philosophy                                                                   |
+| [Orchestrator & State Machine](architecture/orchestrator.md) | Main-thread state machine, message queue, invoke/compact lifecycle, EventBus                                            |
+| [Worker Protocol](architecture/worker-protocol.md)           | Worker ↔ main thread messages, tool-use loop, streaming, cancellation                                                   |
+| [Storage System](architecture/storage.md)                    | OPFS, local folders, write paths, copy/move safeguards, zip export/import, group workspaces, CacheStorage model caching |
+| [Context Management](architecture/context-management.md)     | Token estimation, dynamic windowing, output truncation, auto-compaction, hardware-aware token recommendations           |
+| [Streaming](architecture/streaming.md)                       | SSE flow, StreamAccumulator, throttling, intermediate responses, proxy passthrough                                      |
 
 ### Subsystems
 
 Detailed docs for each major subsystem.
 
-| Document                                                                | What it covers                                                                                                          |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| [Shell Emulator](subsystems/shell.md)                                   | JS shell via `just-bash` AST evaluation, OPFS bridge, supported commands                                                |
-| [WebVM](subsystems/vm.md)                                               | v86 Alpine Linux, boot modes, exclusivity guard, terminal bridge, 9p sync                                               |
-| [Git Integration](subsystems/git.md)                                    | isomorphic-git on native filesystem handles, merge conflicts, credentials                                               |
-| [Channel System](subsystems/channels.md)                                | Channel registry, browser/Telegram/iMessage channels, router, multi-channel flow                                        |
-| [Remote MCP](subsystems/remote-mcp.md)                                  | External MCP servers, tool discovery, authentication, JSON-RPC protocol, OAuth reconnection                             |
-| [Accounts & Credentials](subsystems/accounts.md)                        | Service account management, credential storage, auth bridges                                                            |
-| [Crypto & Secrets](subsystems/crypto.md)                                | AES-256-GCM key storage, runtime key handling, environment hardening; idempotent default Trusted Types policy           |
-| [Tools & Profiles](subsystems/tools.md)                                 | Tool definitions, execution dispatch, profiles, adding new tools                                                        |
-| [Notifications & Scheduling](subsystems/notifications.md)               | Web Push, VAPID, server-side SQLite scheduler, recursion guards                                                         |
-| [Providers & Rate Limiting](subsystems/providers.md)                    | LLM provider registry, adapter pattern, Transformers.js (local), adaptive rate limiting, Prompt API; session retry loop |
-| [Electron Desktop](subsystems/electron.md)                              | Desktop app architecture, in-process server, power management                                                           |
-| [Reactive UI](subsystems/reactive-ui.md)                                | Signals, `ShadowClawElement`, `reconcileList`, Web Components, stores                                                   |
-| [Model Registry & Capabilities](subsystems/providers.md#model-registry) | Dynamic model metadata fetching and modality capability detection                                                       |
-| [Attachment Capabilities](subsystems/attachment-capabilities.md)        | MIME-aware attachment handling and native vs fallback delivery                                                          |
-| [Chat Template Sanitizer](subsystems/sanitizer.md)                      | Strip control tokens and structural markers from local model output                                                     |
-| [A2UI Interactive Surfaces](subsystems/a2ui.md)                         | A2UI v1.0 catalog renderer, component rendering, PeerJS surface delivery, data binding                                  |
-| [AGUI Events & Adapter](subsystems/agui.md)                             | Translates orchestrator EventBus events to standardized AG-UI protocol events for UI visibility                         |
-| [Trusted Types Tinyfill](subsystems/trusted-types-tinyfill.md)          | Polyfill for Trusted Types API, browser compatibility, security rationale                                               |
-| [Email Integration](subsystems/email.md)                                | IMAP/SMTP support with encrypted credentials                                                                            |
-| [WebMCP](subsystems/webmcp.md)                                          | Browser's Model Context Protocol integration and tool execution                                                         |
-| [Pages System](subsystems/pages.md)                                     | Workspace-relative pages rendering and sidebar navigation, markdown frontmatter, HTML embeds, and auto-refresh sync     |
-| [LiteRT Provider](subsystems/providers.md)                              | In-browser WebGPU inference provider using Google LiteRT-LM                                                             |
+| Document                                                                | What it covers                                                                                                           |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| [Shell Emulator](subsystems/shell.md)                                   | JS shell via `just-bash` AST evaluation, OPFS bridge, supported commands                                                 |
+| [WebVM](subsystems/vm.md)                                               | v86 Alpine Linux, boot modes, exclusivity guard, terminal bridge, 9p sync                                                |
+| [Git Integration](subsystems/git.md)                                    | isomorphic-git on native filesystem handles, merge conflicts, credentials                                                |
+| [Channel System](subsystems/channels.md)                                | Channel registry, browser/Telegram/iMessage channels, router, multi-channel flow                                         |
+| [Remote MCP](subsystems/remote-mcp.md)                                  | External MCP servers, tool discovery, authentication, JSON-RPC protocol, OAuth reconnection                              |
+| [Accounts & Credentials](subsystems/accounts.md)                        | Service account management, credential storage, auth bridges                                                             |
+| [Crypto & Secrets](subsystems/crypto.md)                                | AES-256-GCM key storage, runtime key handling, environment hardening; idempotent default Trusted Types policy            |
+| [Tools & Profiles](subsystems/tools.md)                                 | Tool definitions, execution dispatch, profiles, tool configuration panel, adding new tools                               |
+| [Notifications & Scheduling](subsystems/notifications.md)               | Web Push, VAPID, server-side SQLite scheduler, recursion guards                                                          |
+| [Providers & Rate Limiting](subsystems/providers.md)                    | LLM provider registry, adapter pattern, Prompt API (default), dynamic CPU/WASM fallback, CacheStorage model downloads    |
+| [Electron Desktop](subsystems/electron.md)                              | Desktop app architecture, in-process server, power management                                                            |
+| [Reactive UI](subsystems/reactive-ui.md)                                | Signals, `ShadowClawElement`, `reconcileList`, Web Components, stores                                                    |
+| [Model Registry & Capabilities](subsystems/providers.md#model-registry) | Dynamic model metadata fetching and modality capability detection                                                        |
+| [Attachment Capabilities](subsystems/attachment-capabilities.md)        | MIME-aware attachment handling and native vs fallback delivery                                                           |
+| [Chat Template Sanitizer](subsystems/sanitizer.md)                      | Strip control tokens and structural markers from local model output                                                      |
+| [A2UI Interactive Surfaces](subsystems/a2ui.md)                         | A2UI v1.0 catalog renderer, component rendering, PeerJS surface delivery, data binding                                   |
+| [AGUI Events & Adapter](subsystems/agui.md)                             | Translates orchestrator EventBus events to standardized AG-UI protocol events for UI visibility                          |
+| [Trusted Types Tinyfill](subsystems/trusted-types-tinyfill.md)          | Polyfill for Trusted Types API, browser compatibility, security rationale                                                |
+| [Email Integration](subsystems/email.md)                                | IMAP/SMTP support with encrypted credentials                                                                             |
+| [WebMCP](subsystems/webmcp.md)                                          | Browser's Model Context Protocol integration and tool execution                                                          |
+| [Pages System](subsystems/pages.md)                                     | Workspace-relative pages rendering, sidebar navigation, static site seeding, pretty paths, and production asset inlining |
+| [LiteRT Provider](subsystems/providers.md)                              | In-browser WebGPU inference provider using Google LiteRT-LM                                                              |
 
 ### Guides
 

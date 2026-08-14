@@ -3,7 +3,6 @@ import {
   buildTriggerPattern,
   CONFIG_KEYS,
   CONTEXT_WINDOW_SIZE,
-  COPILOT_AZURE_OPENAI_PROXY_URL,
   DB_NAME,
   DB_VERSION,
   DEFAULT_DEV_HOST,
@@ -24,8 +23,6 @@ import {
   getProviderApiKeyConfigKey,
   getProviderAuthCapabilities,
   getProviderTokenAuthScheme,
-  GITHUB_MODELS_PROXY_MODELS_URL,
-  GITHUB_MODELS_PROXY_URL,
   LLAMAFILE_PROXY_MODELS_URL,
   LLAMAFILE_PROXY_URL,
   OAUTH_PROVIDER_DEFINITIONS,
@@ -60,7 +57,7 @@ describe("config.js", () => {
     });
 
     it("should have valid DEFAULT_PROVIDER", () => {
-      expect(DEFAULT_PROVIDER).toBe("openrouter");
+      expect(DEFAULT_PROVIDER).toBe("prompt_api");
     });
 
     it("should have valid SCHEDULER_INTERVAL", () => {
@@ -89,21 +86,6 @@ describe("config.js", () => {
 
     it("should have valid DEFAULT_GROUP_ID", () => {
       expect(DEFAULT_GROUP_ID).toBe("br:main");
-    });
-
-    it("should have valid Copilot Azure proxy URL", () => {
-      expect(COPILOT_AZURE_OPENAI_PROXY_URL).toBe(
-        "http://localhost:8888/copilot-proxy/azure-openai/chat/completions",
-      );
-    });
-
-    it("should have valid GitHub Models proxy URLs", () => {
-      expect(GITHUB_MODELS_PROXY_URL).toBe(
-        "http://localhost:8888/github-models-proxy/inference/chat/completions",
-      );
-      expect(GITHUB_MODELS_PROXY_MODELS_URL).toBe(
-        "http://localhost:8888/github-models-proxy/catalog/models",
-      );
     });
 
     it("should have valid Llamafile proxy URLs", () => {
@@ -171,16 +153,8 @@ describe("config.js", () => {
       expect(PROVIDERS.openrouter).toBeDefined();
     });
 
-    it("should have copilot azure proxy provider", () => {
-      expect(PROVIDERS.copilot_azure_openai_proxy).toBeDefined();
-    });
-
     it("should have prompt api provider", () => {
       expect(PROVIDERS.prompt_api).toBeDefined();
-    });
-
-    it("should have github models provider", () => {
-      expect(PROVIDERS.github_models).toBeDefined();
     });
 
     it("should have llamafile provider", () => {
@@ -208,29 +182,6 @@ describe("config.js", () => {
       expect(PROVIDERS.bedrock_proxy.reasoningParam).toBe("thinking");
       expect(PROVIDERS.gemini_proxy.reasoningParam).toBe("thinkingConfig");
       expect(PROVIDERS.vertex_ai.reasoningParam).toBe("thinkingConfig");
-    });
-
-    it("copilot proxy provider should have required fields", () => {
-      const provider = PROVIDERS.copilot_azure_openai_proxy;
-      expect(provider.id).toBe("copilot_azure_openai_proxy");
-      expect(provider.name).toBe("Copilot / GitHub Models (Local Proxy)");
-      expect(provider.baseUrl).toBe(COPILOT_AZURE_OPENAI_PROXY_URL);
-      expect(provider.format).toBe("openai");
-      expect(provider.apiKeyHeader).toBe("api-key");
-      expect(provider.defaultModel).toBe("gpt-4o-mini");
-      expect(provider.modelsUrl).toBeDefined();
-    });
-
-    it("github models provider should have required fields", () => {
-      const provider = PROVIDERS.github_models;
-      expect(provider.id).toBe("github_models");
-      expect(provider.name).toBe("GitHub Models (Local Proxy)");
-      expect(provider.baseUrl).toBe(GITHUB_MODELS_PROXY_URL);
-      expect(provider.modelsUrl).toBe(GITHUB_MODELS_PROXY_MODELS_URL);
-      expect(provider.format).toBe("openai");
-      expect(provider.apiKeyHeader).toBe("api-key");
-      expect(provider.defaultModel).toBe("openai/gpt-4.1-mini");
-      expect(provider.supportsStreaming).toBe(true);
     });
 
     it("llamafile provider should have required fields", () => {
@@ -278,16 +229,6 @@ describe("config.js", () => {
 
       it("bedrock_proxy should support streaming (InvokeModelWithResponseStreamCommand)", () => {
         expect(PROVIDERS.bedrock_proxy.supportsStreaming).toBe(true);
-      });
-
-      it("copilot_azure_openai_proxy should support streaming (SSE passthrough)", () => {
-        expect(PROVIDERS.copilot_azure_openai_proxy.supportsStreaming).toBe(
-          true,
-        );
-      });
-
-      it("github_models should support streaming (SSE passthrough)", () => {
-        expect(PROVIDERS.github_models.supportsStreaming).toBe(true);
       });
 
       it("prompt_api should NOT support streaming via SSE (uses dedicated path)", () => {
@@ -537,10 +478,10 @@ describe("config.js", () => {
       expect(provider.id).toBe(DEFAULT_PROVIDER);
     });
 
-    it("default provider should be valid openrouter config", () => {
+    it("default provider should be valid prompt_api config", () => {
       const provider = getDefaultProvider();
-      expect(provider.name).toBe("OpenRouter");
-      expect(provider.format).toBe("openai");
+      expect(provider.name).toBe("Prompt API (Browser)");
+      expect(provider.format).toBe("prompt_api");
     });
   });
 
@@ -556,19 +497,9 @@ describe("config.js", () => {
       expect(providers).toContain("openrouter");
     });
 
-    it("should include copilot azure proxy in available providers", () => {
-      const providers = getAvailableProviders();
-      expect(providers).toContain("copilot_azure_openai_proxy");
-    });
-
     it("should include prompt api in available providers", () => {
       const providers = getAvailableProviders();
       expect(providers).toContain("prompt_api");
-    });
-
-    it("should include github models in available providers", () => {
-      const providers = getAvailableProviders();
-      expect(providers).toContain("github_models");
     });
 
     it("should include llamafile in available providers", () => {
@@ -593,14 +524,6 @@ describe("config.js", () => {
     it("should return a provider-scoped API key config key", () => {
       expect(getProviderApiKeyConfigKey("openrouter")).toBe(
         "api_key:openrouter",
-      );
-
-      expect(getProviderApiKeyConfigKey("copilot_azure_openai_proxy")).toBe(
-        "api_key:copilot_azure_openai_proxy",
-      );
-
-      expect(getProviderApiKeyConfigKey("github_models")).toBe(
-        "api_key:github_models",
       );
     });
   });
@@ -691,7 +614,30 @@ describe("config.js", () => {
 
     it("should return DEFAULT_MAX_TOKENS for unknown models", () => {
       expect(getModelMaxTokens("some-unknown-model")).toBe(DEFAULT_MAX_TOKENS);
-      expect(getModelMaxTokens("browser-built-in")).toBe(DEFAULT_MAX_TOKENS);
+    });
+
+    it("should return 4096 for browser-built-in model", () => {
+      expect(getModelMaxTokens("browser-built-in")).toBe(4096);
+    });
+
+    it("should return correct limits for ONNX community models", () => {
+      expect(getModelMaxTokens("onnx-community/gemma-3-1b-it-ONNX-GQA")).toBe(
+        32768,
+      );
+      expect(getModelMaxTokens("onnx-community/gemma-3-1b-it-ONNX")).toBe(
+        32768,
+      );
+      expect(getModelMaxTokens("onnx-community/Qwen3-0.6B-ONNX")).toBe(32768);
+      expect(
+        getModelMaxTokens("onnx-community/Llama-3.2-1B-Instruct-ONNX"),
+      ).toBe(32768);
+      expect(getModelMaxTokens("onnx-community/Phi-4-mini-instruct-ONNX")).toBe(
+        16384,
+      );
+      expect(getModelMaxTokens("HuggingFaceTB/SmolLM3-3B-ONNX")).toBe(8192);
+      expect(
+        getModelMaxTokens("onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX"),
+      ).toBe(32768);
     });
 
     it("should return DEFAULT_MAX_TOKENS for empty/null model", () => {

@@ -2,18 +2,18 @@ import { jest } from "@jest/globals";
 
 describe("getRoute", () => {
   let db: any;
-  let oStore: any;
-  let parseRouteFromUrlMock: jest.Mock;
+
+  let isPossibleAppRouteMock: jest.Mock;
   let getRoute: any;
 
   beforeEach(async () => {
     db = {};
-    oStore = { activeGroupId: "test-group-id" };
-    parseRouteFromUrlMock = jest.fn();
+
+    isPossibleAppRouteMock = jest.fn().mockReturnValue(true);
 
     jest.resetModules();
     jest.unstable_mockModule("../../../core/app-routes.js", () => ({
-      parseRouteFromUrl: parseRouteFromUrlMock,
+      isPossibleAppRoute: isPossibleAppRouteMock,
     }));
 
     // Re-import after mocking
@@ -26,27 +26,27 @@ describe("getRoute", () => {
   });
 
   it("returns undefined if db is falsy", () => {
-    const result = getRoute(null as any, oStore, new Event("navigate"));
+    const result = getRoute(null as any, new Event("navigate"));
     expect(result).toBeUndefined();
-    expect(parseRouteFromUrlMock).not.toHaveBeenCalled();
+    expect(isPossibleAppRouteMock).not.toHaveBeenCalled();
   });
 
   it("returns undefined if navigationType is 'reload'", () => {
     const navigateEvent = new Event("navigate") as any;
     navigateEvent.navigationType = "reload";
     navigateEvent.destination = { url: "https://example.com/test" };
-    const result = getRoute(db, oStore, navigateEvent);
+    const result = getRoute(db, navigateEvent);
     expect(result).toBeUndefined();
-    expect(parseRouteFromUrlMock).not.toHaveBeenCalled();
+    expect(isPossibleAppRouteMock).not.toHaveBeenCalled();
   });
 
   it("returns undefined if destinationUrl is not a string", () => {
     const navigateEvent = new Event("navigate") as any;
     navigateEvent.navigationType = "push";
     navigateEvent.destination = { url: 123 };
-    const result = getRoute(db, oStore, navigateEvent);
+    const result = getRoute(db, navigateEvent);
     expect(result).toBeUndefined();
-    expect(parseRouteFromUrlMock).not.toHaveBeenCalled();
+    expect(isPossibleAppRouteMock).not.toHaveBeenCalled();
   });
 
   it("returns undefined if destination URL origin does not match window.location.origin", () => {
@@ -59,29 +59,38 @@ describe("getRoute", () => {
         : "http://localhost";
     navigateEvent.destination = { url: `${differentOrigin}/test` };
 
-    const result = getRoute(db, oStore, navigateEvent);
+    const result = getRoute(db, navigateEvent);
     expect(result).toBeUndefined();
-    expect(parseRouteFromUrlMock).not.toHaveBeenCalled();
+    expect(isPossibleAppRouteMock).not.toHaveBeenCalled();
   });
 
-  it("returns route and navigateEvent when all conditions pass", () => {
-    const mockRoute = { pathname: "/test", params: {} };
-    parseRouteFromUrlMock.mockReturnValue(mockRoute);
+  it("returns parsedUrl and navigateEvent when all conditions pass", () => {
+    isPossibleAppRouteMock.mockReturnValue(true);
 
     const navigateEvent = new Event("navigate") as any;
     navigateEvent.navigationType = "push";
     navigateEvent.destination = { url: `${window.location.origin}/test` };
 
-    const result = getRoute(db, oStore, navigateEvent);
+    const result = getRoute(db, navigateEvent);
 
-    expect(parseRouteFromUrlMock).toHaveBeenCalledTimes(1);
-    expect(parseRouteFromUrlMock).toHaveBeenCalledWith(
-      expect.any(URL),
-      oStore.activeGroupId,
-    );
+    expect(isPossibleAppRouteMock).toHaveBeenCalledTimes(1);
+    expect(isPossibleAppRouteMock).toHaveBeenCalledWith("/test");
     expect(result).toEqual({
-      route: mockRoute,
+      parsedUrl: expect.any(URL),
       navigateEvent,
     });
+    expect(result.parsedUrl.pathname).toBe("/test");
+  });
+
+  it("returns undefined if isPossibleAppRoute returns false", () => {
+    isPossibleAppRouteMock.mockReturnValue(false);
+
+    const navigateEvent = new Event("navigate") as any;
+    navigateEvent.navigationType = "push";
+    navigateEvent.destination = { url: `${window.location.origin}/test` };
+
+    const result = getRoute(db, navigateEvent);
+
+    expect(result).toBeUndefined();
   });
 });

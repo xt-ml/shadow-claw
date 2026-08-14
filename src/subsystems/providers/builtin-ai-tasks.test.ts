@@ -1,5 +1,14 @@
 import { jest } from "@jest/globals";
-import {
+
+jest.unstable_mockModule("../../db/db.js", () => ({
+  getDb: jest.fn<any>().mockResolvedValue(null),
+}));
+
+jest.unstable_mockModule("../../db/getConfig.js", () => ({
+  getConfig: jest.fn<any>().mockResolvedValue(null),
+}));
+
+const {
   createTaskInstanceWithFallback,
   ensureBuiltinAiPolyfills,
   isBuiltinTaskSupported,
@@ -9,7 +18,7 @@ import {
   rewriteText,
   detectLanguage,
   translateText,
-} from "./builtin-ai-tasks.js";
+} = await import("./builtin-ai-tasks.js");
 
 describe("builtin-ai-tasks subsystem", () => {
   const originalGlobals: Record<string, any> = {};
@@ -103,6 +112,110 @@ describe("builtin-ai-tasks subsystem", () => {
       expect((globalThis as any).TRANSFORMERS_CONFIG.device).toBe("wasm");
       expect(calls).toBe(2);
     });
+
+    it("retries with wasm fallback on ONNX ORT_NOT_IMPLEMENTED (ERROR_CODE: 9) — the GatherBlockQuantized Firefox bug and sets CPU fallback model", async () => {
+      // This is the exact error that fires in Firefox when the GPU driver supports
+      // WebGPU but lacks the GatherBlockQuantized kernel for q4f16 block-quantized models.
+      (globalThis as any).TRANSFORMERS_CONFIG = {
+        device: "webgpu",
+        dtype: "q4f16",
+      };
+
+      let calls = 0;
+      const mockFactory = {
+        create: async () => {
+          calls++;
+          if (calls === 1) {
+            throw new Error(
+              "Can't create a session. ERROR_CODE: 9, ERROR_MESSAGE: Could not find an implementation for GatherBlockQuantized(1) node with name '/model/embed_tokens/Gather_Quant'",
+            );
+          }
+          return { ready: true };
+        },
+      };
+
+      const instance = await createTaskInstanceWithFallback(mockFactory, {});
+      expect(instance).toEqual({ ready: true });
+      expect((globalThis as any).TRANSFORMERS_CONFIG.device).toBe("wasm");
+      expect((globalThis as any).TRANSFORMERS_CONFIG.dtype).toBe("q4");
+      expect((globalThis as any).TRANSFORMERS_CONFIG.modelName).toBe(
+        "onnx-community/gemma-3-1b-it-ONNX-GQA",
+      );
+      expect(calls).toBe(2);
+    });
+
+    it("retries with wasm fallback when WebNN backend fails and sets CPU fallback model", async () => {
+      (globalThis as any).TRANSFORMERS_CONFIG = {
+        device: "webnn",
+        dtype: "q4f16",
+      };
+
+      let calls = 0;
+      const mockFactory = {
+        create: async () => {
+          calls++;
+          if (calls === 1) {
+            throw new Error("WebNN: backend initialization failed");
+          }
+          return { ready: true };
+        },
+      };
+
+      const instance = await createTaskInstanceWithFallback(mockFactory, {});
+      expect(instance).toEqual({ ready: true });
+      expect((globalThis as any).TRANSFORMERS_CONFIG.device).toBe("wasm");
+      expect((globalThis as any).TRANSFORMERS_CONFIG.dtype).toBe("q4");
+      expect((globalThis as any).TRANSFORMERS_CONFIG.modelName).toBe(
+        "onnx-community/gemma-3-1b-it-ONNX-GQA",
+      );
+      expect(calls).toBe(2);
+    });
+
+    it("retries with wasm fallback on ONNX bad_alloc (ERROR_CODE: 6) and sets CPU fallback model", async () => {
+      (globalThis as any).TRANSFORMERS_CONFIG = {
+        device: "webgpu",
+        dtype: "q4f16",
+      };
+
+      let calls = 0;
+      const mockFactory = {
+        create: async () => {
+          calls++;
+          if (calls === 1) {
+            throw new Error(
+              "Can't create a session. ERROR_CODE: 6, ERROR_MESSAGE: std::bad_alloc",
+            );
+          }
+          return { ready: true };
+        },
+      };
+
+      const instance = await createTaskInstanceWithFallback(mockFactory, {});
+      expect(instance).toEqual({ ready: true });
+      expect((globalThis as any).TRANSFORMERS_CONFIG.device).toBe("wasm");
+      expect((globalThis as any).TRANSFORMERS_CONFIG.dtype).toBe("q4");
+      expect((globalThis as any).TRANSFORMERS_CONFIG.modelName).toBe(
+        "onnx-community/gemma-3-1b-it-ONNX-GQA",
+      );
+      expect(calls).toBe(2);
+    });
+
+    it("does not swallow non-backend errors (e.g. abort, network failures)", async () => {
+      (globalThis as any).TRANSFORMERS_CONFIG = {
+        device: "webgpu",
+        dtype: "q4f16",
+      };
+
+      const mockFactory = {
+        create: async () => {
+          throw new Error("AbortError: Prompt API session creation aborted");
+        },
+      };
+
+      await expect(
+        createTaskInstanceWithFallback(mockFactory, {}),
+      ).rejects.toThrow("Prompt API session creation aborted");
+    });
   });
 
   describe("isBuiltinTaskSupported", () => {
@@ -122,7 +235,7 @@ describe("builtin-ai-tasks subsystem", () => {
       await expect(ensureBuiltinAiPolyfills()).resolves.not.toThrow();
     });
 
-    it("configures wasm device when WebGPU requestAdapter returns null", async () => {
+    it("configures wasm device and CPU fallback model when WebGPU and WebNN are absent", async () => {
       const originalNavigator = globalThis.navigator;
       try {
         Object.defineProperty(globalThis, "navigator", {
@@ -139,12 +252,57 @@ describe("builtin-ai-tasks subsystem", () => {
 
         await ensureBuiltinAiPolyfills();
         expect((globalThis as any).TRANSFORMERS_CONFIG?.device).toBe("wasm");
+        expect((globalThis as any).TRANSFORMERS_CONFIG?.dtype).toBe("q4");
+        expect((globalThis as any).TRANSFORMERS_CONFIG?.modelName).toBe(
+          "onnx-community/gemma-3-1b-it-ONNX-GQA",
+        );
       } finally {
         Object.defineProperty(globalThis, "navigator", {
           value: originalNavigator,
           configurable: true,
         });
       }
+    });
+
+    it("configures webgpu device and sets the polyfill model when WebGPU is available", async () => {
+      const originalNavigator = globalThis.navigator;
+      try {
+        Object.defineProperty(globalThis, "navigator", {
+          value: {
+            gpu: {
+              requestAdapter: async () => ({
+                requestDevice: async () => ({
+                  destroy: () => {},
+                }),
+              }),
+            },
+          },
+          configurable: true,
+        });
+
+        delete (globalThis as any).LanguageModel;
+        delete (globalThis as any).TRANSFORMERS_CONFIG;
+
+        await ensureBuiltinAiPolyfills();
+        expect((globalThis as any).TRANSFORMERS_CONFIG?.device).toBe("webgpu");
+        expect((globalThis as any).TRANSFORMERS_CONFIG?.dtype).toBe("q4f16");
+        expect((globalThis as any).TRANSFORMERS_CONFIG?.modelName).toBe(
+          "onnx-community/gemma-3-1b-it-ONNX-GQA",
+        );
+      } finally {
+        Object.defineProperty(globalThis, "navigator", {
+          value: originalNavigator,
+          configurable: true,
+        });
+      }
+    });
+
+    it("does not configure TRANSFORMERS_CONFIG when native LanguageModel is present", async () => {
+      (globalThis as any).LanguageModel = class {};
+      delete (globalThis as any).TRANSFORMERS_CONFIG;
+
+      await ensureBuiltinAiPolyfills();
+      expect((globalThis as any).TRANSFORMERS_CONFIG).toBeUndefined();
     });
   });
 

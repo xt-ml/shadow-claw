@@ -217,6 +217,95 @@ describe("prerenderPrettyPaths", () => {
     expect(rootHtml).toContain('id="shadow-claw-static-routing"');
   });
 
+  it("recursively loads and merges subRoutes", async () => {
+    const publicDir = path.join(tmpDir, "dist/public");
+    const indexPath = path.join(publicDir, "index.html");
+    const sourcePath = path.join(tmpDir, "pages/main");
+    const routesPath = path.join(tmpDir, "pages/routes.json");
+
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+    await mkdir(path.join(sourcePath, "posts"), { recursive: true });
+    await mkdir(path.dirname(routesPath), { recursive: true });
+
+    await writeFile(
+      indexPath,
+      '<!doctype html><html><head><base href="/"><title>ShadowClaw</title></head><body><shadow-claw></shadow-claw></body></html>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      "<template></template>",
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      "<template></template>",
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      "<template></template>",
+      "utf8",
+    );
+
+    const routesJson = {
+      routes: {
+        "/pages/main/posts/main.md": { prettyPath: "/main-post/" },
+      },
+      subRoutes: ["sub-routes.json"],
+    };
+    await writeFile(routesPath, JSON.stringify(routesJson, null, 2), "utf8");
+
+    const subRoutesJson = {
+      routes: {
+        "/pages/main/posts/sub.md": { prettyPath: "/sub-post/" },
+      },
+    };
+    await writeFile(
+      path.join(tmpDir, "pages/sub-routes.json"),
+      JSON.stringify(subRoutesJson, null, 2),
+      "utf8",
+    );
+
+    await writeFile(path.join(sourcePath, "posts/main.md"), "main", "utf8");
+    await writeFile(path.join(sourcePath, "posts/sub.md"), "sub", "utf8");
+
+    const result = await prerenderPrettyPaths({
+      publicDir,
+      routesPath,
+      sourcePath,
+      indexPath,
+      prerenderPages: 0,
+    });
+
+    expect(result.count).toBe(2);
+    expect(result.generatedPaths).toContain("main-post/index.html");
+    expect(result.generatedPaths).toContain("sub-post/index.html");
+
+    // Check that subRoutes property is removed from final routing json
+    const manifestPath = path.join(publicDir, "static-routing.json");
+    const manifestContent = await readFile(manifestPath, "utf8");
+    const parsedManifest = JSON.parse(manifestContent);
+    expect(parsedManifest.subRoutes).toBeUndefined();
+    expect(parsedManifest.routes["/pages/main/posts/sub.md"].prettyPath).toBe(
+      "/sub-post/",
+    );
+  });
+
   it("embeds all pages when prerenderPages is 'all'", async () => {
     const publicDir = path.join(tmpDir, "dist/public");
     const indexPath = path.join(publicDir, "index.html");
@@ -300,5 +389,109 @@ describe("prerenderPrettyPaths", () => {
     expect(manifestMatch).not.toBeNull();
     const embeddedManifest = JSON.parse(manifestMatch[1]);
     expect(embeddedManifest.pages).toHaveLength(2);
+  });
+
+  it("copies co-located assets to pretty path directory and populates files/main and static-main", async () => {
+    const publicDir = path.join(tmpDir, "dist/public");
+    const indexPath = path.join(publicDir, "index.html");
+    const sourcePath = path.join(tmpDir, "pages/main");
+    const routesPath = path.join(tmpDir, "pages/routes.json");
+
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+    await mkdir(path.join(sourcePath, "posts/2026/07/01"), { recursive: true });
+    await mkdir(path.dirname(routesPath), { recursive: true });
+
+    await writeFile(
+      indexPath,
+      '<!doctype html><html><head><base href="/"><title>ShadowClaw</title></head><body><shadow-claw></shadow-claw></body></html>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      "<template></template>",
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      "<template></template>",
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      "<template></template>",
+      "utf8",
+    );
+
+    const postContent = [
+      "---",
+      'title: "On Developing Loops"',
+      "---",
+      "![screenshot.png](screenshot.png)",
+    ].join("\n");
+
+    await writeFile(
+      path.join(sourcePath, "posts/2026/07/01/2026-07-01_03-37-38.md"),
+      postContent,
+      "utf8",
+    );
+    await writeFile(
+      path.join(sourcePath, "posts/2026/07/01/screenshot.png"),
+      "FAKE_PNG_BINARY_DATA",
+      "utf8",
+    );
+
+    const routesJson = {
+      routes: {
+        "/pages/main/posts/2026/07/01/2026-07-01_03-37-38.md": {
+          prettyPath: "/2026/06/30/on-developing-loops/",
+        },
+      },
+    };
+    await writeFile(routesPath, JSON.stringify(routesJson, null, 2), "utf8");
+
+    await prerenderPrettyPaths({
+      publicDir,
+      routesPath,
+      sourcePath,
+      indexPath,
+      prerenderPages: "all",
+    });
+
+    // Verify screenshot was copied to pretty path directory
+    const prettyAssetPath = path.join(
+      publicDir,
+      "2026/06/30/on-developing-loops/screenshot.png",
+    );
+    const prettyAsset = await readFile(prettyAssetPath, "utf8");
+    expect(prettyAsset).toBe("FAKE_PNG_BINARY_DATA");
+
+    // Verify screenshot was copied to files/main and static-main
+    const filesAssetPath = path.join(
+      publicDir,
+      "files/main/posts/2026/07/01/screenshot.png",
+    );
+    const filesAsset = await readFile(filesAssetPath, "utf8");
+    expect(filesAsset).toBe("FAKE_PNG_BINARY_DATA");
+
+    const staticMainAssetPath = path.join(
+      publicDir,
+      "static-main/posts/2026/07/01/screenshot.png",
+    );
+    const staticMainAsset = await readFile(staticMainAssetPath, "utf8");
+    expect(staticMainAsset).toBe("FAKE_PNG_BINARY_DATA");
   });
 });

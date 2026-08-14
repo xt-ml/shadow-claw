@@ -81,21 +81,43 @@ describe("staticMainSite", () => {
 
   it("resolves the static manifest URL correctly", () => {
     const expected =
-      typeof document !== "undefined" && document.baseURI
-        ? new URL(STATIC_MAIN_MANIFEST_PATH, document.baseURI).toString()
+      typeof window !== "undefined" && window.location?.origin
+        ? new URL(
+            `/${STATIC_MAIN_MANIFEST_PATH}`,
+            window.location.origin,
+          ).toString()
         : `/${STATIC_MAIN_MANIFEST_PATH}`;
     expect(resolveStaticMainManifestUrl()).toBe(expected);
   });
 
   it("resolves static main file URL correctly", () => {
     const expected =
-      typeof document !== "undefined" && document.baseURI
+      typeof window !== "undefined" && window.location?.origin
         ? new URL(
-            `${STATIC_MAIN_DIR}/posts/test.md`,
-            document.baseURI,
+            `/${STATIC_MAIN_DIR}/posts/test.md`,
+            window.location.origin,
           ).toString()
         : `/${STATIC_MAIN_DIR}/posts/test.md`;
     expect(resolveStaticMainFileUrl("posts/test.md")).toBe(expected);
+  });
+
+  it("resolves static URLs correctly when window location is deep path", () => {
+    const origHref = window.location.href;
+    try {
+      window.history.pushState(
+        {},
+        "",
+        "/pages/main/posts/2025/12/31/2025-12-31_00-08-00.md",
+      );
+      expect(resolveStaticMainManifestUrl()).toBe(
+        `${window.location.origin}/static-main-manifest.json`,
+      );
+      expect(resolveStaticMainFileUrl("posts/2025/12/31/test.md")).toBe(
+        `${window.location.origin}/static-main/posts/2025/12/31/test.md`,
+      );
+    } finally {
+      window.history.pushState({}, "", origHref);
+    }
   });
 
   it("fetches static main file directly via fetchStaticMainFile", async () => {
@@ -232,8 +254,8 @@ describe("staticMainSite", () => {
     const seeded = await seedStaticMainSite({} as any);
 
     expect(seeded).toEqual([
-      { groupId: DEFAULT_GROUP_ID, path: "MEMORY.md" },
       { groupId: DEFAULT_GROUP_ID, path: "guide.md" },
+      { groupId: DEFAULT_GROUP_ID, path: "MEMORY.md" },
     ]);
     expect(mockWriteGroupFile).toHaveBeenCalledTimes(2);
     expect(mockWriteGroupFile).toHaveBeenCalledWith(
@@ -305,8 +327,8 @@ describe("staticMainSite", () => {
     const seeded = await seedStaticMainSite({} as any);
 
     expect(seeded).toEqual([
-      { groupId: DEFAULT_GROUP_ID, path: "MEMORY.md" },
       { groupId: DEFAULT_GROUP_ID, path: "guide.md" },
+      { groupId: DEFAULT_GROUP_ID, path: "MEMORY.md" },
     ]);
     expect(mockWriteGroupFile).toHaveBeenCalledTimes(1);
     expect(mockWriteGroupFile).toHaveBeenCalledWith(
@@ -341,9 +363,9 @@ describe("staticMainSite", () => {
     );
 
     expect(seeded).toEqual([
-      { groupId: DEFAULT_GROUP_ID, path: "MEMORY.md" },
       { groupId: DEFAULT_GROUP_ID, path: "getting-started.md" },
       { groupId: DEFAULT_GROUP_ID, path: "2026-06-28-a-new-day.md" },
+      { groupId: DEFAULT_GROUP_ID, path: "MEMORY.md" },
     ]);
   });
 
@@ -432,7 +454,35 @@ describe("staticMainSite", () => {
     );
   });
 
-  it("fetches full static-main-manifest.json during seedStaticMainSite even if embedded script is partial", async () => {
+  it("uses embedded script synchronously and does not fetch full manifest by default", async () => {
+    const script = document.createElement("script");
+    script.id = "shadow-claw-static-manifest";
+    script.type = "application/json";
+    script.textContent = JSON.stringify({
+      pages: [
+        { displayPath: "posts/current-post.md", content: "# Current Post" },
+      ],
+    });
+    document.head.appendChild(script);
+
+    mockGroupFileExists.mockResolvedValue(false);
+    mockWriteGroupFile.mockResolvedValue(undefined);
+
+    const seeded = await seedStaticMainSite({} as any);
+
+    expect(seeded).toEqual([
+      { groupId: DEFAULT_GROUP_ID, path: "posts/current-post.md" },
+    ]);
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(mockWriteGroupFile).toHaveBeenCalledWith(
+      {} as any,
+      DEFAULT_GROUP_ID,
+      "posts/current-post.md",
+      "# Current Post",
+    );
+  });
+
+  it("fetches full static-main-manifest.json during seedStaticMainSite when preferEmbedded is false", async () => {
     // 1. Partial embedded script with only 1 page
     const script = document.createElement("script");
     script.id = "shadow-claw-static-manifest";
@@ -459,12 +509,14 @@ describe("staticMainSite", () => {
     mockGroupFileExists.mockResolvedValue(false);
     mockWriteGroupFile.mockResolvedValue(undefined);
 
-    const seeded = await seedStaticMainSite({} as any);
+    const seeded = await seedStaticMainSite({} as any, DEFAULT_GROUP_ID, [], {
+      preferEmbedded: false,
+    });
 
     expect(seeded).toEqual([
-      { groupId: DEFAULT_GROUP_ID, path: "MEMORY.md" },
-      { groupId: DEFAULT_GROUP_ID, path: "posts/page-1.md" },
       { groupId: DEFAULT_GROUP_ID, path: "posts/page-2.md" },
+      { groupId: DEFAULT_GROUP_ID, path: "posts/page-1.md" },
+      { groupId: DEFAULT_GROUP_ID, path: "MEMORY.md" },
     ]);
     expect(mockWriteGroupFile).toHaveBeenCalledWith(
       {} as any,

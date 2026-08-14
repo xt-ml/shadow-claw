@@ -4,9 +4,19 @@ import { createLogMessage } from "../../worker/utils/createLogMessage.js";
 import { createToolActivityMessage } from "../../worker/utils/createToolActivityMessage.js";
 import { executeTool } from "../../worker/utils/executeTool.js";
 import { setPostHandler } from "../../worker/utils/post.js";
-import { NANO_BUILTIN_PROFILE } from "../tools/builtin-profiles.js";
+import { DEFAULT_BUILTIN_PROFILE } from "../tools/builtin-profiles.js";
 import { TOOL_DEFINITIONS, ToolDefinition } from "../tools/tools.js";
-import { ensureBuiltinAiPolyfills } from "./builtin-ai-tasks.js";
+import {
+  ensureBuiltinAiPolyfills,
+  createTaskInstanceWithFallback,
+  getPromptApiFallbackModel,
+} from "./builtin-ai-tasks.js";
+import {
+  DEFAULT_PROMPT_API_MODEL_SIZE_BYTES,
+  PromptApiProgressAggregator,
+  setModelCacheProgressHook,
+  clearModelCacheProgressHook,
+} from "./utils/index.js";
 
 import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent/spawn-subagent.js";
 
@@ -16,10 +26,10 @@ import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent/sp
  * overwhelmed by too many tool definitions. All other tools remain
  * available to cloud-hosted providers.
  */
-export { NANO_BUILTIN_PROFILE };
+export { DEFAULT_BUILTIN_PROFILE };
 
 const PROMPT_API_TOOLS = TOOL_DEFINITIONS.filter((t) =>
-  NANO_BUILTIN_PROFILE.enabledToolNames.includes(t.name),
+  DEFAULT_BUILTIN_PROFILE.enabledToolNames.includes(t.name),
 );
 
 export { PROMPT_API_TOOLS };
@@ -44,7 +54,7 @@ function getLanguageModelApi(): {
 }
 
 /**
- * Feature detection for the web Prompt API.
+ * Feature detection for the Prompt API.
  */
 export function isPromptApiSupported(): boolean {
   return !!getLanguageModelApi();
@@ -109,13 +119,54 @@ function scheduleWarmSessionCleanup(): void {
   }, WARM_SESSION_IDLE_MS);
 }
 
-function buildInitialPrompts(systemPrompt: string): any[] {
-  const text = String(systemPrompt || "").trim();
-  if (!text) {
-    return [];
+function formatMessageContent(msg: any): string {
+  if (typeof msg?.content === "string") {
+    return msg.content;
   }
 
-  return [{ role: "system", content: text }];
+  if (Array.isArray(msg?.content)) {
+    return msg.content
+      .map((block: any) => {
+        if (block?.type === "text") {
+          return block.text || "";
+        }
+        if (block?.type === "tool_use") {
+          return `[TOOL_CALL ${block.name}] ${JSON.stringify(block.input || {})}`;
+        }
+        if (block?.type === "tool_result") {
+          return `[TOOL_RESULT ${block.tool_use_id}] ${String(block.content || "")}`;
+        }
+        if (block?.type === "attachment") {
+          return `[ATTACHMENT ${block.mediaType}] ${block.fileName} (${block.mimeType})`;
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return "";
+}
+
+function buildInitialPrompts(
+  systemPrompt: string,
+  historyMessages: any[] = [],
+): any[] {
+  const prompts: any[] = [];
+  const text = String(systemPrompt || "").trim();
+  if (text) {
+    prompts.push({ role: "system", content: text });
+  }
+
+  for (const msg of historyMessages) {
+    const role = msg?.role === "assistant" ? "assistant" : "user";
+    const content = formatMessageContent(msg);
+    if (content) {
+      prompts.push({ role, content });
+    }
+  }
+
+  return prompts;
 }
 
 async function emitModelDownloadProgress(
@@ -195,6 +246,54 @@ function summarizePromptApiSession(
   ].join(" | ");
 }
 
+async function fetchPolyfillTotalSizeBytes(
+  modelName: string,
+  dtype: string,
+): Promise<number> {
+  const files = [
+    "config.json",
+    "tokenizer.json",
+    "tokenizer_config.json",
+    "generation_config.json",
+  ];
+
+  const sizes = await Promise.all([
+    ...files.map(async (file) => {
+      try {
+        const res = await fetch(
+          `https://huggingface.co/${modelName}/resolve/main/${file}`,
+          { method: "HEAD" },
+        );
+        if (res.ok) {
+          return parseInt(res.headers.get("content-length") || "0", 10);
+        }
+      } catch {}
+      return 0;
+    }),
+    (async () => {
+      try {
+        let res = await fetch(
+          `https://huggingface.co/${modelName}/resolve/main/onnx/model_${dtype}.onnx`,
+          { method: "HEAD" },
+        );
+        if (!res.ok) {
+          res = await fetch(
+            `https://huggingface.co/${modelName}/resolve/main/onnx/model.onnx`,
+            { method: "HEAD" },
+          );
+        }
+        if (res.ok) {
+          return parseInt(res.headers.get("content-length") || "0", 10);
+        }
+      } catch {}
+      return 0;
+    })(),
+  ]);
+
+  const total = sizes.reduce((a, b) => a + b, 0);
+  return total > 0 ? total : DEFAULT_PROMPT_API_MODEL_SIZE_BYTES;
+}
+
 export type PromptApiSamplingMode =
   | "most-predictable"
   | "predictable"
@@ -219,11 +318,8 @@ async function createPromptSessionWithProgress(
   samplingOptions?: PromptApiSamplingOptions,
   tools?: ToolDefinition[],
 ) {
-  let LanguageModelApi = getLanguageModelApi();
-  if (!LanguageModelApi) {
-    await ensureBuiltinAiPolyfills();
-    LanguageModelApi = getLanguageModelApi();
-  }
+  await ensureBuiltinAiPolyfills();
+  const LanguageModelApi = getLanguageModelApi();
   if (!LanguageModelApi) {
     throw new Error(
       "Prompt API is unavailable in this browser. Enable Prompt API flags in a supported browser (for example Edge Dev/Canary or Chrome with the required flags) or switch provider.",
@@ -260,6 +356,8 @@ async function createPromptSessionWithProgress(
   const availability = await LanguageModelApi.availability({
     ...PROMPT_IO_OPTIONS,
     ...samplingParams,
+    ...(nativeTools ? { tools: nativeTools } : {}),
+    ...(initialPrompts && initialPrompts.length > 0 ? { initialPrompts } : {}),
   });
   await emitPromptApiDiagnostic(
     emit,
@@ -267,18 +365,48 @@ async function createPromptSessionWithProgress(
     `availability() returned: ${availability}`,
   );
 
-  if (availability === "unavailable") {
+  if (availability === "unavailable" || availability === "no") {
     throw new Error(
       "Prompt API model is unavailable on this device/browser. Switch provider or enable the feature flags.",
     );
   }
 
-  if (availability === "downloadable" || availability === "downloading") {
+  const isReadilyAvailable = availability === "readily";
+  const needsDownload =
+    availability !== "readily" && availability !== "available";
+
+  const isPolyfill =
+    !!(globalThis as any).TRANSFORMERS_CONFIG ||
+    (availability === "available" &&
+      !("LanguageModel" in globalThis) &&
+      !(globalThis as any).ai?.languageModel);
+
+  let expectedTotalBytes = 0;
+  if (isPolyfill) {
+    const config = (globalThis as any).TRANSFORMERS_CONFIG || {};
+    const modelName = config.modelName || (await getPromptApiFallbackModel());
+    const dtype = config.dtype || "q4";
+    expectedTotalBytes = await fetchPolyfillTotalSizeBytes(modelName, dtype);
+  }
+
+  const aggregator = new PromptApiProgressAggregator(
+    (status, progress, message) => {
+      void emitModelDownloadProgress(emit, groupId, status, progress, message);
+    },
+    {
+      expectedTotalBytes,
+      suppressInitialZero: true,
+      logEvents: logPromptApiEvents,
+    },
+  );
+
+  if (needsDownload) {
+    aggregator.markActive();
     await emitModelDownloadProgress(
       emit,
       groupId,
       "running",
-      availability === "downloadable" ? 0 : null,
+      availability === "downloading" ? null : 0,
       "Downloading Prompt API model...",
     );
   }
@@ -286,24 +414,12 @@ async function createPromptSessionWithProgress(
   let session;
   let latestAvailability = availability;
   try {
-    for (
-      let attempt = 1;
-      attempt <= PROMPT_API_CREATE_RETRY_MAX_ATTEMPTS;
-      attempt++
-    ) {
-      await emitPromptApiDiagnostic(
-        emit,
-        groupId,
-        `Creating Prompt API session... (attempt ${attempt}/${PROMPT_API_CREATE_RETRY_MAX_ATTEMPTS})`,
-      );
+    setModelCacheProgressHook((url, received, total, complete) => {
+      aggregator.onStreamProgress(url, received, total, !!complete);
+    });
 
-      try {
-        session = await LanguageModelApi.create({
-          ...PROMPT_IO_OPTIONS,
-          ...samplingParams,
-          ...(nativeTools ? { tools: nativeTools } : {}),
-          ...(initialPrompts.length > 0 ? { initialPrompts } : {}),
-          signal: abortSignal,
+    const monitorOption = !isReadilyAvailable
+      ? {
           monitor(monitorTarget: any) {
             if (logPromptApiEvents) {
               console.log(
@@ -332,61 +448,43 @@ async function createPromptSessionWithProgress(
             }
 
             monitorTarget.addEventListener("downloadprogress", (event: any) => {
-              const loaded = (event as any).loaded;
-              const total = (event as any).total;
-              const loadedValue = Number(loaded);
-              const totalValue = Number(total);
-
-              if (logPromptApiEvents) {
-                console.log("[PromptAPI] downloadprogress event:", {
-                  loaded,
-                  total,
-                  loadedValue,
-                  totalValue,
-                  lengthComputable: (event as any).lengthComputable,
-                  type: event?.type,
-                });
-              }
-
-              if (!Number.isFinite(loadedValue)) {
-                if (logPromptApiEvents) {
-                  console.warn(
-                    "[PromptAPI] downloadprogress: loadedValue is not finite, skipping.",
-                  );
-                }
-
-                return;
-              }
-
-              const normalized =
-                Number.isFinite(totalValue) && totalValue > 0
-                  ? Math.max(0, Math.min(1, loadedValue / totalValue))
-                  : Math.max(0, Math.min(1, loadedValue));
-
-              if (logPromptApiEvents) {
-                console.log(
-                  "[PromptAPI] downloadprogress normalized:",
-                  normalized,
-                  `(${Math.round(normalized * 100)}%)`,
-                );
-              }
-
-              void emitModelDownloadProgress(
-                emit,
-                groupId,
-                "running",
-                normalized,
-                `Downloading Prompt API model... ${Math.round(normalized * 100)}%`,
-              );
+              aggregator.onProgressEvent(event);
             });
           },
-        });
+        }
+      : {};
+
+    for (
+      let attempt = 1;
+      attempt <= PROMPT_API_CREATE_RETRY_MAX_ATTEMPTS;
+      attempt++
+    ) {
+      await emitPromptApiDiagnostic(
+        emit,
+        groupId,
+        `Creating Prompt API session... (attempt ${attempt}/${PROMPT_API_CREATE_RETRY_MAX_ATTEMPTS})`,
+      );
+
+      try {
+        session = await createTaskInstanceWithFallback(
+          LanguageModelApi as any,
+          {
+            ...PROMPT_IO_OPTIONS,
+            ...samplingParams,
+            ...(nativeTools ? { tools: nativeTools } : {}),
+            ...(initialPrompts.length > 0 ? { initialPrompts } : {}),
+            signal: abortSignal,
+            ...monitorOption,
+          },
+        );
 
         break;
       } catch (createErr) {
         const stillDownloading =
-          latestAvailability === "downloadable" ||
-          latestAvailability === "downloading";
+          latestAvailability !== "readily" &&
+          latestAvailability !== "available" &&
+          latestAvailability !== "unavailable" &&
+          latestAvailability !== "no";
         const canRetryForDownloading =
           stillDownloading && isPromptApiCreateNotReadyError(createErr);
 
@@ -403,8 +501,14 @@ async function createPromptSessionWithProgress(
           "Session creation failed while model is still downloading; retrying shortly...",
         );
 
-        latestAvailability =
-          await LanguageModelApi.availability(PROMPT_IO_OPTIONS);
+        latestAvailability = await LanguageModelApi.availability({
+          ...PROMPT_IO_OPTIONS,
+          ...samplingParams,
+          ...(nativeTools ? { tools: nativeTools } : {}),
+          ...(initialPrompts && initialPrompts.length > 0
+            ? { initialPrompts }
+            : {}),
+        });
         await emitPromptApiDiagnostic(
           emit,
           groupId,
@@ -412,14 +516,16 @@ async function createPromptSessionWithProgress(
         );
 
         if (
-          latestAvailability === "downloadable" ||
-          latestAvailability === "downloading"
+          latestAvailability !== "readily" &&
+          latestAvailability !== "available" &&
+          latestAvailability !== "unavailable" &&
+          latestAvailability !== "no"
         ) {
           await emitModelDownloadProgress(
             emit,
             groupId,
             "running",
-            latestAvailability === "downloadable" ? 0 : null,
+            latestAvailability === "downloading" ? null : 0,
             "Downloading Prompt API model...",
           );
         }
@@ -430,7 +536,7 @@ async function createPromptSessionWithProgress(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     if (emitErrorOnFailure) {
-      await emitModelDownloadProgress(emit, groupId, "error", null, message);
+      aggregator.onError(err);
     }
 
     await emitPromptApiDiagnostic(
@@ -440,6 +546,8 @@ async function createPromptSessionWithProgress(
     );
 
     throw err;
+  } finally {
+    clearModelCacheProgressHook();
   }
 
   await emitPromptApiDiagnostic(
@@ -448,13 +556,9 @@ async function createPromptSessionWithProgress(
     summarizePromptApiSession(session, LanguageModelApi),
   );
 
-  await emitModelDownloadProgress(
-    emit,
-    groupId,
-    "done",
-    1,
-    "Prompt API model ready.",
-  );
+  if (needsDownload || aggregator.hasEmitted) {
+    aggregator.onDone();
+  }
 
   return session;
 }
@@ -475,7 +579,11 @@ export function isPromptApiMonitorFallbackError(error: unknown): boolean {
 
 function mapPromptApiModelLabel(raw: string): string {
   const normalized = raw.toLowerCase();
-  if (normalized.includes("gemma4") || normalized.includes("gemma 4")) {
+  if (
+    normalized.includes("gemma4") ||
+    normalized.includes("gemma 4") ||
+    normalized.includes("gemma-4")
+  ) {
     return "Gemma 4";
   }
 
@@ -535,26 +643,16 @@ function summarizePromptApiCapabilities(
 
 */
 
-async function getOrCreateWarmSession(
+async function createPromptSessionDirect(
   emit: (message: any) => Promise<void> | void,
   groupId: string,
   systemPrompt: string,
   abortSignal: AbortSignal | undefined,
   samplingOptions?: PromptApiSamplingOptions,
   tools?: ToolDefinition[],
+  historyMessages: any[] = [],
 ) {
-  const promptKey = String(systemPrompt || "");
-
-  clearWarmSessionTimer();
-
-  if (warmSessionState.session && warmSessionState.key === promptKey) {
-    scheduleWarmSessionCleanup();
-
-    return warmSessionState.session;
-  }
-
-  await destroyWarmSession();
-
+  await ensureBuiltinAiPolyfills();
   const LanguageModelApi = getLanguageModelApi();
   if (!LanguageModelApi) {
     throw new Error(
@@ -562,7 +660,7 @@ async function getOrCreateWarmSession(
     );
   }
 
-  const initialPrompts = buildInitialPrompts(systemPrompt);
+  const initialPrompts = buildInitialPrompts(systemPrompt, historyMessages);
   const samplingParams = {
     ...(samplingOptions?.samplingMode
       ? { samplingMode: samplingOptions.samplingMode }
@@ -587,7 +685,7 @@ async function getOrCreateWarmSession(
         }))
       : undefined;
 
-  warmSessionState.session = await createPromptSessionWithProgress(
+  return await createPromptSessionWithProgress(
     emit,
     groupId,
     abortSignal,
@@ -597,20 +695,22 @@ async function getOrCreateWarmSession(
     tools,
   ).catch(async (error) => {
     // Fallback to plain creation if monitor-path options fail on this build.
-
     if (!isPromptApiMonitorFallbackError(error)) {
       throw error;
     }
 
     let fallbackSession;
     try {
-      fallbackSession = await LanguageModelApi.create({
-        ...PROMPT_IO_OPTIONS,
-        ...samplingParams,
-        ...(nativeTools ? { tools: nativeTools } : {}),
-        ...(initialPrompts.length > 0 ? { initialPrompts } : {}),
-        signal: abortSignal,
-      });
+      fallbackSession = await createTaskInstanceWithFallback(
+        LanguageModelApi as any,
+        {
+          ...PROMPT_IO_OPTIONS,
+          ...samplingParams,
+          ...(nativeTools ? { tools: nativeTools } : {}),
+          ...(initialPrompts.length > 0 ? { initialPrompts } : {}),
+          signal: abortSignal,
+        },
+      );
     } catch (fallbackError) {
       const message =
         fallbackError instanceof Error
@@ -621,21 +721,29 @@ async function getOrCreateWarmSession(
       throw fallbackError;
     }
 
-    await emitModelDownloadProgress(
-      emit,
-      groupId,
-      "done",
-      1,
-      "Prompt API model ready.",
-    );
+    const availability = await LanguageModelApi.availability({
+      ...PROMPT_IO_OPTIONS,
+      ...samplingParams,
+      ...(nativeTools ? { tools: nativeTools } : {}),
+      ...(initialPrompts && initialPrompts.length > 0
+        ? { initialPrompts }
+        : {}),
+    }).catch(() => "available");
+    const needsDownload =
+      availability !== "readily" && availability !== "available";
+
+    if (needsDownload) {
+      await emitModelDownloadProgress(
+        emit,
+        groupId,
+        "done",
+        1,
+        "Prompt API model ready.",
+      );
+    }
 
     return fallbackSession;
   });
-
-  warmSessionState.key = promptKey;
-  scheduleWarmSessionCleanup();
-
-  return warmSessionState.session;
 }
 
 async function acquirePromptSession(
@@ -645,42 +753,55 @@ async function acquirePromptSession(
   abortSignal: AbortSignal | undefined,
   samplingOptions?: PromptApiSamplingOptions,
   tools?: ToolDefinition[],
+  historyMessages: any[] = [],
 ) {
-  const warmSession = await getOrCreateWarmSession(
+  const promptKey =
+    String(systemPrompt || "") +
+    (historyMessages.length ? JSON.stringify(historyMessages) : "");
+
+  clearWarmSessionTimer();
+
+  if (
+    warmSessionState.session &&
+    warmSessionState.key === promptKey &&
+    typeof warmSessionState.session.clone === "function"
+  ) {
+    try {
+      const clone = await warmSessionState.session.clone();
+      scheduleWarmSessionCleanup();
+
+      return { session: clone, destroyAfterUse: true };
+    } catch {
+      await destroyWarmSession();
+    }
+  }
+
+  await destroyWarmSession();
+
+  const session = await createPromptSessionDirect(
     emit,
     groupId,
     systemPrompt,
     abortSignal,
     samplingOptions,
     tools,
+    historyMessages,
   );
 
-  if (warmSession && typeof warmSession.clone === "function") {
+  if (typeof session.clone === "function") {
+    warmSessionState.session = session;
+    warmSessionState.key = promptKey;
+    scheduleWarmSessionCleanup();
     try {
-      const clone = await warmSession.clone();
-      scheduleWarmSessionCleanup();
+      const clone = await session.clone();
 
       return { session: clone, destroyAfterUse: true };
     } catch {
-      // Clone not available — destroy the warm session and create a fresh one
-      // so prior conversation history doesn't accumulate across invocations.
+      // If cloning fails, use the original session directly
     }
   }
 
-  // Clone unavailable: create a fresh session to avoid context bleed from
-  // prior invocations polluting the session's multi-turn history.
-  await destroyWarmSession();
-  const freshSession = await createPromptSessionWithProgress(
-    emit,
-    groupId,
-    abortSignal,
-    buildInitialPrompts(systemPrompt),
-    true,
-    samplingOptions,
-    tools,
-  );
-
-  return { session: freshSession, destroyAfterUse: true };
+  return { session, destroyAfterUse: true };
 }
 
 function buildPromptTranscript(
@@ -758,6 +879,27 @@ function parseStructured(raw: string): {
     return null;
   }
 
+  // Check for Qwen/Llama XML-like tool calls: <tool_call>{"name": "...", "arguments": ...}</tool_call>
+  const toolCallMatch = text.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
+  if (toolCallMatch) {
+    try {
+      const parsedTool = JSON.parse(toolCallMatch[1]);
+      if (parsedTool.name) {
+        return {
+          type: "tool_use",
+          tool_calls: [
+            {
+              name: parsedTool.name,
+              input: parsedTool.arguments || parsedTool.parameters || {},
+            },
+          ],
+        };
+      }
+    } catch {
+      // fallback to other parsing if invalid JSON
+    }
+  }
+
   try {
     return JSON.parse(text);
   } catch {
@@ -800,13 +942,20 @@ export async function invokeWithPromptApi(
     ),
   );
 
+  const historyMessages = messages.length > 1 ? messages.slice(0, -1) : [];
+  const latestMessage =
+    messages.length > 0 ? messages[messages.length - 1] : null;
+
+  const fullSystemPrompt = systemPrompt;
+
   const { session, destroyAfterUse } = await acquirePromptSession(
     emit,
     groupId,
-    systemPrompt,
+    fullSystemPrompt,
     abortSignal,
     samplingOptions,
     activeTools,
+    historyMessages,
   );
 
   const runtimeModel = detectPromptApiModelLabel(session, LanguageModelApi);
@@ -864,25 +1013,6 @@ export async function invokeWithPromptApi(
       required: ["type"],
     };
 
-    // Compact tool hints: name, params, and first sentence of description.
-    // Use only the caller-provided subset to keep context small
-    // enough for Gemini Nano — the full tool set overwhelms it.
-    const toolHints = activeTools
-      .map((t) => {
-        const params = Object.keys(t.input_schema.properties || {}).join(", ");
-        const brief = t.description.split(". ")[0];
-
-        return `${t.name}(${params}): ${brief}`;
-      })
-      .join("\n");
-
-    const jsonInstructions = [
-      "Return ONLY valid JSON (no markdown fences).",
-      'To call tools: {"type":"tool_use","tool_calls":[{"name":"<tool>","input":{...}}]}',
-      'To respond:    {"type":"response","response":"<your answer>"}',
-      "IMPORTANT: When the user asks you to use a specific tool, you MUST call it via tool_use. Do NOT refuse or simulate the tool — actually invoke it.",
-    ].join("\n");
-
     let currentMessages = [...messages];
     for (let i = 0; i < 12; i++) {
       await emit(
@@ -894,23 +1024,12 @@ export async function invokeWithPromptApi(
         ),
       );
 
-      // First iteration: send conversation transcript + available tool names.
+      // First iteration: send the latest user message.
       // Subsequent iterations: the session already has prior context, so only
-      // send the latest tool results to avoid O(n²) context duplication.
+      // send the latest tool results.
       let prompt;
       if (i === 0) {
-        prompt = [
-          jsonInstructions,
-          "",
-          "Available tools:",
-          toolHints,
-          "",
-          buildPromptTranscript(systemPrompt, currentMessages, [], false),
-          "",
-          "REMINDER — respond with ONLY valid JSON:",
-          'Tool call: {"type":"tool_use","tool_calls":[{"name":"<tool>","input":{...}}]}',
-          'Text reply: {"type":"response","response":"<your answer>"}',
-        ].join("\n");
+        prompt = formatMessageContent(latestMessage) || "Continue.";
       } else {
         const lastEntry = currentMessages[currentMessages.length - 1];
         const resultLines = Array.isArray(lastEntry?.content)
@@ -931,16 +1050,9 @@ export async function invokeWithPromptApi(
           "Tool execution results:",
           ...resultLines,
           "",
-          "Available tools:",
-          toolHints,
-          "",
           lastUserText ? `Original user request: "${lastUserText}"` : "",
-          "Decide: is the user's original request NOW fully satisfied?",
-          '- YES, task is done → {"type":"response","response":"<summary of what was done>"}',
-          '- NO, more tools needed → {"type":"tool_use","tool_calls":[{"name":"<tool>","input":{...}}]}',
-          "Do NOT repeat a tool you already called with the same input.",
-          "",
-          jsonInstructions,
+          "If the user's original request is NOW fully satisfied, provide a final response.",
+          "Otherwise, call the next required tool.",
         ]
           .filter(Boolean)
           .join("\n");
@@ -991,9 +1103,14 @@ export async function invokeWithPromptApi(
           // is processed before the "complete JSON" break.
           let textToStream = "";
           const rawStr = accumulated.trimStart();
-          if (rawStr.startsWith("{")) {
+          if (
+            rawStr.startsWith("<tool_call>") ||
+            rawStr.startsWith('{"type":"tool_use"')
+          ) {
+            // It's a tool call, don't stream to chat
+            textToStream = "";
+          } else if (rawStr.startsWith("{")) {
             // Heuristic for {"type":"response","response":"..."}
-            // We look for the "response" field specifically
             const match = rawStr.match(/"response"\s*:\s*"((?:[^"\\]|\\.)*)/);
             if (match) {
               textToStream = match[1]
@@ -1001,7 +1118,7 @@ export async function invokeWithPromptApi(
                 .replace(/\\n/g, "\n");
             }
           } else {
-            // Not JSON (e.g. retry without constraint), stream raw
+            // Not JSON, stream raw text
             textToStream = sanitizeModelOutput(rawStr, "prompt_api");
           }
 

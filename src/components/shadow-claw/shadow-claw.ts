@@ -1,4 +1,4 @@
-import { Orchestrator } from "../../core/orchestrator/orchestrator.js";
+import type { Orchestrator } from "../../core/orchestrator/orchestrator.js";
 
 import { ShadowClawDatabase, setDB } from "../../db/db.js";
 
@@ -45,10 +45,6 @@ import type { AppDialogOptions } from "../../ui/types.js";
 import type { ShadowClawTerminal } from "../shadow-claw-terminal/shadow-claw-terminal.js";
 import type { ProviderHelpType } from "../types.js";
 
-import "../shadow-claw-conversations/shadow-claw-conversations.js";
-import "../shadow-claw-dialog/shadow-claw-dialog.js";
-import "../shadow-claw-toast/shadow-claw-toast.js";
-
 import ShadowClawElement from "../shadow-claw-element.js";
 
 export {
@@ -72,7 +68,7 @@ export class ShadowClaw extends ShadowClawElement {
   fallbackClickListenerAttached: boolean = false;
   headerMainCollapsedOverride: boolean | null = null;
   navigationListenerAttached: boolean = false;
-  orchestrator: Orchestrator = new Orchestrator();
+  orchestrator!: Orchestrator;
   pagesSidebarHidden: boolean = false;
   popstateListener: (() => void) | null = null;
   previousOrchestratorState: OrchestratorDisplayState = "idle";
@@ -100,6 +96,30 @@ export class ShadowClaw extends ShadowClawElement {
     }
 
     try {
+      const { Orchestrator } =
+        await import("../../core/orchestrator/orchestrator.js");
+
+      // Lazily load non-critical UI components to reduce initial JS execution
+      Promise.all([
+        import("../shadow-claw-conversations/shadow-claw-conversations.js"),
+        import("../shadow-claw-dialog/shadow-claw-dialog.js"),
+        import("../shadow-claw-toast/shadow-claw-toast.js"),
+      ]).catch(console.error);
+
+      // Explicitly yield to the event loop to ensure Time to First Paint (TTFP)
+      // fires before the heavy IndexedDB and Orchestrator init blocks the thread.
+      await new Promise((resolve) => {
+        if ("requestIdleCallback" in window) {
+          (window as any).requestIdleCallback(() => resolve(null));
+        } else {
+          setTimeout(resolve, 0);
+        }
+      });
+
+      if (!this.orchestrator) {
+        this.orchestrator = new Orchestrator();
+      }
+
       this.db = await this.orchestrator.init();
 
       // Initialize reactive app store wiring before child components rely on ready state.
@@ -278,24 +298,33 @@ export class ShadowClaw extends ShadowClawElement {
   };
 
   handleNavigationApiNavigate = (event: Event) => {
-    const { route, navigateEvent } =
-      getRoute(this.db, orchestratorStore, event) ?? {};
+    const { parsedUrl, navigateEvent } = getRoute(this.db, event) ?? {};
 
-    if (!route || !navigateEvent) {
+    if (!parsedUrl || !navigateEvent) {
       return;
     }
 
     if (typeof navigateEvent.intercept === "function") {
       navigateEvent.intercept({
         handler: async () => {
+          const { parseRouteFromUrlAsync } =
+            await import("../../core/app-routes.js");
+          const asyncRoute = await parseRouteFromUrlAsync(
+            parsedUrl,
+            orchestratorStore.activeGroupId,
+          );
+          if (!asyncRoute) {
+            // Not a SPA route, we could assign location to force a server hit or just return.
+            return;
+          }
+
           await applyRoute(
             this.shadowRoot,
             this,
             this.db,
             fileViewerStore,
             orchestratorStore,
-            route,
-            { replace: true },
+            asyncRoute,
           );
         },
       });

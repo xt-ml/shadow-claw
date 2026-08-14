@@ -5,6 +5,7 @@ import { splitFrontmatter } from "../../common/utils/frontmatter.mjs";
 import { CONFIG_KEYS } from "../../config/config.js";
 import {
   applyBasePath,
+  buildRoutePath,
   getFileRouteDirPath,
   getWorkspaceRouteRequestPath,
   resolveHrefAgainstRoute,
@@ -98,6 +99,11 @@ export class ShadowClawPages extends ShadowClawElement {
 
   /** Set to true after initial URL routing is complete. Gates effect-driven renders. */
   _routingReady: boolean = false;
+
+  _renderedKey: string | null = null;
+  _renderedContent: string | null = null;
+  _renderedFrontmatterToggle: boolean | null = null;
+  _dsdInitialPath: string | null = null;
 
   constructor() {
     super();
@@ -215,6 +221,13 @@ export class ShadowClawPages extends ShadowClawElement {
         rendered.hidden = true;
         rendered.textContent = "";
       }
+    } else {
+      const dsdSelected = root
+        .querySelector("[data-pages-dropdown-selected]")
+        ?.textContent?.trim();
+      if (dsdSelected) {
+        this._dsdInitialPath = dsdSelected;
+      }
     }
 
     this.db = await getDb();
@@ -316,6 +329,10 @@ export class ShadowClawPages extends ShadowClawElement {
   }
 
   disconnectedCallback() {
+    this._renderedKey = null;
+    this._renderedContent = null;
+    this._renderedFrontmatterToggle = null;
+    this._dsdInitialPath = null;
     if (this.navFadeTimer !== null) {
       clearTimeout(this.navFadeTimer);
       this.navFadeTimer = null;
@@ -526,7 +543,31 @@ export class ShadowClawPages extends ShadowClawElement {
     const fm = this.pageFrontmatter.get();
     if (header) {
       if (fm && fm.title) {
-        header.setAttribute("title", `Pages — ${fm.title}`);
+        if (this.selectedPage) {
+          const routeUrl = applyBasePath(
+            buildRoutePath({
+              page: "pages",
+              groupId: this.selectedPage.groupId,
+              path: this.selectedPage.path,
+            }),
+          );
+
+          let absoluteUrl = routeUrl;
+          if (typeof window !== "undefined" && window.location?.origin) {
+            try {
+              absoluteUrl = new URL(routeUrl, window.location.origin).href;
+            } catch {
+              // Fallback
+            }
+          }
+
+          header.setAttribute(
+            "title",
+            `Pages — <a href="${absoluteUrl}">${fm.title}</a>`,
+          );
+        } else {
+          header.setAttribute("title", `Pages — ${fm.title}`);
+        }
       } else {
         header.setAttribute("title", "Pages");
       }
@@ -1028,12 +1069,23 @@ export class ShadowClawPages extends ShadowClawElement {
   }
 
   setupEffects() {
+    // Effect 1: Render the sidebar list and header.
+    // Depends on: pages, groups, activePinnedPage (via getSelectedPageIndex), and pageFrontmatter.
     this.addCleanup(
       effect(() => {
         const pages = orchestratorStore.pages;
         const groups = orchestratorStore.groups;
-        const activePinnedPage = orchestratorStore.activePinnedPage;
         this.renderPageList(pages, groups);
+      }),
+    );
+
+    // Effect 2: Ensure valid active page selection and trigger content render.
+    // Depends on: pages, activePinnedPage.
+    // Does NOT depend on pageFrontmatter, preventing infinite render loops when frontmatter updates.
+    this.addCleanup(
+      effect(() => {
+        const pages = orchestratorStore.pages;
+        const activePinnedPage = orchestratorStore.activePinnedPage;
 
         if (pages.length === 0) {
           if (activePinnedPage !== null) {
@@ -1220,27 +1272,66 @@ export class ShadowClawPages extends ShadowClawElement {
     groupId: string,
     workspacePath: string,
   ): Promise<string | null> {
-    if (!this.db) {
-      return null;
+    if (this.db) {
+      try {
+        const bytes = await readGroupFileBytes(this.db, groupId, workspacePath);
+        const ext = workspacePath.split(".").pop()?.toLowerCase() || "";
+        const mimeType = this.mimeTypeForImageExt(ext);
+
+        const blobBytes = new Uint8Array(bytes.byteLength);
+        blobBytes.set(bytes);
+
+        return await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(new Blob([blobBytes], { type: mimeType }));
+        });
+      } catch {
+        // Fall through to network fetch fallback
+      }
     }
 
     try {
-      const bytes = await readGroupFileBytes(this.db, groupId, workspacePath);
-      const ext = workspacePath.split(".").pop()?.toLowerCase() || "";
-      const mimeType = this.mimeTypeForImageExt(ext);
+      const cleanPath = workspacePath.replace(/^\/+/, "");
+      const candidates = [
+        applyBasePath(`/files/main/${cleanPath}`),
+        applyBasePath(`/static-main/${cleanPath}`),
+        applyBasePath(`/pages/main/${cleanPath}`),
+      ];
+      for (const url of candidates) {
+        try {
+          const fullUrl =
+            typeof window !== "undefined" && window.location?.origin
+              ? new URL(url, window.location.origin).toString()
+              : url;
+          const res = await fetch(fullUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            if (this.db) {
+              try {
+                const buffer = await blob.arrayBuffer();
+                await writeGroupFile(
+                  this.db,
+                  groupId,
+                  workspacePath,
+                  new Uint8Array(buffer),
+                );
+              } catch {}
+            }
 
-      const blobBytes = new Uint8Array(bytes.byteLength);
-      blobBytes.set(bytes);
+            return await new Promise<string>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve(reader.result as string);
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+          }
+        } catch {}
+      }
+    } catch {}
 
-      return await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.readAsDataURL(new Blob([blobBytes], { type: mimeType }));
-      });
-    } catch {
-      return null;
-    }
+    return null;
   }
 
   async renderSelectedPage() {
@@ -1258,6 +1349,9 @@ export class ShadowClawPages extends ShadowClawElement {
 
     const selectedPage = this.selectedPage;
     if (!this.db || !selectedPage) {
+      this._renderedKey = null;
+      this._renderedContent = null;
+      this._renderedFrontmatterToggle = null;
       empty.hidden = false;
       rendered.hidden = true;
       rendered.textContent = "";
@@ -1304,7 +1398,22 @@ export class ShadowClawPages extends ShadowClawElement {
 
       empty.hidden = true;
 
+      const pageKey = `${selectedPage.groupId}:${selectedPage.path}`;
+
       if (this.isHtmlPath(selectedPage.path)) {
+        if (
+          this._renderedKey === pageKey &&
+          this._renderedContent === content &&
+          root.querySelector("[data-pages-iframe]")
+        ) {
+          this.showNavButtonsTemporarily(2500);
+
+          return;
+        }
+
+        this._renderedKey = pageKey;
+        this._renderedContent = content;
+        this._renderedFrontmatterToggle = null;
         rendered.hidden = true;
         const iframe = this.ensurePreviewIframe(root, rendered);
         iframe.hidden = false;
@@ -1319,20 +1428,63 @@ export class ShadowClawPages extends ShadowClawElement {
       }
 
       this.removePreviewIframe(root);
-      rendered.hidden = false;
 
       if (this.isMarkdownPath(selectedPage.path)) {
         const parsedFrontmatter = splitFrontmatter(content);
-        if (Object.keys(parsedFrontmatter.data).length > 0) {
-          this.pageFrontmatter.set(parsedFrontmatter.data);
-        } else {
-          this.pageFrontmatter.set(null);
+        const newData =
+          Object.keys(parsedFrontmatter.data).length > 0
+            ? parsedFrontmatter.data
+            : null;
+
+        const currentData = this.pageFrontmatter.get();
+        if (JSON.stringify(currentData) !== JSON.stringify(newData)) {
+          this.pageFrontmatter.set(newData);
         }
 
         const renderFrontmatter = await resolveFrontmatterToggle(
           this.db,
           CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES,
         );
+
+        // Check if already rendered with matching content and settings
+        if (
+          this._renderedKey === pageKey &&
+          this._renderedContent === content &&
+          this._renderedFrontmatterToggle === renderFrontmatter &&
+          rendered.children.length > 0 &&
+          !rendered.hidden
+        ) {
+          this.showNavButtonsTemporarily(2500);
+
+          return;
+        }
+
+        // Check if DSD SSR content is already present for this initial page
+        if (
+          !this._renderedKey &&
+          this._dsdInitialPath &&
+          this._dsdInitialPath === selectedPage.path &&
+          rendered.children.length > 0 &&
+          !rendered.hidden
+        ) {
+          this._renderedKey = pageKey;
+          this._renderedContent = content;
+          this._renderedFrontmatterToggle = renderFrontmatter;
+          await this.resolveMarkdownImages(
+            rendered,
+            selectedPage.groupId,
+            selectedPage.path,
+          );
+          this.showNavButtonsTemporarily(2500);
+
+          return;
+        }
+
+        this._renderedKey = pageKey;
+        this._renderedContent = content;
+        this._renderedFrontmatterToggle = renderFrontmatter;
+        rendered.hidden = false;
+
         const html = await renderMarkdown(content, {
           renderFrontmatter,
         });
@@ -1359,10 +1511,27 @@ export class ShadowClawPages extends ShadowClawElement {
         return;
       }
 
+      if (
+        this._renderedKey === pageKey &&
+        this._renderedContent === content &&
+        !rendered.hidden
+      ) {
+        this.showNavButtonsTemporarily(2500);
+
+        return;
+      }
+
+      this._renderedKey = pageKey;
+      this._renderedContent = content;
+      this._renderedFrontmatterToggle = null;
       this.pageFrontmatter.set(null);
+      rendered.hidden = false;
       rendered.textContent = content;
       this.showNavButtonsTemporarily(2500);
     } catch (error) {
+      this._renderedKey = null;
+      this._renderedContent = null;
+      this._renderedFrontmatterToggle = null;
       empty.hidden = false;
       rendered.hidden = true;
       rendered.textContent = "";

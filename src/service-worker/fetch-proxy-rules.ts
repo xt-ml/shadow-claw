@@ -6,6 +6,7 @@ const BYPASS_HOSTS = [
   "esm.run",
   "huggingface.co",
   "hf.co",
+  "hf-mirror.com",
 ];
 
 const BYPASS_PROVIDERS = [
@@ -23,20 +24,27 @@ export function shouldBypassFetchProxy(
     return true;
   }
 
+  const hostname = requestUrl.hostname.toLowerCase();
+
   if (
-    BYPASS_HOSTS.includes(requestUrl.hostname) ||
-    requestUrl.hostname.endsWith(".huggingface.co") ||
-    requestUrl.hostname.endsWith(".hf.co")
+    BYPASS_HOSTS.includes(hostname) ||
+    hostname.endsWith(".huggingface.co") ||
+    hostname.endsWith(".hf.co") ||
+    hostname.endsWith(".hf-mirror.com") ||
+    hostname.endsWith(".esm.sh") ||
+    hostname.endsWith(".jsdelivr.net")
   ) {
     return true;
   }
 
-  if (BYPASS_PROVIDERS.includes(requestUrl.hostname)) {
+  if (
+    BYPASS_PROVIDERS.includes(hostname) ||
+    hostname.endsWith(".openrouter.ai")
+  ) {
     return true;
   }
 
-  const isLoopback =
-    requestUrl.hostname === "localhost" || requestUrl.hostname === "127.0.0.1";
+  const isLoopback = hostname === "localhost" || hostname === "127.0.0.1";
 
   const isShareTargetPath = requestUrl.pathname.endsWith(
     "/share/share-target.html",

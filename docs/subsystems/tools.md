@@ -77,11 +77,29 @@ Predefined sets of tools optimized for specific use cases.
 - **`git-ops`**: Optimized for repository management.
 - **`minimal`**: Only essential file and shell tools.
 - **`full`**: All available tools enabled.
-- **`__builtin_nano`**: Specialized profile for Gemini Nano (`prompt_api`) that minimizes context consumption.
+- **`__builtin_default`** ("Default"): Safe, standard built-in profile offering a balanced default set of capabilities across local and cloud providers.
 
 ### Auto-Activation
 
-Saved profiles can specify a `providerId`. When the orchestrator switches to a model from that provider, the associated profile is automatically activated. For example, selecting Gemini Nano automatically triggers the Nano Optimized profile.
+Saved profiles can specify a `providerId`. When the orchestrator switches to a model from that provider, the associated profile is automatically activated.
+
+## Tool Configuration Panel
+
+The dedicated **Tool Configuration** view (`<shadow-claw-tools>`, accessible via `/settings/tool-configuration` or `/tools`) provides centralized management for all agent tools and execution settings:
+
+- **Profiles & Toggles**: Select from built-in or custom profiles, or enable/disable individual tools granularly.
+- **Internet Access Control**: Shared toggle (`vm_bash_full_internet_access`) controlling whether the `bash` and `javascript` sandbox environments have full public network access.
+- **Search Files Tuning**:
+  - `search_files_max_file_bytes`: Maximum file size in bytes to search (defaults to 1MB). Larger files are skipped to avoid excessive memory usage.
+  - `search_files_max_files_visited`: Maximum count of files visited before stopping the search traversal (defaults to 10,000 files).
+  - `search_files_skip_dirs`: Comma-separated list of directory names skipped during search traversal (defaults to `.git, node_modules, dist, dist-electron, build`).
+- **Web Search Routing**:
+  - `web_search_use_proxy`: Toggle routing search queries through a CORS proxy.
+  - `web_search_cors_proxy_url`: Custom CORS proxy endpoint (defaults to `/proxy?url=`).
+  - `web_search_search_url`: Search engine query URL template (defaults to `https://html.duckduckgo.com/html/?q={{query}}`).
+- **WebMCP Integration & Mode**:
+  - `webmcp_enabled`: Enable or disable WebMCP tool exposure to the browser.
+  - `webmcp_mode`: Switch between `"polyfill"` (`@mcp-b/webmcp-polyfill`) and `"native"` (Chrome experimental `document.modelContext`).
 
 ## Tool Execution Dispatch
 
@@ -102,14 +120,15 @@ Saved profiles can specify a `providerId`. When the orchestrator switches to a m
 - **`copy_file`** — Copies a file or directory in the workspace (supports cross-group copies via `source_group_id`/`target_group_id`)
 - **`create_directory`** — Creates an empty directory (and intermediate parent directories) in the workspace
 - **`patch_file`** — In-place string replacement (safer than sed for targeted edits)
-- **`delete_file`** — Deletes a file atomically
-- **`move_file`** — Moves/renames a file atomically
-- **`copy_file`** — Copies a file atomically
-- **`create_directory`** — Creates a new directory
 - **`list_files`** — Returns directory listing with `/` suffix for directories
 - **`open_file`** — Posts `open-file` message to main thread for UI viewer
 - **`send_file`** — Transfers a workspace file to the current peer over PeerJS WebRTC; only works in `peer:` conversations
-- **`search_files`** — Recursively searches file content for a literal string or regex across the workspace, with optional `path` and `file_glob` filters; returns `file:line: content` matches (capped at 500)
+- **`search_files`** — Recursively searches file content for a literal string or regex across the workspace:
+  - Supports `path` root and `file_glob` pattern filtering (e.g. `*.ts`).
+  - Automatically skips binary files (null byte heuristics).
+  - Protects against ReDoS via regex execution timeouts and pattern length limits.
+  - Honors configured bounds (`search_files_max_file_bytes`, `search_files_max_files_visited`, and `search_files_skip_dirs`).
+  - Returns formatted `file:line: content` matches (capped at 500 matches with individual line length truncation).
 - **`diff_files`** — Compares two workspace files line-by-line and returns a `- [Line N]` / `+ [Line N]` diff (capped at 100 differences)
 
 ### Execution tools
@@ -128,7 +147,7 @@ Saved profiles can specify a `providerId`. When the orchestrator switches to a m
   - Response headers are captured and returned
   - **UNTRUSTED content wrapping** — response body is wrapped in `--- BEGIN EXTERNAL CONTENT (UNTRUSTED: fetch_url) --- / --- END EXTERNAL CONTENT ---` delimiters so the LLM has a structural signal that the content is external data, not an instruction
 - **`fetch_file`** — Fetches a URL and saves the body directly to the workspace in one atomic step; supports the same auth options as `fetch_url`; binary content (images, PDFs, audio, video) is saved as raw bytes
-- **`web_search`** — Performs a DuckDuckGo HTML search via the configured CORS proxy and returns the top 10 results (title, URL, snippet) as plain text, wrapped in UNTRUSTED content delimiters
+- **`web_search`** — Performs a DuckDuckGo HTML search via the configured CORS proxy and search URL template and returns the top 10 results (title, URL, snippet) as plain text, wrapped in UNTRUSTED content delimiters
 
 ### Prompt injection defense
 
@@ -201,10 +220,7 @@ Managed via `CONFIG_KEYS.TOOL_PROFILES` and `CONFIG_KEYS.ACTIVE_TOOL_PROFILE`.
 
 ### Built-in profile
 
-`NANO_BUILTIN_PROFILE` — optimized for Gemini Nano (small model):
-
-- Constrained tool set (safe subset for small models)
-- Auto-activated when Prompt API provider is selected
+`DEFAULT_BUILTIN_PROFILE` (`__builtin_default`, "Default") — balanced default set of safe capabilities.
 
 ### Manual selection vs profiles
 
@@ -219,7 +235,7 @@ When a user manually toggles individual tools:
 
 When the browser WebMCP API is available (`document.modelContext`, with `navigator.modelContext` fallback), tools are also registered via `src/subsystems/mcp/webmcp.ts` so browser-side model contexts can invoke the same tool surface through `registerWebMcpTools()`.
 
-ShadowClaw registers tools with explicit annotations for current WebMCP implementations:
+WebMCP mode can be toggled between `"polyfill"` and `"native"` in Tool Configuration:
 
 - `readOnlyHint: false`
 - `untrustedContentHint: true` (tool output may contain untrusted/user or external data)

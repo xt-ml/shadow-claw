@@ -41,6 +41,16 @@
   margin: 0;
 }
 
+.header__title a {
+  color: var(--shadow-claw-link);
+  text-decoration: none;
+}
+
+.header__title a:hover {
+  color: var(--shadow-claw-link-hover);
+  text-decoration: underline;
+}
+
 .header__actions {
   display: flex;
   flex-direction: column;

@@ -159,11 +159,9 @@ Different integrations may use different credential schemes:
 
 ### Provider Credentials
 
-| Provider                     | Key Name  | Type   | Usage                       |
-| ---------------------------- | --------- | ------ | --------------------------- |
-| `openrouter`                 | `api_key` | string | Bearer token                |
-| `github_models`              | `api_key` | string | GitHub token (proxy)        |
-| `copilot_azure_openai_proxy` | `api_key` | string | Azure OpenAI-compatible key |
+| Provider     | Key Name  | Type   | Usage        |
+| ------------ | --------- | ------ | ------------ |
+| `openrouter` | `api_key` | string | Bearer token |
 
 ### Channel Credentials
 

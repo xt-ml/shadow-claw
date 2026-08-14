@@ -14,6 +14,10 @@ jest.unstable_mockModule("../../../db/getConfig.js", () => ({
   getConfig: jest.fn<any>().mockResolvedValue(null),
 }));
 
+jest.unstable_mockModule("../../../db/saveMessage.js", () => ({
+  saveMessage: jest.fn<any>().mockResolvedValue(1),
+}));
+
 jest.unstable_mockModule("../../../db/groups.js", () => ({
   getGroupMetadata: jest.fn<any>().mockResolvedValue([]),
   saveGroupMetadata: jest.fn<any>().mockResolvedValue(undefined),
@@ -46,6 +50,7 @@ describe("compactContext", () => {
     db = {} as any;
     const { Orchestrator: Orch } = await import("../orchestrator.js");
     o = new Orch();
+    o.provider = "openrouter";
     o.providerConfig = { requiresApiKey: false } as any;
 
     const mod = await import("./compactContext.js");
@@ -53,6 +58,7 @@ describe("compactContext", () => {
   });
 
   it("emits error if requires API key and none is set", async () => {
+    o.provider = "openrouter";
     o.providerConfig = { requiresApiKey: true } as any;
     jest.spyOn(o, "getApiKey").mockResolvedValue("");
 

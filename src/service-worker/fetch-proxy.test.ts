@@ -278,4 +278,18 @@ describe("service-worker fetch proxy workspace routes", () => {
     expect(Array.from(bodyBytes)).toEqual(Array.from(imageBytes));
     expect(networkFetch).not.toHaveBeenCalled();
   });
+
+  it("does not claim or intercept bypass requests (such as HF CDN downloads) so the browser handles them natively", async () => {
+    const hfCdnRequest = {
+      url: "https://us.aws.cdn.hf.co/onnx-community/gemma-3-1b-it-ONNX-GQA/model_quantized.onnx_data",
+      method: "GET",
+      mode: "cors",
+      destination: "fetch",
+      headers: new TestHeaders(),
+    };
+
+    const response = dispatchFetchIntercept(hfCdnRequest);
+    expect(response).toBeNull();
+    expect(networkFetch).not.toHaveBeenCalled();
+  });
 });

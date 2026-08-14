@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 
-import { CONFIG_KEYS, getModelMaxTokens } from "../../../config/config.js";
+import { CONFIG_KEYS } from "../../../config/config.js";
 
 import {
   setContextCompressionEnabled,
@@ -115,15 +115,18 @@ describe("settings (functional utilities)", () => {
   });
 
   describe("setMaxTokens", () => {
-    it("clamps to model maximum", async () => {
+    it("stores large values without clamping to model maximum", async () => {
       const state = makeState({ model: "test-model" });
-      const { mockFn } = mockSetConfig();
-      const modelMax = getModelMaxTokens("test-model");
+      const { calls, mockFn } = mockSetConfig();
 
       await setMaxTokens(state, {} as any, 999999, mockFn);
 
-      expect(state.maxTokens).toBeLessThanOrEqual(modelMax);
-      expect(state.maxTokens).toBeGreaterThanOrEqual(1);
+      // No upper clamp — user can set any value they want
+      expect(state.maxTokens).toBe(999999);
+      expect(calls[0]).toEqual({
+        key: CONFIG_KEYS.MAX_TOKENS,
+        value: "999999",
+      });
     });
 
     it("clamps below 1 to 1", async () => {

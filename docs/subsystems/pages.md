@@ -49,9 +49,10 @@ The list of saved pages, default pinned page, and active page are managed centra
 
 During store initialization, `seedStaticMainSite()` seeds default pages from the special `pages/main/` directory:
 
-1. Manifest discovery fetches `static-main-manifest.json` (which contains all static pages built from `pages/main/`), falling back to embedded `#shadow-claw-static-manifest` JSON script elements.
-2. On first boot, seeds all static markdown files (including subdirectories like `posts/`) into the `br:main` workspace file storage and marks seeding as complete in IndexedDB under `CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED`.
-3. Ensures `MEMORY.md` and default static workspace pages exist unless marked as suppressed. Subsequent reloads skip redundant re-seeding unless storage is cleared or a deployment purge is triggered via `purgeId`.
+1. **Embedded Manifest Prioritization**: Manifest discovery checks embedded `#shadow-claw-static-manifest` JSON script elements first (`preferEmbedded: true`), avoiding network waterfalls on boot.
+2. **Background Full Sync**: Full manifest synchronization (`static-main-manifest.json`) is scheduled asynchronously via `scheduleBackgroundStaticMainSiteSeeding()` (leveraging `requestIdleCallback`) to download any remaining static assets in the background without blocking the main UI thread.
+3. **Workspace Seeding**: On first boot, seeds static markdown files (including subdirectories like `posts/`) into the `br:main` workspace file storage and records seeding state in IndexedDB under `CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED`.
+4. **Suppression & Deletion Respect**: Ensures `MEMORY.md` and default static workspace pages exist unless marked as suppressed. Subsequent reloads skip redundant re-seeding unless storage is cleared or a deployment purge is triggered via `purgeId`.
 
 ### Page Suppression (`src/storage/suppressedPages.ts`)
 
@@ -112,19 +113,28 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 
 ---
 
-## Pre-rendered Content & Pretty Paths (`OVERRIDE_PRERENDER_SKELETON`)
+## Pre-rendered Content, Routing & Pretty Paths
 
 Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prerender-dsd-shell.mjs` and `bin/prerender-pretty-paths.mjs` support static server-side rendering with pretty path resolution:
 
+- **Production Asset Inlining**:
+  - In production builds (`npm run build:prod`), critical assets (`index.css`, `theme-init.js`, and `service-worker/init.js`) are inlined directly into `index.html` and pre-rendered pages to eliminate render-blocking round-trips.
 - **Configurable Pre-rendering (`--prerender-pages` / `PRERENDER_PAGES`)**:
   - Configurable page range option (`all`, `none`/`0`, or a specific number `N`, defaulting to `1` / current page).
   - Defaults to embedding only the current page in the SSR DSD shell and `#shadow-claw-static-manifest` to minimize bundle size and eliminate redundant SSR overhead.
   - The build pipeline writes the full manifest to `static-main-manifest.json` and copies all source files to `static-main/` for runtime on-demand fetching.
 - **Dynamic Hydration & Fallback Loading**:
   - When navigating to pages not embedded in the initial HTML or stored in local storage, `shadow-claw-pages` and `getStaticPageContent()` dynamically fetch individual markdown files from `static-main/` or fallback to `static-main-manifest.json`.
-- **Pretty Paths**: Configured via `pages/routes.json` to map markdown page sources to clean URL paths (e.g. `/2026/06/30/on-developing-loops/`). The pre-render pipeline generates dedicated `index.html` files with page-specific DSD templates.
-- **Static Routing Manifest**: Embedded via `#shadow-claw-static-routing` JSON script tags or fetched via `static-routing.json` (`src/storage/staticRouting.ts`), allowing client-side router (`app-routes.ts`) and pages component to resolve routes seamlessly across Node.js, Electron, and GitHub Pages.
-- **DSD Shell Override**: Enabled via the "Override pre-rendered content" toggle in Settings (`CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON`). Hides the initial DSD shell on boot, showing the skeleton loader until hydration finishes.
+- **Pretty Paths & Sub-Routes**:
+  - Configured via `pages/routes.json` to map markdown page sources to clean URL paths (e.g. `/2026/06/30/on-developing-loops/`).
+  - Supports recursive nested `subRoutes` entries matching child URL hierarchies.
+  - The pre-render pipeline generates dedicated physical `index.html` files with page-specific DSD templates.
+- **Static Routing Manifest**:
+  - Embedded via `#shadow-claw-static-routing` JSON script tags or fetched via `static-routing.json` (`src/storage/staticRouting.ts`), allowing client-side router (`app-routes.ts`) and pages component to resolve routes asynchronously (`resolvePrettyPathToRouteAsync`, `parseRouteFromUrlAsync`) across Node.js, Electron, and GitHub Pages.
+- **Server Middleware Fallbacks**:
+  - Express server includes static file middleware serving fallback content from `pages/main` for `/files/main/`, `/static-main/`, and `/pages/`, alongside SPA redirect fallback middleware for clean URL reloads.
+- **DSD Shell Override**:
+  - Enabled via the "Override pre-rendered content" toggle in Settings (`CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON`). Hides the initial DSD shell on boot, showing the skeleton loader until hydration finishes.
 
 ---
 

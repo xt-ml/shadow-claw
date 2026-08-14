@@ -254,8 +254,6 @@ const expectedLogs = [
   "GetAgentCard returned error:",
   "[ShadowClaw] Service worker update failed.",
   "[ModelRegistry] Registered",
-  "GitHub Models API error",
-  "Copilot models discovery error:",
   "Failed to ensure main workspace Memory:",
   "Failed to open file: a/b/c.txt",
   "Failed to import chat data:",
@@ -273,6 +271,7 @@ const expectedLogs = [
   "Provided module is not an instance of Module",
   "Test environment has been torn down",
   "Polyfill: window.",
+  "Built-in AI Polyfill:",
 ];
 
 function isExpectedLog(...args: any[]) {

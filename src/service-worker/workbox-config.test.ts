@@ -5,6 +5,7 @@ type WorkboxConfigShape = {
   navigateFallbackAllowlist?: RegExp[];
   runtimeCaching: Array<{
     urlPattern: (ctx: { url: URL }) => boolean;
+    handler: string;
   }>;
 };
 
@@ -46,28 +47,42 @@ describe("workbox runtime caching rules", () => {
     );
   });
 
-  it("matches Hugging Face model weights with CacheFirst rule", () => {
-    const hfMatcher = workboxConfig.runtimeCaching[1]?.urlPattern;
+  it("does not match Hugging Face or CDN model downloads in runtimeCaching (deferring directly to native network/CacheStorage)", () => {
+    for (const rule of workboxConfig.runtimeCaching) {
+      expect(
+        rule.urlPattern({
+          url: new URL(
+            "https://huggingface.co/onnx-community/gemma-3-1b-it-ONNX-GQA/resolve/main/onnx/model_quantized.onnx_data",
+          ),
+        }),
+      ).toBe(false);
 
-    expect(
-      hfMatcher({
-        url: new URL(
-          "https://huggingface.co/onnx-community/gemma-3-1b-it-ONNX-GQA/resolve/main/onnx/model_quantized.onnx_data",
-        ),
-      }),
-    ).toBe(true);
+      expect(
+        rule.urlPattern({
+          url: new URL(
+            "https://us.aws.cdn.hf.co/onnx-community/gemma-3-1b-it-ONNX-GQA/resolve/main/onnx/model_quantized.onnx_data",
+          ),
+        }),
+      ).toBe(false);
 
-    expect(
-      hfMatcher({
-        url: new URL(
-          "https://us.aws.cdn.hf.co/onnx-community/gemma-3-1b-it-ONNX-GQA/resolve/main/onnx/model_quantized.onnx_data",
-        ),
-      }),
-    ).toBe(true);
+      expect(
+        rule.urlPattern({
+          url: new URL("https://huggingface.co/google/gemma-2-2b-it.litertlm"),
+        }),
+      ).toBe(false);
+
+      expect(
+        rule.urlPattern({
+          url: new URL(
+            "https://hf-mirror.com/onnx-community/Qwen3-0.6B-ONNX/resolve/main/model_q4.onnx",
+          ),
+        }),
+      ).toBe(false);
+    }
   });
 
   it("does not cache same-origin telegram proxy requests", () => {
-    const matcher = workboxConfig.runtimeCaching[2]?.urlPattern;
+    const matcher = workboxConfig.runtimeCaching[0]?.urlPattern;
 
     expect(
       matcher({
@@ -79,7 +94,7 @@ describe("workbox runtime caching rules", () => {
   });
 
   it("still caches regular same-origin app assets", () => {
-    const matcher = workboxConfig.runtimeCaching[2]?.urlPattern;
+    const matcher = workboxConfig.runtimeCaching[0]?.urlPattern;
 
     expect(
       matcher({

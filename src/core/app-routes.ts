@@ -1,6 +1,7 @@
 import {
   resolvePrettyPathToRoute,
   resolveRouteToPrettyPath,
+  resolvePrettyPathToRouteAsync,
 } from "../storage/staticRouting.js";
 
 export type ShadowClawPageRoute =
@@ -369,6 +370,58 @@ export function parseRouteFromUrl(
 
   if (page === "channels") {
     return { page: "channels", anchor };
+  }
+
+  return null;
+}
+
+export function isPossibleAppRoute(pathname: string): boolean {
+  const parts = pathname.split("/").filter(Boolean);
+  if (parts.length === 0) return true; // root
+  const page = parts[0].toLowerCase();
+  if (VALID_PAGES.has(page)) return true;
+
+  if (resolvePrettyPathToRoute(pathname)) return true;
+
+  // Since we can't await, we will just say true for ANYTHING that is not clearly an asset or API call,
+  // or we can just return true. If it's a SPA, we can intercept everything that is not an extension
+  // (like .png, .css) or /api/.
+  // Wait, if we return true, it intercepts, and if it fails to resolve, it returns null.
+  // Actually, we can check if it matches any subRoute prefix in the embedded manifest.
+  // We can't access cachedManifest easily here unless we expose a sync getter.
+  // Let's just return true if it doesn't have a file extension.
+  const lastPart = parts[parts.length - 1];
+  if (
+    lastPart.includes(".") &&
+    !lastPart.endsWith(".html") &&
+    !lastPart.endsWith(".md")
+  ) {
+    return false;
+  }
+
+  return true;
+}
+
+export async function parseRouteFromUrlAsync(
+  url: URL,
+  fallbackGroupId?: string,
+): Promise<ShadowClawAppRoute | null> {
+  const syncRoute = parseRouteFromUrl(url, fallbackGroupId);
+  if (syncRoute) return syncRoute;
+
+  let pathname = url.pathname;
+  const basePath = getAppBasePath();
+  if (basePath !== "/" && pathname.startsWith(basePath)) {
+    pathname = "/" + pathname.slice(basePath.length);
+  }
+
+  const prettyRoute = await resolvePrettyPathToRouteAsync(pathname);
+  if (prettyRoute) {
+    const anchor = url.hash ? url.hash.replace(/^#/, "") : undefined;
+    return {
+      ...prettyRoute,
+      anchor: anchor || prettyRoute.anchor,
+    };
   }
 
   return null;

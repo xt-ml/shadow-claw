@@ -131,7 +131,7 @@ function applyPurgePreRenderedStaticPages(
   current.purgePreRenderedStaticPages = true;
 }
 
-function isPageFile(filePath) {
+export function isPageFile(filePath) {
   const ext = path.extname(filePath).toLowerCase();
 
   return PAGE_EXTENSIONS.has(ext);
@@ -216,13 +216,41 @@ export async function renderPageHtml(pageContent, pagePath) {
   const isHtml = ext === ".html" || ext === ".htm" || ext === ".xhtml";
 
   if (isHtml) {
-    return sanitizeRenderedHtml(pageContent);
+    let rendered = sanitizeRenderedHtml(pageContent);
+    if (pagePath) {
+      const dir = path.posix.dirname(toPosixPath(pagePath));
+      const prefix = `/files/main/${dir === "." ? "" : dir + "/"}`;
+      rendered = rendered.replace(
+        /<img\s+([^>]*?)src="([^"]+)"([^>]*)>/giu,
+        (match, before, src, after) => {
+          if (/^(?:[a-z]+:|#|\/)/iu.test(src)) {
+            return match;
+          }
+          return `<img ${before}src="${prefix}${src}"${after}>`;
+        },
+      );
+    }
+    return rendered;
   }
 
   try {
     const parsed = splitFrontmatterWithGrayMatter(pageContent);
     const markdownHtml = await marked.parse(parsed.content);
-    const rendered = sanitizeRenderedHtml(markdownHtml);
+    let rendered = sanitizeRenderedHtml(markdownHtml);
+
+    if (pagePath) {
+      const dir = path.posix.dirname(toPosixPath(pagePath));
+      const prefix = `/files/main/${dir === "." ? "" : dir + "/"}`;
+      rendered = rendered.replace(
+        /<img\s+([^>]*?)src="([^"]+)"([^>]*)>/giu,
+        (match, before, src, after) => {
+          if (/^(?:[a-z]+:|#|\/)/iu.test(src)) {
+            return match;
+          }
+          return `<img ${before}src="${prefix}${src}"${after}>`;
+        },
+      );
+    }
 
     if (Object.keys(parsed.data).length === 0) {
       return rendered;
@@ -329,6 +357,7 @@ export function injectPageHeaderDsd(
   pagesContent,
   pageHeaderTemplateContent,
   frontmatterTitle = "",
+  pageHeaderCss = "",
 ) {
   return pagesContent.replace(
     /(<shadow-claw-page-header\b[^>]*>)([\s\S]*?)(<\/shadow-claw-page-header>)/iu,
@@ -363,7 +392,7 @@ export function injectPageHeaderDsd(
       return [
         openTag,
         '<template shadowrootmode="open" data-shadow-claw-page-header-dsd="true">',
-        '<link rel="stylesheet" href="components/shadow-claw-page-header/shadow-claw-page-header.css" />',
+        `<style data-dsd-style>${pageHeaderCss}</style>`,
         headerShadowContent,
         "</template>",
         innerContent.trim(),
@@ -379,6 +408,7 @@ export function applyStaticPagesContent(
   renderedHtml,
   pageHeaderTemplateContent,
   frontmatterTitle = "",
+  pageHeaderCss = "",
 ) {
   const statusText =
     pageSources.length === 1
@@ -413,7 +443,12 @@ export function applyStaticPagesContent(
       `<div class="pages__rendered" data-pages-rendered>${renderedHtml}</div>`,
   );
 
-  return injectPageHeaderDsd(next, pageHeaderTemplateContent, frontmatterTitle);
+  return injectPageHeaderDsd(
+    next,
+    pageHeaderTemplateContent,
+    frontmatterTitle,
+    pageHeaderCss,
+  );
 }
 
 export function buildPagesDsdHost(
@@ -422,6 +457,8 @@ export function buildPagesDsdHost(
   renderedHtml,
   pageHeaderTemplateContent,
   frontmatterTitle = "",
+  pagesCss = "",
+  pageHeaderCss = "",
 ) {
   const pagesShadowContent = applyStaticPagesContent(
     pagesTemplateContent,
@@ -429,12 +466,13 @@ export function buildPagesDsdHost(
     renderedHtml,
     pageHeaderTemplateContent,
     frontmatterTitle,
+    pageHeaderCss,
   );
 
   return [
     "<shadow-claw-pages>",
     '<template shadowrootmode="open" data-shadow-claw-pages-dsd="true">',
-    '<link rel="stylesheet" href="components/shadow-claw-pages/shadow-claw-pages.css" />',
+    `<style data-dsd-style>${pagesCss}</style>`,
     pagesShadowContent,
     "</template>",
     "</shadow-claw-pages>",
@@ -452,13 +490,13 @@ function applyNoSeedPagesContent(templateContent) {
   return next;
 }
 
-function buildPagesDsdHostEmpty(pagesTemplateContent) {
+function buildPagesDsdHostEmpty(pagesTemplateContent, pagesCss = "") {
   const pagesShadowContent = applyNoSeedPagesContent(pagesTemplateContent);
 
   return [
     "<shadow-claw-pages>",
     '<template shadowrootmode="open" data-shadow-claw-pages-dsd="true">',
-    '<link rel="stylesheet" href="components/shadow-claw-pages/shadow-claw-pages.css" />',
+    `<style data-dsd-style>${pagesCss}</style>`,
     pagesShadowContent,
     "</template>",
     "</shadow-claw-pages>",
@@ -492,6 +530,7 @@ function wrapShadowClawDialogContentInTemplate(html) {
 export function buildShadowClawDsdTemplate(
   shadowClawTemplateContent,
   pagesDsdHost,
+  shadowClawCss = "",
 ) {
   const withPages = shadowClawTemplateContent.replace(
     /<shadow-claw-pages><\/shadow-claw-pages>/iu,
@@ -501,7 +540,7 @@ export function buildShadowClawDsdTemplate(
 
   return [
     '<template shadowrootmode="open" data-shadow-claw-dsd="true">',
-    '<link rel="stylesheet" href="components/shadow-claw/shadow-claw.css" />',
+    `<style data-dsd-style>${shadowClawCss}</style>`,
     content,
     "</template>",
   ].join("\n");
@@ -509,6 +548,7 @@ export function buildShadowClawDsdTemplate(
 
 export function buildShadowClawDsdTemplateWithoutPages(
   shadowClawTemplateContent,
+  shadowClawCss = "",
 ) {
   let next = shadowClawTemplateContent;
 
@@ -544,7 +584,7 @@ export function buildShadowClawDsdTemplateWithoutPages(
 
   return [
     '<template shadowrootmode="open" data-shadow-claw-dsd="true">',
-    '<link rel="stylesheet" href="components/shadow-claw/shadow-claw.css" />',
+    `<style data-dsd-style>${shadowClawCss}</style>`,
     content,
     "</template>",
   ].join("\n");
@@ -617,6 +657,155 @@ export function injectStaticManifestScript(html, manifestJson) {
 }
 
 /**
+ * Inlines critical CSS and JS for production builds.
+ *
+ * @param {string} html
+ * @param {string} publicDir
+ * @returns {Promise<string>}
+ */
+export async function inlineCriticalAssets(html, publicDir) {
+  if (process.env.NODE_ENV !== "production") {
+    return html;
+  }
+
+  let nextHtml = html;
+  try {
+    const cssPath = path.join(publicDir, "index.css");
+    const cssContent = await readFile(cssPath, "utf8");
+    nextHtml = nextHtml.replace(
+      /<link\b[^>]*?href="(?:\/)?index\.css"[^>]*?>/iu,
+      () => `<style>${cssContent}</style>`,
+    );
+  } catch (err) {
+    console.warn("Failed to inline index.css", err.message);
+  }
+
+  try {
+    const jsPath = path.join(publicDir, "theme-init.js");
+    const jsContent = await readFile(jsPath, "utf8");
+    nextHtml = nextHtml.replace(
+      /<script\b[^>]*?src="(?:\/)?theme-init\.js"[^>]*?><\/script>/iu,
+      () => `<script>${jsContent}</script>`,
+    );
+  } catch (err) {
+    console.warn("Failed to inline theme-init.js", err.message);
+  }
+
+  try {
+    const swInitPath = path.join(publicDir, "service-worker/init.js");
+    const swInitContent = await readFile(swInitPath, "utf8");
+    nextHtml = nextHtml.replace(
+      /<script\b[^>]*?src="(?:\/)?service-worker\/init\.js"[^>]*?><\/script>/iu,
+      () => `<script type="module">${swInitContent}</script>`,
+    );
+  } catch (err) {
+    console.warn("Failed to inline service-worker/init.js", err.message);
+  }
+
+  return nextHtml;
+}
+
+/**
+ * Minifies Declarative Shadow DOM (DSD) template contents and structural HTML.
+ * Collapses whitespace, newlines, and inter-tag spaces inside `<template>` blocks
+ * while safely preserving `<pre>` and `<textarea>` elements. Handles nested templates cleanly.
+ *
+ * @param {string} html
+ * @returns {string}
+ */
+export function minifyDsdTemplateHtml(html) {
+  if (!html || typeof html !== "string") {
+    return html;
+  }
+
+  // Preserve <pre> and <textarea> blocks to protect formatted code / frontmatter
+  const preserved = [];
+  const withPlaceholders = html.replace(
+    /<pre\b[^>]*>[\s\S]*?<\/pre>|<textarea\b[^>]*>[\s\S]*?<\/textarea>/gi,
+    (match) => {
+      const idx = preserved.length;
+      preserved.push(match);
+      return `___PRESERVED_BLOCK_${idx}___`;
+    },
+  );
+
+  const minifySegment = (content) =>
+    content.replace(/\s+/g, " ").replace(/>\s+</g, "><").trim();
+
+  // Recursively process nested template tags so innermost and outermost templates are all minified
+  function processTemplates(str) {
+    const templateRegex = /<template\b[^>]*>/gi;
+    let match;
+    let pos = 0;
+    let result = "";
+
+    while ((match = templateRegex.exec(str)) !== null) {
+      const openTag = match[0];
+      const startIndex = match.index;
+
+      const templateTagPattern = /<\/?template\b[^>]*>/gi;
+      templateTagPattern.lastIndex = startIndex;
+      let depth = 0;
+      let sawRoot = false;
+      let tagMatch = templateTagPattern.exec(str);
+      let endMatchIndex = -1;
+      let closeTagLen = 0;
+
+      while (tagMatch) {
+        const isClose = tagMatch[0].toLowerCase().startsWith("</template");
+        if (!isClose) {
+          depth += 1;
+          sawRoot = true;
+        } else {
+          depth -= 1;
+        }
+        if (sawRoot && depth === 0) {
+          endMatchIndex = tagMatch.index;
+          closeTagLen = tagMatch[0].length;
+          break;
+        }
+        tagMatch = templateTagPattern.exec(str);
+      }
+
+      if (endMatchIndex !== -1) {
+        result += str.slice(pos, startIndex);
+        const innerContent = str.slice(
+          startIndex + openTag.length,
+          endMatchIndex,
+        );
+        const processedInner = minifySegment(processTemplates(innerContent));
+        result += `${openTag}${processedInner}</template>`;
+        pos = endMatchIndex + closeTagLen;
+        templateRegex.lastIndex = pos;
+      }
+    }
+    result += str.slice(pos);
+    return result;
+  }
+
+  let minified = processTemplates(withPlaceholders);
+
+  // Direct regex replacement pass for template shadowrootmode blocks
+  minified = minified.replace(
+    /(<template\s+shadowrootmode="?[a-z]+"?[^>]*>)([\s\S]*?)(<\/template>)/gi,
+    (match, startTag, innerContent, endTag) => {
+      const minifiedContent = minifySegment(innerContent);
+      return `${startTag}${minifiedContent}${endTag}`;
+    },
+  );
+
+  // Restore preserved blocks
+  for (let i = 0; i < preserved.length; i++) {
+    minified = minified.replace(
+      `___PRESERVED_BLOCK_${i}___`,
+      () => preserved[i],
+    );
+  }
+
+  return minified;
+}
+
+/**
  * Normalizes prerender-pages option to a number (0, 1, N) or "all".
  *
  * @param {string|number|boolean|undefined} val
@@ -650,6 +839,7 @@ export function normalizePrerenderPagesOption(val) {
  * @property {string} [publicDir]
  * @property {boolean} [noSeed]
  * @property {string|number} [prerenderPages]
+ * @property {boolean} [silent]
  */
 
 /**
@@ -683,18 +873,37 @@ export async function prerenderDsdShell(options = {}) {
     "components/shadow-claw-page-header/shadow-claw-page-header.html",
   );
 
+  const shadowClawCssPath = path.join(
+    publicDir,
+    "components/shadow-claw/shadow-claw.css",
+  );
+  const pagesCssPath = path.join(
+    publicDir,
+    "components/shadow-claw-pages/shadow-claw-pages.css",
+  );
+  const pageHeaderCssPath = path.join(
+    publicDir,
+    "components/shadow-claw-page-header/shadow-claw-page-header.css",
+  );
+
   const [
     indexHtml,
     shadowClawTemplateSource,
     pagesTemplateSource,
     pageHeaderTemplateSource,
     pageSources,
+    shadowClawCssSource,
+    pagesCssSource,
+    pageHeaderCssSource,
   ] = await Promise.all([
     readFile(indexPath, "utf8"),
     readFile(shadowClawTemplatePath, "utf8"),
     readFile(pagesTemplatePath, "utf8").catch(() => ""),
     readFile(pageHeaderTemplatePath, "utf8").catch(() => ""),
     collectPageSources(sourcePath),
+    readFile(shadowClawCssPath, "utf8").catch(() => ""),
+    readFile(pagesCssPath, "utf8").catch(() => ""),
+    readFile(pageHeaderCssPath, "utf8").catch(() => ""),
   ]);
 
   const pageSourcesWithContent = await Promise.all(
@@ -752,13 +961,17 @@ export async function prerenderDsdShell(options = {}) {
     "utf8",
   );
 
-  // Always copy static-main assets
+  // Always copy static-main and files/main assets
   try {
     const sourceStats = await stat(sourcePath);
     if (sourceStats.isDirectory()) {
       const targetDir = path.join(publicDir, "static-main");
       await mkdir(targetDir, { recursive: true });
       await cp(sourcePath, targetDir, { recursive: true });
+
+      const filesTargetDir = path.join(publicDir, "files/main");
+      await mkdir(filesTargetDir, { recursive: true });
+      await cp(sourcePath, filesTargetDir, { recursive: true });
     }
   } catch {}
 
@@ -777,8 +990,13 @@ export async function prerenderDsdShell(options = {}) {
     );
     const emptyManifestJson = JSON.stringify({ pages: [] });
     const nextHtml = injectStaticManifestScript(htmlWithDsd, emptyManifestJson);
-    await writeFile(indexPath, nextHtml, "utf8");
-    console.log(`Injected DSD shell into ${indexPath} (pages DSD disabled).`);
+    const minifiedHtml = minifyDsdTemplateHtml(nextHtml);
+    const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir);
+    await writeFile(indexPath, finalHtml, "utf8");
+    const isSilent = options.silent ?? process.env.NODE_ENV === "test";
+    if (!isSilent) {
+      console.log(`Injected DSD shell into ${indexPath} (pages DSD disabled).`);
+    }
     return;
   }
 
@@ -800,27 +1018,57 @@ export async function prerenderDsdShell(options = {}) {
   const frontmatterTitle =
     parsed.data && parsed.data.title ? parsed.data.title : "";
   const rendered = selectedPage
-    ? await renderPageHtml(
-        selectedContent,
-        selectedPage.absolutePath || selectedPage.displayPath,
-      )
+    ? await renderPageHtml(selectedContent, selectedPage.displayPath)
     : "";
 
   const pagesTemplateContent = extractTemplateContent(pagesTemplateSource);
   const pageHeaderTemplateContent = extractTemplateContent(
     pageHeaderTemplateSource,
   );
-  const pagesDsdHost = buildPagesDsdHost(
-    pagesTemplateContent,
-    dsdPages,
-    rendered,
-    pageHeaderTemplateContent,
-    frontmatterTitle,
-  );
-  const shadowClawDsdTemplate = buildShadowClawDsdTemplate(
-    shadowClawTemplateContent,
-    pagesDsdHost,
-  );
+
+  let shadowClawDsdTemplate;
+  if (prerenderPages === 0) {
+    shadowClawDsdTemplate = buildShadowClawDsdTemplateWithoutPages(
+      shadowClawTemplateContent,
+      shadowClawCssSource,
+    );
+  } else if (pageSourcesWithContent.length === 0) {
+    const pagesDsdHost = buildPagesDsdHostEmpty(
+      pagesTemplateContent,
+      pagesCssSource,
+    );
+    shadowClawDsdTemplate = buildShadowClawDsdTemplate(
+      shadowClawTemplateContent,
+      pagesDsdHost,
+      shadowClawCssSource,
+    );
+  } else {
+    const defaultPage = pageSourcesWithContent[0];
+    const parsed = splitFrontmatterWithGrayMatter(defaultPage.content);
+    const frontmatterTitle =
+      parsed.data && parsed.data.title ? parsed.data.title : "";
+
+    const renderedHtml = await renderPageHtml(
+      defaultPage.content,
+      defaultPage.absolutePath || defaultPage.displayPath,
+    );
+
+    const pagesDsdHost = buildPagesDsdHost(
+      pagesTemplateContent,
+      dsdPages,
+      renderedHtml,
+      pageHeaderTemplateContent,
+      frontmatterTitle,
+      pagesCssSource,
+      pageHeaderCssSource,
+    );
+    shadowClawDsdTemplate = buildShadowClawDsdTemplate(
+      shadowClawTemplateContent,
+      pagesDsdHost,
+      shadowClawCssSource,
+    );
+  }
+
   const htmlWithDsd = injectShadowClawTemplate(
     indexHtml,
     shadowClawDsdTemplate,
@@ -837,10 +1085,15 @@ export async function prerenderDsdShell(options = {}) {
   const embeddedManifestJson = JSON.stringify(embeddedManifest);
 
   const nextHtml = injectStaticManifestScript(markedHtml, embeddedManifestJson);
-  await writeFile(indexPath, nextHtml, "utf8");
-  console.log(
-    `Injected DSD shell into ${indexPath} from ${sourcePath} (${dsdPages.length} of ${pageSources.length} page${pageSources.length === 1 ? "" : "s"} prerendered).`,
-  );
+  const minifiedHtml = minifyDsdTemplateHtml(nextHtml);
+  const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir);
+  await writeFile(indexPath, finalHtml, "utf8");
+  const isSilent = options.silent ?? process.env.NODE_ENV === "test";
+  if (!isSilent) {
+    console.log(
+      `Injected DSD shell into ${indexPath} from ${sourcePath} (${dsdPages.length} of ${pageSources.length} page${pageSources.length === 1 ? "" : "s"} prerendered).`,
+    );
+  }
 }
 
 async function main() {

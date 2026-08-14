@@ -371,7 +371,7 @@ describe("shadow-claw", () => {
 
     document.body.appendChild(component);
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     expect(orchestratorStore.init).toHaveBeenCalledWith(
       expect.any(Object),
@@ -395,7 +395,7 @@ describe("shadow-claw", () => {
 
     document.body.appendChild(component);
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     expect(orchestratorStore.init).toHaveBeenCalled();
   });
@@ -444,7 +444,7 @@ describe("shadow-claw", () => {
     const component = new ShadowClaw();
     component.orchestrator = mockOrchestrator;
     document.body.appendChild(component);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     ((await openFileHandler) as any)?.({
       path: "new_password.html",
@@ -483,7 +483,7 @@ describe("shadow-claw", () => {
     const component = new ShadowClaw();
     component.orchestrator = mockOrchestrator;
     document.body.appendChild(component);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     const notFoundErr = new DOMException(
       "A requested file or directory could not be found",
@@ -538,7 +538,7 @@ describe("shadow-claw", () => {
     const component = new ShadowClaw();
     component.orchestrator = mockOrchestrator;
     document.body.appendChild(component);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     toggleTerminalVisibility(component.shadowRoot, component);
 
@@ -575,8 +575,8 @@ describe("shadow-claw", () => {
 
     document.body.appendChild(component);
 
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     const convEl = component.shadowRoot?.querySelector(
       "shadow-claw-conversations" as any,
@@ -604,7 +604,7 @@ describe("shadow-claw", () => {
     const component = new ShadowClaw();
     component.orchestrator = createOrchestratorStub();
     document.body.appendChild(component);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     const pagesNavItem = component.shadowRoot?.querySelector(
       '.nav-item[data-page="pages"]',
@@ -641,7 +641,7 @@ describe("shadow-claw", () => {
     const component = new ShadowClaw();
     component.orchestrator = createOrchestratorStub();
     document.body.appendChild(component);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await new Promise((resolve) => setTimeout(resolve, 250));
 
     const pagesPage = component.shadowRoot?.querySelector(
       '[data-page-id="pages"]',
@@ -685,7 +685,7 @@ describe("shadow-claw", () => {
       const component = new ShadowClaw();
       component.orchestrator = createOrchestratorStub();
       document.body.appendChild(component);
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => setTimeout(resolve, 250));
 
       expect(showWarning).toHaveBeenCalledWith(
         expect.stringContaining("Private Browsing / Limited Storage"),

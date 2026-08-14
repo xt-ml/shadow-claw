@@ -2,6 +2,7 @@
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config/config.js";
 import { getConfig } from "../db/getConfig.js";
 import { setConfig } from "../db/setConfig.js";
+import { applyBasePath } from "../core/app-routes.js";
 import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "./defaultMemoryContent.mjs";
 import {
   ensureMainGroupMemory,
@@ -65,33 +66,32 @@ export async function setStaticMainSiteSeeded(
 }
 
 export function resolveStaticMainManifestUrl(): string {
-  const fallback = `/${STATIC_MAIN_MANIFEST_PATH}`;
+  const targetPath = applyBasePath(`/${STATIC_MAIN_MANIFEST_PATH}`);
 
-  if (typeof document === "undefined" || !document.baseURI) {
-    return fallback;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    try {
+      return new URL(targetPath, window.location.origin).toString();
+    } catch {
+      return targetPath;
+    }
   }
 
-  try {
-    return new URL(STATIC_MAIN_MANIFEST_PATH, document.baseURI).toString();
-  } catch {
-    return fallback;
-  }
+  return targetPath;
 }
 
 export function resolveStaticMainFileUrl(displayPath: string): string {
   const cleanPath = displayPath.replace(/^\/+/, "");
-  const relativePath = `${STATIC_MAIN_DIR}/${cleanPath}`;
-  const fallback = `/${relativePath}`;
+  const targetPath = applyBasePath(`/${STATIC_MAIN_DIR}/${cleanPath}`);
 
-  if (typeof document === "undefined" || !document.baseURI) {
-    return fallback;
+  if (typeof window !== "undefined" && window.location?.origin) {
+    try {
+      return new URL(targetPath, window.location.origin).toString();
+    } catch {
+      return targetPath;
+    }
   }
 
-  try {
-    return new URL(relativePath, document.baseURI).toString();
-  } catch {
-    return fallback;
-  }
+  return targetPath;
 }
 
 export async function fetchStaticMainManifest(): Promise<StaticMainManifest | null> {
@@ -252,6 +252,32 @@ async function processPurgeTokens(
   }
 }
 
+export function sortSavedPageRefs(refs: SavedPageRef[]): SavedPageRef[] {
+  return [...refs].sort((left, right) => {
+    const leftPath = left.path;
+    const rightPath = right.path;
+
+    const leftIsMemory = /^memory\.(md|markdown)$/iu.test(
+      leftPath.split("/").pop() || "",
+    );
+    const rightIsMemory = /^memory\.(md|markdown)$/iu.test(
+      rightPath.split("/").pop() || "",
+    );
+
+    if (leftIsMemory && !rightIsMemory) {
+      return 1;
+    }
+
+    if (!leftIsMemory && rightIsMemory) {
+      return -1;
+    }
+
+    return rightPath.localeCompare(leftPath, undefined, {
+      sensitivity: "base",
+    });
+  });
+}
+
 /** Returns true when a purge should be skipped because it already ran for
  *  this `purgeId` on this client. Updates localStorage when a purge is
  *  allowed so future boots are skipped. */
@@ -279,11 +305,12 @@ export async function seedStaticMainSite(
   db: ShadowClawDatabase,
   groupId: string = DEFAULT_GROUP_ID,
   existingPages: SavedPageRef[] = [],
+  options: { preferEmbedded?: boolean; fetchFallback?: boolean } = {},
 ): Promise<SavedPageRef[] & { didPurge?: boolean }> {
   await ensureMainGroupIndex(db, groupId);
-  // When seeding (especially on first boot), prefer fetching the full manifest so all
-  // markdown files from pages/main (posts, MEMORY, etc.) are seeded into the workspace.
-  const manifest = await getStaticMainManifest({ preferEmbedded: false });
+  // When seeding on initial boot, prefer the embedded manifest so first paint / hydration
+  // does not block on a heavy network request. Full background seeding can run separately.
+  const manifest = await getStaticMainManifest(options);
 
   let didPurge = false;
   if (manifest.preRenderedStaticPages) {
@@ -380,7 +407,15 @@ export async function seedStaticMainSite(
     }
   }
 
-  await setStaticMainSiteSeeded(db, groupId, true);
+  const hasEmbeddedScript =
+    typeof document !== "undefined" &&
+    document.getElementById("shadow-claw-static-manifest") !== null;
+  const isPartialEmbeddedSeed =
+    options.preferEmbedded !== false && hasEmbeddedScript;
+
+  if (!isPartialEmbeddedSeed) {
+    await setStaticMainSiteSeeded(db, groupId, true);
+  }
 
   Object.defineProperty(resultPages, "didPurge", {
     value: didPurge,
@@ -388,5 +423,5 @@ export async function seedStaticMainSite(
     writable: true,
     configurable: true,
   });
-  return resultPages;
+  return sortSavedPageRefs(resultPages);
 }

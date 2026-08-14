@@ -164,14 +164,19 @@ describe("initTasks", () => {
   let mockOrchestrator: any;
   let mockDb: any;
   let originalWorker: any;
+  let originalRequestIdleCallback: any;
 
   beforeAll(() => {
     originalWorker = global.Worker;
     (global as any).Worker = MockWorker;
+
+    originalRequestIdleCallback = (global as any).requestIdleCallback;
+    (global as any).requestIdleCallback = (cb: any) => cb();
   });
 
   afterAll(() => {
     (global as any).Worker = originalWorker;
+    (global as any).requestIdleCallback = originalRequestIdleCallback;
   });
 
   beforeEach(() => {

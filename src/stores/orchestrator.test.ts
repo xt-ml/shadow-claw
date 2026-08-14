@@ -2720,5 +2720,26 @@ describe("OrchestratorStore", () => {
 
       expect(store.activePinnedPage).toEqual(mockPage);
     });
+
+    it("schedules background static main site seeding without blocking init", async () => {
+      const store = new OrchestratorStore();
+      const spy = jest
+        .spyOn(store, "scheduleBackgroundStaticMainSiteSeeding")
+        .mockImplementation(() => {});
+
+      const events = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+      };
+
+      await store.init({} as any, orch);
+
+      expect(spy).toHaveBeenCalledWith({} as any);
+    });
   });
 });

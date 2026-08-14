@@ -102,8 +102,11 @@ describe("ensureMainGroupMemory", () => {
 
   it("resolves the static MEMORY.md URL correctly", () => {
     const expected =
-      typeof document !== "undefined" && document.baseURI
-        ? new URL(STATIC_MAIN_GROUP_MEMORY_PATH, document.baseURI).toString()
+      typeof window !== "undefined" && window.location?.origin
+        ? new URL(
+            `/${STATIC_MAIN_GROUP_MEMORY_PATH}`,
+            window.location.origin,
+          ).toString()
         : `/${STATIC_MAIN_GROUP_MEMORY_PATH}`;
     expect(resolveStaticMainGroupMemoryUrl()).toBe(expected);
   });

@@ -41,7 +41,17 @@ describe("service-worker init", () => {
       delete serviceWorkerListeners[key];
     }
 
-    setTimeoutSpy = jest.spyOn(globalThis, "setTimeout");
+    const originalSetTimeout = globalThis.setTimeout;
+    setTimeoutSpy = jest
+      .spyOn(globalThis, "setTimeout")
+      .mockImplementation((cb: any, ms: any) => {
+        if (ms === 10_000 || ms === 1000) {
+          cb();
+          return 1 as any;
+        }
+        return originalSetTimeout(cb, ms);
+      });
+
     globalThis.sessionStorage.clear();
 
     Object.defineProperty(globalThis.navigator, "serviceWorker", {

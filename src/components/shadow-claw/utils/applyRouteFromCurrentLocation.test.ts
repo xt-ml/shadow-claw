@@ -14,7 +14,7 @@ describe("applyRouteFromCurrentLocation", () => {
   let oStore: OrchestratorStore;
   let url: URL;
 
-  let mockParseRouteFromUrl: jest.Mock<any>;
+  let mockParseRouteFromUrlAsync: jest.Mock<any>;
   let mockApplyRoute: jest.Mock<any>;
 
   beforeEach(async () => {
@@ -22,14 +22,15 @@ describe("applyRouteFromCurrentLocation", () => {
     jest.clearAllMocks();
 
     jest.unstable_mockModule("../../../core/app-routes.js", () => ({
-      parseRouteFromUrl: jest.fn(),
+      parseRouteFromUrlAsync: jest.fn(),
     }));
     jest.unstable_mockModule("./applyRoute.js", () => ({
       applyRoute: jest.fn(),
     }));
 
     const appRoutes = await import("../../../core/app-routes.js");
-    mockParseRouteFromUrl = appRoutes.parseRouteFromUrl as jest.Mock<any>;
+    mockParseRouteFromUrlAsync =
+      appRoutes.parseRouteFromUrlAsync as jest.Mock<any>;
 
     const applyRouteModule = await import("./applyRoute.js");
     mockApplyRoute = applyRouteModule.applyRoute as jest.Mock<any>;
@@ -56,7 +57,7 @@ describe("applyRouteFromCurrentLocation", () => {
     } as any;
     url = new URL("https://example.com/test?group=group1");
 
-    mockParseRouteFromUrl.mockReturnValue({
+    mockParseRouteFromUrlAsync.mockResolvedValue({
       page: "files",
       groupId: "group1",
       path: "/test/path",
@@ -65,8 +66,8 @@ describe("applyRouteFromCurrentLocation", () => {
     mockApplyRoute.mockResolvedValue(undefined as any);
   });
 
-  it("should return early if parseRouteFromUrl returns null", async () => {
-    mockParseRouteFromUrl.mockReturnValue(null);
+  it("should return early if parseRouteFromUrlAsync returns null", async () => {
+    mockParseRouteFromUrlAsync.mockResolvedValue(null);
 
     await applyRouteFromCurrentLocation(
       shadow,
@@ -77,7 +78,7 @@ describe("applyRouteFromCurrentLocation", () => {
       url,
     );
 
-    expect(mockParseRouteFromUrl).toHaveBeenCalledWith(
+    expect(mockParseRouteFromUrlAsync).toHaveBeenCalledWith(
       url,
       oStore.activeGroupId,
     );
@@ -94,7 +95,7 @@ describe("applyRouteFromCurrentLocation", () => {
       url,
     );
 
-    expect(mockParseRouteFromUrl).toHaveBeenCalledWith(
+    expect(mockParseRouteFromUrlAsync).toHaveBeenCalledWith(
       url,
       oStore.activeGroupId,
     );

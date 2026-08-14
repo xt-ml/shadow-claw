@@ -69,34 +69,26 @@ describe("navigateToRoute", () => {
     expect(mockApplyBasePath).toHaveBeenCalledWith("/chat");
     expect(mockSupportsNavigationApi).toHaveBeenCalled();
     expect(mockNav.navigate).toHaveBeenCalledWith("/base/chat", {
-      history: "replace",
+      history: "push",
     });
-    expect(mockHistoryState).toHaveBeenCalledWith(
-      globalThis.history,
-      "/base/chat",
-      { replace: true },
-    );
+    expect(mockHistoryState).not.toHaveBeenCalled();
     expect(mockApplyRoute).not.toHaveBeenCalled();
   });
 
-  it("should use history: auto when options.replace is false", async () => {
+  it("should use history: replace when options.replace is true", async () => {
     mockSupportsNavigationApi.mockReturnValue(true);
 
     await navigateToRoute(shadowRoot, shadowClaw, db, fStore, oStore, route, {
-      replace: false,
+      replace: true,
     });
 
     expect(mockNav.navigate).toHaveBeenCalledWith("/base/chat", {
-      history: "auto",
+      history: "replace",
     });
-    expect(mockHistoryState).toHaveBeenCalledWith(
-      globalThis.history,
-      "/base/chat",
-      { replace: false },
-    );
+    expect(mockHistoryState).not.toHaveBeenCalled();
   });
 
-  it("should fallback to applyRoute if Navigation API is not supported", async () => {
+  it("should fallback to applyRoute and call historyState if Navigation API is not supported", async () => {
     mockSupportsNavigationApi.mockReturnValue(false);
 
     await navigateToRoute(shadowRoot, shadowClaw, db, fStore, oStore, route, {
@@ -105,6 +97,11 @@ describe("navigateToRoute", () => {
 
     expect(mockSupportsNavigationApi).toHaveBeenCalled();
     expect(mockNav.navigate).not.toHaveBeenCalled();
+    expect(mockHistoryState).toHaveBeenCalledWith(
+      globalThis.history,
+      "/base/chat",
+      { replace: false, useTrailingSlash: false },
+    );
     expect(mockApplyRoute).toHaveBeenCalledWith(
       shadowRoot,
       shadowClaw,
@@ -112,7 +109,6 @@ describe("navigateToRoute", () => {
       fStore,
       oStore,
       route,
-      { replace: false },
     );
   });
 });

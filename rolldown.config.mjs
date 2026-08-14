@@ -279,10 +279,59 @@ const configs = [
     ...commonResolve("browser", [
       copy({
         targets: [
-          { src: "index.html", dest: "dist/public" },
-          { src: "index.css", dest: "dist/public" },
+          {
+            src: "index.html",
+            dest: "dist/public",
+            transform: async (contents) => {
+              if (!isProduction) {
+                return contents;
+              }
+
+              const result = await htmlnano.process(contents.toString(), {
+                collapseWhitespace: "conservative",
+                removeComments: true,
+              });
+
+              return result.html;
+            },
+          },
+          {
+            src: "index.css",
+            dest: "dist/public",
+            transform: async (contents, sourcePath) => {
+              if (!isProduction) {
+                return contents;
+              }
+
+              const result = await postcss([
+                cssnano({
+                  preset: ["default", { discardComments: { removeAll: true } }],
+                }),
+              ]).process(contents.toString(), {
+                from: sourcePath,
+                to: join("dist/public", "index.css"),
+              });
+
+              return result.css;
+            },
+          },
           { src: "manifest.json", dest: "dist/public" },
-          { src: "404.html", dest: "dist/public" },
+          {
+            src: "404.html",
+            dest: "dist/public",
+            transform: async (contents) => {
+              if (!isProduction) {
+                return contents;
+              }
+
+              const result = await htmlnano.process(contents.toString(), {
+                collapseWhitespace: "conservative",
+                removeComments: true,
+              });
+
+              return result.html;
+            },
+          },
           {
             src: ["src/**/*.css"],
             dest: "dist/public",

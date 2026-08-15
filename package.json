@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.18.0",
+  "version": "1.18.1",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -51,7 +51,7 @@
     "@azure/core-auth": "^1.10.1",
     "@google/genai": "^2.0.1",
     "@huggingface/transformers": "^4.2.0",
-    "@litert-lm/core": "^0.13.1",
+    "@litert-lm/core": "^0.15.0",
     "@types/qrcode": "^1.5.6",
     "@xmldom/xmldom": "^0.9.10",
     "built-in-ai-task-apis-polyfills": "^1.16.2",

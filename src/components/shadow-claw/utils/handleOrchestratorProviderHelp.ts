@@ -1,6 +1,7 @@
 import { requestDialog } from "./requestDialog.js";
 
 import { buildLlamafileHelpDialogOptions } from "../../common/help/llamafile.js";
+import { buildPromptApiHelpDialogOptions } from "../../common/help/prompt-api.js";
 import { buildProviderHelpDialogOptions } from "../../common/help/providers.js";
 import { buildTransformersJsHelpDialogOptions } from "../../common/help/transformers.js";
 
@@ -26,6 +27,12 @@ export async function handleOrchestratorProviderHelp(
       doc,
       shadow,
       buildTransformersJsHelpDialogOptions(payload.reason),
+    );
+  } else if (payload?.providerId === "prompt_api") {
+    await requestDialog(
+      doc,
+      shadow,
+      buildPromptApiHelpDialogOptions(payload.reason),
     );
   } else if (payload?.providerId && payload.helpType) {
     await requestDialog(

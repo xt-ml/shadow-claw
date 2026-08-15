@@ -6,9 +6,105 @@ import {
 describe("PromptApiProgressAggregator", () => {
   it("exports a non-zero default model size constant", () => {
     expect(DEFAULT_PROMPT_API_MODEL_SIZE_BYTES).toBeGreaterThan(
-      900 * 1024 * 1024,
+      800 * 1024 * 1024,
     );
   });
+
+  it("does not prematurely lock at 100% or flicker when a small metadata file finishes before the large model file", () => {
+    const emitted: Array<{
+      status: string;
+      progress: number | null;
+      message: string;
+    }> = [];
+    const aggregator = new PromptApiProgressAggregator(
+      (status, progress, message) => {
+        emitted.push({ status, progress, message });
+      },
+      // Simulating a case where expected total was set to 20 MB (metadata only)
+      { expectedTotalBytes: 20 * 1024 * 1024 },
+    );
+
+    const tokenizerUrl = "https://example.com/tokenizer.json";
+    const modelUrl = "https://example.com/model_q4.onnx_data";
+
+    // Tokenizer downloads 20 MB and completes
+    aggregator.onStreamProgress(
+      tokenizerUrl,
+      20 * 1024 * 1024,
+      20 * 1024 * 1024,
+      true,
+    );
+    expect(emitted[emitted.length - 1]?.progress).toBe(1);
+    expect(emitted[emitted.length - 1]?.message).toContain(
+      "20.0 / 20.0 MB · 100%",
+    );
+
+    // Large model file stream arrives: 135.4 MB of 839.0 MB
+    aggregator.onStreamProgress(
+      modelUrl,
+      135.4 * 1024 * 1024,
+      839 * 1024 * 1024,
+      false,
+    );
+
+    // The display MUST recalculate for the expanded total (155.4 MB / 859.0 MB ≈ 18%)
+    // and must NOT be stuck at 100%!
+    const latest = emitted[emitted.length - 1];
+    expect(latest?.message).not.toContain("100%");
+    expect(latest?.message).toContain("155.4 / 859.0 MB · 18%");
+    expect(latest?.progress).toBeCloseTo(155.4 / 859.0, 2);
+  });
+
+  it("ignores coarse polyfill fractional events while active stream progress is ongoing to avoid flickering", () => {
+    const emitted: Array<{
+      status: string;
+      progress: number | null;
+      message: string;
+    }> = [];
+    const aggregator = new PromptApiProgressAggregator(
+      (status, progress, message) => {
+        emitted.push({ status, progress, message });
+      },
+      { expectedTotalBytes: 800 * 1024 * 1024 },
+    );
+
+    const modelUrl = "https://example.com/model_q4.onnx_data";
+
+    // Active byte stream progress
+    aggregator.onStreamProgress(
+      modelUrl,
+      200 * 1024 * 1024,
+      800 * 1024 * 1024,
+      false,
+    );
+    expect(emitted[emitted.length - 1]?.message).toContain(
+      "200.0 / 800.0 MB · 25%",
+    );
+
+    const emitCountBefore = emitted.length;
+
+    // Polyfill fires coarse downloadprogress event (e.g. loaded: 0.01 or 1, total: 1)
+    aggregator.onProgressEvent({ loaded: 0.01, total: 1 });
+    aggregator.onProgressEvent({ loaded: 1, total: 1 });
+
+    // Should NOT have overwritten with coarse values
+    expect(emitted.length).toBe(emitCountBefore);
+    expect(emitted[emitted.length - 1]?.message).toContain(
+      "200.0 / 800.0 MB · 25%",
+    );
+
+    // Further stream progress works as expected
+    aggregator.onStreamProgress(
+      modelUrl,
+      400 * 1024 * 1024,
+      800 * 1024 * 1024,
+      false,
+    );
+    expect(emitted[emitted.length - 1]?.message).toContain(
+      "400.0 / 800.0 MB · 50%",
+    );
+  });
+
   it("formats fractional polyfill progress events into MB and percentage monotonically", () => {
     const emitted: Array<{
       status: string;
@@ -188,15 +284,6 @@ describe("PromptApiProgressAggregator", () => {
         const total = parseFloat(match[1]);
         expect(total).toBeGreaterThanOrEqual(maxTotal);
         maxTotal = total;
-      }
-    }
-
-    // Also verify progress fraction never went backwards
-    let maxProgress = 0;
-    for (const e of emitted) {
-      if (e.progress !== null) {
-        expect(e.progress).toBeGreaterThanOrEqual(maxProgress);
-        maxProgress = e.progress;
       }
     }
   });

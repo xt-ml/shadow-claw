@@ -13,9 +13,38 @@ function parseModelBillionsFromId(modelId: string): number | null {
 }
 
 export type BrowserDtype = "q4f16" | "q4" | "fp16" | "q8" | "fp32";
-export type DtypeStrategy = "auto" | "memory" | "balanced" | "quality";
+export type DtypeStrategy =
+  | "auto"
+  | "memory"
+  | "balanced"
+  | "quality"
+  | "q4f16"
+  | "q4"
+  | "q8"
+  | "fp16"
+  | "fp32";
 
 export function normalizeDtypeStrategy(value: unknown): DtypeStrategy {
+  if (value === "q4f16") {
+    return "q4f16";
+  }
+
+  if (value === "q4") {
+    return "q4";
+  }
+
+  if (value === "q8") {
+    return "q8";
+  }
+
+  if (value === "fp16") {
+    return "fp16";
+  }
+
+  if (value === "fp32") {
+    return "fp32";
+  }
+
   if (value === "memory") {
     return "memory";
   }
@@ -53,16 +82,38 @@ export function getPreferredDtypes(
   const isWebGpu = device === "webgpu";
   const isWebNn = device.startsWith("webnn");
 
+  // User-selected explicit dtypes
+  if (strategy === "q4f16") {
+    return uniqueStable(["q4f16", "q4", "fp16"]);
+  }
+
+  if (strategy === "q4") {
+    return uniqueStable(["q4", "q4f16", "q8", "fp16"]);
+  }
+
+  if (strategy === "q8") {
+    return uniqueStable(["q8", "q4", "fp16"]);
+  }
+
+  if (strategy === "fp16") {
+    return uniqueStable(["fp16", "q4f16", "q4"]);
+  }
+
+  if (strategy === "fp32") {
+    return uniqueStable(["fp32", "fp16", "q8", "q4"]);
+  }
+
   if (isWebGpu || isWebNn) {
     // WebGPU/WebNN can choose between memory-first and quality-first paths.
     if (strategy === "quality") {
       return ["fp16", "q4f16", "q4"];
     }
 
-    if (strategy === "balanced") {
-      return ["q4f16", "fp16", "q4"];
+    if (strategy === "memory") {
+      return ["q4", "q4f16", "fp16"];
     }
 
+    // Default "auto" and "balanced" on WebGPU/WebNN: q4f16, matching Prompt API fallback
     return ["q4f16", "q4", "fp16"];
   }
 
@@ -72,14 +123,15 @@ export function getPreferredDtypes(
   }
 
   if (strategy === "balanced") {
-    return ["q8", "fp16", "q4", "fp32"];
+    return ["q4f16", "q4", "q8", "fp16", "fp32"];
   }
 
   if (strategy === "memory") {
     return ["q4", "q8", "fp16"];
   }
 
-  const dtypes: BrowserDtype[] = ["q8", "q4", "fp16"];
+  // Default "auto" on CPU/WASM: q4f16 first (matching Prompt API fallback)
+  const dtypes: BrowserDtype[] = ["q4f16", "q4", "q8", "fp16"];
   const modelBillions = parseModelBillionsFromId(modelId);
 
   // Only allow fp32 fallback for very small models on high-memory devices.

@@ -121,9 +121,10 @@ Backed by the `builtin-ai-tasks` subsystem with dynamic polyfill loading and a M
 - **Default Provider**: `prompt_api` ("Prompt API (Browser)") is the default provider in ShadowClaw.
 - **Zero Configuration**: Keyless, zero-cost execution with zero network requirements once models are cached.
 - **Dynamic Fallback Architecture**:
-  - Automatically probes hardware acceleration via **WebNN** (`navigator.ml`) and asynchronous WebGPU feature probing (`isWebGpuAdapterAvailable()`).
-  - When accelerated backends encounter unsupported kernels or memory-allocation failures (`ORT_NOT_IMPLEMENTED`, `ERROR_CODE: 9`, `bad_alloc`, `out of memory`, `ERROR_CODE: 6`), `createTaskInstanceWithFallback()` transparently switches execution to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) without interrupting the user with modal prompts.
-  - Default polyfill model is `onnx-community/gemma-3-1b-it-ONNX-GQA`. Users can configure their preferred Prompt API fallback model in Settings (`CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL`, including `onnx-community/Qwen3-0.6B-ONNX`, `onnx-community/Llama-3.2-1B-Instruct-ONNX`, and `onnx-community/SmolLM2-360M-Instruct-ONNX`).
+  - Automatically probes hardware acceleration via **WebNN** (`navigator.ml`) and asynchronous WebGPU feature probing (`isWebGpuAdapterAvailable()`). Software-emulated WebGPU adapters and those lacking `shader-f16` support are rejected to ensure optimal performance.
+  - When accelerated backends encounter unsupported kernels, memory-allocation failures, or software-only adapters (`ORT_NOT_IMPLEMENTED`, `ERROR_CODE: 9`, `bad_alloc`, `out of memory`, `ERROR_CODE: 6`), `createTaskInstanceWithFallback()` transparently switches execution to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) without interrupting the user with modal prompts.
+  - Default polyfill model is `onnx-community/Qwen3-0.6B-ONNX`. Users can configure their preferred Prompt API fallback model in Settings (`CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL`, including `onnx-community/gemma-3-1b-it-ONNX-GQA`, `onnx-community/Llama-3.2-1B-Instruct-ONNX`, and `onnx-community/SmolLM2-360M-Instruct-ONNX`).
+  - **Hardware Preferences**: Transformers.js inference defaults to `q4f16` quantization across browser-native paths. Users can explicitly configure preferred device and dtype overrides in Settings.
 - **Dynamic Chat Templates & XML Tool Calling**:
   - Dynamically fetches and parses `tokenizer_config.json` for ONNX models to detect model-native tool calling syntax (such as Qwen/Llama XML `<tool_call>` tags).
   - Generation loop supports multi-turn session cloning and warm session reuse.

@@ -216,7 +216,7 @@ export async function invokeWithTransformersJs(
 ) {
   const activeTools = tools || [];
   const backend =
-    (await getConfig(db, CONFIG_KEYS.TRANSFORMERS_JS_BACKEND)) || "cpu";
+    (await getConfig(db, CONFIG_KEYS.TRANSFORMERS_JS_BACKEND)) || "auto";
   const dtypeStrategy =
     (await getConfig(db, CONFIG_KEYS.TRANSFORMERS_JS_DTYPE_STRATEGY)) || "auto";
 

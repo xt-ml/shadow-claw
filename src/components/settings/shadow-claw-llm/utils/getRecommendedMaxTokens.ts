@@ -1,4 +1,9 @@
-import { getModelMaxTokens } from "../../../../config/config.js";
+import {
+  DEFAULT_PROMPT_API_FALLBACK_MODEL,
+  getModelMaxTokens,
+} from "../../../../config/config.js";
+import { modelRegistry } from "../../../../subsystems/providers/model-registry.js";
+import { isPromptApiSupported } from "../../../../subsystems/providers/prompt-api-provider.js";
 
 export type BrowserNavigator = Navigator & {
   deviceMemory?: number;
@@ -15,8 +20,8 @@ const BROWSER_MODEL_CONTEXT_WINDOWS: Array<{
   // Gemma 3 1B (GQA / standard) — 128K native context
   { pattern: "gemma-3-1b-it-ONNX-GQA", contextWindow: 128_000 },
   { pattern: "gemma-3-1b-it-ONNX", contextWindow: 128_000 },
-  // Qwen3 0.6B — 32K native context
-  { pattern: "Qwen3-0.6B-ONNX", contextWindow: 32_000 },
+  // Qwen3 0.6B — 131K native context (from tokenizer_config.json model_max_length)
+  { pattern: "Qwen3-0.6B-ONNX", contextWindow: 131_072 },
   // Qwen3.5 ONNX variants
   { pattern: "Qwen3.5", contextWindow: 32_768 },
   // Llama 3.2 1B/3B — 128K native context
@@ -39,6 +44,15 @@ const BROWSER_MODEL_CONTEXT_WINDOWS: Array<{
 ];
 
 function getBrowserModelContextWindow(modelId: string): number | null {
+  const dynamicInfo = modelRegistry.getModelInfo(modelId);
+  if (
+    dynamicInfo &&
+    typeof dynamicInfo.contextWindow === "number" &&
+    dynamicInfo.contextWindow > 0
+  ) {
+    return dynamicInfo.contextWindow;
+  }
+
   for (const { pattern, contextWindow } of BROWSER_MODEL_CONTEXT_WINDOWS) {
     if (modelId.includes(pattern)) {
       return contextWindow;
@@ -51,11 +65,24 @@ function getBrowserModelContextWindow(modelId: string): number | null {
 export function getRecommendedMaxTokens(
   providerId: string,
   modelId: string,
+  fallbackModelId?: string,
 ): {
   recommended: number;
   detail: string;
 } {
-  const modelCeiling = getModelMaxTokens(modelId);
+  let effectiveModel = modelId;
+  if (
+    providerId === "prompt_api" &&
+    (modelId === "browser-built-in" || !modelId)
+  ) {
+    if (fallbackModelId) {
+      effectiveModel = fallbackModelId;
+    } else if (!isPromptApiSupported()) {
+      effectiveModel = DEFAULT_PROMPT_API_FALLBACK_MODEL;
+    }
+  }
+
+  const modelCeiling = getModelMaxTokens(effectiveModel);
   const browserNavigator: BrowserNavigator | null =
     typeof navigator === "undefined" ? null : (navigator as BrowserNavigator);
   const deviceMemory =
@@ -74,7 +101,7 @@ export function getRecommendedMaxTokens(
 
   // For browser-local providers, factor in device hardware and model context
   if (isBrowserLocal || providerId === "ollama") {
-    const knownContext = getBrowserModelContextWindow(modelId);
+    const knownContext = getBrowserModelContextWindow(effectiveModel);
     let recommended = modelCeiling;
 
     // Hardware-aware scaling
@@ -100,7 +127,7 @@ export function getRecommendedMaxTokens(
       }
     }
 
-    if (/thinking|reasoning/i.test(modelId)) {
+    if (/thinking|reasoning/i.test(effectiveModel)) {
       recommended = Math.min(recommended, 4096);
     }
 
@@ -119,7 +146,7 @@ export function getRecommendedMaxTokens(
       hints.push(`${cpuThreads} CPU threads`);
     }
 
-    if (/thinking|reasoning/i.test(modelId)) {
+    if (/thinking|reasoning/i.test(effectiveModel)) {
       hints.push("reasoning model");
     }
 

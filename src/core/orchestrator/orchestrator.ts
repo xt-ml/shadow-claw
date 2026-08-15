@@ -4,6 +4,7 @@ import {
   DEFAULT_GROUP_ID,
   DEFAULT_MAX_ITERATIONS,
   DEFAULT_MAX_TOKENS,
+  DEFAULT_PROMPT_API_FALLBACK_MODEL,
   DEFAULT_PROVIDER,
   ProviderConfig,
   buildTriggerPattern,
@@ -42,6 +43,7 @@ import { RoomChannel } from "../../subsystems/channels/room.js";
 import { TelegramChannel } from "../../subsystems/channels/telegram.js";
 
 import { unregisterWebMcpTools } from "../../subsystems/mcp/webmcp.js";
+import { isPromptApiSupported } from "../../subsystems/providers/prompt-api-provider.js";
 
 import { getContextLimit } from "../../subsystems/providers/providers.js";
 import { TaskScheduler } from "../../subsystems/tools/task-scheduler.js";
@@ -530,6 +532,20 @@ export class Orchestrator {
         ? (getProvider(group.pinnedProvider)?.defaultModel ?? this.model)
         : this.model);
 
+    let modelForTokenLimits = effectiveModel;
+    if (
+      (group?.pinnedProvider ?? this.provider) === "prompt_api" &&
+      (effectiveModel === "browser-built-in" || !effectiveModel) &&
+      !isPromptApiSupported()
+    ) {
+      const configuredFallback = await getConfig(
+        this.db!,
+        CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+      );
+      modelForTokenLimits =
+        configuredFallback || DEFAULT_PROMPT_API_FALLBACK_MODEL;
+    }
+
     const configuredMaxTokens =
       typeof group?.pinnedMaxTokens === "number" &&
       Number.isFinite(group.pinnedMaxTokens) &&
@@ -539,10 +555,10 @@ export class Orchestrator {
 
     const effectiveMaxTokens = Math.max(
       1,
-      Math.min(configuredMaxTokens, getModelMaxTokens(effectiveModel)),
+      Math.min(configuredMaxTokens, getModelMaxTokens(modelForTokenLimits)),
     );
 
-    const contextLimit = getContextLimit(effectiveModel);
+    const contextLimit = getContextLimit(modelForTokenLimits);
     const systemPromptTokens =
       estimateTokens(systemPrompt) +
       (activeTools?.reduce(

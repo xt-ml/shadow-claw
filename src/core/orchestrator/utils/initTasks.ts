@@ -2,6 +2,7 @@ import {
   ASSISTANT_NAME,
   CONFIG_KEYS,
   DEFAULT_MAX_ITERATIONS,
+  DEFAULT_PROMPT_API_FALLBACK_MODEL,
   buildTriggerPattern,
   getDefaultProvider,
   getModelMaxTokens,
@@ -17,6 +18,8 @@ import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { RoomManager } from "../../../subsystems/channels/room-manager.js";
 import { setWebMcpMode as applyWebMcpMode } from "../../../subsystems/mcp/webmcp.js";
 import { modelRegistry } from "../../../subsystems/providers/model-registry.js";
+import { isPromptApiSupported } from "../../../subsystems/providers/prompt-api-provider.js";
+import { fetchTokenizerConfig } from "../../../subsystems/providers/utils/chatTemplate.js";
 import { TaskScheduler } from "../../../subsystems/tools/task-scheduler.js";
 import { enqueue } from "./enqueue.js";
 import { handleWorkerMessage } from "./handleWorkerMessage.js";
@@ -333,11 +336,31 @@ export async function initProviderAndModel(
     orchestrator.model = orchestrator.providerConfig.defaultModel;
   }
 
-  const dynamicMaxTokens = getModelMaxTokens(orchestrator.model);
+  let effectiveMaxTokensModel = orchestrator.model;
+  if (
+    orchestrator.provider === "prompt_api" &&
+    !isPromptApiSupported() &&
+    (orchestrator.model === "browser-built-in" || !orchestrator.model)
+  ) {
+    const configuredFallback = await getConfig(
+      db,
+      CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+    );
+    effectiveMaxTokensModel =
+      configuredFallback || DEFAULT_PROMPT_API_FALLBACK_MODEL;
+    fetchTokenizerConfig(effectiveMaxTokensModel).catch(() => {});
+  }
 
-  // If the stored value is exactly 8192 (our legacy fallback), prioritize the dynamic value
-  // from our registry and updated limits definitions.
-  if (storedMaxTokens === "8192") {
+  const dynamicMaxTokens = getModelMaxTokens(effectiveMaxTokensModel);
+
+  // If the stored value is exactly 8192 (our legacy fallback) or 4096 (legacy prompt_api default),
+  // prioritize the dynamic value from our registry and updated limits definitions.
+  if (
+    storedMaxTokens === "8192" ||
+    (orchestrator.provider === "prompt_api" &&
+      !isPromptApiSupported() &&
+      storedMaxTokens === "4096")
+  ) {
     orchestrator.maxTokens = dynamicMaxTokens;
   } else {
     const parsedStored = parseInt(
@@ -345,9 +368,7 @@ export async function initProviderAndModel(
       10,
     );
 
-    // Hard clamp any stored manual overrides against our new safe dynamic boundaries
-    // to avoid 400 errors if a user previously forced a too-large MAX_TOKENS in the DB.
-    orchestrator.maxTokens = Math.min(parsedStored, dynamicMaxTokens);
+    orchestrator.maxTokens = Math.max(1, parsedStored);
   }
 
   if (storedMaxIterations) {

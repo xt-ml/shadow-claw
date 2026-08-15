@@ -67,16 +67,51 @@
     >
       <label class="form-label">Select Prompt API Fallback Model</label>
       <select class="form-select" data-setting="prompt-api-fallback-select">
-        <option value="onnx-community/gemma-3-1b-it-ONNX-GQA">
-          onnx-community/gemma-3-1b-it-ONNX-GQA (webgpu, q4f16)
-        </option>
         <option value="onnx-community/Qwen3-0.6B-ONNX">
-          onnx-community/Qwen3-0.6B-ONNX (wasm, q4)
+          onnx-community/Qwen3-0.6B-ONNX — Recommended (Fast, Compact &amp; Tool
+          Calling)
+        </option>
+        <option value="onnx-community/gemma-3-1b-it-ONNX-GQA">
+          onnx-community/gemma-3-1b-it-ONNX-GQA — Alternative (1B Parameters,
+          Larger Download)
         </option>
       </select>
       <div class="form-helper">
-        Fallback model used when GPU acceleration is unavailable for the Prompt
-        API polyfill.
+        Local model used when the browser's native Prompt API is unavailable.
+      </div>
+      <div class="form-group" style="margin-top: 1rem">
+        <label class="form-label">Preferred Device</label>
+        <select class="form-select" data-setting="prompt-api-device-select">
+          <option value="auto">
+            Auto-detect (WebGPU if available, WASM fallback)
+          </option>
+          <option value="webgpu">WebGPU (Fastest)</option>
+          <option value="wasm">WASM / CPU (Compatibility)</option>
+        </select>
+        <div class="form-helper">
+          Select the hardware backend for local model execution. WebGPU is
+          recommended for modern browsers and dedicated GPUs.
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Preferred Dtype</label>
+        <select class="form-select" data-setting="prompt-api-dtype-select">
+          <option value="auto">Auto (Default: q4f16)</option>
+          <option value="q4f16">
+            Quantized 4-bit Float16 KV (q4f16 — Fast &amp; Compact)
+          </option>
+          <option value="q4">Quantized 4-bit (q4 — Ultra Small)</option>
+          <option value="q8">Quantized 8-bit (q8 — Memory Efficient)</option>
+          <option value="fp16">Float16 (fp16 — Performance)</option>
+          <option value="fp32">Float32 (fp32 — High Precision)</option>
+          <option value="memory">Memory Optimized (Smallest Download)</option>
+          <option value="balanced">Balanced (Speed &amp; Memory)</option>
+          <option value="quality">Quality Optimized (Highest Precision)</option>
+        </select>
+        <div class="form-helper">
+          Controls dtype preference order for browser inference. Models are not
+          re-quantized; this selects the closest available model revision.
+        </div>
       </div>
     </div>
 
@@ -222,9 +257,11 @@
     <div class="form-group">
       <label class="form-label">Preferred Device</label>
       <select class="form-select" data-setting="transformers-js-device-select">
-        <option value="auto">Auto-detect</option>
+        <option value="auto">
+          Auto-detect (WebGPU if available, WASM fallback)
+        </option>
         <option value="webgpu">WebGPU (Fastest)</option>
-        <option value="wasm">WASM (Compatibility)</option>
+        <option value="wasm">WASM / CPU (Compatibility)</option>
       </select>
       <div class="form-helper">
         Select the hardware backend for local model execution. WebGPU is
@@ -234,11 +271,17 @@
     <div class="form-group">
       <label class="form-label">Preferred Dtype</label>
       <select class="form-select" data-setting="transformers-js-dtype-select">
-        <option value="auto">Auto (Balanced)</option>
-        <option value="fp32">Float32 (High Precision)</option>
-        <option value="fp16">Float16 (Performance)</option>
-        <option value="q8">Quantized 8-bit (Memory Efficient)</option>
-        <option value="q4">Quantized 4-bit (Ultra Small)</option>
+        <option value="auto">Auto (Default: q4f16)</option>
+        <option value="q4f16">
+          Quantized 4-bit Float16 KV (q4f16 — Fast &amp; Compact)
+        </option>
+        <option value="q4">Quantized 4-bit (q4 — Ultra Small)</option>
+        <option value="q8">Quantized 8-bit (q8 — Memory Efficient)</option>
+        <option value="fp16">Float16 (fp16 — Performance)</option>
+        <option value="fp32">Float32 (fp32 — High Precision)</option>
+        <option value="memory">Memory Optimized (Smallest Download)</option>
+        <option value="balanced">Balanced (Speed &amp; Memory)</option>
+        <option value="quality">Quality Optimized (Highest Precision)</option>
       </select>
       <div class="form-helper">
         Controls dtype preference order for browser inference. Models are not
@@ -260,10 +303,13 @@
         placeholder="4096"
         type="number"
       />
-      <div class="form-helper">
+      <div class="form-helper" data-setting="max-tokens-helper">
         Caps the assistant response length for the current model.
       </div>
     </div>
+    <button class="save-btn" data-action="apply-recommended-max-tokens">
+      ✨ Apply Recommended
+    </button>
     <button class="save-btn" data-action="save-max-tokens">
       💾 Save Max Tokens
     </button>

@@ -13,6 +13,16 @@ jest.unstable_mockModule("../../db/groups.js", () => ({
   createGroup: mockCreateGroup,
   renameGroup: mockRenameGroup,
   deleteGroupMetadata: mockDeleteGroupMetadata,
+  getGroupMetadata: (jest.fn() as any).mockResolvedValue([]),
+  saveGroupMetadata: (jest.fn() as any).mockResolvedValue(undefined),
+  reorderGroups: (jest.fn() as any).mockResolvedValue(undefined),
+  cloneGroup: (jest.fn() as any).mockResolvedValue(null),
+  updateGroupPinnedProvider: (jest.fn() as any).mockResolvedValue(undefined),
+  updateGroupSubagentSettings: (jest.fn() as any).mockResolvedValue(undefined),
+  updateGroupProviderRuntimeOverrides: (jest.fn() as any).mockResolvedValue(
+    undefined,
+  ),
+  updateGroupToolTags: (jest.fn() as any).mockResolvedValue(undefined),
 }));
 
 jest.unstable_mockModule("../../db/clearGroupMessages.js", () => ({

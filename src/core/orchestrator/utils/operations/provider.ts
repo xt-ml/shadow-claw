@@ -1,5 +1,6 @@
 import {
   CONFIG_KEYS,
+  DEFAULT_PROMPT_API_FALLBACK_MODEL,
   LLAMAFILE_PROXY_URL,
   PROVIDERS,
   buildTriggerPattern,
@@ -8,9 +9,11 @@ import {
 } from "../../../../config/config.js";
 
 import type { ProviderConfig } from "../../../../config/config.js";
+import { getConfig } from "../../../../db/getConfig.js";
 import { setConfig as _defaultSetConfig } from "../../../../db/setConfig.js";
 import { toolsStore } from "../../../../stores/tools.js";
 import { modelRegistry } from "../../../../subsystems/providers/model-registry.js";
+import { isPromptApiSupported } from "../../../../subsystems/providers/prompt-api-provider.js";
 
 import type { ShadowClawDatabase } from "../../../../db/db.js";
 import type { LLMProvider } from "../../../../subsystems/providers/types.js";
@@ -364,7 +367,20 @@ export async function setModel(
   _setConfig: SetConfigFn = _defaultSetConfig,
 ): Promise<void> {
   state.model = model;
-  state.maxTokens = getModelMaxTokens(state.model);
+  let effectiveModelForLimits = model;
+  if (
+    state.provider === "prompt_api" &&
+    !isPromptApiSupported() &&
+    (model === "browser-built-in" || !model)
+  ) {
+    const configuredFallback = await getConfig(
+      db,
+      CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+    );
+    effectiveModelForLimits =
+      configuredFallback || DEFAULT_PROMPT_API_FALLBACK_MODEL;
+  }
+  state.maxTokens = getModelMaxTokens(effectiveModelForLimits);
 
   await _setConfig(db, CONFIG_KEYS.MODEL, model);
 
@@ -470,7 +486,21 @@ export async function setProvider(
     getProviderRuntimeHeaders(state, providerId),
   );
 
-  state.maxTokens = getModelMaxTokens(state.model);
+  let effectiveModelForLimits = state.model;
+  if (
+    providerId === "prompt_api" &&
+    !isPromptApiSupported() &&
+    (state.model === "browser-built-in" || !state.model)
+  ) {
+    const configuredFallback = await getConfig(
+      db,
+      CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+    );
+    effectiveModelForLimits =
+      configuredFallback || DEFAULT_PROMPT_API_FALLBACK_MODEL;
+  }
+
+  state.maxTokens = getModelMaxTokens(effectiveModelForLimits);
 
   await _setConfig(db, CONFIG_KEYS.PROVIDER, providerId);
   await _setConfig(db, CONFIG_KEYS.MODEL, state.model);

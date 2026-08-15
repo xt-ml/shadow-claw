@@ -1,5 +1,6 @@
 import {
   CONFIG_KEYS,
+  DEFAULT_PROMPT_API_FALLBACK_MODEL,
   getModelMaxTokens,
   getProvider,
 } from "../../../config/config.js";
@@ -110,9 +111,23 @@ export async function invokeAgent(
       ? Math.floor(group.pinnedMaxTokens)
       : o.maxTokens;
 
+  let modelForTokenLimits = effectiveModel;
+  if (
+    effectiveProviderId === "prompt_api" &&
+    (effectiveModel === "browser-built-in" || !effectiveModel) &&
+    !isPromptApiSupported()
+  ) {
+    const configuredFallback = await getConfig(
+      db,
+      CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+    );
+    modelForTokenLimits =
+      configuredFallback || DEFAULT_PROMPT_API_FALLBACK_MODEL;
+  }
+
   const effectiveMaxTokens = Math.max(
     1,
-    Math.min(configuredMaxTokens, getModelMaxTokens(effectiveModel)),
+    Math.min(configuredMaxTokens, getModelMaxTokens(modelForTokenLimits)),
   );
 
   const effectiveProviderConfig =
@@ -148,7 +163,7 @@ export async function invokeAgent(
   );
 
   // Build conversation context with dynamic token-aware windowing
-  const contextLimit = getContextLimit(effectiveModel);
+  const contextLimit = getContextLimit(modelForTokenLimits);
   const systemPromptTokens =
     estimateTokens(systemPrompt) +
     (activeTools?.reduce(
@@ -440,7 +455,7 @@ export async function invokeAgent(
           : await o.getApiKeyForSpecificProvider(db, effectiveProviderId),
       assistantName: o.assistantName,
       contextCompression: o.contextCompressionEnabled,
-      contextLimit: getContextLimit(effectiveModel),
+      contextLimit: getContextLimit(modelForTokenLimits),
       enabledTools: activeTools,
       groupId: executionGroupId,
       isScheduledTask: o.schedulerTriggeredGroups.has(groupId),

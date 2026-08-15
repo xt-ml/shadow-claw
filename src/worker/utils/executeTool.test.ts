@@ -150,6 +150,7 @@ describe("executeTool.js", () => {
       DEFAULT_DEV_PORT: 8888,
       DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
       DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
+      DEFAULT_PROMPT_API_FALLBACK_MODEL: "onnx-community/Qwen3-0.6B-ONNX",
       DEFAULT_GROUP_ID: "default",
       LLAMAFILE_PROXY_URL: "/proxy/llamafile",
       PROVIDERS: [],

@@ -1148,3 +1148,173 @@ describe("shadow-claw-chat utility methods", () => {
     expect(instance.clampInputAreaHeight(100)).toBe(100);
   });
 });
+
+describe("shadow-claw-chat prompt api onboarding", () => {
+  let ShadowClawChat: any;
+  let mockDb: any;
+  let storedConfig: Record<string, string>;
+
+  beforeAll(async () => {
+    const mod = await import("./shadow-claw-chat.js");
+    ShadowClawChat = mod.ShadowClawChat;
+  });
+
+  beforeEach(() => {
+    storedConfig = {};
+    mockDb = {
+      transaction: jest.fn().mockImplementation((..._args: any[]) => {
+        return {
+          objectStore: jest.fn().mockReturnValue({
+            get: jest.fn().mockImplementation((...getArgs: any[]) => {
+              const key = getArgs[0];
+              const req: any = {
+                result:
+                  storedConfig[key] !== undefined
+                    ? { key, value: storedConfig[key] }
+                    : undefined,
+              };
+              queueMicrotask(() => req.onsuccess?.({ target: req }));
+              return req;
+            }),
+            put: jest.fn().mockImplementation((...putArgs: any[]) => {
+              const val = putArgs[0];
+              storedConfig[val.key] = val.value;
+              const req: any = { result: val.key };
+              queueMicrotask(() => req.onsuccess?.({ target: req }));
+              return req;
+            }),
+          }),
+        };
+      }),
+    };
+    setDB(mockDb);
+  });
+
+  it("should not open dialog if onboarding has already been seen", async () => {
+    storedConfig["prompt_api_onboarding_seen"] = "true";
+    const instance = Object.create(ShadowClawChat.prototype);
+    instance.db = mockDb;
+    const mockShadowRoot: any = {
+      querySelector: jest.fn(),
+      querySelectorAll: jest.fn().mockReturnValue([]),
+    };
+    Object.defineProperty(instance, "shadowRoot", { value: mockShadowRoot });
+    instance.ensureShadowDialogs = jest.fn();
+
+    await instance.checkPromptApiOnboarding.call(instance);
+
+    expect(mockShadowRoot.querySelector).not.toHaveBeenCalled();
+  });
+
+  it("should open dialog and set fallback model if onboarding has not been seen", async () => {
+    storedConfig["prompt_api_fallback_model"] =
+      "onnx-community/gemma-3-1b-it-ONNX-GQA";
+
+    const mockDialog: any = {
+      showModal: jest.fn(),
+    };
+    const mockStatusEl: any = { innerHTML: "" };
+    const mockSelectEl: any = { value: "" };
+
+    const instance = Object.create(ShadowClawChat.prototype);
+    instance.db = mockDb;
+    const mockShadowRoot: any = {
+      querySelector: jest.fn().mockImplementation((...args: any[]) => {
+        const selector = args[0];
+        if (selector === '[data-info="prompt-api-status"]') return mockStatusEl;
+        if (
+          selector === '[data-setting="prompt-api-onboarding-fallback-model"]'
+        )
+          return mockSelectEl;
+        if (
+          selector ===
+          'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]'
+        )
+          return mockDialog;
+        return null;
+      }),
+      querySelectorAll: jest.fn().mockReturnValue([]),
+    };
+    Object.defineProperty(instance, "shadowRoot", { value: mockShadowRoot });
+    instance.ensureShadowDialogs = jest.fn();
+
+    await instance.checkPromptApiOnboarding.call(instance);
+
+    expect(mockSelectEl.value).toBe("onnx-community/gemma-3-1b-it-ONNX-GQA");
+    expect(mockDialog.showModal).toHaveBeenCalledTimes(1);
+  });
+
+  it("should confirm onboarding and persist model selection and seen flag", async () => {
+    const mockDialog: any = {
+      close: jest.fn(),
+    };
+    const mockSelectEl: any = { value: "onnx-community/Qwen3-0.6B-ONNX" };
+
+    const instance = Object.create(ShadowClawChat.prototype);
+    instance.db = mockDb;
+    const mockShadowRoot: any = {
+      querySelector: jest.fn().mockImplementation((...args: any[]) => {
+        const selector = args[0];
+        if (
+          selector === '[data-setting="prompt-api-onboarding-fallback-model"]'
+        )
+          return mockSelectEl;
+        if (
+          selector ===
+          'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]'
+        )
+          return mockDialog;
+        return null;
+      }),
+      querySelectorAll: jest.fn().mockReturnValue([]),
+    };
+    Object.defineProperty(instance, "shadowRoot", { value: mockShadowRoot });
+
+    await instance.confirmPromptApiOnboarding.call(instance);
+
+    expect(storedConfig["prompt_api_fallback_model"]).toBe(
+      "onnx-community/Qwen3-0.6B-ONNX",
+    );
+    expect(storedConfig["prompt_api_onboarding_seen"]).toBe("true");
+    expect(mockDialog.close).toHaveBeenCalledTimes(1);
+  });
+
+  it("should bypass onboarding to settings, persisting seen flag and dispatching navigation", async () => {
+    const mockDialog: any = {
+      close: jest.fn(),
+    };
+
+    const instance = Object.create(ShadowClawChat.prototype);
+    instance.db = mockDb;
+    const mockShadowRoot: any = {
+      querySelector: jest.fn().mockImplementation((...args: any[]) => {
+        const selector = args[0];
+        if (
+          selector ===
+          'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]'
+        )
+          return mockDialog;
+        return null;
+      }),
+      querySelectorAll: jest.fn().mockReturnValue([]),
+    };
+    Object.defineProperty(instance, "shadowRoot", { value: mockShadowRoot });
+
+    const navigateEvents: CustomEvent[] = [];
+    const navListener = (e: Event) => {
+      navigateEvents.push(e as CustomEvent);
+    };
+    document.addEventListener("shadow-claw-navigate", navListener);
+
+    try {
+      await instance.bypassPromptApiOnboardingToSettings.call(instance);
+
+      expect(storedConfig["prompt_api_onboarding_seen"]).toBe("true");
+      expect(mockDialog.close).toHaveBeenCalledTimes(1);
+      expect(navigateEvents.length).toBe(1);
+      expect(navigateEvents[0].detail).toEqual({ page: "settings" });
+    } finally {
+      document.removeEventListener("shadow-claw-navigate", navListener);
+    }
+  });
+});

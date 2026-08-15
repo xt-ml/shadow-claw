@@ -56,6 +56,7 @@ describe("handleInvoke.js", () => {
 
     jest.unstable_mockModule("../../config/config.js", () => ({
       DEFAULT_MAX_ITERATIONS: 50,
+      DEFAULT_PROMPT_API_FALLBACK_MODEL: "onnx-community/Qwen3-0.6B-ONNX",
       getProvider: mockGetProvider,
     }));
 

@@ -103,7 +103,14 @@ To prevent infinite execution loops, the system enforces a strict recursion guar
 - **Identity Transform Policy:** The primary Trusted Types policy's `createHTML` callback in `src/security/trusted-types.ts` is intentionally implemented as an identity transform `(input) => input`. This prevents double-sanitization and preserves caller-specified custom sanitization options (such as allowing `blob:` URLs for relative workspace media previews) that would otherwise be lost.
 - **Default Trusted Types Policy:** Use `ensureDefaultTrustedTypesPolicy()` from `src/security/default-trusted-types-policy.ts` to register the `"default"` Trusted Types policy idempotently. It uses `trustedTypes.getPolicy("default")` before attempting `createPolicy`, so it is safe to call from multiple modules (including after HMR). Use `toDefaultTrustedScriptUrl()` for script URL sinks such as Workbox service worker registration. Both are called as early as possible from `src/core/theme-init.ts`.
 - **Custom Purify Options:** When rendering media resolved relative to the workspace, pass custom DOMPurify configurations extending the standard `ALLOWED_URI_REGEXP` to allow `blob:` URIs safely.
-- **Iframe Embed Allowlists:** Markdown and HTML preview work should preserve the Settings-backed iframe host allowlist in `src/security/iframe-sanitizer.ts`; update the sanitizer tests and docs when adding or changing embed hosts.
+- **Iframe Embed Allowlists**
+
+Markdown and HTML preview work should preserve the Settings-backed iframe host allowlist in `src/security/iframe-sanitizer.ts`; update the sanitizer tests and docs when adding or changing embed hosts.
+
+### Local Inference & Transformers.js
+
+- **Hardware Acceleration**: Ensure CPU/WASM fallback explicitly uses `q4` to avoid software emulation. Reject WebGPU adapters lacking `shader-f16`.
+- **Chat Templates**: Local providers use dynamic Jinja templating (`chat_template.jinja`) fetched with the tokenizer via the Hugging Face API. Do not hardcode chat templates.
 
 ### Static Main Site, Routing & Page Suppression
 

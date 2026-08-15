@@ -1,5 +1,6 @@
 import {
   CONFIG_KEYS,
+  DEFAULT_PROMPT_API_FALLBACK_MODEL,
   DEFAULT_SUBAGENT_MAX_PARALLEL,
   DEFAULT_SUBAGENT_WORKSPACE_MODE,
 } from "../../../config/config.js";
@@ -13,11 +14,17 @@ import { setSanitizedHtml } from "../../../security/trusted-types.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
 import { getRecommendedMaxTokens } from "./utils/getRecommendedMaxTokens.js";
+import { fetchTokenizerConfig } from "../../../subsystems/providers/utils/chatTemplate.js";
 
 import {
   buildLlamafileHelpDialogOptions,
   LLAMAFILE_EXPECTED_DIR,
 } from "../../common/help/llamafile.js";
+
+import {
+  isNativePromptApiSupported,
+  isPromptApiPotentiallySupported,
+} from "../../common/help/prompt-api.js";
 
 import {
   compareLocalModelCandidates,
@@ -113,9 +120,22 @@ export class ShadowClawLlm extends ShadowClawElement {
       return;
     }
 
+    const providerId = this.orchestrator.provider;
+    const modelId = this.orchestrator.model;
+    let fallbackModelId: string | undefined;
+
+    if (providerId === "prompt_api") {
+      const fallbackSelect = root.querySelector(
+        '[data-setting="prompt-api-fallback-select"]',
+      ) as HTMLSelectElement | null;
+      fallbackModelId =
+        fallbackSelect?.value || DEFAULT_PROMPT_API_FALLBACK_MODEL;
+    }
+
     const recommendation = getRecommendedMaxTokens(
-      this.orchestrator.provider,
-      this.orchestrator.model,
+      providerId,
+      modelId,
+      fallbackModelId,
     );
 
     input.value = String(recommendation.recommended);
@@ -133,6 +153,18 @@ export class ShadowClawLlm extends ShadowClawElement {
     root
       .querySelector('[data-setting="provider-select"]')
       ?.addEventListener("change", () => this.onProviderChange());
+
+    root
+      .querySelector('[data-setting="prompt-api-fallback-select"]')
+      ?.addEventListener("change", (e) => {
+        const target = e.target as HTMLSelectElement | null;
+        if (target?.value) {
+          fetchTokenizerConfig(target.value)
+            .then(() => this.updateMaxTokensUI())
+            .catch(() => {});
+        }
+        this.updateMaxTokensUI();
+      });
 
     root
       .querySelector('[data-action="save-llm-provider"]')
@@ -528,8 +560,22 @@ export class ShadowClawLlm extends ShadowClawElement {
 
     const providerId = this.orchestrator.provider;
     const modelId = this.orchestrator.model;
+    let fallbackModelId: string | undefined;
+
+    if (providerId === "prompt_api") {
+      const fallbackSelect = root.querySelector(
+        '[data-setting="prompt-api-fallback-select"]',
+      ) as HTMLSelectElement | null;
+      fallbackModelId =
+        fallbackSelect?.value || DEFAULT_PROMPT_API_FALLBACK_MODEL;
+    }
+
     const currentValue = this.orchestrator.maxTokens;
-    const recommendation = getRecommendedMaxTokens(providerId, modelId);
+    const recommendation = getRecommendedMaxTokens(
+      providerId,
+      modelId,
+      fallbackModelId,
+    );
 
     if (input) {
       input.value = String(currentValue);
@@ -649,8 +695,10 @@ export class ShadowClawLlm extends ShadowClawElement {
       '[data-setting="prompt-api-fallback-group"]',
     ) as HTMLElement | null;
     if (promptApiFallbackGroup) {
+      const isAvailable =
+        isNativePromptApiSupported() || isPromptApiPotentiallySupported();
       promptApiFallbackGroup.style.display =
-        currentProvider === "prompt_api" ? "block" : "none";
+        currentProvider === "prompt_api" && !isAvailable ? "block" : "none";
     }
 
     const modelSelect = root.querySelector(
@@ -1266,7 +1314,7 @@ export class ShadowClawLlm extends ShadowClawElement {
         this.updateBedrockSettingsVisibility(providerId);
         this.updateMeshLlmSettingsVisibility(providerId);
         this.updateTransformersJsSettingsVisibility(providerId);
-        this.renderTransformersJsSettings();
+        await this.renderTransformersJsSettings();
 
         const selectedText =
           providerSelect.selectedOptions[0]?.text || providerId;
@@ -1344,7 +1392,7 @@ export class ShadowClawLlm extends ShadowClawElement {
     this.updateMeshLlmSettingsVisibility(currentProvider);
     this.renderMeshLlmSettings();
     this.updateTransformersJsSettingsVisibility(currentProvider);
-    this.renderTransformersJsSettings();
+    await this.renderTransformersJsSettings();
     void this.renderBuiltinAiSettings();
 
     const promptApiFallbackSelect = root.querySelector(
@@ -1356,7 +1404,35 @@ export class ShadowClawLlm extends ShadowClawElement {
         CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
       );
       promptApiFallbackSelect.value =
-        configuredFallback || "onnx-community/Qwen3-0.6B-ONNX";
+        configuredFallback || DEFAULT_PROMPT_API_FALLBACK_MODEL;
+      this.updateMaxTokensUI();
+
+      if (promptApiFallbackSelect.value) {
+        fetchTokenizerConfig(promptApiFallbackSelect.value)
+          .then(() => {
+            this.updateMaxTokensUI();
+          })
+          .catch(() => {});
+      }
+    }
+
+    const promptApiDeviceSelect = root.querySelector(
+      '[data-setting="prompt-api-device-select"]',
+    ) as HTMLSelectElement | null;
+    if (promptApiDeviceSelect) {
+      const configuredBackend =
+        (await getConfig(this.db, CONFIG_KEYS.PROMPT_API_BACKEND)) || "auto";
+      promptApiDeviceSelect.value = configuredBackend;
+    }
+
+    const promptApiDtypeSelect = root.querySelector(
+      '[data-setting="prompt-api-dtype-select"]',
+    ) as HTMLSelectElement | null;
+    if (promptApiDtypeSelect) {
+      const configuredDtype =
+        (await getConfig(this.db, CONFIG_KEYS.PROMPT_API_DTYPE_STRATEGY)) ||
+        "auto";
+      promptApiDtypeSelect.value = configuredDtype;
     }
 
     // Load streaming toggle
@@ -1458,20 +1534,20 @@ export class ShadowClawLlm extends ShadowClawElement {
     const { CONFIG_KEYS } = await import("../../../config/config.js");
 
     const backend =
-      (await getConfig(this.db, CONFIG_KEYS.TRANSFORMERS_JS_BACKEND)) || "cpu";
+      (await getConfig(this.db, CONFIG_KEYS.TRANSFORMERS_JS_BACKEND)) || "auto";
     const dtypeStrategy =
       (await getConfig(this.db, CONFIG_KEYS.TRANSFORMERS_JS_DTYPE_STRATEGY)) ||
       "auto";
 
     const backendSelect = root.querySelector(
-      '[data-setting="transformers-js-backend"]',
+      '[data-setting="transformers-js-backend"], [data-setting="transformers-js-device-select"]',
     ) as HTMLSelectElement | null;
     if (backendSelect) {
       backendSelect.value = backend;
     }
 
     const dtypeStrategySelect = root.querySelector(
-      '[data-setting="transformers-js-dtype-strategy"]',
+      '[data-setting="transformers-js-dtype-strategy"], [data-setting="transformers-js-dtype-select"]',
     ) as HTMLSelectElement | null;
     if (dtypeStrategySelect) {
       dtypeStrategySelect.value = dtypeStrategy;
@@ -1826,21 +1902,50 @@ export class ShadowClawLlm extends ShadowClawElement {
       return;
     }
 
-    const promptApiFallbackSelect = root.querySelector(
-      '[data-setting="prompt-api-fallback-select"]',
-    ) as HTMLSelectElement | null;
-    if (
-      promptApiFallbackSelect &&
-      this.orchestrator.provider === "prompt_api"
-    ) {
-      try {
-        await setConfig(
-          this.db,
-          CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
-          promptApiFallbackSelect.value,
-        );
-      } catch (err) {
-        console.warn("Error saving prompt api fallback model", err);
+    if (this.orchestrator.provider === "prompt_api") {
+      const promptApiFallbackSelect = root.querySelector(
+        '[data-setting="prompt-api-fallback-select"]',
+      ) as HTMLSelectElement | null;
+      if (promptApiFallbackSelect) {
+        try {
+          await setConfig(
+            this.db,
+            CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+            promptApiFallbackSelect.value,
+          );
+        } catch (err) {
+          console.warn("Error saving prompt api fallback model", err);
+        }
+      }
+
+      const promptApiDeviceSelect = root.querySelector(
+        '[data-setting="prompt-api-device-select"]',
+      ) as HTMLSelectElement | null;
+      if (promptApiDeviceSelect) {
+        try {
+          await setConfig(
+            this.db,
+            CONFIG_KEYS.PROMPT_API_BACKEND,
+            promptApiDeviceSelect.value,
+          );
+        } catch (err) {
+          console.warn("Error saving prompt api backend", err);
+        }
+      }
+
+      const promptApiDtypeSelect = root.querySelector(
+        '[data-setting="prompt-api-dtype-select"]',
+      ) as HTMLSelectElement | null;
+      if (promptApiDtypeSelect) {
+        try {
+          await setConfig(
+            this.db,
+            CONFIG_KEYS.PROMPT_API_DTYPE_STRATEGY,
+            promptApiDtypeSelect.value,
+          );
+        } catch (err) {
+          console.warn("Error saving prompt api dtype strategy", err);
+        }
       }
     }
 
@@ -2029,11 +2134,11 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     const backendSelect = root.querySelector(
-      '[data-setting="transformers-js-backend"]',
+      '[data-setting="transformers-js-backend"], [data-setting="transformers-js-device-select"]',
     ) as HTMLSelectElement | null;
-    const backend = backendSelect?.value || "cpu";
+    const backend = backendSelect?.value || "auto";
     const dtypeStrategySelect = root.querySelector(
-      '[data-setting="transformers-js-dtype-strategy"]',
+      '[data-setting="transformers-js-dtype-strategy"], [data-setting="transformers-js-dtype-select"]',
     ) as HTMLSelectElement | null;
     const dtypeStrategy = dtypeStrategySelect?.value || "auto";
 

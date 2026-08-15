@@ -6,7 +6,12 @@ import {
   env,
 } from "@huggingface/transformers";
 
-import { createModelCacheFetch } from "../../subsystems/providers/utils/index.js";
+import {
+  createModelCacheFetch,
+  normalizeMessagesForChatTemplate,
+  mapToolsForChatTemplate,
+} from "../../subsystems/providers/utils/index.js";
+
 import {
   getPreferredDtypes,
   normalizeDtypeStrategy,
@@ -142,9 +147,64 @@ async function loadModel(
         ? navigatorWithMemory.deviceMemory
         : null;
 
-    // Map device to Transformers.js format
     let targetDevice: any = device;
-    if (isWebNN) {
+    if (device === "auto") {
+      let hasGpu = false;
+      if (typeof navigator !== "undefined" && "gpu" in navigator) {
+        try {
+          const adapter = await (navigator as any).gpu.requestAdapter({
+            powerPreference: "high-performance",
+          });
+          if (
+            adapter &&
+            adapter.isFallbackAdapter !== true &&
+            (!adapter.features || adapter.features.has("shader-f16"))
+          ) {
+            const info =
+              adapter.info ||
+              (typeof adapter.requestAdapterInfo === "function"
+                ? await adapter.requestAdapterInfo()
+                : null);
+            const vendor = (info?.vendor || "").toLowerCase();
+            const arch = (info?.architecture || "").toLowerCase();
+            const desc = (info?.description || "").toLowerCase();
+            const dev = (info?.device || "").toLowerCase();
+            const adapterType = (
+              (info as any)?.adapterType ||
+              (info as any)?.deviceType ||
+              (info as any)?.type ||
+              ""
+            ).toLowerCase();
+
+            if (
+              adapterType !== "cpu" &&
+              adapterType !== "software" &&
+              arch !== "swiftshader" &&
+              arch !== "llvmpipe" &&
+              arch !== "softpipe" &&
+              arch !== "lavapipe" &&
+              arch !== "cpu" &&
+              !vendor.includes("swiftshader") &&
+              !desc.includes("llvmpipe") &&
+              !desc.includes("softpipe") &&
+              !desc.includes("lavapipe") &&
+              !desc.includes("software") &&
+              !desc.includes("basic render") &&
+              !dev.includes("llvmpipe") &&
+              !dev.includes("softpipe") &&
+              !dev.includes("lavapipe") &&
+              !dev.includes("swiftshader") &&
+              !dev.includes("basic render")
+            ) {
+              hasGpu = true;
+            }
+          }
+        } catch {
+          hasGpu = false;
+        }
+      }
+      targetDevice = hasGpu ? "webgpu" : "wasm";
+    } else if (isWebNN) {
       targetDevice = "webnn";
     } else if (isWebGPU) {
       targetDevice = "webgpu";
@@ -154,7 +214,7 @@ async function loadModel(
 
     const strategy = normalizeDtypeStrategy(dtypeStrategy);
     const dtypeCandidates = getPreferredDtypes(
-      device,
+      targetDevice,
       modelId,
       deviceMemoryGb,
       strategy,
@@ -192,6 +252,52 @@ async function loadModel(
           `Model load failed for dtype '${dtype}', trying next candidate...`,
           error,
         );
+      }
+    }
+
+    if (!model && (targetDevice === "webgpu" || targetDevice === "webnn")) {
+      console.warn(
+        `Hardware accelerated backend (${targetDevice}) failed. Retrying with CPU/WASM fallback (q4)...`,
+      );
+      targetDevice = "wasm";
+      const wasmCandidates = getPreferredDtypes(
+        "wasm",
+        modelId,
+        deviceMemoryGb,
+        strategy,
+      );
+      for (const dtype of wasmCandidates) {
+        try {
+          model = await AutoModelForCausalLM.from_pretrained(modelId, {
+            device: "wasm",
+            dtype,
+            progress_callback: (info: any) => {
+              if (info.status === "progress") {
+                self.postMessage({
+                  type: "progress",
+                  payload: {
+                    groupId,
+                    status: "running",
+                    progress: info.progress / 100,
+                    message: `Downloading model weights (${dtype})... ${Math.round(info.progress)}%`,
+                  },
+                });
+              }
+            },
+            session_options: {
+              logSeverityLevel: 0,
+            },
+          });
+
+          break;
+        } catch (error) {
+          lastModelLoadError = error;
+
+          console.warn(
+            `WASM fallback load failed for dtype '${dtype}', trying next candidate...`,
+            error,
+          );
+        }
       }
     }
 
@@ -241,59 +347,8 @@ async function generate(
 
   const tokenizer = processor.tokenizer || processor;
 
-  // Map ShadowClaw messages to Transformers.js format
-  const chatMessages = messages.map((m: any) => {
-    let content = m.content;
-    if (Array.isArray(content)) {
-      content = content
-        .map((block: any) => {
-          if (block.type === "text") {
-            return block.text;
-          }
-
-          if (block.type === "tool_use") {
-            return `[TOOL_CALL ${block.name}] ${JSON.stringify(block.input)}`;
-          }
-
-          if (block.type === "tool_result") {
-            if (typeof block.content === "string") {
-              return `[TOOL_RESULT] ${block.content}`;
-            }
-
-            if (Array.isArray(block.content)) {
-              const textParts = block.content
-                .filter((b: any) => b.type === "text")
-                .map((b: any) => b.text)
-                .join("\n");
-
-              return `[TOOL_RESULT] ${textParts || "[image content]"}`;
-            }
-
-            return `[TOOL_RESULT] ${JSON.stringify(block.content)}`;
-          }
-
-          return "";
-        })
-        .join("\n");
-    }
-
-    return {
-      role: m.role === "assistant" ? "assistant" : "user",
-      content: content,
-    };
-  });
-
-  const mappedTools =
-    tools && tools.length > 0
-      ? tools.map((t) => ({
-          type: "function",
-          function: {
-            name: t.name,
-            description: t.description,
-            parameters: t.input_schema,
-          },
-        }))
-      : undefined;
+  const chatMessages = normalizeMessagesForChatTemplate(messages);
+  const mappedTools = mapToolsForChatTemplate(tools);
 
   const inputs = tokenizer.apply_chat_template(chatMessages, {
     add_generation_prompt: true,

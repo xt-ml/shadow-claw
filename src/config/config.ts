@@ -835,32 +835,32 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     format: "openai",
     apiKeyHeader: "Authorization",
     headers: {},
-    defaultModel: "onnx-community/gemma-4-E2B-it-ONNX",
+    defaultModel: "onnx-community/Qwen3-0.6B-ONNX",
     modelsUrl: TRANSFORMERS_JS_PROXY_MODELS_URL,
     models: [
-      "onnx-community/gemma-3-1b-it-ONNX",
-      "onnx-community/gemma-3-1b-it-ONNX-GQA",
-      "onnx-community/gemma-4-E2B-it-ONNX",
-      "onnx-community/gemma-4-E4B-it-ONNX",
-      "onnx-community/gemma-4-E9B-it-ONNX",
-      "onnx-community/gemma-4-E27B-it-ONNX",
-      "onnx-community/gemma-4-12B-it-ONNX",
-      "onnx-community/gemma-4-E2B-it-qat-mobile-ONNX",
-      "onnx-community/gemma-4-E4B-it-qat-mobile-ONNX",
-      "onnx-community/gemma-4-12B-it-qat-mobile-ONNX",
-      "onnx-community/Phi-3.5-mini-instruct-onnx-web",
-      "onnx-community/Phi-4-mini-instruct-ONNX",
-      "onnx-community/Llama-3.2-1B-Instruct-ONNX",
-      "onnx-community/Llama-3.2-3B-Instruct-ONNX",
-      "webgpu/Qwen3-4B-ONNX",
-      "onnx-community/Qwen3-0.6B-ONNX",
       "onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX",
+      "onnx-community/gemma-3-1b-it-ONNX-GQA",
+      "onnx-community/gemma-3-1b-it-ONNX",
+      "onnx-community/gemma-4-E2B-it-ONNX",
+      "onnx-community/gemma-4-E2B-it-qat-mobile-ONNX",
+      "onnx-community/gemma-4-E4B-it-ONNX",
+      "onnx-community/gemma-4-E4B-it-qat-mobile-ONNX",
+      "onnx-community/gemma-4-E9B-it-ONNX",
+      "onnx-community/gemma-4-12B-it-ONNX",
+      "onnx-community/gemma-4-12B-it-qat-mobile-ONNX",
+      "onnx-community/gemma-4-E27B-it-ONNX",
       "onnx-community/gpt-oss-20b-ONNX",
       "onnx-community/LFM2-1.2B-ONNX",
-      "LiquidAI/LFM2.5-1.2B-Thinking-ONNX",
-      "HuggingFaceTB/SmolLM3-3B-ONNX",
+      "onnx-community/Llama-3.2-1B-Instruct-ONNX",
+      "onnx-community/Llama-3.2-3B-Instruct-ONNX",
+      "onnx-community/Phi-3.5-mini-instruct-onnx-web",
+      "onnx-community/Phi-4-mini-instruct-ONNX",
+      "onnx-community/Qwen3-0.6B-ONNX",
       "onnx-community/Qwen3.5-0.8B-ONNX-OPT",
       "onnx-community/Qwen3.5-4B-ONNX-OPT",
+      "HuggingFaceTB/SmolLM3-3B-ONNX",
+      "LiquidAI/LFM2.5-1.2B-Thinking-ONNX",
+      "webgpu/Qwen3-4B-ONNX",
     ],
     requiresApiKey: false,
     supportsStreaming: true,
@@ -872,9 +872,10 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
     format: "transformers_js",
     apiKeyHeader: "Authorization",
     headers: {},
-    defaultModel: "onnx-community/gemma-4-E2B-it-ONNX",
+    defaultModel: "onnx-community/Qwen3-0.6B-ONNX",
     modelsUrl: "https://huggingface.co/api/models?author=onnx-community",
     models: [
+      "onnx-community/Qwen3-0.6B-ONNX",
       "onnx-community/gemma-3-1b-it-ONNX",
       "onnx-community/gemma-3-1b-it-ONNX-GQA",
       "onnx-community/gemma-4-E2B-it-ONNX",
@@ -890,7 +891,6 @@ export const PROVIDERS: Record<string, ProviderConfig> = {
       "onnx-community/Llama-3.2-1B-Instruct-ONNX",
       "onnx-community/Llama-3.2-3B-Instruct-ONNX",
       "webgpu/Qwen3-4B-ONNX",
-      "onnx-community/Qwen3-0.6B-ONNX",
       "onnx-community/DeepSeek-R1-Distill-Qwen-1.5B-ONNX",
       "onnx-community/gpt-oss-20b-ONNX",
       "onnx-community/LFM2-1.2B-ONNX",
@@ -1053,7 +1053,10 @@ export const CONFIG_KEYS = {
   PAGES_LIST: "pages_list",
   PASSPHRASE_SALT: "passphrase_salt",
   PASSPHRASE_VERIFY: "passphrase_verify",
+  PROMPT_API_BACKEND: "prompt_api_backend",
+  PROMPT_API_DTYPE_STRATEGY: "prompt_api_dtype_strategy",
   PROMPT_API_FALLBACK_MODEL: "prompt_api_fallback_model",
+  PROMPT_API_ONBOARDING_SEEN: "prompt_api_onboarding_seen",
   PEERJS_MY_ALIAS: "peerjs_my_alias",
   PEERJS_MY_PEER_ID: "peerjs_my_peer_id",
   PEERJS_PEER_ALIASES: "peerjs_peer_aliases",
@@ -1122,3 +1125,22 @@ export const DEFAULT_SUBAGENT_MAX_PARALLEL = 5;
 
 /** Default subagent workspace mode */
 export const DEFAULT_SUBAGENT_WORKSPACE_MODE = "automatic";
+
+/** Default Prompt API fallback model */
+export const DEFAULT_PROMPT_API_FALLBACK_MODEL =
+  "onnx-community/Qwen3-0.6B-ONNX";
+
+/** Default Prompt API fallback backend */
+export const DEFAULT_PROMPT_API_BACKEND = "auto";
+
+/** Default Prompt API fallback dtype strategy */
+export const DEFAULT_PROMPT_API_DTYPE_STRATEGY = "auto";
+
+/** Default Transformers.js model */
+export const DEFAULT_TRANSFORMERS_JS_MODEL = "onnx-community/Qwen3-0.6B-ONNX";
+
+/** Default Transformers.js backend */
+export const DEFAULT_TRANSFORMERS_JS_BACKEND = "auto";
+
+/** Default Transformers.js dtype strategy */
+export const DEFAULT_TRANSFORMERS_JS_DTYPE_STRATEGY = "auto";

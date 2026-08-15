@@ -2,6 +2,7 @@ import { detectProviderHelpType } from "../../../components/common/help/provider
 import {
   CONFIG_KEYS,
   DEFAULT_GROUP_ID,
+  DEFAULT_PROMPT_API_FALLBACK_MODEL,
   getProvider,
 } from "../../../config/config.js";
 
@@ -113,7 +114,20 @@ export async function compactContext(
     peerState,
   );
 
-  const contextLimit = getContextLimit(effectiveModel);
+  let modelForContext = effectiveModel;
+  if (
+    effectiveProviderId === "prompt_api" &&
+    (effectiveModel === "browser-built-in" || !effectiveModel) &&
+    !isPromptApiSupported()
+  ) {
+    const configuredFallback = await getConfig(
+      db,
+      CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+    );
+    modelForContext = configuredFallback || DEFAULT_PROMPT_API_FALLBACK_MODEL;
+  }
+
+  const contextLimit = getContextLimit(modelForContext);
   const systemPromptTokens = estimateTokens(systemPrompt);
   const allMessages = await buildConversationMessages(groupId, 200);
   const dynamicContext = buildDynamicContext(allMessages, {
@@ -221,7 +235,7 @@ export async function compactContext(
       apiKey: currentApiKey,
       assistantName: o.assistantName,
       contextCompression: o.contextCompressionEnabled,
-      contextLimit: getContextLimit(effectiveModel),
+      contextLimit: getContextLimit(modelForContext),
       groupId,
       memory,
       messages,

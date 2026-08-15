@@ -151,6 +151,111 @@
       </div>
     </div>
 
+    <shadow-claw-dialog
+      dialog-class="chat__prompt-api-dialog"
+      dialog-aria-label="Prompt API Onboarding"
+    >
+      <form class="chat__prompt-api-form" method="dialog">
+        <div class="chat__prompt-api-header">
+          <div class="chat__prompt-api-icon" aria-hidden="true">&#10024;</div>
+          <div>
+            <h3 class="chat__prompt-api-title">
+              Welcome to Local AI (Prompt API)
+            </h3>
+            <p class="chat__prompt-api-subtitle">
+              On-device intelligence built directly into your browser.
+            </p>
+          </div>
+        </div>
+
+        <div class="chat__prompt-api-body">
+          <section class="chat__prompt-api-card">
+            <h4>&#128274; 100% On-Device</h4>
+            <p>
+              ShadowClaw defaults to the browser-native
+              <strong>Prompt API</strong>. Models execute directly on your
+              hardware with no API keys and no subscription costs.
+            </p>
+          </section>
+
+          <section class="chat__prompt-api-card chat__prompt-api-status-card">
+            <h4>&#127760; Browser Capabilities</h4>
+            <div
+              class="chat__prompt-api-status-content"
+              data-info="prompt-api-status"
+            >
+              <!-- Populated dynamically based on native Prompt API support -->
+            </div>
+          </section>
+
+          <section class="chat__prompt-api-card">
+            <h4>&#128229; Local Model Download</h4>
+            <p>
+              Running AI locally requires downloading the model weights into
+              your browser's local cache on first use. A progress bar will show
+              download status in the chat. Once loaded, the model runs
+              completely offline.
+            </p>
+          </section>
+
+          <section class="chat__prompt-api-card chat__prompt-api-fallback-card">
+            <h4>&#9881;&#65039; Default Prompt API Model</h4>
+            <p class="chat__prompt-api-model-desc">
+              Choose your default Prompt API fallback model. If native browser
+              Prompt API is not enabled, ShadowClaw will run this local model
+              directly in the browser:
+            </p>
+            <div class="chat__prompt-api-select-group">
+              <label class="form-label" for="prompt-api-fallback-model-select"
+                >Model Choice</label
+              >
+              <select
+                id="prompt-api-fallback-model-select"
+                class="form-select chat__prompt-api-select"
+                data-setting="prompt-api-onboarding-fallback-model"
+              >
+                <option value="onnx-community/Qwen3-0.6B-ONNX" selected>
+                  onnx-community/Qwen3-0.6B-ONNX &mdash; Recommended (Fast,
+                  Compact &amp; Tool Calling)
+                </option>
+                <option value="onnx-community/gemma-3-1b-it-ONNX-GQA">
+                  onnx-community/gemma-3-1b-it-ONNX-GQA &mdash; Alternative (1B
+                  Parameters, Larger Download)
+                </option>
+              </select>
+            </div>
+          </section>
+
+          <section class="chat__prompt-api-card">
+            <h4>&#127760; Prefer Cloud AI or Another Provider?</h4>
+            <p>
+              Local AI with Prompt API is free and private, but not your only
+              option. ShadowClaw also supports OpenRouter, Anthropic, OpenAI,
+              Google Gemini, and AWS Bedrock. You can configure any provider at
+              any time in Settings.
+            </p>
+          </section>
+        </div>
+
+        <div class="chat__prompt-api-actions">
+          <button
+            type="button"
+            class="chat__prompt-api-secondary-btn"
+            data-action="configure-other-provider"
+          >
+            &#9881;&#65039; Configure Other Provider in Settings
+          </button>
+          <button
+            type="submit"
+            class="chat__prompt-api-confirm-btn"
+            data-action="confirm-prompt-api-onboarding"
+          >
+            Continue with Prompt API
+          </button>
+        </div>
+      </form>
+    </shadow-claw-dialog>
+
     <input
       class="chat__restore-input"
       type="file"

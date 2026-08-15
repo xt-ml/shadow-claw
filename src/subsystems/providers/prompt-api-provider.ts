@@ -16,6 +16,7 @@ import {
   PromptApiProgressAggregator,
   setModelCacheProgressHook,
   clearModelCacheProgressHook,
+  normalizeMessagesForChatTemplate,
 } from "./utils/index.js";
 
 import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent/spawn-subagent.js";
@@ -152,21 +153,7 @@ function buildInitialPrompts(
   systemPrompt: string,
   historyMessages: any[] = [],
 ): any[] {
-  const prompts: any[] = [];
-  const text = String(systemPrompt || "").trim();
-  if (text) {
-    prompts.push({ role: "system", content: text });
-  }
-
-  for (const msg of historyMessages) {
-    const role = msg?.role === "assistant" ? "assistant" : "user";
-    const content = formatMessageContent(msg);
-    if (content) {
-      prompts.push({ role, content });
-    }
-  }
-
-  return prompts;
+  return normalizeMessagesForChatTemplate(historyMessages, systemPrompt);
 }
 
 async function emitModelDownloadProgress(
@@ -246,52 +233,128 @@ function summarizePromptApiSession(
   ].join(" | ");
 }
 
-async function fetchPolyfillTotalSizeBytes(
+export async function fetchPolyfillTotalSizeBytes(
   modelName: string,
   dtype: string,
 ): Promise<number> {
-  const files = [
+  // Step 1: Try Hugging Face tree API for an exact file size manifest
+  try {
+    const treeRes = await fetch(
+      `https://huggingface.co/api/models/${encodeURI(modelName)}/tree/main?recursive=true`,
+    );
+    if (treeRes.ok) {
+      const items = await treeRes.json();
+      if (Array.isArray(items) && items.length > 0) {
+        const files = items.filter((i) => i.type === "file");
+        const metadataFiles = files.filter((f) =>
+          [
+            "config.json",
+            "generation_config.json",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "special_tokens_map.json",
+            "added_tokens.json",
+            "chat_template.jinja",
+            "tokenizer.model",
+          ].includes(f.path),
+        );
+        const metadataSize = metadataFiles.reduce(
+          (acc, f) => acc + (Number(f.size) || 0),
+          0,
+        );
+
+        let onnxFiles = files.filter((f) => {
+          const p = String(f.path || "").toLowerCase();
+          if (
+            !p.endsWith(".onnx") &&
+            !p.includes(".onnx_data") &&
+            !p.includes(".onnx.data") &&
+            !p.includes("_data")
+          ) {
+            return false;
+          }
+          if (dtype) {
+            const cleanDtype = dtype.toLowerCase();
+            if (
+              p.includes(`model_${cleanDtype}.`) ||
+              p.includes(`model_${cleanDtype}_`) ||
+              p.includes(`_${cleanDtype}.`) ||
+              p.includes(`_${cleanDtype}_`) ||
+              p.includes(`/${cleanDtype}/`)
+            ) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (onnxFiles.length === 0) {
+          onnxFiles = files.filter((f) => {
+            const p = String(f.path || "").toLowerCase();
+            return (
+              (p.includes("onnx/model.") ||
+                p.includes("onnx/model_quantized.") ||
+                p.includes("model.")) &&
+              (p.endsWith(".onnx") ||
+                p.includes(".onnx_data") ||
+                p.includes(".onnx.data"))
+            );
+          });
+        }
+
+        const onnxSize = onnxFiles.reduce(
+          (acc, f) => acc + (Number(f.size) || 0),
+          0,
+        );
+        const treeTotal = metadataSize + onnxSize;
+        if (treeTotal > 5 * 1024 * 1024) {
+          return treeTotal;
+        }
+      }
+    }
+  } catch (err) {
+    // Ignore tree API failure and proceed to HEAD fallback
+  }
+
+  // Step 2: Fallback to HEAD requests for candidate files
+  const candidateFiles = [
     "config.json",
+    "generation_config.json",
     "tokenizer.json",
     "tokenizer_config.json",
-    "generation_config.json",
+    "special_tokens_map.json",
+    `onnx/model_${dtype}.onnx`,
+    `onnx/model_${dtype}.onnx_data`,
+    `onnx/model_${dtype}.onnx.data`,
+    `onnx/model.onnx`,
+    `onnx/model.onnx_data`,
+    `onnx/model_quantized.onnx`,
+    `onnx/model_quantized.onnx_data`,
   ];
 
-  const sizes = await Promise.all([
-    ...files.map(async (file) => {
-      try {
-        const res = await fetch(
-          `https://huggingface.co/${modelName}/resolve/main/${file}`,
-          { method: "HEAD" },
-        );
-        if (res.ok) {
-          return parseInt(res.headers.get("content-length") || "0", 10);
-        }
-      } catch {}
-      return 0;
-    }),
-    (async () => {
-      try {
-        let res = await fetch(
-          `https://huggingface.co/${modelName}/resolve/main/onnx/model_${dtype}.onnx`,
-          { method: "HEAD" },
-        );
-        if (!res.ok) {
-          res = await fetch(
-            `https://huggingface.co/${modelName}/resolve/main/onnx/model.onnx`,
+  try {
+    const sizes = await Promise.all(
+      candidateFiles.map(async (file) => {
+        try {
+          const res = await fetch(
+            `https://huggingface.co/${modelName}/resolve/main/${file}`,
             { method: "HEAD" },
           );
-        }
-        if (res.ok) {
-          return parseInt(res.headers.get("content-length") || "0", 10);
-        }
-      } catch {}
-      return 0;
-    })(),
-  ]);
+          if (res.ok) {
+            return parseInt(res.headers.get("content-length") || "0", 10);
+          }
+        } catch {}
+        return 0;
+      }),
+    );
 
-  const total = sizes.reduce((a, b) => a + b, 0);
-  return total > 0 ? total : DEFAULT_PROMPT_API_MODEL_SIZE_BYTES;
+    const headTotal = sizes.reduce((a, b) => a + b, 0);
+    if (headTotal > 5 * 1024 * 1024) {
+      return headTotal;
+    }
+  } catch {}
+
+  return DEFAULT_PROMPT_API_MODEL_SIZE_BYTES;
 }
 
 export type PromptApiSamplingMode =
@@ -521,13 +584,15 @@ async function createPromptSessionWithProgress(
           latestAvailability !== "unavailable" &&
           latestAvailability !== "no"
         ) {
-          await emitModelDownloadProgress(
-            emit,
-            groupId,
-            "running",
-            latestAvailability === "downloading" ? null : 0,
-            "Downloading Prompt API model...",
-          );
+          if (!aggregator.hasEmitted) {
+            await emitModelDownloadProgress(
+              emit,
+              groupId,
+              "running",
+              latestAvailability === "downloading" ? null : 0,
+              "Downloading Prompt API model...",
+            );
+          }
         }
 
         await waitForPromptApiCreateRetry(abortSignal);
@@ -880,41 +945,89 @@ function parseStructured(raw: string): {
   }
 
   // Check for Qwen/Llama XML-like tool calls: <tool_call>{"name": "...", "arguments": ...}</tool_call>
-  const toolCallMatch = text.match(/<tool_call>([\s\S]*?)<\/tool_call>/);
-  if (toolCallMatch) {
-    try {
-      const parsedTool = JSON.parse(toolCallMatch[1]);
-      if (parsedTool.name) {
-        return {
-          type: "tool_use",
-          tool_calls: [
-            {
-              name: parsedTool.name,
-              input: parsedTool.arguments || parsedTool.parameters || {},
-            },
-          ],
-        };
+  const toolCallMatches = [
+    ...text.matchAll(/<tool_call>([\s\S]*?)<\/tool_call>/g),
+  ];
+  if (toolCallMatches.length > 0) {
+    const toolCalls: Array<{
+      id?: string;
+      name: string;
+      input: Record<string, any>;
+    }> = [];
+    for (const match of toolCallMatches) {
+      try {
+        const parsedTool = JSON.parse(match[1].trim());
+        const toolName = parsedTool.name || parsedTool.function?.name;
+        if (toolName) {
+          toolCalls.push({
+            id: parsedTool.id || `call_${Date.now()}_${toolCalls.length}`,
+            name: toolName,
+            input:
+              parsedTool.arguments ||
+              parsedTool.function?.arguments ||
+              parsedTool.parameters ||
+              parsedTool.input ||
+              {},
+          });
+        }
+      } catch {
+        // fallback
       }
-    } catch {
-      // fallback to other parsing if invalid JSON
+    }
+    if (toolCalls.length > 0) {
+      return {
+        type: "tool_use",
+        tool_calls: toolCalls,
+      };
     }
   }
 
+  let obj: any = null;
   try {
-    return JSON.parse(text);
+    obj = JSON.parse(text);
   } catch {
     const start = text.indexOf("{");
     const end = text.lastIndexOf("}");
     if (start >= 0 && end > start) {
       try {
-        return JSON.parse(text.slice(start, end + 1));
+        obj = JSON.parse(text.slice(start, end + 1));
       } catch {
-        return null;
+        obj = null;
       }
     }
-
-    return null;
   }
+
+  if (obj && typeof obj === "object") {
+    if (obj.type === "tool_use" || Array.isArray(obj.tool_calls)) {
+      return {
+        type: "tool_use",
+        tool_calls: Array.isArray(obj.tool_calls) ? obj.tool_calls : [],
+        response: typeof obj.response === "string" ? obj.response : undefined,
+      };
+    }
+
+    const extractedText =
+      typeof obj.response === "string"
+        ? obj.response
+        : typeof obj.text === "string"
+          ? obj.text
+          : typeof obj.message === "string"
+            ? obj.message
+            : typeof obj.content === "string"
+              ? obj.content
+              : typeof obj.answer === "string"
+                ? obj.answer
+                : undefined;
+
+    if (extractedText !== undefined || obj.type === "response") {
+      return {
+        type: "response",
+        response: extractedText,
+      };
+    }
+  }
+
+  return null;
 }
 
 export async function invokeWithPromptApi(
@@ -1229,7 +1342,7 @@ export async function invokeWithPromptApi(
         }
       }
 
-      if (supportsPromptConstraintOptions()) {
+      if (activeTools.length > 0 && supportsPromptConstraintOptions()) {
         try {
           raw = await tryPromptStreamingWithSession(session, prompt, {
             signal: abortSignal,
@@ -1267,12 +1380,11 @@ export async function invokeWithPromptApi(
         let finalText = parsed?.response
           ? sanitizeModelOutput(parsed.response, "prompt_api")
           : undefined;
-        if (!finalText) {
-          const rawStr = sanitizeModelOutput(
+        if (finalText === undefined) {
+          finalText = sanitizeModelOutput(
             String(raw || "").trim(),
             "prompt_api",
           );
-          finalText = rawStr.startsWith("{") ? "" : rawStr;
         }
 
         await emit({
@@ -1282,18 +1394,11 @@ export async function invokeWithPromptApi(
       }
 
       if (!parsed || parsed.type === "response") {
-        // If the model returned valid JSON with type=response but no response
-        // field, or returned something unparseable, treat the raw output as
-        // plain text only if it doesn't look like our JSON envelope.
         let text = parsed?.response
           ? sanitizeModelOutput(parsed.response, "prompt_api")
           : undefined;
-        if (!text) {
-          const rawStr = sanitizeModelOutput(
-            String(raw || "").trim(),
-            "prompt_api",
-          );
-          text = rawStr.startsWith("{") ? "" : rawStr;
+        if (text === undefined) {
+          text = sanitizeModelOutput(String(raw || "").trim(), "prompt_api");
         }
 
         const preview =

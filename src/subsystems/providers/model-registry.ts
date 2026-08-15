@@ -48,6 +48,13 @@ class ModelRegistry {
   }
 
   /**
+   * Clear all registered model metadata.
+   */
+  clear() {
+    this.models.clear();
+  }
+
+  /**
    * Fetch model info from a provider's modelsUrl and populate the registry.
    * Handles OpenRouter and any OpenAI-compatible provider that returns
    * {data: [{id, context_length, top_provider: {max_completion_tokens}}]}

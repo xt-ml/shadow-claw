@@ -27,6 +27,7 @@ describe("handleCompact.js", () => {
     mockSetStorageRoot = jest.fn();
 
     jest.unstable_mockModule("../../config/config.js", () => ({
+      DEFAULT_PROMPT_API_FALLBACK_MODEL: "onnx-community/Qwen3-0.6B-ONNX",
       getProvider: mockGetProvider,
     }));
 

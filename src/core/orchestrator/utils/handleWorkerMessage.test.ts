@@ -91,6 +91,7 @@ jest.unstable_mockModule("../../../config/config.js", () => ({
   OAUTH_PROVIDER_DEFINITIONS: {},
   getProviderApiKeyConfigKey: jest.fn(),
   CONFIG_KEYS: {},
+  DEFAULT_PROMPT_API_FALLBACK_MODEL: "onnx-community/Qwen3-0.6B-ONNX",
   getModelMaxTokens: jest.fn().mockReturnValue(128000),
   buildTriggerPattern: jest.fn().mockReturnValue(new RegExp("")),
   DEFAULT_GROUP_ID: "br:main",
@@ -108,6 +109,16 @@ jest.unstable_mockModule("../../../db/getAllTasks.js", () => ({
 
 jest.unstable_mockModule("../../../db/rooms.js", () => ({
   roomIdFromGroupId: mockRoomIdFromGroupId,
+  ROOM_PREFIX: "room:",
+  roomGroupId: (id: string) => `room:${id}`,
+  getRoomMetadata: (jest.fn() as any).mockResolvedValue([]),
+  saveRoomMetadata: (jest.fn() as any).mockResolvedValue(undefined),
+  getRoom: (jest.fn() as any).mockResolvedValue(null),
+  upsertRoom: (jest.fn() as any).mockResolvedValue(undefined),
+  createRoom: (jest.fn() as any).mockResolvedValue({}),
+  addRoomMember: (jest.fn() as any).mockResolvedValue(null),
+  removeRoomMember: (jest.fn() as any).mockResolvedValue(null),
+  deleteRoom: (jest.fn() as any).mockResolvedValue(undefined),
 }));
 
 jest.unstable_mockModule("../../../db/saveTask.js", () => ({
@@ -145,6 +156,7 @@ jest.unstable_mockModule("../../../stores/tools.js", () => ({
 
 jest.unstable_mockModule("../../../subsystems/mcp/mcp-connections.js", () => ({
   getRemoteMcpConnection: mockGetRemoteMcpConnection,
+  listRemoteMcpConnections: (jest.fn() as any).mockResolvedValue([]),
 }));
 
 jest.unstable_mockModule("../../../subsystems/mcp/mcp-reconnect.js", () => ({
@@ -186,6 +198,11 @@ jest.unstable_mockModule(
     summarizeText: mockSummarizeText,
     translateText: mockTranslateText,
     writeText: mockWriteText,
+    createTaskInstanceWithFallback: (jest.fn() as any).mockResolvedValue({}),
+    getPromptApiFallbackModel: (jest.fn() as any).mockResolvedValue(
+      "onnx-community/Qwen3-0.6B-ONNX",
+    ),
+    PROMPT_API_POLYFILL_MODEL: "onnx-community/Qwen3-0.6B-ONNX",
   }),
 );
 

@@ -155,6 +155,14 @@ export function showPage(
     }
   }
 
+  // Check Prompt API onboarding when switching to the chat tab
+  if (resolvedPage === "chat") {
+    const chatComp = shadow.querySelector("shadow-claw-chat") as any;
+    if (chatComp && typeof chatComp.checkPromptApiOnboarding === "function") {
+      void chatComp.checkPromptApiOnboarding();
+    }
+  }
+
   // Auto-refresh files if switching to the files tab
   if (resolvedPage === "files" && db) {
     oStore.loadFiles(db).catch(console.error);

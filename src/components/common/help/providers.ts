@@ -20,6 +20,10 @@ const PROVIDER_HELP_LINKS: Record<string, { label: string; href: string }> = {
     label: "Install Ollama",
     href: "https://ollama.com/download",
   },
+  prompt_api: {
+    label: "Prompt API Docs",
+    href: "https://developer.chrome.com/docs/ai/built-in",
+  },
 };
 
 const LOCAL_PROXY_PROVIDER_IDS = new Set([

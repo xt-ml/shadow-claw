@@ -996,4 +996,117 @@ describe("prompt-api-provider streaming events", () => {
     const createArg = (createMock.mock.calls[0] as any[])[0];
     expect(createArg?.samplingMode).toBe("creative");
   });
+
+  describe("fetchPolyfillTotalSizeBytes", () => {
+    it("dynamically computes size from Hugging Face tree API including multi-shard .onnx_data files", async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        (globalThis as any).fetch = jest.fn(async (url: string) => {
+          if (url.includes("/tree/main")) {
+            return {
+              ok: true,
+              json: async () => [
+                { path: "config.json", type: "file", size: 1024 },
+                {
+                  path: "tokenizer.json",
+                  type: "file",
+                  size: 19 * 1024 * 1024,
+                },
+                {
+                  path: "onnx/model_q4.onnx",
+                  type: "file",
+                  size: 2 * 1024 * 1024,
+                },
+                {
+                  path: "onnx/model_q4.onnx_data",
+                  type: "file",
+                  size: 839 * 1024 * 1024,
+                },
+              ],
+            };
+          }
+          return { ok: false };
+        });
+
+        const { fetchPolyfillTotalSizeBytes } =
+          await import("./prompt-api-provider.js");
+        const size = await fetchPolyfillTotalSizeBytes(
+          "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          "q4",
+        );
+
+        // Expected: 1024 + 19MB + 2MB + 839MB = ~860MB
+        expect(size).toBe(
+          1024 + 19 * 1024 * 1024 + 2 * 1024 * 1024 + 839 * 1024 * 1024,
+        );
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("falls back to candidate HEAD requests when tree API fails", async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        (globalThis as any).fetch = jest.fn(async (url: string, opts?: any) => {
+          if (url.includes("/tree/main")) {
+            return { ok: false, status: 404 };
+          }
+          if (opts?.method === "HEAD") {
+            if (url.endsWith("/config.json")) {
+              return {
+                ok: true,
+                headers: {
+                  get: (name: string) =>
+                    name.toLowerCase() === "content-length" ? "2048" : null,
+                },
+              };
+            }
+            if (url.endsWith("/onnx/model_q4.onnx_data")) {
+              return {
+                ok: true,
+                headers: {
+                  get: (name: string) =>
+                    name.toLowerCase() === "content-length"
+                      ? String(820 * 1024 * 1024)
+                      : null,
+                },
+              };
+            }
+          }
+          return { ok: false };
+        });
+
+        const { fetchPolyfillTotalSizeBytes } =
+          await import("./prompt-api-provider.js");
+        const size = await fetchPolyfillTotalSizeBytes(
+          "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          "q4",
+        );
+
+        expect(size).toBe(2048 + 820 * 1024 * 1024);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it("falls back to default size constant if all network queries fail", async () => {
+      const originalFetch = globalThis.fetch;
+      try {
+        (globalThis as any).fetch = jest.fn(async () => {
+          throw new Error("Network offline");
+        });
+
+        const { fetchPolyfillTotalSizeBytes } =
+          await import("./prompt-api-provider.js");
+        const size = await fetchPolyfillTotalSizeBytes(
+          "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          "q4",
+        );
+
+        expect(size).toBeGreaterThan(800 * 1024 * 1024);
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+  });
 });

@@ -10,7 +10,12 @@ import {
   DEFAULT_DEV_PORT,
   DEFAULT_GROUP_ID,
   DEFAULT_MAX_TOKENS,
+  DEFAULT_PROMPT_API_BACKEND,
+  DEFAULT_PROMPT_API_DTYPE_STRATEGY,
+  DEFAULT_PROMPT_API_FALLBACK_MODEL,
   DEFAULT_PROVIDER,
+  DEFAULT_TRANSFORMERS_JS_BACKEND,
+  DEFAULT_TRANSFORMERS_JS_DTYPE_STRATEGY,
   DEFAULT_VM_BOOT_HOST,
   FETCH_MAX_RESPONSE,
   GENERAL_ACCOUNT_PROVIDER_CAPABILITIES,
@@ -112,6 +117,22 @@ describe("config.js", () => {
     it("should have valid DEFAULT_VM_BOOT_HOST", () => {
       expect(DEFAULT_VM_BOOT_HOST).toBe("http://localhost:8888");
     });
+
+    it("should have valid DEFAULT_PROMPT_API_FALLBACK_MODEL", () => {
+      expect(DEFAULT_PROMPT_API_FALLBACK_MODEL).toBe(
+        "onnx-community/Qwen3-0.6B-ONNX",
+      );
+    });
+
+    it("should have valid DEFAULT_PROMPT_API_BACKEND and DEFAULT_PROMPT_API_DTYPE_STRATEGY", () => {
+      expect(DEFAULT_PROMPT_API_BACKEND).toBe("auto");
+      expect(DEFAULT_PROMPT_API_DTYPE_STRATEGY).toBe("auto");
+    });
+
+    it("should have valid DEFAULT_TRANSFORMERS_JS_BACKEND and DEFAULT_TRANSFORMERS_JS_DTYPE_STRATEGY", () => {
+      expect(DEFAULT_TRANSFORMERS_JS_BACKEND).toBe("auto");
+      expect(DEFAULT_TRANSFORMERS_JS_DTYPE_STRATEGY).toBe("auto");
+    });
   });
 
   describe("buildTriggerPattern", () => {
@@ -203,7 +224,16 @@ describe("config.js", () => {
       expect(provider.modelsUrl).toBe(TRANSFORMERS_JS_PROXY_MODELS_URL);
       expect(provider.format).toBe("openai");
       expect(provider.requiresApiKey).toBe(false);
-      expect(provider.defaultModel).toBe("onnx-community/gemma-4-E2B-it-ONNX");
+      expect(provider.defaultModel).toBe("onnx-community/Qwen3-0.6B-ONNX");
+    });
+
+    it("transformers js browser provider should have required fields", () => {
+      const provider = PROVIDERS.transformers_js_browser;
+      expect(provider.id).toBe("transformers_js_browser");
+      expect(provider.name).toBe("Transformers.js (Browser)");
+      expect(provider.format).toBe("transformers_js");
+      expect(provider.requiresApiKey).toBe(false);
+      expect(provider.defaultModel).toBe("onnx-community/Qwen3-0.6B-ONNX");
     });
 
     it("prompt api provider should be keyless and experimental", () => {
@@ -412,6 +442,13 @@ describe("config.js", () => {
       );
       expect(CONFIG_KEYS.PASSPHRASE_SALT).toBe("passphrase_salt");
       expect(CONFIG_KEYS.PASSPHRASE_VERIFY).toBe("passphrase_verify");
+      expect(CONFIG_KEYS.PROMPT_API_BACKEND).toBe("prompt_api_backend");
+      expect(CONFIG_KEYS.PROMPT_API_DTYPE_STRATEGY).toBe(
+        "prompt_api_dtype_strategy",
+      );
+      expect(CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL).toBe(
+        "prompt_api_fallback_model",
+      );
       expect(CONFIG_KEYS.PROVIDER).toBe("provider");
       expect(CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT).toBe("rate_limit_auto_adapt");
       expect(CONFIG_KEYS.RATE_LIMIT_CALLS_PER_MINUTE).toBe(

@@ -19,6 +19,7 @@ describe("worker and worker/agent.js", () => {
       BASH_MAX_TIMEOUT_SEC: 1800,
       DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
       DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
+      DEFAULT_PROMPT_API_FALLBACK_MODEL: "onnx-community/Qwen3-0.6B-ONNX",
       CONFIG_KEYS: {
         PROVIDER: "provider",
         API_KEY: "api_key",

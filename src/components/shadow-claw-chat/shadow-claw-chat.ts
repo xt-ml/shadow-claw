@@ -1,6 +1,12 @@
 import JSZip from "jszip";
 
-import { CONFIG_KEYS } from "../../config/config.js";
+import {
+  CONFIG_KEYS,
+  DEFAULT_PROMPT_API_FALLBACK_MODEL,
+  DEFAULT_PROVIDER,
+} from "../../config/config.js";
+
+import { shouldInstallE2eBridge } from "../../testing/e2e-bridge.js";
 
 import {
   formatModelAttachmentCapabilitySummary,
@@ -56,6 +62,11 @@ import {
   handleSpecialLinkNavigation,
 } from "../../utils/utils.js";
 import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
+import {
+  isNativePromptApiSupported,
+  isPromptApiPotentiallySupported,
+  renderPromptApiStatusHtml,
+} from "../common/help/prompt-api.js";
 
 import { computeTokenDisplayValues } from "./utils/computeTokenDisplayValues.js";
 import { escapeHtml } from "./utils/escapeHtml.js";
@@ -67,6 +78,7 @@ import type { AppDialogOptions } from "../../ui/types.js";
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-a2ui-interceptor/shadow-claw-a2ui-interceptor.js";
 import "../shadow-claw-a2ui/shadow-claw-a2ui.js";
+import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
 
 import ShadowClawElement from "../shadow-claw-element.js";
@@ -116,7 +128,7 @@ export class ShadowClawChat extends ShadowClawElement {
   activityLogCollapsedOverride: boolean | null = null;
   activityLogVisibilityMediaQuery: MediaQueryList | null = null;
 
-  #db: ShadowClawDatabase | null;
+  db: ShadowClawDatabase | null = null;
   #dragDepth: number;
   #queuedAttachments: QueuedAttachment[];
   #renderVersion: number;
@@ -129,7 +141,7 @@ export class ShadowClawChat extends ShadowClawElement {
     super();
 
     chatUiStore.reset();
-    this.#db = null;
+    this.db = null;
     this.#renderVersion = 0;
     this.#streamRenderVersion = 0;
     this.#suppressScrollTracking = false;
@@ -145,7 +157,7 @@ export class ShadowClawChat extends ShadowClawElement {
       throw new Error("shadowRoot not found");
     }
 
-    this.#db = await getDb();
+    this.db = await getDb();
     await this.restoreInputAreaHeight();
 
     this.dispatchTerminalSlotReady();
@@ -153,6 +165,7 @@ export class ShadowClawChat extends ShadowClawElement {
     this.setupEffects();
     this.setupActivityLogVisibility();
     this.bindEventListeners();
+    await this.checkPromptApiOnboarding();
   }
 
   disconnectedCallback() {
@@ -425,6 +438,227 @@ export class ShadowClawChat extends ShadowClawElement {
         void this.queueDroppedData(event.dataTransfer);
       });
     }
+
+    const form = root.querySelector(".chat__prompt-api-form");
+    if (form instanceof HTMLFormElement) {
+      form.addEventListener("submit", (e) => {
+        e.preventDefault();
+        void this.confirmPromptApiOnboarding();
+      });
+    }
+
+    const confirmBtn = root.querySelector(
+      '[data-action="confirm-prompt-api-onboarding"]',
+    );
+    if (confirmBtn instanceof HTMLElement) {
+      confirmBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        void this.confirmPromptApiOnboarding();
+      });
+    }
+
+    const configureSettingsBtn = root.querySelector(
+      '[data-action="configure-other-provider"]',
+    );
+    if (configureSettingsBtn instanceof HTMLElement) {
+      configureSettingsBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        void this.bypassPromptApiOnboardingToSettings();
+      });
+    }
+  }
+
+  async checkPromptApiOnboarding(): Promise<void> {
+    if (
+      shouldInstallE2eBridge() &&
+      !(globalThis as any).__SHADOWCLAW_E2E_TEST_ONBOARDING__
+    ) {
+      return;
+    }
+
+    if (!this.db) {
+      this.db = await getDb();
+    }
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const provider = await getConfig(this.db, CONFIG_KEYS.PROVIDER);
+      const effectiveProvider =
+        typeof provider === "string" && provider.trim()
+          ? provider.trim()
+          : DEFAULT_PROVIDER;
+      if (effectiveProvider !== "prompt_api") {
+        return;
+      }
+
+      const seen = await getConfig(
+        this.db,
+        CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN,
+      );
+      if (isTruthyConfigValue(seen, false)) {
+        return;
+      }
+
+      const root = this.shadowRoot;
+      if (!root) {
+        return;
+      }
+
+      this.ensureShadowDialogs();
+
+      const isNativeSupported = isNativePromptApiSupported();
+      const isPotentiallySupported = isPromptApiPotentiallySupported();
+      const isAvailable = isNativeSupported || isPotentiallySupported;
+
+      const statusCard = root.querySelector(".chat__prompt-api-status-card");
+      if (statusCard instanceof HTMLElement) {
+        statusCard.hidden = !isAvailable;
+      }
+
+      const statusEl = root.querySelector('[data-info="prompt-api-status"]');
+      if (statusEl instanceof HTMLElement) {
+        setSanitizedHtml(
+          statusEl,
+          renderPromptApiStatusHtml(isNativeSupported),
+        );
+      }
+
+      const fallbackCard = root.querySelector(
+        ".chat__prompt-api-fallback-card",
+      );
+      if (fallbackCard instanceof HTMLElement) {
+        fallbackCard.hidden = isAvailable;
+      }
+
+      const modelSelect = root.querySelector(
+        '[data-setting="prompt-api-onboarding-fallback-model"]',
+      ) as HTMLSelectElement | null;
+      if (modelSelect) {
+        const storedFallbackModel = await getConfig(
+          this.db,
+          CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+        );
+        const currentModel =
+          typeof storedFallbackModel === "string" && storedFallbackModel.trim()
+            ? storedFallbackModel.trim()
+            : DEFAULT_PROMPT_API_FALLBACK_MODEL;
+        modelSelect.value = currentModel;
+      }
+
+      const shadowDialog = root.querySelector(
+        'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]',
+      );
+      if (
+        shadowDialog &&
+        typeof (shadowDialog as any).showModal === "function"
+      ) {
+        (shadowDialog as any).showModal();
+      } else {
+        const dialogEl = root.querySelector("dialog.chat__prompt-api-dialog");
+        if (dialogEl instanceof HTMLDialogElement) {
+          if (typeof dialogEl.showModal === "function") {
+            dialogEl.showModal();
+          } else {
+            dialogEl.setAttribute("open", "");
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to check Prompt API onboarding:", err);
+    }
+  }
+
+  async bypassPromptApiOnboardingToSettings(): Promise<void> {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    if (!this.db) {
+      this.db = await getDb();
+    }
+
+    if (this.db) {
+      try {
+        await setConfig(
+          this.db,
+          CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN,
+          "true",
+        );
+      } catch (err) {
+        console.warn("Failed to persist Prompt API onboarding status:", err);
+      }
+    }
+
+    const shadowDialog = root.querySelector(
+      'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]',
+    );
+    if (shadowDialog && typeof (shadowDialog as any).close === "function") {
+      (shadowDialog as any).close();
+    } else {
+      const dialogEl = root.querySelector("dialog.chat__prompt-api-dialog");
+      if (dialogEl instanceof HTMLDialogElement) {
+        dialogEl.close();
+      }
+    }
+
+    document.dispatchEvent(
+      new CustomEvent("shadow-claw-navigate", {
+        detail: { page: "settings" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  async confirmPromptApiOnboarding(): Promise<void> {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    if (!this.db) {
+      this.db = await getDb();
+    }
+
+    const modelSelect = root.querySelector(
+      '[data-setting="prompt-api-onboarding-fallback-model"]',
+    ) as HTMLSelectElement | null;
+    const selectedModel =
+      modelSelect?.value?.trim() || DEFAULT_PROMPT_API_FALLBACK_MODEL;
+
+    if (this.db) {
+      try {
+        await setConfig(
+          this.db,
+          CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+          selectedModel,
+        );
+        await setConfig(
+          this.db,
+          CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN,
+          "true",
+        );
+      } catch (err) {
+        console.warn("Failed to persist Prompt API onboarding settings:", err);
+      }
+    }
+
+    const shadowDialog = root.querySelector(
+      'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]',
+    );
+    if (shadowDialog && typeof (shadowDialog as any).close === "function") {
+      (shadowDialog as any).close();
+    } else {
+      const dialogEl = root.querySelector("dialog.chat__prompt-api-dialog");
+      if (dialogEl instanceof HTMLDialogElement) {
+        dialogEl.close();
+      }
+    }
+
+    showSuccess("Prompt API configured", 2500);
   }
 
   bindInputResizeEvents(inputArea: HTMLElement, handle: HTMLElement): void {
@@ -601,10 +835,6 @@ export class ShadowClawChat extends ShadowClawElement {
       MIN_CHAT_INPUT_HEIGHT_PX,
       Math.min(Math.max(MIN_CHAT_INPUT_HEIGHT_PX, viewportMax), px),
     );
-  }
-
-  get db() {
-    return this.#db;
   }
 
   deferWorkspaceImageLoads(html: string): string {
@@ -1266,7 +1496,7 @@ export class ShadowClawChat extends ShadowClawElement {
         // Render messages sequentially to ensure order and proper awaiting
         const renderMessages = async () => {
           const renderFrontmatter = await resolveFrontmatterToggle(
-            this.#db,
+            this.db,
             CONFIG_KEYS.MARKDOWN_FRONTMATTER_CHAT,
           );
 
@@ -1927,12 +2157,12 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 
   async downloadAttachment(groupId: string, attachment: MessageAttachment) {
-    if (!this.#db || !attachment.path) {
+    if (!this.db || !attachment.path) {
       return;
     }
 
     try {
-      await downloadGroupFile(this.#db, groupId, attachment.path);
+      await downloadGroupFile(this.db, groupId, attachment.path);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       showError(`Failed to download attachment: ${message}`, 5000);
@@ -1940,13 +2170,13 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 
   async downloadChat() {
-    if (!this.#db) {
+    if (!this.db) {
       return;
     }
 
     try {
       const groupId = orchestratorStore.activeGroupId;
-      const chatData = await exportChatData(this.#db, groupId);
+      const chatData = await exportChatData(this.db, groupId);
       if (!chatData) {
         showError("Failed to export chat data", 6000);
 
@@ -1983,7 +2213,7 @@ export class ShadowClawChat extends ShadowClawElement {
       return;
     }
 
-    if (!this.#db) {
+    if (!this.db) {
       return;
     }
 
@@ -1993,7 +2223,7 @@ export class ShadowClawChat extends ShadowClawElement {
     }
 
     try {
-      await orchestratorStore.newSession(this.#db);
+      await orchestratorStore.newSession(this.db);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.warn("Failed to clear session:", errorMsg);
@@ -2001,7 +2231,7 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 
   async handleCompactChat() {
-    if (!this.#db) {
+    if (!this.db) {
       return;
     }
 
@@ -2019,7 +2249,7 @@ export class ShadowClawChat extends ShadowClawElement {
     }
 
     try {
-      await orchestratorStore.compactContext(this.#db);
+      await orchestratorStore.compactContext(this.db);
 
       showInfo("Compacting context...", 2500);
     } catch (err) {
@@ -2067,12 +2297,12 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 
   async openAttachment(groupId: string, attachment: MessageAttachment) {
-    if (!this.#db || !attachment.path) {
+    if (!this.db || !attachment.path) {
       return;
     }
 
     try {
-      await fileViewerStore.openFile(this.#db, attachment.path, groupId);
+      await fileViewerStore.openFile(this.db, attachment.path, groupId);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       showError(`Failed to open attachment: ${message}`, 5000);
@@ -2080,12 +2310,12 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 
   async persistInputAreaHeight(px: number): Promise<void> {
-    if (!this.#db) {
+    if (!this.db) {
       return;
     }
 
     try {
-      await setConfig(this.#db, CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT, px);
+      await setConfig(this.db, CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT, px);
     } catch {
       // Ignore persistence failures so input remains usable when storage is unavailable.
     }
@@ -2170,13 +2400,13 @@ export class ShadowClawChat extends ShadowClawElement {
     msg: StoredMessage,
     attachment: MessageAttachment,
   ): Promise<HTMLElement | null> {
-    if (!this.#db || !attachment.path) {
+    if (!this.db || !attachment.path) {
       return null;
     }
 
     try {
       const bytes = await readGroupFileBytes(
-        this.#db,
+        this.db,
         msg.groupId,
         attachment.path,
       );
@@ -2252,7 +2482,7 @@ export class ShadowClawChat extends ShadowClawElement {
       title.className = "chat__attachment-title";
       title.type = "button";
       title.textContent = attachment.fileName;
-      title.disabled = !attachment.path || !this.#db;
+      title.disabled = !attachment.path || !this.db;
       title.addEventListener("click", () => {
         void this.openAttachment(msg.groupId, attachment);
       });
@@ -2268,7 +2498,7 @@ export class ShadowClawChat extends ShadowClawElement {
       const actions = document.createElement("div");
       actions.className = "chat__attachment-actions";
 
-      if (attachment.path && this.#db) {
+      if (attachment.path && this.db) {
         const openBtn = document.createElement("button");
         openBtn.className = "chat__attachment-action";
         openBtn.type = "button";
@@ -2376,7 +2606,7 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 
   async resolveImagePaths(groupId: string, container: HTMLElement) {
-    if (!this.#db) {
+    if (!this.db) {
       return;
     }
 
@@ -2388,7 +2618,7 @@ export class ShadowClawChat extends ShadowClawElement {
       if (workspacePath) {
         try {
           const bytes = await readGroupFileBytes(
-            this.#db,
+            this.db,
             groupId,
             workspacePath,
           );
@@ -2448,7 +2678,7 @@ export class ShadowClawChat extends ShadowClawElement {
       }
 
       try {
-        const bytes = await readGroupFileBytes(this.#db, groupId, filePath);
+        const bytes = await readGroupFileBytes(this.db, groupId, filePath);
         const blobBytes = new Uint8Array(bytes.byteLength);
         blobBytes.set(bytes);
 
@@ -2468,7 +2698,7 @@ export class ShadowClawChat extends ShadowClawElement {
   }
 
   async restoreChat(input: HTMLInputElement) {
-    if (!this.#db) {
+    if (!this.db) {
       return;
     }
 
@@ -2509,7 +2739,7 @@ export class ShadowClawChat extends ShadowClawElement {
       }
 
       const groupId = orchestratorStore.activeGroupId;
-      await importChatData(this.#db, groupId, chatData);
+      await importChatData(this.db, groupId, chatData);
       await orchestratorStore.loadHistory();
 
       showSuccess("Chat restored successfully", 3500);
@@ -2529,8 +2759,8 @@ export class ShadowClawChat extends ShadowClawElement {
     }
 
     try {
-      const saved = this.#db
-        ? await getConfig(this.#db, CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT)
+      const saved = this.db
+        ? await getConfig(this.db, CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT)
         : undefined;
 
       if (typeof saved === "number" && Number.isFinite(saved) && saved > 0) {

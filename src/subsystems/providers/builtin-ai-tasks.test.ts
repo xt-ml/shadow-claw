@@ -68,6 +68,8 @@ describe("builtin-ai-tasks subsystem", () => {
           value: {
             gpu: {
               requestAdapter: async () => ({
+                isFallbackAdapter: false,
+                features: new Set(["shader-f16"]),
                 requestDevice: async () => ({
                   destroy: () => {},
                 }),
@@ -78,6 +80,90 @@ describe("builtin-ai-tasks subsystem", () => {
         });
 
         expect(await isWebGpuAdapterAvailable()).toBe(true);
+      } finally {
+        Object.defineProperty(globalThis, "navigator", {
+          value: originalNavigator,
+          configurable: true,
+        });
+      }
+    });
+
+    it("returns false when adapter lacks shader-f16 support", async () => {
+      const originalNavigator = globalThis.navigator;
+      try {
+        Object.defineProperty(globalThis, "navigator", {
+          value: {
+            gpu: {
+              requestAdapter: async () => ({
+                isFallbackAdapter: false,
+                features: new Set([]),
+                requestDevice: async () => ({
+                  destroy: () => {},
+                }),
+              }),
+            },
+          },
+          configurable: true,
+        });
+
+        expect(await isWebGpuAdapterAvailable()).toBe(false);
+      } finally {
+        Object.defineProperty(globalThis, "navigator", {
+          value: originalNavigator,
+          configurable: true,
+        });
+      }
+    });
+
+    it("returns false when adapter is a CPU software fallback adapter", async () => {
+      const originalNavigator = globalThis.navigator;
+      try {
+        Object.defineProperty(globalThis, "navigator", {
+          value: {
+            gpu: {
+              requestAdapter: async () => ({
+                isFallbackAdapter: true,
+                requestDevice: async () => ({
+                  destroy: () => {},
+                }),
+              }),
+            },
+          },
+          configurable: true,
+        });
+
+        expect(await isWebGpuAdapterAvailable()).toBe(false);
+      } finally {
+        Object.defineProperty(globalThis, "navigator", {
+          value: originalNavigator,
+          configurable: true,
+        });
+      }
+    });
+
+    it("returns false when adapter info indicates SwiftShader / llvmpipe", async () => {
+      const originalNavigator = globalThis.navigator;
+      try {
+        Object.defineProperty(globalThis, "navigator", {
+          value: {
+            gpu: {
+              requestAdapter: async () => ({
+                isFallbackAdapter: false,
+                info: {
+                  vendor: "Google",
+                  architecture: "swiftshader",
+                  description: "Google SwiftShader",
+                },
+                requestDevice: async () => ({
+                  destroy: () => {},
+                }),
+              }),
+            },
+          },
+          configurable: true,
+        });
+
+        expect(await isWebGpuAdapterAvailable()).toBe(false);
       } finally {
         Object.defineProperty(globalThis, "navigator", {
           value: originalNavigator,
@@ -139,7 +225,7 @@ describe("builtin-ai-tasks subsystem", () => {
       expect((globalThis as any).TRANSFORMERS_CONFIG.device).toBe("wasm");
       expect((globalThis as any).TRANSFORMERS_CONFIG.dtype).toBe("q4");
       expect((globalThis as any).TRANSFORMERS_CONFIG.modelName).toBe(
-        "onnx-community/gemma-3-1b-it-ONNX-GQA",
+        "onnx-community/Qwen3-0.6B-ONNX",
       );
       expect(calls).toBe(2);
     });
@@ -166,7 +252,7 @@ describe("builtin-ai-tasks subsystem", () => {
       expect((globalThis as any).TRANSFORMERS_CONFIG.device).toBe("wasm");
       expect((globalThis as any).TRANSFORMERS_CONFIG.dtype).toBe("q4");
       expect((globalThis as any).TRANSFORMERS_CONFIG.modelName).toBe(
-        "onnx-community/gemma-3-1b-it-ONNX-GQA",
+        "onnx-community/Qwen3-0.6B-ONNX",
       );
       expect(calls).toBe(2);
     });
@@ -195,7 +281,7 @@ describe("builtin-ai-tasks subsystem", () => {
       expect((globalThis as any).TRANSFORMERS_CONFIG.device).toBe("wasm");
       expect((globalThis as any).TRANSFORMERS_CONFIG.dtype).toBe("q4");
       expect((globalThis as any).TRANSFORMERS_CONFIG.modelName).toBe(
-        "onnx-community/gemma-3-1b-it-ONNX-GQA",
+        "onnx-community/Qwen3-0.6B-ONNX",
       );
       expect(calls).toBe(2);
     });
@@ -252,9 +338,9 @@ describe("builtin-ai-tasks subsystem", () => {
 
         await ensureBuiltinAiPolyfills();
         expect((globalThis as any).TRANSFORMERS_CONFIG?.device).toBe("wasm");
-        expect((globalThis as any).TRANSFORMERS_CONFIG?.dtype).toBe("q4");
+        expect((globalThis as any).TRANSFORMERS_CONFIG?.dtype).toBe("q4f16");
         expect((globalThis as any).TRANSFORMERS_CONFIG?.modelName).toBe(
-          "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          "onnx-community/Qwen3-0.6B-ONNX",
         );
       } finally {
         Object.defineProperty(globalThis, "navigator", {
@@ -271,6 +357,8 @@ describe("builtin-ai-tasks subsystem", () => {
           value: {
             gpu: {
               requestAdapter: async () => ({
+                isFallbackAdapter: false,
+                features: new Set(["shader-f16"]),
                 requestDevice: async () => ({
                   destroy: () => {},
                 }),
@@ -287,7 +375,7 @@ describe("builtin-ai-tasks subsystem", () => {
         expect((globalThis as any).TRANSFORMERS_CONFIG?.device).toBe("webgpu");
         expect((globalThis as any).TRANSFORMERS_CONFIG?.dtype).toBe("q4f16");
         expect((globalThis as any).TRANSFORMERS_CONFIG?.modelName).toBe(
-          "onnx-community/gemma-3-1b-it-ONNX-GQA",
+          "onnx-community/Qwen3-0.6B-ONNX",
         );
       } finally {
         Object.defineProperty(globalThis, "navigator", {

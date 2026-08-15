@@ -9,16 +9,11 @@ export const DEFAULT_BUILTIN_PROFILE: ToolProfile = {
   name: "Default",
   providerId: "prompt_api",
   enabledToolNames: [
-    "fetch_url",
     "javascript",
     "list_files",
     "open_file",
-    "proofread_text",
     "read_file",
-    "summarize_text",
-    "translate_text",
     "write_file",
-    "write_text",
   ],
   customTools: [],
   systemPromptOverride:

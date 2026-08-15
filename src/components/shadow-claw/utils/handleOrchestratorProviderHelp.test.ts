@@ -6,6 +6,7 @@ describe("handleOrchestratorProviderHelp", () => {
   let mockBuildLlamafileHelpDialogOptions: jest.Mock<any>;
   let mockBuildProviderHelpDialogOptions: jest.Mock<any>;
   let mockBuildTransformersJsHelpDialogOptions: jest.Mock<any>;
+  let mockBuildPromptApiHelpDialogOptions: jest.Mock<any>;
 
   let mockDoc: Document;
   let mockShadow: ShadowRoot | null;
@@ -36,6 +37,12 @@ describe("handleOrchestratorProviderHelp", () => {
         reason,
       })),
     }));
+    jest.unstable_mockModule("../../common/help/prompt-api.js", () => ({
+      buildPromptApiHelpDialogOptions: jest.fn((reason) => ({
+        title: "Prompt API Help",
+        reason,
+      })),
+    }));
 
     mockRequestDialog = (await import("./requestDialog.js"))
       .requestDialog as jest.Mock<any>;
@@ -48,6 +55,9 @@ describe("handleOrchestratorProviderHelp", () => {
     mockBuildTransformersJsHelpDialogOptions = (
       await import("../../common/help/transformers.js")
     ).buildTransformersJsHelpDialogOptions as jest.Mock<any>;
+    mockBuildPromptApiHelpDialogOptions = (
+      await import("../../common/help/prompt-api.js")
+    ).buildPromptApiHelpDialogOptions as jest.Mock<any>;
     handleOrchestratorProviderHelp = (
       await import("./handleOrchestratorProviderHelp.js")
     ).handleOrchestratorProviderHelp;
@@ -100,6 +110,24 @@ describe("handleOrchestratorProviderHelp", () => {
     expect(mockRequestDialog).toHaveBeenCalledWith(mockDoc, mockShadow, {
       title: "Transformers.js Help",
       reason: "Transformers model not loaded",
+    });
+  });
+
+  it("should open prompt_api help dialog when providerId is prompt_api", async () => {
+    const payload = {
+      providerId: "prompt_api",
+      reason: "Prompt API unavailable",
+    };
+
+    await handleOrchestratorProviderHelp(mockDoc, mockShadow, payload as any);
+
+    expect(mockBuildPromptApiHelpDialogOptions).toHaveBeenCalledWith(
+      "Prompt API unavailable",
+    );
+    expect(mockRequestDialog).toHaveBeenCalledTimes(1);
+    expect(mockRequestDialog).toHaveBeenCalledWith(mockDoc, mockShadow, {
+      title: "Prompt API Help",
+      reason: "Prompt API unavailable",
     });
   });
 

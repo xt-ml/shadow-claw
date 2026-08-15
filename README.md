@@ -117,7 +117,7 @@ ShadowClaw supports multiple LLM providers with a unified adapter pattern:
 - Adaptive rate limiting with `retry-after` support
 - Dynamic model registry with capability metadata (context, modalities, tool support)
 - Multi-format support (OpenAI, Anthropic, Prompt API)
-- Prompt API session retry loop & hardware feature probing — automatically probes WebGPU adapter capabilities, retries `LanguageModel.create()` during downloads, and dynamically falls back to WebAssembly CPU (`device: "wasm"`) if WebGPU initialization fails (e.g. on iPadOS)
+- Prompt API session retry loop & hardware feature probing — automatically probes WebGPU adapter capabilities (requiring `shader-f16` support), retries `LanguageModel.create()` during downloads, and dynamically falls back to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) if WebGPU initialization fails or software emulation is detected.
 - Polyfill model cache — Service Worker `CacheFirst` caching strategy stores Hugging Face polyfill model binaries (`.onnx`, `.onnx_data`) for offline performance
 
 **Setup & details**: [docs/guides/adding-a-provider.md](docs/guides/adding-a-provider.md) | [docs/subsystems/providers.md](docs/subsystems/providers.md)
@@ -302,6 +302,7 @@ Create model-specific or task-specific tool profiles to optimize the context win
 - Override system prompt per profile
 - Auto-activate profiles by model
 - Save custom selections
+- **Built-in Profile** — Default Prompt API profile is restricted to core file and script tools (`javascript`, `list_files`, `open_file`, `read_file`, `write_file`)
 - **Execution-time allowlist enforcement** — Tool calls are re-validated at runtime against the active enabled tool list (profile/manual), not only generation-time schema hints
 - **Shared internet access control** — Toggles public internet access (`fetch` and shell networking) globally for the `bash` and `javascript` tools
 

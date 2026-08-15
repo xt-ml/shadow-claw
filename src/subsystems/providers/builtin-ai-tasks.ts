@@ -15,7 +15,10 @@
 import { createModelCacheFetch } from "./utils/index.js";
 import { getDb } from "../../db/db.js";
 import { getConfig } from "../../db/getConfig.js";
-import { CONFIG_KEYS } from "../../config/config.js";
+import {
+  CONFIG_KEYS,
+  DEFAULT_PROMPT_API_FALLBACK_MODEL,
+} from "../../config/config.js";
 
 export type BuiltinTaskType =
   | "summarizer"
@@ -145,8 +148,58 @@ export async function isWebGpuAdapterAvailable(): Promise<boolean> {
     return false;
   }
   try {
-    const adapter = await (navigator as any).gpu.requestAdapter();
-    if (!adapter) return false;
+    const adapter = await (navigator as any).gpu.requestAdapter({
+      powerPreference: "high-performance",
+    });
+    if (!adapter || adapter.isFallbackAdapter === true) return false;
+
+    // Hardware WebGPU acceleration requires native shader-f16 support.
+    // Software rasterizers and CPU emulators do not support shader-f16.
+    if (adapter.features && !adapter.features.has("shader-f16")) {
+      return false;
+    }
+
+    const info =
+      adapter.info ||
+      (typeof adapter.requestAdapterInfo === "function"
+        ? await adapter.requestAdapterInfo()
+        : null);
+    if (info) {
+      const vendor = (info.vendor || "").toLowerCase();
+      const arch = (info.architecture || "").toLowerCase();
+      const desc = (info.description || "").toLowerCase();
+      const device = (info.device || "").toLowerCase();
+      const adapterType = (
+        (info as any).adapterType ||
+        (info as any).deviceType ||
+        (info as any).type ||
+        ""
+      ).toLowerCase();
+
+      if (
+        adapterType === "cpu" ||
+        adapterType === "software" ||
+        arch === "swiftshader" ||
+        arch === "llvmpipe" ||
+        arch === "softpipe" ||
+        arch === "lavapipe" ||
+        arch === "cpu" ||
+        vendor.includes("swiftshader") ||
+        desc.includes("llvmpipe") ||
+        desc.includes("softpipe") ||
+        desc.includes("lavapipe") ||
+        desc.includes("software") ||
+        desc.includes("basic render") ||
+        device.includes("llvmpipe") ||
+        device.includes("softpipe") ||
+        device.includes("lavapipe") ||
+        device.includes("swiftshader") ||
+        device.includes("basic render")
+      ) {
+        return false;
+      }
+    }
+
     const device = await adapter.requestDevice();
     if (device) {
       if (typeof device.destroy === "function") {
@@ -192,7 +245,7 @@ function isAcceleratedBackendError(errMsg: string): boolean {
   );
 }
 
-export let PROMPT_API_POLYFILL_MODEL = "onnx-community/gemma-3-1b-it-ONNX-GQA";
+export let PROMPT_API_POLYFILL_MODEL = DEFAULT_PROMPT_API_FALLBACK_MODEL;
 
 export async function getPromptApiFallbackModel(): Promise<string> {
   try {
@@ -291,19 +344,45 @@ export async function ensureBuiltinAiPolyfills(): Promise<void> {
 
     if (!g.TRANSFORMERS_CONFIG) {
       let device = "wasm";
-      let dtype = "q4";
+      let dtype = "q4f16";
 
-      if (typeof navigator !== "undefined") {
+      let userDevice: string | null = null;
+      let userDtype: string | null = null;
+      try {
+        const db = await getDb();
+        if (db) {
+          userDevice =
+            (await getConfig(db, CONFIG_KEYS.PROMPT_API_BACKEND)) ||
+            (await getConfig(db, CONFIG_KEYS.TRANSFORMERS_JS_BACKEND)) ||
+            null;
+          userDtype =
+            (await getConfig(db, CONFIG_KEYS.PROMPT_API_DTYPE_STRATEGY)) ||
+            (await getConfig(db, CONFIG_KEYS.TRANSFORMERS_JS_DTYPE_STRATEGY)) ||
+            null;
+        }
+      } catch {}
+
+      if (userDevice === "wasm") {
+        device = "wasm";
+      } else if (userDevice === "webgpu") {
+        device = "webgpu";
+      } else if (userDevice && userDevice.startsWith("webnn")) {
+        device = "webnn";
+      } else if (typeof navigator !== "undefined") {
         if ("ml" in navigator) {
           device = "webnn";
-          dtype = "q4f16";
         } else if ("gpu" in navigator) {
           const webgpuOk = await isWebGpuAdapterAvailable();
           if (webgpuOk) {
             device = "webgpu";
-            dtype = "q4f16";
           }
         }
+      }
+
+      if (userDtype && userDtype !== "auto") {
+        dtype = userDtype;
+      } else {
+        dtype = "q4f16";
       }
 
       g.TRANSFORMERS_CONFIG = {

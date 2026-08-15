@@ -1,9 +1,9 @@
 /**
- * Expected download size for the default Prompt API polyfill CPU model
- * (onnx-community/Qwen3-0.6B-ONNX / q4).
- * Approx 930 MB (919 MB model_q4.onnx + ~11 MB config/tokenizer).
+ * Expected download size for the default Prompt API polyfill model
+ * (onnx-community/gemma-3-1b-it-ONNX-GQA / q4 / q4f16).
+ * Approx 840 MB (819-859 MB model weights + ~20 MB tokenizer/configs).
  */
-export const DEFAULT_PROMPT_API_MODEL_SIZE_BYTES = 930 * 1024 * 1024;
+export const DEFAULT_PROMPT_API_MODEL_SIZE_BYTES = 840 * 1024 * 1024;
 
 export interface PromptApiProgressOptions {
   expectedTotalBytes?: number;
@@ -27,6 +27,7 @@ export class PromptApiProgressAggregator {
   private readonly logEvents: boolean;
   private readonly suppressInitialZero: boolean;
   private _hasEmitted: boolean = false;
+  private hasStreamEvents: boolean = false;
 
   private urlBytesMap = new Map<
     string,
@@ -70,10 +71,12 @@ export class PromptApiProgressAggregator {
   ): void {
     if (!Number.isFinite(received) || received < 0) return;
 
+    this.hasStreamEvents = true;
     this.urlBytesMap.set(url, { received, total, complete });
 
     let sumReceived = 0;
     let sumTotal = 0;
+    let allComplete = this.urlBytesMap.size > 0;
 
     for (const entry of this.urlBytesMap.values()) {
       sumReceived += entry.received;
@@ -84,12 +87,14 @@ export class PromptApiProgressAggregator {
       ) {
         sumTotal += entry.total;
       }
+      if (!entry.complete) {
+        allComplete = false;
+      }
     }
 
-    const rawEffectiveTotal =
-      this.expectedTotalBytes > 0
-        ? Math.max(sumTotal, this.expectedTotalBytes)
-        : sumTotal;
+    const previousEffectiveTotal = this.maxEffectiveTotal;
+    const baseTotal = this.expectedTotalBytes > 0 ? this.expectedTotalBytes : 0;
+    const rawEffectiveTotal = Math.max(sumTotal, baseTotal);
     this.maxEffectiveTotal = Math.max(
       this.maxEffectiveTotal,
       rawEffectiveTotal,
@@ -99,12 +104,33 @@ export class PromptApiProgressAggregator {
     this.maxLoadedBytes = Math.max(this.maxLoadedBytes, sumReceived);
 
     if (effectiveTotal > 0) {
-      const fraction = Math.min(1, this.maxLoadedBytes / effectiveTotal);
-      this.maxProgressFraction = Math.max(this.maxProgressFraction, fraction);
+      const rawFraction = Math.min(
+        1,
+        Math.max(0, this.maxLoadedBytes / effectiveTotal),
+      );
+      const displayFraction = allComplete
+        ? rawFraction
+        : Math.min(0.99, rawFraction);
+
+      // If effectiveTotal expanded significantly, adjust maxProgressFraction to match the new total
+      if (
+        effectiveTotal > previousEffectiveTotal &&
+        previousEffectiveTotal > 0
+      ) {
+        this.maxProgressFraction = displayFraction;
+      } else {
+        this.maxProgressFraction = Math.max(
+          this.maxProgressFraction,
+          displayFraction,
+        );
+      }
 
       const loadedMB = (this.maxLoadedBytes / (1024 * 1024)).toFixed(1);
       const totalMB = (effectiveTotal / (1024 * 1024)).toFixed(1);
-      const percent = Math.round(this.maxProgressFraction * 100);
+      const percent = Math.min(
+        allComplete ? 100 : 99,
+        Math.round(this.maxProgressFraction * 100),
+      );
 
       const message = `Downloading Prompt API model... (${loadedMB} / ${totalMB} MB · ${percent}%)`;
       this.emit(this.maxProgressFraction, message);
@@ -131,6 +157,12 @@ export class PromptApiProgressAggregator {
       return;
     }
 
+    // If live byte streams are actively reporting progress from createModelCacheFetch,
+    // ignore coarse normalized fraction events (0 <= loaded <= 1) to avoid flickering
+    if (this.hasStreamEvents && loaded <= 1) {
+      return;
+    }
+
     if (
       this.suppressInitialZero &&
       !this._hasEmitted &&
@@ -142,10 +174,16 @@ export class PromptApiProgressAggregator {
 
     // Case 1: Bytes with a known valid total (Native Chrome provides this in recent versions)
     if (Number.isFinite(total) && total > 1) {
-      const fraction = Math.max(0, Math.min(1, loaded / total));
+      const baseTotal =
+        this.expectedTotalBytes > 0 ? this.expectedTotalBytes : 0;
+      const effectiveTotal = Math.max(total, baseTotal, this.maxEffectiveTotal);
+      this.maxEffectiveTotal = effectiveTotal;
+      this.maxLoadedBytes = Math.max(this.maxLoadedBytes, loaded);
+
+      const fraction = Math.min(0.99, this.maxLoadedBytes / effectiveTotal);
       this.maxProgressFraction = Math.max(this.maxProgressFraction, fraction);
-      const loadedMB = (loaded / (1024 * 1024)).toFixed(1);
-      const totalMB = (total / (1024 * 1024)).toFixed(1);
+      const loadedMB = (this.maxLoadedBytes / (1024 * 1024)).toFixed(1);
+      const totalMB = (effectiveTotal / (1024 * 1024)).toFixed(1);
       const percent = Math.round(this.maxProgressFraction * 100);
       this.emit(
         this.maxProgressFraction,
@@ -157,17 +195,23 @@ export class PromptApiProgressAggregator {
     // Case 2: Normalized fraction (0 <= loaded <= 1) (Polyfill fake events often use this)
     if (loaded >= 0 && loaded <= 1) {
       const rawFraction = Math.max(0, Math.min(1, loaded));
+      const displayFraction = rawFraction >= 1 ? 0.99 : rawFraction;
       this.maxProgressFraction = Math.max(
         this.maxProgressFraction,
-        rawFraction,
+        displayFraction,
       );
 
-      if (this.expectedTotalBytes > 0) {
+      const effectiveTotal = Math.max(
+        this.maxEffectiveTotal,
+        this.expectedTotalBytes,
+      );
+
+      if (effectiveTotal > 0) {
         const estimatedBytes = Math.round(
-          this.maxProgressFraction * this.expectedTotalBytes,
+          this.maxProgressFraction * effectiveTotal,
         );
         const loadedMB = (estimatedBytes / (1024 * 1024)).toFixed(1);
-        const totalMB = (this.expectedTotalBytes / (1024 * 1024)).toFixed(1);
+        const totalMB = (effectiveTotal / (1024 * 1024)).toFixed(1);
         const percent = Math.round(this.maxProgressFraction * 100);
         this.emit(
           this.maxProgressFraction,
@@ -185,11 +229,17 @@ export class PromptApiProgressAggregator {
 
     // Case 3: Raw bytes but no total known
     if (loaded > 1) {
-      if (this.expectedTotalBytes > 0) {
-        const rawTotal = Math.max(loaded, this.expectedTotalBytes);
-        const fraction = Math.min(1, loaded / rawTotal);
+      this.maxLoadedBytes = Math.max(this.maxLoadedBytes, loaded);
+      const effectiveTotal = Math.max(
+        this.maxEffectiveTotal,
+        this.expectedTotalBytes,
+      );
+
+      if (effectiveTotal > 0) {
+        const rawTotal = Math.max(this.maxLoadedBytes, effectiveTotal);
+        const fraction = Math.min(0.99, this.maxLoadedBytes / rawTotal);
         this.maxProgressFraction = Math.max(this.maxProgressFraction, fraction);
-        const loadedMB = (loaded / (1024 * 1024)).toFixed(1);
+        const loadedMB = (this.maxLoadedBytes / (1024 * 1024)).toFixed(1);
         const totalMB = (rawTotal / (1024 * 1024)).toFixed(1);
         const percent = Math.round(this.maxProgressFraction * 100);
         this.emit(
@@ -197,7 +247,7 @@ export class PromptApiProgressAggregator {
           `Downloading Prompt API model... (${loadedMB} / ${totalMB} MB · ${percent}%)`,
         );
       } else {
-        const loadedMB = (loaded / (1024 * 1024)).toFixed(1);
+        const loadedMB = (this.maxLoadedBytes / (1024 * 1024)).toFixed(1);
         this.emit(
           null,
           `Downloading Prompt API model... (${loadedMB} MB downloaded)`,

@@ -51,10 +51,16 @@ jest.unstable_mockModule("../../../config/config.js", () => ({
     CONTEXT_COMPRESSION: "context_compression",
     SUBAGENT_MAX_PARALLEL: "subagent_max_parallel",
     SUBAGENT_WORKSPACE_MODE: "subagent_workspace_mode",
+    PROMPT_API_BACKEND: "prompt_api_backend",
+    PROMPT_API_DTYPE_STRATEGY: "prompt_api_dtype_strategy",
+    PROMPT_API_FALLBACK_MODEL: "prompt_api_fallback_model",
+    TRANSFORMERS_JS_BACKEND: "transformers_js_backend",
+    TRANSFORMERS_JS_DTYPE_STRATEGY: "transformers_js_dtype_strategy",
   },
   DEFAULT_MAX_ITERATIONS: 50,
   DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
   DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
+  DEFAULT_PROMPT_API_FALLBACK_MODEL: "onnx-community/Qwen3-0.6B-ONNX",
   DEFAULT_GROUP_ID: "br:main",
   OPFS_ROOT: "shadowclaw",
   PROVIDERS,
@@ -615,6 +621,200 @@ describe("shadow-claw-llm", () => {
     expect(showSuccess).toHaveBeenCalledWith(
       "Subagent workspace mode saved",
       3000,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("defaults Prompt API fallback model to Qwen3-0.6B-ONNX when not configured", async () => {
+    (getConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "prompt_api_fallback_model") {
+        return undefined;
+      }
+      return undefined;
+    });
+
+    const orch = createOrchestratorStub({
+      getProvider: jest.fn<any>().mockReturnValue("prompt_api"),
+    });
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const fallbackSelect = el.shadowRoot?.querySelector(
+      '[data-setting="prompt-api-fallback-select"]',
+    ) as HTMLSelectElement | null;
+
+    expect(fallbackSelect).not.toBeNull();
+    expect(fallbackSelect?.value).toBe("onnx-community/Qwen3-0.6B-ONNX");
+
+    document.body.removeChild(el);
+  });
+
+  it("loads configured Prompt API fallback model when set in DB", async () => {
+    (getConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "prompt_api_fallback_model") {
+        return "onnx-community/gemma-3-1b-it-ONNX-GQA";
+      }
+      return undefined;
+    });
+
+    const orch = createOrchestratorStub({
+      getProvider: jest.fn<any>().mockReturnValue("prompt_api"),
+    });
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const fallbackSelect = el.shadowRoot?.querySelector(
+      '[data-setting="prompt-api-fallback-select"]',
+    ) as HTMLSelectElement | null;
+
+    expect(fallbackSelect).not.toBeNull();
+    expect(fallbackSelect?.value).toBe("onnx-community/gemma-3-1b-it-ONNX-GQA");
+
+    document.body.removeChild(el);
+  });
+
+  it("loads configured Prompt API device and dtype settings and saves them on saveModel", async () => {
+    (getConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "prompt_api_backend") {
+        return "webgpu";
+      }
+      if (key === "prompt_api_dtype_strategy") {
+        return "q4f16";
+      }
+      return undefined;
+    });
+
+    const orch = createOrchestratorStub({
+      getProvider: jest.fn<any>().mockReturnValue("prompt_api"),
+      getModel: jest.fn<any>().mockReturnValue("browser-built-in"),
+    });
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const deviceSelect = el.shadowRoot?.querySelector(
+      '[data-setting="prompt-api-device-select"]',
+    ) as HTMLSelectElement | null;
+    const dtypeSelect = el.shadowRoot?.querySelector(
+      '[data-setting="prompt-api-dtype-select"]',
+    ) as HTMLSelectElement | null;
+
+    expect(deviceSelect).not.toBeNull();
+    expect(dtypeSelect).not.toBeNull();
+    expect(deviceSelect?.value).toBe("webgpu");
+    expect(dtypeSelect?.value).toBe("q4f16");
+
+    deviceSelect!.value = "wasm";
+    dtypeSelect!.value = "q4";
+
+    await el.saveModel();
+
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "prompt_api_backend",
+      "wasm",
+    );
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "prompt_api_dtype_strategy",
+      "q4",
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("updates max tokens recommendation when fallback model is changed", async () => {
+    (getConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "prompt_api_fallback_model") {
+        return "onnx-community/Qwen3-0.6B-ONNX";
+      }
+      return undefined;
+    });
+
+    const orch = createOrchestratorStub({
+      getProvider: jest.fn<any>().mockReturnValue("prompt_api"),
+      getModel: jest.fn<any>().mockReturnValue("browser-built-in"),
+      getMaxTokens: jest.fn<any>().mockReturnValue(8192),
+    });
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const helper = el.shadowRoot?.querySelector(
+      '[data-setting="max-tokens-helper"]',
+    ) as HTMLElement | null;
+
+    expect(helper).not.toBeNull();
+    expect(helper?.textContent).toContain("131,072 tokens");
+
+    document.body.removeChild(el);
+  });
+
+  it("renders and saves Transformers.js browser inference settings", async () => {
+    (getConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "transformers_js_backend") {
+        return "webgpu";
+      }
+      if (key === "transformers_js_dtype_strategy") {
+        return "q4f16";
+      }
+      return undefined;
+    });
+
+    const orch = createOrchestratorStub({
+      getProvider: jest.fn<any>().mockReturnValue("transformers_js_browser"),
+      getModel: jest
+        .fn<any>()
+        .mockReturnValue("onnx-community/Qwen3-0.6B-ONNX"),
+    });
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm();
+    document.body.appendChild(el);
+    await new Promise((r) => setTimeout(r, 100));
+    await el.render();
+
+    const deviceSelect = el.shadowRoot?.querySelector(
+      '[data-setting="transformers-js-device-select"]',
+    ) as HTMLSelectElement | null;
+    const dtypeSelect = el.shadowRoot?.querySelector(
+      '[data-setting="transformers-js-dtype-select"]',
+    ) as HTMLSelectElement | null;
+
+    expect(deviceSelect).not.toBeNull();
+    expect(dtypeSelect).not.toBeNull();
+    expect(deviceSelect?.value).toBe("webgpu");
+    expect(dtypeSelect?.value).toBe("q4f16");
+
+    deviceSelect!.value = "wasm";
+    dtypeSelect!.value = "q4";
+
+    await el.saveTransformersJsSettings();
+
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "transformers_js_backend",
+      "wasm",
+    );
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "transformers_js_dtype_strategy",
+      "q4",
     );
 
     document.body.removeChild(el);

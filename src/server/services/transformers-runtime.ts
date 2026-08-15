@@ -18,12 +18,15 @@ import {
 import path from "node:path";
 
 import { parsePositiveInteger } from "../utils/proxy-helpers.js";
+import {
+  normalizeMessagesForChatTemplate,
+  renderChatTemplate,
+} from "../../subsystems/providers/utils/chatTemplate.js";
 
 const DEFAULT_USER_AGENT =
   process.env.SHADOWCLAW_USER_AGENT || "ShadowClaw/1.0";
 const TRANSFORMERS_JS_MODULE_ID = "@huggingface/transformers";
-export const DEFAULT_TRANSFORMERS_JS_MODEL =
-  "onnx-community/gemma-4-E2B-it-ONNX";
+export const DEFAULT_TRANSFORMERS_JS_MODEL = "onnx-community/Qwen3-0.6B-ONNX";
 const TRANSFORMERS_JS_MODELS_CACHE_FILE = path.resolve(
   process.cwd(),
   "assets/cache/transformers.js/models.json",
@@ -75,6 +78,13 @@ export type TransformersJsDiskCacheStatus = {
 const STATIC_MODELS: TransformersModelMetadata[] = [
   {
     id: DEFAULT_TRANSFORMERS_JS_MODEL,
+    name: "Qwen 3 0.6B (ONNX)",
+    context_length: 32_768,
+    max_completion_tokens: 8192,
+    supports_tools: true,
+  },
+  {
+    id: "onnx-community/gemma-4-E2B-it-ONNX",
     name: "Gemma 4 E2B (ONNX)",
     context_length: 128_000,
     max_completion_tokens: 8192,
@@ -424,65 +434,6 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
     return text.replace(/<\s*turn\|>\s*|<\|end_of_turn\|>|<\|eot_id\|>/gi, "");
   }
 
-  function extractMessageText(message: any): string {
-    const content = message?.content;
-    if (typeof content === "string") {
-      return content;
-    }
-
-    if (!Array.isArray(content)) {
-      return "";
-    }
-
-    return content
-      .map((block: any) => {
-        if (block?.type === "text" && typeof block.text === "string") {
-          return block.text;
-        }
-
-        if (
-          block?.type === "tool_result" &&
-          typeof block.content === "string" &&
-          block.content
-        ) {
-          return `[tool-result] ${block.content}`;
-        }
-
-        if (block?.type === "attachment") {
-          return `[attachment:${block.mediaType}] ${block.fileName} (${block.mimeType})`;
-        }
-
-        return "";
-      })
-      .filter(Boolean)
-      .join("\n");
-  }
-
-  function buildPromptFromMessages(messages: any[]): string {
-    const lines = messages
-      .map((message: any) => {
-        const role =
-          message?.role === "assistant"
-            ? "assistant"
-            : message?.role === "system"
-              ? "system"
-              : "user";
-        const text = extractMessageText(message).trim();
-        if (!text) {
-          return "";
-        }
-
-        return `${role}: ${text}`;
-      })
-      .filter(Boolean);
-
-    if (lines.length === 0) {
-      return "user: Say hello.";
-    }
-
-    return lines.join("\n");
-  }
-
   async function loadRuntime(
     modelId: string,
     verbose: boolean,
@@ -601,7 +552,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
       let lastLoaderError: unknown = null;
 
       if (isGemma4Model) {
-        const gemmaDtypes = ["q4f16", "q4", "fp16"];
+        const gemmaDtypes = ["q4", "q4f16", "fp16"];
         for (const dtype of gemmaDtypes) {
           try {
             model = await Gemma4ForConditionalGeneration.from_pretrained(
@@ -632,30 +583,36 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
           }
         }
       } else {
+        const dtypesToTry = ["q4", "q4f16", "q8", "fp16"];
         for (const candidate of loaderCandidates) {
-          try {
-            model = await candidate.from_pretrained?.(modelId, {
-              dtype: "q4f16",
-              device: "cpu",
-              progress_callback: (info: any) => {
-                if (info?.status === "progress_total") {
-                  const pct = Number(info.progress);
-                  setDownloadStatus({
-                    status: "running",
-                    progress: Number.isFinite(pct)
-                      ? Math.max(0, Math.min(1, pct / 100))
-                      : null,
-                    message: `Downloading ${modelId} (${candidate.name})...`,
-                    modelId,
-                  });
-                }
-              },
-            });
-            modelLoaderName = candidate.name;
+          for (const dtype of dtypesToTry) {
+            try {
+              model = await candidate.from_pretrained?.(modelId, {
+                dtype,
+                device: "cpu",
+                progress_callback: (info: any) => {
+                  if (info?.status === "progress_total") {
+                    const pct = Number(info.progress);
+                    setDownloadStatus({
+                      status: "running",
+                      progress: Number.isFinite(pct)
+                        ? Math.max(0, Math.min(1, pct / 100))
+                        : null,
+                      message: `Downloading ${modelId} (${candidate.name}/${dtype})...`,
+                      modelId,
+                    });
+                  }
+                },
+              });
+              modelLoaderName = `${candidate.name}/${dtype}`;
 
+              break;
+            } catch (error) {
+              lastLoaderError = error;
+            }
+          }
+          if (model) {
             break;
-          } catch (error) {
-            lastLoaderError = error;
           }
         }
       }
@@ -847,22 +804,55 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
       }
 
       try {
-        const promptText = buildPromptFromMessages(messages);
-        const formattedMessages = [
-          { role: "user", content: [{ type: "text", text: promptText }] },
-        ];
+        const normalizedMessages = normalizeMessagesForChatTemplate(messages);
+        let prompt: string;
 
-        const prompt = runtime.processor.apply_chat_template(
-          formattedMessages,
-          {
-            enable_thinking: false,
-            add_generation_prompt: true,
-          },
-        );
+        if (typeof runtime.processor?.apply_chat_template === "function") {
+          try {
+            prompt = runtime.processor.apply_chat_template(normalizedMessages, {
+              enable_thinking: false,
+              add_generation_prompt: true,
+              tokenize: false,
+            });
+          } catch {
+            prompt = await renderChatTemplate({
+              modelName: modelId,
+              messages: normalizedMessages,
+              addGenerationPrompt: true,
+            });
+          }
+        } else if (
+          typeof runtime.processor?.tokenizer?.apply_chat_template ===
+          "function"
+        ) {
+          try {
+            prompt = runtime.processor.tokenizer.apply_chat_template(
+              normalizedMessages,
+              {
+                enable_thinking: false,
+                add_generation_prompt: true,
+                tokenize: false,
+              },
+            );
+          } catch {
+            prompt = await renderChatTemplate({
+              modelName: modelId,
+              messages: normalizedMessages,
+              addGenerationPrompt: true,
+            });
+          }
+        } else {
+          prompt = await renderChatTemplate({
+            modelName: modelId,
+            messages: normalizedMessages,
+            addGenerationPrompt: true,
+          });
+        }
 
         const inputs = await runtime.processor(prompt, null, null, {
           add_special_tokens: false,
         });
+
         const streamed: string[] = [];
 
         const outputs: any = await awaitOperation(
@@ -908,7 +898,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
 
         return {
           text,
-          promptTokens: estimateTextTokens(promptText),
+          promptTokens: estimateTextTokens(prompt),
           completionTokens: estimateTextTokens(text),
         };
       } catch (error) {

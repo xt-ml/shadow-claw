@@ -12,3 +12,4 @@ export * from "./downloadModelToCache.js";
 export * from "./loadModelStream.js";
 export * from "./createModelCacheFetch.js";
 export * from "./promptApiProgressAggregator.js";
+export * from "./chatTemplate.js";

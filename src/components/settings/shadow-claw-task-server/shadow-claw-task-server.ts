@@ -1,5 +1,8 @@
 import { effect } from "../../../core/effect.js";
-import { setTaskServerUrl } from "../../../core/orchestrator/utils/settings.js";
+import {
+  setTaskServerEnabled,
+  setTaskServerUrl,
+} from "../../../core/orchestrator/utils/settings.js";
 import { getDb } from "../../../db/db.js";
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess } from "../../../ui/toast.js";
@@ -55,6 +58,13 @@ export class ShadowClawTaskServer extends ShadowClawElement {
       ?.addEventListener("click", () => {
         void this.saveTaskServerUrl();
       });
+
+    root
+      .querySelector('[data-setting="task-server-enabled-toggle"]')
+      ?.addEventListener("change", (e) => {
+        const target = e.target as HTMLInputElement;
+        void this.saveTaskServerEnabled(target.checked);
+      });
   }
 
   setupEffects() {
@@ -81,6 +91,13 @@ export class ShadowClawTaskServer extends ShadowClawElement {
     ) as HTMLInputElement | null;
     if (input) {
       input.value = this.orchestrator.taskServerUrl;
+    }
+
+    const enabledToggle = root.querySelector(
+      '[data-setting="task-server-enabled-toggle"]',
+    ) as HTMLInputElement | null;
+    if (enabledToggle) {
+      enabledToggle.checked = this.orchestrator.taskServerEnabled;
     }
   }
 
@@ -109,6 +126,18 @@ export class ShadowClawTaskServer extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving Task Server URL: " + errorMsg, 6000);
+    }
+  }
+  async saveTaskServerEnabled(enabled: boolean) {
+    if (!this.orchestrator || !this.db) {
+      return;
+    }
+
+    try {
+      await setTaskServerEnabled(this.orchestrator, this.db, enabled);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving Task Server setting: " + errorMsg, 6000);
     }
   }
 }

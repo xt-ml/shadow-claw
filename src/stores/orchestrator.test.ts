@@ -885,6 +885,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -908,6 +909,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -953,6 +955,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -984,6 +987,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -1050,6 +1054,10 @@ describe("OrchestratorStore", () => {
 
   it("reorderTasks reorders tasks, loads them, and triggers sync to server", async () => {
     const store: any = new OrchestratorStore();
+    store.orchestrator = {
+      taskServerEnabled: true,
+      taskServerUrl: "/schedule",
+    } as any;
     const loadSpy = jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
     mockReorderTasks.mockResolvedValue([
       {
@@ -1075,14 +1083,7 @@ describe("OrchestratorStore", () => {
       return undefined;
     });
 
-    const mockFetch = (jest.fn() as any).mockImplementation(
-      async (_url: string, init?: RequestInit) => {
-        if (init?.method === "HEAD") {
-          return { status: 200 } as any;
-        }
-        return { ok: true } as any;
-      },
-    );
+    const mockFetch = (jest.fn() as any).mockResolvedValue({ ok: true } as any);
     (global as any).fetch = mockFetch;
 
     await store.reorderTasks({} as any, "group-a", ["t2", "t1"]);
@@ -1128,6 +1129,10 @@ describe("OrchestratorStore", () => {
 
   it("queues failed delete sync for replay", async () => {
     const store: any = new OrchestratorStore();
+    store.orchestrator = {
+      taskServerEnabled: true,
+      taskServerUrl: "/schedule",
+    } as any;
     jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
 
     (global as any).fetch = (jest.fn() as any).mockResolvedValue({ ok: false });
@@ -1151,6 +1156,10 @@ describe("OrchestratorStore", () => {
 
   it("allows local delete when server returns 404", async () => {
     const store: any = new OrchestratorStore();
+    store.orchestrator = {
+      taskServerEnabled: true,
+      taskServerUrl: "/schedule",
+    } as any;
     jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
 
     (global as any).fetch = (jest.fn() as any).mockResolvedValue({
@@ -1170,6 +1179,10 @@ describe("OrchestratorStore", () => {
 
   it("allows local delete when server returns 405", async () => {
     const store: any = new OrchestratorStore();
+    store.orchestrator = {
+      taskServerEnabled: true,
+      taskServerUrl: "/schedule",
+    } as any;
     jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
 
     (global as any).fetch = (jest.fn() as any).mockResolvedValue({
@@ -1197,6 +1210,7 @@ describe("OrchestratorStore", () => {
       getGitProxyUrl: () => "",
       getVMBashFullInternetAccess: () => false,
       getTaskServerUrl: () => "/schedule",
+      taskServerEnabled: true,
     };
 
     (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
@@ -1243,6 +1257,10 @@ describe("OrchestratorStore", () => {
 
   it("reconciles server-only tasks into local store", async () => {
     const store = new OrchestratorStore();
+    (store as any).orchestrator = {
+      taskServerEnabled: true,
+      taskServerUrl: "/schedule",
+    } as any;
 
     (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
       if (key === "subscriber_id") {
@@ -1307,6 +1325,10 @@ describe("OrchestratorStore", () => {
 
   it("includes subscriberId when syncing task upserts to server", async () => {
     const store: any = new OrchestratorStore();
+    store.orchestrator = {
+      taskServerEnabled: true,
+      taskServerUrl: "/schedule",
+    } as any;
     (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
       if (key === "subscriber_id") {
         return "sub-xyz";
@@ -1315,15 +1337,9 @@ describe("OrchestratorStore", () => {
       return undefined;
     });
 
-    (global as any).fetch = (jest.fn() as any).mockImplementation(
-      async (_url: string, init?: RequestInit) => {
-        if (init?.method === "HEAD") {
-          return { status: 200 } as any;
-        }
-
-        return { ok: true } as any;
-      },
-    );
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
+      ok: true,
+    } as any);
 
     await store.upsertTask(
       {} as any,
@@ -1353,6 +1369,10 @@ describe("OrchestratorStore", () => {
 
   it("includes subscriberId when deleting task on server", async () => {
     const store: any = new OrchestratorStore();
+    store.orchestrator = {
+      taskServerEnabled: true,
+      taskServerUrl: "/schedule",
+    } as any;
     jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
     (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
       if (key === "subscriber_id") {
@@ -1362,15 +1382,9 @@ describe("OrchestratorStore", () => {
       return undefined;
     });
 
-    (global as any).fetch = (jest.fn() as any).mockImplementation(
-      async (_url: string, init?: RequestInit) => {
-        if (init?.method === "HEAD") {
-          return { status: 200 } as any;
-        }
-
-        return { ok: true } as any;
-      },
-    );
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
+      ok: true,
+    } as any);
 
     await store.deleteTask({} as any, "t-del");
 
@@ -1695,6 +1709,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
       jest.spyOn(store, "loadHistory").mockResolvedValue(undefined);
       jest.spyOn(store, "loadTasks").mockResolvedValue(undefined);
@@ -1744,6 +1759,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -1764,6 +1780,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -1808,6 +1825,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -1845,6 +1863,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -1922,6 +1941,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2072,6 +2092,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2109,6 +2130,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2145,6 +2167,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2176,6 +2199,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2209,6 +2233,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2236,6 +2261,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2257,6 +2283,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2298,6 +2325,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2341,6 +2369,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       jest.spyOn(store, "loadHistory").mockResolvedValue(undefined);
@@ -2495,6 +2524,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: jest.fn().mockReturnValue(""),
         getVMBashFullInternetAccess: jest.fn().mockReturnValue(false),
         getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2520,6 +2550,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: jest.fn().mockReturnValue(""),
         getVMBashFullInternetAccess: jest.fn().mockReturnValue(false),
         getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2545,6 +2576,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: jest.fn().mockReturnValue(""),
         getVMBashFullInternetAccess: jest.fn().mockReturnValue(false),
         getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
+        taskServerEnabled: true,
       };
 
       jest.spyOn(store, "loadHistory").mockResolvedValue(undefined);
@@ -2579,6 +2611,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: jest.fn().mockReturnValue(""),
         getVMBashFullInternetAccess: jest.fn().mockReturnValue(false),
         getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
+        taskServerEnabled: true,
       };
 
       jest.spyOn(store, "loadHistory").mockResolvedValue(undefined);
@@ -2611,6 +2644,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: jest.fn().mockReturnValue(""),
         getVMBashFullInternetAccess: jest.fn().mockReturnValue(false),
         getTaskServerUrl: jest.fn().mockReturnValue("/schedule"),
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2641,6 +2675,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       jest.spyOn(store, "loadHistory").mockResolvedValue(undefined);
@@ -2714,6 +2749,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);
@@ -2735,6 +2771,7 @@ describe("OrchestratorStore", () => {
         getGitProxyUrl: () => "",
         getVMBashFullInternetAccess: () => false,
         getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
       };
 
       await store.init({} as any, orch);

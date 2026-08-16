@@ -175,29 +175,11 @@ function isConfigEnabled(value: unknown): boolean {
  * Lazy-cached probe: returns true only when the server's schedule API is
  * reachable.
  *
- * The result is cached per base URL for the lifetime of the page.
+ * Returns false immediately when taskServerEnabled is false so no network
+ * probes are ever made in static-only deployments.
  */
-const _scheduleServerAvailableCache = new Map<string, boolean>();
-async function isScheduleServerAvailable(baseUrl: string): Promise<boolean> {
-  const cached = _scheduleServerAvailableCache.get(baseUrl);
-  if (cached !== undefined) {
-    return cached;
-  }
-
-  try {
-    const base = baseUrl.replace(/\/$/, "");
-    const res = await fetch(`${base}/tasks`, { method: "HEAD" });
-    // A 200/405 means the route exists; a redirect or HTML 404 means static host.
-    const available =
-      res.status !== 404 && res.status !== 301 && res.status !== 302;
-    _scheduleServerAvailableCache.set(baseUrl, available);
-
-    return available;
-  } catch {
-    _scheduleServerAvailableCache.set(baseUrl, false);
-
-    return false;
-  }
+function isScheduleServerEnabled(enabled: boolean): boolean {
+  return !!enabled;
 }
 
 /**
@@ -207,9 +189,22 @@ async function syncTaskToServer(
   task: Task,
   baseUrl: string,
   subscriberId: string,
+  serverEnabled: boolean,
 ): Promise<boolean> {
-  if (!(await isScheduleServerAvailable(baseUrl))) {
-    return true; // Silently succeed on static-only deployments.
+  if (!isScheduleServerEnabled(serverEnabled)) {
+    return true; // Silently succeed when server-side tasks are disabled.
+  }
+
+  // If the task has no schedule, it belongs only in local storage.
+  // We issue a delete to ensure it is removed from the server if it was previously scheduled.
+  if (!task.schedule) {
+    const deleteResult = await deleteTaskFromServer(
+      task.id,
+      baseUrl,
+      subscriberId,
+      serverEnabled,
+    );
+    return deleteResult !== "failed";
   }
 
   try {
@@ -238,9 +233,10 @@ async function deleteTaskFromServer(
   id: string,
   baseUrl: string,
   subscriberId: string,
+  serverEnabled: boolean,
 ): Promise<DeleteTaskServerResult> {
-  if (!(await isScheduleServerAvailable(baseUrl))) {
-    return "missing"; // No server to delete from on static-only deployments.
+  if (!isScheduleServerEnabled(serverEnabled)) {
+    return "missing"; // No server in static-only deployments.
   }
 
   try {
@@ -273,9 +269,10 @@ async function fetchServerTasksForGroup(
   groupId: string,
   baseUrl: string,
   subscriberId: string,
+  serverEnabled: boolean,
 ): Promise<Task[] | null> {
-  if (!(await isScheduleServerAvailable(baseUrl))) {
-    return null; // No server on static-only deployments.
+  if (!isScheduleServerEnabled(serverEnabled)) {
+    return null; // No server in static-only deployments.
   }
 
   try {
@@ -860,6 +857,7 @@ export class OrchestratorStore {
         task.id,
         this.getTaskServerBaseUrl(),
         subscriberId,
+        this.orchestrator?.taskServerEnabled ?? false,
       );
       if (serverResult === "failed") {
         console.warn(
@@ -986,6 +984,7 @@ export class OrchestratorStore {
       id,
       this.getTaskServerBaseUrl(),
       subscriberId,
+      this.orchestrator?.taskServerEnabled ?? false,
     );
     if (serverResult === "failed") {
       console.warn("Failed to delete task from server — queued for replay.");
@@ -1503,6 +1502,7 @@ export class OrchestratorStore {
       currentGroupId,
       this.getTaskServerBaseUrl(),
       subscriberId,
+      this.orchestrator?.taskServerEnabled ?? false,
     );
     if (!serverGroupTasks) {
       return;
@@ -1697,7 +1697,12 @@ export class OrchestratorStore {
     const subscriberId = await this.getSubscriberId(db);
     for (const task of updatedTasks) {
       const base = this.getTaskServerBaseUrl();
-      const ok = await syncTaskToServer(task, base, subscriberId);
+      const ok = await syncTaskToServer(
+        task,
+        base,
+        subscriberId,
+        this.orchestrator?.taskServerEnabled ?? false,
+      );
       if (!ok) {
         console.warn(
           `Failed to sync reordered task "${task.id}" to server — queued for replay.`,
@@ -1727,8 +1732,18 @@ export class OrchestratorStore {
         const base = this.getTaskServerBaseUrl();
         const ok =
           op.type === "upsert"
-            ? await syncTaskToServer(op.task, base, subscriberId)
-            : await deleteTaskFromServer(op.id, base, subscriberId);
+            ? await syncTaskToServer(
+                op.task,
+                base,
+                subscriberId,
+                this.orchestrator?.taskServerEnabled ?? false,
+              )
+            : await deleteTaskFromServer(
+                op.id,
+                base,
+                subscriberId,
+                this.orchestrator?.taskServerEnabled ?? false,
+              );
 
         if (!ok) {
           remaining.push(op);
@@ -1999,6 +2014,7 @@ export class OrchestratorStore {
       updatedTask,
       this.getTaskServerBaseUrl(),
       await this.getSubscriberId(db),
+      this.orchestrator?.taskServerEnabled ?? false,
     );
     if (!serverOk) {
       console.warn("Failed to update task on server — queued for replay.");
@@ -2098,6 +2114,7 @@ export class OrchestratorStore {
       task,
       this.getTaskServerBaseUrl(),
       subscriberId,
+      this.orchestrator?.taskServerEnabled ?? false,
     );
     if (!serverOk) {
       console.warn("Failed to sync task to server — queued for replay.");

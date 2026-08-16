@@ -2,7 +2,7 @@ import { modelRegistry } from "../subsystems/providers/model-registry.js";
 
 /** Default assistant name (used in trigger pattern) */
 
-export const ASSISTANT_NAME = "example";
+export const ASSISTANT_NAME = "ShadowClaw";
 
 /**
  * Build a trigger pattern for the assistant name
@@ -1085,6 +1085,7 @@ export const CONFIG_KEYS = {
   SUBAGENT_WORKSPACE_MODE: "subagent_workspace_mode",
   SUPPRESSED_PAGES_LIST: "suppressed_pages_list",
   SYSTEM_PROMPT_OVERRIDE: "system_prompt_override",
+  TASK_SERVER_ENABLED: "task_server_enabled",
   TASK_SERVER_URL: "task_server_url",
   TASK_SYNC_OUTBOX: "task_sync_outbox",
   TELEGRAM_BOT_TOKEN: "telegram_bot_token",
@@ -1144,3 +1145,9 @@ export const DEFAULT_TRANSFORMERS_JS_BACKEND = "auto";
 
 /** Default Transformers.js dtype strategy */
 export const DEFAULT_TRANSFORMERS_JS_DTYPE_STRATEGY = "auto";
+
+/** Default Task Server URL (base path, without /tasks suffix) */
+export const DEFAULT_TASK_SERVER_URL = "http://localhost:8888/schedule";
+
+/** Default Task Server Enabled */
+export const DEFAULT_TASK_SERVER_ENABLED = false;

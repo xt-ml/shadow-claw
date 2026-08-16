@@ -36,6 +36,8 @@ const mockConfig = {
   getProviderTokenAuthScheme: jest.fn(),
   DEFAULT_DEV_HOST: "http://localhost:8888",
   DEFAULT_DEV_PORT: 8888,
+  DEFAULT_TASK_SERVER_URL: "http://localhost:8888/schedule",
+  TASK_SERVER_ENABLED: false,
   BASH_DEFAULT_TIMEOUT_SEC: 60,
   BASH_MAX_TIMEOUT_SEC: 300,
   DEFAULT_VM_NETWORK_RELAY_URL: "",

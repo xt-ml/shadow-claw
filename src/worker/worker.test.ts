@@ -20,6 +20,8 @@ describe("worker and worker/agent.js", () => {
       DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
       DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
       DEFAULT_PROMPT_API_FALLBACK_MODEL: "onnx-community/Qwen3-0.6B-ONNX",
+      DEFAULT_TASK_SERVER_URL: "http://localhost:8888/schedule",
+      TASK_SERVER_ENABLED: false,
       CONFIG_KEYS: {
         PROVIDER: "provider",
         API_KEY: "api_key",

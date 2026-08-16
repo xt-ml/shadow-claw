@@ -98,6 +98,7 @@ export interface OrchestratorState {
   pushSubscriptionWarned: boolean;
   scheduler: TaskScheduler | null;
   schedulerTriggeredGroups: Set<string>;
+  taskServerEnabled: boolean;
   taskServerUrl: string;
 
   // ── Peer / Rooms ──────────────────────────────────────────────────────────

@@ -112,3 +112,22 @@ export function initializeThemeAndBootState() {
 
 handleGithubPages404Redirects();
 initializeThemeAndBootState();
+
+// Handle lazy-loading CSS (like fonts) without CSP-violating inline onload handlers.
+window.addEventListener(
+  "load",
+  (e: Event) => {
+    const target = e.target as HTMLElement;
+    if (target && target.tagName === "LINK") {
+      const link = target as HTMLLinkElement;
+      if (
+        link.rel === "stylesheet" &&
+        link.media === "print" &&
+        link.href.includes("Material+Symbols")
+      ) {
+        link.media = "all";
+      }
+    }
+  },
+  true,
+);

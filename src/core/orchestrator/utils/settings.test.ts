@@ -236,14 +236,14 @@ describe("settings (functional utilities)", () => {
   });
 
   describe("setTaskServerUrl", () => {
-    it("defaults to /schedule when empty", async () => {
+    it("defaults to config default when empty", async () => {
       const state = makeState();
       const { calls, mockFn } = mockSetConfig();
 
       await setTaskServerUrl(state, {} as any, "", mockFn);
 
-      expect(state.taskServerUrl).toBe("/schedule");
-      expect(calls[0].value).toBe("/schedule");
+      expect(state.taskServerUrl).toBe("http://localhost:8888/schedule");
+      expect(calls[0].value).toBe("http://localhost:8888/schedule");
     });
   });
 

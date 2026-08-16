@@ -5,10 +5,19 @@ import type { Task } from "../../../../db/types.js";
 import type { OrchestratorState } from "../../orchestrator-state.js";
 
 export async function syncTaskToServer(
-  state: Pick<OrchestratorState, "taskServerUrl">,
+  state: Pick<OrchestratorState, "taskServerUrl" | "taskServerEnabled">,
   task: Task,
   subscriberId?: string,
 ): Promise<boolean> {
+  if (!state.taskServerEnabled) {
+    return true; // No server configured — silently succeed.
+  }
+
+  // If the task has no schedule, it belongs only in local storage.
+  // We issue a delete to ensure it is removed from the server if it was previously scheduled.
+  if (!task.schedule) {
+    return deleteTaskFromServer(state, task.id, subscriberId);
+  }
   try {
     const base = state.taskServerUrl.replace(/\/$/, "");
     const res = await fetch(`${base}/tasks`, {
@@ -37,10 +46,13 @@ export async function syncTaskToServer(
 }
 
 export async function deleteTaskFromServer(
-  state: Pick<OrchestratorState, "taskServerUrl">,
+  state: Pick<OrchestratorState, "taskServerUrl" | "taskServerEnabled">,
   id: string,
   subscriberId?: string,
 ): Promise<boolean> {
+  if (!state.taskServerEnabled) {
+    return true; // No server configured — silently succeed.
+  }
   try {
     const base = state.taskServerUrl.replace(/\/$/, "");
     const suffix = subscriberId

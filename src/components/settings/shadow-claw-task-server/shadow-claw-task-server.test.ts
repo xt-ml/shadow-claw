@@ -12,10 +12,12 @@ jest.unstable_mockModule("../../../db/db.js", () => ({
 }));
 
 const mockSetTaskServerUrl = jest.fn(() => Promise.resolve());
+const mockSetTaskServerEnabled = jest.fn(() => Promise.resolve());
 jest.unstable_mockModule(
   "../../../core/orchestrator/utils/settings.js",
   () => ({
     setTaskServerUrl: mockSetTaskServerUrl,
+    setTaskServerEnabled: mockSetTaskServerEnabled,
   }),
 );
 

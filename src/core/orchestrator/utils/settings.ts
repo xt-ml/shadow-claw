@@ -1,4 +1,7 @@
-import { CONFIG_KEYS } from "../../../config/config.js";
+import {
+  CONFIG_KEYS,
+  DEFAULT_TASK_SERVER_URL,
+} from "../../../config/config.js";
 import { setConfig as _defaultSetConfig } from "../../../db/setConfig.js";
 import { syncProxyConfigToServiceWorker } from "./syncProxyConfigToServiceWorker.js";
 
@@ -140,13 +143,30 @@ export async function setStreamingEnabled(
   );
 }
 
+export async function setTaskServerEnabled(
+  state: OrchestratorState,
+  db: ShadowClawDatabase,
+  enabled: boolean,
+  _setConfig: SetConfigFn = _defaultSetConfig,
+): Promise<void> {
+  state.taskServerEnabled = !!enabled;
+
+  await _setConfig(
+    db,
+    CONFIG_KEYS.TASK_SERVER_ENABLED,
+    state.taskServerEnabled ? "true" : "false",
+  );
+}
+
 export async function setTaskServerUrl(
   state: OrchestratorState,
   db: ShadowClawDatabase,
   url: string,
   _setConfig: SetConfigFn = _defaultSetConfig,
 ): Promise<void> {
-  state.taskServerUrl = url || "/schedule";
+  const defaultUrl = DEFAULT_TASK_SERVER_URL;
+
+  state.taskServerUrl = url || defaultUrl;
 
   await _setConfig(db, CONFIG_KEYS.TASK_SERVER_URL, state.taskServerUrl);
 }

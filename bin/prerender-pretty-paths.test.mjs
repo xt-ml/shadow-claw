@@ -584,10 +584,7 @@ describe("prerenderPrettyPaths", () => {
     expect(embeddedManifest.pages[0].displayPath).toBe("posts/post1.md");
 
     const fullManifest = JSON.parse(
-      await readFile(
-        path.join(publicDir, "static-main-manifest.json"),
-        "utf8",
-      ),
+      await readFile(path.join(publicDir, "static-main-manifest.json"), "utf8"),
     );
     expect(fullManifest.pages).toHaveLength(1);
     expect(fullManifest.pages[0].displayPath).toBe("posts/post1.md");

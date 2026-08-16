@@ -50,7 +50,7 @@ describe("config.js", () => {
 
   describe("Constants", () => {
     it("should have valid ASSISTANT_NAME", () => {
-      expect(ASSISTANT_NAME).toBe("example");
+      expect(ASSISTANT_NAME).toBe("ShadowClaw");
     });
 
     it("should have valid context window size", () => {
@@ -137,19 +137,19 @@ describe("config.js", () => {
 
   describe("buildTriggerPattern", () => {
     it("should create a pattern that matches @name at start of message", () => {
-      const pattern = buildTriggerPattern("example");
-      expect(pattern.test("@example hello")).toBe(true);
+      const pattern = buildTriggerPattern("ShadowClaw");
+      expect(pattern.test("@ShadowClaw hello")).toBe(true);
     });
 
     it("should create a pattern that matches @name with space prefix", () => {
-      const pattern = buildTriggerPattern("example");
-      expect(pattern.test("hey @example what's up")).toBe(true);
+      const pattern = buildTriggerPattern("ShadowClaw");
+      expect(pattern.test("hey @ShadowClaw what's up")).toBe(true);
     });
 
     it("should be case-insensitive", () => {
-      const pattern = buildTriggerPattern("example");
-      expect(pattern.test("@example")).toBe(true);
-      expect(pattern.test("@example")).toBe(true);
+      const pattern = buildTriggerPattern("ShadowClaw");
+      expect(pattern.test("@shadowclaw")).toBe(true);
+      expect(pattern.test("@ShadowClaw")).toBe(true);
     });
 
     it("should escape special regex characters", () => {
@@ -159,13 +159,13 @@ describe("config.js", () => {
     });
 
     it("should not match @name as part of a longer word", () => {
-      const pattern = buildTriggerPattern("example");
-      expect(pattern.test("@examples")).toBe(false); // word boundary enforced
+      const pattern = buildTriggerPattern("ShadowClaw");
+      expect(pattern.test("@ShadowClaws")).toBe(false); // word boundary enforced
     });
 
     it("TRIGGER_PATTERN should be a valid regex", () => {
       expect(TRIGGER_PATTERN).toBeInstanceOf(RegExp);
-      expect(TRIGGER_PATTERN.test("@example")).toBe(true);
+      expect(TRIGGER_PATTERN.test("@ShadowClaw")).toBe(true);
     });
   });
 

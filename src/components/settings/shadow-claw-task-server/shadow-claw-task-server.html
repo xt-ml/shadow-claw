@@ -11,6 +11,23 @@
     </div>
 
     <div class="form-group">
+      <div class="form-toggle">
+        <input
+          data-setting="task-server-enabled-toggle"
+          id="task-server-enabled-toggle"
+          type="checkbox"
+        />
+        <label class="form-label" for="task-server-enabled-toggle">
+          Enable Server-Side Tasks
+        </label>
+      </div>
+      <div class="form-helper">
+        Opt in to server-side task scheduling. When disabled, the application
+        will not attempt to probe or communicate with a task server.
+      </div>
+    </div>
+
+    <div class="form-group">
       <label class="form-label" for="task-server-url">Task Server URL</label>
       <input
         class="form-input"

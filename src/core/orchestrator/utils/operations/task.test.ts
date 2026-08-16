@@ -23,7 +23,7 @@ describe("task operations", () => {
 
   it("syncTaskToServer includes subscriberId in request body", async () => {
     await syncTaskToServer(
-      { taskServerUrl: "/schedule" } as any,
+      { taskServerUrl: "/schedule", taskServerEnabled: true } as any,
       {
         id: "t1",
         groupId: "br:main",
@@ -47,7 +47,7 @@ describe("task operations", () => {
 
   it("deleteTaskFromServer includes subscriberId query parameter", async () => {
     await deleteTaskFromServer(
-      { taskServerUrl: "/schedule" } as any,
+      { taskServerUrl: "/schedule", taskServerEnabled: true } as any,
       "t1",
       "sub-2",
     );

@@ -459,4 +459,3 @@ describe("prerenderDsdShell purge flag pages", () => {
     expect(manifestJson.preRenderedStaticPages["br-main"]).toBeDefined();
   });
 });
-

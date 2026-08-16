@@ -778,7 +778,7 @@ describe("Orchestrator", () => {
 
     await enqueue(o, fakeDb, {
       channel: CHANNEL_TELEGRAM,
-      content: "@example - /clear_chat",
+      content: "@ShadowClaw - /clear_chat",
       groupId: "tg:8352127045",
       id: "msg-direct-tg",
       sender: "Sam",
@@ -828,7 +828,7 @@ describe("Orchestrator", () => {
 
     await enqueue(o, fakeDb, {
       channel: CHANNEL_IMESSAGE,
-      content: `@example /show_toast '{"message":"it works","duration":10}'`,
+      content: `@ShadowClaw /show_toast '{"message":"it works","duration":10}'`,
       groupId: "im:chat-1",
       id: "msg-direct-im",
       sender: "Alex",
@@ -1239,6 +1239,7 @@ describe("Orchestrator", () => {
 
     it("delete-task removes from IndexedDB only after server 200", async () => {
       const o = new Orchestrator();
+      o.taskServerEnabled = true;
       const events: any[] = [];
 
       o.events.on("task-change", (e: any) => events.push(e));
@@ -1267,6 +1268,7 @@ describe("Orchestrator", () => {
 
     it("delete-task keeps task in view when server fails", async () => {
       const o = new Orchestrator();
+      o.taskServerEnabled = true;
       const events: any[] = [];
 
       o.events.on("task-change", (e: any) => events.push(e));
@@ -1291,6 +1293,7 @@ describe("Orchestrator", () => {
 
     it("delete-task keeps task in view when server is unreachable", async () => {
       const o = new Orchestrator();
+      o.taskServerEnabled = true;
       const events: any[] = [];
 
       o.events.on("task-change", (e: any) => events.push(e));
@@ -1314,6 +1317,7 @@ describe("Orchestrator", () => {
 
     it("task-created awaits server sync before saving to IndexedDB", async () => {
       const o = new Orchestrator();
+      o.taskServerEnabled = true;
       const events: any[] = [];
 
       o.events.on("task-change", (e: any) => events.push(e));
@@ -1343,6 +1347,7 @@ describe("Orchestrator", () => {
 
     it("task-created does NOT save locally when server sync fails", async () => {
       const o = new Orchestrator();
+      o.taskServerEnabled = true;
       const events: any[] = [];
 
       o.events.on("task-change", (e: any) => events.push(e));
@@ -1367,6 +1372,7 @@ describe("Orchestrator", () => {
 
     it("update-task awaits server sync", async () => {
       const o = new Orchestrator();
+      o.taskServerEnabled = true;
       const events: any[] = [];
 
       o.events.on("task-change", (e: any) => events.push(e));
@@ -1396,6 +1402,7 @@ describe("Orchestrator", () => {
 
     it("update-task does NOT save locally when server sync fails", async () => {
       const o = new Orchestrator();
+      o.taskServerEnabled = true;
       const events: any[] = [];
 
       o.events.on("task-change", (e: any) => events.push(e));

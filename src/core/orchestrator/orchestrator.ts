@@ -6,6 +6,7 @@ import {
   DEFAULT_MAX_TOKENS,
   DEFAULT_PROMPT_API_FALLBACK_MODEL,
   DEFAULT_PROVIDER,
+  DEFAULT_TASK_SERVER_ENABLED,
   ProviderConfig,
   buildTriggerPattern,
   getDefaultProvider,
@@ -172,6 +173,7 @@ export class Orchestrator {
 
   state: OrchestratorDisplayState = "idle";
   streamingEnabled: boolean = true;
+  taskServerEnabled: boolean = DEFAULT_TASK_SERVER_ENABLED;
   taskServerUrl: string = "/schedule";
 
   telegram: TelegramChannel = new TelegramChannel();

@@ -60,7 +60,7 @@ describe("settings-backup", () => {
             },
           ],
         },
-        { key: "assistant_name", value: "example" },
+        { key: "assistant_name", value: "ShadowClaw" },
       ],
       false,
     );
@@ -99,7 +99,7 @@ describe("settings-backup", () => {
           },
         ],
       },
-      { key: "assistant_name", value: "example" },
+      { key: "assistant_name", value: "ShadowClaw" },
     ]);
     expect(mockDecryptValue).not.toHaveBeenCalled();
   });
@@ -159,7 +159,7 @@ describe("settings-backup", () => {
 
     const restored = await reapplyPlaintextPasswords(
       [
-        { key: "assistant_name", value: "example" },
+        { key: "assistant_name", value: "ShadowClaw" },
         { key: "git_accounts", value: [{ id: "git-1" }] },
       ],
       [
@@ -177,7 +177,7 @@ describe("settings-backup", () => {
     );
 
     expect(restored).toEqual([
-      { key: "assistant_name", value: "example" },
+      { key: "assistant_name", value: "ShadowClaw" },
       {
         key: "git_accounts",
         value: [{ id: "git-1", password: "enc:plain-account-password" }],

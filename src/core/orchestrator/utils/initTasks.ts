@@ -211,8 +211,15 @@ export async function initFeatureFlagsAndLimits(
     (await getConfig(db, CONFIG_KEYS.PROXY_URL)) || "/proxy";
   orchestrator.gitProxyUrl =
     (await getConfig(db, CONFIG_KEYS.GIT_PROXY_URL)) || "/git-proxy";
+  const storedTaskServerEnabled = await getConfig(
+    db,
+    CONFIG_KEYS.TASK_SERVER_ENABLED,
+  );
+  orchestrator.taskServerEnabled = storedTaskServerEnabled === "true";
+
   orchestrator.taskServerUrl =
-    (await getConfig(db, CONFIG_KEYS.TASK_SERVER_URL)) || "/schedule";
+    (await getConfig(db, CONFIG_KEYS.TASK_SERVER_URL)) ||
+    (await import("../../../config/config.js")).DEFAULT_TASK_SERVER_URL;
 }
 
 export async function initLlamafileAndMesh(

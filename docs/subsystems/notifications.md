@@ -153,7 +153,7 @@ PATCH  /schedule/tasks/:id/enable      Enable task
 PATCH  /schedule/tasks/:id/disable     Disable task
 ```
 
-Tasks are synced to the server whenever the agent creates/updates/deletes/reorders a scheduled task (guarded by recursion check).
+Tasks are synced to the server whenever the agent creates/updates/deletes/reorders a scheduled task (guarded by recursion check). The server sync can be globally disabled via the `TASK_SERVER_ENABLED` config flag (managed in Settings). When disabled, tasks only execute locally when the browser tab is open.
 
 ## Recursion Guard
 

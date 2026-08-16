@@ -373,6 +373,7 @@ Settings panel controller.
 - `assistantNameInput()` — Assistant name input
 - `saveAssistantNameButton()` — Save assistant name button
 - `overridePrerenderSkeletonToggle()` — Override pre-rendered skeleton toggle checkbox (`OVERRIDE_PRERENDER_SKELETON`)
+- `taskServerConfig()` — Task server configuration component (`<shadow-claw-task-server>`)
 
 ## Shared Utilities (`shared/index.ts`)
 

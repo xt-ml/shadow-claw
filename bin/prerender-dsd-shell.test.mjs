@@ -6,9 +6,14 @@ import {
   markNoSeedPrerenderHost,
   minifyDsdTemplateHtml,
   normalizePrerenderPagesOption,
+  prerenderDsdShell,
   renderPageHtml,
   sortPagePaths,
 } from "./prerender-dsd-shell.mjs";
+
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 describe("markNoSeedPrerenderHost", () => {
   it('adds data-prerender-no-seed="true" to shadow-claw element so CSS skeleton rules are active from first paint', () => {
@@ -343,3 +348,115 @@ describe("minifyDsdTemplateHtml", () => {
     expect(minifyDsdTemplateHtml("<div>hello</div>")).toBe("<div>hello</div>");
   });
 });
+
+describe("prerenderDsdShell purge flag pages", () => {
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = path.join(
+      os.tmpdir(),
+      `sc-dsd-purge-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    await mkdir(tmpDir, { recursive: true });
+  });
+
+  afterEach(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("excludes purge flag page from DSD pages list and rendered HTML while populating preRenderedStaticPages and purgeId in static manifest", async () => {
+    const publicDir = path.join(tmpDir, "dist/public");
+    const indexPath = path.join(publicDir, "index.html");
+    const sourcePath = path.join(tmpDir, "pages/main");
+
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+    await mkdir(sourcePath, { recursive: true });
+
+    await writeFile(
+      indexPath,
+      '<!doctype html><html><head><base href="/"><title>ShadowClaw</title></head><body><shadow-claw></shadow-claw></body></html>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      '<template><div class="app"><shadow-claw-pages></shadow-claw-pages></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      '<template><div class="pages__list" data-pages-list role="list"></div><div class="pages__rendered" data-pages-rendered hidden></div><div class="pages__empty" data-pages-empty></div><shadow-claw-page-header title="Pages"></shadow-claw-page-header></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      '<template><header class="header"><h2 class="header__title"></h2><details class="header__actions-disclosure"></details><div class="header__actions" id="header-actions-panel"></div></header></template>',
+      "utf8",
+    );
+
+    // 1. Regular post
+    await writeFile(
+      path.join(sourcePath, "post.md"),
+      '---\ntitle: "My First Post"\nslug: "my-first-post"\n---\n# My First Post Content',
+      "utf8",
+    );
+
+    // 2. Memory reset / purge flag page
+    await writeFile(
+      path.join(sourcePath, "MEMORY.md"),
+      '---\ntitle: "MEMORY"\ncreated: "0000-01-01T00:00:00Z"\nupdated: "0000-01-01T00:00:00Z"\nslug: "shadow-claw--purge-pages"\npurge-id: "build-test-999"\n---\n',
+      "utf8",
+    );
+
+    await prerenderDsdShell({
+      indexPath,
+      sourcePath,
+      publicDir,
+      prerenderPages: "all",
+      silent: true,
+    });
+
+    const outputHtml = await readFile(indexPath, "utf8");
+
+    // Must NOT contain MEMORY.md in pages list or as rendered page
+    expect(outputHtml).not.toContain("shadow-claw--purge-pages");
+    expect(outputHtml).not.toContain("MEMORY.md");
+    expect(outputHtml).toContain("My First Post");
+    expect(outputHtml).toContain("My First Post Content");
+
+    // Static manifest script tag in index.html
+    const scriptMatch = outputHtml.match(
+      /<script id="shadow-claw-static-manifest"[^>]*>([\s\S]*?)<\/script>/,
+    );
+    expect(scriptMatch).not.toBeNull();
+    const embeddedManifest = JSON.parse(scriptMatch[1]);
+
+    // Pages array must only contain the real post, not the purge page
+    expect(embeddedManifest.pages).toHaveLength(1);
+    expect(embeddedManifest.pages[0].displayPath).toBe("post.md");
+    expect(embeddedManifest.purgeId).toBe("build-test-999");
+    expect(embeddedManifest.preRenderedStaticPages["br-main"]).toBeDefined();
+
+    // static-main-manifest.json
+    const manifestPath = path.join(publicDir, "static-main-manifest.json");
+    const manifestJson = JSON.parse(await readFile(manifestPath, "utf8"));
+    expect(manifestJson.pages).toHaveLength(1);
+    expect(manifestJson.pages[0].displayPath).toBe("post.md");
+    expect(manifestJson.purgeId).toBe("build-test-999");
+    expect(manifestJson.preRenderedStaticPages["br-main"]).toBeDefined();
+  });
+});
+

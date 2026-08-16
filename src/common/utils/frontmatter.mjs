@@ -96,7 +96,7 @@ export function createFrontmatterDetailsElement(data, documentInstance) {
 
   const details = documentInstance.createElement("details");
   details.setAttribute("class", "markdown-frontmatter__details");
-  details.setAttribute("open", "");
+  details.setAttribute("hidden", "hidden");
 
   const summary = documentInstance.createElement("summary");
   summary.setAttribute("class", "markdown-frontmatter__summary");

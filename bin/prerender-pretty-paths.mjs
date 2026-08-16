@@ -262,7 +262,7 @@ export async function prerenderPrettyPaths(options = {}) {
   ]);
 
   // Load all page contents
-  const pageSourcesWithContent = await Promise.all(
+  const rawPageSourcesWithContent = await Promise.all(
     rawPageSources.map(async (page) => {
       const content =
         typeof page.inlineContent === "string"
@@ -271,6 +271,15 @@ export async function prerenderPrettyPaths(options = {}) {
       return { ...page, content };
     }),
   );
+
+  const pageSourcesWithContent = rawPageSourcesWithContent.filter((page) => {
+    return !(
+      page.displayPath.endsWith(".md") &&
+      /^---\r?\n[\s\S]*?slug:\s*"shadow-claw--purge-pages"[\s\S]*?---/mu.test(
+        page.content,
+      )
+    );
+  });
 
   // Update root index.html with static routing script
   const rootHtmlMinified = minifyDsdTemplateHtml(
@@ -299,9 +308,22 @@ export async function prerenderPrettyPaths(options = {}) {
   }));
 
   const fullManifestPath = path.join(publicDir, "static-main-manifest.json");
+  let existingManifest = {};
+  try {
+    existingManifest = JSON.parse(await readFile(fullManifestPath, "utf8"));
+  } catch {}
+
+  const fullManifest = {
+    pages: allManifestPages,
+    ...(existingManifest.preRenderedStaticPages
+      ? { preRenderedStaticPages: existingManifest.preRenderedStaticPages }
+      : {}),
+    ...(existingManifest.purgeId ? { purgeId: existingManifest.purgeId } : {}),
+  };
+
   await writeFile(
     fullManifestPath,
-    JSON.stringify({ pages: allManifestPages }, null, 2),
+    JSON.stringify(fullManifest, null, 2),
     "utf8",
   );
 
@@ -415,6 +437,12 @@ export async function prerenderPrettyPaths(options = {}) {
     const markedHtml = markNoSeedPrerenderHost(htmlWithDsd);
     const embeddedManifestJson = JSON.stringify({
       pages: embeddedManifestPages,
+      ...(existingManifest.preRenderedStaticPages
+        ? { preRenderedStaticPages: existingManifest.preRenderedStaticPages }
+        : {}),
+      ...(existingManifest.purgeId
+        ? { purgeId: existingManifest.purgeId }
+        : {}),
     });
     const htmlWithManifest = injectStaticManifestScript(
       markedHtml,

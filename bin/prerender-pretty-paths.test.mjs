@@ -494,4 +494,102 @@ describe("prerenderPrettyPaths", () => {
     const staticMainAsset = await readFile(staticMainAssetPath, "utf8");
     expect(staticMainAsset).toBe("FAKE_PNG_BINARY_DATA");
   });
+
+  it("excludes purge flag pages from pretty path shells and embedded static manifest", async () => {
+    const publicDir = path.join(tmpDir, "dist/public");
+    const indexPath = path.join(publicDir, "index.html");
+    const sourcePath = path.join(tmpDir, "pages/main");
+    const routesPath = path.join(tmpDir, "pages/routes.json");
+
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+    await mkdir(path.join(sourcePath, "posts"), { recursive: true });
+    await mkdir(path.dirname(routesPath), { recursive: true });
+
+    await writeFile(
+      indexPath,
+      '<!doctype html><html><head><base href="/"><title>ShadowClaw</title></head><body><shadow-claw></shadow-claw></body></html>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      '<template><div class="app"><shadow-claw-pages></shadow-claw-pages></div></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      '<template><div class="pages__list" data-pages-list role="list"></div><div class="pages__rendered" data-pages-rendered hidden></div><div class="pages__empty" data-pages-empty></div><shadow-claw-page-header title="Pages"></shadow-claw-page-header></template>',
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      '<template><header class="header"><h2 class="header__title"></h2><details class="header__actions-disclosure"></details><div class="header__actions" id="header-actions-panel"></div></header></template>',
+      "utf8",
+    );
+
+    await writeFile(
+      path.join(sourcePath, "posts/post1.md"),
+      '---\ntitle: "Post 1"\nslug: "post-1"\n---\n# Post 1',
+      "utf8",
+    );
+    await writeFile(
+      path.join(sourcePath, "MEMORY.md"),
+      '---\ntitle: "MEMORY"\nslug: "shadow-claw--purge-pages"\npurge-id: "purge-test-123"\n---\n',
+      "utf8",
+    );
+
+    const routesJson = {
+      routes: {
+        "/pages/main/posts/post1.md": {
+          prettyPath: "/post-1/",
+        },
+      },
+    };
+    await writeFile(routesPath, JSON.stringify(routesJson, null, 2), "utf8");
+
+    await prerenderPrettyPaths({
+      publicDir,
+      routesPath,
+      sourcePath,
+      indexPath,
+      prerenderPages: "all",
+    });
+
+    const prettyHtml = await readFile(
+      path.join(publicDir, "post-1/index.html"),
+      "utf8",
+    );
+    expect(prettyHtml).not.toContain("shadow-claw--purge-pages");
+    expect(prettyHtml).not.toContain("MEMORY.md");
+
+    const manifestMatch = prettyHtml.match(
+      /<script id="shadow-claw-static-manifest"[^>]*>([\s\S]*?)<\/script>/,
+    );
+    expect(manifestMatch).not.toBeNull();
+    const embeddedManifest = JSON.parse(manifestMatch[1]);
+    expect(embeddedManifest.pages).toHaveLength(1);
+    expect(embeddedManifest.pages[0].displayPath).toBe("posts/post1.md");
+
+    const fullManifest = JSON.parse(
+      await readFile(
+        path.join(publicDir, "static-main-manifest.json"),
+        "utf8",
+      ),
+    );
+    expect(fullManifest.pages).toHaveLength(1);
+    expect(fullManifest.pages[0].displayPath).toBe("posts/post1.md");
+  });
 });

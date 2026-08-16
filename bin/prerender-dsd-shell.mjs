@@ -937,6 +937,7 @@ export async function prerenderDsdShell(options = {}) {
           manifestPurgeId = String(rawPurgeId);
         }
       }
+      return false;
     }
     return true;
   });
@@ -1032,7 +1033,7 @@ export async function prerenderDsdShell(options = {}) {
       shadowClawTemplateContent,
       shadowClawCssSource,
     );
-  } else if (pageSourcesWithContent.length === 0) {
+  } else if (filteredPageSources.length === 0) {
     const pagesDsdHost = buildPagesDsdHostEmpty(
       pagesTemplateContent,
       pagesCssSource,
@@ -1043,7 +1044,7 @@ export async function prerenderDsdShell(options = {}) {
       shadowClawCssSource,
     );
   } else {
-    const defaultPage = pageSourcesWithContent[0];
+    const defaultPage = filteredPageSources[0];
     const parsed = splitFrontmatterWithGrayMatter(defaultPage.content);
     const frontmatterTitle =
       parsed.data && parsed.data.title ? parsed.data.title : "";

@@ -76,6 +76,9 @@ async function main() {
   // publish robots.txt
   await cp("robots.txt", "dist/public/robots.txt");
 
+  // publish sitemap.xml
+  await cp("sitemap.xml", "dist/public/sitemap.xml");
+
   // publish pages directory for lazy routing manifests
   try {
     await cp("pages", "dist/public/pages", { recursive: true });

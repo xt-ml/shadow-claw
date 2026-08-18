@@ -1,5 +1,12 @@
 // Shared source of truth for the default index.html content.
-export const DEFAULT_MAIN_GROUP_INDEX_CONTENT = `<article>
+export const DEFAULT_MAIN_GROUP_INDEX_CONTENT = `---
+title: "ShadowClaw Pages"
+created: "1970-01-01T00:00:00Z"
+updated: "1970-01-01T00:00:00Z"
+slug: "shadow-claw-pages"
+---
+
+<article>
   <h1>Welcome to ShadowClaw Pages</h1>
   <p>This is the default static page for your workspace.</p>
   <h2 id="getting-started-with-shadowclaw">Getting started with ShadowClaw</h2>

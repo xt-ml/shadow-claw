@@ -180,6 +180,8 @@
   color: var(--shadow-claw-accent-primary);
 }
 
+article > h1,
+article > h2,
 .pages__rendered > h1,
 .pages__rendered > h2 {
   margin-top: 0;
@@ -203,6 +205,15 @@
 .pages__status {
   color: var(--shadow-claw-text-secondary);
   font-size: var(--shadow-claw-font-size-sm);
+}
+
+.pages:has(.pages__sidebar.collapsed) .pages__remove-all-btn {
+  display: none;
+}
+
+.pages:has(.pages__sidebar.collapsed)
+  shadow-claw-page-header::part(actions-disclosure) {
+  display: none;
 }
 
 .pages__dropdown-container {

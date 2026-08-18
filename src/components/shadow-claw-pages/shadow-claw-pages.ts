@@ -1450,6 +1450,17 @@ export class ShadowClawPages extends ShadowClawElement {
       const pageKey = `${selectedPage.groupId}:${selectedPage.path}`;
 
       if (this.isHtmlPath(selectedPage.path)) {
+        const parsedFrontmatter = splitFrontmatter(content);
+        const newData =
+          Object.keys(parsedFrontmatter.data).length > 0
+            ? parsedFrontmatter.data
+            : null;
+
+        const currentData = this.pageFrontmatter.get();
+        if (JSON.stringify(currentData) !== JSON.stringify(newData)) {
+          this.pageFrontmatter.set(newData);
+        }
+
         if (
           this._renderedKey === pageKey &&
           this._renderedContent === content &&
@@ -1469,7 +1480,10 @@ export class ShadowClawPages extends ShadowClawElement {
         this.previewFrameWindow = null;
         setTrustedSrcdoc(
           iframe,
-          await this.buildHtmlPageSrcdoc(content, selectedPage.path),
+          await this.buildHtmlPageSrcdoc(
+            parsedFrontmatter.content,
+            selectedPage.path,
+          ),
         );
         this.showNavButtonsTemporarily(2500);
 
@@ -1696,6 +1710,10 @@ export class ShadowClawPages extends ShadowClawElement {
     const iframe = document.createElement("iframe");
     iframe.className = "pages__iframe";
     iframe.setAttribute("data-pages-iframe", "");
+    iframe.setAttribute(
+      "title",
+      this.selectedPage ? `Preview: ${this.selectedPage.path}` : "Page preview",
+    );
     iframe.setAttribute(
       "sandbox",
       "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox",

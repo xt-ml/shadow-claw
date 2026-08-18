@@ -67,7 +67,7 @@ describe("ensureMainGroupMemory", () => {
     );
 
     // Fallback content must match what static build renders from main/MEMORY.md
-    expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).toContain("# Agent Memory");
+    expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).toContain("## Memory");
   });
 
   it("does not overwrite MEMORY.md when it already exists", async () => {

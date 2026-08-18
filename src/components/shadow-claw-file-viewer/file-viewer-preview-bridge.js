@@ -107,6 +107,8 @@
     );
   });
 
+  var lastReportedHeight = -1;
+
   function reportHeight() {
     var body = document.body;
     var docEl = document.documentElement;
@@ -150,7 +152,8 @@
       docEl.style.height = prevDocElHeight || "";
     }
 
-    if (height > 0) {
+    if (height > 0 && Math.abs(height - lastReportedHeight) > 1) {
+      lastReportedHeight = height;
       window.parent.postMessage(
         { type: "shadow-claw-iframe-resize", height: height },
         "*",

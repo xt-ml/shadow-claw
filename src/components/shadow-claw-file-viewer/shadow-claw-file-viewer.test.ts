@@ -439,6 +439,24 @@ describe("shadow-claw-file-viewer", () => {
     expect(srcdoc).toContain("<main>Hello</main>");
   });
 
+  it("strips YAML frontmatter from html file previews", async () => {
+    const component = new ShadowClawFileViewer();
+    const srcdoc = await component.buildIframePreviewSrcdoc({
+      name: "index.html",
+      content: [
+        "---",
+        'title: "Welcome"',
+        'slug: "welcome"',
+        "---",
+        "<main>Hello</main>",
+      ].join("\n"),
+    });
+
+    expect(srcdoc).toContain("<main>Hello</main>");
+    expect(srcdoc).not.toContain('title: "Welcome"');
+    expect(srcdoc).not.toContain('slug: "welcome"');
+  });
+
   it("injects link, font, and theme styles into iframe preview srcdoc to prevent FOUC", async () => {
     const component = new ShadowClawFileViewer();
     const srcdoc = await component.buildIframePreviewSrcdoc({

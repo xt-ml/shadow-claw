@@ -936,7 +936,7 @@ describe("shadow-claw-pages", () => {
       expect(rendered.textContent).toBe(originalContent);
     });
 
-    xit("disables Remove All button when pages list is empty and enables it when pages exist", async () => {
+    it("disables Remove All button when pages list is empty and enables it when pages exist", async () => {
       const component = new ShadowClawPages();
       await component.connectedCallback();
       const root = component.shadowRoot;
@@ -957,7 +957,7 @@ describe("shadow-claw-pages", () => {
       expect(clearBtn.hasAttribute("disabled")).toBe(false);
     });
 
-    xit("clicking Remove All prompts for confirmation and calls removeAllPages when confirmed", async () => {
+    it("clicking Remove All prompts for confirmation and calls removeAllPages when confirmed", async () => {
       const component = new ShadowClawPages();
       await component.connectedCallback();
       component.db = {} as any;

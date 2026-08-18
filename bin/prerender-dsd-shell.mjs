@@ -223,58 +223,50 @@ export async function renderPageHtml(pageContent, pagePath) {
   const ext = path.extname(pagePath).toLowerCase();
   const isHtml = ext === ".html" || ext === ".htm" || ext === ".xhtml";
 
+  let parsed;
+  let rendered;
+
   if (isHtml) {
-    let rendered = sanitizeRenderedHtml(pageContent);
-    if (pagePath) {
-      const dir = path.posix.dirname(toPosixPath(pagePath));
-      const prefix = `/files/main/${dir === "." ? "" : dir + "/"}`;
-      rendered = rendered.replace(
-        /<img\s+([^>]*?)src="([^"]+)"([^>]*)>/giu,
-        (match, before, src, after) => {
-          if (/^(?:[a-z]+:|#|\/)/iu.test(src)) {
-            return match;
-          }
-          return `<img ${before}src="${prefix}${src}"${after}>`;
-        },
-      );
+    parsed = splitFrontmatterWithGrayMatter(pageContent);
+    rendered = sanitizeRenderedHtml(parsed.content);
+  } else {
+    try {
+      parsed = splitFrontmatterWithGrayMatter(pageContent);
+      const markdownHtml = await marked.parse(parsed.content);
+      rendered = sanitizeRenderedHtml(markdownHtml);
+    } catch {
+      parsed = { data: {} };
+      rendered = `<p>${escapeHtml(pageContent)}</p>`;
     }
-    return rendered;
   }
 
-  try {
-    const parsed = splitFrontmatterWithGrayMatter(pageContent);
-    const markdownHtml = await marked.parse(parsed.content);
-    let rendered = sanitizeRenderedHtml(markdownHtml);
+  if (pagePath) {
+    const dir = path.posix.dirname(toPosixPath(pagePath));
+    const prefix = `/files/main/${dir === "." ? "" : dir + "/"}`;
+    rendered = rendered.replace(
+      /<img\s+([^>]*?)src="([^"]+)"([^>]*)>/giu,
+      (match, before, src, after) => {
+        if (/^(?:[a-z]+:|#|\/)/iu.test(src)) {
+          return match;
+        }
+        return `<img ${before}src="${prefix}${src}"${after}>`;
+      },
+    );
+  }
 
-    if (pagePath) {
-      const dir = path.posix.dirname(toPosixPath(pagePath));
-      const prefix = `/files/main/${dir === "." ? "" : dir + "/"}`;
-      rendered = rendered.replace(
-        /<img\s+([^>]*?)src="([^"]+)"([^>]*)>/giu,
-        (match, before, src, after) => {
-          if (/^(?:[a-z]+:|#|\/)/iu.test(src)) {
-            return match;
-          }
-          return `<img ${before}src="${prefix}${src}"${after}>`;
-        },
-      );
-    }
-
-    if (Object.keys(parsed.data).length === 0) {
-      return rendered;
-    }
-
-    return `${renderFrontmatterMarkup(
+  if (parsed.data && Object.keys(parsed.data).length > 0) {
+    const frontmatterMarkup = renderFrontmatterMarkup(
       parsed.data,
       createFrontmatterDetailsElement,
       {
         documentInstance: frontmatterDom,
         serializeNode: (node) => frontmatterSerializer.serializeToString(node),
       },
-    )}${rendered}`;
-  } catch {
-    return `<p>${escapeHtml(pageContent)}</p>`;
+    );
+    rendered = `${frontmatterMarkup}\n${rendered}`;
   }
+
+  return rendered;
 }
 
 function findMatchingTemplateEnd(input, startIndex) {
@@ -860,6 +852,7 @@ export function normalizePrerenderPagesOption(val) {
 
 /**
  * @typedef {Object} PrerenderDsdShellOptions
+ *
  * @property {string} [indexPath]
  * @property {string} [sourcePath]
  * @property {string} [publicDir]

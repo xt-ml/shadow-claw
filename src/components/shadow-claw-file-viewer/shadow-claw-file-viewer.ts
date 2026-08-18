@@ -1,6 +1,7 @@
 import hljs from "highlight.js";
 
 import { renderMarkdown } from "../../content/markdown.js";
+import { splitFrontmatter } from "../../common/utils/frontmatter.mjs";
 
 import { CONFIG_KEYS } from "../../config/config.js";
 import {
@@ -1241,14 +1242,28 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     });
   }
 
+  stripHtmlFrontmatter(content: string): string {
+    if (typeof content !== "string" || !content.trimStart().startsWith("---")) {
+      return content;
+    }
+
+    const parsed = splitFrontmatter(content);
+    if (Object.keys(parsed.data || {}).length === 0) {
+      return content;
+    }
+
+    return parsed.content || "";
+  }
+
   async buildIframePreviewSrcdoc(file: any) {
     if (/\.svg$/i.test(file.name)) {
       return file.content;
     }
 
     const filePath = file.path || file.name || "";
+    const sansFrontmatter = this.stripHtmlFrontmatter(file.content || "");
     const resolvedHtml = this.rewriteWorkspacePreviewHtml(
-      file.content || "",
+      sansFrontmatter,
       filePath,
     );
     const htmlContent = await this.resolveRelativeImagesInHtml(

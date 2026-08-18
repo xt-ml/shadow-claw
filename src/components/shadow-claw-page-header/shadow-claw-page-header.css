@@ -126,7 +126,7 @@
 
 @media (min-width: 40.625rem) {
   .header__main {
-    padding: 1rem;
+    padding: 0.875rem 1rem 1rem;
   }
 
   .header__title {

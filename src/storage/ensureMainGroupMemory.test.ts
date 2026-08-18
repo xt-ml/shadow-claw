@@ -67,16 +67,7 @@ describe("ensureMainGroupMemory", () => {
     );
 
     // Fallback content must match what static build renders from main/MEMORY.md
-    expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).toContain(
-      "# Welcome to ShadowClaw Pages",
-    );
-    expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).toContain("## Getting started");
-    expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).toContain(
-      "## What is MEMORY.md?",
-    );
-    expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).not.toContain(
-      "## Why This File Exists",
-    );
+    expect(DEFAULT_MAIN_GROUP_MEMORY_CONTENT).toContain("# Agent Memory");
   });
 
   it("does not overwrite MEMORY.md when it already exists", async () => {
@@ -89,6 +80,10 @@ describe("ensureMainGroupMemory", () => {
 
   it("uses static main/MEMORY.md template when available", async () => {
     (mockGroupFileExists as any).mockResolvedValue(false);
+    (globalThis as any).fetch = (jest.fn() as any).mockResolvedValue({
+      ok: true,
+      text: async () => "mock static content",
+    });
 
     await expect(ensureMainGroupMemory({} as any)).resolves.toBe(true);
 
@@ -96,7 +91,7 @@ describe("ensureMainGroupMemory", () => {
       {} as any,
       DEFAULT_GROUP_ID,
       DEFAULT_MAIN_GROUP_MEMORY_PATH,
-      DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
+      "mock static content",
     );
   });
 

@@ -38,7 +38,7 @@ import {
 } from "./rate-limit.js";
 
 import { ContentBlock, ToolResultContentBlock } from "../../content/types.js";
-
+import { dispatchSubagentInvoke } from "../../core/orchestrator/utils/dispatchSubagentInvoke.js";
 import { InvokePayload } from "../../subsystems/worker/types.js";
 import { StreamAccumulator } from "../StreamAccumulator/StreamAccumulator.js";
 import { StreamFormat } from "../StreamAccumulator/types.js";
@@ -329,7 +329,8 @@ export async function handleInvoke(
       assistantName: assistantName ?? "",
       db,
       enabledTools: currentTools as any,
-      invokeSubagent: (subPayload) => handleInvoke(db, subPayload),
+      invokeSubagent: (subPayload) =>
+        dispatchSubagentInvoke(db, subPayload, abortSignal),
       maxTokens,
       memory: memory ?? "",
       model,

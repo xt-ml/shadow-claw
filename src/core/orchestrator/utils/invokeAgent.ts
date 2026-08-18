@@ -138,6 +138,7 @@ export async function invokeAgent(
   o.inFlightEffectiveProviderByGroup.set(executionGroupId, {
     providerId: effectiveProviderId,
     providerConfig: effectiveProviderConfig,
+    model: effectiveModel,
   });
 
   // Use pinned tools if set; otherwise fallback to global enabled tools.
@@ -151,6 +152,12 @@ export async function invokeAgent(
   const subagentMaxTokens = group?.subagentMaxTokens;
   const subagentPinnedProvider = group?.subagentPinnedProvider;
   const subagentPinnedModel = group?.subagentPinnedModel;
+  const subagentFastProvider = group?.subagentFastProvider;
+  const subagentFastModel = group?.subagentFastModel;
+  const subagentSmartProvider = group?.subagentSmartProvider;
+  const subagentSmartModel = group?.subagentSmartModel;
+  const subagentPowerfulProvider = group?.subagentPowerfulProvider;
+  const subagentPowerfulModel = group?.subagentPowerfulModel;
   const providerRuntimeOverrides = group?.providerRuntimeOverrides;
 
   const peerState = orchestratorStore.getPeerState(groupId) || undefined;
@@ -254,6 +261,12 @@ export async function invokeAgent(
       subagentMaxTokens,
       subagentPinnedProvider,
       subagentPinnedModel,
+      subagentFastProvider,
+      subagentFastModel,
+      subagentSmartProvider,
+      subagentSmartModel,
+      subagentPowerfulProvider,
+      subagentPowerfulModel,
       systemPrompt,
     };
 
@@ -328,6 +341,12 @@ export async function invokeAgent(
       subagentMaxTokens,
       subagentPinnedProvider,
       subagentPinnedModel,
+      subagentFastProvider,
+      subagentFastModel,
+      subagentSmartProvider,
+      subagentSmartModel,
+      subagentPowerfulProvider,
+      subagentPowerfulModel,
       systemPrompt,
     };
 
@@ -398,6 +417,12 @@ export async function invokeAgent(
       subagentMaxTokens,
       subagentPinnedProvider,
       subagentPinnedModel,
+      subagentFastProvider,
+      subagentFastModel,
+      subagentSmartProvider,
+      subagentSmartModel,
+      subagentPowerfulProvider,
+      subagentPowerfulModel,
       systemPrompt,
     };
 
@@ -481,6 +506,12 @@ export async function invokeAgent(
       subagentMaxTokens,
       subagentPinnedProvider,
       subagentPinnedModel,
+      subagentFastProvider,
+      subagentFastModel,
+      subagentSmartProvider,
+      subagentSmartModel,
+      subagentPowerfulProvider,
+      subagentPowerfulModel,
       systemPrompt,
       subagentTask: subagent,
     },

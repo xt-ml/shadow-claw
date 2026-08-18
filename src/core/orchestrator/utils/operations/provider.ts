@@ -236,7 +236,7 @@ export function getTransformersStatusUrl(
   > & {
     inFlightEffectiveProviderByGroup?: Map<
       string,
-      { providerId: string; providerConfig: ProviderConfig }
+      { providerId: string; providerConfig: ProviderConfig; model: string }
     >;
   },
   groupId?: string,
@@ -515,7 +515,7 @@ export async function pollTransformersProgress(
   > & {
     inFlightEffectiveProviderByGroup?: Map<
       string,
-      { providerId: string; providerConfig: ProviderConfig }
+      { providerId: string; providerConfig: ProviderConfig; model: string }
     >;
   },
   events: EventBus,
@@ -575,7 +575,7 @@ export function startTransformersProgressPolling(
     transformersProgressPollers: Map<string, number>;
     inFlightEffectiveProviderByGroup?: Map<
       string,
-      { providerId: string; providerConfig: ProviderConfig }
+      { providerId: string; providerConfig: ProviderConfig; model: string }
     >;
   },
   events: EventBus,

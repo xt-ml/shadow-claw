@@ -439,6 +439,47 @@ describe("shadow-claw-file-viewer", () => {
     expect(srcdoc).toContain("<main>Hello</main>");
   });
 
+  it("injects link, font, and theme styles into iframe preview srcdoc to prevent FOUC", async () => {
+    const component = new ShadowClawFileViewer();
+    const srcdoc = await component.buildIframePreviewSrcdoc({
+      name: "index.html",
+      content: "<main>Hello</main>",
+    });
+
+    expect(srcdoc).toContain("a {");
+    expect(srcdoc).toContain("color: var(--shadow-claw-link);");
+    expect(srcdoc).toContain("text-decoration: underline;");
+    expect(srcdoc).toContain("text-underline-offset: 0.125rem;");
+    expect(srcdoc).toContain("a:hover {");
+    expect(srcdoc).toContain("color: var(--shadow-claw-link-hover);");
+    expect(srcdoc).toContain("body {");
+    expect(srcdoc).toContain("color: var(--shadow-claw-text-primary);");
+    expect(srcdoc).toContain("font-family: var(--shadow-claw-font-sans);");
+    expect(srcdoc).toContain("pre, code, kbd, samp {");
+    expect(srcdoc).toContain("font-family: var(--shadow-claw-font-mono);");
+  });
+
+  it("updates iframe height when receiving shadow-claw-iframe-resize message", () => {
+    const component = new ShadowClawFileViewer();
+    (component as any).db = {};
+
+    const iframe = document.createElement("iframe");
+    iframe.className = "file-content-iframe";
+    const fakeWindow = {} as Window;
+    component.previewFrameWindow = fakeWindow;
+
+    const root =
+      component.shadowRoot || component.attachShadow({ mode: "open" });
+    root.appendChild(iframe);
+
+    component.handleIframeMessage({
+      data: { type: "shadow-claw-iframe-resize", height: 920 },
+      source: fakeWindow,
+    } as MessageEvent);
+
+    expect(iframe.style.height).toBe("920px");
+  });
+
   it("inlines relative html preview images as data URLs", async () => {
     const component = new ShadowClawFileViewer();
     (component as any).db = {};

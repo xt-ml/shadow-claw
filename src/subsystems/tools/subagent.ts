@@ -29,15 +29,11 @@ export const spawn_subagent: ToolDefinition = {
           "If provided, only these tools are available to the subagent.",
         items: { type: "string" },
       },
-      model: {
+      profile: {
         type: "string",
+        enum: ["current", "fast", "smart", "powerful"],
         description:
-          "Optional model override for the subagent. Defaults to the current model.",
-      },
-      provider: {
-        type: "string",
-        description:
-          "Optional provider override for the subagent. Defaults to the current provider.",
+          "Optional model profile to run the subagent on. Use 'fast' for simple/cheap subtasks (e.g., text formatting, basic search), 'smart' for moderate reasoning, 'powerful' for deep thinking or complex coding, and 'current' to inherit the parent model. Defaults to 'current'.",
       },
       workspace_group_id: {
         type: "string",
@@ -57,7 +53,7 @@ export const spawn_subagent: ToolDefinition = {
           "Optional list of subagent specifications to run in parallel. " +
           "When provided, all agents are launched concurrently and their results are combined. " +
           "Note: There is a configurable maximum limit on parallel subagents (default 5). " +
-          "Each entry can specify a prompt, optional tools list, optional model, and optional system_prompt.",
+          "Each entry can specify a prompt, optional tools list, optional profile, and optional system_prompt.",
         items: {
           type: "object",
           properties: {
@@ -70,13 +66,11 @@ export const spawn_subagent: ToolDefinition = {
               description: "Optional tool names for this subagent.",
               items: { type: "string" },
             },
-            model: {
+            profile: {
               type: "string",
-              description: "Optional model override for this subagent.",
-            },
-            provider: {
-              type: "string",
-              description: "Optional provider override for this subagent.",
+              enum: ["current", "fast", "smart", "powerful"],
+              description:
+                "Optional model profile for this subagent. Defaults to 'current'.",
             },
             workspace_group_id: {
               type: "string",

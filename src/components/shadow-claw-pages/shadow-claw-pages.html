@@ -33,30 +33,30 @@
         <div class="pages__list" data-pages-list role="list"></div>
       </aside>
 
-      <article class="pages__viewer" aria-label="Page preview">
-        <button
-          type="button"
-          class="pages__nav-btn pages__nav-btn--prev"
-          data-pages-prev
-          aria-label="Previous page"
-          hidden
-          disabled
+      <button
+        type="button"
+        class="pages__nav-btn pages__nav-btn--prev"
+        data-pages-prev
+        aria-label="Previous page"
+        hidden
+        disabled
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
         >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="m15 18-6-6 6-6" />
-          </svg>
-        </button>
+          <path d="m15 18-6-6 6-6" />
+        </svg>
+      </button>
 
+      <article class="pages__viewer" aria-label="Page preview">
         <div class="pages__viewer-scroll">
           <div class="pages__dropdown-container" data-pages-dropdown-container>
             <details class="pages__dropdown" data-pages-dropdown>
@@ -80,30 +80,30 @@
           </div>
           <div class="pages__rendered" data-pages-rendered hidden></div>
         </div>
-
-        <button
-          type="button"
-          class="pages__nav-btn pages__nav-btn--next"
-          data-pages-next
-          aria-label="Next page"
-          hidden
-          disabled
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
-          >
-            <path d="m9 18 6-6-6-6" />
-          </svg>
-        </button>
       </article>
+
+      <button
+        type="button"
+        class="pages__nav-btn pages__nav-btn--next"
+        data-pages-next
+        aria-label="Next page"
+        hidden
+        disabled
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+      </button>
     </div>
   </section>
 </template>

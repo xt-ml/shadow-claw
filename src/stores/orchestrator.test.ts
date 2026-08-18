@@ -24,6 +24,10 @@ const mockEnsureMainGroupMemory = jest.fn() as any;
 const mockIsMainGroupMemorySuppressed = jest.fn() as any;
 const mockSetMainGroupMemorySuppressed = jest.fn() as any;
 const mockEnsureMainGroupIndex = jest.fn() as any;
+const mockSeedStaticMainSite = jest.fn() as any;
+const mockIsStaticMainSiteSeeded = jest.fn() as any;
+const mockSetStaticMainSiteSeeded = jest.fn() as any;
+const mockGetStaticMainManifest = jest.fn() as any;
 const mockCopyGroupDirectory = jest.fn() as any;
 const mockDeleteMessage = jest.fn() as any;
 
@@ -229,6 +233,14 @@ jest.unstable_mockModule("../storage/ensureMainGroupIndex.js", () => ({
   setMainGroupIndexSuppressed: jest.fn(),
 }));
 
+jest.unstable_mockModule("../storage/staticMainSite.js", () => ({
+  seedStaticMainSite: mockSeedStaticMainSite,
+  isStaticMainSiteSeeded: mockIsStaticMainSiteSeeded,
+  setStaticMainSiteSeeded: mockSetStaticMainSiteSeeded,
+  getStaticMainManifest: mockGetStaticMainManifest,
+  sortSavedPageRefs: (refs: any[]) => refs,
+}));
+
 jest.unstable_mockModule("../storage/copyGroupDirectory.js", () => ({
   copyGroupDirectory: mockCopyGroupDirectory,
 }));
@@ -339,6 +351,16 @@ describe("OrchestratorStore", () => {
     (mockEnsureMainGroupIndex as any).mockResolvedValue(true);
     (mockIsMainGroupMemorySuppressed as any).mockResolvedValue(false);
     (mockSetMainGroupMemorySuppressed as any).mockResolvedValue(undefined);
+    // By default, seedStaticMainSite passes through whatever existingPages were
+    // supplied (mirrors real behavior when the manifest has nothing new to add).
+    // Tests with an empty pages_list get [] back → ensureDefaultPage runs.
+    (mockSeedStaticMainSite as any).mockImplementation(
+      (_db: any, _groupId: any, existingPages: any[] = []) =>
+        Promise.resolve(existingPages),
+    );
+    (mockIsStaticMainSiteSeeded as any).mockResolvedValue(false);
+    (mockSetStaticMainSiteSeeded as any).mockResolvedValue(undefined);
+    (mockGetStaticMainManifest as any).mockResolvedValue({ pages: [] });
 
     // Mock fetch for server-side task sync (syncTaskToServer / deleteTaskFromServer)
 

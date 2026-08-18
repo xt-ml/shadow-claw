@@ -375,7 +375,7 @@ pre {
 .file-content--iframe {
   height: 100%;
   margin: 0;
-  overflow: hidden;
+  overflow: auto;
   padding: 0;
   width: 100%;
 }
@@ -384,7 +384,8 @@ pre {
   background-color: var(--shadow-claw-bg-primary);
   border: none;
   border-radius: var(--shadow-claw-radius-s);
-  height: 100%;
+  display: block;
+  min-height: 100%;
   width: 100%;
 }
 

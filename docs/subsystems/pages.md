@@ -52,7 +52,7 @@ During store initialization, `seedStaticMainSite()` seeds default pages from the
 1. **Embedded Manifest Prioritization**: Manifest discovery checks embedded `#shadow-claw-static-manifest` JSON script elements first (`preferEmbedded: true`), avoiding network waterfalls on boot.
 2. **Background Full Sync**: Full manifest synchronization (`static-main-manifest.json`) is scheduled asynchronously via `scheduleBackgroundStaticMainSiteSeeding()` (leveraging `requestIdleCallback`) to download any remaining static assets in the background without blocking the main UI thread.
 3. **Workspace Seeding**: On first boot, seeds static markdown files (including subdirectories like `posts/`) into the `br:main` workspace file storage and records seeding state in IndexedDB under `CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED`.
-4. **Suppression & Deletion Respect**: Ensures `MEMORY.md` and default static workspace pages exist unless marked as suppressed. Subsequent reloads skip redundant re-seeding unless storage is cleared or a deployment purge is triggered via `purgeId`. Note that pages containing the `--purge-pages` flag are excluded from DSD pre-rendering and production static site manifests.
+4. **Suppression & Deletion Respect**: Ensures `index.html`, `MEMORY.md`, and default static workspace pages exist unless marked as suppressed. Subsequent reloads skip redundant re-seeding unless storage is cleared or a deployment purge is triggered via `purgeId`. Note that pages containing the `--purge-pages` flag are excluded from DSD pre-rendering and production static site manifests.
 
 ### Page Suppression (`src/storage/suppressedPages.ts`)
 

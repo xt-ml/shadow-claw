@@ -26,16 +26,16 @@ describe("spawn_subagent tool definition", () => {
     expect(props.tools.type).toBe("array");
   });
 
-  it("has optional model property as string", () => {
+  it("has optional profile property as string enum", () => {
     const props = spawn_subagent.input_schema.properties as Record<string, any>;
-    expect(props.model).toBeDefined();
-    expect(props.model.type).toBe("string");
-  });
-
-  it("has optional provider property as string", () => {
-    const props = spawn_subagent.input_schema.properties as Record<string, any>;
-    expect(props.provider).toBeDefined();
-    expect(props.provider.type).toBe("string");
+    expect(props.profile).toBeDefined();
+    expect(props.profile.type).toBe("string");
+    expect(props.profile.enum).toEqual([
+      "current",
+      "fast",
+      "smart",
+      "powerful",
+    ]);
   });
 
   it("has optional workspace_group_id property as string", () => {
@@ -56,13 +56,19 @@ describe("spawn_subagent tool definition", () => {
     expect(props.parallel_agents.type).toBe("array");
   });
 
-  it("parallel_agents items have prompt and tools", () => {
+  it("parallel_agents items have prompt, tools and profile", () => {
     const props = spawn_subagent.input_schema.properties as Record<string, any>;
     const items = props.parallel_agents.items;
     expect(items).toBeDefined();
     expect(items.properties.prompt).toBeDefined();
     expect(items.properties.tools).toBeDefined();
-    expect(items.properties.provider).toBeDefined();
+    expect(items.properties.profile).toBeDefined();
+    expect(items.properties.profile.enum).toEqual([
+      "current",
+      "fast",
+      "smart",
+      "powerful",
+    ]);
     expect(items.properties.workspace_group_id).toBeDefined();
   });
 

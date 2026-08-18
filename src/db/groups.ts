@@ -186,6 +186,12 @@ export async function cloneGroup(
     subagentMaxTokens: source.subagentMaxTokens,
     subagentPinnedProvider: source.subagentPinnedProvider,
     subagentPinnedModel: source.subagentPinnedModel,
+    subagentFastProvider: source.subagentFastProvider,
+    subagentFastModel: source.subagentFastModel,
+    subagentSmartProvider: source.subagentSmartProvider,
+    subagentSmartModel: source.subagentSmartModel,
+    subagentPowerfulProvider: source.subagentPowerfulProvider,
+    subagentPowerfulModel: source.subagentPowerfulModel,
     toolTags: source.toolTags ? [...source.toolTags] : undefined,
   };
   groups.push(clone);
@@ -297,6 +303,57 @@ export async function updateGroupProviderRuntimeOverrides(
       delete group.providerRuntimeOverrides;
     }
   }
+
+  await saveGroupMetadata(db, groups);
+}
+
+/**
+ * Update the named subagent model profile slots (fast / smart / powerful).
+ * These are available in automatic mode so the LLM can route subagents by
+ * task complexity without hallucinating arbitrary provider/model IDs.
+ */
+export async function updateGroupSubagentProfiles(
+  db: ShadowClawDatabase,
+  groupId: string,
+  profiles: {
+    fast?: { provider?: string; model?: string } | null;
+    smart?: { provider?: string; model?: string } | null;
+    powerful?: { provider?: string; model?: string } | null;
+  },
+): Promise<void> {
+  const groups = await getGroupMetadata(db);
+  const group = groups.find((g) => g.groupId === groupId);
+  if (!group) {
+    return;
+  }
+
+  const set = (
+    providerKey: keyof GroupMeta,
+    modelKey: keyof GroupMeta,
+    slot: { provider?: string; model?: string } | null | undefined,
+  ) => {
+    if (slot === null) {
+      // Explicit null clears the slot
+      delete (group as any)[providerKey];
+      delete (group as any)[modelKey];
+    } else if (slot !== undefined) {
+      if (slot.provider) {
+        (group as any)[providerKey] = slot.provider;
+      } else {
+        delete (group as any)[providerKey];
+      }
+
+      if (slot.model) {
+        (group as any)[modelKey] = slot.model;
+      } else {
+        delete (group as any)[modelKey];
+      }
+    }
+  };
+
+  set("subagentFastProvider", "subagentFastModel", profiles.fast);
+  set("subagentSmartProvider", "subagentSmartModel", profiles.smart);
+  set("subagentPowerfulProvider", "subagentPowerfulModel", profiles.powerful);
 
   await saveGroupMetadata(db, groups);
 }

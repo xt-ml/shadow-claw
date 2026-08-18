@@ -469,6 +469,27 @@ describe("invokeAgent", () => {
     });
   });
 
+  it("should record the resolved effective model in inFlightEffectiveProviderByGroup", async () => {
+    mockListGroups.mockResolvedValue([
+      {
+        groupId: "group1",
+        pinnedProvider: "pinned-provider",
+        pinnedModel: "pinned-model",
+      },
+    ]);
+
+    await invokeAgent(mockOrchestrator, mockDb, "group1", "hello");
+
+    expect(
+      mockOrchestrator.inFlightEffectiveProviderByGroup.get("group1"),
+    ).toEqual(
+      expect.objectContaining({
+        providerId: "pinned-provider",
+        model: "pinned-model",
+      }),
+    );
+  });
+
   it("should use pinned provider and model from group", async () => {
     mockListGroups.mockResolvedValue([
       {

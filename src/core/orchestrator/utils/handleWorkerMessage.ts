@@ -765,7 +765,10 @@ async function executeActiveProviderTask(
     ? o.inFlightEffectiveProviderByGroup?.get(groupId)
     : undefined;
   const effectiveProviderId = inFlightInfo?.providerId || o.provider;
-  const effectiveModel = inFlightInfo?.providerConfig?.defaultModel || o.model;
+  const effectiveModel =
+    inFlightInfo?.model ||
+    inFlightInfo?.providerConfig?.defaultModel ||
+    o.model;
 
   let prompt = "";
   if (taskType === "translate") {

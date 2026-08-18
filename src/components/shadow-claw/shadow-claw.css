@@ -125,8 +125,6 @@ a:hover {
   display: flex;
   flex-direction: column;
   font-family: var(--shadow-claw-font-sans);
-  height: 100vh;
-  height: 100dvh;
   /* Punch through the `visibility: hidden` set on the shadow-claw host
      by the sc-prerender-override global CSS rule. The existing boot-pending
      opacity rules still hide the real pre-rendered content; the skeleton
@@ -345,6 +343,8 @@ shadow-claw-conversations {
   display: flex;
   flex: 1;
   flex-direction: column;
+  height: calc(100vh - 4rem);
+  height: calc(100dvh - 4rem);
   min-height: 0;
   overflow: hidden;
   position: relative;
@@ -356,7 +356,7 @@ shadow-claw-conversations {
   flex: 1;
   flex-direction: column;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .page.active {

@@ -37,6 +37,13 @@ export interface GroupMeta {
   subagentMaxTokens?: number;
   subagentPinnedModel?: string;
   subagentPinnedProvider?: string;
+  /** Automatic-mode model profile slots configured by the user. */
+  subagentFastProvider?: string;
+  subagentFastModel?: string;
+  subagentSmartProvider?: string;
+  subagentSmartModel?: string;
+  subagentPowerfulProvider?: string;
+  subagentPowerfulModel?: string;
   toolTags?: string[];
 }
 

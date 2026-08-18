@@ -178,6 +178,31 @@ jest.unstable_mockModule("../../../db/getConfig.js", () => ({
   getConfig: mockGetConfig,
 }));
 
+const mockGetApiKeyForRequest = jest.fn() as any;
+const mockGetProviderRuntimeHeaders = jest.fn() as any;
+const mockStopTransformersProgressPolling = jest.fn() as any;
+
+jest.unstable_mockModule("./operations/provider.js", () => ({
+  getApiKeyForRequest: mockGetApiKeyForRequest,
+  getProviderRuntimeHeaders: mockGetProviderRuntimeHeaders,
+  stopTransformersProgressPolling: mockStopTransformersProgressPolling,
+  getTransformersStatusUrl: jest.fn(),
+  pollTransformersProgress: jest.fn(),
+  startTransformersProgressPolling: jest.fn(),
+}));
+
+const mockBuildHeaders = jest.fn() as any;
+const mockFormatRequest = jest.fn() as any;
+const mockParseResponse = jest.fn() as any;
+
+jest.unstable_mockModule("../../../subsystems/providers/providers.js", () => ({
+  buildHeaders: mockBuildHeaders,
+  formatRequest: mockFormatRequest,
+  getContextLimit: jest.fn().mockReturnValue(128000),
+  normalizeMeshLlmResult: jest.fn().mockImplementation((r: any) => r),
+  parseResponse: mockParseResponse,
+}));
+
 const mockSummarizeText = jest.fn() as any;
 const mockWriteText = jest.fn() as any;
 const mockRewriteText = jest.fn() as any;
@@ -250,6 +275,14 @@ describe("handleWorkerMessage", () => {
 
     mockGetPushUrl.mockResolvedValue("http://push");
     mockGetAllTasks.mockResolvedValue([]);
+    mockGetApiKeyForRequest.mockResolvedValue("api-key");
+    mockGetProviderRuntimeHeaders.mockReturnValue({});
+    mockStopTransformersProgressPolling.mockReturnValue(undefined);
+    mockBuildHeaders.mockReturnValue({ Authorization: "Bearer api-key" });
+    mockFormatRequest.mockReturnValue({ model: "placeholder", messages: [] });
+    mockParseResponse.mockReturnValue({
+      content: [{ type: "text", text: "parsed result" }],
+    });
     global.fetch = (jest.fn() as any).mockResolvedValue({} as any) as any;
   });
 
@@ -383,6 +416,7 @@ describe("handleWorkerMessage", () => {
   it("handles llamafile error", async () => {
     mockOrchestrator.inFlightEffectiveProviderByGroup.set("g1", {
       providerId: "llamafile",
+      model: "llamafile-model",
     });
     mockIsLlamafileResolutionError.mockReturnValue(true);
     await send({
@@ -745,6 +779,83 @@ describe("handleWorkerMessage", () => {
         type: "native-ai-task-response",
         payload: { id: "task_err", error: "Summarizer out of memory" },
       });
+    });
+  });
+
+  /**
+   * Regression test for the missing `model` field on inFlightEffectiveProviderByGroup.
+   *
+   * Before the fix, `executeActiveProviderTask` resolved the model via:
+   *   inFlightInfo?.providerConfig?.defaultModel || o.model
+   *
+   * This meant the conversation-pinned model was ignored and the provider's
+   * config-level defaultModel was silently substituted. The fix adds a `model`
+   * field directly to the in-flight entry so the resolved model is always used.
+   */
+  describe("request-native-ai-task uses inFlightEffectiveProviderByGroup.model", () => {
+    it("passes the in-flight resolved model to formatRequest, not providerConfig.defaultModel", async () => {
+      const { getProvider } = await import("../../../config/config.js");
+      (getProvider as jest.MockedFunction<any>).mockReturnValue({
+        name: "Test Provider",
+        baseUrl: "https://api.test.example/v1",
+        format: "openai",
+        requiresApiKey: true,
+        supportsStreaming: false,
+        defaultModel: "provider-default-model", // should NOT be used
+      });
+
+      mockGetConfig.mockResolvedValue("active_provider");
+      mockOrchestrator.provider = "test-provider";
+      mockOrchestrator.model = "orchestrator-fallback-model"; // should NOT be used
+
+      // The resolved (pinned) model recorded when the invocation started
+      const resolvedModel = "claude-sonnet-4-5-pinned";
+      mockOrchestrator.inFlightEffectiveProviderByGroup.set("g1", {
+        providerId: "test-provider",
+        providerConfig: {
+          name: "Test Provider",
+          baseUrl: "https://api.test.example/v1",
+          format: "openai",
+          requiresApiKey: true,
+          defaultModel: "provider-default-model",
+        },
+        // ← This field was missing before the fix; without it, formatRequest
+        //   would have received 'provider-default-model' or 'orchestrator-fallback-model'.
+        model: resolvedModel,
+      });
+
+      global.fetch = (jest.fn() as any).mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            choices: [{ message: { content: "Summarized." } }],
+          }),
+      }) as any;
+
+      mockParseResponse.mockReturnValue({
+        content: [{ type: "text", text: "Summarized." }],
+      });
+
+      await send({
+        type: "request-native-ai-task",
+        payload: {
+          id: "model-check-task",
+          groupId: "g1",
+          taskType: "summarize",
+          input: { text: "A very long article…" },
+        },
+      });
+
+      await new Promise(process.nextTick);
+
+      // formatRequest must have been called with the resolved pinned model,
+      // not providerConfig.defaultModel or o.model.
+      expect(mockFormatRequest).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ model: resolvedModel }),
+      );
     });
   });
 });

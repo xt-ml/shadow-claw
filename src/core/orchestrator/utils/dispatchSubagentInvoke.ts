@@ -21,7 +21,7 @@ type SubagentPayload = InvokePayload & { isScheduledTask?: boolean };
 const BROWSER_PROVIDER_IDS = new Set([
   "litert_lm_browser",
   "prompt_api",
-  "transformer_js_browser",
+  "transformers_js_browser",
 ]);
 
 export function isBrowserProviderId(providerId: string | undefined): boolean {
@@ -91,6 +91,7 @@ export async function dispatchSubagentInvoke(
       payload.maxTokens,
       emit,
       abortSignal,
+      payload.model,
       payload.enabledTools,
     );
 

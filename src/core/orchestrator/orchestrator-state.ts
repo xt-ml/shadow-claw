@@ -73,7 +73,7 @@ export interface OrchestratorState {
   // ── In-flight tracking ────────────────────────────────────────────────────
   inFlightEffectiveProviderByGroup: Map<
     string,
-    { providerId: string; providerConfig: ProviderConfig }
+    { providerId: string; providerConfig: ProviderConfig; model: string }
   >;
   inFlightProviderRequestIds: Map<string, string>;
   inFlightTriggerByGroup: Map<string, string>;

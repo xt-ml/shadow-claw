@@ -21,6 +21,7 @@ import {
   renderFrontmatterMarkup,
 } from "../src/common/utils/frontmatter.mjs";
 
+import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "../src/storage/defaultIndexContent.mjs";
 import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "../src/storage/defaultMemoryContent.mjs";
 
 /**
@@ -59,11 +60,18 @@ const frontmatterSerializer = new XMLSerializer();
  * @returns {PageSource}
  */
 function buildDefaultPageSource() {
-  return {
-    absolutePath: null,
-    displayPath: "MEMORY.md",
-    inlineContent: DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
-  };
+  return [
+    {
+      absolutePath: null,
+      displayPath: "index.html",
+      inlineContent: DEFAULT_MAIN_GROUP_INDEX_CONTENT,
+    },
+    {
+      absolutePath: null,
+      displayPath: "MEMORY.md",
+      inlineContent: DEFAULT_MAIN_GROUP_MEMORY_CONTENT,
+    },
+  ];
 }
 
 function escapeHtml(input) {
@@ -162,7 +170,7 @@ export async function collectPageSources(sourcePath) {
     sourceStats = await stat(sourcePath);
   } catch (error) {
     if (error?.code === "ENOENT") {
-      return [buildDefaultPageSource()];
+      return buildDefaultPageSource();
     }
 
     throw error;
@@ -199,7 +207,7 @@ export async function collectPageSources(sourcePath) {
   await visit(sourcePath);
 
   if (pages.length === 0) {
-    return [buildDefaultPageSource()];
+    return buildDefaultPageSource();
   }
 
   const pageByDisplayPath = new Map(

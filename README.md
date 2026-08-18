@@ -210,7 +210,7 @@ ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace con
 - **Ebook-Style Navigation** — Functional Previous/Next pagination controls with HTML-entity decoded frontmatter headers and seamless page transitions
 - **Pre-rendered Content Override** — Optional setting (`OVERRIDE_PRERENDER_SKELETON`) suppresses Declarative Shadow DOM (DSD) pre-rendered content during boot to eliminate hydration flash
 
-Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first setup) which serves as a workspace-scoped system context for the agent.
+Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first setup) which serves as a workspace-scoped system context for the agent. An `index.html` is also auto-created as the default home page.
 
 ## WebVM (Optional Alpine Linux)
 

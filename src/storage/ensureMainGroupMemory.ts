@@ -13,7 +13,7 @@ import type { ShadowClawDatabase } from "../db/types.js";
 export { DEFAULT_MAIN_GROUP_MEMORY_CONTENT as DEFAULT_MAIN_GROUP_MEMORY_CONTENT };
 
 export const DEFAULT_MAIN_GROUP_MEMORY_PATH = "MEMORY.md";
-export const STATIC_MAIN_GROUP_MEMORY_PATH = "main/memory.md";
+export const STATIC_MAIN_GROUP_MEMORY_PATH = "static-main/MEMORY.md";
 
 export function resolveStaticMainGroupMemoryUrl(): string {
   const targetPath = applyBasePath(`/${STATIC_MAIN_GROUP_MEMORY_PATH}`);
@@ -73,7 +73,18 @@ export async function ensureMainGroupMemory(
       return false;
     }
 
-    const content = customContent ?? DEFAULT_MAIN_GROUP_MEMORY_CONTENT;
+    let content = customContent;
+    if (content === undefined && typeof fetch === "function") {
+      try {
+        const res = await fetch(resolveStaticMainGroupMemoryUrl());
+        if (res.ok) {
+          content = await res.text();
+        }
+      } catch {
+        // Fetch failed or unavailable, fallback to default
+      }
+    }
+    content = content ?? DEFAULT_MAIN_GROUP_MEMORY_CONTENT;
 
     await writeGroupFile(db, groupId, DEFAULT_MAIN_GROUP_MEMORY_PATH, content);
 

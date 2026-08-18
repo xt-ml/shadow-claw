@@ -237,7 +237,7 @@ describe("executeSpawnSubagentTool", () => {
     expect(toolNames).toEqual(["read_file"]);
   });
 
-  it("overrides model when specified in input", async () => {
+  it("in manual mode, overrides model when specified as pinned model", async () => {
     mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
@@ -253,13 +253,49 @@ describe("executeSpawnSubagentTool", () => {
     });
 
     await executeSpawnSubagentTool(
-      { prompt: "task", model: "gpt-4o" },
+      { prompt: "task" },
       "parent-group",
-      makeContext(),
+      makeContext({
+        subagentModelSelectionMode: "manual",
+        subagentPinnedProvider: "openai",
+        subagentPinnedModel: "gpt-4o",
+      }),
     );
 
     const [_db, payload] = mockHandleInvoke.mock.calls[0];
     expect(payload.model).toBe("gpt-4o");
+  });
+
+  it("in automatic mode, ignores LLM-emitted model and falls back to parent ctx model", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    // LLM hallucinated "gpt-4o" even though we're running litert_lm_browser
+    await executeSpawnSubagentTool(
+      { prompt: "task", model: "gpt-4o" },
+      "parent-group",
+      makeContext({
+        provider: "litert_lm_browser",
+        model: "litert-community/gemma-4-E2B-it-litert-lm",
+        subagentModelSelectionMode: "automatic",
+      }),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    // The hallucinated "gpt-4o" must NOT be used — undefined causes runSingleSubagent
+    // to fall back to ctx.model (the litert model)
+    expect(payload.model).not.toBe("gpt-4o");
   });
 
   it("clamps subagent max tokens by selected model limit", async () => {
@@ -278,9 +314,14 @@ describe("executeSpawnSubagentTool", () => {
     });
 
     await executeSpawnSubagentTool(
-      { prompt: "task", model: "anthropic.claude-haiku-4-5" },
+      { prompt: "task" },
       "parent-group",
-      makeContext({ maxTokens: 128000 }),
+      makeContext({
+        maxTokens: 128000,
+        subagentModelSelectionMode: "manual",
+        subagentPinnedProvider: "anthropic",
+        subagentPinnedModel: "anthropic.claude-haiku-4-5",
+      }),
     );
 
     const [_db, payload] = mockHandleInvoke.mock.calls[0];
@@ -303,9 +344,15 @@ describe("executeSpawnSubagentTool", () => {
     });
 
     await executeSpawnSubagentTool(
-      { prompt: "task", model: "anthropic.claude-haiku-4-5" },
+      { prompt: "task" },
       "parent-group",
-      makeContext({ maxTokens: 128000, subagentMaxTokens: 100000 }),
+      makeContext({
+        maxTokens: 128000,
+        subagentMaxTokens: 100000,
+        subagentModelSelectionMode: "manual",
+        subagentPinnedProvider: "anthropic",
+        subagentPinnedModel: "anthropic.claude-haiku-4-5",
+      }),
     );
 
     const [_db, payload] = mockHandleInvoke.mock.calls[0];
@@ -328,16 +375,22 @@ describe("executeSpawnSubagentTool", () => {
     });
 
     await executeSpawnSubagentTool(
-      { prompt: "task", model: "anthropic.claude-opus-4-8" },
+      { prompt: "task" },
       "parent-group",
-      makeContext({ maxTokens: 64000, subagentMaxTokens: undefined }),
+      makeContext({
+        maxTokens: 64000,
+        subagentMaxTokens: undefined,
+        subagentModelSelectionMode: "manual",
+        subagentPinnedProvider: "anthropic",
+        subagentPinnedModel: "anthropic.claude-opus-4-8",
+      }),
     );
 
     const [_db, payload] = mockHandleInvoke.mock.calls[0];
     expect(payload.maxTokens).toBe(128000);
   });
 
-  it("overrides provider when specified in input", async () => {
+  it("in manual mode, overrides provider to a different provider with its api key", async () => {
     mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
@@ -353,14 +406,182 @@ describe("executeSpawnSubagentTool", () => {
     });
 
     await executeSpawnSubagentTool(
-      { prompt: "task", provider: "openai" },
+      { prompt: "task" },
       "parent-group",
-      makeContext(),
+      makeContext({
+        subagentModelSelectionMode: "manual",
+        subagentPinnedProvider: "openai",
+        subagentPinnedModel: "gpt-4o",
+      }),
     );
 
     const [_db, payload] = mockHandleInvoke.mock.calls[0];
     expect(payload.provider).toBe("openai");
     expect(payload.apiKey).toBe("openai-key");
+  });
+
+  it("in automatic mode, ignores LLM-emitted provider and falls back to parent ctx provider", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+
+      return Promise.resolve();
+    });
+
+    // LiteRT-LM hallucinated "openai" as provider — must be ignored
+    await executeSpawnSubagentTool(
+      { prompt: "task", provider: "openai" },
+      "parent-group",
+      makeContext({
+        provider: "litert_lm_browser",
+        model: "litert-community/gemma-4-E2B-it-litert-lm",
+        subagentModelSelectionMode: "automatic",
+      }),
+    );
+
+    const [_db, payload] = mockHandleInvoke.mock.calls[0];
+    // The hallucinated "openai" must NOT leak through in automatic mode
+    expect(payload.provider).not.toBe("openai");
+  });
+
+  it("in automatic mode, maps profile 'fast', 'smart', 'powerful' to their configured provider/model", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+      return Promise.resolve();
+    });
+
+    const ctx = makeContext({
+      subagentModelSelectionMode: "automatic",
+      subagentFastProvider: "litert_lm_browser",
+      subagentFastModel: "litert-community/gemma-4-E2B-it-litert-lm",
+      subagentSmartProvider: "huggingface",
+      subagentSmartModel: "meta-llama/Llama-3.1-8B-Instruct",
+      subagentPowerfulProvider: "openai",
+      subagentPowerfulModel: "gpt-4o",
+    });
+
+    // 1. Fast profile
+    await executeSpawnSubagentTool(
+      { prompt: "fast task", profile: "fast" },
+      "parent-group",
+      ctx,
+    );
+    const [, payloadFast] = mockHandleInvoke.mock.calls[0];
+    expect(payloadFast.provider).toBe("litert_lm_browser");
+    expect(payloadFast.model).toBe("litert-community/gemma-4-E2B-it-litert-lm");
+
+    // 2. Smart profile
+    await executeSpawnSubagentTool(
+      { prompt: "smart task", profile: "smart" },
+      "parent-group",
+      ctx,
+    );
+    const [, payloadSmart] = mockHandleInvoke.mock.calls[1];
+    expect(payloadSmart.provider).toBe("huggingface");
+    expect(payloadSmart.model).toBe("meta-llama/Llama-3.1-8B-Instruct");
+
+    // 3. Powerful profile
+    await executeSpawnSubagentTool(
+      { prompt: "powerful task", profile: "powerful" },
+      "parent-group",
+      ctx,
+    );
+    const [, payloadPowerful] = mockHandleInvoke.mock.calls[2];
+    expect(payloadPowerful.provider).toBe("openai");
+    expect(payloadPowerful.model).toBe("gpt-4o");
+  });
+
+  it("in automatic mode, falls back to parent model/provider if profile is not configured or current", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+      return Promise.resolve();
+    });
+
+    const ctx = makeContext({
+      provider: "litert_lm_browser",
+      model: "litert-community/gemma-4-E2B-it-litert-lm",
+      subagentModelSelectionMode: "automatic",
+      subagentFastProvider: undefined,
+      subagentFastModel: undefined,
+    });
+
+    // Fast profile is not configured -> fallback to parent
+    await executeSpawnSubagentTool(
+      { prompt: "unconfigured task", profile: "fast" },
+      "parent-group",
+      ctx,
+    );
+    const [, payloadFast] = mockHandleInvoke.mock.calls[0];
+    expect(payloadFast.provider).toBe("litert_lm_browser");
+    expect(payloadFast.model).toBe("litert-community/gemma-4-E2B-it-litert-lm");
+
+    // 'current' profile -> use parent
+    await executeSpawnSubagentTool(
+      { prompt: "current task", profile: "current" },
+      "parent-group",
+      ctx,
+    );
+    const [, payloadCurrent] = mockHandleInvoke.mock.calls[1];
+    expect(payloadCurrent.provider).toBe("litert_lm_browser");
+    expect(payloadCurrent.model).toBe(
+      "litert-community/gemma-4-E2B-it-litert-lm",
+    );
+  });
+
+  it("in manual mode, ignores profile selection and uses pinned model/provider", async () => {
+    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+      const collectors = mockRegisterSubagentCollector.mock.calls;
+      const lastCall = collectors[collectors.length - 1];
+      if (lastCall) {
+        const [collectedGroupId, collectorArr] = lastCall;
+        collectorArr.push({
+          type: "response",
+          payload: { groupId: collectedGroupId, text: "done" },
+        });
+      }
+      return Promise.resolve();
+    });
+
+    const ctx = makeContext({
+      subagentModelSelectionMode: "manual",
+      subagentPinnedProvider: "openai",
+      subagentPinnedModel: "gpt-4o",
+      subagentFastProvider: "litert_lm_browser",
+      subagentFastModel: "litert-community/gemma-4-E2B-it-litert-lm",
+    });
+
+    // Should ignore profile: "fast" and use pinned "openai"/"gpt-4o"
+    await executeSpawnSubagentTool(
+      { prompt: "task", profile: "fast" },
+      "parent-group",
+      ctx,
+    );
+    const [, payload] = mockHandleInvoke.mock.calls[0];
+    expect(payload.provider).toBe("openai");
+    expect(payload.model).toBe("gpt-4o");
   });
 
   it("resolves bedrock provider runtime headers when provider is overridden", async () => {
@@ -403,9 +624,13 @@ describe("executeSpawnSubagentTool", () => {
     });
 
     await executeSpawnSubagentTool(
-      { prompt: "task", provider: "bedrock_proxy" },
+      { prompt: "task" },
       "parent-group",
-      makeContext(),
+      makeContext({
+        subagentModelSelectionMode: "manual",
+        subagentPinnedProvider: "bedrock_proxy",
+        subagentPinnedModel: "anthropic.claude-sonnet-4-6-v1:0",
+      }),
     );
 
     const [_db, payload] = mockHandleInvoke.mock.calls[0];

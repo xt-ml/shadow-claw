@@ -55,6 +55,7 @@ describe("handleInvoke.js", () => {
     mockBuildSystemPrompt = jest.fn();
 
     jest.unstable_mockModule("../../config/config.js", () => ({
+      CONFIG_KEYS: null,
       DEFAULT_MAX_ITERATIONS: 50,
       DEFAULT_PROMPT_API_FALLBACK_MODEL: "onnx-community/Qwen3-0.6B-ONNX",
       getProvider: mockGetProvider,
@@ -96,6 +97,7 @@ describe("handleInvoke.js", () => {
       post: mockPost,
       registerSubagentCollector: jest.fn(),
       unregisterSubagentCollector: jest.fn(),
+      setPostHandler: jest.fn(),
     }));
 
     jest.unstable_mockModule("./parseSSEStream.js", () => ({

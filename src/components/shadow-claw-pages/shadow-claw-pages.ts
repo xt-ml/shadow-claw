@@ -30,6 +30,10 @@ import { orchestratorStore } from "../../stores/orchestrator.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
 
 import { showError, showSuccess, showWarning } from "../../ui/toast.js";
+import {
+  getIframeHtmlClass,
+  getIframeThemeStyleHtml,
+} from "../../ui/iframe-theme.js";
 import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
 
 import type { Config } from "dompurify";
@@ -93,6 +97,7 @@ export class ShadowClawPages extends ShadowClawElement {
 
   navFadeTimer: ReturnType<typeof setTimeout> | null = null;
   sidebarOpen: boolean = false;
+  themeObserver: MutationObserver | null = null;
 
   autoRefreshIntervalSec: number = 0;
   autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -318,6 +323,18 @@ export class ShadowClawPages extends ShadowClawElement {
 
     this.setupEffects();
 
+    this.themeObserver = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.type === "attributes" && m.attributeName === "class") {
+          this.syncIframeTheme();
+        }
+      }
+    });
+    this.themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
     // Wait for the parent ShadowClaw to finish URL routing before allowing
     // the effect to trigger page renders. Without this gate the effect fires
     // immediately with the store's default (pre-rendered) pinned page, causing
@@ -333,6 +350,12 @@ export class ShadowClawPages extends ShadowClawElement {
     this._renderedContent = null;
     this._renderedFrontmatterToggle = null;
     this._dsdInitialPath = null;
+
+    if (this.themeObserver) {
+      this.themeObserver.disconnect();
+      this.themeObserver = null;
+    }
+
     if (this.navFadeTimer !== null) {
       clearTimeout(this.navFadeTimer);
       this.navFadeTimer = null;
@@ -413,11 +436,39 @@ export class ShadowClawPages extends ShadowClawElement {
   }
 
   handleIframeMessage = (event: MessageEvent) => {
-    if (!this.db || !event.data || typeof event.data !== "object") {
+    if (!event.data || typeof event.data !== "object") {
       return;
     }
 
-    const payload = event.data as { type?: unknown; href?: unknown };
+    const payload = event.data as {
+      type?: unknown;
+      href?: unknown;
+      height?: unknown;
+    };
+
+    if (
+      payload.type === "shadow-claw-iframe-resize" &&
+      typeof payload.height === "number"
+    ) {
+      const root = this.shadowRoot;
+      const iframe = root?.querySelector("[data-pages-iframe]");
+      if (
+        iframe instanceof HTMLIFrameElement &&
+        (!this.previewFrameWindow ||
+          event.source === this.previewFrameWindow ||
+          (iframe.contentWindow && event.source === iframe.contentWindow))
+      ) {
+        this.previewFrameWindow = iframe.contentWindow;
+        iframe.style.setProperty("height", `${payload.height}px`, "important");
+      }
+
+      return;
+    }
+
+    if (!this.db) {
+      return;
+    }
+
     if (
       payload.type !== "shadow-claw-file-viewer-link" ||
       typeof payload.href !== "string"
@@ -1179,13 +1230,11 @@ export class ShadowClawPages extends ShadowClawElement {
 
     return [
       "<!doctype html>",
-      '<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">',
+      `<html class="${getIframeHtmlClass()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`,
       `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">`,
       `<base href="${this.getPageRouteDirectory(filePath)}" target="_blank">`,
       `<script src="${bridgeScriptUrl}" nonce="${nonce}"><\/script>`,
-      "<style>",
-      "  img { max-width: 100%; max-height: 100%; }",
-      "</style>",
+      getIframeThemeStyleHtml(),
       "</head><body>",
       safeContent,
       "</body></html>",
@@ -1654,10 +1703,37 @@ export class ShadowClawPages extends ShadowClawElement {
     iframe.hidden = true;
     iframe.addEventListener("load", () => {
       this.previewFrameWindow = iframe.contentWindow;
+      this.syncIframeTheme();
     });
     rendered.before(iframe);
 
     return iframe;
+  }
+
+  private syncIframeTheme(): void {
+    if (!this.previewFrameWindow) {
+      return;
+    }
+
+    const isDark = document.documentElement.classList.contains("dark-mode");
+    const styles = getComputedStyle(document.documentElement);
+    const customProperties: Record<string, string> = {};
+
+    for (let i = 0; i < styles.length; i++) {
+      const prop = styles[i];
+      if (prop.startsWith("--")) {
+        customProperties[prop] = styles.getPropertyValue(prop);
+      }
+    }
+
+    this.previewFrameWindow.postMessage(
+      {
+        type: "shadow-claw-theme-update",
+        theme: isDark ? "dark" : "light",
+        customProperties,
+      },
+      "*",
+    );
   }
 
   private pageRefKey(page: SavedPageRef | null): string {

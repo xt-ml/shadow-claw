@@ -24,6 +24,12 @@ export interface SubagentInvokeContext {
   subagentMaxTokens?: number;
   subagentPinnedProvider?: string;
   subagentPinnedModel?: string;
+  subagentFastProvider?: string;
+  subagentFastModel?: string;
+  subagentSmartProvider?: string;
+  subagentSmartModel?: string;
+  subagentPowerfulProvider?: string;
+  subagentPowerfulModel?: string;
   providerRuntimeOverrides?: {
     bedrock_proxy?: {
       authMode?: "provider_chain" | "sso";
@@ -53,6 +59,7 @@ export interface SubagentInvokeContext {
 export interface SubagentSpec {
   prompt: string;
   tools?: string[];
+  profile?: "current" | "fast" | "smart" | "powerful";
   model?: string;
   provider?: string;
   workspace_group_id?: string;
@@ -78,6 +85,56 @@ function normalizeSubagentWorkspaceMode(value: unknown): SubagentWorkspaceMode {
   }
 
   return DEFAULT_SUBAGENT_WORKSPACE_MODE as SubagentWorkspaceMode;
+}
+
+function resolveSpec(specInput: any, ctx: SubagentInvokeContext): SubagentSpec {
+  const isManual = ctx.subagentModelSelectionMode === "manual";
+  let resolvedProvider: string | undefined;
+  let resolvedModel: string | undefined;
+
+  if (isManual) {
+    resolvedProvider = ctx.subagentPinnedProvider;
+    resolvedModel = ctx.subagentPinnedModel;
+  } else {
+    // Automatic mode: resolve based on profile parameter
+    const profile = specInput.profile || "current";
+    if (
+      profile === "fast" &&
+      ctx.subagentFastProvider &&
+      ctx.subagentFastModel
+    ) {
+      resolvedProvider = ctx.subagentFastProvider;
+      resolvedModel = ctx.subagentFastModel;
+    } else if (
+      profile === "smart" &&
+      ctx.subagentSmartProvider &&
+      ctx.subagentSmartModel
+    ) {
+      resolvedProvider = ctx.subagentSmartProvider;
+      resolvedModel = ctx.subagentSmartModel;
+    } else if (
+      profile === "powerful" &&
+      ctx.subagentPowerfulProvider &&
+      ctx.subagentPowerfulModel
+    ) {
+      resolvedProvider = ctx.subagentPowerfulProvider;
+      resolvedModel = ctx.subagentPowerfulModel;
+    } else {
+      // Fallback to "current" (parent)
+      resolvedProvider = ctx.provider;
+      resolvedModel = ctx.model;
+    }
+  }
+
+  return {
+    prompt: specInput.prompt ?? "",
+    tools: specInput.tools,
+    profile: specInput.profile,
+    model: resolvedModel,
+    provider: resolvedProvider,
+    workspace_group_id: specInput.workspace_group_id,
+    system_prompt: specInput.system_prompt,
+  };
 }
 
 /**
@@ -113,33 +170,18 @@ export async function executeSpawnSubagentTool(
       return `Error: Requested ${input.parallel_agents.length} parallel subagents, but the maximum allowed is ${maxSubagents}. Please reduce the number of parallel agents.`;
     }
 
-    const specs: SubagentSpec[] = input.parallel_agents;
+    const specs: any[] = input.parallel_agents;
 
     const results = await Promise.all(
-      specs.map((spec, i) => {
-        const defaultedProvider =
-          ctx.subagentModelSelectionMode === "manual"
-            ? ctx.subagentPinnedProvider
-            : undefined;
-        const defaultedModel =
-          ctx.subagentModelSelectionMode === "manual"
-            ? ctx.subagentPinnedModel
-            : undefined;
-        const fullSpec: SubagentSpec = {
-          prompt: spec.prompt ?? "",
-          tools: spec.tools,
-          model: defaultedModel ?? spec.model,
-          provider: defaultedProvider ?? spec.provider,
-          workspace_group_id: spec.workspace_group_id,
-          system_prompt: spec.system_prompt,
-        };
+      specs.map((specInput, i) => {
+        const fullSpec = resolveSpec(specInput, ctx);
 
         return runSingleSubagent(fullSpec, ctx, {
           parentGroupId: groupId,
           workspaceMode,
         }).then((text) => ({
           index: i + 1,
-          prompt: spec.prompt,
+          prompt: specInput.prompt ?? "",
           text,
         }));
       }),
@@ -158,23 +200,7 @@ export async function executeSpawnSubagentTool(
   }
 
   // Single subagent
-  const defaultedProvider =
-    ctx.subagentModelSelectionMode === "manual"
-      ? ctx.subagentPinnedProvider
-      : undefined;
-  const defaultedModel =
-    ctx.subagentModelSelectionMode === "manual"
-      ? ctx.subagentPinnedModel
-      : undefined;
-
-  const spec: SubagentSpec = {
-    prompt: input.prompt ?? "",
-    tools: input.tools,
-    model: defaultedModel ?? input.model,
-    provider: defaultedProvider ?? input.provider,
-    workspace_group_id: input.workspace_group_id,
-    system_prompt: input.system_prompt,
-  };
+  const spec = resolveSpec(input, ctx);
 
   return runSingleSubagent(spec, ctx, {
     parentGroupId: groupId,

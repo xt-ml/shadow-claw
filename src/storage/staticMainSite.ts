@@ -1,21 +1,23 @@
-/// <reference lib="dom" />
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config/config.js";
+import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "./defaultIndexContent.mjs";
+import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "./defaultMemoryContent.mjs";
+
+import { applyBasePath } from "../core/app-routes.js";
 import { getConfig } from "../db/getConfig.js";
 import { setConfig } from "../db/setConfig.js";
-import { applyBasePath } from "../core/app-routes.js";
-import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "./defaultMemoryContent.mjs";
+
+import { deleteAllGroupFiles } from "./deleteAllGroupFiles.js";
+import { deleteGroupDirectory } from "./deleteGroupDirectory.js";
+import { ensureMainGroupIndex } from "./ensureMainGroupIndex.js";
+
 import {
   ensureMainGroupMemory,
   isMainGroupMemorySuppressed,
 } from "./ensureMainGroupMemory.js";
+
 import { groupFileExists } from "./groupFileExists.js";
-import { writeGroupFile } from "./writeGroupFile.js";
-
 import { isPageSuppressed, pageRefKey } from "./suppressedPages.js";
-
-import { ensureMainGroupIndex } from "./ensureMainGroupIndex.js";
-import { deleteAllGroupFiles } from "./deleteAllGroupFiles.js";
-import { deleteGroupDirectory } from "./deleteGroupDirectory.js";
+import { writeGroupFile } from "./writeGroupFile.js";
 
 import type { SavedPageRef, ShadowClawDatabase } from "../db/types.js";
 
@@ -155,7 +157,6 @@ export async function getStaticMainManifest(
 
     return null;
   };
-
   if (options.preferEmbedded !== false) {
     const embedded = parseEmbedded();
     if (embedded) {
@@ -179,6 +180,10 @@ export async function getStaticMainManifest(
 
   return {
     pages: [
+      {
+        displayPath: "index.html",
+        content: DEFAULT_MAIN_GROUP_INDEX_CONTENT,
+      },
       {
         displayPath: "MEMORY.md",
         content: DEFAULT_MAIN_GROUP_MEMORY_CONTENT,

@@ -11,7 +11,7 @@ import { applyBasePath } from "../core/app-routes.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 
 export const DEFAULT_MAIN_GROUP_INDEX_PATH = "index.html";
-export const STATIC_MAIN_GROUP_INDEX_PATH = "main/index.html";
+export const STATIC_MAIN_GROUP_INDEX_PATH = "static-main/index.html";
 
 export function resolveStaticMainGroupIndexUrl(): string {
   const targetPath = applyBasePath(`/${STATIC_MAIN_GROUP_INDEX_PATH}`);
@@ -52,6 +52,7 @@ export async function setMainGroupIndexSuppressed(
 export async function ensureMainGroupIndex(
   db: ShadowClawDatabase,
   groupId: string = DEFAULT_GROUP_ID,
+  customContent?: string,
 ): Promise<boolean> {
   try {
     const exists = await groupFileExists(db, groupId, "index.html");
@@ -67,12 +68,20 @@ export async function ensureMainGroupIndex(
       return false;
     }
 
-    await writeGroupFile(
-      db,
-      groupId,
-      "index.html",
-      DEFAULT_MAIN_GROUP_INDEX_CONTENT,
-    );
+    let content = customContent;
+    if (content === undefined && typeof fetch === "function") {
+      try {
+        const res = await fetch(resolveStaticMainGroupIndexUrl());
+        if (res.ok) {
+          content = await res.text();
+        }
+      } catch {
+        // Fetch failed or unavailable, fallback to default
+      }
+    }
+    content = content ?? DEFAULT_MAIN_GROUP_INDEX_CONTENT;
+
+    await writeGroupFile(db, groupId, "index.html", content);
 
     return true;
   } catch (error) {

@@ -169,6 +169,13 @@ export interface InvokePayload {
   subagentMaxTokens?: number;
   subagentPinnedModel?: string;
   subagentPinnedProvider?: string;
+  /** Automatic-mode profile slots — fast/smart/powerful configured by the user. */
+  subagentFastProvider?: string;
+  subagentFastModel?: string;
+  subagentSmartProvider?: string;
+  subagentSmartModel?: string;
+  subagentPowerfulProvider?: string;
+  subagentPowerfulModel?: string;
   systemPrompt: string;
   workspaceGroupId?: string;
   subagentTask?: boolean;

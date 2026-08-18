@@ -709,6 +709,16 @@ export async function invokeWithLiteRtLm(
 
       for (const call of calls) {
         await emit(createToolActivityMessage(groupId, call.name, "running"));
+        // LiteRT-LM runs on the main thread (emit === handleWorkerMessage).
+        // Route builtin-AI cross-thread requests (e.g. summarize_text's
+        // "request-native-ai-task") back through emit so the main-thread
+        // handler rseolves them; otherwise post() fails through to
+        // self.postMessage and the tool promise hangs forever. Matches the
+        // transformers-js / prompt-api providers.
+        setPostHandler((msg) => {
+          void emit(msg);
+        });
+
         let output: any;
         try {
           output = await executeTool(db, call.name, call.input || {}, groupId, {

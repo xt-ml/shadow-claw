@@ -117,6 +117,7 @@ export class Orchestrator {
     {
       providerId: string;
       providerConfig: ProviderConfig;
+      model: string;
     }
   > = new Map();
 

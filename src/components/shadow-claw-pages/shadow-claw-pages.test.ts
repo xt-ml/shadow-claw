@@ -181,6 +181,28 @@ describe("shadow-claw-pages", () => {
     );
   });
 
+  it("injects link, font, and theme styles into html page srcdoc to prevent FOUC", async () => {
+    const component = new ShadowClawPages();
+    component.selectedPage = { groupId: "group-1", path: "docs/page.html" };
+
+    const srcdoc = await component.buildHtmlPageSrcdoc(
+      "<main>Hello</main>",
+      "docs/page.html",
+    );
+
+    expect(srcdoc).toContain("a {");
+    expect(srcdoc).toContain("color: var(--shadow-claw-link);");
+    expect(srcdoc).toContain("text-decoration: underline;");
+    expect(srcdoc).toContain("text-underline-offset: 0.125rem;");
+    expect(srcdoc).toContain("a:hover {");
+    expect(srcdoc).toContain("color: var(--shadow-claw-link-hover);");
+    expect(srcdoc).toContain("body {");
+    expect(srcdoc).toContain("color: var(--shadow-claw-text-primary);");
+    expect(srcdoc).toContain("font-family: var(--shadow-claw-font-sans);");
+    expect(srcdoc).toContain("pre, code, kbd, samp {");
+    expect(srcdoc).toContain("font-family: var(--shadow-claw-font-mono);");
+  });
+
   it("inlines workspace-route html image variants", async () => {
     const component = new ShadowClawPages();
 
@@ -1287,6 +1309,27 @@ describe("shadow-claw-pages", () => {
         renderFrontmatter: true,
       });
       expect(rendered.hidden).toBe(false);
+    });
+
+    it("updates iframe height when receiving shadow-claw-iframe-resize message", () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+
+      const iframe = document.createElement("iframe");
+      iframe.setAttribute("data-pages-iframe", "");
+      const fakeWindow = {} as Window;
+      component.previewFrameWindow = fakeWindow;
+
+      const root =
+        component.shadowRoot || component.attachShadow({ mode: "open" });
+      root.appendChild(iframe);
+
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-iframe-resize", height: 850 },
+        source: fakeWindow,
+      } as MessageEvent);
+
+      expect(iframe.style.height).toBe("850px");
     });
   });
 });

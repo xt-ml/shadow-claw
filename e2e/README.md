@@ -410,6 +410,7 @@ export const TIME_MINUTES_ONE = 60000;
 - For Provider Help dialogs, mock provider errors to trigger the dialogs and verify the contextual instructions and links.
 - **Remote MCP Testing**: Verify tool discovery, execution, and automatic OAuth reconnection flows by mocking streamable HTTP responses and OAuth failure modes.
 - **Proxy Security Testing**: Verify that the `/proxy` endpoint rejects non-HTTP/S schemes (`file:`, `ftp:`, etc.) with `400` and blocks private/loopback IP targets (`localhost`, `127.*`, `10.*`, `192.168.*`, `169.254.*`) with `403`. Use the unit tests in `src/server/utils/proxy-helpers.test.ts` for scheme and SSRF guard coverage; E2E tests should verify that the authenticated service-worker format (body-based JSON with `Content-Type: application/json`) is still allowed to reach local tool servers.
+- **Page Navigation Testing**: When testing pages or file viewer navigation, ensure keyboard events (`ArrowLeft`/`ArrowRight`) are properly guarded and do not trigger when the active element is an input or content-editable. Swipe gestures can be simulated using mouse events (`mousedown`, `mousemove`, `mouseup`) or touch events; ensure drag/text-selection does not trigger a false swipe.
 
 ### ❌ DON'T
 

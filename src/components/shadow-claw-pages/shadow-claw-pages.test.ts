@@ -1332,4 +1332,236 @@ describe("shadow-claw-pages", () => {
       expect(iframe.style.height).toBe("850px");
     });
   });
+
+  describe("pages keyboard and swipe navigation", () => {
+    it("navigates with ArrowLeft and ArrowRight keys", async () => {
+      const component = new ShadowClawPages();
+      document.body.appendChild(component);
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+        { groupId: "group-1", path: "docs/third.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+      component.selectedPage = pages[1]; // middle page
+      component.renderPageList(pages, []);
+      await Promise.resolve();
+
+      const navigateListener = jest.fn();
+      document.addEventListener("shadow-claw-navigate", navigateListener);
+
+      // Press ArrowRight -> goToNextPage (docs/first.md)
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+      );
+      expect(component.selectedPage).toEqual(pages[0]);
+      expect(navigateListener).toHaveBeenCalledTimes(1);
+
+      // Press ArrowLeft -> goToPreviousPage (docs/second.md)
+      navigateListener.mockClear();
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }),
+      );
+      expect(component.selectedPage).toEqual(pages[1]);
+      expect(navigateListener).toHaveBeenCalledTimes(1);
+
+      document.removeEventListener("shadow-claw-navigate", navigateListener);
+      if (component.parentNode) {
+        component.parentNode.removeChild(component);
+      }
+    });
+
+    it("suppresses keyboard navigation when focus is inside editable elements or sidebar list", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+      component.selectedPage = pages[1];
+      component.renderPageList(pages, []);
+
+      // Inside input
+      const input = document.createElement("input");
+      document.body.appendChild(input);
+      input.focus();
+
+      input.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+      );
+      expect(component.selectedPage).toEqual(pages[1]);
+
+      document.body.removeChild(input);
+
+      // With modifier key (Ctrl)
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowRight",
+          ctrlKey: true,
+          bubbles: true,
+        }),
+      );
+      expect(component.selectedPage).toEqual(pages[1]);
+    });
+
+    it("triggers navigation on horizontal swipe touch gestures", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+        { groupId: "group-1", path: "docs/third.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+      component.selectedPage = pages[1];
+
+      // Swipe Left (deltaX = -100) -> goToNextPage (docs/first.md)
+      component.handleTouchStart({
+        touches: [{ clientX: 200, clientY: 100 }],
+      } as any);
+      component.handleTouchEnd({
+        changedTouches: [{ clientX: 100, clientY: 105 }],
+      } as any);
+
+      expect(component.selectedPage).toEqual(pages[0]);
+
+      // Swipe Right (deltaX = 100) -> goToPreviousPage (docs/second.md)
+      component.handleTouchStart({
+        touches: [{ clientX: 100, clientY: 100 }],
+      } as any);
+      component.handleTouchEnd({
+        changedTouches: [{ clientX: 200, clientY: 105 }],
+      } as any);
+
+      expect(component.selectedPage).toEqual(pages[1]);
+    });
+
+    it("ignores swipes below threshold or predominantly vertical swipes", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+      component.selectedPage = pages[1];
+
+      // Small distance (deltaX = -20)
+      component.handleTouchStart({
+        touches: [{ clientX: 100, clientY: 100 }],
+      } as any);
+      component.handleTouchEnd({
+        changedTouches: [{ clientX: 80, clientY: 100 }],
+      } as any);
+
+      expect(component.selectedPage).toEqual(pages[1]);
+
+      // Vertical swipe (deltaX = -60, deltaY = 120)
+      component.handleTouchStart({
+        touches: [{ clientX: 100, clientY: 100 }],
+      } as any);
+      component.handleTouchEnd({
+        changedTouches: [{ clientX: 40, clientY: 220 }],
+      } as any);
+
+      expect(component.selectedPage).toEqual(pages[1]);
+    });
+
+    it("triggers navigation on horizontal mouse gestures", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+        { groupId: "group-1", path: "docs/third.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+      component.selectedPage = pages[1];
+
+      // Gesture Left (deltaX = -100) -> goToNextPage (docs/first.md)
+      component.handleMouseDown({
+        button: 0,
+        clientX: 200,
+        clientY: 100,
+      } as any);
+      component.handleMouseUp({
+        clientX: 100,
+        clientY: 105,
+      } as any);
+
+      expect(component.selectedPage).toEqual(pages[0]);
+
+      // Gesture Right (deltaX = 100) -> goToPreviousPage (docs/second.md)
+      component.handleMouseDown({
+        button: 0,
+        clientX: 100,
+        clientY: 100,
+      } as any);
+      component.handleMouseUp({
+        clientX: 200,
+        clientY: 105,
+      } as any);
+
+      expect(component.selectedPage).toEqual(pages[1]);
+    });
+
+    it("handles shadow-claw-swipe message from iframe preview", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+      component.selectedPage = pages[1];
+
+      const fakeWindow = {} as Window;
+      component.previewFrameWindow = fakeWindow;
+
+      // Swipe left message -> goToNextPage
+      component.handleIframeMessage({
+        data: { type: "shadow-claw-swipe", direction: "left" },
+        source: fakeWindow,
+      } as MessageEvent);
+
+      expect(component.selectedPage).toEqual(pages[0]);
+    });
+
+    it("announces page changes to screen readers via live region", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const announcer = root.querySelector("[data-pages-announcer]");
+      expect(announcer).not.toBeNull();
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+      component.selectedPage = pages[0];
+
+      expect(announcer?.textContent).toContain("docs/first.md");
+    });
+  });
 });

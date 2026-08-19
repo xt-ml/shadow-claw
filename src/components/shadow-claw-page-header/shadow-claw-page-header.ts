@@ -14,7 +14,7 @@ export class ShadowClawPageHeader extends ShadowClawElement {
   static template = shadowClawPageHeaderTemplate;
 
   static get observedAttributes() {
-    return ["title", "icon"];
+    return ["title", "page-title", "icon"];
   }
 
   mainCollapsed: boolean = false;
@@ -177,7 +177,9 @@ export class ShadowClawPageHeader extends ShadowClawElement {
     const titleEl = root.querySelector(".header__title");
     if (titleEl) {
       const icon = this.getAttribute("icon") || "";
-      const title = this.getAttribute("title") || "";
+      const title = this.hasAttribute("page-title")
+        ? this.getAttribute("page-title") || ""
+        : this.getAttribute("title") || "";
       setSanitizedHtml(titleEl, icon ? `${icon} ${title}` : title);
     }
 

@@ -1,5 +1,11 @@
 <template>
   <section class="pages" aria-label="Pages">
+    <div
+      class="pages__announcer"
+      data-pages-announcer
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
     <shadow-claw-page-header icon="📚" title="Pages">
       <nav
         slot="breadcrumbs"

@@ -152,6 +152,7 @@ export function sortPagePaths(paths) {
       path.basename(right),
     );
 
+    // 1. Keep MEMORY.md at the absolute bottom
     if (leftIsMemory && !rightIsMemory) {
       return 1;
     }
@@ -160,7 +161,11 @@ export function sortPagePaths(paths) {
       return -1;
     }
 
-    return right.localeCompare(left, undefined, { sensitivity: "base" });
+    // 2. Sort right-to-left (Z-A) with natural numeric handling (10, 2, 1)
+    return right.localeCompare(left, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
   });
 }
 

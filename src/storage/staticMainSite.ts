@@ -277,7 +277,9 @@ export function sortSavedPageRefs(refs: SavedPageRef[]): SavedPageRef[] {
       return -1;
     }
 
+    // 2. Sort right-to-left (Z-A) with natural numeric handling
     return rightPath.localeCompare(leftPath, undefined, {
+      numeric: true,
       sensitivity: "base",
     });
   });

@@ -118,6 +118,7 @@ Markdown and HTML preview work should preserve the Settings-backed iframe host a
 - **Static Pretty Paths & Routing:** When `pages/routes.json` is present, `bin/prerender-pretty-paths.mjs` generates physical `index.html` files with DSD shells for pretty paths and injects the routing manifest into `#shadow-claw-static-routing` and `static-routing.json` (`src/storage/staticRouting.ts`). Keep routing resolution environment-agnostic (Node.js, Electron, GitHub Pages). Pages containing the `--purge-pages` slug are excluded from pre-rendered static site manifests and DSD output to prevent accidental publication.
 - **Pre-rendered DSD Shell Override:** `OVERRIDE_PRERENDER_SKELETON` (`override_prerender_skeleton`) allows suppressing Declarative Shadow DOM (DSD) shell content on initial load to prevent visual flash before full hydration. Handled during bootstrap in `src/core/theme-init.ts` and `src/components/shadow-claw/shadow-claw.ts`.
 - **Markdown Frontmatter Visibility:** Markdown preview surfaces can optionally render YAML frontmatter as visible metadata/details blocks. Keep the four frontmatter toggles (`pages`, `file_viewer`, `chat`, `tasks`) and their config keys in sync with the rendering behavior when touching markdown UX.
+- **Page Navigation & Sanitization:** Ensure `title` strings passed to headers (like `shadow-claw-page-header`) are sanitized (HTML stripped/escaped). Keyboard navigation (`ArrowLeft`/`ArrowRight`) and swipe gestures must include strict focus guards to prevent interfering with active inputs or selections.
 
 ## What to Avoid
 

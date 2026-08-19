@@ -207,8 +207,9 @@ ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace con
 - **Static Pretty Paths & DSD Pre-rendering** — Build-time pre-rendering for `pages/routes.json` generates static HTML with Declarative Shadow DOM templates for clean URLs across Node.js, Electron, and GitHub Pages (pages flagged for purge are excluded from the output manifest)
 - **Page Suppression** — Deleting pages suppresses auto-reseeding (`SUPPRESSED_PAGES_LIST`) until re-added
 - **Safe iframe embeds** — HTML previews use a configurable iframe host allowlist in Settings, with safe defaults for common embedded content hosts
-- **Ebook-Style Navigation** — Functional Previous/Next pagination controls with HTML-entity decoded frontmatter headers and seamless page transitions
+- **Ebook-Style Navigation** — Functional Previous/Next pagination controls with HTML-entity decoded frontmatter headers, seamless page transitions, `ArrowLeft`/`ArrowRight` keyboard navigation, touch/mouse swipe gestures, and `aria-live` screen reader announcements
 - **Pre-rendered Content Override** — Optional setting (`OVERRIDE_PRERENDER_SKELETON`) suppresses Declarative Shadow DOM (DSD) pre-rendered content during boot to eliminate hydration flash
+- **Content-Only Publishing** — Supports GitHub Pages publishing via the [`shadow-claw-template` template repository](https://github.com/xt-ml/shadow-claw-template) that pulls ShadowClaw as a CI-time build dependency.
 
 Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first setup) which serves as a workspace-scoped system context for the agent. An `index.html` is also auto-created as the default home page.
 

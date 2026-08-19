@@ -117,14 +117,24 @@ async function main() {
     // Production only replacements
     console.log("Running production post-build steps...");
 
+    // Allow forks and content-only deployments to inject their own GitHub Pages
+    // coordinates via environment variables.  Defaults preserve the canonical
+    // xt-ml/shadow-claw deployment so existing behaviour is unchanged.
+    const pagesOrigin =
+      env.PAGES_ORIGIN ?? "https://xt-ml.github.io/shadow-claw/";
+    const basePath = env.PAGES_BASE_PATH ?? "/shadow-claw/";
+
+    console.log(`  PAGES_ORIGIN   : ${pagesOrigin}`);
+    console.log(`  PAGES_BASE_PATH: ${basePath}`);
+
     // Replace dev URL with production URL in manifest.json
     await run(
-      'echo "https://xt-ml.github.io/shadow-claw/" | node bin/file-search-replace.mjs "http://localhost:8888" "dist/public/manifest.json"',
+      `echo "${pagesOrigin}" | node bin/file-search-replace.mjs "http://localhost:8888" "dist/public/manifest.json"`,
     );
 
     // Replace base href in index.html
     await run(
-      'echo "base href=\\"/shadow-claw/\\"" | node bin/file-search-replace.mjs "base href=\\"/\\"" "dist/public/index.html"',
+      `echo 'base href="${basePath}"' | node bin/file-search-replace.mjs 'base href="/"' "dist/public/index.html"`,
     );
 
     // node bin/touch-nojekyll.mjs

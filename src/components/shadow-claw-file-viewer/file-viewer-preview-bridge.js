@@ -43,6 +43,103 @@
     }
   });
 
+  var touchStartX = 0;
+  var touchStartY = 0;
+  var touchStartTime = 0;
+
+  document.addEventListener(
+    "touchstart",
+    function (event) {
+      if (event.touches && event.touches.length === 1) {
+        touchStartX = event.touches[0].clientX;
+        touchStartY = event.touches[0].clientY;
+        touchStartTime = Date.now();
+      }
+    },
+    { passive: true },
+  );
+
+  document.addEventListener(
+    "touchend",
+    function (event) {
+      if (event.changedTouches && event.changedTouches.length === 1) {
+        var touchEndX = event.changedTouches[0].clientX;
+        var touchEndY = event.changedTouches[0].clientY;
+        var deltaTime = Date.now() - touchStartTime;
+
+        var deltaX = touchEndX - touchStartX;
+        var deltaY = touchEndY - touchStartY;
+
+        if (
+          Math.abs(deltaX) >= 50 &&
+          Math.abs(deltaX) > Math.abs(deltaY) &&
+          deltaTime <= 600
+        ) {
+          var direction = deltaX < 0 ? "left" : "right";
+          window.parent.postMessage(
+            { type: "shadow-claw-swipe", direction: direction },
+            "*",
+          );
+        }
+      }
+    },
+    { passive: true },
+  );
+
+  var mouseStartX = 0;
+  var mouseStartY = 0;
+  var mouseStartTime = 0;
+  var isMouseDown = false;
+
+  document.addEventListener(
+    "mousedown",
+    function (event) {
+      if (event.button !== 0) {
+        return;
+      }
+      isMouseDown = true;
+      mouseStartX = event.clientX;
+      mouseStartY = event.clientY;
+      mouseStartTime = Date.now();
+    },
+    { passive: true },
+  );
+
+  document.addEventListener(
+    "mouseup",
+    function (event) {
+      if (!isMouseDown) {
+        return;
+      }
+      isMouseDown = false;
+
+      var selection = window.getSelection();
+      if (selection && selection.toString().length > 0) {
+        return;
+      }
+
+      var mouseEndX = event.clientX;
+      var mouseEndY = event.clientY;
+      var deltaTime = Date.now() - mouseStartTime;
+
+      var deltaX = mouseEndX - mouseStartX;
+      var deltaY = mouseEndY - mouseStartY;
+
+      if (
+        Math.abs(deltaX) >= 50 &&
+        Math.abs(deltaX) > Math.abs(deltaY) &&
+        deltaTime <= 600
+      ) {
+        var direction = deltaX < 0 ? "left" : "right";
+        window.parent.postMessage(
+          { type: "shadow-claw-swipe", direction: direction },
+          "*",
+        );
+      }
+    },
+    { passive: true },
+  );
+
   document.addEventListener("click", function (event) {
     // Only handle unmodified primary clicks.
     if (event.defaultPrevented || event.button !== 0) {

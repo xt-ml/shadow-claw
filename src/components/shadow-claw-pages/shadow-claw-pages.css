@@ -5,6 +5,7 @@
 :host {
   display: block;
   height: calc(100dvh + 4rem);
+  line-height: 1.5;
 }
 
 .pages {
@@ -484,4 +485,20 @@ article > h2,
   .pages__content.pages__content--sidebar-collapsed .pages__nav-btn--prev {
     left: 0.5rem;
   }
+}
+
+ul {
+  line-height: 1.5;
+}
+
+.pages__announcer {
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  height: 0.0625rem;
+  margin: -0.0625rem;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  white-space: nowrap;
+  width: 0.0625rem;
 }

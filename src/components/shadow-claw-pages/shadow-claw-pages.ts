@@ -110,9 +110,165 @@ export class ShadowClawPages extends ShadowClawElement {
   _renderedFrontmatterToggle: boolean | null = null;
   _dsdInitialPath: string | null = null;
 
+  touchStartX: number = 0;
+  touchStartY: number = 0;
+  touchStartTime: number = 0;
+
+  mouseStartX: number = 0;
+  mouseStartY: number = 0;
+  mouseStartTime: number = 0;
+  isMouseDown: boolean = false;
+
   constructor() {
     super();
   }
+
+  announcePageChange(page: SavedPageRef) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+    const announcer = root.querySelector("[data-pages-announcer]");
+    if (announcer instanceof HTMLElement) {
+      const fm = this.pageFrontmatter.get();
+      const title = fm && fm.title ? fm.title : page.path;
+      announcer.textContent = `Navigated to page: ${title}`;
+    }
+  }
+
+  handleKeyDown = (event: KeyboardEvent) => {
+    if (!this.isConnected) {
+      return;
+    }
+
+    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
+      return;
+    }
+
+    if (event.ctrlKey || event.altKey || event.metaKey) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    const activeEl = root?.activeElement || document.activeElement;
+    const target = (event.target as HTMLElement) || null;
+
+    const isEditableOrNav = (el: EventTarget | null) => {
+      if (!el || !(el instanceof HTMLElement)) {
+        return false;
+      }
+      const tagName = el.tagName.toLowerCase();
+      if (
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select" ||
+        tagName === "option"
+      ) {
+        return true;
+      }
+      if (
+        el.isContentEditable ||
+        el.getAttribute("contenteditable") === "true"
+      ) {
+        return true;
+      }
+      if (
+        el.closest("[data-pages-list]") ||
+        el.closest("[data-pages-dropdown]") ||
+        el.closest(".pages__sidebar")
+      ) {
+        return true;
+      }
+      return false;
+    };
+
+    if (isEditableOrNav(target) || isEditableOrNav(activeEl)) {
+      return;
+    }
+
+    event.preventDefault();
+    this.showNavButtonsTemporarily(2000);
+
+    if (event.key === "ArrowLeft") {
+      this.goToPreviousPage();
+    } else if (event.key === "ArrowRight") {
+      this.goToNextPage();
+    }
+  };
+
+  handleTouchStart = (event: TouchEvent) => {
+    if (event.touches && event.touches.length === 1) {
+      this.touchStartX = event.touches[0].clientX;
+      this.touchStartY = event.touches[0].clientY;
+      this.touchStartTime = Date.now();
+    }
+  };
+
+  handleTouchEnd = (event: TouchEvent) => {
+    if (event.changedTouches && event.changedTouches.length === 1) {
+      const touchEndX = event.changedTouches[0].clientX;
+      const touchEndY = event.changedTouches[0].clientY;
+      const deltaTime = Date.now() - this.touchStartTime;
+
+      const deltaX = touchEndX - this.touchStartX;
+      const deltaY = touchEndY - this.touchStartY;
+
+      if (
+        Math.abs(deltaX) >= 50 &&
+        Math.abs(deltaX) > Math.abs(deltaY) &&
+        deltaTime <= 600
+      ) {
+        this.showNavButtonsTemporarily(2000);
+        if (deltaX < 0) {
+          this.goToNextPage();
+        } else {
+          this.goToPreviousPage();
+        }
+      }
+    }
+  };
+
+  handleMouseDown = (event: MouseEvent) => {
+    if (event.button !== 0) {
+      return;
+    }
+    this.isMouseDown = true;
+    this.mouseStartX = event.clientX;
+    this.mouseStartY = event.clientY;
+    this.mouseStartTime = Date.now();
+  };
+
+  handleMouseUp = (event: MouseEvent) => {
+    if (!this.isMouseDown) {
+      return;
+    }
+    this.isMouseDown = false;
+
+    const selection = window.getSelection();
+    if (selection && selection.toString().length > 0) {
+      return;
+    }
+
+    const mouseEndX = event.clientX;
+    const mouseEndY = event.clientY;
+    const deltaTime = Date.now() - this.mouseStartTime;
+
+    const deltaX = mouseEndX - this.mouseStartX;
+    const deltaY = mouseEndY - this.mouseStartY;
+
+    if (
+      Math.abs(deltaX) >= 50 &&
+      Math.abs(deltaX) > Math.abs(deltaY) &&
+      deltaTime <= 600
+    ) {
+      this.showNavButtonsTemporarily(2000);
+      if (deltaX < 0) {
+        this.goToNextPage();
+      } else {
+        this.goToPreviousPage();
+      }
+    }
+  };
 
   handleVisibilityChange = () => {
     if (!document.hidden && this.isConnected) {
@@ -246,6 +402,7 @@ export class ShadowClawPages extends ShadowClawElement {
       "shadow-claw-pages-auto-refresh-change",
       this.handleAutoRefreshConfigChange,
     );
+    document.addEventListener("keydown", this.handleKeyDown);
 
     root.addEventListener("click", (event: Event) => {
       const dropdown = root.querySelector("[data-pages-dropdown]");
@@ -275,6 +432,18 @@ export class ShadowClawPages extends ShadowClawElement {
         passive: true,
       });
       viewer.addEventListener("touchstart", handleViewerInteraction, {
+        passive: true,
+      });
+      viewer.addEventListener("touchstart", this.handleTouchStart, {
+        passive: true,
+      });
+      viewer.addEventListener("touchend", this.handleTouchEnd, {
+        passive: true,
+      });
+      viewer.addEventListener("mousedown", this.handleMouseDown, {
+        passive: true,
+      });
+      viewer.addEventListener("mouseup", this.handleMouseUp, {
         passive: true,
       });
       viewer.addEventListener("click", handleViewerInteraction, {
@@ -374,6 +543,7 @@ export class ShadowClawPages extends ShadowClawElement {
       "shadow-claw-pages-auto-refresh-change",
       this.handleAutoRefreshConfigChange,
     );
+    document.removeEventListener("keydown", this.handleKeyDown);
     this.previewFrameWindow = null;
     super.disconnectedCallback?.();
   }
@@ -444,7 +614,25 @@ export class ShadowClawPages extends ShadowClawElement {
       type?: unknown;
       href?: unknown;
       height?: unknown;
+      direction?: unknown;
     };
+
+    if (
+      payload.type === "shadow-claw-swipe" &&
+      typeof payload.direction === "string"
+    ) {
+      if (this.previewFrameWindow && event.source !== this.previewFrameWindow) {
+        return;
+      }
+      this.showNavButtonsTemporarily(2000);
+      if (payload.direction === "left") {
+        this.goToNextPage();
+      } else if (payload.direction === "right") {
+        this.goToPreviousPage();
+      }
+
+      return;
+    }
 
     if (
       payload.type === "shadow-claw-iframe-resize" &&
@@ -535,6 +723,7 @@ export class ShadowClawPages extends ShadowClawElement {
   navigateToPage(page: SavedPageRef) {
     this.selectedPage = page;
     this.showNavButtonsTemporarily(2500);
+    this.announcePageChange(page);
     document.dispatchEvent(
       new CustomEvent("shadow-claw-navigate", {
         detail: {
@@ -613,13 +802,16 @@ export class ShadowClawPages extends ShadowClawElement {
           }
 
           header.setAttribute(
-            "title",
-            `Pages — <a href="${absoluteUrl}">${fm.title}</a>`,
+            "page-title",
+            `<a href="${absoluteUrl}">${fm.title}</a>`,
           );
+          header.setAttribute("title", fm.title);
         } else {
-          header.setAttribute("title", `Pages — ${fm.title}`);
+          header.setAttribute("page-title", fm.title);
+          header.setAttribute("title", fm.title);
         }
       } else {
+        header.setAttribute("page-title", "Pages");
         header.setAttribute("title", "Pages");
       }
     }
@@ -1113,6 +1305,10 @@ export class ShadowClawPages extends ShadowClawElement {
       void orchestratorStore.setActivePinnedPage(this.db, val);
     } else {
       orchestratorStore._activePinnedPage.set(val);
+    }
+
+    if (val) {
+      this.announcePageChange(val);
     }
 
     this.renderPageList(orchestratorStore.pages, orchestratorStore.groups);

@@ -72,6 +72,8 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 
 - **URL Sync**: Selecting or reordering pages dispatches navigation events (`shadow-claw-navigate`) and updates browser URL history via `history.pushState()`, preserving active page state across refreshes.
 - **Ebook-Style Pagination**: Includes Previous (`[data-pages-prev]`) and Next (`[data-pages-next]`) page controls. Navigation buttons are dynamically enabled/disabled and set to `hidden` (`display: none !important`) based on current page index to avoid layout shifts.
+- **Keyboard & Gesture Navigation**: Supports `ArrowLeft` and `ArrowRight` keyboard navigation for page turning, with strict focus guards to prevent interference when typing in inputs or content-editable regions. Swipe gestures are fully supported via touch and mouse drag interactions, including swipe passthrough from sandboxed iframe previews via `postMessage`.
+- **Accessibility Announcements**: Uses an `aria-live` announcer to provide immediate screen reader feedback (`Navigated to page: [Title]`) when the active page changes.
 - **Routing Ready Gating**: Renders are gated (`_routingReady`) until `orchestratorStore.whenReady` resolves URL routing, preventing a one-frame flash of the default pre-rendered page.
 - **Pinned Home Page & Reordering**: Users can reorder pages via drag-and-drop or star indicators. The top page acts as the pinned home page (`effectiveDefaultPage`).
 - **Responsive Viewport**: On mobile viewports, the sidebar supports toggle collapse (`pages__content--sidebar-collapsed`).

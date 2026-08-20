@@ -70,6 +70,9 @@ export class ShadowClaw extends ShadowClawElement {
   navigationListenerAttached: boolean = false;
   orchestrator!: Orchestrator;
   pagesSidebarHidden: boolean = false;
+  chatSidebarHidden: boolean = false;
+  tasksSidebarHidden: boolean = false;
+  filesSidebarHidden: boolean = false;
   popstateListener: (() => void) | null = null;
   previousOrchestratorState: OrchestratorDisplayState = "idle";
   terminalElement: ShadowClawTerminal | null = null;
@@ -133,7 +136,13 @@ export class ShadowClaw extends ShadowClawElement {
       // markup starts on a different page. On a fresh install (no persisted page),
       // trust the pre-rendered content instead of forcing to Chat — unless the
       // Pages sidebar is hidden, in which case we must redirect away from it.
-      if (orchestratorStore.hadPersistedActivePage) {
+      const isCurrentPageHidden =
+        (orchestratorStore.activePage === "pages" && this.pagesSidebarHidden) ||
+        (orchestratorStore.activePage === "chat" && this.chatSidebarHidden) ||
+        (orchestratorStore.activePage === "tasks" && this.tasksSidebarHidden) ||
+        (orchestratorStore.activePage === "files" && this.filesSidebarHidden);
+
+      if (orchestratorStore.hadPersistedActivePage && !isCurrentPageHidden) {
         showPage(
           this.shadowRoot,
           this,
@@ -142,13 +151,13 @@ export class ShadowClaw extends ShadowClawElement {
           orchestratorStore.activePage,
           false,
         );
-      } else if (this.pagesSidebarHidden) {
+      } else if (isCurrentPageHidden) {
         showPage(
           this.shadowRoot,
           this,
           this.db,
           orchestratorStore,
-          getDefaultSidebarPage(orchestratorStore),
+          getDefaultSidebarPage(orchestratorStore, this),
           false,
         );
       } else {

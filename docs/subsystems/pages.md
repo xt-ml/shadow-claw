@@ -137,6 +137,18 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prere
   - Express server includes static file middleware serving fallback content from `pages/main` for `/files/main/`, `/static-main/`, and `/pages/`, alongside SPA redirect fallback middleware for clean URL reloads.
 - **DSD Shell Override**:
   - Enabled via the "Override pre-rendered content" toggle in Settings (`CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON`). Hides the initial DSD shell on boot, showing the skeleton loader until hydration finishes.
+- **Declarative Site Configuration (`site-config.json`)**:
+  - Template repositories and content publishers can declaratively brand and customize the site shell without editing ShadowClaw source files:
+    - **`site`**: `title`, `description`, `themeColor`, `lang`.
+    - **`branding`**: `titleText`, `siteUrl`, `repoUrl`, `repoLabel`, `faviconPath`, `appleTouchIconPath`, `logoSlotHtml`.
+    - **`sidebar`**: `pagesHidden`, `chatHidden`, `tasksHidden`, `filesHidden`, `defaultPage` (`"pages"` | `"chat"` | `"tasks"` | `"files"`).
+    - **`pages`**: `sortOrder` (`"asc"` | `"desc"`), `defaultPinnedPage`.
+    - **`theme`**: `stylesheet` (custom theme CSS stylesheet injected into head).
+    - **`settings`**: `assistantName` (pre-seeds the default assistant name).
+  - **Build-Time Application**: `bin/apply-site-config.mjs` patches `index.html`, `manifest.json`, `sitemap.xml`, and copies custom theme stylesheets into the build distribution.
+  - **DSD Shell Navigation Visibility**: `bin/prerender-dsd-shell.mjs` applies `hidden` and `aria-hidden` attributes to sidebar navigation items at build time, preventing layout shift on first paint.
+  - **Runtime Seeding**: `orchestratorStore.init()` reads the embedded `<script id="shadow-claw-site-config" type="application/json">` via `applySiteConfigDefaults()` to seed preferences into IndexedDB on first load.
+  - **Interactive User Controls**: Users can toggle sidebar visibility runtime in Settings under **Navigation**, triggering reactive events (`sidebar-pages-visibility-change`, `sidebar-chat-visibility-change`, `sidebar-tasks-visibility-change`, `sidebar-files-visibility-change`) with graceful fallback routing via `getDefaultSidebarPage()`.
 
 ---
 

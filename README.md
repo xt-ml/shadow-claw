@@ -209,6 +209,8 @@ ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace con
 - **Safe iframe embeds** — HTML previews use a configurable iframe host allowlist in Settings, with safe defaults for common embedded content hosts
 - **Ebook-Style Navigation** — Functional Previous/Next pagination controls with HTML-entity decoded frontmatter headers, seamless page transitions, `ArrowLeft`/`ArrowRight` keyboard navigation, touch/mouse swipe gestures, and `aria-live` screen reader announcements
 - **Pre-rendered Content Override** — Optional setting (`OVERRIDE_PRERENDER_SKELETON`) suppresses Declarative Shadow DOM (DSD) pre-rendered content during boot to eliminate hydration flash
+- **Declarative Site Configuration** — Support for `site-config.json` enabling template repositories to customize site metadata, branding, custom theme stylesheets, custom element security allowlists, and navigation visibility without modifying core source
+- **Dynamic Sidebar Navigation Visibility** — Runtime toggling of Pages, Chat, Tasks, and Files sidebar tabs via Settings, with automatic fallback routing and build-time DSD navigation attribute synchronization
 - **Content-Only Publishing** — Supports GitHub Pages publishing via the [`shadow-claw-template` template repository](https://github.com/xt-ml/shadow-claw-template) that pulls ShadowClaw as a CI-time build dependency.
 
 Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first setup) which serves as a workspace-scoped system context for the agent. An `index.html` is also auto-created as the default home page.
@@ -235,6 +237,8 @@ ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and 
 - **30-second key expiry** for plaintext operations
 - **No plaintext secrets on disk** — encrypted before storage
 - **Trusted Types enforcement** — idempotent `"default"` policy (`src/security/default-trusted-types-policy.ts`) registered at boot via `theme-init.ts`; `getPolicy()` fallback prevents duplicate-creation errors on module reload
+- **Custom element security guards** — `installCustomElementsRegistryGuard` and `installCustomElementDomGuard` prevent unauthorized custom element registration and dynamic DOM injection, strictly enforcing allowlists from `site-config.json` or storage
+- **Iframe sandbox & CSP hardening** — sandboxed preview iframes omit `allow-same-origin` by default and apply a nonce-gated Content Security Policy with domain restrictions
 - **Iframe embed sanitization** — DOMPurify-based iframe allowlisting protects markdown and HTML previews, with Settings-backed host patterns and a safe default host list
 - **SSRF proxy hardening** — `/proxy` blocks non-HTTP/S schemes and private/loopback IP ranges by default; bypassed via `--allow-private-proxy` flag or the authenticated service-worker JSON format
 - **Prompt injection defense** — external tool outputs (`fetch_url`, `web_search`, `remote_mcp_call_tool`) are structurally wrapped in `UNTRUSTED` delimiters; system prompt includes explicit anti-injection instructions when untrusted-content tools are active
@@ -247,7 +251,7 @@ ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and 
 - **Zip export/import** — for conversation backup/restore
 - **Copy/move safety** — folder copy/move operations prevent pasting a folder into itself or one of its descendants, and support inter-group operations with conflict resolution
 
-**Full details**: [docs/architecture/storage.md](docs/architecture/storage.md) | [docs/subsystems/crypto.md](docs/subsystems/crypto.md)
+**Full details**: [docs/architecture/storage.md](docs/architecture/storage.md) | [docs/subsystems/crypto.md](docs/subsystems/crypto.md) | [docs/subsystems/custom-element-security.md](docs/subsystems/custom-element-security.md)
 
 ## Scheduled Tasks & Web Push
 

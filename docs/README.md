@@ -44,6 +44,7 @@ Detailed docs for each major subsystem.
 | [Email Integration](subsystems/email.md)                                | IMAP/SMTP support with encrypted credentials                                                                             |
 | [WebMCP](subsystems/webmcp.md)                                          | Browser's Model Context Protocol integration and tool execution                                                          |
 | [Pages System](subsystems/pages.md)                                     | Workspace-relative pages rendering, sidebar navigation, static site seeding, pretty paths, and production asset inlining |
+| [Custom Element Security](subsystems/custom-element-security.md)        | Custom element registry & DOM guards, allowlists, iframe sandbox policies, and nonce-gated CSP                           |
 | [LiteRT Provider](subsystems/providers.md)                              | In-browser WebGPU inference provider using Google LiteRT-LM                                                              |
 
 ### Guides

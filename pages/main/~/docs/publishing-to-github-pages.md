@@ -21,7 +21,7 @@ Clone the entire ShadowClaw repository, add your pages to `pages/main/`, push to
 
 Your repo contains **only** `pages/main/`, `pages/routes.json`, and a GitHub Actions workflow. The workflow checks out ShadowClaw as a build dependency at CI time — its source is never committed to your repo.
 
-**Strategy B is recommended for personal sites, blogs, and documentation.**
+**Strategy B is recommended for personal sites, project hubs, and documentation.**
 
 ---
 
@@ -42,6 +42,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      shadowclaw_ref:
+        description: "ShadowClaw version tag (e.g. v1.20.0), commit SHA, or branch"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -61,11 +66,38 @@ jobs:
         with:
           path: content
 
+      - name: Resolve ShadowClaw version / ref
+        id: resolve-ref
+        shell: bash
+        run: |
+          REF="${{ github.event.inputs.shadowclaw_ref }}"
+          if [ -z "$REF" ] && [ -f "content/pages/site-config.json" ]; then
+            REF=$(node -e '
+              try {
+                const fs = require("fs");
+                const cfg = JSON.parse(fs.readFileSync("content/pages/site-config.json", "utf8"));
+                const v = cfg.shadowClawVersion || cfg.shadowClawRef || cfg.shadowclawVersion || cfg.shadowclawRef || "";
+                process.stdout.write(String(v).trim());
+              } catch (e) {
+                process.stdout.write("");
+              }
+            ')
+          fi
+          if [ -z "$REF" ] && [ -f "content/.shadowclaw-version" ]; then
+            REF=$(tr -d ' \n\r\t' < content/.shadowclaw-version)
+          fi
+          if [ -z "$REF" ]; then
+            REF="${SHADOWCLAW_REF:-main}"
+          fi
+          echo "Resolved ShadowClaw ref: $REF"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
       - name: Checkout ShadowClaw core (build toolchain)
         uses: actions/checkout@v4
         with:
           repository: xt-ml/shadow-claw
           path: shadow-claw
+          ref: ${{ steps.resolve-ref.outputs.ref }}
 
       - uses: actions/setup-node@v4
         with:
@@ -107,6 +139,19 @@ jobs:
         uses: actions/deploy-pages@v4
 ```
 
+### Version Pinning
+
+You can pin your template site to a specific ShadowClaw release tag (e.g. `v1.20.0`) or git commit SHA (e.g. `62253c53`) to ensure reproducible builds:
+
+1. **In `pages/site-config.json`**:
+   ```json
+   {
+     "shadowClawVersion": "v1.20.0"
+   }
+   ```
+2. **In `.shadowclaw-version`**: Create a file named `.shadowclaw-version` in the root of your content repository containing the version tag or commit SHA.
+3. **Workflow Dispatch**: Run the workflow manually from GitHub Actions UI and supply any tag, SHA, or branch in the `shadowclaw_ref` input.
+
 For a **custom apex domain** (e.g. `example.com`), override:
 
 ```yaml
@@ -119,7 +164,7 @@ PAGES_BASE_PATH: "/"
 ```
 pages/
   main/
-    index.md          ← home page
+    index.html        ← home page
     ~/content/
       about.md        ← any other pages
   routes.json         ← pretty-path config (optional)
@@ -130,7 +175,7 @@ Minimal `pages/routes.json`:
 ```json
 {
   "routes": {
-    "/pages/main/index.md": { "prettyPath": "/main" },
+    "/pages/main/index.html": { "prettyPath": "/main" },
     "/pages/main/~/content/about.md": { "prettyPath": "/main/about" },
     "/pages/main/MEMORY.md": { "prettyPath": "/main/memory" }
   }
@@ -141,7 +186,7 @@ Minimal `pages/routes.json`:
 > ShadowClaw's own router and **must not** be used as pretty path prefixes:
 > `/`, `/chat`, `/files`, `/tasks`, `/pages`, `/settings`, `/tools`, `/channels`.
 > `/` (root) is also reserved as the default pinned page and is unreachable as
-> a pretty path. Use a safe namespace like `/main/`, `/blog/`, `/docs/`, or
+> a pretty path. Use a safe namespace like `/main/`, `/articles/`, `/docs/`, or
 > any custom prefix that doesn't collide with the list above.
 
 #### Default Pinned Page (`/`)
@@ -152,7 +197,7 @@ When visitors navigate to the root URL (`/`) of your published site, ShadowClaw 
 
 1. Both the static site prerenderer (`prerender-dsd-shell`) and runtime page store (`orchestratorStore`) gather all page files in `pages/main/`.
 2. `MEMORY.md` is always moved to the bottom of the list.
-3. All remaining pages are sorted in **reverse alphabetical order** (case-insensitive, Z to A).
+3. All remaining pages are sorted by `pages.sortOrder` from `site-config.json` (`"desc"` by default, natural numeric, or `"asc"`).
 4. The first file in this sorted list (`pages[0]`) becomes the default page rendered at `/`.
 
 **How to ensure your intended home page is rendered at `/`:**
@@ -271,4 +316,4 @@ This chain fetches an external data source, transforms it to markdown via the Ja
 
 ## Template repository
 
-A ready-to-fork starter template is available in the [`shadow-claw-template`](https://github.com/xt-ml/shadow-claw-template) repository. It contains the workflow, sample `pages/main/index.md`, `pages/main/~/content/about.md`, and `pages/routes.json`.
+A ready-to-fork starter template is available in the [`shadow-claw-template`](https://github.com/xt-ml/shadow-claw-template) repository. It contains the workflow, sample `pages/main/index.html`, `pages/main/~/content/about.md`, `pages/site-config.json`, and `pages/routes.json`.

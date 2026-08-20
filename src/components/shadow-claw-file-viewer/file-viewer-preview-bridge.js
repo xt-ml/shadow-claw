@@ -43,6 +43,72 @@
     }
   });
 
+  function isNavSuppressed(event) {
+    if (!event) return false;
+    var navAttributes = [
+      "data-no-nav",
+      "data-no-swipe",
+      "data-no-page-nav",
+      "data-prevent-nav",
+      "data-prevent-page-nav",
+      "data-isolate-input",
+      "data-isolate-navigation",
+      "data-game-controls",
+    ];
+
+    var path =
+      typeof event.composedPath === "function" ? event.composedPath() : [];
+
+    for (var i = 0; i < path.length; i++) {
+      var node = path[i];
+      if (node && node.nodeType === 1) {
+        var tag = (node.tagName || "").toLowerCase();
+        if (
+          tag === "input" ||
+          tag === "textarea" ||
+          tag === "select" ||
+          tag === "option" ||
+          node.isContentEditable ||
+          node.getAttribute("contenteditable") === "true"
+        ) {
+          return true;
+        }
+
+        for (var j = 0; j < navAttributes.length; j++) {
+          if (node.hasAttribute(navAttributes[j])) {
+            return true;
+          }
+        }
+      }
+    }
+    var target = event.target;
+    if (target && target.nodeType === 3) {
+      target = target.parentNode;
+    }
+
+    if (target && target instanceof Element) {
+      var targetTag = (target.tagName || "").toLowerCase();
+      if (
+        targetTag === "input" ||
+        targetTag === "textarea" ||
+        targetTag === "select" ||
+        targetTag === "option" ||
+        target.isContentEditable ||
+        target.getAttribute("contenteditable") === "true"
+      ) {
+        return true;
+      }
+
+      for (var k = 0; k < navAttributes.length; k++) {
+        if (target.closest("[" + navAttributes[k] + "]")) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   var touchStartX = 0;
   var touchStartY = 0;
   var touchStartTime = 0;
@@ -50,6 +116,12 @@
   document.addEventListener(
     "touchstart",
     function (event) {
+      if (isNavSuppressed(event)) {
+        touchStartX = 0;
+        touchStartY = 0;
+        touchStartTime = 0;
+        return;
+      }
       if (event.touches && event.touches.length === 1) {
         touchStartX = event.touches[0].clientX;
         touchStartY = event.touches[0].clientY;
@@ -62,6 +134,10 @@
   document.addEventListener(
     "touchend",
     function (event) {
+      if (!touchStartTime || isNavSuppressed(event)) {
+        touchStartTime = 0;
+        return;
+      }
       if (event.changedTouches && event.changedTouches.length === 1) {
         var touchEndX = event.changedTouches[0].clientX;
         var touchEndY = event.changedTouches[0].clientY;
@@ -82,6 +158,7 @@
           );
         }
       }
+      touchStartTime = 0;
     },
     { passive: true },
   );
@@ -94,7 +171,8 @@
   document.addEventListener(
     "mousedown",
     function (event) {
-      if (event.button !== 0) {
+      if (event.button !== 0 || isNavSuppressed(event)) {
+        isMouseDown = false;
         return;
       }
       isMouseDown = true;
@@ -112,6 +190,9 @@
         return;
       }
       isMouseDown = false;
+      if (isNavSuppressed(event)) {
+        return;
+      }
 
       var selection = window.getSelection();
       if (selection && selection.toString().length > 0) {

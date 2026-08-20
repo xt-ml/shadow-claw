@@ -145,14 +145,25 @@ export function isPageFile(filePath) {
   return PAGE_EXTENSIONS.has(ext);
 }
 
-export function sortPagePaths(paths) {
+export function sortPagePaths(paths, sortOrder = "desc") {
   return [...paths].sort((left, right) => {
-    const leftIsMemory = /^memory\.(md|markdown)$/iu.test(path.basename(left));
-    const rightIsMemory = /^memory\.(md|markdown)$/iu.test(
-      path.basename(right),
-    );
+    const leftFileName = path.basename(left);
+    const rightFileName = path.basename(right);
 
-    // 1. Keep MEMORY.md at the absolute bottom
+    const leftIsIndex = /^index\.(html?|xhtml)$/iu.test(leftFileName);
+    const rightIsIndex = /^index\.(html?|xhtml)$/iu.test(rightFileName);
+
+    if (leftIsIndex && !rightIsIndex) {
+      return -1;
+    }
+
+    if (!leftIsIndex && rightIsIndex) {
+      return 1;
+    }
+
+    const leftIsMemory = /^memory\.(md|markdown)$/iu.test(leftFileName);
+    const rightIsMemory = /^memory\.(md|markdown)$/iu.test(rightFileName);
+
     if (leftIsMemory && !rightIsMemory) {
       return 1;
     }
@@ -161,15 +172,21 @@ export function sortPagePaths(paths) {
       return -1;
     }
 
-    // 2. Sort right-to-left (Z-A) with natural numeric handling (10, 2, 1)
-    return right.localeCompare(left, undefined, {
+    if (sortOrder === "desc") {
+      return right.localeCompare(left, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    }
+
+    return left.localeCompare(right, undefined, {
       numeric: true,
       sensitivity: "base",
     });
   });
 }
 
-export async function collectPageSources(sourcePath) {
+export async function collectPageSources(sourcePath, sortOrder = "desc") {
   let sourceStats;
   try {
     sourceStats = await stat(sourcePath);
@@ -219,9 +236,10 @@ export async function collectPageSources(sourcePath) {
     pages.map((page) => [page.displayPath, page]),
   );
 
-  return sortPagePaths(pages.map((page) => page.displayPath)).map(
-    (displayPath) => pageByDisplayPath.get(displayPath),
-  );
+  return sortPagePaths(
+    pages.map((page) => page.displayPath),
+    sortOrder,
+  ).map((displayPath) => pageByDisplayPath.get(displayPath));
 }
 
 export async function renderPageHtml(pageContent, pagePath) {
@@ -532,15 +550,39 @@ function wrapShadowClawDialogContentInTemplate(html) {
   );
 }
 
+export function applySidebarVisibilityToTemplate(html, sidebarConfig = {}) {
+  let next = html;
+  if (!sidebarConfig || typeof sidebarConfig !== "object") {
+    return next;
+  }
+
+  const hidePage = (page) => {
+    const regex = new RegExp(
+      `(<li\\s+class="[^"]*nav-item[^"]*"\\s+data-page="${page}")(?![^>]*\\bhidden\\b)([^>]*>)`,
+      "iu",
+    );
+    next = next.replace(regex, '$1 hidden aria-hidden="true"$2');
+  };
+
+  if (sidebarConfig.pagesHidden) hidePage("pages");
+  if (sidebarConfig.chatHidden) hidePage("chat");
+  if (sidebarConfig.tasksHidden) hidePage("tasks");
+  if (sidebarConfig.filesHidden) hidePage("files");
+
+  return next;
+}
+
 export function buildShadowClawDsdTemplate(
   shadowClawTemplateContent,
   pagesDsdHost,
   shadowClawCss = "",
+  sidebarConfig = {},
 ) {
-  const withPages = shadowClawTemplateContent.replace(
+  let withPages = shadowClawTemplateContent.replace(
     /<shadow-claw-pages><\/shadow-claw-pages>/iu,
     () => pagesDsdHost,
   );
+  withPages = applySidebarVisibilityToTemplate(withPages, sidebarConfig);
   const content = wrapShadowClawDialogContentInTemplate(withPages);
 
   return [
@@ -554,6 +596,7 @@ export function buildShadowClawDsdTemplate(
 export function buildShadowClawDsdTemplateWithoutPages(
   shadowClawTemplateContent,
   shadowClawCss = "",
+  sidebarConfig = {},
 ) {
   let next = shadowClawTemplateContent;
 
@@ -570,20 +613,37 @@ export function buildShadowClawDsdTemplateWithoutPages(
   // Hide the Pages nav item (keep it in DOM so JS can unhide it later)
   next = next.replace(
     /(<li\s+class="nav-item[^"]*"\s+data-page="pages")>/iu,
-    "$1 hidden>",
+    '$1 hidden aria-hidden="true">',
   );
 
-  // Make Chat nav item active
+  // Determine fallback active page
+  const fallbackPage = !sidebarConfig?.chatHidden
+    ? "chat"
+    : !sidebarConfig?.tasksHidden
+      ? "tasks"
+      : !sidebarConfig?.filesHidden
+        ? "files"
+        : "chat";
+
+  // Make fallback nav item active
   next = next.replace(
-    /(<li\s+class="nav-item)(\s*"\s+data-page="chat">)/iu,
+    new RegExp(
+      `(<li\\s+class="nav-item)(\\s*"\\s+data-page="${fallbackPage}">)`,
+      "iu",
+    ),
     "$1 active$2",
   );
 
-  // Make Chat page div active
+  // Make fallback page div active
   next = next.replace(
-    /(<div\s+class="page\s+chat-page)("\s+data-page-id="chat">)/iu,
+    new RegExp(
+      `(<div\\s+class="page\\s+${fallbackPage}-page)("\\s+data-page-id="${fallbackPage}">)`,
+      "iu",
+    ),
     "$1 active$2",
   );
+
+  next = applySidebarVisibilityToTemplate(next, sidebarConfig);
 
   const content = wrapShadowClawDialogContentInTemplate(next);
 
@@ -884,6 +944,23 @@ export async function prerenderDsdShell(options = {}) {
         : (process.env.PRERENDER_PAGES ?? 1);
   const prerenderPages = normalizePrerenderPagesOption(rawPagesOpt);
 
+  let siteConfig = {};
+  const configCandidatePaths = [
+    options.siteConfigPath,
+    path.join(path.dirname(sourcePath), "site-config.json"),
+    path.resolve("pages/site-config.json"),
+  ].filter(Boolean);
+
+  for (const cfgPath of configCandidatePaths) {
+    try {
+      const raw = await readFile(path.resolve(cfgPath), "utf8");
+      siteConfig = JSON.parse(raw);
+      break;
+    } catch {}
+  }
+
+  const sortOrder = options.sortOrder || siteConfig?.pages?.sortOrder || "desc";
+
   const shadowClawTemplatePath = path.join(
     publicDir,
     "components/shadow-claw/shadow-claw.html",
@@ -924,7 +1001,7 @@ export async function prerenderDsdShell(options = {}) {
     readFile(shadowClawTemplatePath, "utf8"),
     readFile(pagesTemplatePath, "utf8").catch(() => ""),
     readFile(pageHeaderTemplatePath, "utf8").catch(() => ""),
-    collectPageSources(sourcePath),
+    collectPageSources(sourcePath, sortOrder),
     readFile(shadowClawCssPath, "utf8").catch(() => ""),
     readFile(pagesCssPath, "utf8").catch(() => ""),
     readFile(pageHeaderCssPath, "utf8").catch(() => ""),
@@ -1007,6 +1084,8 @@ export async function prerenderDsdShell(options = {}) {
   if (prerenderPages === 0) {
     const shadowClawDsdTemplate = buildShadowClawDsdTemplateWithoutPages(
       shadowClawTemplateContent,
+      shadowClawCssSource,
+      siteConfig.sidebar,
     );
     const markedHtml = markNoSeedPrerenderHost(indexHtml);
     const htmlWithDsd = injectShadowClawTemplate(
@@ -1056,6 +1135,7 @@ export async function prerenderDsdShell(options = {}) {
     shadowClawDsdTemplate = buildShadowClawDsdTemplateWithoutPages(
       shadowClawTemplateContent,
       shadowClawCssSource,
+      siteConfig.sidebar,
     );
   } else if (filteredPageSources.length === 0) {
     const pagesDsdHost = buildPagesDsdHostEmpty(
@@ -1066,6 +1146,7 @@ export async function prerenderDsdShell(options = {}) {
       shadowClawTemplateContent,
       pagesDsdHost,
       shadowClawCssSource,
+      siteConfig.sidebar,
     );
   } else {
     const defaultPage = filteredPageSources[0];
@@ -1091,6 +1172,7 @@ export async function prerenderDsdShell(options = {}) {
       shadowClawTemplateContent,
       pagesDsdHost,
       shadowClawCssSource,
+      siteConfig.sidebar,
     );
   }
 

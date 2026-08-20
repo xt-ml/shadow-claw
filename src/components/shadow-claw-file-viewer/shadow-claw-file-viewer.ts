@@ -40,6 +40,12 @@ import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import type { Config } from "dompurify";
 import type { ShadowClawDatabase } from "../../db/types.js";
 
+import {
+  getApprovedCustomElementScripts,
+  getIframeCsp,
+  getIframeSandboxPolicy,
+  isAllowedCustomElement,
+} from "../../security/custom-element-security.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 import shadowClawFileViewerStyles from "./shadow-claw-file-viewer.css" with { type: "css" };
 import shadowClawFileViewerTemplate from "./shadow-claw-file-viewer.html" with { type: "html" };
@@ -54,6 +60,11 @@ const previewSanitizeOptions: Config = {
   ALLOWED_URI_REGEXP:
     /^(?:(?:https?|mailto|ftp|tel|file|blob|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   ADD_TAGS: ["iframe", "figure", "figcaption"],
+  CUSTOM_ELEMENT_HANDLING: {
+    tagNameCheck: (tagName: string) => isAllowedCustomElement(tagName),
+    attributeNameCheck: () => true,
+    allowCustomizedBuiltInElements: false,
+  },
   ADD_ATTR: [
     "allow",
     "allowfullscreen",
@@ -378,7 +389,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return "allow-modals allow-popups allow-popups-to-escape-sandbox";
     }
 
-    return "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox";
+    return getIframeSandboxPolicy();
   }
 
   getLanguageFromFilename(fileName: string) {
@@ -1273,24 +1284,57 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     const safeContent = sanitizeSrcdocHtml(htmlContent, previewSanitizeOptions);
 
-    // A per-render nonce restricts script execution inside the sandboxed iframe
-    // to only the reviewed same-origin bridge script. Inline scripts and any
-    // other external scripts are blocked even though allow-scripts is required
-    // for the bridge to run at all (sandbox cannot be removed without losing
-    // link interception).
+    // Nonce-gated CSP: only the bridge script and approved custom element scripts may run.
     const nonce = crypto.randomUUID().replace(/-/g, "");
+    const bridgeScriptUrl = this.getIframeBridgeScriptUrl();
 
-    return (
-      "<!doctype html>" +
-      `<html class="${getIframeHtmlClass()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">` +
-      `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">` +
-      `<base href="${applyBasePath(getFileRouteDirPath(orchestratorStore.activeGroupId, filePath))}" target="_blank">` +
-      `<script src="${this.getIframeBridgeScriptUrl()}" nonce="${nonce}"><\/script>` +
-      getIframeThemeStyleHtml() +
-      "</head><body>" +
-      safeContent +
-      "</body></html>"
-    );
+    const approvedScripts = getApprovedCustomElementScripts();
+    const cspContent = getIframeCsp(nonce);
+
+    const configScript =
+      typeof document !== "undefined"
+        ? document.getElementById("shadow-claw-site-config")
+        : null;
+    const siteConfigHtml =
+      configScript && configScript.textContent
+        ? `<script id="shadow-claw-site-config" type="application/json">${configScript.textContent}</script>`
+        : "";
+
+    const customElementScriptsHtml = approvedScripts
+      .map((src) => {
+        const isExternal =
+          src.startsWith("http://") ||
+          src.startsWith("https://") ||
+          src.startsWith("//");
+        const resolvedSrc = isExternal
+          ? src
+          : applyBasePath(
+              src.startsWith("/")
+                ? src
+                : `/${src.replace(/^pages\/main\//, "")}`,
+            );
+        return `<script type="module" src="${resolvedSrc}" nonce="${nonce}"></script>`;
+      })
+      .join("\n");
+
+    const themeStylesheetLink = `<link rel="stylesheet" href="${applyBasePath(
+      "/theme.css",
+    )}">`;
+
+    return [
+      "<!doctype html>",
+      `<html class="${getIframeHtmlClass()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`,
+      `<meta http-equiv="Content-Security-Policy" content="${cspContent}">`,
+      `<base href="${applyBasePath(getFileRouteDirPath(orchestratorStore.activeGroupId, filePath))}" target="_blank">`,
+      siteConfigHtml,
+      `<script src="${bridgeScriptUrl}" nonce="${nonce}"></script>`,
+      getIframeThemeStyleHtml(),
+      themeStylesheetLink,
+      customElementScriptsHtml,
+      "</head><body>",
+      safeContent,
+      "</body></html>",
+    ].join("");
   }
 
   async canDismissViewer() {
@@ -1639,6 +1683,8 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         "sandbox",
         this.getIframeSandboxPermissions(file.name),
       );
+      iframe.setAttribute("allow", "fullscreen");
+      iframe.setAttribute("allowfullscreen", "true");
 
       iframe.setAttribute("referrerpolicy", "no-referrer");
       setTrustedSrcdoc(iframe, await this.buildIframePreviewSrcdoc(file));

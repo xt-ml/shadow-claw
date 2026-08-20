@@ -373,6 +373,10 @@ Settings panel controller.
 - `assistantNameInput()` — Assistant name input
 - `saveAssistantNameButton()` — Save assistant name button
 - `overridePrerenderSkeletonToggle()` — Override pre-rendered skeleton toggle checkbox (`OVERRIDE_PRERENDER_SKELETON`)
+- `sidebarPagesHiddenToggle()` — Toggle visibility for Pages navigation item in sidebar
+- `sidebarChatHiddenToggle()` — Toggle visibility for Chat navigation item in sidebar
+- `sidebarTasksHiddenToggle()` — Toggle visibility for Tasks navigation item in sidebar
+- `sidebarFilesHiddenToggle()` — Toggle visibility for Files navigation item in sidebar
 - `taskServerConfig()` — Task server configuration component (`<shadow-claw-task-server>`)
 
 ## Shared Utilities (`shared/index.ts`)
@@ -411,6 +415,8 @@ export const TIME_MINUTES_ONE = 60000;
 - **Remote MCP Testing**: Verify tool discovery, execution, and automatic OAuth reconnection flows by mocking streamable HTTP responses and OAuth failure modes.
 - **Proxy Security Testing**: Verify that the `/proxy` endpoint rejects non-HTTP/S schemes (`file:`, `ftp:`, etc.) with `400` and blocks private/loopback IP targets (`localhost`, `127.*`, `10.*`, `192.168.*`, `169.254.*`) with `403`. Use the unit tests in `src/server/utils/proxy-helpers.test.ts` for scheme and SSRF guard coverage; E2E tests should verify that the authenticated service-worker format (body-based JSON with `Content-Type: application/json`) is still allowed to reach local tool servers.
 - **Page Navigation Testing**: When testing pages or file viewer navigation, ensure keyboard events (`ArrowLeft`/`ArrowRight`) are properly guarded and do not trigger when the active element is an input or content-editable. Swipe gestures can be simulated using mouse events (`mousedown`, `mousemove`, `mouseup`) or touch events; ensure drag/text-selection does not trigger a false swipe.
+- **Sidebar Visibility & Fallback Testing**: When verifying sidebar toggle controls, assert that hiding the currently active view triggers automatic navigation to the next available visible view (`getDefaultSidebarPage`).
+- **Custom Element Guard Testing**: When testing custom elements in E2E or unit suites, verify that registering unapproved custom element tags throws a security error and DOM injection of unapproved custom element tags results in immediate removal by the DOM mutation guard.
 
 ### ❌ DON'T
 

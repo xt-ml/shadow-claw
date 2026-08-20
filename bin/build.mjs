@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { execSync } from "node:child_process";
-import { cp, mkdir } from "node:fs/promises";
+import { cp, mkdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { chdir, env, exit, argv } from "node:process";
 import { fileURLToPath } from "node:url";
@@ -64,20 +64,77 @@ async function main() {
     }
   }
 
-  // publish documentation
-  await cp("README.md", "dist/public/README.md");
-  await cp("e2e/README.md", "dist/public/e2e/README.md");
-  await cp("docs", "dist/public/docs", { recursive: true });
+  // Copy template-specific custom assets from pages/assets or pages/main/assets if present
+  try {
+    await cp("pages/assets", "dist/public/assets", {
+      recursive: true,
+      force: true,
+    });
+  } catch (e) {}
+  try {
+    await cp("pages/main/assets", "dist/public/assets", {
+      recursive: true,
+      force: true,
+    });
+  } catch (e) {}
+
+  const copyWithFallback = async (sources, dest, opts = {}) => {
+    const candidates = Array.isArray(sources) ? sources : [sources];
+    for (const candidate of candidates) {
+      try {
+        await stat(candidate);
+        await cp(candidate, dest, opts);
+        return true;
+      } catch {}
+    }
+    return false;
+  };
+
+  // publish documentation (template can override via pages/)
+  await copyWithFallback(
+    ["pages/README.md", "README.md"],
+    "dist/public/README.md",
+  );
+  try {
+    await cp("e2e/README.md", "dist/public/e2e/README.md");
+  } catch {}
+  await copyWithFallback(["pages/docs", "docs"], "dist/public/docs", {
+    recursive: true,
+  });
 
   // publish index-friendly documentation
-  await cp("AGENTS.md", "dist/public/AGENTS.md");
-  await cp("llms.txt", "dist/public/llms.txt");
+  await copyWithFallback(
+    ["pages/AGENTS.md", "AGENTS.md"],
+    "dist/public/AGENTS.md",
+  );
+  await copyWithFallback(
+    ["pages/llms.txt", "llms.txt"],
+    "dist/public/llms.txt",
+  );
 
   // publish robots.txt
-  await cp("robots.txt", "dist/public/robots.txt");
+  await copyWithFallback(
+    ["pages/robots.txt", "robots.txt"],
+    "dist/public/robots.txt",
+  );
 
   // publish sitemap.xml
-  await cp("sitemap.xml", "dist/public/sitemap.xml");
+  await copyWithFallback(
+    ["pages/sitemap.xml", "pages/main/sitemap.xml", "sitemap.xml"],
+    "dist/public/sitemap.xml",
+  );
+
+  // publish 404.html
+  await copyWithFallback(
+    ["pages/404.html", "pages/main/404.html", "404.html"],
+    "dist/public/404.html",
+  );
+
+  // publish manifest.json
+  await copyWithFallback(
+    ["pages/manifest.json", "pages/main/manifest.json", "manifest.json"],
+    "dist/public/manifest.json",
+  );
 
   // publish pages directory for lazy routing manifests
   try {
@@ -100,6 +157,16 @@ async function main() {
   }
 
   await run("npm run -s rolldown");
+
+  // Apply declarative site configuration (branding, metadata, manifest, theme).
+  // site-config.json is optional — the script exits cleanly when absent.
+  try {
+    await run(
+      "node bin/apply-site-config.mjs dist/public pages/site-config.json",
+    );
+  } catch {
+    // site-config.json not present or apply failed — not fatal
+  }
 
   // Render static DSD shell into index.html for no-JS and first paint.
   // Pages content seeding from pages/main/ is configurable via PRERENDER_PAGES (default "1" for current page).

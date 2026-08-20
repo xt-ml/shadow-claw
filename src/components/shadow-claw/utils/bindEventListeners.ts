@@ -4,7 +4,10 @@ import { getDefaultSidebarPage } from "./getDefaultSidebarPage.js";
 import { initSidebarResize } from "./initSidebarResize.js";
 import { requestDialog } from "./requestDialog.js";
 import { scheduleTerminalPlacement } from "./scheduleTerminalPlacement.js";
-import { setPagesSidebarHidden } from "./setPagesSidebarHidden.js";
+import {
+  setPagesSidebarHidden,
+  setSidebarNavHidden,
+} from "./setPagesSidebarHidden.js";
 import { supportsNavigationApi } from "./supportsNavigationApi.js";
 import { syncPageHeaderMainVisibilityOverride } from "./syncPageHeaderMainVisibilityOverride.js";
 
@@ -164,6 +167,21 @@ export function bindEventListeners(
   shadow.addEventListener("sidebar-pages-visibility-change", (event: Event) => {
     const hidden = Boolean((event as CustomEvent).detail?.hidden);
     setPagesSidebarHidden(shadow, shadowClaw, oStore, db, hidden);
+  });
+
+  shadow.addEventListener("sidebar-chat-visibility-change", (event: Event) => {
+    const hidden = Boolean((event as CustomEvent).detail?.hidden);
+    setSidebarNavHidden(shadow, shadowClaw, oStore, db, "chat", hidden);
+  });
+
+  shadow.addEventListener("sidebar-tasks-visibility-change", (event: Event) => {
+    const hidden = Boolean((event as CustomEvent).detail?.hidden);
+    setSidebarNavHidden(shadow, shadowClaw, oStore, db, "tasks", hidden);
+  });
+
+  shadow.addEventListener("sidebar-files-visibility-change", (event: Event) => {
+    const hidden = Boolean((event as CustomEvent).detail?.hidden);
+    setSidebarNavHidden(shadow, shadowClaw, oStore, db, "files", hidden);
   });
 
   // Tools / Channels page "Back to Settings" navigation

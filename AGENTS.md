@@ -29,6 +29,7 @@ ShadowClaw has been significantly deduplicated. Instead of a massive `AGENTS.md`
 | Channels & Multi-Conversation | [docs/subsystems/channels.md](docs/subsystems/channels.md)                               |
 | Chat Template Sanitizer       | [docs/subsystems/sanitizer.md](docs/subsystems/sanitizer.md)                             |
 | Cryptography & Secrets        | [docs/subsystems/crypto.md](docs/subsystems/crypto.md)                                   |
+| Custom Element Security       | [docs/subsystems/custom-element-security.md](docs/subsystems/custom-element-security.md) |
 | Electron Desktop App          | [docs/subsystems/electron.md](docs/subsystems/electron.md)                               |
 | Email Integration             | [docs/subsystems/email.md](docs/subsystems/email.md)                                     |
 | Git Integration               | [docs/subsystems/git.md](docs/subsystems/git.md)                                         |
@@ -120,6 +121,17 @@ Markdown and HTML preview work should preserve the Settings-backed iframe host a
 - **Markdown Frontmatter Visibility:** Markdown preview surfaces can optionally render YAML frontmatter as visible metadata/details blocks. Keep the four frontmatter toggles (`pages`, `file_viewer`, `chat`, `tasks`) and their config keys in sync with the rendering behavior when touching markdown UX.
 - **Page Navigation & Sanitization:** Ensure `title` strings passed to headers (like `shadow-claw-page-header`) are sanitized (HTML stripped/escaped). Keyboard navigation (`ArrowLeft`/`ArrowRight`) and swipe gestures must include strict focus guards to prevent interfering with active inputs or selections.
 
+### Custom Element Security & Iframe Sandboxing
+
+- **Custom Element Guards:** `installCustomElementsRegistryGuard` and `installCustomElementDomGuard` (`src/security/custom-element-security.ts`) intercept unauthorized custom element registrations and dynamically strip unapproved custom elements from the DOM tree. Only core elements (`shadow-claw` and `shadow-claw-*`) or elements explicitly allowlisted via `site-config.json` or `CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS` are permitted.
+- **Iframe Sandboxing & CSP:** Sandboxed preview iframes omit `allow-same-origin` by default to enforce origin isolation, using a nonce-gated Content Security Policy with domain restrictions generated via `getIframeCsp(nonce)`.
+- **Approved Script Loading:** Dynamic loading of custom element scripts is restricted to safe protocols and validated host patterns using `loadApprovedCustomElementScript`.
+
+### Declarative Site Configuration & Dynamic Navigation
+
+- **Declarative Site Config (`site-config.json`):** Template repositories configure metadata, branding, custom element allowlists, and navigation visibility via `site-config.json`, which is patched into production artifacts at build time via `bin/apply-site-config.mjs` and seeded into IndexedDB at runtime via `applySiteConfigDefaults()`.
+- **Dynamic Sidebar Navigation:** Sidebar navigation items (Pages, Chat, Tasks, Files) support runtime toggling and build-time DSD hiding. Ensure navigation fallback logic (`getDefaultSidebarPage`) resolves to the next visible item when active pages are hidden.
+
 ## What to Avoid
 
 - **Do not** add a frontend framework (React, Vue, Svelte, etc.).
@@ -127,6 +139,7 @@ Markdown and HTML preview work should preserve the Settings-backed iframe host a
 - **Do not** `postMessage` to the worker with ad-hoc shapes — use the typed protocol in `docs/architecture/worker-protocol.md`.
 - **Do not** store API keys in plaintext — always go through `src/security/crypto.ts`.
 - **Do not** import Electron modules from browser-side `.ts` files — Electron is desktop-only.
+- **Do not** register or inject unapproved custom elements without configuring them through `site-config.json` or `setAllowedCustomElements`.
 - **Do not** rely on `navigator.modelContext` alone for WebMCP detection; prefer `document.modelContext` with `navigator.modelContext` fallback for compatibility.
 - **Do not** commit `dist-electron/`, `push-subscriptions.db`, or `scheduled-tasks.db` — they are git-ignored.
 - **Do not** add new docs pages without updating `docs/README.md` and verifying references in `AGENTS.md`.

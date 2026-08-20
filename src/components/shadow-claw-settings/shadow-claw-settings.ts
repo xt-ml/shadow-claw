@@ -237,6 +237,33 @@ export class ShadowClawSettings extends ShadowClawElement {
       });
 
     root
+      .querySelector('[data-setting="sidebar-hide-chat-toggle"]')
+      ?.addEventListener("change", (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        if (target) {
+          void this.onSidebarHideChatToggle(target.checked);
+        }
+      });
+
+    root
+      .querySelector('[data-setting="sidebar-hide-tasks-toggle"]')
+      ?.addEventListener("change", (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        if (target) {
+          void this.onSidebarHideTasksToggle(target.checked);
+        }
+      });
+
+    root
+      .querySelector('[data-setting="sidebar-hide-files-toggle"]')
+      ?.addEventListener("change", (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        if (target) {
+          void this.onSidebarHideFilesToggle(target.checked);
+        }
+      });
+
+    root
       .querySelector('[data-setting="pages-auto-refresh-input"]')
       ?.addEventListener("change", (e: Event) => {
         const target = e.target as HTMLInputElement;
@@ -617,6 +644,99 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
+  async onSidebarHideChatToggle(hidden: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../../db/setConfig.js");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.SIDEBAR_CHAT_HIDDEN,
+        hidden ? "true" : "false",
+      );
+
+      this.dispatchEvent(
+        new CustomEvent("sidebar-chat-visibility-change", {
+          detail: { hidden },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+
+      showSuccess(
+        hidden ? "Chat hidden in sidebar" : "Chat shown in sidebar",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving sidebar Chat visibility: " + errorMsg, 6000);
+    }
+  }
+
+  async onSidebarHideTasksToggle(hidden: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../../db/setConfig.js");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN,
+        hidden ? "true" : "false",
+      );
+
+      this.dispatchEvent(
+        new CustomEvent("sidebar-tasks-visibility-change", {
+          detail: { hidden },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+
+      showSuccess(
+        hidden ? "Tasks hidden in sidebar" : "Tasks shown in sidebar",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving sidebar Tasks visibility: " + errorMsg, 6000);
+    }
+  }
+
+  async onSidebarHideFilesToggle(hidden: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../../db/setConfig.js");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.SIDEBAR_FILES_HIDDEN,
+        hidden ? "true" : "false",
+      );
+
+      this.dispatchEvent(
+        new CustomEvent("sidebar-files-visibility-change", {
+          detail: { hidden },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+
+      showSuccess(
+        hidden ? "Files hidden in sidebar" : "Files shown in sidebar",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving sidebar Files visibility: " + errorMsg, 6000);
+    }
+  }
+
   async onPagesAutoRefreshInputChange(valSec: number) {
     if (!this.db) {
       return;
@@ -708,6 +828,57 @@ export class ShadowClawSettings extends ShadowClawElement {
     ) as HTMLInputElement | null;
     if (sidebarHidePagesToggle) {
       sidebarHidePagesToggle.checked = sidebarPagesHidden;
+    }
+
+    const rawSidebarChatHidden = (await getConfig(
+      this.db,
+      CONFIG_KEYS.SIDEBAR_CHAT_HIDDEN,
+    )) as unknown;
+    const sidebarChatHidden =
+      rawSidebarChatHidden === true ||
+      rawSidebarChatHidden === "true" ||
+      rawSidebarChatHidden === 1 ||
+      rawSidebarChatHidden === "1";
+
+    const sidebarHideChatToggle = root.querySelector(
+      '[data-setting="sidebar-hide-chat-toggle"]',
+    ) as HTMLInputElement | null;
+    if (sidebarHideChatToggle) {
+      sidebarHideChatToggle.checked = sidebarChatHidden;
+    }
+
+    const rawSidebarTasksHidden = (await getConfig(
+      this.db,
+      CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN,
+    )) as unknown;
+    const sidebarTasksHidden =
+      rawSidebarTasksHidden === true ||
+      rawSidebarTasksHidden === "true" ||
+      rawSidebarTasksHidden === 1 ||
+      rawSidebarTasksHidden === "1";
+
+    const sidebarHideTasksToggle = root.querySelector(
+      '[data-setting="sidebar-hide-tasks-toggle"]',
+    ) as HTMLInputElement | null;
+    if (sidebarHideTasksToggle) {
+      sidebarHideTasksToggle.checked = sidebarTasksHidden;
+    }
+
+    const rawSidebarFilesHidden = (await getConfig(
+      this.db,
+      CONFIG_KEYS.SIDEBAR_FILES_HIDDEN,
+    )) as unknown;
+    const sidebarFilesHidden =
+      rawSidebarFilesHidden === true ||
+      rawSidebarFilesHidden === "true" ||
+      rawSidebarFilesHidden === 1 ||
+      rawSidebarFilesHidden === "1";
+
+    const sidebarHideFilesToggle = root.querySelector(
+      '[data-setting="sidebar-hide-files-toggle"]',
+    ) as HTMLInputElement | null;
+    if (sidebarHideFilesToggle) {
+      sidebarHideFilesToggle.checked = sidebarFilesHidden;
     }
 
     const pagesAutoRefreshInput = root.querySelector(

@@ -257,17 +257,49 @@ async function processPurgeTokens(
   }
 }
 
-export function sortSavedPageRefs(refs: SavedPageRef[]): SavedPageRef[] {
+function getSiteConfigSortOrder(): "asc" | "desc" {
+  if (typeof document !== "undefined") {
+    try {
+      const scriptEl = document.getElementById("shadow-claw-site-config");
+      if (scriptEl?.textContent) {
+        const config = JSON.parse(scriptEl.textContent);
+        if (config?.pages?.sortOrder === "desc") {
+          return "desc";
+        }
+        if (config?.pages?.sortOrder === "asc") {
+          return "asc";
+        }
+      }
+    } catch {}
+  }
+  return "desc";
+}
+
+export function sortSavedPageRefs(
+  refs: SavedPageRef[],
+  sortOrder?: "asc" | "desc",
+): SavedPageRef[] {
+  const order = sortOrder ?? getSiteConfigSortOrder();
   return [...refs].sort((left, right) => {
     const leftPath = left.path;
     const rightPath = right.path;
 
-    const leftIsMemory = /^memory\.(md|markdown)$/iu.test(
-      leftPath.split("/").pop() || "",
-    );
-    const rightIsMemory = /^memory\.(md|markdown)$/iu.test(
-      rightPath.split("/").pop() || "",
-    );
+    const leftFileName = leftPath.split("/").pop() || "";
+    const rightFileName = rightPath.split("/").pop() || "";
+
+    const leftIsIndex = /^index\.(html?|xhtml)$/iu.test(leftFileName);
+    const rightIsIndex = /^index\.(html?|xhtml)$/iu.test(rightFileName);
+
+    if (leftIsIndex && !rightIsIndex) {
+      return -1;
+    }
+
+    if (!leftIsIndex && rightIsIndex) {
+      return 1;
+    }
+
+    const leftIsMemory = /^memory\.(md|markdown)$/iu.test(leftFileName);
+    const rightIsMemory = /^memory\.(md|markdown)$/iu.test(rightFileName);
 
     if (leftIsMemory && !rightIsMemory) {
       return 1;
@@ -277,7 +309,14 @@ export function sortSavedPageRefs(refs: SavedPageRef[]): SavedPageRef[] {
       return -1;
     }
 
-    // 2. Sort right-to-left (Z-A) with natural numeric handling
+    if (order === "asc") {
+      return leftPath.localeCompare(rightPath, undefined, {
+        numeric: true,
+        sensitivity: "base",
+      });
+    }
+
+    // Sort right-to-left (Z-A) with natural numeric handling
     return rightPath.localeCompare(leftPath, undefined, {
       numeric: true,
       sensitivity: "base",

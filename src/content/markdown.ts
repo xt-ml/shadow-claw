@@ -20,6 +20,7 @@ import {
   ensureIframeSanitizerHook,
   getDOMPurify,
 } from "../security/iframe-sanitizer.js";
+import { isAllowedCustomElement } from "../security/custom-element-security.js";
 
 export interface MarkdownRenderOptions {
   breaks?: boolean;
@@ -276,6 +277,11 @@ export async function renderMarkdown(
         "scrolling",
       ],
       ADD_TAGS: ["iframe", "figure", "figcaption"],
+      CUSTOM_ELEMENT_HANDLING: {
+        tagNameCheck: (tagName: string) => isAllowedCustomElement(tagName),
+        attributeNameCheck: () => true,
+        allowCustomizedBuiltInElements: false,
+      },
       ADD_ATTR: [
         "allow",
         "allowfullscreen",

@@ -44,6 +44,12 @@ import type {
   ShadowClawDatabase,
 } from "../../db/types.js";
 
+import {
+  getApprovedCustomElementScripts,
+  getIframeCsp,
+  getIframeSandboxPolicy,
+  isAllowedCustomElement,
+} from "../../security/custom-element-security.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
@@ -56,6 +62,11 @@ const previewSanitizeOptions: Config = {
   ALLOWED_URI_REGEXP:
     /^(?:(?:https?|mailto|ftp|tel|file|blob|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   ADD_TAGS: ["iframe", "figure", "figcaption"],
+  CUSTOM_ELEMENT_HANDLING: {
+    tagNameCheck: (tagName: string) => isAllowedCustomElement(tagName),
+    attributeNameCheck: () => true,
+    allowCustomizedBuiltInElements: false,
+  },
   ADD_ATTR: [
     "allow",
     "allowfullscreen",
@@ -136,6 +147,90 @@ export class ShadowClawPages extends ShadowClawElement {
     }
   }
 
+  isNavigationSuppressed = (
+    event?: UIEvent | Event | null,
+    extraEl?: EventTarget | null,
+  ): boolean => {
+    const navAttributes = [
+      "data-no-nav",
+      "data-no-swipe",
+      "data-no-page-nav",
+      "data-prevent-nav",
+      "data-prevent-page-nav",
+      "data-isolate-input",
+      "data-isolate-navigation",
+      "data-game-controls",
+    ];
+
+    const checkElement = (el: EventTarget | null): boolean => {
+      if (!el || !(el instanceof HTMLElement)) {
+        return false;
+      }
+      const tagName = el.tagName.toLowerCase();
+      if (
+        tagName === "input" ||
+        tagName === "textarea" ||
+        tagName === "select" ||
+        tagName === "option" ||
+        tagName === "iframe"
+      ) {
+        return true;
+      }
+      if (
+        el.classList.contains("pages__preview-frame") ||
+        el.isContentEditable ||
+        el.getAttribute("contenteditable") === "true"
+      ) {
+        return true;
+      }
+      if (
+        el.closest("[data-pages-list]") ||
+        el.closest("[data-pages-dropdown]") ||
+        el.closest(".pages__sidebar") ||
+        el.closest(".pages__preview-frame") ||
+        el.closest("iframe") ||
+        navAttributes.some((attr) => el.closest(`[${attr}]`))
+      ) {
+        return true;
+      }
+      return false;
+    };
+
+    if (extraEl && checkElement(extraEl)) {
+      return true;
+    }
+
+    if (event) {
+      const path =
+        typeof (event as any).composedPath === "function"
+          ? (event as any).composedPath()
+          : [];
+      for (const node of path) {
+        if (node instanceof HTMLElement) {
+          const nodeTag = node.tagName.toLowerCase();
+          if (
+            navAttributes.some((attr) => node.hasAttribute(attr)) ||
+            nodeTag === "input" ||
+            nodeTag === "textarea" ||
+            nodeTag === "select" ||
+            nodeTag === "option" ||
+            nodeTag === "iframe" ||
+            node.classList.contains("pages__preview-frame") ||
+            node.isContentEditable ||
+            node.getAttribute("contenteditable") === "true"
+          ) {
+            return true;
+          }
+        }
+      }
+      if (event.target && checkElement(event.target)) {
+        return true;
+      }
+    }
+
+    return false;
+  };
+
   handleKeyDown = (event: KeyboardEvent) => {
     if (!this.isConnected) {
       return;
@@ -153,36 +248,10 @@ export class ShadowClawPages extends ShadowClawElement {
     const activeEl = root?.activeElement || document.activeElement;
     const target = (event.target as HTMLElement) || null;
 
-    const isEditableOrNav = (el: EventTarget | null) => {
-      if (!el || !(el instanceof HTMLElement)) {
-        return false;
-      }
-      const tagName = el.tagName.toLowerCase();
-      if (
-        tagName === "input" ||
-        tagName === "textarea" ||
-        tagName === "select" ||
-        tagName === "option"
-      ) {
-        return true;
-      }
-      if (
-        el.isContentEditable ||
-        el.getAttribute("contenteditable") === "true"
-      ) {
-        return true;
-      }
-      if (
-        el.closest("[data-pages-list]") ||
-        el.closest("[data-pages-dropdown]") ||
-        el.closest(".pages__sidebar")
-      ) {
-        return true;
-      }
-      return false;
-    };
-
-    if (isEditableOrNav(target) || isEditableOrNav(activeEl)) {
+    if (
+      this.isNavigationSuppressed(event, target) ||
+      this.isNavigationSuppressed(undefined, activeEl)
+    ) {
       return;
     }
 
@@ -197,6 +266,12 @@ export class ShadowClawPages extends ShadowClawElement {
   };
 
   handleTouchStart = (event: TouchEvent) => {
+    if (this.isNavigationSuppressed(event)) {
+      this.touchStartX = 0;
+      this.touchStartY = 0;
+      this.touchStartTime = 0;
+      return;
+    }
     if (event.touches && event.touches.length === 1) {
       this.touchStartX = event.touches[0].clientX;
       this.touchStartY = event.touches[0].clientY;
@@ -205,6 +280,10 @@ export class ShadowClawPages extends ShadowClawElement {
   };
 
   handleTouchEnd = (event: TouchEvent) => {
+    if (!this.touchStartTime || this.isNavigationSuppressed(event)) {
+      this.touchStartTime = 0;
+      return;
+    }
     if (event.changedTouches && event.changedTouches.length === 1) {
       const touchEndX = event.changedTouches[0].clientX;
       const touchEndY = event.changedTouches[0].clientY;
@@ -226,10 +305,12 @@ export class ShadowClawPages extends ShadowClawElement {
         }
       }
     }
+    this.touchStartTime = 0;
   };
 
   handleMouseDown = (event: MouseEvent) => {
-    if (event.button !== 0) {
+    if (event.button !== 0 || this.isNavigationSuppressed(event)) {
+      this.isMouseDown = false;
       return;
     }
     this.isMouseDown = true;
@@ -243,6 +324,9 @@ export class ShadowClawPages extends ShadowClawElement {
       return;
     }
     this.isMouseDown = false;
+    if (this.isNavigationSuppressed(event)) {
+      return;
+    }
 
     const selection = window.getSelection();
     if (selection && selection.toString().length > 0) {
@@ -1417,20 +1501,55 @@ export class ShadowClawPages extends ShadowClawElement {
 
     const safeContent = sanitizeSrcdocHtml(inlinedHtml, previewSanitizeOptions);
 
-    // Nonce-gated CSP: only the bridge script (served same-origin) may run.
-    // Inline scripts and other external scripts are blocked.
+    // Nonce-gated CSP: only the bridge script and approved custom element scripts may run.
     const nonce = crypto.randomUUID().replace(/-/g, "");
     const bridgeScriptUrl = applyBasePath(
       "/assets/file-viewer-preview-bridge.js",
     );
 
+    const approvedScripts = getApprovedCustomElementScripts();
+    const cspContent = getIframeCsp(nonce);
+
+    const configScript =
+      typeof document !== "undefined"
+        ? document.getElementById("shadow-claw-site-config")
+        : null;
+    const siteConfigHtml =
+      configScript && configScript.textContent
+        ? `<script id="shadow-claw-site-config" type="application/json">${configScript.textContent}</script>`
+        : "";
+
+    const customElementScriptsHtml = approvedScripts
+      .map((src) => {
+        const isExternal =
+          src.startsWith("http://") ||
+          src.startsWith("https://") ||
+          src.startsWith("//");
+        const resolvedSrc = isExternal
+          ? src
+          : applyBasePath(
+              src.startsWith("/")
+                ? src
+                : `/${src.replace(/^pages\/main\//, "")}`,
+            );
+        return `<script type="module" src="${resolvedSrc}" nonce="${nonce}"></script>`;
+      })
+      .join("\n");
+
+    const themeStylesheetLink = `<link rel="stylesheet" href="${applyBasePath(
+      "/theme.css",
+    )}">`;
+
     return [
       "<!doctype html>",
       `<html class="${getIframeHtmlClass()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`,
-      `<meta http-equiv="Content-Security-Policy" content="script-src 'nonce-${nonce}'">`,
+      `<meta http-equiv="Content-Security-Policy" content="${cspContent}">`,
       `<base href="${this.getPageRouteDirectory(filePath)}" target="_blank">`,
-      `<script src="${bridgeScriptUrl}" nonce="${nonce}"><\/script>`,
+      siteConfigHtml,
+      `<script src="${bridgeScriptUrl}" nonce="${nonce}"></script>`,
       getIframeThemeStyleHtml(),
+      themeStylesheetLink,
+      customElementScriptsHtml,
       "</head><body>",
       safeContent,
       "</body></html>",
@@ -1910,10 +2029,9 @@ export class ShadowClawPages extends ShadowClawElement {
       "title",
       this.selectedPage ? `Preview: ${this.selectedPage.path}` : "Page preview",
     );
-    iframe.setAttribute(
-      "sandbox",
-      "allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox",
-    );
+    iframe.setAttribute("sandbox", getIframeSandboxPolicy());
+    iframe.setAttribute("allow", "fullscreen");
+    iframe.setAttribute("allowfullscreen", "true");
     iframe.hidden = true;
     iframe.addEventListener("load", () => {
       this.previewFrameWindow = iframe.contentWindow;

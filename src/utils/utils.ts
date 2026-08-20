@@ -5,6 +5,10 @@ import {
   ensureIframeSanitizerHook,
   getDOMPurify,
 } from "../security/iframe-sanitizer.js";
+import {
+  ensureCustomElementSanitizerHook,
+  isAllowedCustomElement,
+} from "../security/custom-element-security.js";
 
 export type HashInput = File | Blob | ArrayBuffer | ArrayBufferView;
 
@@ -59,6 +63,7 @@ export function sanitizeHtml(
   options: Config = {},
 ): string {
   ensureIframeSanitizerHook();
+  ensureCustomElementSanitizerHook();
 
   return getDOMPurify().sanitize(dirty, {
     ADD_TAGS: ["iframe", "figure", "figcaption"],
@@ -71,9 +76,8 @@ export function sanitizeHtml(
       "loading",
     ],
     CUSTOM_ELEMENT_HANDLING: {
-      // any hyphenated custom element
-      tagNameCheck: /^.*-.*$/,
-      attributeNameCheck: null,
+      tagNameCheck: (tagName: string) => isAllowedCustomElement(tagName),
+      attributeNameCheck: () => true,
       allowCustomizedBuiltInElements: false,
     },
     ...options,

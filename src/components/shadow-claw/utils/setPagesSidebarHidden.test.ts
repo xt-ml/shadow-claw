@@ -1,13 +1,14 @@
 import { jest } from "@jest/globals";
 
-describe("setPagesSidebarHidden", () => {
+describe("setPagesSidebarHidden and setSidebarNavHidden", () => {
   let shadowRoot: ShadowRoot;
   let shadowClaw: any;
   let oStore: any;
   let db: any;
 
   let setPagesSidebarHidden: any;
-  let mockApplyPagesSidebarVisibility: any;
+  let setSidebarNavHidden: any;
+  let mockApplySidebarNavVisibility: any;
   let mockGetDefaultSidebarPage: any;
   let mockShowPage: any;
 
@@ -15,16 +16,22 @@ describe("setPagesSidebarHidden", () => {
     jest.clearAllMocks();
 
     shadowRoot = document.createElement("div").attachShadow({ mode: "open" });
-    shadowClaw = { pagesSidebarHidden: false, currentPage: "chat" };
+    shadowClaw = {
+      pagesSidebarHidden: false,
+      chatSidebarHidden: false,
+      tasksSidebarHidden: false,
+      filesSidebarHidden: false,
+      currentPage: "chat",
+    };
     oStore = {};
     db = {};
 
-    mockApplyPagesSidebarVisibility = jest.fn();
+    mockApplySidebarNavVisibility = jest.fn();
     mockGetDefaultSidebarPage = jest.fn().mockReturnValue("default-page");
     mockShowPage = jest.fn();
 
-    jest.unstable_mockModule("./applyPagesSidebarVisibility.js", () => ({
-      applyPagesSidebarVisibility: mockApplyPagesSidebarVisibility,
+    jest.unstable_mockModule("./sidebarVisibility.js", () => ({
+      applySidebarNavVisibility: mockApplySidebarNavVisibility,
     }));
     jest.unstable_mockModule("./getDefaultSidebarPage.js", () => ({
       getDefaultSidebarPage: mockGetDefaultSidebarPage,
@@ -35,6 +42,7 @@ describe("setPagesSidebarHidden", () => {
 
     const module = await import("./setPagesSidebarHidden.js");
     setPagesSidebarHidden = module.setPagesSidebarHidden;
+    setSidebarNavHidden = module.setSidebarNavHidden;
   });
 
   afterEach(() => {
@@ -45,9 +53,10 @@ describe("setPagesSidebarHidden", () => {
     setPagesSidebarHidden(shadowRoot, shadowClaw, oStore, db, true);
 
     expect(shadowClaw.pagesSidebarHidden).toBe(true);
-    expect(mockApplyPagesSidebarVisibility).toHaveBeenCalledWith(
+    expect(mockApplySidebarNavVisibility).toHaveBeenCalledWith(
       shadowRoot,
-      shadowClaw,
+      "pages",
+      true,
     );
     expect(mockShowPage).not.toHaveBeenCalled();
   });
@@ -57,11 +66,12 @@ describe("setPagesSidebarHidden", () => {
     setPagesSidebarHidden(shadowRoot, shadowClaw, oStore, db, true);
 
     expect(shadowClaw.pagesSidebarHidden).toBe(true);
-    expect(mockApplyPagesSidebarVisibility).toHaveBeenCalledWith(
+    expect(mockApplySidebarNavVisibility).toHaveBeenCalledWith(
       shadowRoot,
-      shadowClaw,
+      "pages",
+      true,
     );
-    expect(mockGetDefaultSidebarPage).toHaveBeenCalledWith(oStore);
+    expect(mockGetDefaultSidebarPage).toHaveBeenCalledWith(oStore, shadowClaw);
     expect(mockShowPage).toHaveBeenCalledWith(
       shadowRoot,
       shadowClaw,
@@ -76,11 +86,32 @@ describe("setPagesSidebarHidden", () => {
     setPagesSidebarHidden(shadowRoot, shadowClaw, oStore, db, false);
 
     expect(shadowClaw.pagesSidebarHidden).toBe(false);
-    expect(mockApplyPagesSidebarVisibility).toHaveBeenCalledWith(
+    expect(mockApplySidebarNavVisibility).toHaveBeenCalledWith(
       shadowRoot,
-      shadowClaw,
+      "pages",
+      false,
     );
     expect(mockGetDefaultSidebarPage).not.toHaveBeenCalled();
     expect(mockShowPage).not.toHaveBeenCalled();
+  });
+
+  it("should support setSidebarNavHidden for chat, tasks, files", () => {
+    shadowClaw.currentPage = "tasks";
+    setSidebarNavHidden(shadowRoot, shadowClaw, oStore, db, "tasks", true);
+
+    expect(shadowClaw.tasksSidebarHidden).toBe(true);
+    expect(mockApplySidebarNavVisibility).toHaveBeenCalledWith(
+      shadowRoot,
+      "tasks",
+      true,
+    );
+    expect(mockGetDefaultSidebarPage).toHaveBeenCalledWith(oStore, shadowClaw);
+    expect(mockShowPage).toHaveBeenCalledWith(
+      shadowRoot,
+      shadowClaw,
+      db,
+      oStore,
+      "default-page",
+    );
   });
 });

@@ -23,6 +23,7 @@ jest.unstable_mockModule("../../security/trusted-types.js", () => ({
 
     return html;
   }),
+  toTrustedScriptUrl: jest.fn((url: string) => url),
   toTrustedHtmlPresanitized: jest.fn((html: string) => html),
 }));
 
@@ -1543,6 +1544,65 @@ describe("shadow-claw-pages", () => {
       } as MessageEvent);
 
       expect(component.selectedPage).toEqual(pages[0]);
+    });
+
+    it("suppresses keyboard and gesture navigation when focus or target has data-no-nav attribute", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+      component.selectedPage = pages[1];
+      component.renderPageList(pages, []);
+
+      // Create a game container with data-no-nav
+      const gameContainer = document.createElement("div");
+      gameContainer.setAttribute("data-no-nav", "");
+      const gameElement = document.createElement("block-garden");
+      gameContainer.appendChild(gameElement);
+      document.body.appendChild(gameContainer);
+
+      // Keydown inside game container should be ignored
+      gameElement.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+      );
+      expect(component.selectedPage).toEqual(pages[1]);
+
+      // Touch inside game container should be ignored
+      component.handleTouchStart({
+        touches: [{ clientX: 300, clientY: 100 }],
+        composedPath: () => [gameElement, gameContainer, document.body],
+        target: gameElement,
+      } as any);
+      component.handleTouchEnd({
+        changedTouches: [{ clientX: 50, clientY: 100 }],
+        composedPath: () => [gameElement, gameContainer, document.body],
+        target: gameElement,
+      } as any);
+      expect(component.selectedPage).toEqual(pages[1]);
+
+      // Mouse drag inside game container should be ignored
+      component.handleMouseDown({
+        button: 0,
+        clientX: 300,
+        clientY: 100,
+        composedPath: () => [gameElement, gameContainer, document.body],
+        target: gameElement,
+      } as any);
+      component.handleMouseUp({
+        clientX: 50,
+        clientY: 100,
+        composedPath: () => [gameElement, gameContainer, document.body],
+        target: gameElement,
+      } as any);
+      expect(component.selectedPage).toEqual(pages[1]);
+
+      document.body.removeChild(gameContainer);
     });
 
     it("announces page changes to screen readers via live region", async () => {

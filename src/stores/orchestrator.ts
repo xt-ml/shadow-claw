@@ -59,6 +59,13 @@ import { readGroupFile } from "../storage/readGroupFile.js";
 import { requestStorageAccess } from "../storage/requestStorageAccess.js";
 import { getStorageStatus } from "../storage/storage.js";
 import {
+  configureCustomElementSecurity,
+  installCustomElementDomGuard,
+  installCustomElementsRegistryGuard,
+  loadApprovedCustomElementScript,
+  loadCustomElementSecurityFromDb,
+} from "../security/custom-element-security.js";
+import {
   isStaticMainSiteSeeded,
   seedStaticMainSite,
 } from "../storage/staticMainSite.js";
@@ -415,7 +422,9 @@ export class OrchestratorStore {
   public _remoteAgentTypingByGroup: Signal.State<Map<string, boolean>>;
   private _replayingTaskSyncOutbox: boolean;
   private _subscriberId: string | null;
-  public _sidebarDefaultPage: Signal.State<"chat" | "tasks" | "files">;
+  public _sidebarDefaultPage: Signal.State<
+    "pages" | "chat" | "tasks" | "files"
+  >;
   public _state: Signal.State<OrchestratorDisplayState>;
   public _storageStatus: Signal.State<StorageStatus | null>;
   public _streamingText: Signal.State<string | null>;
@@ -1356,6 +1365,14 @@ export class OrchestratorStore {
       }) as EventListener);
     }
 
+    // Initialize custom element security from DB and install registry guard
+    await loadCustomElementSecurityFromDb(db);
+    installCustomElementsRegistryGuard();
+    installCustomElementDomGuard();
+
+    // Apply declarative site config defaults (from embedded site-config.json) on first boot
+    await this.applySiteConfigDefaults(db);
+
     // Restore last-active conversation, then load data
     await this.loadGroups(db);
     const lastGroup = await getConfig(db, CONFIG_KEYS.LAST_ACTIVE_GROUP);
@@ -2196,8 +2213,13 @@ export class OrchestratorStore {
 
   private normalizeSidebarDefaultPage(
     value: unknown,
-  ): "chat" | "tasks" | "files" {
-    if (value === "chat" || value === "tasks" || value === "files") {
+  ): "pages" | "chat" | "tasks" | "files" {
+    if (
+      value === "pages" ||
+      value === "chat" ||
+      value === "tasks" ||
+      value === "files"
+    ) {
       return value;
     }
 
@@ -2297,8 +2319,13 @@ export class OrchestratorStore {
 
   private resolveSidebarDefaultPageForActivePage(
     page: string,
-  ): "chat" | "tasks" | "files" {
-    if (page === "chat" || page === "tasks" || page === "files") {
+  ): "pages" | "chat" | "tasks" | "files" {
+    if (
+      page === "pages" ||
+      page === "chat" ||
+      page === "tasks" ||
+      page === "files"
+    ) {
       return page;
     }
 
@@ -2494,6 +2521,154 @@ export class OrchestratorStore {
     ]);
 
     await this.persistTaskSyncOutbox(db);
+  }
+
+  private async applySiteConfigDefaults(db: ShadowClawDatabase): Promise<void> {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    try {
+      const scriptEl = document.getElementById("shadow-claw-site-config");
+      if (!scriptEl?.textContent) {
+        return;
+      }
+
+      const config = JSON.parse(scriptEl.textContent);
+      if (!config || typeof config !== "object") {
+        return;
+      }
+
+      configureCustomElementSecurity(config);
+      installCustomElementsRegistryGuard();
+      installCustomElementDomGuard();
+
+      const customElConfig = config.customElements;
+      const customScripts =
+        (typeof customElConfig === "object" && !Array.isArray(customElConfig)
+          ? customElConfig.scripts
+          : customElConfig) ||
+        config.scripts ||
+        config.theme?.scripts;
+
+      if (Array.isArray(customScripts)) {
+        for (const item of customScripts) {
+          const src = typeof item === "string" ? item : item?.src;
+          const type =
+            typeof item === "object" && item?.type ? item.type : "module";
+          const async = typeof item === "object" ? Boolean(item?.async) : false;
+          const defer = typeof item === "object" ? Boolean(item?.defer) : false;
+          if (src) {
+            try {
+              await loadApprovedCustomElementScript(src, {
+                type,
+                async,
+                defer,
+              });
+            } catch (scriptErr) {
+              console.warn(
+                "Failed to load approved custom element script:",
+                scriptErr,
+              );
+            }
+          }
+        }
+      }
+
+      const isSeeded = await getConfig(db, CONFIG_KEYS.SITE_CONFIG_SEEDED);
+      if (isSeeded) {
+        return;
+      }
+
+      const allowedElements =
+        config.allowedCustomElements ||
+        (typeof customElConfig === "object" && !Array.isArray(customElConfig)
+          ? customElConfig.allowedElements
+          : undefined);
+      if (allowedElements !== undefined) {
+        await setConfig(
+          db,
+          CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS,
+          JSON.stringify(allowedElements),
+        );
+      }
+
+      const allowedDomains =
+        config.allowedCustomElementDomains ||
+        (typeof customElConfig === "object" && !Array.isArray(customElConfig)
+          ? customElConfig.allowedDomains
+          : undefined);
+      if (allowedDomains !== undefined) {
+        await setConfig(
+          db,
+          CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENT_HOST_PATTERNS,
+          JSON.stringify(allowedDomains),
+        );
+      }
+
+      if (config.sidebar && typeof config.sidebar === "object") {
+        const {
+          pagesHidden,
+          chatHidden,
+          tasksHidden,
+          filesHidden,
+          defaultPage,
+        } = config.sidebar;
+        if (pagesHidden !== undefined) {
+          await setConfig(
+            db,
+            CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN,
+            String(Boolean(pagesHidden)),
+          );
+        }
+        if (chatHidden !== undefined) {
+          await setConfig(
+            db,
+            CONFIG_KEYS.SIDEBAR_CHAT_HIDDEN,
+            String(Boolean(chatHidden)),
+          );
+        }
+        if (tasksHidden !== undefined) {
+          await setConfig(
+            db,
+            CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN,
+            String(Boolean(tasksHidden)),
+          );
+        }
+        if (filesHidden !== undefined) {
+          await setConfig(
+            db,
+            CONFIG_KEYS.SIDEBAR_FILES_HIDDEN,
+            String(Boolean(filesHidden)),
+          );
+        }
+        if (defaultPage && typeof defaultPage === "string") {
+          await setConfig(db, CONFIG_KEYS.SIDEBAR_DEFAULT_PAGE, defaultPage);
+        }
+      }
+
+      if (config.settings && typeof config.settings === "object") {
+        const { assistantName } = config.settings;
+        if (assistantName && typeof assistantName === "string") {
+          await setConfig(db, CONFIG_KEYS.ASSISTANT_NAME, assistantName);
+        }
+      }
+
+      if (config.pages && typeof config.pages === "object") {
+        const { defaultPinnedPage } = config.pages;
+        if (defaultPinnedPage && typeof defaultPinnedPage === "string") {
+          await setConfig(
+            db,
+            CONFIG_KEYS.DEFAULT_PINNED_PAGE,
+            defaultPinnedPage,
+          );
+        }
+      }
+
+      await setConfig(db, CONFIG_KEYS.SITE_CONFIG_SEEDED, "true");
+    } catch (err) {
+      console.warn("Failed to apply site-config defaults:", err);
+    }
   }
 }
 

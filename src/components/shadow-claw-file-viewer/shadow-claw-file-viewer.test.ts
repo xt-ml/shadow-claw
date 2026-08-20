@@ -82,6 +82,8 @@ const { setSanitizedHtml, toTrustedHtmlPresanitized } =
   await import("../../security/trusted-types.js");
 const { readGroupFileBytes } =
   await import("../../storage/readGroupFileBytes.js");
+const { setAllowedCustomElementHostPatterns } =
+  await import("../../security/custom-element-security.js");
 
 describe("shadow-claw-file-viewer", () => {
   beforeEach(() => {
@@ -600,6 +602,39 @@ describe("shadow-claw-file-viewer", () => {
 
     expect(srcdoc).toContain(`nonce="${nonce}"`);
     expect(srcdoc).toContain("/assets/file-viewer-preview-bridge.js");
+  });
+
+  it("injects site config, theme stylesheet, and approved custom element scripts into html iframe srcdoc when configured", async () => {
+    const component = new ShadowClawFileViewer();
+    setAllowedCustomElementHostPatterns(["kherrick.github.io"]);
+    const configScript = document.createElement("script");
+    configScript.id = "shadow-claw-site-config";
+    configScript.type = "application/json";
+    configScript.textContent = JSON.stringify({
+      customElements: {
+        scripts: [
+          "pages/main/block-garden-adapter.js",
+          "https://kherrick.github.io/block-garden/block-garden-bundle-min.mjs",
+        ],
+      },
+    });
+    document.head.appendChild(configScript);
+
+    const srcdoc = await component.buildIframePreviewSrcdoc({
+      name: "index.html",
+      path: "pages/main/index.html",
+      content: "<block-garden></block-garden>",
+    });
+
+    expect(srcdoc).toContain('<link rel="stylesheet" href="/theme.css">');
+    expect(srcdoc).toContain('id="shadow-claw-site-config"');
+    expect(srcdoc).toContain('src="/block-garden-adapter.js"');
+    expect(srcdoc).toContain(
+      'src="https://kherrick.github.io/block-garden/block-garden-bundle-min.mjs"',
+    );
+
+    document.head.removeChild(configScript);
+    setAllowedCustomElementHostPatterns([]);
   });
 
   it("rewrites relative image src to /files routes in html iframe srcdoc", async () => {

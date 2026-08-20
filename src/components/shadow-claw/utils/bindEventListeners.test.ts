@@ -49,6 +49,7 @@ describe("bindEventListeners", () => {
     }));
     jest.unstable_mockModule("./setPagesSidebarHidden.js", () => ({
       setPagesSidebarHidden: jest.fn(),
+      setSidebarNavHidden: jest.fn(),
     }));
     jest.unstable_mockModule("./supportsNavigationApi.js", () => ({
       supportsNavigationApi: jest.fn(),

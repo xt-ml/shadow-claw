@@ -22,6 +22,15 @@ if (typeof window !== "undefined") {
   }
 }
 
+import {
+  installCustomElementDomGuard,
+  installCustomElementsRegistryGuard,
+} from "../security/custom-element-security.js";
+
+// Ensure custom element registry & DOM guards are active before any components or scripts run
+installCustomElementsRegistryGuard();
+installCustomElementDomGuard();
+
 import { initializeApp } from "./utils/initializeApp.js";
 import { loadAppShell } from "./utils/loadAppShell.js";
 import { resumeAudioContext } from "../ui/audio.js";

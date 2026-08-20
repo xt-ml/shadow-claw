@@ -161,7 +161,9 @@ export function isSafeIframeSource(src: string): boolean {
 
   try {
     const base =
-      typeof window !== "undefined" && window.location?.origin
+      typeof window !== "undefined" &&
+      window.location?.origin &&
+      window.location.origin !== "null"
         ? window.location.origin
         : "http://localhost";
     const url = new URL(trimmed, base);
@@ -173,6 +175,7 @@ export function isSafeIframeSource(src: string): boolean {
     if (
       typeof window !== "undefined" &&
       window.location?.origin &&
+      window.location.origin !== "null" &&
       url.origin === window.location.origin
     ) {
       return true;

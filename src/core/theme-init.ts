@@ -1,5 +1,9 @@
 import { initializeTrustedTypesTinyfill } from "../security/trusted-types-tinyfill.js";
 import { ensureDefaultTrustedTypesPolicy } from "../security/default-trusted-types-policy.js";
+import {
+  installCustomElementDomGuard,
+  installCustomElementsRegistryGuard,
+} from "../security/custom-element-security.js";
 
 declare const __PRERENDER_MAIN_MEMORY__: boolean;
 
@@ -25,6 +29,10 @@ export function initializeThemeAndBootState() {
   initializeTrustedTypesTinyfill();
 
   ensureDefaultTrustedTypesPolicy();
+
+  // Guard custom element registry and DOM mutations as early as possible
+  installCustomElementsRegistryGuard();
+  installCustomElementDomGuard();
 
   const root = document.documentElement;
   root.classList.add("sc-js-enabled", "sc-js-boot-pending");

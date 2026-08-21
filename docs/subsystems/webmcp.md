@@ -110,6 +110,26 @@ annotations: {
 }
 ```
 
+### `parseWebMcpInputSchema(inputSchema: unknown): Record<string, unknown>`
+
+Safely parses and normalizes WebMCP tool input schemas with backwards compatibility for Chrome spec evolution.
+
+- **Chrome 154.0.8014.0+ (PR #241):** `RegisteredTool#inputSchema` is returned as a JavaScript object (a deep copy of the registration schema).
+- **Chrome < 154.0.8014.0:** `RegisteredTool#inputSchema` was returned as a stringified JSON schema (`DOMString`).
+
+`parseWebMcpInputSchema` handles both representations gracefully:
+- If passed a string, attempts `JSON.parse`.
+- If passed an object, returns the object directly.
+- On invalid JSON or non-object input, gracefully falls back to `{ type: "object", properties: {} }`.
+
+### `getWebMcpTools(): Promise<NormalizedWebMcpRegisteredTool[]>`
+
+Queries tools registered on `document.modelContext.getTools()` while practicing graceful degradation:
+
+1. Feature-detects `getTools()` on `modelContext`.
+2. If `getTools()` is absent (older browser builds or basic polyfills), returns an empty array `[]` without throwing.
+3. Normalizes `inputSchema` on every returned tool so callers receive a JavaScript object regardless of Chrome version or polyfill implementation.
+
 ### `unregisterWebMcpTools(): void`
 
 Unregisters all previously registered tools.
@@ -289,7 +309,24 @@ With the introduction of the Chrome WebMCP Origin Trial (Chrome 149+), the API e
 - **Executing tools:** `document.modelContext.executeTool(tool, input)`
 - **Permissions Policy / Cross-origin iframes:** Support for WebMCP inside iframes via `allow="webmcp *"`.
 
-**ShadowClaw's Role:**
-ShadowClaw currently acts exclusively as a **Tool Provider**. Our integration focuses on `registerTool()` to expose ShadowClaw's built-in tools (Bash, Git, etc.) to the browser's context so they can be consumed by external AI agents (like Chrome's Built-in AI or MCP-B).
+### Schema Format Compatibility (PR #241 / Chrome 154+)
 
-ShadowClaw's internal LLM does not currently act as a **Tool Consumer** via WebMCP (i.e., we do not dynamically poll `getTools()` to expose external page-provided tools to our agent). However, because we utilize `@mcp-b/webmcp-polyfill`, the polyfill already gracefully supports these consumer APIs should we choose to bridge them to the LLM in the future.
+Starting in Chrome 154.0.8014.0 (PR #241), `RegisteredTool#inputSchema` returned from `getTools()` is a JavaScript object rather than a stringified JSON string (`DOMString`). ShadowClaw helper `parseWebMcpInputSchema` handles both schema formats seamlessly:
+
+```ts
+import { parseWebMcpInputSchema, getWebMcpTools } from "./webmcp.js";
+
+// Normalize schema whether object (Chrome 154+) or JSON DOMString (Chrome < 154)
+const schema = parseWebMcpInputSchema(tool.inputSchema);
+```
+
+### Tool Querying & Graceful Degradation (`getWebMcpTools`)
+
+ShadowClaw provides `getWebMcpTools()` to safely query registered WebMCP tools across different browser environments:
+
+1. Feature-detects `getTools()` on `document.modelContext` / `navigator.modelContext`.
+2. If `getTools()` is absent (older browser builds or polyfills lacking `getTools`), returns an empty array `[]` without throwing.
+3. Normalizes `inputSchema` on every returned tool so callers receive a JavaScript object regardless of Chrome version or polyfill implementation.
+
+**ShadowClaw's Role:**
+ShadowClaw acts primarily as a **Tool Provider** via `registerTool()`, exposing built-in tools (Bash, Git, etc.) to the browser context for consumption by external AI agents. With `getWebMcpTools()`, ShadowClaw also supports tool discovery with backwards-compatible schema parsing and graceful degradation when running on older browsers or polyfill targets.

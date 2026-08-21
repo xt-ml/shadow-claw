@@ -8,6 +8,7 @@ import {
   applyBasePath,
   getFileRouteDirPath,
   getWorkspaceRouteRequestPath,
+  isPossibleAppRoute,
   resolveHrefAgainstRoute,
 } from "../../core/app-routes.js";
 
@@ -657,7 +658,12 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return;
     }
 
-    if (resolved.origin !== window.location.origin) {
+    const isInternal =
+      resolved.origin === window.location.origin &&
+      (isPossibleAppRoute(resolved.pathname) ||
+        Boolean(this.resolveWorkspaceLinkPath(payload.href, filePath)));
+
+    if (!isInternal) {
       window.open(resolved.href, "_blank", "noopener,noreferrer");
 
       return;
@@ -974,6 +980,11 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     let normalized = candidate.split(/[?#]/, 1)[0].replace(/\\/g, "/");
     const isAbsolute = normalized.startsWith("/");
+
+    if (hasScheme || isAbsolute) {
+      return null;
+    }
+
     normalized = normalized.replace(/^\/+/, "");
 
     if (!normalized) {
@@ -1057,12 +1068,17 @@ export class ShadowClawFileViewer extends ShadowClawElement {
           routeDir,
           window.location.origin,
         );
-        if (!resolved) {
+        if (!resolved || resolved.origin !== window.location.origin) {
           continue;
         }
 
-        if (resolved.origin !== window.location.origin) {
-          continue;
+        if (attribute === "href") {
+          const isInternal =
+            isPossibleAppRoute(resolved.pathname) ||
+            Boolean(this.resolveWorkspaceLinkPath(trimmed, filePath));
+          if (!isInternal) {
+            continue;
+          }
         }
 
         node.setAttribute(
@@ -1418,7 +1434,13 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       window.location.origin,
     );
 
-    if (resolved && resolved.origin === window.location.origin) {
+    const isInternal =
+      resolved &&
+      resolved.origin === window.location.origin &&
+      (isPossibleAppRoute(resolved.pathname) ||
+        Boolean(this.resolveWorkspaceLinkPath(href, basePath)));
+
+    if (isInternal && resolved) {
       event.preventDefault();
       const targetPath = `${resolved.pathname}${resolved.search}${resolved.hash}`;
       const nav = (window as any).navigation;

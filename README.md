@@ -4,7 +4,7 @@
 
 A browser-native, fully-featured AI assistant. TypeScript + Web Components + IndexedDB + File System API.
 
-[![ShadowClaw Screenshot](assets/screenshots/shadow-claw-screenshot-1920x1050.png)](https://xt-ml.github.io/shadow-claw/)
+[![ShadowClaw Screenshot](assets/screenshots/shadow-claw-screenshot-1920x1052.png)](https://xt-ml.github.io/shadow-claw/)
 
 ## Quick Start
 
@@ -146,10 +146,10 @@ The agent has access to **50+ tools** including:
 
 ### Testing WebMCP Integration
 
-**WebMCP integration**: When `document.modelContext` is available (with `navigator.modelContext` fallback for Chrome < 152), tools are also registered through the browser's Model Context Protocol (`@mcp-b/webmcp-polyfill` v3).
+**WebMCP integration**: When `document.modelContext` is available (with `navigator.modelContext` fallback for Chrome < 152), tools are also registered through the browser's Model Context Protocol (`@mcp-b/webmcp-polyfill` v3). ShadowClaw provides `parseWebMcpInputSchema` to normalize input schemas across Chrome 154+ (native object) and Chrome < 154 (DOMString JSON) versions, and `getWebMcpTools()` to safely query registered tools with graceful degradation.
 
 ```ts
-// get available tools
+// get available tools (safely normalizes input schemas across Chrome versions)
 var tools = await document.modelContext.getTools();
 
 // format the tool list
@@ -181,7 +181,7 @@ await document.modelContext.executeTool(
 );
 ```
 
-**Full reference**: [docs/subsystems/tools.md](docs/subsystems/tools.md)
+**Full reference**: [docs/subsystems/tools.md](docs/subsystems/tools.md) | [docs/subsystems/webmcp.md](docs/subsystems/webmcp.md)
 
 ## Conversations & Messaging Channels
 
@@ -204,7 +204,7 @@ ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace con
 - **Workspace-relative links** — Links and images in pages resolve relative to the workspace
 - **Page sidebar** — Persistent list of saved pages with drag-and-drop reordering and responsive mobile sidebar collapse
 - **Static Main Site Seeding** — Automatically seeds default main pages from the `pages/main/` manifest, respecting page suppression rules
-- **Static Pretty Paths & DSD Pre-rendering** — Build-time pre-rendering for `pages/routes.json` generates static HTML with Declarative Shadow DOM templates for clean URLs across Node.js, Electron, and GitHub Pages (pages flagged for purge are excluded from the output manifest)
+- **Static Pretty Paths & DSD Pre-rendering** — Build-time pre-rendering for `pages/routes.json` generates static HTML with Declarative Shadow DOM templates for clean URLs across Node.js, Electron, and GitHub Pages (pages flagged for purge are excluded from the output manifest); same-origin links are validated via `isPossibleAppRoute` so non-app paths fall back to native browser navigation
 - **Page Suppression** — Deleting pages suppresses auto-reseeding (`SUPPRESSED_PAGES_LIST`) until re-added
 - **Safe iframe embeds** — HTML previews use a configurable iframe host allowlist in Settings, with safe defaults for common embedded content hosts
 - **Ebook-Style Navigation** — Functional Previous/Next pagination controls with HTML-entity decoded frontmatter headers, seamless page transitions, `ArrowLeft`/`ArrowRight` keyboard navigation, touch/mouse swipe gestures, and `aria-live` screen reader announcements

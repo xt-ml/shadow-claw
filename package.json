@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.20.0",
+  "version": "1.20.2",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -16,6 +16,7 @@
     "build:pkg:meta": "node -e \"import fs from 'node:fs/promises';const m=process.argv[1],f='dist/public/index.html',s=await fs.readFile(f,'utf8');await fs.writeFile(f,s.replace(/<meta\\s+name=\\\"revision\\\"[^>]*>/,'<meta name=\\\"revision\\\" content=\\\"'+m+'\\\" />'));\"",
     "build:prerender-main-memory-false": "cross-env PRERENDER_MAIN_MEMORY=false npm run -s build",
     "build:prod:prerender-main-memory-false": "cross-env PRERENDER_MAIN_MEMORY=false npm run -s build:prod",
+    "build:prod:local": "cross-env NODE_ENV=production PAGES_ORIGIN=http://localhost:8888/shadow-claw/ PAGES_BASE_PATH=/shadow-claw/ npm run build",
     "build:prod": "cross-env NODE_ENV=production npm run build",
     "build:service-worker": "npm run -s clean:service-worker && workbox generateSW src/service-worker/workbox-config.cjs",
     "build": "npm run -s tsc && node bin/build.mjs",

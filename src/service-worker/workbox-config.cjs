@@ -7,8 +7,6 @@ module.exports = {
     "**/*.json",
     "**/*.js",
     "**/*.png",
-    "**/*.svg",
-    "**/*.webp",
   ],
   globIgnores: [
     "**/bin/**",

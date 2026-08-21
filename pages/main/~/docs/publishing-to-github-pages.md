@@ -71,13 +71,28 @@ jobs:
         shell: bash
         run: |
           REF="${{ github.event.inputs.shadowclaw_ref }}"
-          if [ -z "$REF" ] && [ -f "content/pages/site-config.json" ]; then
+          if [ -z "$REF" ]; then
             REF=$(node -e '
               try {
                 const fs = require("fs");
-                const cfg = JSON.parse(fs.readFileSync("content/pages/site-config.json", "utf8"));
-                const v = cfg.shadowClawVersion || cfg.shadowClawRef || cfg.shadowclawVersion || cfg.shadowclawRef || "";
-                process.stdout.write(String(v).trim());
+                const paths = [
+                  "content/pages/resources/site-config.json",
+                  "content/pages/deps/site-config.json",
+                  "content/resources/site-config.json",
+                  "content/deps/site-config.json",
+                  "content/pages/site-config.json",
+                  "content/site-config.json",
+                ];
+                for (const p of paths) {
+                  if (fs.existsSync(p)) {
+                    const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
+                    const v = cfg.shadowClawVersion || cfg.shadowClawRef || cfg.shadowclawVersion || cfg.shadowclawRef || "";
+                    if (v) {
+                      process.stdout.write(String(v).trim());
+                      break;
+                    }
+                  }
+                }
               } catch (e) {
                 process.stdout.write("");
               }

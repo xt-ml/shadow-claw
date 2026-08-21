@@ -8,6 +8,7 @@ import {
   buildRoutePath,
   getFileRouteDirPath,
   getWorkspaceRouteRequestPath,
+  isPossibleAppRoute,
   resolveHrefAgainstRoute,
 } from "../../core/app-routes.js";
 
@@ -652,16 +653,16 @@ export class ShadowClawPages extends ShadowClawElement {
   goToNextPage() {
     const pages = orchestratorStore.pages;
     const index = this.getSelectedPageIndex();
-    if (index > 0) {
-      this.navigateToPage(pages[index - 1]);
+    if (index >= 0 && index < pages.length - 1) {
+      this.navigateToPage(pages[index + 1]);
     }
   }
 
   goToPreviousPage() {
     const pages = orchestratorStore.pages;
     const index = this.getSelectedPageIndex();
-    if (index >= 0 && index < pages.length - 1) {
-      this.navigateToPage(pages[index + 1]);
+    if (index > 0) {
+      this.navigateToPage(pages[index - 1]);
     }
   }
 
@@ -753,6 +754,8 @@ export class ShadowClawPages extends ShadowClawElement {
     }
 
     const basePath = this.selectedPage?.path || "";
+    const groupId =
+      this.selectedPage?.groupId || orchestratorStore.activeGroupId;
     const routeDir = this.getPageRouteDirectory(basePath);
     const resolved = resolveHrefAgainstRoute(
       payload.href,
@@ -763,7 +766,14 @@ export class ShadowClawPages extends ShadowClawElement {
       return;
     }
 
-    if (resolved.origin !== window.location.origin) {
+    const isInternal =
+      resolved.origin === window.location.origin &&
+      (isPossibleAppRoute(resolved.pathname) ||
+        Boolean(
+          this.resolveWorkspaceLinkPath(payload.href, basePath, groupId),
+        ));
+
+    if (!isInternal) {
       window.open(resolved.href, "_blank", "noopener,noreferrer");
 
       return;
@@ -911,8 +921,8 @@ export class ShadowClawPages extends ShadowClawElement {
         nextBtn.hidden = true;
       } else {
         const idx = this.getSelectedPageIndex();
-        const isPrevDisabled = idx < 0 || idx >= pages.length - 1;
-        const isNextDisabled = idx <= 0;
+        const isPrevDisabled = idx <= 0;
+        const isNextDisabled = idx < 0 || idx >= pages.length - 1;
         prevBtn.disabled = isPrevDisabled;
         prevBtn.hidden = isPrevDisabled;
         nextBtn.disabled = isNextDisabled;
@@ -1337,6 +1347,17 @@ export class ShadowClawPages extends ShadowClawElement {
         );
         if (!resolved || resolved.origin !== window.location.origin) {
           continue;
+        }
+
+        if (attribute === "href") {
+          const groupId =
+            this.selectedPage?.groupId || orchestratorStore.activeGroupId;
+          const isInternal =
+            isPossibleAppRoute(resolved.pathname) ||
+            Boolean(this.resolveWorkspaceLinkPath(trimmed, filePath, groupId));
+          if (!isInternal) {
+            continue;
+          }
         }
 
         node.setAttribute(

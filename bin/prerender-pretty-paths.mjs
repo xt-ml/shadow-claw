@@ -64,6 +64,19 @@ import {
  *
  * @returns {string}
  */
+export function insertBeforeClosingHead(html, contentToInsert) {
+  const lastHeadIndex = html.lastIndexOf("</head>");
+  if (lastHeadIndex !== -1) {
+    return (
+      html.slice(0, lastHeadIndex) +
+      contentToInsert +
+      "\n" +
+      html.slice(lastHeadIndex)
+    );
+  }
+  return `${contentToInsert}\n${html}`;
+}
+
 export function injectStaticRoutingScript(html, routingJson) {
   const safeRoutingJson = escapeJsonForHtmlScript(routingJson);
   const scriptTag = `<script id="shadow-claw-static-routing" type="application/json">${safeRoutingJson}</script>`;
@@ -74,11 +87,7 @@ export function injectStaticRoutingScript(html, routingJson) {
     );
   }
 
-  if (html.includes("</head>")) {
-    return html.replace("</head>", () => `  ${scriptTag}\n</head>`);
-  }
-
-  return `${scriptTag}\n${html}`;
+  return insertBeforeClosingHead(html, `  ${scriptTag}`);
 }
 
 function trimSlashes(value) {

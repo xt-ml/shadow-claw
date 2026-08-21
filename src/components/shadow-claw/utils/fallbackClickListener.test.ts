@@ -293,6 +293,29 @@ describe("fallbackClickListener", () => {
     expect(event.defaultPrevented).toBe(false);
   });
 
+  it("should do nothing if same-origin anchor points to a non-app route (e.g. /block-garden/)", () => {
+    const listener = fallbackClickListener(
+      shadowRootMock,
+      shadowClawMock,
+      dbMock,
+      fStoreMock,
+      oStoreMock,
+      urlMock,
+    );
+    const anchor = document.createElement("a");
+    anchor.href =
+      window.location.origin + "/block-garden/?gettingStarted=false";
+    anchor.setAttribute("href", "/block-garden/?gettingStarted=false");
+    const event = new MouseEvent("click", { button: 0, cancelable: true });
+    Object.defineProperty(event, "composedPath", {
+      value: () => [anchor],
+    });
+    listener(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(historyStateMock).not.toHaveBeenCalled();
+    expect(applyRouteFromCurrentLocationMock).not.toHaveBeenCalled();
+  });
+
   it("should prevent default and call historyState and applyRouteFromCurrentLocation on valid click", () => {
     const listener = fallbackClickListener(
       shadowRootMock,
@@ -303,8 +326,8 @@ describe("fallbackClickListener", () => {
       urlMock,
     );
     const anchor = document.createElement("a");
-    anchor.href = window.location.origin + "/new-page";
-    anchor.setAttribute("href", "/new-page");
+    anchor.href = window.location.origin + "/chat";
+    anchor.setAttribute("href", "/chat");
     const event = new MouseEvent("click", { button: 0, cancelable: true });
     Object.defineProperty(event, "composedPath", {
       value: () => [anchor],
@@ -313,7 +336,7 @@ describe("fallbackClickListener", () => {
     expect(event.defaultPrevented).toBe(true);
     expect(historyStateMock).toHaveBeenCalledWith(
       (globalThis as any).history,
-      "/new-page",
+      "/chat",
       { replace: false, useTrailingSlash: false },
     );
     expect(applyRouteFromCurrentLocationMock).toHaveBeenCalledWith(

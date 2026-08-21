@@ -3,7 +3,7 @@ import { jest } from "@jest/globals";
 import { getTargetPath } from "./getTargetPath";
 
 describe("getTargetPath", () => {
-  test("should return the target path from a URL", () => {
+  test("should return the target path from a URL matching an app route", () => {
     const loc = {
       origin: "https://example.com",
       pathname: "/old",
@@ -12,13 +12,13 @@ describe("getTargetPath", () => {
     } as Location;
 
     const link = {
-      href: "https://example.com/path",
+      href: "https://example.com/chat/path",
       origin: "https://example.com",
       target: "_self",
-      pathname: "/path",
+      pathname: "/chat/path",
       search: "",
       hash: "",
-      getAttribute: () => "https://example.com/path",
+      getAttribute: () => "https://example.com/chat/path",
     };
     Object.setPrototypeOf(link, HTMLAnchorElement.prototype);
 
@@ -27,7 +27,29 @@ describe("getTargetPath", () => {
       button: 0,
       composedPath: () => [link],
     } as unknown as MouseEvent;
-    expect(getTargetPath(loc, ev)).toBe("/path");
+    expect(getTargetPath(loc, ev)).toBe("/chat/path");
+  });
+
+  test("should return null for same-origin paths that are not app routes (e.g. block-garden demo)", () => {
+    const loc = {
+      origin: "https://kherrick.github.io",
+      pathname: "/block-garden-knowledge-hub/",
+      search: "",
+      hash: "",
+    } as Location;
+
+    const link = document.createElement("a");
+    link.href = "https://kherrick.github.io/block-garden/?gettingStarted=false";
+    link.target = "_self";
+
+    const ev = {
+      preventDefault: jest.fn(),
+      button: 0,
+      composedPath: () => [link],
+    } as unknown as MouseEvent;
+
+    expect(getTargetPath(loc, ev)).toBeNull();
+    expect(ev.preventDefault).not.toHaveBeenCalled();
   });
 
   test("should return null for modified clicks", () => {

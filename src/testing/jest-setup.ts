@@ -272,6 +272,9 @@ const expectedLogs = [
   "Test environment has been torn down",
   "Polyfill: window.",
   "Built-in AI Polyfill:",
+  "Failed to retrieve WebMCP tools via getTools():",
+  "[Security] Registration blocked:",
+  "[Security] Removing unapproved custom element:",
 ];
 
 function isExpectedLog(...args: any[]) {

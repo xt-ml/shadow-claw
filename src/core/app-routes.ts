@@ -376,30 +376,24 @@ export function parseRouteFromUrl(
 }
 
 export function isPossibleAppRoute(pathname: string): boolean {
-  const parts = pathname.split("/").filter(Boolean);
-  if (parts.length === 0) return true; // root
-  const page = parts[0].toLowerCase();
-  if (VALID_PAGES.has(page)) return true;
+  let relativePath = pathname;
+  const basePath = getAppBasePath();
 
-  if (resolvePrettyPathToRoute(pathname)) return true;
-
-  // Since we can't await, we will just say true for ANYTHING that is not clearly an asset or API call,
-  // or we can just return true. If it's a SPA, we can intercept everything that is not an extension
-  // (like .png, .css) or /api/.
-  // Wait, if we return true, it intercepts, and if it fails to resolve, it returns null.
-  // Actually, we can check if it matches any subRoute prefix in the embedded manifest.
-  // We can't access cachedManifest easily here unless we expose a sync getter.
-  // Let's just return true if it doesn't have a file extension.
-  const lastPart = parts[parts.length - 1];
-  if (
-    lastPart.includes(".") &&
-    !lastPart.endsWith(".html") &&
-    !lastPart.endsWith(".md")
-  ) {
+  if (basePath !== "/" && relativePath.startsWith(basePath)) {
+    relativePath = "/" + relativePath.slice(basePath.length);
+  } else if (basePath !== "/" && !relativePath.startsWith(basePath)) {
     return false;
   }
 
-  return true;
+  const parts = relativePath.split("/").filter(Boolean);
+  if (parts.length === 0) return true; // root
+
+  const page = parts[0].toLowerCase();
+  if (VALID_PAGES.has(page)) return true;
+
+  if (resolvePrettyPathToRoute(relativePath)) return true;
+
+  return false;
 }
 
 export async function parseRouteFromUrlAsync(

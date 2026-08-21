@@ -704,6 +704,19 @@ export function escapeJsonForHtmlScript(jsonString) {
     .replace(/\u2029/g, "\\u2029");
 }
 
+export function insertBeforeClosingHead(html, contentToInsert) {
+  const lastHeadIndex = html.lastIndexOf("</head>");
+  if (lastHeadIndex !== -1) {
+    return (
+      html.slice(0, lastHeadIndex) +
+      contentToInsert +
+      "\n" +
+      html.slice(lastHeadIndex)
+    );
+  }
+  return `${contentToInsert}\n${html}`;
+}
+
 export function injectStaticManifestScript(html, manifestJson) {
   const safeManifestJson = escapeJsonForHtmlScript(manifestJson);
   const manifestScriptTag = `<script id="shadow-claw-static-manifest" type="application/json">${safeManifestJson}</script>`;
@@ -716,24 +729,12 @@ export function injectStaticManifestScript(html, manifestJson) {
       /<script\s+id="shadow-claw-static-manifest"[\s\S]*?<\/script>/iu,
       () => manifestScriptTag,
     );
-  } else if (resultHtml.includes("</head>")) {
-    resultHtml = resultHtml.replace(
-      "</head>",
-      () => `  ${manifestScriptTag}\n</head>`,
-    );
   } else {
-    resultHtml = `${manifestScriptTag}\n${resultHtml}`;
+    resultHtml = insertBeforeClosingHead(resultHtml, `  ${manifestScriptTag}`);
   }
 
   if (!/id="shadow-claw-static-routing"/iu.test(resultHtml)) {
-    if (resultHtml.includes("</head>")) {
-      resultHtml = resultHtml.replace(
-        "</head>",
-        () => `  ${routingScriptTag}\n</head>`,
-      );
-    } else {
-      resultHtml = `${routingScriptTag}\n${resultHtml}`;
-    }
+    resultHtml = insertBeforeClosingHead(resultHtml, `  ${routingScriptTag}`);
   }
 
   return resultHtml;

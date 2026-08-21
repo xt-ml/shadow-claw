@@ -533,6 +533,42 @@ describe("shadow-claw-file-viewer", () => {
     expect(srcdoc).not.toContain("window.parent.postMessage");
   });
 
+  it("keeps same-origin external application links (e.g. block-garden) untouched in html iframe srcdoc", async () => {
+    const component = new ShadowClawFileViewer();
+    const origin = window.location.origin;
+    const externalLink = `${origin}/block-garden/?gettingStarted=false`;
+    const srcdoc = await component.buildIframePreviewSrcdoc({
+      name: "index.html",
+      path: "docs/index.html",
+      content: `<a href="${externalLink}">Block Garden</a>`,
+    });
+
+    expect(srcdoc).toContain("/block-garden/?gettingStarted=false");
+  });
+
+  it("opens same-origin external application links in a new window via handleIframeMessage", () => {
+    const windowOpenSpy = jest
+      .spyOn(window, "open")
+      .mockImplementation(() => null);
+    const component = new ShadowClawFileViewer();
+    component.db = {} as any;
+
+    const origin = window.location.origin;
+    const targetUrl = `${origin}/block-garden/?gettingStarted=false`;
+
+    component.handleIframeMessage({
+      data: { type: "shadow-claw-file-viewer-link", href: targetUrl },
+      source: null,
+    } as MessageEvent);
+
+    expect(windowOpenSpy).toHaveBeenCalledWith(
+      targetUrl,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    windowOpenSpy.mockRestore();
+  });
+
   it("sanitizes active script content out of html iframe srcdoc bodies", async () => {
     const component = new ShadowClawFileViewer();
     const srcdoc = await component.buildIframePreviewSrcdoc({

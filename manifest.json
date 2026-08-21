@@ -5,7 +5,7 @@
   "id": "shadow-claw",
   "name": "ShadowClaw",
   "short_name": "ShadowClaw",
-  "start_url": "http://localhost:8888",
+  "start_url": ".",
   "theme_color": "#000000",
   "share_target": {
     "action": "share/share-target.html",
@@ -91,8 +91,8 @@
     {
       "form_factor": "wide",
       "label": "shadow-claw",
-      "sizes": "1920x1050",
-      "src": "assets/screenshots/shadow-claw-screenshot-1920x1050.png",
+      "sizes": "1920x1052",
+      "src": "assets/screenshots/shadow-claw-screenshot-1920x1052.png",
       "type": "image/png"
     },
     {

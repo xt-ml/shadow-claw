@@ -582,6 +582,50 @@ describe("shadow-claw-pages", () => {
 
       expect(rewritten).toContain('href="https://example.com/page"');
     });
+
+    it("keeps same-origin external application links (e.g. block-garden) untouched", () => {
+      const component = new ShadowClawPages();
+      component.selectedPage = { groupId: "group-1", path: "docs/index.md" };
+
+      const origin = window.location.origin;
+      const externalLink = `${origin}/block-garden/?gettingStarted=false`;
+      const html = `<a href="${externalLink}">Block Garden</a>`;
+      const rewritten = component.rewriteWorkspacePreviewHtml(
+        html,
+        "docs/index.md",
+      );
+
+      expect(rewritten).toContain(`href="${externalLink}"`);
+    });
+
+    it("opens same-origin external application links in a new window via handleIframeMessage", () => {
+      const windowOpenSpy = jest
+        .spyOn(window, "open")
+        .mockImplementation(() => null);
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+      component.selectedPage = { groupId: "br:main", path: "README.md" };
+
+      const origin = window.location.origin;
+      const targetUrl = `${origin}/block-garden/?gettingStarted=false`;
+
+      const event = {
+        source: null,
+        data: {
+          type: "shadow-claw-file-viewer-link",
+          href: targetUrl,
+        },
+      } as MessageEvent;
+
+      component.handleIframeMessage(event);
+
+      expect(windowOpenSpy).toHaveBeenCalledWith(
+        targetUrl,
+        "_blank",
+        "noopener,noreferrer",
+      );
+      windowOpenSpy.mockRestore();
+    });
   });
 
   describe("pages sub-sidebar and list enhancements", () => {
@@ -1045,15 +1089,15 @@ describe("shadow-claw-pages", () => {
       component.renderPageList(pages, []);
       await Promise.resolve(); // wait for effects
 
-      expect(prevBtn.disabled).toBe(false);
-      expect(nextBtn.disabled).toBe(true);
+      expect(prevBtn.disabled).toBe(true);
+      expect(nextBtn.disabled).toBe(false);
 
       component.selectedPage = pages[1];
       component.renderPageList(pages, []);
       await Promise.resolve();
 
-      expect(prevBtn.disabled).toBe(true);
-      expect(nextBtn.disabled).toBe(false);
+      expect(prevBtn.disabled).toBe(false);
+      expect(nextBtn.disabled).toBe(true);
     });
 
     it("navigates to correct adjacent page when clicked and dispatches navigation event", async () => {
@@ -1084,14 +1128,14 @@ describe("shadow-claw-pages", () => {
 
       // Click next
       nextBtn.click();
-      expect(component.selectedPage).toEqual(pages[0]);
+      expect(component.selectedPage).toEqual(pages[2]);
       expect(navigateListener).toHaveBeenCalledTimes(1);
 
       const nextEvent = navigateListener.mock.calls[0][0] as CustomEvent;
       expect(nextEvent.detail).toEqual({
         page: "pages",
         groupId: "group-1",
-        path: "docs/first.md",
+        path: "docs/third.md",
       });
 
       // Click prev
@@ -1355,11 +1399,11 @@ describe("shadow-claw-pages", () => {
       const navigateListener = jest.fn();
       document.addEventListener("shadow-claw-navigate", navigateListener);
 
-      // Press ArrowRight -> goToNextPage (docs/first.md)
+      // Press ArrowRight -> goToNextPage (docs/third.md)
       document.dispatchEvent(
         new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
       );
-      expect(component.selectedPage).toEqual(pages[0]);
+      expect(component.selectedPage).toEqual(pages[2]);
       expect(navigateListener).toHaveBeenCalledTimes(1);
 
       // Press ArrowLeft -> goToPreviousPage (docs/second.md)
@@ -1427,7 +1471,7 @@ describe("shadow-claw-pages", () => {
       (orchestratorStore as any).pages = pages;
       component.selectedPage = pages[1];
 
-      // Swipe Left (deltaX = -100) -> goToNextPage (docs/first.md)
+      // Swipe Left (deltaX = -100) -> goToNextPage (docs/third.md)
       component.handleTouchStart({
         touches: [{ clientX: 200, clientY: 100 }],
       } as any);
@@ -1435,7 +1479,7 @@ describe("shadow-claw-pages", () => {
         changedTouches: [{ clientX: 100, clientY: 105 }],
       } as any);
 
-      expect(component.selectedPage).toEqual(pages[0]);
+      expect(component.selectedPage).toEqual(pages[2]);
 
       // Swipe Right (deltaX = 100) -> goToPreviousPage (docs/second.md)
       component.handleTouchStart({
@@ -1496,7 +1540,7 @@ describe("shadow-claw-pages", () => {
       (orchestratorStore as any).pages = pages;
       component.selectedPage = pages[1];
 
-      // Gesture Left (deltaX = -100) -> goToNextPage (docs/first.md)
+      // Gesture Left (deltaX = -100) -> goToNextPage (docs/third.md)
       component.handleMouseDown({
         button: 0,
         clientX: 200,
@@ -1507,7 +1551,7 @@ describe("shadow-claw-pages", () => {
         clientY: 105,
       } as any);
 
-      expect(component.selectedPage).toEqual(pages[0]);
+      expect(component.selectedPage).toEqual(pages[2]);
 
       // Gesture Right (deltaX = 100) -> goToPreviousPage (docs/second.md)
       component.handleMouseDown({
@@ -1530,6 +1574,7 @@ describe("shadow-claw-pages", () => {
       const pages = [
         { groupId: "group-1", path: "docs/first.md" },
         { groupId: "group-1", path: "docs/second.md" },
+        { groupId: "group-1", path: "docs/third.md" },
       ];
       (orchestratorStore as any).pages = pages;
       component.selectedPage = pages[1];
@@ -1543,7 +1588,7 @@ describe("shadow-claw-pages", () => {
         source: fakeWindow,
       } as MessageEvent);
 
-      expect(component.selectedPage).toEqual(pages[0]);
+      expect(component.selectedPage).toEqual(pages[2]);
     });
 
     it("suppresses keyboard and gesture navigation when focus or target has data-no-nav attribute", async () => {

@@ -1,3 +1,5 @@
+import { isPossibleAppRoute } from "../../../core/app-routes.js";
+
 export function getTargetPath(loc: Location, ev: MouseEvent): string | null {
   // 1. Ignore modified clicks, non-left clicks, and canceled events
   if (
@@ -46,6 +48,11 @@ export function getTargetPath(loc: Location, ev: MouseEvent): string | null {
 
   // 5. Ignore completely external domains
   if (link.origin !== loc.origin) {
+    return null;
+  }
+
+  // 6. Ignore same-origin links that are not possible app routes (e.g. separate deployments)
+  if (!isPossibleAppRoute(link.pathname)) {
     return null;
   }
 

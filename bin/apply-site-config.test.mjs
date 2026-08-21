@@ -1,3 +1,5 @@
+import { jest } from "@jest/globals";
+
 import {
   applySiteConfig,
   escapeHtml,
@@ -12,6 +14,41 @@ import os from "node:os";
 import path from "node:path";
 
 describe("apply-site-config", () => {
+  let logSpy;
+  let warnSpy;
+  let logs = [];
+
+  beforeEach(() => {
+    logs = [];
+    logSpy = jest.spyOn(console, "log").mockImplementation((...args) => {
+      logs.push({ type: "log", args });
+    });
+    warnSpy = jest.spyOn(console, "warn").mockImplementation((...args) => {
+      logs.push({ type: "warn", args });
+    });
+  });
+
+  afterEach(() => {
+    const state = expect.getState();
+    const testFailed =
+      (state.suppressedErrors && state.suppressedErrors.length > 0) ||
+      (state.assertionCalls > 0 &&
+        state.numPassingAsserts < state.assertionCalls);
+
+    logSpy.mockRestore();
+    warnSpy.mockRestore();
+
+    if (testFailed) {
+      for (const item of logs) {
+        if (item.type === "warn") {
+          console.warn(...item.args);
+        } else {
+          console.log(...item.args);
+        }
+      }
+    }
+  });
+
   describe("escapeHtml", () => {
     it("escapes special HTML characters", () => {
       expect(escapeHtml("<script>alert(\"xss\" & 'test')</script>")).toBe(
@@ -145,10 +182,30 @@ describe("apply-site-config", () => {
       expect(patched.background_color).toBe("#09110a");
       expect(patched.theme_color).toBe("#22c55e");
     });
+
+    it("patches start_url using PAGES_ORIGIN environment variable", () => {
+      const baseManifest = JSON.stringify({
+        name: "ShadowClaw",
+        start_url: "https://production.example.com/",
+      });
+
+      const oldEnv = process.env.PAGES_ORIGIN;
+      try {
+        process.env.PAGES_ORIGIN = "http://localhost:8888/shadow-claw/";
+        const patched = JSON.parse(patchManifest(baseManifest, {}));
+        expect(patched.start_url).toBe("http://localhost:8888/shadow-claw/");
+      } finally {
+        if (oldEnv !== undefined) {
+          process.env.PAGES_ORIGIN = oldEnv;
+        } else {
+          delete process.env.PAGES_ORIGIN;
+        }
+      }
+    });
   });
 
   describe("patchSitemap", () => {
-    it("replaces sitemap origin when pagesOrigin is provided", () => {
+    it("replaces sitemap origin when pagesOrigin is provided for xml", () => {
       const baseXml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
@@ -162,6 +219,19 @@ describe("apply-site-config", () => {
       );
       expect(patched).toContain(
         "<loc>https://kherrick.github.io/shadow-claw-template-demo/</loc>",
+      );
+    });
+
+    it("replaces sitemap origin when pagesOrigin is provided for text sitemaps", () => {
+      const baseTxt = `https://example.com/
+https://example.com/about`;
+
+      const patched = patchSitemap(
+        baseTxt,
+        "https://kherrick.github.io/shadow-claw-template-demo/",
+      );
+      expect(patched).toContain(
+        "https://kherrick.github.io/shadow-claw-template-demo/\nhttps://kherrick.github.io/shadow-claw-template-demo/about",
       );
     });
   });
@@ -304,6 +374,235 @@ describe("apply-site-config", () => {
         "utf8",
       );
       expect(copiedAsset).toBe("FAKE_PNG");
+    });
+
+    it("applies site configuration files from dedicated pages/resources directory layout", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const pagesDir = path.join(tmpDir, "pages");
+      const resourcesDir = path.join(pagesDir, "resources");
+      await mkdir(distPublicDir, { recursive: true });
+      await mkdir(resourcesDir, { recursive: true });
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      const siteConfigPath = path.join(resourcesDir, "site-config.json");
+
+      await writeFile(
+        indexPath,
+        '<!doctype html><html><head><script src="theme-init.js"></script></head><body></body></html>',
+        "utf8",
+      );
+
+      await writeFile(
+        path.join(resourcesDir, "favicon.svg"),
+        '<svg id="demo-fav"></svg>',
+        "utf8",
+      );
+      await writeFile(
+        path.join(resourcesDir, "404.html"),
+        "<title>Resource 404</title>",
+        "utf8",
+      );
+      await writeFile(
+        path.join(resourcesDir, "manifest.json"),
+        JSON.stringify({ name: "Resources Manifest" }),
+        "utf8",
+      );
+
+      const resAssetsDir = path.join(resourcesDir, "assets");
+      await mkdir(resAssetsDir, { recursive: true });
+      await writeFile(
+        path.join(resAssetsDir, "icon.png"),
+        "PNG_RESOURCE",
+        "utf8",
+      );
+
+      const config = {
+        site: { title: "Resources Demo" },
+        branding: { faviconPath: "favicon.svg" },
+      };
+      await writeFile(siteConfigPath, JSON.stringify(config), "utf8");
+
+      const result = await applySiteConfig(distPublicDir, siteConfigPath);
+      expect(result.applied).toBe(true);
+
+      const copiedFavicon = await readFile(
+        path.join(distPublicDir, "favicon.svg"),
+        "utf8",
+      );
+      expect(copiedFavicon).toContain("demo-fav");
+
+      const copiedManifest = JSON.parse(
+        await readFile(path.join(distPublicDir, "manifest.json"), "utf8"),
+      );
+      expect(copiedManifest.name).toBe("Resources Demo");
+
+      const copiedAsset = await readFile(
+        path.join(distPublicDir, "assets", "icon.png"),
+        "utf8",
+      );
+      expect(copiedAsset).toBe("PNG_RESOURCE");
+    });
+
+    it("prioritizes template resources (pages/resources/manifest.json) over root repository defaults", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const pagesDir = path.join(tmpDir, "pages");
+      const resourcesDir = path.join(pagesDir, "resources");
+      await mkdir(distPublicDir, { recursive: true });
+      await mkdir(resourcesDir, { recursive: true });
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      const siteConfigPath = path.join(resourcesDir, "site-config.json");
+
+      await writeFile(
+        indexPath,
+        "<!doctype html><html><head></head><body></body></html>",
+        "utf8",
+      );
+
+      // Root-level default manifest (simulating shadow-claw/manifest.json)
+      const rootManifestPath = path.join(tmpDir, "manifest.json");
+      await writeFile(
+        rootManifestPath,
+        JSON.stringify({
+          name: "ShadowClaw Root",
+          screenshots: [
+            {
+              sizes: "1920x1050",
+              src: "assets/screenshots/shadow-claw-screenshot-1920x1052.png",
+            },
+          ],
+        }),
+        "utf8",
+      );
+
+      // Template-level manifest in pages/resources/manifest.json
+      const templateManifestPath = path.join(resourcesDir, "manifest.json");
+      await writeFile(
+        templateManifestPath,
+        JSON.stringify({
+          name: "Template Custom Manifest",
+          screenshots: [
+            {
+              sizes: "1920x1052",
+              src: "assets/screenshots/shadow-claw-screenshot-1920x1052.png",
+            },
+          ],
+        }),
+        "utf8",
+      );
+
+      const config = {
+        site: { title: "Template App" },
+      };
+      await writeFile(siteConfigPath, JSON.stringify(config), "utf8");
+
+      const result = await applySiteConfig(distPublicDir, siteConfigPath);
+      expect(result.applied).toBe(true);
+
+      const copiedManifest = JSON.parse(
+        await readFile(path.join(distPublicDir, "manifest.json"), "utf8"),
+      );
+      expect(copiedManifest.screenshots[0].sizes).toBe("1920x1052");
+    });
+
+    it("applies site configuration supporting sitemap.txt", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const pagesDir = path.join(tmpDir, "pages");
+      const resourcesDir = path.join(pagesDir, "resources");
+      await mkdir(distPublicDir, { recursive: true });
+      await mkdir(resourcesDir, { recursive: true });
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      const siteConfigPath = path.join(resourcesDir, "site-config.json");
+
+      await writeFile(
+        indexPath,
+        "<!doctype html><html><head></head><body></body></html>",
+        "utf8",
+      );
+      await writeFile(
+        path.join(resourcesDir, "sitemap.txt"),
+        "https://example.com/\nhttps://example.com/about",
+        "utf8",
+      );
+
+      const config = {
+        site: { title: "Sitemap Txt Demo" },
+        sitemapPath: "sitemap.txt",
+      };
+      await writeFile(siteConfigPath, JSON.stringify(config), "utf8");
+
+      const oldEnv = process.env.PAGES_ORIGIN;
+      try {
+        process.env.PAGES_ORIGIN = "https://demo.example.com/";
+        const result = await applySiteConfig(distPublicDir, siteConfigPath);
+        expect(result.applied).toBe(true);
+
+        const copiedSitemapTxt = await readFile(
+          path.join(distPublicDir, "sitemap.txt"),
+          "utf8",
+        );
+        expect(copiedSitemapTxt).toContain(
+          "https://demo.example.com/\nhttps://demo.example.com/about",
+        );
+      } finally {
+        if (oldEnv !== undefined) {
+          process.env.PAGES_ORIGIN = oldEnv;
+        } else {
+          delete process.env.PAGES_ORIGIN;
+        }
+      }
+    });
+
+    it("prioritizes template custom asset icons over root repository default asset icons", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const pagesDir = path.join(tmpDir, "pages");
+      const resourcesDir = path.join(pagesDir, "resources");
+      const rootAssetsIconsDir = path.join(tmpDir, "assets", "icons");
+      const templateAssetsIconsDir = path.join(resourcesDir, "assets", "icons");
+
+      await mkdir(distPublicDir, { recursive: true });
+      await mkdir(rootAssetsIconsDir, { recursive: true });
+      await mkdir(templateAssetsIconsDir, { recursive: true });
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      const siteConfigPath = path.join(resourcesDir, "site-config.json");
+
+      await writeFile(
+        indexPath,
+        "<!doctype html><html><head></head><body></body></html>",
+        "utf8",
+      );
+
+      // Root repository default asset icon
+      await writeFile(
+        path.join(rootAssetsIconsDir, "96.png"),
+        "ROOT_BASE_96_PNG",
+        "utf8",
+      );
+
+      // Template-level custom asset icon
+      await writeFile(
+        path.join(templateAssetsIconsDir, "96.png"),
+        "TEMPLATE_DEMO_96_PNG",
+        "utf8",
+      );
+
+      const config = {
+        site: { title: "Custom Asset Prioritization Test" },
+        assets: ["assets"],
+        pwa: { manifestPath: "manifest.json" },
+      };
+      await writeFile(siteConfigPath, JSON.stringify(config), "utf8");
+
+      const result = await applySiteConfig(distPublicDir, siteConfigPath);
+      expect(result.applied).toBe(true);
+
+      const copied96Icon = await readFile(
+        path.join(distPublicDir, "assets", "icons", "96.png"),
+        "utf8",
+      );
+      expect(copied96Icon).toBe("TEMPLATE_DEMO_96_PNG");
     });
   });
 });

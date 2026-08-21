@@ -40,6 +40,19 @@ export function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
+export function insertBeforeClosingHead(html, contentToInsert) {
+  const lastHeadIndex = html.lastIndexOf("</head>");
+  if (lastHeadIndex !== -1) {
+    return (
+      html.slice(0, lastHeadIndex) +
+      contentToInsert +
+      "\n" +
+      html.slice(lastHeadIndex)
+    );
+  }
+  return `${contentToInsert}\n${html}`;
+}
+
 function escapeRegexLiteral(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -118,28 +131,38 @@ function patchIndexHtml(html, config) {
         ? "image/png"
         : "image/x-icon";
     const newTag = `<link href="${escapeHtml(faviconHref)}" rel="icon" type="${iconType}" />`;
-    if (/<link\s+href="[^"]*"\s+rel="icon"\b[^>]*\/?>/iu.test(next)) {
-      next = next.replace(
-        /<link\s+href="[^"]*"\s+rel="icon"\b[^>]*\/?>/iu,
-        newTag,
-      );
-    } else if (next.includes("</head>")) {
-      next = next.replace("</head>", `  ${newTag}\n</head>`);
+    let faviconReplaced = false;
+    next = next.replace(
+      /<link\b[^>]*\brel=["']?(?:shortcut\s+)?icon["']?[^>]*\/?>/giu,
+      () => {
+        if (!faviconReplaced) {
+          faviconReplaced = true;
+          return newTag;
+        }
+        return "";
+      },
+    );
+    if (!faviconReplaced) {
+      next = insertBeforeClosingHead(next, `  ${newTag}`);
     }
   }
 
   if (branding.appleTouchIconPath) {
     const appleHref = branding.appleTouchIconPath.replace(/^pages\/main\//, "");
     const newTag = `<link href="${escapeHtml(appleHref)}" rel="apple-touch-icon" />`;
-    if (
-      /<link\s+href="[^"]*"\s+rel="apple-touch-icon"\b[^>]*\/?>/iu.test(next)
-    ) {
-      next = next.replace(
-        /<link\s+href="[^"]*"\s+rel="apple-touch-icon"\b[^>]*\/?>/iu,
-        newTag,
-      );
-    } else if (next.includes("</head>")) {
-      next = next.replace("</head>", `  ${newTag}\n</head>`);
+    let appleReplaced = false;
+    next = next.replace(
+      /<link\b[^>]*\brel=["']?apple-touch-icon["']?[^>]*\/?>/giu,
+      () => {
+        if (!appleReplaced) {
+          appleReplaced = true;
+          return newTag;
+        }
+        return "";
+      },
+    );
+    if (!appleReplaced) {
+      next = insertBeforeClosingHead(next, `  ${newTag}`);
     }
   }
 
@@ -201,12 +224,24 @@ function patchIndexHtml(html, config) {
   const theme = config.theme || {};
   if (theme.stylesheet) {
     // Resolve the stylesheet path relative to the dist root
-    const stylesheetHref = theme.stylesheet.replace(/^pages\/main\//, "");
-    // Inject after index.css
-    next = next.replace(
-      /(<link\s+rel="stylesheet"\s+href="index\.css"\s*\/?>)/iu,
-      `$1\n    <link rel="stylesheet" href="${escapeHtml(stylesheetHref)}" />`,
+    const stylesheetHref = theme.stylesheet.replace(
+      /^(pages\/)?(resources\/|deps\/|main\/)?/,
+      "",
     );
+    const themeCssTag = `<link rel="stylesheet" href="${escapeHtml(stylesheetHref)}" />`;
+    if (
+      !next.includes(`href="${stylesheetHref}"`) &&
+      !next.includes(`href="${escapeHtml(stylesheetHref)}"`)
+    ) {
+      if (/<link\s+rel="stylesheet"\s+href="index\.css"\s*\/?>/iu.test(next)) {
+        next = next.replace(
+          /(<link\s+rel="stylesheet"\s+href="index\.css"\s*\/?>)/iu,
+          `$1\n    ${themeCssTag}`,
+        );
+      } else {
+        next = insertBeforeClosingHead(next, `  ${themeCssTag}`);
+      }
+    }
   }
 
   // --- Custom scripts & custom elements injection ---
@@ -280,7 +315,9 @@ function patchIndexHtml(html, config) {
           !rawSrc.startsWith("http://") &&
           !rawSrc.startsWith("https://") &&
           !rawSrc.startsWith("//");
-        const src = isLocal ? rawSrc.replace(/^pages\/main\//, "") : rawSrc;
+        const src = isLocal
+          ? rawSrc.replace(/^(pages\/)?(resources\/|deps\/|main\/)?/, "")
+          : rawSrc;
 
         if (typeof entry === "string") {
           return `    <script type="module" src="${escapeHtml(src)}"></script>`;
@@ -299,10 +336,16 @@ function patchIndexHtml(html, config) {
       .join("\n");
 
     if (scriptTags) {
-      next = next.replace(
-        /(<script\s+type="module"\s+src="index\.js"\s*><\/script>)/iu,
-        `${scriptTags}\n    $1`,
-      );
+      if (
+        /<script\s+type="module"\s+src="index\.js"\s*><\/script>/iu.test(next)
+      ) {
+        next = next.replace(
+          /(<script\s+type="module"\s+src="index\.js"\s*><\/script>)/iu,
+          `${scriptTags}\n    $1`,
+        );
+      } else {
+        next = insertBeforeClosingHead(next, `${scriptTags}`);
+      }
     }
   }
 
@@ -328,16 +371,69 @@ function patchIndexHtml(html, config) {
 
   const siteConfigScript = `<script id="shadow-claw-site-config" type="application/json">${safeJson}</script>`;
 
-  if (next.includes('<script src="theme-init.js">')) {
+  if (next.includes('<script id="shadow-claw-site-config"')) {
+    next = next.replace(
+      /<script\s+id="shadow-claw-site-config"[\s\S]*?<\/script>/iu,
+      () => siteConfigScript,
+    );
+  } else if (next.includes('<script src="theme-init.js">')) {
     next = next.replace(
       '<script src="theme-init.js">',
       `${siteConfigScript}\n    <script src="theme-init.js">`,
     );
-  } else if (next.includes("</head>")) {
-    next = next.replace("</head>", `  ${siteConfigScript}\n</head>`);
+  } else if (/<script\b[^>]*>\s*var\s+ShadowClawThemeInit\b/iu.test(next)) {
+    next = next.replace(
+      /(<script\b[^>]*>\s*var\s+ShadowClawThemeInit\b)/iu,
+      `${siteConfigScript}\n    $1`,
+    );
+  } else {
+    next = insertBeforeClosingHead(next, `  ${siteConfigScript}`);
   }
 
   return next;
+}
+
+function normalizeManifestIcon(icon) {
+  const src = (icon.src || "").replace(
+    /^(pages\/)?(resources\/|deps\/|main\/)?/,
+    "",
+  );
+  const iconType =
+    icon.type ||
+    (src.endsWith(".svg")
+      ? "image/svg+xml"
+      : src.endsWith(".png")
+        ? "image/png"
+        : "image/x-icon");
+
+  const rawPurpose = (icon.purpose || "any").trim();
+
+  if (iconType === "image/svg+xml" || src.endsWith(".svg")) {
+    return [
+      {
+        ...icon,
+        src,
+        type: iconType,
+        purpose: "any",
+      },
+    ];
+  }
+
+  if (rawPurpose.includes("any") && rawPurpose.includes("maskable")) {
+    return [
+      { ...icon, src, type: iconType, purpose: "any" },
+      { ...icon, src, type: iconType, purpose: "maskable" },
+    ];
+  }
+
+  return [
+    {
+      ...icon,
+      src,
+      type: iconType,
+      purpose: rawPurpose,
+    },
+  ];
 }
 
 /**
@@ -348,6 +444,8 @@ function patchManifest(manifestJson, config) {
     typeof manifestJson === "string" ? JSON.parse(manifestJson) : manifestJson;
   const pwa = config.pwa || {};
   const site = config.site || {};
+  const pagesOrigin = process.env.PAGES_ORIGIN;
+  const basePath = process.env.PAGES_BASE_PATH;
 
   if (pwa.name || site.title) {
     manifest.name = pwa.name || site.title;
@@ -369,21 +467,37 @@ function patchManifest(manifestJson, config) {
     manifest.theme_color = pwa.themeColor || site.themeColor;
   }
 
+  if (pwa.startUrl) {
+    manifest.start_url = pwa.startUrl;
+  } else if (pagesOrigin) {
+    manifest.start_url = pagesOrigin;
+  } else if (!manifest.start_url) {
+    manifest.start_url = "./";
+  }
+
   if (pwa.icons && Array.isArray(pwa.icons)) {
-    manifest.icons = pwa.icons.map((icon) => {
-      const src = (icon.src || "").replace(/^pages\/main\//, "");
-      const iconType =
-        icon.type ||
-        (src.endsWith(".svg")
-          ? "image/svg+xml"
-          : src.endsWith(".png")
-            ? "image/png"
-            : "image/x-icon");
+    const customIcons = pwa.icons.flatMap(normalizeManifestIcon);
+    const existingIcons = Array.isArray(manifest.icons)
+      ? manifest.icons.flatMap(normalizeManifestIcon)
+      : [];
+    const customSrcs = new Set(customIcons.map((i) => i.src));
+    manifest.icons = [
+      ...customIcons,
+      ...existingIcons.filter((i) => !customSrcs.has(i.src)),
+    ];
+  } else if (Array.isArray(manifest.icons)) {
+    manifest.icons = manifest.icons.flatMap(normalizeManifestIcon);
+  }
+
+  if (pwa.screenshots && Array.isArray(pwa.screenshots)) {
+    manifest.screenshots = pwa.screenshots.map((screen) => {
+      const src = (screen.src || "").replace(
+        /^(pages\/)?(resources\/|deps\/|main\/)?/,
+        "",
+      );
       return {
-        purpose: icon.purpose || "any",
-        sizes: icon.sizes,
+        ...screen,
         src,
-        type: iconType,
       };
     });
   }
@@ -392,17 +506,54 @@ function patchManifest(manifestJson, config) {
 }
 
 /**
- * Patch `sitemap.xml` — replace the hardcoded origin with PAGES_ORIGIN.
+ * Patch `sitemap.xml` or `sitemap.txt` — replace the hardcoded origin with PAGES_ORIGIN.
  */
-function patchSitemap(xml, pagesOrigin) {
+function patchSitemap(content, pagesOrigin) {
   if (!pagesOrigin) {
-    return xml;
+    return content;
   }
 
-  return xml.replace(
-    /<loc>[^<]*<\/loc>/giu,
-    `<loc>${escapeHtml(pagesOrigin)}</loc>`,
-  );
+  if (/<loc>/i.test(content)) {
+    return content.replace(
+      /<loc>[^<]*<\/loc>/giu,
+      `<loc>${escapeHtml(pagesOrigin)}</loc>`,
+    );
+  }
+
+  const normalizedOrigin = pagesOrigin.endsWith("/")
+    ? pagesOrigin
+    : pagesOrigin + "/";
+
+  return content
+    .split("\n")
+    .map((line) => {
+      const trimmed = line.trim();
+      if (!trimmed) return line;
+      if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        try {
+          const u = new URL(trimmed);
+          const originUrl = new URL(normalizedOrigin);
+          u.protocol = originUrl.protocol;
+          u.host = originUrl.host;
+          let basePath = originUrl.pathname.endsWith("/")
+            ? originUrl.pathname.slice(0, -1)
+            : originUrl.pathname;
+          let pagePath = u.pathname;
+          u.pathname = basePath + pagePath;
+          return u.toString();
+        } catch {
+          return normalizedOrigin;
+        }
+      } else if (trimmed.startsWith("/")) {
+        try {
+          return new URL(trimmed, normalizedOrigin).toString();
+        } catch {
+          return line;
+        }
+      }
+      return line;
+    })
+    .join("\n");
 }
 
 /**
@@ -430,35 +581,137 @@ function patch404Html(html, config, basePath) {
   return next;
 }
 
+function getRepoRootDir(configDir) {
+  const resolved = path.resolve(configDir);
+  const parts = resolved.split(path.sep);
+  const last = parts[parts.length - 1];
+  const secondLast = parts[parts.length - 2];
+  if ((last === "resources" || last === "deps") && secondLast === "pages") {
+    return path.resolve(resolved, "../..");
+  }
+  if (last === "resources" || last === "deps" || last === "pages") {
+    return path.resolve(resolved, "..");
+  }
+  return resolved;
+}
+
+/**
+ * Helper to resolve candidate file paths considering resources/, deps/, main/ and templateRootDir.
+ */
+function getCandidateFilePaths(relativePath, configDir, templateRootDir) {
+  if (!relativePath || typeof relativePath !== "string") return [];
+  if (path.isAbsolute(relativePath)) return [relativePath];
+
+  const cleanPath = relativePath.replace(
+    /^(pages\/)?(resources\/|deps\/|main\/)?/,
+    "",
+  );
+  const repoRootDir = getRepoRootDir(configDir);
+
+  return [
+    path.resolve(configDir, relativePath),
+    path.resolve(configDir, cleanPath),
+    path.resolve(configDir, "resources", cleanPath),
+    path.resolve(configDir, "deps", cleanPath),
+    path.resolve(configDir, "main", cleanPath),
+    path.resolve(repoRootDir, "pages", "resources", cleanPath),
+    path.resolve(repoRootDir, "pages", "resources", relativePath),
+    path.resolve(repoRootDir, "pages", "deps", cleanPath),
+    path.resolve(repoRootDir, "pages", "deps", relativePath),
+    path.resolve(repoRootDir, "resources", cleanPath),
+    path.resolve(repoRootDir, "resources", relativePath),
+    path.resolve(repoRootDir, "deps", cleanPath),
+    path.resolve(repoRootDir, "deps", relativePath),
+    path.resolve(templateRootDir, "pages", "resources", cleanPath),
+    path.resolve(templateRootDir, "pages", "deps", cleanPath),
+    path.resolve(templateRootDir, "resources", cleanPath),
+    path.resolve(templateRootDir, "deps", cleanPath),
+    path.resolve(templateRootDir, "pages", relativePath),
+    path.resolve(templateRootDir, "pages", cleanPath),
+    path.resolve(templateRootDir, "pages", "main", cleanPath),
+    path.resolve(templateRootDir, relativePath),
+    path.resolve(templateRootDir, cleanPath),
+    path.resolve(repoRootDir, "pages", relativePath),
+    path.resolve(repoRootDir, "pages", cleanPath),
+    path.resolve(repoRootDir, "pages", "main", cleanPath),
+    path.resolve(repoRootDir, "pages", "main", relativePath),
+    path.resolve(repoRootDir, relativePath),
+    path.resolve(repoRootDir, cleanPath),
+  ];
+}
+
+async function findFirstExisting(candidates) {
+  for (const cand of candidates) {
+    if (!cand) continue;
+    try {
+      await stat(cand);
+      return cand;
+    } catch {}
+  }
+  return null;
+}
+
 /**
  * Copies custom template overrides for 404.html, manifest.json, sitemap.xml,
- * and assets directories if present in the template repository.
+ * assets directories, and root-level resources if present in the template repository.
  */
 async function copyCustomSiteFiles(config, distPublicDir, siteConfigPath) {
   const configDir = siteConfigPath
     ? path.dirname(path.resolve(siteConfigPath))
     : process.cwd();
   const templateRootDir = path.resolve(configDir, "..");
+  const repoRootDir = getRepoRootDir(configDir);
 
-  const findFirstExisting = async (candidates) => {
-    for (const cand of candidates) {
-      if (!cand) continue;
-      try {
-        await stat(cand);
-        return cand;
-      } catch {}
-    }
-    return null;
-  };
+  // Copy any root-level resource directory (resources, deps, pages/resources, pages/deps)
+  const resourceDirCandidates = [
+    path.resolve(configDir, "resources"),
+    path.resolve(configDir, "deps"),
+    path.resolve(templateRootDir, "resources"),
+    path.resolve(templateRootDir, "deps"),
+    path.resolve(templateRootDir, "pages", "resources"),
+    path.resolve(templateRootDir, "pages", "deps"),
+    path.resolve(repoRootDir, "resources"),
+    path.resolve(repoRootDir, "deps"),
+    path.resolve(repoRootDir, "pages", "resources"),
+    path.resolve(repoRootDir, "pages", "deps"),
+  ];
+
+  for (const resDir of resourceDirCandidates) {
+    try {
+      const entries = await readdir(resDir, { withFileTypes: true });
+      for (const entry of entries) {
+        const srcPath = path.join(resDir, entry.name);
+        const destPath = path.join(distPublicDir, entry.name);
+        if (entry.isDirectory()) {
+          await cp(srcPath, destPath, { recursive: true, force: true });
+        } else if (entry.isFile()) {
+          await mkdir(path.dirname(destPath), { recursive: true });
+          await copyFile(srcPath, destPath);
+        }
+      }
+    } catch {}
+  }
 
   // 1. Custom 404.html
   const notFoundCandidates = [
-    config.pages?.notFoundPath,
-    config.branding?.notFoundPath,
-    config.notFoundPath,
-    path.resolve(configDir, "404.html"),
-    path.resolve(configDir, "main", "404.html"),
-    path.resolve(templateRootDir, "404.html"),
+    ...(config.pages?.notFoundPath
+      ? getCandidateFilePaths(
+          config.pages.notFoundPath,
+          configDir,
+          templateRootDir,
+        )
+      : []),
+    ...(config.branding?.notFoundPath
+      ? getCandidateFilePaths(
+          config.branding.notFoundPath,
+          configDir,
+          templateRootDir,
+        )
+      : []),
+    ...(config.notFoundPath
+      ? getCandidateFilePaths(config.notFoundPath, configDir, templateRootDir)
+      : []),
+    ...getCandidateFilePaths("404.html", configDir, templateRootDir),
   ];
 
   const found404 = await findFirstExisting(notFoundCandidates);
@@ -473,11 +726,17 @@ async function copyCustomSiteFiles(config, distPublicDir, siteConfigPath) {
 
   // 2. Custom manifest.json
   const manifestCandidates = [
-    config.pwa?.manifestPath,
-    config.manifestPath,
-    path.resolve(configDir, "manifest.json"),
-    path.resolve(configDir, "main", "manifest.json"),
-    path.resolve(templateRootDir, "manifest.json"),
+    ...(config.pwa?.manifestPath
+      ? getCandidateFilePaths(
+          config.pwa.manifestPath,
+          configDir,
+          templateRootDir,
+        )
+      : []),
+    ...(config.manifestPath
+      ? getCandidateFilePaths(config.manifestPath, configDir, templateRootDir)
+      : []),
+    ...getCandidateFilePaths("manifest.json", configDir, templateRootDir),
   ];
 
   const foundManifest = await findFirstExisting(manifestCandidates);
@@ -492,23 +751,56 @@ async function copyCustomSiteFiles(config, distPublicDir, siteConfigPath) {
     }
   }
 
-  // 3. Custom sitemap.xml
-  const sitemapCandidates = [
-    config.sitemapPath,
-    path.resolve(configDir, "sitemap.xml"),
-    path.resolve(configDir, "main", "sitemap.xml"),
-    path.resolve(templateRootDir, "sitemap.xml"),
-  ];
+  // 3. Custom sitemap (sitemap.xml or sitemap.txt)
+  let copiedSitemap = false;
+  if (config.sitemapPath) {
+    const sitemapCandidates = getCandidateFilePaths(
+      config.sitemapPath,
+      configDir,
+      templateRootDir,
+    );
+    const foundSitemap = await findFirstExisting(sitemapCandidates);
+    if (foundSitemap) {
+      try {
+        const destName = path.basename(foundSitemap);
+        await copyFile(foundSitemap, path.join(distPublicDir, destName));
+        console.log(`  Copied custom sitemap: ${foundSitemap} → ${destName}`);
+        copiedSitemap = true;
+      } catch (err) {
+        console.warn(
+          `  Warning: Could not copy custom sitemap: ${err.message}`,
+        );
+      }
+    }
+  }
 
-  const foundSitemap = await findFirstExisting(sitemapCandidates);
-  if (foundSitemap) {
-    try {
-      await copyFile(foundSitemap, path.join(distPublicDir, "sitemap.xml"));
-      console.log(`  Copied custom sitemap.xml: ${foundSitemap}`);
-    } catch (err) {
-      console.warn(
-        `  Warning: Could not copy custom sitemap.xml: ${err.message}`,
-      );
+  if (!copiedSitemap) {
+    const foundXml = await findFirstExisting(
+      getCandidateFilePaths("sitemap.xml", configDir, templateRootDir),
+    );
+    if (foundXml) {
+      try {
+        await copyFile(foundXml, path.join(distPublicDir, "sitemap.xml"));
+        console.log(`  Copied custom sitemap.xml: ${foundXml}`);
+      } catch (err) {
+        console.warn(
+          `  Warning: Could not copy custom sitemap.xml: ${err.message}`,
+        );
+      }
+    }
+
+    const foundTxt = await findFirstExisting(
+      getCandidateFilePaths("sitemap.txt", configDir, templateRootDir),
+    );
+    if (foundTxt) {
+      try {
+        await copyFile(foundTxt, path.join(distPublicDir, "sitemap.txt"));
+        console.log(`  Copied custom sitemap.txt: ${foundTxt}`);
+      } catch (err) {
+        console.warn(
+          `  Warning: Could not copy custom sitemap.txt: ${err.message}`,
+        );
+      }
     }
   }
 
@@ -521,12 +813,16 @@ async function copyCustomSiteFiles(config, distPublicDir, siteConfigPath) {
     ? config.assets
     : [config.assetsDir, config.assets].filter(Boolean);
 
-  const assetCandidates = [
-    ...rawAssetPaths,
-    path.resolve(configDir, "assets"),
-    path.resolve(configDir, "main", "assets"),
-    path.resolve(templateRootDir, "assets"),
-  ].filter((item) => item && typeof item === "string");
+  const assetCandidates = Array.from(
+    new Set(
+      [
+        ...rawAssetPaths.flatMap((ap) =>
+          getCandidateFilePaths(ap, configDir, templateRootDir),
+        ),
+        ...getCandidateFilePaths("assets", configDir, templateRootDir),
+      ].filter((item) => item && typeof item === "string"),
+    ),
+  );
 
   const destAssetsDir = path.join(distPublicDir, "assets");
 
@@ -540,20 +836,22 @@ async function copyCustomSiteFiles(config, distPublicDir, siteConfigPath) {
     } catch {}
   }
 
-  for (const candidate of assetCandidates) {
-    const absPath = path.isAbsolute(candidate)
-      ? candidate
-      : path.resolve(templateRootDir, candidate);
+  const copiedAssetSources = new Set();
+  const reversedCandidates = [...assetCandidates].reverse();
+  for (const candidate of reversedCandidates) {
+    if (copiedAssetSources.has(candidate)) continue;
     try {
-      const st = await stat(absPath);
+      const st = await stat(candidate);
+      copiedAssetSources.add(candidate);
       if (st.isDirectory()) {
-        await cp(absPath, destAssetsDir, { recursive: true, force: true });
-        console.log(`  Copied custom assets: ${absPath} → ${destAssetsDir}`);
+        await cp(candidate, destAssetsDir, { recursive: true, force: true });
+        console.log(`  Copied custom assets: ${candidate} → ${destAssetsDir}`);
       } else if (st.isFile()) {
-        const fileName = path.basename(absPath);
-        await copyFile(absPath, path.join(destAssetsDir, fileName));
+        const fileName = path.basename(candidate);
+        await mkdir(destAssetsDir, { recursive: true });
+        await copyFile(candidate, path.join(destAssetsDir, fileName));
         console.log(
-          `  Copied custom asset file: ${absPath} → ${destAssetsDir}`,
+          `  Copied custom asset file: ${candidate} → ${destAssetsDir}`,
         );
       }
     } catch {}
@@ -570,36 +868,28 @@ async function copyThemeStylesheet(config, distPublicDir, siteConfigPath) {
     return;
   }
 
-  // Find source stylesheet: try relative to template root (parent of pages/ dir),
-  // then relative to siteConfig directory, then relative to cwd.
   const configDir = siteConfigPath
     ? path.dirname(path.resolve(siteConfigPath))
     : process.cwd();
   const templateRootDir = path.resolve(configDir, "..");
 
-  const candidatePaths = [
-    path.resolve(templateRootDir, theme.stylesheet),
-    path.resolve(configDir, theme.stylesheet),
-    path.resolve(theme.stylesheet),
-  ];
+  const candidatePaths = getCandidateFilePaths(
+    theme.stylesheet,
+    configDir,
+    templateRootDir,
+  );
 
-  let sourcePath = null;
-  for (const candidate of candidatePaths) {
-    try {
-      await readFile(candidate);
-      sourcePath = candidate;
-      break;
-    } catch {}
-  }
+  const sourcePath = await findFirstExisting(candidatePaths);
+  if (!sourcePath) return;
 
-  if (!sourcePath) {
-    sourcePath = candidatePaths[0];
-  }
-
-  const destFilename = theme.stylesheet.replace(/^pages\/main\//, "");
+  const destFilename = theme.stylesheet.replace(
+    /^(pages\/)?(resources\/|deps\/|main\/)?/,
+    "",
+  );
   const destPath = path.join(distPublicDir, destFilename);
 
   try {
+    await mkdir(path.dirname(destPath), { recursive: true });
     await copyFile(sourcePath, destPath);
     console.log(`  Copied theme stylesheet: ${sourcePath} → ${destPath}`);
   } catch (err) {
@@ -639,25 +929,21 @@ async function copyLocalScripts(config, distPublicDir, siteConfigPath) {
       continue;
     }
 
-    const candidatePaths = [
-      path.resolve(templateRootDir, src),
-      path.resolve(configDir, src),
-      path.resolve(src),
-    ];
-
-    let sourcePath = null;
-    for (const candidate of candidatePaths) {
-      try {
-        await readFile(candidate);
-        sourcePath = candidate;
-        break;
-      } catch {}
-    }
+    const candidatePaths = getCandidateFilePaths(
+      src,
+      configDir,
+      templateRootDir,
+    );
+    const sourcePath = await findFirstExisting(candidatePaths);
 
     if (sourcePath) {
-      const destFilename = src.replace(/^pages\/main\//, "");
+      const destFilename = src.replace(
+        /^(pages\/)?(resources\/|deps\/|main\/)?/,
+        "",
+      );
       const destPath = path.join(distPublicDir, destFilename);
       try {
+        await mkdir(path.dirname(destPath), { recursive: true });
         await copyFile(sourcePath, destPath);
         console.log(`  Copied custom script: ${sourcePath} → ${destPath}`);
       } catch (err) {
@@ -673,12 +959,40 @@ async function copyBrandingAssets(config, distPublicDir, siteConfigPath) {
   const branding = config.branding || {};
   const pwa = config.pwa || {};
 
+  const configDir = siteConfigPath
+    ? path.dirname(path.resolve(siteConfigPath))
+    : process.cwd();
+  const templateRootDir = path.resolve(configDir, "..");
+
+  let manifestIconSrcs = [];
+  const manifestCandidate = await findFirstExisting(
+    getCandidateFilePaths(
+      pwa.manifestPath || config.manifestPath || "manifest.json",
+      configDir,
+      templateRootDir,
+    ),
+  );
+  if (manifestCandidate) {
+    const manifestData = await readJson(manifestCandidate);
+    if (manifestData && Array.isArray(manifestData.icons)) {
+      manifestIconSrcs = manifestData.icons.map((i) => i?.src).filter(Boolean);
+    }
+  }
+
   const candidateAssets = [
     branding.faviconPath,
     branding.appleTouchIconPath,
+    "assets/icons/favicon.svg",
+    "assets/icons/favicon.ico",
     "favicon.svg",
+    "favicon.ico",
+    "pages/resources/assets/icons/favicon.svg",
+    "pages/resources/assets/icons/favicon.ico",
+    "pages/resources/favicon.svg",
+    "pages/deps/favicon.svg",
     "pages/main/favicon.svg",
     ...(Array.isArray(pwa.icons) ? pwa.icons.map((i) => i.src) : []),
+    ...manifestIconSrcs,
   ].filter(
     (p) =>
       p &&
@@ -692,37 +1006,30 @@ async function copyBrandingAssets(config, distPublicDir, siteConfigPath) {
     return;
   }
 
-  const configDir = siteConfigPath
-    ? path.dirname(path.resolve(siteConfigPath))
-    : process.cwd();
-  const templateRootDir = path.resolve(configDir, "..");
-
   const copiedPaths = new Set();
+  const copiedDestPaths = new Set();
 
   for (const assetPath of candidateAssets) {
     if (copiedPaths.has(assetPath)) continue;
     copiedPaths.add(assetPath);
 
-    const candidatePaths = [
-      path.resolve(templateRootDir, assetPath),
-      path.resolve(configDir, assetPath),
-      path.resolve(configDir, "main", assetPath),
-      path.resolve(assetPath),
-    ];
-
-    let sourcePath = null;
-    for (const candidate of candidatePaths) {
-      try {
-        await readFile(candidate);
-        sourcePath = candidate;
-        break;
-      } catch {}
-    }
+    const candidatePaths = getCandidateFilePaths(
+      assetPath,
+      configDir,
+      templateRootDir,
+    );
+    const sourcePath = await findFirstExisting(candidatePaths);
 
     if (sourcePath) {
-      const destFilename = assetPath.replace(/^pages\/main\//, "");
+      const destFilename = assetPath.replace(
+        /^(pages\/)?(resources\/|deps\/|main\/)?/,
+        "",
+      );
       const destPath = path.join(distPublicDir, destFilename);
+      if (copiedDestPaths.has(destPath)) continue;
+      copiedDestPaths.add(destPath);
       try {
+        await mkdir(path.dirname(destPath), { recursive: true });
         await copyFile(sourcePath, destPath);
         console.log(`  Copied branding asset: ${sourcePath} → ${destPath}`);
       } catch (err) {
@@ -778,13 +1085,15 @@ export async function applySiteConfig(distPublicDir, siteConfigPath) {
     console.log("  Patched manifest.json");
   }
 
-  // --- sitemap.xml ---
-  const sitemapPath = path.join(distPublicDir, "sitemap.xml");
-  const sitemapText = await readText(sitemapPath);
-  if (sitemapText && pagesOrigin) {
-    const patched = patchSitemap(sitemapText, pagesOrigin);
-    await writeText(sitemapPath, patched);
-    console.log("  Patched sitemap.xml");
+  // --- sitemap.xml / sitemap.txt ---
+  for (const sitemapName of ["sitemap.xml", "sitemap.txt"]) {
+    const sitemapPath = path.join(distPublicDir, sitemapName);
+    const sitemapText = await readText(sitemapPath);
+    if (sitemapText && pagesOrigin) {
+      const patched = patchSitemap(sitemapText, pagesOrigin);
+      await writeText(sitemapPath, patched);
+      console.log(`  Patched ${sitemapName}`);
+    }
   }
 
   // --- 404.html ---

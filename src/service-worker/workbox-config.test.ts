@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "@jest/globals";
 
 type WorkboxConfigShape = {
+  globPatterns?: string[];
   navigateFallback?: string;
   navigateFallbackAllowlist?: RegExp[];
   runtimeCaching: Array<{
@@ -101,5 +102,10 @@ describe("workbox runtime caching rules", () => {
         url: new URL("http://localhost:8888/index.js"),
       }),
     ).toBe(true);
+  });
+
+  it("does not include unmatched globPatterns that trigger Workbox warnings", () => {
+    expect(workboxConfig.globPatterns).not.toContain("**/*.svg");
+    expect(workboxConfig.globPatterns).not.toContain("**/*.webp");
   });
 });

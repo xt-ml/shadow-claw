@@ -1,3 +1,4 @@
+import { isPossibleAppRoute } from "../../../core/app-routes.js";
 import { ShadowClawDatabase } from "../../../db/types.js";
 import { FileViewerStore } from "../../../stores/file-viewer.js";
 import { OrchestratorStore } from "../../../stores/orchestrator.js";
@@ -55,6 +56,10 @@ export const fallbackClickListener =
     }
 
     if (link.origin !== window.location.origin) {
+      return;
+    }
+
+    if (!isPossibleAppRoute(link.pathname)) {
       return;
     }
 

@@ -85,6 +85,8 @@ function getModelContextApi(): any {
     const api = modelContext as {
       registerTool?: unknown;
       unregisterTool?: unknown;
+      getTools?: unknown;
+      executeTool?: unknown;
     };
 
     if (typeof api.registerTool !== "function") {
@@ -96,6 +98,102 @@ function getModelContextApi(): any {
     console.warn("WebMCP modelContext access failed:", err);
 
     return null;
+  }
+}
+
+/**
+ * Safely parse or normalize WebMCP input schema.
+ *
+ * Starting in Chrome 154.0.8014.0 (PR #241), `RegisteredTool#inputSchema` returns
+ * a JavaScript object (a deep copy of the schema provided at registration).
+ * In Chrome < 154.0.8014.0, `RegisteredTool#inputSchema` returned a stringified JSON schema (DOMString).
+ *
+ * This function provides backwards-compatible schema parsing:
+ * - If inputSchema is a string: attempts JSON.parse.
+ * - If inputSchema is an object: returns the object.
+ * - Fallbacks gracefully to an empty object schema if null, undefined, or invalid JSON.
+ */
+export function parseWebMcpInputSchema(
+  inputSchema: unknown,
+): Record<string, unknown> {
+  if (typeof inputSchema === "string") {
+    try {
+      const parsed = JSON.parse(inputSchema);
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Fallback on JSON parse error
+    }
+
+    return { type: "object", properties: {} };
+  }
+
+  if (
+    inputSchema &&
+    typeof inputSchema === "object" &&
+    !Array.isArray(inputSchema)
+  ) {
+    return inputSchema as Record<string, unknown>;
+  }
+
+  return { type: "object", properties: {} };
+}
+
+export interface WebMcpRegisteredTool {
+  name: string;
+  description?: string;
+  inputSchema?: unknown;
+  annotations?: Record<string, unknown>;
+  execute?: (input: Record<string, unknown>) => Promise<unknown>;
+}
+
+export interface NormalizedWebMcpRegisteredTool {
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+  annotations?: Record<string, unknown>;
+  execute?: (input: Record<string, unknown>) => Promise<unknown>;
+}
+
+/**
+ * Retrieve tools registered on the WebMCP ModelContext API.
+ *
+ * Practicing graceful degradation:
+ * - Feature-detects `getTools()` on `document.modelContext` / `navigator.modelContext`.
+ * - If `getTools()` is absent (older browser builds or polyfills without getTools),
+ *   returns an empty array `[]` without throwing.
+ * - Normalizes `RegisteredTool#inputSchema` so caller receives a JavaScript object
+ *   whether running on Chrome 154+ (native object) or Chrome < 154 (DOMString JSON).
+ */
+export async function getWebMcpTools(): Promise<
+  NormalizedWebMcpRegisteredTool[]
+> {
+  const modelContext = getModelContextApi() as {
+    getTools?: () => Promise<WebMcpRegisteredTool[]>;
+  } | null;
+
+  if (!modelContext || typeof modelContext.getTools !== "function") {
+    return [];
+  }
+
+  try {
+    const rawTools = await modelContext.getTools();
+    if (!Array.isArray(rawTools)) {
+      return [];
+    }
+
+    return rawTools.map((tool) => ({
+      name: tool.name,
+      ...(tool.description ? { description: tool.description } : {}),
+      inputSchema: parseWebMcpInputSchema(tool.inputSchema),
+      ...(tool.annotations ? { annotations: tool.annotations } : {}),
+      ...(tool.execute ? { execute: tool.execute } : {}),
+    }));
+  } catch (err) {
+    console.warn("Failed to retrieve WebMCP tools via getTools():", err);
+
+    return [];
   }
 }
 
@@ -155,7 +253,7 @@ export async function registerWebMcpTools(
       const toolDef: any = {
         name: def.name,
         description: def.description,
-        inputSchema: def.input_schema,
+        inputSchema: parseWebMcpInputSchema(def.input_schema),
         annotations: {
           readOnlyHint: false,
           untrustedContentHint: true,

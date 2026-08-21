@@ -70,7 +70,7 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 
 ### Navigation & URL State Synchronization
 
-- **URL Sync**: Selecting or reordering pages dispatches navigation events (`shadow-claw-navigate`) and updates browser URL history via `history.pushState()`, preserving active page state across refreshes.
+- **URL Sync & App Route Validation**: Selecting or reordering pages dispatches navigation events (`shadow-claw-navigate`) and updates browser URL history via `history.pushState()`, preserving active page state across refreshes. Same-origin link navigation uses `isPossibleAppRoute(pathname)` to validate internal routes against top-level valid pages (`VALID_PAGES`) and static route manifests; same-origin links pointing to non-app paths (such as external demo applications or static deployments) bypass SPA router interception and fall back to native browser navigation (`window.open`).
 - **Ebook-Style Pagination**: Includes Previous (`[data-pages-prev]`) and Next (`[data-pages-next]`) page controls. Navigation buttons are dynamically enabled/disabled and set to `hidden` (`display: none !important`) based on current page index to avoid layout shifts.
 - **Keyboard & Gesture Navigation**: Supports `ArrowLeft` and `ArrowRight` keyboard navigation for page turning, with strict focus guards to prevent interference when typing in inputs or content-editable regions. Swipe gestures are fully supported via touch and mouse drag interactions, including swipe passthrough from sandboxed iframe previews via `postMessage`.
 - **Accessibility Announcements**: Uses an `aria-live` announcer to provide immediate screen reader feedback (`Navigated to page: [Title]`) when the active page changes.
@@ -145,7 +145,7 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prere
     - **`pages`**: `sortOrder` (`"asc"` | `"desc"`), `defaultPinnedPage`.
     - **`theme`**: `stylesheet` (custom theme CSS stylesheet injected into head).
     - **`settings`**: `assistantName` (pre-seeds the default assistant name).
-  - **Build-Time Application**: `bin/apply-site-config.mjs` patches `index.html`, `manifest.json`, `sitemap.xml`, and copies custom theme stylesheets into the build distribution.
+  - **Build-Time Application**: `bin/apply-site-config.mjs` patches `index.html`, `manifest.json`, `sitemap.xml` / `sitemap.txt`, and copies custom theme stylesheets into the build distribution.
   - **DSD Shell Navigation Visibility**: `bin/prerender-dsd-shell.mjs` applies `hidden` and `aria-hidden` attributes to sidebar navigation items at build time, preventing layout shift on first paint.
   - **Runtime Seeding**: `orchestratorStore.init()` reads the embedded `<script id="shadow-claw-site-config" type="application/json">` via `applySiteConfigDefaults()` to seed preferences into IndexedDB on first load.
   - **Interactive User Controls**: Users can toggle sidebar visibility runtime in Settings under **Navigation**, triggering reactive events (`sidebar-pages-visibility-change`, `sidebar-chat-visibility-change`, `sidebar-tasks-visibility-change`, `sidebar-files-visibility-change`) with graceful fallback routing via `getDefaultSidebarPage()`.

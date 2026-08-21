@@ -414,7 +414,7 @@ export const TIME_MINUTES_ONE = 60000;
 - For Provider Help dialogs, mock provider errors to trigger the dialogs and verify the contextual instructions and links.
 - **Remote MCP Testing**: Verify tool discovery, execution, and automatic OAuth reconnection flows by mocking streamable HTTP responses and OAuth failure modes.
 - **Proxy Security Testing**: Verify that the `/proxy` endpoint rejects non-HTTP/S schemes (`file:`, `ftp:`, etc.) with `400` and blocks private/loopback IP targets (`localhost`, `127.*`, `10.*`, `192.168.*`, `169.254.*`) with `403`. Use the unit tests in `src/server/utils/proxy-helpers.test.ts` for scheme and SSRF guard coverage; E2E tests should verify that the authenticated service-worker format (body-based JSON with `Content-Type: application/json`) is still allowed to reach local tool servers.
-- **Page Navigation Testing**: When testing pages or file viewer navigation, ensure keyboard events (`ArrowLeft`/`ArrowRight`) are properly guarded and do not trigger when the active element is an input or content-editable. Swipe gestures can be simulated using mouse events (`mousedown`, `mousemove`, `mouseup`) or touch events; ensure drag/text-selection does not trigger a false swipe.
+- **Page Navigation Testing**: When testing pages or file viewer navigation, ensure keyboard events (`ArrowLeft`/`ArrowRight`) are properly guarded and do not trigger when the active element is an input or content-editable. Swipe gestures can be simulated using mouse events (`mousedown`, `mousemove`, `mouseup`) or touch events; ensure drag/text-selection does not trigger a false swipe. Assert that same-origin links are validated via `isPossibleAppRoute` so non-app routes (e.g. standalone demo subpaths) bypass SPA navigation and trigger native browser navigation (`window.open`).
 - **Sidebar Visibility & Fallback Testing**: When verifying sidebar toggle controls, assert that hiding the currently active view triggers automatic navigation to the next available visible view (`getDefaultSidebarPage`).
 - **Custom Element Guard Testing**: When testing custom elements in E2E or unit suites, verify that registering unapproved custom element tags throws a security error and DOM injection of unapproved custom element tags results in immediate removal by the DOM mutation guard.
 
@@ -484,7 +484,7 @@ Some runtime paths are browser-capability dependent and should be handled simila
 to storage feature gates.
 
 - Prompt API provider depends on `globalThis.LanguageModel` support.
-- WebMCP integration depends on `document.modelContext` support (with `navigator.modelContext` fallback for Chrome < 152, where `navigator.modelContext` was deprecated in Chrome 150 and removed in Chrome 152.0.7943.0).
+- WebMCP integration depends on `document.modelContext` support (with `navigator.modelContext` fallback for Chrome < 152, where `navigator.modelContext` was deprecated in Chrome 150 and removed in Chrome 152.0.7943.0). Input schemas support native JavaScript objects (Chrome 154+) and DOMString JSON (Chrome < 154) via `parseWebMcpInputSchema`, and `getWebMcpTools()` degrades gracefully to `[]` when `getTools()` is unavailable.
 - In unsupported browsers, tests should verify graceful fallback/error messaging,
   not hard-fail on unavailable platform features.
 

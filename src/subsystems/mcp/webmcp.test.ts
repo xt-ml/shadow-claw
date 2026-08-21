@@ -33,13 +33,15 @@ describe("webmcp integration", () => {
     // test mock onto document.modelContext instead of the real polyfill.
     jest.unstable_mockModule("@mcp-b/webmcp-polyfill", () => ({
       initializeWebMCPPolyfill: jest.fn(() => {
-        Object.defineProperty((globalThis as any).document, "modelContext", {
-          configurable: true,
-          value: {
-            registerTool: mockRegisterTool,
-            unregisterTool: mockUnregisterTool,
-          },
-        });
+        if (!(globalThis as any).document?.modelContext) {
+          Object.defineProperty((globalThis as any).document, "modelContext", {
+            configurable: true,
+            value: {
+              registerTool: mockRegisterTool,
+              unregisterTool: mockUnregisterTool,
+            },
+          });
+        }
       }),
     }));
 
@@ -64,6 +66,154 @@ describe("webmcp integration", () => {
 
   afterEach(() => {
     delete ((globalThis as any).document as any).modelContext;
+  });
+
+  describe("parseWebMcpInputSchema", () => {
+    it("handles JavaScript object input schema (Chrome 154+ / PR #241)", async () => {
+      const { parseWebMcpInputSchema } = await import("./webmcp.js");
+      const objSchema = {
+        type: "object",
+        properties: { path: { type: "string" } },
+      };
+
+      expect(parseWebMcpInputSchema(objSchema)).toEqual(objSchema);
+    });
+
+    it("handles stringified JSON DOMString schema (Chrome < 154 backward-compat)", async () => {
+      const { parseWebMcpInputSchema } = await import("./webmcp.js");
+      const stringSchema = JSON.stringify({
+        type: "object",
+        properties: { url: { type: "string" } },
+      });
+
+      expect(parseWebMcpInputSchema(stringSchema)).toEqual({
+        type: "object",
+        properties: { url: { type: "string" } },
+      });
+    });
+
+    it("gracefully falls back on invalid JSON strings, primitives, null, or undefined", async () => {
+      const { parseWebMcpInputSchema } = await import("./webmcp.js");
+
+      expect(parseWebMcpInputSchema("invalid-json{")).toEqual({
+        type: "object",
+        properties: {},
+      });
+      expect(parseWebMcpInputSchema(null)).toEqual({
+        type: "object",
+        properties: {},
+      });
+      expect(parseWebMcpInputSchema(undefined)).toEqual({
+        type: "object",
+        properties: {},
+      });
+      expect(parseWebMcpInputSchema(123)).toEqual({
+        type: "object",
+        properties: {},
+      });
+      expect(parseWebMcpInputSchema(["not", "an", "object"])).toEqual({
+        type: "object",
+        properties: {},
+      });
+    });
+  });
+
+  describe("getWebMcpTools", () => {
+    it("returns normalized tools with object inputSchema on Chrome 154+ (native object)", async () => {
+      const { getWebMcpTools } = await import("./webmcp.js");
+
+      Object.defineProperty((globalThis as any).document, "modelContext", {
+        configurable: true,
+        value: {
+          registerTool: mockRegisterTool,
+          getTools: jest.fn(async () => [
+            {
+              name: "read_file",
+              description: "Read a file from disk",
+              inputSchema: {
+                type: "object",
+                properties: { path: { type: "string" } },
+              },
+            },
+          ]),
+        },
+      });
+
+      const tools = await getWebMcpTools();
+
+      expect(tools).toHaveLength(1);
+      expect(tools[0]).toEqual({
+        name: "read_file",
+        description: "Read a file from disk",
+        inputSchema: {
+          type: "object",
+          properties: { path: { type: "string" } },
+        },
+      });
+    });
+
+    it("returns normalized tools with parsed object inputSchema on Chrome < 154 (DOMString JSON)", async () => {
+      const { getWebMcpTools } = await import("./webmcp.js");
+
+      Object.defineProperty((globalThis as any).document, "modelContext", {
+        configurable: true,
+        value: {
+          registerTool: mockRegisterTool,
+          getTools: jest.fn(async () => [
+            {
+              name: "write_file",
+              description: "Write content to a file",
+              inputSchema: JSON.stringify({
+                type: "object",
+                properties: { content: { type: "string" } },
+              }),
+            },
+          ]),
+        },
+      });
+
+      const tools = await getWebMcpTools();
+
+      expect(tools).toHaveLength(1);
+      expect(tools[0].inputSchema).toEqual({
+        type: "object",
+        properties: { content: { type: "string" } },
+      });
+    });
+
+    it("returns empty array gracefully when getTools is unavailable", async () => {
+      const { getWebMcpTools } = await import("./webmcp.js");
+
+      Object.defineProperty((globalThis as any).document, "modelContext", {
+        configurable: true,
+        value: {
+          registerTool: mockRegisterTool,
+          // No getTools defined
+        },
+      });
+
+      const tools = await getWebMcpTools();
+
+      expect(tools).toEqual([]);
+    });
+
+    it("returns empty array gracefully when getTools throws an error", async () => {
+      const { getWebMcpTools } = await import("./webmcp.js");
+
+      Object.defineProperty((globalThis as any).document, "modelContext", {
+        configurable: true,
+        value: {
+          registerTool: mockRegisterTool,
+          getTools: jest.fn(async () => {
+            throw new Error("Internal WebMCP error");
+          }),
+        },
+      });
+
+      const tools = await getWebMcpTools();
+
+      expect(tools).toEqual([]);
+    });
   });
 
   it("feature-detects WebMCP support", () => {

@@ -42,8 +42,8 @@ Detailed docs for each major subsystem.
 | [AGUI Events & Adapter](subsystems/agui.md)                             | Translates orchestrator EventBus events to standardized AG-UI protocol events for UI visibility                          |
 | [Trusted Types Tinyfill](subsystems/trusted-types-tinyfill.md)          | Polyfill for Trusted Types API, browser compatibility, security rationale                                                |
 | [Email Integration](subsystems/email.md)                                | IMAP/SMTP support with encrypted credentials                                                                             |
-| [WebMCP](subsystems/webmcp.md)                                          | Browser's Model Context Protocol integration and tool execution                                                          |
-| [Pages System](subsystems/pages.md)                                     | Workspace-relative pages rendering, sidebar navigation, static site seeding, pretty paths, and production asset inlining |
+| [WebMCP](subsystems/webmcp.md)                                          | Browser's Model Context Protocol integration and tool execution, supporting Chrome 154+ object input schemas, getWebMcpTools querying, and graceful degradation |
+| [Pages System](subsystems/pages.md)                                     | Workspace-relative pages rendering, sidebar navigation, static site seeding, pretty paths, same-origin route validation, and production asset inlining |
 | [Custom Element Security](subsystems/custom-element-security.md)        | Custom element registry & DOM guards, allowlists, iframe sandbox policies, and nonce-gated CSP                           |
 | [LiteRT Provider](subsystems/providers.md)                              | In-browser WebGPU inference provider using Google LiteRT-LM                                                              |
 

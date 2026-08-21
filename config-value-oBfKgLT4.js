@@ -1,0 +1,1 @@
+function e(e,t=!1){return e==null?t:e===!0||e===`true`||e===1||e===`1`}export{e as t};

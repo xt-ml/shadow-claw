@@ -1,0 +1,11 @@
+function e(){if(typeof window>`u`&&typeof globalThis>`u`)return!1;let e=typeof window<`u`?window:globalThis;return!!(e.LanguageModel&&typeof e.LanguageModel.create==`function`||e.ai?.languageModel&&typeof e.ai.languageModel.create==`function`)}function t(){if(typeof navigator>`u`)return!1;let e=navigator.userAgent.toLowerCase();return e.includes(`mac`)||e.includes(`iphone`)||e.includes(`ipad`)||e.includes(`ipod`)?!1:e.includes(`chrome`)||e.includes(`edg`)}function n(e){return e?`<div class="chat__prompt-api-badge chat__prompt-api-badge--success">&#10003; Native Prompt API detected</div>
+<p class="chat__prompt-api-status-note">Your browser has built-in on-device AI support enabled.</p>`:`<div class="chat__prompt-api-badge chat__prompt-api-badge--warning">&#9888;&#65039; Native Prompt API not detected &mdash; using local ONNX fallback</div>
+<div class="chat__prompt-api-instructions">
+  <p class="chat__prompt-api-instructions-title"><strong>To enable native Prompt API in your browser:</strong></p>
+  <ol class="chat__prompt-api-steps">
+    <li>Navigate to <code>chrome://flags</code> (or <code>edge://flags</code>)</li>
+    <li>Enable <code>#prompt-api-for-gemini-nano</code> (or <code>#prompt-api</code>) and <code>#enables-optimization-guide-on-device-model</code></li>
+    <li>Visit <code>chrome://components</code> (or <code>edge://components</code>) and click <em>Check for update</em> next to the on-device model component</li>
+    <li>Restart your browser</li>
+  </ol>
+</div>`}function r(e){let t=[`ShadowClaw uses the browser-native Prompt API for local, private AI inference.`,`If native browser Prompt API is unavailable, ShadowClaw falls back to running a local ONNX model in your browser (defaulting to Qwen 0.6B).`,`To enable native Prompt API: enable the Prompt API flags and optimization guide under your browser's experimental flags (chrome://flags or edge://flags).`];return e&&e.trim()&&t.push(`Details: ${e.trim()}`),{mode:`info`,title:`Prompt API Setup & Info`,message:`ShadowClaw is configured to use the browser-native Prompt API.`,details:t,confirmLabel:`OK`,links:[{label:`Prompt API Documentation`,href:`https://developer.chrome.com/docs/ai/built-in`}]}}export{n as i,e as n,t as r,r as t};

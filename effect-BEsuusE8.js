@@ -1,0 +1,1 @@
+import{n as e}from"./toast-60iDlgiH.js";let t=!0;const n=new e.subtle.Watcher(()=>{t&&(t=!1,globalThis.queueMicrotask(r))});function r(){t=!0;for(let e of n.getPending())e.get();n.watch()}function i(t){let r,i=new e.Computed(()=>{typeof r==`function`&&r(),r=t()});return n.watch(i),i.get(),()=>{n.unwatch(i),typeof r==`function`&&r(),r=void 0}}export{i as t};

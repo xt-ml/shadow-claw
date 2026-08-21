@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-aKtaBQYM.js";import{t}from"./txPromise-EBECky1b.js";var n=e({getConfig:()=>r});function r(e,n){return t(e,`config`,`readonly`,e=>e.get(n)).then(e=>e?.value)}export{n,r as t};

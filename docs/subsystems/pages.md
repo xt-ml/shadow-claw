@@ -1,0 +1,157 @@
+# Pages System
+
+> Workspace-relative pages rendering and sidebar navigation.
+
+**Source:** `src/components/shadow-claw-pages/shadow-claw-pages.ts` · `src/stores/orchestrator.ts` · `src/storage/staticMainSite.ts` · `src/storage/suppressedPages.ts`
+
+## Overview
+
+ShadowClaw includes a Pages sidebar for organizing and viewing workspace content. It allows users to render markdown and HTML files as structured previews.
+
+Links and images in pages resolve relative to the workspace. The page state persists across sessions, and the top item in the page list serves as the default page when selecting root Pages.
+
+Markdown pages can optionally surface YAML frontmatter as a visible metadata block before the rendered content. HTML previews use a configurable iframe host allowlist so embedded content stays constrained to trusted hosts.
+
+---
+
+## Architecture Overview
+
+```mermaid
+graph TD
+  "User / UI" --> "shadow-claw-pages"
+  "shadow-claw-pages" --> "orchestratorStore"
+  "orchestratorStore" --> "CONFIG_KEYS.PAGES_LIST (DB)"
+  "orchestratorStore" --> "seedStaticMainSite()"
+  "seedStaticMainSite()" --> "suppressedPages (DB)"
+
+  "shadow-claw-pages" -- "Markdown" --> "renderMarkdown()"
+  "renderMarkdown()" --> "DOMPurify + Image Data URL Conversion"
+
+  "shadow-claw-pages" -- "HTML" --> "Iframe srcdoc"
+  "Iframe srcdoc" --> "sanitizeSrcdocHtml()"
+  "Iframe srcdoc" --> "file-viewer-preview-bridge.js"
+  "file-viewer-preview-bridge.js" -- "postMessage" --> "shadow-claw-pages"
+  "shadow-claw-pages" -- "shadow-claw-navigate" --> "Browser History API"
+```
+
+---
+
+## State Management & Storage (`src/stores/orchestrator.ts`)
+
+The list of saved pages, default pinned page, and active page are managed centrally by the orchestrator:
+
+- `_pages`: A `Signal.State` holding the array of `SavedPageRef` objects.
+- `_activePinnedPage`: The currently active page reference.
+- `_defaultPinnedPage`: The default pinned page reference set by the user or top item.
+- `effectiveDefaultPage`: Computed property returning the top item in the pages list or `null`.
+
+### Static Main Site Seeding (`src/storage/staticMainSite.ts`)
+
+During store initialization, `seedStaticMainSite()` seeds default pages from the special `pages/main/` directory:
+
+1. **Embedded Manifest Prioritization**: Manifest discovery checks embedded `#shadow-claw-static-manifest` JSON script elements first (`preferEmbedded: true`), avoiding network waterfalls on boot.
+2. **Background Full Sync**: Full manifest synchronization (`static-main-manifest.json`) is scheduled asynchronously via `scheduleBackgroundStaticMainSiteSeeding()` (leveraging `requestIdleCallback`) to download any remaining static assets in the background without blocking the main UI thread.
+3. **Workspace Seeding**: On first boot, seeds static markdown files (including subdirectories like `posts/`) into the `br:main` workspace file storage and records seeding state in IndexedDB under `CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED`.
+4. **Suppression & Deletion Respect**: Ensures `index.html`, `MEMORY.md`, and default static workspace pages exist unless marked as suppressed. Subsequent reloads skip redundant re-seeding unless storage is cleared or a deployment purge is triggered via `purgeId`. Note that pages containing the `--purge-pages` flag are excluded from DSD pre-rendering and production static site manifests.
+
+### Page Suppression (`src/storage/suppressedPages.ts`)
+
+To prevent deleted static pages from re-appearing on reload:
+
+- Deleted pages are recorded in IndexedDB under `CONFIG_KEYS.SUPPRESSED_PAGES_LIST`.
+- `isPageSuppressed()`, `suppressPage()`, and `unsuppressPage()` manage page suppression status.
+- Re-adding a page unsuppresses it, allowing it to be persisted normally.
+
+---
+
+## Component Logic (`src/components/shadow-claw-pages/shadow-claw-pages.ts`)
+
+The `shadow-claw-pages` web component handles rendering the UI and displaying file previews:
+
+### Navigation & URL State Synchronization
+
+- **URL Sync & App Route Validation**: Selecting or reordering pages dispatches navigation events (`shadow-claw-navigate`) and updates browser URL history via `history.pushState()`, preserving active page state across refreshes. Same-origin link navigation uses `isPossibleAppRoute(pathname)` to validate internal routes against top-level valid pages (`VALID_PAGES`) and static route manifests; same-origin links pointing to non-app paths (such as external demo applications or static deployments) bypass SPA router interception and fall back to native browser navigation (`window.open`).
+- **Ebook-Style Pagination**: Includes Previous (`[data-pages-prev]`) and Next (`[data-pages-next]`) page controls. Navigation buttons are dynamically enabled/disabled and set to `hidden` (`display: none !important`) based on current page index to avoid layout shifts.
+- **Keyboard & Gesture Navigation**: Supports `ArrowLeft` and `ArrowRight` keyboard navigation for page turning, with strict focus guards to prevent interference when typing in inputs or content-editable regions. Swipe gestures are fully supported via touch and mouse drag interactions, including swipe passthrough from sandboxed iframe previews via `postMessage`.
+- **Accessibility Announcements**: Uses an `aria-live` announcer to provide immediate screen reader feedback (`Navigated to page: [Title]`) when the active page changes.
+- **Routing Ready Gating**: Renders are gated (`_routingReady`) until `orchestratorStore.whenReady` resolves URL routing, preventing a one-frame flash of the default pre-rendered page.
+- **Pinned Home Page & Reordering**: Users can reorder pages via drag-and-drop or star indicators. The top page acts as the pinned home page (`effectiveDefaultPage`).
+- **Responsive Viewport**: On mobile viewports, the sidebar supports toggle collapse (`pages__content--sidebar-collapsed`).
+- **Confirmation Modals**: Destructive page removals render standardized confirmation dialogs consistent with workspace UI dialogs.
+
+### Automatic Refresh & Visibility Synchronization
+
+- **Immediate Activation Refresh**: Switching to the Pages sidebar tab or selecting the root `/pages` route immediately fetches and re-renders the latest file version from workspace storage (`readGroupFile`), guaranteeing up-to-date content without requiring a manual reload.
+- **Visibility & Focus Syncing**: Listens to the Page Visibility API (`visibilitychange`) and window `focus` events. When the browser tab or desktop window regains focus while Pages is active, the active page content is re-rendered immediately.
+- **Configurable Auto-Refresh Interval (`CONFIG_KEYS.PAGES_AUTO_REFRESH_INTERVAL`)**:
+  - Configurable in Settings under **Navigation & Pages** (from `0` to `86,400` seconds / 24 hours).
+  - Defaults to `0` seconds (disabled).
+  - When configured to a value `> 0`, an interval timer periodically re-fetches and renders the latest pinned page content in a billboard-style loop.
+  - Automatically pauses when the document is hidden or the component is disconnected to save CPU and storage I/O.
+
+### Content Rendering
+
+#### Markdown (`.md`, `.markdown`)
+
+1. Rendered to HTML via `renderMarkdown()`.
+2. YAML frontmatter is parsed from the document head and can be rendered as a visible metadata/details block when the relevant Settings toggle is enabled. Header titles safely decode HTML entities in frontmatter titles (such as `&#8211;` or `&amp;`) before display.
+3. Link paths (`a[href]`) are rewritten to resolve against the active workspace route.
+4. Images (`img[src]`) with relative workspace paths are fetched from OPFS via `readGroupFileBytes()`, converted to `Blob` data URLs based on their mime type, and injected back into the HTML.
+5. Content is sanitized using `setSanitizedHtml` and a custom `DOMPurify` configuration (`previewSanitizeOptions`) that specifically allows `blob:` URIs.
+
+#### HTML (`.html`, `.xhtml`)
+
+1. The raw HTML content is wrapped in a full document structure and sanitized via `sanitizeSrcdocHtml`.
+2. It is rendered inside a sandboxed `iframe` using `setTrustedSrcdoc`.
+3. To prevent XSS, inline scripts and external scripts are blocked using a nonce-gated Content Security Policy (CSP).
+4. A DOMPurify iframe hook removes unsafe embeds and only preserves iframe `src` values that match the Settings-backed host allowlist.
+5. The only permitted script is `file-viewer-preview-bridge.js`. This bridge script intercepts navigation inside the iframe and sends a `shadow-claw-file-viewer-link` `postMessage` to the parent component, which processes the navigation safely via the browser History API.
+
+### Frontmatter and Embed Settings
+
+- `CONFIG_KEYS.MARKDOWN_FRONTMATTER_PAGES`, `CONFIG_KEYS.MARKDOWN_FRONTMATTER_FILE_VIEWER`, `CONFIG_KEYS.MARKDOWN_FRONTMATTER_CHAT`, and `CONFIG_KEYS.MARKDOWN_FRONTMATTER_TASKS` control where frontmatter is rendered.
+- `CONFIG_KEYS.ALLOWED_IFRAME_HOST_PATTERNS` stores the iframe host allowlist used by markdown and HTML previews.
+- Allowlist entries can be plain domains, wildcard domains, or regex patterns; the default list covers common YouTube and ShadowClaw-hosted embeds.
+
+---
+
+## Pre-rendered Content, Routing & Pretty Paths
+
+Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prerender-dsd-shell.mjs` and `bin/prerender-pretty-paths.mjs` support static server-side rendering with pretty path resolution:
+
+- **Production Asset Inlining**:
+  - In production builds (`npm run build:prod`), critical assets (`index.css`, `theme-init.js`, and `service-worker/init.js`) are inlined directly into `index.html` and pre-rendered pages to eliminate render-blocking round-trips.
+- **Configurable Pre-rendering (`--prerender-pages` / `PRERENDER_PAGES`)**:
+  - Configurable page range option (`all`, `none`/`0`, or a specific number `N`, defaulting to `1` / current page).
+  - Defaults to embedding only the current page in the SSR DSD shell and `#shadow-claw-static-manifest` to minimize bundle size and eliminate redundant SSR overhead.
+  - The build pipeline writes the full manifest to `static-main-manifest.json` and copies all source files to `static-main/` for runtime on-demand fetching.
+- **Dynamic Hydration & Fallback Loading**:
+  - When navigating to pages not embedded in the initial HTML or stored in local storage, `shadow-claw-pages` and `getStaticPageContent()` dynamically fetch individual markdown files from `static-main/` or fallback to `static-main-manifest.json`.
+- **Pretty Paths & Sub-Routes**:
+  - Configured via `pages/routes.json` to map markdown page sources to clean URL paths (e.g. `/2026/06/30/on-developing-loops/`).
+  - Supports recursive nested `subRoutes` entries matching child URL hierarchies.
+  - The pre-render pipeline generates dedicated physical `index.html` files with page-specific DSD templates.
+- **Static Routing Manifest**:
+  - Embedded via `#shadow-claw-static-routing` JSON script tags or fetched via `static-routing.json` (`src/storage/staticRouting.ts`), allowing client-side router (`app-routes.ts`) and pages component to resolve routes asynchronously (`resolvePrettyPathToRouteAsync`, `parseRouteFromUrlAsync`) across Node.js, Electron, and GitHub Pages.
+- **Server Middleware Fallbacks**:
+  - Express server includes static file middleware serving fallback content from `pages/main` for `/files/main/`, `/static-main/`, and `/pages/`, alongside SPA redirect fallback middleware for clean URL reloads.
+- **DSD Shell Override**:
+  - Enabled via the "Override pre-rendered content" toggle in Settings (`CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON`). Hides the initial DSD shell on boot, showing the skeleton loader until hydration finishes.
+- **Declarative Site Configuration (`site-config.json`)**:
+  - Template repositories and content publishers can declaratively brand and customize the site shell without editing ShadowClaw source files:
+    - **`site`**: `title`, `description`, `themeColor`, `lang`.
+    - **`branding`**: `titleText`, `siteUrl`, `repoUrl`, `repoLabel`, `faviconPath`, `appleTouchIconPath`, `logoSlotHtml`.
+    - **`sidebar`**: `pagesHidden`, `chatHidden`, `tasksHidden`, `filesHidden`, `defaultPage` (`"pages"` | `"chat"` | `"tasks"` | `"files"`).
+    - **`pages`**: `sortOrder` (`"asc"` | `"desc"`), `defaultPinnedPage`.
+    - **`theme`**: `stylesheet` (custom theme CSS stylesheet injected into head).
+    - **`settings`**: `assistantName` (pre-seeds the default assistant name).
+  - **Build-Time Application**: `bin/apply-site-config.mjs` patches `index.html`, `manifest.json`, `sitemap.xml` / `sitemap.txt`, and copies custom theme stylesheets into the build distribution.
+  - **DSD Shell Navigation Visibility**: `bin/prerender-dsd-shell.mjs` applies `hidden` and `aria-hidden` attributes to sidebar navigation items at build time, preventing layout shift on first paint.
+  - **Runtime Seeding**: `orchestratorStore.init()` reads the embedded `<script id="shadow-claw-site-config" type="application/json">` via `applySiteConfigDefaults()` to seed preferences into IndexedDB on first load.
+  - **Interactive User Controls**: Users can toggle sidebar visibility runtime in Settings under **Navigation**, triggering reactive events (`sidebar-pages-visibility-change`, `sidebar-chat-visibility-change`, `sidebar-tasks-visibility-change`, `sidebar-files-visibility-change`) with graceful fallback routing via `getDefaultSidebarPage()`.
+
+---
+
+## Agent Capabilities
+
+The Pages system is primarily driven by the user interface and UI interactions. There are no direct agent-facing tools (e.g., `pin_page`) exposed to the LLM for managing the Pages sidebar. Agents can indirectly affect pages by writing to the underlying Markdown or HTML files via standard file manipulation tools (`write_file`, `patch_file`).

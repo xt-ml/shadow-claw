@@ -1,0 +1,1 @@
+import{n as e}from"./rolldown-runtime-aKtaBQYM.js";import{t}from"./txPromise-EBECky1b.js";var n=e({setConfig:()=>r});function r(e,n,r){return t(e,`config`,`readwrite`,e=>e.put({key:n,value:r})).then(()=>void 0)}export{n,r as t};

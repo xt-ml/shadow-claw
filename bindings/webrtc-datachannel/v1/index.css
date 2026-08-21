@@ -1,0 +1,114 @@
+:root {
+  background: #f8fafc;
+  color: #0f172a;
+  color-scheme: light;
+  font-family:
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100vh;
+  width: 100%;
+}
+
+body {
+  background: var(--shadow-claw-bg-primary, #f8fafc);
+  color: var(--shadow-claw-text-primary, #0f172a);
+  font-family: var(--shadow-claw-font-sans, system-ui, sans-serif);
+  line-height: 1.65;
+}
+
+main {
+  background: var(--shadow-claw-bg-primary-reverse, #ffffff);
+  border: 1px solid var(--shadow-claw-border-color, #e2e8f0);
+  border-radius: 1rem;
+  box-shadow: 0 1rem 2rem rgba(15, 23, 42, 0.08);
+  margin: 2rem auto;
+  max-width: 900px;
+  padding: 1.75rem 1.5rem;
+}
+
+h1,
+h2,
+h3 {
+  color: var(--shadow-claw-text-primary, #0f172a);
+  margin-bottom: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+h1 {
+  font-size: 2rem;
+}
+
+h2 {
+  font-size: 1.35rem;
+}
+
+p,
+li,
+dt,
+dd {
+  color: var(--shadow-claw-text-secondary, #475569);
+  margin: 0 0 1rem 0;
+}
+
+p:last-child,
+li:last-child,
+dd:last-child {
+  margin-bottom: 0;
+}
+
+dl {
+  margin: 1rem 0 2rem;
+}
+
+dt {
+  color: var(--shadow-claw-text-primary, #0f172a);
+  font-weight: 700;
+}
+
+dd {
+  margin-left: 0;
+}
+
+ul {
+  padding-left: 1.35rem;
+}
+
+pre,
+code {
+  font-family: var(
+    --shadow-claw-font-mono,
+    "Fira Code",
+    "Courier New",
+    monospace
+  );
+}
+
+pre {
+  background: var(--shadow-claw-bg-secondary, #f1f5f9);
+  border: 1px solid var(--shadow-claw-border-color, #e2e8f0);
+  border-radius: 0.75rem;
+  overflow-x: auto;
+  padding: 1rem;
+}
+
+code {
+  color: var(--shadow-claw-text-primary, #0f172a);
+}
+
+a {
+  color: var(--shadow-claw-link, #1d4ed8);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}

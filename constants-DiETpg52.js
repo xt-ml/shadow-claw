@@ -1,0 +1,1 @@
+const e=`sc-js-boot-pending`,t=`data-js-boot-pending`,n=`data-hydration-pending`;export{e as n,n as r,t};

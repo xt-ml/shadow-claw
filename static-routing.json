@@ -1,0 +1,16 @@
+{
+  "routes": {
+    "/pages/main/index.html": {
+      "prettyPath": "/main"
+    },
+    "/pages/main/~/docs/publishing-to-github-pages.md": {
+      "prettyPath": "/docs/publishing"
+    },
+    "/pages/main/~/docs/example/article.html": {
+      "prettyPath": "/docs/example/article"
+    },
+    "/pages/main/MEMORY.md": {
+      "prettyPath": "/main/memory"
+    }
+  }
+}

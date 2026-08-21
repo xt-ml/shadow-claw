@@ -140,12 +140,19 @@ export function parseWebMcpInputSchema(
   return { type: "object", properties: {} };
 }
 
+export interface WebMcpExecuteContext {
+  signal?: AbortSignal;
+}
+
 export interface WebMcpRegisteredTool {
   name: string;
   description?: string;
   inputSchema?: unknown;
   annotations?: Record<string, unknown>;
-  execute?: (input: Record<string, unknown>) => Promise<unknown>;
+  execute?: (
+    input: Record<string, unknown>,
+    context?: WebMcpExecuteContext | AbortSignal,
+  ) => Promise<unknown>;
 }
 
 export interface NormalizedWebMcpRegisteredTool {
@@ -153,8 +160,40 @@ export interface NormalizedWebMcpRegisteredTool {
   description?: string;
   inputSchema: Record<string, unknown>;
   annotations?: Record<string, unknown>;
-  execute?: (input: Record<string, unknown>) => Promise<unknown>;
+  execute?: (
+    input: Record<string, unknown>,
+    context?: WebMcpExecuteContext | AbortSignal,
+  ) => Promise<unknown>;
 }
+
+/**
+ * Safely extract AbortSignal from execute options/context.
+ * Supports Chrome 153+ options object `{ signal }` (PR #247), direct AbortSignal instances,
+ * or undefined for backward compatibility with Chrome < 153 and legacy callers.
+ */
+export function extractAbortSignal(
+  context?: WebMcpExecuteContext | AbortSignal,
+): AbortSignal | undefined {
+  if (!context) {
+    return undefined;
+  }
+
+  if (typeof AbortSignal !== "undefined" && context instanceof AbortSignal) {
+    return context;
+  }
+
+  if (
+    typeof context === "object" &&
+    "signal" in context &&
+    typeof AbortSignal !== "undefined" &&
+    context.signal instanceof AbortSignal
+  ) {
+    return context.signal;
+  }
+
+  return undefined;
+}
+
 
 /**
  * Retrieve tools registered on the WebMCP ModelContext API.
@@ -258,17 +297,48 @@ export async function registerWebMcpTools(
           readOnlyHint: false,
           untrustedContentHint: true,
         },
-        execute: (input: Record<string, unknown>) => {
+        execute: (
+          input: Record<string, unknown>,
+          context?: WebMcpExecuteContext | AbortSignal,
+        ) => {
           if (!agentWorker) {
             throw new Error("Cannot execute tool: agent worker is not ready");
+          }
+
+          const signal = extractAbortSignal(context);
+
+          if (signal?.aborted) {
+            return Promise.reject(new Error("Tool execution aborted"));
           }
 
           return new Promise((resolve, reject) => {
             const callId =
               Date.now().toString(36) + Math.random().toString(36).slice(2);
 
-            const timeout = setTimeout(() => {
+            let timeout: ReturnType<typeof setTimeout> | null = null;
+
+            const cleanup = () => {
+              if (timeout !== null) {
+                clearTimeout(timeout);
+                timeout = null;
+              }
               agentWorker?.removeEventListener("message", handler);
+              if (signal && onAbort) {
+                signal.removeEventListener("abort", onAbort);
+              }
+            };
+
+            const onAbort = () => {
+              cleanup();
+              reject(new Error("Tool execution aborted"));
+            };
+
+            if (signal) {
+              signal.addEventListener("abort", onAbort, { once: true });
+            }
+
+            timeout = setTimeout(() => {
+              cleanup();
               reject(new Error("Timeout waiting for tool execution"));
             }, 600000);
 
@@ -279,9 +349,7 @@ export async function registerWebMcpTools(
                 data.type === "execute-tool-result" &&
                 data.callId === callId
               ) {
-                clearTimeout(timeout);
-
-                agentWorker?.removeEventListener("message", handler);
+                cleanup();
 
                 if (data.error) {
                   reject(new Error(data.error));

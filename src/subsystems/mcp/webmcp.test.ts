@@ -370,6 +370,63 @@ describe("webmcp integration", () => {
     );
   });
 
+  it("handles Chrome 153+ execution cancellation via { signal } option (PR #247)", async () => {
+    const emit = jest.fn();
+    const mockWorker: any = {
+      postMessage: jest.fn(),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    };
+
+    await registerWebMcpTools(mockWorker, emit, "group-webmcp");
+
+    const listTasksRegistration = mockRegisterTool.mock.calls
+      .map((args: any[]) => args[0])
+      .find((registration: any) => registration.name === "list_tasks");
+
+    const controller = new AbortController();
+
+    const executePromise = listTasksRegistration.execute(
+      { foo: "bar" },
+      { signal: controller.signal },
+    );
+
+    expect(mockWorker.postMessage).toHaveBeenCalled();
+
+    // Abort execution mid-flight
+    controller.abort();
+
+    await expect(executePromise).rejects.toThrow("Tool execution aborted");
+    expect(mockWorker.removeEventListener).toHaveBeenCalled();
+  });
+
+  it("aborts immediately when execute is called with an already-aborted signal", async () => {
+    const emit = jest.fn();
+    const mockWorker: any = {
+      postMessage: jest.fn(),
+      addEventListener: jest.fn(),
+      removeEventListener: jest.fn(),
+    };
+
+    await registerWebMcpTools(mockWorker, emit, "group-webmcp");
+
+    const listTasksRegistration = mockRegisterTool.mock.calls
+      .map((args: any[]) => args[0])
+      .find((registration: any) => registration.name === "list_tasks");
+
+    const controller = new AbortController();
+    controller.abort();
+
+    const executePromise = listTasksRegistration.execute(
+      { foo: "bar" },
+      { signal: controller.signal },
+    );
+
+    await expect(executePromise).rejects.toThrow("Tool execution aborted");
+    expect(mockWorker.postMessage).not.toHaveBeenCalled();
+  });
+
+
   it("does not register any tools when tools array is explicitly empty", async () => {
     const registered = await registerWebMcpTools(
       null,

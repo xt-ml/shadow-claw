@@ -118,6 +118,7 @@ Safely parses and normalizes WebMCP tool input schemas with backwards compatibil
 - **Chrome < 154.0.8014.0:** `RegisteredTool#inputSchema` was returned as a stringified JSON schema (`DOMString`).
 
 `parseWebMcpInputSchema` handles both representations gracefully:
+
 - If passed a string, attempts `JSON.parse`.
 - If passed an object, returns the object directly.
 - On invalid JSON or non-object input, gracefully falls back to `{ type: "object", properties: {} }`.
@@ -319,6 +320,16 @@ import { parseWebMcpInputSchema, getWebMcpTools } from "./webmcp.js";
 // Normalize schema whether object (Chrome 154+) or JSON DOMString (Chrome < 154)
 const schema = parseWebMcpInputSchema(tool.inputSchema);
 ```
+
+### Execution Cancellation & AbortSignal (PR #247 / Chrome 153+)
+
+Starting in Chrome 153.0.8009.0 (PR #247 / Issue 48), registered tool `execute` callbacks receive an execution context object containing an `AbortSignal` as their second argument: `execute(input, { signal })`.
+
+ShadowClaw handles this gracefully with `extractAbortSignal(context)`:
+
+- **Chrome 153+ (`{ signal }`):** Automatically registers an `abort` listener on `signal`. If the user or browser cancels tool execution mid-flight, ShadowClaw immediately cleans up worker message listeners and rejects the execution promise with an `AbortError`.
+- **Pre-aborted signals:** Rejects immediately without posting to the agent worker.
+- **Chrome < 153 & Legacy Callers (`execute(input)`):** Gracefully falls back to standard execution without signal context when no second argument is provided.
 
 ### Tool Querying & Graceful Degradation (`getWebMcpTools`)
 

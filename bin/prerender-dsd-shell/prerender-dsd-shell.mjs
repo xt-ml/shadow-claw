@@ -19,14 +19,26 @@ import { marked } from "marked";
 import {
   createFrontmatterDetailsElement,
   renderFrontmatterMarkup,
-} from "../src/common/utils/frontmatter.mjs";
+} from "../../src/common/utils/frontmatter.mjs";
 
-import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "../src/storage/defaultIndexContent.mjs";
-import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "../src/storage/defaultMemoryContent.mjs";
+import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "../../src/storage/defaultIndexContent.mjs";
+import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "../../src/storage/defaultMemoryContent.mjs";
+import { escapeHtml } from "./utils/escape-html.mjs";
+import { sanitizeRenderedHtml } from "./utils/sanitize-rendered-html.mjs";
+import { toPosixPath } from "./utils/to-posix-path.mjs";
+import { normalizePrerenderPagesOption } from "./utils/normalize-prerender-pages-option.mjs";
+import { escapeJsonForHtmlScript } from "./utils/escape-json-for-html-script.mjs";
+import { insertBeforeClosingHead } from "./utils/insert-before-closing-head.mjs";
+import { injectStaticManifestScript } from "./utils/inject-static-manifest-script.mjs";
+
+export { escapeJsonForHtmlScript };
+export { insertBeforeClosingHead };
+export { injectStaticManifestScript };
+export { normalizePrerenderPagesOption };
 
 /**
- * @typedef {import("../src/storage/staticMainSite.js").StaticMainManifest} StaticMainManifest
- * @typedef {import("../src/storage/staticMainSite.js").StaticPageSource} StaticPageSource
+ * @typedef {import("../../src/storage/staticMainSite.js").StaticMainManifest} StaticMainManifest
+ * @typedef {import("../../src/storage/staticMainSite.js").StaticPageSource} StaticPageSource
  */
 
 /**
@@ -74,23 +86,6 @@ function buildDefaultPageSource() {
   ];
 }
 
-function escapeHtml(input) {
-  return input
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function sanitizeRenderedHtml(html) {
-  // Build-time safety: strip script tags and inline event handlers.
-
-  return html
-    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/giu, "")
-    .replace(/\son[a-z]+\s*=\s*(?:"[^"]*"|'[^']*'|[^\s>]+)/giu, "");
-}
-
 export function splitFrontmatterWithGrayMatter(src) {
   const parsed = matter(src);
   const data =
@@ -110,10 +105,6 @@ export function extractTemplateContent(html) {
   }
 
   return templateMatch[1].trim();
-}
-
-function toPosixPath(inputPath) {
-  return inputPath.split(path.sep).join("/");
 }
 
 function applyPurgePreRenderedStaticPages(
@@ -695,51 +686,6 @@ export function markNoSeedPrerenderHost(indexHtml) {
   );
 }
 
-export function escapeJsonForHtmlScript(jsonString) {
-  return jsonString
-    .replace(/</g, "\\u003c")
-    .replace(/>/g, "\\u003e")
-    .replace(/\//g, "\\u002f")
-    .replace(/\u2028/g, "\\u2028")
-    .replace(/\u2029/g, "\\u2029");
-}
-
-export function insertBeforeClosingHead(html, contentToInsert) {
-  const lastHeadIndex = html.lastIndexOf("</head>");
-  if (lastHeadIndex !== -1) {
-    return (
-      html.slice(0, lastHeadIndex) +
-      contentToInsert +
-      "\n" +
-      html.slice(lastHeadIndex)
-    );
-  }
-  return `${contentToInsert}\n${html}`;
-}
-
-export function injectStaticManifestScript(html, manifestJson) {
-  const safeManifestJson = escapeJsonForHtmlScript(manifestJson);
-  const manifestScriptTag = `<script id="shadow-claw-static-manifest" type="application/json">${safeManifestJson}</script>`;
-  const routingScriptTag = `<script id="shadow-claw-static-routing" type="application/json">{"routes":{}}</script>`;
-
-  let resultHtml = html;
-
-  if (/id="shadow-claw-static-manifest"/iu.test(resultHtml)) {
-    resultHtml = resultHtml.replace(
-      /<script\s+id="shadow-claw-static-manifest"[\s\S]*?<\/script>/iu,
-      () => manifestScriptTag,
-    );
-  } else {
-    resultHtml = insertBeforeClosingHead(resultHtml, `  ${manifestScriptTag}`);
-  }
-
-  if (!/id="shadow-claw-static-routing"/iu.test(resultHtml)) {
-    resultHtml = insertBeforeClosingHead(resultHtml, `  ${routingScriptTag}`);
-  }
-
-  return resultHtml;
-}
-
 /**
  * Inlines critical CSS and JS for production builds.
  *
@@ -895,26 +841,6 @@ export function minifyDsdTemplateHtml(html) {
  * @param {string|number|boolean|undefined} val
  * @returns {number|"all"}
  */
-export function normalizePrerenderPagesOption(val) {
-  if (val === undefined || val === null || val === "" || val === true) {
-    return 1;
-  }
-  const str = String(val).trim().toLowerCase();
-  if (str === "all") {
-    return "all";
-  }
-  if (str === "none" || str === "0" || str === "false") {
-    return 0;
-  }
-  if (str === "1" || str === "current" || str === "single") {
-    return 1;
-  }
-  const num = parseInt(str, 10);
-  if (!isNaN(num) && num >= 0) {
-    return num;
-  }
-  return 1;
-}
 
 /**
  * @typedef {Object} PrerenderDsdShellOptions

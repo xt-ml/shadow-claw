@@ -47,7 +47,7 @@ The list of saved pages, default pinned page, and active page are managed centra
 
 ### Static Main Site Seeding (`src/storage/staticMainSite.ts`)
 
-During store initialization, `seedStaticMainSite()` seeds default pages from the special `pages/main/` directory:
+During store initialization, `seedStaticMainSite()` seeds default pages from the special `pages/main/` directory. When that directory is absent, the build and runtime use the built-in `index.html` and `MEMORY.md` pages instead:
 
 1. **Embedded Manifest Prioritization**: Manifest discovery checks embedded `#shadow-claw-static-manifest` JSON script elements first (`preferEmbedded: true`), avoiding network waterfalls on boot.
 2. **Background Full Sync**: Full manifest synchronization (`static-main-manifest.json`) is scheduled asynchronously via `scheduleBackgroundStaticMainSiteSeeding()` (leveraging `requestIdleCallback`) to download any remaining static assets in the background without blocking the main UI thread.
@@ -82,6 +82,7 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 ### Automatic Refresh & Visibility Synchronization
 
 - **Immediate Activation Refresh**: Switching to the Pages sidebar tab or selecting the root `/pages` route immediately fetches and re-renders the latest file version from workspace storage (`readGroupFile`), guaranteeing up-to-date content without requiring a manual reload.
+- **Save Synchronization**: When the File Viewer successfully saves the file currently rendered by Pages, it dispatches a `shadow-claw-file-saved` event containing the file's `groupId` and workspace `path`. Pages re-renders only when both values match the selected page, so edits appear immediately without navigating away and back.
 - **Visibility & Focus Syncing**: Listens to the Page Visibility API (`visibilitychange`) and window `focus` events. When the browser tab or desktop window regains focus while Pages is active, the active page content is re-rendered immediately.
 - **Configurable Auto-Refresh Interval (`CONFIG_KEYS.PAGES_AUTO_REFRESH_INTERVAL`)**:
   - Configurable in Settings under **Navigation & Pages** (from `0` to `86,400` seconds / 24 hours).
@@ -117,7 +118,7 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 
 ## Pre-rendered Content, Routing & Pretty Paths
 
-Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prerender-dsd-shell.mjs` and `bin/prerender-pretty-paths.mjs` support static server-side rendering with pretty path resolution:
+Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prerender-dsd-shell/prerender-dsd-shell.mjs` and `bin/prerender-pretty-paths/prerender-pretty-paths.mjs` support static server-side rendering with pretty path resolution:
 
 - **Production Asset Inlining**:
   - In production builds (`npm run build:prod`), critical assets (`index.css`, `theme-init.js`, and `service-worker/init.js`) are inlined directly into `index.html` and pre-rendered pages to eliminate render-blocking round-trips.
@@ -128,9 +129,10 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prere
 - **Dynamic Hydration & Fallback Loading**:
   - When navigating to pages not embedded in the initial HTML or stored in local storage, `shadow-claw-pages` and `getStaticPageContent()` dynamically fetch individual markdown files from `static-main/` or fallback to `static-main-manifest.json`.
 - **Pretty Paths & Sub-Routes**:
-  - Configured via `pages/routes.json` to map markdown page sources to clean URL paths (e.g. `/2026/06/30/on-developing-loops/`).
+  - Configured via `routes.json` (normally `pages/routes.json`) to map markdown page sources to clean URL paths (e.g. `/2026/06/30/on-developing-loops/`). Candidate locations include `pages/resources/`, `pages/deps/`, `resources/`, `deps/`, `pages/`, and the project root.
   - Supports recursive nested `subRoutes` entries matching child URL hierarchies.
   - The pre-render pipeline generates dedicated physical `index.html` files with page-specific DSD templates.
+  - If no `routes.json` exists, pretty-path generation is skipped without failing the build.
 - **Static Routing Manifest**:
   - Embedded via `#shadow-claw-static-routing` JSON script tags or fetched via `static-routing.json` (`src/storage/staticRouting.ts`), allowing client-side router (`app-routes.ts`) and pages component to resolve routes asynchronously (`resolvePrettyPathToRouteAsync`, `parseRouteFromUrlAsync`) across Node.js, Electron, and GitHub Pages.
 - **Server Middleware Fallbacks**:
@@ -138,17 +140,27 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prere
 - **DSD Shell Override**:
   - Enabled via the "Override pre-rendered content" toggle in Settings (`CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON`). Hides the initial DSD shell on boot, showing the skeleton loader until hydration finishes.
 - **Declarative Site Configuration (`site-config.json`)**:
-  - Template repositories and content publishers can declaratively brand and customize the site shell without editing ShadowClaw source files:
+  - Template repositories and content publishers can declaratively brand and customize the site shell without editing ShadowClaw source files. The canonical location is the project root; compatible legacy content locations are also discovered:
     - **`site`**: `title`, `description`, `themeColor`, `lang`.
     - **`branding`**: `titleText`, `siteUrl`, `repoUrl`, `repoLabel`, `faviconPath`, `appleTouchIconPath`, `logoSlotHtml`.
     - **`sidebar`**: `pagesHidden`, `chatHidden`, `tasksHidden`, `filesHidden`, `defaultPage` (`"pages"` | `"chat"` | `"tasks"` | `"files"`).
     - **`pages`**: `sortOrder` (`"asc"` | `"desc"`), `defaultPinnedPage`.
     - **`theme`**: `stylesheet` (custom theme CSS stylesheet injected into head).
     - **`settings`**: `assistantName` (pre-seeds the default assistant name).
-  - **Build-Time Application**: `bin/apply-site-config.mjs` patches `index.html`, `manifest.json`, `sitemap.xml` / `sitemap.txt`, and copies custom theme stylesheets into the build distribution.
-  - **DSD Shell Navigation Visibility**: `bin/prerender-dsd-shell.mjs` applies `hidden` and `aria-hidden` attributes to sidebar navigation items at build time, preventing layout shift on first paint.
+  - **Build-Time Application**: `bin/site-config/apply.mjs` patches `index.html`, `manifest.json`, `sitemap.xml` / `sitemap.txt`, and copies custom theme stylesheets into the build distribution. Stylesheets under `pages/resources/`, `pages/deps/`, `resources/`, `deps/`, `pages/assets/`, or `pages/main/assets/` are flattened to the distribution root and have that prefix removed from the generated `href`; other paths, such as `pages/main/theme.css`, retain their path.
+  - **Branding Asset Precedence**: For `faviconPath` and `appleTouchIconPath`, content-specific locations under `pages/` and its supported resource/dependency paths are checked before bare repository-root defaults, so a published site's branding assets are not shadowed by ShadowClaw's built-in assets.
+  - **DSD Shell Navigation Visibility**: `bin/prerender-dsd-shell/prerender-dsd-shell.mjs` applies `hidden` and `aria-hidden` attributes to sidebar navigation items at build time, preventing layout shift on first paint.
   - **Runtime Seeding**: `orchestratorStore.init()` reads the embedded `<script id="shadow-claw-site-config" type="application/json">` via `applySiteConfigDefaults()` to seed preferences into IndexedDB on first load.
   - **Interactive User Controls**: Users can toggle sidebar visibility runtime in Settings under **Navigation**, triggering reactive events (`sidebar-pages-visibility-change`, `sidebar-chat-visibility-change`, `sidebar-tasks-visibility-change`, `sidebar-files-visibility-change`) with graceful fallback routing via `getDefaultSidebarPage()`.
+
+### Static Publishing Build
+
+The production build is orchestrated by `bin/build/build.mjs`. It copies optional
+content, applies `site-config.json`, prerenders the DSD shell, generates any
+configured pretty paths, and builds the service worker. A repository may omit
+`pages/` entirely; the build still succeeds and publishes the built-in default
+Pages content. The regression suite in `bin/build/build.test.mjs` covers both a
+normal `pages/` tree and the absent-directory case.
 
 ---
 

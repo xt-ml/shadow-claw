@@ -9,6 +9,7 @@ import type { ShadowClawDatabase } from "../db/types.js";
 export interface FileInfo {
   name: string;
   path?: string;
+  groupId?: string;
   content: string;
   kind: "text" | "pdf" | "binary";
   binaryContent: Uint8Array | null;
@@ -129,6 +130,7 @@ export class FileViewerStore {
         this._file.set({
           name,
           path,
+          groupId,
           content: "",
           kind: "pdf",
           binaryContent,
@@ -144,6 +146,7 @@ export class FileViewerStore {
         this._file.set({
           name,
           path,
+          groupId,
           content: "",
           kind: "binary",
           binaryContent: null,
@@ -158,6 +161,7 @@ export class FileViewerStore {
       this._file.set({
         name,
         path,
+        groupId,
         content,
         kind: "text",
         binaryContent: null,

@@ -31,6 +31,7 @@ describe("FileViewerStore", () => {
     expect(s.file).toEqual({
       name: "c.txt",
       path: "a/b/c.txt",
+      groupId: "g1",
       content: "hello",
       kind: "text",
       binaryContent: null,
@@ -62,6 +63,7 @@ describe("FileViewerStore", () => {
     expect(s.file).toEqual({
       name: "single-file.txt",
       path: "single-file.txt",
+      groupId: "g1",
       content: "content",
       kind: "text",
       binaryContent: null,
@@ -88,6 +90,7 @@ describe("FileViewerStore", () => {
     expect(s.file).toEqual({
       name: "manual.pdf",
       path: "folder/manual.pdf",
+      groupId: "g1",
       content: "",
       kind: "pdf",
       binaryContent: pdfBytes,
@@ -110,6 +113,7 @@ describe("FileViewerStore", () => {
     expect(s.file).toEqual({
       name: "logo.png",
       path: "images/logo.png",
+      groupId: "g1",
       content: "",
       kind: "binary",
       binaryContent: null,
@@ -144,6 +148,7 @@ describe("FileViewerStore", () => {
     expect(s.file).toEqual({
       name: "file.txt",
       path: "file.txt",
+      groupId: "br:main",
       content: "content",
       kind: "text",
       binaryContent: null,

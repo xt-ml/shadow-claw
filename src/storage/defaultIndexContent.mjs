@@ -7,7 +7,7 @@ slug: "shadow-claw-pages"
 ---
 
 <article>
-  <h1>Welcome to ShadowClaw Pages</h1>
+  <h2>Welcome to ShadowClaw Pages</h2>
   <p>This is the default static page for your workspace.</p>
   <h2 id="getting-started-with-shadowclaw">Getting started with ShadowClaw</h2>
   <h3 id="what-is-memorymd">What is MEMORY.md?</h3>
@@ -28,7 +28,6 @@ slug: "shadow-claw-pages"
       Edit and preview files with the file viewer:
       <ul>
         <li><a href="/files/main/index.html">index.html</a></li>
-        <li><a href="/files/main/MEMORY.md">MEMORY.md</a></li>
       </ul>
     </li>
   </ul>

@@ -82,6 +82,7 @@ const { setSanitizedHtml, toTrustedHtmlPresanitized } =
   await import("../../security/trusted-types.js");
 const { readGroupFileBytes } =
   await import("../../storage/readGroupFileBytes.js");
+const { writeGroupFile } = await import("../../storage/writeGroupFile.js");
 const { setAllowedCustomElementHostPatterns } =
   await import("../../security/custom-element-security.js");
 
@@ -1185,6 +1186,76 @@ describe("shadow-claw-file-viewer", () => {
     expect(closeFileMock).not.toHaveBeenCalled();
 
     document.body.removeChild(appHost);
+  });
+
+  it("dispatches shadow-claw-file-saved with the saved path and group id after a successful save", async () => {
+    const component = new ShadowClawFileViewer();
+    component.db = {} as any;
+
+    const editor = document.createElement("textarea");
+    editor.className = "file-editor";
+    editor.value = "# updated content";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "modal-save-btn";
+
+    component.shadowRoot?.replaceChildren(editor, saveBtn);
+
+    (fileViewerStore as any).file = {
+      name: "page.md",
+      path: "page.md",
+      kind: "text",
+      content: "# original content",
+    };
+
+    const savedListener = jest.fn();
+    document.addEventListener("shadow-claw-file-saved", savedListener);
+
+    await component.handleSave();
+
+    expect(writeGroupFile).toHaveBeenCalledWith(
+      component.db,
+      "test-group",
+      "page.md",
+      "# updated content",
+    );
+    expect(savedListener).toHaveBeenCalledTimes(1);
+    const event = savedListener.mock.calls[0][0] as CustomEvent;
+    expect(event.detail).toEqual({ groupId: "test-group", path: "page.md" });
+
+    document.removeEventListener("shadow-claw-file-saved", savedListener);
+  });
+
+  it("saves a Pages-opened file using its full workspace path", async () => {
+    const component = new ShadowClawFileViewer();
+    component.db = {} as any;
+
+    const editor = document.createElement("textarea");
+    editor.className = "file-editor";
+    editor.value = "# updated article";
+
+    const saveBtn = document.createElement("button");
+    saveBtn.className = "modal-save-btn";
+
+    component.shadowRoot?.replaceChildren(editor, saveBtn);
+
+    (fileViewerStore as any).file = {
+      name: "article.html",
+      path: "~/docs/example/article.html",
+      groupId: "conversation-2",
+      kind: "text",
+      content: "<h2>Article</h2>",
+    };
+    (orchestratorStore as any).currentPath = ".";
+
+    await component.handleSave();
+
+    expect(writeGroupFile).toHaveBeenCalledWith(
+      component.db,
+      "conversation-2",
+      "~/docs/example/article.html",
+      "# updated article",
+    );
   });
 
   describe("workspace link resolution", () => {

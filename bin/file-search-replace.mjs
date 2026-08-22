@@ -9,25 +9,50 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const dataProjectRoot = join(__dirname, "..");
 
-chdir(dataProjectRoot);
-
 /**
  * Reads UTF-8 content from process stdin.
  *
  * @returns {Promise<string>}
  */
-async function readStdin() {
+export async function readStdin(input = stdin) {
   const chunks = [];
 
-  for await (const chunk of stdin) {
+  for await (const chunk of input) {
     chunks.push(chunk);
   }
 
   return Buffer.concat(chunks).toString("utf8").trim();
 }
 
-async function main() {
+export async function fileSearchReplace(
+  args,
+  {
+    readFileImpl = readFile,
+    writeFileImpl = writeFile,
+    stdin: stdinImpl = stdin,
+    logImpl = console.log,
+  } = {},
+) {
+  if (args.length < 2) {
+    throw new Error("at least a search pattern and file path are required");
+  }
+
+  const [searchPatternStr, filePath, prepend = "", maybeReplacement] = args;
+  const searchPattern = new RegExp(searchPatternStr, "g");
+  const replacement = maybeReplacement ?? (await readStdin(stdinImpl));
+
+  let content = await readFileImpl(filePath, "utf8");
+
+  content = content.replace(searchPattern, `${prepend}${replacement}`);
+
+  await writeFileImpl(filePath, content, "utf8");
+
+  logImpl(`Replaced content in: ${filePath}`);
+}
+
+export async function main() {
   const args = argv.slice(2);
+  chdir(dataProjectRoot);
 
   if (args.length < 2) {
     console.error(
@@ -41,21 +66,12 @@ async function main() {
     exit(1);
   }
 
-  const [searchPatternStr, filePath, prepend = "", maybeReplacement] = args;
-  const searchPattern = new RegExp(searchPatternStr, "g");
-  const replacement = maybeReplacement ?? (await readStdin());
-
-  let content = await readFile(filePath, "utf8");
-
-  content = content.replace(searchPattern, `${prepend}${replacement}`);
-
-  await writeFile(filePath, content, "utf8");
-
-  console.log(`Replaced content in: ${filePath}`);
+  await fileSearchReplace(args);
 }
 
-main().catch((e) => {
-  console.error(e);
-
-  exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((error) => {
+    console.error(error);
+    exit(1);
+  });
+}

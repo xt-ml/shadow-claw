@@ -203,15 +203,15 @@ ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace con
 - **Render markdown & HTML** — Save any markdown or HTML file as a page for structured preview, including optional visible YAML frontmatter metadata
 - **Workspace-relative links** — Links and images in pages resolve relative to the workspace
 - **Page sidebar** — Persistent list of saved pages with drag-and-drop reordering and responsive mobile sidebar collapse
-- **Static Main Site Seeding** — Automatically seeds default main pages from the `pages/main/` manifest, respecting page suppression rules
-- **Static Pretty Paths & DSD Pre-rendering** — Build-time pre-rendering for `pages/routes.json` generates static HTML with Declarative Shadow DOM templates for clean URLs across Node.js, Electron, and GitHub Pages (pages flagged for purge are excluded from the output manifest); same-origin links are validated via `isPossibleAppRoute` so non-app paths fall back to native browser navigation
+- **Static Main Site Seeding** — Automatically seeds default main pages from the `pages/main/` manifest, respecting page suppression rules; when `pages/` is absent, built-in `index.html` and `MEMORY.md` defaults are used
+- **Static Pretty Paths & DSD Pre-rendering** — Build-time pre-rendering for `routes.json` (usually `pages/routes.json`) generates static HTML with Declarative Shadow DOM templates for clean URLs across Node.js, Electron, and GitHub Pages; missing routes are skipped, pages flagged for purge are excluded from the output manifest, and same-origin links are validated via `isPossibleAppRoute` so non-app paths fall back to native browser navigation
 - **Page Suppression** — Deleting pages suppresses auto-reseeding (`SUPPRESSED_PAGES_LIST`) until re-added
 - **Safe iframe embeds** — HTML previews use a configurable iframe host allowlist in Settings, with safe defaults for common embedded content hosts
 - **Ebook-Style Navigation** — Functional Previous/Next pagination controls with HTML-entity decoded frontmatter headers, seamless page transitions, `ArrowLeft`/`ArrowRight` keyboard navigation, touch/mouse swipe gestures, and `aria-live` screen reader announcements
 - **Pre-rendered Content Override** — Optional setting (`OVERRIDE_PRERENDER_SKELETON`) suppresses Declarative Shadow DOM (DSD) pre-rendered content during boot to eliminate hydration flash
 - **Declarative Site Configuration** — Support for `site-config.json` enabling template repositories to customize site metadata, branding, custom theme stylesheets, custom element security allowlists, and navigation visibility without modifying core source
 - **Dynamic Sidebar Navigation Visibility** — Runtime toggling of Pages, Chat, Tasks, and Files sidebar tabs via Settings, with automatic fallback routing and build-time DSD navigation attribute synchronization
-- **Content-Only Publishing** — Supports GitHub Pages publishing via the [`shadow-claw-template` template repository](https://github.com/xt-ml/shadow-claw-template) that pulls ShadowClaw as a CI-time build dependency.
+- **Content-Only Publishing** — Supports GitHub Pages publishing via the [`shadow-claw-template` template repository](https://github.com/xt-ml/shadow-claw-template) that pulls ShadowClaw as a CI-time build dependency; see the [publishing guide](pages/main/~/docs/publishing-to-github-pages.md) for root-level `site-config.json` and optional `pages/` behavior.
 
 Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first setup) which serves as a workspace-scoped system context for the agent. An `index.html` is also auto-created as the default home page.
 

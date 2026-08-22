@@ -86,6 +86,8 @@ describe("ShadowClawConversations", () => {
     mockOrchStore.groups = [{ groupId: "br:main", name: "Main", createdAt: 0 }];
     mockOrchStore.activeGroupId = "br:main";
     mockOrchStore.unreadGroupIds = new Set();
+    mockOrchStore.activePage = "chat";
+    mockOrchStore.sidebarDefaultPage = "chat";
   });
 
   it("is a defined custom element", () => {
@@ -1146,6 +1148,38 @@ describe("ShadowClawConversations", () => {
       secondItem.dispatchEvent(
         new KeyboardEvent("keydown", { key: " ", bubbles: true }),
       );
+      expect(navigateEvents).toHaveLength(1);
+      expect(navigateEvents[0].detail).toMatchObject({
+        page: "chat",
+        groupId: "br:second",
+      });
+
+      document.removeEventListener("shadow-claw-navigate", captureNavigate);
+
+      document.body.removeChild(el);
+    });
+
+    it("never navigates to the pages tab when switching conversations, since its route can't carry a bare groupId", async () => {
+      mockOrchStore.groups = [
+        { groupId: "br:main", name: "Main", createdAt: 0 },
+        { groupId: "br:second", name: "Second", createdAt: 1 },
+      ];
+      mockOrchStore.activeGroupId = "br:main";
+      mockOrchStore.activePage = "pages";
+      mockOrchStore.sidebarDefaultPage = "pages";
+
+      const el = new ShadowClawConversations() as any;
+      document.body.appendChild(el);
+      await el.render();
+      el.db = {} as any;
+
+      const navigateEvents: CustomEvent[] = [];
+      const captureNavigate = (e: Event) =>
+        navigateEvents.push(e as CustomEvent);
+      document.addEventListener("shadow-claw-navigate", captureNavigate);
+
+      await el.handleSwitch("br:second");
+
       expect(navigateEvents).toHaveLength(1);
       expect(navigateEvents[0].detail).toMatchObject({
         page: "chat",

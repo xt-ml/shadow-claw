@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 
 /**
- * apply-site-config.mjs
+ * site-config/apply.mjs
  *
  * Reads a declarative `site-config.json` from the template repo's `pages/`
  * directory and patches production build artefacts in `dist/public/` so
  * template consumers can brand the site without touching ShadowClaw source.
  *
  * Usage:
- *   node bin/apply-site-config.mjs <distPublicDir> <siteConfigPath>
+ *   node bin/site-config/apply.mjs <distPublicDir> <siteConfigPath>
  *
  * Both arguments are required, but the script exits silently (0) when the
  * config file does not exist — site-config.json is optional.
@@ -26,6 +26,10 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildCustomElementScriptTags } from "./utils/custom-elements/build-custom-element-script-tags.mjs";
+import { getApprovedCustomElementScripts } from "./utils/custom-elements/get-approved-custom-element-scripts.mjs";
+import { resolveCustomElementScripts } from "./utils/custom-elements/resolve-custom-element-scripts.mjs";
+import { sanitizeEmbeddedCustomElementScripts } from "./utils/custom-elements/sanitize-embedded-custom-element-scripts.mjs";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -55,6 +59,30 @@ export function insertBeforeClosingHead(html, contentToInsert) {
 
 function escapeRegexLiteral(str) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// Prefixes whose *contents* are flattened into dist/public root by
+// copyResourceDirEntries() during build (see bin/build/build.mjs). A
+// stylesheet path under one of these is copied to dist root, so the leading
+// segment must be stripped from its href. Any other pages/* path (e.g.
+// pages/main/theme.css) is copied verbatim under dist/public/pages/ and must
+// keep its path intact.
+const FLATTENED_STYLESHEET_PREFIXES = [
+  "pages/resources/",
+  "pages/deps/",
+  "resources/",
+  "deps/",
+  "pages/assets/",
+  "pages/main/assets/",
+];
+
+function resolveThemeStylesheetHref(stylesheet) {
+  for (const prefix of FLATTENED_STYLESHEET_PREFIXES) {
+    if (stylesheet.startsWith(prefix)) {
+      return stylesheet.slice(prefix.length);
+    }
+  }
+  return stylesheet;
 }
 
 /** Read a JSON file and return the parsed object, or null on failure. */
@@ -223,11 +251,12 @@ function patchIndexHtml(html, config) {
   // --- Theme stylesheet injection ---
   const theme = config.theme || {};
   if (theme.stylesheet) {
-    // Resolve the stylesheet path relative to the dist root
-    const stylesheetHref = theme.stylesheet.replace(
-      /^(pages\/)?(resources\/|deps\/|main\/)?/,
-      "",
-    );
+    // Unlike favicon/appleTouchIcon, pages/main/* is copied verbatim to
+    // dist/public/pages/main/* (not flattened to dist root — only the
+    // contents of pages/{resources,deps,assets}/ and pages/main/assets/ are
+    // flattened), so the href must keep its pages/ prefix or the browser
+    // 404s on it.
+    const stylesheetHref = resolveThemeStylesheetHref(theme.stylesheet);
     const themeCssTag = `<link rel="stylesheet" href="${escapeHtml(stylesheetHref)}" />`;
     if (
       !next.includes(`href="${stylesheetHref}"`) &&
@@ -245,124 +274,36 @@ function patchIndexHtml(html, config) {
   }
 
   // --- Custom scripts & custom elements injection ---
-  const customElConfig = config.customElements;
-  const rawScripts =
-    (typeof customElConfig === "object" && !Array.isArray(customElConfig)
-      ? customElConfig.scripts
-      : customElConfig) ||
-    config.scripts ||
-    theme.scripts ||
-    [];
+  const { rawScripts, allowedDomains } = resolveCustomElementScripts(
+    config,
+    theme,
+  );
+  const approvedEntries = getApprovedCustomElementScripts(
+    rawScripts,
+    allowedDomains,
+    console.warn,
+  );
+  const scriptTags = buildCustomElementScriptTags(approvedEntries, escapeHtml);
 
-  const allowedDomains =
-    (typeof customElConfig === "object" && !Array.isArray(customElConfig)
-      ? customElConfig.allowedDomains
-      : undefined) ||
-    config.allowedCustomElementDomains ||
-    [];
-
-  const isDomainAllowed = (urlStr) => {
+  if (scriptTags) {
     if (
-      !urlStr.startsWith("http://") &&
-      !urlStr.startsWith("https://") &&
-      !urlStr.startsWith("//")
+      /<script\s+type="module"\s+src="index\.js"\s*><\/script>/iu.test(next)
     ) {
-      return true; // local relative script
-    }
-    if (
-      !allowedDomains ||
-      (Array.isArray(allowedDomains) && allowedDomains.length === 0)
-    ) {
-      return true; // if no explicit domain filter at build time, let runtime security handle it
-    }
-    try {
-      const url = new URL(urlStr, "https://localhost");
-      if (url.protocol !== "http:" && url.protocol !== "https:") return false;
-      const hostname = url.hostname.toLowerCase();
-      const domainList = Array.isArray(allowedDomains)
-        ? allowedDomains
-        : String(allowedDomains).split(/[\n,]+/);
-      return domainList.some((d) => {
-        const pattern = d.trim().toLowerCase();
-        return (
-          hostname === pattern ||
-          hostname.endsWith("." + pattern) ||
-          pattern === "*"
-        );
-      });
-    } catch {
-      return false;
-    }
-  };
-
-  if (Array.isArray(rawScripts) && rawScripts.length > 0) {
-    const approvedEntries = rawScripts.filter((entry) => {
-      const src = typeof entry === "string" ? entry : entry?.src;
-      if (!src) return false;
-      if (!isDomainAllowed(src)) {
-        console.warn(
-          `[Security] Skipping script from unapproved domain during build: ${src}`,
-        );
-        return false;
-      }
-      return true;
-    });
-
-    const scriptTags = approvedEntries
-      .map((entry) => {
-        const rawSrc = typeof entry === "string" ? entry : entry?.src;
-        const isLocal =
-          !rawSrc.startsWith("http://") &&
-          !rawSrc.startsWith("https://") &&
-          !rawSrc.startsWith("//");
-        const src = isLocal
-          ? rawSrc.replace(/^(pages\/)?(resources\/|deps\/|main\/)?/, "")
-          : rawSrc;
-
-        if (typeof entry === "string") {
-          return `    <script type="module" src="${escapeHtml(src)}"></script>`;
-        }
-        if (entry && typeof entry === "object" && entry.src) {
-          const type = entry.type
-            ? ` type="${escapeHtml(entry.type)}"`
-            : ' type="module"';
-          const asyncAttr = entry.async ? " async" : "";
-          const deferAttr = entry.defer ? " defer" : "";
-          return `    <script${type}${asyncAttr}${deferAttr} src="${escapeHtml(src)}"></script>`;
-        }
-        return "";
-      })
-      .filter(Boolean)
-      .join("\n");
-
-    if (scriptTags) {
-      if (
-        /<script\s+type="module"\s+src="index\.js"\s*><\/script>/iu.test(next)
-      ) {
-        next = next.replace(
-          /(<script\s+type="module"\s+src="index\.js"\s*><\/script>)/iu,
-          `${scriptTags}\n    $1`,
-        );
-      } else {
-        next = insertBeforeClosingHead(next, `${scriptTags}`);
-      }
+      next = next.replace(
+        /(<script\s+type="module"\s+src="index\.js"\s*><\/script>)/iu,
+        `${scriptTags}\n    $1`,
+      );
+    } else {
+      next = insertBeforeClosingHead(next, `${scriptTags}`);
     }
   }
 
   // --- Embed site-config.json for runtime boot-time seeding ---
   // Clone and sanitize embedded config to exclude any rejected scripts
-  const sanitizedConfig = JSON.parse(JSON.stringify(config));
-  if (
-    sanitizedConfig.customElements &&
-    typeof sanitizedConfig.customElements === "object" &&
-    Array.isArray(sanitizedConfig.customElements.scripts)
-  ) {
-    sanitizedConfig.customElements.scripts =
-      sanitizedConfig.customElements.scripts.filter((entry) => {
-        const src = typeof entry === "string" ? entry : entry?.src;
-        return src ? isDomainAllowed(src) : false;
-      });
-  }
+  const sanitizedConfig = sanitizeEmbeddedCustomElementScripts(
+    config,
+    allowedDomains,
+  );
 
   const safeJson = JSON.stringify(sanitizedConfig)
     .replace(/</g, "\\u003c")
@@ -596,7 +537,28 @@ function getRepoRootDir(configDir) {
 }
 
 /**
+ * Resolve the template root directory (the directory site-config.json
+ * "belongs" to conceptually) without escaping above the repo root when
+ * site-config.json lives directly at the repo root — otherwise candidate
+ * resolution could leak in unrelated sibling directories on disk.
+ */
+function getTemplateRootDir(configDir) {
+  const resolved = path.resolve(configDir);
+  const last = path.basename(resolved);
+  if (last === "resources" || last === "deps" || last === "pages") {
+    return path.resolve(resolved, "..");
+  }
+  return resolved;
+}
+
+/**
  * Helper to resolve candidate file paths considering resources/, deps/, main/ and templateRootDir.
+ *
+ * Content/template-specific locations (pages/resources, pages/deps, pages/,
+ * pages/main) are checked before bare repo-root paths. ShadowClaw itself
+ * ships default assets (e.g. assets/icons/favicon.ico) at the repo root, so
+ * a bare-root candidate must be a last resort — otherwise it would always
+ * shadow a content repo's own override living under pages/.
  */
 function getCandidateFilePaths(relativePath, configDir, templateRootDir) {
   if (!relativePath || typeof relativePath !== "string") return [];
@@ -609,8 +571,6 @@ function getCandidateFilePaths(relativePath, configDir, templateRootDir) {
   const repoRootDir = getRepoRootDir(configDir);
 
   return [
-    path.resolve(configDir, relativePath),
-    path.resolve(configDir, cleanPath),
     path.resolve(configDir, "resources", cleanPath),
     path.resolve(configDir, "deps", cleanPath),
     path.resolve(configDir, "main", cleanPath),
@@ -629,12 +589,16 @@ function getCandidateFilePaths(relativePath, configDir, templateRootDir) {
     path.resolve(templateRootDir, "pages", relativePath),
     path.resolve(templateRootDir, "pages", cleanPath),
     path.resolve(templateRootDir, "pages", "main", cleanPath),
-    path.resolve(templateRootDir, relativePath),
-    path.resolve(templateRootDir, cleanPath),
     path.resolve(repoRootDir, "pages", relativePath),
     path.resolve(repoRootDir, "pages", cleanPath),
     path.resolve(repoRootDir, "pages", "main", cleanPath),
     path.resolve(repoRootDir, "pages", "main", relativePath),
+    // Bare repo-root/template-root fallbacks last: these match ShadowClaw's
+    // own bundled default assets and must not shadow content overrides.
+    path.resolve(configDir, relativePath),
+    path.resolve(configDir, cleanPath),
+    path.resolve(templateRootDir, relativePath),
+    path.resolve(templateRootDir, cleanPath),
     path.resolve(repoRootDir, relativePath),
     path.resolve(repoRootDir, cleanPath),
   ];
@@ -659,7 +623,7 @@ async function copyCustomSiteFiles(config, distPublicDir, siteConfigPath) {
   const configDir = siteConfigPath
     ? path.dirname(path.resolve(siteConfigPath))
     : process.cwd();
-  const templateRootDir = path.resolve(configDir, "..");
+  const templateRootDir = getTemplateRootDir(configDir);
   const repoRootDir = getRepoRootDir(configDir);
 
   // Copy any root-level resource directory (resources, deps, pages/resources, pages/deps)
@@ -871,7 +835,7 @@ async function copyThemeStylesheet(config, distPublicDir, siteConfigPath) {
   const configDir = siteConfigPath
     ? path.dirname(path.resolve(siteConfigPath))
     : process.cwd();
-  const templateRootDir = path.resolve(configDir, "..");
+  const templateRootDir = getTemplateRootDir(configDir);
 
   const candidatePaths = getCandidateFilePaths(
     theme.stylesheet,
@@ -916,7 +880,7 @@ async function copyLocalScripts(config, distPublicDir, siteConfigPath) {
   const configDir = siteConfigPath
     ? path.dirname(path.resolve(siteConfigPath))
     : process.cwd();
-  const templateRootDir = path.resolve(configDir, "..");
+  const templateRootDir = getTemplateRootDir(configDir);
 
   for (const entry of rawScripts) {
     const src = typeof entry === "string" ? entry : entry?.src;
@@ -962,7 +926,7 @@ async function copyBrandingAssets(config, distPublicDir, siteConfigPath) {
   const configDir = siteConfigPath
     ? path.dirname(path.resolve(siteConfigPath))
     : process.cwd();
-  const templateRootDir = path.resolve(configDir, "..");
+  const templateRootDir = getTemplateRootDir(configDir);
 
   let manifestIconSrcs = [];
   const manifestCandidate = await findFirstExisting(
@@ -1123,7 +1087,7 @@ async function main() {
 
   if (!distPublicDir || !siteConfigPath) {
     console.error(
-      "Usage: node bin/apply-site-config.mjs <distPublicDir> <siteConfigPath>",
+      "Usage: node bin/site-config/apply.mjs <distPublicDir> <siteConfigPath>",
     );
     process.exit(1);
   }
@@ -1138,7 +1102,7 @@ const isMainModule =
 
 if (isMainModule) {
   main().catch((err) => {
-    console.error("apply-site-config.mjs failed:", err);
+    console.error("site-config/apply.mjs failed:", err);
     process.exit(1);
   });
 }

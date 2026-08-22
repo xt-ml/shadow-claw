@@ -879,11 +879,16 @@ export class ShadowClawConversations extends ShadowClawElement {
     }
 
     // Derive the appropriate sidebar page from the current active page.
+    // "pages" is excluded as a fallback because its route omits groupId
+    // when no workspace path is present, so it can't represent a switch.
     const rawPage = orchestratorStore.activePage;
+    const fallbackPage = orchestratorStore.sidebarDefaultPage;
     const page =
       rawPage === "chat" || rawPage === "tasks" || rawPage === "files"
         ? rawPage
-        : (orchestratorStore.sidebarDefaultPage ?? "chat");
+        : fallbackPage === "tasks" || fallbackPage === "files"
+          ? fallbackPage
+          : "chat";
 
     // Dispatch a navigate event so the URL updates to /page/groupId and
     // the router calls applyRoute, which handles switchConversation.

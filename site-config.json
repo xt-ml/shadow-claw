@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "site": {
+    "title": "ShadowClaw",
+    "description": "ShadowClaw - Browser-native AI agent.",
+    "themeColor": "#fff"
+  },
+  "branding": {
+    "faviconPath": "assets/icons/favicon.ico",
+    "appleTouchIconPath": "assets/icons/180.png",
+    "notFoundPath": "404.html"
+  },
+  "pwa": {
+    "manifestPath": "manifest.json",
+    "themeColor": "#000000"
+  },
+  "sitemapPath": "sitemap.xml",
+  "assets": ["assets"],
+  "sidebar": {
+    "pagesHidden": false,
+    "chatHidden": false,
+    "tasksHidden": false,
+    "filesHidden": false,
+    "defaultPage": "pages"
+  }
+}

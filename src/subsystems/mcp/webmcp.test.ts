@@ -426,7 +426,6 @@ describe("webmcp integration", () => {
     expect(mockWorker.postMessage).not.toHaveBeenCalled();
   });
 
-
   it("does not register any tools when tools array is explicitly empty", async () => {
     const registered = await registerWebMcpTools(
       null,

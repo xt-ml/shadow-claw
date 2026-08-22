@@ -7,7 +7,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { escapeJsonForHtmlScript } from "./prerender-dsd-shell.mjs";
+import { escapeJsonForHtmlScript } from "../prerender-dsd-shell/prerender-dsd-shell.mjs";
 
 describe("injectStaticRoutingScript", () => {
   it("escapes script tags, HTML comments, and special characters in routing JSON", () => {

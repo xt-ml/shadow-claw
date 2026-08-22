@@ -36,6 +36,8 @@ export interface StaticMainManifest {
 
 /** localStorage key that records the last completed purge run. */
 export const PURGE_STORAGE_KEY = "sc:purge-id";
+export const PURGE_CONFIG_KEY = "static_main_site_purge_id";
+const LEGACY_PURGE_ID = "__legacy_purge_pages__";
 
 export const STATIC_MAIN_MANIFEST_PATH = "static-main-manifest.json";
 export const STATIC_MAIN_DIR = "static-main";
@@ -325,24 +327,45 @@ export function sortSavedPageRefs(
 }
 
 /** Returns true when a purge should be skipped because it already ran for
- *  this `purgeId` on this client. Updates localStorage when a purge is
- *  allowed so future boots are skipped. */
-function checkAndMarkPurge(purgeId: string | undefined): boolean {
-  if (!purgeId) {
-    // No purgeId in manifest → always-purge (legacy behaviour).
-    return false;
-  }
+ * this deployment on this client. */
+async function checkAndMarkPurge(
+  db: ShadowClawDatabase,
+  purgeId: string | undefined,
+): Promise<boolean> {
+  const effectivePurgeId = purgeId ?? LEGACY_PURGE_ID;
   try {
     const lastPurgeId = localStorage.getItem(PURGE_STORAGE_KEY);
-    if (lastPurgeId === purgeId) {
-      // Already purged for this deployment — skip.
+    if (lastPurgeId === effectivePurgeId) {
       return true;
     }
-    // Record this purge run so next boot skips it.
-    localStorage.setItem(PURGE_STORAGE_KEY, purgeId);
   } catch {
-    // localStorage may be unavailable (e.g. private-browsing restrictions).
-    // Fall through and allow the purge so we're never stuck.
+    // Continue with IndexedDB when localStorage is unavailable.
+  }
+
+  try {
+    const lastPurgeId = await getConfig(db, PURGE_CONFIG_KEY);
+    if (lastPurgeId === effectivePurgeId) {
+      try {
+        localStorage.setItem(PURGE_STORAGE_KEY, effectivePurgeId);
+      } catch {
+        // IndexedDB is the durable record when localStorage is unavailable.
+      }
+      return true;
+    }
+
+    await setConfig(db, PURGE_CONFIG_KEY, effectivePurgeId);
+    try {
+      localStorage.setItem(PURGE_STORAGE_KEY, effectivePurgeId);
+    } catch {
+      // IndexedDB is the durable record when localStorage is unavailable.
+    }
+  } catch {
+    // Fall back to localStorage when IndexedDB is unavailable.
+    try {
+      localStorage.setItem(PURGE_STORAGE_KEY, effectivePurgeId);
+    } catch {
+      // If neither store is available, allow the purge to proceed.
+    }
   }
   return false;
 }
@@ -360,7 +383,7 @@ export async function seedStaticMainSite(
 
   let didPurge = false;
   if (manifest.preRenderedStaticPages) {
-    if (!checkAndMarkPurge(manifest.purgeId)) {
+    if (!(await checkAndMarkPurge(db, manifest.purgeId))) {
       didPurge = true;
       await processPurgeTokens(db, manifest.preRenderedStaticPages);
     }
@@ -368,7 +391,7 @@ export async function seedStaticMainSite(
 
   for (const page of manifest.pages) {
     if (page.content?.includes('slug: "shadow-claw--purge-pages"')) {
-      if (!didPurge && !checkAndMarkPurge(manifest.purgeId)) {
+      if (!didPurge && !(await checkAndMarkPurge(db, manifest.purgeId))) {
         didPurge = true;
         await deleteAllGroupFiles(db, groupId);
       }

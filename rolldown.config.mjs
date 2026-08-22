@@ -193,11 +193,11 @@ function swWatchPlugin() {
               process.env.PRERENDER_MAIN_MEMORY !== "false";
             if (prerenderMainMemory) {
               await execAsync(
-                "node bin/prerender-dsd-shell.mjs dist/public/index.html pages/main",
+                "node bin/prerender-dsd-shell/prerender-dsd-shell.mjs dist/public/index.html pages/main",
               );
             } else {
               await execAsync(
-                "node bin/prerender-dsd-shell.mjs dist/public/index.html --no-seed",
+                "node bin/prerender-dsd-shell/prerender-dsd-shell.mjs dist/public/index.html --no-seed",
               );
             }
 

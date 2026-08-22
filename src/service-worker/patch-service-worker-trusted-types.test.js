@@ -1,6 +1,23 @@
-import { describe, expect, it } from "@jest/globals";
+import { describe, expect, it, jest } from "@jest/globals";
+import vm from "node:vm";
 
 import { patchServiceWorkerTrustedTypes } from "./patch-service-worker-trusted-types.js";
+
+const SERVICE_WORKER_SOURCE =
+  'if(!self.define){importScripts("one.js","two.js")}';
+
+function runPatchedServiceWorker({ trustedTypes } = {}) {
+  const importScripts = jest.fn();
+  const context = { importScripts, self: null, trustedTypes };
+  context.self = context;
+
+  vm.runInNewContext(
+    patchServiceWorkerTrustedTypes(SERVICE_WORKER_SOURCE),
+    context,
+  );
+
+  return importScripts;
+}
 
 describe("patchServiceWorkerTrustedTypes", () => {
   it("wraps generated service worker importScripts calls with Trusted Types helper", () => {
@@ -20,5 +37,60 @@ describe("patchServiceWorkerTrustedTypes", () => {
     const source = "console.log('ok');";
 
     expect(patchServiceWorkerTrustedTypes(source)).toBe(source);
+  });
+
+  it("does not patch a service worker more than once", () => {
+    const patched = patchServiceWorkerTrustedTypes(SERVICE_WORKER_SOURCE);
+
+    expect(patchServiceWorkerTrustedTypes(patched)).toBe(patched);
+  });
+
+  it("uses the default Trusted Types policy when one already exists", () => {
+    const createScriptURL = jest.fn((url) => `trusted:${url}`);
+    const getPolicy = jest.fn(() => ({ createScriptURL }));
+    const importScripts = runPatchedServiceWorker({
+      trustedTypes: {
+        createPolicy: jest.fn(),
+        getPolicy,
+      },
+    });
+
+    expect(getPolicy).toHaveBeenCalledWith("default");
+    expect(createScriptURL).toHaveBeenCalledWith("one.js");
+    expect(createScriptURL).toHaveBeenCalledWith("two.js");
+    expect(importScripts).toHaveBeenCalledWith(
+      "trusted:one.js",
+      "trusted:two.js",
+    );
+  });
+
+  it("creates a default Trusted Types policy when none exists", () => {
+    const createScriptURL = jest.fn((url) => `trusted:${url}`);
+    const createPolicy = jest.fn(() => ({ createScriptURL }));
+    const importScripts = runPatchedServiceWorker({
+      trustedTypes: {
+        createPolicy,
+        getPolicy: jest.fn(() => null),
+      },
+    });
+
+    expect(createPolicy).toHaveBeenCalledWith("default", expect.any(Object));
+    expect(createScriptURL).toHaveBeenCalledWith("one.js");
+    expect(importScripts).toHaveBeenCalledWith(
+      "trusted:one.js",
+      "trusted:two.js",
+    );
+  });
+
+  it("falls back to raw URLs when Trusted Types setup fails", () => {
+    const importScripts = runPatchedServiceWorker({
+      trustedTypes: {
+        createPolicy: jest.fn(() => {
+          throw new Error("policy already exists");
+        }),
+      },
+    });
+
+    expect(importScripts).toHaveBeenCalledWith("one.js", "two.js");
   });
 });

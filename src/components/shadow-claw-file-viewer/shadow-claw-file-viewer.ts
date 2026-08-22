@@ -1506,18 +1506,26 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
       const newContent = editor.value;
       const filePath =
-        orchestratorStore.currentPath === "."
+        file.path ||
+        (orchestratorStore.currentPath === "."
           ? file.name
-          : `${orchestratorStore.currentPath}/${file.name}`;
+          : `${orchestratorStore.currentPath}/${file.name}`);
+      const groupId = file.groupId || orchestratorStore.activeGroupId;
 
-      await writeGroupFile(
-        this.db,
-        orchestratorStore.activeGroupId,
-        filePath,
-        newContent,
-      );
+      await writeGroupFile(this.db, groupId, filePath, newContent);
 
       showSuccess(`Saved ${file.name}`);
+
+      // Notify pages (and other consumers) rendering this path so they refresh
+      // without requiring the user to navigate away and back.
+      document.dispatchEvent(
+        new CustomEvent("shadow-claw-file-saved", {
+          detail: { groupId, path: filePath },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+
       await orchestratorStore.loadFiles(this.db);
 
       file.content = newContent;

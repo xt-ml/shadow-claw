@@ -1,6 +1,6 @@
 {
   "name": "shadowclaw",
-  "version": "1.20.2",
+  "version": "1.20.3",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -19,7 +19,7 @@
     "build:prod:local": "cross-env NODE_ENV=production PAGES_ORIGIN=http://localhost:8888/shadow-claw/ PAGES_BASE_PATH=/shadow-claw/ npm run build",
     "build:prod": "cross-env NODE_ENV=production npm run build",
     "build:service-worker": "npm run -s clean:service-worker && workbox generateSW src/service-worker/workbox-config.cjs",
-    "build": "npm run -s tsc && node bin/build.mjs",
+    "build": "npm run -s tsc && node bin/build/build.mjs",
     "clean:service-worker": "node bin/rimraf.mjs dist/public/workbox-*.js && node bin/rimraf.mjs dist/public/service-worker.js",
     "deploy:gh-pages": "npm run -s build:prod && gh-pages -f -m \"npm run deploy:gh-pages\" -d dist/public -r git@github.com:xt-ml/shadow-claw.git",
     "dev": "npm run build && concurrently -P \"npm run rolldown -- --watch\" \"node --watch dist/server.js {@}\" --",

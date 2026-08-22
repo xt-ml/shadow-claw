@@ -2,12 +2,13 @@ import { jest } from "@jest/globals";
 
 import {
   applySiteConfig,
+  copyBrandingAssets,
   escapeHtml,
   patch404Html,
   patchIndexHtml,
   patchManifest,
   patchSitemap,
-} from "./apply-site-config.mjs";
+} from "./apply.mjs";
 
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -119,6 +120,46 @@ describe("apply-site-config", () => {
       expect(themeInitIdx).toBeGreaterThan(-1);
       expect(siteConfigIdx).toBeLessThan(themeInitIdx);
     });
+
+    it("resolves theme.stylesheet to its actual on-disk dist path (pages/main/theme.css is never flattened to dist root)", () => {
+      const config = {
+        theme: {
+          stylesheet: "pages/main/theme.css",
+        },
+      };
+
+      const patched = patchIndexHtml(baseHtml, config);
+
+      // build.mjs only copies the whole `pages` dir to `dist/public/pages`;
+      // it never flattens pages/main/theme.css to dist/public/theme.css
+      // (unlike favicon/appleTouchIcon paths, which are copied to dist root
+      // by getPublishCopyPlan). The injected href must match where the file
+      // actually ends up, or the browser will 404 on it.
+      expect(patched).toContain(
+        '<link rel="stylesheet" href="pages/main/theme.css" />',
+      );
+      expect(patched).not.toContain(
+        '<link rel="stylesheet" href="theme.css" />',
+      );
+    });
+
+    it.each([
+      ["pages/resources/theme.css", "theme.css"],
+      ["pages/deps/theme.css", "theme.css"],
+      ["resources/theme.css", "theme.css"],
+      ["deps/theme.css", "theme.css"],
+      ["pages/assets/theme.css", "theme.css"],
+      ["pages/main/assets/theme.css", "theme.css"],
+    ])(
+      "flattens theme.stylesheet %s to dist root as %s (contents of these dirs are flattened by copyResourceDirEntries)",
+      (stylesheet, expectedHref) => {
+        const patched = patchIndexHtml(baseHtml, { theme: { stylesheet } });
+
+        expect(patched).toContain(
+          `<link rel="stylesheet" href="${expectedHref}" />`,
+        );
+      },
+    );
 
     it("blocks scripts from unapproved domains during build patching", () => {
       const config = {
@@ -443,6 +484,60 @@ https://example.com/about`;
       expect(copiedAsset).toBe("PNG_RESOURCE");
     });
 
+    // Reproduces a real deployment bug: site-config.json is copied to the
+    // shadow-claw repo root (configDir === repo root) while the content
+    // repo's own pages/ tree is copied to shadow-claw/pages/. ShadowClaw
+    // ships its own default assets/icons/favicon.ico at the repo root, at
+    // the exact same relative path declared by branding.faviconPath, so it
+    // must not be allowed to shadow the content repo's actual branding
+    // asset under pages/resources/.
+    it("prefers the content repo's pages/resources branding asset over a same-path ShadowClaw default at the repo root", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const repoRootDir = tmpDir;
+      const pagesResourcesDir = path.join(repoRootDir, "pages/resources");
+      await mkdir(distPublicDir, { recursive: true });
+      await mkdir(pagesResourcesDir, { recursive: true });
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      await writeFile(
+        indexPath,
+        "<!doctype html><html><head></head><body></body></html>",
+        "utf8",
+      );
+
+      // Simulates ShadowClaw's own bundled default icon at the repo root.
+      const defaultIconDir = path.join(repoRootDir, "assets/icons");
+      await mkdir(defaultIconDir, { recursive: true });
+      await writeFile(
+        path.join(defaultIconDir, "favicon.ico"),
+        "SHADOW_CLAW_DEFAULT_ICON",
+        "utf8",
+      );
+
+      // Simulates the content repo's own override, copied to pages/resources/.
+      const contentIconDir = path.join(pagesResourcesDir, "assets/icons");
+      await mkdir(contentIconDir, { recursive: true });
+      await writeFile(
+        path.join(contentIconDir, "favicon.ico"),
+        "CONTENT_REPO_CUSTOM_ICON",
+        "utf8",
+      );
+
+      const siteConfigPath = path.join(repoRootDir, "site-config.json");
+      const config = {
+        branding: { faviconPath: "assets/icons/favicon.ico" },
+      };
+      await writeFile(siteConfigPath, JSON.stringify(config), "utf8");
+
+      await copyBrandingAssets(config, distPublicDir, siteConfigPath);
+
+      const copiedFavicon = await readFile(
+        path.join(distPublicDir, "assets/icons/favicon.ico"),
+        "utf8",
+      );
+      expect(copiedFavicon).toBe("CONTENT_REPO_CUSTOM_ICON");
+    });
+
     it("prioritizes template resources (pages/resources/manifest.json) over root repository defaults", async () => {
       const distPublicDir = path.join(tmpDir, "dist/public");
       const pagesDir = path.join(tmpDir, "pages");
@@ -603,6 +698,68 @@ https://example.com/about`;
         "utf8",
       );
       expect(copied96Icon).toBe("TEMPLATE_DEMO_96_PNG");
+    });
+
+    it("resolves template assets relative to the repo root (not its parent) when site-config.json lives at the project root", async () => {
+      const workspaceDir = path.join(tmpDir, "workspace");
+      const repoDir = path.join(workspaceDir, "shadow-claw-template");
+      const distPublicDir = path.join(repoDir, "dist/public");
+
+      await mkdir(distPublicDir, { recursive: true });
+      await mkdir(path.join(repoDir, "assets", "icons"), { recursive: true });
+      // An unrelated directory one level above the repo root that happens to
+      // share the "assets" name — must never be treated as a template source.
+      await mkdir(path.join(workspaceDir, "assets", "icons"), {
+        recursive: true,
+      });
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      await writeFile(
+        indexPath,
+        "<!doctype html><html><head></head><body></body></html>",
+        "utf8",
+      );
+
+      await writeFile(
+        path.join(repoDir, "assets", "icons", "96.png"),
+        "REPO_ROOT_96_PNG",
+        "utf8",
+      );
+      await writeFile(
+        path.join(workspaceDir, "assets", "icons", "96.png"),
+        "OUTSIDE_REPO_96_PNG",
+        "utf8",
+      );
+      // A file that ONLY exists outside the repo — it must never leak into
+      // the build output, regardless of overwrite ordering for shared names.
+      await writeFile(
+        path.join(workspaceDir, "assets", "leaked-secret.txt"),
+        "SHOULD_NOT_LEAK",
+        "utf8",
+      );
+
+      const siteConfigPath = path.join(repoDir, "site-config.json");
+      const config = {
+        site: { title: "Root Config Demo" },
+        assets: ["assets"],
+      };
+      await writeFile(siteConfigPath, JSON.stringify(config), "utf8");
+
+      const result = await applySiteConfig(distPublicDir, siteConfigPath);
+      expect(result.applied).toBe(true);
+
+      const copiedIcon = await readFile(
+        path.join(distPublicDir, "assets", "icons", "96.png"),
+        "utf8",
+      );
+      expect(copiedIcon).toBe("REPO_ROOT_96_PNG");
+
+      await expect(
+        readFile(
+          path.join(distPublicDir, "assets", "leaked-secret.txt"),
+          "utf8",
+        ),
+      ).rejects.toThrow();
     });
   });
 });

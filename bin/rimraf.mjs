@@ -9,32 +9,41 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const dataProjectRoot = join(__dirname, "..");
 
-process.chdir(dataProjectRoot);
-
-const [, script, source] = argv;
-
 /**
  * Recursively deletes a file or directory.
+ *
  * @param {string} path
+ *
  * @returns {Promise<void>}
  */
-export async function rimraf(path) {
+export async function rimraf(
+  path,
+  { rmImpl = rm, logImpl = console.log, errorImpl = console.error } = {},
+) {
   try {
-    await rm(path, { recursive: true, force: true });
-    console.log(`Successfully deleted: ${path}`);
+    await rmImpl(path, { recursive: true, force: true });
+
+    logImpl(`Successfully deleted: ${path}`);
   } catch (error) {
-    console.error(`Error while deleting ${path}:`, error.message);
+    errorImpl(`Error while deleting ${path}:`, error.message);
   }
 }
 
-function usage() {
+function usage(script) {
   console.error(`${script} [source]`);
 }
 
-if (!source) {
-  usage();
+export async function main({ script = argv[1], source = argv[2] } = {}) {
+  if (!source) {
+    usage(script);
 
-  exit(1);
+    exit(1);
+  }
+
+  process.chdir(dataProjectRoot);
+  await rimraf(source);
 }
 
-await rimraf(source);
+if (import.meta.url === `file://${process.argv[1]}`) {
+  await main();
+}

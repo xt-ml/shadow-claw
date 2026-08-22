@@ -194,7 +194,6 @@ export function extractAbortSignal(
   return undefined;
 }
 
-
 /**
  * Retrieve tools registered on the WebMCP ModelContext API.
  *

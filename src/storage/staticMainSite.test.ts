@@ -639,7 +639,7 @@ describe("seedStaticMainSite – localStorage-gated purge", () => {
     expect(localStorage.getItem(PURGE_STORAGE_KEY)).toBe("build-002");
   });
 
-  it("falls back to always-purge (legacy) when purgeId is absent from manifest", async () => {
+  it("purges only once when purgeId is absent from manifest", async () => {
     injectManifestScript({
       pages: [
         {
@@ -653,7 +653,7 @@ describe("seedStaticMainSite – localStorage-gated purge", () => {
     await seedStaticMainSite({} as any);
     expect(mockDeleteAllGroupFiles).toHaveBeenCalledTimes(1);
 
-    // Second call – still no purgeId, so purges again (legacy always-purge)
+    // Second call – the ID-less reset marker has already been consumed.
     const existing = document.getElementById("shadow-claw-static-manifest");
     if (existing) existing.remove();
     injectManifestScript({
@@ -666,6 +666,6 @@ describe("seedStaticMainSite – localStorage-gated purge", () => {
     });
 
     await seedStaticMainSite({} as any);
-    expect(mockDeleteAllGroupFiles).toHaveBeenCalledTimes(2);
+    expect(mockDeleteAllGroupFiles).toHaveBeenCalledTimes(1);
   });
 });

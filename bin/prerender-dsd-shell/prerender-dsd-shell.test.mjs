@@ -1,5 +1,6 @@
 import {
   applyStaticPagesContent,
+  collectPageSources,
   escapeJsonForHtmlScript,
   injectPageHeaderDsd,
   injectStaticManifestScript,
@@ -346,6 +347,25 @@ describe("minifyDsdTemplateHtml", () => {
     expect(minifyDsdTemplateHtml(null)).toBeNull();
     expect(minifyDsdTemplateHtml(undefined)).toBeUndefined();
     expect(minifyDsdTemplateHtml("<div>hello</div>")).toBe("<div>hello</div>");
+  });
+});
+
+describe("collectPageSources without a pages directory", () => {
+  it("returns the built-in default pages", async () => {
+    const sourcePath = path.join(
+      os.tmpdir(),
+      `sc-dsd-missing-pages-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+
+    const pages = await collectPageSources(sourcePath);
+
+    expect(pages.map(({ displayPath }) => displayPath)).toEqual([
+      "index.html",
+      "MEMORY.md",
+    ]);
+    expect(
+      pages.every(({ inlineContent }) => typeof inlineContent === "string"),
+    ).toBe(true);
   });
 });
 

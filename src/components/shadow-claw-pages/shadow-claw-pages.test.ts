@@ -1296,6 +1296,54 @@ describe("shadow-claw-pages", () => {
       expect(renderSpy).toHaveBeenCalled();
     });
 
+    it("re-renders selected page when shadow-claw-file-saved event matches the currently selected page", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+
+      const renderSpy = jest
+        .spyOn(component, "renderSelectedPage")
+        .mockImplementation(async () => {});
+
+      component.selectedPage = { groupId: "group-1", path: "docs/page.md" };
+      renderSpy.mockClear();
+
+      await component.connectedCallback();
+      renderSpy.mockClear();
+
+      document.dispatchEvent(
+        new CustomEvent("shadow-claw-file-saved", {
+          detail: { groupId: "group-1", path: "docs/page.md" },
+        }),
+      );
+
+      expect(renderSpy).toHaveBeenCalled();
+      renderSpy.mockRestore();
+    });
+
+    it("ignores shadow-claw-file-saved event for a page other than the currently selected one", async () => {
+      const component = new ShadowClawPages();
+      component.db = {} as any;
+
+      const renderSpy = jest
+        .spyOn(component, "renderSelectedPage")
+        .mockImplementation(async () => {});
+
+      component.selectedPage = { groupId: "group-1", path: "docs/page.md" };
+      renderSpy.mockClear();
+
+      await component.connectedCallback();
+      renderSpy.mockClear();
+
+      document.dispatchEvent(
+        new CustomEvent("shadow-claw-file-saved", {
+          detail: { groupId: "group-1", path: "docs/other.md" },
+        }),
+      );
+
+      expect(renderSpy).not.toHaveBeenCalled();
+      renderSpy.mockRestore();
+    });
+
     it("re-renders content when navigating between nested posts", async () => {
       const component = new ShadowClawPages();
       const root = component.shadowRoot;

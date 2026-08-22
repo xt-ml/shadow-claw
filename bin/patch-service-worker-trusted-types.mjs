@@ -12,15 +12,28 @@ const DEFAULT_SERVICE_WORKER_PATH = resolve(
   "dist/public/service-worker.js",
 );
 
-async function main() {
-  const targetPath = process.argv[2] || DEFAULT_SERVICE_WORKER_PATH;
-  const source = await readFile(targetPath, "utf8");
-  const patched = patchServiceWorkerTrustedTypes(source);
+export async function patchServiceWorkerTrustedTypesFile(
+  targetPath = DEFAULT_SERVICE_WORKER_PATH,
+  {
+    readFileImpl = readFile,
+    writeFileImpl = writeFile,
+    patchImpl = patchServiceWorkerTrustedTypes,
+    logImpl = console.log,
+  } = {},
+) {
+  const source = await readFileImpl(targetPath, "utf8");
+  const patched = patchImpl(source);
 
   if (patched !== source) {
-    await writeFile(targetPath, patched, "utf8");
-    console.log(`Patched Trusted Types imports in ${targetPath}`);
+    await writeFileImpl(targetPath, patched, "utf8");
+    logImpl(`Patched Trusted Types imports in ${targetPath}`);
   }
+}
+
+export async function main() {
+  await patchServiceWorkerTrustedTypesFile(
+    process.argv[2] || DEFAULT_SERVICE_WORKER_PATH,
+  );
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

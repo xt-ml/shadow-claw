@@ -371,6 +371,21 @@ export class ShadowClawPages extends ShadowClawElement {
     }
   };
 
+  handleFileSaved = (event: Event) => {
+    const detail = (event as CustomEvent).detail;
+    const selectedPage = this.selectedPage;
+    if (
+      !detail ||
+      !selectedPage ||
+      detail.groupId !== selectedPage.groupId ||
+      detail.path !== selectedPage.path
+    ) {
+      return;
+    }
+
+    void this.renderSelectedPage();
+  };
+
   handleAutoRefreshConfigChange = (event: Event) => {
     const detail = (event as CustomEvent).detail;
     if (detail && typeof detail.interval === "number") {
@@ -487,6 +502,7 @@ export class ShadowClawPages extends ShadowClawElement {
       "shadow-claw-pages-auto-refresh-change",
       this.handleAutoRefreshConfigChange,
     );
+    document.addEventListener("shadow-claw-file-saved", this.handleFileSaved);
     document.addEventListener("keydown", this.handleKeyDown);
 
     root.addEventListener("click", (event: Event) => {
@@ -627,6 +643,10 @@ export class ShadowClawPages extends ShadowClawElement {
     window.removeEventListener(
       "shadow-claw-pages-auto-refresh-change",
       this.handleAutoRefreshConfigChange,
+    );
+    document.removeEventListener(
+      "shadow-claw-file-saved",
+      this.handleFileSaved,
     );
     document.removeEventListener("keydown", this.handleKeyDown);
     this.previewFrameWindow = null;

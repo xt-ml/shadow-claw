@@ -19,7 +19,7 @@ Clone the entire ShadowClaw repository, add your pages to `pages/main/`, push to
 
 ### Strategy B — Pages-only repo
 
-Your repo contains **only** `pages/main/`, `pages/routes.json`, and a GitHub Actions workflow. The workflow checks out ShadowClaw as a build dependency at CI time — its source is never committed to your repo.
+Your repo contains your content, an optional root-level `site-config.json`, and a GitHub Actions workflow. Content normally lives under `pages/`; the workflow checks out ShadowClaw as a build dependency at CI time — its source is never committed to your repo.
 
 **Strategy B is recommended for personal sites, project hubs, and documentation.**
 
@@ -76,12 +76,12 @@ jobs:
               try {
                 const fs = require("fs");
                 const paths = [
+                  "content/site-config.json",
+                  "content/pages/site-config.json",
                   "content/pages/resources/site-config.json",
                   "content/pages/deps/site-config.json",
                   "content/resources/site-config.json",
                   "content/deps/site-config.json",
-                  "content/pages/site-config.json",
-                  "content/site-config.json",
                 ];
                 for (const p of paths) {
                   if (fs.existsSync(p)) {
@@ -127,7 +127,9 @@ jobs:
       - name: Inject content into ShadowClaw build root
         run: |
           rm -rf shadow-claw/pages
-          cp -r content/pages shadow-claw/
+          if [ -d "content/pages" ]; then cp -r content/pages shadow-claw/; fi
+          if [ -f "content/site-config.json" ]; then cp content/site-config.json shadow-claw/; fi
+          mkdir -p shadow-claw/pages
 
       - name: Build production bundle
         working-directory: shadow-claw
@@ -158,14 +160,16 @@ jobs:
 
 You can pin your template site to a specific ShadowClaw release tag (e.g. `v1.20.0`) or git commit SHA (e.g. `62253c53`) to ensure reproducible builds:
 
-1. **In `pages/site-config.json`**:
-   ```json
-   {
-     "shadowClawVersion": "v1.20.0"
-   }
-   ```
-2. **In `.shadowclaw-version`**: Create a file named `.shadowclaw-version` in the root of your content repository containing the version tag or commit SHA.
-3. **Workflow Dispatch**: Run the workflow manually from GitHub Actions UI and supply any tag, SHA, or branch in the `shadowclaw_ref` input.
+- **In `site-config.json` at the repository root**:
+
+```json
+{
+  "shadowClawVersion": "v1.20.0"
+}
+```
+
+- **In `.shadowclaw-version`**: Create a file named `.shadowclaw-version` in the root of your content repository containing the version tag or commit SHA.
+- **Workflow Dispatch**: Run the workflow manually from GitHub Actions UI and supply any tag, SHA, or branch in the `shadowclaw_ref` input.
 
 For a **custom apex domain** (e.g. `example.com`), override:
 
@@ -176,14 +180,20 @@ PAGES_BASE_PATH: "/"
 
 ### 3. Add your content
 
-```
+```text
 pages/
   main/
     index.html        ← home page
     ~/content/
       about.md        ← any other pages
   routes.json         ← pretty-path config (optional)
+
+site-config.json      ← branding and build configuration (optional)
 ```
+
+The `pages/` directory is optional. If it is absent, the build succeeds and
+ShadowClaw publishes its built-in `index.html` and `MEMORY.md` Pages content.
+Pretty paths are skipped unless a `routes.json` file is present.
 
 Minimal `pages/routes.json`:
 
@@ -210,7 +220,7 @@ When visitors navigate to the root URL (`/`) of your published site, ShadowClaw 
 
 **How ShadowClaw selects the default page for `/`:**
 
-1. Both the static site prerenderer (`prerender-dsd-shell`) and runtime page store (`orchestratorStore`) gather all page files in `pages/main/`.
+1. Both the static site prerenderer (`prerender-dsd-shell`) and runtime page store (`orchestratorStore`) gather all page files in `pages/main/`. If `pages/main/` is absent, both use the built-in default `index.html` and `MEMORY.md` pages.
 2. `MEMORY.md` is always moved to the bottom of the list.
 3. All remaining pages are sorted by `pages.sortOrder` from `site-config.json` (`"desc"` by default, natural numeric, or `"asc"`).
 4. The first file in this sorted list (`pages[0]`) becomes the default page rendered at `/`.
@@ -331,4 +341,4 @@ This chain fetches an external data source, transforms it to markdown via the Ja
 
 ## Template repository
 
-A ready-to-fork starter template is available in the [`shadow-claw-template`](https://github.com/xt-ml/shadow-claw-template) repository. It contains the workflow, sample `pages/main/index.html`, `pages/main/~/content/about.md`, `pages/site-config.json`, and `pages/routes.json`.
+A ready-to-fork starter template is available in the [`shadow-claw-template`](https://github.com/xt-ml/shadow-claw-template) repository. It contains the workflow, sample `pages/main/index.html`, `pages/main/~/content/about.md`, root-level `site-config.json`, and `pages/routes.json`.

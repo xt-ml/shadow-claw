@@ -16,7 +16,6 @@ import {
   buildShadowClawDsdTemplate,
   buildShadowClawDsdTemplateWithoutPages,
   collectPageSources,
-  escapeJsonForHtmlScript,
   extractTemplateContent,
   injectShadowClawTemplate,
   injectStaticManifestScript,
@@ -28,12 +27,19 @@ import {
   renderPageHtml,
   sortPagePaths,
   splitFrontmatterWithGrayMatter,
-} from "./prerender-dsd-shell.mjs";
+} from "../prerender-dsd-shell/prerender-dsd-shell.mjs";
+import { extractDisplayPathFromRouteKey } from "./utils/extract-display-path-from-route-key.mjs";
+import { injectStaticRoutingScript } from "./utils/inject-static-routing-script.mjs";
+import { insertBeforeClosingHead } from "./utils/insert-before-closing-head.mjs";
+import { trimSlashes } from "./utils/trim-slashes.mjs";
+
+export { injectStaticRoutingScript };
+export { insertBeforeClosingHead };
 
 /**
- * @typedef {import("../src/storage/staticRouting.js").StaticRoutesManifest} StaticRoutesManifest
- * @typedef {import("../src/storage/staticRouting.js").StaticRouteDefinition} StaticRouteDefinition
- * @typedef {import("../src/core/app-routes.js").ShadowClawAppRoute} ShadowClawAppRoute
+ * @typedef {import("../../src/storage/staticRouting.js").StaticRoutesManifest} StaticRoutesManifest
+ * @typedef {import("../../src/storage/staticRouting.js").StaticRouteDefinition} StaticRouteDefinition
+ * @typedef {import("../../src/core/app-routes.js").ShadowClawAppRoute} ShadowClawAppRoute
  */
 
 /**
@@ -55,71 +61,6 @@ import {
  * @property {boolean} skipped
  * @property {string} [reason]
  */
-
-/**
- * Injects or updates the static routing JSON script block into the HTML head.
- *
- * @param {string} html
- * @param {string} routingJson
- *
- * @returns {string}
- */
-export function insertBeforeClosingHead(html, contentToInsert) {
-  const lastHeadIndex = html.lastIndexOf("</head>");
-  if (lastHeadIndex !== -1) {
-    return (
-      html.slice(0, lastHeadIndex) +
-      contentToInsert +
-      "\n" +
-      html.slice(lastHeadIndex)
-    );
-  }
-  return `${contentToInsert}\n${html}`;
-}
-
-export function injectStaticRoutingScript(html, routingJson) {
-  const safeRoutingJson = escapeJsonForHtmlScript(routingJson);
-  const scriptTag = `<script id="shadow-claw-static-routing" type="application/json">${safeRoutingJson}</script>`;
-  if (/id="shadow-claw-static-routing"/iu.test(html)) {
-    return html.replace(
-      /<script\s+id="shadow-claw-static-routing"[\s\S]*?<\/script>/iu,
-      () => scriptTag,
-    );
-  }
-
-  return insertBeforeClosingHead(html, `  ${scriptTag}`);
-}
-
-function trimSlashes(value) {
-  return value.replace(/^\/+|\/+$/g, "");
-}
-
-function extractDisplayPathFromRouteKey(routeKey) {
-  let clean = trimSlashes(routeKey);
-  if (clean.startsWith("pages/main/")) {
-    return clean.slice("pages/main/".length);
-  }
-
-  if (clean.startsWith("pages/br:main/")) {
-    return clean.slice("pages/br:main/".length);
-  }
-
-  if (clean.startsWith("pages/br-main/")) {
-    return clean.slice("pages/br-main/".length);
-  }
-
-  if (clean.startsWith("main/")) {
-    return clean.slice("main/".length);
-  }
-
-  if (clean.startsWith("pages/")) {
-    const parts = clean.split("/");
-    if (parts.length >= 3) {
-      return parts.slice(2).join("/");
-    }
-  }
-  return clean;
-}
 
 /**
  * Pre-renders individual static HTML files for all pretty paths configured in routes.json.

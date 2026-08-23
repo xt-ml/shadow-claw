@@ -255,10 +255,24 @@ export async function collectSkillSources(sourcePath) {
       if (entry.isDirectory()) {
         await visit(absolutePath);
       } else if (entry.isFile()) {
-        files.push({
+        const file = {
           absolutePath,
           displayPath: toPosixPath(path.relative(sourcePath, absolutePath)),
-        });
+        };
+        if (path.extname(entry.name).toLowerCase() === ".md") {
+          try {
+            const parsed = splitFrontmatterWithGrayMatter(
+              await readFile(absolutePath, "utf8"),
+            );
+            if (parsed.data.slug === "shadow-claw--purge-skills") {
+              file.isPurgeMarker = true;
+              if (parsed.data["purge-id"] !== undefined) {
+                file.purgeId = String(parsed.data["purge-id"]);
+              }
+            }
+          } catch {}
+        }
+        files.push(file);
       }
     }
   }
@@ -1019,13 +1033,19 @@ export async function prerenderDsdShell(options = {}) {
   }));
   const fullManifest = { pages: fullManifestPages };
   const fullManifestSkills = await Promise.all(
-    skillSources.map(async (skill) => ({
-      displayPath: skill.displayPath,
-      content: await readFile(skill.absolutePath, "utf8"),
-    })),
+    skillSources
+      .filter((skill) => !skill.isPurgeMarker)
+      .map(async (skill) => ({
+        displayPath: skill.displayPath,
+        content: await readFile(skill.absolutePath, "utf8"),
+      })),
   );
   if (fullManifestSkills.length > 0) {
     fullManifest.skills = fullManifestSkills;
+  }
+  const skillPurgeMarker = skillSources.find((skill) => skill.isPurgeMarker);
+  if (skillPurgeMarker?.purgeId) {
+    fullManifest.skillsPurgeId = skillPurgeMarker.purgeId;
   }
   if (Object.keys(purgeTokens).length > 0) {
     fullManifest.preRenderedStaticPages = purgeTokens;
@@ -1173,6 +1193,9 @@ export async function prerenderDsdShell(options = {}) {
   const embeddedManifest = { pages: embeddedManifestPages };
   if (fullManifestSkills.length > 0) {
     embeddedManifest.skills = fullManifestSkills;
+  }
+  if (skillPurgeMarker?.purgeId) {
+    embeddedManifest.skillsPurgeId = skillPurgeMarker.purgeId;
   }
   if (Object.keys(purgeTokens).length > 0) {
     embeddedManifest.preRenderedStaticPages = purgeTokens;

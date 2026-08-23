@@ -7,6 +7,7 @@ const mockGetConfig = jest.fn() as any;
 const mockSetConfig = jest.fn() as any;
 const mockEnsureMainGroupIndex = jest.fn() as any;
 const mockDeleteAllGroupFiles = jest.fn() as any;
+const mockDeleteGroupDirectory = jest.fn() as any;
 
 jest.unstable_mockModule("./groupFileExists.js", () => ({
   groupFileExists: mockGroupFileExists,
@@ -36,6 +37,10 @@ jest.unstable_mockModule("./deleteAllGroupFiles.js", () => ({
   deleteAllGroupFiles: mockDeleteAllGroupFiles,
 }));
 
+jest.unstable_mockModule("./deleteGroupDirectory.js", () => ({
+  deleteGroupDirectory: mockDeleteGroupDirectory,
+}));
+
 const {
   getStaticMainManifest,
   getStaticPageContent,
@@ -50,6 +55,7 @@ const {
   STATIC_MAIN_DIR,
   resolveStaticMainManifestUrl,
   PURGE_STORAGE_KEY,
+  SKILLS_PURGE_STORAGE_KEY,
 } = await import("./staticMainSite.js");
 const { CONFIG_KEYS, DEFAULT_GROUP_ID } = await import("../config/config.js");
 
@@ -596,6 +602,7 @@ describe("seedStaticMainSite – localStorage-gated purge", () => {
     mockSetConfig.mockResolvedValue(undefined);
     mockEnsureMainGroupIndex.mockResolvedValue(true);
     mockDeleteAllGroupFiles.mockResolvedValue(undefined);
+    mockDeleteGroupDirectory.mockResolvedValue(undefined);
     localStorage.clear();
   });
 
@@ -667,5 +674,44 @@ describe("seedStaticMainSite – localStorage-gated purge", () => {
 
     await seedStaticMainSite({} as any);
     expect(mockDeleteAllGroupFiles).toHaveBeenCalledTimes(1);
+  });
+
+  it("purges only skills when the skills purge ID changes", async () => {
+    localStorage.setItem(SKILLS_PURGE_STORAGE_KEY, "skills-build-001");
+    injectManifestScript({
+      pages: [{ displayPath: "index.html", content: "# Home" }],
+      skills: [
+        {
+          displayPath: "example/SKILL.md",
+          content:
+            "---\nname: example\ndescription: Example skill\n---\nUse it.",
+        },
+      ],
+      skillsPurgeId: "skills-build-002",
+    });
+
+    await seedStaticMainSite({} as any);
+
+    expect(mockDeleteGroupDirectory).toHaveBeenCalledWith(
+      expect.anything(),
+      DEFAULT_GROUP_ID,
+      "skills/main",
+    );
+    expect(mockDeleteAllGroupFiles).not.toHaveBeenCalled();
+    expect(localStorage.getItem(SKILLS_PURGE_STORAGE_KEY)).toBe(
+      "skills-build-002",
+    );
+  });
+
+  it("does not purge skills again when the skills purge ID is unchanged", async () => {
+    localStorage.setItem(SKILLS_PURGE_STORAGE_KEY, "skills-build-001");
+    injectManifestScript({
+      pages: [{ displayPath: "index.html", content: "# Home" }],
+      skillsPurgeId: "skills-build-001",
+    });
+
+    await seedStaticMainSite({} as any);
+
+    expect(mockDeleteGroupDirectory).not.toHaveBeenCalled();
   });
 });

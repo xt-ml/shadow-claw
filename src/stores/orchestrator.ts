@@ -75,6 +75,7 @@ import { AGUIAdapter } from "../ui/agui-adapter.js";
 import { showError } from "../ui/toast.js";
 import { applyJsonPatch } from "../utils/jsonPatch.js";
 import { ulid } from "../utils/ulid.js";
+import { toolsStore } from "./tools.js";
 
 import type { MessageAttachment } from "../content/types.js";
 import type { Orchestrator } from "../core/orchestrator/orchestrator.js";
@@ -2663,6 +2664,18 @@ export class OrchestratorStore {
             defaultPinnedPage,
           );
         }
+      }
+
+      if (Array.isArray(config.enabledTools)) {
+        const availableToolNames = new Set(
+          toolsStore.allTools.map((tool) => tool.name),
+        );
+        const enabledTools = config.enabledTools.filter(
+          (name: unknown): name is string =>
+            typeof name === "string" && availableToolNames.has(name),
+        );
+        await listGroups(db);
+        await updateGroupToolTags(db, DEFAULT_GROUP_ID, enabledTools);
       }
 
       await setConfig(db, CONFIG_KEYS.SITE_CONFIG_SEEDED, "true");

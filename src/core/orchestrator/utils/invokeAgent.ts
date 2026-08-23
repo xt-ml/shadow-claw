@@ -144,10 +144,9 @@ export async function invokeAgent(
   });
 
   // Use pinned tools if set; otherwise fallback to global enabled tools.
-  const configuredTools =
-    group?.toolTags && group.toolTags.length > 0
-      ? toolsStore.allTools.filter((t) => group.toolTags!.includes(t.name))
-      : toolsStore.enabledTools;
+  const configuredTools = Array.isArray(group?.toolTags)
+    ? toolsStore.allTools.filter((t) => group.toolTags!.includes(t.name))
+    : toolsStore.enabledTools;
   const skillDiscovery = await discoverSkills(db, executionGroupId);
   const activeTools =
     skillDiscovery.skills.length > 0 &&

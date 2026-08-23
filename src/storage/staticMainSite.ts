@@ -34,6 +34,7 @@ export interface StaticSkillSource {
 export interface StaticMainManifest {
   pages: StaticPageSource[];
   skills?: StaticSkillSource[];
+  skillsPurgeId?: string;
   preRenderedStaticPages?: Record<string, any>;
   /** One-shot purge guard. Runtime stores this in localStorage after purging;
    *  subsequent boots skip the purge until the value changes. */
@@ -43,6 +44,8 @@ export interface StaticMainManifest {
 /** localStorage key that records the last completed purge run. */
 export const PURGE_STORAGE_KEY = "sc:purge-id";
 export const PURGE_CONFIG_KEY = "static_main_site_purge_id";
+export const SKILLS_PURGE_STORAGE_KEY = "sc:skills-purge-id";
+export const SKILLS_PURGE_CONFIG_KEY = "static_main_skills_purge_id";
 const LEGACY_PURGE_ID = "__legacy_purge_pages__";
 
 export const STATIC_MAIN_MANIFEST_PATH = "static-main-manifest.json";
@@ -337,10 +340,12 @@ export function sortSavedPageRefs(
 async function checkAndMarkPurge(
   db: ShadowClawDatabase,
   purgeId: string | undefined,
+  storageKey: string = PURGE_STORAGE_KEY,
+  configKey: string = PURGE_CONFIG_KEY,
 ): Promise<boolean> {
   const effectivePurgeId = purgeId ?? LEGACY_PURGE_ID;
   try {
-    const lastPurgeId = localStorage.getItem(PURGE_STORAGE_KEY);
+    const lastPurgeId = localStorage.getItem(storageKey);
     if (lastPurgeId === effectivePurgeId) {
       return true;
     }
@@ -349,26 +354,26 @@ async function checkAndMarkPurge(
   }
 
   try {
-    const lastPurgeId = await getConfig(db, PURGE_CONFIG_KEY);
+    const lastPurgeId = await getConfig(db, configKey);
     if (lastPurgeId === effectivePurgeId) {
       try {
-        localStorage.setItem(PURGE_STORAGE_KEY, effectivePurgeId);
+        localStorage.setItem(storageKey, effectivePurgeId);
       } catch {
         // IndexedDB is the durable record when localStorage is unavailable.
       }
       return true;
     }
 
-    await setConfig(db, PURGE_CONFIG_KEY, effectivePurgeId);
+    await setConfig(db, configKey, effectivePurgeId);
     try {
-      localStorage.setItem(PURGE_STORAGE_KEY, effectivePurgeId);
+      localStorage.setItem(storageKey, effectivePurgeId);
     } catch {
       // IndexedDB is the durable record when localStorage is unavailable.
     }
   } catch {
     // Fall back to localStorage when IndexedDB is unavailable.
     try {
-      localStorage.setItem(PURGE_STORAGE_KEY, effectivePurgeId);
+      localStorage.setItem(storageKey, effectivePurgeId);
     } catch {
       // If neither store is available, allow the purge to proceed.
     }
@@ -393,6 +398,21 @@ export async function seedStaticMainSite(
       didPurge = true;
       await processPurgeTokens(db, manifest.preRenderedStaticPages);
     }
+  }
+
+  let didPurgeSkills = false;
+  if (
+    groupId === DEFAULT_GROUP_ID &&
+    manifest.skillsPurgeId !== undefined &&
+    !(await checkAndMarkPurge(
+      db,
+      manifest.skillsPurgeId,
+      SKILLS_PURGE_STORAGE_KEY,
+      SKILLS_PURGE_CONFIG_KEY,
+    ))
+  ) {
+    didPurgeSkills = true;
+    await deleteGroupDirectory(db, groupId, "skills/main");
   }
 
   for (const page of manifest.pages) {
@@ -509,6 +529,12 @@ export async function seedStaticMainSite(
 
   Object.defineProperty(resultPages, "didPurge", {
     value: didPurge,
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  });
+  Object.defineProperty(resultPages, "didPurgeSkills", {
+    value: didPurgeSkills,
     enumerable: false,
     writable: true,
     configurable: true,

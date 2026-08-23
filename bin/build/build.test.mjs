@@ -70,6 +70,11 @@ describe("build without and with pages", () => {
       "---\nname: example\ndescription: Example skill for build tests\n---\nUse the example workflow.",
       "utf8",
     );
+    await writeFile(
+      path.join(tempProjectRoot, "skills/main/purge.md"),
+      "---\nslug: shadow-claw--purge-skills\npurge-id: skills-build-001\n---\n",
+      "utf8",
+    );
     await runBuild();
 
     const manifest = JSON.parse(
@@ -85,6 +90,7 @@ describe("build without and with pages", () => {
         content: expect.stringContaining("name: example"),
       },
     ]);
+    expect(manifest.skillsPurgeId).toBe("skills-build-001");
   });
 
   it("builds with no pages directory and keeps default pages", async () => {

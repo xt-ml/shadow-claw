@@ -268,6 +268,9 @@ export async function prerenderPrettyPaths(options = {}) {
     ...(Array.isArray(existingManifest.skills)
       ? { skills: existingManifest.skills }
       : {}),
+    ...(Array.isArray(existingManifest.tools)
+      ? { tools: existingManifest.tools }
+      : {}),
     ...(existingManifest.skillsPurgeId
       ? { skillsPurgeId: existingManifest.skillsPurgeId }
       : {}),
@@ -395,6 +398,9 @@ export async function prerenderPrettyPaths(options = {}) {
       pages: embeddedManifestPages,
       ...(Array.isArray(existingManifest.skills)
         ? { skills: existingManifest.skills }
+        : {}),
+      ...(Array.isArray(existingManifest.tools)
+        ? { tools: existingManifest.tools }
         : {}),
       ...(existingManifest.skillsPurgeId
         ? { skillsPurgeId: existingManifest.skillsPurgeId }

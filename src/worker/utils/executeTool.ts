@@ -72,6 +72,7 @@ import { executeSearchFiles } from "../tools/workspace/search-files.js";
 import { executeSendFile } from "../tools/workspace/send-file.js";
 import { executeUpdateMemory } from "../tools/workspace/update-memory.js";
 import { executeWriteFile } from "../tools/workspace/write-file.js";
+import { findDeclarativeTool } from "../../subsystems/tools/declarative.js";
 import { executeActivateSkill } from "../../subsystems/skills/activateSkill.js";
 import { toolsStore } from "../../stores/tools.js";
 import {
@@ -143,6 +144,7 @@ export async function executeTool(
     invokeContext?: SubagentInvokeContext;
     isScheduledTask?: boolean;
     isTaskExecution?: boolean;
+    declarativeDepth?: number;
   } = {},
 ): Promise<ToolResult> {
   try {
@@ -517,8 +519,50 @@ export async function executeTool(
         return await executeTranslateText(input, groupId);
       }
 
-      default:
-        return `Unknown tool: ${name}`;
+      default: {
+        const declarativeTool = await findDeclarativeTool(db, groupId, name);
+        if (!declarativeTool) {
+          return `Unknown tool: ${name}`;
+        }
+
+        const declarativeDepth = options.declarativeDepth || 0;
+        if (declarativeDepth >= 8) {
+          return `Tool error (${name}): declarative tool nesting limit exceeded.`;
+        }
+
+        if (declarativeTool.execution.type === "tool") {
+          const target = declarativeTool.execution.name;
+          if (!target) {
+            return `Tool error (${name}): declarative tool target is missing.`;
+          }
+
+          return await executeTool(
+            db,
+            target,
+            declarativeTool.execution.input
+              ? { ...input, ...declarativeTool.execution.input }
+              : input,
+            groupId,
+            { ...options, declarativeDepth: declarativeDepth + 1 },
+          );
+        }
+
+        if (declarativeTool.execution.type === "bash") {
+          return await executeBash(
+            db,
+            {
+              command: declarativeTool.execution.command,
+              stdin: JSON.stringify(input),
+            },
+            groupId,
+          );
+        }
+
+        return await executeJavascript(db, {
+          code: declarativeTool.execution.code,
+          data: JSON.stringify(input),
+        });
+      }
     }
   } catch (err) {
     return `Tool error (${name}): ${err instanceof Error ? err.message : String(err)}`;

@@ -40,6 +40,7 @@ export { normalizePrerenderPagesOption };
  * @typedef {import("../../src/storage/staticMainSite.js").StaticMainManifest} StaticMainManifest
  * @typedef {import("../../src/storage/staticMainSite.js").StaticPageSource} StaticPageSource
  * @typedef {import("../../src/storage/staticMainSite.js").StaticSkillSource} StaticSkillSource
+ * @typedef {import("../../src/storage/staticMainSite.js").StaticToolSource} StaticToolSource
  */
 
 /**
@@ -273,6 +274,41 @@ export async function collectSkillSources(sourcePath) {
           } catch {}
         }
         files.push(file);
+      }
+    }
+  }
+
+  await visit(sourcePath);
+  return files.sort((left, right) =>
+    left.displayPath.localeCompare(right.displayPath),
+  );
+}
+
+export async function collectToolSources(sourcePath) {
+  try {
+    const sourceStats = await stat(sourcePath);
+    if (!sourceStats.isDirectory()) {
+      return [];
+    }
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+
+  const files = [];
+  async function visit(currentDir) {
+    const entries = await readdir(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const absolutePath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        await visit(absolutePath);
+      } else if (entry.isFile() && entry.name.endsWith(".json")) {
+        files.push({
+          absolutePath,
+          displayPath: toPosixPath(path.relative(sourcePath, absolutePath)),
+        });
       }
     }
   }
@@ -915,6 +951,10 @@ export async function prerenderDsdShell(options = {}) {
     options.skillsSourcePath ||
       path.join(path.dirname(sourcePath), "..", "skills", "main"),
   );
+  const toolsSourcePath = path.resolve(
+    options.toolsSourcePath ||
+      path.join(path.dirname(sourcePath), "..", "tools", "main"),
+  );
   const publicDir = path.resolve(options.publicDir || path.dirname(indexPath));
 
   const rawPagesOpt =
@@ -975,6 +1015,7 @@ export async function prerenderDsdShell(options = {}) {
     pageHeaderTemplateSource,
     pageSources,
     skillSources,
+    toolSources,
     shadowClawCssSource,
     pagesCssSource,
     pageHeaderCssSource,
@@ -985,6 +1026,7 @@ export async function prerenderDsdShell(options = {}) {
     readFile(pageHeaderTemplatePath, "utf8").catch(() => ""),
     collectPageSources(sourcePath, sortOrder),
     collectSkillSources(skillsSourcePath),
+    collectToolSources(toolsSourcePath),
     readFile(shadowClawCssPath, "utf8").catch(() => ""),
     readFile(pagesCssPath, "utf8").catch(() => ""),
     readFile(pageHeaderCssPath, "utf8").catch(() => ""),
@@ -1043,6 +1085,15 @@ export async function prerenderDsdShell(options = {}) {
   if (fullManifestSkills.length > 0) {
     fullManifest.skills = fullManifestSkills;
   }
+  const fullManifestTools = await Promise.all(
+    toolSources.map(async (tool) => ({
+      displayPath: tool.displayPath,
+      content: await readFile(tool.absolutePath, "utf8"),
+    })),
+  );
+  if (fullManifestTools.length > 0) {
+    fullManifest.tools = fullManifestTools;
+  }
   const skillPurgeMarker = skillSources.find((skill) => skill.isPurgeMarker);
   if (skillPurgeMarker?.purgeId) {
     fullManifest.skillsPurgeId = skillPurgeMarker.purgeId;
@@ -1072,6 +1123,16 @@ export async function prerenderDsdShell(options = {}) {
       const filesTargetDir = path.join(publicDir, "files/main");
       await mkdir(filesTargetDir, { recursive: true });
       await cp(sourcePath, filesTargetDir, { recursive: true });
+    }
+  } catch {}
+
+  try {
+    const toolsStats = await stat(toolsSourcePath);
+    if (toolsStats.isDirectory()) {
+      await mkdir(path.join(publicDir, "tools/main"), { recursive: true });
+      await cp(toolsSourcePath, path.join(publicDir, "tools/main"), {
+        recursive: true,
+      });
     }
   } catch {}
 
@@ -1193,6 +1254,9 @@ export async function prerenderDsdShell(options = {}) {
   const embeddedManifest = { pages: embeddedManifestPages };
   if (fullManifestSkills.length > 0) {
     embeddedManifest.skills = fullManifestSkills;
+  }
+  if (fullManifestTools.length > 0) {
+    embeddedManifest.tools = fullManifestTools;
   }
   if (skillPurgeMarker?.purgeId) {
     embeddedManifest.skillsPurgeId = skillPurgeMarker.purgeId;

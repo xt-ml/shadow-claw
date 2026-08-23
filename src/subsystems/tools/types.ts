@@ -8,6 +8,19 @@ export interface ToolDefinition {
   };
 }
 
+export interface DeclarativeToolExecution {
+  type: "bash" | "javascript" | "tool";
+  command?: string;
+  code?: string;
+  name?: string;
+  input?: Record<string, unknown>;
+}
+
+export interface DeclarativeToolDefinition extends ToolDefinition {
+  execution: DeclarativeToolExecution;
+  path?: string;
+}
+
 export interface ToolProfile {
   // Unique profile identifier
   id: string;

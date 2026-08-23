@@ -247,3 +247,40 @@ To test the WebMCP integration in Google Chrome, you can use the [Model Context 
 ## Adding a New Tool
 
 See the [Adding a Tool](../guides/adding-a-tool.md) guide.
+
+## Declarative Tools
+
+Template sites can add executable tools without modifying ShadowClaw source by
+placing JSON definitions under `tools/main/`. Each definition contains the
+standard tool schema plus an explicit executor:
+
+```json
+{
+  "name": "echo_input",
+  "description": "Echo structured input.",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "value": { "type": "string" }
+    },
+    "required": ["value"]
+  },
+  "execution": {
+    "type": "javascript",
+    "code": "return JSON.parse(data).value;"
+  }
+}
+```
+
+Supported executors are `bash`, `javascript`, and `tool`. Bash runs through
+the WebVM or `just-bash` workspace fallback and receives the JSON arguments on
+stdin. JavaScript runs through the isolated JavaScript worker and receives the
+JSON arguments in `data`. The `tool` executor delegates to an existing
+allowlisted ShadowClaw tool and may provide an `input` object to merge with the
+call input.
+
+Declarative tools are loaded from the conversation's OPFS workspace. The
+published `tools/main/` tree is seeded only into the Main conversation, and
+normal runtime tool allowlists still apply to delegated tools. Built-in tool
+names cannot be shadowed, and declarative delegation is capped to prevent
+cycles.

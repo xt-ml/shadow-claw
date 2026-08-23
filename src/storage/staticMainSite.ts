@@ -31,10 +31,16 @@ export interface StaticSkillSource {
   content: string;
 }
 
+export interface StaticToolSource {
+  displayPath: string;
+  content: string;
+}
+
 export interface StaticMainManifest {
   pages: StaticPageSource[];
   skills?: StaticSkillSource[];
   skillsPurgeId?: string;
+  tools?: StaticToolSource[];
   preRenderedStaticPages?: Record<string, any>;
   /** One-shot purge guard. Runtime stores this in localStorage after purging;
    *  subsequent boots skip the purge until the value changes. */
@@ -513,6 +519,17 @@ export async function seedStaticMainSite(
         }
       } catch (error) {
         console.warn(`Failed to seed skill file ${skillPath}:`, error);
+      }
+    }
+
+    for (const tool of manifest.tools || []) {
+      const toolPath = `tools/main/${tool.displayPath}`;
+      try {
+        if (!(await groupFileExists(db, groupId, toolPath))) {
+          await writeGroupFile(db, groupId, toolPath, tool.content);
+        }
+      } catch (error) {
+        console.warn(`Failed to seed tool file ${toolPath}:`, error);
       }
     }
   }

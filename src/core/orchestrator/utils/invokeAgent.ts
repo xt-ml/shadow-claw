@@ -34,6 +34,7 @@ import { ulid } from "../../../utils/ulid.js";
 import { buildSystemPrompt } from "../../../worker/utils/system-prompt.js";
 import { discoverSkills } from "../../../subsystems/skills/discoverSkills.js";
 import { activate_skill } from "../../../subsystems/skills/tool.js";
+import { loadDeclarativeTools } from "../../../subsystems/tools/declarative.js";
 
 import { compactContext } from "./compactContext.js";
 import { deliverResponse } from "./deliverResponse.js";
@@ -147,12 +148,21 @@ export async function invokeAgent(
   const configuredTools = Array.isArray(group?.toolTags)
     ? toolsStore.allTools.filter((t) => group.toolTags!.includes(t.name))
     : toolsStore.enabledTools;
+  const declarativeToolResult = await loadDeclarativeTools(
+    db,
+    executionGroupId,
+  );
+  const declarativeTools = declarativeToolResult.tools.filter(
+    (tool) =>
+      !toolsStore.allTools.some((builtIn) => builtIn.name === tool.name),
+  );
+  const toolsWithDeclarative = [...configuredTools, ...declarativeTools];
   const skillDiscovery = await discoverSkills(db, executionGroupId);
   const activeTools =
     skillDiscovery.skills.length > 0 &&
-    !configuredTools.some((tool) => tool.name === activate_skill.name)
-      ? [...configuredTools, activate_skill]
-      : configuredTools;
+    !toolsWithDeclarative.some((tool) => tool.name === activate_skill.name)
+      ? [...toolsWithDeclarative, activate_skill]
+      : toolsWithDeclarative;
 
   const subagentModelSelectionMode =
     group?.subagentModelSelectionMode === "manual" ? "manual" : "automatic";

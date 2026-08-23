@@ -62,6 +62,19 @@ describe("build without and with pages", () => {
   }
 
   it("builds with the normal pages tree", async () => {
+    await mkdir(path.join(tempProjectRoot, "tools/main"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(tempProjectRoot, "tools/main/echo.json"),
+      JSON.stringify({
+        name: "echo",
+        description: "Echo structured input.",
+        input_schema: { type: "object" },
+        execution: { type: "javascript", code: "return data;" },
+      }),
+      "utf8",
+    );
     await mkdir(path.join(tempProjectRoot, "skills/main/example"), {
       recursive: true,
     });
@@ -84,6 +97,12 @@ describe("build without and with pages", () => {
       ),
     );
     expect(manifest.pages.length).toBeGreaterThan(0);
+    expect(manifest.tools).toEqual([
+      {
+        displayPath: "echo.json",
+        content: expect.stringContaining('"name":"echo"'),
+      },
+    ]);
     expect(manifest.skills).toEqual([
       {
         displayPath: "example/SKILL.md",

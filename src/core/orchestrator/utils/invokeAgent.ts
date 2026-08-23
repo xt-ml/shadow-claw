@@ -32,6 +32,8 @@ import { getContextLimit } from "../../../subsystems/providers/providers.js";
 import { invokeWithTransformersJs } from "../../../subsystems/providers/transformers-js-provider.js";
 import { ulid } from "../../../utils/ulid.js";
 import { buildSystemPrompt } from "../../../worker/utils/system-prompt.js";
+import { discoverSkills } from "../../../subsystems/skills/discoverSkills.js";
+import { activate_skill } from "../../../subsystems/skills/tool.js";
 
 import { compactContext } from "./compactContext.js";
 import { deliverResponse } from "./deliverResponse.js";
@@ -142,10 +144,16 @@ export async function invokeAgent(
   });
 
   // Use pinned tools if set; otherwise fallback to global enabled tools.
-  const activeTools =
+  const configuredTools =
     group?.toolTags && group.toolTags.length > 0
       ? toolsStore.allTools.filter((t) => group.toolTags!.includes(t.name))
       : toolsStore.enabledTools;
+  const skillDiscovery = await discoverSkills(db, executionGroupId);
+  const activeTools =
+    skillDiscovery.skills.length > 0 &&
+    !configuredTools.some((tool) => tool.name === activate_skill.name)
+      ? [...configuredTools, activate_skill]
+      : configuredTools;
 
   const subagentModelSelectionMode =
     group?.subagentModelSelectionMode === "manual" ? "manual" : "automatic";
@@ -167,6 +175,7 @@ export async function invokeAgent(
     activeTools,
     toolsStore.systemPromptOverride,
     peerState,
+    skillDiscovery.skills,
   );
 
   // Build conversation context with dynamic token-aware windowing

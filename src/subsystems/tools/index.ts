@@ -92,6 +92,8 @@ import {
   translate_text,
 } from "./builtin-ai.js";
 
+export { activate_skill } from "../skills/tool.js";
+
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
   ask_user,
   attach_file_to_chat,

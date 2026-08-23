@@ -1,4 +1,12 @@
-import { cp, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import os from "node:os";
@@ -54,6 +62,14 @@ describe("build without and with pages", () => {
   }
 
   it("builds with the normal pages tree", async () => {
+    await mkdir(path.join(tempProjectRoot, "skills/main/example"), {
+      recursive: true,
+    });
+    await writeFile(
+      path.join(tempProjectRoot, "skills/main/example/SKILL.md"),
+      "---\nname: example\ndescription: Example skill for build tests\n---\nUse the example workflow.",
+      "utf8",
+    );
     await runBuild();
 
     const manifest = JSON.parse(
@@ -63,6 +79,12 @@ describe("build without and with pages", () => {
       ),
     );
     expect(manifest.pages.length).toBeGreaterThan(0);
+    expect(manifest.skills).toEqual([
+      {
+        displayPath: "example/SKILL.md",
+        content: expect.stringContaining("name: example"),
+      },
+    ]);
   });
 
   it("builds with no pages directory and keeps default pages", async () => {

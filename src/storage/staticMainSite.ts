@@ -26,8 +26,14 @@ export interface StaticPageSource {
   content: string;
 }
 
+export interface StaticSkillSource {
+  displayPath: string;
+  content: string;
+}
+
 export interface StaticMainManifest {
   pages: StaticPageSource[];
+  skills?: StaticSkillSource[];
   preRenderedStaticPages?: Record<string, any>;
   /** One-shot purge guard. Runtime stores this in localStorage after purging;
    *  subsequent boots skip the purge until the value changes. */
@@ -473,6 +479,21 @@ export async function seedStaticMainSite(
         `Failed to seed static page file ${page.displayPath}:`,
         error,
       );
+    }
+  }
+
+  // Bundled skills belong to the main conversation only. Other groups can
+  // provide their own skills under their isolated workspace.
+  if (groupId === DEFAULT_GROUP_ID) {
+    for (const skill of manifest.skills || []) {
+      const skillPath = `skills/main/${skill.displayPath}`;
+      try {
+        if (!(await groupFileExists(db, groupId, skillPath))) {
+          await writeGroupFile(db, groupId, skillPath, skill.content);
+        }
+      } catch (error) {
+        console.warn(`Failed to seed skill file ${skillPath}:`, error);
+      }
     }
   }
 

@@ -76,6 +76,10 @@ export async function runBuild() {
     await cp("pages/main", "dist/public/static-main", { recursive: true });
   } catch {}
 
+  try {
+    await cp("skills", "dist/public/skills", { recursive: true });
+  } catch {}
+
   await run("npm run -s rolldown");
 
   if (prerenderMainMemory) {

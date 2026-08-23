@@ -39,6 +39,7 @@ export { normalizePrerenderPagesOption };
 /**
  * @typedef {import("../../src/storage/staticMainSite.js").StaticMainManifest} StaticMainManifest
  * @typedef {import("../../src/storage/staticMainSite.js").StaticPageSource} StaticPageSource
+ * @typedef {import("../../src/storage/staticMainSite.js").StaticSkillSource} StaticSkillSource
  */
 
 /**
@@ -231,6 +232,41 @@ export async function collectPageSources(sourcePath, sortOrder = "desc") {
     pages.map((page) => page.displayPath),
     sortOrder,
   ).map((displayPath) => pageByDisplayPath.get(displayPath));
+}
+
+export async function collectSkillSources(sourcePath) {
+  try {
+    const sourceStats = await stat(sourcePath);
+    if (!sourceStats.isDirectory()) {
+      return [];
+    }
+  } catch (error) {
+    if (error?.code === "ENOENT") {
+      return [];
+    }
+    throw error;
+  }
+
+  const files = [];
+  async function visit(currentDir) {
+    const entries = await readdir(currentDir, { withFileTypes: true });
+    for (const entry of entries) {
+      const absolutePath = path.join(currentDir, entry.name);
+      if (entry.isDirectory()) {
+        await visit(absolutePath);
+      } else if (entry.isFile()) {
+        files.push({
+          absolutePath,
+          displayPath: toPosixPath(path.relative(sourcePath, absolutePath)),
+        });
+      }
+    }
+  }
+
+  await visit(sourcePath);
+  return files.sort((left, right) =>
+    left.displayPath.localeCompare(right.displayPath),
+  );
 }
 
 export async function renderPageHtml(pageContent, pagePath) {
@@ -861,6 +897,10 @@ export function minifyDsdTemplateHtml(html) {
 export async function prerenderDsdShell(options = {}) {
   const indexPath = path.resolve(options.indexPath || "dist/public/index.html");
   const sourcePath = path.resolve(options.sourcePath || "pages/main");
+  const skillsSourcePath = path.resolve(
+    options.skillsSourcePath ||
+      path.join(path.dirname(sourcePath), "..", "skills", "main"),
+  );
   const publicDir = path.resolve(options.publicDir || path.dirname(indexPath));
 
   const rawPagesOpt =
@@ -920,6 +960,7 @@ export async function prerenderDsdShell(options = {}) {
     pagesTemplateSource,
     pageHeaderTemplateSource,
     pageSources,
+    skillSources,
     shadowClawCssSource,
     pagesCssSource,
     pageHeaderCssSource,
@@ -929,6 +970,7 @@ export async function prerenderDsdShell(options = {}) {
     readFile(pagesTemplatePath, "utf8").catch(() => ""),
     readFile(pageHeaderTemplatePath, "utf8").catch(() => ""),
     collectPageSources(sourcePath, sortOrder),
+    collectSkillSources(skillsSourcePath),
     readFile(shadowClawCssPath, "utf8").catch(() => ""),
     readFile(pagesCssPath, "utf8").catch(() => ""),
     readFile(pageHeaderCssPath, "utf8").catch(() => ""),
@@ -976,6 +1018,15 @@ export async function prerenderDsdShell(options = {}) {
     content: page.content,
   }));
   const fullManifest = { pages: fullManifestPages };
+  const fullManifestSkills = await Promise.all(
+    skillSources.map(async (skill) => ({
+      displayPath: skill.displayPath,
+      content: await readFile(skill.absolutePath, "utf8"),
+    })),
+  );
+  if (fullManifestSkills.length > 0) {
+    fullManifest.skills = fullManifestSkills;
+  }
   if (Object.keys(purgeTokens).length > 0) {
     fullManifest.preRenderedStaticPages = purgeTokens;
   }
@@ -1004,6 +1055,16 @@ export async function prerenderDsdShell(options = {}) {
     }
   } catch {}
 
+  try {
+    const skillsStats = await stat(skillsSourcePath);
+    if (skillsStats.isDirectory()) {
+      await mkdir(path.join(publicDir, "skills/main"), { recursive: true });
+      await cp(skillsSourcePath, path.join(publicDir, "skills/main"), {
+        recursive: true,
+      });
+    }
+  } catch {}
+
   const shadowClawTemplateContent = extractTemplateContent(
     shadowClawTemplateSource,
   );
@@ -1019,7 +1080,7 @@ export async function prerenderDsdShell(options = {}) {
       markedHtml,
       shadowClawDsdTemplate,
     );
-    const emptyManifestJson = JSON.stringify({ pages: [] });
+    const emptyManifestJson = JSON.stringify({ pages: [], skills: [] });
     const nextHtml = injectStaticManifestScript(htmlWithDsd, emptyManifestJson);
     const minifiedHtml = minifyDsdTemplateHtml(nextHtml);
     const finalHtml = await inlineCriticalAssets(minifiedHtml, publicDir);
@@ -1110,6 +1171,9 @@ export async function prerenderDsdShell(options = {}) {
   const markedHtml = markNoSeedPrerenderHost(htmlWithDsd);
 
   const embeddedManifest = { pages: embeddedManifestPages };
+  if (fullManifestSkills.length > 0) {
+    embeddedManifest.skills = fullManifestSkills;
+  }
   if (Object.keys(purgeTokens).length > 0) {
     embeddedManifest.preRenderedStaticPages = purgeTokens;
   }

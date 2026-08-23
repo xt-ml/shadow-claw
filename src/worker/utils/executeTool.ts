@@ -72,6 +72,7 @@ import { executeSearchFiles } from "../tools/workspace/search-files.js";
 import { executeSendFile } from "../tools/workspace/send-file.js";
 import { executeUpdateMemory } from "../tools/workspace/update-memory.js";
 import { executeWriteFile } from "../tools/workspace/write-file.js";
+import { executeActivateSkill } from "../../subsystems/skills/activateSkill.js";
 import { toolsStore } from "../../stores/tools.js";
 import {
   executeDetectLanguage,
@@ -279,6 +280,10 @@ export async function executeTool(
 
       case "javascript": {
         return await executeJavascript(db, input);
+      }
+
+      case "activate_skill": {
+        return await executeActivateSkill(db, input, groupId);
       }
 
       case "list_tasks": {

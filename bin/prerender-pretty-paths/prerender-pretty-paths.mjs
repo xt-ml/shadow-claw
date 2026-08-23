@@ -265,6 +265,9 @@ export async function prerenderPrettyPaths(options = {}) {
 
   const fullManifest = {
     pages: allManifestPages,
+    ...(Array.isArray(existingManifest.skills)
+      ? { skills: existingManifest.skills }
+      : {}),
     ...(existingManifest.preRenderedStaticPages
       ? { preRenderedStaticPages: existingManifest.preRenderedStaticPages }
       : {}),
@@ -387,6 +390,9 @@ export async function prerenderPrettyPaths(options = {}) {
     const markedHtml = markNoSeedPrerenderHost(htmlWithDsd);
     const embeddedManifestJson = JSON.stringify({
       pages: embeddedManifestPages,
+      ...(Array.isArray(existingManifest.skills)
+        ? { skills: existingManifest.skills }
+        : {}),
       ...(existingManifest.preRenderedStaticPages
         ? { preRenderedStaticPages: existingManifest.preRenderedStaticPages }
         : {}),

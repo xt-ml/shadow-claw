@@ -18,6 +18,7 @@ import {
 
 import { setStorageRoot } from "../../storage/storage.js";
 import { executeTool } from "./executeTool.js";
+import { executeToolChain } from "./toolChain.js";
 import { handleCompact } from "./handleCompact.js";
 import { handleInvoke } from "./handleInvoke.js";
 import { pendingTasks } from "./pendingTasks.js";
@@ -238,10 +239,10 @@ export async function handleMessage(event: MessageEvent): Promise<void> {
         break;
       }
 
-      const results: string[] = [];
-      const rawOutputs: any[] = [];
-      for (const tool of tools) {
-        try {
+      const { results } = await executeToolChain(db, groupId, tools, {
+        isManual: payload.isManual,
+        isTaskExecution: true,
+        onStep: (tool) => {
           if (!tool.suppressToast) {
             post({
               type: "show-toast",
@@ -251,31 +252,8 @@ export async function handleMessage(event: MessageEvent): Promise<void> {
               },
             });
           }
-
-          const resolvedInput = resolvePipeRefs(
-            tool.input || {},
-            rawOutputs,
-            tools,
-          );
-          const output = await executeTool(
-            db,
-            tool.name,
-            resolvedInput,
-            groupId,
-            { isScheduledTask: !payload.isManual, isTaskExecution: true },
-          );
-          rawOutputs.push(output);
-          if (!tool.suppressOutput) {
-            results.push(`**Tool \`${tool.name}\`**: ${output}`);
-          }
-        } catch (err: any) {
-          const errMsg = err.message || String(err);
-          rawOutputs.push(errMsg);
-          if (!tool.suppressOutput) {
-            results.push(`**Tool \`${tool.name}\` failed**: ${errMsg}`);
-          }
-        }
-      }
+        },
+      });
 
       if (results.length > 0) {
         post({
@@ -287,6 +265,46 @@ export async function handleMessage(event: MessageEvent): Promise<void> {
         });
       }
 
+      break;
+    }
+
+    case "execute-skill-tools": {
+      const groupId = payload?.groupId;
+      const tools = Array.isArray(payload?.tools) ? payload.tools : [];
+
+      if (!groupId || tools.length === 0) {
+        post({
+          type: "error",
+          payload: {
+            groupId: groupId || DEFAULT_GROUP_ID,
+            error: "Invalid execute-skill-tools payload.",
+          },
+        });
+        break;
+      }
+
+      const { results } = await executeToolChain(db, groupId, tools, {
+        isManual: true,
+        isTaskExecution: false,
+        onStep: (tool) => {
+          if (!tool.suppressToast) {
+            post({
+              type: "show-toast",
+              payload: {
+                message: `Running skill tool: ${tool.name}...`,
+                duration: 3000,
+              },
+            });
+          }
+        },
+      });
+
+      if (results.length > 0) {
+        post({
+          type: "response",
+          payload: { groupId, text: results.join("\n\n") },
+        });
+      }
       break;
     }
 
@@ -606,75 +624,4 @@ export async function handleMessage(event: MessageEvent): Promise<void> {
       break;
     }
   }
-}
-
-/**
- * Helper to recursively resolve $pipe references in tool input objects.
- */
-export function resolvePipeRefs(
-  value: any,
-  rawOutputs: any[],
-  tools: any[],
-): any {
-  if (value && typeof value === "object") {
-    if (Array.isArray(value)) {
-      return value.map((item) => resolvePipeRefs(item, rawOutputs, tools));
-    }
-
-    if ("$pipe" in value) {
-      const ref = value.$pipe;
-      let output: any = "";
-
-      if (ref === "prev") {
-        output = rawOutputs[rawOutputs.length - 1] ?? "";
-      } else if (typeof ref === "number") {
-        output = rawOutputs[ref] ?? "";
-      } else if (typeof ref === "string") {
-        for (let i = rawOutputs.length - 1; i >= 0; i--) {
-          if (tools[i]?.name === ref) {
-            output = rawOutputs[i];
-            break;
-          }
-        }
-      }
-
-      return resultToValue(output);
-    }
-
-    const resolvedObj: Record<string, any> = {};
-    for (const [k, v] of Object.entries(value)) {
-      resolvedObj[k] = resolvePipeRefs(v, rawOutputs, tools);
-    }
-    return resolvedObj;
-  }
-  return value;
-}
-
-/**
- * Normalizes tool results (strings, ToolResultContentBlock arrays) for piping.
- */
-function resultToValue(result: any): any {
-  if (typeof result === "string") {
-    return result;
-  }
-  if (Array.isArray(result)) {
-    return result
-      .map((block) => {
-        if (block && typeof block === "object") {
-          if ("text" in block) {
-            return String(block.text);
-          }
-          if ("data" in block) {
-            return String(block.data);
-          }
-          return JSON.stringify(block);
-        }
-        return String(block ?? "");
-      })
-      .join("\n");
-  }
-  if (result && typeof result === "object") {
-    return result;
-  }
-  return result ?? "";
 }

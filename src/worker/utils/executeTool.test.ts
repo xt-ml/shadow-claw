@@ -1771,7 +1771,7 @@ describe("executeTool.js", () => {
     );
 
     expect(mockSandboxedEval).toHaveBeenCalledWith(
-      "1+1",
+      "return (1+1);",
       undefined,
       false,
       undefined,
@@ -1795,7 +1795,7 @@ describe("executeTool.js", () => {
     expect(result).toContain("(no return value)");
     expect(result).toContain("Hint:");
     expect(mockSandboxedEval).toHaveBeenCalledWith(
-      "undefined",
+      "return (undefined);",
       undefined,
       false,
       undefined,
@@ -1808,7 +1808,7 @@ describe("executeTool.js", () => {
     ).resolves.toBe("null");
 
     expect(mockSandboxedEval).toHaveBeenCalledWith(
-      "null",
+      "return (null);",
       undefined,
       false,
       undefined,
@@ -1829,7 +1829,7 @@ describe("executeTool.js", () => {
     );
 
     expect(mockSandboxedEval).toHaveBeenCalledWith(
-      "x",
+      "return (x);",
       undefined,
       false,
       undefined,
@@ -1848,7 +1848,7 @@ describe("executeTool.js", () => {
     );
 
     expect(mockSandboxedEval).toHaveBeenCalledWith(
-      "DATA",
+      "return (DATA);",
       undefined,
       false,
       "hello",
@@ -1869,7 +1869,7 @@ describe("executeTool.js", () => {
     await executeTool({}, "javascript", { code: "1+1" }, "group1");
 
     expect(mockSandboxedEval).toHaveBeenCalledWith(
-      "1+1",
+      "return (1+1);",
       undefined,
       false,
       undefined,

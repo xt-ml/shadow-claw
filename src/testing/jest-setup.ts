@@ -275,6 +275,7 @@ const expectedLogs = [
   "Failed to retrieve WebMCP tools via getTools():",
   "[Security] Registration blocked:",
   "[Security] Removing unapproved custom element:",
+  "Failed to retrieve local storage handle from DB:",
 ];
 
 function isExpectedLog(...args: any[]) {

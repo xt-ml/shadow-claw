@@ -12,6 +12,12 @@ jest.unstable_mockModule("./parseDirectToolCommand.js", () => ({
   parseDirectToolCommand: mockParseDirectToolCommand,
 }));
 
+const mockDiscoverSkills = jest.fn() as any;
+jest.unstable_mockModule(
+  "../../../subsystems/skills/discoverSkills.js",
+  () => ({ discoverSkills: mockDiscoverSkills }),
+);
+
 const mockGetApiKeyForRequest = jest.fn() as any;
 jest.unstable_mockModule("./operations/provider.js", () => ({
   getApiKeyForRequest: mockGetApiKeyForRequest,
@@ -92,6 +98,7 @@ describe("enqueue & processQueue", () => {
     };
 
     mockParseDirectToolCommand.mockReturnValue(null);
+    mockDiscoverSkills.mockResolvedValue({ skills: [], diagnostics: [] });
     mockGetApiKeyForRequest.mockResolvedValue("key");
     mockPersistMessageAttachments.mockResolvedValue([]);
     mockListGroups.mockResolvedValue([]);
@@ -142,6 +149,73 @@ describe("enqueue & processQueue", () => {
         "message",
         expect.any(Object),
       );
+    });
+
+    it("should route a user-invocable skill slash command to the agent", async () => {
+      mockDiscoverSkills.mockResolvedValue({
+        skills: [
+          {
+            name: "toast-random-number",
+            description: "Show a random number",
+            userInvocable: true,
+          },
+        ],
+        diagnostics: [],
+      });
+      const msg: any = {
+        groupId: "g1",
+        content: "/toast-random-number",
+        channel: "peerjs",
+      };
+
+      await enqueue(mockOrchestrator, mockDb, msg);
+
+      expect(mockOrchestrator.messageQueue[0]).toEqual(
+        expect.objectContaining({
+          content:
+            '[SKILL COMMAND] Activate the "toast-random-number" skill and follow its instructions.\n',
+        }),
+      );
+      expect(mockSaveMessage).toHaveBeenCalledWith(
+        mockDb,
+        expect.objectContaining({ content: "/toast-random-number" }),
+      );
+    });
+
+    it("should execute a declarative skill chain without queueing an agent turn", async () => {
+      mockDiscoverSkills.mockResolvedValue({
+        skills: [
+          {
+            name: "toast-random-number",
+            description: "Show a random number",
+            userInvocable: true,
+            execution: {
+              type: "tools",
+              tools: [
+                { name: "javascript", input: { code: "1" } },
+                { name: "show_toast", input: { message: { $pipe: "prev" } } },
+              ],
+            },
+          },
+        ],
+        diagnostics: [],
+      });
+      const msg: any = {
+        groupId: "g1",
+        content: "/toast-random-number",
+        channel: "browser",
+      };
+
+      await enqueue(mockOrchestrator, mockDb, msg);
+
+      expect(mockOrchestrator.messageQueue).toHaveLength(0);
+      expect(mockOrchestrator.agentWorker.postMessage).toHaveBeenCalledWith({
+        type: "execute-skill-tools",
+        payload: expect.objectContaining({
+          groupId: "g1",
+          skillName: "toast-random-number",
+        }),
+      });
     });
 
     it("should handle direct tool commands without enqueuing for invokeAgent", async () => {

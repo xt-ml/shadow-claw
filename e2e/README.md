@@ -6,35 +6,35 @@ End-to-end test suite for ShadowClaw using Playwright with the Page Object Model
 
 ```text
 e2e/
-├── components/          # Reusable component objects for UI regions
-│   ├── nav.component.ts
-│   ├── message-input.component.ts
-│   ├── chat-actions.component.ts
-│   ├── file-browser.component.ts
-│   └── conversations.component.ts
-├── pages/              # Page objects representing app views
-│   ├── app.page.ts    # Root app + navigation
-│   ├── chat.page.ts   # Chat interface
-│   ├── files.page.ts  # Files browser
-│   ├── tasks.page.ts  # Task scheduler
-│   └── settings.page.ts  # Settings panel
-├── shared/             # Low-level utilities and helpers
-│   └── index.ts       # DB helpers, constants, wait functions
-├── fixtures.ts        # Shared test fixtures (app, chat, files, tasks, settings, conversations)
-├── *.test.ts          # Test suites
-│   └── chat.test.ts           # Chat interface verification
-│   └── conversations.test.ts  # Conversation CRUD + delete-dialog keyboard accessibility
-│   └── files.test.ts          # File browser upload + file/folder creation operations
-│   └── navigation.test.ts     # App-level navigation and page switching
-│   └── settings.test.ts       # Settings persistence (max iterations, streaming, assistant name)
-│   └── streaming-chat.test.ts # Chat flow with mock SSE streaming + non-streaming
-│   └── task-crud.test.ts      # Task CRUD (create, edit, toggle, delete)
-│   └── tasks.test.ts          # Task interface and toggle verification
-│   └── file-viewer.test.ts    # File viewer component integration coverage
-│   └── share-target.test.ts   # Web Share Target import flow
-│   └── orchestrator.test.ts   # System integration coverage
-│   └── storage.test.ts        # System integration coverage
-└── README.md           # This file
+├── components/                    # Reusable component objects for UI regions
+│   ├── nav.component.ts           # Navigation between pages + settings, auth, and back to chat
+│   ├── message-input.component.ts # Message input field + send button
+│   ├── chat-actions.component.ts  # Chat actions (stop, clear, new conversation)
+│   ├── file-browser.component.ts  # File browser component
+│   └── conversations.component.ts # Conversations list and conversation-selection logic
+├── pages/                         # Page objects representing app views
+│   ├── app.page.ts                # Root app + navigation
+│   ├── chat.page.ts               # Chat interface
+│   ├── files.page.ts              # Files browser
+│   ├── tasks.page.ts              # Task scheduler
+│   └── settings.page.ts           # Settings panel
+├── shared/                        # Low-level utilities and helpers
+│   └── index.ts                   # DB helpers, constants, wait functions
+├── fixtures.ts                    # Shared test fixtures (app, chat, files, tasks, settings, conversations)
+├── *.test.ts                      # Test suites
+│   └── chat.test.ts               # Chat interface verification
+│   └── conversations.test.ts      # Conversation CRUD + delete-dialog keyboard accessibility
+│   └── files.test.ts              # File browser upload + file/folder creation operations
+│   └── navigation.test.ts         # App-level navigation and page switching
+│   └── settings.test.ts           # Settings persistence (max iterations, streaming, assistant name)
+│   └── streaming-chat.test.ts     # Chat flow with mock SSE streaming + non-streaming
+│   └── task-crud.test.ts          # Task CRUD (create, edit, toggle, delete)
+│   └── tasks.test.ts              # Task interface and toggle verification
+│   └── file-viewer.test.ts        # File viewer component integration coverage
+│   └── share-target.test.ts       # Web Share Target import flow
+│   └── orchestrator.test.ts       # System integration coverage
+│   └── storage.test.ts            # System integration coverage
+└── README.md                      # This file
 ```
 
 ## Security and Test Bridge
@@ -327,6 +327,7 @@ Behavior notes:
 - **Provider Runtime Override Testing**: For conversation-level overrides, verify Bedrock proxy (`authMode`, `profile`, `region`) and Llamafile (`host`, `mode`, `offline`, `port`) values propagate to runtime headers and provider calls.
 - **Shared State Testing**: For Multi-Agent flows, verify that `STATE_SNAPSHOT` and `STATE_DELTA` events correctly synchronize state across participants and properly render in the UI.
 - **`ask_user` Testing**: When the agent calls `ask_user`, the worker blocks on a pending promise until the UI sends back an `ask-user-response` message containing the user's answer. E2E tests that trigger this flow must simulate that postMessage dispatch to unblock the agent; otherwise the invocation will hang.
+- **Skill Slash Commands & Declarative Tool Chains**: Slash commands like `/toast-random-number` or `/skill-creator` trigger skill workflows directly. For declarative skills with `execution: { type: "tools", tools: [...] }`, execution dispatches to `executeToolChain` on the worker thread without calling LLM providers. E2E tests can trigger slash commands via `chat.sendMessage("/skill-name")` and verify target side-effects (e.g. toasts, chat text) while respecting `suppressToast` and `suppressOutput` settings.
 
 ### `FilesPage`
 

@@ -6,6 +6,9 @@
     "/pages/main/~/docs/publishing-to-github-pages.md": {
       "prettyPath": "/docs/publishing"
     },
+    "/pages/main/~/docs/skill-creator.md": {
+      "prettyPath": "/docs/skill-creator"
+    },
     "/pages/main/~/docs/example/article.html": {
       "prettyPath": "/docs/example/article"
     },

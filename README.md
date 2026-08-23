@@ -215,6 +215,13 @@ ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace con
 
 Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first setup) which serves as a workspace-scoped system context for the agent. An `index.html` is also auto-created as the default home page.
 
+## Agent Skills and Declarative Tools
+
+- **Workspace Agent Skills** — Discovers `.agents/skills/**/SKILL.md` instruction packages, presents model-invocable skill descriptions in the system prompt, and loads instructions plus bundled resources through `activate_skill`. Default bundled skills include `skill-creator` and `toast-random-number`.
+- **Slash Commands & Declarative Execution Pipelines** — User-invocable skills support `/skill-name` slash-command triggers. Skills with `execution: { type: "tools", tools: [...] }` execute tool pipelines directly on the worker thread via `executeToolChain` without scheduling Tasks or invoking LLM prompts. Supports `$pipe` output chaining and step-level or cascaded `suppressToast: true` and `suppressOutput: true` options.
+- **Declarative Tools** — Content repositories can define executable tools as JSON under `.agents/tools/main/` using sandboxed Bash or JavaScript, or delegate to existing tools without changing ShadowClaw source. Includes `generate_random_number` as a default declarative tool.
+- **Enhanced JS Tool Expression Evaluation** — The `javascript` tool automatically evaluates single expressions without explicit `return` statements by wrapping them in `return (<expression>);`.
+
 ## WebVM (Optional Alpine Linux)
 
 For advanced `bash` operations, ShadowClaw includes an optional **WebVM** (`v86` Alpine Linux) that runs in the Web Worker.

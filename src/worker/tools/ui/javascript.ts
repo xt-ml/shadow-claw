@@ -7,15 +7,36 @@ export async function executeJavascript(
   input: Record<string, any>,
 ): Promise<string> {
   const allowFullInternetAccess = await getAllowFullInternetAccess(db);
-  const result = (await sandboxedEval(
-    input.code,
+  let codeToRun = input.code;
+  if (typeof codeToRun === "string" && !/\breturn\b/.test(codeToRun)) {
+    codeToRun = `return (${codeToRun.trim()});`;
+  }
+
+  let result = (await sandboxedEval(
+    codeToRun,
     undefined,
     allowFullInternetAccess,
     input.data,
   )) as any;
 
-  if (!result.ok) {
-    return `JavaScript error: ${result.error}`;
+  const isSyntaxOrMissingResult =
+    !result ||
+    (typeof result.error === "string" &&
+      (result.error.includes("SyntaxError") ||
+        result.error.includes("Unexpected token") ||
+        result.error.includes("illegal statement")));
+
+  if (isSyntaxOrMissingResult && codeToRun !== input.code) {
+    result = (await sandboxedEval(
+      input.code,
+      undefined,
+      allowFullInternetAccess,
+      input.data,
+    )) as any;
+  }
+
+  if (!result || !result.ok) {
+    return `JavaScript error: ${result?.error || "Unknown error"}`;
   }
 
   const value = result.value;

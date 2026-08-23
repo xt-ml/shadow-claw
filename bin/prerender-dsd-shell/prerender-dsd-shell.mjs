@@ -949,11 +949,11 @@ export async function prerenderDsdShell(options = {}) {
   const sourcePath = path.resolve(options.sourcePath || "pages/main");
   const skillsSourcePath = path.resolve(
     options.skillsSourcePath ||
-      path.join(path.dirname(sourcePath), "..", "skills", "main"),
+      path.join(path.dirname(sourcePath), "..", ".agents", "skills", "main"),
   );
   const toolsSourcePath = path.resolve(
     options.toolsSourcePath ||
-      path.join(path.dirname(sourcePath), "..", "tools", "main"),
+      path.join(path.dirname(sourcePath), "..", ".agents", "tools", "main"),
   );
   const publicDir = path.resolve(options.publicDir || path.dirname(indexPath));
 
@@ -968,8 +968,7 @@ export async function prerenderDsdShell(options = {}) {
   let siteConfig = {};
   const configCandidatePaths = [
     options.siteConfigPath,
-    path.join(path.dirname(sourcePath), "site-config.json"),
-    path.resolve("pages/site-config.json"),
+    path.resolve("site-config.json"),
   ].filter(Boolean);
 
   for (const cfgPath of configCandidatePaths) {

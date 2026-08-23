@@ -1,4 +1,4 @@
-import { getWorkspaceDir } from "../../storage/getWorkspaceDir.js";
+import { getGroupDir } from "../../storage/getGroupDir.js";
 import { readGroupFile } from "../../storage/readGroupFile.js";
 
 import { parseSkill } from "./parseSkill.js";
@@ -18,7 +18,7 @@ export async function discoverSkills(
 ): Promise<SkillDiscoveryResult> {
   const skills: SkillRecord[] = [];
   const diagnostics: SkillDiagnostic[] = [];
-  const root = await getWorkspaceDir(db, groupId);
+  const root = await getGroupDir(db, groupId);
   const skillPaths: string[] = [];
   let visitedDirectories = 0;
 
@@ -29,7 +29,7 @@ export async function discoverSkills(
     visitedDirectories += 1;
     if (visitedDirectories > MAX_DIRECTORIES) {
       diagnostics.push({
-        path: "skills",
+        path: ".agents/skills",
         message: `Skill discovery stopped after ${MAX_DIRECTORIES} directories`,
       });
       return;
@@ -39,15 +39,19 @@ export async function discoverSkills(
       const childPath = relativePath ? `${relativePath}/${name}` : name;
       if (handle.kind === "directory") {
         await visit(handle, childPath);
-      } else if (name === "SKILL.md" && childPath.startsWith("skills/")) {
+      } else if (
+        name === "SKILL.md" &&
+        childPath.startsWith(".agents/skills/")
+      ) {
         skillPaths.push(childPath);
       }
     }
   }
 
   try {
-    const skillsDir = await root.getDirectoryHandle("skills");
-    await visit(skillsDir, "skills");
+    const agentsDir = await root.getDirectoryHandle(".agents");
+    const skillsDir = await agentsDir.getDirectoryHandle("skills");
+    await visit(skillsDir, ".agents/skills");
   } catch {
     return { skills, diagnostics };
   }
@@ -102,7 +106,7 @@ async function listSkillResources(
   groupId: string,
   basePath: string,
 ): Promise<string[]> {
-  const root = await getWorkspaceDir(db, groupId);
+  const root = await getGroupDir(db, groupId);
   const parts = basePath.split("/").filter(Boolean);
   let directory = root;
   for (const part of parts) {

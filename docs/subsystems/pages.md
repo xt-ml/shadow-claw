@@ -151,16 +151,20 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prere
   - **Branding Asset Precedence**: For `faviconPath` and `appleTouchIconPath`, content-specific locations under `pages/` and its supported resource/dependency paths are checked before bare repository-root defaults, so a published site's branding assets are not shadowed by ShadowClaw's built-in assets.
   - **DSD Shell Navigation Visibility**: `bin/prerender-dsd-shell/prerender-dsd-shell.mjs` applies `hidden` and `aria-hidden` attributes to sidebar navigation items at build time, preventing layout shift on first paint.
   - **Runtime Seeding**: `orchestratorStore.init()` reads the embedded `<script id="shadow-claw-site-config" type="application/json">` via `applySiteConfigDefaults()` to seed preferences into IndexedDB on first load.
+  - **Reset**: Settings → Storage → **Reset Site Config** clears the local seed marker. The embedded defaults become eligible to apply again after the next reload; current settings are not overwritten immediately.
   - **Interactive User Controls**: Users can toggle sidebar visibility runtime in Settings under **Navigation**, triggering reactive events (`sidebar-pages-visibility-change`, `sidebar-chat-visibility-change`, `sidebar-tasks-visibility-change`, `sidebar-files-visibility-change`) with graceful fallback routing via `getDefaultSidebarPage()`.
 
 ### Static Publishing Build
 
 The production build is orchestrated by `bin/build/build.mjs`. It copies optional
-content, applies `site-config.json`, prerenders the DSD shell, generates any
-configured pretty paths, and builds the service worker. A repository may omit
-`pages/` entirely; the build still succeeds and publishes the built-in default
-Pages content. The regression suite in `bin/build/build.test.mjs` covers both a
-normal `pages/` tree and the absent-directory case.
+content, skills, and declarative tools, applies `site-config.json`, prerenders
+the DSD shell, generates any configured pretty paths, and builds the service
+worker. Published `skills/` and `tools/` entries are included in
+`static-main-manifest.json` and seeded only into the Main conversation. A
+repository may omit `pages/` entirely; the build still succeeds and publishes
+the built-in default Pages content. The regression suite in
+`bin/build/build.test.mjs` covers both a normal `pages/` tree and the
+absent-directory case.
 
 ---
 

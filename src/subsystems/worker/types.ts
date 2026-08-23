@@ -19,6 +19,10 @@ export type WorkerInbound =
       type: "execute-task-tools";
       payload: { groupId: string; tools: TaskToolCall[] };
     }
+  | {
+      type: "execute-skill-tools";
+      payload: { groupId: string; skillName: string; tools: TaskToolCall[] };
+    }
   | { type: "invoke"; payload: InvokePayload }
   | {
       type: "set-vm-mode";

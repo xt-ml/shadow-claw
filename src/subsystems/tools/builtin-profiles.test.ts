@@ -6,7 +6,7 @@ describe("DEFAULT_BUILTIN_PROFILE", () => {
     expect(DEFAULT_BUILTIN_PROFILE.providerId).toBe("prompt_api");
   });
 
-  it("is limited to exactly the 5 default prompt api tools", () => {
+  it("is limited to the default prompt api tools", () => {
     expect(DEFAULT_BUILTIN_PROFILE.enabledToolNames).toHaveLength(5);
     expect(DEFAULT_BUILTIN_PROFILE.enabledToolNames).toEqual([
       "javascript",

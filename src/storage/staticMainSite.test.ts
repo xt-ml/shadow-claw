@@ -695,11 +695,63 @@ describe("seedStaticMainSite – localStorage-gated purge", () => {
     expect(mockDeleteGroupDirectory).toHaveBeenCalledWith(
       expect.anything(),
       DEFAULT_GROUP_ID,
-      "skills/main",
+      ".agents/skills/main",
     );
     expect(mockDeleteAllGroupFiles).not.toHaveBeenCalled();
     expect(localStorage.getItem(SKILLS_PURGE_STORAGE_KEY)).toBe(
       "skills-build-002",
+    );
+  });
+
+  it("continues seeding when the bundled skills directory is missing", async () => {
+    injectManifestScript({
+      pages: [{ displayPath: "index.html", content: "# Home" }],
+      skills: [
+        {
+          displayPath: "example/SKILL.md",
+          content:
+            "---\nname: example\ndescription: Example skill\n---\nUse it.",
+        },
+      ],
+      skillsPurgeId: "skills-build-003",
+    });
+    mockDeleteGroupDirectory.mockRejectedValue(
+      Object.assign(new Error("missing"), { name: "NotFoundError" }),
+    );
+    mockGroupFileExists.mockResolvedValue(false);
+
+    await expect(seedStaticMainSite({} as any)).resolves.toEqual(
+      expect.any(Array),
+    );
+    expect(mockWriteGroupFile).toHaveBeenCalledWith(
+      expect.anything(),
+      DEFAULT_GROUP_ID,
+      ".agents/skills/main/example/SKILL.md",
+      expect.stringContaining("name: example"),
+    );
+  });
+
+  it("seeds the current bundled skill content after a purge", async () => {
+    injectManifestScript({
+      pages: [{ displayPath: "index.html", content: "# Home" }],
+      skills: [
+        {
+          displayPath: "toast-random-number/SKILL.md",
+          content:
+            '---\nname: toast-random-number\ndescription: Generate a number\nexecution:\n  type: tools\n  tools:\n    - name: javascript\n      input:\n        code: "1"\n---\n',
+        },
+      ],
+      skillsPurgeId: "skills-defaults-004",
+    });
+    mockGroupFileExists.mockResolvedValue(false);
+
+    await seedStaticMainSite({} as any);
+
+    expect(mockWriteGroupFile).toHaveBeenCalledWith(
+      expect.anything(),
+      DEFAULT_GROUP_ID,
+      ".agents/skills/main/toast-random-number/SKILL.md",
+      expect.stringContaining("execution:\n  type: tools"),
     );
   });
 

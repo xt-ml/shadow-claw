@@ -75,23 +75,11 @@ jobs:
             REF=$(node -e '
               try {
                 const fs = require("fs");
-                const paths = [
-                  "content/site-config.json",
-                  "content/pages/site-config.json",
-                  "content/pages/resources/site-config.json",
-                  "content/pages/deps/site-config.json",
-                  "content/resources/site-config.json",
-                  "content/deps/site-config.json",
-                ];
-                for (const p of paths) {
-                  if (fs.existsSync(p)) {
-                    const cfg = JSON.parse(fs.readFileSync(p, "utf8"));
-                    const v = cfg.shadowClawVersion || cfg.shadowClawRef || cfg.shadowclawVersion || cfg.shadowclawRef || "";
-                    if (v) {
-                      process.stdout.write(String(v).trim());
-                      break;
-                    }
-                  }
+                const configPath = "content/site-config.json";
+                if (fs.existsSync(configPath)) {
+                  const cfg = JSON.parse(fs.readFileSync(configPath, "utf8"));
+                  const v = cfg.shadowClawVersion || cfg.shadowClawRef || cfg.shadowclawVersion || cfg.shadowclawRef || "";
+                  if (v) process.stdout.write(String(v).trim());
                 }
               } catch (e) {
                 process.stdout.write("");

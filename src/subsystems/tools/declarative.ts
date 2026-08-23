@@ -1,4 +1,4 @@
-import { getWorkspaceDir } from "../../storage/getWorkspaceDir.js";
+import { getGroupDir } from "../../storage/getGroupDir.js";
 import { readGroupFile } from "../../storage/readGroupFile.js";
 
 import type { ShadowClawDatabase } from "../../db/types.js";
@@ -24,8 +24,8 @@ export function parseDeclarativeTool(
     typeof candidate.description === "string"
       ? candidate.description.trim()
       : "";
-  const inputSchema = candidate.input_schema;
-  const execution = candidate.execution;
+  const inputSchema = candidate.input_schema ?? candidate.parameters;
+  const execution = candidate.execution ?? candidate.evaluation;
 
   if (!TOOL_NAME_PATTERN.test(name)) {
     throw new Error(`Tool name is invalid: ${name || "(missing)"}`);
@@ -70,7 +70,7 @@ export function parseDeclarativeTool(
     };
   }
   const sourceKey = type === "bash" ? "command" : "code";
-  const source = parsedExecution[sourceKey];
+  const source = parsedExecution[sourceKey] ?? parsedExecution.expression;
   if (typeof source !== "string" || source.trim() === "") {
     throw new Error(`Tool ${name} execution requires ${sourceKey}`);
   }
@@ -93,7 +93,7 @@ export async function loadDeclarativeTools(
 ): Promise<{ tools: DeclarativeToolDefinition[]; diagnostics: string[] }> {
   const tools: DeclarativeToolDefinition[] = [];
   const diagnostics: string[] = [];
-  const root = await getWorkspaceDir(db, groupId);
+  const root = await getGroupDir(db, groupId);
   const paths: string[] = [];
 
   async function visit(
@@ -106,7 +106,7 @@ export async function loadDeclarativeTools(
         await visit(handle, childPath);
       } else if (
         name.endsWith(".json") &&
-        childPath.startsWith("tools/main/")
+        childPath.startsWith(".agents/tools/main/")
       ) {
         paths.push(childPath);
       }
@@ -114,7 +114,9 @@ export async function loadDeclarativeTools(
   }
 
   try {
-    await visit(await root.getDirectoryHandle("tools"), "tools");
+    const agentsDir = await root.getDirectoryHandle(".agents");
+    const toolsDir = await agentsDir.getDirectoryHandle("tools");
+    await visit(toolsDir, ".agents/tools");
   } catch {
     return { tools, diagnostics };
   }

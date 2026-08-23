@@ -13,6 +13,7 @@ import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
 import { ChannelRegistry } from "../../subsystems/channels/channel-registry.js";
+import { loadDeclarativeTools } from "../../subsystems/tools/declarative.js";
 import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
 
 import type { LLMProvider } from "../../subsystems/providers/types.js";
@@ -401,6 +402,19 @@ export class ShadowClawConversations extends ShadowClawElement {
 
     dialog.showModal();
 
+    const candidateToolsMap = new Map<
+      string,
+      { name: string; description?: string }
+    >();
+    for (const tool of TOOL_DEFINITIONS) {
+      candidateToolsMap.set(tool.name, tool);
+    }
+    for (const tool of toolsStore.allTools) {
+      if (!candidateToolsMap.has(tool.name)) {
+        candidateToolsMap.set(tool.name, tool);
+      }
+    }
+
     const updateDatalist = () => {
       if (!datalist) {
         return;
@@ -408,7 +422,7 @@ export class ShadowClawConversations extends ShadowClawElement {
 
       const pinned = new Set(this._pendingDetailsToolTags || []);
       datalist.replaceChildren();
-      for (const tool of TOOL_DEFINITIONS) {
+      for (const tool of candidateToolsMap.values()) {
         if (pinned.has(tool.name)) {
           continue;
         }
@@ -419,6 +433,23 @@ export class ShadowClawConversations extends ShadowClawElement {
       }
     };
 
+    if (this.db && groupId) {
+      loadDeclarativeTools(this.db, groupId)
+        .then(({ tools: declTools }) => {
+          let added = false;
+          for (const tool of declTools) {
+            if (!candidateToolsMap.has(tool.name)) {
+              candidateToolsMap.set(tool.name, tool);
+              added = true;
+            }
+          }
+          if (added) {
+            updateDatalist();
+          }
+        })
+        .catch(() => {});
+    }
+
     const renderChips = () => {
       if (!toolsContainer) {
         return;
@@ -428,13 +459,13 @@ export class ShadowClawConversations extends ShadowClawElement {
 
       const tags = this._pendingDetailsToolTags || [];
       for (const tagName of tags) {
-        const tool = TOOL_DEFINITIONS.find((t) => t.name === tagName);
+        const tool = candidateToolsMap.get(tagName);
         const chip = document.createElement("span");
         chip.className = "conversations__tool-chip";
 
         const nameSpan = document.createElement("span");
         nameSpan.textContent = tagName;
-        if (tool) {
+        if (tool?.description) {
           nameSpan.title = tool.description;
         }
 
@@ -499,8 +530,9 @@ export class ShadowClawConversations extends ShadowClawElement {
           return;
         }
 
-        const tool = TOOL_DEFINITIONS.find((t) => t.name === val);
-        if (!tool) {
+        const isValidName = /^[a-z][a-z0-9_]{0,63}$/.test(val);
+        const tool = candidateToolsMap.get(val);
+        if (!tool && !isValidName) {
           toolInput.value = "";
 
           return;

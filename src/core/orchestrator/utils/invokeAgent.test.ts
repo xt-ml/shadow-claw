@@ -29,6 +29,13 @@ jest.unstable_mockModule("./operations/channel.js", () => ({
   getChannelTypeForGroup: mockGetChannelTypeForGroup,
 }));
 
+const mockLoadDeclarativeTools = jest.fn() as any;
+const mockFindDeclarativeTool = jest.fn() as any;
+jest.unstable_mockModule("../../../subsystems/tools/declarative.js", () => ({
+  loadDeclarativeTools: mockLoadDeclarativeTools,
+  findDeclarativeTool: mockFindDeclarativeTool,
+}));
+
 const mockGetApiKeyForRequest = jest.fn() as any;
 const mockGetProviderRuntimeHeaders = jest.fn() as any;
 const mockGetReasoningConfig = jest.fn() as any;
@@ -246,6 +253,10 @@ describe("invokeAgent", () => {
     });
     mockListGroups.mockResolvedValue([]);
     mockReadGroupFile.mockResolvedValue("memory content");
+    mockLoadDeclarativeTools.mockResolvedValue({
+      tools: [],
+      diagnostics: [],
+    });
     mockGetProvider.mockImplementation((id: string) => ({
       defaultModel: "default-" + id,
       supportsStreaming: true,
@@ -638,5 +649,31 @@ describe("invokeAgent", () => {
         subagentTask: true,
       }),
     });
+  });
+
+  it("should filter declarative tools by toolTags when toolTags are set on group", async () => {
+    mockListGroups.mockResolvedValue([
+      {
+        groupId: "group1",
+        toolTags: ["generate_random_number", "tool1"],
+      },
+    ]);
+    mockLoadDeclarativeTools.mockResolvedValue({
+      tools: [
+        { name: "generate_random_number", description: "random number" },
+        { name: "unpinned_declarative_tool", description: "other tool" },
+      ],
+      diagnostics: [],
+    });
+
+    await invokeAgent(mockOrchestrator, mockDb, "group1", "hello");
+
+    const postCall = mockOrchestrator.agentWorker.postMessage.mock.calls[0][0];
+    const enabledToolNames = postCall.payload.enabledTools.map(
+      (t: any) => t.name,
+    );
+    expect(enabledToolNames).toContain("generate_random_number");
+    expect(enabledToolNames).toContain("tool1");
+    expect(enabledToolNames).not.toContain("unpinned_declarative_tool");
   });
 });

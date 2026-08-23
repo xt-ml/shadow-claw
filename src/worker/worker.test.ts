@@ -199,7 +199,7 @@ describe("worker and worker/agent.js", () => {
           "group",
         );
         expect(mockSandboxedEval).toHaveBeenCalledWith(
-          "1 + 1",
+          "return (1 + 1);",
           undefined,
           false,
           undefined,
@@ -220,7 +220,7 @@ describe("worker and worker/agent.js", () => {
           "group",
         );
         expect(mockSandboxedEval).toHaveBeenCalledWith(
-          "throw new Error('fail')",
+          "return (throw new Error('fail'));",
           undefined,
           false,
           undefined,

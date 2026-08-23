@@ -638,5 +638,51 @@ describe("handleMessage.js", () => {
         },
       });
     });
+
+    it("should execute declarative skill chains through the same engine", async () => {
+      const db: any = {} as any;
+      (mockOpenDatabase as any).mockResolvedValue(db);
+      (mockExecuteTool as any)
+        .mockResolvedValueOnce("123")
+        .mockResolvedValueOnce("toast shown");
+
+      await handleMessage({
+        data: {
+          type: "execute-skill-tools",
+          payload: {
+            groupId: "g1",
+            skillName: "toast-random-number",
+            tools: [
+              { name: "javascript", input: { code: "123" } },
+              { name: "show_toast", input: { message: { $pipe: "prev" } } },
+            ],
+          },
+        },
+      });
+
+      expect(mockExecuteTool).toHaveBeenNthCalledWith(
+        1,
+        db,
+        "javascript",
+        { code: "123" },
+        "g1",
+        { isScheduledTask: false, isTaskExecution: false },
+      );
+      expect(mockExecuteTool).toHaveBeenNthCalledWith(
+        2,
+        db,
+        "show_toast",
+        { message: "123" },
+        "g1",
+        { isScheduledTask: false, isTaskExecution: false },
+      );
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "response",
+        payload: {
+          groupId: "g1",
+          text: "**Tool `javascript`**: 123\n\n**Tool `show_toast`**: toast shown",
+        },
+      });
+    });
   });
 });

@@ -62,11 +62,11 @@ describe("build without and with pages", () => {
   }
 
   it("builds with the normal pages tree", async () => {
-    await mkdir(path.join(tempProjectRoot, "tools/main"), {
+    await mkdir(path.join(tempProjectRoot, ".agents/tools/main"), {
       recursive: true,
     });
     await writeFile(
-      path.join(tempProjectRoot, "tools/main/echo.json"),
+      path.join(tempProjectRoot, ".agents/tools/main/echo.json"),
       JSON.stringify({
         name: "echo",
         description: "Echo structured input.",
@@ -75,16 +75,16 @@ describe("build without and with pages", () => {
       }),
       "utf8",
     );
-    await mkdir(path.join(tempProjectRoot, "skills/main/example"), {
+    await mkdir(path.join(tempProjectRoot, ".agents/skills/main/example"), {
       recursive: true,
     });
     await writeFile(
-      path.join(tempProjectRoot, "skills/main/example/SKILL.md"),
+      path.join(tempProjectRoot, ".agents/skills/main/example/SKILL.md"),
       "---\nname: example\ndescription: Example skill for build tests\n---\nUse the example workflow.",
       "utf8",
     );
     await writeFile(
-      path.join(tempProjectRoot, "skills/main/purge.md"),
+      path.join(tempProjectRoot, ".agents/skills/main/purge.md"),
       "---\nslug: shadow-claw--purge-skills\npurge-id: skills-build-001\n---\n",
       "utf8",
     );
@@ -97,18 +97,37 @@ describe("build without and with pages", () => {
       ),
     );
     expect(manifest.pages.length).toBeGreaterThan(0);
-    expect(manifest.tools).toEqual([
-      {
-        displayPath: "echo.json",
-        content: expect.stringContaining('"name":"echo"'),
-      },
-    ]);
-    expect(manifest.skills).toEqual([
-      {
-        displayPath: "example/SKILL.md",
-        content: expect.stringContaining("name: example"),
-      },
-    ]);
+    expect(manifest.tools).toEqual(
+      expect.arrayContaining([
+        {
+          displayPath: "echo.json",
+          content: expect.stringContaining('"name":"echo"'),
+        },
+        {
+          displayPath: "generate_random_number.json",
+          content: expect.stringContaining('"name": "generate_random_number"'),
+        },
+      ]),
+    );
+    expect(manifest.skills).toEqual(
+      expect.arrayContaining([
+        {
+          displayPath: "example/SKILL.md",
+          content: expect.stringContaining("name: example"),
+        },
+        {
+          displayPath: "skill-creator/SKILL.md",
+          content: expect.stringContaining("name: skill-creator"),
+        },
+        {
+          displayPath: "toast-random-number/SKILL.md",
+          content: expect.stringContaining("name: toast-random-number"),
+        },
+      ]),
+    );
+    expect(
+      manifest.skills.filter((s) => s.displayPath.endsWith("SKILL.md")),
+    ).toHaveLength(3);
     expect(manifest.skillsPurgeId).toBe("skills-build-001");
   });
 

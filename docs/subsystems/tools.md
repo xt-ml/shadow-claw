@@ -134,7 +134,7 @@ The dedicated **Tool Configuration** view (`<shadow-claw-tools>`, accessible via
 ### Execution tools
 
 - **`bash`** — Prefers WebVM, falls back to JS shell (see [WebVM](vm.md) and [Shell](shell.md))
-- **`javascript`** — Sandboxed strict-mode via `sandboxedEval()` (`src/worker/utils/sandboxedEval.ts`). Code **must use `return`** to produce output. No DOM, `eval`, or `Function`. Network `fetch` is enabled/disabled by the shared Tool Configuration -> Internet Access toggle.
+- **`javascript`** — Sandboxed strict-mode via `sandboxedEval()` (`src/worker/utils/sandboxedEval.ts`). Code automatically evaluates single expressions without explicit `return` keywords by wrapping them as `return (<expression>);`. No DOM, `eval`, or `Function`. Network `fetch` is enabled/disabled by the shared Tool Configuration -> Internet Access toggle.
 
 ### Web tools
 
@@ -251,7 +251,7 @@ See the [Adding a Tool](../guides/adding-a-tool.md) guide.
 ## Declarative Tools
 
 Template sites can add executable tools without modifying ShadowClaw source by
-placing JSON definitions under `tools/main/`. Each definition contains the
+placing JSON definitions under `.agents/tools/main/`. Each definition contains the
 standard tool schema plus an explicit executor:
 
 ```json
@@ -280,7 +280,16 @@ allowlisted ShadowClaw tool and may provide an `input` object to merge with the
 call input.
 
 Declarative tools are loaded from the conversation's OPFS workspace. The
-published `tools/main/` tree is seeded only into the Main conversation, and
+published `.agents/tools/main/` tree is seeded only into the Main conversation, and
 normal runtime tool allowlists still apply to delegated tools. Built-in tool
-names cannot be shadowed, and declarative delegation is capped to prevent
-cycles.
+names cannot be shadowed, and declarative delegation is capped at eight nested
+calls to prevent cycles and runaway execution.
+
+Default declarative tools include `.agents/tools/main/generate_random_number.json`, which generates random integers within a range using a sandboxed JavaScript expression. Declarative tools can be invoked directly by the agent or chained within declarative skills via the shared `executeToolChain` engine (`src/worker/utils/toolChain.ts`).
+
+Tool names must match `^[a-z][a-z0-9_]{0,63}$`. Invalid JSON or definitions are
+skipped and recorded as diagnostics rather than preventing other declarative
+tools from loading. The declarative wrapper must be enabled in the active tool
+list; when it delegates to another tool, that target must also pass the normal
+runtime allowlist check. Bash receives serialized arguments on stdin, while
+JavaScript receives them in `data`.

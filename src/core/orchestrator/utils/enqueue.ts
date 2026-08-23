@@ -11,6 +11,8 @@ import { clearPeerJsTypingState } from "./operations/channel.js";
 import { getApiKeyForRequest } from "./operations/provider.js";
 
 import { parseDirectToolCommand } from "./parseDirectToolCommand.js";
+import { discoverSkills } from "../../../subsystems/skills/discoverSkills.js";
+import { parseSkillCommand } from "../../../subsystems/skills/parseSkillCommand.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { InboundMessage } from "../../../subsystems/channels/types.js";
@@ -59,6 +61,12 @@ export async function enqueue(
     o.assistantName,
     msg,
   );
+  const skillCommand = directToolCommand
+    ? null
+    : parseSkillCommand(
+        msg.content,
+        (await discoverSkills(db, msg.groupId)).skills,
+      );
   const isFromBrowser = msg.channel === "browser"; // Messages submitted in ShadowClaw UI
   const autoTrigger = o.channelRegistry.shouldAutoTrigger(msg.groupId);
 
@@ -66,6 +74,10 @@ export async function enqueue(
 
   if (msg.channel === "browser" || msg.groupId.startsWith("room:")) {
     hasTrigger = o.triggerPattern.test(msg.content.trim());
+  }
+
+  if (skillCommand) {
+    hasTrigger = true;
   }
 
   // ── A2A task-state conversation termination ──────────────────────────────
@@ -134,6 +146,7 @@ export async function enqueue(
   if (
     isTrigger &&
     !isFromBrowser &&
+    !skillCommand &&
     msg.groupId.startsWith("peer:") &&
     o.peerCompletedContexts.has(msg.groupId)
   ) {
@@ -153,12 +166,31 @@ export async function enqueue(
     isTrigger,
   };
 
-  if (isTrigger && !isDirectToolCommand) {
-    o.messageQueue.push(msg);
+  if (isTrigger && !isDirectToolCommand && !skillCommand?.skill.execution) {
+    o.messageQueue.push(
+      skillCommand
+        ? {
+            ...msg,
+            content: `[SKILL COMMAND] Activate the "${skillCommand.skill.name}" skill and follow its instructions.\n${skillCommand.arguments}`,
+          }
+        : msg,
+    );
   }
 
   await saveMessage(db, stored);
   o.events.emit("message", stored);
+
+  if (skillCommand?.skill.execution && o.agentWorker) {
+    o.agentWorker.postMessage({
+      type: "execute-skill-tools",
+      payload: {
+        groupId: msg.groupId,
+        skillName: skillCommand.skill.name,
+        tools: skillCommand.skill.execution.tools,
+      },
+    });
+    return;
+  }
 
   // Keep peer typing state in sync, but do not treat every P2P chat message
   // as an agent response. Normal peer messages should not force the remote

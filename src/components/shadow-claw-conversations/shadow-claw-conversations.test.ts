@@ -696,6 +696,50 @@ describe("ShadowClawConversations", () => {
 
       document.body.removeChild(el);
     });
+
+    it("allows adding a declaratively registered tool to pinned tools", async () => {
+      mockOrchStore.groups = [
+        { groupId: "br:main", name: "Main", createdAt: 0, toolTags: [] },
+      ];
+      mockOrchStore.activeGroupId = "br:main";
+
+      const el = new ShadowClawConversations() as any;
+      document.body.appendChild(el);
+      await el.render();
+      el.db = {} as any;
+
+      const dialog = el.shadowRoot?.querySelector(
+        ".conversations__details-dialog",
+      ) as HTMLDialogElement | null;
+      if (dialog) {
+        (dialog as any).showModal = jest.fn();
+      }
+
+      await el.handleDetails("br:main", "Main");
+
+      const toolInput = el.shadowRoot?.querySelector(
+        "#conversations-tool-input",
+      ) as HTMLInputElement;
+      const addBtn = el.shadowRoot?.querySelector(
+        "#conversations-add-tool-btn",
+      ) as HTMLButtonElement;
+
+      // Add declarative tool 'generate_random_number' via input
+      toolInput.value = "generate_random_number";
+      addBtn.click();
+
+      // Check if a chip with 'generate_random_number' was created
+      const chips = el.shadowRoot?.querySelectorAll(
+        ".conversations__tool-chip",
+      );
+      const declarativeChip = Array.from(chips || []).find(
+        (c: any) =>
+          c.querySelector("span")?.textContent === "generate_random_number",
+      );
+      expect(declarativeChip).toBeDefined();
+
+      document.body.removeChild(el);
+    });
   });
 
   describe("details dialog: provider/model pinning", () => {

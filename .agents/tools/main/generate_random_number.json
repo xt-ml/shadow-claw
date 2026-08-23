@@ -1,0 +1,21 @@
+{
+  "name": "generate_random_number",
+  "description": "Generate a random integer within a specified range (min through max, inclusive).",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "min": {
+        "type": "number",
+        "description": "Minimum integer value (inclusive, default: 1)"
+      },
+      "max": {
+        "type": "number",
+        "description": "Maximum integer value (inclusive, default: 1000000)"
+      }
+    }
+  },
+  "execution": {
+    "type": "javascript",
+    "code": "const input = data ? JSON.parse(data) : {}; const min = typeof input.min === 'number' ? input.min : 1; const max = typeof input.max === 'number' ? input.max : 1000000; return Math.floor(Math.random() * (max - min + 1)) + min;"
+  }
+}

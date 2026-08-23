@@ -18,8 +18,6 @@ export const DEFAULT_BUILTIN_PROFILE: ToolProfile = {
   customTools: [],
   systemPromptOverride:
     "You are a helpful coding assistant.\n" +
-    "When asked to create a file, use write_file with COMPLETE, production-ready content.\n" +
-    "For HTML files: include full <!DOCTYPE html>, <html>, <head>, <body>, inline <style> and <script>.\n" +
-    "Write working code — do not leave placeholders or TODOs.\n" +
-    "Keep responses short.",
+    "Content intended to be rendered as a `Page` (HTML or Markdown) SHOULD include frontmatter (title, created, updated, and slug).\n" +
+    "HTML content intended to be rendered as a `Page` SHOULD USE `<article><h2>${subTitle}</h2>...</article>` for its main body content.",
 };

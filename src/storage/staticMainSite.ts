@@ -418,7 +418,21 @@ export async function seedStaticMainSite(
     ))
   ) {
     didPurgeSkills = true;
-    await deleteGroupDirectory(db, groupId, "skills/main");
+    try {
+      await deleteGroupDirectory(db, groupId, ".agents/skills/main");
+    } catch (error) {
+      // A fresh workspace has no bundled-skill directory to remove yet.
+      if (
+        !(
+          error &&
+          typeof error === "object" &&
+          "name" in error &&
+          error.name === "NotFoundError"
+        )
+      ) {
+        throw error;
+      }
+    }
   }
 
   for (const page of manifest.pages) {
@@ -512,7 +526,7 @@ export async function seedStaticMainSite(
   // provide their own skills under their isolated workspace.
   if (groupId === DEFAULT_GROUP_ID) {
     for (const skill of manifest.skills || []) {
-      const skillPath = `skills/main/${skill.displayPath}`;
+      const skillPath = `.agents/skills/main/${skill.displayPath}`;
       try {
         if (!(await groupFileExists(db, groupId, skillPath))) {
           await writeGroupFile(db, groupId, skillPath, skill.content);
@@ -523,7 +537,7 @@ export async function seedStaticMainSite(
     }
 
     for (const tool of manifest.tools || []) {
-      const toolPath = `tools/main/${tool.displayPath}`;
+      const toolPath = `.agents/tools/main/${tool.displayPath}`;
       try {
         if (!(await groupFileExists(db, groupId, toolPath))) {
           await writeGroupFile(db, groupId, toolPath, tool.content);

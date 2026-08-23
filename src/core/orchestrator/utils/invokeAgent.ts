@@ -152,10 +152,13 @@ export async function invokeAgent(
     db,
     executionGroupId,
   );
-  const declarativeTools = declarativeToolResult.tools.filter(
+  const rawDeclarativeTools = declarativeToolResult.tools.filter(
     (tool) =>
       !toolsStore.allTools.some((builtIn) => builtIn.name === tool.name),
   );
+  const declarativeTools = Array.isArray(group?.toolTags)
+    ? rawDeclarativeTools.filter((tool) => group.toolTags!.includes(tool.name))
+    : rawDeclarativeTools;
   const toolsWithDeclarative = [...configuredTools, ...declarativeTools];
   const skillDiscovery = await discoverSkills(db, executionGroupId);
   const activeTools =

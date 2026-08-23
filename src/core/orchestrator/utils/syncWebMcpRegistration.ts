@@ -18,6 +18,8 @@ import type { WebMcpMode } from "../../../subsystems/mcp/webmcp.js";
 import type { OrchestratorState } from "../orchestrator-state.js";
 import type { Orchestrator } from "../orchestrator.js";
 
+import { loadDeclarativeTools } from "../../../subsystems/tools/declarative.js";
+
 export function syncWebMcpRegistration(
   orchestrator: Orchestrator,
   db: ShadowClawDatabase,
@@ -47,10 +49,6 @@ export function syncWebMcpRegistration(
     const globalTools = toolsStore.enabledTools;
     const groups = orchestratorStore.groups;
     const group = groups.find((g) => g.groupId === activeGroupId);
-    const tools =
-      group?.toolTags && group.toolTags.length > 0
-        ? allTools.filter((t) => group.toolTags!.includes(t.name))
-        : globalTools;
 
     // Serialize WebMCP registration calls to prevent overlapping unregister/register cycles.
     orchestrator.webMcpRegistrationLock = orchestrator.webMcpRegistrationLock
@@ -58,6 +56,22 @@ export function syncWebMcpRegistration(
         unregisterWebMcpTools();
         // Small delay to allow the browser's ModelContext to process the unregistrations.
         await new Promise((resolve) => setTimeout(resolve, 0));
+
+        let declarativeTools: any[] = [];
+        try {
+          const res = await loadDeclarativeTools(db, activeGroupId);
+          declarativeTools = (res?.tools || []).filter(
+            (dt) => !allTools.some((bt) => bt.name === dt.name),
+          );
+        } catch {
+          // Ignore OPFS load errors
+        }
+
+        const candidateTools = [...allTools, ...declarativeTools];
+        const tools =
+          group?.toolTags && group.toolTags.length > 0
+            ? candidateTools.filter((t) => group.toolTags!.includes(t.name))
+            : [...globalTools, ...declarativeTools];
 
         await registerWebMcpTools(
           orchestrator.agentWorker,

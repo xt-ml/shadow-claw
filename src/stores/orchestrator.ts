@@ -808,6 +808,11 @@ export class OrchestratorStore {
     return this._whenInitialized;
   }
 
+  /** Allow embedded declarative site defaults to apply again on next boot. */
+  async resetSiteConfigSeed(db: ShadowClawDatabase): Promise<void> {
+    await setConfig(db, CONFIG_KEYS.SITE_CONFIG_SEEDED, false);
+  }
+
   get whenReady(): Promise<void> {
     return this._whenReady;
   }

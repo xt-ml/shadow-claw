@@ -75,7 +75,6 @@ import { AGUIAdapter } from "../ui/agui-adapter.js";
 import { showError } from "../ui/toast.js";
 import { applyJsonPatch } from "../utils/jsonPatch.js";
 import { ulid } from "../utils/ulid.js";
-import { toolsStore } from "./tools.js";
 
 import type { MessageAttachment } from "../content/types.js";
 import type { Orchestrator } from "../core/orchestrator/orchestrator.js";
@@ -1376,6 +1375,24 @@ export class OrchestratorStore {
     installCustomElementsRegistryGuard();
     installCustomElementDomGuard();
 
+    // Seed static main site files (including declarative tools) first
+    const rawPagesList = await getConfig(db, CONFIG_KEYS.PAGES_LIST);
+    const existingPages =
+      rawPagesList !== null && rawPagesList !== undefined
+        ? this.parsePagesList(rawPagesList)
+        : [];
+    const seeded = await seedStaticMainSite(
+      db,
+      DEFAULT_GROUP_ID,
+      existingPages,
+    );
+    if (seeded.length > 0) {
+      this.setPages(seeded);
+      await this.persistPages(db);
+    } else {
+      await this.ensureDefaultPage(db);
+    }
+
     // Apply declarative site config defaults (from embedded site-config.json) on first boot
     await this.applySiteConfigDefaults(db);
 
@@ -1401,23 +1418,6 @@ export class OrchestratorStore {
     this._sidebarDefaultPage.set(
       this.normalizeSidebarDefaultPage(sidebarDefaultPageRaw),
     );
-
-    const rawPagesList = await getConfig(db, CONFIG_KEYS.PAGES_LIST);
-    const existingPages =
-      rawPagesList !== null && rawPagesList !== undefined
-        ? this.parsePagesList(rawPagesList)
-        : [];
-    const seeded = await seedStaticMainSite(
-      db,
-      DEFAULT_GROUP_ID,
-      existingPages,
-    );
-    if (seeded.length > 0) {
-      this.setPages(seeded);
-      await this.persistPages(db);
-    } else {
-      await this.ensureDefaultPage(db);
-    }
 
     const lastPinnedPageRaw = await getConfig(
       db,
@@ -2672,12 +2672,9 @@ export class OrchestratorStore {
       }
 
       if (Array.isArray(config.enabledTools)) {
-        const availableToolNames = new Set(
-          toolsStore.allTools.map((tool) => tool.name),
-        );
         const enabledTools = config.enabledTools.filter(
           (name: unknown): name is string =>
-            typeof name === "string" && availableToolNames.has(name),
+            typeof name === "string" && name.trim().length > 0,
         );
         await listGroups(db);
         await updateGroupToolTags(db, DEFAULT_GROUP_ID, enabledTools);

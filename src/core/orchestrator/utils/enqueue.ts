@@ -183,7 +183,8 @@ export async function enqueue(
   if (skillCommand?.skill.execution && o.agentWorker) {
     const rawTools = skillCommand.skill.execution.tools;
     const tools = rawTools.map((t) => {
-      const inputObj = t.input && typeof t.input === "object" ? { ...t.input } : {};
+      const inputObj =
+        t.input && typeof t.input === "object" ? { ...t.input } : {};
       if (skillCommand.arguments && Object.keys(inputObj).length === 0) {
         inputObj.rawInput = skillCommand.arguments;
       }

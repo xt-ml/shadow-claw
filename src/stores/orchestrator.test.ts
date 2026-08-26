@@ -2800,5 +2800,38 @@ describe("OrchestratorStore", () => {
 
       expect(spy).toHaveBeenCalledWith({} as any);
     });
+
+    it("preserves declarative tool names specified in site-config enabledTools", async () => {
+      const store = new OrchestratorStore();
+      const events = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
+      };
+
+      const configElement = document.createElement("script");
+      configElement.id = "shadow-claw-site-config";
+      configElement.type = "application/json";
+      configElement.textContent = JSON.stringify({
+        enabledTools: ["pwgen", "pwgen_help", "pwgen_entropy"],
+      });
+      document.head.appendChild(configElement);
+
+      try {
+        await store.init({} as any, orch);
+        expect(mockUpdateGroupToolTags).toHaveBeenCalledWith(
+          {} as any,
+          DEFAULT_GROUP_ID,
+          ["pwgen", "pwgen_help", "pwgen_entropy"],
+        );
+      } finally {
+        configElement.remove();
+      }
+    });
   });
 });

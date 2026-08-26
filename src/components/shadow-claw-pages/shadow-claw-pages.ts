@@ -1,4 +1,9 @@
 import { Signal } from "signal-polyfill";
+import {
+  getNamespacedItem,
+  removeNamespacedItem,
+  setNamespacedItem,
+} from "../../utils/namespacedStorage.js";
 import { renderMarkdown } from "../../content/markdown.js";
 import { splitFrontmatter } from "../../common/utils/frontmatter.mjs";
 
@@ -977,7 +982,7 @@ export class ShadowClawPages extends ShadowClawElement {
         const stateKey = `shadow-claw-pages-group-collapsed-${groupId}`;
         let isCollapsed = false;
         try {
-          isCollapsed = localStorage.getItem(stateKey) === "true";
+          isCollapsed = getNamespacedItem(stateKey) === "true";
         } catch {
           // Ignore
         }
@@ -988,9 +993,9 @@ export class ShadowClawPages extends ShadowClawElement {
         details.addEventListener("toggle", () => {
           try {
             if (details.open) {
-              localStorage.removeItem(stateKey);
+              removeNamespacedItem(stateKey);
             } else {
-              localStorage.setItem(stateKey, "true");
+              setNamespacedItem(stateKey, "true");
             }
           } catch {
             // Ignore
@@ -2072,7 +2077,6 @@ export class ShadowClawPages extends ShadowClawElement {
     );
     iframe.setAttribute("sandbox", getIframeSandboxPolicy());
     iframe.setAttribute("allow", "fullscreen");
-    iframe.setAttribute("allowfullscreen", "true");
     iframe.hidden = true;
     iframe.addEventListener("load", () => {
       this.previewFrameWindow = iframe.contentWindow;

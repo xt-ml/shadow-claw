@@ -272,6 +272,7 @@ The `<shadow-claw-tools>` component includes interactive controls for managing t
 
 - **Internet Access Toggle** (`.tools__internet-access-toggle` / `#toolsInternetAccessOptIn`): A checkbox to toggle the shared full public internet access setting (`vm_bash_full_internet_access`) for both `bash` and `javascript` tools.
 - **Web Search Proxy Toggle & Settings**: Checkbox (`.tools__web-search-proxy-toggle`), custom CORS proxy endpoint input (`.tools__web-search-proxy-input`), and custom search URL template input (`.tools__web-search-template-input`) to configure search routing for `web_search`.
+- **Declarative Tool Toggles & Badges**: Checkboxes (`.tools__declarative-tool-toggle`) and `"declarative"` badges allowing independent enablement/disablement of declarative tools discovered in `.agents/tools/main/`.
 - **WebMCP Toggle** (`.tools__webmcp-toggle`): Toggles integration with browser's Model Context Protocol.
 - **WebMCP Mode selector** (`.tools__webmcp-mode`): Selects the WebMCP execution mode.
 
@@ -505,7 +506,7 @@ to storage feature gates.
 
 ## Storage Tests (Feature-Gated)
 
-Storage integration tests (`storage.test.ts`) are **feature-gated** at runtime:
+Storage integration tests (`storage.test.ts`) and migration tests (`migrateLegacyDatabase.test.ts`) verify per-deployment storage namespacing (`namespacedStorage`, `shadowclaw_<namespace>`, `shadow-claw-opfs-<namespace>`) and are **feature-gated** at runtime:
 
 - Tests skip if `indexedDB` or `navigator.storage` are unavailable
 - This is intentional — not all browsers/contexts support OPFS

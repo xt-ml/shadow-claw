@@ -5,6 +5,8 @@ import { getConfig } from "../db/getConfig.js";
 import { setConfig } from "../db/setConfig.js";
 import { TOOL_DEFINITIONS } from "../subsystems/tools/tools.js";
 import { DEFAULT_BUILTIN_PROFILE } from "../subsystems/tools/builtin-profiles.js";
+import { loadDeclarativeTools } from "../subsystems/tools/declarative.js";
+import type { DeclarativeToolDefinition } from "../subsystems/tools/declarative.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 import type { ToolDefinition, ToolProfile } from "../subsystems/tools/tools.js";
 
@@ -13,6 +15,11 @@ export class ToolsStore {
   private _activeProfileId: Signal.State<string | null>;
   private _allTools: Signal.Computed<ToolDefinition[]>;
   private _customTools: Signal.State<ToolDefinition[]>;
+  private _declarativeTools: Signal.State<DeclarativeToolDefinition[]>;
+  private _declarativeToolNamesEnabled: Signal.State<Set<string> | null>;
+  private _enabledDeclarativeTools: Signal.Computed<
+    DeclarativeToolDefinition[]
+  >;
   private _enabledToolNames: Signal.State<Set<string>>;
   private _enabledTools: Signal.Computed<ToolDefinition[]>;
   private _profiles: Signal.State<ToolProfile[]>;
@@ -29,6 +36,10 @@ export class ToolsStore {
       new Set(DEFAULT_BUILTIN_PROFILE.enabledToolNames),
     );
     this._customTools = new Signal.State([]);
+    this._declarativeTools = new Signal.State([]);
+    this._declarativeToolNamesEnabled = new Signal.State<Set<string> | null>(
+      null,
+    );
     this._systemPromptOverride = new Signal.State("");
     this._profiles = new Signal.State([]);
     this._activeProfileId = new Signal.State(DEFAULT_BUILTIN_PROFILE.id);
@@ -55,6 +66,15 @@ export class ToolsStore {
       return this._allTools
         .get()
         .filter((t: ToolDefinition) => enabled.has(t.name));
+    });
+
+    this._enabledDeclarativeTools = new Signal.Computed(() => {
+      const tools = this._declarativeTools.get();
+      const enabledSet = this._declarativeToolNamesEnabled.get();
+      if (enabledSet === null) {
+        return tools;
+      }
+      return tools.filter((t) => enabledSet.has(t.name));
     });
 
     this._activeProfile = new Signal.Computed(() => {
@@ -87,12 +107,100 @@ export class ToolsStore {
     return this._customTools.get();
   }
 
+  get declarativeTools(): DeclarativeToolDefinition[] {
+    return this._declarativeTools.get();
+  }
+
+  get declarativeToolNamesEnabled(): Set<string> | null {
+    return this._declarativeToolNamesEnabled.get();
+  }
+
+  get enabledDeclarativeTools(): DeclarativeToolDefinition[] {
+    return this._enabledDeclarativeTools.get();
+  }
+
   get enabledToolNames(): Set<string> {
     return this._enabledToolNames.get();
   }
 
   get enabledTools(): ToolDefinition[] {
     return this._enabledTools.get();
+  }
+
+  isDeclarativeToolEnabled(name: string): boolean {
+    const enabledSet = this._declarativeToolNamesEnabled.get();
+    if (enabledSet === null) {
+      return true;
+    }
+    return enabledSet.has(name);
+  }
+
+  async refreshDeclarativeTools(
+    db: ShadowClawDatabase,
+    groupId?: string,
+  ): Promise<DeclarativeToolDefinition[]> {
+    try {
+      const res = await loadDeclarativeTools(db, groupId || "br:main");
+      const allBuiltInAndCustom = this.allTools;
+      const declTools = (res?.tools || []).filter(
+        (dt) => !allBuiltInAndCustom.some((bt) => bt.name === dt.name),
+      );
+
+      const current = this._declarativeTools.get();
+      const isSame =
+        current.length === declTools.length &&
+        current.every(
+          (t, i) =>
+            t.name === declTools[i].name &&
+            t.description === declTools[i].description &&
+            JSON.stringify(t.execution) ===
+              JSON.stringify(declTools[i].execution),
+        );
+
+      if (!isSame) {
+        this._declarativeTools.set(declTools);
+      }
+      return declTools;
+    } catch {
+      if (this._declarativeTools.get().length > 0) {
+        this._declarativeTools.set([]);
+      }
+      return [];
+    }
+  }
+
+  async setDeclarativeToolEnabled(
+    db: ShadowClawDatabase,
+    toolName: string,
+    enabled: boolean,
+  ): Promise<void> {
+    const currentEnabled = this._declarativeToolNamesEnabled.get();
+    const allDeclTools = this._declarativeTools.get();
+    const nextSet = new Set(
+      currentEnabled === null
+        ? allDeclTools.map((t) => t.name)
+        : currentEnabled,
+    );
+    if (enabled) {
+      nextSet.add(toolName);
+    } else {
+      nextSet.delete(toolName);
+    }
+    this._declarativeToolNamesEnabled.set(nextSet);
+    await setConfig(
+      db,
+      CONFIG_KEYS.DECLARATIVE_TOOLS_ENABLED,
+      Array.from(nextSet),
+    );
+  }
+
+  async setAllDeclarativeEnabled(
+    db: ShadowClawDatabase,
+    toolNames: string[],
+  ): Promise<void> {
+    const nextSet = new Set(toolNames);
+    this._declarativeToolNamesEnabled.set(nextSet);
+    await setConfig(db, CONFIG_KEYS.DECLARATIVE_TOOLS_ENABLED, toolNames);
   }
 
   /**
@@ -103,6 +211,9 @@ export class ToolsStore {
       {
         enabledTools: [...this._enabledToolNames.get()],
         customTools: this._customTools.get(),
+        declarativeToolsEnabled: this._declarativeToolNamesEnabled.get()
+          ? Array.from(this._declarativeToolNamesEnabled.get()!)
+          : null,
         systemPromptOverride: this._systemPromptOverride.get(),
         profiles: this._profiles.get(),
         activeProfileId: this._activeProfileId.get(),
@@ -371,6 +482,20 @@ export class ToolsStore {
         data.searchFilesSkipDirs,
       );
     }
+
+    if (Array.isArray(data.declarativeToolsEnabled)) {
+      this._declarativeToolNamesEnabled.set(
+        new Set(data.declarativeToolsEnabled),
+      );
+      await setConfig(
+        db,
+        CONFIG_KEYS.DECLARATIVE_TOOLS_ENABLED,
+        data.declarativeToolsEnabled,
+      );
+    } else if (data.declarativeToolsEnabled === null) {
+      this._declarativeToolNamesEnabled.set(null);
+      await setConfig(db, CONFIG_KEYS.DECLARATIVE_TOOLS_ENABLED, null);
+    }
   }
 
   /**
@@ -389,6 +514,7 @@ export class ToolsStore {
       searchFilesMaxFileBytesRaw,
       searchFilesMaxFilesVisitedRaw,
       searchFilesSkipDirsRaw,
+      declarativeEnabledRaw,
     ] = await Promise.all([
       getConfig(db, CONFIG_KEYS.ENABLED_TOOLS),
       getConfig(db, CONFIG_KEYS.CUSTOM_TOOLS),
@@ -401,6 +527,7 @@ export class ToolsStore {
       getConfig(db, CONFIG_KEYS.SEARCH_FILES_MAX_FILE_BYTES),
       getConfig(db, CONFIG_KEYS.SEARCH_FILES_MAX_FILES_VISITED),
       getConfig(db, CONFIG_KEYS.SEARCH_FILES_SKIP_DIRS),
+      getConfig(db, CONFIG_KEYS.DECLARATIVE_TOOLS_ENABLED),
     ]);
 
     if (Array.isArray(enabledRaw)) {
@@ -409,6 +536,10 @@ export class ToolsStore {
 
     if (Array.isArray(customRaw)) {
       this._customTools.set(customRaw);
+    }
+
+    if (Array.isArray(declarativeEnabledRaw)) {
+      this._declarativeToolNamesEnabled.set(new Set(declarativeEnabledRaw));
     }
 
     if (typeof promptOverride === "string") {

@@ -75,6 +75,7 @@ import { AGUIAdapter } from "../ui/agui-adapter.js";
 import { showError } from "../ui/toast.js";
 import { applyJsonPatch } from "../utils/jsonPatch.js";
 import { ulid } from "../utils/ulid.js";
+import { toolsStore } from "./tools.js";
 
 import type { MessageAttachment } from "../content/types.js";
 import type { Orchestrator } from "../core/orchestrator/orchestrator.js";
@@ -2657,6 +2658,33 @@ export class OrchestratorStore {
         const { assistantName } = config.settings;
         if (assistantName && typeof assistantName === "string") {
           await setConfig(db, CONFIG_KEYS.ASSISTANT_NAME, assistantName);
+        }
+      }
+
+      const defaultToolsProfile =
+        (config.settings && typeof config.settings === "object"
+          ? config.settings.defaultToolsProfile
+          : undefined) ?? config.defaultToolsProfile;
+      if (
+        typeof defaultToolsProfile === "string" &&
+        defaultToolsProfile.trim().length > 0
+      ) {
+        const profileValue = defaultToolsProfile.trim();
+        if (profileValue.toLowerCase() === "none") {
+          await toolsStore.deactivateProfile(db);
+        } else {
+          const matchedProfile = toolsStore.profiles.find(
+            (p) =>
+              p.id.toLowerCase() === profileValue.toLowerCase() ||
+              p.name.toLowerCase() === profileValue.toLowerCase(),
+          );
+          if (matchedProfile) {
+            await toolsStore.activateProfile(db, matchedProfile.id);
+          } else {
+            console.warn(
+              `Default tools profile "${profileValue}" specified in site-config was not found.`,
+            );
+          }
         }
       }
 

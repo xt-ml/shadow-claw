@@ -18,7 +18,8 @@ import type { WebMcpMode } from "../../../subsystems/mcp/webmcp.js";
 import type { OrchestratorState } from "../orchestrator-state.js";
 import type { Orchestrator } from "../orchestrator.js";
 
-import { loadDeclarativeTools } from "../../../subsystems/tools/declarative.js";
+import { discoverSkills } from "../../../subsystems/skills/discoverSkills.js";
+import { activate_skill } from "../../../subsystems/skills/tool.js";
 
 export function syncWebMcpRegistration(
   orchestrator: Orchestrator,
@@ -47,6 +48,8 @@ export function syncWebMcpRegistration(
     const activeGroupId = orchestratorStore.activeGroupId;
     const allTools = toolsStore.allTools;
     const globalTools = toolsStore.enabledTools;
+    void toolsStore.declarativeTools;
+    void toolsStore.declarativeToolNamesEnabled;
     const groups = orchestratorStore.groups;
     const group = groups.find((g) => g.groupId === activeGroupId);
 
@@ -59,19 +62,37 @@ export function syncWebMcpRegistration(
 
         let declarativeTools: any[] = [];
         try {
-          const res = await loadDeclarativeTools(db, activeGroupId);
-          declarativeTools = (res?.tools || []).filter(
-            (dt) => !allTools.some((bt) => bt.name === dt.name),
+          declarativeTools = await toolsStore.refreshDeclarativeTools(
+            db,
+            activeGroupId,
           );
         } catch {
           // Ignore OPFS load errors
         }
 
+        const enabledDeclarativeTools = declarativeTools.filter((dt) =>
+          toolsStore.isDeclarativeToolEnabled(dt.name),
+        );
+
         const candidateTools = [...allTools, ...declarativeTools];
-        const tools =
+        let tools =
           group?.toolTags && group.toolTags.length > 0
             ? candidateTools.filter((t) => group.toolTags!.includes(t.name))
-            : [...globalTools, ...declarativeTools];
+            : [...globalTools, ...enabledDeclarativeTools];
+
+        let skillDiscovery: { skills: any[] } = { skills: [] };
+        try {
+          skillDiscovery = await discoverSkills(db, activeGroupId);
+        } catch {
+          // Ignore OPFS load errors
+        }
+
+        if (
+          skillDiscovery.skills.length > 0 &&
+          !tools.some((t) => t.name === activate_skill.name)
+        ) {
+          tools = [...tools, activate_skill];
+        }
 
         await registerWebMcpTools(
           orchestrator.agentWorker,

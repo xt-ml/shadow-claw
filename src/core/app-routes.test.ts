@@ -2,6 +2,7 @@ import {
   applyBasePath,
   buildRoutePath,
   getAppBasePath,
+  getDeploymentNamespace,
   getFileRouteDirPath,
   getWorkspaceRouteRequestPath,
   parseRouteFromUrl,
@@ -402,6 +403,44 @@ describe("app-routes", () => {
       });
 
       baseEl.remove();
+    });
+  });
+
+  describe("getDeploymentNamespace", () => {
+    beforeEach(() => {
+      (globalThis as any).__applyBasePathCacheReset?.();
+      delete (window as any).__SHADOWCLAW_DEPLOY_ID__;
+      delete process.env.SHADOWCLAW_DEPLOY_ID;
+    });
+
+    afterEach(() => {
+      delete (window as any).__SHADOWCLAW_DEPLOY_ID__;
+      delete process.env.SHADOWCLAW_DEPLOY_ID;
+    });
+
+    it("returns empty string when base path is root", () => {
+      expect(getDeploymentNamespace()).toBe("");
+    });
+
+    it("derives clean namespace from subpath base path", () => {
+      const baseEl = document.createElement("base");
+      baseEl.setAttribute("href", "/shadow-claw-deploy-1/");
+      document.head.appendChild(baseEl);
+      (globalThis as any).__applyBasePathCacheReset?.();
+
+      expect(getDeploymentNamespace()).toBe("shadow-claw-deploy-1");
+
+      baseEl.remove();
+    });
+
+    it("respects explicit window.__SHADOWCLAW_DEPLOY_ID__ override", () => {
+      (window as any).__SHADOWCLAW_DEPLOY_ID__ = "deploy-custom-1";
+      expect(getDeploymentNamespace()).toBe("deploy-custom-1");
+    });
+
+    it("respects process.env.SHADOWCLAW_DEPLOY_ID override when window override is absent", () => {
+      process.env.SHADOWCLAW_DEPLOY_ID = "deploy-env-2";
+      expect(getDeploymentNamespace()).toBe("deploy-env-2");
     });
   });
 });

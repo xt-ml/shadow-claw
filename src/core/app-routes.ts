@@ -59,6 +59,34 @@ if (typeof globalThis !== "undefined") {
   (globalThis as any).__applyBasePathCacheReset = resetAppBasePathCache;
 }
 
+export function getDeploymentNamespace(): string {
+  if (
+    typeof window !== "undefined" &&
+    (window as any).__SHADOWCLAW_DEPLOY_ID__
+  ) {
+    const customId = String((window as any).__SHADOWCLAW_DEPLOY_ID__).trim();
+    if (customId) {
+      return customId.replace(/[^a-zA-Z0-9_-]/g, "-");
+    }
+  }
+
+  const proc = (globalThis as any).process;
+  if (proc && proc.env && proc.env.SHADOWCLAW_DEPLOY_ID) {
+    const envId = String(proc.env.SHADOWCLAW_DEPLOY_ID).trim();
+    if (envId) {
+      return envId.replace(/[^a-zA-Z0-9_-]/g, "-");
+    }
+  }
+
+  const basePath = getAppBasePath();
+  if (!basePath || basePath === "/") {
+    return "";
+  }
+
+  const clean = basePath.replace(/^\/+|\/+$/g, "");
+  return clean.replace(/[^a-zA-Z0-9_-]/g, "-");
+}
+
 export function getAppBasePath(): string {
   if (cachedBasePath !== null) {
     return cachedBasePath;

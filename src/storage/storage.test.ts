@@ -4,6 +4,7 @@ import { jest } from "@jest/globals";
 jest.unstable_mockModule("../config/config.js", () => ({
   CONFIG_KEYS: { STORAGE_HANDLE: "storageHandle" },
   OPFS_ROOT: "sc-root",
+  getOpfsRootName: () => "sc-root",
 }));
 
 jest.unstable_mockModule("../db/deleteConfig.js", () => ({
@@ -117,6 +118,21 @@ describe("storage.js", () => {
 
       expect(root.name).toBe("mock-dir"); // From OPFS fallback
       expect((global as any).navigator.storage.getDirectory).toHaveBeenCalled();
+    });
+
+    it("should use namespaced OPFS root directory handle when deployment namespace is present", async () => {
+      (getConfig as any).mockResolvedValueOnce(null);
+      (window as any).__SHADOWCLAW_DEPLOY_ID__ = "deploy-1";
+
+      const getDirSpy = jest.spyOn(mockOpfsRoot, "getDirectoryHandle");
+      await storage.getStorageRoot(db);
+
+      expect(getDirSpy).toHaveBeenCalledWith("sc-root-deploy-1", {
+        create: true,
+      });
+
+      delete (window as any).__SHADOWCLAW_DEPLOY_ID__;
+      getDirSpy.mockRestore();
     });
 
     it("should return explicit root if set", async () => {

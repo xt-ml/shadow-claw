@@ -22,5 +22,8 @@
     "tasksHidden": false,
     "filesHidden": false,
     "defaultPage": "pages"
+  },
+  "settings": {
+    "defaultToolsProfile": "__builtin_default"
   }
 }

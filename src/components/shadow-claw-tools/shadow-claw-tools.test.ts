@@ -58,6 +58,13 @@ jest.unstable_mockModule("../../stores/tools.js", () => ({
     ],
     enabledToolNames: new Set(["bash"]),
     customTools: [{ name: "custom_tool", description: "A custom tool." }],
+    declarativeTools: [],
+    declarativeToolNamesEnabled: null,
+    enabledDeclarativeTools: [],
+    isDeclarativeToolEnabled: jest.fn(() => true),
+    refreshDeclarativeTools: jest.fn(() => Promise.resolve([])),
+    setDeclarativeToolEnabled: jest.fn(),
+    setAllDeclarativeEnabled: jest.fn(),
     systemPromptOverride: "Test prompt",
     profiles: [
       { id: "__builtin_1", name: "Builtin Profile" },

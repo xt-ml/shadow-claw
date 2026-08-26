@@ -202,3 +202,18 @@ ShadowClaw utilizes the browser's `CacheStorage` API for local model weight stor
 - **Chunked Resumable Streaming**: Downloads large model files in chunks, persisting intermediate progress into partial metadata (`readPartialMeta` / `writePartialMeta`). If a download is interrupted, it resumes using HTTP `Range` requests without restarting from 0%.
 - **Single Source of Truth**: Transformers.js native browser caching (`env.useBrowserCache`) is disabled to prevent duplicate storage overhead. Fetch requests for models are routed directly through `createModelCacheFetch`.
 - **Service Worker Bypass**: The Service Worker excludes model binary URLs (`*.onnx`, `*.onnx_data`, `huggingface.co`, `hf.co`, `hf-mirror.com`, `litertlm`) from Workbox runtime caching, delegating model storage entirely to `CacheStorage`.
+
+## Per-Deployment Storage Namespacing & Migration
+
+To prevent storage state leakage when multiple instances are deployed under subpaths of a single domain (e.g. GitHub Pages project sites like `username.github.io/shadow-claw-deploy-1`), ShadowClaw dynamically namespaces IndexedDB, OPFS root directories, and `localStorage` storage keys.
+
+1. **Namespace Resolution (`getDeploymentNamespace()`):**
+   Derived automatically from subpath routing (`getAppBasePath()`) or explicit overrides (`window.__SHADOWCLAW_DEPLOY_ID__` / `process.env.SHADOWCLAW_DEPLOY_ID`).
+2. **IndexedDB Scope (`getDbName()`):**
+   Computes database names as `shadowclaw-${namespace}` (falling back to legacy `"shadowclaw"` when unnamespaced).
+3. **OPFS Root Directory Scope (`getOpfsRootName()`):**
+   Computes OPFS root directory handles as `shadow-claw-opfs-${namespace}` (falling back to `"shadowclaw"` when unnamespaced).
+4. **Automated Legacy Migration (`migrateLegacyDatabase.ts`):**
+   When booting a namespaced database for the first time, ShadowClaw checks if data was previously stored under `"shadowclaw"`. If present, all object stores are copied into the new namespaced database in a single non-destructive pass, setting `DB_MIGRATED_FROM_LEGACY`. The legacy database is left intact as a fallback seed.
+5. **Namespaced `localStorage` (`namespacedStorage.ts`):**
+   Key pattern `shadowclaw:${namespace}:${key}` with automatic one-time copy-on-read from legacy unprefixed keys.

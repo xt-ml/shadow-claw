@@ -176,7 +176,18 @@ pages/
       about.md        ← any other pages
   routes.json         ← pretty-path config (optional)
 
-site-config.json      ← branding and build configuration (optional)
+site-config.json      ← branding, default tool settings, and build configuration (optional)
+```
+
+Site configurations can also specify tool defaults under `settings`:
+
+```json
+{
+  "settings": {
+    "defaultToolsProfile": "__builtin_default",
+    "enabledTools": ["javascript", "read_file", "write_file"]
+  }
+}
 ```
 
 The `pages/` directory is optional. If it is absent, the build succeeds and

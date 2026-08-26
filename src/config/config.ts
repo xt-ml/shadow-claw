@@ -1,4 +1,5 @@
 import { modelRegistry } from "../subsystems/providers/model-registry.js";
+import { getDeploymentNamespace } from "../core/app-routes.js";
 
 /** Default assistant name (used in trigger pattern) */
 
@@ -200,11 +201,29 @@ export const DEFAULT_VM_NETWORK_RELAY_URL = "wss://relay.widgetry.org/";
  */
 export const DEFAULT_VM_BOOT_HOST = "http://localhost:8888";
 
+/** Legacy IndexedDB database name (unnamespaced) */
+export const LEGACY_DB_NAME = "shadowclaw";
+
+/** Get current deployment IndexedDB database name */
+export function getDbName(): string {
+  const ns = getDeploymentNamespace();
+  return ns ? `shadowclaw-${ns}` : LEGACY_DB_NAME;
+}
+
 /** IndexedDB database name */
-export const DB_NAME = "shadowclaw";
+export const DB_NAME = getDbName();
 
 /** IndexedDB version */
 export const DB_VERSION = 2;
+
+/** Legacy OPFS root directory name (unnamespaced) */
+export const LEGACY_OPFS_ROOT = "shadowclaw";
+
+/** Get current deployment OPFS root directory name */
+export function getOpfsRootName(): string {
+  const ns = getDeploymentNamespace();
+  return ns ? `shadowclaw-${ns}` : LEGACY_OPFS_ROOT;
+}
 
 /** OPFS root directory name */
 export const OPFS_ROOT = "shadowclaw";
@@ -1016,6 +1035,8 @@ export const CONFIG_KEYS = {
   CONTEXT_COMPRESSION_ENABLED: "context_compression_enabled",
   CONVERSATIONS_HEIGHT: "conversations_height",
   CUSTOM_TOOLS: "custom_tools",
+  DB_MIGRATED_FROM_LEGACY: "db_migrated_from_legacy",
+  DECLARATIVE_TOOLS_ENABLED: "declarative_tools_enabled",
   DEFAULT_PINNED_PAGE: "default_pinned_page",
   DIRECT_TOOL_COMMAND_POLICY: "direct_tool_command_policy",
   ENABLED_TOOLS: "enabled_tools",

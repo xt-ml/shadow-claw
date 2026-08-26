@@ -1,4 +1,5 @@
 import { CONFIG_KEYS, OPFS_ROOT } from "../config/config.js";
+import { getDeploymentNamespace } from "../core/app-routes.js";
 import { deleteConfig } from "../db/deleteConfig.js";
 import { getConfig } from "../db/getConfig.js";
 import { getMemoryOpfsRoot } from "./memoryStorage.js";
@@ -41,8 +42,12 @@ async function getOpfsRoot(): Promise<FileSystemDirectoryHandle> {
       typeof navigator.storage.getDirectory === "function"
     ) {
       const opfsRoot = await navigator.storage.getDirectory();
+      const ns = getDeploymentNamespace();
+      const opfsRootName = ns ? `${OPFS_ROOT}-${ns}` : OPFS_ROOT;
 
-      return await opfsRoot.getDirectoryHandle(OPFS_ROOT, { create: true });
+      return await opfsRoot.getDirectoryHandle(opfsRootName, {
+        create: true,
+      });
     }
   } catch (err) {
     console.warn(

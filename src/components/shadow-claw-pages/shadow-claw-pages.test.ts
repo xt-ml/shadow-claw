@@ -156,6 +156,12 @@ describe("shadow-claw-pages", () => {
     const iframe = root.querySelector("[data-pages-iframe]");
     expect(iframe).toBeInstanceOf(HTMLIFrameElement);
     expect((iframe as HTMLIFrameElement).hidden).toBe(false);
+    expect((iframe as HTMLIFrameElement).getAttribute("allow")).toBe(
+      "fullscreen",
+    );
+    expect((iframe as HTMLIFrameElement).hasAttribute("allowfullscreen")).toBe(
+      false,
+    );
     expect(setTrustedSrcdoc).toHaveBeenCalledTimes(1);
   });
 

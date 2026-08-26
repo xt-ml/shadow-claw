@@ -132,11 +132,13 @@ Markdown and HTML preview work should preserve the Settings-backed iframe host a
 
 - **Custom Element Guards:** `installCustomElementsRegistryGuard` and `installCustomElementDomGuard` (`src/security/custom-element-security.ts`) intercept unauthorized custom element registrations and dynamically strip unapproved custom elements from the DOM tree. Only core elements (`shadow-claw` and `shadow-claw-*`) or elements explicitly allowlisted via `site-config.json` or `CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS` are permitted.
 - **Iframe Sandboxing & CSP:** Sandboxed preview iframes omit `allow-same-origin` by default to enforce origin isolation, using a nonce-gated Content Security Policy with domain restrictions generated via `getIframeCsp(nonce)`.
+- **Iframe Attribute Cleanups:** When rendering preview iframes (such as in `shadow-claw-pages` and `shadow-claw-file-viewer`), rely on `allow="fullscreen"` and omit redundant `allowfullscreen` boolean attributes to avoid browser DevTools precedence warnings.
 - **Approved Script Loading:** Dynamic loading of custom element scripts is restricted to safe protocols and validated host patterns using `loadApprovedCustomElementScript`.
 
-### Declarative Site Configuration & Dynamic Navigation
+### Declarative Site Configuration, Storage Namespacing & Dynamic Navigation
 
-- **Declarative Site Config (`site-config.json`):** Template repositories configure metadata, branding, custom element allowlists, and navigation visibility via `site-config.json`, which is patched into production artifacts at build time via `bin/site-config/apply.mjs` and seeded into IndexedDB at runtime via `applySiteConfigDefaults()`.
+- **Declarative Site Config (`site-config.json`):** Template repositories configure metadata, branding, tool defaults (`defaultToolsProfile`, `enabledTools`), custom element allowlists, and navigation visibility via `site-config.json`, which is patched into production artifacts at build time via `bin/site-config/apply.mjs` and seeded into IndexedDB at runtime via `applySiteConfigDefaults()`.
+- **Per-Deployment Storage Namespacing:** Use `namespacedStorage` for `localStorage` keys and `getDbName()` / `getOpfsRootName()` for IndexedDB/OPFS namespacing per deployment namespace (`getDeploymentNamespace()`) to prevent state leakage across subpath deployments. Legacy database stores are automatically migrated via `migrateLegacyDatabase.ts`.
 - **Dynamic Sidebar Navigation:** Sidebar navigation items (Pages, Chat, Tasks, Files) support runtime toggling and build-time DSD hiding. Ensure navigation fallback logic (`getDefaultSidebarPage`) resolves to the next visible item when active pages are hidden.
 
 ## What to Avoid

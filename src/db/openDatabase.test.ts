@@ -2,12 +2,20 @@ import { jest } from "@jest/globals";
 
 const setDB = jest.fn();
 
+jest.unstable_mockModule("./migrateLegacyDatabase.js", () => ({
+  migrateLegacyDatabase: jest.fn<any>().mockResolvedValue(undefined),
+}));
+
 jest.unstable_mockModule("./db.js", () => ({
   setDB,
+  getDb: jest.fn(),
 }));
 
 jest.unstable_mockModule("../config/config.js", () => ({
   DB_NAME: "shadowclaw-test",
+  getDbName: () => "shadowclaw-test",
+  LEGACY_DB_NAME: "shadowclaw",
+  CONFIG_KEYS: { DB_MIGRATED_FROM_LEGACY: "db_migrated_from_legacy" },
   DB_VERSION: 3,
 }));
 

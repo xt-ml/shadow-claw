@@ -1,4 +1,9 @@
 import { Signal } from "signal-polyfill";
+import {
+  getNamespacedItem,
+  getNamespacedStorageKey,
+  setNamespacedItem,
+} from "../utils/namespacedStorage.js";
 
 export type ThemeChoice = "light" | "dark" | "system";
 export type ResolvedTheme = "light" | "dark";
@@ -64,7 +69,7 @@ function applyTheme(resolved: ResolvedTheme): void {
   );
 }
 
-const stored = (localStorage.getItem(THEME_KEY) as ThemeChoice) || "system";
+const stored = (getNamespacedItem(THEME_KEY) as ThemeChoice) || "system";
 
 const initialResolved = resolveTheme(stored);
 applyTheme(initialResolved);
@@ -94,7 +99,7 @@ export class ThemeStore {
       const mql = window.matchMedia("(prefers-color-scheme: dark)");
       mql.addEventListener("change", () => {
         const resolved = getSystemTheme();
-        localStorage.setItem(THEME_KEY, "system");
+        setNamespacedItem(THEME_KEY, "system");
         applyTheme(resolved);
         this._theme.set("system");
         this._resolved.set(resolved);
@@ -103,7 +108,8 @@ export class ThemeStore {
 
     // Listen for storage changes (tab sync)
     window.addEventListener("storage", (e) => {
-      if (e.key === THEME_KEY && e.newValue) {
+      const targetKey = getNamespacedStorageKey(THEME_KEY);
+      if (e.key === targetKey && e.newValue) {
         this.setTheme(e.newValue as ThemeChoice);
       }
     });
@@ -118,7 +124,7 @@ export class ThemeStore {
    */
   setTheme(theme: ThemeChoice): void {
     const resolved = resolveTheme(theme);
-    localStorage.setItem(THEME_KEY, theme);
+    setNamespacedItem(THEME_KEY, theme);
     applyTheme(resolved);
     this._theme.set(theme);
     this._resolved.set(resolved);

@@ -1,4 +1,5 @@
 import JSZip from "jszip";
+import { getNamespacedItem } from "../../utils/namespacedStorage.js";
 
 import {
   CONFIG_KEYS,
@@ -1514,7 +1515,7 @@ export class ShadowClawChat extends ShadowClawElement {
 
             const messageType = msg.isFromMe ? "assistant" : "user";
             const assistantName =
-              localStorage.getItem("assistantName") || "example";
+              getNamespacedItem("assistantName") || "ShadowClaw";
             const sender = msg.isFromMe ? assistantName : msg.sender || "You";
 
             const msgDiv = document.createElement("article");
@@ -2547,7 +2548,7 @@ export class ShadowClawChat extends ShadowClawElement {
     let contentEl: HTMLElement | null = null;
 
     if (!streamDiv) {
-      const assistantName = localStorage.getItem("assistantName") || "example";
+      const assistantName = getNamespacedItem("assistantName") || "ShadowClaw";
 
       streamDiv = document.createElement("article");
       streamDiv.className =

@@ -22,7 +22,7 @@ A fully-functional agent runtime that runs entirely in the browser—no AI proce
 
 - **Multi-model support**: OpenRouter, Anthropic, Google Gemini, AWS Bedrock, Ollama, Llamafile, Mesh LLM, Transformers.js, and browser-native Prompt API
 - **Web Components UI**: Native Custom Elements + TC39 Signals for reactive updates
-- **Persistent storage**: IndexedDB for messages/config, OPFS for files
+- **Persistent storage**: IndexedDB for messages/config, OPFS for files (namespaced per deployment subpath with automated legacy migration)
 - **Agent tools**: File I/O, shell (with optional WebVM), Git, HTTP, JavaScript execution
 - **Multi-conversation support**: Each conversation has isolated chat history, file workspace, and scheduled tasks
 - **Messaging channels**: Browser chat, PeerJS, Telegram Bot API, iMessage bridge (configurable)
@@ -253,6 +253,7 @@ ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and 
 **File I/O:**
 
 - **OPFS** — browser-sandboxed storage (`shadowclaw/<groupId>/workspace/`)
+- **Per-deployment storage namespacing** — IndexedDB (`shadowclaw_<namespace>`), OPFS (`shadow-claw-opfs-<namespace>`), and localStorage (`shadowclaw:<namespace>:<key>`) are namespaced per deployment subpath with automated legacy database migration (`migrateLegacyDatabase.ts`)
 - **Local Folder** — user-selected directory via File System Access API
 - **Centralized write paths** — cross-browser fallback for Safari compatibility
 - **Zip export/import** — for conversation backup/restore
@@ -315,6 +316,8 @@ Create model-specific or task-specific tool profiles to optimize the context win
 - Auto-activate profiles by model
 - Save custom selections
 - **Built-in Profile** — Default Prompt API profile is restricted to core file and script tools (`javascript`, `list_files`, `open_file`, `read_file`, `write_file`)
+- **Site-config tool defaults** — Pre-seed default tool profiles (`defaultToolsProfile`) and built-in tools (`enabledTools`) via `site-config.json`
+- **Declarative tool management & gating** — Declarative tool toggles persist in storage, update in-place in `<shadow-claw-tools>`, gate execution during LLM invocation, and synchronize automatically with WebMCP
 - **Execution-time allowlist enforcement** — Tool calls are re-validated at runtime against the active enabled tool list (profile/manual), not only generation-time schema hints
 - **Shared internet access control** — Toggles public internet access (`fetch` and shell networking) globally for the `bash` and `javascript` tools
 

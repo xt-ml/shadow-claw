@@ -127,3 +127,19 @@ When a local directory is selected:
 - The two never mix — DB for structured data, storage for files
 - `openDatabase()` must be called once at startup (done in `src/core/orchestrator/orchestrator.ts`)
 - No direct `indexedDB` or OPFS calls outside their respective layers
+
+## Per-Deployment Storage Namespacing & Migration
+
+To prevent storage state leakage when multiple instances are deployed under subpaths of a single domain (e.g. GitHub Pages project sites like `username.github.io/shadow-claw-deploy-1`), ShadowClaw dynamically namespaces IndexedDB and `localStorage` storage keys.
+
+1. **Namespace Resolution (`getDeploymentNamespace()`):**
+   Derived automatically from subpath routing (`getAppBasePath()`) or explicit overrides (`window.__SHADOWCLAW_DEPLOY_ID__` / `process.env.SHADOWCLAW_DEPLOY_ID`).
+2. **IndexedDB Scope (`getDbName()`):**
+   Computes database names as `shadowclaw-${namespace}` (falling back to legacy `"shadowclaw"` when unnamespaced).
+3. **Automated Legacy Migration (`migrateLegacyDatabase.ts`):**
+   When booting a namespaced database for the first time, ShadowClaw checks if data was previously stored under `"shadowclaw"`. If present, all object stores are copied into the new namespaced database in a single non-destructive pass, setting `DB_MIGRATED_FROM_LEGACY`. The legacy database is left intact as a fallback seed.
+4. **Namespaced `localStorage` (`namespacedStorage.ts`):**
+   Key pattern `shadowclaw:${namespace}:${key}` with automatic one-time copy-on-read from legacy unprefixed keys.
+5. **Isolation Assurance:**
+   - **Electron Desktop**: Uses a dedicated Chromium profile and user data directory (`~/.config/shadowclaw`), guaranteeing storage isolation regardless of origin.
+   - **Local Development**: Runs on distinct origins (`http://localhost:8888`), which browsers partition natively.

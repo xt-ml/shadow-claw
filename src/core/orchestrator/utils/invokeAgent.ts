@@ -158,7 +158,9 @@ export async function invokeAgent(
   );
   const declarativeTools = Array.isArray(group?.toolTags)
     ? rawDeclarativeTools.filter((tool) => group.toolTags!.includes(tool.name))
-    : rawDeclarativeTools;
+    : rawDeclarativeTools.filter((tool) =>
+        toolsStore.isDeclarativeToolEnabled(tool.name),
+      );
   const toolsWithDeclarative = [...configuredTools, ...declarativeTools];
   const skillDiscovery = await discoverSkills(db, executionGroupId);
   const activeTools =

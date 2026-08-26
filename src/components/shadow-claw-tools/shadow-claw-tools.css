@@ -137,6 +137,11 @@
   text-transform: uppercase;
 }
 
+.tools__item-badge--declarative {
+  background: var(--shadow-claw-accent-secondary, rgba(120, 80, 220, 0.2));
+  color: var(--shadow-claw-accent-primary, #7c4dff);
+}
+
 /* Toolbar */
 .tools__toolbar {
   display: flex;

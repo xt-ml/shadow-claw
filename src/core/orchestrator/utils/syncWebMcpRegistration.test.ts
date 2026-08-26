@@ -28,16 +28,31 @@ jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   },
 }));
 
-jest.unstable_mockModule("../../../stores/tools.js", () => ({
-  toolsStore: {
-    allTools: [{ name: "tool1" }, { name: "tool2" }],
-    enabledTools: [{ name: "tool2" }],
-  },
-}));
+const mockDiscoverSkills = jest.fn() as any;
+jest.unstable_mockModule(
+  "../../../subsystems/skills/discoverSkills.js",
+  () => ({
+    discoverSkills: mockDiscoverSkills,
+  }),
+);
 
 const mockLoadDeclarativeTools = jest.fn() as any;
 jest.unstable_mockModule("../../../subsystems/tools/declarative.js", () => ({
   loadDeclarativeTools: mockLoadDeclarativeTools,
+}));
+
+jest.unstable_mockModule("../../../stores/tools.js", () => ({
+  toolsStore: {
+    allTools: [{ name: "tool1" }, { name: "tool2" }],
+    enabledTools: [{ name: "tool2" }],
+    declarativeTools: [],
+    declarativeToolNamesEnabled: null,
+    refreshDeclarativeTools: jest.fn(async (db: any, groupId: any) => {
+      const res = await mockLoadDeclarativeTools(db, groupId);
+      return res?.tools || [];
+    }),
+    isDeclarativeToolEnabled: jest.fn(() => true),
+  },
 }));
 
 const { syncWebMcpRegistration } = await import("./syncWebMcpRegistration.js");
@@ -56,6 +71,7 @@ describe("syncWebMcpRegistration", () => {
       agentWorker: {},
       handleWorkerMessage: jest.fn(),
     };
+    mockDiscoverSkills.mockResolvedValue({ skills: [] });
     mockLoadDeclarativeTools.mockResolvedValue({
       tools: [
         {
@@ -134,5 +150,23 @@ describe("syncWebMcpRegistration", () => {
     );
 
     consoleError.mockRestore();
+  });
+
+  it("should append activate_skill tool to WebMCP tools when skills are discovered", async () => {
+    mockDiscoverSkills.mockResolvedValue({
+      skills: [{ name: "my-skill", description: "My custom skill" }],
+    });
+
+    syncWebMcpRegistration(mockOrchestrator, mockDb);
+    await mockOrchestrator.webMcpRegistrationLock;
+
+    expect(mockRegisterWebMcpTools).toHaveBeenCalledWith(
+      mockOrchestrator.agentWorker,
+      expect.any(Function),
+      "group1",
+      expect.arrayContaining([
+        expect.objectContaining({ name: "activate_skill" }),
+      ]),
+    );
   });
 });

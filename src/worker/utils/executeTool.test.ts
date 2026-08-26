@@ -134,6 +134,8 @@ describe("executeTool.js", () => {
       BASH_MAX_TIMEOUT_SEC: 1800,
       FETCH_MAX_RESPONSE: 1000,
       OPFS_ROOT: "shadowclaw",
+      LEGACY_OPFS_ROOT: "shadowclaw",
+      getOpfsRootName: jest.fn(() => "shadowclaw"),
       OAUTH_PROVIDER_DEFINITIONS: {},
       CONFIG_KEYS: {
         GIT_TOKEN: "git-token",

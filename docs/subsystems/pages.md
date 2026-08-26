@@ -146,7 +146,7 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prere
     - **`sidebar`**: `pagesHidden`, `chatHidden`, `tasksHidden`, `filesHidden`, `defaultPage` (`"pages"` | `"chat"` | `"tasks"` | `"files"`).
     - **`pages`**: `sortOrder` (`"asc"` | `"desc"`), `defaultPinnedPage`.
     - **`theme`**: `stylesheet` (custom theme CSS stylesheet injected into head).
-    - **`settings`**: `assistantName` (pre-seeds the default assistant name).
+    - **`settings`**: `assistantName` (pre-seeds the default assistant name), `defaultToolsProfile` (pre-seeds the default tool profile e.g. `"__builtin_default"` or `"none"`), `enabledTools` (pre-seeds default enabled built-in tool array).
   - **Build-Time Application**: `bin/site-config/apply.mjs` patches `index.html`, `manifest.json`, `sitemap.xml` / `sitemap.txt`, and copies custom theme stylesheets into the build distribution. Stylesheets under `pages/resources/`, `pages/deps/`, `resources/`, `deps/`, `pages/assets/`, or `pages/main/assets/` are flattened to the distribution root and have that prefix removed from the generated `href`; other paths, such as `pages/main/theme.css`, retain their path.
   - **Branding Asset Precedence**: For `faviconPath` and `appleTouchIconPath`, content-specific locations under `pages/` and its supported resource/dependency paths are checked before bare repository-root defaults, so a published site's branding assets are not shadowed by ShadowClaw's built-in assets.
   - **DSD Shell Navigation Visibility**: `bin/prerender-dsd-shell/prerender-dsd-shell.mjs` applies `hidden` and `aria-hidden` attributes to sidebar navigation items at build time, preventing layout shift on first paint.

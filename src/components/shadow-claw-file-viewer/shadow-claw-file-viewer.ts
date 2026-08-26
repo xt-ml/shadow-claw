@@ -1714,7 +1714,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         this.getIframeSandboxPermissions(file.name),
       );
       iframe.setAttribute("allow", "fullscreen");
-      iframe.setAttribute("allowfullscreen", "true");
 
       iframe.setAttribute("referrerpolicy", "no-referrer");
       setTrustedSrcdoc(iframe, await this.buildIframePreviewSrcdoc(file));

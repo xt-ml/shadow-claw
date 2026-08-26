@@ -40,7 +40,7 @@ module.exports = {
   // // Force new service worker to activate and control pages immediately (bypassing dialog asking for reload).
   // skipWaiting: true,
   clientsClaim: true,
-  navigateFallback: "/index.html",
+  navigateFallback: "index.html",
   navigateFallbackAllowlist: [
     /^\/$/,
     /^\/(chat|files|pages|tasks|settings)(?:\/.*)?$/,

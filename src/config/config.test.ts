@@ -5,6 +5,10 @@ import {
   CONTEXT_WINDOW_SIZE,
   DB_NAME,
   DB_VERSION,
+  getDbName,
+  LEGACY_DB_NAME,
+  LEGACY_OPFS_ROOT,
+  getOpfsRootName,
   DEFAULT_DEV_HOST,
   DEFAULT_DEV_IP,
   DEFAULT_DEV_PORT,
@@ -77,16 +81,28 @@ describe("config.js", () => {
       expect(FETCH_MAX_RESPONSE).toBe(102_400);
     });
 
-    it("should have valid DB_NAME", () => {
+    it("should have valid DB_NAME and getDbName() support namespacing", () => {
+      expect(LEGACY_DB_NAME).toBe("shadowclaw");
+      expect(getDbName()).toBe("shadowclaw");
       expect(DB_NAME).toBe("shadowclaw");
+
+      (window as any).__SHADOWCLAW_DEPLOY_ID__ = "deploy-1";
+      expect(getDbName()).toBe("shadowclaw-deploy-1");
+      delete (window as any).__SHADOWCLAW_DEPLOY_ID__;
     });
 
     it("should have valid DB_VERSION", () => {
       expect(DB_VERSION).toBe(2);
     });
 
-    it("should have valid OPFS_ROOT", () => {
+    it("should have valid OPFS_ROOT and getOpfsRootName() support namespacing", () => {
+      expect(LEGACY_OPFS_ROOT).toBe("shadowclaw");
+      expect(getOpfsRootName()).toBe("shadowclaw");
       expect(OPFS_ROOT).toBe("shadowclaw");
+
+      (window as any).__SHADOWCLAW_DEPLOY_ID__ = "deploy-1";
+      expect(getOpfsRootName()).toBe("shadowclaw-deploy-1");
+      delete (window as any).__SHADOWCLAW_DEPLOY_ID__;
     });
 
     it("should have valid DEFAULT_GROUP_ID", () => {

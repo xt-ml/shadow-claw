@@ -8,6 +8,8 @@ import type {
   ToolDefinition,
 } from "./types.js";
 
+export type { DeclarativeToolDefinition };
+
 const TOOL_NAME_PATTERN = /^[a-z][a-z0-9_]{0,63}$/;
 
 export function parseDeclarativeTool(

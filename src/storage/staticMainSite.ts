@@ -1,4 +1,8 @@
 import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../config/config.js";
+import {
+  getNamespacedItem,
+  setNamespacedItem,
+} from "../utils/namespacedStorage.js";
 import { DEFAULT_MAIN_GROUP_INDEX_CONTENT } from "./defaultIndexContent.mjs";
 import { DEFAULT_MAIN_GROUP_MEMORY_CONTENT } from "./defaultMemoryContent.mjs";
 
@@ -351,7 +355,7 @@ async function checkAndMarkPurge(
 ): Promise<boolean> {
   const effectivePurgeId = purgeId ?? LEGACY_PURGE_ID;
   try {
-    const lastPurgeId = localStorage.getItem(storageKey);
+    const lastPurgeId = getNamespacedItem(storageKey);
     if (lastPurgeId === effectivePurgeId) {
       return true;
     }
@@ -363,7 +367,7 @@ async function checkAndMarkPurge(
     const lastPurgeId = await getConfig(db, configKey);
     if (lastPurgeId === effectivePurgeId) {
       try {
-        localStorage.setItem(storageKey, effectivePurgeId);
+        setNamespacedItem(storageKey, effectivePurgeId);
       } catch {
         // IndexedDB is the durable record when localStorage is unavailable.
       }
@@ -372,14 +376,14 @@ async function checkAndMarkPurge(
 
     await setConfig(db, configKey, effectivePurgeId);
     try {
-      localStorage.setItem(storageKey, effectivePurgeId);
+      setNamespacedItem(storageKey, effectivePurgeId);
     } catch {
       // IndexedDB is the durable record when localStorage is unavailable.
     }
   } catch {
     // Fall back to localStorage when IndexedDB is unavailable.
     try {
-      localStorage.setItem(storageKey, effectivePurgeId);
+      setNamespacedItem(storageKey, effectivePurgeId);
     } catch {
       // If neither store is available, allow the purge to proceed.
     }

@@ -22,6 +22,7 @@ describe("applyRoute", () => {
       buildRoutePath: jest.fn(),
       parseRouteFromUrl: jest.fn(),
       getAppBasePath: jest.fn(),
+      getDeploymentNamespace: jest.fn(() => ""),
       resolveHrefAgainstRoute: jest.fn(),
       getFileRouteDirPath: jest.fn(),
       getWorkspaceRouteRequestPath: jest.fn(),

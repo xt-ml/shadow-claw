@@ -581,6 +581,23 @@ describe("shadow-claw-file-viewer", () => {
     expect(srcdoc).not.toContain("alert(1)");
   });
 
+  it("sets allow='fullscreen' and omits allowfullscreen on HTML iframe previews", async () => {
+    const component = new ShadowClawFileViewer();
+    const content = document.createElement("div");
+
+    await component.renderPreview(content, {
+      kind: "text",
+      name: "index.html",
+      path: "docs/index.html",
+      content: "<h1>Test</h1>",
+    });
+
+    const iframe = content.querySelector("iframe");
+    expect(iframe).toBeInstanceOf(HTMLIFrameElement);
+    expect(iframe?.getAttribute("allow")).toBe("fullscreen");
+    expect(iframe?.hasAttribute("allowfullscreen")).toBe(false);
+  });
+
   it("inlines relative markdown preview images as data URLs", async () => {
     const component = new ShadowClawFileViewer();
     (component as any).db = {};

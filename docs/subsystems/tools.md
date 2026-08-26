@@ -248,6 +248,22 @@ To test the WebMCP integration in Google Chrome, you can use the [Model Context 
 
 See the [Adding a Tool](../guides/adding-a-tool.md) guide.
 
+### Site Configuration Tool Defaults (`site-config.json`)
+
+Site templates can declaratively initialize tool defaults and profile selections via `site-config.json`:
+
+```json
+{
+  "settings": {
+    "defaultToolsProfile": "__builtin_default",
+    "enabledTools": ["javascript", "read_file", "write_file"]
+  }
+}
+```
+
+- **`defaultToolsProfile`**: Specifies the initial profile ID or name (e.g. `"__builtin_default"` or `"git-ops"`) activated on first load. Set to `"none"` to explicitly deactivate all profiles so no preset overrides active selections.
+- **`enabledTools`**: Specifies the list of standard built-in/custom tools enabled by default. Setting `"enabledTools": []` along with `"defaultToolsProfile": "none"` completely disables standard built-in tools while leaving enabled declarative tools active.
+
 ## Declarative Tools
 
 Template sites can add executable tools without modifying ShadowClaw source by
@@ -284,6 +300,15 @@ published `.agents/tools/main/` tree is seeded only into the Main conversation, 
 normal runtime tool allowlists still apply to delegated tools. Built-in tool
 names cannot be shadowed, and declarative delegation is capped at eight nested
 calls to prevent cycles and runaway execution.
+
+### Declarative Tools Visibility & Gating
+
+Declarative tools are integrated into the application's reactive state and settings management:
+
+- **State Management (`ToolsStore`)**: Reactively managed via `_declarativeTools` and `_declarativeToolNamesEnabled` signals. Enabled states are persisted in IndexedDB under `CONFIG_KEYS.DECLARATIVE_TOOLS_ENABLED`.
+- **Settings UI (`<shadow-claw-tools>`)**: Displayed with dedicated `"declarative"` badges and independent enable/disable checkboxes. List updating uses in-place DOM diffing (`isSameStructure`) to avoid DOM reconstruction thrashed states or hover flickering.
+- **WebMCP Integration**: Synchronized automatically via `syncWebMcpRegistration` so browser-side WebMCP callers receive both standard and active declarative tools.
+- **Orchestrator Filtering**: Filtered dynamically in `invokeAgent` based on user settings before passing tool definitions to LLM providers.
 
 Default declarative tools include `.agents/tools/main/generate_random_number.json`, which generates random integers within a range using a sandboxed JavaScript expression. Declarative tools can be invoked directly by the agent or chained within declarative skills via the shared `executeToolChain` engine (`src/worker/utils/toolChain.ts`).
 

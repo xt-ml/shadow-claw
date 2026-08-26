@@ -22,7 +22,7 @@ beforeAll(async () => {
 
 describe("workbox runtime caching rules", () => {
   it("uses index.html as the navigation fallback", () => {
-    expect(workboxConfig.navigateFallback).toBe("/index.html");
+    expect(workboxConfig.navigateFallback).toBe("index.html");
   });
 
   it("allows SPA navigation fallback for app routes", () => {

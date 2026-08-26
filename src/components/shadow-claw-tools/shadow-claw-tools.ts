@@ -42,6 +42,7 @@ export class ShadowClawTools extends ShadowClawElement {
     const db = await getDb();
     this.orchestrator = orchestratorStore.orchestrator;
 
+    await toolsStore.refreshDeclarativeTools(db);
     this.setupEffects(db);
     this.bindEventListeners(db);
   }
@@ -99,6 +100,8 @@ export class ShadowClawTools extends ShadowClawElement {
       ?.addEventListener("click", () => {
         const allNames = toolsStore.allTools.map((t) => t.name);
         toolsStore.setAllEnabled(db, allNames);
+        const declNames = toolsStore.declarativeTools.map((t) => t.name);
+        toolsStore.setAllDeclarativeEnabled(db, declNames);
         showInfo("All tools enabled");
       });
 
@@ -106,6 +109,7 @@ export class ShadowClawTools extends ShadowClawElement {
       .querySelector(".tools__select-none-btn")
       ?.addEventListener("click", () => {
         toolsStore.setAllEnabled(db, []);
+        toolsStore.setAllDeclarativeEnabled(db, []);
         showInfo("All tools disabled");
       });
 
@@ -519,6 +523,8 @@ export class ShadowClawTools extends ShadowClawElement {
       effect(() => {
         toolsStore.enabledToolNames;
         toolsStore.customTools;
+        toolsStore.declarativeTools;
+        toolsStore.declarativeToolNamesEnabled;
         toolsStore.systemPromptOverride;
         toolsStore.profiles;
         toolsStore.activeProfileId;
@@ -727,89 +733,162 @@ export class ShadowClawTools extends ShadowClawElement {
 
     const enabled = toolsStore.enabledToolNames;
     const allTools = toolsStore.allTools;
+    const declarativeTools = toolsStore.declarativeTools;
 
-    list.replaceChildren();
+    const existingCheckboxes = list.querySelectorAll<HTMLInputElement>(
+      ".tools__item-checkbox[data-tool]",
+    );
+    const existingToolNames = Array.from(existingCheckboxes).map(
+      (cb) => cb.getAttribute("data-tool") || "",
+    );
+    const targetToolNames = [
+      ...allTools.map((t) => t.name),
+      ...declarativeTools.map((t) => t.name),
+    ];
 
-    for (const tool of allTools) {
-      const isCustom = !BUILTIN_TOOL_NAMES.has(tool.name);
-      const isChecked = enabled.has(tool.name);
-      const brief = tool.description.split(". ")[0];
+    const isSameStructure =
+      existingToolNames.length === targetToolNames.length &&
+      existingToolNames.every((name, i) => name === targetToolNames[i]);
 
-      const item = document.createElement("div");
-      item.className = "tools__item";
-      item.setAttribute("role", "listitem");
+    if (isSameStructure) {
+      for (const cb of existingCheckboxes) {
+        const toolName = cb.getAttribute("data-tool");
+        if (!toolName) continue;
+        const isDeclarative = declarativeTools.some((t) => t.name === toolName);
+        const isChecked = isDeclarative
+          ? toolsStore.isDeclarativeToolEnabled(toolName)
+          : enabled.has(toolName);
+        if (cb.checked !== isChecked) {
+          cb.checked = isChecked;
+        }
+      }
+    } else {
+      list.replaceChildren();
 
-      const checkbox = document.createElement("input");
-      checkbox.type = "checkbox";
-      checkbox.className = "tools__item-checkbox";
-      checkbox.setAttribute("data-tool", tool.name);
-      checkbox.setAttribute("aria-label", `Enable ${tool.name}`);
-      checkbox.checked = isChecked;
+      for (const tool of allTools) {
+        const isCustom = !BUILTIN_TOOL_NAMES.has(tool.name);
+        const isChecked = enabled.has(tool.name);
+        const brief = tool.description.split(". ")[0];
 
-      const info = document.createElement("div");
-      info.className = "tools__item-info";
+        const item = document.createElement("div");
+        item.className = "tools__item";
+        item.setAttribute("role", "listitem");
 
-      const name = document.createElement("div");
-      name.className = "tools__item-name";
-      name.textContent = tool.name;
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "tools__item-checkbox";
+        checkbox.setAttribute("data-tool", tool.name);
+        checkbox.setAttribute("aria-label", `Enable ${tool.name}`);
+        checkbox.checked = isChecked;
 
-      const desc = document.createElement("div");
-      desc.className = "tools__item-desc";
-      desc.setAttribute("title", tool.description);
-      desc.textContent = brief;
-      info.append(name, desc);
+        const info = document.createElement("div");
+        info.className = "tools__item-info";
 
-      const cloneBtn = document.createElement("button");
-      cloneBtn.className = "tools__item-clone";
-      cloneBtn.setAttribute("data-clone", tool.name);
-      cloneBtn.setAttribute("aria-label", `Clone ${tool.name}`);
-      cloneBtn.setAttribute("title", "Clone tool");
-      cloneBtn.textContent = "📋";
+        const name = document.createElement("div");
+        name.className = "tools__item-name";
+        name.textContent = tool.name;
 
-      item.append(checkbox, info);
+        const desc = document.createElement("div");
+        desc.className = "tools__item-desc";
+        desc.setAttribute("title", tool.description);
+        desc.textContent = brief;
+        info.append(name, desc);
 
-      if (isCustom) {
+        const cloneBtn = document.createElement("button");
+        cloneBtn.className = "tools__item-clone";
+        cloneBtn.setAttribute("data-clone", tool.name);
+        cloneBtn.setAttribute("aria-label", `Clone ${tool.name}`);
+        cloneBtn.setAttribute("title", "Clone tool");
+        cloneBtn.textContent = "📋";
+
+        item.append(checkbox, info);
+
+        if (isCustom) {
+          const badge = document.createElement("span");
+          badge.className = "tools__item-badge";
+          badge.textContent = "custom";
+          item.append(badge);
+        }
+
+        item.append(cloneBtn);
+
+        let deleteBtn: HTMLButtonElement | null = null;
+        if (isCustom) {
+          deleteBtn = document.createElement("button");
+          deleteBtn.className = "tools__item-delete";
+          deleteBtn.setAttribute("data-delete", tool.name);
+          deleteBtn.setAttribute("aria-label", `Delete ${tool.name}`);
+          deleteBtn.textContent = "🗑️";
+          item.append(deleteBtn);
+        }
+
+        // Toggle
+        checkbox?.addEventListener("change", () => {
+          toolsStore.setToolEnabled(db, tool.name, checkbox.checked);
+        });
+
+        // Clone
+        cloneBtn?.addEventListener("click", () => {
+          this.openCloneDialog(tool.name);
+        });
+
+        // Delete custom tool
+        deleteBtn?.addEventListener("click", () => {
+          toolsStore.removeCustomTool(db, tool.name);
+          showInfo(`Removed custom tool: ${tool.name}`);
+        });
+
+        list.appendChild(item);
+      }
+
+      for (const tool of declarativeTools) {
+        const isChecked = toolsStore.isDeclarativeToolEnabled(tool.name);
+        const brief = tool.description.split(". ")[0];
+
+        const item = document.createElement("div");
+        item.className = "tools__item";
+        item.setAttribute("role", "listitem");
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "tools__item-checkbox";
+        checkbox.setAttribute("data-tool", tool.name);
+        checkbox.setAttribute("aria-label", `Enable ${tool.name}`);
+        checkbox.checked = isChecked;
+
+        const info = document.createElement("div");
+        info.className = "tools__item-info";
+
+        const name = document.createElement("div");
+        name.className = "tools__item-name";
+        name.textContent = tool.name;
+
+        const desc = document.createElement("div");
+        desc.className = "tools__item-desc";
+        desc.setAttribute("title", tool.description);
+        desc.textContent = brief;
+        info.append(name, desc);
+
         const badge = document.createElement("span");
-        badge.className = "tools__item-badge";
-        badge.textContent = "custom";
-        item.append(badge);
+        badge.className = "tools__item-badge tools__item-badge--declarative";
+        badge.textContent = "declarative";
+        item.append(checkbox, info, badge);
+
+        checkbox.addEventListener("change", () => {
+          toolsStore.setDeclarativeToolEnabled(db, tool.name, checkbox.checked);
+        });
+
+        list.appendChild(item);
       }
-
-      item.append(cloneBtn);
-
-      let deleteBtn: HTMLButtonElement | null = null;
-      if (isCustom) {
-        deleteBtn = document.createElement("button");
-        deleteBtn.className = "tools__item-delete";
-        deleteBtn.setAttribute("data-delete", tool.name);
-        deleteBtn.setAttribute("aria-label", `Delete ${tool.name}`);
-        deleteBtn.textContent = "🗑️";
-        item.append(deleteBtn);
-      }
-
-      // Toggle
-      checkbox?.addEventListener("change", () => {
-        toolsStore.setToolEnabled(db, tool.name, checkbox.checked);
-      });
-
-      // Clone
-      cloneBtn?.addEventListener("click", () => {
-        this.openCloneDialog(tool.name);
-      });
-
-      // Delete custom tool
-      deleteBtn?.addEventListener("click", () => {
-        toolsStore.removeCustomTool(db, tool.name);
-        showInfo(`Removed custom tool: ${tool.name}`);
-      });
-
-      list.appendChild(item);
     }
 
     // Update count
     const countEl = root.querySelector(".tools__count");
     if (countEl) {
-      countEl.textContent = `${enabled.size} of ${allTools.length} enabled`;
+      const totalEnabled =
+        enabled.size + toolsStore.enabledDeclarativeTools.length;
+      const totalCount = allTools.length + declarativeTools.length;
+      countEl.textContent = `${totalEnabled} of ${totalCount} enabled`;
     }
 
     // Update prompt textarea

@@ -149,6 +149,13 @@ jest.unstable_mockModule("../../../stores/tools.js", () => ({
   toolsStore: {
     allTools: [{ name: "tool1" }],
     enabledTools: [{ name: "tool1" }],
+    refreshDeclarativeTools: jest.fn(async (db: any, groupId: any) => {
+      const res = await mockLoadDeclarativeTools(db, groupId);
+      return res?.tools || [];
+    }),
+    isDeclarativeToolEnabled: jest.fn(
+      (name: string) => name !== "disabled_decl_tool",
+    ),
   },
 }));
 
@@ -675,5 +682,29 @@ describe("invokeAgent", () => {
     expect(enabledToolNames).toContain("generate_random_number");
     expect(enabledToolNames).toContain("tool1");
     expect(enabledToolNames).not.toContain("unpinned_declarative_tool");
+  });
+
+  it("should filter out disabled declarative tools when enabledTools payload is constructed", async () => {
+    mockListGroups.mockResolvedValue([
+      {
+        groupId: "group1",
+      },
+    ]);
+    mockLoadDeclarativeTools.mockResolvedValue({
+      tools: [
+        { name: "generate_random_number", description: "random number" },
+        { name: "disabled_decl_tool", description: "disabled tool" },
+      ],
+      diagnostics: [],
+    });
+
+    await invokeAgent(mockOrchestrator, mockDb, "group1", "hello");
+
+    const postCall = mockOrchestrator.agentWorker.postMessage.mock.calls[0][0];
+    const enabledToolNames = postCall.payload.enabledTools.map(
+      (t: any) => t.name,
+    );
+    expect(enabledToolNames).toContain("generate_random_number");
+    expect(enabledToolNames).not.toContain("disabled_decl_tool");
   });
 });

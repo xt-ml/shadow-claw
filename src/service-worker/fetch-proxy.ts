@@ -1,6 +1,9 @@
 /// <reference types="@types/serviceworker" />
 
-import { getWorkspaceRouteRequestPath } from "../core/app-routes.js";
+import {
+  getDeploymentNamespace,
+  getWorkspaceRouteRequestPath,
+} from "../core/app-routes.js";
 import { shouldBypassFetchProxy } from "./fetch-proxy-rules.js";
 
 /**
@@ -9,8 +12,6 @@ import { shouldBypassFetchProxy } from "./fetch-proxy-rules.js";
  */
 let useProxy = false;
 let proxyUrl = "/proxy";
-
-const OPFS_ROOT = "shadowclaw";
 
 const MIME_TYPE_BY_EXTENSION: Record<string, string> = {
   "3gp": "video/3gpp",
@@ -99,7 +100,11 @@ async function openWorkspaceRouteFile(
 
   try {
     const root = await storage.getDirectory();
-    const appRoot = await root.getDirectoryHandle(OPFS_ROOT, { create: true });
+    const ns = getDeploymentNamespace();
+    const opfsRootName = ns ? `shadowclaw-${ns}` : "shadowclaw";
+    const appRoot = await root.getDirectoryHandle(opfsRootName, {
+      create: true,
+    });
     const groupsDir = await appRoot.getDirectoryHandle("groups", {
       create: true,
     });

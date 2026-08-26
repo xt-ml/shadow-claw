@@ -1,4 +1,8 @@
 import { ASSISTANT_NAME, CONFIG_KEYS } from "../../config/config.js";
+import {
+  getNamespacedItem,
+  setNamespacedItem,
+} from "../../utils/namespacedStorage.js";
 
 import {
   createSettingsBackupBlob,
@@ -578,7 +582,7 @@ export class ShadowClawSettings extends ShadowClawElement {
 
   async onOverridePrerenderSkeletonToggle(enabled: boolean) {
     try {
-      localStorage.setItem(
+      setNamespacedItem(
         "shadow-claw-override-prerender-skeleton",
         enabled ? "true" : "false",
       );
@@ -907,7 +911,7 @@ export class ShadowClawSettings extends ShadowClawElement {
     )) as unknown;
     let storedLocalStorage: string | null = null;
     try {
-      storedLocalStorage = localStorage.getItem(
+      storedLocalStorage = getNamespacedItem(
         "shadow-claw-override-prerender-skeleton",
       );
     } catch {
@@ -934,7 +938,7 @@ export class ShadowClawSettings extends ShadowClawElement {
 
     if (overridePrerenderSkeleton) {
       try {
-        localStorage.setItem("shadow-claw-override-prerender-skeleton", "true");
+        setNamespacedItem("shadow-claw-override-prerender-skeleton", "true");
       } catch {
         // Ignore localStorage quota / access errors
       }
@@ -1162,7 +1166,7 @@ export class ShadowClawSettings extends ShadowClawElement {
       return;
     }
 
-    localStorage.setItem("assistantName", name);
+    setNamespacedItem("assistantName", name);
 
     try {
       const orchestrator = this.orchestrator || orchestratorStore.orchestrator;

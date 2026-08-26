@@ -4,6 +4,7 @@ import {
   installCustomElementDomGuard,
   installCustomElementsRegistryGuard,
 } from "../security/custom-element-security.js";
+import { getNamespacedItem } from "../utils/namespacedStorage.js";
 
 declare const __PRERENDER_MAIN_MEMORY__: boolean;
 
@@ -49,7 +50,7 @@ export function initializeThemeAndBootState() {
 
   let shouldOverridePrerender = false;
   try {
-    const rawVal = localStorage.getItem(OVERRIDE_PRERENDER_KEY);
+    const rawVal = getNamespacedItem(OVERRIDE_PRERENDER_KEY);
     if (rawVal === null) {
       shouldOverridePrerender = __PRERENDER_MAIN_MEMORY__;
     } else {
@@ -108,7 +109,7 @@ export function initializeThemeAndBootState() {
   }
 
   const themeKey = "shadow-claw-theme";
-  const storedTheme = localStorage.getItem(themeKey) || "system";
+  const storedTheme = getNamespacedItem(themeKey) || "system";
   const prefersDark =
     window.matchMedia &&
     window.matchMedia("(prefers-color-scheme: dark)").matches;

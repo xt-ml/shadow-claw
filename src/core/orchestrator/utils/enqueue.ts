@@ -181,12 +181,24 @@ export async function enqueue(
   o.events.emit("message", stored);
 
   if (skillCommand?.skill.execution && o.agentWorker) {
+    const rawTools = skillCommand.skill.execution.tools;
+    const tools = rawTools.map((t) => {
+      const inputObj = t.input && typeof t.input === "object" ? { ...t.input } : {};
+      if (skillCommand.arguments && Object.keys(inputObj).length === 0) {
+        inputObj.rawInput = skillCommand.arguments;
+      }
+      return {
+        ...t,
+        input: inputObj,
+      };
+    });
+
     o.agentWorker.postMessage({
       type: "execute-skill-tools",
       payload: {
         groupId: msg.groupId,
         skillName: skillCommand.skill.name,
-        tools: skillCommand.skill.execution.tools,
+        tools,
       },
     });
     return;

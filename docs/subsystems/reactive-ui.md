@@ -334,3 +334,4 @@ ShadowClaw uses a centralized frontend routing system based on the `shadow-claw-
 - **Sidebar visibility**: Configurable via `SIDEBAR_PAGES_HIDDEN` setting; when hidden, Pages sidebar is excluded from navigation
 - **Default page**: Configurable starting page via `SIDEBAR_DEFAULT_PAGE`; persists across reloads
 - **Page list**: All saved pages stored in `PAGES_LIST` config key
+- **Horizontal Chat Split View**: Configurable via `CHAT_SPLIT_VIEW_ENABLED` and `CHAT_SPLIT_VIEW_HEIGHT`. When enabled, pins the Chat component at the bottom of the main view alongside other active pages (Pages, Tasks, Files). It is suppressed on mobile viewports (< 56rem) or when navigating directly to the primary Chat page.

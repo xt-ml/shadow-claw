@@ -8,6 +8,7 @@ import {
   setPagesSidebarHidden,
   setSidebarNavHidden,
 } from "./setPagesSidebarHidden.js";
+import { showPage } from "./showPage.js";
 import { supportsNavigationApi } from "./supportsNavigationApi.js";
 import { syncPageHeaderMainVisibilityOverride } from "./syncPageHeaderMainVisibilityOverride.js";
 
@@ -182,6 +183,12 @@ export function bindEventListeners(
   shadow.addEventListener("sidebar-files-visibility-change", (event: Event) => {
     const hidden = Boolean((event as CustomEvent).detail?.hidden);
     setSidebarNavHidden(shadow, shadowClaw, oStore, db, "files", hidden);
+  });
+
+  shadow.addEventListener("chat-split-view-change", (event: Event) => {
+    const enabled = Boolean((event as CustomEvent).detail?.enabled);
+    shadowClaw.chatSplitViewEnabled = enabled;
+    showPage(shadow, shadowClaw, db, oStore, shadowClaw.currentPage, false);
   });
 
   // Tools / Channels page "Back to Settings" navigation

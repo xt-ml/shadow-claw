@@ -159,4 +159,44 @@ describe("showPage", () => {
     showPage(shadowRoot, shadowClaw, undefined, oStore, "chat", true);
     expect(oStore.setActivePage).not.toHaveBeenCalled();
   });
+
+  it("should activate horizontal split view when chatSplitViewEnabled is true and target page is not chat", () => {
+    shadowRoot.innerHTML = `
+      <div class="main-content">
+        <div class="page" data-page-id="pages"></div>
+        <div class="page" data-page-id="chat"></div>
+        <div class="chat-split-resize-handle" hidden></div>
+      </div>
+    `;
+    mockResolvePageForVisibility.mockReturnValue("pages");
+    shadowClaw.chatSplitViewEnabled = true;
+
+    showPage(shadowRoot, shadowClaw, db, oStore, "pages", false);
+
+    const mainContent = shadowRoot.querySelector(".main-content");
+    const handle = shadowRoot.querySelector(".chat-split-resize-handle");
+
+    expect(mainContent?.classList.contains("split-chat-active")).toBe(true);
+    expect(handle?.hasAttribute("hidden")).toBe(false);
+  });
+
+  it("should suppress horizontal split view when resolved page is chat", () => {
+    shadowRoot.innerHTML = `
+      <div class="main-content split-chat-active">
+        <div class="page" data-page-id="pages"></div>
+        <div class="page" data-page-id="chat"></div>
+        <div class="chat-split-resize-handle"></div>
+      </div>
+    `;
+    mockResolvePageForVisibility.mockReturnValue("chat");
+    shadowClaw.chatSplitViewEnabled = true;
+
+    showPage(shadowRoot, shadowClaw, db, oStore, "chat", false);
+
+    const mainContent = shadowRoot.querySelector(".main-content");
+    const handle = shadowRoot.querySelector(".chat-split-resize-handle");
+
+    expect(mainContent?.classList.contains("split-chat-active")).toBe(false);
+    expect(handle?.hasAttribute("hidden")).toBe(true);
+  });
 });

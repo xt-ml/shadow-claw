@@ -1031,6 +1031,8 @@ export const CONFIG_KEYS = {
   BUILTIN_AI_TOOLS_BACKEND: "builtin_ai_tools_backend",
   CHANNEL_ENABLED_PREFIX: "channel_enabled:",
   CHAT_INPUT_AREA_HEIGHT: "chat_input_area_height",
+  CHAT_SPLIT_VIEW_ENABLED: "chat_split_view_enabled",
+  CHAT_SPLIT_VIEW_HEIGHT: "chat_split_view_height",
   COMPACTION_ENGINE_PREFERENCE: "compaction_engine_preference",
   CONTEXT_COMPRESSION_ENABLED: "context_compression_enabled",
   CONVERSATIONS_HEIGHT: "conversations_height",

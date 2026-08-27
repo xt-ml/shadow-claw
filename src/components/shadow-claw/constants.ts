@@ -1,3 +1,6 @@
 export const DEFAULT_SIDEBAR_WIDTH_PX = 250;
 export const MIN_SIDEBAR_WIDTH_PX = 200;
 export const MAX_SIDEBAR_WIDTH_PX = 560;
+
+export const DEFAULT_CHAT_SPLIT_HEIGHT_PX = 320;
+export const MIN_CHAT_SPLIT_HEIGHT_PX = 150;

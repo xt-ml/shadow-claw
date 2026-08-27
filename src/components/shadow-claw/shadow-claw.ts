@@ -73,6 +73,7 @@ export class ShadowClaw extends ShadowClawElement {
   chatSidebarHidden: boolean = false;
   tasksSidebarHidden: boolean = false;
   filesSidebarHidden: boolean = false;
+  chatSplitViewEnabled: boolean = false;
   popstateListener: (() => void) | null = null;
   previousOrchestratorState: OrchestratorDisplayState = "idle";
   terminalElement: ShadowClawTerminal | null = null;
@@ -374,6 +375,36 @@ export class ShadowClaw extends ShadowClawElement {
       orchestratorStore,
       this.db,
     );
+
+    if (this.db) {
+      try {
+        const { getConfig } = await import("../../db/getConfig.js");
+        const { parseConfigBoolean } =
+          await import("./utils/parseConfigBoolean.js");
+        const { CONFIG_KEYS } = await import("../../config/config.js");
+        const rawSplit = await getConfig(
+          this.db,
+          CONFIG_KEYS.CHAT_SPLIT_VIEW_ENABLED,
+        );
+        this.chatSplitViewEnabled = parseConfigBoolean(rawSplit);
+      } catch {
+        this.chatSplitViewEnabled = false;
+      }
+    }
+
+    const chatSplitHandle = this.shadowRoot?.querySelector(
+      ".chat-split-resize-handle",
+    );
+    if (this.shadowRoot && chatSplitHandle instanceof HTMLElement) {
+      const { initChatSplitResize } =
+        await import("./utils/initChatSplitResize.js");
+      await initChatSplitResize(
+        this.shadowRoot,
+        this,
+        chatSplitHandle,
+        this.db,
+      );
+    }
 
     this.terminalElement = document.createElement(
       "shadow-claw-terminal",

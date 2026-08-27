@@ -268,6 +268,15 @@ export class ShadowClawSettings extends ShadowClawElement {
       });
 
     root
+      .querySelector('[data-setting="chat-split-view-toggle"]')
+      ?.addEventListener("change", (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        if (target) {
+          void this.onChatSplitViewToggle(target.checked);
+        }
+      });
+
+    root
       .querySelector('[data-setting="pages-auto-refresh-input"]')
       ?.addEventListener("change", (e: Event) => {
         const target = e.target as HTMLInputElement;
@@ -741,6 +750,39 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
+  async onChatSplitViewToggle(enabled: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../../db/setConfig.js");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.CHAT_SPLIT_VIEW_ENABLED,
+        enabled ? "true" : "false",
+      );
+
+      this.dispatchEvent(
+        new CustomEvent("chat-split-view-change", {
+          detail: { enabled },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+
+      showSuccess(
+        enabled
+          ? "Horizontal Chat split view enabled"
+          : "Horizontal Chat split view disabled",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving Chat split view setting: " + errorMsg, 6000);
+    }
+  }
+
   async onPagesAutoRefreshInputChange(valSec: number) {
     if (!this.db) {
       return;
@@ -883,6 +925,22 @@ export class ShadowClawSettings extends ShadowClawElement {
     ) as HTMLInputElement | null;
     if (sidebarHideFilesToggle) {
       sidebarHideFilesToggle.checked = sidebarFilesHidden;
+    }
+
+    const rawChatSplitViewEnabled = (await getConfig(
+      this.db,
+      CONFIG_KEYS.CHAT_SPLIT_VIEW_ENABLED,
+    )) as unknown;
+    const chatSplitViewEnabled = isTruthyConfigValue(
+      rawChatSplitViewEnabled,
+      false,
+    );
+
+    const chatSplitViewToggle = root.querySelector(
+      '[data-setting="chat-split-view-toggle"]',
+    ) as HTMLInputElement | null;
+    if (chatSplitViewToggle) {
+      chatSplitViewToggle.checked = chatSplitViewEnabled;
     }
 
     const pagesAutoRefreshInput = root.querySelector(

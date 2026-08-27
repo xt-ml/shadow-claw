@@ -44,6 +44,7 @@ function ensurePageElementStamped(shadow: ShadowRoot, pageId: string): void {
 
 export interface ShowPageContext {
   pagesSidebarHidden: boolean;
+  chatSplitViewEnabled?: boolean;
   currentPage: string;
   terminalElement: any;
   terminalVisible: boolean;
@@ -72,6 +73,44 @@ export function showPage(
     page,
     shadowClaw.pagesSidebarHidden,
   );
+
+  // Handle chat horizontal split view
+  const isSplitActive =
+    Boolean(shadowClaw.chatSplitViewEnabled) && resolvedPage !== "chat";
+
+  const mainContent = shadow.querySelector(".main-content");
+  const chatSplitResizeHandle = shadow.querySelector(
+    ".chat-split-resize-handle",
+  );
+
+  if (isSplitActive) {
+    const chatTag = PAGE_ELEMENT_TAGS.chat;
+    if (chatTag && customElements.get(chatTag)) {
+      ensurePageElementStamped(shadow, "chat");
+    } else {
+      void ensureComponentLoaded("chat")
+        .then(() => {
+          if (shadow) {
+            ensurePageElementStamped(shadow, "chat");
+          }
+        })
+        .catch(console.error);
+    }
+
+    if (mainContent) {
+      mainContent.classList.add("split-chat-active");
+    }
+    if (chatSplitResizeHandle) {
+      chatSplitResizeHandle.removeAttribute("hidden");
+    }
+  } else {
+    if (mainContent) {
+      mainContent.classList.remove("split-chat-active");
+    }
+    if (chatSplitResizeHandle) {
+      chatSplitResizeHandle.setAttribute("hidden", "hidden");
+    }
+  }
 
   // Ensure the JS module import completes, then stamp the page element.
   // Stamping only after customElements.define guarantees the element constructor

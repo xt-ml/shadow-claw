@@ -2582,6 +2582,13 @@ export class OrchestratorStore {
         }
       }
 
+      // Clear any erroneous group-level toolTags override on DEFAULT_GROUP_ID
+      const groups = await listGroups(db);
+      const defaultGroup = groups.find((g) => g.groupId === DEFAULT_GROUP_ID);
+      if (defaultGroup?.toolTags) {
+        await updateGroupToolTags(db, DEFAULT_GROUP_ID, undefined);
+      }
+
       const isSeeded = await getConfig(db, CONFIG_KEYS.SITE_CONFIG_SEEDED);
       if (isSeeded) {
         return;
@@ -2704,8 +2711,7 @@ export class OrchestratorStore {
           (name: unknown): name is string =>
             typeof name === "string" && name.trim().length > 0,
         );
-        await listGroups(db);
-        await updateGroupToolTags(db, DEFAULT_GROUP_ID, enabledTools);
+        await toolsStore.setAllEnabled(db, enabledTools);
       }
 
       await setConfig(db, CONFIG_KEYS.SITE_CONFIG_SEEDED, "true");

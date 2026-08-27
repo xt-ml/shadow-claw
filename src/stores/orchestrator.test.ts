@@ -2801,7 +2801,49 @@ describe("OrchestratorStore", () => {
       expect(spy).toHaveBeenCalledWith({} as any);
     });
 
-    it("preserves declarative tool names specified in site-config enabledTools", async () => {
+    it("applies declarative and built-in tool names from site-config to toolsStore without setting group toolTags", async () => {
+      const store = new OrchestratorStore();
+      const events = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
+      };
+
+      const { toolsStore } = await import("./tools.js");
+      const setAllEnabledSpy = jest
+        .spyOn(toolsStore, "setAllEnabled")
+        .mockImplementation(async () => {});
+
+      const configElement = document.createElement("script");
+      configElement.id = "shadow-claw-site-config";
+      configElement.type = "application/json";
+      configElement.textContent = JSON.stringify({
+        settings: {
+          defaultToolsProfile: "none",
+        },
+        enabledTools: ["pwgen", "pwgen_help", "pwgen_entropy"],
+      });
+      document.head.appendChild(configElement);
+
+      try {
+        await store.init({} as any, orch);
+        expect(setAllEnabledSpy).toHaveBeenCalledWith({} as any, [
+          "pwgen",
+          "pwgen_help",
+          "pwgen_entropy",
+        ]);
+      } finally {
+        configElement.remove();
+        setAllEnabledSpy.mockRestore();
+      }
+    });
+
+    it("clears legacy group-level toolTags on DEFAULT_GROUP_ID if present", async () => {
       const store = new OrchestratorStore();
       const events = createEvents();
       const orch: any = {
@@ -2817,17 +2859,19 @@ describe("OrchestratorStore", () => {
       const configElement = document.createElement("script");
       configElement.id = "shadow-claw-site-config";
       configElement.type = "application/json";
-      configElement.textContent = JSON.stringify({
-        enabledTools: ["pwgen", "pwgen_help", "pwgen_entropy"],
-      });
+      configElement.textContent = JSON.stringify({});
       document.head.appendChild(configElement);
+
+      mockListGroups.mockResolvedValue([
+        { groupId: DEFAULT_GROUP_ID, name: "Main", toolTags: ["old_tool"] },
+      ]);
 
       try {
         await store.init({} as any, orch);
         expect(mockUpdateGroupToolTags).toHaveBeenCalledWith(
           {} as any,
           DEFAULT_GROUP_ID,
-          ["pwgen", "pwgen_help", "pwgen_entropy"],
+          undefined,
         );
       } finally {
         configElement.remove();

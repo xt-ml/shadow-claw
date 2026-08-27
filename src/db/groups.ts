@@ -83,12 +83,16 @@ export async function renameGroup(
 export async function updateGroupToolTags(
   db: ShadowClawDatabase,
   groupId: string,
-  tags: string[],
+  tags?: string[],
 ): Promise<void> {
   const groups = await getGroupMetadata(db);
   const group = groups.find((g) => g.groupId === groupId);
   if (group) {
-    group.toolTags = tags;
+    if (tags && tags.length > 0) {
+      group.toolTags = tags;
+    } else {
+      delete group.toolTags;
+    }
   }
 
   await saveGroupMetadata(db, groups);

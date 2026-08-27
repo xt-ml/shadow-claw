@@ -21,9 +21,9 @@ Skill names must be 1-64 characters containing lowercase letters, digits, and si
 
 ## Discovery and activation
 
-`discoverSkills()` loads skill metadata without loading the full instruction body into the prompt. The model receives the names and descriptions of skills that do not set `disable-model-invocation: true`. When a task matches a description, the model calls `activate_skill` with the exact skill name.
+`discoverSkills()` loads skill metadata without loading the full instruction body into the prompt. Discovery scans `.agents/skills/` within the requested conversation group workspace, falling back to `DEFAULT_GROUP_ID` so non-default rooms inherit main group skills. The model receives the names and descriptions of skills that do not set `disable-model-invocation: true`. When a task matches a description, the model calls `activate_skill` with the exact skill name.
 
-Activation returns the skill instructions, its directory path, and a sorted list of bundled resource paths. Relative paths in the instructions resolve against that skill directory. Scripts must run through the workspace `bash` or `javascript` tools, and repository changes must use the workspace Git tools; skills never receive host filesystem access.
+Activation returns the skill instructions, its directory path, and a sorted list of bundled resource paths loaded from the skill's originating workspace group (`groupId`). Relative paths in the instructions resolve against that skill directory. Scripts must run through the workspace `bash` or `javascript` tools, and repository changes must use the workspace Git tools; skills never receive host filesystem access.
 
 Malformed skills and duplicate names are skipped and reported as discovery diagnostics. Discovery stops after visiting 2,000 directories. A skill can be refreshed by activating it again, so the returned body and resources reflect the current workspace files.
 
@@ -76,8 +76,7 @@ metadata:
 
 ShadowClaw includes standard default skills under `.agents/skills/main/`:
 
-- **`skill-creator`**: Guide for creating, editing, reviewing, and validating declarative skills and supporting resources.
-- **`toast-random-number`**: Demonstrates a two-step declarative pipeline that generates a random number and displays it in a toast notification silently without chat clutter.
+- **`skill-creator`**: Guide for creating, editing, reviewing, and validating declarative skills and supporting resources. (Example skills such as **`toast-random-number`** are included in the `shadow-claw-template` repository).
 
 ## Static publishing
 

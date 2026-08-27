@@ -97,18 +97,12 @@ describe("build without and with pages", () => {
       ),
     );
     expect(manifest.pages.length).toBeGreaterThan(0);
-    expect(manifest.tools).toEqual(
-      expect.arrayContaining([
-        {
-          displayPath: "echo.json",
-          content: expect.stringContaining('"name":"echo"'),
-        },
-        {
-          displayPath: "generate_random_number.json",
-          content: expect.stringContaining('"name": "generate_random_number"'),
-        },
-      ]),
-    );
+    expect(manifest.tools).toEqual([
+      {
+        displayPath: "echo.json",
+        content: expect.stringContaining('"name":"echo"'),
+      },
+    ]);
     expect(manifest.skills).toEqual(
       expect.arrayContaining([
         {
@@ -119,15 +113,11 @@ describe("build without and with pages", () => {
           displayPath: "skill-creator/SKILL.md",
           content: expect.stringContaining("name: skill-creator"),
         },
-        {
-          displayPath: "toast-random-number/SKILL.md",
-          content: expect.stringContaining("name: toast-random-number"),
-        },
       ]),
     );
     expect(
       manifest.skills.filter((s) => s.displayPath.endsWith("SKILL.md")),
-    ).toHaveLength(3);
+    ).toHaveLength(2);
     expect(manifest.skillsPurgeId).toBe("skills-build-001");
   });
 

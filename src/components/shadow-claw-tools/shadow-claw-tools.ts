@@ -885,8 +885,10 @@ export class ShadowClawTools extends ShadowClawElement {
     // Update count
     const countEl = root.querySelector(".tools__count");
     if (countEl) {
-      const totalEnabled =
-        enabled.size + toolsStore.enabledDeclarativeTools.length;
+      const enabledBuiltinCount = (toolsStore.enabledTools || []).length;
+      const enabledDeclarativeCount = (toolsStore.enabledDeclarativeTools || [])
+        .length;
+      const totalEnabled = enabledBuiltinCount + enabledDeclarativeCount;
       const totalCount = allTools.length + declarativeTools.length;
       countEl.textContent = `${totalEnabled} of ${totalCount} enabled`;
     }

@@ -2712,6 +2712,7 @@ export class OrchestratorStore {
             typeof name === "string" && name.trim().length > 0,
         );
         await toolsStore.setAllEnabled(db, enabledTools);
+        await toolsStore.setAllDeclarativeEnabled(db, enabledTools);
       }
 
       await setConfig(db, CONFIG_KEYS.SITE_CONFIG_SEEDED, "true");

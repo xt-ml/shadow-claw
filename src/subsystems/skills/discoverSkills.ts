@@ -1,3 +1,4 @@
+import { DEFAULT_GROUP_ID } from "../../config/config.js";
 import { getGroupDir } from "../../storage/getGroupDir.js";
 import { readGroupFile } from "../../storage/readGroupFile.js";
 
@@ -14,64 +15,82 @@ const MAX_DIRECTORIES = 2000;
 
 export async function discoverSkills(
   db: ShadowClawDatabase,
-  groupId: string,
+  groupId: string = DEFAULT_GROUP_ID,
 ): Promise<SkillDiscoveryResult> {
   const skills: SkillRecord[] = [];
   const diagnostics: SkillDiagnostic[] = [];
-  const root = await getGroupDir(db, groupId);
-  const skillPaths: string[] = [];
-  let visitedDirectories = 0;
 
-  async function visit(
-    directory: FileSystemDirectoryHandle,
-    relativePath: string,
-  ) {
-    visitedDirectories += 1;
-    if (visitedDirectories > MAX_DIRECTORIES) {
-      diagnostics.push({
-        path: ".agents/skills",
-        message: `Skill discovery stopped after ${MAX_DIRECTORIES} directories`,
-      });
-      return;
-    }
+  const groupIdsToScan =
+    groupId === DEFAULT_GROUP_ID
+      ? [DEFAULT_GROUP_ID]
+      : [groupId, DEFAULT_GROUP_ID];
 
-    for await (const [name, handle] of (directory as any).entries()) {
-      const childPath = relativePath ? `${relativePath}/${name}` : name;
-      if (handle.kind === "directory") {
-        await visit(handle, childPath);
-      } else if (
-        name === "SKILL.md" &&
-        childPath.startsWith(".agents/skills/")
-      ) {
-        skillPaths.push(childPath);
-      }
-    }
-  }
-
-  try {
-    const agentsDir = await root.getDirectoryHandle(".agents");
-    const skillsDir = await agentsDir.getDirectoryHandle("skills");
-    await visit(skillsDir, ".agents/skills");
-  } catch {
-    return { skills, diagnostics };
-  }
-
-  for (const path of skillPaths.sort()) {
+  for (const targetGroupId of groupIdsToScan) {
     try {
-      const skill = parseSkill(path, await readGroupFile(db, groupId, path));
-      if (skills.some((candidate) => candidate.name === skill.name)) {
-        diagnostics.push({
-          path,
-          message: `Duplicate skill name: ${skill.name}`,
-        });
+      const root = await getGroupDir(db, targetGroupId);
+      const skillPaths: string[] = [];
+      let visitedDirectories = 0;
+
+      async function visit(
+        directory: FileSystemDirectoryHandle,
+        relativePath: string,
+      ) {
+        visitedDirectories += 1;
+        if (visitedDirectories > MAX_DIRECTORIES) {
+          diagnostics.push({
+            path: ".agents/skills",
+            message: `Skill discovery stopped after ${MAX_DIRECTORIES} directories`,
+          });
+          return;
+        }
+
+        for await (const [name, handle] of (directory as any).entries()) {
+          const childPath = relativePath ? `${relativePath}/${name}` : name;
+          if (handle.kind === "directory") {
+            await visit(handle, childPath);
+          } else if (
+            name === "SKILL.md" &&
+            childPath.startsWith(".agents/skills/")
+          ) {
+            skillPaths.push(childPath);
+          }
+        }
+      }
+
+      try {
+        const agentsDir = await root.getDirectoryHandle(".agents");
+        const skillsDir = await agentsDir.getDirectoryHandle("skills");
+        await visit(skillsDir, ".agents/skills");
+      } catch {
         continue;
       }
-      skills.push(skill);
-    } catch (error) {
-      diagnostics.push({
-        path,
-        message: error instanceof Error ? error.message : String(error),
-      });
+
+      for (const path of skillPaths.sort()) {
+        try {
+          const skill = parseSkill(
+            path,
+            await readGroupFile(db, targetGroupId, path),
+          );
+          if (skills.some((candidate) => candidate.name === skill.name)) {
+            if (targetGroupId === groupId) {
+              diagnostics.push({
+                path,
+                message: `Duplicate skill name: ${skill.name}`,
+              });
+            }
+            continue;
+          }
+          skill.groupId = targetGroupId;
+          skills.push(skill);
+        } catch (error) {
+          diagnostics.push({
+            path,
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    } catch {
+      // Continue scanning fallback group
     }
   }
 
@@ -80,7 +99,7 @@ export async function discoverSkills(
 
 export async function loadSkill(
   db: ShadowClawDatabase,
-  groupId: string,
+  groupId: string = DEFAULT_GROUP_ID,
   name: string,
 ): Promise<SkillRecord | null> {
   const result = await discoverSkills(db, groupId);
@@ -89,13 +108,15 @@ export async function loadSkill(
     return null;
   }
 
+  const targetGroupId = skill.groupId || groupId;
   const refreshed = parseSkill(
     skill.path,
-    await readGroupFile(db, groupId, skill.path),
+    await readGroupFile(db, targetGroupId, skill.path),
   );
+  refreshed.groupId = targetGroupId;
   refreshed.resources = await listSkillResources(
     db,
-    groupId,
+    targetGroupId,
     refreshed.basePath,
   );
   return refreshed;

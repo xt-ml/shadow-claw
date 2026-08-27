@@ -442,5 +442,25 @@ describe("app-routes", () => {
       process.env.SHADOWCLAW_DEPLOY_ID = "deploy-env-2";
       expect(getDeploymentNamespace()).toBe("deploy-env-2");
     });
+
+    it("derives subpath deployment namespace when running in Web Worker context", () => {
+      const originalSelf = (globalThis as any).self;
+      class MockWorkerGlobalScope {}
+      (globalThis as any).WorkerGlobalScope = MockWorkerGlobalScope;
+      try {
+        const mockWorkerSelf = Object.create(MockWorkerGlobalScope.prototype);
+        mockWorkerSelf.location = new URL(
+          "http://localhost/shadow-claw/assets/agent.worker.js",
+        );
+        (globalThis as any).self = mockWorkerSelf;
+        (globalThis as any).__applyBasePathCacheReset?.();
+
+        expect(getDeploymentNamespace()).toBe("shadow-claw");
+      } finally {
+        delete (globalThis as any).WorkerGlobalScope;
+        (globalThis as any).self = originalSelf;
+        (globalThis as any).__applyBasePathCacheReset?.();
+      }
+    });
   });
 });

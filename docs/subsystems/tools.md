@@ -295,22 +295,18 @@ JSON arguments in `data`. The `tool` executor delegates to an existing
 allowlisted ShadowClaw tool and may provide an `input` object to merge with the
 call input.
 
-Declarative tools are loaded from the conversation's OPFS workspace. The
-published `.agents/tools/main/` tree is seeded only into the Main conversation, and
-normal runtime tool allowlists still apply to delegated tools. Built-in tool
-names cannot be shadowed, and declarative delegation is capped at eight nested
-calls to prevent cycles and runaway execution.
+Declarative tools are loaded from the conversation's OPFS workspace (`loadDeclarativeTools`), scanning `.agents/tools/` within the requested conversation workspace and falling back to `DEFAULT_GROUP_ID` so non-default rooms inherit main group declarative tools. The published `.agents/tools/main/` tree is seeded into the Main conversation, and normal runtime tool allowlists still apply to delegated tools. Built-in tool names cannot be shadowed, and declarative delegation is capped at eight nested calls to prevent cycles and runaway execution.
 
 ### Declarative Tools Visibility & Gating
 
 Declarative tools are integrated into the application's reactive state and settings management:
 
-- **State Management (`ToolsStore`)**: Reactively managed via `_declarativeTools` and `_declarativeToolNamesEnabled` signals. Enabled states are persisted in IndexedDB under `CONFIG_KEYS.DECLARATIVE_TOOLS_ENABLED`.
-- **Settings UI (`<shadow-claw-tools>`)**: Displayed with dedicated `"declarative"` badges and independent enable/disable checkboxes. List updating uses in-place DOM diffing (`isSameStructure`) to avoid DOM reconstruction thrashed states or hover flickering.
+- **State Management (`ToolsStore`)**: Reactively managed via `_declarativeTools` and `_declarativeToolNamesEnabled` signals. Enabled states are persisted in IndexedDB under `CONFIG_KEYS.DECLARATIVE_TOOLS_ENABLED`. When site configuration defaults (`enabledTools`) are applied during orchestrator initialization, both standard built-in tools (`setAllEnabled`) and declarative tools (`setAllDeclarativeEnabled`) are updated synchronously.
+- **Settings UI (`<shadow-claw-tools>`)**: Displayed with dedicated `"declarative"` badges and independent enable/disable checkboxes. The tool count indicator calculates the total enabled capabilities as the sum of enabled built-in tools and enabled declarative tools. List updating uses in-place DOM diffing (`isSameStructure`) to avoid DOM reconstruction thrashed states or hover flickering.
 - **WebMCP Integration**: Synchronized automatically via `syncWebMcpRegistration` so browser-side WebMCP callers receive both standard and active declarative tools.
 - **Orchestrator Filtering**: Filtered dynamically in `invokeAgent` based on user settings before passing tool definitions to LLM providers.
 
-Default declarative tools include `.agents/tools/main/generate_random_number.json`, which generates random integers within a range using a sandboxed JavaScript expression. Declarative tools can be invoked directly by the agent or chained within declarative skills via the shared `executeToolChain` engine (`src/worker/utils/toolChain.ts`).
+Declarative tools (such as `.agents/tools/main/generate_random_number.json` in the starter template repository) can generate outputs using sandboxed JavaScript expressions or delegated tools. Declarative tools can be invoked directly by the agent or chained within declarative skills via the shared `executeToolChain` engine (`src/worker/utils/toolChain.ts`).
 
 Tool names must match `^[a-z][a-z0-9_]{0,63}$`. Invalid JSON or definitions are
 skipped and recorded as diagnostics rather than preventing other declarative

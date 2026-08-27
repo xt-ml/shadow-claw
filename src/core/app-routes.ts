@@ -60,11 +60,15 @@ if (typeof globalThis !== "undefined") {
 }
 
 export function getDeploymentNamespace(): string {
-  if (
-    typeof window !== "undefined" &&
-    (window as any).__SHADOWCLAW_DEPLOY_ID__
-  ) {
-    const customId = String((window as any).__SHADOWCLAW_DEPLOY_ID__).trim();
+  const globalObj =
+    typeof window !== "undefined"
+      ? window
+      : typeof self !== "undefined"
+        ? self
+        : globalThis;
+
+  if (globalObj && (globalObj as any).__SHADOWCLAW_DEPLOY_ID__) {
+    const customId = String((globalObj as any).__SHADOWCLAW_DEPLOY_ID__).trim();
     if (customId) {
       return customId.replace(/[^a-zA-Z0-9_-]/g, "-");
     }
@@ -92,7 +96,42 @@ export function getAppBasePath(): string {
     return cachedBasePath;
   }
 
-  if (typeof window === "undefined" || !window.location) {
+  // In Web Worker environment:
+  const isWorker =
+    typeof window === "undefined" ||
+    (typeof (globalThis as any).WorkerGlobalScope !== "undefined" &&
+      typeof self !== "undefined" &&
+      self instanceof (globalThis as any).WorkerGlobalScope);
+
+  if (isWorker && typeof self !== "undefined" && (self as any).location) {
+    const workerPath = (self as any).location.pathname || "/";
+    const parts = workerPath.split("/").filter(Boolean);
+    if (parts.length >= 1) {
+      const first = parts[0].toLowerCase();
+      const isRootFile =
+        first === "service-worker.js" ||
+        first === "sw.js" ||
+        first === "manifest.json" ||
+        first === "sitemap.xml" ||
+        first === "favicon.ico" ||
+        first === "index.html";
+
+      if (!isRootFile) {
+        cachedBasePath = "/" + parts[0] + "/";
+
+        return cachedBasePath;
+      }
+    }
+  }
+
+  const loc =
+    typeof window !== "undefined" && window.location
+      ? window.location
+      : typeof self !== "undefined" && self.location
+        ? self.location
+        : null;
+
+  if (!loc) {
     return "/";
   }
 
@@ -106,7 +145,7 @@ export function getAppBasePath(): string {
       const href = baseEl.getAttribute("href");
       if (href) {
         try {
-          const baseUriPath = new URL(href, window.location.origin).pathname;
+          const baseUriPath = new URL(href, loc.origin).pathname;
           let base = baseUriPath;
           if (!base.endsWith("/")) {
             base += "/";
@@ -121,7 +160,7 @@ export function getAppBasePath(): string {
     }
   }
 
-  const pathname = window.location.pathname || "/";
+  const pathname = loc.pathname || "/";
   if (pathname === "/") {
     cachedBasePath = "/";
 
@@ -160,7 +199,32 @@ export function getAppBasePath(): string {
     return cachedBasePath;
   }
 
-  // 4. Default to root base path for unhandled multi-segment paths
+  // 4. In Web Worker context (where window is undefined and self.location is available):
+  // Inspect worker script URL subpath (e.g. /shadow-claw/agent.worker.js or /shadow-claw/assets/worker.js)
+  if (
+    typeof window === "undefined" &&
+    typeof self !== "undefined" &&
+    (self as any).location
+  ) {
+    if (parts.length >= 1) {
+      const first = parts[0].toLowerCase();
+      const isRootFile =
+        first === "service-worker.js" ||
+        first === "sw.js" ||
+        first === "manifest.json" ||
+        first === "sitemap.xml" ||
+        first === "favicon.ico" ||
+        first === "index.html";
+
+      if (!isRootFile) {
+        cachedBasePath = "/" + parts[0] + "/";
+
+        return cachedBasePath;
+      }
+    }
+  }
+
+  // 5. Default to root base path for unhandled multi-segment paths
   cachedBasePath = "/";
 
   return cachedBasePath;

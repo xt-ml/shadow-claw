@@ -2818,6 +2818,9 @@ describe("OrchestratorStore", () => {
       const setAllEnabledSpy = jest
         .spyOn(toolsStore, "setAllEnabled")
         .mockImplementation(async () => {});
+      const setAllDeclarativeEnabledSpy = jest
+        .spyOn(toolsStore, "setAllDeclarativeEnabled")
+        .mockImplementation(async () => {});
 
       const configElement = document.createElement("script");
       configElement.id = "shadow-claw-site-config";
@@ -2837,9 +2840,15 @@ describe("OrchestratorStore", () => {
           "pwgen_help",
           "pwgen_entropy",
         ]);
+        expect(setAllDeclarativeEnabledSpy).toHaveBeenCalledWith({} as any, [
+          "pwgen",
+          "pwgen_help",
+          "pwgen_entropy",
+        ]);
       } finally {
         configElement.remove();
         setAllEnabledSpy.mockRestore();
+        setAllDeclarativeEnabledSpy.mockRestore();
       }
     });
 

@@ -24,6 +24,7 @@ export interface SkillRecord extends SkillFrontmatter {
   basePath: string;
   body?: string;
   resources?: string[];
+  groupId?: string;
 }
 
 export interface SkillDiagnostic {

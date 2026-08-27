@@ -1,3 +1,5 @@
+import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../config/config.js";
+import { getConfig } from "../../db/getConfig.js";
 import { getGroupDir } from "../../storage/getGroupDir.js";
 import { readGroupFile } from "../../storage/readGroupFile.js";
 
@@ -91,44 +93,63 @@ export function parseDeclarativeTool(
 
 export async function loadDeclarativeTools(
   db: ShadowClawDatabase,
-  groupId: string,
+  groupId: string = DEFAULT_GROUP_ID,
 ): Promise<{ tools: DeclarativeToolDefinition[]; diagnostics: string[] }> {
   const tools: DeclarativeToolDefinition[] = [];
   const diagnostics: string[] = [];
-  const root = await getGroupDir(db, groupId);
-  const paths: string[] = [];
 
-  async function visit(
-    directory: FileSystemDirectoryHandle,
-    relativePath: string,
-  ) {
-    for await (const [name, handle] of (directory as any).entries()) {
-      const childPath = `${relativePath}/${name}`;
-      if (handle.kind === "directory") {
-        await visit(handle, childPath);
-      } else if (
-        name.endsWith(".json") &&
-        childPath.startsWith(".agents/tools/main/")
-      ) {
-        paths.push(childPath);
-      }
-    }
-  }
+  const groupIdsToScan =
+    groupId === DEFAULT_GROUP_ID
+      ? [DEFAULT_GROUP_ID]
+      : [groupId, DEFAULT_GROUP_ID];
 
-  try {
-    const agentsDir = await root.getDirectoryHandle(".agents");
-    const toolsDir = await agentsDir.getDirectoryHandle("tools");
-    await visit(toolsDir, ".agents/tools");
-  } catch {
-    return { tools, diagnostics };
-  }
-
-  for (const path of paths.sort()) {
+  for (const targetGroupId of groupIdsToScan) {
     try {
-      const parsed = JSON.parse(await readGroupFile(db, groupId, path));
-      tools.push(parseDeclarativeTool(path, parsed));
-    } catch (error) {
-      diagnostics.push(error instanceof Error ? error.message : String(error));
+      const root = await getGroupDir(db, targetGroupId);
+      const paths: string[] = [];
+
+      async function visit(
+        directory: FileSystemDirectoryHandle,
+        relativePath: string,
+      ) {
+        for await (const [name, handle] of (directory as any).entries()) {
+          const childPath = `${relativePath}/${name}`;
+          if (handle.kind === "directory") {
+            await visit(handle, childPath);
+          } else if (
+            name.endsWith(".json") &&
+            childPath.startsWith(".agents/tools/")
+          ) {
+            paths.push(childPath);
+          }
+        }
+      }
+
+      try {
+        const agentsDir = await root.getDirectoryHandle(".agents");
+        const toolsDir = await agentsDir.getDirectoryHandle("tools");
+        await visit(toolsDir, ".agents/tools");
+      } catch {
+        continue;
+      }
+
+      for (const path of paths.sort()) {
+        try {
+          const parsed = JSON.parse(
+            await readGroupFile(db, targetGroupId, path),
+          );
+          const parsedTool = parseDeclarativeTool(path, parsed);
+          if (!tools.some((t) => t.name === parsedTool.name)) {
+            tools.push(parsedTool);
+          }
+        } catch (error) {
+          diagnostics.push(
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+    } catch {
+      // Continue to next group directory
     }
   }
 
@@ -137,12 +158,25 @@ export async function loadDeclarativeTools(
 
 export async function findDeclarativeTool(
   db: ShadowClawDatabase,
-  groupId: string,
+  groupId: string = DEFAULT_GROUP_ID,
   name: string,
 ): Promise<DeclarativeToolDefinition | null> {
   try {
     const { tools } = await loadDeclarativeTools(db, groupId);
-    return tools.find((tool) => tool.name === name) || null;
+    const tool = tools.find((t) => t.name === name) || null;
+    if (!tool) {
+      return null;
+    }
+
+    const rawEnabled = await getConfig(
+      db,
+      CONFIG_KEYS.DECLARATIVE_TOOLS_ENABLED,
+    );
+    if (Array.isArray(rawEnabled) && !rawEnabled.includes(name)) {
+      return null;
+    }
+
+    return tool;
   } catch {
     return null;
   }

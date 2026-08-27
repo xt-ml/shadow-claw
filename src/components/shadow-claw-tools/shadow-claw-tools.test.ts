@@ -57,6 +57,7 @@ jest.unstable_mockModule("../../stores/tools.js", () => ({
       { name: "custom_tool", description: "A custom tool." },
     ],
     enabledToolNames: new Set(["bash"]),
+    enabledTools: [{ name: "bash", description: "Bash tool." }],
     customTools: [{ name: "custom_tool", description: "A custom tool." }],
     declarativeTools: [],
     declarativeToolNamesEnabled: null,
@@ -136,6 +137,35 @@ describe("shadow-claw-tools", () => {
     // Check tool list
     const items = root?.querySelectorAll(".tools__item");
     expect(items?.length).toBe(2);
+
+    document.body.removeChild(el);
+  });
+
+  it("should correctly compute total enabled tool count when built-in tools are disabled and declarative tools are enabled", async () => {
+    // Simulate toolsStore where built-in enabledTools has 0 items and enabledDeclarativeTools has 3 items
+    toolsStore.enabledTools = [];
+    toolsStore.enabledDeclarativeTools = [
+      { name: "scan_for_nearby_ores", description: "Scan" },
+      { name: "fireworks", description: "Fireworks" },
+      { name: "konami_code", description: "Konami" },
+    ];
+    toolsStore.allTools = [
+      { name: "bash", description: "Bash" },
+      { name: "custom_tool", description: "Custom" },
+    ];
+    toolsStore.declarativeTools = [
+      { name: "scan_for_nearby_ores", description: "Scan" },
+      { name: "fireworks", description: "Fireworks" },
+      { name: "konami_code", description: "Konami" },
+    ];
+
+    const el = new ShadowClawTools();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    await new Promise((r) => setTimeout(r, 0));
+
+    const countEl = el.shadowRoot?.querySelector(".tools__count");
+    expect(countEl?.textContent).toBe("3 of 5 enabled");
 
     document.body.removeChild(el);
   });

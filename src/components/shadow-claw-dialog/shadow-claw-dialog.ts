@@ -24,25 +24,6 @@ export class ShadowClawDialog extends HTMLElement {
     return this._dialog;
   }
 
-  get open(): boolean {
-    return this._dialog?.open ?? false;
-  }
-
-  get returnValue(): string {
-    return this._dialog?.returnValue ?? "";
-  }
-
-  set returnValue(value: string) {
-    if (this._dialog) {
-      this._dialog.returnValue = value;
-    }
-  }
-
-  showModal(): void {
-    this.ensureDialog();
-    this._dialog?.showModal();
-  }
-
   ensureDialog(): void {
     if (this._dialog) {
       this.syncDialogAttributes();
@@ -68,6 +49,25 @@ export class ShadowClawDialog extends HTMLElement {
     }
 
     this.appendChild(dialog);
+  }
+
+  get open(): boolean {
+    return this._dialog?.open ?? false;
+  }
+
+  get returnValue(): string {
+    return this._dialog?.returnValue ?? "";
+  }
+
+  set returnValue(value: string) {
+    if (this._dialog) {
+      this._dialog.returnValue = value;
+    }
+  }
+
+  showModal(): void {
+    this.ensureDialog();
+    this._dialog?.showModal();
   }
 
   private syncDialogAttributes(): void {

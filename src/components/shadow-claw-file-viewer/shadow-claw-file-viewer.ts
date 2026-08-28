@@ -38,14 +38,14 @@ import {
 import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
-import { IframeBroadcastProxy } from "../shadow-claw-pages/iframe-broadcast-proxy.js";
+import { IframeBroadcastProxy } from "../shadow-claw-pages/utils/iframe-broadcast-proxy.js";
 import {
   iframeStorageClear,
   iframeStorageDelete,
   iframeStorageGet,
   iframeStorageGetAll,
   iframeStorageSet,
-} from "../shadow-claw-pages/iframe-storage-proxy.js";
+} from "../shadow-claw-pages/utils/iframe-storage-proxy.js";
 
 import type { Config } from "dompurify";
 import type { ShadowClawDatabase } from "../../db/types.js";
@@ -104,6 +104,7 @@ function resolveFrontmatterToggle(
 export class ShadowClawFileViewer extends ShadowClawElement {
   static styles = shadowClawFileViewerStyles;
   static template = shadowClawFileViewerTemplate;
+  broadcastProxy: IframeBroadcastProxy | null = null;
 
   currentImageObjectUrls: string[] = [];
   currentObjectUrl: string | null = null;
@@ -119,7 +120,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
   lastOpenedFileName: string = "";
   previewFrameWindow: Window | null = null;
-  broadcastProxy: IframeBroadcastProxy | null = null;
   themeObserver: MutationObserver | null = null;
   viewRenderToken: number = 0;
 
@@ -750,109 +750,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
 
-  /**
-   * Handle a storage proxy request from a sandboxed iframe.
-   * Performs the requested storage operation in the parent's origin context
-   * using a namespaced IndexedDB store, then posts the result back.
-   */
-  private async handleStorageProxyRequest(
-    source: WindowProxy,
-    requestId: string,
-    method: string,
-    args: Record<string, unknown>,
-  ): Promise<void> {
-    if (!requestId) {
-      return;
-    }
-
-    const currentFile = fileViewerStore.file;
-    const pageKey = currentFile?.path || currentFile?.name || "__default__";
-
-    try {
-      let result: unknown;
-
-      switch (method) {
-        // localStorage-style operations
-        case "setItem":
-          await iframeStorageSet(
-            pageKey,
-            String(args.key || ""),
-            args.value as string,
-          );
-          break;
-        case "removeItem":
-          await iframeStorageDelete(pageKey, String(args.key || ""));
-          break;
-        case "clear":
-          await iframeStorageClear(pageKey);
-          break;
-        case "getAllItems":
-          result = await iframeStorageGetAll(pageKey);
-          break;
-
-        // IndexedDB-style operations
-        case "idb-get":
-          result = await iframeStorageGet(
-            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
-            String(args.key || ""),
-          );
-          break;
-        case "idb-getAll":
-          result = await iframeStorageGetAll(
-            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
-          );
-          break;
-        case "idb-put": {
-          const idbKey =
-            args.key != null ? String(args.key) : `__auto_${Date.now()}`;
-          await iframeStorageSet(
-            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
-            idbKey,
-            args.value,
-          );
-          result = idbKey;
-          break;
-        }
-        case "idb-delete":
-          await iframeStorageDelete(
-            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
-            String(args.key || ""),
-          );
-          break;
-        case "idb-clear":
-          await iframeStorageClear(
-            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
-          );
-          break;
-        case "idb-deleteDatabase":
-          await iframeStorageClear(
-            `${pageKey}::idb::${args.dbName}::__default__`,
-          );
-          break;
-        default:
-          throw new Error(`Unknown storage proxy method: ${method}`);
-      }
-
-      source.postMessage(
-        {
-          type: "shadow-claw-storage-proxy-result",
-          requestId,
-          result: result ?? null,
-        },
-        "*",
-      );
-    } catch (err) {
-      source.postMessage(
-        {
-          type: "shadow-claw-storage-proxy-result",
-          requestId,
-          error: err instanceof Error ? err.message : String(err),
-        },
-        "*",
-      );
-    }
-  }
-
   hasUnsavedChanges() {
     return this.isEditorDirty;
   }
@@ -1379,6 +1276,19 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     return false;
   }
 
+  stripHtmlFrontmatter(content: string): string {
+    if (typeof content !== "string" || !content.trimStart().startsWith("---")) {
+      return content;
+    }
+
+    const parsed = splitFrontmatter(content);
+    if (Object.keys(parsed.data || {}).length === 0) {
+      return content;
+    }
+
+    return parsed.content || "";
+  }
+
   toPreviewMarkdown(file: any) {
     if (this.isMarkdownLikeFile(file.name)) {
       return file.content;
@@ -1446,42 +1356,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         .join("\n");
       setSanitizedHtml(codeEl, wrappedHtml);
     });
-  }
-
-  stripHtmlFrontmatter(content: string): string {
-    if (typeof content !== "string" || !content.trimStart().startsWith("---")) {
-      return content;
-    }
-
-    const parsed = splitFrontmatter(content);
-    if (Object.keys(parsed.data || {}).length === 0) {
-      return content;
-    }
-
-    return parsed.content || "";
-  }
-
-  private async reloadPreviewWithSearchParams(
-    searchParams: string,
-  ): Promise<void> {
-    const file = fileViewerStore.file;
-    if (!file) {
-      return;
-    }
-
-    const root = this.shadowRoot;
-    const iframe = root?.querySelector(
-      ".file-viewer__iframe",
-    ) as HTMLIFrameElement;
-    if (!iframe) {
-      return;
-    }
-
-    this.previewFrameWindow = null;
-    setTrustedSrcdoc(
-      iframe,
-      await this.buildIframePreviewSrcdoc(file, searchParams),
-    );
   }
 
   async buildIframePreviewSrcdoc(file: any, searchParams: string = "") {
@@ -2355,6 +2229,132 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         customProperties,
       },
       "*",
+    );
+  }
+
+  /**
+   * Handle a storage proxy request from a sandboxed iframe.
+   * Performs the requested storage operation in the parent's origin context
+   * using a namespaced IndexedDB store, then posts the result back.
+   */
+  private async handleStorageProxyRequest(
+    source: WindowProxy,
+    requestId: string,
+    method: string,
+    args: Record<string, unknown>,
+  ): Promise<void> {
+    if (!requestId) {
+      return;
+    }
+
+    const currentFile = fileViewerStore.file;
+    const pageKey = currentFile?.path || currentFile?.name || "__default__";
+
+    try {
+      let result: unknown;
+
+      switch (method) {
+        // localStorage-style operations
+        case "setItem":
+          await iframeStorageSet(
+            pageKey,
+            String(args.key || ""),
+            args.value as string,
+          );
+          break;
+        case "removeItem":
+          await iframeStorageDelete(pageKey, String(args.key || ""));
+          break;
+        case "clear":
+          await iframeStorageClear(pageKey);
+          break;
+        case "getAllItems":
+          result = await iframeStorageGetAll(pageKey);
+          break;
+
+        // IndexedDB-style operations
+        case "idb-get":
+          result = await iframeStorageGet(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+            String(args.key || ""),
+          );
+          break;
+        case "idb-getAll":
+          result = await iframeStorageGetAll(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+          );
+          break;
+        case "idb-put": {
+          const idbKey =
+            args.key != null ? String(args.key) : `__auto_${Date.now()}`;
+          await iframeStorageSet(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+            idbKey,
+            args.value,
+          );
+          result = idbKey;
+          break;
+        }
+        case "idb-delete":
+          await iframeStorageDelete(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+            String(args.key || ""),
+          );
+          break;
+        case "idb-clear":
+          await iframeStorageClear(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+          );
+          break;
+        case "idb-deleteDatabase":
+          await iframeStorageClear(
+            `${pageKey}::idb::${args.dbName}::__default__`,
+          );
+          break;
+        default:
+          throw new Error(`Unknown storage proxy method: ${method}`);
+      }
+
+      source.postMessage(
+        {
+          type: "shadow-claw-storage-proxy-result",
+          requestId,
+          result: result ?? null,
+        },
+        "*",
+      );
+    } catch (err) {
+      source.postMessage(
+        {
+          type: "shadow-claw-storage-proxy-result",
+          requestId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        "*",
+      );
+    }
+  }
+
+  private async reloadPreviewWithSearchParams(
+    searchParams: string,
+  ): Promise<void> {
+    const file = fileViewerStore.file;
+    if (!file) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    const iframe = root?.querySelector(
+      ".file-viewer__iframe",
+    ) as HTMLIFrameElement;
+    if (!iframe) {
+      return;
+    }
+
+    this.previewFrameWindow = null;
+    setTrustedSrcdoc(
+      iframe,
+      await this.buildIframePreviewSrcdoc(file, searchParams),
     );
   }
 }

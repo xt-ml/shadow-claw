@@ -1,47 +1,80 @@
 import { Signal } from "signal-polyfill";
-import {
-  getNamespacedItem,
-  removeNamespacedItem,
-  setNamespacedItem,
-} from "../../utils/namespacedStorage.js";
-import { renderMarkdown } from "../../content/markdown.js";
-import { splitFrontmatter } from "../../common/utils/frontmatter.mjs";
 
+import { effect } from "../../core/effect.js";
+
+import { splitFrontmatter } from "../../common/utils/frontmatter.mjs";
 import { CONFIG_KEYS } from "../../config/config.js";
+import { renderMarkdown } from "../../content/markdown.js";
+
 import {
   applyBasePath,
   buildRoutePath,
   getFileRouteDirPath,
-  getWorkspaceRouteRequestPath,
   isPossibleAppRoute,
   resolveHrefAgainstRoute,
 } from "../../core/app-routes.js";
 
-import { effect } from "../../core/effect.js";
 import { getDb } from "../../db/db.js";
 import { getConfig } from "../../db/getConfig.js";
+import { isAllowedCustomElement } from "../../security/custom-element-security.js";
 
 import {
-  sanitizeSrcdocHtml,
   setSanitizedHtml,
   setTrustedSrcdoc,
 } from "../../security/trusted-types.js";
 
 import { readGroupFile } from "../../storage/readGroupFile.js";
-import { readGroupFileBytes } from "../../storage/readGroupFileBytes.js";
-import { writeGroupFile } from "../../storage/writeGroupFile.js";
 import { getStaticPageContent } from "../../storage/staticMainSite.js";
-
-import { orchestratorStore } from "../../stores/orchestrator.js";
+import { writeGroupFile } from "../../storage/writeGroupFile.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
+import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
 
-import { showError, showSuccess, showWarning } from "../../ui/toast.js";
+import { showError, showSuccess } from "../../ui/toast.js";
+
 import {
-  getIframeHtmlClass,
-  getIframeThemeStyleHtml,
-} from "../../ui/iframe-theme.js";
-import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
+  getNamespacedItem,
+  removeNamespacedItem,
+  setNamespacedItem,
+} from "../../utils/namespacedStorage.js";
+
+import { announcePageChange } from "./utils/announcePageChange.js";
+import { buildHtmlPageSrcdoc } from "./utils/buildHtmlPageSrcdoc.js";
+import { calculatePaginationDisabledState } from "./utils/calculatePaginationDisabledState.js";
+import { confirmRemoveAllPages } from "./utils/confirmRemoveAllPages.js";
+import { handleStorageProxyMessage } from "./utils/dispatchStorageProxyCommand.js";
+import { ensurePreviewIframe } from "./utils/ensurePreviewIframe.js";
+import { fetchAutoRefreshInterval } from "./utils/fetchAutoRefreshInterval.js";
+import { getSelectedPageIndex } from "./utils/getSelectedPageIndex.js";
+import { groupPagesByGroup } from "./utils/groupPagesByGroup.js";
+import { handleAnchorNavigation } from "./utils/handleAnchorNavigation.js";
+import { handleAutoRefreshConfigEvent } from "./utils/handleAutoRefreshConfigEvent.js";
+import { handleFileSavedEvent } from "./utils/handleFileSavedEvent.js";
+import { handleKeyDownNavigation } from "./utils/handleKeyDownNavigation.js";
+import { handleMouseDownGesture } from "./utils/handleMouseDownGesture.js";
+import { handleMouseUpGesture } from "./utils/handleMouseUpGesture.js";
+import { handlePageReorder } from "./utils/handlePageReorder.js";
+import { handleTouchEndGesture } from "./utils/handleTouchEndGesture.js";
+import { handleTouchStartGesture } from "./utils/handleTouchStartGesture.js";
+import { handleVisibilityStateChange } from "./utils/handleVisibilityStateChange.js";
+import { handleWindowFocusEvent } from "./utils/handleWindowFocusEvent.js";
+import { IframeBroadcastProxy } from "./utils/iframe-broadcast-proxy.js";
+import { isNavigationSuppressed } from "./utils/isNavigationSuppressed.js";
+import { isHtmlPath, isMarkdownPath } from "./utils/pageFileTypes.js";
+import { pageRefKey } from "./utils/pageRefKey.js";
+import { parseIframeMessage } from "./utils/parseIframeMessage.js";
+import { readImageAsDataUrl } from "./utils/readImageAsDataUrl.js";
+import { removePreviewIframe } from "./utils/removePreviewIframe.js";
+import { requestConfirmation } from "./utils/requestConfirmation.js";
+import { resolveFrontmatterToggle } from "./utils/resolveFrontmatterToggle.js";
+import { resolveMarkdownImages } from "./utils/resolveMarkdownImages.js";
+import { resolveWorkspaceLinkPath } from "./utils/resolveWorkspaceLinkPath.js";
+import { rewriteWorkspacePreviewHtml } from "./utils/rewriteWorkspacePreviewHtml.js";
+import { shouldRunAutoRefresh } from "./utils/shouldRunAutoRefresh.js";
+import { syncIframeTheme } from "./utils/syncIframeTheme.js";
+import { toggleSidebarState } from "./utils/toggleSidebarState.js";
+
+import ShadowClawElement from "../shadow-claw-element.js";
 
 import type { Config } from "dompurify";
 
@@ -51,25 +84,9 @@ import type {
   ShadowClawDatabase,
 } from "../../db/types.js";
 
-import {
-  getApprovedCustomElementScripts,
-  getIframeCsp,
-  getIframeSandboxPolicy,
-  isAllowedCustomElement,
-} from "../../security/custom-element-security.js";
-import ShadowClawElement from "../shadow-claw-element.js";
-
-import {
-  iframeStorageClear,
-  iframeStorageDelete,
-  iframeStorageGet,
-  iframeStorageGetAll,
-  iframeStorageSet,
-} from "./iframe-storage-proxy.js";
-import { IframeBroadcastProxy } from "./iframe-broadcast-proxy.js";
-
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
+
 import shadowClawPagesStyles from "./shadow-claw-pages.css" with { type: "css" };
 import shadowClawPagesTemplate from "./shadow-claw-pages.html" with { type: "html" };
 
@@ -95,382 +112,38 @@ const previewSanitizeOptions: Config = {
 
 const elementName = "shadow-claw-pages";
 
-async function resolveFrontmatterToggle(
-  db: ShadowClawDatabase | null,
-  key: string,
-): Promise<boolean> {
-  if (!db || typeof (db as any).transaction !== "function") {
-    return true;
-  }
-
-  try {
-    return isTruthyConfigValue(await getConfig(db, key), true);
-  } catch {
-    return true;
-  }
-}
-
 export class ShadowClawPages extends ShadowClawElement {
   static styles = shadowClawPagesStyles;
   static template = shadowClawPagesTemplate;
 
-  db: ShadowClawDatabase | null = null;
-  draggedPageIndex: number | null = null;
-  pageFrontmatter = new Signal.State<Record<string, any> | null>(null);
-
-  previewFrameWindow: Window | null = null;
-  broadcastProxy: IframeBroadcastProxy | null = null;
-
-  renderToken: number = 0;
-
-  navFadeTimer: ReturnType<typeof setTimeout> | null = null;
-  sidebarOpen: boolean = false;
-  themeObserver: MutationObserver | null = null;
-
   autoRefreshIntervalSec: number = 0;
   autoRefreshTimer: ReturnType<typeof setInterval> | null = null;
 
-  /** Set to true after initial URL routing is complete. Gates effect-driven renders. */
-  _routingReady: boolean = false;
-
-  _renderedKey: string | null = null;
-  _renderedContent: string | null = null;
-  _renderedFrontmatterToggle: boolean | null = null;
-  _dsdInitialPath: string | null = null;
-
-  touchStartX: number = 0;
-  touchStartY: number = 0;
-  touchStartTime: number = 0;
-
+  broadcastProxy: IframeBroadcastProxy | null = null;
+  db: ShadowClawDatabase | null = null;
+  draggedPageIndex: number | null = null;
+  isMouseDown: boolean = false;
+  mouseStartTime: number = 0;
   mouseStartX: number = 0;
   mouseStartY: number = 0;
-  mouseStartTime: number = 0;
-  isMouseDown: boolean = false;
+  navFadeTimer: ReturnType<typeof setTimeout> | null = null;
+  pageFrontmatter = new Signal.State<Record<string, any> | null>(null);
+  previewFrameWindow: Window | null = null;
+  renderToken: number = 0;
+  sidebarOpen: boolean = false;
+  themeObserver: MutationObserver | null = null;
+  touchStartTime: number = 0;
+  touchStartX: number = 0;
+  touchStartY: number = 0;
+
+  private dsdInitialPath: string | null = null;
+  private renderedContent: string | null = null;
+  private renderedFrontmatterToggle: boolean | null = null;
+  private renderedKey: string | null = null;
+  private routingReady: boolean = false;
 
   constructor() {
     super();
-  }
-
-  announcePageChange(page: SavedPageRef) {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-    const announcer = root.querySelector("[data-pages-announcer]");
-    if (announcer instanceof HTMLElement) {
-      const fm = this.pageFrontmatter.get();
-      const title = fm && fm.title ? fm.title : page.path;
-      announcer.textContent = `Navigated to page: ${title}`;
-    }
-  }
-
-  isNavigationSuppressed = (
-    event?: UIEvent | Event | null,
-    extraEl?: EventTarget | null,
-  ): boolean => {
-    const navAttributes = [
-      "data-no-nav",
-      "data-no-swipe",
-      "data-no-page-nav",
-      "data-prevent-nav",
-      "data-prevent-page-nav",
-      "data-isolate-input",
-      "data-isolate-navigation",
-      "data-game-controls",
-    ];
-
-    const checkElement = (el: EventTarget | null): boolean => {
-      if (!el || !(el instanceof HTMLElement)) {
-        return false;
-      }
-      const tagName = el.tagName.toLowerCase();
-      if (
-        tagName === "input" ||
-        tagName === "textarea" ||
-        tagName === "select" ||
-        tagName === "option" ||
-        tagName === "iframe"
-      ) {
-        return true;
-      }
-      if (
-        el.classList.contains("pages__preview-frame") ||
-        el.isContentEditable ||
-        el.getAttribute("contenteditable") === "true"
-      ) {
-        return true;
-      }
-      if (
-        el.closest("[data-pages-list]") ||
-        el.closest("[data-pages-dropdown]") ||
-        el.closest(".pages__sidebar") ||
-        el.closest(".pages__preview-frame") ||
-        el.closest("iframe") ||
-        navAttributes.some((attr) => el.closest(`[${attr}]`))
-      ) {
-        return true;
-      }
-      return false;
-    };
-
-    if (extraEl && checkElement(extraEl)) {
-      return true;
-    }
-
-    if (event) {
-      const path =
-        typeof (event as any).composedPath === "function"
-          ? (event as any).composedPath()
-          : [];
-      for (const node of path) {
-        if (node instanceof HTMLElement) {
-          const nodeTag = node.tagName.toLowerCase();
-          if (
-            navAttributes.some((attr) => node.hasAttribute(attr)) ||
-            nodeTag === "input" ||
-            nodeTag === "textarea" ||
-            nodeTag === "select" ||
-            nodeTag === "option" ||
-            nodeTag === "iframe" ||
-            node.classList.contains("pages__preview-frame") ||
-            node.isContentEditable ||
-            node.getAttribute("contenteditable") === "true"
-          ) {
-            return true;
-          }
-        }
-      }
-      if (event.target && checkElement(event.target)) {
-        return true;
-      }
-    }
-
-    return false;
-  };
-
-  handleKeyDown = (event: KeyboardEvent) => {
-    if (!this.isConnected) {
-      return;
-    }
-
-    if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") {
-      return;
-    }
-
-    if (event.ctrlKey || event.altKey || event.metaKey) {
-      return;
-    }
-
-    const root = this.shadowRoot;
-    const activeEl = root?.activeElement || document.activeElement;
-    const target = (event.target as HTMLElement) || null;
-
-    if (
-      this.isNavigationSuppressed(event, target) ||
-      this.isNavigationSuppressed(undefined, activeEl)
-    ) {
-      return;
-    }
-
-    event.preventDefault();
-    this.showNavButtonsTemporarily(2000);
-
-    if (event.key === "ArrowLeft") {
-      this.goToPreviousPage();
-    } else if (event.key === "ArrowRight") {
-      this.goToNextPage();
-    }
-  };
-
-  handleTouchStart = (event: TouchEvent) => {
-    if (this.isNavigationSuppressed(event)) {
-      this.touchStartX = 0;
-      this.touchStartY = 0;
-      this.touchStartTime = 0;
-      return;
-    }
-    if (event.touches && event.touches.length === 1) {
-      this.touchStartX = event.touches[0].clientX;
-      this.touchStartY = event.touches[0].clientY;
-      this.touchStartTime = Date.now();
-    }
-  };
-
-  handleTouchEnd = (event: TouchEvent) => {
-    if (!this.touchStartTime || this.isNavigationSuppressed(event)) {
-      this.touchStartTime = 0;
-      return;
-    }
-    if (event.changedTouches && event.changedTouches.length === 1) {
-      const touchEndX = event.changedTouches[0].clientX;
-      const touchEndY = event.changedTouches[0].clientY;
-      const deltaTime = Date.now() - this.touchStartTime;
-
-      const deltaX = touchEndX - this.touchStartX;
-      const deltaY = touchEndY - this.touchStartY;
-
-      if (
-        Math.abs(deltaX) >= 50 &&
-        Math.abs(deltaX) > Math.abs(deltaY) &&
-        deltaTime <= 600
-      ) {
-        this.showNavButtonsTemporarily(2000);
-        if (deltaX < 0) {
-          this.goToNextPage();
-        } else {
-          this.goToPreviousPage();
-        }
-      }
-    }
-    this.touchStartTime = 0;
-  };
-
-  handleMouseDown = (event: MouseEvent) => {
-    if (event.button !== 0 || this.isNavigationSuppressed(event)) {
-      this.isMouseDown = false;
-      return;
-    }
-    this.isMouseDown = true;
-    this.mouseStartX = event.clientX;
-    this.mouseStartY = event.clientY;
-    this.mouseStartTime = Date.now();
-  };
-
-  handleMouseUp = (event: MouseEvent) => {
-    if (!this.isMouseDown) {
-      return;
-    }
-    this.isMouseDown = false;
-    if (this.isNavigationSuppressed(event)) {
-      return;
-    }
-
-    const selection = window.getSelection();
-    if (selection && selection.toString().length > 0) {
-      return;
-    }
-
-    const mouseEndX = event.clientX;
-    const mouseEndY = event.clientY;
-    const deltaTime = Date.now() - this.mouseStartTime;
-
-    const deltaX = mouseEndX - this.mouseStartX;
-    const deltaY = mouseEndY - this.mouseStartY;
-
-    if (
-      Math.abs(deltaX) >= 50 &&
-      Math.abs(deltaX) > Math.abs(deltaY) &&
-      deltaTime <= 600
-    ) {
-      this.showNavButtonsTemporarily(2000);
-      if (deltaX < 0) {
-        this.goToNextPage();
-      } else {
-        this.goToPreviousPage();
-      }
-    }
-  };
-
-  handleVisibilityChange = () => {
-    if (!document.hidden && this.isConnected) {
-      void this.renderSelectedPage();
-      void this.setupAutoRefreshTimer();
-    } else if (document.hidden && this.autoRefreshTimer !== null) {
-      clearInterval(this.autoRefreshTimer);
-      this.autoRefreshTimer = null;
-    }
-  };
-
-  handleWindowFocus = () => {
-    if (!document.hidden && this.isConnected) {
-      void this.renderSelectedPage();
-    }
-  };
-
-  handleFileSaved = (event: Event) => {
-    const detail = (event as CustomEvent).detail;
-    const selectedPage = this.selectedPage;
-    if (
-      !detail ||
-      !selectedPage ||
-      detail.groupId !== selectedPage.groupId ||
-      detail.path !== selectedPage.path
-    ) {
-      return;
-    }
-
-    void this.renderSelectedPage();
-  };
-
-  handleAutoRefreshConfigChange = (event: Event) => {
-    const detail = (event as CustomEvent).detail;
-    if (detail && typeof detail.interval === "number") {
-      this.autoRefreshIntervalSec = Math.max(
-        0,
-        Math.min(detail.interval, 86400),
-      );
-    }
-    void this.setupAutoRefreshTimer();
-  };
-
-  async setupAutoRefreshTimer(): Promise<void> {
-    if (this.autoRefreshTimer !== null) {
-      clearInterval(this.autoRefreshTimer);
-      this.autoRefreshTimer = null;
-    }
-
-    if (!this.db) {
-      return;
-    }
-
-    try {
-      const stored = await getConfig(
-        this.db,
-        CONFIG_KEYS.PAGES_AUTO_REFRESH_INTERVAL,
-      );
-      let sec = 0;
-      if (typeof stored === "string" || typeof stored === "number") {
-        const parsed = parseInt(String(stored), 10);
-        if (!isNaN(parsed) && parsed >= 0) {
-          sec = Math.min(parsed, 86400);
-        }
-      }
-
-      this.autoRefreshIntervalSec = sec;
-
-      if (sec > 0 && !document.hidden && this.isConnected) {
-        this.autoRefreshTimer = setInterval(() => {
-          if (!document.hidden && this.isConnected) {
-            void this.renderSelectedPage();
-          }
-        }, sec * 1000);
-      }
-    } catch {
-      // Ignore config read failures
-    }
-  }
-
-  showNavButtonsTemporarily(durationMs = 2500) {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const viewer = root.querySelector(".pages__viewer");
-    if (viewer instanceof HTMLElement) {
-      viewer.classList.add("pages__viewer--nav-visible");
-    }
-
-    if (this.navFadeTimer !== null) {
-      clearTimeout(this.navFadeTimer);
-    }
-
-    this.navFadeTimer = setTimeout(() => {
-      this.navFadeTimer = null;
-      if (viewer instanceof HTMLElement) {
-        viewer.classList.remove("pages__viewer--nav-visible");
-      }
-    }, durationMs);
   }
 
   async connectedCallback() {
@@ -503,7 +176,7 @@ export class ShadowClawPages extends ShadowClawElement {
         .querySelector("[data-pages-dropdown-selected]")
         ?.textContent?.trim();
       if (dsdSelected) {
-        this._dsdInitialPath = dsdSelected;
+        this.dsdInitialPath = dsdSelected;
       }
     }
 
@@ -637,16 +310,16 @@ export class ShadowClawPages extends ShadowClawElement {
     // immediately with the store's default (pre-rendered) pinned page, causing
     // a one-frame flash of SSR content before the URL-requested page loads.
     await orchestratorStore.whenReady;
-    this._routingReady = true;
+    this.routingReady = true;
     void this.renderSelectedPage();
     void this.setupAutoRefreshTimer();
   }
 
   disconnectedCallback() {
-    this._renderedKey = null;
-    this._renderedContent = null;
-    this._renderedFrontmatterToggle = null;
-    this._dsdInitialPath = null;
+    this.renderedKey = null;
+    this.renderedContent = null;
+    this.renderedFrontmatterToggle = null;
+    this.dsdInitialPath = null;
 
     if (this.themeObserver) {
       this.themeObserver.disconnect();
@@ -682,26 +355,21 @@ export class ShadowClawPages extends ShadowClawElement {
     super.disconnectedCallback?.();
   }
 
-  getPageRouteDirectory(filePath: string): string {
-    const groupId =
-      this.selectedPage?.groupId || orchestratorStore.activeGroupId;
-
-    return applyBasePath(getFileRouteDirPath(groupId, filePath));
-  }
-
-  getSelectedPageIndex(): number {
-    if (!this.selectedPage) {
-      return -1;
+  announcePageChange(page: SavedPageRef) {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
     }
-    const pages = orchestratorStore.pages;
-    return pages.findIndex(
-      (p) => this.pageRefKey(p) === this.pageRefKey(this.selectedPage),
-    );
+    const announcer = root.querySelector("[data-pages-announcer]");
+    if (announcer instanceof HTMLElement) {
+      const fm = this.pageFrontmatter.get();
+      announcePageChange(page, fm?.title, announcer);
+    }
   }
 
   goToNextPage() {
     const pages = orchestratorStore.pages;
-    const index = this.getSelectedPageIndex();
+    const index = getSelectedPageIndex(this.selectedPage, pages);
     if (index >= 0 && index < pages.length - 1) {
       this.navigateToPage(pages[index + 1]);
     }
@@ -709,7 +377,7 @@ export class ShadowClawPages extends ShadowClawElement {
 
   goToPreviousPage() {
     const pages = orchestratorStore.pages;
-    const index = this.getSelectedPageIndex();
+    const index = getSelectedPageIndex(this.selectedPage, pages);
     if (index > 0) {
       this.navigateToPage(pages[index - 1]);
     }
@@ -722,92 +390,68 @@ export class ShadowClawPages extends ShadowClawElement {
     }
 
     const rendered = root.querySelector("[data-pages-rendered]") as HTMLElement;
-    if (!rendered || rendered.hidden) {
-      return false;
-    }
-
-    const id = anchor.replace(/^#/, "");
-    const target =
-      rendered.querySelector(`[id="${id}"]`) ||
-      rendered.querySelector(`a[name="${id}"]`);
-    if (target) {
-      target.scrollIntoView({ behavior: "smooth", block: "start" });
-
-      return true;
-    }
-
-    return false;
+    return handleAnchorNavigation(anchor, rendered);
   }
 
+  handleAutoRefreshConfigChange = (event: Event) => {
+    const interval = handleAutoRefreshConfigEvent(event);
+    if (interval !== null) {
+      this.autoRefreshIntervalSec = interval;
+    }
+    void this.setupAutoRefreshTimer();
+  };
+
+  handleFileSaved = (event: Event) => {
+    if (handleFileSavedEvent(event, this.selectedPage)) {
+      void this.renderSelectedPage();
+    }
+  };
+
   handleIframeMessage = (event: MessageEvent) => {
-    if (!event.data || typeof event.data !== "object") {
+    const msg = parseIframeMessage(event.data);
+    if (!msg) {
       return;
     }
 
-    const payload = event.data as {
-      type?: unknown;
-      href?: unknown;
-      height?: unknown;
-      direction?: unknown;
-      requestId?: unknown;
-      method?: unknown;
-      args?: unknown;
-      channel?: unknown;
-      payload?: unknown;
-    };
-
-    if (
-      payload.type === "shadow-claw-broadcast-result" &&
-      typeof payload.channel === "string"
-    ) {
+    if (msg.kind === "broadcast-result") {
       this.broadcastProxy?.handleResultFromIframe(
         event.source as WindowProxy,
-        payload.channel,
-        payload.payload,
+        msg.channel,
+        msg.payload,
       );
       return;
     }
 
-    // Storage proxy: handle requests from sandboxed iframes that lack
-    // IndexedDB/localStorage access due to opaque-origin isolation.
-    if (payload.type === "shadow-claw-storage-proxy") {
+    if (msg.kind === "storage-proxy") {
       if (this.previewFrameWindow && event.source !== this.previewFrameWindow) {
         return;
       }
 
-      this.handleStorageProxyRequest(
+      const pageKey = this.selectedPage?.path || "__default__";
+      void handleStorageProxyMessage(
         event.source as WindowProxy,
-        String(payload.requestId || ""),
-        String(payload.method || ""),
-        (payload.args && typeof payload.args === "object"
-          ? payload.args
-          : {}) as Record<string, unknown>,
+        msg.requestId,
+        msg.method,
+        msg.args,
+        pageKey,
       );
-
       return;
     }
 
-    if (
-      payload.type === "shadow-claw-swipe" &&
-      typeof payload.direction === "string"
-    ) {
+    if (msg.kind === "swipe") {
       if (this.previewFrameWindow && event.source !== this.previewFrameWindow) {
         return;
       }
       this.showNavButtonsTemporarily(2000);
-      if (payload.direction === "left") {
+      if (msg.direction === "left") {
         this.goToNextPage();
-      } else if (payload.direction === "right") {
+      } else if (msg.direction === "right") {
         this.goToPreviousPage();
       }
-
       return;
     }
 
-    if (
-      payload.type === "shadow-claw-iframe-resize" &&
-      typeof payload.height === "number"
-    ) {
+    if (msg.kind === "iframe-resize") {
       const root = this.shadowRoot;
       const iframe = root?.querySelector("[data-pages-iframe]");
       if (
@@ -817,20 +461,12 @@ export class ShadowClawPages extends ShadowClawElement {
           (iframe.contentWindow && event.source === iframe.contentWindow))
       ) {
         this.previewFrameWindow = iframe.contentWindow;
-        iframe.style.setProperty("height", `${payload.height}px`, "important");
+        iframe.style.setProperty("height", `${msg.height}px`, "important");
       }
-
       return;
     }
 
-    if (!this.db) {
-      return;
-    }
-
-    if (
-      payload.type !== "shadow-claw-file-viewer-link" ||
-      typeof payload.href !== "string"
-    ) {
+    if (!this.db || msg.kind !== "file-viewer-link") {
       return;
     }
 
@@ -841,9 +477,9 @@ export class ShadowClawPages extends ShadowClawElement {
     const basePath = this.selectedPage?.path || "";
     const groupId =
       this.selectedPage?.groupId || orchestratorStore.activeGroupId;
-    const routeDir = this.getPageRouteDirectory(basePath);
+    const routeDir = applyBasePath(getFileRouteDirPath(groupId, basePath));
     const resolved = resolveHrefAgainstRoute(
-      payload.href,
+      msg.href,
       routeDir,
       window.location.origin,
     );
@@ -862,9 +498,7 @@ export class ShadowClawPages extends ShadowClawElement {
     const isInternal =
       resolved.origin === window.location.origin &&
       (isPossibleAppRoute(resolved.pathname) ||
-        Boolean(
-          this.resolveWorkspaceLinkPath(payload.href, basePath, groupId),
-        ));
+        Boolean(resolveWorkspaceLinkPath(msg.href, basePath, groupId)));
 
     if (!isInternal) {
       window.open(resolved.href, "_blank", "noopener,noreferrer");
@@ -884,130 +518,108 @@ export class ShadowClawPages extends ShadowClawElement {
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
 
-  /**
-   * Handle a storage proxy request from a sandboxed iframe.
-   * Performs the requested storage operation in the parent's origin context
-   * using a namespaced IndexedDB store, then posts the result back.
-   */
-  private async handleStorageProxyRequest(
-    source: WindowProxy,
-    requestId: string,
-    method: string,
-    args: Record<string, unknown>,
-  ): Promise<void> {
-    if (!requestId) {
-      return;
-    }
-
-    const pageKey = this.selectedPage?.path || "__default__";
-
-    try {
-      let result: unknown;
-
-      switch (method) {
-        // localStorage-style operations
-        case "setItem":
-          await iframeStorageSet(
-            pageKey,
-            String(args.key || ""),
-            args.value as string,
-          );
-          break;
-        case "removeItem":
-          await iframeStorageDelete(pageKey, String(args.key || ""));
-          break;
-        case "clear":
-          await iframeStorageClear(pageKey);
-          break;
-        case "getAllItems":
-          result = await iframeStorageGetAll(pageKey);
-          break;
-
-        // IndexedDB-style operations
-        case "idb-get":
-          result = await iframeStorageGet(
-            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
-            String(args.key || ""),
-          );
-          break;
-        case "idb-getAll":
-          result = await iframeStorageGetAll(
-            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
-          );
-          break;
-        case "idb-put": {
-          const idbKey =
-            args.key != null ? String(args.key) : `__auto_${Date.now()}`;
-          await iframeStorageSet(
-            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
-            idbKey,
-            args.value,
-          );
-          result = idbKey;
-          break;
+  handleKeyDown = (event: KeyboardEvent) => {
+    handleKeyDownNavigation(
+      event,
+      this.isConnected,
+      this.shadowRoot,
+      (direction) => {
+        this.showNavButtonsTemporarily(2000);
+        if (direction === "previous") {
+          this.goToPreviousPage();
+        } else {
+          this.goToNextPage();
         }
-        case "idb-delete":
-          await iframeStorageDelete(
-            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
-            String(args.key || ""),
-          );
-          break;
-        case "idb-clear":
-          await iframeStorageClear(
-            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
-          );
-          break;
-        case "idb-deleteDatabase":
-          await iframeStorageClear(
-            `${pageKey}::idb::${args.dbName}::__default__`,
-          );
-          break;
-        default:
-          throw new Error(`Unknown storage proxy method: ${method}`);
+      },
+    );
+  };
+
+  handleMouseDown = (event: MouseEvent) => {
+    const state = handleMouseDownGesture(event, isNavigationSuppressed(event));
+    this.mouseStartX = state.mouseStartX;
+    this.mouseStartY = state.mouseStartY;
+    this.mouseStartTime = state.mouseStartTime;
+    this.isMouseDown = state.isMouseDown;
+  };
+
+  handleMouseUp = (event: MouseEvent) => {
+    const selection = window.getSelection();
+    const hasSelection = Boolean(selection && selection.toString().length > 0);
+    const direction = handleMouseUpGesture(
+      event,
+      {
+        mouseStartX: this.mouseStartX,
+        mouseStartY: this.mouseStartY,
+        mouseStartTime: this.mouseStartTime,
+        isMouseDown: this.isMouseDown,
+      },
+      isNavigationSuppressed(event),
+      hasSelection,
+    );
+    this.isMouseDown = false;
+    if (direction) {
+      this.showNavButtonsTemporarily(2000);
+      if (direction === "next") {
+        this.goToNextPage();
+      } else {
+        this.goToPreviousPage();
       }
-
-      source.postMessage(
-        {
-          type: "shadow-claw-storage-proxy-result",
-          requestId,
-          result: result ?? null,
-        },
-        "*",
-      );
-    } catch (err) {
-      source.postMessage(
-        {
-          type: "shadow-claw-storage-proxy-result",
-          requestId,
-          error: err instanceof Error ? err.message : String(err),
-        },
-        "*",
-      );
     }
-  }
+  };
 
-  isHtmlPath(path: string): boolean {
-    return /\.(html?|xhtml)$/iu.test(path);
-  }
+  handleTouchEnd = (event: TouchEvent) => {
+    const direction = handleTouchEndGesture(
+      event,
+      {
+        touchStartX: this.touchStartX,
+        touchStartY: this.touchStartY,
+        touchStartTime: this.touchStartTime,
+      },
+      isNavigationSuppressed(event),
+    );
+    if (direction) {
+      this.showNavButtonsTemporarily(2000);
+      if (direction === "next") {
+        this.goToNextPage();
+      } else {
+        this.goToPreviousPage();
+      }
+    }
+    this.touchStartTime = 0;
+  };
 
-  isMarkdownPath(path: string): boolean {
-    return /\.(md|markdown)$/iu.test(path);
-  }
+  handleTouchStart = (event: TouchEvent) => {
+    const updated = handleTouchStartGesture(
+      event,
+      isNavigationSuppressed(event),
+    );
+    if (updated) {
+      this.touchStartX = updated.touchStartX;
+      this.touchStartY = updated.touchStartY;
+      this.touchStartTime = updated.touchStartTime;
+    }
+  };
 
-  mimeTypeForImageExt(ext: string): string {
-    const map: Record<string, string> = {
-      apng: "image/apng",
-      avif: "image/avif",
-      gif: "image/gif",
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      svg: "image/svg+xml",
-      webp: "image/webp",
-    };
+  handleVisibilityChange = () => {
+    const action = handleVisibilityStateChange(
+      document.hidden,
+      this.isConnected,
+      this.autoRefreshTimer !== null,
+    );
+    if (action === "render-and-timer") {
+      void this.renderSelectedPage();
+      void this.setupAutoRefreshTimer();
+    } else if (action === "clear-timer" && this.autoRefreshTimer !== null) {
+      clearInterval(this.autoRefreshTimer);
+      this.autoRefreshTimer = null;
+    }
+  };
 
-    return map[ext] ?? "image/jpeg";
-  }
+  handleWindowFocus = () => {
+    if (handleWindowFocusEvent(document.hidden, this.isConnected)) {
+      void this.renderSelectedPage();
+    }
+  };
 
   navigateToPage(page: SavedPageRef) {
     this.selectedPage = page;
@@ -1109,20 +721,13 @@ export class ShadowClawPages extends ShadowClawElement {
       prevBtn instanceof HTMLButtonElement &&
       nextBtn instanceof HTMLButtonElement
     ) {
-      if (pages.length === 0) {
-        prevBtn.disabled = true;
-        prevBtn.hidden = true;
-        nextBtn.disabled = true;
-        nextBtn.hidden = true;
-      } else {
-        const idx = this.getSelectedPageIndex();
-        const isPrevDisabled = idx <= 0;
-        const isNextDisabled = idx < 0 || idx >= pages.length - 1;
-        prevBtn.disabled = isPrevDisabled;
-        prevBtn.hidden = isPrevDisabled;
-        nextBtn.disabled = isNextDisabled;
-        nextBtn.hidden = isNextDisabled;
-      }
+      const idx = getSelectedPageIndex(this.selectedPage, pages);
+      const { isPrevDisabled, isNextDisabled } =
+        calculatePaginationDisabledState(idx, pages.length);
+      prevBtn.disabled = isPrevDisabled;
+      prevBtn.hidden = isPrevDisabled;
+      nextBtn.disabled = isNextDisabled;
+      nextBtn.hidden = isNextDisabled;
     }
 
     if (pages.length === 0) {
@@ -1132,13 +737,7 @@ export class ShadowClawPages extends ShadowClawElement {
     const groupNameById = new Map(
       groups.map((group) => [group.groupId, group.name]),
     );
-    const pagesByGroup = new Map<string, SavedPageRef[]>();
-
-    pages.forEach((page) => {
-      const groupPages = pagesByGroup.get(page.groupId) || [];
-      groupPages.push(page);
-      pagesByGroup.set(page.groupId, groupPages);
-    });
+    const pagesByGroup = groupPagesByGroup(pages);
 
     lists.forEach((list) => {
       if (!(list instanceof HTMLElement)) {
@@ -1199,7 +798,7 @@ export class ShadowClawPages extends ShadowClawElement {
           row.className = "pages__list-item";
           if (
             this.selectedPage &&
-            this.pageRefKey(page) === this.pageRefKey(this.selectedPage)
+            pageRefKey(page) === pageRefKey(this.selectedPage)
           ) {
             row.classList.add("active");
           }
@@ -1328,7 +927,7 @@ export class ShadowClawPages extends ShadowClawElement {
               return;
             }
 
-            const confirmed = await this.requestConfirmation({
+            const confirmed = await requestConfirmation({
               title: "Remove Page",
               message: `Are you sure you want to remove this page from Pages?\n\n${path}`,
               confirmLabel: "Remove",
@@ -1369,227 +968,17 @@ export class ShadowClawPages extends ShadowClawElement {
     });
   }
 
-  resolveRouteGroupId(
-    routeGroupId: string,
-    expectedGroupId: string,
-  ): string | null {
-    if (
-      routeGroupId === expectedGroupId ||
-      this.routeGroupMatches(routeGroupId, expectedGroupId)
-    ) {
-      return expectedGroupId;
-    }
-
-    const groups = Array.isArray(orchestratorStore.groups)
-      ? orchestratorStore.groups
-      : [];
-    const exact = groups.find((group) => group.groupId === routeGroupId);
-    if (exact) {
-      return exact.groupId;
-    }
-
-    const alias = groups.find((group) =>
-      this.routeGroupMatches(routeGroupId, group.groupId),
-    );
-    if (alias) {
-      return alias.groupId;
-    }
-
-    return routeGroupId || null;
-  }
-
-  resolveWorkspaceFileTarget(
-    href: string,
-    filePath: string,
-    groupId: string,
-  ): { groupId: string; path: string } | null {
-    const trimmed = href.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      return null;
-    }
-
-    const routeCandidates: string[] = [];
-    let rawPath = trimmed.split(/[?#]/, 1)[0];
-
-    if (/^[a-zA-Z][a-zA-Z\d+.-]*:/u.test(rawPath) || rawPath.startsWith("//")) {
-      let parsed: URL;
-      try {
-        parsed = new URL(rawPath, window.location.href);
-      } catch {
-        return null;
-      }
-
-      if (parsed.origin !== window.location.origin) {
-        return null;
-      }
-
-      rawPath = parsed.pathname;
-    }
-
-    const normalizedRoutePath = rawPath.replace(/^(?:\.\/)+/u, "");
-    if (normalizedRoutePath.startsWith("files/")) {
-      routeCandidates.push(`/${normalizedRoutePath}`);
-    }
-
-    if (rawPath.startsWith("/")) {
-      const nestedFilesIndex = rawPath.lastIndexOf("/files/");
-      if (nestedFilesIndex > 0) {
-        routeCandidates.push(rawPath.slice(nestedFilesIndex));
-      }
-
-      routeCandidates.push(rawPath);
-    }
-
-    for (const candidate of routeCandidates) {
-      const route = getWorkspaceRouteRequestPath(candidate);
-      if (!route) {
-        continue;
-      }
-
-      const resolvedGroupId = this.resolveRouteGroupId(route.groupId, groupId);
-      if (!resolvedGroupId) {
-        continue;
-      }
-
-      return { groupId: resolvedGroupId, path: route.path };
-    }
-
-    const path = this.resolveWorkspaceLinkPath(trimmed, filePath, groupId);
-    if (!path) {
-      return null;
-    }
-
-    return { groupId, path };
-  }
-
-  resolveWorkspaceLinkPath(
-    href: string,
-    filePath: string,
-    groupId: string,
-  ): string | null {
-    const trimmed = href.trim();
-    if (!trimmed || trimmed.startsWith("#")) {
-      return null;
-    }
-
-    const rawPath = trimmed.split(/[?#]/, 1)[0];
-    const normalizedRoutePath = rawPath.replace(/^(?:\.\/)+/u, "");
-    const routeCandidates: string[] = [];
-
-    if (normalizedRoutePath.startsWith("files/")) {
-      routeCandidates.push(`/${normalizedRoutePath}`);
-    }
-
-    if (rawPath.startsWith("/")) {
-      const nestedFilesIndex = rawPath.lastIndexOf("/files/");
-      if (nestedFilesIndex > 0) {
-        routeCandidates.push(rawPath.slice(nestedFilesIndex));
-      }
-
-      routeCandidates.push(rawPath);
-    }
-
-    for (const candidate of routeCandidates) {
-      const route = getWorkspaceRouteRequestPath(candidate);
-      if (route && this.routeGroupMatches(route.groupId, groupId)) {
-        return route.path;
-      }
-    }
-
-    const routeDir = getFileRouteDirPath(groupId, filePath);
-    const resolved = resolveHrefAgainstRoute(
-      trimmed,
+  rewriteWorkspacePreviewHtml(html: string, filePath: string): string {
+    const groupId =
+      this.selectedPage?.groupId || orchestratorStore.activeGroupId;
+    const routeDir = applyBasePath(getFileRouteDirPath(groupId, filePath));
+    return rewriteWorkspacePreviewHtml(
+      html,
+      filePath,
       routeDir,
+      groupId,
       window.location.origin,
     );
-    if (!resolved || resolved.origin !== window.location.origin) {
-      return null;
-    }
-
-    const route = getWorkspaceRouteRequestPath(resolved.pathname);
-    if (!route || !this.routeGroupMatches(route.groupId, groupId)) {
-      return null;
-    }
-
-    return route.path;
-  }
-
-  rewriteWorkspacePreviewHtml(html: string, filePath: string): string {
-    if (!html) {
-      return html;
-    }
-
-    const routeDir = this.getPageRouteDirectory(filePath);
-    const parsed = new DOMParser().parseFromString(html, "text/html");
-
-    const rewrite = (selector: string, attribute: "href" | "src") => {
-      const nodes = Array.from(parsed.querySelectorAll(selector));
-      for (const node of nodes) {
-        const currentValue = node.getAttribute(attribute) || "";
-        const trimmed = currentValue.trim();
-        if (
-          !trimmed ||
-          trimmed.startsWith("#") ||
-          trimmed.startsWith("javascript:")
-        ) {
-          continue;
-        }
-
-        const resolved = resolveHrefAgainstRoute(
-          trimmed,
-          routeDir,
-          window.location.origin,
-        );
-        if (!resolved || resolved.origin !== window.location.origin) {
-          continue;
-        }
-
-        if (attribute === "href") {
-          const groupId =
-            this.selectedPage?.groupId || orchestratorStore.activeGroupId;
-          const isInternal =
-            isPossibleAppRoute(resolved.pathname) ||
-            Boolean(this.resolveWorkspaceLinkPath(trimmed, filePath, groupId));
-          if (!isInternal) {
-            continue;
-          }
-        }
-
-        node.setAttribute(
-          attribute,
-          `${resolved.pathname}${resolved.search}${resolved.hash}`,
-        );
-      }
-    };
-
-    rewrite("a[href]", "href");
-    rewrite("img[src]", "src");
-    rewrite("audio[src]", "src");
-    rewrite("video[src]", "src");
-    rewrite("source[src]", "src");
-
-    return parsed.body.innerHTML;
-  }
-
-  routeGroupMatches(routeGroupId: string, expectedGroupId: string): boolean {
-    if (routeGroupId === expectedGroupId) {
-      return true;
-    }
-
-    if (
-      (routeGroupId === "main" && expectedGroupId === "br:main") ||
-      (routeGroupId === "br:main" && expectedGroupId === "main")
-    ) {
-      return true;
-    }
-
-    if (!routeGroupId.includes(":") && !expectedGroupId.includes(":")) {
-      return false;
-    }
-
-    const normalize = (value: string) => value.trim().replace(/:/g, "-");
-
-    return normalize(routeGroupId) === normalize(expectedGroupId);
   }
 
   get selectedPage(): SavedPageRef | null {
@@ -1597,7 +986,7 @@ export class ShadowClawPages extends ShadowClawElement {
   }
 
   set selectedPage(val: SavedPageRef | null) {
-    if (this.pageRefKey(val) === this.pageRefKey(this.selectedPage)) {
+    if (pageRefKey(val) === pageRefKey(this.selectedPage)) {
       return;
     }
 
@@ -1650,8 +1039,7 @@ export class ShadowClawPages extends ShadowClawElement {
         } else if (
           !activePinnedPage ||
           !pages.some(
-            (page) =>
-              this.pageRefKey(page) === this.pageRefKey(activePinnedPage),
+            (page) => pageRefKey(page) === pageRefKey(activePinnedPage),
           )
         ) {
           this.selectedPage =
@@ -1661,7 +1049,7 @@ export class ShadowClawPages extends ShadowClawElement {
         // Guard: skip renders until URL routing has been applied by the parent
         // ShadowClaw. This prevents the effect from flashing the default
         // pre-rendered page before applyRouteFromCurrentLocation runs.
-        if (!this._routingReady) {
+        if (!this.routingReady) {
           return;
         }
 
@@ -1670,72 +1058,35 @@ export class ShadowClawPages extends ShadowClawElement {
     );
   }
 
-  toggleSidebar(force?: boolean) {
+  showNavButtonsTemporarily(durationMs = 2500) {
     const root = this.shadowRoot;
     if (!root) {
       return;
     }
 
-    const dropdown = root.querySelector("[data-pages-dropdown]");
-    const isDropdownOpen =
-      dropdown instanceof HTMLDetailsElement && dropdown.open;
-
-    let nextOpen: boolean;
-    if (force !== undefined) {
-      nextOpen = force;
-    } else {
-      nextOpen = !(isDropdownOpen || this.sidebarOpen);
+    const viewer = root.querySelector(".pages__viewer");
+    if (viewer instanceof HTMLElement) {
+      viewer.classList.add("pages__viewer--nav-visible");
     }
 
-    this.sidebarOpen = nextOpen;
-
-    const sidebar = root.querySelector(".pages__sidebar");
-    const content = root.querySelector(".pages__content");
-
-    if (sidebar) {
-      sidebar.classList.toggle("collapsed", !this.sidebarOpen);
-    }
-    if (content) {
-      content.classList.toggle(
-        "pages__content--sidebar-collapsed",
-        !this.sidebarOpen,
-      );
+    if (this.navFadeTimer !== null) {
+      clearTimeout(this.navFadeTimer);
     }
 
-    if (dropdown instanceof HTMLDetailsElement) {
-      if (nextOpen) {
-        dropdown.setAttribute("open", "");
-      } else {
-        dropdown.removeAttribute("open");
+    this.navFadeTimer = setTimeout(() => {
+      this.navFadeTimer = null;
+      if (viewer instanceof HTMLElement) {
+        viewer.classList.remove("pages__viewer--nav-visible");
       }
-    }
+    }, durationMs);
   }
 
-  private async reloadPreviewWithSearchParams(
-    searchParams: string,
-  ): Promise<void> {
-    if (!this.selectedPage || !this._renderedContent) {
-      return;
-    }
-
-    const root = this.shadowRoot;
-    const rendered = root?.querySelector("#rendered") as HTMLElement;
-    if (!root || !rendered) {
-      return;
-    }
-
-    const parsedFrontmatter = splitFrontmatter(this._renderedContent);
-    const iframe = this.ensurePreviewIframe(root, rendered);
-    iframe.hidden = false;
-    this.previewFrameWindow = null;
-    setTrustedSrcdoc(
-      iframe,
-      await this.buildHtmlPageSrcdoc(
-        parsedFrontmatter.content,
-        this.selectedPage.path,
-        searchParams,
-      ),
-    );
+  toggleSidebar(force?: boolean) {
+    this.sidebarOpen = toggleSidebarState({
+      root: this.shadowRoot,
+      currentOpen: this.sidebarOpen,
+      force,
+    });
   }
 
   async buildHtmlPageSrcdoc(
@@ -1743,112 +1094,38 @@ export class ShadowClawPages extends ShadowClawElement {
     filePath: string,
     searchParams: string = "",
   ): Promise<string> {
-    const resolvedHtml = this.rewriteWorkspacePreviewHtml(content, filePath);
     const groupId =
       this.selectedPage?.groupId || orchestratorStore.activeGroupId;
-    const inlinedHtml = await this.resolveRelativeImagesInHtml(
-      resolvedHtml,
+    return await buildHtmlPageSrcdoc({
+      content,
       filePath,
+      searchParams,
       groupId,
-    );
-
-    const safeContent = sanitizeSrcdocHtml(inlinedHtml, previewSanitizeOptions);
-
-    // Nonce-gated CSP: only the bridge script and approved custom element scripts may run.
-    const nonce = crypto.randomUUID().replace(/-/g, "");
-    const bridgeScriptUrl = applyBasePath(
-      "/assets/file-viewer-preview-bridge.js",
-    );
-    const storageBridgeScriptUrl = applyBasePath(
-      "/assets/iframe-storage-bridge.js",
-    );
-
-    const approvedScripts = getApprovedCustomElementScripts();
-    const cspContent = getIframeCsp(nonce);
-
-    const configScript =
-      typeof document !== "undefined"
-        ? document.getElementById("shadow-claw-site-config")
-        : null;
-    const siteConfigHtml =
-      configScript && configScript.textContent
-        ? `<script id="shadow-claw-site-config" type="application/json">${configScript.textContent}</script>`
-        : "";
-
-    const searchScriptHtml = searchParams
-      ? `<script nonce="${nonce}">(function(){try{Object.defineProperty(window.location,"search",{get:function(){return ${JSON.stringify(searchParams)};},configurable:true});}catch(e){}})();</script>`
-      : "";
-
-    const customElementScriptsHtml = approvedScripts
-      .map((src) => {
-        const isExternal =
-          src.startsWith("http://") ||
-          src.startsWith("https://") ||
-          src.startsWith("//");
-        const resolvedSrc = isExternal
-          ? src
-          : applyBasePath(
-              src.startsWith("/")
-                ? src
-                : `/${src.replace(/^pages\/main\//, "")}`,
-            );
-        return `<script type="module" src="${resolvedSrc}" nonce="${nonce}"></script>`;
-      })
-      .join("\n");
-
-    const themeStylesheetLink = `<link rel="stylesheet" href="${applyBasePath(
-      "/theme.css",
-    )}">`;
-
-    return [
-      "<!doctype html>",
-      `<html class="${getIframeHtmlClass()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`,
-      `<meta http-equiv="Content-Security-Policy" content="${cspContent}">`,
-      `<base href="${this.getPageRouteDirectory(filePath)}" target="_blank">`,
-      searchScriptHtml,
-      siteConfigHtml,
-      `<script src="${storageBridgeScriptUrl}" nonce="${nonce}"></script>`,
-      `<script src="${bridgeScriptUrl}" nonce="${nonce}"></script>`,
-      getIframeThemeStyleHtml(),
-      themeStylesheetLink,
-      customElementScriptsHtml,
-      "</head><body>",
-      safeContent,
-      "</body></html>",
-    ].join("");
+      origin: typeof window !== "undefined" ? window.location?.origin : "",
+      resolveRelativeImagesInHtmlFn: (c, p, g) =>
+        this.resolveRelativeImagesInHtml(c, p, g),
+    });
   }
 
   async handleRemoveAll() {
-    if (!this.db) {
-      return;
-    }
-
-    const confirmed = await this.requestConfirmation({
-      title: "Remove All Pages",
-      message: "Remove ALL saved pages from Pages? This cannot be undone!",
-      confirmLabel: "Remove All",
-      cancelLabel: "Cancel",
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
+    const btn = this.shadowRoot?.querySelector(".pages__remove-all-btn");
     try {
-      const btn = this.shadowRoot?.querySelector(".pages__remove-all-btn");
       btn?.toggleAttribute("disabled", true);
       if (btn) {
         btn.textContent = "⏳";
       }
 
-      await orchestratorStore.removeAllPages(this.db);
-      showSuccess("Removed all pages from Pages", 2400);
+      const success = await confirmRemoveAllPages(this.db, (opts) =>
+        requestConfirmation(opts),
+      );
+      if (success) {
+        showSuccess("Removed all pages from Pages", 2400);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       showError(`Failed to remove all pages: ${message}`, 4500);
       console.error("Remove all pages error:", err);
     } finally {
-      const btn = this.shadowRoot?.querySelector(".pages__remove-all-btn");
       btn?.toggleAttribute("disabled", false);
       if (btn) {
         btn.textContent = "🗑️ Remove All";
@@ -1857,107 +1134,29 @@ export class ShadowClawPages extends ShadowClawElement {
   }
 
   async handleReorder(fromIndex: number, toIndex: number) {
-    if (!this.db || fromIndex === toIndex) {
-      return;
-    }
+    const result = await handlePageReorder({
+      db: this.db,
+      currentPages: orchestratorStore.pages,
+      fromIndex,
+      toIndex,
+    });
 
-    const pages = [...orchestratorStore.pages];
-    if (
-      fromIndex < 0 ||
-      fromIndex >= pages.length ||
-      toIndex < 0 ||
-      toIndex >= pages.length
-    ) {
-      return;
-    }
-
-    const [moved] = pages.splice(fromIndex, 1);
-    pages.splice(toIndex, 0, moved);
-
-    await orchestratorStore.reorderPages(this.db, pages);
-
-    if (toIndex === 0 && moved) {
-      this.selectedPage = moved;
+    if (result.movedToFirst) {
+      this.selectedPage = result.movedToFirst;
       void this.renderSelectedPage();
 
       document.dispatchEvent(
         new CustomEvent("shadow-claw-navigate", {
           detail: {
             page: "pages",
-            groupId: moved.groupId,
-            path: moved.path,
+            groupId: result.movedToFirst.groupId,
+            path: result.movedToFirst.path,
           },
           bubbles: true,
           composed: true,
         }),
       );
     }
-  }
-
-  async readImageAsDataUrl(
-    groupId: string,
-    workspacePath: string,
-  ): Promise<string | null> {
-    if (this.db) {
-      try {
-        const bytes = await readGroupFileBytes(this.db, groupId, workspacePath);
-        const ext = workspacePath.split(".").pop()?.toLowerCase() || "";
-        const mimeType = this.mimeTypeForImageExt(ext);
-
-        const blobBytes = new Uint8Array(bytes.byteLength);
-        blobBytes.set(bytes);
-
-        return await new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(reader.result as string);
-          reader.onerror = reject;
-          reader.readAsDataURL(new Blob([blobBytes], { type: mimeType }));
-        });
-      } catch {
-        // Fall through to network fetch fallback
-      }
-    }
-
-    try {
-      const cleanPath = workspacePath.replace(/^\/+/, "");
-      const candidates = [
-        applyBasePath(`/files/main/${cleanPath}`),
-        applyBasePath(`/static-main/${cleanPath}`),
-        applyBasePath(`/pages/main/${cleanPath}`),
-      ];
-      for (const url of candidates) {
-        try {
-          const fullUrl =
-            typeof window !== "undefined" && window.location?.origin
-              ? new URL(url, window.location.origin).toString()
-              : url;
-          const res = await fetch(fullUrl);
-          if (res.ok) {
-            const blob = await res.blob();
-            if (this.db) {
-              try {
-                const buffer = await blob.arrayBuffer();
-                await writeGroupFile(
-                  this.db,
-                  groupId,
-                  workspacePath,
-                  new Uint8Array(buffer),
-                );
-              } catch {}
-            }
-
-            return await new Promise<string>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve(reader.result as string);
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-          }
-        } catch {}
-      }
-    } catch {}
-
-    return null;
   }
 
   async renderSelectedPage() {
@@ -1975,14 +1174,14 @@ export class ShadowClawPages extends ShadowClawElement {
 
     const selectedPage = this.selectedPage;
     if (!this.db || !selectedPage) {
-      this._renderedKey = null;
-      this._renderedContent = null;
-      this._renderedFrontmatterToggle = null;
+      this.renderedKey = null;
+      this.renderedContent = null;
+      this.renderedFrontmatterToggle = null;
       empty.hidden = false;
       rendered.hidden = true;
       rendered.textContent = "";
       this.pageFrontmatter.set(null);
-      this.removePreviewIframe(root);
+      removePreviewIframe(root);
 
       return;
     }
@@ -2026,7 +1225,7 @@ export class ShadowClawPages extends ShadowClawElement {
 
       const pageKey = `${selectedPage.groupId}:${selectedPage.path}`;
 
-      if (this.isHtmlPath(selectedPage.path)) {
+      if (isHtmlPath(selectedPage.path)) {
         const parsedFrontmatter = splitFrontmatter(content);
         const newData =
           Object.keys(parsedFrontmatter.data).length > 0
@@ -2039,8 +1238,8 @@ export class ShadowClawPages extends ShadowClawElement {
         }
 
         if (
-          this._renderedKey === pageKey &&
-          this._renderedContent === content &&
+          this.renderedKey === pageKey &&
+          this.renderedContent === content &&
           root.querySelector("[data-pages-iframe]")
         ) {
           this.showNavButtonsTemporarily(2500);
@@ -2048,9 +1247,9 @@ export class ShadowClawPages extends ShadowClawElement {
           return;
         }
 
-        this._renderedKey = pageKey;
-        this._renderedContent = content;
-        this._renderedFrontmatterToggle = null;
+        this.renderedKey = pageKey;
+        this.renderedContent = content;
+        this.renderedFrontmatterToggle = null;
         rendered.hidden = true;
         const iframe = this.ensurePreviewIframe(root, rendered);
         iframe.hidden = false;
@@ -2067,9 +1266,9 @@ export class ShadowClawPages extends ShadowClawElement {
         return;
       }
 
-      this.removePreviewIframe(root);
+      removePreviewIframe(root);
 
-      if (this.isMarkdownPath(selectedPage.path)) {
+      if (isMarkdownPath(selectedPage.path)) {
         const parsedFrontmatter = splitFrontmatter(content);
         const newData =
           Object.keys(parsedFrontmatter.data).length > 0
@@ -2088,9 +1287,9 @@ export class ShadowClawPages extends ShadowClawElement {
 
         // Check if already rendered with matching content and settings
         if (
-          this._renderedKey === pageKey &&
-          this._renderedContent === content &&
-          this._renderedFrontmatterToggle === renderFrontmatter &&
+          this.renderedKey === pageKey &&
+          this.renderedContent === content &&
+          this.renderedFrontmatterToggle === renderFrontmatter &&
           rendered.children.length > 0 &&
           !rendered.hidden
         ) {
@@ -2101,15 +1300,15 @@ export class ShadowClawPages extends ShadowClawElement {
 
         // Check if DSD SSR content is already present for this initial page
         if (
-          !this._renderedKey &&
-          this._dsdInitialPath &&
-          this._dsdInitialPath === selectedPage.path &&
+          !this.renderedKey &&
+          this.dsdInitialPath &&
+          this.dsdInitialPath === selectedPage.path &&
           rendered.children.length > 0 &&
           !rendered.hidden
         ) {
-          this._renderedKey = pageKey;
-          this._renderedContent = content;
-          this._renderedFrontmatterToggle = renderFrontmatter;
+          this.renderedKey = pageKey;
+          this.renderedContent = content;
+          this.renderedFrontmatterToggle = renderFrontmatter;
           await this.resolveMarkdownImages(
             rendered,
             selectedPage.groupId,
@@ -2120,9 +1319,9 @@ export class ShadowClawPages extends ShadowClawElement {
           return;
         }
 
-        this._renderedKey = pageKey;
-        this._renderedContent = content;
-        this._renderedFrontmatterToggle = renderFrontmatter;
+        this.renderedKey = pageKey;
+        this.renderedContent = content;
+        this.renderedFrontmatterToggle = renderFrontmatter;
         rendered.hidden = false;
 
         const html = await renderMarkdown(content, {
@@ -2132,9 +1331,15 @@ export class ShadowClawPages extends ShadowClawElement {
           return;
         }
 
-        const resolvedHtml = this.rewriteWorkspacePreviewHtml(
+        const routeDir = applyBasePath(
+          getFileRouteDirPath(selectedPage.groupId, selectedPage.path),
+        );
+        const resolvedHtml = rewriteWorkspacePreviewHtml(
           html,
           selectedPage.path,
+          routeDir,
+          selectedPage.groupId,
+          window.location.origin,
         );
         if (token !== this.renderToken) {
           return;
@@ -2152,8 +1357,8 @@ export class ShadowClawPages extends ShadowClawElement {
       }
 
       if (
-        this._renderedKey === pageKey &&
-        this._renderedContent === content &&
+        this.renderedKey === pageKey &&
+        this.renderedContent === content &&
         !rendered.hidden
       ) {
         this.showNavButtonsTemporarily(2500);
@@ -2161,41 +1366,25 @@ export class ShadowClawPages extends ShadowClawElement {
         return;
       }
 
-      this._renderedKey = pageKey;
-      this._renderedContent = content;
-      this._renderedFrontmatterToggle = null;
+      this.renderedKey = pageKey;
+      this.renderedContent = content;
+      this.renderedFrontmatterToggle = null;
       this.pageFrontmatter.set(null);
       rendered.hidden = false;
       rendered.textContent = content;
       this.showNavButtonsTemporarily(2500);
     } catch (error) {
-      this._renderedKey = null;
-      this._renderedContent = null;
-      this._renderedFrontmatterToggle = null;
+      this.renderedKey = null;
+      this.renderedContent = null;
+      this.renderedFrontmatterToggle = null;
       empty.hidden = false;
       rendered.hidden = true;
       rendered.textContent = "";
       this.pageFrontmatter.set(null);
-      this.removePreviewIframe(root);
+      removePreviewIframe(root);
       const message = error instanceof Error ? error.message : String(error);
       showError(`Failed to load page ${selectedPage.path}: ${message}`, 5000);
     }
-  }
-
-  async requestConfirmation(options: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-  }): Promise<boolean> {
-    const appShell = document.querySelector("shadow-claw") as any;
-    if (appShell && typeof appShell.requestDialog === "function") {
-      return await appShell.requestDialog({ mode: "confirm", ...options });
-    }
-
-    showWarning(options.message, 4500);
-
-    return false;
   }
 
   async resolveMarkdownImages(
@@ -2203,34 +1392,21 @@ export class ShadowClawPages extends ShadowClawElement {
     groupId: string,
     filePath: string,
   ): Promise<void> {
-    const images = Array.from(content.querySelectorAll("img[src]"));
-    if (images.length === 0) {
-      return;
-    }
-
-    await Promise.all(
-      images.map(async (img) => {
-        const src = img.getAttribute("src") || "";
-        if (!src || /^(?:blob:|data:|#)/u.test(src)) {
-          return;
-        }
-
-        const target = this.resolveWorkspaceFileTarget(src, filePath, groupId);
-        if (!target) {
-          return;
-        }
-
-        const dataUrl = await this.readImageAsDataUrl(
-          target.groupId,
-          target.path,
-        );
-        if (!dataUrl) {
-          return;
-        }
-
-        img.setAttribute("src", dataUrl);
-      }),
-    );
+    const groups = Array.isArray(orchestratorStore.groups)
+      ? orchestratorStore.groups
+      : [];
+    await resolveMarkdownImages({
+      container: content,
+      groupId,
+      filePath,
+      groups,
+      readImageAsDataUrlFn: (g, p) =>
+        readImageAsDataUrl({
+          db: this.db,
+          groupId: g,
+          workspacePath: p,
+        }),
+    });
   }
 
   async resolveRelativeImagesInHtml(
@@ -2243,113 +1419,76 @@ export class ShadowClawPages extends ShadowClawElement {
     }
 
     const parsed = new DOMParser().parseFromString(html, "text/html");
-    const images = Array.from(parsed.querySelectorAll("img[src]"));
-    if (images.length === 0) {
-      return html;
+    await this.resolveMarkdownImages(parsed.body, groupId, filePath);
+    return parsed.body.innerHTML;
+  }
+
+  async setupAutoRefreshTimer(): Promise<void> {
+    if (this.autoRefreshTimer !== null) {
+      clearInterval(this.autoRefreshTimer);
+      this.autoRefreshTimer = null;
     }
 
-    await Promise.all(
-      images.map(async (img) => {
-        const src = img.getAttribute("src") || "";
-        if (!src || /^(?:blob:|data:|#)/u.test(src)) {
-          return;
+    if (!this.db) {
+      return;
+    }
+
+    const sec = await fetchAutoRefreshInterval(this.db, getConfig);
+    this.autoRefreshIntervalSec = sec;
+
+    if (shouldRunAutoRefresh(sec, document.hidden, this.isConnected)) {
+      this.autoRefreshTimer = setInterval(() => {
+        if (shouldRunAutoRefresh(sec, document.hidden, this.isConnected)) {
+          void this.renderSelectedPage();
         }
-
-        const target = this.resolveWorkspaceFileTarget(src, filePath, groupId);
-        if (!target) {
-          return;
-        }
-
-        const dataUrl = await this.readImageAsDataUrl(
-          target.groupId,
-          target.path,
-        );
-        if (!dataUrl) {
-          return;
-        }
-
-        img.setAttribute("src", dataUrl);
-      }),
-    );
-
-    return parsed.body.innerHTML;
+      }, sec * 1000);
+    }
   }
 
   private ensurePreviewIframe(
     root: ShadowRoot,
     rendered: HTMLElement,
   ): HTMLIFrameElement {
-    const existing = root.querySelector("[data-pages-iframe]");
-    if (existing instanceof HTMLIFrameElement) {
-      return existing;
-    }
-
-    const iframe = document.createElement("iframe");
-    iframe.className = "pages__iframe";
-    iframe.setAttribute("data-pages-iframe", "");
-    iframe.setAttribute(
-      "title",
-      this.selectedPage ? `Preview: ${this.selectedPage.path}` : "Page preview",
-    );
-    iframe.setAttribute("sandbox", getIframeSandboxPolicy());
-    iframe.setAttribute("allow", "fullscreen");
-    iframe.hidden = true;
-    iframe.addEventListener("load", () => {
-      this.previewFrameWindow = iframe.contentWindow;
-      this.syncIframeTheme();
+    return ensurePreviewIframe({
+      root,
+      rendered,
+      selectedPath: this.selectedPage?.path,
+      onIframeLoad: (win) => {
+        this.previewFrameWindow = win;
+        this.syncIframeTheme();
+      },
     });
-    rendered.before(iframe);
-
-    return iframe;
   }
 
   private syncIframeTheme(): void {
-    if (!this.previewFrameWindow) {
+    syncIframeTheme(this.previewFrameWindow);
+  }
+
+  private async reloadPreviewWithSearchParams(
+    searchParams: string,
+  ): Promise<void> {
+    if (!this.selectedPage || !this.renderedContent) {
       return;
     }
 
-    const isDark = document.documentElement.classList.contains("dark-mode");
-    const styles = getComputedStyle(document.documentElement);
-    const customProperties: Record<string, string> = {};
-
-    for (let i = 0; i < styles.length; i++) {
-      const prop = styles[i];
-      if (prop.startsWith("--")) {
-        customProperties[prop] = styles.getPropertyValue(prop);
-      }
+    const root = this.shadowRoot;
+    const rendered = root?.querySelector("#rendered") as HTMLElement;
+    if (!root || !rendered) {
+      return;
     }
 
-    this.previewFrameWindow.postMessage(
-      {
-        type: "shadow-claw-theme-update",
-        theme: isDark ? "dark" : "light",
-        customProperties,
-      },
-      "*",
+    const parsedFrontmatter = splitFrontmatter(this.renderedContent);
+    const iframe = this.ensurePreviewIframe(root, rendered);
+    iframe.hidden = false;
+    this.previewFrameWindow = null;
+    setTrustedSrcdoc(
+      iframe,
+      await this.buildHtmlPageSrcdoc(
+        parsedFrontmatter.content,
+        this.selectedPage.path,
+        searchParams,
+      ),
     );
-  }
-
-  private pageRefKey(page: SavedPageRef | null): string {
-    if (!page) {
-      return "";
-    }
-
-    let normalizedGroupId = page.groupId;
-    if (normalizedGroupId === "main") {
-      normalizedGroupId = "br:main";
-    }
-
-    return `${normalizedGroupId}\u0000${page.path}`;
-  }
-
-  private removePreviewIframe(root: ShadowRoot): void {
-    const iframe = root.querySelector("[data-pages-iframe]");
-    if (!(iframe instanceof HTMLIFrameElement)) {
-      return;
-    }
-
-    iframe.removeAttribute("srcdoc");
-    iframe.remove();
   }
 }
 

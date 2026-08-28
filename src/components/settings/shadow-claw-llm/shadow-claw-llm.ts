@@ -366,80 +366,6 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
   }
 
-  async renderBuiltinAiSettings() {
-    if (!this.db) {
-      return;
-    }
-
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const compactionSelect = root.querySelector(
-      '[data-setting="compaction-engine-select"]',
-    ) as HTMLSelectElement | null;
-    const toolsBackendSelect = root.querySelector(
-      '[data-setting="builtin-ai-tools-backend-select"]',
-    ) as HTMLSelectElement | null;
-
-    const compactionPref = await getConfig(
-      this.db,
-      CONFIG_KEYS.COMPACTION_ENGINE_PREFERENCE,
-    );
-    const toolsPref = await getConfig(
-      this.db,
-      CONFIG_KEYS.BUILTIN_AI_TOOLS_BACKEND,
-    );
-
-    if (compactionSelect) {
-      compactionSelect.value = compactionPref || "auto";
-    }
-
-    if (toolsBackendSelect) {
-      toolsBackendSelect.value = toolsPref || "active_provider";
-    }
-  }
-
-  async saveBuiltinAiSettings() {
-    if (!this.db) {
-      return;
-    }
-
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const compactionSelect = root.querySelector(
-      '[data-setting="compaction-engine-select"]',
-    ) as HTMLSelectElement | null;
-    const toolsBackendSelect = root.querySelector(
-      '[data-setting="builtin-ai-tools-backend-select"]',
-    ) as HTMLSelectElement | null;
-
-    try {
-      if (compactionSelect) {
-        await setConfig(
-          this.db,
-          CONFIG_KEYS.COMPACTION_ENGINE_PREFERENCE,
-          compactionSelect.value,
-        );
-      }
-      if (toolsBackendSelect) {
-        await setConfig(
-          this.db,
-          CONFIG_KEYS.BUILTIN_AI_TOOLS_BACKEND,
-          toolsBackendSelect.value,
-        );
-      }
-      showSuccess("Built-in AI settings saved successfully", 2500);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError("Error saving Built-in AI settings: " + errorMsg, 5000);
-    }
-  }
-
   /**
    * Set up reactive effects.
    */
@@ -1520,6 +1446,41 @@ export class ShadowClawLlm extends ShadowClawElement {
     this.updateMaxTokensUI();
   }
 
+  async renderBuiltinAiSettings() {
+    if (!this.db) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const compactionSelect = root.querySelector(
+      '[data-setting="compaction-engine-select"]',
+    ) as HTMLSelectElement | null;
+    const toolsBackendSelect = root.querySelector(
+      '[data-setting="builtin-ai-tools-backend-select"]',
+    ) as HTMLSelectElement | null;
+
+    const compactionPref = await getConfig(
+      this.db,
+      CONFIG_KEYS.COMPACTION_ENGINE_PREFERENCE,
+    );
+    const toolsPref = await getConfig(
+      this.db,
+      CONFIG_KEYS.BUILTIN_AI_TOOLS_BACKEND,
+    );
+
+    if (compactionSelect) {
+      compactionSelect.value = compactionPref || "auto";
+    }
+
+    if (toolsBackendSelect) {
+      toolsBackendSelect.value = toolsPref || "active_provider";
+    }
+  }
+
   async renderTransformersJsSettings() {
     if (!this.db) {
       return;
@@ -1680,6 +1641,45 @@ export class ShadowClawLlm extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving Bedrock fallback settings: " + errorMsg, 6000);
+    }
+  }
+
+  async saveBuiltinAiSettings() {
+    if (!this.db) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    const compactionSelect = root.querySelector(
+      '[data-setting="compaction-engine-select"]',
+    ) as HTMLSelectElement | null;
+    const toolsBackendSelect = root.querySelector(
+      '[data-setting="builtin-ai-tools-backend-select"]',
+    ) as HTMLSelectElement | null;
+
+    try {
+      if (compactionSelect) {
+        await setConfig(
+          this.db,
+          CONFIG_KEYS.COMPACTION_ENGINE_PREFERENCE,
+          compactionSelect.value,
+        );
+      }
+      if (toolsBackendSelect) {
+        await setConfig(
+          this.db,
+          CONFIG_KEYS.BUILTIN_AI_TOOLS_BACKEND,
+          toolsBackendSelect.value,
+        );
+      }
+      showSuccess("Built-in AI settings saved successfully", 2500);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving Built-in AI settings: " + errorMsg, 5000);
     }
   }
 

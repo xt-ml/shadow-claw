@@ -48,13 +48,13 @@ export class ShadowClawTasks extends ShadowClawElement {
   editingTools: any[] = [];
   renderFrontmatter = true;
   tasks: any[] = [];
-
-  private _draggedTaskId: string | null = null;
-  private _touchId: number | null = null;
-  private _touchDraggedTaskId: string | null = null;
-  private _keyboardGrabbedId: string | null = null;
   private _autoScrollActive = false;
   private _autoScrollSpeed = 0;
+
+  private _draggedTaskId: string | null = null;
+  private _keyboardGrabbedId: string | null = null;
+  private _touchDraggedTaskId: string | null = null;
+  private _touchId: number | null = null;
 
   constructor() {
     super();
@@ -868,6 +868,44 @@ export class ShadowClawTasks extends ShadowClawElement {
     showError(`Failed to open linked file: ${resolved}`, 5000);
   }
 
+  async handleReorder(
+    draggedId: string,
+    targetId: string,
+    precomputedIds?: string[],
+  ) {
+    const db = await getDb();
+    if (!db) {
+      return;
+    }
+
+    if (precomputedIds) {
+      await orchestratorStore.reorderTasks(
+        db,
+        orchestratorStore.activeGroupId,
+        precomputedIds,
+      );
+      return;
+    }
+
+    const tasks = orchestratorStore.tasks || [];
+    const ids = tasks.map((t) => t.id);
+    const fromIdx = ids.indexOf(draggedId);
+    const toIdx = ids.indexOf(targetId);
+
+    if (fromIdx < 0 || toIdx < 0) {
+      return;
+    }
+
+    ids.splice(fromIdx, 1);
+    ids.splice(toIdx, 0, draggedId);
+
+    await orchestratorStore.reorderTasks(
+      db,
+      orchestratorStore.activeGroupId,
+      ids,
+    );
+  }
+
   /**
    * Handle restore (upload and import JSON)
    */
@@ -1174,44 +1212,6 @@ export class ShadowClawTasks extends ShadowClawElement {
     this._bindTouchListEvents(list);
   }
 
-  async handleReorder(
-    draggedId: string,
-    targetId: string,
-    precomputedIds?: string[],
-  ) {
-    const db = await getDb();
-    if (!db) {
-      return;
-    }
-
-    if (precomputedIds) {
-      await orchestratorStore.reorderTasks(
-        db,
-        orchestratorStore.activeGroupId,
-        precomputedIds,
-      );
-      return;
-    }
-
-    const tasks = orchestratorStore.tasks || [];
-    const ids = tasks.map((t) => t.id);
-    const fromIdx = ids.indexOf(draggedId);
-    const toIdx = ids.indexOf(targetId);
-
-    if (fromIdx < 0 || toIdx < 0) {
-      return;
-    }
-
-    ids.splice(fromIdx, 1);
-    ids.splice(toIdx, 0, draggedId);
-
-    await orchestratorStore.reorderTasks(
-      db,
-      orchestratorStore.activeGroupId,
-      ids,
-    );
-  }
-
   _announce(message: string) {
     const region = this.shadowRoot?.querySelector("#live-region");
     if (region) {
@@ -1318,75 +1318,6 @@ export class ShadowClawTasks extends ShadowClawElement {
       if (t.identifier === this._touchId) {
         return t;
       }
-    }
-  }
-
-  _itemAtPoint(x: number, y: number): Element | null {
-    const root = this.shadowRoot;
-    if (!root) {
-      return null;
-    }
-
-    const el = root.elementFromPoint(x, y);
-    return el?.closest?.(".tasks__item") || null;
-  }
-
-  _startAutoScroll() {
-    if (this._autoScrollActive) {
-      return;
-    }
-    this._autoScrollActive = true;
-
-    const scrollLoop = () => {
-      if (!this._autoScrollActive) {
-        return;
-      }
-
-      const root = this.shadowRoot;
-      const content = root?.querySelector(
-        ".tasks__content",
-      ) as HTMLElement | null;
-      if (content && this._autoScrollSpeed !== 0) {
-        content.scrollTop += this._autoScrollSpeed;
-      }
-
-      requestAnimationFrame(scrollLoop);
-    };
-
-    requestAnimationFrame(scrollLoop);
-  }
-
-  _stopAutoScroll() {
-    this._autoScrollActive = false;
-    this._autoScrollSpeed = 0;
-  }
-
-  _updateAutoScrollSpeed(clientY: number) {
-    const root = this.shadowRoot;
-    const content = root?.querySelector(
-      ".tasks__content",
-    ) as HTMLElement | null;
-    if (!content) {
-      this._autoScrollSpeed = 0;
-      return;
-    }
-
-    const rect = content.getBoundingClientRect();
-    const threshold = 50; // pixels from top/bottom to start scrolling
-
-    const distTop = clientY - rect.top;
-    const distBottom = rect.bottom - clientY;
-
-    if (distTop >= 0 && distTop < threshold) {
-      // Near the top: scroll up. Speed is faster the closer to the edge.
-      this._autoScrollSpeed = -((threshold - distTop) / threshold) * 8;
-      this._startAutoScroll();
-    } else if (distBottom >= 0 && distBottom < threshold) {
-      // Near the bottom: scroll down.
-      this._autoScrollSpeed = ((threshold - distBottom) / threshold) * 8;
-      this._startAutoScroll();
-    } else {
-      this._autoScrollSpeed = 0;
     }
   }
 
@@ -1545,6 +1476,75 @@ export class ShadowClawTasks extends ShadowClawElement {
       ids.splice(newIdx, 0, this._keyboardGrabbedId);
       this._announce(`Moved to position ${newIdx + 1} of ${total}.`);
       this.handleReorder(this._keyboardGrabbedId, ids[currentIdx], ids);
+    }
+  }
+
+  _itemAtPoint(x: number, y: number): Element | null {
+    const root = this.shadowRoot;
+    if (!root) {
+      return null;
+    }
+
+    const el = root.elementFromPoint(x, y);
+    return el?.closest?.(".tasks__item") || null;
+  }
+
+  _startAutoScroll() {
+    if (this._autoScrollActive) {
+      return;
+    }
+    this._autoScrollActive = true;
+
+    const scrollLoop = () => {
+      if (!this._autoScrollActive) {
+        return;
+      }
+
+      const root = this.shadowRoot;
+      const content = root?.querySelector(
+        ".tasks__content",
+      ) as HTMLElement | null;
+      if (content && this._autoScrollSpeed !== 0) {
+        content.scrollTop += this._autoScrollSpeed;
+      }
+
+      requestAnimationFrame(scrollLoop);
+    };
+
+    requestAnimationFrame(scrollLoop);
+  }
+
+  _stopAutoScroll() {
+    this._autoScrollActive = false;
+    this._autoScrollSpeed = 0;
+  }
+
+  _updateAutoScrollSpeed(clientY: number) {
+    const root = this.shadowRoot;
+    const content = root?.querySelector(
+      ".tasks__content",
+    ) as HTMLElement | null;
+    if (!content) {
+      this._autoScrollSpeed = 0;
+      return;
+    }
+
+    const rect = content.getBoundingClientRect();
+    const threshold = 50; // pixels from top/bottom to start scrolling
+
+    const distTop = clientY - rect.top;
+    const distBottom = rect.bottom - clientY;
+
+    if (distTop >= 0 && distTop < threshold) {
+      // Near the top: scroll up. Speed is faster the closer to the edge.
+      this._autoScrollSpeed = -((threshold - distTop) / threshold) * 8;
+      this._startAutoScroll();
+    } else if (distBottom >= 0 && distBottom < threshold) {
+      // Near the bottom: scroll down.
+      this._autoScrollSpeed = ((threshold - distBottom) / threshold) * 8;
+      this._startAutoScroll();
+    } else {
+      this._autoScrollSpeed = 0;
     }
   }
 }

@@ -100,6 +100,18 @@ export class ShadowClawTaskServer extends ShadowClawElement {
       enabledToggle.checked = this.orchestrator.taskServerEnabled;
     }
   }
+  async saveTaskServerEnabled(enabled: boolean) {
+    if (!this.orchestrator || !this.db) {
+      return;
+    }
+
+    try {
+      await setTaskServerEnabled(this.orchestrator, this.db, enabled);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving Task Server setting: " + errorMsg, 6000);
+    }
+  }
 
   async saveTaskServerUrl() {
     if (!this.orchestrator || !this.db) {
@@ -126,18 +138,6 @@ export class ShadowClawTaskServer extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving Task Server URL: " + errorMsg, 6000);
-    }
-  }
-  async saveTaskServerEnabled(enabled: boolean) {
-    if (!this.orchestrator || !this.db) {
-      return;
-    }
-
-    try {
-      await setTaskServerEnabled(this.orchestrator, this.db, enabled);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError("Error saving Task Server setting: " + errorMsg, 6000);
     }
   }
 }

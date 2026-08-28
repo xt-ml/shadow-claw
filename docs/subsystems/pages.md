@@ -66,7 +66,7 @@ To prevent deleted static pages from re-appearing on reload:
 
 ## Component Logic (`src/components/shadow-claw-pages/shadow-claw-pages.ts`)
 
-The `shadow-claw-pages` web component handles rendering the UI and displaying file previews:
+The `shadow-claw-pages` web component handles rendering the UI and displaying file previews. Complex tasks (iframe srcdoc construction, swipe gesture detection, storage proxy dispatch, page reordering, anchor navigation, auto-refresh interval parsing, and frontmatter toggles) are extracted into testable, standalone utility modules under `src/components/shadow-claw-pages/utils/`:
 
 ### Navigation & URL State Synchronization
 
@@ -106,7 +106,7 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 2. It is rendered inside a sandboxed `iframe` using `setTrustedSrcdoc`.
 3. To prevent XSS, inline scripts and external scripts are blocked using a nonce-gated Content Security Policy (CSP).
 4. A DOMPurify iframe hook removes unsafe embeds and only preserves iframe `src` values that match the Settings-backed host allowlist.
-5. The iframe loads two bridge scripts: `file-viewer-preview-bridge.js` (intercepts link navigation to prevent iframe self-navigation away from `srcdoc`, relaying application query parameters like `?gameSave=` for generic Web Component re-initialization and routing external links via `window.open`, touch gestures, and `BroadcastChannel` messages under opaque `null` origins) and `iframe-storage-bridge.js` (intercepts `IndexedDB` and `localStorage` security errors caused by opaque origin isolation and proxies CRUD storage requests to `shadow-claw-pages.handleStorageProxyRequest()` via `shadow-claw-storage-proxy` `postMessage` calls).
+5. The iframe loads two bridge scripts: `file-viewer-preview-bridge.js` (intercepts link navigation to prevent iframe self-navigation away from `srcdoc`, relaying application query parameters like `?gameSave=` for generic Web Component re-initialization and routing external links via `window.open`, touch gestures, and `BroadcastChannel` messages under opaque `null` origins) and `iframe-storage-bridge.js` (intercepts `IndexedDB` and `localStorage` security errors caused by opaque origin isolation and proxies CRUD storage requests via `dispatchStorageProxyCommand` in `dispatchStorageProxyCommand.ts` via `shadow-claw-storage-proxy` `postMessage` calls).
 
 ### Frontmatter and Embed Settings
 

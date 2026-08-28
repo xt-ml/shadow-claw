@@ -106,6 +106,10 @@ jest.unstable_mockModule("../../db/getConfig.js", () => ({
   getConfig: jest.fn(async () => "0"),
 }));
 
+jest.unstable_mockModule("./utils/requestConfirmation.js", () => ({
+  requestConfirmation: jest.fn(),
+}));
+
 const { ShadowClawPages } = await import("./shadow-claw-pages.js");
 const { orchestratorStore } = await import("../../stores/orchestrator.js");
 const { readGroupFile } = await import("../../storage/readGroupFile.js");
@@ -118,6 +122,7 @@ const { renderMarkdown } = await import("../../content/markdown.js");
 const { getConfig } = await import("../../db/getConfig.js");
 const { setSanitizedHtml, setTrustedSrcdoc } =
   await import("../../security/trusted-types.js");
+const { requestConfirmation } = await import("./utils/requestConfirmation.js");
 
 describe("shadow-claw-pages", () => {
   beforeEach(() => {
@@ -370,7 +375,7 @@ describe("shadow-claw-pages", () => {
     rendered.innerHTML = "<p>DSD Pre-rendered Markup</p>";
     rendered.hidden = false;
 
-    component._dsdInitialPath = "docs/page.md";
+    (component as any).dsdInitialPath = "docs/page.md";
     component.db = {} as any;
     component.selectedPage = { groupId: "group-1", path: "docs/page.md" };
 
@@ -706,9 +711,9 @@ describe("shadow-claw-pages", () => {
       const component = new ShadowClawPages();
       await component.connectedCallback();
       component.db = {} as any;
-      const spy = jest
-        .spyOn(component, "requestConfirmation")
-        .mockResolvedValue(false);
+      (
+        requestConfirmation as jest.MockedFunction<typeof requestConfirmation>
+      ).mockResolvedValueOnce(false);
 
       const root = component.shadowRoot;
       if (!root) return;
@@ -727,7 +732,7 @@ describe("shadow-claw-pages", () => {
       removeBtn.click();
       await Promise.resolve();
 
-      expect(spy).toHaveBeenCalledWith({
+      expect(requestConfirmation).toHaveBeenCalledWith({
         title: "Remove Page",
         message: expect.stringContaining("docs/first.md"),
         confirmLabel: "Remove",
@@ -740,7 +745,9 @@ describe("shadow-claw-pages", () => {
       const component = new ShadowClawPages();
       await component.connectedCallback();
       component.db = {} as any;
-      jest.spyOn(component, "requestConfirmation").mockResolvedValue(true);
+      (
+        requestConfirmation as jest.MockedFunction<typeof requestConfirmation>
+      ).mockResolvedValueOnce(true);
 
       const root = component.shadowRoot;
       if (!root) return;
@@ -1015,8 +1022,7 @@ describe("shadow-claw-pages", () => {
       const root = component.shadowRoot;
       if (!root) return;
 
-      const spy = jest
-        .spyOn(component, "requestConfirmation")
+      (requestConfirmation as jest.MockedFunction<typeof requestConfirmation>)
         .mockResolvedValueOnce(false)
         .mockResolvedValueOnce(true);
 
@@ -1032,7 +1038,7 @@ describe("shadow-claw-pages", () => {
       // 1. Canceled
       clearBtn.click();
       await Promise.resolve();
-      expect(spy).toHaveBeenNthCalledWith(1, {
+      expect(requestConfirmation).toHaveBeenNthCalledWith(1, {
         title: "Remove All Pages",
         message: expect.stringContaining("Remove ALL saved pages"),
         confirmLabel: "Remove All",

@@ -44,6 +44,19 @@ export default class ShadowClawElement extends HTMLElement {
     this.render();
   }
 
+  disconnectedCallback() {
+    this.disposeCleanups();
+  }
+
+  protected addCleanup(cleanup: () => void): void {
+    this._cleanups.push(cleanup);
+  }
+
+  protected disposeCleanups(): void {
+    this._cleanups.forEach((cleanup) => cleanup());
+    this._cleanups = [];
+  }
+
   protected ensureShadowDialogs(): void {
     if (!this.shadowRoot) {
       return;
@@ -57,19 +70,6 @@ export default class ShadowClawElement extends HTMLElement {
         (dialog as any).ensureDialog();
       }
     }
-  }
-
-  disconnectedCallback() {
-    this.disposeCleanups();
-  }
-
-  protected addCleanup(cleanup: () => void): void {
-    this._cleanups.push(cleanup);
-  }
-
-  protected disposeCleanups(): void {
-    this._cleanups.forEach((cleanup) => cleanup());
-    this._cleanups = [];
   }
 
   render() {}

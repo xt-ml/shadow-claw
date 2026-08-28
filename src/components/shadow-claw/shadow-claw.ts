@@ -63,19 +63,19 @@ export class ShadowClaw extends ShadowClawElement {
   static template = shadowClawTemplate;
 
   activityLogCollapsedOverride: boolean | null = null;
+  chatSidebarHidden: boolean = false;
+  chatSplitViewEnabled: boolean = false;
   currentPage: string = orchestratorStore.sidebarDefaultPage;
   db: ShadowClawDatabase | null = null;
   fallbackClickListenerAttached: boolean = false;
+  filesSidebarHidden: boolean = false;
   headerMainCollapsedOverride: boolean | null = null;
   navigationListenerAttached: boolean = false;
   orchestrator!: Orchestrator;
   pagesSidebarHidden: boolean = false;
-  chatSidebarHidden: boolean = false;
-  tasksSidebarHidden: boolean = false;
-  filesSidebarHidden: boolean = false;
-  chatSplitViewEnabled: boolean = false;
   popstateListener: (() => void) | null = null;
   previousOrchestratorState: OrchestratorDisplayState = "idle";
+  tasksSidebarHidden: boolean = false;
   terminalElement: ShadowClawTerminal | null = null;
   terminalPlacementFrame: number | null = null;
   terminalVisible: boolean = false;

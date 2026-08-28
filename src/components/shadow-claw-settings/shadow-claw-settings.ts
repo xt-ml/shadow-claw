@@ -589,6 +589,39 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
+  async onChatSplitViewToggle(enabled: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../../db/setConfig.js");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.CHAT_SPLIT_VIEW_ENABLED,
+        enabled ? "true" : "false",
+      );
+
+      this.dispatchEvent(
+        new CustomEvent("chat-split-view-change", {
+          detail: { enabled },
+          bubbles: true,
+          composed: true,
+        }),
+      );
+
+      showSuccess(
+        enabled
+          ? "Horizontal Chat split view enabled"
+          : "Horizontal Chat split view disabled",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving Chat split view setting: " + errorMsg, 6000);
+    }
+  }
+
   async onOverridePrerenderSkeletonToggle(enabled: boolean) {
     try {
       setNamespacedItem(
@@ -626,34 +659,36 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
-  async onSidebarHidePagesToggle(hidden: boolean) {
+  async onPagesAutoRefreshInputChange(valSec: number) {
     if (!this.db) {
       return;
     }
+
+    const sec = Math.max(0, Math.min(valSec, 86400));
 
     try {
       const { setConfig } = await import("../../db/setConfig.js");
       await setConfig(
         this.db,
-        CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN,
-        hidden ? "true" : "false",
+        CONFIG_KEYS.PAGES_AUTO_REFRESH_INTERVAL,
+        String(sec),
       );
 
-      this.dispatchEvent(
-        new CustomEvent("sidebar-pages-visibility-change", {
-          detail: { hidden },
-          bubbles: true,
-          composed: true,
+      window.dispatchEvent(
+        new CustomEvent("shadow-claw-pages-auto-refresh-change", {
+          detail: { interval: sec },
         }),
       );
 
       showSuccess(
-        hidden ? "Pages hidden in sidebar" : "Pages shown in sidebar",
+        sec > 0
+          ? `Pages auto refresh set to ${sec}s`
+          : "Pages auto refresh disabled",
         2500,
       );
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      showError("Error saving sidebar Pages visibility: " + errorMsg, 6000);
+      showError("Error saving Pages auto refresh interval: " + errorMsg, 6000);
     }
   }
 
@@ -688,37 +723,6 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
-  async onSidebarHideTasksToggle(hidden: boolean) {
-    if (!this.db) {
-      return;
-    }
-
-    try {
-      const { setConfig } = await import("../../db/setConfig.js");
-      await setConfig(
-        this.db,
-        CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN,
-        hidden ? "true" : "false",
-      );
-
-      this.dispatchEvent(
-        new CustomEvent("sidebar-tasks-visibility-change", {
-          detail: { hidden },
-          bubbles: true,
-          composed: true,
-        }),
-      );
-
-      showSuccess(
-        hidden ? "Tasks hidden in sidebar" : "Tasks shown in sidebar",
-        2500,
-      );
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError("Error saving sidebar Tasks visibility: " + errorMsg, 6000);
-    }
-  }
-
   async onSidebarHideFilesToggle(hidden: boolean) {
     if (!this.db) {
       return;
@@ -750,7 +754,7 @@ export class ShadowClawSettings extends ShadowClawElement {
     }
   }
 
-  async onChatSplitViewToggle(enabled: boolean) {
+  async onSidebarHidePagesToggle(hidden: boolean) {
     if (!this.db) {
       return;
     }
@@ -759,60 +763,56 @@ export class ShadowClawSettings extends ShadowClawElement {
       const { setConfig } = await import("../../db/setConfig.js");
       await setConfig(
         this.db,
-        CONFIG_KEYS.CHAT_SPLIT_VIEW_ENABLED,
-        enabled ? "true" : "false",
+        CONFIG_KEYS.SIDEBAR_PAGES_HIDDEN,
+        hidden ? "true" : "false",
       );
 
       this.dispatchEvent(
-        new CustomEvent("chat-split-view-change", {
-          detail: { enabled },
+        new CustomEvent("sidebar-pages-visibility-change", {
+          detail: { hidden },
           bubbles: true,
           composed: true,
         }),
       );
 
       showSuccess(
-        enabled
-          ? "Horizontal Chat split view enabled"
-          : "Horizontal Chat split view disabled",
+        hidden ? "Pages hidden in sidebar" : "Pages shown in sidebar",
         2500,
       );
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      showError("Error saving Chat split view setting: " + errorMsg, 6000);
+      showError("Error saving sidebar Pages visibility: " + errorMsg, 6000);
     }
   }
 
-  async onPagesAutoRefreshInputChange(valSec: number) {
+  async onSidebarHideTasksToggle(hidden: boolean) {
     if (!this.db) {
       return;
     }
-
-    const sec = Math.max(0, Math.min(valSec, 86400));
 
     try {
       const { setConfig } = await import("../../db/setConfig.js");
       await setConfig(
         this.db,
-        CONFIG_KEYS.PAGES_AUTO_REFRESH_INTERVAL,
-        String(sec),
+        CONFIG_KEYS.SIDEBAR_TASKS_HIDDEN,
+        hidden ? "true" : "false",
       );
 
-      window.dispatchEvent(
-        new CustomEvent("shadow-claw-pages-auto-refresh-change", {
-          detail: { interval: sec },
+      this.dispatchEvent(
+        new CustomEvent("sidebar-tasks-visibility-change", {
+          detail: { hidden },
+          bubbles: true,
+          composed: true,
         }),
       );
 
       showSuccess(
-        sec > 0
-          ? `Pages auto refresh set to ${sec}s`
-          : "Pages auto refresh disabled",
+        hidden ? "Tasks hidden in sidebar" : "Tasks shown in sidebar",
         2500,
       );
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
-      showError("Error saving Pages auto refresh interval: " + errorMsg, 6000);
+      showError("Error saving sidebar Tasks visibility: " + errorMsg, 6000);
     }
   }
 

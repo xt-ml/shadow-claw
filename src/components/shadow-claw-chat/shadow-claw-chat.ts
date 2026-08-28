@@ -469,199 +469,6 @@ export class ShadowClawChat extends ShadowClawElement {
     }
   }
 
-  async checkPromptApiOnboarding(): Promise<void> {
-    if (
-      shouldInstallE2eBridge() &&
-      !(globalThis as any).__SHADOWCLAW_E2E_TEST_ONBOARDING__
-    ) {
-      return;
-    }
-
-    if (!this.db) {
-      this.db = await getDb();
-    }
-    if (!this.db) {
-      return;
-    }
-
-    try {
-      const provider = await getConfig(this.db, CONFIG_KEYS.PROVIDER);
-      const effectiveProvider =
-        typeof provider === "string" && provider.trim()
-          ? provider.trim()
-          : DEFAULT_PROVIDER;
-      if (effectiveProvider !== "prompt_api") {
-        return;
-      }
-
-      const seen = await getConfig(
-        this.db,
-        CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN,
-      );
-      if (isTruthyConfigValue(seen, false)) {
-        return;
-      }
-
-      const root = this.shadowRoot;
-      if (!root) {
-        return;
-      }
-
-      this.ensureShadowDialogs();
-
-      const isNativeSupported = isNativePromptApiSupported();
-      const isPotentiallySupported = isPromptApiPotentiallySupported();
-      const isAvailable = isNativeSupported || isPotentiallySupported;
-
-      const statusCard = root.querySelector(".chat__prompt-api-status-card");
-      if (statusCard instanceof HTMLElement) {
-        statusCard.hidden = !isAvailable;
-      }
-
-      const statusEl = root.querySelector('[data-info="prompt-api-status"]');
-      if (statusEl instanceof HTMLElement) {
-        setSanitizedHtml(
-          statusEl,
-          renderPromptApiStatusHtml(isNativeSupported),
-        );
-      }
-
-      const fallbackCard = root.querySelector(
-        ".chat__prompt-api-fallback-card",
-      );
-      if (fallbackCard instanceof HTMLElement) {
-        fallbackCard.hidden = isAvailable;
-      }
-
-      const modelSelect = root.querySelector(
-        '[data-setting="prompt-api-onboarding-fallback-model"]',
-      ) as HTMLSelectElement | null;
-      if (modelSelect) {
-        const storedFallbackModel = await getConfig(
-          this.db,
-          CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
-        );
-        const currentModel =
-          typeof storedFallbackModel === "string" && storedFallbackModel.trim()
-            ? storedFallbackModel.trim()
-            : DEFAULT_PROMPT_API_FALLBACK_MODEL;
-        modelSelect.value = currentModel;
-      }
-
-      const shadowDialog = root.querySelector(
-        'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]',
-      );
-      if (
-        shadowDialog &&
-        typeof (shadowDialog as any).showModal === "function"
-      ) {
-        (shadowDialog as any).showModal();
-      } else {
-        const dialogEl = root.querySelector("dialog.chat__prompt-api-dialog");
-        if (dialogEl instanceof HTMLDialogElement) {
-          if (typeof dialogEl.showModal === "function") {
-            dialogEl.showModal();
-          } else {
-            dialogEl.setAttribute("open", "");
-          }
-        }
-      }
-    } catch (err) {
-      console.warn("Failed to check Prompt API onboarding:", err);
-    }
-  }
-
-  async bypassPromptApiOnboardingToSettings(): Promise<void> {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    if (!this.db) {
-      this.db = await getDb();
-    }
-
-    if (this.db) {
-      try {
-        await setConfig(
-          this.db,
-          CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN,
-          "true",
-        );
-      } catch (err) {
-        console.warn("Failed to persist Prompt API onboarding status:", err);
-      }
-    }
-
-    const shadowDialog = root.querySelector(
-      'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]',
-    );
-    if (shadowDialog && typeof (shadowDialog as any).close === "function") {
-      (shadowDialog as any).close();
-    } else {
-      const dialogEl = root.querySelector("dialog.chat__prompt-api-dialog");
-      if (dialogEl instanceof HTMLDialogElement) {
-        dialogEl.close();
-      }
-    }
-
-    document.dispatchEvent(
-      new CustomEvent("shadow-claw-navigate", {
-        detail: { page: "settings" },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-  }
-
-  async confirmPromptApiOnboarding(): Promise<void> {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    if (!this.db) {
-      this.db = await getDb();
-    }
-
-    const modelSelect = root.querySelector(
-      '[data-setting="prompt-api-onboarding-fallback-model"]',
-    ) as HTMLSelectElement | null;
-    const selectedModel =
-      modelSelect?.value?.trim() || DEFAULT_PROMPT_API_FALLBACK_MODEL;
-
-    if (this.db) {
-      try {
-        await setConfig(
-          this.db,
-          CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
-          selectedModel,
-        );
-        await setConfig(
-          this.db,
-          CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN,
-          "true",
-        );
-      } catch (err) {
-        console.warn("Failed to persist Prompt API onboarding settings:", err);
-      }
-    }
-
-    const shadowDialog = root.querySelector(
-      'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]',
-    );
-    if (shadowDialog && typeof (shadowDialog as any).close === "function") {
-      (shadowDialog as any).close();
-    } else {
-      const dialogEl = root.querySelector("dialog.chat__prompt-api-dialog");
-      if (dialogEl instanceof HTMLDialogElement) {
-        dialogEl.close();
-      }
-    }
-
-    showSuccess("Prompt API configured", 2500);
-  }
-
   bindInputResizeEvents(inputArea: HTMLElement, handle: HTMLElement): void {
     handle.setAttribute("tabindex", "0");
     handle.setAttribute("role", "separator");
@@ -2155,6 +1962,199 @@ export class ShadowClawChat extends ShadowClawElement {
       text: `${prefix}${manifest}${inlineBlock}`,
       attachments,
     };
+  }
+
+  async bypassPromptApiOnboardingToSettings(): Promise<void> {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    if (!this.db) {
+      this.db = await getDb();
+    }
+
+    if (this.db) {
+      try {
+        await setConfig(
+          this.db,
+          CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN,
+          "true",
+        );
+      } catch (err) {
+        console.warn("Failed to persist Prompt API onboarding status:", err);
+      }
+    }
+
+    const shadowDialog = root.querySelector(
+      'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]',
+    );
+    if (shadowDialog && typeof (shadowDialog as any).close === "function") {
+      (shadowDialog as any).close();
+    } else {
+      const dialogEl = root.querySelector("dialog.chat__prompt-api-dialog");
+      if (dialogEl instanceof HTMLDialogElement) {
+        dialogEl.close();
+      }
+    }
+
+    document.dispatchEvent(
+      new CustomEvent("shadow-claw-navigate", {
+        detail: { page: "settings" },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  async checkPromptApiOnboarding(): Promise<void> {
+    if (
+      shouldInstallE2eBridge() &&
+      !(globalThis as any).__SHADOWCLAW_E2E_TEST_ONBOARDING__
+    ) {
+      return;
+    }
+
+    if (!this.db) {
+      this.db = await getDb();
+    }
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const provider = await getConfig(this.db, CONFIG_KEYS.PROVIDER);
+      const effectiveProvider =
+        typeof provider === "string" && provider.trim()
+          ? provider.trim()
+          : DEFAULT_PROVIDER;
+      if (effectiveProvider !== "prompt_api") {
+        return;
+      }
+
+      const seen = await getConfig(
+        this.db,
+        CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN,
+      );
+      if (isTruthyConfigValue(seen, false)) {
+        return;
+      }
+
+      const root = this.shadowRoot;
+      if (!root) {
+        return;
+      }
+
+      this.ensureShadowDialogs();
+
+      const isNativeSupported = isNativePromptApiSupported();
+      const isPotentiallySupported = isPromptApiPotentiallySupported();
+      const isAvailable = isNativeSupported || isPotentiallySupported;
+
+      const statusCard = root.querySelector(".chat__prompt-api-status-card");
+      if (statusCard instanceof HTMLElement) {
+        statusCard.hidden = !isAvailable;
+      }
+
+      const statusEl = root.querySelector('[data-info="prompt-api-status"]');
+      if (statusEl instanceof HTMLElement) {
+        setSanitizedHtml(
+          statusEl,
+          renderPromptApiStatusHtml(isNativeSupported),
+        );
+      }
+
+      const fallbackCard = root.querySelector(
+        ".chat__prompt-api-fallback-card",
+      );
+      if (fallbackCard instanceof HTMLElement) {
+        fallbackCard.hidden = isAvailable;
+      }
+
+      const modelSelect = root.querySelector(
+        '[data-setting="prompt-api-onboarding-fallback-model"]',
+      ) as HTMLSelectElement | null;
+      if (modelSelect) {
+        const storedFallbackModel = await getConfig(
+          this.db,
+          CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+        );
+        const currentModel =
+          typeof storedFallbackModel === "string" && storedFallbackModel.trim()
+            ? storedFallbackModel.trim()
+            : DEFAULT_PROMPT_API_FALLBACK_MODEL;
+        modelSelect.value = currentModel;
+      }
+
+      const shadowDialog = root.querySelector(
+        'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]',
+      );
+      if (
+        shadowDialog &&
+        typeof (shadowDialog as any).showModal === "function"
+      ) {
+        (shadowDialog as any).showModal();
+      } else {
+        const dialogEl = root.querySelector("dialog.chat__prompt-api-dialog");
+        if (dialogEl instanceof HTMLDialogElement) {
+          if (typeof dialogEl.showModal === "function") {
+            dialogEl.showModal();
+          } else {
+            dialogEl.setAttribute("open", "");
+          }
+        }
+      }
+    } catch (err) {
+      console.warn("Failed to check Prompt API onboarding:", err);
+    }
+  }
+
+  async confirmPromptApiOnboarding(): Promise<void> {
+    const root = this.shadowRoot;
+    if (!root) {
+      return;
+    }
+
+    if (!this.db) {
+      this.db = await getDb();
+    }
+
+    const modelSelect = root.querySelector(
+      '[data-setting="prompt-api-onboarding-fallback-model"]',
+    ) as HTMLSelectElement | null;
+    const selectedModel =
+      modelSelect?.value?.trim() || DEFAULT_PROMPT_API_FALLBACK_MODEL;
+
+    if (this.db) {
+      try {
+        await setConfig(
+          this.db,
+          CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+          selectedModel,
+        );
+        await setConfig(
+          this.db,
+          CONFIG_KEYS.PROMPT_API_ONBOARDING_SEEN,
+          "true",
+        );
+      } catch (err) {
+        console.warn("Failed to persist Prompt API onboarding settings:", err);
+      }
+    }
+
+    const shadowDialog = root.querySelector(
+      'shadow-claw-dialog[dialog-class="chat__prompt-api-dialog"]',
+    );
+    if (shadowDialog && typeof (shadowDialog as any).close === "function") {
+      (shadowDialog as any).close();
+    } else {
+      const dialogEl = root.querySelector("dialog.chat__prompt-api-dialog");
+      if (dialogEl instanceof HTMLDialogElement) {
+        dialogEl.close();
+      }
+    }
+
+    showSuccess("Prompt API configured", 2500);
   }
 
   async downloadAttachment(groupId: string, attachment: MessageAttachment) {

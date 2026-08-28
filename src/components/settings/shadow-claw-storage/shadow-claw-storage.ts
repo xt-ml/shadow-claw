@@ -211,6 +211,35 @@ export class ShadowClawStorage extends ShadowClawElement {
     }
   }
 
+  async handleResetSiteConfig() {
+    if (!this.db) {
+      return;
+    }
+
+    const confirmed = await this.requestConfirmation({
+      title: "Reset Site Config",
+      message:
+        "Allow embedded site-config.json defaults to apply again after the next reload?",
+      confirmLabel: "Reset",
+      cancelLabel: "Cancel",
+    });
+
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await orchestratorStore.resetSiteConfigSeed(this.db);
+      showSuccess(
+        "Site config reset. Reload to apply its defaults again.",
+        5000,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(`Failed to reset site config: ${errorMsg}`, 6000);
+    }
+  }
+
   /**
    * Handle resetting storage directory.
    */
@@ -240,35 +269,6 @@ export class ShadowClawStorage extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError(`Failed to reset storage location: ${errorMsg}`, 6000);
-    }
-  }
-
-  async handleResetSiteConfig() {
-    if (!this.db) {
-      return;
-    }
-
-    const confirmed = await this.requestConfirmation({
-      title: "Reset Site Config",
-      message:
-        "Allow embedded site-config.json defaults to apply again after the next reload?",
-      confirmLabel: "Reset",
-      cancelLabel: "Cancel",
-    });
-
-    if (!confirmed) {
-      return;
-    }
-
-    try {
-      await orchestratorStore.resetSiteConfigSeed(this.db);
-      showSuccess(
-        "Site config reset. Reload to apply its defaults again.",
-        5000,
-      );
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError(`Failed to reset site config: ${errorMsg}`, 6000);
     }
   }
 

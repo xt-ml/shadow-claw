@@ -42,6 +42,8 @@ export class ShadowClawConversations extends ShadowClawElement {
 
   public channelRegistry: ChannelRegistry | null = null;
   public db: ShadowClawDatabase | null = null;
+  private _autoScrollActive = false;
+  private _autoScrollSpeed = 0;
 
   private _draggedGroupId: string | null = null;
   private _effectCleanup: (() => void) | null = null;
@@ -62,8 +64,6 @@ export class ShadowClawConversations extends ShadowClawElement {
   private _pendingRenameName: string | null = null;
   private _touchDraggedGroupId: string | null = null;
   private _touchId: number | null = null;
-  private _autoScrollActive = false;
-  private _autoScrollSpeed = 0;
 
   async connectedCallback() {
     const root = this.shadowRoot;
@@ -1527,65 +1527,6 @@ export class ShadowClawConversations extends ShadowClawElement {
     return el?.closest?.(".conversation-item") || null;
   }
 
-  _startAutoScroll() {
-    if (this._autoScrollActive) {
-      return;
-    }
-    this._autoScrollActive = true;
-
-    const scrollLoop = () => {
-      if (!this._autoScrollActive) {
-        return;
-      }
-
-      const root = this.shadowRoot;
-      const content = root?.querySelector(
-        ".conversation-list",
-      ) as HTMLElement | null;
-      if (content && this._autoScrollSpeed !== 0) {
-        content.scrollTop += this._autoScrollSpeed;
-      }
-
-      requestAnimationFrame(scrollLoop);
-    };
-
-    requestAnimationFrame(scrollLoop);
-  }
-
-  _stopAutoScroll() {
-    this._autoScrollActive = false;
-    this._autoScrollSpeed = 0;
-  }
-
-  _updateAutoScrollSpeed(clientY: number) {
-    const root = this.shadowRoot;
-    const content = root?.querySelector(
-      ".conversation-list",
-    ) as HTMLElement | null;
-    if (!content) {
-      this._autoScrollSpeed = 0;
-      return;
-    }
-
-    const rect = content.getBoundingClientRect();
-    const threshold = 50; // pixels from top/bottom to start scrolling
-
-    const distTop = clientY - rect.top;
-    const distBottom = rect.bottom - clientY;
-
-    if (distTop >= 0 && distTop < threshold) {
-      // Near the top: scroll up. Speed is faster the closer to the edge.
-      this._autoScrollSpeed = -((threshold - distTop) / threshold) * 8;
-      this._startAutoScroll();
-    } else if (distBottom >= 0 && distBottom < threshold) {
-      // Near the bottom: scroll down.
-      this._autoScrollSpeed = ((threshold - distBottom) / threshold) * 8;
-      this._startAutoScroll();
-    } else {
-      this._autoScrollSpeed = 0;
-    }
-  }
-
   _setupDialogListeners() {
     const root = this.shadowRoot as ShadowRoot;
 
@@ -1680,6 +1621,65 @@ export class ShadowClawConversations extends ShadowClawElement {
       e.preventDefault();
       await this._submitCloneDialog();
     });
+  }
+
+  _startAutoScroll() {
+    if (this._autoScrollActive) {
+      return;
+    }
+    this._autoScrollActive = true;
+
+    const scrollLoop = () => {
+      if (!this._autoScrollActive) {
+        return;
+      }
+
+      const root = this.shadowRoot;
+      const content = root?.querySelector(
+        ".conversation-list",
+      ) as HTMLElement | null;
+      if (content && this._autoScrollSpeed !== 0) {
+        content.scrollTop += this._autoScrollSpeed;
+      }
+
+      requestAnimationFrame(scrollLoop);
+    };
+
+    requestAnimationFrame(scrollLoop);
+  }
+
+  _stopAutoScroll() {
+    this._autoScrollActive = false;
+    this._autoScrollSpeed = 0;
+  }
+
+  _updateAutoScrollSpeed(clientY: number) {
+    const root = this.shadowRoot;
+    const content = root?.querySelector(
+      ".conversation-list",
+    ) as HTMLElement | null;
+    if (!content) {
+      this._autoScrollSpeed = 0;
+      return;
+    }
+
+    const rect = content.getBoundingClientRect();
+    const threshold = 50; // pixels from top/bottom to start scrolling
+
+    const distTop = clientY - rect.top;
+    const distBottom = rect.bottom - clientY;
+
+    if (distTop >= 0 && distTop < threshold) {
+      // Near the top: scroll up. Speed is faster the closer to the edge.
+      this._autoScrollSpeed = -((threshold - distTop) / threshold) * 8;
+      this._startAutoScroll();
+    } else if (distBottom >= 0 && distBottom < threshold) {
+      // Near the bottom: scroll down.
+      this._autoScrollSpeed = ((threshold - distBottom) / threshold) * 8;
+      this._startAutoScroll();
+    } else {
+      this._autoScrollSpeed = 0;
+    }
   }
 
   private async _loadProviderModels(

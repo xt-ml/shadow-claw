@@ -62,7 +62,6 @@ import {
   configureCustomElementSecurity,
   installCustomElementDomGuard,
   installCustomElementsRegistryGuard,
-  loadApprovedCustomElementScript,
   loadCustomElementSecurityFromDb,
 } from "../security/custom-element-security.js";
 import {
@@ -2551,36 +2550,6 @@ export class OrchestratorStore {
       installCustomElementDomGuard();
 
       const customElConfig = config.customElements;
-      const customScripts =
-        (typeof customElConfig === "object" && !Array.isArray(customElConfig)
-          ? customElConfig.scripts
-          : customElConfig) ||
-        config.scripts ||
-        config.theme?.scripts;
-
-      if (Array.isArray(customScripts)) {
-        for (const item of customScripts) {
-          const src = typeof item === "string" ? item : item?.src;
-          const type =
-            typeof item === "object" && item?.type ? item.type : "module";
-          const async = typeof item === "object" ? Boolean(item?.async) : false;
-          const defer = typeof item === "object" ? Boolean(item?.defer) : false;
-          if (src) {
-            try {
-              await loadApprovedCustomElementScript(src, {
-                type,
-                async,
-                defer,
-              });
-            } catch (scriptErr) {
-              console.warn(
-                "Failed to load approved custom element script:",
-                scriptErr,
-              );
-            }
-          }
-        }
-      }
 
       // Clear any erroneous group-level toolTags override on DEFAULT_GROUP_ID
       const groups = await listGroups(db);

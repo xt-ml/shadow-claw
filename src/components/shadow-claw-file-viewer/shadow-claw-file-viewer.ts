@@ -28,6 +28,7 @@ import { writeGroupFile } from "../../storage/writeGroupFile.js";
 
 import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
+import { toolsStore } from "../../stores/tools.js";
 
 import { showError, showSuccess } from "../../ui/toast.js";
 import {
@@ -37,6 +38,14 @@ import {
 import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
+import { IframeBroadcastProxy } from "../shadow-claw-pages/iframe-broadcast-proxy.js";
+import {
+  iframeStorageClear,
+  iframeStorageDelete,
+  iframeStorageGet,
+  iframeStorageGetAll,
+  iframeStorageSet,
+} from "../shadow-claw-pages/iframe-storage-proxy.js";
 
 import type { Config } from "dompurify";
 import type { ShadowClawDatabase } from "../../db/types.js";
@@ -110,6 +119,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
   lastOpenedFileName: string = "";
   previewFrameWindow: Window | null = null;
+  broadcastProxy: IframeBroadcastProxy | null = null;
   themeObserver: MutationObserver | null = null;
   viewRenderToken: number = 0;
 
@@ -125,6 +135,17 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     this.setupEffects();
     this.bindEventListeners();
+
+    this.broadcastProxy = new IframeBroadcastProxy(
+      () =>
+        this.previewFrameWindow ||
+        (
+          this.shadowRoot?.querySelector(
+            ".file-content-iframe",
+          ) as HTMLIFrameElement
+        )?.contentWindow ||
+        null,
+    );
 
     window.addEventListener("message", this.handleIframeMessage);
     document.addEventListener("fullscreenchange", this.handleFullscreenChange);
@@ -153,6 +174,8 @@ export class ShadowClawFileViewer extends ShadowClawElement {
   }
 
   disconnectedCallback() {
+    this.broadcastProxy?.dispose();
+    this.broadcastProxy = null;
     window.removeEventListener("message", this.handleIframeMessage);
     document.removeEventListener(
       "fullscreenchange",
@@ -607,7 +630,21 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       type?: unknown;
       href?: unknown;
       height?: unknown;
+      channel?: unknown;
+      payload?: unknown;
     };
+
+    if (
+      payload.type === "shadow-claw-broadcast-result" &&
+      typeof payload.channel === "string"
+    ) {
+      this.broadcastProxy?.handleResultFromIframe(
+        event.source as WindowProxy,
+        payload.channel,
+        payload.payload,
+      );
+      return;
+    }
 
     if (
       payload.type === "shadow-claw-iframe-resize" &&
@@ -624,6 +661,30 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         this.previewFrameWindow = iframe.contentWindow;
         iframe.style.setProperty("height", `${payload.height}px`, "important");
       }
+
+      return;
+    }
+
+    if (payload.type === "shadow-claw-storage-proxy") {
+      if (this.previewFrameWindow && event.source !== this.previewFrameWindow) {
+        return;
+      }
+
+      const p = payload as {
+        requestId?: unknown;
+        method?: unknown;
+        args?: unknown;
+      };
+
+      this.handleStorageProxyRequest(
+        event.source as WindowProxy,
+        String(p.requestId || ""),
+        String(p.method || ""),
+        (p.args && typeof p.args === "object" ? p.args : {}) as Record<
+          string,
+          unknown
+        >,
+      );
 
       return;
     }
@@ -658,6 +719,14 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return;
     }
 
+    const hasGameSave = resolved.searchParams.has("gameSave");
+
+    if (hasGameSave) {
+      this.reloadPreviewWithSearchParams(resolved.search);
+
+      return;
+    }
+
     const isInternal =
       resolved.origin === window.location.origin &&
       (isPossibleAppRoute(resolved.pathname) ||
@@ -680,6 +749,109 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     window.history.pushState({}, "", targetPath);
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
+
+  /**
+   * Handle a storage proxy request from a sandboxed iframe.
+   * Performs the requested storage operation in the parent's origin context
+   * using a namespaced IndexedDB store, then posts the result back.
+   */
+  private async handleStorageProxyRequest(
+    source: WindowProxy,
+    requestId: string,
+    method: string,
+    args: Record<string, unknown>,
+  ): Promise<void> {
+    if (!requestId) {
+      return;
+    }
+
+    const currentFile = fileViewerStore.file;
+    const pageKey = currentFile?.path || currentFile?.name || "__default__";
+
+    try {
+      let result: unknown;
+
+      switch (method) {
+        // localStorage-style operations
+        case "setItem":
+          await iframeStorageSet(
+            pageKey,
+            String(args.key || ""),
+            args.value as string,
+          );
+          break;
+        case "removeItem":
+          await iframeStorageDelete(pageKey, String(args.key || ""));
+          break;
+        case "clear":
+          await iframeStorageClear(pageKey);
+          break;
+        case "getAllItems":
+          result = await iframeStorageGetAll(pageKey);
+          break;
+
+        // IndexedDB-style operations
+        case "idb-get":
+          result = await iframeStorageGet(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+            String(args.key || ""),
+          );
+          break;
+        case "idb-getAll":
+          result = await iframeStorageGetAll(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+          );
+          break;
+        case "idb-put": {
+          const idbKey =
+            args.key != null ? String(args.key) : `__auto_${Date.now()}`;
+          await iframeStorageSet(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+            idbKey,
+            args.value,
+          );
+          result = idbKey;
+          break;
+        }
+        case "idb-delete":
+          await iframeStorageDelete(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+            String(args.key || ""),
+          );
+          break;
+        case "idb-clear":
+          await iframeStorageClear(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+          );
+          break;
+        case "idb-deleteDatabase":
+          await iframeStorageClear(
+            `${pageKey}::idb::${args.dbName}::__default__`,
+          );
+          break;
+        default:
+          throw new Error(`Unknown storage proxy method: ${method}`);
+      }
+
+      source.postMessage(
+        {
+          type: "shadow-claw-storage-proxy-result",
+          requestId,
+          result: result ?? null,
+        },
+        "*",
+      );
+    } catch (err) {
+      source.postMessage(
+        {
+          type: "shadow-claw-storage-proxy-result",
+          requestId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        "*",
+      );
+    }
+  }
 
   hasUnsavedChanges() {
     return this.isEditorDirty;
@@ -1120,6 +1292,13 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
   setupEffects() {
     effect(() => {
+      const declTools = toolsStore.declarativeTools;
+      if (this.broadcastProxy && declTools.length > 0) {
+        this.broadcastProxy.registerChannelsFromTools(declTools);
+      }
+    });
+
+    effect(() => {
       const file = fileViewerStore.file;
       const renderToken = ++this.viewRenderToken;
       const root = this.shadowRoot;
@@ -1282,7 +1461,30 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     return parsed.content || "";
   }
 
-  async buildIframePreviewSrcdoc(file: any) {
+  private async reloadPreviewWithSearchParams(
+    searchParams: string,
+  ): Promise<void> {
+    const file = fileViewerStore.file;
+    if (!file) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    const iframe = root?.querySelector(
+      ".file-viewer__iframe",
+    ) as HTMLIFrameElement;
+    if (!iframe) {
+      return;
+    }
+
+    this.previewFrameWindow = null;
+    setTrustedSrcdoc(
+      iframe,
+      await this.buildIframePreviewSrcdoc(file, searchParams),
+    );
+  }
+
+  async buildIframePreviewSrcdoc(file: any, searchParams: string = "") {
     if (/\.svg$/i.test(file.name)) {
       return file.content;
     }
@@ -1303,6 +1505,9 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     // Nonce-gated CSP: only the bridge script and approved custom element scripts may run.
     const nonce = crypto.randomUUID().replace(/-/g, "");
     const bridgeScriptUrl = this.getIframeBridgeScriptUrl();
+    const storageBridgeScriptUrl = applyBasePath(
+      "/assets/iframe-storage-bridge.js",
+    );
 
     const approvedScripts = getApprovedCustomElementScripts();
     const cspContent = getIframeCsp(nonce);
@@ -1315,6 +1520,10 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       configScript && configScript.textContent
         ? `<script id="shadow-claw-site-config" type="application/json">${configScript.textContent}</script>`
         : "";
+
+    const searchScriptHtml = searchParams
+      ? `<script nonce="${nonce}">(function(){try{Object.defineProperty(window.location,"search",{get:function(){return ${JSON.stringify(searchParams)};},configurable:true});}catch(e){}})();</script>`
+      : "";
 
     const customElementScriptsHtml = approvedScripts
       .map((src) => {
@@ -1342,7 +1551,9 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       `<html class="${getIframeHtmlClass()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`,
       `<meta http-equiv="Content-Security-Policy" content="${cspContent}">`,
       `<base href="${applyBasePath(getFileRouteDirPath(orchestratorStore.activeGroupId, filePath))}" target="_blank">`,
+      searchScriptHtml,
       siteConfigHtml,
+      `<script src="${storageBridgeScriptUrl}" nonce="${nonce}"></script>`,
       `<script src="${bridgeScriptUrl}" nonce="${nonce}"></script>`,
       getIframeThemeStyleHtml(),
       themeStylesheetLink,

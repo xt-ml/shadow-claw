@@ -83,6 +83,10 @@ describe("static-files-middleware", () => {
     );
 
     middleware(req, res, next);
+    expect(res.setHeader).toHaveBeenCalledWith(
+      "Access-Control-Allow-Origin",
+      "*",
+    );
     expect(res.setHeader).toHaveBeenCalledWith("Cache-Control", "no-cache");
   });
 

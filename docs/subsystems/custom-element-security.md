@@ -66,15 +66,20 @@ Registers `uponSanitizeElement` and `afterSanitizeElements` hooks with DOMPurify
 
 ### 5. Sandboxed Previews & CSP (`getIframeCsp`, `getIframeSandboxPolicy`)
 
-- **Default Sandbox Policy:** `allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox`. Notably, `allow-same-origin` is omitted by default to ensure maximum isolation.
+- **Default Sandbox Policy:** `allow-modals allow-scripts allow-popups allow-popups-to-escape-sandbox`. Notably, `allow-same-origin` is omitted by default to eliminate Chrome sandbox escape warnings and enforce strict opaque-origin (`null`) isolation.
+- **Single-Load Sandboxed Execution:** Custom element scripts (`customElements.scripts`) are executed exclusively inside sandboxed preview `<iframe>` instances (`iframe.srcdoc`) and are deliberately excluded from injection into the parent document shell (`index.html`). This guarantees single-load execution of custom elements and isolates element styles and scripts from the parent application shell.
+- **Transparent Storage Proxy Bridge (`iframe-storage-bridge.js` & `iframe-storage-proxy.ts`):** Because browsers deny direct `IndexedDB` and `localStorage` access in `null`-origin sandboxes, ShadowClaw injects `iframe-storage-bridge.js` into preview iframes. The bridge detects storage security errors and polyfills `indexedDB` and `localStorage` by proxying CRUD operations over `postMessage` (`shadow-claw-storage-proxy`). The parent frame receives these messages and executes them via `iframe-storage-proxy.ts` against a namespaced IndexedDB key-value store (`shadow-claw-iframe-storage`), giving interactive custom elements (like 3D game engines and canvas sandboxes) full storage capabilities without granting same-origin privileges.
+- **Declarative BroadcastChannel Proxy Bridge (`file-viewer-preview-bridge.js` & `iframe-broadcast-proxy.ts`):** Browser `BroadcastChannel` instances are origin-partitioned and blocked under opaque `null` origins. ShadowClaw provides a zero-config, origin-agnostic `IframeBroadcastProxy` that automatically scans enabled declarative tools for `BroadcastChannel` instantiation patterns and relays messages bi-directionally between parent/worker tools and the sandboxed iframe. An `isRelayingCommandFromParent` guard inside the iframe bridge suppresses duplicate result relay to eliminate command echo feedback loops.
+- **Local Static CORS Headers:** ShadowClaw's static file middleware sets `Access-Control-Allow-Origin: *` so sandboxed opaque-origin (`null`) iframes can fetch local custom element adapter scripts and assets during development.
 - **Nonce-gated CSP:** Generates strict `script-src`, `worker-src`, `connect-src`, `style-src`, and `img-src` directives dynamically incorporating active nonce tokens and approved script hosts.
 
 ### 6. Approved Script Loader (`loadApprovedCustomElementScript`)
 
-Loads remote custom element scripts dynamically:
+Validates remote custom element scripts dynamically:
 
 - Validates URL protocols (restricting to `http:`/`https:`) and validates hostnames against `activeHostMatchers`.
 - Converts URLs to Trusted Types via `toTrustedScriptUrl()`.
+- Custom element scripts execute exclusively inside sandboxed preview `<iframe>` environments (`iframe.srcdoc`) with `allow="fullscreen"` permissions, eliminating duplicate initialization and protecting the main application shell context.
 
 ---
 

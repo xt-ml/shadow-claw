@@ -49,6 +49,9 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
   app.use(expressUrlrewrite(/^(.+)\/index\.html$/, "$1/"));
 
   app.use((req: Request, res: Response, next: NextFunction) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+
     const requestPath = new URL(req.originalUrl, "http://localhost").pathname;
     const isWebVMAsset =
       requestPath.startsWith("/assets/v86.9pfs/") ||

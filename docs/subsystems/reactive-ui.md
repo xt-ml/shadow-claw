@@ -327,7 +327,7 @@ ShadowClaw uses a centralized frontend routing system based on the `shadow-claw-
 - **Special Links**: Links starting with `/#` (e.g., `/#Chat`, `/#Files?groupId=xyz&path=doc.md`) are intercepted by the `handleSpecialLinkNavigation` utility and dispatched as navigation events.
 - **Cross-Conversation Linking**: Query parameters (`groupId`, `path`, `anchor`) allow linking directly to a specific file or page within a different conversation group.
 - **Anchor Scrolling & Highlighting**: When navigating to a file with an anchor (e.g., `#L10-L20` or `#heading-id`), the File Viewer and Pages components automatically scroll the target into view and highlight the relevant lines.
-- **Link Interception**: `ShadowClawFileViewer` and `ShadowClawPages` use a shared bridge script (`file-viewer-preview-bridge.js`) inside their sandboxed iframes to intercept link clicks and post them to the parent window for workspace-relative routing.
+- **Link Interception & Storage Proxying**: `ShadowClawFileViewer` and `ShadowClawPages` inject two specialized bridge scripts inside sandboxed preview iframes: `file-viewer-preview-bridge.js` (intercepts all non-hash link clicks to prevent sandboxed iframe self-navigation away from `srcdoc`, relays application state parameters like `?gameSave=` for generic Web Component re-initialization, and handles touch gestures and iframe resize events) and `iframe-storage-bridge.js` (detects opaque-origin storage security errors and transparently proxies `IndexedDB` and `localStorage` operations over `postMessage`).
 
 #### Configuration
 

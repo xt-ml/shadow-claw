@@ -108,7 +108,7 @@ describe("apply-site-config", () => {
         '<meta name="theme-color" content="#111c12" />',
       );
       expect(patched).toContain('<html lang="en-US"');
-      expect(patched).toContain(
+      expect(patched).not.toContain(
         '<script type="module" src="https://kherrick.github.io/block-garden/block-garden-bundle-min.mjs"></script>',
       );
 
@@ -161,7 +161,7 @@ describe("apply-site-config", () => {
       },
     );
 
-    it("blocks scripts from unapproved domains during build patching", () => {
+    it("blocks scripts from unapproved domains during build patching of embedded site-config", () => {
       const config = {
         customElements: {
           allowedElements: ["block-garden"],

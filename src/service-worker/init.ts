@@ -291,50 +291,58 @@ function handleServiceWorkerControllerChange() {
   }
 }
 
-if ("serviceWorker" in navigator) {
-  // Workbox registers the service worker from script URL sinks.
-  // Ensure a default Trusted Types policy exists before Workbox executes.
-  ensureDefaultTrustedTypesPolicy();
+try {
+  if (
+    typeof navigator !== "undefined" &&
+    "serviceWorker" in navigator &&
+    navigator.serviceWorker
+  ) {
+    // Workbox registers the service worker from script URL sinks.
+    // Ensure a default Trusted Types policy exists before Workbox executes.
+    ensureDefaultTrustedTypesPolicy();
 
-  const wb = new Workbox(
-    toDefaultTrustedScriptUrl("service-worker.js") as string,
-  );
+    const wb = new Workbox(
+      toDefaultTrustedScriptUrl("service-worker.js") as string,
+    );
 
-  wb.addEventListener("waiting", async () => {
-    if (hasRecentUpdateFailure()) {
-      return;
+    wb.addEventListener("waiting", async () => {
+      if (hasRecentUpdateFailure()) {
+        return;
+      }
+
+      if (hasActiveUpdateIntent()) {
+        await applyPendingUpdate(wb);
+
+        return;
+      }
+
+      if (await confirmServiceWorkerUpdate()) {
+        beginUpdateIntent();
+        await applyPendingUpdate(wb);
+      }
+    });
+
+    wb.addEventListener("controlling", () => {
+      handleServiceWorkerControllerChange();
+    });
+
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      handleServiceWorkerControllerChange();
+    });
+
+    const registerSW = () => {
+      // Delay registration for 10 seconds to avoid blocking main thread startup.
+      globalThis.setTimeout(() => {
+        wb.register();
+      }, 10_000);
+    };
+
+    if (document.readyState === "complete") {
+      registerSW();
+    } else {
+      globalThis.addEventListener("load", registerSW);
     }
-
-    if (hasActiveUpdateIntent()) {
-      await applyPendingUpdate(wb);
-
-      return;
-    }
-
-    if (await confirmServiceWorkerUpdate()) {
-      beginUpdateIntent();
-      await applyPendingUpdate(wb);
-    }
-  });
-
-  wb.addEventListener("controlling", () => {
-    handleServiceWorkerControllerChange();
-  });
-
-  navigator.serviceWorker.addEventListener("controllerchange", () => {
-    handleServiceWorkerControllerChange();
-  });
-
-  const registerSW = () => {
-    // Delay registration for 10 seconds to avoid blocking main thread startup.
-    globalThis.setTimeout(() => {
-      wb.register();
-    }, 10_000);
-  };
-
-  if (document.readyState === "complete") {
-    registerSW();
-  } else {
-    globalThis.addEventListener("load", registerSW);
   }
+} catch {
+  // Ignored in sandboxed cross-origin iframes without allow-same-origin
 }

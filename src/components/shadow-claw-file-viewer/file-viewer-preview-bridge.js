@@ -13,8 +13,71 @@
 (function () {
   "use strict";
 
+  // ---------------------------------------------------------------------------
+  // BroadcastChannel Opaque-Origin Proxy Bridge
+  // ---------------------------------------------------------------------------
+  // When allow-same-origin is omitted from sandboxed preview iframes, the iframe
+  // operates under a null (opaque) origin. Native BroadcastChannel instances are
+  // partitioned by origin, preventing direct communication between parent/worker
+  // tools and the iframe.
+  //
+  // This bridge wraps window.BroadcastChannel inside the iframe so that any
+  // message posted by iframe scripts (e.g., tool responses) is automatically
+  // relayed to the parent window via postMessage. It also listens for commands
+  // posted from the parent window and re-emits them to the iframe's BroadcastChannel.
+  // ---------------------------------------------------------------------------
+  var isRelayingCommandFromParent = false;
+
+  if (
+    typeof BroadcastChannel !== "undefined" &&
+    !window._shadowClawBcBridgeInstalled
+  ) {
+    window._shadowClawBcBridgeInstalled = true;
+    var NativeBroadcastChannel = window.BroadcastChannel;
+    var origPostMessage = NativeBroadcastChannel.prototype.postMessage;
+
+    NativeBroadcastChannel.prototype.postMessage = function (message) {
+      origPostMessage.call(this, message);
+      if (isRelayingCommandFromParent) {
+        return;
+      }
+      try {
+        if (window.parent && window.parent !== window) {
+          window.parent.postMessage(
+            {
+              type: "shadow-claw-broadcast-result",
+              channel: this.name,
+              payload: message,
+            },
+            "*",
+          );
+        }
+      } catch (e) {
+        // Ignore postMessage transfer errors
+      }
+    };
+  }
+
   window.addEventListener("message", function (event) {
     if (!event.data || typeof event.data !== "object") {
+      return;
+    }
+
+    if (event.data.type === "shadow-claw-broadcast-command") {
+      var channelName = event.data.channel;
+      var payload = event.data.payload;
+      if (channelName && typeof NativeBroadcastChannel !== "undefined") {
+        try {
+          var bc = new NativeBroadcastChannel(channelName);
+          isRelayingCommandFromParent = true;
+          bc.postMessage(payload);
+          isRelayingCommandFromParent = false;
+          bc.close();
+        } catch (e) {
+          isRelayingCommandFromParent = false;
+          // Ignore command relay errors
+        }
+      }
       return;
     }
 
@@ -40,6 +103,58 @@
       } else {
         document.documentElement.classList.remove("dark-mode");
       }
+    }
+
+    if (event.data.type === "shadow-claw-update-url-params") {
+      var searchStr = event.data.search || "";
+      if (searchStr) {
+        try {
+          window.history.replaceState(
+            null,
+            "",
+            window.location.pathname + searchStr,
+          );
+        } catch (e) {}
+
+        try {
+          window.dispatchEvent(new Event("popstate"));
+          window.dispatchEvent(new Event("locationchange"));
+        } catch (e) {}
+
+        var customEls = document.querySelectorAll("*");
+        var retriggered = false;
+        for (var i = 0; i < customEls.length; i++) {
+          var el = customEls[i];
+          if (el.tagName && el.tagName.indexOf("-") !== -1 && el.parentNode) {
+            try {
+              var cb = el.connectedCallback;
+              var clone = el.cloneNode(true);
+              if (typeof cb === "function") {
+                clone.connectedCallback = cb;
+              }
+              el.parentNode.replaceChild(clone, el);
+              if (typeof clone.connectedCallback === "function") {
+                try {
+                  clone.connectedCallback();
+                } catch (e3) {}
+              }
+              retriggered = true;
+            } catch (err) {
+              if (typeof el.connectedCallback === "function") {
+                try {
+                  el.connectedCallback();
+                  retriggered = true;
+                } catch (e2) {}
+              }
+            }
+          }
+        }
+
+        if (!retriggered) {
+          window.location.reload();
+        }
+      }
+      return;
     }
   });
 
@@ -267,16 +382,7 @@
       return;
     }
 
-    // External links: open in new tab (base target=_blank handles this).
-    // We intercept everything that looks like it could be a workspace/app link.
-    var isExternal =
-      /^(?:https?|ftp|mailto|tel):\/\//i.test(href) || href.startsWith("//");
-
-    if (isExternal) {
-      return;
-    }
-
-    // All other hrefs are potentially workspace links — intercept and postMessage.
+    // Intercept all links so sandboxed preview iframes never navigate away from srcdoc.
     event.preventDefault();
 
     window.parent.postMessage(

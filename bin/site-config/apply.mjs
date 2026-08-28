@@ -273,30 +273,11 @@ function patchIndexHtml(html, config) {
     }
   }
 
-  // --- Custom scripts & custom elements injection ---
-  const { rawScripts, allowedDomains } = resolveCustomElementScripts(
-    config,
-    theme,
-  );
-  const approvedEntries = getApprovedCustomElementScripts(
-    rawScripts,
-    allowedDomains,
-    console.warn,
-  );
-  const scriptTags = buildCustomElementScriptTags(approvedEntries, escapeHtml);
-
-  if (scriptTags) {
-    if (
-      /<script\s+type="module"\s+src="index\.js"\s*><\/script>/iu.test(next)
-    ) {
-      next = next.replace(
-        /(<script\s+type="module"\s+src="index\.js"\s*><\/script>)/iu,
-        `${scriptTags}\n    $1`,
-      );
-    } else {
-      next = insertBeforeClosingHead(next, `${scriptTags}`);
-    }
-  }
+  // --- Custom elements script resolution ---
+  // Custom element scripts are executed exclusively inside sandboxed preview iframes
+  // (srcdoc), not in the outer application shell document, to ensure single-load
+  // execution and prevent style pollution in the outer shell.
+  const { allowedDomains } = resolveCustomElementScripts(config, theme);
 
   // --- Embed site-config.json for runtime boot-time seeding ---
   // Clone and sanitize embedded config to exclude any rejected scripts

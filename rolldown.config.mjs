@@ -379,6 +379,10 @@ const configs = [
             src: "src/components/shadow-claw-file-viewer/file-viewer-preview-bridge.js",
             dest: "dist/public/assets",
           },
+          {
+            src: "src/components/shadow-claw-file-viewer/iframe-storage-bridge.js",
+            dest: "dist/public/assets",
+          },
           { src: "src/subsystems/channels/bindings", dest: "dist/public" },
         ],
         copyOnce: true,

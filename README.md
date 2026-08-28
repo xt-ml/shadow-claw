@@ -46,7 +46,7 @@ A fully-functional agent runtime that runs entirely in the browser—no AI proce
 - **Web Share Target** — Receive files/URLs directly from OS share sheet
 - **Scheduled tasks** — Cron expressions with server-side persistence and Web Push
 - **Git integration** — Clone, branch, merge (with conflict reports), push/pull
-- **File viewer** — Syntax highlighting (locally bundled CSS, no CDN), PDF preview, media playback, Web Share, native/fallback fullscreen, relative image workspace resolving, and configurable iframe embed sanitization; iframe sandbox hardened (no `allow-same-origin`)
+- **File viewer** — Syntax highlighting (locally bundled CSS, no CDN), PDF preview, media playback, Web Share, native/fallback fullscreen, relative image workspace resolving, and configurable iframe embed sanitization; hardened opaque-origin iframe sandbox (no `allow-same-origin`) with transparent `postMessage` storage proxy bridge (`IndexedDB`/`localStorage`), programmatic navigation interception (`location.href`, `assign()`, `replace()`), `showOpenFilePicker`/`showSaveFilePicker` polyfills, and declarative `BroadcastChannel` proxying
 - **Files browser** — Clipboard-driven Cut/Copy/Paste actions, hidden Paste button when empty, folder self-paste protection, inter-group transfers, and conflict resolution (rename/overwrite)
 
 ## Architecture
@@ -245,7 +245,7 @@ ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and 
 - **No plaintext secrets on disk** — encrypted before storage
 - **Trusted Types enforcement** — idempotent `"default"` policy (`src/security/default-trusted-types-policy.ts`) registered at boot via `theme-init.ts`; `getPolicy()` fallback prevents duplicate-creation errors on module reload
 - **Custom element security guards** — `installCustomElementsRegistryGuard` and `installCustomElementDomGuard` prevent unauthorized custom element registration and dynamic DOM injection, strictly enforcing allowlists from `site-config.json` or storage
-- **Iframe sandbox & CSP hardening** — sandboxed preview iframes omit `allow-same-origin` by default and apply a nonce-gated Content Security Policy with domain restrictions
+- **Iframe sandbox & CSP hardening** — sandboxed preview iframes omit `allow-same-origin` by default to enforce opaque-origin (`null`) isolation without Chrome sandbox escape warnings, while injecting a transparent `postMessage` storage proxy bridge (`iframe-storage-bridge.js`) to provide namespaced `IndexedDB` and `localStorage` persistence for custom elements, trapping `ServiceWorker`/`caches` `SecurityError` rejections, polyfilling `showOpenFilePicker`/`showSaveFilePicker`, and relaying programmatic/link navigation and declarative `BroadcastChannel` messages via `IframeBroadcastProxy`
 - **Iframe embed sanitization** — DOMPurify-based iframe allowlisting protects markdown and HTML previews, with Settings-backed host patterns and a safe default host list
 - **SSRF proxy hardening** — `/proxy` blocks non-HTTP/S schemes and private/loopback IP ranges by default; bypassed via `--allow-private-proxy` flag or the authenticated service-worker JSON format
 - **Prompt injection defense** — external tool outputs (`fetch_url`, `web_search`, `remote_mcp_call_tool`) are structurally wrapped in `UNTRUSTED` delimiters; system prompt includes explicit anti-injection instructions when untrusted-content tools are active

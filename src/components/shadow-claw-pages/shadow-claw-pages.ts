@@ -34,6 +34,7 @@ import { getStaticPageContent } from "../../storage/staticMainSite.js";
 
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { fileViewerStore } from "../../stores/file-viewer.js";
+import { toolsStore } from "../../stores/tools.js";
 
 import { showError, showSuccess, showWarning } from "../../ui/toast.js";
 import {
@@ -57,6 +58,15 @@ import {
   isAllowedCustomElement,
 } from "../../security/custom-element-security.js";
 import ShadowClawElement from "../shadow-claw-element.js";
+
+import {
+  iframeStorageClear,
+  iframeStorageDelete,
+  iframeStorageGet,
+  iframeStorageGetAll,
+  iframeStorageSet,
+} from "./iframe-storage-proxy.js";
+import { IframeBroadcastProxy } from "./iframe-broadcast-proxy.js";
 
 import "../common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.js";
 import "../shadow-claw-page-header/shadow-claw-page-header.js";
@@ -109,6 +119,7 @@ export class ShadowClawPages extends ShadowClawElement {
   pageFrontmatter = new Signal.State<Record<string, any> | null>(null);
 
   previewFrameWindow: Window | null = null;
+  broadcastProxy: IframeBroadcastProxy | null = null;
 
   renderToken: number = 0;
 
@@ -500,6 +511,17 @@ export class ShadowClawPages extends ShadowClawElement {
 
     await orchestratorStore.whenInitialized;
 
+    this.broadcastProxy = new IframeBroadcastProxy(
+      () =>
+        this.previewFrameWindow ||
+        (
+          this.shadowRoot?.querySelector(
+            "[data-pages-iframe]",
+          ) as HTMLIFrameElement
+        )?.contentWindow ||
+        null,
+    );
+
     window.addEventListener("message", this.handleIframeMessage);
     document.addEventListener("visibilitychange", this.handleVisibilityChange);
     window.addEventListener("focus", this.handleWindowFocus);
@@ -654,6 +676,8 @@ export class ShadowClawPages extends ShadowClawElement {
       this.handleFileSaved,
     );
     document.removeEventListener("keydown", this.handleKeyDown);
+    this.broadcastProxy?.dispose();
+    this.broadcastProxy = null;
     this.previewFrameWindow = null;
     super.disconnectedCallback?.();
   }
@@ -725,7 +749,43 @@ export class ShadowClawPages extends ShadowClawElement {
       href?: unknown;
       height?: unknown;
       direction?: unknown;
+      requestId?: unknown;
+      method?: unknown;
+      args?: unknown;
+      channel?: unknown;
+      payload?: unknown;
     };
+
+    if (
+      payload.type === "shadow-claw-broadcast-result" &&
+      typeof payload.channel === "string"
+    ) {
+      this.broadcastProxy?.handleResultFromIframe(
+        event.source as WindowProxy,
+        payload.channel,
+        payload.payload,
+      );
+      return;
+    }
+
+    // Storage proxy: handle requests from sandboxed iframes that lack
+    // IndexedDB/localStorage access due to opaque-origin isolation.
+    if (payload.type === "shadow-claw-storage-proxy") {
+      if (this.previewFrameWindow && event.source !== this.previewFrameWindow) {
+        return;
+      }
+
+      this.handleStorageProxyRequest(
+        event.source as WindowProxy,
+        String(payload.requestId || ""),
+        String(payload.method || ""),
+        (payload.args && typeof payload.args === "object"
+          ? payload.args
+          : {}) as Record<string, unknown>,
+      );
+
+      return;
+    }
 
     if (
       payload.type === "shadow-claw-swipe" &&
@@ -791,6 +851,14 @@ export class ShadowClawPages extends ShadowClawElement {
       return;
     }
 
+    const hasGameSave = resolved.searchParams.has("gameSave");
+
+    if (hasGameSave) {
+      this.reloadPreviewWithSearchParams(resolved.search);
+
+      return;
+    }
+
     const isInternal =
       resolved.origin === window.location.origin &&
       (isPossibleAppRoute(resolved.pathname) ||
@@ -815,6 +883,108 @@ export class ShadowClawPages extends ShadowClawElement {
     window.history.pushState({}, "", targetPath);
     window.dispatchEvent(new PopStateEvent("popstate"));
   };
+
+  /**
+   * Handle a storage proxy request from a sandboxed iframe.
+   * Performs the requested storage operation in the parent's origin context
+   * using a namespaced IndexedDB store, then posts the result back.
+   */
+  private async handleStorageProxyRequest(
+    source: WindowProxy,
+    requestId: string,
+    method: string,
+    args: Record<string, unknown>,
+  ): Promise<void> {
+    if (!requestId) {
+      return;
+    }
+
+    const pageKey = this.selectedPage?.path || "__default__";
+
+    try {
+      let result: unknown;
+
+      switch (method) {
+        // localStorage-style operations
+        case "setItem":
+          await iframeStorageSet(
+            pageKey,
+            String(args.key || ""),
+            args.value as string,
+          );
+          break;
+        case "removeItem":
+          await iframeStorageDelete(pageKey, String(args.key || ""));
+          break;
+        case "clear":
+          await iframeStorageClear(pageKey);
+          break;
+        case "getAllItems":
+          result = await iframeStorageGetAll(pageKey);
+          break;
+
+        // IndexedDB-style operations
+        case "idb-get":
+          result = await iframeStorageGet(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+            String(args.key || ""),
+          );
+          break;
+        case "idb-getAll":
+          result = await iframeStorageGetAll(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+          );
+          break;
+        case "idb-put": {
+          const idbKey =
+            args.key != null ? String(args.key) : `__auto_${Date.now()}`;
+          await iframeStorageSet(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+            idbKey,
+            args.value,
+          );
+          result = idbKey;
+          break;
+        }
+        case "idb-delete":
+          await iframeStorageDelete(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+            String(args.key || ""),
+          );
+          break;
+        case "idb-clear":
+          await iframeStorageClear(
+            `${pageKey}::idb::${args.dbName}::${args.storeName}`,
+          );
+          break;
+        case "idb-deleteDatabase":
+          await iframeStorageClear(
+            `${pageKey}::idb::${args.dbName}::__default__`,
+          );
+          break;
+        default:
+          throw new Error(`Unknown storage proxy method: ${method}`);
+      }
+
+      source.postMessage(
+        {
+          type: "shadow-claw-storage-proxy-result",
+          requestId,
+          result: result ?? null,
+        },
+        "*",
+      );
+    } catch (err) {
+      source.postMessage(
+        {
+          type: "shadow-claw-storage-proxy-result",
+          requestId,
+          error: err instanceof Error ? err.message : String(err),
+        },
+        "*",
+      );
+    }
+  }
 
   isHtmlPath(path: string): boolean {
     return /\.(html?|xhtml)$/iu.test(path);
@@ -1446,6 +1616,15 @@ export class ShadowClawPages extends ShadowClawElement {
   }
 
   setupEffects() {
+    this.addCleanup(
+      effect(() => {
+        const declTools = toolsStore.declarativeTools;
+        if (this.broadcastProxy && declTools.length > 0) {
+          this.broadcastProxy.registerChannelsFromTools(declTools);
+        }
+      }),
+    );
+
     // Effect 1: Render the sidebar list and header.
     // Depends on: pages, groups, activePinnedPage (via getSelectedPageIndex), and pageFrontmatter.
     this.addCleanup(
@@ -1532,9 +1711,37 @@ export class ShadowClawPages extends ShadowClawElement {
     }
   }
 
+  private async reloadPreviewWithSearchParams(
+    searchParams: string,
+  ): Promise<void> {
+    if (!this.selectedPage || !this._renderedContent) {
+      return;
+    }
+
+    const root = this.shadowRoot;
+    const rendered = root?.querySelector("#rendered") as HTMLElement;
+    if (!root || !rendered) {
+      return;
+    }
+
+    const parsedFrontmatter = splitFrontmatter(this._renderedContent);
+    const iframe = this.ensurePreviewIframe(root, rendered);
+    iframe.hidden = false;
+    this.previewFrameWindow = null;
+    setTrustedSrcdoc(
+      iframe,
+      await this.buildHtmlPageSrcdoc(
+        parsedFrontmatter.content,
+        this.selectedPage.path,
+        searchParams,
+      ),
+    );
+  }
+
   async buildHtmlPageSrcdoc(
     content: string,
     filePath: string,
+    searchParams: string = "",
   ): Promise<string> {
     const resolvedHtml = this.rewriteWorkspacePreviewHtml(content, filePath);
     const groupId =
@@ -1552,6 +1759,9 @@ export class ShadowClawPages extends ShadowClawElement {
     const bridgeScriptUrl = applyBasePath(
       "/assets/file-viewer-preview-bridge.js",
     );
+    const storageBridgeScriptUrl = applyBasePath(
+      "/assets/iframe-storage-bridge.js",
+    );
 
     const approvedScripts = getApprovedCustomElementScripts();
     const cspContent = getIframeCsp(nonce);
@@ -1564,6 +1774,10 @@ export class ShadowClawPages extends ShadowClawElement {
       configScript && configScript.textContent
         ? `<script id="shadow-claw-site-config" type="application/json">${configScript.textContent}</script>`
         : "";
+
+    const searchScriptHtml = searchParams
+      ? `<script nonce="${nonce}">(function(){try{Object.defineProperty(window.location,"search",{get:function(){return ${JSON.stringify(searchParams)};},configurable:true});}catch(e){}})();</script>`
+      : "";
 
     const customElementScriptsHtml = approvedScripts
       .map((src) => {
@@ -1591,7 +1805,9 @@ export class ShadowClawPages extends ShadowClawElement {
       `<html class="${getIframeHtmlClass()}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">`,
       `<meta http-equiv="Content-Security-Policy" content="${cspContent}">`,
       `<base href="${this.getPageRouteDirectory(filePath)}" target="_blank">`,
+      searchScriptHtml,
       siteConfigHtml,
+      `<script src="${storageBridgeScriptUrl}" nonce="${nonce}"></script>`,
       `<script src="${bridgeScriptUrl}" nonce="${nonce}"></script>`,
       getIframeThemeStyleHtml(),
       themeStylesheetLink,

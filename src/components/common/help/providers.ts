@@ -165,5 +165,6 @@ export function buildProviderHelpDialogOptions(
     details,
     links,
     confirmLabel: "OK",
+    autoCloseSeconds: 30,
   };
 }

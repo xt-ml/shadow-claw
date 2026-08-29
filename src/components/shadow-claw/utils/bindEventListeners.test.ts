@@ -882,6 +882,7 @@ describe("bindEventListeners", () => {
         title: "Peer Connection Error",
         message: "Failed to communicate with peer peer123: Connection timeout",
         confirmLabel: "Dismiss",
+        autoCloseSeconds: 30,
       });
     });
 
@@ -913,6 +914,7 @@ describe("bindEventListeners", () => {
         title: "Peer Connection Error",
         message: "PeerJS error: Some error",
         confirmLabel: "Dismiss",
+        autoCloseSeconds: 30,
       });
     });
   });

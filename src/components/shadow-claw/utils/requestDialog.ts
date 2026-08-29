@@ -30,6 +30,9 @@ export async function requestDialog(
   const cancelBtn = shadow.querySelector(
     ".app-dialog__btn--cancel",
   ) as HTMLButtonElement | null;
+  const countdownEl = shadow.querySelector(
+    ".app-dialog__countdown",
+  ) as HTMLElement | null;
 
   if (
     !dialog ||
@@ -41,6 +44,11 @@ export async function requestDialog(
     !cancelBtn
   ) {
     return false;
+  }
+
+  if ((dialog as any)._autoCloseTimer) {
+    clearInterval((dialog as any)._autoCloseTimer);
+    (dialog as any)._autoCloseTimer = null;
   }
 
   if (dialog.open) {
@@ -76,15 +84,64 @@ export async function requestDialog(
   }
 
   const mode = options.mode || "confirm";
-  confirmBtn.textContent =
+  const baseConfirmLabel =
     options.confirmLabel || (mode === "info" ? "OK" : "Confirm");
   cancelBtn.textContent = options.cancelLabel || "Cancel";
   cancelBtn.hidden = mode === "info";
+
+  let autoCloseTimer: ReturnType<typeof setInterval> | null = null;
+  const cleanupTimer = () => {
+    if (autoCloseTimer) {
+      clearInterval(autoCloseTimer);
+      autoCloseTimer = null;
+    }
+    if ((dialog as any)._autoCloseTimer) {
+      (dialog as any)._autoCloseTimer = null;
+    }
+  };
+
+  if (
+    typeof options.autoCloseSeconds === "number" &&
+    options.autoCloseSeconds > 0
+  ) {
+    let remainingSeconds = Math.max(1, Math.round(options.autoCloseSeconds));
+    confirmBtn.textContent = `${baseConfirmLabel} (${remainingSeconds}s)`;
+
+    if (countdownEl) {
+      countdownEl.hidden = false;
+      countdownEl.textContent = `Auto-closing in ${remainingSeconds}s...`;
+      countdownEl.setAttribute("role", "status");
+      countdownEl.setAttribute("aria-live", "polite");
+      countdownEl.setAttribute("aria-atomic", "true");
+    }
+
+    autoCloseTimer = setInterval(() => {
+      remainingSeconds--;
+      if (remainingSeconds > 0) {
+        confirmBtn.textContent = `${baseConfirmLabel} (${remainingSeconds}s)`;
+        if (countdownEl) {
+          countdownEl.textContent = `Auto-closing in ${remainingSeconds}s...`;
+        }
+      } else {
+        cleanupTimer();
+        dialog.returnValue = mode === "info" ? "confirm" : "cancel";
+        dialog.close(dialog.returnValue);
+      }
+    }, 1000);
+    (dialog as any)._autoCloseTimer = autoCloseTimer;
+  } else {
+    confirmBtn.textContent = baseConfirmLabel;
+    if (countdownEl) {
+      countdownEl.hidden = true;
+      countdownEl.textContent = "";
+    }
+  }
 
   dialog.returnValue = "";
 
   return await new Promise<boolean>((resolve) => {
     const onClose = () => {
+      cleanupTimer();
       dialog.removeEventListener("close", onClose);
       resolve(dialog.returnValue === "confirm");
     };

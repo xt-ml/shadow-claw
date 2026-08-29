@@ -83,6 +83,7 @@ describe("prompt-api help and capability utilities", () => {
       const options = buildPromptApiHelpDialogOptions();
       expect(options.mode).toBe("info");
       expect(options.title).toBe("Prompt API Setup & Info");
+      expect(options.autoCloseSeconds).toBe(30);
       expect(options.message).toContain("Prompt API");
       expect(options.links).toEqual([
         {

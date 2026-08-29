@@ -267,6 +267,9 @@ The chat UI includes additional message and activity controls:
 Destructive actions (for example message delete, compact, file/task clear, and unsaved editor close)
 use app-level confirm dialogs via the root app shell (`shadow-claw.requestDialog`) rather than
 native `window.confirm()`. This keeps confirmation UX and keyboard behavior consistent across pages.
+Dialogs support optional `autoCloseSeconds` (used for provider errors and fatal dialogs), which renders
+a 1-second countdown on the confirm button and an ARIA live region (`role="status"`, `aria-live="polite"`, `aria-atomic="true"`)
+to auto-close the dialog and resolve the promise without blocking unattended agent loops.
 
 When activity-log disk logging is enabled from Settings, server-side log entries
 are persisted under `.cache/logs` in the app data directory.

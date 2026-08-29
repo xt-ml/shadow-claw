@@ -290,6 +290,7 @@ export function bindEventListeners(
       title,
       message,
       confirmLabel: "Dismiss",
+      autoCloseSeconds: 30,
     });
   });
 

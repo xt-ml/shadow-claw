@@ -36,6 +36,7 @@ export function buildTransformersJsHelpDialogOptions(
       "ShadowClaw could not run a Transformers.js model via the local proxy.",
     details,
     confirmLabel: "OK",
+    autoCloseSeconds: 30,
     links: [
       {
         label: "Transformers.js docs",

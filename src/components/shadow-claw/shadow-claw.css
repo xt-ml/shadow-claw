@@ -531,6 +531,12 @@ shadow-claw-conversations {
   text-decoration: underline;
 }
 
+.app-dialog__countdown {
+  color: var(--shadow-claw-text-secondary);
+  font-size: 0.875rem;
+  margin: 0;
+}
+
 .app-confirm-dialog__actions {
   display: flex;
   gap: 0.5rem;

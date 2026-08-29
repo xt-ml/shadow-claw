@@ -92,6 +92,11 @@ To prevent infinite execution loops, the system enforces a strict recursion guar
 - The `spawn_subagent` tool is explicitly excluded from the subagent's allowed tools to prevent infinite subagent recursion. Furthermore, parallel subagent spawns respect a globally configured limit (`SUBAGENT_MAX_PARALLEL`).
 - The `ask_user` tool **blocks the worker** until the UI sends back an `ask-user-response` message. Never call it from a scheduled task or subagent context (including tasks with the subagent flag enabled) where no human is present to respond — it will deadlock the worker.
 
+### Provider Error Dialogs & Auto-Close
+
+- Provider errors (such as `429` rate limiting, unreachable providers, missing or invalid API keys, and local runtime faults) surface help dialogs via `requestDialog` configured with `autoCloseSeconds: 30`.
+- Dialogs display a 1-second visual countdown on the confirmation button and an `aria-live="polite"` status region (`role="status"`, `aria-atomic="true"`). Auto-close ensures unattended task executions and automated runs do not deadlock or block indefinitely waiting for manual modal dismissal.
+
 ### Subagent Dispatch & Tool Allowlisting
 
 - Route subagent invocation through `dispatchSubagentInvoke` (`src/core/orchestrator/utils/dispatchSubagentInvoke.ts`) so provider-specific browser/runtime handling stays centralized.

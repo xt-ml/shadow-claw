@@ -157,8 +157,9 @@ ShadowClaw includes a contextual help system that intercepts provider errors and
 
 - **Detection**: `detectProviderHelpType()` parses error messages and status codes to categorize issues (e.g., `api-key-invalid`, `rate-limited`, `provider-unreachable`).
 - **Dialogs**: `buildProviderHelpDialogOptions()` generates a user-friendly dialog with instructions tailored to the provider.
-- **Local Runtimes**: Specific help builders exist for `llamafile` and `transformers_js_local` to guide users through local environment setup failures.
-- **Links**: Dialogs include direct "Settings" links or external documentation links (e.g., HuggingFace token settings).
+- **Auto-Close Countdown**: Provider help and fatal API error dialogs specify `autoCloseSeconds: 30`, showing an accessible countdown on the confirmation button and an `aria-live="polite"` status region (`role="status"`, `aria-atomic="true"`) to prevent unattended workflows from blocking indefinitely.
+- **Local Runtimes**: Specific help builders exist for `llamafile`, `transformers_js_local`, and `prompt_api` to guide users through local environment setup failures with automatic 30s countdowns.
+- **Links**: Dialogs include direct "Settings" links or external documentation links (e.g., HuggingFace token settings, OpenRouter API keys).
 
 ## Tool Formats by Provider
 

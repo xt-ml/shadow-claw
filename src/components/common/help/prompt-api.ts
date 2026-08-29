@@ -90,6 +90,7 @@ export function buildPromptApiHelpDialogOptions(
     message: "ShadowClaw is configured to use the browser-native Prompt API.",
     details,
     confirmLabel: "OK",
+    autoCloseSeconds: 30,
     links: [
       {
         label: "Prompt API Documentation",

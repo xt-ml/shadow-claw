@@ -31,6 +31,7 @@ export function buildLlamafileHelpDialogOptions(
     message: "ShadowClaw could not find a usable llamafile model for CLI mode.",
     details,
     confirmLabel: "OK",
+    autoCloseSeconds: 30,
     links: [
       {
         label: "Get llamafile",

@@ -114,7 +114,7 @@ ShadowClaw supports multiple LLM providers with a unified adapter pattern:
 **Features:**
 
 - Streaming responses (OpenAI + Anthropic formats)
-- Adaptive rate limiting with `retry-after` support
+- Adaptive rate limiting with `retry-after` support and 30-second auto-closing, ARIA-accessible countdown dialogs for fatal errors and throttling
 - Dynamic model registry with capability metadata (context, modalities, tool support)
 - Multi-format support (OpenAI, Anthropic, Prompt API)
 - Prompt API session retry loop & hardware feature probing — automatically probes WebGPU adapter capabilities (requiring `shader-f16` support), retries `LanguageModel.create()` during downloads, and dynamically falls back to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) if WebGPU initialization fails or software emulation is detected.

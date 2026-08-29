@@ -35,6 +35,13 @@ describe("requestDialog", () => {
     linksEl = doc.createElement("div");
     linksEl.className = "app-dialog__links";
 
+    const countdownEl = doc.createElement("p");
+    countdownEl.className = "app-dialog__countdown";
+    countdownEl.setAttribute("role", "status");
+    countdownEl.setAttribute("aria-live", "polite");
+    countdownEl.setAttribute("aria-atomic", "true");
+    countdownEl.hidden = true;
+
     confirmBtn = doc.createElement("button");
     confirmBtn.className = "app-dialog__btn--confirm";
 
@@ -46,10 +53,15 @@ describe("requestDialog", () => {
       messageEl,
       detailsEl,
       linksEl,
+      countdownEl,
       confirmBtn,
       cancelBtn,
     );
     shadowRoot.append(dialog);
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
   });
 
   it("should return false if shadowRoot is not provided", async () => {
@@ -131,5 +143,92 @@ describe("requestDialog", () => {
     Object.defineProperty(dialog, "open", { value: true, configurable: true });
     requestDialog(doc, shadowRoot, { title: "T", message: "M" });
     expect(dialog.close).toHaveBeenCalled();
+  });
+
+  it("should show countdown and auto-close after autoCloseSeconds expires", async () => {
+    jest.useFakeTimers();
+
+    const countdownEl = shadowRoot.querySelector(
+      ".app-dialog__countdown",
+    ) as HTMLElement;
+
+    const p = requestDialog(doc, shadowRoot, {
+      title: "Rate Limited",
+      message: "OpenRouter is throttling requests",
+      mode: "info",
+      confirmLabel: "OK",
+      autoCloseSeconds: 30,
+    });
+
+    expect(countdownEl.hidden).toBe(false);
+    expect(countdownEl.textContent).toContain("30");
+    expect(confirmBtn.textContent).toBe("OK (30s)");
+    expect(countdownEl.getAttribute("role")).toBe("status");
+    expect(countdownEl.getAttribute("aria-live")).toBe("polite");
+
+    // Advance 1 second
+    jest.advanceTimersByTime(1000);
+    expect(countdownEl.textContent).toContain("29");
+    expect(confirmBtn.textContent).toBe("OK (29s)");
+
+    // Advance 28 more seconds (total 29s elapsed, 1s remaining)
+    jest.advanceTimersByTime(28000);
+    expect(countdownEl.textContent).toContain("1");
+    expect(confirmBtn.textContent).toBe("OK (1s)");
+
+    // Advance last 1 second -> should auto close dialog
+    (dialog.close as jest.Mock<any>).mockImplementation(() => {
+      dialog.dispatchEvent(new Event("close"));
+    });
+
+    jest.advanceTimersByTime(1000);
+    expect(dialog.close).toHaveBeenCalled();
+
+    const result = await p;
+    expect(result).toBe(true);
+  });
+
+  it("should clear timer if user closes early", async () => {
+    jest.useFakeTimers();
+
+    const p = requestDialog(doc, shadowRoot, {
+      title: "Rate Limited",
+      message: "OpenRouter is throttling requests",
+      mode: "info",
+      autoCloseSeconds: 30,
+    });
+
+    // Advance 5 seconds
+    jest.advanceTimersByTime(5000);
+
+    // Simulate user closing
+    dialog.returnValue = "confirm";
+    dialog.dispatchEvent(new Event("close"));
+
+    const result = await p;
+    expect(result).toBe(true);
+
+    // Advancing past 30s should not trigger another close
+    dialog.close = jest.fn();
+    jest.advanceTimersByTime(30000);
+    expect(dialog.close).not.toHaveBeenCalled();
+  });
+
+  it("should keep countdown element hidden when autoCloseSeconds is not provided", async () => {
+    const countdownEl = shadowRoot.querySelector(
+      ".app-dialog__countdown",
+    ) as HTMLElement;
+
+    const p = requestDialog(doc, shadowRoot, {
+      title: "Normal Dialog",
+      message: "No auto close",
+    });
+
+    expect(countdownEl.hidden).toBe(true);
+    expect(confirmBtn.textContent).toBe("Confirm");
+
+    dialog.returnValue = "confirm";
+    dialog.dispatchEvent(new Event("close"));
+    await p;
   });
 });

@@ -4,6 +4,7 @@ export interface AppDialogLink {
 }
 
 export interface AppDialogOptions extends ConfirmationDialogOptions {
+  autoCloseSeconds?: number;
   details?: string[];
   links?: AppDialogLink[];
   mode?: "confirm" | "info";

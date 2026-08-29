@@ -1,5 +1,11 @@
-export function getPublishCopyPlan() {
-  return [
+import path from "node:path";
+
+export function getPublishCopyPlan({
+  contentRoot = "",
+  toolchainRoot = "",
+  distPublicDir = "dist/public",
+} = {}) {
+  const basePlan = [
     {
       sources: [
         "pages/resources/README.md",
@@ -139,4 +145,35 @@ export function getPublishCopyPlan() {
       dest: "dist/public/favicon.ico",
     },
   ];
+
+  if (!contentRoot && !toolchainRoot && distPublicDir === "dist/public") {
+    return basePlan;
+  }
+
+  return basePlan.map((entry) => {
+    const dest = distPublicDir
+      ? entry.dest.replace(/^dist\/public/, distPublicDir)
+      : entry.dest;
+
+    const sources = [];
+    if (contentRoot) {
+      for (const src of entry.sources) {
+        sources.push(path.join(contentRoot, src));
+      }
+    }
+    if (toolchainRoot && toolchainRoot !== contentRoot) {
+      for (const src of entry.sources) {
+        sources.push(path.join(toolchainRoot, src));
+      }
+    }
+    if (!contentRoot && !toolchainRoot) {
+      sources.push(...entry.sources);
+    }
+
+    return {
+      sources,
+      dest,
+      ...(entry.opts ? { opts: entry.opts } : {}),
+    };
+  });
 }

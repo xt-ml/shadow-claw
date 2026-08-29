@@ -25,4 +25,17 @@ describe("getPublishCopyPlan", () => {
       plan.find((entry) => entry.dest === "dist/public/favicon.ico"),
     ).toBeTruthy();
   });
+
+  it("resolves sources and dest with custom contentRoot and distPublicDir", () => {
+    const contentRoot = "/custom/content";
+    const distPublicDir = "/custom/content/dist/public";
+    const plan = getPublishCopyPlan({ contentRoot, distPublicDir });
+
+    const readmeEntry = plan.find(
+      (entry) => entry.dest === "/custom/content/dist/public/README.md",
+    );
+    expect(readmeEntry).toBeTruthy();
+    expect(readmeEntry.sources).toContain("/custom/content/README.md");
+    expect(readmeEntry.sources).toContain("/custom/content/pages/README.md");
+  });
 });

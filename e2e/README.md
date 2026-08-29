@@ -448,16 +448,18 @@ npm run e2e -- --project=chromium
 npm run e2e -- --reporter=html
 ```
 
-### Build Regression Tests
+### Build & CLI Regression Tests
 
-The build and prerender CLI suites live under `bin/` and run through the
+The build, CLI, and prerender test suites live under `bin/` and run through the
 project Jest configuration. The build integration test covers both the normal
-`pages/` layout and a project with no `pages/` directory; the latter must still
-publish the built-in `index.html` and `MEMORY.md` defaults.
+`pages/` layout and a project with no `pages/` directory (which publishes the
+built-in `index.html` and `MEMORY.md` defaults), as well as the unified `shadow-claw`
+CLI tool commands (`build`, `dev`, `run`, `serve`, `init`, `--version`).
 
 ```bash
 NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
-  npx jest --runInBand bin/build/build.test.mjs \
+  npx jest --runInBand bin/cli.test.mjs \
+  bin/build/build.test.mjs \
   bin/prerender-dsd-shell/prerender-dsd-shell.test.mjs \
   bin/prerender-pretty-paths/prerender-pretty-paths.test.mjs
 ```

@@ -10,6 +10,21 @@ The ShadowClaw Express server supports flexible host, port, and CORS configurati
 
 ## Quick Start
 
+### Using the `shadow-claw` CLI (Recommended)
+
+```bash
+# Start local development server with live template build
+npx shadow-claw dev
+
+# Start on custom port and bind to all interfaces
+npx shadow-claw dev 9000 --host 0.0.0.0
+
+# Serve an existing pre-built dist/public directory
+npx shadow-claw serve 8888
+```
+
+### In-Repo (`npm start`)
+
 ```bash
 # Default: localhost:8888
 npm start
@@ -31,6 +46,7 @@ npm start -- 9000 --host 192.168.1.100 --cors-mode all
 **Position 1** (first positional argument)
 
 ```bash
+npx shadow-claw dev 5000   # Listen on port 5000
 npm start -- 5000          # Listen on port 5000
 npm start -- 8888          # Listen on port 8888 (explicit)
 ```
@@ -97,6 +113,8 @@ npm start -- 8888
 | `SHADOWCLAW_CORS_MODE`            | CORS policy                         | `private`, `all`, `localhost` |
 | `SHADOWCLAW_CORS_ALLOWED_ORIGINS` | Explicit allowlist (CSV)            | `https://a.com,https://b.com` |
 | `SHADOWCLAW_ALLOW_PRIVATE_PROXY`  | Allow `/proxy` to reach private IPs | `1`, `true`, `yes`            |
+| `SHADOWCLAW_ROOT_PATH`            | Static files directory root         | `/path/to/dist/public`        |
+| `SHADOWCLAW_DATABASE_DIR`         | Server SQLite database directory    | `/path/to/.cache`             |
 
 ## Common Scenarios
 

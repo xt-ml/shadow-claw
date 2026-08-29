@@ -54,6 +54,11 @@ export function parseConfig(): ServerConfig {
       "--allow-private-proxy",
       "Allow the /proxy endpoint to reach private/loopback addresses (disables SSRF block)",
       false,
+    )
+    .option("--root-path <path>", "Directory containing static assets to serve")
+    .option(
+      "--database-dir <path>",
+      "Directory where SQLite databases are stored",
     );
 
   program.parse();
@@ -62,10 +67,20 @@ export function parseConfig(): ServerConfig {
   const args = program.args;
 
   // Root path detection
+  const envRootPath = (
+    env.SHADOWCLAW_ROOT_PATH ||
+    env.SHADOWCLAW_PUBLIC_DIR ||
+    ""
+  ).trim();
   const srcRootPath = path.join(__dirname, "..");
   const distPublicPath = path.join(__dirname, "public");
   const isDist = fs.existsSync(distPublicPath);
-  const rootPath = isDist ? distPublicPath : srcRootPath;
+  const detectedRootPath = isDist ? distPublicPath : srcRootPath;
+  const rootPath = options.rootPath
+    ? path.resolve(options.rootPath)
+    : envRootPath
+      ? path.resolve(envRootPath)
+      : detectedRootPath;
 
   // Project root detection
   const projectRoot = isDist
@@ -73,9 +88,11 @@ export function parseConfig(): ServerConfig {
     : path.join(__dirname, "..", ".."); // from src/server/
 
   const envDatabaseDir = (env.SHADOWCLAW_DATABASE_DIR || "").trim();
-  const databaseDir = envDatabaseDir
-    ? path.resolve(projectRoot, envDatabaseDir)
-    : path.join(projectRoot, "database");
+  const databaseDir = options.databaseDir
+    ? path.resolve(options.databaseDir)
+    : envDatabaseDir
+      ? path.resolve(projectRoot, envDatabaseDir)
+      : path.join(projectRoot, "database");
 
   // Port logic
   let port = DEFAULT_DEV_PORT;

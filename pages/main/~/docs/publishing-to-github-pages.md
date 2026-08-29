@@ -11,17 +11,25 @@ ShadowClaw can drive a fully automated static-site publishing pipeline directly 
 
 ---
 
-## Two deployment strategies
+## Deployment strategies
 
 ### Strategy A — Full fork
 
 Clone the entire ShadowClaw repository, add your pages to `pages/main/`, push to a new repo you own, and let CI build and deploy it.
 
-### Strategy B — Pages-only repo
+### Strategy B — Pages-only repo (Git clone & inject in CI)
 
-Your repo contains your content, an optional root-level `site-config.json`, and a GitHub Actions workflow. Content normally lives under `pages/`; the workflow checks out ShadowClaw as a build dependency at CI time — its source is never committed to your repo.
+Your repo contains your content, an optional root-level `site-config.json`, and a GitHub Actions workflow. Content lives under `pages/`; the workflow checks out ShadowClaw as a build toolchain in CI and builds into `dist/public`.
 
-**Strategy B is recommended for personal sites, project hubs, and documentation.**
+### Strategy C — NPM Package & CLI (`npx shadow-claw`)
+
+Run or deploy using the `shadow-claw` npm package directly:
+
+- Locally: `npx shadow-claw dev` (or `shadow-claw run`) to preview with dev server.
+- In CI: `npx shadow-claw build --prod` builds `dist/public` without needing to clone ShadowClaw or copy files.
+- In `package.json`: add `"shadow-claw": "^1.22.4"` as a devDependency and run `npm run build`.
+
+**Strategy B and Strategy C are both fully supported for content-only repositories and knowledge hubs.**
 
 ---
 
@@ -332,6 +340,64 @@ This chain fetches an external data source, transforms it to markdown via the Ja
     }
   ]
 }
+```
+
+---
+
+## Strategy C — NPM Package & CLI Workflow
+
+If you prefer building directly with `npx shadowclaw` without cloning the ShadowClaw repository in CI, use this minimal workflow:
+
+```yaml
+name: Build and Deploy via ShadowClaw CLI
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout content repo
+        uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Build production bundle
+        env:
+          NODE_ENV: production
+          PAGES_ORIGIN: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
+          PAGES_BASE_PATH: "/${{ github.event.repository.name }}/"
+        run: npx shadow-claw build --prod
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/public
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
 ```
 
 > **Tip:** Wrap this in a scheduled task (Tasks sidebar → New Task → type `tools`, set a cron interval) to run the pipeline automatically, e.g. every 24 hours. No LLM calls are made at execution time.

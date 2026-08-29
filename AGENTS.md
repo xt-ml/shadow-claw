@@ -43,6 +43,7 @@ ShadowClaw has been significantly deduplicated. Instead of a massive `AGENTS.md`
 | UI & Signals (Web Components) | [docs/subsystems/reactive-ui.md](docs/subsystems/reactive-ui.md)                         |
 | WebMCP Integration            | [docs/subsystems/webmcp.md](docs/subsystems/webmcp.md)                                   |
 | WebVM (v86 Alpine)            | [docs/subsystems/vm.md](docs/subsystems/vm.md)                                           |
+| CLI & Static Site Publishing  | [docs/subsystems/cli.md](docs/subsystems/cli.md)                                         |
 
 ## Conventions & Guardrails
 
@@ -145,6 +146,12 @@ Markdown and HTML preview work should preserve the Settings-backed iframe host a
 - **Declarative Site Config (`site-config.json`):** Template repositories configure metadata, branding, tool defaults (`defaultToolsProfile`, `enabledTools`), custom element allowlists, and navigation visibility via `site-config.json`, which is patched into production artifacts at build time via `bin/site-config/apply.mjs` and seeded into IndexedDB at runtime via `applySiteConfigDefaults()`.
 - **Per-Deployment Storage Namespacing:** Use `namespacedStorage` for `localStorage` keys and `getDbName()` / `getOpfsRootName()` for IndexedDB/OPFS namespacing per deployment namespace (`getDeploymentNamespace()`) to prevent state leakage across subpath deployments. Legacy database stores are automatically migrated via `migrateLegacyDatabase.ts`.
 - **Dynamic Sidebar Navigation:** Sidebar navigation items (Pages, Chat, Tasks, Files) support runtime toggling and build-time DSD hiding. Ensure navigation fallback logic (`getDefaultSidebarPage`) resolves to the next visible item when active pages are hidden.
+
+### CLI & Dual-Root Build Pipeline
+
+- **Dual-Root Path Resolution:** The build toolchain (`bin/build/build.mjs`) cleanly decouples `toolchainRoot` (the ShadowClaw package/repo root) from `contentRoot` (the consumer template project). In-repo builds (`resolve(contentRoot) === resolve(toolchainRoot)`) preserve the standalone in-tree compilation path. CLI/template consumer builds read pre-bundled web assets from `toolchainRoot/dist/public` and inject `pages/`, `site-config.json`, `assets/`, `.agents/`, and pretty routes from `contentRoot`, outputting to `<contentRoot>/dist/public`.
+- **CLI Commands (`bin/cli.mjs`):** The `shadow-claw` / `shadowclaw` CLI provides `build`, `dev`, `run`, `serve`, and `init` commands. It supports running dev servers programmatically via `startServer` (`src/server/server.ts`) with custom `--root-path` and `--database-dir` arguments.
+- **Naming Conventions:** Refer to the product/brand in prose and documentation as **ShadowClaw**. Use kebab-case **`shadow-claw`** for package name, CLI commands (`npx shadow-claw`), repositories, directory paths, and custom elements.
 
 ## What to Avoid
 

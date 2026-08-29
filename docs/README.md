@@ -33,7 +33,7 @@ Detailed docs for each major subsystem.
 | [Tools & Profiles](subsystems/tools.md)                                 | Tool definitions, execution dispatch, profiles, tool configuration panel, adding new tools                                                                      |
 | [Agent Skills](subsystems/skills.md)                                    | Workspace-local skill discovery, slash-command routing, declarative tool execution pipelines, output/toast suppression, resources, and static publishing        |
 | [Notifications & Scheduling](subsystems/notifications.md)               | Web Push, VAPID, server-side SQLite scheduler, recursion guards                                                                                                 |
-| [Providers & Rate Limiting](subsystems/providers.md)                    | LLM provider registry, adapter pattern, Prompt API (default), dynamic CPU/WASM fallback, CacheStorage model downloads, and 30s auto-closing error dialogs |
+| [Providers & Rate Limiting](subsystems/providers.md)                    | LLM provider registry, adapter pattern, Prompt API (default), dynamic CPU/WASM fallback, CacheStorage model downloads, and 30s auto-closing error dialogs       |
 | [Electron Desktop](subsystems/electron.md)                              | Desktop app architecture, in-process server, power management                                                                                                   |
 | [Reactive UI](subsystems/reactive-ui.md)                                | Signals, `ShadowClawElement`, `reconcileList`, Web Components, stores                                                                                           |
 | [Model Registry & Capabilities](subsystems/providers.md#model-registry) | Dynamic model metadata fetching and modality capability detection                                                                                               |
@@ -47,6 +47,7 @@ Detailed docs for each major subsystem.
 | [Pages System](subsystems/pages.md)                                     | Workspace-relative pages rendering, sidebar navigation, static site seeding, pretty paths, same-origin route validation, and production asset inlining          |
 | [Custom Element Security](subsystems/custom-element-security.md)        | Custom element registry & DOM guards, allowlists, iframe sandbox policies, and nonce-gated CSP                                                                  |
 | [LiteRT Provider](subsystems/providers.md)                              | In-browser WebGPU inference provider using Google LiteRT-LM                                                                                                     |
+| [CLI & Static Site Publishing](subsystems/cli.md)                       | `shadow-claw` CLI commands (`build`, `dev`, `serve`, `init`), dual-root path resolution, and npm packaging                                                      |
 
 ### Guides
 

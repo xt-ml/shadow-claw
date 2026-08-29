@@ -83,6 +83,31 @@ describe("copyResourceDirEntries", () => {
     expect(cpImpl).not.toHaveBeenCalled();
   });
 
+  it("resolves resource directories relative to baseDir when provided", async () => {
+    const readdirImpl = jest.fn().mockImplementation(async (dir) => {
+      if (dir === "/custom/root/resources") {
+        return [fileEntry("custom.txt")];
+      }
+      return [];
+    });
+    const cpImpl = jest.fn().mockResolvedValue(undefined);
+
+    await copyResourceDirEntries(["resources"], "/custom/root/dist/public", {
+      baseDir: "/custom/root",
+      readdirImpl,
+      cpImpl,
+    });
+
+    expect(readdirImpl).toHaveBeenCalledWith("/custom/root/resources", {
+      withFileTypes: true,
+    });
+    expect(cpImpl).toHaveBeenCalledWith(
+      "/custom/root/resources/custom.txt",
+      "/custom/root/dist/public/custom.txt",
+      { force: true },
+    );
+  });
+
   it("works with default fs dependencies", async () => {
     const tmpDir = path.join(
       os.tmpdir(),

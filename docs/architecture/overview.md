@@ -173,6 +173,8 @@ sequenceDiagram
 
 | Directory                       | Contents                                                                     |
 | ------------------------------- | ---------------------------------------------------------------------------- |
+| `bin/`                          | CLI entry points (`bin/cli.mjs`), build pipeline (`bin/build/`), and scripts |
+| `pages/`                        | Static site pages and routes (for in-repo deployment)                        |
 | `src/`                          | All application source code                                                  |
 | `src/components/`               | Web Components (`<shadow-claw-*>`), each in its own subdirectory             |
 | `src/components/common/`        | Reusable shared components (`empty-state`, `card`, `actions`)                |

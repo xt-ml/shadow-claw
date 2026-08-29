@@ -12,6 +12,7 @@ import {
 import {
   getApprovedCustomElementScripts,
   getIframeCsp,
+  isAllowedCustomElement,
 } from "../../../security/custom-element-security.js";
 
 export const defaultPreviewSanitizeOptions: Config = {
@@ -20,9 +21,18 @@ export const defaultPreviewSanitizeOptions: Config = {
     /^(?:(?:https?|mailto|ftp|tel|file|blob|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
   ADD_TAGS: ["iframe", "figure", "figcaption"],
   CUSTOM_ELEMENT_HANDLING: {
-    tagNameCheck: null,
-    attributeNameCheck: null,
+    tagNameCheck: (tagName: string) => isAllowedCustomElement(tagName),
+    attributeNameCheck: () => true,
+    allowCustomizedBuiltInElements: false,
   },
+  ADD_ATTR: [
+    "allow",
+    "allowfullscreen",
+    "frameborder",
+    "scrolling",
+    "referrerpolicy",
+    "loading",
+  ],
 };
 
 export interface BuildHtmlSrcdocOptions {

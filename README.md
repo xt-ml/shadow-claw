@@ -4,7 +4,7 @@
 
 A browser-native, fully-featured AI assistant. TypeScript + Web Components + IndexedDB + File System API.
 
-[![ShadowClaw Screenshot](assets/screenshots/shadow-claw-screenshot-1920x1052.png)](https://xt-ml.github.io/shadow-claw/)
+[![ShadowClaw Screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/shadow-claw-screenshot-1920x1052.png)](https://xt-ml.github.io/shadow-claw/)
 
 ## Quick Start
 

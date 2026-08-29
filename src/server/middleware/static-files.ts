@@ -72,6 +72,22 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
           return;
         }
 
+        // Check if request has a subpath prefix matching a root file (e.g. /shadow-claw/index.js -> /index.js)
+        const strippedSegmentPath = requestPath.replace(/^\/[^/]+/, "");
+        if (strippedSegmentPath) {
+          const strippedFilePath = path.join(rootPath, strippedSegmentPath);
+          try {
+            if (
+              fs.existsSync(strippedFilePath) &&
+              fs.statSync(strippedFilePath).isFile()
+            ) {
+              res.sendFile(strippedFilePath);
+
+              return;
+            }
+          } catch {}
+        }
+
         if (requestPath.startsWith("/files/main/")) {
           const fallbackPath = path.resolve(
             "pages/main",

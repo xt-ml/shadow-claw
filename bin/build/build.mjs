@@ -332,14 +332,25 @@ export async function runBuild(options = {}) {
     );
   } catch {}
 
-  // 9. Production post-build
+  // 9. Base href normalization & Production post-build
+  const defaultBasePath = isProduction
+    ? options.basePath || env.PAGES_BASE_PATH || "/"
+    : options.basePath || "/";
+  const basePath = defaultBasePath;
+
+  try {
+    const idxHtml = await readFile(indexPath, "utf8");
+    const updatedHtml = idxHtml.replace(
+      /<base\s+href="[^"]*"\s*\/?>/i,
+      `<base href="${basePath}" />`,
+    );
+    await writeFile(indexPath, updatedHtml, "utf8");
+  } catch {}
+
   if (isProduction) {
     console.log("Running production post-build steps...");
 
     const pagesOrigin = options.pagesOrigin || env.PAGES_ORIGIN;
-    const basePath =
-      options.basePath || (env.PAGES_BASE_PATH ?? "/shadow-claw/");
-
     console.log(`  PAGES_ORIGIN   : ${pagesOrigin || "(relative ./)"}`);
     console.log(`  PAGES_BASE_PATH: ${basePath}`);
 
@@ -359,13 +370,6 @@ export async function runBuild(options = {}) {
       } catch {}
     }
 
-    const fileSearchReplaceScript = join(
-      toolchainRoot,
-      "bin/file-search-replace.mjs",
-    );
-    await run(
-      `echo 'base href="${basePath}"' | node "${fileSearchReplaceScript}" 'base href="/"' "${indexPath}"`,
-    );
     await writeFile(join(distPublicDir, ".nojekyll"), "", "utf8");
 
     let meta = "";

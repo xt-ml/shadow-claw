@@ -6,6 +6,7 @@ jest.unstable_mockModule("./getNestedDir.js", () => ({
 }));
 
 jest.unstable_mockModule("./storage.js", () => ({
+  getOpfsRootDirName: jest.fn(() => "shadowclaw"),
   getStorageRoot: jest.fn(),
 }));
 

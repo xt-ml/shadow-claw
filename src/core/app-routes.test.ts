@@ -462,5 +462,45 @@ describe("app-routes", () => {
         (globalThis as any).__applyBasePathCacheReset?.();
       }
     });
+
+    it("returns empty namespace when running in Web Worker context at root domain", () => {
+      const originalSelf = (globalThis as any).self;
+      class MockWorkerGlobalScope {}
+      (globalThis as any).WorkerGlobalScope = MockWorkerGlobalScope;
+      try {
+        const mockWorkerSelf = Object.create(MockWorkerGlobalScope.prototype);
+        mockWorkerSelf.location = new URL(
+          "http://localhost:8888/agent.worker.js",
+        );
+        (globalThis as any).self = mockWorkerSelf;
+        (globalThis as any).__applyBasePathCacheReset?.();
+
+        expect(getDeploymentNamespace()).toBe("");
+      } finally {
+        delete (globalThis as any).WorkerGlobalScope;
+        (globalThis as any).self = originalSelf;
+        (globalThis as any).__applyBasePathCacheReset?.();
+      }
+    });
+
+    it("returns empty namespace when running in Web Worker context at root domain service-worker folder", () => {
+      const originalSelf = (globalThis as any).self;
+      class MockWorkerGlobalScope {}
+      (globalThis as any).WorkerGlobalScope = MockWorkerGlobalScope;
+      try {
+        const mockWorkerSelf = Object.create(MockWorkerGlobalScope.prototype);
+        mockWorkerSelf.location = new URL(
+          "http://localhost:8888/service-worker/init.js",
+        );
+        (globalThis as any).self = mockWorkerSelf;
+        (globalThis as any).__applyBasePathCacheReset?.();
+
+        expect(getDeploymentNamespace()).toBe("");
+      } finally {
+        delete (globalThis as any).WorkerGlobalScope;
+        (globalThis as any).self = originalSelf;
+        (globalThis as any).__applyBasePathCacheReset?.();
+      }
+    });
   });
 });

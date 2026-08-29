@@ -15,6 +15,7 @@ jest.unstable_mockModule("./writeFileHandle.js", () => ({
 }));
 
 jest.unstable_mockModule("./storage.js", () => ({
+  getOpfsRootDirName: jest.fn(() => "shadowclaw"),
   getStorageStatus: mockGetStorageStatus,
 }));
 

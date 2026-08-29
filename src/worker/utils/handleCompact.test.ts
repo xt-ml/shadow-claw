@@ -38,6 +38,7 @@ describe("handleCompact.js", () => {
     }));
 
     jest.unstable_mockModule("../../storage/storage.js", () => ({
+      getOpfsRootDirName: jest.fn(() => "shadowclaw"),
       setStorageRoot: mockSetStorageRoot,
     }));
 

@@ -1,7 +1,7 @@
-import { OPFS_ROOT } from "../config/config.js";
 import { getGroupDir } from "./getGroupDir.js";
 import { parsePath } from "./parsePath.js";
 import {
+  getOpfsRootDirName,
   getStorageStatus,
   invalidateStorageRoot,
   isStaleHandleError,
@@ -86,7 +86,7 @@ export async function renameGroupEntry(
 
           const safeId = groupId.replace(/:/g, "-");
           await writeOpfsPathViaWorker(
-            [OPFS_ROOT, "groups", safeId, ...dirs, trimmedName],
+            [getOpfsRootDirName(), "groups", safeId, ...dirs, trimmedName],
             file,
           );
         }

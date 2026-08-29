@@ -7,6 +7,7 @@ jest.unstable_mockModule("./getGroupDir.js", () => ({
 jest.unstable_mockModule("./parsePath.js", () => ({ parsePath: jest.fn() }));
 
 jest.unstable_mockModule("./storage.js", () => ({
+  getOpfsRootDirName: jest.fn().mockReturnValue("shadowclaw"),
   getStorageStatus: (jest.fn() as any).mockResolvedValue({
     type: "opfs",
     permission: "granted",

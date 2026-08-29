@@ -112,6 +112,7 @@ describe("worker and worker/agent.js", () => {
     }));
 
     jest.unstable_mockModule("../storage/storage.js", () => ({
+      getOpfsRootDirName: jest.fn(() => "shadowclaw"),
       getStorageRoot: jest.fn(),
       setStorageRoot: jest.fn(),
       getStorageStatus: jest.fn(() => ({ type: "opfs" })),

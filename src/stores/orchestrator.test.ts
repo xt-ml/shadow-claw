@@ -162,6 +162,7 @@ const mockUpdateGroupProviderRuntimeOverrides = jest.fn() as any;
 const mockUpdateGroupSubagentSettings = jest.fn() as any;
 
 jest.unstable_mockModule("../storage/storage.js", () => ({
+  getOpfsRootDirName: jest.fn(() => "shadowclaw"),
   getStorageStatus: mockGetStorageStatus,
   getStorageRoot: jest.fn(),
   clearStorageRootCache: jest.fn(),

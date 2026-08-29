@@ -55,6 +55,7 @@ describe("handleMessage.js", () => {
     }));
 
     jest.unstable_mockModule("../../storage/storage.js", () => ({
+      getOpfsRootDirName: jest.fn(() => "shadowclaw"),
       getStorageRoot: (jest.fn() as any).mockResolvedValue({
         name: "mock-root",
       }),

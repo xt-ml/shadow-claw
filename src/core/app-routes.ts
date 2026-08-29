@@ -106,21 +106,40 @@ export function getAppBasePath(): string {
   if (isWorker && typeof self !== "undefined" && (self as any).location) {
     const workerPath = (self as any).location.pathname || "/";
     const parts = workerPath.split("/").filter(Boolean);
-    if (parts.length >= 1) {
-      const first = parts[0].toLowerCase();
-      const isRootFile =
-        first === "service-worker.js" ||
-        first === "sw.js" ||
-        first === "manifest.json" ||
-        first === "sitemap.xml" ||
-        first === "favicon.ico" ||
-        first === "index.html";
 
-      if (!isRootFile) {
-        cachedBasePath = "/" + parts[0] + "/";
+    // In a Web Worker, the pathname is always the URL of a script file (e.g. /agent.worker.js or /shadow-claw/agent.worker.js).
+    // If there is only 1 segment (e.g. ["agent.worker.js"]), the worker is hosted at the root domain.
+    if (parts.length <= 1) {
+      cachedBasePath = "/";
 
-        return cachedBasePath;
-      }
+      return cachedBasePath;
+    }
+
+    const first = parts[0].toLowerCase();
+    const isRootFileOrDir =
+      first === "service-worker.js" ||
+      first === "sw.js" ||
+      first === "manifest.json" ||
+      first === "sitemap.xml" ||
+      first === "favicon.ico" ||
+      first === "index.html" ||
+      first === "service-worker" ||
+      first === "assets" ||
+      first === "dist" ||
+      first === "public";
+
+    // If there are 2 segments and the first is an internal asset/service-worker folder (e.g. /service-worker/init.js),
+    // it's hosted at the root domain.
+    if (isRootFileOrDir && parts.length === 2) {
+      cachedBasePath = "/";
+
+      return cachedBasePath;
+    }
+
+    if (!isRootFileOrDir) {
+      cachedBasePath = "/" + parts[0] + "/";
+
+      return cachedBasePath;
     }
   }
 
@@ -199,32 +218,7 @@ export function getAppBasePath(): string {
     return cachedBasePath;
   }
 
-  // 4. In Web Worker context (where window is undefined and self.location is available):
-  // Inspect worker script URL subpath (e.g. /shadow-claw/agent.worker.js or /shadow-claw/assets/worker.js)
-  if (
-    typeof window === "undefined" &&
-    typeof self !== "undefined" &&
-    (self as any).location
-  ) {
-    if (parts.length >= 1) {
-      const first = parts[0].toLowerCase();
-      const isRootFile =
-        first === "service-worker.js" ||
-        first === "sw.js" ||
-        first === "manifest.json" ||
-        first === "sitemap.xml" ||
-        first === "favicon.ico" ||
-        first === "index.html";
-
-      if (!isRootFile) {
-        cachedBasePath = "/" + parts[0] + "/";
-
-        return cachedBasePath;
-      }
-    }
-  }
-
-  // 5. Default to root base path for unhandled multi-segment paths
+  // 4. Default to root base path for unhandled multi-segment paths
   cachedBasePath = "/";
 
   return cachedBasePath;

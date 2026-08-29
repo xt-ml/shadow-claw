@@ -5,6 +5,7 @@ jest.unstable_mockModule("./getGroupDir.js", () => ({
 }));
 
 jest.unstable_mockModule("./storage.js", () => ({
+  getOpfsRootDirName: jest.fn(() => "shadowclaw"),
   invalidateStorageRoot: jest.fn(),
   isStaleHandleError: (jest.fn() as any).mockReturnValue(false),
 }));

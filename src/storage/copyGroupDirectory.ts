@@ -1,6 +1,5 @@
-import { OPFS_ROOT } from "../config/config.js";
 import { getGroupDir } from "./getGroupDir.js";
-import { getStorageStatus } from "./storage.js";
+import { getOpfsRootDirName, getStorageStatus } from "./storage.js";
 import { writeFileHandle, writeOpfsPathViaWorker } from "./writeFileHandle.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 
@@ -31,7 +30,7 @@ export async function copyGroupDirectory(
 
   const safeTargetGroupId = targetGroupId.replace(/:/g, "-");
   const initialPathSegments = [
-    OPFS_ROOT,
+    getOpfsRootDirName(),
     "groups",
     safeTargetGroupId,
     ...parts,

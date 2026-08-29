@@ -34,6 +34,15 @@ async function probeHandleAccess(
   }
 }
 
+/**
+ * Get the OPFS root directory name taking into account deployment namespace.
+ */
+export function getOpfsRootDirName(): string {
+  const ns = getDeploymentNamespace();
+
+  return ns ? `${OPFS_ROOT}-${ns}` : OPFS_ROOT;
+}
+
 async function getOpfsRoot(): Promise<FileSystemDirectoryHandle> {
   try {
     if (
@@ -42,8 +51,7 @@ async function getOpfsRoot(): Promise<FileSystemDirectoryHandle> {
       typeof navigator.storage.getDirectory === "function"
     ) {
       const opfsRoot = await navigator.storage.getDirectory();
-      const ns = getDeploymentNamespace();
-      const opfsRootName = ns ? `${OPFS_ROOT}-${ns}` : OPFS_ROOT;
+      const opfsRootName = getOpfsRootDirName();
 
       return await opfsRoot.getDirectoryHandle(opfsRootName, {
         create: true,

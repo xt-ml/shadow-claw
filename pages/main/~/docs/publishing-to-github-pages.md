@@ -51,10 +51,10 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      shadowclaw_ref:
-        description: "ShadowClaw version tag (e.g. v1.20.0), commit SHA, or branch"
+      shadowclaw_version:
+        description: "ShadowClaw npm version (e.g. latest, 1.23.3)"
         required: false
-        default: ""
+        default: "latest"
 
 permissions:
   contents: read
@@ -66,87 +66,33 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout content repo
-        uses: actions/checkout@v4
-        with:
-          path: content
+      - name: Checkout repository
+        uses: actions/checkout@v6
 
-      - name: Resolve ShadowClaw version / ref
-        id: resolve-ref
-        shell: bash
-        run: |
-          REF="${{ github.event.inputs.shadowclaw_ref }}"
-          if [ -z "$REF" ]; then
-            REF=$(node -e '
-              try {
-                const fs = require("fs");
-                const configPath = "content/site-config.json";
-                if (fs.existsSync(configPath)) {
-                  const cfg = JSON.parse(fs.readFileSync(configPath, "utf8"));
-                  const v = cfg.shadowClawVersion || cfg.shadowClawRef || cfg.shadowclawVersion || cfg.shadowclawRef || "";
-                  if (v) process.stdout.write(String(v).trim());
-                }
-              } catch (e) {
-                process.stdout.write("");
-              }
-            ')
-          fi
-          if [ -z "$REF" ] && [ -f "content/.shadowclaw-version" ]; then
-            REF=$(tr -d ' \n\r\t' < content/.shadowclaw-version)
-          fi
-          if [ -z "$REF" ]; then
-            REF="${SHADOWCLAW_REF:-main}"
-          fi
-          echo "Resolved ShadowClaw ref: $REF"
-          echo "ref=$REF" >> "$GITHUB_OUTPUT"
-
-      - name: Checkout ShadowClaw core (build toolchain)
-        uses: actions/checkout@v4
-        with:
-          repository: xt-ml/shadow-claw
-          path: shadow-claw
-          ref: ${{ steps.resolve-ref.outputs.ref }}
-
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
           node-version: "24"
-          cache: npm
-          cache-dependency-path: shadow-claw/package-lock.json
 
-      - name: Install ShadowClaw build dependencies
-        run: npm ci
-        working-directory: shadow-claw
-
-      - name: Inject content into ShadowClaw build root
-        run: |
-          rm -rf shadow-claw/pages
-          if [ -d "content/pages" ]; then cp -r content/pages shadow-claw/; fi
-          if [ -f "content/site-config.json" ]; then cp content/site-config.json shadow-claw/; fi
-          mkdir -p shadow-claw/pages
-
-      - name: Build production bundle
-        working-directory: shadow-claw
+      - name: Build static site via ShadowClaw CLI
         env:
-          NODE_ENV: production
           PAGES_ORIGIN: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
           PAGES_BASE_PATH: "/${{ github.event.repository.name }}/"
-        run: npm run build:prod
+        run: |
+          VERSION="${{ github.event.inputs.shadowclaw_version || 'latest' }}"
+          npx --yes "shadow-claw@$VERSION" build --prod
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: shadow-claw/dist/public
+          path: dist/public
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
@@ -154,18 +100,7 @@ jobs:
 
 ### Version Pinning
 
-You can pin your template site to a specific ShadowClaw release tag (e.g. `v1.20.0`) or git commit SHA (e.g. `62253c53`) to ensure reproducible builds:
-
-- **In `site-config.json` at the repository root**:
-
-```json
-{
-  "shadowClawVersion": "v1.20.0"
-}
-```
-
-- **In `.shadowclaw-version`**: Create a file named `.shadowclaw-version` in the root of your content repository containing the version tag or commit SHA.
-- **Workflow Dispatch**: Run the workflow manually from GitHub Actions UI and supply any tag, SHA, or branch in the `shadowclaw_ref` input.
+ShadowClaw builds via `npx --yes shadow-claw@latest build --prod`. To pin to a specific npm release (e.g. `1.23.3`), specify the version in `.github/workflows/deploy-pages.yml` or supply `shadowclaw_version` when triggering the GitHub Actions workflow manually.
 
 For a **custom apex domain** (e.g. `example.com`), override:
 

@@ -1385,6 +1385,111 @@ describe("shadow-claw-file-viewer", () => {
       expect(navigate).toHaveBeenCalledWith("/#Pages?path=docs/linked.md");
     });
 
+    it("navigates relative image link in root via route URL", async () => {
+      const component = new ShadowClawFileViewer();
+      component.db = {} as any;
+
+      const navigate = jest.fn();
+      Object.defineProperty(window as any, "navigation", {
+        configurable: true,
+        value: { navigate },
+      });
+
+      (fileViewerStore as any).file = {
+        path: "index.md",
+        name: "index.md",
+        kind: "text",
+        content: "# index",
+      };
+
+      const body = document.createElement("div");
+      const link = document.createElement("a");
+      link.setAttribute("href", "01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg");
+      body.appendChild(link);
+
+      const event = new MouseEvent("click", {
+        bubbles: true,
+        cancelable: true,
+        button: 0,
+      });
+      Object.defineProperty(event, "target", {
+        configurable: true,
+        value: link,
+      });
+
+      await component.handlePreviewLinkClick(event);
+
+      expect(event.defaultPrevented).toBe(true);
+      expect(navigate).toHaveBeenCalledWith(
+        "/files/test-group/01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg",
+      );
+    });
+
+    it("rewrites relative asset hrefs in markdown preview HTML", () => {
+      const component = new ShadowClawFileViewer();
+      const inputHtml =
+        '<p><a href="01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg">image</a></p>';
+      const rewritten = component.rewriteWorkspacePreviewHtml(
+        inputHtml,
+        "index.md",
+      );
+      expect(rewritten).toContain(
+        'href="/files/test-group/01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg"',
+      );
+    });
+
+    it("rewrites relative asset hrefs when subpath base path is active", () => {
+      document.querySelectorAll("base").forEach((el) => el.remove());
+      const baseEl = document.createElement("base");
+      baseEl.setAttribute("href", "/shadow-claw/");
+      document.head.appendChild(baseEl);
+      (globalThis as any).__applyBasePathCacheReset?.();
+
+      try {
+        const component = new ShadowClawFileViewer();
+        const inputHtml =
+          '<p><a href="01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg">image</a></p>';
+        const rewritten = component.rewriteWorkspacePreviewHtml(
+          inputHtml,
+          "index.md",
+        );
+        expect(rewritten).toContain(
+          'href="/shadow-claw/files/test-group/01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg"',
+        );
+      } finally {
+        baseEl.remove();
+        (globalThis as any).__applyBasePathCacheReset?.();
+      }
+    });
+
+    it("bindEventListeners delegates clicks within .file-content to handlePreviewLinkClick", () => {
+      const component = new ShadowClawFileViewer();
+      const root = document.createElement("div");
+      const content = document.createElement("div");
+      content.className = "file-content";
+      const link = document.createElement("a");
+      link.setAttribute("href", "01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg");
+      content.appendChild(link);
+      root.appendChild(content);
+      Object.defineProperty(component, "shadowRoot", {
+        configurable: true,
+        value: root,
+      });
+
+      const spy = jest
+        .spyOn(component, "handlePreviewLinkClick")
+        .mockImplementation(async () => {});
+
+      component.bindEventListeners();
+
+      link.dispatchEvent(
+        new MouseEvent("click", { bubbles: true, cancelable: true }),
+      );
+
+      expect(spy).toHaveBeenCalledTimes(1);
+      spy.mockRestore();
+    });
+
     it("resolves relative links against the opened file directory", () => {
       const component = new ShadowClawFileViewer();
 

@@ -36,6 +36,37 @@ describe("resolveWorkspaceLinkPath", () => {
     expect(result).toBe("docs/guide.md");
   });
 
+  it("resolves relative image link in file directory", () => {
+    const result = resolveWorkspaceLinkPath(
+      "01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg",
+      "index.md",
+      groupId,
+      origin,
+    );
+    expect(result).toBe("01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg");
+  });
+
+  it("resolves relative links when subpath base tag is active", () => {
+    document.querySelectorAll("base").forEach((el) => el.remove());
+    const baseEl = document.createElement("base");
+    baseEl.setAttribute("href", "/shadow-claw/");
+    document.head.appendChild(baseEl);
+    (globalThis as any).__applyBasePathCacheReset?.();
+
+    try {
+      const result = resolveWorkspaceLinkPath(
+        "01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg",
+        "index.md",
+        groupId,
+        origin,
+      );
+      expect(result).toBe("01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg");
+    } finally {
+      baseEl.remove();
+      (globalThis as any).__applyBasePathCacheReset?.();
+    }
+  });
+
   it("returns null if link points to external origin", () => {
     const result = resolveWorkspaceLinkPath(
       "https://example.com/page",

@@ -5,6 +5,7 @@ import {
   getDeploymentNamespace,
   getFileRouteDirPath,
   getWorkspaceRouteRequestPath,
+  isPossibleAppRoute,
   parseRouteFromUrl,
   resolveHrefAgainstRoute,
 } from "./app-routes.js";
@@ -148,8 +149,14 @@ describe("app-routes", () => {
   describe("applyBasePath", () => {
     // Reset cached base path between tests
     beforeEach(() => {
+      document.querySelectorAll("base").forEach((el) => el.remove());
       // Force-reset the module-level cache so each sub-test starts fresh.
       // We do this by temporarily reassigning window.location via jsdom.
+      (globalThis as any).__applyBasePathCacheReset?.();
+    });
+
+    afterEach(() => {
+      document.querySelectorAll("base").forEach((el) => el.remove());
       (globalThis as any).__applyBasePathCacheReset?.();
     });
 
@@ -190,6 +197,55 @@ describe("app-routes", () => {
         groupId: "br:main",
         anchor: undefined,
       });
+    });
+
+    it("handles explicit subpath <base href> tag correctly for all workspace routes", () => {
+      document.querySelectorAll("base").forEach((el) => el.remove());
+      const baseEl = document.createElement("base");
+      baseEl.setAttribute("href", "/shadow-claw/");
+      document.head.appendChild(baseEl);
+      (globalThis as any).__applyBasePathCacheReset?.();
+
+      try {
+        expect(getAppBasePath()).toBe("/shadow-claw/");
+
+        // Workspace file route extraction with subpath prefix
+        expect(
+          getWorkspaceRouteRequestPath(
+            "/shadow-claw/files/main/01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg",
+          ),
+        ).toEqual({
+          groupId: "br:main",
+          path: "01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg",
+        });
+
+        // isPossibleAppRoute validation
+        expect(
+          isPossibleAppRoute(
+            "/shadow-claw/files/main/01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg",
+          ),
+        ).toBe(true);
+
+        // Path without base prefix should NOT match app routes
+        expect(
+          isPossibleAppRoute(
+            "/files/main/01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg",
+          ),
+        ).toBe(false);
+
+        // resolveHrefAgainstRoute with subpath routeDir
+        const resolved = resolveHrefAgainstRoute(
+          "01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg",
+          applyBasePath(getFileRouteDirPath("br:main", "index.md")),
+          "http://localhost",
+        );
+        expect(resolved?.pathname).toBe(
+          "/shadow-claw/files/main/01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg",
+        );
+      } finally {
+        baseEl.remove();
+        (globalThis as any).__applyBasePathCacheReset?.();
+      }
     });
   });
 

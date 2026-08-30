@@ -42,4 +42,19 @@ describe("rewriteWorkspacePreviewHtml", () => {
     );
     expect(rewritten).toContain('href="https://example.com/docs"');
   });
+
+  it("rewrites relative markdown links to subpath-prefixed workspace routes", () => {
+    const html =
+      '<p><a href="01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg">01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg</a></p>';
+    const rewritten = rewriteWorkspacePreviewHtml(
+      html,
+      "index.md",
+      "/shadow-claw/files/br:main/",
+      groupId,
+      origin,
+    );
+    expect(rewritten).toContain(
+      'href="/shadow-claw/files/br:main/01M1A1R4Y708YJNPGV2NHQKYF7-IMG_0233.jpeg"',
+    );
+  });
 });

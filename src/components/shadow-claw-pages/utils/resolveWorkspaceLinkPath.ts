@@ -1,4 +1,5 @@
 import {
+  applyBasePath,
   getFileRouteDirPath,
   getWorkspaceRouteRequestPath,
   resolveHrefAgainstRoute,
@@ -43,7 +44,7 @@ export function resolveWorkspaceLinkPath(
     }
   }
 
-  const routeDir = getFileRouteDirPath(groupId, filePath);
+  const routeDir = applyBasePath(getFileRouteDirPath(groupId, filePath));
   const resolved = resolveHrefAgainstRoute(
     trimmed,
     routeDir,

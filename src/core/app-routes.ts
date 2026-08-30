@@ -551,7 +551,14 @@ export function getFileRouteDirPath(groupId: string, filePath: string): string {
 export function getWorkspaceRouteRequestPath(
   pathname: string,
 ): { groupId: string; path: string } | null {
-  const parts = pathname
+  let relativePath = pathname;
+  const basePath = getAppBasePath();
+
+  if (basePath !== "/" && relativePath.startsWith(basePath)) {
+    relativePath = "/" + relativePath.slice(basePath.length);
+  }
+
+  const parts = relativePath
     .split("/")
     .filter(Boolean)
     .map((part) => decodePathSegment(part));

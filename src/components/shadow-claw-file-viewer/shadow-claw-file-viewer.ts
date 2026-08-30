@@ -251,6 +251,11 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return;
     }
 
+    const content = root.querySelector(".file-content");
+    content?.addEventListener("click", (event: Event) => {
+      void this.handlePreviewLinkClick(event as MouseEvent);
+    });
+
     const modal = root.querySelector(".file-modal");
     modal?.addEventListener("cancel", (event: Event) => {
       event.preventDefault();
@@ -706,9 +711,8 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     const current = fileViewerStore.file;
     const filePath = current?.path || current?.name || "";
-    const routeDir = getFileRouteDirPath(
-      orchestratorStore.activeGroupId,
-      filePath,
+    const routeDir = applyBasePath(
+      getFileRouteDirPath(orchestratorStore.activeGroupId, filePath),
     );
     const resolved = resolveHrefAgainstRoute(
       payload.href,
@@ -1110,9 +1114,8 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       return html;
     }
 
-    const routeDir = getFileRouteDirPath(
-      orchestratorStore.activeGroupId,
-      filePath,
+    const routeDir = applyBasePath(
+      getFileRouteDirPath(orchestratorStore.activeGroupId, filePath),
     );
     const parsed = new DOMParser().parseFromString(html, "text/html");
 
@@ -1509,9 +1512,8 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     const current = fileViewerStore.file;
     const basePath = current?.path || current?.name || "";
     const href = link.getAttribute("href") || "";
-    const routeDir = getFileRouteDirPath(
-      orchestratorStore.activeGroupId,
-      basePath,
+    const routeDir = applyBasePath(
+      getFileRouteDirPath(orchestratorStore.activeGroupId, basePath),
     );
     const resolved = resolveHrefAgainstRoute(
       href,

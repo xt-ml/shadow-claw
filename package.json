@@ -1,6 +1,6 @@
 {
   "name": "shadow-claw",
-  "version": "1.23.3",
+  "version": "1.23.4",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",

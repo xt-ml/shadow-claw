@@ -1,6 +1,7 @@
 import { DB_VERSION, getDbName } from "../config/config.js";
 import { setDB } from "./db.js";
 import { migrateLegacyDatabase } from "./migrateLegacyDatabase.js";
+import { migrateLegacyOpfs } from "../storage/migrateLegacyOpfs.js";
 import type { ShadowClawDatabase } from "./types.js";
 
 /**
@@ -59,8 +60,9 @@ export function openDatabase(): Promise<ShadowClawDatabase> {
       setDB(db);
       try {
         await migrateLegacyDatabase(db);
+        await migrateLegacyOpfs(db);
       } catch (e) {
-        console.warn("Error running IndexedDB legacy migration:", e);
+        console.warn("Error running legacy migration:", e);
       }
       resolve(db);
     };

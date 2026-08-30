@@ -213,7 +213,10 @@ To prevent storage state leakage when multiple instances are deployed under subp
    Computes database names as `shadowclaw-${namespace}` (falling back to legacy `"shadowclaw"` when unnamespaced).
 3. **OPFS Root Directory Scope (`getOpfsRootName()`):**
    Computes OPFS root directory handles as `shadow-claw-opfs-${namespace}` (falling back to `"shadowclaw"` when unnamespaced).
-4. **Automated Legacy Migration (`migrateLegacyDatabase.ts`):**
-   When booting a namespaced database for the first time, ShadowClaw checks if data was previously stored under `"shadowclaw"`. If present, all object stores are copied into the new namespaced database in a single non-destructive pass, setting `DB_MIGRATED_FROM_LEGACY`. The legacy database is left intact as a fallback seed.
+4. **Automated Legacy Migration (`migrateLegacyDatabase.ts` & `migrateLegacyOpfs.ts`):**
+   When booting a namespaced deployment for the first time, ShadowClaw checks if data was previously stored under `"shadowclaw"`.
+   - **IndexedDB**: Copies all object stores into the new namespaced database in a single non-destructive pass, setting `DB_MIGRATED_FROM_LEGACY`.
+   - **OPFS**: Recursively copies all legacy workspace directories and files from `"shadowclaw"` into `"shadowclaw-${namespace}"` (with Safari worker write fallback), setting `OPFS_MIGRATED_FROM_LEGACY`.
+   The legacy storage is left intact as a fallback seed.
 5. **Namespaced `localStorage` (`namespacedStorage.ts`):**
    Key pattern `shadowclaw:${namespace}:${key}` with automatic one-time copy-on-read from legacy unprefixed keys.

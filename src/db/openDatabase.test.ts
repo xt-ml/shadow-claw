@@ -2,8 +2,15 @@ import { jest } from "@jest/globals";
 
 const setDB = jest.fn();
 
+const mockMigrateLegacyDatabase = jest.fn<any>().mockResolvedValue(undefined);
+const mockMigrateLegacyOpfs = jest.fn<any>().mockResolvedValue(undefined);
+
 jest.unstable_mockModule("./migrateLegacyDatabase.js", () => ({
-  migrateLegacyDatabase: jest.fn<any>().mockResolvedValue(undefined),
+  migrateLegacyDatabase: mockMigrateLegacyDatabase,
+}));
+
+jest.unstable_mockModule("../storage/migrateLegacyOpfs.js", () => ({
+  migrateLegacyOpfs: mockMigrateLegacyOpfs,
 }));
 
 jest.unstable_mockModule("./db.js", () => ({
@@ -110,6 +117,8 @@ describe("openDatabase", () => {
     );
 
     expect(setDB).toHaveBeenCalledWith(database);
+    expect(mockMigrateLegacyDatabase).toHaveBeenCalledWith(database);
+    expect(mockMigrateLegacyOpfs).toHaveBeenCalledWith(database);
   });
 
   it("skips creating stores that already exist", async () => {

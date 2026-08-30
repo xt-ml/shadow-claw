@@ -1073,6 +1073,7 @@ export const CONFIG_KEYS = {
   MESH_LLM_HOST: "mesh_llm_host",
   MODEL: "model",
   OAUTH_PROVIDER_DEFINITIONS: "oauth_provider_definitions",
+  OPFS_MIGRATED_FROM_LEGACY: "opfs_migrated_from_legacy",
   OVERRIDE_PRERENDER_SKELETON: "override_prerender_skeleton",
   PAGES_AUTO_REFRESH_INTERVAL: "pages_auto_refresh_interval",
   PAGES_LIST: "pages_list",

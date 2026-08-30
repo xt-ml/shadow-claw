@@ -4,12 +4,12 @@ import { execSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, "..");
 
-function parseSemver(v) {
+export function parseSemver(v) {
   const clean = String(v || "")
     .trim()
     .replace(/^[v^~]/, "");
@@ -26,7 +26,7 @@ function parseSemver(v) {
   };
 }
 
-function compareSemver(a, b) {
+export function compareSemver(a, b) {
   const pa = parseSemver(a);
   const pb = parseSemver(b);
   if (!pa || !pb) return String(a).localeCompare(String(b));
@@ -43,6 +43,47 @@ function compareSemver(a, b) {
   return 0;
 }
 
+export async function assertVersionBump({
+  localPkgVersion,
+  localLockVersion,
+  pkgName,
+  publishedVersion,
+  silent = false,
+}) {
+  if (!silent) {
+    console.log(`Checking version bump for package "${pkgName}"...`);
+    console.log(`- Local package.json version     : ${localPkgVersion}`);
+  }
+
+  if (localLockVersion) {
+    if (!silent) {
+      console.log(`- Local package-lock.json version: ${localLockVersion}`);
+    }
+    if (localPkgVersion !== localLockVersion) {
+      throw new Error(
+        `Version mismatch: package.json (${localPkgVersion}) does not match package-lock.json (${localLockVersion})!`,
+      );
+    }
+  }
+
+  if (publishedVersion) {
+    if (!silent) {
+      console.log(`- Published npm registry version : ${publishedVersion}`);
+    }
+    const cmp = compareSemver(localPkgVersion, publishedVersion);
+    if (cmp <= 0) {
+      throw new Error(
+        `Version assertion failed: Local version (${localPkgVersion}) must be greater than published npm version (${publishedVersion}). Please bump the version before publishing.`,
+      );
+    }
+    if (!silent) {
+      console.log(
+        `✓ Version assertion passed: ${localPkgVersion} > ${publishedVersion}`,
+      );
+    }
+  }
+}
+
 async function main() {
   const pkgJsonPath = path.join(rootDir, "package.json");
   const lockJsonPath = path.join(rootDir, "package-lock.json");
@@ -56,21 +97,6 @@ async function main() {
   const pkgName = pkg.name;
   const localPkgVersion = pkg.version;
   const localLockVersion = lock?.version;
-
-  console.log(`Checking version bump for package "${pkgName}"...`);
-  console.log(`- Local package.json version     : ${localPkgVersion}`);
-  if (localLockVersion) {
-    console.log(`- Local package-lock.json version: ${localLockVersion}`);
-    if (localPkgVersion !== localLockVersion) {
-      console.error(
-        `\n[FATAL] Version mismatch: package.json (${localPkgVersion}) does not match package-lock.json (${localLockVersion})!`,
-      );
-      console.error(
-        `Run "npm install" or "npm version" to synchronize package-lock.json.`,
-      );
-      process.exit(1);
-    }
-  }
 
   let publishedVersion = null;
   try {
@@ -98,25 +124,21 @@ async function main() {
     );
   }
 
-  if (publishedVersion) {
-    console.log(`- Published npm registry version : ${publishedVersion}`);
-    const cmp = compareSemver(localPkgVersion, publishedVersion);
-    if (cmp <= 0) {
-      console.error(
-        `\n[FATAL] Version assertion failed: Local version (${localPkgVersion}) must be greater than published npm version (${publishedVersion}).`,
-      );
-      console.error(
-        `Please bump the version in package.json and package-lock.json (e.g. "npm version patch|minor|major") before publishing.\n`,
-      );
-      process.exit(1);
-    }
-    console.log(
-      `✓ Version assertion passed: ${localPkgVersion} > ${publishedVersion}`,
-    );
-  }
+  await assertVersionBump({
+    localPkgVersion,
+    localLockVersion,
+    pkgName,
+    publishedVersion,
+  });
 }
 
-main().catch((err) => {
-  console.error("Version assertion check failed:", err);
-  process.exit(1);
-});
+const isMainModule =
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+
+if (isMainModule) {
+  main().catch((err) => {
+    console.error(`\n[FATAL] ${err.message}\n`);
+    process.exit(1);
+  });
+}

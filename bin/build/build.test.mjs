@@ -31,6 +31,7 @@ describe("build without and with pages", () => {
         return !new Set([
           ".cache",
           ".git",
+          ".lighthouseci",
           "cache",
           "coverage",
           "database",

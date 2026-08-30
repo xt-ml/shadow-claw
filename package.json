@@ -1,6 +1,6 @@
 {
   "name": "shadow-claw",
-  "version": "1.23.2",
+  "version": "1.23.3",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -22,8 +22,17 @@
   "engines": {
     "node": ">=24"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xt-ml/shadow-claw.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xt-ml/shadow-claw/issues"
+  },
+  "homepage": "https://github.com/xt-ml/shadow-claw#readme",
   "scripts": {
     "prepack": "npm run build:prod",
+    "assert:version": "node bin/assert-version-bump.mjs",
     "build:clean": "node bin/rimraf.mjs dist && node bin/rimraf.mjs dist-electron",
     "build:copy:all:assets": "cross-env COPY_ALL_ASSETS=true npm run build",
     "build:pkg:get:meta": "git rev-parse HEAD",
@@ -47,6 +56,7 @@
     "electron:build": "npm run build && npm run build:service-worker && electron-builder",
     "electron": "npm run build && electron dist/electron/main.cjs",
     "format": "npx prettier 404.html index.css index.html jest.config.ts playwright.config.ts rolldown.config.mjs \"{bin,e2e,electron,share,src}/**/*.{html,css,ts,js,mjs}\" --write",
+    "lighthouse": "npm run -s build:prod && npx @lhci/cli autorun",
     "rolldown": "rolldown -c rolldown.config.mjs",
     "start": "npm run build && node dist/server.js",
     "test": "npm run -s tsc && cross-env NODE_OPTIONS=\"--no-warnings --experimental-vm-modules\" jest",

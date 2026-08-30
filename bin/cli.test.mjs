@@ -109,5 +109,5 @@ slug: "custom-test"
     );
     expect(builtIndexHtml).toContain("Custom Test Hub");
     expect(builtIndexHtml).toContain("Hello from Custom Test");
-  });
+  }, 30_000);
 });

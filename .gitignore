@@ -1,5 +1,6 @@
 .cache
 .env
+.lighthouseci
 .vscode
 *.db
 assets/cache*

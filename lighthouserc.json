@@ -1,0 +1,23 @@
+{
+  "ci": {
+    "collect": {
+      "staticDistDir": "./dist/public",
+      "url": ["http://localhost/index.html"],
+      "numberOfRuns": 1,
+      "settings": {
+        "chromeFlags": "--headless=new --no-sandbox --disable-dev-shm-usage --disable-gpu",
+        "onlyCategories": [
+          "performance",
+          "accessibility",
+          "best-practices",
+          "seo",
+          "agentic-browsing"
+        ]
+      }
+    },
+    "upload": {
+      "target": "filesystem",
+      "outputDir": "./.lighthouseci"
+    }
+  }
+}

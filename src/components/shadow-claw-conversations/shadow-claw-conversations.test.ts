@@ -1449,4 +1449,498 @@ describe("shadow-claw-conversations dialog submission methods", () => {
     expect(el._pendingDeleteGroupId).toBeNull();
     document.body.removeChild(el);
   });
+
+  it("handles reordering conversations with draggedId/targetId and precomputed IDs", async () => {
+    mockOrchStore.groups = [
+      { groupId: "br:1", name: "One", createdAt: 0 },
+      { groupId: "br:2", name: "Two", createdAt: 1 },
+      { groupId: "br:3", name: "Three", createdAt: 2 },
+    ];
+
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.render();
+    el.db = {} as any;
+
+    // 1. Precomputed IDs
+    await el.handleReorder("br:1", "br:3", ["br:2", "br:3", "br:1"]);
+    expect(mockOrchStore.reorderConversations).toHaveBeenCalledWith(el.db, [
+      "br:2",
+      "br:3",
+      "br:1",
+    ]);
+
+    // 2. Dragged & Target IDs
+    await el.handleReorder("br:1", "br:3");
+    expect(mockOrchStore.reorderConversations).toHaveBeenCalledWith(el.db, [
+      "br:2",
+      "br:3",
+      "br:1",
+    ]);
+
+    // 3. Nonexistent ID (no-op)
+    jest.clearAllMocks();
+    await el.handleReorder("br:invalid", "br:3");
+    expect(mockOrchStore.reorderConversations).not.toHaveBeenCalled();
+
+    // 4. Missing DB (no-op)
+    el.db = null;
+    await el.handleReorder("br:1", "br:2");
+    expect(mockOrchStore.reorderConversations).not.toHaveBeenCalled();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles switching conversations and dispatches shadow-claw-navigate", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.render();
+
+    const navigateListener = jest.fn();
+    document.addEventListener("shadow-claw-navigate", navigateListener);
+
+    // 1. Switching to active group is a no-op
+    mockOrchStore.activeGroupId = "br:main";
+    await el.handleSwitch("br:main");
+    expect(navigateListener).not.toHaveBeenCalled();
+
+    // 2. Switching to another group
+    await el.handleSwitch("br:other");
+    expect(navigateListener).toHaveBeenCalledWith(
+      expect.objectContaining({
+        detail: {
+          page: "chat",
+          groupId: "br:other",
+        },
+      }),
+    );
+
+    document.removeEventListener("shadow-claw-navigate", navigateListener);
+    document.body.removeChild(el);
+  });
+
+  it("cancels dialogs and resets pending state on cancel button clicks", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.render();
+
+    el._setupDialogListeners();
+
+    // 1. Create cancel
+    const createDialog = el.shadowRoot?.querySelector(
+      ".conversations__create-dialog",
+    ) as any;
+    if (createDialog) createDialog.close = jest.fn();
+    const createCancel = el.shadowRoot?.querySelector(
+      ".conversations__create-dialog .conversations__cancel",
+    ) as HTMLButtonElement;
+    createCancel?.click();
+    expect(createDialog?.close).toHaveBeenCalled();
+
+    // 2. Delete cancel
+    el._pendingDeleteGroupId = "br:to-delete";
+    const deleteDialog = el.shadowRoot?.querySelector(
+      ".conversations__delete-dialog",
+    ) as any;
+    if (deleteDialog) deleteDialog.close = jest.fn();
+    const deleteCancel = el.shadowRoot?.querySelector(
+      ".conversations__delete-dialog .conversations__cancel",
+    ) as HTMLButtonElement;
+    deleteCancel?.click();
+    expect(deleteDialog?.close).toHaveBeenCalled();
+    expect(el._pendingDeleteGroupId).toBeNull();
+
+    // 3. Clone cancel
+    el._pendingCloneGroupId = "br:to-clone";
+    const cloneDialog = el.shadowRoot?.querySelector(
+      ".conversations__clone-dialog",
+    ) as any;
+    if (cloneDialog) cloneDialog.close = jest.fn();
+    const cloneCancel = el.shadowRoot?.querySelector(
+      ".conversations__clone-dialog .conversations__cancel",
+    ) as HTMLButtonElement;
+    cloneCancel?.click();
+    expect(cloneDialog?.close).toHaveBeenCalled();
+    expect(el._pendingCloneGroupId).toBeNull();
+
+    // 4. Details cancel
+    el._pendingRenameGroupId = "br:to-rename";
+    const detailsDialog = el.shadowRoot?.querySelector(
+      ".conversations__details-dialog",
+    ) as any;
+    if (detailsDialog) detailsDialog.close = jest.fn();
+    const detailsCancel = el.shadowRoot?.querySelector(
+      ".conversations__details-dialog .conversations__cancel",
+    ) as HTMLButtonElement;
+    detailsCancel?.click();
+    expect(detailsDialog?.close).toHaveBeenCalled();
+    expect(el._pendingRenameGroupId).toBeNull();
+
+    document.body.removeChild(el);
+  });
+
+  it("submits details dialog with rename and settings updates", async () => {
+    mockOrchStore.groups = [
+      { groupId: "br:main", name: "Old Name", createdAt: 0, toolTags: [] },
+    ];
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.render();
+    el.db = {} as any;
+
+    el._pendingRenameGroupId = "br:main";
+    el._pendingRenameName = "Old Name";
+    el._pendingDetailsToolTags = ["bash", "read_file"];
+    el._pendingDetailsPinnedProvider = "anthropic";
+    el._pendingDetailsPinnedModel = "claude-3-5-sonnet";
+    el._pendingDetailsPinnedMaxTokens = 4096;
+    el._pendingDetailsSubagentMode = "manual";
+    el._pendingDetailsSubagentProvider = "openai";
+    el._pendingDetailsSubagentModel = "gpt-4o";
+    el._pendingDetailsSubagentMaxTokens = 2048;
+
+    const dialog = el.shadowRoot?.querySelector(
+      ".conversations__details-dialog",
+    ) as HTMLDialogElement;
+    if (dialog) (dialog as any).close = jest.fn();
+
+    const nameInput = el.shadowRoot?.querySelector(
+      ".conversations__details-dialog .conversations__input",
+    ) as HTMLInputElement;
+    if (nameInput) nameInput.value = "New Name";
+
+    await el._submitDetailsDialog();
+
+    expect(mockOrchStore.renameConversation).toHaveBeenCalledWith(
+      el.db,
+      "br:main",
+      "New Name",
+    );
+    expect(mockOrchStore.updateConversationToolTags).toHaveBeenCalledWith(
+      el.db,
+      "br:main",
+      ["bash", "read_file"],
+    );
+    expect(mockOrchStore.updateConversationPinnedProvider).toHaveBeenCalledWith(
+      el.db,
+      "br:main",
+      "anthropic",
+      "claude-3-5-sonnet",
+      4096,
+    );
+    expect(
+      mockOrchStore.updateConversationSubagentSettings,
+    ).toHaveBeenCalledWith(
+      el.db,
+      "br:main",
+      "manual",
+      "openai",
+      "gpt-4o",
+      2048,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles item action button clicks (clone, details, delete, toggle actions)", async () => {
+    mockOrchStore.groups = [
+      { groupId: "br:g1", name: "Group 1", createdAt: 0 },
+      { groupId: "br:g2", name: "Group 2", createdAt: 1 },
+    ];
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.render();
+    el.db = {} as any;
+
+    const items = el.shadowRoot?.querySelectorAll(
+      ".conversation-item",
+    ) as NodeListOf<HTMLElement>;
+    expect(items.length).toBe(2);
+
+    const dialogs = el.shadowRoot?.querySelectorAll("dialog") || [];
+    dialogs.forEach((d: any) => {
+      d.showModal = jest.fn();
+      d.close = jest.fn();
+    });
+
+    const firstItem = items[0];
+    const cloneBtn = firstItem.querySelector(
+      "[data-action='clone']",
+    ) as HTMLButtonElement;
+    const detailsBtn = firstItem.querySelector(
+      "[data-action='details']",
+    ) as HTMLButtonElement;
+    const deleteBtn = firstItem.querySelector(
+      "[data-action='delete']",
+    ) as HTMLButtonElement;
+    const toggleActionsBtn = firstItem.querySelector(
+      ".conversation-actions-toggle",
+    ) as HTMLButtonElement;
+
+    // Toggle actions menu
+    toggleActionsBtn.click();
+    expect(firstItem.classList.contains("show-actions")).toBe(true);
+
+    // Clone click opens clone dialog
+    const handleCloneSpy = jest.spyOn(el, "handleClone");
+    cloneBtn.click();
+    expect(handleCloneSpy).toHaveBeenCalledWith("br:g1");
+
+    // Details click opens details dialog
+    const handleDetailsSpy = jest.spyOn(el, "handleDetails");
+    detailsBtn.click();
+    expect(handleDetailsSpy).toHaveBeenCalledWith("br:g1", "Group 1");
+
+    // Delete click opens delete dialog
+    const handleDeleteSpy = jest.spyOn(el, "handleDelete");
+    deleteBtn.click();
+    expect(handleDeleteSpy).toHaveBeenCalledWith("br:g1", "Group 1");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles drag and drop reordering events on items", async () => {
+    mockOrchStore.groups = [
+      { groupId: "br:g1", name: "Group 1", createdAt: 0 },
+      { groupId: "br:g2", name: "Group 2", createdAt: 1 },
+    ];
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.render();
+    el.db = {} as any;
+
+    const list = el.shadowRoot?.querySelector(
+      ".conversation-list",
+    ) as HTMLElement;
+    const items = el.shadowRoot?.querySelectorAll(
+      ".conversation-item",
+    ) as NodeListOf<HTMLElement>;
+    const firstHandle = items[0].querySelector(".drag-handle") as HTMLElement;
+
+    // dragstart
+    const dragStartEvent = new Event("dragstart", { bubbles: true }) as any;
+    dragStartEvent.dataTransfer = { setData: jest.fn() };
+    firstHandle.dispatchEvent(dragStartEvent);
+    expect(el._draggedGroupId).toBe("br:g1");
+
+    // dragover on second item
+    const dragOverEvent = new Event("dragover", { bubbles: true }) as any;
+    dragOverEvent.preventDefault = jest.fn();
+    list.dispatchEvent(dragOverEvent);
+
+    // drop on list
+    const dropEvent = new Event("drop", { bubbles: true }) as any;
+    dropEvent.preventDefault = jest.fn();
+    list.dispatchEvent(dropEvent);
+
+    // dragend
+    firstHandle.dispatchEvent(new Event("dragend", { bubbles: true }));
+    expect(el._draggedGroupId).toBeNull();
+
+    document.body.removeChild(el);
+  });
+
+  it("handles touch dragging reordering events on drag handle", async () => {
+    mockOrchStore.groups = [
+      { groupId: "br:g1", name: "Group 1", createdAt: 0 },
+      { groupId: "br:g2", name: "Group 2", createdAt: 1 },
+    ];
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.render();
+    el.db = {} as any;
+
+    const items = el.shadowRoot?.querySelectorAll(
+      ".conversation-item",
+    ) as NodeListOf<HTMLElement>;
+    const firstHandle = items[0].querySelector(".drag-handle") as HTMLElement;
+
+    const list = el.shadowRoot?.querySelector(
+      ".conversation-list",
+    ) as HTMLElement;
+    el.shadowRoot.elementFromPoint = jest.fn(() => items[1]);
+
+    // touchstart
+    const touchStartEvent = new Event("touchstart", { bubbles: true }) as any;
+    touchStartEvent.touches = [{ identifier: 1, clientY: 50 }];
+    firstHandle.dispatchEvent(touchStartEvent);
+    expect(el._touchDraggedGroupId).toBe("br:g1");
+
+    // touchmove
+    const touchMoveEvent = new Event("touchmove", { bubbles: true }) as any;
+    touchMoveEvent.touches = [{ identifier: 1, clientY: 100 }];
+    list.dispatchEvent(touchMoveEvent);
+
+    // touchend
+    const touchEndEvent = new Event("touchend", { bubbles: true }) as any;
+    touchEndEvent.changedTouches = [{ identifier: 1, clientY: 100 }];
+    list.dispatchEvent(touchEndEvent);
+    expect(el._touchDraggedGroupId).toBeNull();
+
+    document.body.removeChild(el);
+  });
+
+  it("submits clone, create, and delete dialogs", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.render();
+    el.db = {} as any;
+
+    // 1. Clone dialog submit
+    const cloneDialog = el.shadowRoot?.querySelector(
+      ".conversations__clone-dialog",
+    );
+    if (cloneDialog) (cloneDialog as any).close = jest.fn();
+    el._pendingCloneGroupId = "br:g1";
+    await el._submitCloneDialog();
+    expect(mockOrchStore.cloneConversation).toHaveBeenCalledWith(
+      el.db,
+      "br:g1",
+    );
+    expect(el._pendingCloneGroupId).toBeNull();
+
+    // 2. Create dialog submit with empty name
+    const createInput = el.shadowRoot?.querySelector(
+      ".conversations__create-dialog .conversations__input",
+    ) as HTMLInputElement;
+    const createDialog = el.shadowRoot?.querySelector(
+      ".conversations__create-dialog",
+    );
+    if (createDialog) (createDialog as any).close = jest.fn();
+
+    if (createInput) createInput.value = "   ";
+    await el._submitCreateDialog();
+    expect(mockOrchStore.createConversation).not.toHaveBeenCalled();
+
+    // Create dialog submit with valid name
+    if (createInput) createInput.value = "New Conv";
+    await el._submitCreateDialog();
+    expect(mockOrchStore.createConversation).toHaveBeenCalledWith(
+      el.db,
+      "New Conv",
+    );
+
+    // 3. Delete dialog submit
+    const deleteDialog = el.shadowRoot?.querySelector(
+      ".conversations__delete-dialog",
+    );
+    if (deleteDialog) (deleteDialog as any).close = jest.fn();
+    el._pendingDeleteGroupId = "br:g2";
+    await el._submitDeleteDialog();
+    expect(mockOrchStore.deleteConversation).toHaveBeenCalledWith(
+      el.db,
+      "br:g2",
+    );
+    expect(el._pendingDeleteGroupId).toBeNull();
+
+    document.body.removeChild(el);
+  });
+
+  it("submits details dialog with tool tags and provider settings", async () => {
+    const el = new ShadowClawConversations() as any;
+    document.body.appendChild(el);
+    await el.render();
+    el.db = {} as any;
+
+    const detailsDialog = el.shadowRoot?.querySelector(
+      ".conversations__details-dialog",
+    );
+    if (detailsDialog) (detailsDialog as any).close = jest.fn();
+
+    const detailsInput = el.shadowRoot?.querySelector(
+      ".conversations__details-dialog .conversations__input",
+    ) as HTMLInputElement;
+
+    el._pendingRenameGroupId = "br:g1";
+    el._pendingRenameName = "Old Name";
+    el._pendingDetailsToolTags = ["bash", "git"];
+    el._pendingDetailsPinnedProvider = "anthropic";
+    el._pendingDetailsPinnedModel = "claude-3";
+    el._pendingDetailsPinnedMaxTokens = 2048;
+    el._pendingDetailsProviderRuntimeOverrides = { temperature: 0.7 };
+    el._pendingDetailsSubagentMode = "manual";
+    el._pendingDetailsSubagentProvider = "openai";
+    el._pendingDetailsSubagentModel = "gpt-4";
+    el._pendingDetailsSubagentMaxTokens = 1024;
+
+    if (detailsInput) detailsInput.value = "Updated Name";
+
+    await el._submitDetailsDialog();
+
+    expect(mockOrchStore.renameConversation).toHaveBeenCalledWith(
+      el.db,
+      "br:g1",
+      "Updated Name",
+    );
+    expect(mockOrchStore.updateConversationToolTags).toHaveBeenCalledWith(
+      el.db,
+      "br:g1",
+      ["bash", "git"],
+    );
+    expect(mockOrchStore.updateConversationPinnedProvider).toHaveBeenCalledWith(
+      el.db,
+      "br:g1",
+      "anthropic",
+      "claude-3",
+      2048,
+    );
+    expect(
+      mockOrchStore.updateConversationProviderRuntimeOverrides,
+    ).toHaveBeenCalledWith(el.db, "br:g1", { temperature: 0.7 });
+    expect(
+      mockOrchStore.updateConversationSubagentSettings,
+    ).toHaveBeenCalledWith(el.db, "br:g1", "manual", "openai", "gpt-4", 1024);
+
+    expect(el._pendingRenameGroupId).toBeNull();
+    expect(el._pendingRenameName).toBeNull();
+
+    // Reorder tests
+    mockOrchStore.groups = [
+      { groupId: "g1", name: "G1" },
+      { groupId: "g2", name: "G2" },
+      { groupId: "g3", name: "G3" },
+    ];
+    await el.handleReorder("g3", "g1");
+    expect(mockOrchStore.reorderConversations).toHaveBeenCalledWith(el.db, [
+      "g3",
+      "g1",
+      "g2",
+    ]);
+
+    await el.handleReorder("g1", "g2", ["g2", "g1", "g3"]);
+    expect(mockOrchStore.reorderConversations).toHaveBeenCalledWith(el.db, [
+      "g2",
+      "g1",
+      "g3",
+    ]);
+
+    // Persist height test
+    await el._persistHeight(350);
+    expect(mockSetConfig).toHaveBeenCalledWith(
+      el.db,
+      "conversations_height",
+      350,
+    );
+
+    // _loadProviderModels tests
+    (global.fetch as any) = jest.fn<any>().mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        data: [{ id: "model-dyn-1", name: "Dynamic Model 1" }],
+      }),
+    });
+
+    const providerWithDynamic = {
+      id: "prov-test",
+      name: "Test Provider",
+      modelsUrl: "http://localhost/models",
+    };
+
+    const models = await el._loadProviderModels(providerWithDynamic);
+    expect(models).toHaveLength(1);
+    expect(models[0].id).toBe("model-dyn-1");
+
+    document.body.removeChild(el);
+  });
 });

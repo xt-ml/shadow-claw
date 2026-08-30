@@ -98,6 +98,10 @@ const mockSetMaxTokens = jest.fn(async () => {});
 const mockSetRateLimitCallsPerMinute = jest.fn(async () => {});
 const mockSetRateLimitAutoAdapt = jest.fn(async () => {});
 const mockSetReasoningEffort = jest.fn(async () => {});
+const mockSetMaxIterations = jest.fn(async () => {});
+const mockSetLlamafileSettings = jest.fn(async () => {});
+const mockSetContextCompressionEnabled = jest.fn(async () => {});
+const mockSetStreamingEnabled = jest.fn(async () => {});
 
 jest.unstable_mockModule(
   "../../../core/orchestrator/utils/operations/provider.js",
@@ -128,7 +132,7 @@ jest.unstable_mockModule(
     getProviderRuntimeHeaders: jest.fn().mockReturnValue({}),
     setProvider: mockSetProvider,
     setBedrockSettings: mockSetBedrockSettings,
-    setLlamafileSettings: jest.fn(async () => {}),
+    setLlamafileSettings: mockSetLlamafileSettings,
     setMeshLlmSettings: jest.fn(async () => {}),
     setModel: jest.fn(async () => {}),
     setAssistantName: jest.fn(async () => {}),
@@ -151,11 +155,11 @@ jest.unstable_mockModule(
     setGitProxyUrl: jest.fn(async () => {}),
     setProxyUrl: jest.fn(async () => {}),
     setVmInternetAccess: jest.fn(async () => {}),
-    setStreamingEnabled: jest.fn(async () => {}),
+    setStreamingEnabled: mockSetStreamingEnabled,
     setUseProxy: jest.fn(async () => {}),
     setVMBashFullInternetAccess: jest.fn(async () => {}),
-    setContextCompressionEnabled: jest.fn(async () => {}),
-    setMaxIterations: jest.fn(async () => {}),
+    setContextCompressionEnabled: mockSetContextCompressionEnabled,
+    setMaxIterations: mockSetMaxIterations,
   }),
 );
 
@@ -196,6 +200,7 @@ const { setConfig } = await import("../../../db/setConfig.js");
 
 function createOrchestratorStub(overrides = {}) {
   const base = {
+    setApiKey: jest.fn<any>().mockResolvedValue(undefined),
     setProvider: jest.fn<any>().mockResolvedValue(undefined),
     setModel: jest.fn<any>().mockResolvedValue(undefined),
     setAssistantName: jest.fn<any>().mockResolvedValue(undefined),
@@ -816,6 +821,304 @@ describe("shadow-claw-llm", () => {
       "transformers_js_dtype_strategy",
       "q4",
     );
+
+    document.body.removeChild(el);
+  });
+
+  it("saves subagent max parallel, workspace mode, and reasoning effort", async () => {
+    const el = new ShadowClawLlm() as any;
+    el.db = {};
+    el.orchestrator = createOrchestratorStub();
+    document.body.appendChild(el);
+    await el.render();
+
+    const maxParallelInput = el.shadowRoot?.querySelector(
+      '[data-setting="subagent-max-parallel-input"]',
+    ) as HTMLInputElement | null;
+    if (maxParallelInput) {
+      maxParallelInput.value = "8";
+    }
+    await el.saveSubagentMaxParallel();
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "subagent_max_parallel",
+      "8",
+    );
+
+    const wsModeSelect = el.shadowRoot?.querySelector(
+      '[data-setting="subagent-workspace-mode-select"]',
+    ) as HTMLSelectElement | null;
+    if (wsModeSelect) {
+      wsModeSelect.value = "isolated";
+    }
+    await el.saveSubagentWorkspaceMode();
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "subagent_workspace_mode",
+      "isolated",
+    );
+
+    const reasoningSelect = el.shadowRoot?.querySelector(
+      '[data-setting="reasoning-effort-select"]',
+    ) as HTMLSelectElement | null;
+    if (reasoningSelect) {
+      reasoningSelect.value = "high";
+    }
+    await el.saveReasoningEffort();
+    expect(mockSetReasoningEffort).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "high",
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("saves max iterations and context compression settings", async () => {
+    const el = new ShadowClawLlm() as any;
+    el.db = {};
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+    document.body.appendChild(el);
+    await el.render();
+
+    const maxIterInput = el.shadowRoot?.querySelector(
+      '[data-setting="max-iterations-input"]',
+    ) as HTMLInputElement | null;
+    if (maxIterInput) {
+      maxIterInput.value = "100";
+    }
+    await el.saveMaxIterations();
+    expect(mockSetMaxIterations).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      100,
+    );
+
+    await el.onContextCompressionToggle(true);
+    expect(mockSetContextCompressionEnabled).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      true,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("saves rate limit settings and applies recommended max tokens", async () => {
+    const el = new ShadowClawLlm() as any;
+    el.db = {};
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+    document.body.appendChild(el);
+    await el.render();
+
+    const rateInput = el.shadowRoot?.querySelector(
+      '[data-setting="rate-limit-calls-per-minute-input"]',
+    ) as HTMLInputElement | null;
+    const adaptInput = el.shadowRoot?.querySelector(
+      '[data-setting="rate-limit-auto-adapt-toggle"]',
+    ) as HTMLInputElement | null;
+
+    if (rateInput) rateInput.value = "30";
+    if (adaptInput) adaptInput.checked = true;
+
+    await el.saveRateLimitSettings();
+    expect(mockSetRateLimitCallsPerMinute).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      30,
+    );
+    expect(mockSetRateLimitAutoAdapt).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      true,
+    );
+
+    const maxTokensInput = el.shadowRoot?.querySelector(
+      '[data-setting="max-tokens-input"]',
+    ) as HTMLInputElement | null;
+    await el.applyRecommendedMaxTokens();
+    expect(maxTokensInput?.value).toBeTruthy();
+
+    document.body.removeChild(el);
+  });
+
+  it("saves bedrock and llamafile settings", async () => {
+    const el = new ShadowClawLlm() as any;
+    el.db = {};
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+    document.body.appendChild(el);
+    await el.render();
+
+    const regionInput = el.shadowRoot?.querySelector(
+      '[data-setting="bedrock-region-input"]',
+    ) as HTMLInputElement | null;
+    const profileInput = el.shadowRoot?.querySelector(
+      '[data-setting="bedrock-profile-input"]',
+    ) as HTMLInputElement | null;
+
+    if (regionInput) regionInput.value = "us-west-2";
+    if (profileInput) profileInput.value = "default";
+
+    await el.saveBedrockSettings();
+    expect(mockSetBedrockSettings).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ region: "us-west-2", profile: "default" }),
+    );
+
+    const modeInput = el.shadowRoot?.querySelector(
+      '[data-setting="llamafile-mode-select"]',
+    ) as HTMLSelectElement | null;
+    const hostInput = el.shadowRoot?.querySelector(
+      '[data-setting="llamafile-host-input"]',
+    ) as HTMLInputElement | null;
+    const portInput = el.shadowRoot?.querySelector(
+      '[data-setting="llamafile-port-input"]',
+    ) as HTMLInputElement | null;
+    const offlineInput = el.shadowRoot?.querySelector(
+      '[data-setting="llamafile-offline-toggle"]',
+    ) as HTMLInputElement | null;
+
+    if (modeInput) modeInput.value = "server";
+    if (hostInput) hostInput.value = "http://127.0.0.1";
+    if (portInput) portInput.value = "8080";
+    if (offlineInput) offlineInput.checked = true;
+
+    await el.saveLlamafileSettings();
+    expect(mockSetLlamafileSettings).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({
+        mode: "server",
+        host: "http://127.0.0.1",
+        port: 8080,
+        offline: true,
+      }),
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles saveReasoningEffort, saveSubagentMaxParallel, and onStreamingToggle", async () => {
+    const orch = createOrchestratorStub();
+    (orchestratorStore as any).orchestrator = orch;
+
+    const el = new ShadowClawLlm() as any;
+    document.body.appendChild(el);
+    await el.render();
+
+    // 1. saveReasoningEffort
+    const select = el.shadowRoot?.querySelector(
+      '[data-setting="reasoning-effort-select"]',
+    ) as HTMLSelectElement | null;
+    if (select) select.value = "high";
+    await el.saveReasoningEffort();
+    expect(mockSetReasoningEffort).toHaveBeenCalledWith(
+      orch,
+      expect.anything(),
+      "high",
+    );
+
+    // 2. saveSubagentMaxParallel
+    const parallelInput = el.shadowRoot?.querySelector(
+      '[data-setting="subagent-max-parallel-input"]',
+    ) as HTMLInputElement | null;
+    if (parallelInput) parallelInput.value = "5";
+    await el.saveSubagentMaxParallel();
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "subagent_max_parallel",
+      "5",
+    );
+
+    // 3. onStreamingToggle
+    await el.onStreamingToggle(true);
+    expect(mockSetStreamingEnabled).toHaveBeenCalled();
+
+    // 4. saveMaxIterations
+    const maxIterInput = el.shadowRoot?.querySelector(
+      '[data-setting="max-iterations-input"]',
+    ) as HTMLInputElement | null;
+    if (maxIterInput) maxIterInput.value = "42";
+    await el.saveMaxIterations();
+    expect(mockSetMaxIterations).toHaveBeenCalledWith(
+      orch,
+      expect.anything(),
+      42,
+    );
+
+    // 5. saveMaxTokens
+    const maxTokensInput = el.shadowRoot?.querySelector(
+      '[data-setting="max-tokens-input"]',
+    ) as HTMLInputElement | null;
+    if (maxTokensInput) maxTokensInput.value = "2048";
+    await el.saveMaxTokens();
+    expect(mockSetMaxTokens).toHaveBeenCalledWith(
+      orch,
+      expect.anything(),
+      2048,
+    );
+
+    // 6. saveSubagentWorkspaceMode
+    const wsModeSelect = el.shadowRoot?.querySelector(
+      '[data-setting="subagent-workspace-mode-select"]',
+    ) as HTMLSelectElement | null;
+    if (wsModeSelect) wsModeSelect.value = "isolated";
+    await el.saveSubagentWorkspaceMode();
+    expect(setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "subagent_workspace_mode",
+      "isolated",
+    );
+
+    // 7. saveApiKey
+    const keyInput = el.shadowRoot?.querySelector(
+      '[data-setting="api-key-input"]',
+    ) as HTMLInputElement | null;
+    const providerSelect = el.shadowRoot?.querySelector(
+      '[data-setting="provider-select"]',
+    ) as HTMLSelectElement | null;
+    if (keyInput) keyInput.value = "sk-test-key-123";
+    if (providerSelect) providerSelect.value = "provider-a";
+    await el.saveApiKey();
+    expect(orch.setApiKey).toHaveBeenCalledWith(
+      expect.anything(),
+      "sk-test-key-123",
+    );
+
+    // 8. saveBuiltinAiSettings
+    await el.saveBuiltinAiSettings();
+    expect(setConfig).toHaveBeenCalled();
+
+    // 9. saveTransformersJsSettings
+    await el.saveTransformersJsSettings();
+    expect(setConfig).toHaveBeenCalled();
+
+    // 10. showLlamafileHelpDialog
+    el.requestAppDialog = jest.fn<any>().mockResolvedValue(undefined);
+    await el.showLlamafileHelpDialog("connection refused");
+    expect(el.requestAppDialog).toHaveBeenCalled();
+
+    // 11. saveMeshLlmSettings
+    const hostInput = el.shadowRoot?.querySelector(
+      '[data-setting="mesh-llm-host-input"]',
+    ) as HTMLInputElement | null;
+    if (hostInput) hostInput.value = "http://localhost:11434";
+    await el.saveMeshLlmSettings();
+
+    // 12. updateModelSelector dynamic models
+    (global.fetch as any) = jest.fn<any>().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        models: [{ id: "dynamic-model-1", name: "Dynamic Model 1" }],
+      }),
+    });
+    orch.getProvider.mockReturnValue("bedrock_proxy");
+    el.updateModelSelector();
 
     document.body.removeChild(el);
   });

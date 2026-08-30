@@ -164,4 +164,53 @@ describe("ollama-routes", () => {
     expect(res.write).toHaveBeenCalledWith(expect.any(Buffer));
     expect(res.end).toHaveBeenCalled();
   });
+
+  it("handles non-streaming error responses and exceptions", async () => {
+    const handler = routes.get("POST /ollama-proxy/chat/completions");
+
+    // Upstream error response
+    globalFetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      text: async () => "Bad request from Ollama",
+    });
+
+    const req1 = {
+      body: { model: "llama3", messages: [], stream: false },
+      headers: {},
+    };
+    const res1 = createResponse();
+    await handler(req1, res1);
+
+    expect(res1.status).toHaveBeenCalledWith(400);
+    expect(res1.json).toHaveBeenCalledWith({
+      error: "Bad request from Ollama",
+    });
+
+    // Exception throw
+    globalFetchMock.mockRejectedValueOnce(new Error("Connection refused"));
+
+    const req2 = {
+      body: { model: "llama3", messages: [], stream: false },
+      headers: {},
+    };
+    const res2 = createResponse();
+    await handler(req2, res2);
+
+    expect(res2.status).toHaveBeenCalledWith(502);
+  });
+
+  it("handles models route failure gracefully", async () => {
+    const handler = routes.get("GET /ollama-proxy/models");
+
+    globalFetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+    });
+
+    const res = createResponse();
+    await handler({}, res);
+
+    expect(res.status).toHaveBeenCalledWith(502);
+  });
 });

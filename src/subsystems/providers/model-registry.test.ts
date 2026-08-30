@@ -1,3 +1,4 @@
+import { jest } from "@jest/globals";
 import { modelRegistry } from "./model-registry.js";
 
 describe("ModelRegistry", () => {
@@ -255,6 +256,120 @@ describe("ModelRegistry", () => {
         maxOutput: null,
         routesByRequestFeatures: true,
       });
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+    }
+  });
+
+  it("should clear registered models", () => {
+    modelRegistry.registerModelInfo("model-to-clear", {
+      contextWindow: 4096,
+      maxOutput: 1024,
+    });
+    expect(modelRegistry.getModelInfo("model-to-clear")).not.toBeNull();
+    modelRegistry.clear();
+    expect(modelRegistry.getModelInfo("model-to-clear")).toBeNull();
+  });
+
+  it("should do nothing when provider has no modelsUrl", async () => {
+    await expect(
+      modelRegistry.fetchModelInfo({ id: "no-url" } as any),
+    ).resolves.toBeUndefined();
+  });
+
+  it("should handle apiKeyHeader, apiKeyHeaderFormat, headers, and extraHeaders", async () => {
+    const originalFetch = (globalThis as any).fetch;
+    let sentHeaders: any = null;
+
+    (globalThis as any).fetch = async (_url: string, opts: any) => {
+      sentHeaders = opts.headers;
+      return {
+        ok: true,
+        json: async () => ({
+          data: [{ id: "test-auth-model", context_length: 16000 }],
+        }),
+      };
+    };
+
+    try {
+      await modelRegistry.fetchModelInfo(
+        {
+          id: "hf-provider",
+          modelsUrl: "https://api.hf.co/models",
+          headers: { "X-Custom": "CustomVal" },
+          apiKeyHeader: "Authorization",
+          apiKeyHeaderFormat: "Bearer {key}",
+        } as any,
+        "secret-key",
+        { "X-Extra": "ExtraVal" },
+      );
+
+      expect(sentHeaders.get("Authorization")).toBe("Bearer secret-key");
+      expect(sentHeaders.get("X-Custom")).toBe("CustomVal");
+      expect(sentHeaders.get("X-Extra")).toBe("ExtraVal");
+      expect(modelRegistry.getModelInfo("test-auth-model")).toEqual({
+        contextWindow: 16000,
+        maxOutput: null,
+      });
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+    }
+  });
+
+  it("should handle error when fetch response is not ok", async () => {
+    const originalFetch = (globalThis as any).fetch;
+    const consoleSpy = jest
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    (globalThis as any).fetch = async () => ({
+      ok: false,
+      status: 403,
+      statusText: "Forbidden",
+    });
+
+    try {
+      await modelRegistry.fetchModelInfo({
+        id: "fail-provider",
+        modelsUrl: "https://fail.com/models",
+      } as any);
+
+      expect(consoleSpy).toHaveBeenCalledWith(
+        "[ModelRegistry] Error fetching models for fail-provider:",
+        expect.any(Error),
+      );
+      expect(modelRegistry.loading).toBe(false);
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+      consoleSpy.mockRestore();
+    }
+  });
+
+  it("should parse text->image architecture modality string", async () => {
+    const originalFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = async () => ({
+      ok: true,
+      json: async () => ({
+        data: [
+          {
+            id: "vision-model",
+            context_length: 32000,
+            architecture: {
+              modality: "text+image->text",
+            },
+          },
+        ],
+      }),
+    });
+
+    try {
+      await modelRegistry.fetchModelInfo({
+        id: "vision-provider",
+        modelsUrl: "https://vision.com/models",
+      } as any);
+
+      expect(
+        modelRegistry.getModelInfo("vision-model")?.supportsImageInput,
+      ).toBe(true);
     } finally {
       (globalThis as any).fetch = originalFetch;
     }

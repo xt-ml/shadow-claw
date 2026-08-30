@@ -382,4 +382,76 @@ describe("shadow-claw-git", () => {
 
     document.body.removeChild(el);
   });
+
+  it("handles setDefaultAccount and deleteAccount", async () => {
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.render();
+
+    el.accounts = [
+      {
+        id: "acc-1",
+        label: "Account 1",
+        hostPattern: "github.com",
+        authMode: "token",
+      } as any,
+      {
+        id: "acc-2",
+        label: "Account 2",
+        hostPattern: "gitlab.com",
+        authMode: "token",
+      } as any,
+    ];
+    el.defaultAccountId = "acc-1";
+
+    await el.setDefaultAccount("acc-2");
+    expect(el.defaultAccountId).toBe("acc-2");
+
+    await el.deleteAccount("acc-1");
+    expect(el.accounts.find((a) => a.id === "acc-1")).toBeUndefined();
+    expect(el.defaultAccountId).toBe("acc-2");
+
+    document.body.removeChild(el);
+  });
+
+  it("handles saveGitSettings with custom proxy and author info", async () => {
+    const { setConfig } = await import("../../../db/setConfig.js");
+    const el = new ShadowClawGit();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.render();
+    el.db = {} as any;
+
+    const customRadio = el.shadowRoot?.querySelector(
+      '[data-setting="git-proxy-custom"]',
+    ) as HTMLInputElement;
+    if (customRadio) customRadio.checked = true;
+
+    const authorNameInput = el.shadowRoot?.querySelector(
+      '[data-setting="git-author-name-input"]',
+    ) as HTMLInputElement;
+    if (authorNameInput) authorNameInput.value = "Custom Author";
+
+    const authorEmailInput = el.shadowRoot?.querySelector(
+      '[data-setting="git-author-email-input"]',
+    ) as HTMLInputElement;
+    if (authorEmailInput) authorEmailInput.value = "author@example.com";
+
+    await el.saveGitSettings();
+
+    expect(setConfig).toHaveBeenCalledWith(el.db, "git_cors_proxy", "custom");
+    expect(setConfig).toHaveBeenCalledWith(
+      el.db,
+      "git_author_name",
+      "Custom Author",
+    );
+    expect(setConfig).toHaveBeenCalledWith(
+      el.db,
+      "git_author_email",
+      "author@example.com",
+    );
+
+    document.body.removeChild(el);
+  });
 });

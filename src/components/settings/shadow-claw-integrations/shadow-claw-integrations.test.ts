@@ -384,4 +384,120 @@ describe("shadow-claw-integrations", () => {
 
     document.body.removeChild(el);
   });
+
+  it("handles testConnectionFromForm with success and error responses", async () => {
+    const el = new ShadowClawIntegrations();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    el.manifests = [
+      {
+        id: "imap",
+        name: "IMAP",
+        configurableFields: ["host", "port", "mailboxPath"],
+        description: "",
+      } as any,
+    ];
+    (getEmailPluginManifest as jest.Mock).mockReturnValue(el.manifests[0]);
+    el.showForm(null);
+
+    const slot = el.shadowRoot?.querySelector(
+      '[data-region="connection-form"]',
+    ) as HTMLElement;
+
+    const userInput = slot.querySelector("#int-username") as HTMLInputElement;
+    if (userInput) userInput.value = "user@test.com";
+
+    const hostInput = slot.querySelector("#cfg-host") as HTMLInputElement;
+    if (hostInput) hostInput.value = "imap.test.com";
+
+    const passInput = slot.querySelector("#int-password") as HTMLInputElement;
+    if (passInput) passInput.value = "secret-pass";
+
+    const { resolveConnectionTestAuth } =
+      await import("./connection-test-auth.js");
+    (resolveConnectionTestAuth as jest.Mock<any>).mockReturnValue({
+      authType: "basic_userpass",
+      password: "secret-pass",
+    });
+
+    // Mock fetch for /integrations/email/read success
+    (global.fetch as any) = (jest.fn() as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ count: 5 }),
+    });
+
+    await el.testConnectionFromForm(slot);
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/integrations/email/read",
+      expect.objectContaining({ method: "POST" }),
+    );
+
+    // Mock fetch for failure
+    (global.fetch as any) = (jest.fn() as any).mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      json: async () => ({ error: "Auth failed" }),
+    });
+
+    await el.testConnectionFromForm(slot);
+
+    // Toggle connection test
+    el.connections = [
+      {
+        id: "conn-1",
+        label: "My IMAP",
+        pluginId: "imap",
+        enabled: true,
+        config: {},
+        credentialRef: null,
+        createdAt: 0,
+        updatedAt: 0,
+      } as any,
+    ];
+    const { upsertEmailConnection } =
+      await import("../../../subsystems/email/connections.js");
+    await el.toggleConnection("conn-1");
+    expect(upsertEmailConnection).toHaveBeenCalledWith(
+      el.db,
+      expect.objectContaining({
+        id: "conn-1",
+        enabled: false,
+      }),
+    );
+
+    // OAuth connect from form tests
+    const oauthSlot = document.createElement("div");
+    oauthSlot.innerHTML = `
+      <select id="int-oauth-provider"><option value="google">Google</option></select>
+      <input id="int-oauth-client-id" value="client-id-123" />
+      <input id="int-oauth-client-secret" value="secret-xyz" />
+      <input id="int-oauth-scope" value="https://mail.google.com/" />
+      <div data-region="oauth-status"></div>
+      <button data-action="connect-oauth"></button>
+    `;
+    el.shadowRoot?.appendChild(oauthSlot);
+
+    (global.fetch as any) = jest.fn<any>().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        authUrl: "https://accounts.google.com/o/oauth2/auth",
+      }),
+    });
+
+    const windowOpenSpy = jest
+      .spyOn(window, "open")
+      .mockImplementation(() => null);
+    await el.connectOAuthFromForm(oauthSlot);
+    expect(global.fetch).toHaveBeenCalledWith(
+      "/oauth/authorize",
+      expect.objectContaining({ method: "POST" }),
+    );
+    windowOpenSpy.mockRestore();
+
+    document.body.removeChild(el);
+  });
 });

@@ -18,6 +18,8 @@ const {
   rewriteText,
   detectLanguage,
   translateText,
+  proofreadText,
+  embedText,
 } = await import("./builtin-ai-tasks.js");
 
 describe("builtin-ai-tasks subsystem", () => {
@@ -528,6 +530,78 @@ describe("builtin-ai-tasks subsystem", () => {
       });
       expect(mockTranslate).toHaveBeenCalledWith("Hello world");
       expect(mockDestroy).toHaveBeenCalled();
+    });
+  });
+
+  describe("proofreadText", () => {
+    it("calls Proofreader.create and proofreader.proofread when available", async () => {
+      const mockProofread = jest.fn<any>().mockResolvedValue("Corrected text.");
+      const mockDestroy = jest.fn<any>();
+
+      (globalThis as any).Proofreader = {
+        create: jest.fn<any>().mockResolvedValue({
+          proofread: mockProofread,
+          destroy: mockDestroy,
+        }),
+      };
+
+      const result = await proofreadText("Bad text", { context: "Email" });
+      expect(result).toBe("Corrected text.");
+      expect((globalThis as any).Proofreader.create).toHaveBeenCalledWith({
+        context: "Email",
+      });
+      expect(mockProofread).toHaveBeenCalledWith("Bad text", {
+        context: "Email",
+      });
+      expect(mockDestroy).toHaveBeenCalled();
+    });
+
+    it("falls back to rewriteText when Proofreader is absent", async () => {
+      delete (globalThis as any).Proofreader;
+      const mockRewrite = jest
+        .fn<any>()
+        .mockResolvedValue("Rewritten proofread text.");
+      const mockDestroy = jest.fn<any>();
+
+      (globalThis as any).Rewriter = {
+        create: jest.fn<any>().mockResolvedValue({
+          rewrite: mockRewrite,
+          destroy: mockDestroy,
+        }),
+      };
+
+      const result = await proofreadText("Bad text", { context: "Email" });
+      expect(result).toBe("Rewritten proofread text.");
+      expect(mockRewrite).toHaveBeenCalled();
+      expect(mockDestroy).toHaveBeenCalled();
+    });
+  });
+
+  describe("embedText", () => {
+    it("calls SemanticEmbedder.create and embedder.embed", async () => {
+      const mockEmbed = jest.fn<any>().mockResolvedValue({
+        embeddings: [[0.1, 0.2, 0.3]],
+      });
+      const mockDestroy = jest.fn<any>();
+
+      (globalThis as any).SemanticEmbedder = {
+        create: jest.fn<any>().mockResolvedValue({
+          embed: mockEmbed,
+          destroy: mockDestroy,
+        }),
+      };
+
+      const result = await embedText("Hello embed");
+      expect(result).toEqual({ embeddings: [[0.1, 0.2, 0.3]] });
+      expect(mockEmbed).toHaveBeenCalledWith("Hello embed");
+      expect(mockDestroy).toHaveBeenCalled();
+    });
+
+    it("throws error when SemanticEmbedder is not available", async () => {
+      delete (globalThis as any).SemanticEmbedder;
+      await expect(embedText("Hello embed")).rejects.toThrow(
+        /Semantic Embedder API is not supported/,
+      );
     });
   });
 });

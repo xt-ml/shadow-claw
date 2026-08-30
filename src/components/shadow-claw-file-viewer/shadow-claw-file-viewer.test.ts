@@ -1862,4 +1862,277 @@ describe("shadow-claw-file-viewer", () => {
       expect(resolved).toContain("data:image/png;base64,iVBORw==");
     });
   });
+
+  describe("syncIframeTheme & storage proxy bridge", () => {
+    it("syncs theme and custom properties to previewFrameWindow", () => {
+      const component = new ShadowClawFileViewer() as any;
+      const mockPostMessage = jest.fn();
+      component.previewFrameWindow = { postMessage: mockPostMessage };
+
+      component.syncIframeTheme();
+
+      expect(mockPostMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-theme-update",
+          theme: expect.any(String),
+          customProperties: expect.any(Object),
+        }),
+        "*",
+      );
+    });
+
+    it("handles storage proxy requests (setItem, removeItem, getAllItems, idb-put, idb-get)", async () => {
+      const component = new ShadowClawFileViewer() as any;
+      const mockSource = { postMessage: jest.fn() };
+
+      (fileViewerStore as any).file = { path: "demo.html", name: "demo.html" };
+
+      // 1. setItem
+      await component.handleStorageProxyRequest(
+        mockSource,
+        "req-1",
+        "setItem",
+        {
+          key: "pref",
+          value: "dark",
+        },
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-1",
+          result: null,
+        }),
+        "*",
+      );
+
+      // 2. idb-put
+      await component.handleStorageProxyRequest(
+        mockSource,
+        "req-2",
+        "idb-put",
+        {
+          dbName: "test-db",
+          storeName: "items",
+          key: "k1",
+          value: { foo: "bar" },
+        },
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-2",
+          result: "k1",
+        }),
+        "*",
+      );
+
+      // 3. Unknown method sends error
+      await component.handleStorageProxyRequest(
+        mockSource,
+        "req-3",
+        "unknownMethod",
+        {},
+      );
+      expect(mockSource.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-storage-proxy-result",
+          requestId: "req-3",
+          error: expect.stringContaining("Unknown storage proxy method"),
+        }),
+        "*",
+      );
+    });
+
+    it("builds web share File instances from native files and binary buffers", () => {
+      const component = new ShadowClawFileViewer() as any;
+
+      const native = new File(["content"], "test.txt", {
+        type: "text/plain",
+      });
+      expect(component.buildWebShareFile({ nativeFile: native })).toBe(native);
+
+      const binaryFile = component.buildWebShareFile({
+        name: "data.bin",
+        binaryContent: new Uint8Array([1, 2, 3]),
+        mimeType: "application/octet-stream",
+      });
+      expect(binaryFile).toBeInstanceOf(File);
+      expect(binaryFile.name).toBe("data.bin");
+
+      expect(component.buildWebShareFile(null)).toBeNull();
+      expect(component.buildWebShareFile({ binaryContent: null })).toBeNull();
+      expect(
+        component.buildWebShareFile({ binaryContent: new Uint8Array([]) }),
+      ).toBeNull();
+    });
+
+    it("cleans up resources and disconnects observers on disconnectedCallback", () => {
+      const component = new ShadowClawFileViewer() as any;
+      const disposeMock = jest.fn();
+      component.broadcastProxy = { dispose: disposeMock };
+      const disconnectMock = jest.fn();
+      component.themeObserver = { disconnect: disconnectMock };
+      const revokeMock = jest.spyOn(component, "revokeObjectUrl");
+
+      component.disconnectedCallback();
+
+      expect(disposeMock).toHaveBeenCalledTimes(1);
+      expect(component.broadcastProxy).toBeNull();
+      expect(disconnectMock).toHaveBeenCalledTimes(1);
+      expect(component.themeObserver).toBeNull();
+      expect(revokeMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("synchronizes iframe theme with document dark/light mode class", () => {
+      const component = new ShadowClawFileViewer() as any;
+      const mockPostMessage = jest.fn();
+      component.previewFrameWindow = { postMessage: mockPostMessage };
+
+      document.documentElement.className = "dark-theme";
+      component.syncIframeTheme();
+
+      expect(mockPostMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "shadow-claw-theme-update",
+        }),
+        "*",
+      );
+    });
+
+    it("handles openFolderInFilesView, openWorkspaceLink, and viewer dismissal", async () => {
+      const component = new ShadowClawFileViewer() as any;
+      component.db = {} as any;
+
+      // 1. openFolderInFilesView
+      await component.openFolderInFilesView("docs/subfolder/");
+      expect(orchestratorStore.setCurrentPath).toHaveBeenCalledWith(
+        component.db,
+        "docs/subfolder",
+      );
+      expect(fileViewerStore.closeFile).toHaveBeenCalled();
+
+      // 2. openWorkspaceLink with extension
+      await component.openWorkspaceLink("notes.txt", "docs");
+      expect(fileViewerStore.openFile).toHaveBeenCalledWith(
+        component.db,
+        expect.any(String),
+        expect.any(String),
+      );
+
+      // 3. canDismissViewer when not dirty
+      component.isDirty = false;
+      const canDismiss = await component.canDismissViewer();
+      expect(canDismiss).toBe(true);
+
+      // 4. canDismissViewer when dirty
+      component.isDirty = true;
+      component.requestConfirmation = jest.fn<any>().mockResolvedValue(true);
+      const canDismissDirty = await component.canDismissViewer();
+      expect(canDismissDirty).toBe(true);
+
+      // 5. requestCloseViewer
+      component.isDirty = false;
+      const closed = await component.requestCloseViewer();
+      expect(closed).toBe(true);
+      expect(fileViewerStore.closeFile).toHaveBeenCalled();
+    });
+
+    it("handles handleSave, handleShareFile, and toggleFullscreenMode", async () => {
+      const { ShadowClawFileViewer } =
+        await import("./shadow-claw-file-viewer.js");
+      const { writeGroupFile } =
+        await import("../../storage/writeGroupFile.js");
+
+      const component = new ShadowClawFileViewer() as any;
+      document.body.appendChild(component);
+      component.db = {} as any;
+
+      // 1. handleSave
+      (fileViewerStore as any).file = {
+        name: "test.txt",
+        path: "docs/test.txt",
+        kind: "text",
+        content: "old content",
+        groupId: "g1",
+      };
+      let editor = component.shadowRoot?.querySelector(".file-editor");
+      if (!editor) {
+        editor = document.createElement("textarea");
+        editor.className = "file-editor";
+        component.shadowRoot?.appendChild(editor);
+      }
+      editor.value = "new content";
+
+      await component.handleSave();
+      expect(writeGroupFile).toHaveBeenCalledWith(
+        component.db,
+        "g1",
+        "docs/test.txt",
+        "new content",
+      );
+
+      // 2. handleShareFile
+      const mockShare = jest.fn<any>().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, "share", {
+        value: mockShare,
+        configurable: true,
+        writable: true,
+      });
+      await component.handleShareFile();
+      expect(mockShare).toHaveBeenCalledWith(
+        expect.objectContaining({ title: "test.txt" }),
+      );
+
+      // 3. renderBinaryPreview - empty
+      const contentEl = document.createElement("div");
+      component.renderBinaryPreview(contentEl, {
+        name: "empty.bin",
+        mimeType: "application/octet-stream",
+        binaryContent: new Uint8Array(0),
+      });
+      expect(contentEl.textContent).toBe("Binary content unavailable.");
+
+      // 4. renderBinaryPreview - image
+      (global.URL.createObjectURL as any) = jest
+        .fn<any>()
+        .mockReturnValue("blob:image-url");
+      component.renderBinaryPreview(contentEl, {
+        name: "img.jpg",
+        mimeType: "image/jpeg",
+        binaryContent: new Uint8Array([1, 2, 3]),
+      });
+      expect(contentEl.querySelector("img")).not.toBeNull();
+
+      // 5. renderBinaryPreview - video
+      component.renderBinaryPreview(contentEl, {
+        name: "clip.mp4",
+        mimeType: "video/mp4",
+        binaryContent: new Uint8Array([1, 2, 3]),
+      });
+      expect(contentEl.querySelector("video")).not.toBeNull();
+
+      // 6. renderBinaryPreview - audio
+      component.renderBinaryPreview(contentEl, {
+        name: "song.mp3",
+        mimeType: "audio/mp3",
+        binaryContent: new Uint8Array([1, 2, 3]),
+      });
+      expect(contentEl.querySelector("audio")).not.toBeNull();
+
+      // 7. renderBinaryPreview - iframe/pdf
+      component.renderBinaryPreview(contentEl, {
+        name: "doc.pdf",
+        mimeType: "application/pdf",
+        binaryContent: new Uint8Array([1, 2, 3]),
+      });
+      expect(contentEl.querySelector("iframe")).not.toBeNull();
+
+      // 8. resetContent
+      component.resetContent();
+      expect(component.isFullscreenMode).toBe(false);
+
+      document.body.removeChild(component);
+    });
+  });
 });

@@ -15,7 +15,14 @@ export class ShadowClawDialog extends HTMLElement {
 
   close(returnValue?: string): void {
     this.ensureDialog();
-    this._dialog?.close(returnValue);
+    if (typeof this._dialog?.close === "function") {
+      this._dialog.close(returnValue);
+    } else if (this._dialog) {
+      this._dialog.removeAttribute("open");
+      if (returnValue !== undefined) {
+        this._dialog.returnValue = returnValue;
+      }
+    }
   }
 
   get dialog(): HTMLDialogElement | null {
@@ -67,7 +74,11 @@ export class ShadowClawDialog extends HTMLElement {
 
   showModal(): void {
     this.ensureDialog();
-    this._dialog?.showModal();
+    if (typeof this._dialog?.showModal === "function") {
+      this._dialog.showModal();
+    } else if (this._dialog) {
+      this._dialog.setAttribute("open", "");
+    }
   }
 
   private syncDialogAttributes(): void {

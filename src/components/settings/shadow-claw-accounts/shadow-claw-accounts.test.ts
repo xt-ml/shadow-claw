@@ -388,4 +388,39 @@ describe("shadow-claw-accounts", () => {
 
     document.body.removeChild(el);
   });
+
+  it("handles setDefaultAccount and deleteAccount", async () => {
+    const el = new ShadowClawAccounts();
+    document.body.appendChild(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    await el.render();
+    el.db = {} as any;
+
+    el.accounts = [
+      {
+        id: "acct-1",
+        label: "Account 1",
+        service: "Figma",
+        hostPattern: "api.figma.com",
+        authMode: "token",
+      } as any,
+      {
+        id: "acct-2",
+        label: "Account 2",
+        service: "Linear",
+        hostPattern: "api.linear.app",
+        authMode: "token",
+      } as any,
+    ];
+    el.defaultAccountId = "acct-1";
+
+    await el.setDefaultAccount("acct-2");
+    expect(el.defaultAccountId).toBe("acct-2");
+
+    await el.deleteAccount("acct-1");
+    expect(el.accounts.find((a) => a.id === "acct-1")).toBeUndefined();
+    expect(el.defaultAccountId).toBe("acct-2");
+
+    document.body.removeChild(el);
+  });
 });

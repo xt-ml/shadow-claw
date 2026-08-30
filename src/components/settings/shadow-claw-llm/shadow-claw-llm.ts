@@ -318,16 +318,16 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     const modeInput = root.querySelector(
-      '[data-setting="llamafile-mode"]',
+      '[data-setting="llamafile-mode"], [data-setting="llamafile-mode-select"]',
     ) as HTMLSelectElement | null;
     const hostInput = root.querySelector(
-      '[data-setting="llamafile-host"]',
+      '[data-setting="llamafile-host"], [data-setting="llamafile-host-input"]',
     ) as HTMLInputElement | null;
     const portInput = root.querySelector(
-      '[data-setting="llamafile-port"]',
+      '[data-setting="llamafile-port"], [data-setting="llamafile-port-input"]',
     ) as HTMLInputElement | null;
     const offlineInput = root.querySelector(
-      '[data-setting="llamafile-offline"]',
+      '[data-setting="llamafile-offline"], [data-setting="llamafile-offline-toggle"]',
     ) as HTMLInputElement | null;
 
     if (modeInput) {
@@ -1694,16 +1694,16 @@ export class ShadowClawLlm extends ShadowClawElement {
     }
 
     const modeInput = root.querySelector(
-      '[data-setting="llamafile-mode"]',
+      '[data-setting="llamafile-mode"], [data-setting="llamafile-mode-select"]',
     ) as HTMLSelectElement | null;
     const hostInput = root.querySelector(
-      '[data-setting="llamafile-host"]',
+      '[data-setting="llamafile-host"], [data-setting="llamafile-host-input"]',
     ) as HTMLInputElement | null;
     const portInput = root.querySelector(
-      '[data-setting="llamafile-port"]',
+      '[data-setting="llamafile-port"], [data-setting="llamafile-port-input"]',
     ) as HTMLInputElement | null;
     const offlineInput = root.querySelector(
-      '[data-setting="llamafile-offline"]',
+      '[data-setting="llamafile-offline"], [data-setting="llamafile-offline-toggle"]',
     ) as HTMLInputElement | null;
 
     if (!modeInput || !hostInput || !portInput || !offlineInput) {

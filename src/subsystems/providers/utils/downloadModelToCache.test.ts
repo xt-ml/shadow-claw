@@ -2,8 +2,8 @@ import { jest } from "@jest/globals";
 import { downloadModelToCache } from "./downloadModelToCache.js";
 
 // jsdom does not implement Blob fully, so we mock it for the tests
-if (typeof global !== "undefined") {
-  (global as any).Blob = class MockBlob {
+if (typeof globalThis !== "undefined") {
+  (globalThis as any).Blob = class MockBlob {
     private parts: any[];
     public size: number;
     constructor(parts: any[]) {

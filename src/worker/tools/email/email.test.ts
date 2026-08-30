@@ -30,9 +30,14 @@ describe("worker/tools/email", () => {
             id: "imap",
             name: "IMAP",
             protocol: "imap",
-            actions: ["messages.read", "messages.send"],
+            actions: [
+              "messages.read",
+              "messages.send",
+              "messages.mark_read",
+              "messages.delete",
+            ],
             authTypes: ["basic_userpass", "oauth"],
-            configurableFields: [],
+            configurableFields: ["host", "port"],
           }
         : null,
     );
@@ -44,7 +49,7 @@ describe("worker/tools/email", () => {
         protocol: "imap",
         actions: ["messages.read", "messages.send"],
         authTypes: ["basic_userpass", "oauth"],
-        configurableFields: [],
+        configurableFields: ["host", "port"],
       },
     ]);
 
@@ -119,8 +124,50 @@ describe("worker/tools/email", () => {
 
   it("returns validation error when action is missing", async () => {
     const result = await executeManageEmailTool({} as any, {}, "group-1");
-
     expect(result).toContain("requires action");
+  });
+
+  it("lists plugins, connections and status", async () => {
+    const plugins = await executeManageEmailTool(
+      {} as any,
+      { action: "list_plugins" },
+      "group-1",
+    );
+    expect(plugins).toContain("IMAP");
+
+    mockListEmailConnections.mockResolvedValueOnce([
+      {
+        id: "conn-1",
+        label: "Office 365",
+        pluginId: "imap",
+        enabled: true,
+        config: { host: "outlook.office365.com" },
+      },
+    ]);
+
+    const connections = await executeManageEmailTool(
+      {} as any,
+      { action: "list_connections" },
+      "group-1",
+    );
+    expect(connections).toContain("conn-1 (Office 365)");
+
+    mockListEmailConnections.mockResolvedValueOnce([
+      {
+        id: "conn-1",
+        label: "Office 365",
+        pluginId: "imap",
+        enabled: true,
+        config: {},
+      },
+    ]);
+
+    const status = await executeManageEmailTool(
+      {} as any,
+      { action: "status" },
+      "group-1",
+    );
+    expect(status).toContain("Configured plugin connections: 1");
   });
 
   it("connect stores encrypted basic credentials", async () => {
@@ -154,6 +201,70 @@ describe("worker/tools/email", () => {
       }),
     );
     expect(result).toContain("Email connection created: conn-1");
+  });
+
+  it("configure, enable, disable, delete and test connections", async () => {
+    const existingConn = {
+      id: "conn-cfg",
+      label: "Old Label",
+      pluginId: "imap",
+      enabled: false,
+      config: { host: "old.host" },
+      credentialRef: {
+        username: "user@mail.com",
+        encryptedSecret: "enc:oldpw",
+      },
+    };
+
+    mockGetEmailConnection.mockResolvedValue(existingConn);
+    mockUpsertEmailConnection.mockImplementation(
+      async (_db: any, val: any) => val,
+    );
+
+    // configure
+    const cfgResult = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "configure",
+        connection_id: "conn-cfg",
+        label: "New Label",
+        enabled: true,
+      },
+      "group-1",
+    );
+    expect(cfgResult).toContain("Integration connection updated: conn-cfg");
+
+    // enable
+    const enableResult = await executeManageEmailTool(
+      {} as any,
+      { action: "enable", connection_id: "conn-cfg" },
+      "group-1",
+    );
+    expect(enableResult).toContain("enabled");
+
+    // disable
+    const disableResult = await executeManageEmailTool(
+      {} as any,
+      { action: "disable", connection_id: "conn-cfg" },
+      "group-1",
+    );
+    expect(disableResult).toContain("disabled");
+
+    // test
+    const testResult = await executeManageEmailTool(
+      {} as any,
+      { action: "test", connection_id: "conn-cfg" },
+      "group-1",
+    );
+    expect(testResult).toContain("passed for conn-cfg");
+
+    // delete
+    const deleteResult = await executeManageEmailTool(
+      {} as any,
+      { action: "delete", connection_id: "conn-cfg" },
+      "group-1",
+    );
+    expect(deleteResult).toContain("Integration connection deleted: conn-cfg");
   });
 
   it("read_messages retries once after oauth 401", async () => {
@@ -294,8 +405,8 @@ describe("worker/tools/email", () => {
     expect(parsed.saved_paths).toEqual(["downloads/email/x.txt"]);
   });
 
-  it("mark_as_read validates message_uids", async () => {
-    mockGetEmailConnection.mockResolvedValueOnce({
+  it("mark_as_read and delete_messages execute flag modifications and delete requests", async () => {
+    mockGetEmailConnection.mockResolvedValue({
       id: "conn-mark",
       pluginId: "imap",
       enabled: true,
@@ -307,15 +418,89 @@ describe("worker/tools/email", () => {
       },
     });
 
-    const result = await executeManageEmailTool(
+    // mark_as_read missing uids
+    const noUidResult = await executeManageEmailTool(
+      {} as any,
+      { action: "mark_as_read", connection_id: "conn-mark" },
+      "group-1",
+    );
+    expect(noUidResult).toContain("requires message_uids");
+
+    // mark_as_read success
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ updated: [101] }),
+    });
+
+    const markResult = await executeManageEmailTool(
       {} as any,
       {
         action: "mark_as_read",
         connection_id: "conn-mark",
+        message_uids: [101],
       },
       "group-1",
     );
+    expect(markResult).toContain('"updated": [');
 
-    expect(result).toContain("requires message_uids");
+    // delete_messages success
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: async () => ({ deleted: [102] }),
+    });
+
+    const deleteMsgResult = await executeManageEmailTool(
+      {} as any,
+      {
+        action: "delete_messages",
+        connection_id: "conn-mark",
+        message_uids: [102],
+      },
+      "group-1",
+    );
+    expect(deleteMsgResult).toContain('"deleted": [');
+  });
+
+  it("parses email attachment inputs and guesses mime types correctly", async () => {
+    const { asEmailAttachmentInputs } =
+      await import("./utils/asEmailAttachmentInputs.js");
+    const { guessMimeTypeFromFilename } =
+      await import("./utils/guessMimeTypeFromFilename.js");
+
+    // asEmailAttachmentInputs
+    expect(asEmailAttachmentInputs(null)).toEqual([]);
+    expect(
+      asEmailAttachmentInputs([
+        "file1.txt",
+        "   ",
+        {
+          path: "file2.pdf",
+          filename: "doc.pdf",
+          content_type: "application/pdf",
+        },
+        { path: "" },
+        123,
+      ]),
+    ).toEqual([
+      { path: "file1.txt" },
+      {
+        path: "file2.pdf",
+        filename: "doc.pdf",
+        contentType: "application/pdf",
+      },
+    ]);
+
+    // guessMimeTypeFromFilename
+    expect(guessMimeTypeFromFilename("photo.png")).toBe("image/png");
+    expect(guessMimeTypeFromFilename("photo.jpg")).toBe("image/jpeg");
+    expect(guessMimeTypeFromFilename("photo.jpeg")).toBe("image/jpeg");
+    expect(guessMimeTypeFromFilename("anim.gif")).toBe("image/gif");
+    expect(guessMimeTypeFromFilename("pic.webp")).toBe("image/webp");
+    expect(guessMimeTypeFromFilename("doc.pdf")).toBe("application/pdf");
+    expect(guessMimeTypeFromFilename("notes.txt")).toBe("text/plain");
+    expect(guessMimeTypeFromFilename("readme.md")).toBe("text/plain");
+    expect(guessMimeTypeFromFilename("archive.zip")).toBeUndefined();
   });
 });

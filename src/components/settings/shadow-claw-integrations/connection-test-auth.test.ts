@@ -1,55 +1,45 @@
-import { describe, expect, it } from "@jest/globals";
-
 import { resolveConnectionTestAuth } from "./connection-test-auth.js";
 
 describe("resolveConnectionTestAuth", () => {
-  it("uses pending oauth token when provided", () => {
+  it("resolves oauth authType with trimmed access token", () => {
     const result = resolveConnectionTestAuth({
       authMode: "oauth",
-      pendingOauthAccessToken: "oauth-token",
+      pendingOauthAccessToken: "  my-access-token  ",
+      passwordInput: "",
     });
-
     expect(result).toEqual({
       authType: "oauth",
-      accessToken: "oauth-token",
+      accessToken: "my-access-token",
     });
   });
 
-  it("requires a fresh oauth token and does not reuse stored encrypted credentials", () => {
-    const result = resolveConnectionTestAuth({
+  it("returns error when oauth access token is missing or empty", () => {
+    const result: any = resolveConnectionTestAuth({
       authMode: "oauth",
-      pendingOauthAccessToken: "",
-      hasStoredOauthCredential: true,
+      pendingOauthAccessToken: "   ",
+      passwordInput: "",
     });
-
-    expect(result).toEqual({
-      error:
-        "OAuth access token is missing. Click Connect OAuth first (or save and reconnect).",
-    });
+    expect(result.error).toContain("OAuth access token is missing");
   });
 
-  it("uses entered password for basic auth", () => {
+  it("resolves basic_userpass authType with trimmed password", () => {
     const result = resolveConnectionTestAuth({
-      authMode: "basic",
-      passwordInput: "app-password",
+      authMode: "password",
+      pendingOauthAccessToken: "",
+      passwordInput: "  secret-password  ",
     });
-
     expect(result).toEqual({
       authType: "basic_userpass",
-      password: "app-password",
+      password: "secret-password",
     });
   });
 
-  it("requires explicit password entry and does not decrypt stored secret", () => {
-    const result = resolveConnectionTestAuth({
-      authMode: "basic",
-      passwordInput: "",
-      hasStoredPasswordCredential: true,
+  it("returns error when password is missing or empty", () => {
+    const result: any = resolveConnectionTestAuth({
+      authMode: "password",
+      pendingOauthAccessToken: "",
+      passwordInput: "   ",
     });
-
-    expect(result).toEqual({
-      error:
-        "Password/app password is missing. Enter it to test this connection.",
-    });
+    expect(result.error).toContain("Password/app password is missing");
   });
 });

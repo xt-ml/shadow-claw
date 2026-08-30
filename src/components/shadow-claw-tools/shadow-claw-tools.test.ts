@@ -461,4 +461,84 @@ describe("shadow-claw-tools", () => {
 
     document.body.removeChild(el);
   });
+
+  it("handles handleAddTool, handleCloneTool, handleRestore, and handleSaveProfile", async () => {
+    const el = new ShadowClawTools() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    const db = {} as any;
+
+    const dialog = el.shadowRoot?.querySelector(".tools__dialog");
+    if (dialog) (dialog as any).close = jest.fn();
+    const cloneDialog = el.shadowRoot?.querySelector(".tools__clone-dialog");
+    if (cloneDialog) (cloneDialog as any).close = jest.fn();
+    const profileDialog = el.shadowRoot?.querySelector(
+      ".tools__profile-dialog",
+    );
+    if (profileDialog) (profileDialog as any).close = jest.fn();
+
+    // 1. Add Tool validation
+    const form = document.createElement("form");
+    form.innerHTML = `
+      <input name="name" value="" />
+      <input name="description" value="" />
+    `;
+    await el.handleAddTool(db, form);
+    expect(toolsStore.addCustomTool).not.toHaveBeenCalled();
+
+    // 2. Add Tool success
+    form.innerHTML = `
+      <input name="name" value="unique_tool" />
+      <input name="description" value="A unique tool" />
+      <input name="input_schema" value='{"type":"object"}' />
+    `;
+    await el.handleAddTool(db, form);
+    expect(toolsStore.addCustomTool).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ name: "unique_tool" }),
+    );
+
+    // 3. Clone Tool
+    const cloneForm = document.createElement("form");
+    cloneForm.innerHTML = `
+      <input name="source" value="bash" />
+      <input name="name" value="bash_copy" />
+      <input name="description" value="Cloned bash" />
+    `;
+    await el.handleCloneTool(db, cloneForm);
+    expect(toolsStore.cloneTool).toHaveBeenCalledWith(
+      db,
+      "bash",
+      "bash_copy",
+      "Cloned bash",
+    );
+
+    // 4. Restore backup
+    const restoreFile = {
+      text: jest
+        .fn<() => Promise<string>>()
+        .mockResolvedValue(JSON.stringify({ tools: [] })),
+    };
+    const restoreInput = {
+      files: [restoreFile],
+      value: "backup.json",
+    } as any;
+    await el.handleRestore(db, restoreInput);
+    expect(toolsStore.importBackup).toHaveBeenCalled();
+
+    // 5. Save Profile
+    const profileForm = document.createElement("form");
+    profileForm.innerHTML = `
+      <input name="name" value="Dev Profile" />
+      <input name="providerId" value="anthropic" />
+      <input name="model" value="claude-3" />
+    `;
+    await el.handleSaveProfile(db, profileForm);
+    expect(toolsStore.addProfile).toHaveBeenCalledWith(
+      db,
+      expect.objectContaining({ name: "Dev Profile", providerId: "anthropic" }),
+    );
+
+    document.body.removeChild(el);
+  });
 });

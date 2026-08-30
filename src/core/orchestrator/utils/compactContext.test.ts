@@ -41,6 +41,37 @@ jest.unstable_mockModule("../../../db/groups.js", () => ({
     .mockResolvedValue(undefined),
 }));
 
+jest.unstable_mockModule(
+  "../../../subsystems/providers/builtin-ai-tasks.js",
+  () => ({
+    ensureBuiltinAiPolyfills: jest.fn<any>().mockResolvedValue(undefined),
+    summarizeText: jest
+      .fn<any>()
+      .mockResolvedValue("Mock summary from Task API"),
+    writeText: jest.fn<any>().mockResolvedValue(""),
+    rewriteText: jest.fn<any>().mockResolvedValue(""),
+    detectLanguage: jest.fn<any>().mockResolvedValue([]),
+    translateText: jest.fn<any>().mockResolvedValue(""),
+    proofreadText: jest.fn<any>().mockResolvedValue(""),
+    embedText: jest.fn<any>().mockResolvedValue([]),
+    isBuiltinTaskSupported: jest.fn(() => true),
+    getPromptApiFallbackModel: jest.fn<any>().mockResolvedValue(""),
+    createTaskInstanceWithFallback: jest.fn<any>().mockResolvedValue({}),
+    isWebGpuAdapterAvailable: jest.fn<any>().mockResolvedValue(false),
+  }),
+);
+
+jest.unstable_mockModule(
+  "../../../subsystems/providers/prompt-api-provider.js",
+  () => ({
+    isPromptApiSupported: jest.fn<any>().mockReturnValue(true),
+    compactWithPromptApi: jest
+      .fn<any>()
+      .mockResolvedValue("Mock prompt API summary"),
+    invokeWithPromptApi: jest.fn<any>().mockResolvedValue(undefined),
+  }),
+);
+
 describe("compactContext", () => {
   let db: any;
   let o: Orchestrator;
@@ -112,5 +143,52 @@ describe("compactContext", () => {
     expect(payload.type).toBe("compact");
     expect(payload.payload.provider).toBe("transformers_js_local");
     expect(payload.payload.model).toBe("onnx-community/Llama-3.2-1B-Instruct");
+  });
+
+  it("handles compactionPref === 'builtin_task_api'", async () => {
+    jest.spyOn(o, "getApiKey").mockResolvedValue("key");
+    const { getConfig } = await import("../../../db/getConfig.js");
+    (getConfig as jest.Mock<any>).mockImplementation(
+      (_db: any, key: string) => {
+        if (key === "compaction_engine_preference") {
+          return Promise.resolve("builtin_task_api");
+        }
+        return Promise.resolve(null);
+      },
+    );
+
+    const { buildConversationMessages } =
+      await import("../../../db/buildConversationMessages.js");
+    (buildConversationMessages as jest.Mock<any>).mockResolvedValue([
+      { role: "user", content: "Hi" },
+      { role: "assistant", content: "Hello" },
+    ]);
+
+    o.handleCompactDone = jest.fn<any>().mockResolvedValue(undefined);
+
+    await compactContext(o, db, "group-1");
+
+    expect(o.handleCompactDone).toHaveBeenCalledWith(
+      db,
+      "group-1",
+      "Mock summary from Task API",
+    );
+  });
+
+  it("handles effectiveProviderId === 'prompt_api'", async () => {
+    const { getConfig } = await import("../../../db/getConfig.js");
+    (getConfig as jest.Mock<any>).mockResolvedValue(null);
+
+    o.provider = "prompt_api";
+    o.providerConfig = { requiresApiKey: false } as any;
+    o.handleCompactDone = jest.fn<any>().mockResolvedValue(undefined);
+
+    await compactContext(o, db, "group-1");
+
+    expect(o.handleCompactDone).toHaveBeenCalledWith(
+      db,
+      "group-1",
+      "Mock prompt API summary",
+    );
   });
 });

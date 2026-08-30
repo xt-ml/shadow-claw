@@ -5,6 +5,7 @@ import {
   formatRequest,
   getAdapter,
   getContextLimit,
+  normalizeMeshLlmResult,
   parseResponse,
 } from "./providers.js";
 
@@ -64,10 +65,47 @@ describe("providers.js", () => {
     it("should return correct limit for Claude 3 models", () => {
       expect(getContextLimit("claude-3-opus")).toBe(200000);
       expect(getContextLimit("claude-3-haiku")).toBe(200000);
+      expect(getContextLimit("claude-opus-4")).toBe(1000000);
     });
 
-    it("should return correct limit for GPT-4", () => {
+    it("should return correct limit for GPT-4 and reasoning models", () => {
       expect(getContextLimit("gpt-4")).toBe(8192);
+      expect(getContextLimit("o1-preview")).toBe(200000);
+      expect(getContextLimit("o3-mini")).toBe(200000);
+    });
+
+    it("should return correct limit for Gemini models", () => {
+      expect(getContextLimit("gemini-1.5-pro")).toBe(2097152);
+      expect(getContextLimit("gemini-2.0-flash")).toBe(1048576);
+      expect(getContextLimit("gemini-1.0-pro")).toBe(32768);
+      expect(getContextLimit("gemini-nano")).toBe(4096);
+    });
+
+    it("should return correct limit for Llama, Gemma, and Mistral models", () => {
+      expect(getContextLimit("llama-3.1-70b")).toBe(128000);
+      expect(getContextLimit("llama-3-8b")).toBe(8192);
+      expect(getContextLimit("gemma-4-12b")).toBe(256000);
+      expect(getContextLimit("gemma-4-e2b")).toBe(128000);
+      expect(getContextLimit("gemma-3-12b")).toBe(128000);
+      expect(getContextLimit("gemma-3-1b")).toBe(32000);
+      expect(getContextLimit("gemma-2-9b")).toBe(8192);
+      expect(getContextLimit("mistral-large")).toBe(128000);
+      expect(getContextLimit("mistral-small")).toBe(32000);
+    });
+
+    it("should return correct limit for Bedrock, Phi, Qwen, and Mesh models", () => {
+      expect(getContextLimit("amazon.nova-micro")).toBe(128000);
+      expect(getContextLimit("amazon.nova-pro")).toBe(300000);
+      expect(getContextLimit("amazon.titan-text")).toBe(8192);
+      expect(getContextLimit("cohere.command-r")).toBe(128000);
+      expect(getContextLimit("phi-4-mini")).toBe(128000);
+      expect(getContextLimit("phi-4")).toBe(16384);
+      expect(getContextLimit("phi-3.5")).toBe(128000);
+      expect(getContextLimit("phi-3")).toBe(4096);
+      expect(getContextLimit("qwen3.5-9b")).toBe(262144);
+      expect(getContextLimit("qwen3-0.6b")).toBe(40960);
+      expect(getContextLimit("qwen3-8b")).toBe(128000);
+      expect(getContextLimit("mesh")).toBe(242144);
     });
 
     it("should return default limit for unknown models", () => {
@@ -1155,6 +1193,61 @@ describe("providers.js", () => {
 
       const headers = buildHeaders(provider, "abc123");
       expect(headers["X-Token"]).toBe("Token abc123");
+    });
+  });
+
+  describe("normalizeMeshLlmResult & MeshLlmAdapter", () => {
+    it("returns unchanged for empty or invalid results", () => {
+      expect(normalizeMeshLlmResult(null)).toBeNull();
+      expect(normalizeMeshLlmResult(undefined)).toBeUndefined();
+      expect(normalizeMeshLlmResult({ content: "not-an-array" })).toEqual({
+        content: "not-an-array",
+      });
+    });
+
+    it("normalizes mesh-llm result stripping thought tags and parsing tool calls", () => {
+      const result = {
+        content: [
+          {
+            type: "text",
+            text: '<|channel>Thinking deeply...<channel|>Hello user!<|tool_call>call:search{"q":"test"}<tool_call|>',
+          },
+          { type: "image", data: "123" },
+        ],
+        stop_reason: "end_turn",
+      };
+
+      const normalized = normalizeMeshLlmResult(result);
+      expect(normalized.content).toEqual([
+        { type: "text", text: "Hello user!" },
+        expect.objectContaining({
+          type: "tool_use",
+          name: "search",
+          input: { q: "test" },
+        }),
+        { type: "image", data: "123" },
+      ]);
+      expect(normalized.stop_reason).toBe("tool_use");
+    });
+
+    it("returns MeshLlmAdapter for mesh-llm provider format", () => {
+      const provider: any = { format: "mesh-llm" };
+      const adapter = getAdapter(provider);
+      expect(adapter.constructor.name).toBe("MeshLlmAdapter");
+
+      const response = {
+        choices: [
+          {
+            message: {
+              content: "<|channel>reasoning<channel|>Result text",
+            },
+            finish_reason: "stop",
+          },
+        ],
+      };
+
+      const parsed = parseResponse(provider, response);
+      expect(parsed.content).toEqual([{ type: "text", text: "Result text" }]);
     });
   });
 });

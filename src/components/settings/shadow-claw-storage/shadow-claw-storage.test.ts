@@ -51,6 +51,28 @@ jest.unstable_mockModule("../../../storage/getStorageEstimate.js", () => ({
     .mockResolvedValue({ usage: 1024, quota: 10240 }),
 }));
 
+jest.unstable_mockModule("../../../storage/storage.js", () => ({
+  resetStorageDirectory: jest.fn<any>().mockResolvedValue(undefined),
+  getStorageRoot: jest.fn<any>().mockResolvedValue({}),
+  setStorageRoot: jest.fn(),
+  invalidateStorageRoot: jest.fn(),
+  isStaleHandleError: jest.fn(() => false),
+  setStorageDirectory: jest.fn<any>().mockResolvedValue(undefined),
+  getStorageStatus: jest
+    .fn<any>()
+    .mockResolvedValue({ type: "opfs", permission: "granted", name: "OPFS" }),
+  getOpfsRootDirName: jest.fn(() => "shadow-claw-opfs"),
+  isDirectoryHandle: jest.fn(() => false),
+}));
+
+jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
+  orchestratorStore: {
+    storageStatus: { type: "opfs", permission: "granted" },
+    resetSiteConfigSeed: jest.fn<any>().mockResolvedValue(undefined),
+    loadFiles: jest.fn<any>().mockResolvedValue(undefined),
+  },
+}));
+
 const { CONFIG_KEYS } = await import("../../../config/config.js");
 const { getConfig } = await import("../../../db/getConfig.js");
 const { setConfig } = await import("../../../db/setConfig.js");
@@ -114,5 +136,59 @@ describe("shadow-claw-storage", () => {
     );
 
     document.body.removeChild(el);
+  });
+
+  it("formats bytes accurately", () => {
+    const el = new ShadowClawStorage();
+    expect(el.formatBytes(0)).toBe("0 B");
+    expect(el.formatBytes(1024)).toBe("1 KB");
+    expect(el.formatBytes(1048576)).toBe("1 MB");
+    expect(el.formatBytes(1073741824)).toBe("1 GB");
+  });
+
+  it("handles requestPersistentStorage", async () => {
+    const el = new ShadowClawStorage() as any;
+    el.db = {};
+    el.updateStorageInfo = jest.fn();
+
+    const { requestPersistentStorage } =
+      await import("../../../storage/requestPersistentStorage.js");
+    (requestPersistentStorage as jest.Mock<any>).mockResolvedValueOnce(true);
+
+    await el.handleRequestPersistent();
+    expect(showSuccess).toHaveBeenCalledWith(
+      "Persistent storage granted",
+      3500,
+    );
+
+    const { showWarning } = await import("../../../ui/toast.js");
+    (requestPersistentStorage as jest.Mock<any>).mockResolvedValueOnce(false);
+    await el.handleRequestPersistent();
+    expect(showWarning).toHaveBeenCalled();
+  });
+
+  it("handles handleResetSiteConfig and handleResetStorageDir", async () => {
+    const el = new ShadowClawStorage() as any;
+    el.db = {};
+    el.updateStorageInfo = jest.fn();
+
+    // With confirmation false
+    el.requestConfirmation = (jest.fn() as any).mockResolvedValue(false);
+    await el.handleResetSiteConfig();
+    await el.handleResetStorageDir();
+
+    // With confirmation true
+    el.requestConfirmation = (jest.fn() as any).mockResolvedValue(true);
+    await el.handleResetSiteConfig();
+    expect(showSuccess).toHaveBeenCalledWith(
+      "Site config reset. Reload to apply its defaults again.",
+      5000,
+    );
+
+    await el.handleResetStorageDir();
+    expect(showSuccess).toHaveBeenCalledWith(
+      "Reverted to browser-internal storage",
+      3500,
+    );
   });
 });

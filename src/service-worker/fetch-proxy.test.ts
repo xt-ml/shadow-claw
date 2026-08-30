@@ -2,8 +2,9 @@
 
 import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 
-describe("service-worker fetch proxy workspace routes", () => {
+describe("service-worker fetch proxy", () => {
   let fetchListener: ((event: any) => void) | null = null;
+  let messageListener: ((event: any) => void) | null = null;
   let networkFetch: jest.Mock;
 
   const imageBytes = new Uint8Array([255, 216, 255, 217]);
@@ -82,6 +83,7 @@ describe("service-worker fetch proxy workspace routes", () => {
   beforeEach(async () => {
     jest.resetModules();
     fetchListener = null;
+    messageListener = null;
 
     Object.defineProperty(globalThis, "Response", {
       configurable: true,
@@ -168,6 +170,8 @@ describe("service-worker fetch proxy workspace routes", () => {
           (type: string, handler: (event: any) => void) => {
             if (type === "fetch") {
               fetchListener = handler;
+            } else if (type === "message") {
+              messageListener = handler;
             }
           },
         ),
@@ -291,5 +295,64 @@ describe("service-worker fetch proxy workspace routes", () => {
     const response = dispatchFetchIntercept(hfCdnRequest);
     expect(response).toBeNull();
     expect(networkFetch).not.toHaveBeenCalled();
+  });
+
+  it("handles proxy configuration messages and proxies cross-origin requests", async () => {
+    expect(messageListener).toBeTruthy();
+
+    // Enable proxy via message
+    messageListener!({
+      data: {
+        type: "set-proxy-config",
+        payload: {
+          useProxy: true,
+          proxyUrl: "/proxy",
+        },
+      },
+    } as any);
+
+    const crossOriginPostRequest = {
+      url: "https://api.external.com/v1/resource",
+      method: "POST",
+      mode: "cors",
+      destination: "fetch",
+      headers: new TestHeaders({ Authorization: "Bearer token" }),
+      clone: () => ({
+        text: async () => JSON.stringify({ key: "val" }),
+      }),
+    };
+
+    const response = await dispatchFetch(crossOriginPostRequest);
+    expect(response.status).toBe(200);
+    expect(networkFetch).toHaveBeenCalledWith(
+      `${globalThis.location.origin}/proxy/https://api.external.com/v1/resource`,
+      expect.objectContaining({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+  });
+
+  it("handles legacy set-use-proxy message and direct fetch when proxy disabled", async () => {
+    messageListener!({
+      data: {
+        type: "set-use-proxy",
+        payload: {
+          useProxy: false,
+        },
+      },
+    } as any);
+
+    const crossOriginGetRequest = {
+      url: "https://api.external.com/v1/data",
+      method: "GET",
+      mode: "cors",
+      destination: "fetch",
+      headers: new TestHeaders(),
+    };
+
+    const response = await dispatchFetch(crossOriginGetRequest);
+    expect(response.status).toBe(200);
+    expect(networkFetch).toHaveBeenCalledWith(crossOriginGetRequest);
   });
 });

@@ -812,4 +812,208 @@ describe("shadow-claw-settings", () => {
 
     document.body.removeChild(el);
   });
+
+  it("handles onChatSplitViewToggle and dispatches event", async () => {
+    const el = new ShadowClawSettings() as any;
+    el.db = {};
+    const events: any[] = [];
+    el.addEventListener("chat-split-view-change", (e: any) =>
+      events.push(e.detail),
+    );
+
+    await el.onChatSplitViewToggle(true);
+
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "chat_split_view_enabled",
+      "true",
+    );
+    expect(events).toEqual([{ enabled: true }]);
+  });
+
+  it("handles onPagesAutoRefreshInputChange and dispatches event", async () => {
+    const el = new ShadowClawSettings() as any;
+    el.db = {};
+    const events: any[] = [];
+    const listener = (e: any) => events.push(e.detail);
+    window.addEventListener("shadow-claw-pages-auto-refresh-change", listener);
+
+    try {
+      await el.onPagesAutoRefreshInputChange(30);
+
+      expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+        expect.anything(),
+        "pages_auto_refresh_interval",
+        "30",
+      );
+      expect(events).toEqual([{ interval: 30 }]);
+    } finally {
+      window.removeEventListener(
+        "shadow-claw-pages-auto-refresh-change",
+        listener,
+      );
+    }
+  });
+
+  it("handles sidebar navigation visibility toggles", async () => {
+    const el = new ShadowClawSettings() as any;
+    el.db = {};
+
+    await el.onSidebarHideChatToggle(true);
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "sidebar_chat_hidden",
+      "true",
+    );
+
+    await el.onSidebarHideFilesToggle(true);
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "sidebar_files_hidden",
+      "true",
+    );
+
+    await el.onSidebarHideTasksToggle(true);
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "sidebar_tasks_hidden",
+      "true",
+    );
+  });
+
+  it("handles replaceConfigEntries with transaction", async () => {
+    const el = new ShadowClawSettings() as any;
+    const mockStore = {
+      clear: jest.fn(),
+      put: jest.fn(),
+    };
+    const mockTx = {
+      objectStore: jest.fn(() => mockStore),
+      oncomplete: null as any,
+      onerror: null as any,
+    };
+    el.db = {
+      transaction: jest.fn(() => {
+        setTimeout(() => mockTx.oncomplete?.(), 0);
+        return mockTx;
+      }),
+    };
+
+    await el.replaceConfigEntries([
+      { key: "k1", value: "v1" },
+      { key: "k2", value: "v2" },
+    ]);
+
+    expect(mockStore.clear).toHaveBeenCalled();
+    expect(mockStore.put).toHaveBeenCalledWith({ key: "k1", value: "v1" });
+    expect(mockStore.put).toHaveBeenCalledWith({ key: "k2", value: "v2" });
+  });
+
+  it("returns null when promptForPlaintextBackupHandle encounters AbortError", async () => {
+    const el = new ShadowClawSettings() as any;
+    const abortErr = new Error("User canceled");
+    abortErr.name = "AbortError";
+
+    (globalThis as any).showSaveFilePicker = (
+      jest.fn() as any
+    ).mockRejectedValue(abortErr);
+
+    const handle = await el.promptForPlaintextBackupHandle();
+    expect(handle).toBeNull();
+
+    delete (globalThis as any).showSaveFilePicker;
+  });
+
+  it("handles activity log, chat split view, prerender skeleton, and pages auto refresh settings", async () => {
+    const el = new ShadowClawSettings() as any;
+    el.db = {} as any;
+
+    await el.onActivityLogDiskLoggingToggle(true);
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      el.db,
+      "activity_log_disk_logging_enabled",
+      "true",
+    );
+
+    const splitEventSpy = jest.fn();
+    el.addEventListener("chat-split-view-change", splitEventSpy);
+    await el.onChatSplitViewToggle(true);
+    expect(splitEventSpy).toHaveBeenCalled();
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      el.db,
+      "chat_split_view_enabled",
+      "true",
+    );
+
+    await el.onOverridePrerenderSkeletonToggle(true);
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      el.db,
+      "override_prerender_skeleton",
+      "true",
+    );
+
+    await el.onPagesAutoRefreshInputChange(30);
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      el.db,
+      "pages_auto_refresh_interval",
+      "30",
+    );
+
+    // Sidebar visibility toggles
+    await el.onSidebarHideChatToggle(true);
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      el.db,
+      "sidebar_chat_hidden",
+      "true",
+    );
+
+    await el.onSidebarHideFilesToggle(true);
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      el.db,
+      "sidebar_files_hidden",
+      "true",
+    );
+
+    await el.onSidebarHidePagesToggle(true);
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      el.db,
+      "sidebar_pages_hidden",
+      "true",
+    );
+
+    await el.onSidebarHideTasksToggle(true);
+    expect((globalThis as any)._mockSetConfig).toHaveBeenCalledWith(
+      el.db,
+      "sidebar_tasks_hidden",
+      "true",
+    );
+
+    // Backup / Restore / Clear methods
+    (global.URL.createObjectURL as any) = jest
+      .fn<any>()
+      .mockReturnValue("blob:settings-backup");
+    (global.URL.revokeObjectURL as any) = jest.fn();
+    el.getAllConfigEntries = jest
+      .fn<any>()
+      .mockResolvedValue([{ key: "k", value: "v" }]);
+    el.replaceConfigEntries = jest.fn<any>().mockResolvedValue(undefined);
+    el.closeDialog = jest.fn();
+
+    // confirmBackup
+    await el.confirmBackup();
+    expect(el.closeDialog).toHaveBeenCalledWith(".settings__backup-dialog");
+
+    // confirmClear
+    await el.confirmClear();
+    expect(el.replaceConfigEntries).toHaveBeenCalledWith([]);
+
+    // confirmRestore
+    el.pendingRestoreFile = {
+      name: "backup.json",
+      text: async () =>
+        JSON.stringify({ configEntries: [{ key: "k2", value: "v2" }] }),
+    } as any;
+    await el.confirmRestore();
+    expect(el.replaceConfigEntries).toHaveBeenCalled();
+  });
 });

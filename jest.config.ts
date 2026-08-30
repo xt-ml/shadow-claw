@@ -1,6 +1,15 @@
+const coveragePathIgnorePatterns = [
+  "/node_modules/",
+  "/src/testing/assets/",
+  "/src/testing/assets_missing_v86/",
+  "/src/__mocks__/",
+];
+
 export default {
+  workerIdleMemoryLimit: "512MB",
   extensionsToTreatAsEsm: [".ts"],
   modulePathIgnorePatterns: ["<rootDir>/dist/"],
+  coveragePathIgnorePatterns,
   projects: [
     {
       displayName: "src",
@@ -8,6 +17,7 @@ export default {
       setupFilesAfterEnv: ["<rootDir>/src/testing/jest-setup.ts"],
       roots: ["<rootDir>/src", "<rootDir>/electron"],
       resolver: "<rootDir>/src/testing/jest-ts-resolver.cjs",
+      coveragePathIgnorePatterns,
       transform: {
         "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
         // Support import attributes for CSS and HTML
@@ -40,8 +50,10 @@ export default {
     {
       displayName: "server",
       testEnvironment: "node",
+      setupFilesAfterEnv: ["<rootDir>/src/testing/jest-setup.ts"],
       roots: ["<rootDir>/src/server"],
       resolver: "<rootDir>/src/testing/jest-ts-resolver.cjs",
+      coveragePathIgnorePatterns,
       extensionsToTreatAsEsm: [".ts"],
       transform: {
         "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
@@ -50,8 +62,10 @@ export default {
     {
       displayName: "notifications",
       testEnvironment: "node",
+      setupFilesAfterEnv: ["<rootDir>/src/testing/jest-setup.ts"],
       roots: ["<rootDir>/src"],
       resolver: "<rootDir>/src/testing/jest-ts-resolver.cjs",
+      coveragePathIgnorePatterns,
       extensionsToTreatAsEsm: [".ts"],
       transform: {
         "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
@@ -69,8 +83,10 @@ export default {
     {
       displayName: "task-schedule",
       testEnvironment: "node",
+      setupFilesAfterEnv: ["<rootDir>/src/testing/jest-setup.ts"],
       roots: ["<rootDir>/src"],
       resolver: "<rootDir>/src/testing/jest-ts-resolver.cjs",
+      coveragePathIgnorePatterns,
       extensionsToTreatAsEsm: [".ts"],
       transform: {
         "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
@@ -88,8 +104,10 @@ export default {
     {
       displayName: "bin",
       testEnvironment: "node",
+      setupFilesAfterEnv: ["<rootDir>/src/testing/jest-setup.ts"],
       roots: ["<rootDir>/bin"],
       resolver: "<rootDir>/src/testing/jest-ts-resolver.cjs",
+      coveragePathIgnorePatterns,
       extensionsToTreatAsEsm: [".ts"],
       transform: {
         "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",

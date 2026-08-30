@@ -10,6 +10,8 @@ describe("setupEffects", () => {
   let mockShowSuccess: any;
   let mockShowPage: any;
   let mockUpdateActivityLogToggleVisibility: any;
+  let mockEnsureComponentLoaded: any;
+  let mockFileViewerStore: any;
   let setupEffects: any;
 
   let effectCallbacks: Array<() => void>;
@@ -25,6 +27,8 @@ describe("setupEffects", () => {
     mockShowSuccess = jest.fn();
     mockShowPage = jest.fn();
     mockUpdateActivityLogToggleVisibility = jest.fn();
+    mockEnsureComponentLoaded = jest.fn().mockResolvedValue(undefined as never);
+    mockFileViewerStore = { file: null };
 
     jest.unstable_mockModule("../../../core/effect.js", () => ({
       effect: mockEffect,
@@ -42,7 +46,19 @@ describe("setupEffects", () => {
       updateActivityLogToggleVisibility: mockUpdateActivityLogToggleVisibility,
     }));
 
+    jest.unstable_mockModule("./loadComponent.js", () => ({
+      ensureComponentLoaded: mockEnsureComponentLoaded,
+    }));
+
+    jest.unstable_mockModule("../../../stores/file-viewer.js", () => ({
+      fileViewerStore: mockFileViewerStore,
+    }));
+
     shadowRoot = document.createElement("div").attachShadow({ mode: "open" });
+    const main = document.createElement("div");
+    main.classList.add("main-content");
+    shadowRoot.appendChild(main);
+
     shadowClaw = { previousOrchestratorState: "idle", currentPage: "chat" };
     db = {};
     oStore = { state: "idle", activePage: "chat", activityLog: [] };
@@ -63,6 +79,29 @@ describe("setupEffects", () => {
   it("should register four effects", () => {
     setupEffects(shadowRoot, shadowClaw, db, oStore);
     expect(mockEffect).toHaveBeenCalledTimes(4);
+  });
+
+  it("fileViewerStore effect should load file-viewer and pdf-viewer and stamp DOM", async () => {
+    setupEffects(shadowRoot, shadowClaw, db, oStore);
+    const cb = effectCallbacks[0];
+
+    // When file is null, do nothing
+    mockFileViewerStore.file = null;
+    cb();
+    expect(mockEnsureComponentLoaded).not.toHaveBeenCalled();
+
+    // When file is a text file
+    mockFileViewerStore.file = { name: "doc.txt", kind: "text" };
+    cb();
+    expect(mockEnsureComponentLoaded).toHaveBeenCalledWith("file-viewer");
+
+    await Promise.resolve();
+    expect(shadowRoot.querySelector("shadow-claw-file-viewer")).not.toBeNull();
+
+    // When file is a PDF
+    mockFileViewerStore.file = { name: "manual.pdf", kind: "pdf" };
+    cb();
+    expect(mockEnsureComponentLoaded).toHaveBeenCalledWith("pdf-viewer");
   });
 
   it("orchestrator state effect should showSuccess when transitioning to idle from thinking/responding", () => {

@@ -2,8 +2,8 @@ import { jest } from "@jest/globals";
 import { loadModelStream } from "./loadModelStream.js";
 
 // Mock Blob and Response for Jest/jsdom
-if (typeof global !== "undefined") {
-  (global as any).Blob = class MockBlob {
+if (typeof globalThis !== "undefined") {
+  (globalThis as any).Blob = class MockBlob {
     private parts: any[];
     public size: number;
     constructor(parts: any[]) {

@@ -1,15 +1,19 @@
 import {
+  applySidebarVisibilityToTemplate,
   applyStaticPagesContent,
   collectPageSources,
   escapeJsonForHtmlScript,
+  extractTemplateContent,
   injectPageHeaderDsd,
   injectStaticManifestScript,
+  isPageFile,
   markNoSeedPrerenderHost,
   minifyDsdTemplateHtml,
   normalizePrerenderPagesOption,
   prerenderDsdShell,
   renderPageHtml,
   sortPagePaths,
+  splitFrontmatterWithGrayMatter,
 } from "./prerender-dsd-shell.mjs";
 
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -477,5 +481,47 @@ describe("prerenderDsdShell purge flag pages", () => {
     expect(manifestJson.pages[0].displayPath).toBe("post.md");
     expect(manifestJson.purgeId).toBe("build-test-999");
     expect(manifestJson.preRenderedStaticPages["br-main"]).toBeDefined();
+  });
+
+  describe("prerender helper functions", () => {
+    it("splits frontmatter with gray-matter", () => {
+      const src = "---\ntitle: Hello\n---\n# Content";
+      const res = splitFrontmatterWithGrayMatter(src);
+      expect(res.data.title).toBe("Hello");
+      expect(res.content.trim()).toBe("# Content");
+    });
+
+    it("extracts template content and throws on missing template", () => {
+      const html = "<template><div>Hello</div></template>";
+      expect(extractTemplateContent(html)).toBe("<div>Hello</div>");
+      expect(() => extractTemplateContent("<div>No template</div>")).toThrow(
+        "Template wrapper not found",
+      );
+    });
+
+    it("identifies page files by extension", () => {
+      expect(isPageFile("index.md")).toBe(true);
+      expect(isPageFile("page.html")).toBe(true);
+      expect(isPageFile("script.js")).toBe(false);
+    });
+
+    it("applies sidebar visibility config to template", () => {
+      const tpl =
+        '<li class="nav-item" data-page="chat">Chat</li><li class="nav-item" data-page="files">Files</li>';
+      const modified = applySidebarVisibilityToTemplate(tpl, {
+        chatHidden: true,
+      });
+      expect(modified).toContain('data-page="chat" hidden aria-hidden="true"');
+      expect(modified).not.toContain('data-page="files" hidden');
+    });
+
+    it("minifies DSD template HTML removing excess whitespace and comments", () => {
+      const html =
+        '<template shadowrootmode="open">\n<div>\n  <span>Text</span>\n</div>\n</template>';
+      const minified = minifyDsdTemplateHtml(html);
+      expect(minified).toBe(
+        '<template shadowrootmode="open"><div><span>Text</span></div></template>',
+      );
+    });
   });
 });

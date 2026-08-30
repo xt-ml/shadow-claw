@@ -6,7 +6,11 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
   return {
     getConfig: jest.fn(async () => undefined),
     getProxyUrl: jest.fn(() => "https://proxy.local"),
-    resolveGitCredentials: jest.fn(async () => ({ token: "tok" })),
+    resolveGitCredentials: jest.fn(async () => ({
+      token: "tok",
+      authorName: "Dev",
+      authorEmail: "dev@example.com",
+    })),
     gitClone: jest.fn(async () => "demo"),
     gitCheckout: jest.fn(async () => "checked out"),
     gitBranch: jest.fn(async () => "branched"),
@@ -22,6 +26,15 @@ function makeDeps(overrides: Record<string, unknown> = {}) {
     gitPush: jest.fn(async () => "pushed"),
     gitMerge: jest.fn(async () => "merged"),
     gitReset: jest.fn(async () => "reset"),
+    gitFetch: jest.fn(async () => "fetched"),
+    gitInit: jest.fn(async () => "initialized"),
+    gitTag: jest.fn(async () => "tagged"),
+    gitDeleteBranch: jest.fn(async () => "deleted branch"),
+    gitRemote: jest.fn(async () => "remote info"),
+    gitConfig: jest.fn(async () => "config val"),
+    gitUnstage: jest.fn(async () => "unstaged"),
+    gitShow: jest.fn(async () => "commit info"),
+    gitReadFileAtRef: jest.fn(async () => "file content"),
     getRemoteUrl: jest.fn(async () => "https://example.com/repo.git"),
     readGroupFile: jest.fn(async () => ""),
     getGroupDir: jest.fn(async () => ({}) as any),
@@ -131,7 +144,7 @@ describe("worker/tools/git", () => {
     expect(result).toBe("M file.ts");
   });
 
-  it("calls gitCommit directly", async () => {
+  it("calls gitCommit directly and passes author info", async () => {
     const deps = makeDeps({
       gitCommit: jest.fn(async () => "Committed abc1234: msg"),
     });
@@ -145,9 +158,16 @@ describe("worker/tools/git", () => {
     );
 
     expect(result).toContain("Committed");
+    expect(deps.gitCommit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        authorName: "Dev",
+        authorEmail: "dev@example.com",
+        message: "msg",
+      }),
+    );
   });
 
-  it("returns missing-credentials message for git_push", async () => {
+  it("returns missing-credentials message for git_push when credentials missing", async () => {
     const deps = makeDeps({
       resolveGitCredentials: jest.fn(async () => ({})),
     });
@@ -161,6 +181,23 @@ describe("worker/tools/git", () => {
     );
 
     expect(result).toContain("No git credentials configured");
+  });
+
+  it("calls git_push with valid credentials", async () => {
+    const deps = makeDeps({
+      gitPush: jest.fn(async () => "Pushed main successfully"),
+    });
+
+    const result = await executeGitTool(
+      {} as any,
+      "git_push",
+      { repo: "demo", branch: "main" },
+      "group-1",
+      deps,
+    );
+
+    expect(result).toBe("Pushed main successfully");
+    expect(deps.gitPush).toHaveBeenCalled();
   });
 
   it("formats merge conflicts with inline regions", async () => {
@@ -196,5 +233,179 @@ describe("worker/tools/git", () => {
     expect(result).toContain("src/app.ts");
     expect(result).toContain("Resolution steps:");
     expect(result).toContain("<<<<<<< ours");
+  });
+
+  it("executes remaining git tool operations (add, branch, branches, checkout, config, etc.)", async () => {
+    const deps = makeDeps();
+
+    // git_add
+    await executeGitTool(
+      {} as any,
+      "git_add",
+      { repo: "demo", filepath: "file.txt" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitAdd).toHaveBeenCalled();
+
+    // git_branch
+    await executeGitTool(
+      {} as any,
+      "git_branch",
+      { repo: "demo", name: "feat" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitBranch).toHaveBeenCalled();
+
+    // git_branches
+    await executeGitTool(
+      {} as any,
+      "git_branches",
+      { repo: "demo" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitListBranches).toHaveBeenCalled();
+
+    // git_checkout
+    await executeGitTool(
+      {} as any,
+      "git_checkout",
+      { repo: "demo", ref: "main" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitCheckout).toHaveBeenCalled();
+
+    // git_config
+    await executeGitTool(
+      {} as any,
+      "git_config",
+      { repo: "demo", command: "get", key: "user.name" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitConfig).toHaveBeenCalled();
+
+    // git_delete_branch
+    await executeGitTool(
+      {} as any,
+      "git_delete_branch",
+      { repo: "demo", name: "old" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitDeleteBranch).toHaveBeenCalled();
+
+    // git_diff
+    await executeGitTool(
+      {} as any,
+      "git_diff",
+      { repo: "demo" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitDiff).toHaveBeenCalled();
+
+    // git_fetch
+    await executeGitTool(
+      {} as any,
+      "git_fetch",
+      { repo: "demo" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitFetch).toHaveBeenCalled();
+
+    // git_init
+    await executeGitTool(
+      {} as any,
+      "git_init",
+      { repo: "demo" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitInit).toHaveBeenCalled();
+
+    // git_log
+    await executeGitTool(
+      {} as any,
+      "git_log",
+      { repo: "demo" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitLog).toHaveBeenCalled();
+
+    // git_pull
+    await executeGitTool(
+      {} as any,
+      "git_pull",
+      { repo: "demo" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitPull).toHaveBeenCalled();
+
+    // git_read_file_at_ref
+    await executeGitTool(
+      {} as any,
+      "git_read_file_at_ref",
+      { repo: "demo", ref: "main", filepath: "a.ts" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitReadFileAtRef).toHaveBeenCalled();
+
+    // git_remote
+    await executeGitTool(
+      {} as any,
+      "git_remote",
+      { repo: "demo", command: "list" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitRemote).toHaveBeenCalled();
+
+    // git_reset
+    await executeGitTool(
+      {} as any,
+      "git_reset",
+      { repo: "demo", ref: "HEAD~1" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitReset).toHaveBeenCalled();
+
+    // git_show
+    await executeGitTool(
+      {} as any,
+      "git_show",
+      { repo: "demo", ref: "HEAD" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitShow).toHaveBeenCalled();
+
+    // git_tag
+    await executeGitTool(
+      {} as any,
+      "git_tag",
+      { repo: "demo", tag: "v1.0" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitTag).toHaveBeenCalled();
+
+    // git_unstage
+    await executeGitTool(
+      {} as any,
+      "git_unstage",
+      { repo: "demo", filepath: "a.ts" },
+      "group-1",
+      deps,
+    );
+    expect(deps.gitUnstage).toHaveBeenCalled();
   });
 });

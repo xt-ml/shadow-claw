@@ -11,6 +11,7 @@ describe("email catalog", () => {
 
   it("returns null for unknown manifest id", () => {
     expect(getEmailPluginManifest("does-not-exist")).toBeNull();
+    expect(getEmailPluginManifest("")).toBeNull();
   });
 
   it("returns manifest for known id", () => {

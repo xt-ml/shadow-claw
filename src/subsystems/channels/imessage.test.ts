@@ -232,4 +232,63 @@ describe("IMessageChannel", () => {
     expect(legacySend).toBeDefined();
     expect(legacySend?.init.body instanceof FormData).toBe(true);
   });
+
+  it("handles start, stop, and polling cursor updates", async () => {
+    const channel: any = new IMessageChannel();
+    channel.configure("https://bridge.example", "secret", ["chat-1"]);
+
+    const seen: any[] = [];
+    channel.onMessage((msg: any) => seen.push(msg));
+
+    jest.spyOn(channel, "requestJson").mockImplementation(async () => {
+      channel.stop();
+      return {
+        nextCursor: "cursor-1",
+        messages: [
+          {
+            id: "msg-1",
+            conversationId: "chat-1",
+            sender: "User",
+            body: "Polled message",
+          },
+        ],
+      };
+    });
+
+    channel.start();
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(channel.cursor).toBe("cursor-1");
+    expect(seen).toHaveLength(1);
+    expect(seen[0].content).toBe("Polled message");
+    expect(channel.running).toBe(false);
+  });
+
+  it("sets typing indicators when typing is true", () => {
+    const channel = new IMessageChannel();
+    channel.configure("https://bridge.example", "secret", []);
+    const requestJsonSpy = jest
+      .spyOn(channel, "requestJson")
+      .mockResolvedValue({ ok: true } as any);
+
+    channel.setTyping("im:chat-xyz", true);
+    expect(requestJsonSpy).toHaveBeenCalledWith("/messages/typing", {
+      method: "POST",
+      body: JSON.stringify({ chatId: "chat-xyz", typing: true }),
+    });
+
+    channel.setTyping("im:chat-xyz", false);
+    expect(requestJsonSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("tests connection against /v1/info or /messages", async () => {
+    const channel = new IMessageChannel();
+    channel.configure("https://bridge.example", "secret", []);
+
+    jest
+      .spyOn(channel, "requestJson")
+      .mockResolvedValueOnce({ ok: true } as any);
+    const mode = await channel.ensureApiMode();
+    expect(mode).toBe("beeper-desktop");
+  });
 });

@@ -1,7 +1,9 @@
 import {
   MemoryDirectoryHandle,
   MemoryFileHandle,
+  MemorySyncAccessHandle,
   getMemoryOpfsRoot,
+  isMemoryStorageFallbackActive,
   resetMemoryOpfsRoot,
 } from "./memoryStorage.js";
 
@@ -65,6 +67,41 @@ describe("memoryStorage", () => {
       expect(await file2.text()).toBe("AB");
     });
 
+    it("supports MemorySyncAccessHandle read, write, truncate, getSize, flush and close", async () => {
+      const fileHandle = new MemoryFileHandle("sync.dat");
+      const syncHandle: MemorySyncAccessHandle =
+        await fileHandle.createSyncAccessHandle();
+
+      expect(syncHandle.getSize()).toBe(0);
+
+      const writeData = new Uint8Array([10, 20, 30, 40]);
+      const written = syncHandle.write(writeData, { at: 0 });
+      expect(written).toBe(4);
+      expect(syncHandle.getSize()).toBe(4);
+
+      syncHandle.flush(); // No-op
+
+      const readBuffer = new Uint8Array(4);
+      const readBytes = syncHandle.read(readBuffer, { at: 0 });
+      expect(readBytes).toBe(4);
+      expect(Array.from(readBuffer)).toEqual([10, 20, 30, 40]);
+
+      // Read past end
+      const emptyBuffer = new Uint8Array(2);
+      expect(syncHandle.read(emptyBuffer, { at: 100 })).toBe(0);
+
+      // Truncate
+      syncHandle.truncate(2);
+      expect(syncHandle.getSize()).toBe(2);
+
+      // Close and verify operations throw
+      syncHandle.close();
+      expect(() => syncHandle.getSize()).toThrow();
+      expect(() => syncHandle.read(readBuffer)).toThrow();
+      expect(() => syncHandle.write(writeData)).toThrow();
+      expect(() => syncHandle.truncate(1)).toThrow();
+    });
+
     it("handles permissions and equality", async () => {
       const fileHandle = new MemoryFileHandle("test.txt");
       expect(await fileHandle.queryPermission()).toBe("granted");
@@ -94,6 +131,14 @@ describe("memoryStorage", () => {
       expect(existingFile).toBe(file);
     });
 
+    it("handles special directory names (. and ..)", async () => {
+      const dir = new MemoryDirectoryHandle("root");
+      const current = await dir.getDirectoryHandle(".");
+      expect(current).toBe(dir);
+
+      await expect(dir.getDirectoryHandle("..")).rejects.toThrow();
+    });
+
     it("throws NotFoundError when entry does not exist and create is false", async () => {
       const dir = new MemoryDirectoryHandle("root");
       await expect(dir.getDirectoryHandle("missing")).rejects.toThrow();
@@ -107,6 +152,28 @@ describe("memoryStorage", () => {
 
       await expect(dir.getFileHandle("sub")).rejects.toThrow();
       await expect(dir.getDirectoryHandle("file.txt")).rejects.toThrow();
+    });
+
+    it("resolves descendant handle paths", async () => {
+      const root = new MemoryDirectoryHandle("root");
+      const folderA = await root.getDirectoryHandle("folderA", {
+        create: true,
+      });
+      const folderB = await folderA.getDirectoryHandle("folderB", {
+        create: true,
+      });
+      const file = await folderB.getFileHandle("item.txt", { create: true });
+
+      expect(await root.resolve(root)).toEqual([]);
+      expect(await root.resolve(folderA)).toEqual(["folderA"]);
+      expect(await root.resolve(file)).toEqual([
+        "folderA",
+        "folderB",
+        "item.txt",
+      ]);
+
+      const unrelated = new MemoryFileHandle("unrelated.txt");
+      expect(await root.resolve(unrelated)).toBeNull();
     });
 
     it("iterates entries, keys, and values", async () => {
@@ -131,6 +198,13 @@ describe("memoryStorage", () => {
         values.push(v.name);
       }
       expect(values).toEqual(["b_dir", "a_file.txt"]);
+
+      // async iterator fallback
+      const directEntries: string[] = [];
+      for await (const [name, handle] of dir) {
+        directEntries.push(`${name}:${handle.kind}`);
+      }
+      expect(directEntries).toEqual(["b_dir:directory", "a_file.txt:file"]);
     });
 
     it("removes files and empty/recursive directories", async () => {
@@ -149,12 +223,18 @@ describe("memoryStorage", () => {
     });
   });
 
-  describe("getMemoryOpfsRoot", () => {
-    it("returns a singleton OPFS root child", () => {
+  describe("getMemoryOpfsRoot & isMemoryStorageFallbackActive", () => {
+    it("returns a singleton OPFS root child and reports fallback active", () => {
+      expect(isMemoryStorageFallbackActive()).toBe(false);
       const root1 = getMemoryOpfsRoot();
+      expect(isMemoryStorageFallbackActive()).toBe(true);
+
       const root2 = getMemoryOpfsRoot();
       expect(root1).toBe(root2);
       expect(root1.name).toBeTruthy();
+
+      resetMemoryOpfsRoot();
+      expect(isMemoryStorageFallbackActive()).toBe(false);
     });
   });
 });

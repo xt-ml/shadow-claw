@@ -423,7 +423,7 @@ export interface ColumnSpec extends ComponentCommon {
   align?: AlignValue;
 }
 
-export type ButtonVariant = "default" | "primary" | "borderless";
+export type ButtonVariant = "default" | "primary" | "secondary" | "borderless";
 
 /**
  * A2UI v1.0 spec §actions: server action event sent when a button is clicked.
@@ -571,6 +571,7 @@ export interface CheckBoxSpec extends ComponentCommon, CheckableComponent {
   component: "CheckBox";
   label: DynamicString;
   value: DynamicBoolean;
+  action?: A2UIActionDescriptor;
 }
 
 export interface ChoicePickerOption {
@@ -592,14 +593,14 @@ export interface SliderSpec extends ComponentCommon, CheckableComponent {
   component: "Slider";
   label?: DynamicString;
   min?: number;
-  max: number;
+  max?: number;
   value: DynamicNumber;
   steps?: number;
 }
 
 export interface DateTimeInputSpec extends ComponentCommon, CheckableComponent {
   component: "DateTimeInput";
-  value: DynamicString;
+  value?: DynamicString;
   enableDate?: boolean;
   enableTime?: boolean;
   min?: DynamicString;

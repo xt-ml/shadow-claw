@@ -31,4 +31,24 @@ describe("ChatUiStore", () => {
 
     (URL as any).revokeObjectURL = originalRevoke;
   });
+
+  it("manages group scroll states and snapshots", () => {
+    const store = new ChatUiStore();
+
+    expect(store.getGroupScrollState("group-1")).toBeNull();
+
+    store.setGroupScrollState("group-1", 120, false);
+    expect(store.getGroupScrollState("group-1")).toEqual({
+      distanceFromBottom: 120,
+      nearBottom: false,
+    });
+
+    store.setNearBottom(false);
+    expect(store.nearBottomSnapshot).toBe(false);
+
+    store.reset();
+    expect(store.getGroupScrollState("group-1")).toBeNull();
+    expect(store.isNearBottom).toBe(true);
+    expect(store.nearBottomSnapshot).toBe(true);
+  });
 });

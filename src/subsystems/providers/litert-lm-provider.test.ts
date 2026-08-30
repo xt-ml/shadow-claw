@@ -1,15 +1,41 @@
 import { jest } from "@jest/globals";
 
-import {
+const mockCreateConversation = jest.fn<any>().mockResolvedValue({
+  sendMessage: jest.fn<any>().mockResolvedValue(undefined),
+  sendMessageStreaming: jest.fn<any>().mockImplementation(async function* () {
+    yield {
+      content: [
+        {
+          text: JSON.stringify({
+            type: "response",
+            response: "Hello from LiteRT!",
+          }),
+        },
+      ],
+    };
+  }),
+});
+
+jest.unstable_mockModule("@litert-lm/core", () => ({
+  Engine: {
+    create: jest.fn<any>().mockResolvedValue({
+      createConversation: mockCreateConversation,
+      delete: jest.fn<any>().mockResolvedValue(undefined),
+    }),
+  },
+}));
+
+const {
   isLiteRtLmSupported,
   loadLiteRtModelStream,
   parseModelSpecificToolCall,
   parseLiteRtStructured,
-} from "./litert-lm-provider.js";
+  invokeWithLiteRtLm,
+} = await import("./litert-lm-provider.js");
 
 // jsdom does not implement Blob fully, so we mock it for the tests
-if (typeof global !== "undefined") {
-  (global as any).Blob = class MockBlob {
+if (typeof globalThis !== "undefined") {
+  (globalThis as any).Blob = class MockBlob {
     private parts: any[];
     public size: number;
     constructor(parts: any[]) {
@@ -64,8 +90,6 @@ if (typeof global !== "undefined") {
   };
 }
 
-// TextEncoder / TextDecoder are not available in every Jest environment;
-// fall back to Node's Buffer.
 function encodeText(s: string): Uint8Array {
   if (typeof TextEncoder !== "undefined") {
     return new TextEncoder().encode(s);
@@ -81,10 +105,6 @@ function decodeBytes(b: Uint8Array): string {
 
   return Buffer.from(b).toString("utf8");
 }
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
 
 function makeBodyStream(data: Uint8Array): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({
@@ -114,14 +134,9 @@ function makeFetchResponse(
   };
 }
 
-// ---------------------------------------------------------------------------
-// isLiteRtLmSupported
-// ---------------------------------------------------------------------------
-
 describe("LiteRT-LM Provider", () => {
   describe("isLiteRtLmSupported", () => {
     let originalNavigator: any;
-
     let originalWebAssembly: any;
 
     beforeEach(() => {
@@ -204,13 +219,8 @@ describe("LiteRT-LM Provider", () => {
     });
   });
 
-  // ---------------------------------------------------------------------------
-  // loadLiteRtModelStream — full integration of cache + network
-  // ---------------------------------------------------------------------------
-
   describe("loadLiteRtModelStream", () => {
     let mockFetch: jest.Mock<any>;
-    // cache storage: key -> { body: Uint8Array | null, headers: Headers }
     const cacheStore = new Map<
       string,
       { body: Uint8Array | null; headers: Headers }
@@ -222,9 +232,6 @@ describe("LiteRT-LM Provider", () => {
     }
 
     function makeCacheApi() {
-      // A single cache object backed by `cacheStore`; shared across all
-      // `caches.open()` calls so that writes from one call site are visible
-      // to reads from another.
       const cacheObject = {
         put: jest.fn<any>(async (key: string, response: any) => {
           const headers = response.init
@@ -310,11 +317,8 @@ describe("LiteRT-LM Provider", () => {
       }
     });
 
-    // -- Complete meta hit (after a previous successful download) ---------------
-
     it("returns stream from cached chunks when meta is complete (no network)", async () => {
       const chunk0 = new Uint8Array([1, 2, 3, 4]);
-      // Populate the cache as if a previous download completed
       cacheStore.set("http://model?__sc_meta=1", {
         body: encodeText(
           JSON.stringify({
@@ -335,11 +339,9 @@ describe("LiteRT-LM Provider", () => {
       const onProgress = jest.fn<any>();
       const stream = await loadLiteRtModelStream("http://model", onProgress);
 
-      // Should read from cache — no network calls
       expect(mockFetch).not.toHaveBeenCalled();
       expect(onProgress).toHaveBeenCalledWith(4, 4, true);
 
-      // Stream should yield the cached bytes
       const reader = stream.getReader();
       const collected: number[] = [];
       while (true) {
@@ -354,10 +356,7 @@ describe("LiteRT-LM Provider", () => {
       expect(collected).toEqual([1, 2, 3, 4]);
     });
 
-    // -- Fresh download (no meta) -----------------------------------------------
-
     it("downloads model and writes chunks + meta to CacheStorage", async () => {
-      // 3 bytes fits in a single chunk (way below 16MB flush threshold)
       const modelData = new Uint8Array([10, 20, 30]);
       mockFetch.mockResolvedValueOnce(makeFetchResponse(200, modelData) as any);
 
@@ -372,25 +371,19 @@ describe("LiteRT-LM Provider", () => {
         if (done) break;
       }
 
-      // At least one chunk entry should have been written
       const chunkEntry = cacheStore.get("http://model?__sc_chunk=0");
       expect(chunkEntry).toBeDefined();
 
-      // Meta should exist and be marked complete
       const metaRaw = cacheStore.get("http://model?__sc_meta=1");
       expect(metaRaw).toBeDefined();
       const meta = JSON.parse(decodeBytes(metaRaw!.body!));
       expect(meta.complete).toBe(true);
       expect(meta.received).toBe(3);
 
-      // Progress callback should have fired
       expect(onProgress).toHaveBeenCalled();
     });
 
-    // -- Resume after crash -----------------------------------------------------
-
     it("resumes download from partial meta offset after crash", async () => {
-      // Partial state: 4 bytes already cached in chunk 0, 4 more bytes remain
       const partialBytes = new Uint8Array([1, 2, 3, 4]);
       cacheStore.set("http://model?__sc_meta=1", {
         body: encodeText(
@@ -409,7 +402,6 @@ describe("LiteRT-LM Provider", () => {
         headers: new Headers({ "content-length": "4" }),
       });
 
-      // Server returns the remaining 4 bytes via 206
       const remaining = new Uint8Array([5, 6, 7, 8]);
       mockFetch.mockResolvedValueOnce({
         status: 206,
@@ -425,7 +417,6 @@ describe("LiteRT-LM Provider", () => {
       const onProgress = jest.fn<any>();
       const stream = await loadLiteRtModelStream("http://model", onProgress);
 
-      // Must have issued a Range request
       expect(mockFetch).toHaveBeenCalledTimes(1);
       const [, fetchInit] = mockFetch.mock.calls[0] as any[];
       expect(fetchInit.headers["Range"]).toBe("bytes=4-");
@@ -436,17 +427,13 @@ describe("LiteRT-LM Provider", () => {
         if (done) break;
       }
 
-      // Meta should now be complete
       const metaRaw = cacheStore.get("http://model?__sc_meta=1");
       const meta = JSON.parse(decodeBytes(metaRaw!.body!));
       expect(meta.complete).toBe(true);
       expect(meta.received).toBe(8);
     });
 
-    // -- Resume when server ignores Range (returns 200) -------------------------
-
     it("restarts from scratch when server ignores Range request (200 instead of 206)", async () => {
-      // Partial state exists in cache
       cacheStore.set("http://model?__sc_meta=1", {
         body: encodeText(
           JSON.stringify({
@@ -464,7 +451,6 @@ describe("LiteRT-LM Provider", () => {
         headers: new Headers({ "content-length": "4" }),
       });
 
-      // Server returns 200 (ignores Range) with full data
       const fullData = new Uint8Array([10, 20, 30, 40, 50, 60, 70, 80]);
       mockFetch.mockResolvedValueOnce(makeFetchResponse(200, fullData) as any);
 
@@ -479,14 +465,11 @@ describe("LiteRT-LM Provider", () => {
         if (done) break;
       }
 
-      // Final meta should reflect the full 8 bytes, not 4+4
       const metaRaw = cacheStore.get("http://model?__sc_meta=1");
       const meta = JSON.parse(decodeBytes(metaRaw!.body!));
       expect(meta.complete).toBe(true);
       expect(meta.received).toBe(8);
     });
-
-    // -- Retry on 500 -----------------------------------------------------------
 
     it("retries on 500 error", async () => {
       const modelData = new Uint8Array([1, 2, 3]);
@@ -511,8 +494,6 @@ describe("LiteRT-LM Provider", () => {
       expect(meta.complete).toBe(true);
     });
 
-    // -- Abort ------------------------------------------------------------------
-
     it("aborts download if signal is aborted", async () => {
       mockFetch.mockRejectedValue(
         new DOMException("Aborted", "AbortError") as any,
@@ -528,6 +509,188 @@ describe("LiteRT-LM Provider", () => {
           abortController.signal,
         ),
       ).rejects.toThrow("Aborted");
+    });
+  });
+
+  describe("invokeWithLiteRtLm", () => {
+    it("emits error when LiteRT is unsupported in current environment", async () => {
+      const emit: any = jest.fn();
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "hello" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+
+      expect(emit).toHaveBeenCalledWith({
+        type: "response",
+        payload: {
+          groupId: "g1",
+          text: expect.stringContaining(
+            "LiteRT-LM requires WebGPU and WebAssembly.Suspending",
+          ),
+        },
+      });
+    });
+
+    it("handles model failure when supported but initialization fails", async () => {
+      Object.defineProperty(global, "navigator", {
+        value: { gpu: {} },
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(global, "WebAssembly", {
+        value: { Suspending: class {} },
+        configurable: true,
+        writable: true,
+      });
+
+      const emitted: any[] = [];
+      const emit = jest.fn((msg: any) => {
+        emitted.push(msg);
+      });
+
+      // Pass an unsupported model ID
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "hello" }],
+        1000,
+        emit,
+        undefined,
+        "unsupported-model-id",
+      );
+
+      expect(
+        emitted.some(
+          (m) =>
+            m.type === "model-download-progress" &&
+            m.payload.status === "error",
+        ),
+      ).toBe(true);
+      expect(
+        emitted.some(
+          (m) =>
+            m.type === "response" &&
+            m.payload.text.includes("LiteRT-LM failed to initialize"),
+        ),
+      ).toBe(true);
+    });
+
+    it("handles aborted signal gracefully during model download", async () => {
+      Object.defineProperty(global, "navigator", {
+        value: { gpu: {} },
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(global, "WebAssembly", {
+        value: { Suspending: class {} },
+        configurable: true,
+        writable: true,
+      });
+
+      const abortController = new AbortController();
+      abortController.abort();
+
+      const emitted: any[] = [];
+      const emit = jest.fn((msg: any) => {
+        emitted.push(msg);
+      });
+
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "hello" }],
+        1000,
+        emit,
+        abortController.signal,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+
+      expect(
+        emitted.some(
+          (m) =>
+            m.type === "model-download-progress" &&
+            m.payload.status === "error",
+        ),
+      ).toBe(true);
+    });
+
+    it("emits warning response when LiteRT-LM is not supported in browser", async () => {
+      Object.defineProperty(global, "navigator", {
+        value: {},
+        configurable: true,
+        writable: true,
+      });
+
+      const emitted: any[] = [];
+      const emit = jest.fn((msg: any) => {
+        emitted.push(msg);
+      });
+
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "hello" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+
+      expect(
+        emitted.some(
+          (m) =>
+            m.type === "response" &&
+            m.payload.text.includes("LiteRT-LM requires WebGPU"),
+        ),
+      ).toBe(true);
+    });
+
+    it("successfully creates conversation and streams response when supported", async () => {
+      Object.defineProperty(global, "navigator", {
+        value: { gpu: {} },
+        configurable: true,
+        writable: true,
+      });
+      Object.defineProperty(global, "WebAssembly", {
+        value: { Suspending: class {} },
+        configurable: true,
+        writable: true,
+      });
+
+      global.fetch = jest.fn<any>().mockResolvedValue({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-length": "100" }),
+        body: makeBodyStream(new Uint8Array(100)),
+      });
+
+      const emitted: any[] = [];
+      const emit = jest.fn((msg: any) => {
+        emitted.push(msg);
+      });
+
+      await invokeWithLiteRtLm(
+        {} as any,
+        "g1",
+        "system",
+        [{ role: "user", content: "hello" }],
+        1000,
+        emit,
+        undefined,
+        "litert-community/gemma-4-E2B-it-litert-lm",
+      );
+
+      expect(emitted.some((m) => m.type === "streaming-chunk")).toBe(true);
+      expect(emitted.some((m) => m.type === "streaming-done")).toBe(true);
     });
   });
 });
@@ -547,7 +710,6 @@ describe("parseModelSpecificToolCall", () => {
   });
 
   it('parses a Gemma 4 native tool call with encoded quote tokens <|"|">', () => {
-    // Standard inline output
     const rawInline =
       '<|tool_call>call:web_search{queries:[<|"|>Blueberries latest details<|"|>]}<tool_call|>';
     const resultInline = parseModelSpecificToolCall(rawInline);
@@ -555,7 +717,6 @@ describe("parseModelSpecificToolCall", () => {
     expect(resultInline!.name).toBe("web_search");
     expect(resultInline!.input.queries[0]).toBe("Blueberries latest details");
 
-    // Real-world variant: The model frequently injects a newline before the closing tag
     const rawWithNewline =
       '<|tool_call>call:web_search{queries:[<|"|>Blueberries latest details<|"|>]}\n<tool_call|>';
     const resultWithNewline = parseModelSpecificToolCall(rawWithNewline);

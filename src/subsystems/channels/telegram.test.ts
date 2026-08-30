@@ -331,4 +331,181 @@ describe("TelegramChannel", () => {
     expect(fetchCalls).toBe(2);
     channel.stop();
   });
+
+  it("handles /ping helper command", async () => {
+    const channel = new TelegramChannel();
+    const apiCall = jest
+      .spyOn(channel, "apiCall")
+      .mockResolvedValue({ ok: true } as any);
+
+    channel.configure("token", ["123"]);
+
+    await channel.handleUpdate({
+      update_id: 20,
+      message: {
+        message_id: 99,
+        chat: { id: 123, type: "private" },
+        date: 1_700_000_000,
+        text: "/ping",
+      },
+    });
+
+    expect(apiCall).toHaveBeenCalledWith("sendMessage", {
+      chat_id: "123",
+      text: "Pong! ShadowClaw is running.",
+    });
+  });
+
+  it("handles voice, video, audio, document, sticker, location, and contact messages", async () => {
+    const channel = new TelegramChannel();
+    jest.spyOn(channel, "apiCall").mockResolvedValue({
+      ok: true,
+      result: { file_id: "fid", file_path: "path/file.dat" },
+    } as any);
+
+    channel.configure("token", ["123"]);
+    const messagesSeen: any[] = [];
+    channel.onMessage((m) => messagesSeen.push(m));
+
+    // Voice
+    await channel.handleUpdate({
+      update_id: 21,
+      message: {
+        message_id: 101,
+        chat: { id: 123, type: "private" },
+        date: 1_700_000_000,
+        voice: { file_id: "voice-1", mime_type: "audio/ogg" },
+      },
+    });
+    expect(messagesSeen[0].content).toBe("[Voice message]");
+
+    // Video
+    await channel.handleUpdate({
+      update_id: 22,
+      message: {
+        message_id: 102,
+        chat: { id: 123, type: "private" },
+        date: 1_700_000_000,
+        video: { file_id: "vid-1", file_name: "movie.mp4" },
+      },
+    });
+    expect(messagesSeen[1].content).toBe("[Video]");
+
+    // Audio
+    await channel.handleUpdate({
+      update_id: 23,
+      message: {
+        message_id: 103,
+        chat: { id: 123, type: "private" },
+        date: 1_700_000_000,
+        audio: { file_id: "aud-1", file_name: "song.mp3" },
+      },
+    });
+    expect(messagesSeen[2].content).toBe("[Audio]");
+
+    // Document
+    await channel.handleUpdate({
+      update_id: 24,
+      message: {
+        message_id: 104,
+        chat: { id: 123, type: "private" },
+        date: 1_700_000_000,
+        document: { file_id: "doc-1", file_name: "report.pdf" },
+      },
+    });
+    expect(messagesSeen[3].content).toBe("[Document: report.pdf]");
+
+    // Sticker
+    await channel.handleUpdate({
+      update_id: 25,
+      message: {
+        message_id: 105,
+        chat: { id: 123, type: "private" },
+        date: 1_700_000_000,
+        sticker: { file_id: "stk-1", emoji: "🚀", is_animated: true },
+      },
+    });
+    expect(messagesSeen[4].content).toBe("[Sticker: 🚀]");
+
+    // Location
+    await channel.handleUpdate({
+      update_id: 26,
+      message: {
+        message_id: 106,
+        chat: { id: 123, type: "private" },
+        date: 1_700_000_000,
+        location: { latitude: 37.7749, longitude: -122.4194 },
+      },
+    });
+    expect(messagesSeen[5].content).toBe("[Location: 37.7749, -122.4194]");
+
+    // Contact
+    await channel.handleUpdate({
+      update_id: 27,
+      message: {
+        message_id: 107,
+        chat: { id: 123, type: "private" },
+        date: 1_700_000_000,
+        contact: { first_name: "Jane" },
+      },
+    });
+    expect(messagesSeen[6].content).toBe("[Contact: Jane]");
+  });
+
+  it("sets typing status via sendChatAction", () => {
+    const channel = new TelegramChannel();
+    channel.configure("token", ["123"]);
+    const apiCall = jest
+      .spyOn(channel, "apiCall")
+      .mockResolvedValue({ ok: true } as any);
+
+    channel.setTyping("tg:123", true);
+    expect(apiCall).toHaveBeenCalledWith("sendChatAction", {
+      chat_id: "123",
+      action: "typing",
+    });
+
+    channel.setTyping("tg:123", false);
+    expect(apiCall).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends photos and documents via sendPhoto / sendDocument when fileReader provides blobs", async () => {
+    const channel = new TelegramChannel();
+    channel.configure("token", ["123"]);
+
+    channel.fileReader = jest
+      .fn<any>()
+      .mockImplementation(async (_gid, path) => {
+        if (path.endsWith(".png")) {
+          return new Blob(["png-data"], { type: "image/png" });
+        }
+        return new Blob(["pdf-data"], { type: "application/pdf" });
+      });
+
+    const fetchSpy = jest.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ ok: true }),
+    } as Response);
+
+    await channel.send(
+      "tg:123",
+      "Look at ![photo](images/pic.png) and [doc](docs/file.pdf) please",
+    );
+
+    expect(channel.fileReader).toHaveBeenCalledWith("tg:123", "images/pic.png");
+    expect(channel.fileReader).toHaveBeenCalledWith("tg:123", "docs/file.pdf");
+    expect(
+      fetchSpy.mock.calls.some((c: any) => String(c[0]).includes("sendPhoto")),
+    ).toBe(true);
+    expect(
+      fetchSpy.mock.calls.some((c: any) =>
+        String(c[0]).includes("sendDocument"),
+      ),
+    ).toBe(true);
+    expect(
+      fetchSpy.mock.calls.some((c: any) =>
+        String(c[0]).includes("sendMessage"),
+      ),
+    ).toBe(true);
+  });
 });

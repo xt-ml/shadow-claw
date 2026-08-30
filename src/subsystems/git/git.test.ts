@@ -53,6 +53,16 @@ const mockGit: any = {
   walk: jest.fn<any>().mockResolvedValue([]),
   getConfig: jest.fn(),
   setConfig: jest.fn(),
+  readBlob: jest.fn(),
+  readCommit: jest.fn(),
+  deleteBranch: jest.fn(),
+  init: jest.fn(),
+  annotatedTag: jest.fn(),
+  tag: jest.fn(),
+  listTags: jest.fn(),
+  listRemotes: jest.fn(),
+  addRemote: jest.fn(),
+  deleteRemote: jest.fn(),
 };
 
 // Patch navigator.storage before the module is imported.
@@ -82,6 +92,17 @@ describe("git", () => {
   let gitCurrentBranch: Function;
   let gitDeleteRepo: Function;
   let gitDiff: Function;
+  let gitFetch: Function;
+  let gitReadFileAtRef: Function;
+  let gitShow: Function;
+  let gitDeleteBranch: Function;
+  let gitInit: Function;
+  let gitTag: Function;
+  let gitListTags: Function;
+  let gitRemote: Function;
+  let getRemoteUrl: Function;
+  let gitConfig: Function;
+  let gitUnstage: Function;
   let gitListBranches: Function;
   let gitListRepos: Function;
   let gitLog: Function;
@@ -112,6 +133,17 @@ describe("git", () => {
     gitCurrentBranch = mod.gitCurrentBranch;
     gitDeleteRepo = mod.gitDeleteRepo;
     gitDiff = mod.gitDiff;
+    gitFetch = mod.gitFetch;
+    gitReadFileAtRef = mod.gitReadFileAtRef;
+    gitShow = mod.gitShow;
+    gitDeleteBranch = mod.gitDeleteBranch;
+    gitInit = mod.gitInit;
+    gitTag = mod.gitTag;
+    gitListTags = mod.gitListTags;
+    gitRemote = mod.gitRemote;
+    getRemoteUrl = mod.getRemoteUrl;
+    gitConfig = mod.gitConfig;
+    gitUnstage = mod.gitUnstage;
     gitListBranches = mod.gitListBranches;
     gitListRepos = mod.gitListRepos;
     gitLog = mod.gitLog;
@@ -1201,6 +1233,437 @@ describe("git", () => {
       await expect(
         gitClone({ url: "https://github.com/user/my-repo" }),
       ).rejects.toThrow("Failed to clone/fetch");
+    });
+  });
+
+  describe("gitFetch", () => {
+    it("fetches remote ref successfully", async () => {
+      mockGit.fetch.mockResolvedValueOnce({ fetchHead: "f00ba1" });
+      const result = await gitFetch({ repo: "my-repo", branch: "main" });
+      expect(result).toContain("Fetched main from origin successfully");
+      expect(result).toContain("f00ba1");
+    });
+  });
+
+  describe("gitReadFileAtRef", () => {
+    it("reads file blob at ref without checkout", async () => {
+      mockGit.resolveRef.mockResolvedValueOnce("commita1b2");
+      mockGit.readBlob.mockResolvedValueOnce({
+        blob: new TextEncoder().encode("file content at ref"),
+      });
+
+      const content = await gitReadFileAtRef({
+        repo: "my-repo",
+        ref: "main",
+        filepath: "src/index.ts",
+      });
+      expect(content).toBe("file content at ref");
+    });
+  });
+
+  describe("gitShow", () => {
+    it("shows commit details and diff against parent", async () => {
+      mockGit.resolveRef.mockResolvedValueOnce("commita1b2");
+      mockGit.readCommit.mockResolvedValueOnce({
+        commit: {
+          parent: ["parent123"],
+          author: {
+            name: "Dev",
+            email: "dev@example.com",
+            timestamp: 1700000000,
+          },
+          message: "Commit message here",
+        },
+      });
+      mockGit.statusMatrix.mockResolvedValueOnce([]);
+
+      const output = await gitShow({ repo: "my-repo", ref: "commita1b2" });
+      expect(output).toContain("commit commita1b2");
+      expect(output).toContain("Author: Dev <dev@example.com>");
+      expect(output).toContain("Commit message here");
+    });
+
+    it("shows initial commit message when there is no parent", async () => {
+      mockGit.resolveRef.mockResolvedValueOnce("rootcommit");
+      mockGit.readCommit.mockResolvedValueOnce({
+        commit: {
+          parent: [],
+          author: {
+            name: "Dev",
+            email: "dev@example.com",
+            timestamp: 1700000000,
+          },
+          message: "Initial commit",
+        },
+      });
+
+      const output = await gitShow({ repo: "my-repo", ref: "rootcommit" });
+      expect(output).toContain("Initial commit.");
+    });
+  });
+
+  describe("gitDeleteBranch", () => {
+    it("deletes a local branch", async () => {
+      mockGit.deleteBranch.mockResolvedValueOnce(undefined);
+      const result = await gitDeleteBranch({
+        repo: "my-repo",
+        name: "old-feature",
+      });
+      expect(result).toBe("Deleted local branch old-feature in my-repo");
+      expect(mockGit.deleteBranch).toHaveBeenCalledWith(
+        expect.objectContaining({ ref: "old-feature" }),
+      );
+    });
+  });
+
+  describe("gitInit", () => {
+    it("initializes a new empty git repository", async () => {
+      mockGit.init.mockResolvedValueOnce(undefined);
+      mockGit.getConfig.mockResolvedValueOnce(false);
+
+      const result = await gitInit({ repo: "new-repo" });
+      expect(result).toContain("Initialized empty Git repository in new-repo");
+      expect(mockGit.init).toHaveBeenCalledWith(
+        expect.objectContaining({ defaultBranch: "main" }),
+      );
+    });
+  });
+
+  describe("gitTag & gitListTags", () => {
+    it("creates lightweight and annotated tags", async () => {
+      mockGit.tag.mockResolvedValueOnce(undefined);
+      const resLight = await gitTag({ repo: "my-repo", tag: "v1.0.0" });
+      expect(resLight).toBe("Created tag v1.0.0 in my-repo");
+
+      mockGit.annotatedTag.mockResolvedValueOnce(undefined);
+      const resAnnotated = await gitTag({
+        repo: "my-repo",
+        tag: "v1.1.0",
+        message: "Release 1.1.0",
+      });
+      expect(resAnnotated).toBe("Created annotated tag v1.1.0 in my-repo");
+    });
+
+    it("lists tags", async () => {
+      mockGit.listTags.mockResolvedValueOnce(["v1.0.0", "v1.1.0"]);
+      const list = await gitListTags({ repo: "my-repo" });
+      expect(list).toBe("v1.0.0\nv1.1.0");
+
+      mockGit.listTags.mockResolvedValueOnce([]);
+      const emptyList = await gitListTags({ repo: "my-repo" });
+      expect(emptyList).toBe("No tags found.");
+    });
+  });
+
+  describe("gitRemote", () => {
+    it("manages remotes (list, add, remove)", async () => {
+      mockGit.listRemotes.mockResolvedValueOnce([
+        { remote: "origin", url: "https://github.com/user/repo" },
+      ]);
+      const list = await gitRemote({ repo: "my-repo", command: "list" });
+      expect(list).toContain("origin\thttps://github.com/user/repo");
+
+      mockGit.addRemote.mockResolvedValueOnce(undefined);
+      const add = await gitRemote({
+        repo: "my-repo",
+        command: "add",
+        remote: "upstream",
+        url: "https://github.com/upstream/repo",
+      });
+      expect(add).toBe(
+        "Added remote upstream -> https://github.com/upstream/repo",
+      );
+
+      mockGit.deleteRemote.mockResolvedValueOnce(undefined);
+      const remove = await gitRemote({
+        repo: "my-repo",
+        command: "remove",
+        remote: "upstream",
+      });
+      expect(remove).toBe("Removed remote upstream");
+
+      mockGit.listRemotes.mockResolvedValueOnce([]);
+      const emptyList = await gitRemote({ repo: "my-repo", command: "list" });
+      expect(emptyList).toBe("No remotes.");
+
+      await expect(
+        gitRemote({ repo: "my-repo", command: "add", remote: "" }),
+      ).rejects.toThrow("remote and url are required for add");
+
+      await expect(
+        gitRemote({ repo: "my-repo", command: "remove", remote: "" }),
+      ).rejects.toThrow("remote is required for remove");
+
+      await expect(
+        gitRemote({ repo: "my-repo", command: "unknown" as any }),
+      ).rejects.toThrow("Invalid command");
+    });
+  });
+
+  describe("getRemoteUrl", () => {
+    it("returns url of matching remote", async () => {
+      mockGit.listRemotes.mockResolvedValueOnce([
+        { remote: "origin", url: "https://github.com/user/origin-repo" },
+        { remote: "upstream", url: "https://github.com/user/upstream-repo" },
+      ]);
+
+      const url = await getRemoteUrl({ repo: "my-repo", remote: "upstream" });
+      expect(url).toBe("https://github.com/user/upstream-repo");
+    });
+
+    it("returns undefined if remote not found or on error", async () => {
+      mockGit.listRemotes.mockResolvedValueOnce([
+        { remote: "origin", url: "https://github.com/user/origin-repo" },
+      ]);
+
+      const url = await getRemoteUrl({ repo: "my-repo", remote: "missing" });
+      expect(url).toBeUndefined();
+
+      mockGit.listRemotes.mockRejectedValueOnce(new Error("No repo"));
+      const errUrl = await getRemoteUrl({ repo: "not-a-repo" });
+      expect(errUrl).toBeUndefined();
+    });
+  });
+
+  describe("gitConfig", () => {
+    it("gets and sets config values", async () => {
+      mockGit.getConfig.mockResolvedValueOnce("user@example.com");
+      const getRes = await gitConfig({
+        repo: "my-repo",
+        command: "get",
+        key: "user.email",
+      });
+      expect(getRes).toBe("user@example.com");
+
+      mockGit.getConfig.mockResolvedValueOnce(undefined);
+      const emptyGet = await gitConfig({
+        repo: "my-repo",
+        command: "get",
+        key: "user.signingkey",
+      });
+      expect(emptyGet).toBe("");
+
+      mockGit.setConfig.mockResolvedValueOnce(undefined);
+      const setRes = await gitConfig({
+        repo: "my-repo",
+        command: "set",
+        key: "user.name",
+        value: "Custom Dev",
+      });
+      expect(setRes).toBe("Set user.name = Custom Dev");
+
+      await expect(
+        gitConfig({
+          repo: "my-repo",
+          command: "set",
+          key: "user.name",
+        }),
+      ).rejects.toThrow("value is required for set");
+
+      await expect(
+        gitConfig({
+          repo: "my-repo",
+          command: "invalid" as any,
+          key: "user.name",
+        }),
+      ).rejects.toThrow("Invalid command");
+    });
+  });
+
+  describe("gitUnstage", () => {
+    it("unstages single file or array of files", async () => {
+      mockGit.remove.mockResolvedValue(undefined);
+      const single = await gitUnstage({
+        repo: "my-repo",
+        filepath: "file1.txt",
+      });
+      expect(single).toBe("Unstaged file1.txt in my-repo");
+
+      const multiple = await gitUnstage({
+        repo: "my-repo",
+        filepath: ["file1.txt", "file2.txt"],
+      });
+      expect(multiple).toBe("Unstaged file1.txt, file2.txt in my-repo");
+      expect(mockGit.remove).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe("git utilities and context helpers", () => {
+    it("derives repo name from various url formats", () => {
+      expect(repoNameFromUrl("https://github.com/xt-ml/shadow-claw.git")).toBe(
+        "shadow-claw",
+      );
+      expect(repoNameFromUrl("https://github.com/xt-ml/shadow-claw/")).toBe(
+        "shadow-claw",
+      );
+      expect(repoNameFromUrl("git@github.com:xt-ml/custom-repo.git")).toBe(
+        "custom-repo",
+      );
+      expect(repoNameFromUrl("")).toBe("repo");
+    });
+
+    it("formats repo dir path correctly", () => {
+      expect(repoDir("my-repo")).toBe("repos/my-repo");
+    });
+
+    it("resolves proxy URLs according to preferences", () => {
+      expect(getProxyUrl("custom", "https://proxy.example.com")).toBe(
+        "https://proxy.example.com",
+      );
+      expect(getProxyUrl("public")).toBe("https://www.cors-anywhere.com");
+      expect(getProxyUrl("local")).toContain("/git-proxy");
+    });
+
+    it("initializes git context with and without groupRoot", async () => {
+      const { initGitContext, makeOpfsFs, ensureCoreFilemodeFalse } =
+        await import("./git.js");
+
+      const baseCtx = await initGitContext();
+      expect(baseCtx.repoDirFn("test-repo")).toBe("repos/test-repo");
+
+      const mockGroupHandle: any = {
+        kind: "directory",
+        name: "group-dir",
+        getDirectoryHandle: jest.fn(),
+        getFileHandle: jest.fn(),
+      };
+      const groupCtx = await initGitContext(mockGroupHandle);
+      expect(groupCtx.repoDirFn("test-repo")).toBe("repos/test-repo");
+
+      expect(typeof makeOpfsFs).toBe("function");
+
+      mockGit.getConfig.mockResolvedValueOnce(true);
+      await ensureCoreFilemodeFalse(mockGit, {}, "repos/test-repo");
+      expect(mockGit.setConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          path: "core.filemode",
+          value: false,
+        }),
+      );
+    });
+
+    it("handles gitInit, gitTag, gitListTags, gitRemote, gitConfig, gitUnstage, gitReset", async () => {
+      const {
+        gitInit,
+        gitTag,
+        gitListTags,
+        gitRemote,
+        gitConfig,
+        gitUnstage,
+        gitReset,
+      } = await import("./git.js");
+
+      // 1. gitInit
+      mockGit.init.mockResolvedValue(undefined);
+      const initRes = await gitInit({ repo: "new-repo" });
+      expect(initRes).toContain("Initialized empty Git repository");
+
+      // 2. gitTag
+      mockGit.tag.mockResolvedValue(undefined);
+      const tagRes = await gitTag({ repo: "new-repo", tag: "v1.0.0" });
+      expect(tagRes).toContain("Created tag v1.0.0");
+
+      // 3. gitListTags
+      mockGit.listTags.mockResolvedValue(["v1.0.0", "v1.1.0"]);
+      const tagsRes = await gitListTags({ repo: "new-repo" });
+      expect(tagsRes).toBe("v1.0.0\nv1.1.0");
+
+      // 4. gitRemote - list, add, remove
+      mockGit.listRemotes.mockResolvedValue([
+        { remote: "origin", url: "https://github.com/xt-ml/repo.git" },
+      ]);
+      const remotesRes = await gitRemote({ repo: "new-repo", command: "list" });
+      expect(remotesRes).toContain("origin\thttps://github.com/xt-ml/repo.git");
+
+      mockGit.addRemote.mockResolvedValue(undefined);
+      const addRemoteRes = await gitRemote({
+        repo: "new-repo",
+        command: "add",
+        remote: "upstream",
+        url: "https://github.com/upstream/repo.git",
+      });
+      expect(addRemoteRes).toContain("Added remote upstream");
+
+      mockGit.deleteRemote.mockResolvedValue(undefined);
+      const delRemoteRes = await gitRemote({
+        repo: "new-repo",
+        command: "remove",
+        remote: "upstream",
+      });
+      expect(delRemoteRes).toContain("Removed remote upstream");
+
+      // 5. gitConfig - get and set
+      mockGit.getConfig.mockResolvedValue("John Doe");
+      const configRes = await gitConfig({
+        repo: "new-repo",
+        key: "user.name",
+        command: "get",
+      });
+      expect(configRes).toBe("John Doe");
+
+      mockGit.setConfig.mockResolvedValue(undefined);
+      const setConfigRes = await gitConfig({
+        repo: "new-repo",
+        key: "user.name",
+        value: "Jane Doe",
+        command: "set",
+      });
+      expect(setConfigRes).toContain("Set user.name = Jane Doe");
+
+      // 6. gitUnstage
+      mockGit.resetIndex = jest.fn<any>().mockResolvedValue(undefined);
+      const unstageRes = await gitUnstage({
+        repo: "new-repo",
+        filepath: "file.txt",
+      });
+      expect(unstageRes).toContain("Unstaged file.txt");
+
+      // 7. gitReset
+      mockGit.currentBranch.mockResolvedValue("main");
+      mockGit.resolveRef.mockResolvedValue("abc1234");
+      mockGit.writeRef = jest.fn<any>().mockResolvedValue(undefined);
+      const resetRes = await gitReset({
+        repo: "new-repo",
+        ref: "HEAD~1",
+      });
+      expect(resetRes).toContain("Reset main to HEAD~1");
+
+      // 8. gitDiff between two commits (ref1 & ref2)
+      mockGit.resolveRef = jest
+        .fn<any>()
+        .mockImplementation(async ({ ref }: any) => {
+          return ref === "HEAD~1"
+            ? "11111111111111111111"
+            : "22222222222222222222";
+        });
+      mockGit.readCommit = jest.fn<any>().mockResolvedValue({
+        commit: { tree: "tree-oid" },
+      });
+      mockGit.walk = jest.fn<any>().mockImplementation(async ({ map }: any) => {
+        const A = {
+          type: async () => "blob",
+          oid: async () => "oid-a",
+          content: async () =>
+            new TextEncoder().encode("line 1\nold line\nline 3"),
+        };
+        const B = {
+          type: async () => "blob",
+          oid: async () => "oid-b",
+          content: async () =>
+            new TextEncoder().encode("line 1\nnew line\nline 3"),
+        };
+        const diff = await map("test.txt", [A, B]);
+        return [diff];
+      });
+
+      const { gitDiff } = await import("./git.js");
+      const diffTwoRefs = await gitDiff({
+        repo: "new-repo",
+        ref1: "HEAD~1",
+        ref2: "HEAD",
+      });
+      expect(diffTwoRefs).toContain("Comparing HEAD~1");
+      expect(diffTwoRefs).toContain("test.txt");
     });
   });
 });

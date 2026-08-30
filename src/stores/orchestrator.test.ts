@@ -2887,5 +2887,139 @@ describe("OrchestratorStore", () => {
         configElement.remove();
       }
     });
+
+    it("handles sendMessage with and without a2uiAction", async () => {
+      const store = new OrchestratorStore();
+      const mockSubmit = jest.fn();
+      const orch: any = {
+        browserChat: { submit: mockSubmit },
+        events: createEvents(),
+      };
+      await store.init({} as any, orch);
+
+      store.sendMessage("plain message", []);
+      expect(mockSubmit).toHaveBeenCalledWith(
+        "plain message",
+        DEFAULT_GROUP_ID,
+        [],
+      );
+
+      const action = {
+        actionId: "btn-click",
+        surfaceId: "surf-1",
+        componentId: "btn-1",
+      };
+      store.sendMessage("action message", [], action as any);
+      expect(mockSubmit).toHaveBeenCalledWith(
+        "action message",
+        DEFAULT_GROUP_ID,
+        [],
+        action,
+      );
+    });
+
+    it("manages remote agent status, typing status, and ready state", () => {
+      const store = new OrchestratorStore();
+      expect(store.ready).toBe(false);
+
+      store.setReady(true);
+      expect(store.ready).toBe(true);
+
+      store.setRemoteAgentStatus("peer:agent-1", "running" as any);
+      expect(store._remoteAgentStatusByGroup.get().get("peer:agent-1")).toBe(
+        "running",
+      );
+
+      store.setRemoteAgentTyping("peer:agent-1", true);
+      expect(store._remoteAgentTypingByGroup.get().get("peer:agent-1")).toBe(
+        true,
+      );
+
+      store.setRemoteAgentTyping("peer:agent-1", false);
+      expect(
+        store._remoteAgentTypingByGroup.get().get("peer:agent-1"),
+      ).toBeUndefined();
+    });
+
+    it("handles folder navigation and proxy/network settings", async () => {
+      const store = new OrchestratorStore();
+      const mockDb: any = {};
+      const orch: any = {
+        browserChat: { submit: jest.fn() },
+        events: createEvents(),
+      };
+      await store.init(mockDb, orch);
+
+      // 1. Folder navigation
+      await store.navigateIntoFolder(mockDb, "docs");
+      expect(store.currentPath).toBe("docs");
+
+      await store.navigateIntoFolder(mockDb, "sub");
+      expect(store.currentPath).toBe("docs/sub");
+
+      await store.navigateBackFolder(mockDb);
+      expect(store.currentPath).toBe("docs");
+
+      await store.resetToRootFolder(mockDb);
+      expect(store.currentPath).toBe(".");
+
+      // 2. Proxy & network settings
+      await store.setGitProxyUrl(mockDb, "https://git-proxy.example.com");
+      expect(store.gitProxyUrl).toBe("https://git-proxy.example.com");
+
+      await store.setProxyUrl(mockDb, "https://proxy.example.com");
+      expect(store.proxyUrl).toBe("https://proxy.example.com");
+
+      await store.setUseProxy(mockDb, true);
+      expect(store.useProxy).toBe(true);
+
+      await store.setVMBashFullInternetAccess(mockDb, true);
+      expect(store.vmBashFullInternetAccess).toBe(true);
+    });
+
+    it("handles task management helpers (clearAllTasks, restoreTasksFromBackup, toggleTask)", async () => {
+      const store = new OrchestratorStore();
+      const mockDb: any = {};
+      const orch: any = {
+        browserChat: { submit: jest.fn() },
+        events: createEvents(),
+      };
+      await store.init(mockDb, orch);
+
+      const task: any = {
+        id: "task-123",
+        groupId: DEFAULT_GROUP_ID,
+        name: "Test Task",
+        enabled: true,
+      };
+      mockGetAllTasks.mockResolvedValue([task]);
+      await store.loadTasks(mockDb);
+      expect(store.tasks.length).toBe(1);
+
+      // 1. toggleTask
+      mockGetAllTasks.mockResolvedValue([{ ...task, enabled: false }]);
+      await store.toggleTask(mockDb, task, false);
+      expect(store.tasks.find((t) => t.id === "task-123")?.enabled).toBe(false);
+
+      // 2. restoreTasksFromBackup
+      mockGetAllTasks.mockResolvedValue([
+        task,
+        {
+          id: "task-new",
+          groupId: DEFAULT_GROUP_ID,
+          name: "New Task",
+          enabled: true,
+        },
+      ]);
+      await store.restoreTasksFromBackup(mockDb, [
+        { id: "task-new", name: "New Task", enabled: true } as any,
+      ]);
+      expect(store.tasks.some((t) => t.id === "task-new")).toBe(true);
+
+      // 3. clearAllTasks
+      mockGetAllTasks.mockResolvedValue([]);
+      await store.clearAllTasks(mockDb);
+      expect(store.tasks).toEqual([]);
+    });
   });
 });

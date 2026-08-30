@@ -2,8 +2,11 @@ import { jest } from "@jest/globals";
 
 const mockGetConfig = jest.fn();
 const mockSetConfig = jest.fn();
+const mockLoadDeclarativeTools = jest.fn();
+const mockFindDeclarativeTool = jest.fn();
+const mockParseDeclarativeTool = jest.fn();
 
-jest.unstable_mockModule("../db/setConfig.js", () => ({
+jest.unstable_mockModule("../db/getConfig.js", () => ({
   getConfig: mockGetConfig,
 }));
 
@@ -11,20 +14,24 @@ jest.unstable_mockModule("../db/setConfig.js", () => ({
   setConfig: mockSetConfig,
 }));
 
+jest.unstable_mockModule("../subsystems/tools/declarative.js", () => ({
+  loadDeclarativeTools: mockLoadDeclarativeTools,
+  findDeclarativeTool: mockFindDeclarativeTool,
+  parseDeclarativeTool: mockParseDeclarativeTool,
+}));
+
 const { ToolsStore } = await import("./tools.js");
 const { DEFAULT_BUILTIN_PROFILE } =
-  await import("../subsystems/providers/prompt-api-provider.js");
+  await import("../subsystems/tools/builtin-profiles.js");
 
 const db: any = {} as any;
 
 describe("ToolsStore — built-in Nano profile", () => {
-  let store;
+  let store: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
-
     (mockGetConfig as any).mockResolvedValue(undefined);
-
     (mockSetConfig as any).mockResolvedValue(undefined);
     store = new ToolsStore();
   });
@@ -53,22 +60,22 @@ describe("ToolsStore — built-in Nano profile", () => {
 
   it("refuses to delete the built-in profile", async () => {
     await store.deleteProfile(db, DEFAULT_BUILTIN_PROFILE.id);
-    // Should still be in the list
     expect(
-      store.profiles.find((p) => p.id === DEFAULT_BUILTIN_PROFILE.id),
+      store.profiles.find((p: any) => p.id === DEFAULT_BUILTIN_PROFILE.id),
     ).toBeTruthy();
-    // setConfig should NOT have been called
     expect(mockSetConfig).not.toHaveBeenCalled();
   });
 
   it("findProfilesForProvider returns built-in for prompt_api", () => {
     const matches = store.findProfilesForProvider("prompt_api");
-    expect(matches.some((p) => p.id === DEFAULT_BUILTIN_PROFILE.id)).toBe(true);
+    expect(matches.some((p: any) => p.id === DEFAULT_BUILTIN_PROFILE.id)).toBe(
+      true,
+    );
   });
 
   it("does not return built-in for non-matching provider", () => {
     const matches = store.findProfilesForProvider("openai");
-    expect(matches.some((p) => p.id === DEFAULT_BUILTIN_PROFILE.id)).toBe(
+    expect(matches.some((p: any) => p.id === DEFAULT_BUILTIN_PROFILE.id)).toBe(
       false,
     );
   });
@@ -90,6 +97,119 @@ describe("ToolsStore — built-in Nano profile", () => {
     await store.setAllEnabled(db, ["read_file", "write_file", "show_toast"]);
 
     expect(store.activeProfileId).toBeNull();
+  });
+});
+
+describe("ToolsStore — custom tools, cloning, profiles & web search config", () => {
+  let store: any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (mockGetConfig as any).mockResolvedValue(undefined);
+    (mockSetConfig as any).mockResolvedValue(undefined);
+    store = new ToolsStore();
+  });
+
+  it("adds, removes, and clones custom tools", async () => {
+    const customTool = {
+      name: "custom_math",
+      description: "Perform math",
+      input_schema: { type: "object", properties: {} },
+    };
+
+    await store.addCustomTool(db, customTool);
+    expect(store.customTools).toHaveLength(1);
+    expect(store.enabledToolNames.has("custom_math")).toBe(true);
+
+    const cloned = await store.cloneTool(
+      db,
+      "custom_math",
+      "custom_math_v2",
+      "Perform advanced math",
+    );
+    expect(cloned).toBe(true);
+    expect(store.customTools).toHaveLength(2);
+
+    // Cannot clone with existing name
+    const cloneConflict = await store.cloneTool(
+      db,
+      "custom_math",
+      "custom_math_v2",
+    );
+    expect(cloneConflict).toBe(false);
+
+    // Remove custom tool
+    await store.removeCustomTool(db, "custom_math");
+    expect(store.customTools).toHaveLength(1);
+    expect(store.customTools[0].name).toBe("custom_math_v2");
+  });
+
+  it("manages custom tool profiles and updates", async () => {
+    const profile = {
+      id: "p1",
+      name: "Research Profile",
+      enabledToolNames: ["web_search", "read_file"],
+      customTools: [],
+      systemPromptOverride: "You are a researcher",
+    };
+
+    await store.addProfile(db, profile);
+    expect(store.profiles.find((p: any) => p.id === "p1")).toBeTruthy();
+
+    await store.activateProfile(db, "p1");
+    expect(store.activeProfileId).toBe("p1");
+    expect(store.systemPromptOverride).toBe("You are a researcher");
+
+    await store.setSystemPromptOverride(db, "Updated Prompt");
+    expect(store.systemPromptOverride).toBe("Updated Prompt");
+
+    await store.saveToActiveProfile(db);
+    expect(mockSetConfig).toHaveBeenCalled();
+
+    await store.deactivateProfile(db);
+    expect(store.activeProfileId).toBeNull();
+
+    await store.deleteProfile(db, "p1");
+    expect(store.profiles.find((p: any) => p.id === "p1")).toBeFalsy();
+  });
+
+  it("configures web search and search_files options", async () => {
+    await store.setWebSearchUseProxy(db, true);
+    expect(store.webSearchUseProxy).toBe(true);
+
+    await store.setWebSearchProxyUrl(db, "https://proxy.example.com");
+    expect(store.webSearchProxyUrl).toBe("https://proxy.example.com");
+
+    await store.setWebSearchUrl(db, "https://search.example.com?q={query}");
+    expect(store.webSearchUrl).toBe("https://search.example.com?q={query}");
+
+    await store.setSearchFilesMaxFileBytes(db, 1024 * 1024);
+    expect(store.searchFilesMaxFileBytes).toBe(1024 * 1024);
+
+    await store.setSearchFilesMaxFilesVisited(db, 2000);
+    expect(store.searchFilesMaxFilesVisited).toBe(2000);
+
+    await store.setSearchFilesSkipDirs(db, "dist,out,.git");
+    expect(store.searchFilesSkipDirs).toBe("dist,out,.git");
+    expect(store.searchFilesSkipDirsSet).toEqual(
+      new Set(["dist", "out", ".git"]),
+    );
+  });
+
+  it("loads config from DB on load()", async () => {
+    (mockGetConfig as any).mockImplementation(async (_db: any, key: string) => {
+      if (key === "enabled_tools") return ["read_file"];
+      if (key === "system_prompt_override") return "Loaded Prompt";
+      if (key === "web_search_use_proxy") return "true";
+      if (key === "search_files_max_file_bytes") return "2048";
+      return null;
+    });
+
+    await store.load(db);
+    expect(store.enabledToolNames.has("read_file")).toBe(true);
+    expect(store.systemPromptOverride).toBe("Loaded Prompt");
+    expect(store.webSearchUseProxy).toBe(true);
+    expect(store.searchFilesMaxFileBytes).toBe(2048);
   });
 });
 
@@ -148,5 +268,22 @@ describe("ToolsStore — declarative tools management", () => {
     await newStore.importBackup(db, backupJson);
     expect(newStore.isDeclarativeToolEnabled("tool_x")).toBe(true);
     expect(newStore.isDeclarativeToolEnabled("tool_y")).toBe(false);
+  });
+
+  it("refreshes declarative tools from loader", async () => {
+    (mockLoadDeclarativeTools as any).mockResolvedValueOnce({
+      tools: [
+        {
+          name: "custom_decl_tool",
+          description: "Declarative tool desc",
+          execution: { type: "javascript", script: "return 1;" },
+        },
+      ],
+    });
+
+    const refreshed = await store.refreshDeclarativeTools(db, "br:main");
+    expect(refreshed).toHaveLength(1);
+    expect(store.declarativeTools).toHaveLength(1);
+    expect(store.enabledDeclarativeTools).toHaveLength(1);
   });
 });

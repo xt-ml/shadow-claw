@@ -171,8 +171,46 @@ describe("email connections", () => {
     ]);
 
     const deleted = await deleteEmailConnection({} as any, "conn-9");
-
     expect(deleted).toBe(true);
     expect(mockSetConfig).toHaveBeenCalledWith({} as any, legacyKeyValue, []);
+
+    expect(await deleteEmailConnection({} as any, "")).toBe(false);
+    expect(await deleteEmailConnection({} as any, "non-existent")).toBe(false);
+  });
+
+  it("updates existing connection on upsert", async () => {
+    mockGetConfig.mockResolvedValue([
+      {
+        id: "conn-existing",
+        label: "Old Label",
+        pluginId: "imap",
+        enabled: true,
+        config: {},
+        credentialRef: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ]);
+
+    const updated = await upsertEmailConnection({} as any, {
+      id: "conn-existing",
+      label: "New Label",
+      pluginId: "imap",
+      enabled: false,
+    });
+
+    expect(updated.label).toBe("New Label");
+    expect(updated.enabled).toBe(false);
+  });
+
+  it("handles edge cases for get and bind connection", async () => {
+    expect(await getEmailConnection({} as any, "")).toBeNull();
+    mockGetConfig.mockResolvedValue([]);
+    expect(await getEmailConnection({} as any, "missing")).toBeNull();
+
+    expect(await bindEmailCredentialRef({} as any, "", null)).toBeNull();
+    expect(
+      await bindEmailCredentialRef({} as any, "missing-conn", null),
+    ).toBeNull();
   });
 });

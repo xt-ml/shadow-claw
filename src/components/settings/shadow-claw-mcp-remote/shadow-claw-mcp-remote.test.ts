@@ -291,4 +291,35 @@ describe("shadow-claw-mcp-remote", () => {
 
     document.body.removeChild(el);
   });
+
+  it("handles deleteConnection, reconnectOAuth, and testConnection", async () => {
+    mockDeleteConnection.mockResolvedValue(true);
+    mockReconnectMcpOAuth.mockResolvedValue({ success: true });
+    mockTestConnection.mockResolvedValue({
+      success: true,
+      toolCount: 2,
+      toolNames: ["search", "fetch"],
+      steps: [{ step: "Ping", status: "ok" }],
+    });
+
+    const el = new ShadowClawMcpRemote() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+    el.db = {} as any;
+    el.connections = [{ id: "conn-1", label: "My Connection" }];
+
+    // 1. Delete connection
+    await el.deleteConnection("conn-1");
+    expect(mockDeleteConnection).toHaveBeenCalledWith(el.db, "conn-1");
+
+    // 2. Reconnect OAuth
+    await el.reconnectOAuth("conn-1");
+    expect(mockReconnectMcpOAuth).toHaveBeenCalledWith(el.db, "conn-1");
+
+    // 3. Test connection
+    await el.testConnection("conn-1");
+    expect(mockTestConnection).toHaveBeenCalledWith(el.db, "conn-1");
+
+    document.body.removeChild(el);
+  });
 });

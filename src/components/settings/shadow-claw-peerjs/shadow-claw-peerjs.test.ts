@@ -198,4 +198,190 @@ describe("shadow-claw-peerjs", () => {
       "http://localhost/?peer=test",
     );
   });
+
+  it("should show room QR code", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const room = { roomId: "room-1", name: "Room One" };
+    await el.showRoomQr(room);
+
+    const group = el.shadowRoot?.querySelector(
+      '[data-info="room-qr-group"]',
+    ) as HTMLElement;
+    const label = el.shadowRoot?.querySelector('[data-info="room-qr-label"]');
+    expect(group.hidden).toBe(false);
+    expect(label?.textContent).toContain("Room One");
+
+    document.body.removeChild(el);
+  });
+
+  it("should add and remove trusted peer rows", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const initialRows =
+      el.shadowRoot?.querySelectorAll(".peerjs-trusted-peer-row").length || 0;
+    el._appendTrustedPeerRow("peer-xyz", "Peer XYZ");
+
+    const newRows = el.shadowRoot?.querySelectorAll(".peerjs-trusted-peer-row");
+    expect(newRows.length).toBe(initialRows + 1);
+
+    // Remove row
+    const removeBtn = newRows[newRows.length - 1].querySelector(
+      ".save-btn--danger",
+    ) as HTMLButtonElement;
+    removeBtn?.click();
+
+    expect(
+      el.shadowRoot?.querySelectorAll(".peerjs-trusted-peer-row").length,
+    ).toBe(initialRows);
+
+    document.body.removeChild(el);
+  });
+
+  it("should copy room URL and generate trusted peer options with aliases", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const mockClipboard = {
+      writeText: jest.fn<any>().mockResolvedValue(undefined),
+    };
+    Object.assign(navigator, { clipboard: mockClipboard });
+
+    const options = el._trustedPeerOptions();
+    expect(options.length).toBeGreaterThan(0);
+
+    document.body.removeChild(el);
+  });
+
+  it("handles copyPeerId and copyPeerUrl", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const mockClipboard = {
+      writeText: jest.fn<any>().mockResolvedValue(undefined),
+    };
+    Object.assign(navigator, { clipboard: mockClipboard });
+
+    // 1. Copy Peer ID
+    const peerIdInput = el.shadowRoot?.querySelector(
+      '[data-setting="peerjs-my-peer-id-input"]',
+    ) as HTMLInputElement;
+    if (peerIdInput) peerIdInput.value = "my-test-peer";
+    await el.copyPeerId();
+    expect(mockClipboard.writeText).toHaveBeenCalledWith("my-test-peer");
+
+    // 2. Copy Peer URL
+    el._currentPeerUrl = "http://localhost/?peer=my-test-peer";
+    await el.copyPeerUrl();
+    expect(mockClipboard.writeText).toHaveBeenCalledWith(
+      "http://localhost/?peer=my-test-peer",
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles savePeerJsConfig", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const hostInput = el.shadowRoot?.querySelector(
+      '[data-setting="peerjs-server-host-input"]',
+    ) as HTMLInputElement;
+    const portInput = el.shadowRoot?.querySelector(
+      '[data-setting="peerjs-server-port-input"]',
+    ) as HTMLInputElement;
+
+    if (hostInput) hostInput.value = "peer.example.com";
+    if (portInput) portInput.value = "9001";
+
+    await el.savePeerJsConfig();
+    expect(mockConfigurePeerJs).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      "test-peer-id",
+      expect.any(Array),
+      "peer.example.com",
+      9001,
+      "/myapp",
+      false,
+    );
+
+    document.body.removeChild(el);
+  });
+
+  it("handles copyRoomUrl, showRoomQr, updateConnectionStatus, and updateQrCode", async () => {
+    const el = new ShadowClawPeerJs() as any;
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    const mockClipboard = {
+      writeText: jest.fn<any>().mockResolvedValue(undefined),
+    };
+    Object.assign(navigator, { clipboard: mockClipboard });
+
+    // 1. copyRoomUrl
+    el._currentRoomUrl = "http://localhost/?room=test-room";
+    await el.copyRoomUrl();
+    expect(mockClipboard.writeText).toHaveBeenCalledWith(
+      "http://localhost/?room=test-room",
+    );
+
+    // 2. showRoomQr
+    const room = {
+      roomId: "room-1",
+      name: "Test Room",
+      members: [],
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    await el.showRoomQr(room);
+    expect(el._currentRoomUrl).toContain("room-1");
+
+    // 4. renderRooms
+    const { listRooms } =
+      await import("../../../core/orchestrator/utils/operations/room.js");
+    const testRooms = [
+      {
+        roomId: "room-host-1",
+        name: "My Host Room",
+        hostPeerId: "test-peer-id",
+        members: [
+          { peerId: "test-peer-id", alias: "Host Me", kind: "human" },
+          { peerId: "peer-remote-1", alias: "Agent Remote", kind: "agent" },
+        ],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+      {
+        roomId: "room-guest-2",
+        name: "Guest Room",
+        hostPeerId: "peer-other",
+        members: [{ peerId: "peer-other", alias: "Other", kind: "human" }],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ];
+    (listRooms as jest.Mock<any>).mockReturnValue(testRooms);
+
+    let roomsContainer = el.shadowRoot?.querySelector(
+      '[data-info="rooms-list"]',
+    );
+    if (!roomsContainer) {
+      roomsContainer = document.createElement("div");
+      roomsContainer.setAttribute("data-info", "rooms-list");
+      el.shadowRoot?.appendChild(roomsContainer);
+    }
+
+    el.renderRooms();
+    expect(roomsContainer.querySelectorAll(".peerjs-room-card").length).toBe(2);
+
+    document.body.removeChild(el);
+  });
 });

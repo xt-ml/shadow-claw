@@ -41,6 +41,14 @@ jest.unstable_mockModule("../../storage/uploadGroupFile.js", () => ({
   uploadGroupFile: jest.fn(),
 }));
 
+jest.unstable_mockModule("../../db/getConfig.js", () => ({
+  getConfig: jest.fn<any>().mockResolvedValue(undefined),
+}));
+
+jest.unstable_mockModule("../../utils/ulid.js", () => ({
+  ulid: jest.fn(() => "mock-ulid"),
+}));
+
 jest.unstable_mockModule("../../storage/writeGroupFile.js", () => ({
   writeGroupFile: jest.fn(),
 }));
@@ -104,6 +112,9 @@ jest.unstable_mockModule("../../db/db.js", () => ({
   getDb: jest.fn<any>().mockResolvedValue({} as any),
 }));
 
+const { CONFIG_KEYS } = await import("../../config/config.js");
+const { getConfig } = await import("../../db/getConfig.js");
+const { uploadGroupFile } = await import("../../storage/uploadGroupFile.js");
 const { ShadowClawFiles } = await import("./shadow-claw-files.js");
 const { deleteGroupFile } = await import("../../storage/deleteGroupFile.js");
 const { renameGroupEntry } = await import("../../storage/renameGroupEntry.js");
@@ -144,6 +155,8 @@ describe("shadow-claw-files", () => {
     expect(template).toContain("files__new-is-folder");
 
     expect(template).toContain("files__rename-dialog");
+
+    expect(template).toContain("files__upload-conflict-dialog");
 
     expect(template).toContain("files__drop-hint");
 
@@ -907,6 +920,212 @@ describe("shadow-claw-files", () => {
       "Cannot paste a folder into itself or one of its subfolders",
       4500,
     );
+
+    document.body.removeChild(component);
+  });
+
+  it("uploads files without ULID prefix by default", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.render();
+
+    (getConfig as any).mockResolvedValue(undefined);
+    (orchestratorStore as any).currentPath = ".";
+    (orchestratorStore as any).files = [];
+
+    const file = new File(["content"], "document.pdf", {
+      type: "application/pdf",
+    });
+    await component.uploadFileList({} as any, [file]);
+
+    expect(uploadGroupFile).toHaveBeenCalledWith(
+      {} as any,
+      "default",
+      "document.pdf",
+      file,
+    );
+    expect(showSuccess).toHaveBeenCalledWith("Uploaded 1 file", 3000);
+
+    document.body.removeChild(component);
+  });
+
+  it("uploads files with ULID prefix when setting is enabled", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.render();
+
+    (getConfig as any).mockImplementation((_db: any, key: string) => {
+      if (key === CONFIG_KEYS.FILES_UPLOAD_APPEND_ULID) {
+        return Promise.resolve("true");
+      }
+      return Promise.resolve(undefined);
+    });
+    (orchestratorStore as any).currentPath = "subfolder";
+    (orchestratorStore as any).files = [];
+
+    const file = new File(["content"], "image.png", {
+      type: "image/png",
+    });
+    await component.uploadFileList({} as any, [file]);
+
+    expect(uploadGroupFile).toHaveBeenCalledWith(
+      {} as any,
+      "default",
+      "subfolder/mock-ulid-image.png",
+      file,
+    );
+    expect(showSuccess).toHaveBeenCalledWith("Uploaded 1 file", 3000);
+
+    document.body.removeChild(component);
+  });
+
+  it("prompts conflict dialog and overwrites existing file when selected", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.render();
+
+    (getConfig as any).mockResolvedValue(undefined);
+    (orchestratorStore as any).currentPath = ".";
+    (orchestratorStore as any).files = ["existing.txt"];
+    (orchestratorStore as any).pages = [
+      { groupId: "default", path: "existing.txt" },
+    ];
+
+    jest.spyOn(component, "promptUploadConflict").mockResolvedValue({
+      action: "overwrite",
+    });
+
+    const file = new File(["new content"], "existing.txt", {
+      type: "text/plain",
+    });
+    await component.uploadFileList({} as any, [file]);
+
+    expect(component.promptUploadConflict).toHaveBeenCalledWith(
+      "existing.txt",
+      expect.any(Set),
+    );
+    expect(mockRemovePage).toHaveBeenCalledWith(
+      {} as any,
+      "existing.txt",
+      "default",
+    );
+    expect(uploadGroupFile).toHaveBeenCalledWith(
+      {} as any,
+      "default",
+      "existing.txt",
+      file,
+    );
+    expect(showSuccess).toHaveBeenCalledWith("Uploaded 1 file", 3000);
+
+    document.body.removeChild(component);
+  });
+
+  it("prompts conflict dialog and renames file when new name is chosen", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.render();
+
+    (getConfig as any).mockResolvedValue(undefined);
+    (orchestratorStore as any).currentPath = "docs";
+    (orchestratorStore as any).files = ["existing.txt"];
+
+    jest.spyOn(component, "promptUploadConflict").mockResolvedValue({
+      action: "rename",
+      name: "existing-renamed.txt",
+    });
+
+    const file = new File(["content"], "existing.txt", {
+      type: "text/plain",
+    });
+    await component.uploadFileList({} as any, [file]);
+
+    expect(component.promptUploadConflict).toHaveBeenCalledWith(
+      "existing.txt",
+      expect.any(Set),
+    );
+    expect(uploadGroupFile).toHaveBeenCalledWith(
+      {} as any,
+      "default",
+      "docs/existing-renamed.txt",
+      file,
+    );
+    expect(showSuccess).toHaveBeenCalledWith("Uploaded 1 file", 3000);
+
+    document.body.removeChild(component);
+  });
+
+  it("prompts conflict dialog and skips upload when user cancels", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.render();
+
+    (getConfig as any).mockResolvedValue(undefined);
+    (orchestratorStore as any).currentPath = ".";
+    (orchestratorStore as any).files = ["existing.txt"];
+
+    jest.spyOn(component, "promptUploadConflict").mockResolvedValue(null);
+
+    const file = new File(["content"], "existing.txt", {
+      type: "text/plain",
+    });
+    await component.uploadFileList({} as any, [file]);
+
+    expect(component.promptUploadConflict).toHaveBeenCalledWith(
+      "existing.txt",
+      expect.any(Set),
+    );
+    expect(uploadGroupFile).not.toHaveBeenCalled();
+
+    document.body.removeChild(component);
+  });
+
+  it("handles conflict dialog UI submission and validation", async () => {
+    const component = new ShadowClawFiles();
+    document.body.appendChild(component);
+    await component.render();
+
+    const existingNames = new Set(["existing.txt", "taken.txt"]);
+    const conflictPromise = component.promptUploadConflict(
+      "existing.txt",
+      existingNames,
+    );
+
+    const input = component.shadowRoot?.querySelector(
+      ".files__upload-conflict-rename-input",
+    ) as HTMLInputElement;
+    const form = component.shadowRoot?.querySelector(
+      ".files__upload-conflict-form",
+    ) as HTMLFormElement;
+
+    expect(input.value).toBe("existing.txt");
+
+    // 1. Try empty name
+    input.value = "   ";
+    form.dispatchEvent(new Event("submit"));
+    expect(showWarning).toHaveBeenCalledWith("Please enter a name", 3000);
+
+    // 2. Try path name
+    input.value = "folder/name.txt";
+    form.dispatchEvent(new Event("submit"));
+    expect(showWarning).toHaveBeenCalledWith(
+      "Use only a name, not a path",
+      3500,
+    );
+
+    // 3. Try already taken name
+    input.value = "taken.txt";
+    form.dispatchEvent(new Event("submit"));
+    expect(showWarning).toHaveBeenCalledWith(
+      '"taken.txt" already exists. Please choose a different name.',
+      4000,
+    );
+
+    // 4. Valid new name
+    input.value = "brand-new.txt";
+    form.dispatchEvent(new Event("submit"));
+
+    const result = await conflictPromise;
+    expect(result).toEqual({ action: "rename", name: "brand-new.txt" });
 
     document.body.removeChild(component);
   });

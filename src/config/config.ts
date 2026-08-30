@@ -1042,6 +1042,7 @@ export const CONFIG_KEYS = {
   DEFAULT_PINNED_PAGE: "default_pinned_page",
   DIRECT_TOOL_COMMAND_POLICY: "direct_tool_command_policy",
   ENABLED_TOOLS: "enabled_tools",
+  FILES_UPLOAD_APPEND_ULID: "files_upload_append_ulid",
   GIT_ACCOUNTS: "git_accounts",
   GIT_AUTHOR_EMAIL: "git_author_email",
   GIT_AUTHOR_NAME: "git_author_name",
@@ -1181,3 +1182,6 @@ export const DEFAULT_TASK_SERVER_URL = "http://localhost:8888/schedule";
 
 /** Default Task Server Enabled */
 export const DEFAULT_TASK_SERVER_ENABLED = false;
+
+/** Default Files Upload Append ULID */
+export const DEFAULT_FILES_UPLOAD_APPEND_ULID = false;

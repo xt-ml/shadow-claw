@@ -1,5 +1,8 @@
+import { CONFIG_KEYS } from "../../config/config.js";
 import { effect } from "../../core/effect.js";
 import { getDb } from "../../db/db.js";
+import { getConfig } from "../../db/getConfig.js";
+import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
 
 import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { copyGroupEntry } from "../../storage/copyGroupEntry.js";
@@ -1575,11 +1578,140 @@ export class ShadowClawFiles extends ShadowClawElement {
     return false;
   }
 
+  async promptUploadConflict(
+    fileName: string,
+    existingNames: Set<string>,
+  ): Promise<
+    { action: "overwrite" } | { action: "rename"; name: string } | null
+  > {
+    const root = this.shadowRoot;
+    if (!root) {
+      return null;
+    }
+
+    const dialog = root.querySelector(".files__upload-conflict-dialog");
+    const messageEl = root.querySelector(".files__upload-conflict-message");
+    const renameInput = root.querySelector(
+      ".files__upload-conflict-rename-input",
+    );
+    const form = root.querySelector(".files__upload-conflict-form");
+    const cancelBtn = root.querySelector(".files__upload-conflict-cancel");
+    const overwriteBtn = root.querySelector(
+      ".files__upload-conflict-overwrite",
+    );
+
+    if (
+      !(dialog instanceof HTMLDialogElement) ||
+      !(form instanceof HTMLFormElement) ||
+      !(renameInput instanceof HTMLInputElement)
+    ) {
+      return null;
+    }
+
+    const targetDirName =
+      orchestratorStore.currentPath === "."
+        ? "Root"
+        : orchestratorStore.currentPath;
+
+    if (messageEl instanceof HTMLElement) {
+      messageEl.textContent = `"${fileName}" already exists in "${targetDirName}". Please rename or choose to overwrite.`;
+    }
+
+    renameInput.value = fileName;
+
+    return new Promise((resolve) => {
+      let resolved = false;
+
+      const cleanup = () => {
+        form.removeEventListener("submit", handleSubmit);
+        cancelBtn?.removeEventListener("click", handleCancel);
+        overwriteBtn?.removeEventListener("click", handleOverwrite);
+        dialog.removeEventListener("cancel", handleCancel);
+        dialog.removeEventListener("close", handleClose);
+      };
+
+      const finish = (
+        result:
+          | { action: "overwrite" }
+          | { action: "rename"; name: string }
+          | null,
+      ) => {
+        if (resolved) {
+          return;
+        }
+        resolved = true;
+        cleanup();
+        if (typeof dialog.close === "function") {
+          dialog.close();
+        } else {
+          dialog.removeAttribute("open");
+        }
+        resolve(result);
+      };
+
+      const handleSubmit = (event: Event) => {
+        event.preventDefault();
+        const nextName = renameInput.value.trim();
+        if (!nextName) {
+          showWarning("Please enter a name", 3000);
+          return;
+        }
+
+        if (nextName.includes("/") || nextName.includes("\\")) {
+          showWarning("Use only a name, not a path", 3500);
+          return;
+        }
+
+        if (existingNames.has(nextName) || existingNames.has(`${nextName}/`)) {
+          showWarning(
+            `"${nextName}" already exists. Please choose a different name.`,
+            4000,
+          );
+          renameInput.select();
+          return;
+        }
+
+        finish({ action: "rename", name: nextName });
+      };
+
+      const handleOverwrite = (event: Event) => {
+        event.preventDefault();
+        finish({ action: "overwrite" });
+      };
+
+      const handleCancel = (event: Event) => {
+        event.preventDefault();
+        finish(null);
+      };
+
+      const handleClose = () => {
+        finish(null);
+      };
+
+      form.addEventListener("submit", handleSubmit);
+      cancelBtn?.addEventListener("click", handleCancel);
+      overwriteBtn?.addEventListener("click", handleOverwrite);
+      dialog.addEventListener("cancel", handleCancel);
+      dialog.addEventListener("close", handleClose);
+
+      if (typeof dialog.showModal === "function") {
+        dialog.showModal();
+      } else {
+        dialog.setAttribute("open", "");
+      }
+      renameInput.select();
+    });
+  }
+
   async uploadFileList(db: ShadowClawDatabase, files: FileList | File[]) {
     const fileList: File[] = Array.from(files) as File[];
     if (fileList.length === 0) {
       return;
     }
+
+    const appendUlid = await getConfig(db, CONFIG_KEYS.FILES_UPLOAD_APPEND_ULID)
+      .then((val) => isTruthyConfigValue(val, false))
+      .catch(() => false);
 
     const groupId = orchestratorStore.activeGroupId;
     const currentPath = orchestratorStore.currentPath;
@@ -1587,22 +1719,54 @@ export class ShadowClawFiles extends ShadowClawElement {
 
     filesUiStore.startUpload(count);
 
+    const existingNames = new Set(orchestratorStore.files);
+    let uploadedCount = 0;
+
     try {
       for (let i = 0; i < count; i++) {
         const file = fileList[i];
-        const filename =
-          currentPath === "."
-            ? `${ulid()}-${file.name}`
-            : `${currentPath}/${ulid()}-${file.name}`;
+        let filename = appendUlid ? `${ulid()}-${file.name}` : file.name;
 
-        await uploadGroupFile(db, groupId, filename, file);
+        const hasConflict =
+          existingNames.has(filename) || existingNames.has(`${filename}/`);
+
+        if (hasConflict) {
+          const decision = await this.promptUploadConflict(
+            filename,
+            existingNames,
+          );
+          if (!decision) {
+            filesUiStore.setUploadCompleted(i + 1);
+            continue;
+          }
+
+          if (decision.action === "rename") {
+            filename = decision.name;
+          } else if (decision.action === "overwrite") {
+            const targetPath =
+              currentPath === "." ? filename : `${currentPath}/${filename}`;
+            await this.removePageAssignmentIfNeeded(db, targetPath);
+          }
+        }
+
+        const fullPath =
+          currentPath === "." ? filename : `${currentPath}/${filename}`;
+
+        await uploadGroupFile(db, groupId, fullPath, file);
+        existingNames.add(filename);
+        uploadedCount++;
         filesUiStore.setUploadCompleted(i + 1);
       }
 
       // Reload files
       await orchestratorStore.loadFiles(db);
 
-      showSuccess(`Uploaded ${count} file${count === 1 ? "" : "s"}`, 3000);
+      if (uploadedCount > 0) {
+        showSuccess(
+          `Uploaded ${uploadedCount} file${uploadedCount === 1 ? "" : "s"}`,
+          3000,
+        );
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
 

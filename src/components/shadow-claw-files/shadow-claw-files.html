@@ -172,6 +172,41 @@
         </div>
       </form>
     </shadow-claw-dialog>
+    <shadow-claw-dialog
+      dialog-class="files__upload-conflict-dialog"
+      dialog-aria-label="File upload conflict"
+    >
+      <form class="files__upload-conflict-form" method="dialog">
+        <h3 class="files__upload-conflict-title">File Already Exists</h3>
+        <p class="files__upload-conflict-message"></p>
+        <div class="files__upload-conflict-rename-container">
+          <label
+            class="files__upload-conflict-rename-label"
+            for="files-upload-conflict-name"
+            >New Name</label
+          >
+          <input
+            class="files__upload-conflict-rename-input"
+            id="files-upload-conflict-name"
+            name="files-upload-conflict-name"
+            type="text"
+            autocomplete="off"
+            required
+          />
+        </div>
+        <div class="files__upload-conflict-actions">
+          <button class="files__upload-conflict-cancel" type="button">
+            Cancel
+          </button>
+          <button class="files__upload-conflict-overwrite" type="button">
+            Overwrite
+          </button>
+          <button class="files__upload-conflict-ok" type="submit">
+            Rename
+          </button>
+        </div>
+      </form>
+    </shadow-claw-dialog>
     <div class="files__content">
       <div class="files__terminal-slot" data-terminal-slot hidden></div>
       <p class="files__drop-hint">Drop files here to upload</p>

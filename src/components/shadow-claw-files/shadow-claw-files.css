@@ -361,7 +361,8 @@
 
 .files__new-label,
 .files__rename-label,
-.files__paste-rename-label {
+.files__paste-rename-label,
+.files__upload-conflict-rename-label {
   color: var(--shadow-claw-text-secondary);
   font-size: var(--shadow-claw-font-size-sm);
   font-weight: 600;
@@ -369,7 +370,8 @@
 
 .files__new-input,
 .files__rename-input,
-.files__paste-rename-input {
+.files__paste-rename-input,
+.files__upload-conflict-rename-input {
   background-color: var(--shadow-claw-bg-primary);
   border: 0.0625rem solid var(--shadow-claw-border-color);
   border-radius: var(--shadow-claw-radius-s);
@@ -379,7 +381,8 @@
   padding: 0.375rem 0.5rem;
 }
 
-.files__paste-rename-container {
+.files__paste-rename-container,
+.files__upload-conflict-rename-container {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -401,7 +404,8 @@
 
 .files__new-input:focus,
 .files__rename-input:focus,
-.files__paste-rename-input:focus {
+.files__paste-rename-input:focus,
+.files__upload-conflict-rename-input:focus {
   border-color: var(--shadow-claw-accent-primary);
   box-shadow: 0 0 0 0.125rem var(--shadow-claw-bg-tertiary);
   outline: none;
@@ -469,7 +473,8 @@
   opacity: 0.5;
 }
 
-.files__paste-dialog {
+.files__paste-dialog,
+.files__upload-conflict-dialog {
   background-color: var(--shadow-claw-bg-primary);
   border: 0.0625rem solid var(--shadow-claw-border-color);
   border-radius: var(--shadow-claw-radius-l, 1.5rem);
@@ -479,31 +484,36 @@
   width: calc(100vw - 2rem);
 }
 
-.files__paste-dialog::backdrop {
+.files__paste-dialog::backdrop,
+.files__upload-conflict-dialog::backdrop {
   background-color: rgba(0, 0, 0, 0.35);
 }
 
-.files__paste-form {
+.files__paste-form,
+.files__upload-conflict-form {
   display: flex;
   flex-direction: column;
   gap: 1rem;
   padding: 1.5rem;
 }
 
-.files__paste-title {
+.files__paste-title,
+.files__upload-conflict-title {
   font-size: 1.1rem;
   font-weight: 700;
   margin: 0;
 }
 
-.files__paste-message {
+.files__paste-message,
+.files__upload-conflict-message {
   color: var(--shadow-claw-text-secondary);
   font-size: var(--shadow-claw-font-size-sm);
   line-height: 1.4;
   margin: 0;
 }
 
-.files__paste-actions {
+.files__paste-actions,
+.files__upload-conflict-actions {
   display: flex;
   gap: 0.5rem;
   justify-content: flex-end;
@@ -514,7 +524,10 @@
 .files__paste-continue,
 .files__paste-apply,
 .files__paste-ok,
-.files__paste-overwrite {
+.files__paste-overwrite,
+.files__upload-conflict-cancel,
+.files__upload-conflict-ok,
+.files__upload-conflict-overwrite {
   background-color: transparent;
   border: 0.0625rem solid var(--shadow-claw-border-color);
   border-radius: var(--shadow-claw-radius-pill);
@@ -528,13 +541,16 @@
   transition: all 0.15s ease;
 }
 
-.files__paste-overwrite {
+.files__paste-overwrite,
+.files__upload-conflict-overwrite {
   border-color: var(--shadow-claw-error-color);
   color: var(--shadow-claw-error-color);
 }
 
 .files__paste-overwrite:hover,
-.files__paste-overwrite:focus-visible {
+.files__paste-overwrite:focus-visible,
+.files__upload-conflict-overwrite:hover,
+.files__upload-conflict-overwrite:focus-visible {
   background-color: var(--shadow-claw-error-color);
   color: var(--shadow-claw-on-error, white);
   outline: none;
@@ -542,7 +558,8 @@
 
 .files__paste-continue,
 .files__paste-apply,
-.files__paste-ok {
+.files__paste-ok,
+.files__upload-conflict-ok {
   background-color: var(--shadow-claw-text-primary);
   border-color: var(--shadow-claw-text-primary);
   color: var(--shadow-claw-bg-primary);
@@ -553,7 +570,9 @@
 .files__paste-apply:hover,
 .files__paste-apply:focus-visible,
 .files__paste-ok:hover,
-.files__paste-ok:focus-visible {
+.files__paste-ok:focus-visible,
+.files__upload-conflict-ok:hover,
+.files__upload-conflict-ok:focus-visible {
   background-color: var(--shadow-claw-accent-primary);
   border-color: var(--shadow-claw-accent-primary);
   color: var(--shadow-claw-on-primary);
@@ -561,7 +580,9 @@
 }
 
 .files__paste-cancel:hover,
-.files__paste-cancel:focus-visible {
+.files__paste-cancel:focus-visible,
+.files__upload-conflict-cancel:hover,
+.files__upload-conflict-cancel:focus-visible {
   border-color: var(--shadow-claw-text-primary);
   box-shadow: var(--shadow-claw-shadow-md);
   outline: none;
@@ -570,7 +591,10 @@
 .files__paste-cancel:disabled,
 .files__paste-continue:disabled,
 .files__paste-apply:disabled,
-.files__paste-ok:disabled {
+.files__paste-ok:disabled,
+.files__upload-conflict-cancel:disabled,
+.files__upload-conflict-ok:disabled,
+.files__upload-conflict-overwrite:disabled {
   cursor: not-allowed;
   opacity: 0.6;
 }

@@ -54,5 +54,22 @@
         files directly accessible on your disk.
       </div>
     </div>
+
+    <div class="form-group">
+      <div class="form-toggle">
+        <input
+          data-setting="files-upload-append-ulid-toggle"
+          id="files-upload-append-ulid-toggle"
+          type="checkbox"
+        />
+        <label class="form-label" for="files-upload-append-ulid-toggle">
+          Append unique ID (ULID) to uploaded file names
+        </label>
+      </div>
+      <div class="form-helper">
+        When enabled, uploads automatically prefix file names with a ULID (e.g.
+        01J...-filename.ext). Default: disabled.
+      </div>
+    </div>
   </div>
 </template>

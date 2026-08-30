@@ -12,6 +12,7 @@ import {
   DEFAULT_DEV_HOST,
   DEFAULT_DEV_IP,
   DEFAULT_DEV_PORT,
+  DEFAULT_FILES_UPLOAD_APPEND_ULID,
   DEFAULT_GROUP_ID,
   DEFAULT_MAX_TOKENS,
   DEFAULT_PROMPT_API_BACKEND,
@@ -148,6 +149,10 @@ describe("config.js", () => {
     it("should have valid DEFAULT_TRANSFORMERS_JS_BACKEND and DEFAULT_TRANSFORMERS_JS_DTYPE_STRATEGY", () => {
       expect(DEFAULT_TRANSFORMERS_JS_BACKEND).toBe("auto");
       expect(DEFAULT_TRANSFORMERS_JS_DTYPE_STRATEGY).toBe("auto");
+    });
+
+    it("should have valid DEFAULT_FILES_UPLOAD_APPEND_ULID", () => {
+      expect(DEFAULT_FILES_UPLOAD_APPEND_ULID).toBe(false);
     });
   });
 
@@ -425,6 +430,10 @@ describe("config.js", () => {
       );
       expect(CONFIG_KEYS.CHANNEL_ENABLED_PREFIX).toBe("channel_enabled:");
       expect(CONFIG_KEYS.CHAT_INPUT_AREA_HEIGHT).toBe("chat_input_area_height");
+      expect(CONFIG_KEYS.ENABLED_TOOLS).toBe("enabled_tools");
+      expect(CONFIG_KEYS.FILES_UPLOAD_APPEND_ULID).toBe(
+        "files_upload_append_ulid",
+      );
       expect(CONFIG_KEYS.GIT_AUTHOR_EMAIL).toBe("git_author_email");
       expect(CONFIG_KEYS.GIT_AUTHOR_NAME).toBe("git_author_name");
       expect(CONFIG_KEYS.GIT_CORS_PROXY).toBe("git_cors_proxy");

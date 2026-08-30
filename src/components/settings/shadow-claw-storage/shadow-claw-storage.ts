@@ -13,6 +13,7 @@ import { resetStorageDirectory } from "../../../storage/storage.js";
 
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
+import { isTruthyConfigValue } from "../../../common/utils/config-value.mjs";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 
@@ -84,6 +85,15 @@ export class ShadowClawStorage extends ShadowClawElement {
       ?.addEventListener("click", () => {
         if (this.db) {
           orchestratorStore.grantStorageAccess(this.db);
+        }
+      });
+
+    root
+      .querySelector('[data-setting="files-upload-append-ulid-toggle"]')
+      ?.addEventListener("change", (e: Event) => {
+        const target = e.target as HTMLInputElement;
+        if (target) {
+          void this.onUploadAppendUlidToggle(target.checked);
         }
       });
   }
@@ -241,6 +251,37 @@ export class ShadowClawStorage extends ShadowClawElement {
   }
 
   /**
+   * Handle toggling unique ID prefix for uploaded files.
+   */
+  async onUploadAppendUlidToggle(enabled: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../../../db/setConfig.js");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.FILES_UPLOAD_APPEND_ULID,
+        enabled ? "true" : "false",
+      );
+
+      showSuccess(
+        enabled
+          ? "Unique ID prefix on file upload enabled"
+          : "Unique ID prefix on file upload disabled",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(
+        "Error saving unique ID file upload setting: " + errorMsg,
+        6000,
+      );
+    }
+  }
+
+  /**
    * Handle resetting storage directory.
    */
   async handleResetStorageDir() {
@@ -382,6 +423,21 @@ export class ShadowClawStorage extends ShadowClawElement {
       ) as HTMLButtonElement | null;
       if (requestPersistentBtn) {
         requestPersistentBtn.disabled = persistent;
+      }
+
+      // Sync upload append ULID toggle
+      const uploadAppendUlidVal = await getConfig(
+        this.db,
+        CONFIG_KEYS.FILES_UPLOAD_APPEND_ULID,
+      );
+      const uploadAppendUlidToggle = root.querySelector(
+        '[data-setting="files-upload-append-ulid-toggle"]',
+      ) as HTMLInputElement | null;
+      if (uploadAppendUlidToggle) {
+        uploadAppendUlidToggle.checked = isTruthyConfigValue(
+          uploadAppendUlidVal,
+          false,
+        );
       }
     } catch (err) {
       console.warn("Failed to update storage info:", err);

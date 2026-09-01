@@ -137,6 +137,23 @@ jest.unstable_mockModule(
 );
 
 jest.unstable_mockModule(
+  "../settings/shadow-claw-control-plane/shadow-claw-control-plane.js",
+  () => {
+    class MockControlPlane extends HTMLElement {
+      render = jest.fn();
+      constructor() {
+        super();
+        this.attachShadow({ mode: "open" });
+      }
+    }
+
+    customElements.define("shadow-claw-control-plane", MockControlPlane);
+
+    return { ShadowClawControlPlane: MockControlPlane };
+  },
+);
+
+jest.unstable_mockModule(
   "../settings/shadow-claw-notifications/shadow-claw-notifications.js",
   () => {
     class MockNotifications extends HTMLElement {

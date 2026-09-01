@@ -1035,6 +1035,10 @@ export const CONFIG_KEYS = {
   CHAT_SPLIT_VIEW_HEIGHT: "chat_split_view_height",
   COMPACTION_ENGINE_PREFERENCE: "compaction_engine_preference",
   CONTEXT_COMPRESSION_ENABLED: "context_compression_enabled",
+  CONTROL_PLANE_CLIENT_ID: "control_plane_client_id",
+  CONTROL_PLANE_ENABLED: "control_plane_enabled",
+  CONTROL_PLANE_TRANSPORT: "control_plane_transport",
+  CONTROL_PLANE_URL: "control_plane_url",
   CONVERSATIONS_HEIGHT: "conversations_height",
   CUSTOM_TOOLS: "custom_tools",
   DB_MIGRATED_FROM_LEGACY: "db_migrated_from_legacy",
@@ -1185,3 +1189,9 @@ export const DEFAULT_TASK_SERVER_ENABLED = false;
 
 /** Default Files Upload Append ULID */
 export const DEFAULT_FILES_UPLOAD_APPEND_ULID = false;
+
+/** Default Control Plane Enabled (opt-in) */
+export const DEFAULT_CONTROL_PLANE_ENABLED = false;
+
+/** Default Control Plane Transport ("sse" or "websocket") */
+export const DEFAULT_CONTROL_PLANE_TRANSPORT = "sse";

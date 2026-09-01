@@ -43,6 +43,9 @@ describe("app", () => {
     jest.unstable_mockModule("./routes/oauth.js", () => ({
       registerOAuthRoutes: jest.fn(),
     }));
+    jest.unstable_mockModule("./routes/backup.js", () => ({
+      registerBackupRoutes: jest.fn(),
+    }));
     jest.unstable_mockModule("./routes/csp-report.js", () => ({
       registerCspReportRoutes: jest.fn(),
     }));
@@ -92,6 +95,9 @@ describe("app", () => {
     jest.unstable_mockModule("./middleware/csp.js", () => ({
       createCspReportOnlyMiddleware: jest.fn(() => () => {}),
     }));
+    jest.unstable_mockModule("./client-registry.js", () => ({
+      openClientStore: jest.fn(),
+    }));
     jest.unstable_mockModule("./middleware/static-files.js", () => ({
       registerStaticFilesMiddleware: jest.fn(),
     }));
@@ -101,9 +107,11 @@ describe("app", () => {
     const { createApp } = await import("./app.js");
     const { registerProxyRoutes } = await import("./proxy.js");
     const { registerOAuthRoutes } = await import("./routes/oauth.js");
+    const { registerBackupRoutes } = await import("./routes/backup.js");
     const { registerCspReportRoutes } = await import("./routes/csp-report.js");
     const { openPushStore } =
       await import("../subsystems/notifications/push-store.js");
+    const { openClientStore } = await import("./client-registry.js");
     const { createCspReportOnlyMiddleware } =
       await import("./middleware/csp.js");
     const { registerStaticFilesMiddleware } =
@@ -118,10 +126,14 @@ describe("app", () => {
       verbose: false,
     });
     expect(registerOAuthRoutes).toHaveBeenCalledWith(appMock);
+    expect(registerBackupRoutes).toHaveBeenCalledTimes(1);
     expect(registerCspReportRoutes).toHaveBeenCalledTimes(1);
     expect(createCspReportOnlyMiddleware).toHaveBeenCalledTimes(1);
     expect(openPushStore).toHaveBeenCalledWith(
       expect.stringContaining("push-subscriptions.db"),
+    );
+    expect(openClientStore).toHaveBeenCalledWith(
+      expect.stringContaining("clients.db"),
     );
     expect(registerStaticFilesMiddleware).toHaveBeenCalledWith(
       appMock,

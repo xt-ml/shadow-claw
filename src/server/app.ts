@@ -8,6 +8,7 @@ import {
   registerPushRoutes,
 } from "../subsystems/notifications/push-routes.js";
 import { openPushStore } from "../subsystems/notifications/push-store.js";
+import { openClientStore } from "./client-registry.js";
 
 import { registerTaskScheduleRoutes } from "../subsystems/notifications/task-schedule-routes.js";
 import {
@@ -28,6 +29,7 @@ import { registerProxyRoutes } from "./proxy.js";
 import { registerActivityLogRoutes } from "./routes/activity-log.js";
 import { registerCspReportRoutes } from "./routes/csp-report.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
+import { registerBackupRoutes } from "./routes/backup.js";
 
 import type { Express } from "express";
 import type { ServerConfig } from "./config.js";
@@ -67,6 +69,15 @@ export function createApp(config: ServerConfig): {
 
   app.use(express.json({ limit: "1000mb" }));
 
+  // ---------------- DATABASE & STORES ----------------
+  if (!fs.existsSync(config.databaseDir)) {
+    fs.mkdirSync(config.databaseDir, { recursive: true });
+  }
+
+  openPushStore(path.join(config.databaseDir, "push-subscriptions.db"));
+  openClientStore(path.join(config.databaseDir, "clients.db"));
+  openTaskScheduleStore(path.join(config.databaseDir, "scheduled-tasks.db"));
+
   // ---------------- PROXY ROUTES ----------------
   registerProxyRoutes(app, {
     verbose,
@@ -81,21 +92,20 @@ export function createApp(config: ServerConfig): {
     logsDir: path.resolve(config.databaseDir, "..", ".cache", "logs"),
   });
 
+  // ---------------- BACKUP ROUTES ----------------
+  registerBackupRoutes(app, {
+    backupsDir: path.resolve(config.databaseDir, "..", ".cache", "backups"),
+    token: config.controlToken,
+  });
+
   // ---------------- CSP REPORT ROUTES ----------------
   registerCspReportRoutes(app, {
     logsDir: path.resolve(config.databaseDir, "..", ".cache", "logs"),
     logger,
   });
 
-  // ---------------- DATABASE & PUSH / TASKS ----------------
-  if (!fs.existsSync(config.databaseDir)) {
-    fs.mkdirSync(config.databaseDir, { recursive: true });
-  }
-
-  openPushStore(path.join(config.databaseDir, "push-subscriptions.db"));
+  // ---------------- PUSH & TASK ROUTES ----------------
   registerPushRoutes(app);
-
-  openTaskScheduleStore(path.join(config.databaseDir, "scheduled-tasks.db"));
   registerTaskScheduleRoutes(app);
 
   const scheduler = new ServerTaskScheduler({

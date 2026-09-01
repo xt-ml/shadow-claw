@@ -185,7 +185,7 @@ export function getAllSubscriptions(): PushSubscriptionRow[] {
   }
 
   const result = db
-    .prepare("SELECT * FROM subscriptions ORDER BY created_at DESC")
+    .prepare("SELECT * FROM subscriptions ORDER BY created_at DESC, id DESC")
     .all();
 
   return result

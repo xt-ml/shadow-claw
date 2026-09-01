@@ -99,6 +99,130 @@ Scaffolds a new ShadowClaw content template in `[dir]` (or `process.cwd()`) with
 - `pages/main/index.html` (welcome home page)
 - `.gitignore` (`dist/`, `.cache/`, `node_modules/`)
 
+### `shadow-claw clients [options]`
+
+Lists connected / registered browser and Electron clients and their capabilities (e.g. OPFS, WebMCP, push, WebRTC).
+
+```bash
+# List clients registered via HTTP / WebSocket control plane
+npx shadow-claw clients
+
+# List peers connected via WebRTC DataChannel (requires webrtc listen)
+npx shadow-claw clients --transport webrtc
+```
+
+### `shadow-claw send <message> [options]`
+
+Sends a message/prompt directly to a connected client or active orchestrator conversation.
+
+```bash
+# Send to the default/active conversation on a client via HTTP control plane
+npx shadow-claw send "Hello from the CLI" --client <client-id>
+
+# Send to a specific conversation group (e.g. main AI assistant or PeerJS channel)
+npx shadow-claw send "Hello from the CLI" --client <client-id> --group "br:main"
+npx shadow-claw send "Hello to peer" --client <browser-peer-id> --group "peer:<cli-peer-id>"
+
+# Send over WebRTC DataChannel transport (routes via webrtc listen IPC or direct connection)
+npx shadow-claw send "Hello from CLI" --transport webrtc --client <browser-peer-id>
+```
+
+| Option                    | Type   | Description                                                                                 | Default       |
+| :------------------------ | :----- | :------------------------------------------------------------------------------------------ | :------------ |
+| `--client <id>`           | string | Target client ID or PeerJS peer ID (defaults to first available connected client)           | `""`          |
+| `--group <groupId>`       | string | Target conversation group ID (`br:main`, `peer:<peerId>`, etc.). Defaults to active group.  | Active group  |
+| `--transport <transport>` | string | Transport mechanism: `http` (Control Plane REST/WebSocket) or `webrtc` (WebRTC DataChannel) | `"http"`      |
+| `--host <host>`           | string | Control plane / signaling server host                                                       | `"127.0.0.1"` |
+| `--port <port>`           | number | Control plane / signaling server port                                                       | `8888`        |
+| `--token <token>`         | string | Control token (auto-resolved from `.cache/control-token.json` or `clients.db` if omitted)   | `""`          |
+| `--peer-id <id>`          | string | Custom WebRTC CLI peer ID override                                                          | `""`          |
+| `--cache-dir <dir>`       | string | Custom cache directory for token and peer ID storage                                        | `".cache"`    |
+
+### `shadow-claw backup [trigger|list|delete] [options]`
+
+Triggers a remote OPFS workspace backup from a connected client, lists available snapshots, or deletes backups.
+
+```bash
+# Trigger backup via HTTP control plane
+npx shadow-claw backup
+npx shadow-claw backup --client <client-id>
+
+# Trigger backup via WebRTC DataChannel
+npx shadow-claw backup --transport webrtc --client <browser-peer-id>
+
+# List or delete stored snapshots on server
+npx shadow-claw backup list
+npx shadow-claw backup delete --backup-id <id>
+```
+
+### `shadow-claw tasks [options]`
+
+Lists scheduled tasks configured on a connected client (with optional group filtering).
+
+```bash
+# List all tasks on default connected client
+npx shadow-claw tasks
+
+# List all tasks via HTTP control plane
+npx shadow-claw tasks --client <client-id>
+
+# Filter tasks by conversation group (e.g. main AI chat or peer channel)
+npx shadow-claw tasks --client <client-id> --group "br:main"
+npx shadow-claw tasks --transport webrtc --client <browser-peer-id> --group "peer:<cli-peer-id>"
+
+# List tasks via WebRTC DataChannel
+npx shadow-claw tasks --transport webrtc --client <browser-peer-id>
+```
+
+| Option                    | Type   | Description                                                             | Default       |
+| :------------------------ | :----- | :---------------------------------------------------------------------- | :------------ |
+| `--client <id>`           | string | Target client ID or PeerJS peer ID (defaults to first connected client) | `""`          |
+| `--group <groupId>`       | string | Filter tasks by conversation group ID (`br:main`, `peer:...`, etc.)     | All groups    |
+| `--transport <transport>` | string | Transport mechanism: `http` or `webrtc`                                 | `"http"`      |
+| `--host <host>`           | string | Control plane / signaling server host                                   | `"127.0.0.1"` |
+| `--port <port>`           | number | Control plane / signaling server port                                   | `8888`        |
+| `--token <token>`         | string | Control token                                                           | `""`          |
+| `--peer-id <id>`          | string | Custom WebRTC CLI peer ID override                                      | `""`          |
+| `--cache-dir <dir>`       | string | Custom cache directory                                                  | `".cache"`    |
+
+### `shadow-claw webrtc [action] [options]` / `shadow-claw peer-id [action] [options]`
+
+Manages WebRTC CLI peer identity (`.cache/cli-peer-id`) and provides the `webrtc listen` daemon for headless DataChannel communication with browser tabs.
+
+#### 1. Managing CLI Peer ID
+
+```bash
+# Get or create peer ID
+npx shadow-claw peer-id
+
+# Force renewal / generation of a new peer ID
+npx shadow-claw peer-id --renew
+
+# Set custom peer ID
+npx shadow-claw peer-id --set my-custom-peer-id
+
+# Print only raw ID string (for shell scripting)
+npx shadow-claw peer-id -q
+```
+
+#### 2. Running WebRTC Listener (`webrtc listen`)
+
+Registers the CLI as a live PeerJS peer on the signaling server so browser tabs can initiate direct P2P connections without requiring a control plane connection. It also launches a local Unix socket IPC bridge (`.cache/webrtc-ipc.sock`) to coordinate concurrent `send` commands without peer ID conflicts.
+
+```bash
+# Start WebRTC listener
+npx shadow-claw webrtc listen
+
+# Restrict incoming connections to specific browser peer IDs
+npx shadow-claw webrtc listen --trusted-peer <browser-peer-id>
+```
+
+**Browser Setup Workflow:**
+
+1. Run `npx shadow-claw webrtc listen` to display the CLI peer ID (e.g. `cli-01m1...`).
+2. In the browser, navigate to **Settings → WebRTC/PeerJS → Trusted Peer IDs** and add the CLI's peer ID.
+3. Once connected, dispatch commands with `npx shadow-claw send --transport webrtc --client <browser-peer-id> [--group <groupId>] "message"`.
+
 ---
 
 ## NPM Packaging & Prepack Lifecycle

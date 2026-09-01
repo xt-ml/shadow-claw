@@ -25,6 +25,7 @@ jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   orchestratorStore: {
     orchestrator: {
       taskServerUrl: "/test-schedule",
+      taskServerEnabled: true,
     },
     ready: true,
   },
@@ -56,6 +57,10 @@ describe("shadow-claw-task-server", () => {
       '[data-setting="task-server-url-input"]',
     ) as HTMLInputElement;
     expect(input.value).toBe("/test-schedule");
+    const enabledToggle = el.shadowRoot?.querySelector(
+      '[data-setting="task-server-enabled-toggle"]',
+    ) as HTMLInputElement;
+    expect(enabledToggle.checked).toBe(true);
   });
 
   it("should save task server url", async () => {
@@ -76,5 +81,19 @@ describe("shadow-claw-task-server", () => {
       "https://new-server.com",
     );
     expect(showSuccess).toHaveBeenCalled();
+  });
+
+  it("should save task server enabled toggle", async () => {
+    const el = new ShadowClawTaskServer();
+    document.body.appendChild(el);
+    await el.connectedCallback();
+
+    await el.saveTaskServerEnabled(false);
+
+    expect(mockSetTaskServerEnabled).toHaveBeenCalledWith(
+      orchestratorStore.orchestrator,
+      expect.anything(),
+      false,
+    );
   });
 });

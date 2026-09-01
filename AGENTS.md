@@ -5,7 +5,7 @@
 
 ## Project Snapshot
 
-ShadowClaw is a browser-native AI assistant written in **TypeScript** (`.ts`).
+ShadowClaw is a browser-native AI assistant written in **TypeScript** (`.ts`) — deployable as a PWA, a native desktop app via Electron, a standalone Node.js server, and driven via the `shadow-claw` CLI (for builds, dev serving, and runtime agent interaction).
 The project uses a **Rolldown build pipeline** to bundle the application.
 
 **Stack:** HTML + TypeScript / ESM · Web Components · TC39 Signals · IndexedDB · OPFS · Web Workers · Service Worker (Workbox PWA · Web Push) · Express dev server · Electron desktop · AWS Bedrock · Jest + Playwright tests
@@ -44,6 +44,8 @@ ShadowClaw has been significantly deduplicated. Instead of a massive `AGENTS.md`
 | WebMCP Integration            | [docs/subsystems/webmcp.md](docs/subsystems/webmcp.md)                                   |
 | WebVM (v86 Alpine)            | [docs/subsystems/vm.md](docs/subsystems/vm.md)                                           |
 | CLI & Static Site Publishing  | [docs/subsystems/cli.md](docs/subsystems/cli.md)                                         |
+| Control Plane & Client Bridge | [docs/subsystems/control-plane.md](docs/subsystems/control-plane.md)                     |
+| File Backup Subsystem         | [docs/subsystems/backup.md](docs/subsystems/backup.md)                                   |
 
 ## Conventions & Guardrails
 
@@ -150,7 +152,7 @@ Markdown and HTML preview work should preserve the Settings-backed iframe host a
 ### CLI & Dual-Root Build Pipeline
 
 - **Dual-Root Path Resolution:** The build toolchain (`bin/build/build.mjs`) cleanly decouples `toolchainRoot` (the ShadowClaw package/repo root) from `contentRoot` (the consumer template project). In-repo builds (`resolve(contentRoot) === resolve(toolchainRoot)`) preserve the standalone in-tree compilation path. CLI/template consumer builds read pre-bundled web assets from `toolchainRoot/dist/public` and inject `pages/`, `site-config.json`, `assets/`, `.agents/`, and pretty routes from `contentRoot`, outputting to `<contentRoot>/dist/public`.
-- **CLI Commands (`bin/cli.mjs`):** The `shadow-claw` / `shadowclaw` CLI provides `build`, `dev`, `run`, `serve`, and `init` commands. It supports running dev servers programmatically via `startServer` (`src/server/server.ts`) with custom `--root-path` and `--database-dir` arguments.
+- **CLI Commands (`bin/cli.mjs`):** The `shadow-claw` / `shadowclaw` CLI provides `build`, `dev`, `run`, `serve`, `init`, `clients`, `send`, `backup`, `tasks`, `webrtc`, and `peer-id` commands. It supports running dev servers programmatically via `startServer` (`src/server/server.ts`) with custom `--root-path` and `--database-dir` arguments.
 - **Naming Conventions:** Refer to the product/brand in prose and documentation as **ShadowClaw**. Use kebab-case **`shadow-claw`** for package name, CLI commands (`npx shadow-claw`), repositories, directory paths, and custom elements.
 
 ## What to Avoid
@@ -162,7 +164,7 @@ Markdown and HTML preview work should preserve the Settings-backed iframe host a
 - **Do not** import Electron modules from browser-side `.ts` files — Electron is desktop-only.
 - **Do not** register or inject unapproved custom elements without configuring them through `site-config.json` or `setAllowedCustomElements`.
 - **Do not** rely on `navigator.modelContext` alone for WebMCP detection; prefer `document.modelContext` with `navigator.modelContext` fallback for compatibility. Use `parseWebMcpInputSchema` to normalize schemas across Chrome 154+ (native object) and Chrome < 154 (DOMString JSON) versions, and `getWebMcpTools` for querying registered tools with graceful degradation.
-- **Do not** commit `dist-electron/`, `push-subscriptions.db`, or `scheduled-tasks.db` — they are git-ignored.
+- **Do not** commit `dist-electron/`, `push-subscriptions.db`, `scheduled-tasks.db`, or `clients.db` — they are git-ignored.
 - **Do not** add new docs pages without updating `docs/README.md` and verifying references in `AGENTS.md`.
 - **Do not** allow file-browser copy/move flows to target the same folder or any descendant folder; enforce the guard in both UI and storage paths and cover it with tests. Always specify both `sourceGroupId` and `targetGroupId` when invoking storage moves/copies.
 - **Do not** use raw `window.location.href` or traditional link anchors for internal navigation. Always dispatch a `shadow-claw-navigate` custom event (or use the `handleSpecialLinkNavigation` utility) to switch pages, open files, or scroll to anchors seamlessly.

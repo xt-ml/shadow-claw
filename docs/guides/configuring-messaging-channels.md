@@ -1,14 +1,15 @@
 # Configuring Messaging Channels
 
-> Step-by-step setup guides for Telegram and iMessage channel integration in ShadowClaw.
+> Step-by-step setup guides for Telegram, iMessage, and PeerJS WebRTC channel integration in ShadowClaw.
 
-**Settings:** Open Settings → Messaging Channels to configure any of these options.
+**Settings:** Open Settings → Messaging Channels or Settings → WebRTC/PeerJS to configure these options.
 
 ## Overview
 
-ShadowClaw supports three messaging channels:
+ShadowClaw supports four messaging channels:
 
 - **Browser Chat** (`br:`) — In-app chat interface (always available)
+- **PeerJS WebRTC** (`peer:`) — Peer-to-peer WebRTC DataChannel messaging and remote CLI bridge
 - **Telegram** (`tg:`) — Telegram Bot API integration
 - **iMessage** (`im:`) — iMessage bridge via HTTP relay
 
@@ -210,6 +211,39 @@ if __name__ == '__main__':
     app.run(port=5000)
 ```
 
+## PeerJS WebRTC Setup
+
+### Prerequisites
+
+1. PeerJS signaling server enabled on dev server (`--peerjs` flag, default with `shadow-claw dev`) or custom PeerJS cloud / self-hosted host.
+2. CLI peer ID generated via `shadow-claw peer-id` or running `shadow-claw webrtc listen`.
+
+### PeerJS Step-by-Step
+
+1. **Configure Signaling Server in Browser**
+   - Open **Settings → WebRTC/PeerJS**.
+   - Ensure the signaling host/port matches your server (defaults to `127.0.0.1:8888`).
+   - Copy or note your browser peer ID displayed at the top.
+
+2. **Connect to CLI or Remote Peers**
+   - In **Settings → WebRTC/PeerJS → Trusted Peer IDs**, add the peer ID of the CLI (e.g. `cli-01m1...`) or remote peer.
+   - You can also allow all peers by leaving the trusted peer IDs list empty.
+
+3. **Interact via CLI**
+   - In one terminal, start the listener:
+     ```bash
+     npx shadow-claw webrtc listen
+     ```
+   - In another terminal, send a message to a specific conversation or the browser chat:
+
+     ```bash
+     # Send directly to the peer channel conversation
+     npx shadow-claw send --transport webrtc --client <browser-peer-id> --group "peer:<cli-peer-id>" "Hello from CLI"
+
+     # Send to the main browser AI assistant
+     npx shadow-claw send --transport webrtc --client <browser-peer-id> --group "br:main" "Hello AI"
+     ```
+
 ## Managing Channel Conversations
 
 ### Creating a Conversation
@@ -218,11 +252,11 @@ When you create a new conversation in ShadowClaw:
 
 1. Open the conversation sidebar
 2. Click the **+** (Create) button
-3. Choose the channel (Browser, Telegram, iMessage)
-4. If Telegram/iMessage: select the chat ID
+3. Choose the channel (Browser, PeerJS, Telegram, iMessage)
+4. If PeerJS/Telegram/iMessage: specify or select the peer/chat ID
 5. Name the conversation and save
 
-The conversation ID is auto-prefixed (`br:`, `tg:`, `im:`) so you can track which channel it belongs to.
+The conversation ID is auto-prefixed (`br:`, `peer:`, `tg:`, `im:`) so you can track which channel it belongs to.
 
 ### Switching Between Channels
 
@@ -233,6 +267,7 @@ All active conversations appear in the sidebar. Click any conversation to switch
 | Channel  | Auto-trigger | Mention required? |
 | -------- | ------------ | ----------------- |
 | Browser  | Manual only  | N/A (click send)  |
+| PeerJS   | Yes          | No                |
 | Telegram | Yes          | No                |
 | iMessage | Yes          | No                |
 

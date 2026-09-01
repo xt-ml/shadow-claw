@@ -310,6 +310,39 @@ describe("push-routes", () => {
     });
   });
 
+  describe("POST /push/command", () => {
+    it("registers the route", () => {
+      expect(app.routes.post["/push/command"]).toBeDefined();
+    });
+
+    it("broadcasts remote-command payload to subscribers", async () => {
+      (store.getAllSubscriptions as any).mockReturnValue([
+        {
+          id: 1,
+          endpoint: "https://fcm.example.com/sub1",
+          keys_p256dh: "k1",
+          keys_auth: "k2",
+        },
+      ]);
+      const req = createMockReq({
+        action: "send-message",
+        clientId: "client-target",
+        args: { text: "Wake up" },
+      });
+      const res = createMockRes();
+      await app.routes.post["/push/command"](req, res);
+      expect(res.statusCode).toBe(200);
+      expect(res._json.sent).toBe(1);
+    });
+
+    it("returns 400 when action is missing", async () => {
+      const req = createMockReq({});
+      const res = createMockRes();
+      await app.routes.post["/push/command"](req, res);
+      expect(res.statusCode).toBe(400);
+    });
+  });
+
   describe("broadcastPush()", () => {
     beforeEach(() => {
       jest.clearAllMocks();

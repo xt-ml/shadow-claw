@@ -380,6 +380,7 @@ Settings panel controller.
 - `sidebarTasksHiddenToggle()` — Toggle visibility for Tasks navigation item in sidebar
 - `sidebarFilesHiddenToggle()` — Toggle visibility for Files navigation item in sidebar
 - `taskServerConfig()` — Task server configuration component (`<shadow-claw-task-server>`)
+- `controlPlaneConfig()` — Control plane configuration component (`<shadow-claw-control-plane>`)
 
 ## Shared Utilities (`shared/index.ts`)
 
@@ -454,11 +455,14 @@ The build, CLI, and prerender test suites live under `bin/` and run through the
 project Jest configuration. The build integration test covers both the normal
 `pages/` layout and a project with no `pages/` directory (which publishes the
 built-in `index.html` and `MEMORY.md` defaults), as well as the unified `shadow-claw`
-CLI tool commands (`build`, `dev`, `run`, `serve`, `init`, `--version`).
+CLI tool commands (`build`, `dev`, `run`, `serve`, `init`, `clients`, `send`, `backup`, `tasks`, `webrtc`, `peer-id`, `--version`).
 
 ```bash
 NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
   npx jest --runInBand bin/cli.test.mjs \
+  bin/commands/peer-id.test.mjs \
+  bin/utils/control-client.test.mjs \
+  bin/utils/webrtc-control-client.test.mjs \
   bin/build/build.test.mjs \
   bin/prerender-dsd-shell/prerender-dsd-shell.test.mjs \
   bin/prerender-pretty-paths/prerender-pretty-paths.test.mjs

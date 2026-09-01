@@ -49,6 +49,66 @@ describe("shadow-claw CLI", () => {
     expect(stdout).toContain("run");
     expect(stdout).toContain("serve");
     expect(stdout).toContain("init");
+    expect(stdout).toContain("clients");
+    expect(stdout).toContain("send");
+    expect(stdout).toContain("backup");
+    expect(stdout).toContain("tasks");
+    expect(stdout).toContain("peer-id");
+    expect(stdout).toContain("webrtc");
+  });
+
+  it("manages WebRTC CLI peer ID with peer-id command", async () => {
+    const cacheDir = path.join(tempDir, ".cache");
+
+    // 1. Get/generate new peer ID
+    const { stdout: out1 } = await execFileAsync(process.execPath, [
+      cliPath,
+      "peer-id",
+      "--cache-dir",
+      cacheDir,
+      "--json",
+    ]);
+    const json1 = JSON.parse(out1);
+    expect(json1.peerId).toMatch(/^cli-[0-9a-z]+$/);
+    expect(json1.renewed).toBe(true);
+
+    // 2. Subsequent call returns existing peer ID
+    const { stdout: out2 } = await execFileAsync(process.execPath, [
+      cliPath,
+      "peer-id",
+      "--cache-dir",
+      cacheDir,
+      "-q",
+    ]);
+    expect(out2.trim()).toBe(json1.peerId);
+
+    // 3. Renew peer ID
+    const { stdout: out3 } = await execFileAsync(process.execPath, [
+      cliPath,
+      "peer-id",
+      "--renew",
+      "--cache-dir",
+      cacheDir,
+      "--json",
+    ]);
+    const json3 = JSON.parse(out3);
+    expect(json3.peerId).not.toBe(json1.peerId);
+    expect(json3.renewed).toBe(true);
+
+    // 4. Set custom peer ID
+    const { stdout: out4 } = await execFileAsync(process.execPath, [
+      cliPath,
+      "peer-id",
+      "--set",
+      "my-custom-cli-peer",
+      "--cache-dir",
+      cacheDir,
+      "-q",
+    ]);
+    expect(out4.trim()).toBe("my-custom-cli-peer");
+
+    const saved = await readFile(path.join(cacheDir, "cli-peer-id"), "utf8");
+    expect(saved.trim()).toBe("my-custom-cli-peer");
   });
 
   it("initializes a new template with init command", async () => {

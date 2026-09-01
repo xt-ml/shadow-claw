@@ -216,6 +216,7 @@ _profiles (State) ──────────┘
 | Page Header              | `<shadow-claw-page-header>`    | Reusable mobile-first header                                              |
 | Settings — Accounts      | `<shadow-claw-accounts>`       | General account connection and OAuth flows                                |
 | Settings — Channels      | `<shadow-claw-channel-config>` | Third-party messaging channels configuration                              |
+| Settings — Control Plane | `<shadow-claw-control-plane>`  | CLI and remote control plane client configuration                         |
 | Settings — Git           | `<shadow-claw-git>`            | Git token and proxy settings                                              |
 | Settings — Integrations  | `<shadow-claw-integrations>`   | Special API integrations and Web Search                                   |
 | Settings — LLM           | `<shadow-claw-llm>`            | Provider and model settings                                               |

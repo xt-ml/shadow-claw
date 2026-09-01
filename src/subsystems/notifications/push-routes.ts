@@ -195,4 +195,27 @@ export function registerPushRoutes(app: Express): void {
       res.status(500).json({ error: err.message });
     }
   });
+
+  // Broadcast a remote command via push to wake dormant clients
+  app.post("/push/command", async (req, res) => {
+    const { clientId, action, args, prompt } = req.body || {};
+
+    if (!action) {
+      return res.status(400).json({ error: "Missing action" });
+    }
+
+    try {
+      const result = await broadcastPush({
+        type: "remote-command",
+        title: "ShadowClaw Command",
+        body: prompt || `Remote command: ${action}`,
+        clientId,
+        action,
+        args,
+      });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 }

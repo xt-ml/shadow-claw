@@ -699,4 +699,8 @@ export class Orchestrator {
 
     await setConfig(db, getProviderApiKeyConfigKey(this.provider), encrypted);
   }
+
+  submitMessage(text: string, groupId: string = DEFAULT_GROUP_ID): void {
+    this.browserChat.submit(text, groupId);
+  }
 }

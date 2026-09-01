@@ -6,7 +6,7 @@
 
 ## Context
 
-ShadowClaw originally shipped as a collection of browser-native ES modules (`.mjs` files) loaded directly by the browser with no build step. This approach allowed for a rapid development loop (edit and refresh).
+ShadowClaw originally shipped as a collection of browser-native ES modules (`.mjs` files) loaded directly by the browser with no build step — before Electron, a Node.js server, CLI tooling, and a production build pipeline were added. This approach allowed for a rapid development loop (edit and refresh).
 
 ## Decision
 

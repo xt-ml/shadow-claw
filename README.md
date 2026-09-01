@@ -2,23 +2,43 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/xt-ml/shadow-claw)
 
-A browser-native, fully-featured AI assistant. TypeScript + Web Components + IndexedDB + File System API.
+A browser-native, fully-featured AI assistant — runs as a PWA, a native desktop app, a Node.js server, and via the `shadow-claw` CLI. TypeScript + Web Components + IndexedDB + File System API.
 
 [![ShadowClaw Screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/shadow-claw-screenshot-1920x1052.png)](https://xt-ml.github.io/shadow-claw/)
 
 ## Quick Start
 
+### 1. Launch ShadowClaw instantly without cloning the repo
+
 ```bash
+npx shadow-claw dev --open
+```
+
+Open Settings, select your AI provider (or use the in-browser Prompt API / local models), and start chatting.
+
+### 2. Scaffold a Project or Knowledge Hub
+
+Create a custom template with pages and site configuration:
+
+```bash
+npx shadow-claw init my-assistant
+cd my-assistant
+npx shadow-claw dev --open
+```
+
+### 3. From Source (Contributing / Development)
+
+```bash
+git clone https://github.com/xt-ml/shadow-claw.git
+cd shadow-claw
 npm install && npm run dev  # Dev server → http://localhost:8888
 ```
 
-Open Settings, select a provider (or use browser Prompt API), and start chatting.
-
-**Desktop:** `npm run electron` or `npm run electron:build` for distributable.
+**Desktop App:** `npm run electron` or `npm run electron:build` for distributable installer.
 
 ## What is ShadowClaw?
 
-A fully-functional agent runtime that runs entirely in the browser—no AI processing on a server. Built with TypeScript, it provides:
+A fully-functional agent runtime built on browser-native technology — the orchestration and tool-use loop run client-side, with AI inference routing to remote APIs, local servers, or in-browser models depending on your configuration. Built with TypeScript, it provides:
 
 - **Multi-model support**: OpenRouter, Anthropic, Google Gemini, AWS Bedrock, Ollama, Llamafile, Mesh LLM, Transformers.js, and browser-native Prompt API
 - **Web Components UI**: Native Custom Elements + TC39 Signals for reactive updates
@@ -377,6 +397,23 @@ npm run electron:build       # Build Electron distributable
 npm run electron:build:win   # Build Electron for Windows
 npm run electron:build:mac   # Build Electron for macOS
 ```
+
+### CLI Runtime Commands
+
+The `shadow-claw` CLI connects to a running server or browser clients to interact with active sessions:
+
+```bash
+npx shadow-claw clients                              # List connected browser/Electron clients
+npx shadow-claw send "your prompt" --client <id>    # Send a message to a connected client
+npx shadow-claw backup                               # Trigger OPFS workspace backup
+npx shadow-claw backup list                          # List available backup snapshots
+npx shadow-claw backup delete --backup-id <id>      # Delete a backup snapshot
+npx shadow-claw tasks --client <id>                  # List scheduled tasks on a client
+npx shadow-claw webrtc listen                        # Start headless WebRTC DataChannel daemon
+npx shadow-claw peer-id                              # Get or generate persistent CLI Peer ID
+```
+
+Commands support `--transport webrtc` for direct peer-to-peer DataChannel execution with connected browser clients. Control plane authentication uses `SHADOWCLAW_CONTROL_TOKEN` (env) or `--token` flag. The control plane endpoint and token are printed to the console on server start.
 
 ## License
 

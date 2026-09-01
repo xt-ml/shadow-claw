@@ -12,6 +12,9 @@ interface PushData {
   type?: string;
   taskId?: string;
   groupId?: string;
+  clientId?: string;
+  action?: string;
+  args?: Record<string, unknown>;
   prompt?: string;
   taskType?: string;
   tools?: unknown[];
@@ -27,6 +30,42 @@ self.addEventListener("push", (event: PushEvent) => {
     } catch {
       data = { title: "ShadowClaw", body: event.data.text() };
     }
+  }
+
+  // Remote command trigger — relay to client windows and notify
+  if (data.type === "remote-command") {
+    event.waitUntil(
+      self.clients
+        .matchAll({ type: "window", includeUncontrolled: true })
+        .then((clientList) => {
+          for (const client of clientList) {
+            client.postMessage({
+              type: "remote-command-trigger",
+              clientId: data.clientId,
+              action: data.action,
+              args: data.args,
+              prompt: data.prompt,
+            });
+          }
+
+          return self.registration.showNotification(
+            "ShadowClaw — Remote Command",
+            {
+              body: data.prompt || `Remote command received: ${data.action}`,
+              icon: "/assets/icons/512.png",
+              badge: "/assets/icons/192.png",
+              data: {
+                type: "remote-command",
+                clientId: data.clientId,
+                action: data.action,
+                args: data.args,
+              },
+            },
+          );
+        }),
+    );
+
+    return;
   }
 
   // Scheduled task trigger — relay to any open client windows, then show notification

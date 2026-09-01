@@ -39,6 +39,8 @@ const settingsTabLoaders: Record<string, (() => Promise<unknown>)[]> = {
     () =>
       import("../settings/shadow-claw-mcp-remote/shadow-claw-mcp-remote.js"),
     () =>
+      import("../settings/shadow-claw-control-plane/shadow-claw-control-plane.js"),
+    () =>
       import("../settings/shadow-claw-integrations/shadow-claw-integrations.js"),
     () =>
       import("../settings/shadow-claw-task-server/shadow-claw-task-server.js"),

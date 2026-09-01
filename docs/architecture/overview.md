@@ -6,7 +6,7 @@
 
 ## What is ShadowClaw?
 
-ShadowClaw is a **browser-native AI assistant** — a fully functional agent runtime that runs entirely in the browser with zero server-side AI logic. It's built with TypeScript and bundled with Rolldown.
+ShadowClaw is a **browser-native AI assistant** — a fully functional agent runtime whose orchestration and tool-use loop run client-side, with AI inference routing to remote APIs, local servers, or in-browser models depending on your configuration. It runs as a PWA in any modern browser, as a native desktop app via Electron, as a standalone Node.js server, and is driven via the `shadow-claw` CLI.
 
 **Stack at a glance:**
 
@@ -52,7 +52,7 @@ graph TD
 
 ### 1. Browser-native first
 
-Everything runs in the browser. The Express server provides a suite of backend services including:
+The AI runtime and UI are built on browser-native technology regardless of deployment target. The Express server provides a suite of backend services including:
 
 - CORS proxying for LLM providers (Bedrock, Vertex AI, Gemini, etc.)
 - Web Push notification delivery and VAPID management
@@ -159,15 +159,15 @@ sequenceDiagram
 
 ## Entry Points
 
-| File                                 | Thread  | Role                                                                          |
-| ------------------------------------ | ------- | ----------------------------------------------------------------------------- |
-| `src/core/index.ts`                  | Main    | App bootstrap — opens IndexedDB, boots orchestrator, registers service worker |
-| `src/worker/worker.ts`               | Worker  | Agent worker — owns LLM tool-use loop, VM, tool execution                     |
-| `src/server/server.ts`               | Node.js | Express dev/prod server — proxy, push, scheduling, static files               |
-| `electron/main.ts`                   | Node.js | Electron main process — same Express server in-process                        |
-| `src/service-worker/init.ts`         | SW      | Service worker bootstrap — Workbox cache registration                         |
-| `src/service-worker/push-handler.ts` | SW      | Web Push event handler                                                        |
-| `src/service-worker/fetch-proxy.ts`  | SW      | Fetch interception                                                            |
+| File                                 | Thread  | Role                                                                           |
+| ------------------------------------ | ------- | ------------------------------------------------------------------------------ |
+| `src/core/index.ts`                  | Main    | App bootstrap — opens IndexedDB, boots orchestrator, registers service worker  |
+| `src/worker/worker.ts`               | Worker  | Agent worker — owns LLM tool-use loop, VM, tool execution                      |
+| `src/server/server.ts`               | Node.js | Express dev/prod server — proxy, push, scheduling, control plane, static files |
+| `electron/main.ts`                   | Node.js | Electron main process — same Express server in-process                         |
+| `src/service-worker/init.ts`         | SW      | Service worker bootstrap — Workbox cache registration                          |
+| `src/service-worker/push-handler.ts` | SW      | Web Push event handler                                                         |
+| `src/service-worker/fetch-proxy.ts`  | SW      | Fetch interception                                                             |
 
 ## Key Directories
 
@@ -181,7 +181,7 @@ sequenceDiagram
 | `src/components/settings/`      | Recommended home for settings feature components (incremental migration)     |
 | `src/context/`                  | Token estimation, dynamic windowing, output truncation                       |
 | `src/db/`                       | IndexedDB layer (granular modules for each DB operation)                     |
-| `src/server/`                   | Express server + proxy routes                                                |
+| `src/server/`                   | Express server, control plane, proxy routes, WebRTC, and backup APIs         |
 | `src/service-worker/`           | Service worker modules                                                       |
 | `src/shell/`                    | JS shell emulator + OPFS bridge                                              |
 | `src/storage/`                  | OPFS + File System Access API abstractions                                   |

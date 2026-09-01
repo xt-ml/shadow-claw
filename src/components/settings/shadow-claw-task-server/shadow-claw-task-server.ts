@@ -17,7 +17,7 @@ import shadowClawTaskServerTemplate from "./shadow-claw-task-server.html" with {
 const elementName = "shadow-claw-task-server";
 
 /**
- * Settings sub-component for Task Server URL configuration.
+ * Settings sub-component for Task Server URL and server-side task scheduling configuration.
  */
 export class ShadowClawTaskServer extends ShadowClawElement {
   static styles = shadowClawTaskServerStyles;
@@ -100,6 +100,7 @@ export class ShadowClawTaskServer extends ShadowClawElement {
       enabledToggle.checked = this.orchestrator.taskServerEnabled;
     }
   }
+
   async saveTaskServerEnabled(enabled: boolean) {
     if (!this.orchestrator || !this.db) {
       return;

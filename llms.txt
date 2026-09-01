@@ -1,6 +1,6 @@
 # [ShadowClaw](https://xt-ml.github.io/shadow-claw/)
 
-> A browser-native, fully-featured AI assistant (TypeScript + Web Components + IndexedDB + File System API) that runs an agent runtime entirely client-side, with no AI processing on a server.
+> A browser-native, fully-featured AI assistant (TypeScript + Web Components + IndexedDB + File System API) whose orchestration and tool-use loop run client-side — AI inference routes to remote APIs, local servers, or in-browser models depending on your configuration. Runs as a PWA, a native desktop app via Electron, a standalone Node.js server, and via the `shadow-claw` CLI.
 
 ## Docs
 

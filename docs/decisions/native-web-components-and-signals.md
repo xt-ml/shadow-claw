@@ -6,7 +6,7 @@
 
 ## Context
 
-Building a browser-native AI assistant requires a reactive UI that updates when async operations complete (streaming tokens, tool results, typing indicators). The question was: what framework (if any) to use?
+Building a browser-native AI assistant (one that runs as a PWA, Electron desktop app, Node.js server, and via the CLI) requires a reactive UI that updates when async operations complete (streaming tokens, tool results, typing indicators). The question was: what framework (if any) to use?
 
 The original options were:
 

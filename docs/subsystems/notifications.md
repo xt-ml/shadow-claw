@@ -3,7 +3,7 @@
 > Web Push notifications delivered via VAPID, a server-side SQLite task scheduler,
 > and a client-side cron evaluator — so tasks fire even when no browser tab is open.
 
-**Source:** `src/subsystems/notifications/` · `src/subsystems/tools/task-scheduler.ts` · `src/subsystems/tools/cron.ts` · `src/service-worker/push-handler.ts`
+**Source:** `src/subsystems/notifications/` · `src/subsystems/notifications/push-routes.ts` · `src/subsystems/tools/task-scheduler.ts` · `src/subsystems/tools/cron.ts` · `src/service-worker/push-handler.ts`
 
 ## System Overview
 
@@ -14,6 +14,7 @@ graph TD
     SW["Service Worker<br>push-handler.ts"]
     CS["ClientTaskScheduler<br>task-scheduler.ts"]
     PC["push-client.ts<br>Subscribe / Unsubscribe"]
+    OW["Open Windows<br>(postMessage)"]
   end
 
   subgraph Server ["Express / Electron Server"]
@@ -22,6 +23,7 @@ graph TD
     TSR["task-schedule-routes.ts<br>/schedule/tasks/* endpoints"]
     TSS["task-schedule-store.ts<br>SQLite scheduled tasks"]
     Sched["ServerTaskScheduler<br>60s cron ticks"]
+    CP["Control Plane<br>/push/command"]
   end
 
   subgraph Agent ["Agent"]
@@ -35,9 +37,11 @@ graph TD
   TT --> TSR
   TSR --> TSS
   TSS --> Sched
-  Sched -->|Web Push| SW
+  Sched -->|Web Push: scheduled-task| SW
   SW -->|relay to window| CS
   CS --> TT
+  CP -->|Web Push: remote-command| SW
+  SW -->|postMessage: remote-command-trigger| OW
 ```
 
 ## Push Notifications
@@ -74,6 +78,54 @@ On `push` event:
 ### Relay to open tabs
 
 The service worker uses a `BroadcastChannel("shadowclaw-push")` to relay push events to any open windows. The orchestrator listens on this channel and triggers the agent invocation for scheduled tasks.
+
+---
+
+## Remote Command Push Wakeup
+
+**Files:** `src/service-worker/push-handler.ts` · `src/subsystems/notifications/push-routes.ts`
+
+### Purpose
+
+The control plane may need to dispatch a command to a specific ShadowClaw client that is currently dormant — i.e. not connected to the WebSocket. Rather than dropping the command or waiting for the client to reconnect, the server sends a Web Push notification of type `remote-command` to wake the client up and relay the payload.
+
+### How it works
+
+```mermaid
+sequenceDiagram
+  participant CP as Control Plane
+  participant PR as push-routes.ts<br>POST /push/command
+  participant PS as push-store.ts<br>getAllSubscriptions()
+  participant WP as web-push
+  participant SW as Service Worker<br>push-handler.ts
+  participant OW as Open Windows
+
+  CP->>PR: POST /push/command { clientId, action, args, prompt }
+  PR->>PS: getAllSubscriptions() [ORDER BY … id DESC]
+  PS-->>PR: subscriptions[]
+  loop each subscription
+    PR->>WP: sendNotification(subscription, { type: "remote-command", clientId, action, args, prompt })
+  end
+  WP-->>SW: push event
+  SW->>OW: client.postMessage({ type: "remote-command-trigger", clientId, action, args, prompt })
+  SW->>SW: showNotification("ShadowClaw — Remote Command")
+```
+
+1. **Server:** The control plane POSTs to `/push/command` with `{ clientId, action, args, prompt }`.
+2. **`push-routes.ts`:** Calls `getAllSubscriptions()` (results are stably ordered by `id DESC`) and fans out a Web Push to every subscribed endpoint with payload `{ type: "remote-command", clientId, action, args, prompt }`.
+3. **Service worker (`push-handler.ts`):** On receiving a push whose `data.type === 'remote-command'`, the handler:
+   - Iterates all open `WindowClient`s and calls `client.postMessage({ type: 'remote-command-trigger', clientId, action, args, prompt })`.
+   - Shows an OS notification titled **`ShadowClaw — Remote Command`** so the user is informed even if no window catches the message.
+
+### Client-side handling
+
+Open windows listen for `message` events from the service worker. When a message of type `'remote-command-trigger'` arrives, the orchestrator can act on `action`, `args`, and `prompt` in the same way as a locally-initiated command. The `clientId` field lets the handler route the command only to the intended client and ignore it otherwise.
+
+### Push subscription ordering
+
+`push-store.ts`'s `getAllSubscriptions()` query now applies a secondary `ORDER BY … id DESC` clause, ensuring that subscriptions are returned in a stable, deterministic order. This prevents non-deterministic fan-out behaviour when multiple subscriptions exist for the same browser profile.
+
+---
 
 ## Client-Side Task Scheduler
 

@@ -1102,16 +1102,83 @@ export class PeerJsChannel implements Channel {
 
       return;
     }
+
+    // Control-plane command execution over WebRTC DataChannel
+    if (msg.type === "command:execute") {
+      const payload = (msg.payload || {}) as {
+        commandId?: string;
+        action?: string;
+        args?: any;
+      };
+      const action = payload.action || "";
+      const args = payload.args || {};
+      const commandId = payload.commandId || "";
+
+      import("../../core/utils/initControlPlane.js")
+        .then(({ executeClientControlCommand }) =>
+          executeClientControlCommand(action, args),
+        )
+        .then((result) => {
+          const conn = this.connections.get(remotePeerId);
+          if (conn) {
+            const hasError = Boolean(result?.error);
+            conn.send({
+              id: ulid(),
+              type: "command:result",
+              payload: {
+                commandId,
+                action,
+                success: !hasError,
+                data: result,
+                ...(hasError ? { error: result.error } : {}),
+              },
+            });
+          }
+        })
+        .catch((err) => {
+          const conn = this.connections.get(remotePeerId);
+          if (conn) {
+            conn.send({
+              id: ulid(),
+              type: "command:result",
+              payload: {
+                commandId,
+                action,
+                success: false,
+                error: err?.message || String(err),
+              },
+            });
+          }
+        });
+
+      return;
+    }
+  }
+
+  private _isTrustedPeer(remotePeerId: string): boolean {
+    if (this.trustedPeerIds.size === 0) {
+      return true;
+    }
+    if (this.trustedPeerIds.has(remotePeerId)) {
+      return true;
+    }
+    for (const trusted of this.trustedPeerIds) {
+      const clean = trusted.trim();
+      if (clean.endsWith("*") && remotePeerId.startsWith(clean.slice(0, -1))) {
+        return true;
+      }
+      if (clean === "cli" && remotePeerId.startsWith("cli-")) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private _handleIncomingConnection(conn: DataConnection): void {
     const remotePeerId = conn.peer;
 
     // Reject untrusted peers when a trusted list is configured
-    if (
-      this.trustedPeerIds.size > 0 &&
-      !this.trustedPeerIds.has(remotePeerId)
-    ) {
+    if (!this._isTrustedPeer(remotePeerId)) {
       console.warn(
         `PeerJsChannel: rejecting connection from untrusted peer: ${remotePeerId}`,
       );

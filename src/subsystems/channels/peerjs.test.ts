@@ -814,5 +814,20 @@ describe("PeerJsChannel", () => {
         expect.objectContaining({ result: { ok: true } }),
       );
     });
+
+    it("supports wildcard and prefix trusted peer matching", async () => {
+      const ch = new PeerJsChannel();
+      ch.trustedPeerIds = new Set(["cli-*", "server-node"]);
+
+      expect((ch as any)._isTrustedPeer("cli-01m1cke479mr186s4hbp4a3c3h")).toBe(
+        true,
+      );
+      expect((ch as any)._isTrustedPeer("server-node")).toBe(true);
+      expect((ch as any)._isTrustedPeer("random-untrusted-peer")).toBe(false);
+
+      ch.trustedPeerIds = new Set(["cli"]);
+      expect((ch as any)._isTrustedPeer("cli-12345")).toBe(true);
+      expect((ch as any)._isTrustedPeer("other-12345")).toBe(false);
+    });
   });
 });

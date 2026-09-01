@@ -8,6 +8,12 @@ import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 
 import { runBuild } from "./build/build.mjs";
+import { runClientsCommand } from "./commands/clients.mjs";
+import { runSendCommand } from "./commands/send.mjs";
+import { runBackupCommand } from "./commands/backup.mjs";
+import { runTasksCommand } from "./commands/tasks.mjs";
+import { runPeerIdCommand } from "./commands/peer-id.mjs";
+import { runWebRtcListenCommand } from "./commands/webrtc-listen.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -419,6 +425,166 @@ slug: "home"
       console.error("Init failed:", err);
       process.exit(1);
     }
+  });
+
+// ---------------------------------------------------------------------------
+// PEER-ID / WEBRTC COMMAND
+// ---------------------------------------------------------------------------
+program
+  .command("peer-id [action] [customId]")
+  .alias("webrtc-peer-id")
+  .description(
+    "Get, generate, or renew the WebRTC CLI peer ID stored in .cache/cli-peer-id",
+  )
+  .option(
+    "-r, --renew",
+    "Force renewal / generation of a new WebRTC CLI peer ID",
+  )
+  .option("--set <id>", "Set a specific custom WebRTC CLI peer ID")
+  .option("--cache-dir <dir>", "Custom cache directory (defaults to .cache)")
+  .option("-q, --quiet", "Output only the peer ID string")
+  .option("--json", "Output peer ID and file path as JSON")
+  .action(async (action, customId, options) => {
+    const opts = { ...options };
+    if (customId && !opts.set) {
+      opts.set = customId;
+    }
+    await runPeerIdCommand(action, opts);
+  });
+
+program
+  .command("webrtc [action] [customId]")
+  .description(
+    "Manage WebRTC CLI configuration and peer identity (.cache/cli-peer-id)\n\n" +
+      "  Actions:\n" +
+      "    (default)  Show or generate the CLI peer ID\n" +
+      "    listen     Register as a live PeerJS peer — browser tabs can then\n" +
+      "               connect directly without a control-plane connection",
+  )
+  .option(
+    "-r, --renew",
+    "Force renewal / generation of a new WebRTC CLI peer ID",
+  )
+  .option("--set <id>", "Set a specific custom WebRTC CLI peer ID")
+  .option("--cache-dir <dir>", "Custom cache directory (defaults to .cache)")
+  .option("-q, --quiet", "Output only the peer ID string")
+  .option("--json", "Output peer ID and file path as JSON")
+  // listen-specific options
+  .option("--host <host>", "PeerJS signaling server host (for listen)")
+  .option("--port <port>", "PeerJS signaling server port (for listen)", "8888")
+  .option("--path <path>", "PeerJS signaling server path (for listen)", "/")
+  .option(
+    "--secure",
+    "Use TLS (wss://) for the signaling server (for listen)",
+    false,
+  )
+  .option(
+    "--trusted-peer <id>",
+    "Accept connections only from this peer ID (repeatable, for listen)",
+    (v, prev) => (prev ? [...prev, v] : [v]),
+    [],
+  )
+  .option("--verbose", "Verbose connection logging (for listen)", false)
+  .option("--renew-peer-id", "Renew CLI peer ID before listening", false)
+  .action(async (action, customId, options) => {
+    if (action === "listen") {
+      await runWebRtcListenCommand(options);
+      return;
+    }
+    const opts = { ...options };
+    if (customId && !opts.set) {
+      opts.set = customId;
+    }
+    await runPeerIdCommand(action, opts);
+  });
+
+// ---------------------------------------------------------------------------
+// CLIENTS COMMAND
+// ---------------------------------------------------------------------------
+program
+  .command("clients")
+  .description("List connected / registered browser and Electron clients")
+  .option("--host <host>", "Control plane host")
+  .option("--port <port>", "Control plane port")
+  .option("--token <token>", "Control token")
+  .option("--transport <transport>", "Transport to use: http | webrtc", "http")
+  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
+  .option(
+    "--renew-peer-id",
+    "Renew WebRTC CLI peer ID before connecting",
+    false,
+  )
+  .option("--cache-dir <dir>", "Custom cache directory")
+  .action(async (options) => {
+    await runClientsCommand(options);
+  });
+
+// ---------------------------------------------------------------------------
+// SEND COMMAND
+// ---------------------------------------------------------------------------
+program
+  .command("send <message>")
+  .description("Send a message/prompt to a connected client")
+  .option("--client <id>", "Target client ID (defaults to first available)")
+  .option("--group <groupId>", "Target conversation group ID")
+  .option("--host <host>", "Control plane host")
+  .option("--port <port>", "Control plane port")
+  .option("--token <token>", "Control token")
+  .option("--transport <transport>", "Transport to use: http | webrtc", "http")
+  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
+  .option("--renew-peer-id", "Renew WebRTC CLI peer ID before sending", false)
+  .option("--cache-dir <dir>", "Custom cache directory")
+  .action(async (message, options) => {
+    await runSendCommand(message, options);
+  });
+
+// ---------------------------------------------------------------------------
+// BACKUP COMMAND
+// ---------------------------------------------------------------------------
+program
+  .command("backup [action]")
+  .description(
+    "Trigger or manage client workspace backups (trigger | list | delete)",
+  )
+  .option("--client <id>", "Client ID")
+  .option("--backup-id <id>", "Backup ID (for delete)")
+  .option("--group <groupId>", "Specific workspace group ID")
+  .option("--host <host>", "Control plane host")
+  .option("--port <port>", "Control plane port")
+  .option("--token <token>", "Control token")
+  .option("--transport <transport>", "Transport to use: http | webrtc", "http")
+  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
+  .option(
+    "--renew-peer-id",
+    "Renew WebRTC CLI peer ID before connecting",
+    false,
+  )
+  .option("--cache-dir <dir>", "Custom cache directory")
+  .action(async (action, options) => {
+    await runBackupCommand(action || "trigger", options);
+  });
+
+// ---------------------------------------------------------------------------
+// TASKS COMMAND
+// ---------------------------------------------------------------------------
+program
+  .command("tasks")
+  .description("List scheduled tasks on a connected client")
+  .option("--client <id>", "Target client ID")
+  .option("--group <groupId>", "Filter tasks by conversation group ID")
+  .option("--host <host>", "Control plane host")
+  .option("--port <port>", "Control plane port")
+  .option("--token <token>", "Control token")
+  .option("--transport <transport>", "Transport to use: http | webrtc", "http")
+  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
+  .option(
+    "--renew-peer-id",
+    "Renew WebRTC CLI peer ID before connecting",
+    false,
+  )
+  .option("--cache-dir <dir>", "Custom cache directory")
+  .action(async (options) => {
+    await runTasksCommand(options);
   });
 
 program.parse(process.argv);

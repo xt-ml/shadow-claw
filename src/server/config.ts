@@ -22,6 +22,10 @@ export interface ServerConfig {
    * allowing requests to loopback, RFC-1918, and link-local addresses.
    * Controlled by --allow-private-proxy (or SHADOWCLAW_ALLOW_PRIVATE_PROXY=1).
    */
+  /**
+   * Optional control token override for authenticating control-plane commands.
+   */
+  controlToken?: string;
   allowPrivateProxy: boolean;
 }
 
@@ -59,6 +63,10 @@ export function parseConfig(): ServerConfig {
     .option(
       "--database-dir <path>",
       "Directory where SQLite databases are stored",
+    )
+    .option(
+      "--control-token <token>",
+      "Secret token for control-plane authentication",
     );
 
   program.parse();
@@ -164,6 +172,12 @@ export function parseConfig(): ServerConfig {
       (env.SHADOWCLAW_ALLOW_PRIVATE_PROXY || "").toLowerCase().trim(),
     );
 
+  // Control Token
+  const envControlToken = (env.SHADOWCLAW_CONTROL_TOKEN || "").trim();
+  const controlToken = options.controlToken
+    ? options.controlToken.trim()
+    : envControlToken || undefined;
+
   return {
     port,
     bindHost,
@@ -173,6 +187,7 @@ export function parseConfig(): ServerConfig {
     peerjs,
     rootPath,
     databaseDir,
+    controlToken,
     allowPrivateProxy,
   };
 }

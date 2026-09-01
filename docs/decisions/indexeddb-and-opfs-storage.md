@@ -5,7 +5,7 @@
 
 ## Context
 
-ShadowClaw is browser-native. It needs to persist:
+ShadowClaw is browser-native — its storage layer uses Web Platform APIs whether running as a PWA, via Electron, or against a Node.js backend. It needs to persist:
 
 1. **Message history** — structured data: role, content, timestamps, groupId
 2. **Configuration** — API keys, provider selection, model, settings
@@ -140,7 +140,7 @@ To prevent storage state leakage when multiple instances are deployed under subp
    When booting a namespaced deployment for the first time, ShadowClaw checks if data was previously stored under `"shadowclaw"`.
    - **IndexedDB**: Copies all object stores into the new namespaced database in a single non-destructive pass, setting `DB_MIGRATED_FROM_LEGACY`.
    - **OPFS**: Recursively copies all legacy workspace directories and files from `"shadowclaw"` into `"shadowclaw-${namespace}"` (with Safari worker write fallback), setting `OPFS_MIGRATED_FROM_LEGACY`.
-   The legacy storage is left intact as a fallback seed.
+     The legacy storage is left intact as a fallback seed.
 4. **Namespaced `localStorage` (`namespacedStorage.ts`):**
    Key pattern `shadowclaw:${namespace}:${key}` with automatic one-time copy-on-read from legacy unprefixed keys.
 5. **Isolation Assurance:**

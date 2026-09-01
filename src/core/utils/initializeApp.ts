@@ -35,6 +35,24 @@ export async function initializeApp(
 
     await orchestratorStore.whenReady;
 
+    if (typeof window !== "undefined") {
+      try {
+        const {
+          createDefaultControlPlaneClient,
+          shouldConnectControlPlane,
+          isControlPlaneEnabledSync,
+        } = await import("./initControlPlane.js");
+
+        if (isControlPlaneEnabledSync() && shouldConnectControlPlane()) {
+          createDefaultControlPlaneClient({
+            orchestrator: uiElement.orchestrator,
+          });
+        }
+      } catch (err) {
+        console.warn("[ControlPlane] Failed to initialize:", err);
+      }
+    }
+
     return { orchestrator: uiElement.orchestrator, isInitializing };
   } catch (error) {
     console.error("❌ Failed to initialize ShadowClaw:", error);

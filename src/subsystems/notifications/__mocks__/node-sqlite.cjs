@@ -202,4 +202,15 @@ class MockDatabaseSync {
   }
 }
 
-exports.DatabaseSync = MockDatabaseSync;
+let realSqlite;
+try {
+  if (typeof process.getBuiltinModule === "function") {
+    realSqlite = process.getBuiltinModule("node:sqlite");
+  }
+} catch (_) {}
+
+if (realSqlite && realSqlite.DatabaseSync) {
+  exports.DatabaseSync = realSqlite.DatabaseSync;
+} else {
+  exports.DatabaseSync = MockDatabaseSync;
+}

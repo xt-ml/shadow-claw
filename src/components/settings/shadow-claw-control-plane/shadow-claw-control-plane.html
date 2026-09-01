@@ -1,0 +1,81 @@
+<template>
+  <div class="settings-section">
+    <h3>🎛️ Control Plane</h3>
+
+    <div class="form-group">
+      <div class="form-helper">
+        Configure the remote bridge allowing external tools, CLI commands
+        (<code>shadow-claw</code>), and MCP clients to discover, query, and
+        communicate with this client instance.
+      </div>
+    </div>
+
+    <div class="form-group">
+      <div class="form-toggle">
+        <input
+          data-setting="control-plane-enabled-toggle"
+          id="control-plane-enabled-toggle"
+          type="checkbox"
+        />
+        <label class="form-label" for="control-plane-enabled-toggle">
+          Enable Remote Control Plane Client
+        </label>
+      </div>
+      <div class="form-helper">
+        Allow the <code>shadow-claw</code> CLI and remote server commands to
+        discover and communicate with this client. When disabled, this client
+        operates in standalone/serverless mode without opening a control plane
+        connection.
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="control-plane-url">
+        Control Plane Server URL
+      </label>
+      <input
+        class="form-input"
+        data-setting="control-plane-url-input"
+        id="control-plane-url"
+        placeholder="http://127.0.0.1:8888"
+        spellcheck="false"
+        type="url"
+      />
+      <div class="form-helper">
+        The base URL of the ShadowClaw server or local dev instance for the CLI
+        and remote control plane (e.g. <code>http://127.0.0.1:8888</code> or
+        <code>https://my-server.example.com</code>). Defaults to
+        <code>127.0.0.1:8888</code> when hosted on static sites (like GitHub
+        Pages), or same-origin on server deployments.
+      </div>
+      <button class="save-btn" data-action="save-control-plane-url">
+        💾 Save Control Plane URL
+      </button>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label" for="control-plane-transport">
+        Control Plane Transport
+      </label>
+      <select
+        class="form-select"
+        id="control-plane-transport"
+        data-setting="control-plane-transport-select"
+      >
+        <option value="sse">
+          Server-Sent Events (SSE + HTTP POST) — Recommended / Proxy Friendly
+          (Default)
+        </option>
+        <option value="websocket">WebSocket (Full Duplex)</option>
+      </select>
+      <div class="form-helper">
+        Select the protocol used for the CLI and remote client control plane.
+        SSE + HTTP POST works through standard reverse proxies and firewalls
+        without requiring connection upgrades.
+      </div>
+      <button class="save-btn" data-action="save-control-plane-transport">
+        💾 Save Transport
+      </button>
+    </div>
+  </div>
+</template>

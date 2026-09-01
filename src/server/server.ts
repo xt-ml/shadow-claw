@@ -7,6 +7,8 @@ import tcpPortUsed from "tcp-port-used";
 import { DEFAULT_DEV_IP } from "../config/config.js";
 import { createApp } from "./app.js";
 import { attachPeerServer } from "./peer.js";
+import { createControlPlane } from "./control-plane.js";
+import { ServerPeer } from "./server-peer.js";
 import { parseConfig, ServerConfig } from "./config.js";
 
 export async function startServer(
@@ -27,8 +29,22 @@ export async function startServer(
 
   const httpServer = http.createServer(app);
 
+  const controlPlane = createControlPlane({
+    httpServer,
+    app,
+    token: config.controlToken,
+    verbose: config.verbose,
+  });
+
+  let serverPeer: ServerPeer | null = null;
   if (config.peerjs) {
     attachPeerServer(httpServer, app);
+    serverPeer = new ServerPeer({
+      host: config.bindHost,
+      port: config.port,
+      path: "/peerjs",
+      verbose: config.verbose,
+    });
   }
 
   return new Promise<http.Server>((resolve) => {
@@ -53,8 +69,27 @@ export async function startServer(
         );
       }
 
+      console.log(
+        `Control plane active at http://${config.bindHost}:${config.port}/api/control/events (SSE) and ws://${config.bindHost}:${config.port}/ws/control (WebSocket)`,
+      );
+      console.log(`Control token: ${controlPlane.getToken()}`);
+
       if (config.peerjs) {
         console.log("PeerJS signaling server enabled (routes at /peerjs/*)");
+        if (serverPeer) {
+          serverPeer
+            .start()
+            .then((id) => {
+              console.log(`Server WebRTC peer active with ID: ${id}`);
+            })
+            .catch((err) => {
+              if (config.verbose) {
+                console.warn(
+                  `[server] ServerPeer start notice: ${err.message || String(err)}`,
+                );
+              }
+            });
+        }
       }
 
       if (config.verbose) {

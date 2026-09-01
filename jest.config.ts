@@ -58,6 +58,10 @@ export default {
       transform: {
         "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
       },
+      moduleNameMapper: {
+        "^node:sqlite$":
+          "<rootDir>/src/subsystems/notifications/__mocks__/node-sqlite.cjs",
+      },
     },
     {
       displayName: "notifications",
@@ -111,6 +115,10 @@ export default {
       extensionsToTreatAsEsm: [".ts"],
       transform: {
         "^.+\\.ts$": "<rootDir>/src/testing/jest-ts-transform.cjs",
+      },
+      moduleNameMapper: {
+        "^node:sqlite$":
+          "<rootDir>/src/subsystems/notifications/__mocks__/node-sqlite.cjs",
       },
       testMatch: ["<rootDir>/bin/**/*.test.mjs"],
     },

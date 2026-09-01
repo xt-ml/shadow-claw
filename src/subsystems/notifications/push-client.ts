@@ -12,7 +12,13 @@ import { getConfig } from "../../db/getConfig.js";
  */
 export async function getPushUrl(path: string): Promise<string> {
   const db = await getDb();
-  const proxyUrl = await getConfig(db, CONFIG_KEYS.PUSH_PROXY_URL);
+  let proxyUrl = await getConfig(db, CONFIG_KEYS.PUSH_PROXY_URL);
+
+  if (!proxyUrl && typeof localStorage !== "undefined") {
+    try {
+      proxyUrl = localStorage.getItem(CONFIG_KEYS.PUSH_PROXY_URL) || undefined;
+    } catch (_) {}
+  }
 
   if (!proxyUrl) {
     return path;
@@ -26,6 +32,32 @@ export async function getPushUrl(path: string): Promise<string> {
     : proxyUrl;
 
   return `${normalizedProxy}${normalizedPath}`;
+}
+
+export function getPushFetchOptions(
+  url: string,
+  baseOptions: RequestInit = {},
+): RequestInit {
+  const opts: any = { ...baseOptions };
+  try {
+    const locOrigin =
+      typeof location !== "undefined"
+        ? location.origin
+        : "http://127.0.0.1:8888";
+    const u = new URL(url, locOrigin);
+    const host = u.hostname.toLowerCase();
+    if (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "[::1]"
+    ) {
+      opts.targetAddressSpace = "loopback";
+    } else if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host)) {
+      opts.targetAddressSpace = "private";
+    }
+  } catch (_) {}
+  return opts;
 }
 
 /**
@@ -45,7 +77,7 @@ export function urlBase64ToUint8Array(base64String: string): Uint8Array {
  */
 export async function getVapidPublicKey(): Promise<string> {
   const url = await getPushUrl("/push/vapid-public-key");
-  const res = await fetch(url);
+  const res = await fetch(url, getPushFetchOptions(url));
   const data = await res.json();
 
   return data.publicKey;
@@ -65,11 +97,14 @@ export async function subscribeToPush(): Promise<PushSubscription> {
   });
 
   const url = await getPushUrl("/push/subscribe");
-  await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(subscription),
-  });
+  await fetch(
+    url,
+    getPushFetchOptions(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(subscription),
+    }),
+  );
 
   return subscription;
 }
@@ -90,11 +125,14 @@ export async function unsubscribeFromPush(): Promise<void> {
   await subscription.unsubscribe();
 
   const url = await getPushUrl("/push/subscribe");
-  await fetch(url, {
-    method: "DELETE",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ endpoint }),
-  });
+  await fetch(
+    url,
+    getPushFetchOptions(url, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint }),
+    }),
+  );
 }
 
 /**

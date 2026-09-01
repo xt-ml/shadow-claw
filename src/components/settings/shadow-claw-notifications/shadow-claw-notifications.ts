@@ -1,5 +1,6 @@
 import {
   getCurrentSubscription,
+  getPushFetchOptions,
   getPushUrl,
   subscribeToPush,
   unsubscribeFromPush,
@@ -186,9 +187,12 @@ export class ShadowClawNotifications extends ShadowClawElement {
 
     try {
       const url = await getPushUrl(`/push/subscription/${this._selectedId}`);
-      const res = await fetch(url, {
-        method: "DELETE",
-      });
+      const res = await fetch(
+        url,
+        getPushFetchOptions(url, {
+          method: "DELETE",
+        }),
+      );
 
       if (res.ok) {
         showSuccess("Subscription deleted.");
@@ -237,11 +241,14 @@ export class ShadowClawNotifications extends ShadowClawElement {
 
     try {
       const url = await getPushUrl("/push/send");
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ endpoint: sub.endpoint, payload }),
-      });
+      const res = await fetch(
+        url,
+        getPushFetchOptions(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ endpoint: sub.endpoint, payload }),
+        }),
+      );
 
       if (res.ok) {
         showSuccess("Notification sent!");
@@ -303,10 +310,37 @@ export class ShadowClawNotifications extends ShadowClawElement {
     }
 
     try {
+      const isStaticHost =
+        typeof location !== "undefined" &&
+        (location.protocol === "file:" ||
+          location.hostname.endsWith(".github.io") ||
+          location.hostname.endsWith(".pages.dev"));
+
+      const db = await getDb();
+      const proxyUrl =
+        (await getConfig(db, CONFIG_KEYS.PUSH_PROXY_URL)) ||
+        (typeof localStorage !== "undefined"
+          ? localStorage.getItem(CONFIG_KEYS.PUSH_PROXY_URL)
+          : null);
+
+      if (isStaticHost && !proxyUrl) {
+        this._subscriptions = [];
+        this._backendAvailable = false;
+        this._selectedId = null;
+        this.renderSubscriptionList();
+        this.updateActionButtons();
+        return;
+      }
+
       const url = await getPushUrl("/push/subscriptions");
-      const res = await fetch(url);
+      const res = await fetch(url, getPushFetchOptions(url));
 
       if (!res.ok) {
+        this._subscriptions = [];
+        this._backendAvailable = false;
+        this._selectedId = null;
+        this.renderSubscriptionList();
+        this.updateActionButtons();
         return;
       }
 

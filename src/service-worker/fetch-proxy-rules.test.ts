@@ -64,4 +64,45 @@ describe("shouldBypassFetchProxy", () => {
       ),
     ).toBe(true);
   });
+
+  it("bypasses loopback endpoints when accessed from GitHub Pages origin", () => {
+    const sseUrl = new URL(
+      "http://127.0.0.1:8888/api/control/events?clientId=shadow-claw-test",
+    );
+    expect(
+      shouldBypassFetchProxy(sseUrl, "https://xt-ml.github.io/shadow-claw/"),
+    ).toBe(true);
+
+    const messagesUrl = new URL("http://localhost:8888/api/control/messages");
+    expect(
+      shouldBypassFetchProxy(
+        messagesUrl,
+        "https://xt-ml.github.io/shadow-claw/",
+      ),
+    ).toBe(true);
+
+    const wsUrl = new URL("http://[::1]:8888/ws/control");
+    expect(
+      shouldBypassFetchProxy(wsUrl, "https://xt-ml.github.io/shadow-claw/"),
+    ).toBe(true);
+  });
+
+  it("bypasses private LAN IP endpoints when accessed from GitHub Pages origin", () => {
+    const lanUrl = new URL(
+      "http://192.168.1.100:8888/api/control/events?clientId=shadow-claw-test",
+    );
+    expect(
+      shouldBypassFetchProxy(lanUrl, "https://xt-ml.github.io/shadow-claw/"),
+    ).toBe(true);
+
+    const classBUrl = new URL("http://172.20.0.5:8888/api/control/events");
+    expect(
+      shouldBypassFetchProxy(classBUrl, "https://xt-ml.github.io/shadow-claw/"),
+    ).toBe(true);
+
+    const classAUrl = new URL("http://10.0.0.2:8888/api/control/events");
+    expect(
+      shouldBypassFetchProxy(classAUrl, "https://xt-ml.github.io/shadow-claw/"),
+    ).toBe(true);
+  });
 });

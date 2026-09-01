@@ -4,6 +4,32 @@ import { showToast } from "../../../../ui/toast.js";
 import type { Task } from "../../../../db/types.js";
 import type { OrchestratorState } from "../../orchestrator-state.js";
 
+function getTaskFetchOptions(
+  url: string,
+  baseOptions: RequestInit = {},
+): RequestInit {
+  const opts: any = { ...baseOptions };
+  try {
+    const locOrigin =
+      typeof location !== "undefined"
+        ? location.origin
+        : "http://127.0.0.1:8888";
+    const u = new URL(url, locOrigin);
+    const host = u.hostname.toLowerCase();
+    if (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "[::1]"
+    ) {
+      opts.targetAddressSpace = "loopback";
+    } else if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host)) {
+      opts.targetAddressSpace = "private";
+    }
+  } catch (_) {}
+  return opts;
+}
+
 export async function syncTaskToServer(
   state: Pick<OrchestratorState, "taskServerUrl" | "taskServerEnabled">,
   task: Task,
@@ -20,18 +46,22 @@ export async function syncTaskToServer(
   }
   try {
     const base = state.taskServerUrl.replace(/\/$/, "");
-    const res = await fetch(`${base}/tasks`, {
-      body: JSON.stringify(
-        subscriberId
-          ? {
-              ...task,
-              subscriberId,
-            }
-          : task,
-      ),
-      headers: { "Content-Type": "application/json" },
-      method: "POST",
-    });
+    const url = `${base}/tasks`;
+    const res = await fetch(
+      url,
+      getTaskFetchOptions(url, {
+        body: JSON.stringify(
+          subscriberId
+            ? {
+                ...task,
+                subscriberId,
+              }
+            : task,
+        ),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
+      }),
+    );
     if (!res.ok) {
       console.error("Server rejected task sync:", res.status);
       return false;
@@ -58,11 +88,12 @@ export async function deleteTaskFromServer(
     const suffix = subscriberId
       ? `?subscriberId=${encodeURIComponent(subscriberId)}`
       : "";
+    const url = `${base}/tasks/${encodeURIComponent(id)}${suffix}`;
     const res = await fetch(
-      `${base}/tasks/${encodeURIComponent(id)}${suffix}`,
-      {
+      url,
+      getTaskFetchOptions(url, {
         method: "DELETE",
-      },
+      }),
     );
     if (!res.ok) {
       console.error("Server rejected task deletion:", res.status);

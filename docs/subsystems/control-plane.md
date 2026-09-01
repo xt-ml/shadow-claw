@@ -156,3 +156,14 @@ Users can toggle between transports in **Settings $\rightarrow$ Integrations $\r
 - `read-state`: Returns current active conversation group and state.
 - `invoke-tool`: Invokes WebMCP (`document.modelContext`) tools directly.
 - `trigger-backup`: Initiates workspace upload via `BackupController`.
+
+---
+
+## Private Network Access (PNA) & Static Site Integration
+
+When ShadowClaw is accessed from a public static host (e.g. GitHub Pages `https://xt-ml.github.io` or Cloudflare Pages `https://*.pages.dev`) and connected to a local Task Server / Control Plane (`http://127.0.0.1:8888` or `http://localhost:8888`):
+
+1. **Service Worker Loopback Bypass:** The Service Worker fetch proxy (`src/service-worker/fetch-proxy-rules.ts`) unconditionally bypasses all loopback (`localhost`, `127.0.0.1`, `::1`) and private LAN IP ranges so cross-origin requests are handled natively by the browser rather than failing within the Service Worker context.
+2. **PNA Headers:** The server (`src/server/middleware/pna.ts`) responds with `Access-Control-Allow-Private-Network: true` on both preflight (`OPTIONS`) and cross-origin requests.
+3. **Browser Fetch Options:** Client requests targeting loopback or private network endpoints supply `targetAddressSpace: 'loopback'` (or `'private'`) to satisfy Chromium Private Network Access permissions.
+4. **Origin Trust:** The server automatically trusts GitHub Pages (`.github.io`), Cloudflare Pages (`.pages.dev`), and origins configured via `allowedOrigins` or `corsMode: 'all'`.

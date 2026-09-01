@@ -96,6 +96,8 @@ export function createApp(config: ServerConfig): {
   registerBackupRoutes(app, {
     backupsDir: path.resolve(config.databaseDir, "..", ".cache", "backups"),
     token: config.controlToken,
+    allowedOrigins: config.allowedOrigins,
+    corsMode: config.corsMode,
   });
 
   // ---------------- CSP REPORT ROUTES ----------------

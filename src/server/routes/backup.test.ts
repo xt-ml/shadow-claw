@@ -121,6 +121,20 @@ describe("backup routes", () => {
     expect(res.data.backups).toBeDefined();
   });
 
+  it("allows GitHub Pages origin requests without explicit token header", async () => {
+    const res = await makeHttpRequest({
+      port,
+      path: "/api/backup/list",
+      headers: {
+        host: `127.0.0.1:${port}`,
+        origin: "https://xt-ml.github.io",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.data.backups).toBeDefined();
+  });
+
   it("uploads a file and verifies on disk", async () => {
     const res = await makeHttpRequest({
       port,

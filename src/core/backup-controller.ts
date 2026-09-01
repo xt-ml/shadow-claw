@@ -29,6 +29,25 @@ export interface BackupInitiateResult {
   totalBytes: number;
 }
 
+function getTargetAddressSpace(urlStr: string): string | undefined {
+  try {
+    const u = new URL(urlStr);
+    const host = u.hostname.toLowerCase();
+    if (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "[::1]"
+    ) {
+      return "loopback";
+    }
+    if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host)) {
+      return "private";
+    }
+  } catch {}
+  return undefined;
+}
+
 export class BackupController {
   private _clientId: string;
   private _token?: string;
@@ -80,7 +99,7 @@ export class BackupController {
       }
 
       const uploadUrl = `${this._serverBaseUrl}/api/backup/upload`;
-      const res = await fetch(uploadUrl, {
+      const uploadOpts: any = {
         method: "POST",
         headers,
         body: JSON.stringify({
@@ -90,7 +109,12 @@ export class BackupController {
           content: contentStr,
           encoding,
         }),
-      });
+      };
+      const uploadAddressSpace = getTargetAddressSpace(uploadUrl);
+      if (uploadAddressSpace) {
+        uploadOpts.targetAddressSpace = uploadAddressSpace;
+      }
+      const res = await fetch(uploadUrl, uploadOpts);
 
       if (!res.ok) {
         const errorText = await res.text().catch(() => res.statusText);
@@ -109,7 +133,7 @@ export class BackupController {
 
     // Finalize backup
     const completeUrl = `${this._serverBaseUrl}/api/backup/complete`;
-    const completeRes = await fetch(completeUrl, {
+    const completeOpts: any = {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -118,7 +142,12 @@ export class BackupController {
         fileCount: uploadedCount,
         totalBytes,
       }),
-    });
+    };
+    const completeAddressSpace = getTargetAddressSpace(completeUrl);
+    if (completeAddressSpace) {
+      completeOpts.targetAddressSpace = completeAddressSpace;
+    }
+    const completeRes = await fetch(completeUrl, completeOpts);
 
     if (!completeRes.ok) {
       const errorText = await completeRes

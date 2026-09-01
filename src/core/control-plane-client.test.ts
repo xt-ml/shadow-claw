@@ -97,7 +97,12 @@ class MockEventSource {
 
 describe("control-plane-client", () => {
   let mockFetch: jest.Mock<any>;
-  let postedRequests: Array<{ url: string; body: any; headers: any }>;
+  let postedRequests: Array<{
+    url: string;
+    body: any;
+    headers: any;
+    targetAddressSpace?: string;
+  }>;
 
   beforeEach(() => {
     MockClientWebSocket.instances = [];
@@ -108,6 +113,7 @@ describe("control-plane-client", () => {
         url,
         body: JSON.parse(opts.body),
         headers: opts.headers,
+        targetAddressSpace: opts.targetAddressSpace,
       });
       return { ok: true, json: async () => ({ status: "received" }) };
     }) as any;
@@ -119,7 +125,7 @@ describe("control-plane-client", () => {
   });
 
   describe("SSE Transport (Default)", () => {
-    it("connects via EventSource and sends registration over HTTP POST", async () => {
+    it("connects via EventSource and sends registration over HTTP POST with targetAddressSpace", async () => {
       const client = new ControlPlaneClient({
         clientId: "sse-client-1",
         deviceLabel: "SSE Device",
@@ -145,6 +151,7 @@ describe("control-plane-client", () => {
       expect(postedRequests[0].body.type).toBe("client:register");
       expect(postedRequests[0].body.payload.clientId).toBe("sse-client-1");
       expect(postedRequests[0].body.payload.transport).toBe("sse");
+      expect(postedRequests[0].targetAddressSpace).toBe("loopback");
 
       client.disconnect();
       expect(client.getState()).toBe("disconnected");

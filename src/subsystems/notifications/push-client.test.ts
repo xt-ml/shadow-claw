@@ -88,7 +88,9 @@ describe("push-client", () => {
 
       const key = await getVapidPublicKey();
       expect(key).toBe("test-vapid-key");
-      expect(fetch).toHaveBeenCalledWith("/push/vapid-public-key");
+      expect(fetch).toHaveBeenCalledWith("/push/vapid-public-key", {
+        targetAddressSpace: "loopback",
+      });
     });
   });
 
@@ -113,6 +115,7 @@ describe("push-client", () => {
       const postCall = (fetch as any).mock.calls[1];
       expect(postCall[0]).toBe("/push/subscribe");
       expect(postCall[1].method).toBe("POST");
+      expect(postCall[1].targetAddressSpace).toBe("loopback");
     });
   });
 
@@ -128,6 +131,7 @@ describe("push-client", () => {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ endpoint: mockSubscription.endpoint }),
+        targetAddressSpace: "loopback",
       });
     });
 

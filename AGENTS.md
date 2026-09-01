@@ -106,6 +106,13 @@ To prevent infinite execution loops, the system enforces a strict recursion guar
 - Do not call `executeTool` from provider loops without passing the active enabled tool list (`allowedTools`). Runtime allowlist checks are enforced in `executeTool` and are required even when schemas already constrain generation.
 - Conversation-level `pinnedMaxTokens` overrides are optional and must remain model-aware (clamped to provider/model output limits).
 
+### Private Network Access & Loopback Connections
+
+- **Service Worker Loopback Bypass:** The Service Worker fetch proxy (`src/service-worker/fetch-proxy-rules.ts`) unconditionally bypasses all loopback (`localhost`, `127.0.0.1`, `::1`, `[::1]`) and private IP ranges (`10.x`, `172.16-31.x`, `192.168.x`) so browser tabs hosted on static platforms (such as GitHub Pages or Cloudflare Pages) can connect directly to local servers without Service Worker interception.
+- **Client `targetAddressSpace` Signaling:** Outgoing client fetch requests targeting local or private network endpoints (`control-plane-client.ts`, `backup-controller.ts`, `push-client.ts`, `task.ts`, and `fetch-proxy.ts`) must supply `targetAddressSpace: 'loopback'` (or `'private'`) for Chromium Private Network Access (PNA) compliance.
+- **Server PNA & Cross-Origin Headers:** Server endpoints set `Access-Control-Allow-Private-Network: true` on both preflight (`OPTIONS`) and cross-origin responses, and trust `.github.io` / `.pages.dev` / `allowedOrigins` origins for browser integration.
+
+
 ### HTML Sanitization & Trusted Types
 
 - **Explicit Pre-Sanitization:** All dynamically rendered HTML, inline SVGs, or iframe `srcdoc` values must be sanitized using DOMPurify (e.g., `sanitizeToTrustedHtml` or `sanitizeSrcdocHtml`) **before** being passed to the Trusted Types policy.

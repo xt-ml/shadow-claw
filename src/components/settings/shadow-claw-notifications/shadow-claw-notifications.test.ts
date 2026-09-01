@@ -11,6 +11,9 @@ jest.unstable_mockModule(
     getPushUrl: jest
       .fn<any>()
       .mockImplementation((path: string) => Promise.resolve(path)),
+    getPushFetchOptions: jest
+      .fn<any>()
+      .mockImplementation((_url: string, opts?: any) => opts || {}),
   }),
 );
 

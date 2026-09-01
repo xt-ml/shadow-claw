@@ -15,7 +15,7 @@ describe("pna-middleware", () => {
     next = jest.fn();
   });
 
-  it("sets Access-Control-Allow-Private-Network header if requested", () => {
+  it("sets Access-Control-Allow-Private-Network header if requested explicitly", () => {
     req.headers["access-control-request-private-network"] = "true";
     const middleware = createPnaMiddleware(logger, false);
     middleware(req, res, next);
@@ -27,7 +27,19 @@ describe("pna-middleware", () => {
     expect(next).toHaveBeenCalled();
   });
 
-  it("does not set header if not requested", () => {
+  it("sets Access-Control-Allow-Private-Network header for cross-origin requests", () => {
+    req.headers.origin = "https://xt-ml.github.io";
+    const middleware = createPnaMiddleware(logger, false);
+    middleware(req, res, next);
+
+    expect(res.setHeader).toHaveBeenCalledWith(
+      "Access-Control-Allow-Private-Network",
+      "true",
+    );
+    expect(next).toHaveBeenCalled();
+  });
+
+  it("does not set header if neither requested nor origin present", () => {
     const middleware = createPnaMiddleware(logger, false);
     middleware(req, res, next);
 
@@ -35,7 +47,7 @@ describe("pna-middleware", () => {
     expect(next).toHaveBeenCalled();
   });
 
-  it("logs if verbose is true", () => {
+  it("logs if verbose is true and header is explicitly requested", () => {
     req.headers["access-control-request-private-network"] = "true";
     const middleware = createPnaMiddleware(logger, true);
     middleware(req, res, next);

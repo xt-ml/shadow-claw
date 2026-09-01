@@ -44,16 +44,23 @@ export function shouldBypassFetchProxy(
     return true;
   }
 
-  const isLoopback = hostname === "localhost" || hostname === "127.0.0.1";
+  const isLoopback =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname === "[::1]";
 
-  const isShareTargetPath = requestUrl.pathname.endsWith(
-    "/share/share-target.html",
+  if (isLoopback) {
+    return true;
+  }
+
+  const isPrivateIp = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(
+    hostname,
   );
 
-  const isProxyPath =
-    requestUrl.pathname === "/proxy" ||
-    requestUrl.pathname.startsWith("/git-proxy/") ||
-    isShareTargetPath;
+  if (isPrivateIp) {
+    return true;
+  }
 
-  return isLoopback && isProxyPath;
+  return false;
 }

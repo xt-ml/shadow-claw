@@ -353,11 +353,27 @@ export class ControlPlaneClient {
       headers["Authorization"] = `Bearer ${this._token}`;
     }
 
-    this._fetchFn(messagesUrl.toString(), {
+    const fetchOptions: any = {
       method: "POST",
       headers,
       body: JSON.stringify(msg),
-    }).catch((err) => {
+    };
+
+    const host = messagesUrl.hostname.toLowerCase();
+    const isLoopback =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "[::1]";
+    const isPrivate = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host);
+
+    if (isLoopback) {
+      fetchOptions.targetAddressSpace = "loopback";
+    } else if (isPrivate) {
+      fetchOptions.targetAddressSpace = "private";
+    }
+
+    this._fetchFn(messagesUrl.toString(), fetchOptions).catch((err) => {
       console.warn(
         "[ControlPlaneClient] Failed to send message via HTTP POST:",
         err,

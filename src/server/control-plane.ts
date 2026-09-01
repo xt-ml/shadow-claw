@@ -34,6 +34,8 @@ export interface ControlPlaneOptions {
   token?: string;
   heartbeatTimeoutMs?: number;
   verbose?: boolean;
+  allowedOrigins?: Set<string>;
+  corsMode?: "localhost" | "private" | "all";
 }
 
 export interface PendingCommand {
@@ -115,34 +117,58 @@ export function createControlPlane(options: ControlPlaneOptions): ControlPlane {
     const origin = req.headers.origin;
     const referer = req.headers.referer;
 
-    if (origin) {
+    const isTrustedUrl = (urlStr: string): boolean => {
       try {
-        const originUrl = new URL(origin);
-        if (originUrl.host === host) {
+        const parsed = new URL(urlStr);
+        if (parsed.host === host) {
           return true;
         }
+
+        const hostname = parsed.hostname.toLowerCase();
         if (
-          originUrl.hostname === "127.0.0.1" ||
-          originUrl.hostname === "localhost"
+          hostname === "127.0.0.1" ||
+          hostname === "localhost" ||
+          hostname === "::1" ||
+          hostname === "[::1]"
+        ) {
+          return true;
+        }
+
+        if (
+          hostname === "github.com" ||
+          hostname.endsWith(".github.io") ||
+          hostname.endsWith(".pages.dev")
+        ) {
+          return true;
+        }
+
+        if (options.corsMode === "all") {
+          return true;
+        }
+
+        if (
+          options.allowedOrigins &&
+          options.allowedOrigins.has(parsed.origin)
+        ) {
+          return true;
+        }
+
+        if (
+          options.corsMode === "private" &&
+          /^(127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname)
         ) {
           return true;
         }
       } catch (_) {}
+      return false;
+    };
+
+    if (origin && isTrustedUrl(origin)) {
+      return true;
     }
 
-    if (referer) {
-      try {
-        const refererUrl = new URL(referer);
-        if (refererUrl.host === host) {
-          return true;
-        }
-        if (
-          refererUrl.hostname === "127.0.0.1" ||
-          refererUrl.hostname === "localhost"
-        ) {
-          return true;
-        }
-      } catch (_) {}
+    if (referer && isTrustedUrl(referer)) {
+      return true;
     }
 
     const secFetchSite = req.headers["sec-fetch-site"];

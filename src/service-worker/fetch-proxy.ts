@@ -282,7 +282,7 @@ self.addEventListener("fetch", (event: FetchEvent) => {
           "proxy/" +
           event.request.url;
 
-        const proxyResponse = await fetch(targetUrl.href, {
+        const proxyFetchOpts: any = {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -291,7 +291,23 @@ self.addEventListener("fetch", (event: FetchEvent) => {
             headers,
             body: bodyText,
           }),
-        });
+        };
+
+        const targetHostname = targetUrl.hostname.toLowerCase();
+        if (
+          targetHostname === "localhost" ||
+          targetHostname === "127.0.0.1" ||
+          targetHostname === "::1" ||
+          targetHostname === "[::1]"
+        ) {
+          proxyFetchOpts.targetAddressSpace = "loopback";
+        } else if (
+          /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(targetHostname)
+        ) {
+          proxyFetchOpts.targetAddressSpace = "private";
+        }
+
+        const proxyResponse = await fetch(targetUrl.href, proxyFetchOpts);
 
         return proxyResponse;
       } catch (err) {

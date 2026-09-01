@@ -136,6 +136,19 @@ describe("control-plane", () => {
       expect(ws.readyState).toBe(WebSocket.OPEN);
       ws.close();
     });
+
+    it("accepts GitHub Pages origin connection without token", async () => {
+      const ws = new WebSocket(`ws://127.0.0.1:${port}/ws/control`, {
+        headers: { Origin: "https://xt-ml.github.io" },
+      });
+      await new Promise<void>((resolve, reject) => {
+        ws.on("open", () => resolve());
+        ws.on("error", reject);
+      });
+
+      expect(ws.readyState).toBe(WebSocket.OPEN);
+      ws.close();
+    });
   });
 
   describe("Client registration and heartbeat", () => {
@@ -342,6 +355,29 @@ describe("control-plane", () => {
           payload: {
             clientId: "http-client-1",
             deviceLabel: "HTTP Client",
+            capabilities: ["opfs"],
+            version: "1.0.0",
+          },
+        },
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.data.status).toBe("received");
+      expect(res.data.reply?.type).toBe("server:registered");
+    });
+
+    it("POST /api/control/messages processes message from GitHub Pages origin without token", async () => {
+      const res = await makeHttpRequest({
+        port,
+        path: "/api/control/messages",
+        method: "POST",
+        headers: { Origin: "https://xt-ml.github.io" },
+        body: {
+          id: "http-msg-gh-1",
+          type: "client:register",
+          payload: {
+            clientId: "http-client-gh",
+            deviceLabel: "GitHub Pages Client",
             capabilities: ["opfs"],
             version: "1.0.0",
           },

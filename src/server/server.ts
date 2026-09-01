@@ -34,6 +34,8 @@ export async function startServer(
     app,
     token: config.controlToken,
     verbose: config.verbose,
+    allowedOrigins: config.allowedOrigins,
+    corsMode: config.corsMode,
   });
 
   let serverPeer: ServerPeer | null = null;

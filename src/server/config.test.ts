@@ -111,4 +111,53 @@ describe("config", () => {
 
     expect(config.rootPath).toContain("public");
   });
+
+  it("defaults https to false and provides default sslDir", async () => {
+    const { parseConfig } = await import("./config.js");
+    const config = parseConfig();
+
+    expect(config.https).toBe(false);
+    expect(config.certPath).toBeUndefined();
+    expect(config.keyPath).toBeUndefined();
+    expect(config.sslDir).toContain(".cache/tls");
+  });
+
+  it("parses HTTPS options from CLI flags", async () => {
+    commanderMock.Command().opts.mockReturnValue({
+      https: true,
+      cert: "/custom/cert.pem",
+      key: "/custom/key.pem",
+      sslDir: "/custom/ssl",
+      corsAllowOrigin: [],
+    });
+
+    const { parseConfig } = await import("./config.js");
+    const config = parseConfig();
+
+    expect(config.https).toBe(true);
+    expect(config.certPath).toBe("/custom/cert.pem");
+    expect(config.keyPath).toBe("/custom/key.pem");
+    expect(config.sslDir).toBe("/custom/ssl");
+  });
+
+  it("parses HTTPS options from environment variables", async () => {
+    processMock.env.SHADOWCLAW_HTTPS = "1";
+    processMock.env.SHADOWCLAW_TLS_CERT = "/env/cert.pem";
+    processMock.env.SHADOWCLAW_TLS_KEY = "/env/key.pem";
+    processMock.env.SHADOWCLAW_SSL_DIR = "env-ssl";
+
+    const { parseConfig } = await import("./config.js");
+    const config = parseConfig();
+
+    expect(config.https).toBe(true);
+    expect(config.certPath).toBe("/env/cert.pem");
+    expect(config.keyPath).toBe("/env/key.pem");
+    expect(config.sslDir).toBe(
+      (await import("node:path")).default.resolve(
+        config.rootPath,
+        "..",
+        "env-ssl",
+      ),
+    );
+  });
 });

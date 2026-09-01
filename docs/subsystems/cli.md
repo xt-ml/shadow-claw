@@ -77,15 +77,19 @@ Builds a static site bundle into `./dist/public`.
 
 Builds the site in development mode and starts the local server with live proxy, task scheduler, and static serving.
 
-| Option / Argument        | Type    | Description                                                 | Default       |
-| :----------------------- | :------ | :---------------------------------------------------------- | :------------ |
-| `[port]` / `-p, --port`  | number  | Port to listen on                                           | `8888`        |
-| `--host <host>` / `--ip` | string  | Bind host/IP                                                | `"127.0.0.1"` |
-| `--open`                 | boolean | Automatically open the default browser on start             | `false`       |
-| `--cors-mode <mode>`     | string  | CORS policy: `localhost`, `private`, `all`                  | `"localhost"` |
-| `--peerjs`               | boolean | Enable built-in PeerJS signaling server                     | `false`       |
-| `--allow-private-proxy`  | boolean | Allow `/proxy` endpoint to reach private/loopback addresses | `false`       |
-| `-v, --verbose`          | boolean | Enable verbose request and proxy logging                    | `false`       |
+| Option / Argument        | Type    | Description                                                 | Default        |
+| :----------------------- | :------ | :---------------------------------------------------------- | :------------- |
+| `[port]` / `-p, --port`  | number  | Port to listen on                                           | `8888`         |
+| `--host <host>` / `--ip` | string  | Bind host/IP                                                | `"127.0.0.1"`  |
+| `--open`                 | boolean | Automatically open the default browser on start             | `false`        |
+| `--cors-mode <mode>`     | string  | CORS policy: `localhost`, `private`, `all`                  | `"localhost"`  |
+| `--peerjs`               | boolean | Enable built-in PeerJS signaling server                     | `false`        |
+| `--allow-private-proxy`  | boolean | Allow `/proxy` endpoint to reach private/loopback addresses | `false`        |
+| `--https`                | boolean | Enable opt-in HTTPS server using dev TLS certificate        | `false`        |
+| `--cert <path>`          | string  | Path to custom TLS certificate (PEM)                        | `undefined`    |
+| `--key <path>`           | string  | Path to custom TLS private key (PEM)                        | `undefined`    |
+| `--ssl-dir <path>`       | string  | Directory for self-signed TLS certs                         | `".cache/tls"` |
+| `-v, --verbose`          | boolean | Enable verbose request and proxy logging                    | `false`        |
 
 ### `shadow-claw serve [port]`
 
@@ -127,16 +131,18 @@ npx shadow-claw send "Hello to peer" --client <browser-peer-id> --group "peer:<c
 npx shadow-claw send "Hello from CLI" --transport webrtc --client <browser-peer-id>
 ```
 
-| Option                    | Type   | Description                                                                                 | Default       |
-| :------------------------ | :----- | :------------------------------------------------------------------------------------------ | :------------ |
-| `--client <id>`           | string | Target client ID or PeerJS peer ID (defaults to first available connected client)           | `""`          |
-| `--group <groupId>`       | string | Target conversation group ID (`br:main`, `peer:<peerId>`, etc.). Defaults to active group.  | Active group  |
-| `--transport <transport>` | string | Transport mechanism: `http` (Control Plane REST/WebSocket) or `webrtc` (WebRTC DataChannel) | `"http"`      |
-| `--host <host>`           | string | Control plane / signaling server host                                                       | `"127.0.0.1"` |
-| `--port <port>`           | number | Control plane / signaling server port                                                       | `8888`        |
-| `--token <token>`         | string | Control token (auto-resolved from `.cache/control-token.json` or `clients.db` if omitted)   | `""`          |
-| `--peer-id <id>`          | string | Custom WebRTC CLI peer ID override                                                          | `""`          |
-| `--cache-dir <dir>`       | string | Custom cache directory for token and peer ID storage                                        | `".cache"`    |
+| Option                    | Type    | Description                                                                                 | Default       |
+| :------------------------ | :------ | :------------------------------------------------------------------------------------------ | :------------ |
+| `--client <id>`           | string  | Target client ID or PeerJS peer ID (defaults to first available connected client)           | `""`          |
+| `--group <groupId>`       | string  | Target conversation group ID (`br:main`, `peer:<peerId>`, etc.). Defaults to active group.  | Active group  |
+| `--transport <transport>` | string  | Transport mechanism: `http` (Control Plane REST/WebSocket) or `webrtc` (WebRTC DataChannel) | `"http"`      |
+| `--host <host>`           | string  | Control plane / signaling server host                                                       | `"127.0.0.1"` |
+| `--port <port>`           | number  | Control plane / signaling server port                                                       | `8888`        |
+| `--token <token>`         | string  | Control token (auto-resolved from `.cache/control-token.json` or `clients.db` if omitted)   | `""`          |
+| `--https`                 | boolean | Connect to server control plane via HTTPS                                                   | `false`       |
+| `-k, --insecure`          | boolean | Allow self-signed TLS certificates for local control plane connections                      | `true`        |
+| `--peer-id <id>`          | string  | Custom WebRTC CLI peer ID override                                                          | `""`          |
+| `--cache-dir <dir>`       | string  | Custom cache directory for token and peer ID storage                                        | `".cache"`    |
 
 ### `shadow-claw backup [trigger|list|delete] [options]`
 

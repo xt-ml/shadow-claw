@@ -1,4 +1,5 @@
 import http from "node:http";
+import https from "node:https";
 import { ExpressPeerServer } from "peer";
 import type { Express } from "express";
 
@@ -10,10 +11,13 @@ import type { Express } from "express";
  * We mount the middleware at "/" and set internal path to "/" so routes land
  * at /peerjs/* as expected.
  *
- * @param httpServer - The underlying http.Server (needed for WebSocket upgrade).
+ * @param httpServer - The underlying http.Server or https.Server (needed for WebSocket upgrade).
  * @param app - The Express app to mount the PeerJS REST routes on.
  */
-export function attachPeerServer(httpServer: http.Server, app: Express): void {
+export function attachPeerServer(
+  httpServer: http.Server | https.Server,
+  app: Express,
+): void {
   const peerServer = ExpressPeerServer(httpServer, {
     path: "/",
     allow_discovery: false,

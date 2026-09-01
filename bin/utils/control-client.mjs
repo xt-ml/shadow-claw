@@ -72,7 +72,17 @@ export class CliControlClient {
     this.port =
       options.port || parseInt(process.env.SHADOWCLAW_PORT || "8888", 10);
     this.token = options.token || resolveControlToken(options.token);
-    this.protocol = options.protocol || "http";
+    const isHttps = Boolean(
+      options.https ||
+      ["1", "true", "yes"].includes(
+        (process.env.SHADOWCLAW_HTTPS || "").toLowerCase().trim(),
+      ),
+    );
+    this.protocol = options.protocol || (isHttps ? "https" : "http");
+    this.rejectUnauthorized =
+      options.rejectUnauthorized !== undefined
+        ? Boolean(options.rejectUnauthorized)
+        : Boolean(options.insecure === false);
     this.transport = options.transport || "http";
     this._webrtcClient =
       this.transport === "webrtc"
@@ -81,6 +91,7 @@ export class CliControlClient {
             port: this.port,
             path: options.peerPath || "/",
             secure: this.protocol === "https",
+            rejectUnauthorized: this.rejectUnauthorized,
             peerId: options.peerId,
             cacheDir: options.cacheDir,
             renewPeerId: Boolean(options.renewPeerId),
@@ -99,35 +110,38 @@ export class CliControlClient {
         headers["x-control-token"] = this.token;
       }
 
-      const req = client.request(
-        {
-          hostname: this.host,
-          port: this.port,
-          path: reqPath,
-          method,
-          headers,
-          timeout,
-        },
-        (res) => {
-          let data = "";
-          res.on("data", (chunk) => (data += chunk));
-          res.on("end", () => {
-            let parsed = data;
-            try {
-              parsed = JSON.parse(data);
-            } catch (_) {}
+      const reqOptions = {
+        hostname: this.host,
+        port: this.port,
+        path: reqPath,
+        method,
+        headers,
+        timeout,
+      };
 
-            if (res.statusCode >= 200 && res.statusCode < 300) {
-              resolve(parsed);
-            } else {
-              const errMsg =
-                parsed?.error ||
-                `HTTP request failed with status ${res.statusCode}: ${data}`;
-              reject(new Error(errMsg));
-            }
-          });
-        },
-      );
+      if (this.protocol === "https") {
+        reqOptions.rejectUnauthorized = this.rejectUnauthorized;
+      }
+
+      const req = client.request(reqOptions, (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          let parsed = data;
+          try {
+            parsed = JSON.parse(data);
+          } catch (_) {}
+
+          if (res.statusCode >= 200 && res.statusCode < 300) {
+            resolve(parsed);
+          } else {
+            const errMsg =
+              parsed?.error ||
+              `HTTP request failed with status ${res.statusCode}: ${data}`;
+            reject(new Error(errMsg));
+          }
+        });
+      });
 
       req.on("error", (err) => {
         reject(

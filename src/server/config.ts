@@ -27,6 +27,10 @@ export interface ServerConfig {
    */
   controlToken?: string;
   allowPrivateProxy: boolean;
+  https: boolean;
+  certPath?: string;
+  keyPath?: string;
+  sslDir: string;
 }
 
 export function parseConfig(): ServerConfig {
@@ -67,6 +71,13 @@ export function parseConfig(): ServerConfig {
     .option(
       "--control-token <token>",
       "Secret token for control-plane authentication",
+    )
+    .option("--https", "Enable HTTPS dev server", false)
+    .option("--cert <path>", "Path to existing TLS certificate file")
+    .option("--key <path>", "Path to existing TLS private key file")
+    .option(
+      "--ssl-dir <path>",
+      "Directory for TLS certificate generation/storage",
     );
 
   program.parse();
@@ -178,6 +189,38 @@ export function parseConfig(): ServerConfig {
     ? options.controlToken.trim()
     : envControlToken || undefined;
 
+  // HTTPS & TLS logic
+  const https =
+    Boolean(options.https) ||
+    ["1", "true", "yes"].includes(
+      (env.SHADOWCLAW_HTTPS || "").toLowerCase().trim(),
+    );
+
+  const envCert = (env.SHADOWCLAW_TLS_CERT || env.SHADOWCLAW_CERT || "").trim();
+  const certPath = options.cert
+    ? path.resolve(options.cert)
+    : envCert
+      ? path.resolve(envCert)
+      : undefined;
+
+  const envKey = (env.SHADOWCLAW_TLS_KEY || env.SHADOWCLAW_KEY || "").trim();
+  const keyPath = options.key
+    ? path.resolve(options.key)
+    : envKey
+      ? path.resolve(envKey)
+      : undefined;
+
+  const envSslDir = (
+    env.SHADOWCLAW_SSL_DIR ||
+    env.SHADOWCLAW_TLS_DIR ||
+    ""
+  ).trim();
+  const sslDir = options.sslDir
+    ? path.resolve(options.sslDir)
+    : envSslDir
+      ? path.resolve(projectRoot, envSslDir)
+      : path.resolve(databaseDir, "..", ".cache", "tls");
+
   return {
     port,
     bindHost,
@@ -189,5 +232,9 @@ export function parseConfig(): ServerConfig {
     databaseDir,
     controlToken,
     allowPrivateProxy,
+    https,
+    certPath,
+    keyPath,
+    sslDir,
   };
 }

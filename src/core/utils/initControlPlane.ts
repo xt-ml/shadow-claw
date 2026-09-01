@@ -334,9 +334,11 @@ export async function executeClientControlCommand(
       }
 
       const { BackupController } = await import("../backup-controller.js");
+
       const backupCtrl = new BackupController({
         clientId,
         token: args.token,
+        serverBaseUrl: getControlPlaneServerUrl().httpUrl,
         fileEnumerator: () => collectFiles(groupDir),
         fileReader: (filePath) => readFile(filePath),
       });

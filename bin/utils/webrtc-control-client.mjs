@@ -203,6 +203,7 @@ export class CliWebRtcControlClient {
       options.port || parseInt(process.env.SHADOWCLAW_PORT || "8888", 10);
     this.path = options.path || "/";
     this.secure = options.secure ?? false;
+    this.rejectUnauthorized = options.rejectUnauthorized ?? false;
     this.peer = null;
     this.cacheDir = options.cacheDir;
     this.cliPeerId =
@@ -221,12 +222,19 @@ export class CliWebRtcControlClient {
     const Peer = mod.default?.Peer || mod.default || mod.Peer;
 
     return new Promise((resolve, reject) => {
-      const peer = new Peer(this.cliPeerId, {
+      const peerConfig = {
         host: this.host,
         port: this.port,
         path: this.path,
         secure: this.secure,
-      });
+      };
+
+      if (this.secure) {
+        peerConfig.config = { iceServers: [] };
+        peerConfig.wsOptions = { rejectUnauthorized: this.rejectUnauthorized };
+      }
+
+      const peer = new Peer(this.cliPeerId, peerConfig);
 
       this.peer = peer;
 
@@ -409,6 +417,7 @@ export class CliWebRtcListener {
       options.port || parseInt(process.env.SHADOWCLAW_PORT || "8888", 10);
     this.path = options.path || "/";
     this.secure = options.secure ?? false;
+    this.rejectUnauthorized = options.rejectUnauthorized ?? false;
     this.cacheDir = options.cacheDir;
     this.verbose = options.verbose ?? false;
     this.handlers = options.handlers || {};
@@ -602,12 +611,22 @@ export class CliWebRtcListener {
     return new Promise((resolve, reject) => {
       let isOpened = false;
 
-      const peer = new Peer(this.cliPeerId, {
+      const peerConfig = {
         host: this.host,
         port: this.port,
         path: this.path,
         secure: this.secure,
-      });
+      };
+
+      // When using self-signed certificates (typical for local dev), Node's
+      // WebSocket client rejects the connection by default. Pass rejectUnauthorized
+      // via PeerJS's ws-specific config option to allow self-signed certs.
+      if (this.secure) {
+        peerConfig.config = { iceServers: [] };
+        peerConfig.wsOptions = { rejectUnauthorized: this.rejectUnauthorized };
+      }
+
+      const peer = new Peer(this.cliPeerId, peerConfig);
 
       this._peer = peer;
       this._running = true;

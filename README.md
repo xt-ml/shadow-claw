@@ -383,6 +383,7 @@ E2E test architecture: [`e2e/README.md`](e2e/README.md)
 
 ```bash
 npm run dev                  # Dev server (watch mode)
+npm run dev -- --https       # Dev server with opt-in HTTPS (auto-generates self-signed cert)
 npm start                    # Express server
 npm test                     # Jest (*.test.ts files live next to source)
 npm run e2e                  # Playwright E2E tests (e2e/*.test.ts)
@@ -413,7 +414,7 @@ npx shadow-claw webrtc listen                        # Start headless WebRTC Dat
 npx shadow-claw peer-id                              # Get or generate persistent CLI Peer ID
 ```
 
-Commands support `--transport webrtc` for direct peer-to-peer DataChannel execution with connected browser clients. Control plane authentication uses `SHADOWCLAW_CONTROL_TOKEN` (env) or `--token` flag. The control plane endpoint and token are printed to the console on server start.
+Commands support `--transport webrtc` for direct peer-to-peer DataChannel execution with connected browser clients. Control plane authentication uses `SHADOWCLAW_CONTROL_TOKEN` (env) or `--token` flag, and supports HTTPS endpoints via `--https` (and `--insecure` for self-signed certs). The control plane endpoint and token are printed to the console on server start.
 
 ## License
 

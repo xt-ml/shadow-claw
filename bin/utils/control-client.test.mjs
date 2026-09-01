@@ -80,4 +80,14 @@ describe("CliControlClient", () => {
     const backups = await client.listBackups();
     expect(Array.isArray(backups)).toBe(true);
   });
+
+  it("detects HTTPS protocol from options and environment", () => {
+    const client1 = new CliControlClient({ https: true });
+    expect(client1.protocol).toBe("https");
+
+    process.env.SHADOWCLAW_HTTPS = "1";
+    const client2 = new CliControlClient();
+    expect(client2.protocol).toBe("https");
+    delete process.env.SHADOWCLAW_HTTPS;
+  });
 });

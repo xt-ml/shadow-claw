@@ -1,5 +1,6 @@
 import { exit } from "node:process";
 import http from "node:http";
+import https from "node:https";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import tcpPortUsed from "tcp-port-used";
@@ -10,10 +11,11 @@ import { attachPeerServer } from "./peer.js";
 import { createControlPlane } from "./control-plane.js";
 import { ServerPeer } from "./server-peer.js";
 import { parseConfig, ServerConfig } from "./config.js";
+import { ensureTlsCredentials } from "./tls.js";
 
 export async function startServer(
   customConfig?: ServerConfig,
-): Promise<http.Server> {
+): Promise<http.Server | https.Server> {
   const config = customConfig || parseConfig();
   const { app, scheduler } = createApp(config);
 
@@ -27,7 +29,9 @@ export async function startServer(
 
   scheduler.start();
 
-  const httpServer = http.createServer(app);
+  const httpServer: http.Server | https.Server = config.https
+    ? https.createServer(ensureTlsCredentials(config), app)
+    : http.createServer(app);
 
   const controlPlane = createControlPlane({
     httpServer,
@@ -49,9 +53,20 @@ export async function startServer(
     });
   }
 
-  return new Promise<http.Server>((resolve) => {
+  return new Promise<http.Server | https.Server>((resolve) => {
     httpServer.listen(config.port, config.bindHost, () => {
-      console.log(`Server running at http://${config.bindHost}:${config.port}`);
+      const protocol = config.https ? "https" : "http";
+      const wsProtocol = config.https ? "wss" : "ws";
+
+      console.log(
+        `Server running at ${protocol}://${config.bindHost}:${config.port}`,
+      );
+
+      if (config.https) {
+        const certLocation =
+          config.certPath || path.join(config.sslDir, "cert.pem");
+        console.log(`TLS enabled (cert: ${certLocation})`);
+      }
 
       if (config.bindHost === DEFAULT_DEV_IP) {
         console.log(
@@ -72,7 +87,7 @@ export async function startServer(
       }
 
       console.log(
-        `Control plane active at http://${config.bindHost}:${config.port}/api/control/events (SSE) and ws://${config.bindHost}:${config.port}/ws/control (WebSocket)`,
+        `Control plane active at ${protocol}://${config.bindHost}:${config.port}/api/control/events (SSE) and ${wsProtocol}://${config.bindHost}:${config.port}/ws/control (WebSocket)`,
       );
       console.log(`Control token: ${controlPlane.getToken()}`);
 

@@ -103,6 +103,30 @@ export SHADOWCLAW_CORS_ALLOWED_ORIGINS="https://example.com,https://app.example.
 npm start -- 8888
 ```
 
+### HTTPS Support (Opt-In)
+
+**Flags:** `--https`, `--cert`, `--key`, `--ssl-dir`
+
+HTTPS is opt-in and disabled by default.
+
+```bash
+# Enable HTTPS with auto-generated self-signed dev certificate
+npx shadow-claw dev --https
+npm start -- 8888 --https
+
+# Use custom TLS certificate and private key
+npx shadow-claw dev --https --cert /path/to/cert.pem --key /path/to/key.pem
+npm start -- 8888 --https --cert /path/to/cert.pem --key /path/to/key.pem
+
+# Specify custom directory to store or load auto-generated certificate
+npx shadow-claw dev --https --ssl-dir /path/to/tls
+```
+
+> [!NOTE]
+> When `--https` is specified without `--cert` and `--key`, the server uses OpenSSL (`openssl`) to automatically generate a self-signed development certificate (`cert.pem` and `key.pem`) in `.cache/tls` (or `--ssl-dir`). OpenSSL must be installed on your machine.
+>
+> Self-signed certificates are intended for local development and testing; browsers will display a standard trust warning until the certificate is manually trusted.
+
 ## Environment Variables
 
 | Variable                          | Purpose                             | Example                       |
@@ -110,6 +134,10 @@ npm start -- 8888
 | `SHADOWCLAW_HOST`                 | Server host (fallback)              | `0.0.0.0`                     |
 | `SHADOWCLAW_IP`                   | Server host alias                   | `192.168.1.100`               |
 | `SHADOWCLAW_BIND_IP`              | Server host alias                   | `127.0.0.1`                   |
+| `SHADOWCLAW_HTTPS`                | Enable HTTPS dev server             | `1`, `true`, `yes`            |
+| `SHADOWCLAW_TLS_CERT`             | Path to custom TLS certificate      | `/path/to/cert.pem`           |
+| `SHADOWCLAW_TLS_KEY`              | Path to custom TLS private key      | `/path/to/key.pem`            |
+| `SHADOWCLAW_SSL_DIR`              | Directory for self-signed TLS certs | `/path/to/.cache/tls`         |
 | `SHADOWCLAW_CORS_MODE`            | CORS policy                         | `private`, `all`, `localhost` |
 | `SHADOWCLAW_CORS_ALLOWED_ORIGINS` | Explicit allowlist (CSV)            | `https://a.com,https://b.com` |
 | `SHADOWCLAW_ALLOW_PRIVATE_PROXY`  | Allow `/proxy` to reach private IPs | `1`, `true`, `yes`            |

@@ -173,6 +173,36 @@ async function handleDev(portArg, options) {
         .filter(Boolean),
     );
 
+    const isHttps = Boolean(
+      options.https ||
+      ["1", "true", "yes"].includes(
+        (process.env.SHADOWCLAW_HTTPS || "").toLowerCase().trim(),
+      ),
+    );
+    const certPath =
+      options.cert ||
+      (
+        process.env.SHADOWCLAW_TLS_CERT ||
+        process.env.SHADOWCLAW_CERT ||
+        ""
+      ).trim() ||
+      undefined;
+    const keyPath =
+      options.key ||
+      (
+        process.env.SHADOWCLAW_TLS_KEY ||
+        process.env.SHADOWCLAW_KEY ||
+        ""
+      ).trim() ||
+      undefined;
+    const sslDir = path.resolve(
+      contentRoot,
+      options.sslDir ||
+        process.env.SHADOWCLAW_SSL_DIR ||
+        process.env.SHADOWCLAW_TLS_DIR ||
+        ".cache/tls",
+    );
+
     await startServer({
       port,
       bindHost: host,
@@ -183,9 +213,14 @@ async function handleDev(portArg, options) {
       rootPath: distPublicDir,
       databaseDir,
       allowPrivateProxy: Boolean(options.allowPrivateProxy),
+      https: isHttps,
+      certPath,
+      keyPath,
+      sslDir,
     });
 
-    const localUrl = `http://${host}:${port}`;
+    const protocol = isHttps ? "https" : "http";
+    const localUrl = `${protocol}://${host}:${port}`;
     if (options.open) {
       openBrowser(localUrl);
     }
@@ -218,6 +253,13 @@ program
     "Allow proxy to reach private/loopback addresses",
     false,
   )
+  .option("--https", "Enable HTTPS dev server", false)
+  .option("--cert <path>", "Path to existing TLS certificate file")
+  .option("--key <path>", "Path to existing TLS private key file")
+  .option(
+    "--ssl-dir <path>",
+    "Directory for TLS certificate generation/storage",
+  )
   .option("-v, --verbose", "Enable verbose request/proxy logging", false)
   .option("--open", "Automatically open default browser", false)
   .action(handleDev);
@@ -244,6 +286,13 @@ program
     "--allow-private-proxy",
     "Allow proxy to reach private/loopback addresses",
     false,
+  )
+  .option("--https", "Enable HTTPS dev server", false)
+  .option("--cert <path>", "Path to existing TLS certificate file")
+  .option("--key <path>", "Path to existing TLS private key file")
+  .option(
+    "--ssl-dir <path>",
+    "Directory for TLS certificate generation/storage",
   )
   .option("-v, --verbose", "Enable verbose request/proxy logging", false)
   .option("--open", "Automatically open default browser", false)
@@ -275,6 +324,13 @@ program
     "--allow-private-proxy",
     "Allow proxy to reach private/loopback addresses",
     false,
+  )
+  .option("--https", "Enable HTTPS dev server", false)
+  .option("--cert <path>", "Path to existing TLS certificate file")
+  .option("--key <path>", "Path to existing TLS private key file")
+  .option(
+    "--ssl-dir <path>",
+    "Directory for TLS certificate generation/storage",
   )
   .option("-v, --verbose", "Enable verbose request/proxy logging", false)
   .option("--open", "Automatically open default browser", false)
@@ -328,6 +384,36 @@ program
           .filter(Boolean),
       );
 
+      const isHttps = Boolean(
+        options.https ||
+        ["1", "true", "yes"].includes(
+          (process.env.SHADOWCLAW_HTTPS || "").toLowerCase().trim(),
+        ),
+      );
+      const certPath =
+        options.cert ||
+        (
+          process.env.SHADOWCLAW_TLS_CERT ||
+          process.env.SHADOWCLAW_CERT ||
+          ""
+        ).trim() ||
+        undefined;
+      const keyPath =
+        options.key ||
+        (
+          process.env.SHADOWCLAW_TLS_KEY ||
+          process.env.SHADOWCLAW_KEY ||
+          ""
+        ).trim() ||
+        undefined;
+      const sslDir = path.resolve(
+        contentRoot,
+        options.sslDir ||
+          process.env.SHADOWCLAW_SSL_DIR ||
+          process.env.SHADOWCLAW_TLS_DIR ||
+          ".cache/tls",
+      );
+
       await startServer({
         port,
         bindHost: host,
@@ -338,9 +424,14 @@ program
         rootPath: distPublicDir,
         databaseDir,
         allowPrivateProxy: Boolean(options.allowPrivateProxy),
+        https: isHttps,
+        certPath,
+        keyPath,
+        sslDir,
       });
 
-      const localUrl = `http://${host}:${port}`;
+      const protocol = isHttps ? "https" : "http";
+      const localUrl = `${protocol}://${host}:${port}`;
       if (options.open) {
         openBrowser(localUrl);
       }
@@ -479,6 +570,11 @@ program
     false,
   )
   .option(
+    "--https",
+    "Alias for --secure: use TLS (wss://) for the signaling server",
+    false,
+  )
+  .option(
     "--trusted-peer <id>",
     "Accept connections only from this peer ID (repeatable, for listen)",
     (v, prev) => (prev ? [...prev, v] : [v]),
@@ -486,6 +582,11 @@ program
   )
   .option("--verbose", "Verbose connection logging (for listen)", false)
   .option("--renew-peer-id", "Renew CLI peer ID before listening", false)
+  .option(
+    "-k, --insecure",
+    "Allow self-signed TLS certificates for the signaling server (wss://)",
+    true,
+  )
   .action(async (action, customId, options) => {
     if (action === "listen") {
       await runWebRtcListenCommand(options);
@@ -507,6 +608,8 @@ program
   .option("--host <host>", "Control plane host")
   .option("--port <port>", "Control plane port")
   .option("--token <token>", "Control token")
+  .option("--https", "Connect to server via HTTPS", false)
+  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
   .option("--transport <transport>", "Transport to use: http | webrtc", "http")
   .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
   .option(
@@ -530,6 +633,8 @@ program
   .option("--host <host>", "Control plane host")
   .option("--port <port>", "Control plane port")
   .option("--token <token>", "Control token")
+  .option("--https", "Connect to server via HTTPS", false)
+  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
   .option("--transport <transport>", "Transport to use: http | webrtc", "http")
   .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
   .option("--renew-peer-id", "Renew WebRTC CLI peer ID before sending", false)
@@ -552,6 +657,8 @@ program
   .option("--host <host>", "Control plane host")
   .option("--port <port>", "Control plane port")
   .option("--token <token>", "Control token")
+  .option("--https", "Connect to server via HTTPS", false)
+  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
   .option("--transport <transport>", "Transport to use: http | webrtc", "http")
   .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
   .option(
@@ -575,6 +682,8 @@ program
   .option("--host <host>", "Control plane host")
   .option("--port <port>", "Control plane port")
   .option("--token <token>", "Control token")
+  .option("--https", "Connect to server via HTTPS", false)
+  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
   .option("--transport <transport>", "Transport to use: http | webrtc", "http")
   .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
   .option(

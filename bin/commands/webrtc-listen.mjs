@@ -156,7 +156,23 @@ export async function runWebRtcListenCommand(options = {}) {
     ? parseInt(options.port, 10)
     : parseInt(process.env.SHADOWCLAW_PORT || "8888", 10);
   const peerPath = options.path || "/";
-  const secure = Boolean(options.secure);
+  const secure = Boolean(
+    options.secure ||
+    options.https ||
+    ["1", "true", "yes"].includes(
+      (process.env.SHADOWCLAW_HTTPS || "").toLowerCase().trim(),
+    ),
+  );
+  // --insecure / -k: allow self-signed TLS certificates (default: true for dev)
+  const rejectUnauthorized =
+    options.insecure === false ||
+    ["0", "false", "no"].includes(
+      (process.env.SHADOWCLAW_TLS_REJECT_UNAUTHORIZED || "")
+        .toLowerCase()
+        .trim(),
+    )
+      ? true
+      : false;
   const trustedPeerIds = options.trustedPeer
     ? Array.isArray(options.trustedPeer)
       ? options.trustedPeer
@@ -169,6 +185,9 @@ export async function runWebRtcListenCommand(options = {}) {
   console.log(
     `Signaling server   : ${secure ? "wss" : "ws"}://${host}:${port}${peerPath}`,
   );
+  if (secure && !rejectUnauthorized) {
+    console.log(`TLS verification   : disabled (self-signed cert allowed)`);
+  }
   if (trustedPeerIds.length > 0) {
     console.log(`Trusted peers      : ${trustedPeerIds.join(", ")}`);
   } else {
@@ -186,6 +205,7 @@ export async function runWebRtcListenCommand(options = {}) {
     port,
     path: peerPath,
     secure,
+    rejectUnauthorized,
     trustedPeerIds,
     peerId: options.peerId,
     cacheDir: options.cacheDir,

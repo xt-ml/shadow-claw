@@ -65,7 +65,7 @@ Step-by-step instructions for common dev tasks.
 | [Protocol-Agnostic Integrations](guides/protocol-agnostic-integrations.md)     | Plugin architecture and onboarding for external integrations                |
 | [Service Accounts & Credentials](guides/adding-service-accounts.md)            | How to manage encrypted credentials for channels and services               |
 | [Configuring Messaging Channels](guides/configuring-messaging-channels.md)     | User guide for Telegram and iMessage setup                                  |
-| [Server Development Configuration](guides/server-development-configuration.md) | CLI flags, CORS modes, host binding, port configuration, CSP report logging |
+| [Server Development Configuration](guides/server-development-configuration.md) | CLI flags, CORS modes, host binding, port configuration, opt-in HTTPS/TLS, CSP report logging |
 
 ### Decisions
 

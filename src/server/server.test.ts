@@ -147,3 +147,121 @@ describe("src/server/server.ts proxy simulation", () => {
     expect(headers.authorization).toBe("Bearer server-key");
   });
 });
+
+describe("startServer HTTP / HTTPS selection", () => {
+  let httpMock: any;
+  let httpsMock: any;
+  let appMock: any;
+  let tlsMock: any;
+  let tcpPortUsedMock: any;
+  let controlPlaneMock: any;
+
+  beforeEach(() => {
+    jest.resetModules();
+
+    const fakeServer = {
+      listen: jest.fn((_port: number, _host: string, cb: any) => {
+        if (cb) cb();
+        return fakeServer;
+      }),
+    };
+
+    httpMock = {
+      createServer: jest.fn(() => fakeServer),
+    };
+
+    httpsMock = {
+      createServer: jest.fn(() => fakeServer),
+    };
+
+    appMock = {
+      createApp: jest.fn(() => ({
+        app: {},
+        scheduler: { start: jest.fn() },
+      })),
+    };
+
+    tlsMock = {
+      ensureTlsCredentials: jest.fn(() => ({
+        key: Buffer.from("fake-key"),
+        cert: Buffer.from("fake-cert"),
+      })),
+    };
+
+    tcpPortUsedMock = {
+      check: jest.fn(() => Promise.resolve(false)),
+    };
+
+    controlPlaneMock = {
+      createControlPlane: jest.fn(() => ({
+        getToken: jest.fn(() => "test-token"),
+      })),
+    };
+
+    jest.spyOn(console, "log").mockImplementation(() => {});
+
+    jest.unstable_mockModule("node:http", () => ({
+      default: httpMock,
+      ...httpMock,
+    }));
+    jest.unstable_mockModule("node:https", () => ({
+      default: httpsMock,
+      ...httpsMock,
+    }));
+    jest.unstable_mockModule("./app.js", () => appMock);
+    jest.unstable_mockModule("./tls.js", () => tlsMock);
+    jest.unstable_mockModule("tcp-port-used", () => ({
+      default: tcpPortUsedMock,
+      ...tcpPortUsedMock,
+    }));
+    jest.unstable_mockModule("./control-plane.js", () => controlPlaneMock);
+    jest.unstable_mockModule("./peer.js", () => ({
+      attachPeerServer: jest.fn(),
+    }));
+  });
+
+  it("creates http.Server when config.https is false", async () => {
+    const { startServer } = await import("./server.js");
+    await startServer({
+      port: 8888,
+      bindHost: "127.0.0.1",
+      corsMode: "localhost",
+      allowedOrigins: new Set(),
+      verbose: false,
+      peerjs: false,
+      rootPath: "/root",
+      databaseDir: "/db",
+      allowPrivateProxy: false,
+      https: false,
+      sslDir: "/ssl",
+    });
+
+    expect(httpMock.createServer).toHaveBeenCalledTimes(1);
+    expect(httpsMock.createServer).not.toHaveBeenCalled();
+    expect(tlsMock.ensureTlsCredentials).not.toHaveBeenCalled();
+  });
+
+  it("creates https.Server with TLS credentials when config.https is true", async () => {
+    const { startServer } = await import("./server.js");
+    await startServer({
+      port: 8888,
+      bindHost: "127.0.0.1",
+      corsMode: "localhost",
+      allowedOrigins: new Set(),
+      verbose: false,
+      peerjs: false,
+      rootPath: "/root",
+      databaseDir: "/db",
+      allowPrivateProxy: false,
+      https: true,
+      sslDir: "/ssl",
+    });
+
+    expect(tlsMock.ensureTlsCredentials).toHaveBeenCalledTimes(1);
+    expect(httpsMock.createServer).toHaveBeenCalledWith(
+      { key: Buffer.from("fake-key"), cert: Buffer.from("fake-cert") },
+      expect.anything(),
+    );
+    expect(httpMock.createServer).not.toHaveBeenCalled();
+  });
+});

@@ -7,6 +7,7 @@
  */
 
 import http from "node:http";
+import https from "node:https";
 import { URL } from "node:url";
 import { WebSocketServer, WebSocket } from "ws";
 import type { Express, Request, Response, NextFunction } from "express";
@@ -29,7 +30,7 @@ import type {
 } from "./control-plane-types.js";
 
 export interface ControlPlaneOptions {
-  httpServer: http.Server;
+  httpServer: http.Server | https.Server;
   app?: Express;
   token?: string;
   heartbeatTimeoutMs?: number;

@@ -5,7 +5,7 @@
 
 ## Project Snapshot
 
-ShadowClaw is a browser-native AI assistant written in **TypeScript** (`.ts`) — deployable as a PWA, a native desktop app via Electron, a standalone Node.js server, and driven via the `shadow-claw` CLI (for builds, dev serving, and runtime agent interaction).
+ShadowClaw is a browser-native AI assistant written in **TypeScript** (`.ts`) whose core orchestration and tool-use loop run client-side in the browser. It is deployable as a PWA, a native desktop app via Electron, backed by a Node.js server (local proxying, control plane, MCP), and driven via the `shadow-claw` CLI.
 The project uses a **Rolldown build pipeline** to bundle the application.
 
 **Stack:** HTML + TypeScript / ESM · Web Components · TC39 Signals · IndexedDB · OPFS · Web Workers · Service Worker (Workbox PWA · Web Push) · Express dev server · Electron desktop · AWS Bedrock · Jest + Playwright tests
@@ -45,6 +45,7 @@ ShadowClaw has been significantly deduplicated. Instead of a massive `AGENTS.md`
 | WebVM (v86 Alpine)            | [docs/subsystems/vm.md](docs/subsystems/vm.md)                                           |
 | CLI & Static Site Publishing  | [docs/subsystems/cli.md](docs/subsystems/cli.md)                                         |
 | Control Plane & Client Bridge | [docs/subsystems/control-plane.md](docs/subsystems/control-plane.md)                     |
+| Stateless MCP Server          | [docs/subsystems/mcp-server.md](docs/subsystems/mcp-server.md)                           |
 | File Backup Subsystem         | [docs/subsystems/backup.md](docs/subsystems/backup.md)                                   |
 
 ## Conventions & Guardrails
@@ -112,7 +113,6 @@ To prevent infinite execution loops, the system enforces a strict recursion guar
 - **Client `targetAddressSpace` Signaling:** Outgoing client fetch requests targeting local or private network endpoints (`control-plane-client.ts`, `backup-controller.ts`, `push-client.ts`, `task.ts`, and `fetch-proxy.ts`) must supply `targetAddressSpace: 'loopback'` (or `'private'`) for Chromium Private Network Access (PNA) compliance.
 - **Server PNA & Cross-Origin Headers:** Server endpoints set `Access-Control-Allow-Private-Network: true` on both preflight (`OPTIONS`) and cross-origin responses, and trust `.github.io` / `.pages.dev` / `allowedOrigins` origins for browser integration.
 
-
 ### HTML Sanitization & Trusted Types
 
 - **Explicit Pre-Sanitization:** All dynamically rendered HTML, inline SVGs, or iframe `srcdoc` values must be sanitized using DOMPurify (e.g., `sanitizeToTrustedHtml` or `sanitizeSrcdocHtml`) **before** being passed to the Trusted Types policy.
@@ -159,7 +159,7 @@ Markdown and HTML preview work should preserve the Settings-backed iframe host a
 ### CLI & Dual-Root Build Pipeline
 
 - **Dual-Root Path Resolution:** The build toolchain (`bin/build/build.mjs`) cleanly decouples `toolchainRoot` (the ShadowClaw package/repo root) from `contentRoot` (the consumer template project). In-repo builds (`resolve(contentRoot) === resolve(toolchainRoot)`) preserve the standalone in-tree compilation path. CLI/template consumer builds read pre-bundled web assets from `toolchainRoot/dist/public` and inject `pages/`, `site-config.json`, `assets/`, `.agents/`, and pretty routes from `contentRoot`, outputting to `<contentRoot>/dist/public`.
-- **CLI Commands (`bin/cli.mjs`):** The `shadow-claw` / `shadowclaw` CLI provides `build`, `dev`, `run`, `serve`, `init`, `clients`, `send`, `backup`, `tasks`, `webrtc`, and `peer-id` commands. It supports running dev servers programmatically via `startServer` (`src/server/server.ts`) with custom `--root-path` and `--database-dir` arguments. Dev/run/serve commands accept `--https`, `--cert <path>`, `--key <path>`, and `--ssl-dir <path>` for opt-in HTTPS with auto-generated self-signed certs; control plane commands (`clients`, `send`, `backup`, `tasks`) accept `--https` and `-k, --insecure` to reach an HTTPS control plane server.
+- **CLI Commands (`bin/cli.mjs`):** The `shadow-claw` / `shadowclaw` CLI provides `build`, `dev`, `run`, `serve`, `server` (aliases: `services`, `api`), `init`, `clients`, `send`, `backup`, `tasks`, `webrtc`, and `peer-id` commands. It supports running dev and headless service servers programmatically via `startServer` (`src/server/server.ts`) with custom `--root-path` and `--database-dir` arguments. Dev/run/serve/server commands accept `--https`, `--cert <path>`, `--key <path>`, and `--ssl-dir <path>` for opt-in HTTPS with auto-generated self-signed certs; control plane commands (`clients`, `send`, `backup`, `tasks`) accept `--https` and `-k, --insecure` to reach an HTTPS control plane server.
 - **Naming Conventions:** Refer to the product/brand in prose and documentation as **ShadowClaw**. Use kebab-case **`shadow-claw`** for package name, CLI commands (`npx shadow-claw`), repositories, directory paths, and custom elements.
 
 ## What to Avoid

@@ -90,6 +90,9 @@ export function createControlPlane(options: ControlPlaneOptions): ControlPlane {
     },
     Math.max(10_000, Math.floor(heartbeatTimeoutMs / 2)),
   );
+  if (typeof prunerInterval.unref === "function") {
+    prunerInterval.unref();
+  }
 
   function log(msg: string) {
     if (verbose) {
@@ -367,6 +370,14 @@ export function createControlPlane(options: ControlPlaneOptions): ControlPlane {
       }
       next();
     };
+
+    // Health / Probe endpoint for browser reachability checks and LNA permissions
+    app.get("/api/control/health", (_req: Request, res: Response) => {
+      res.json({
+        status: "ok",
+        controlPlane: true,
+      });
+    });
 
     // List all registered clients
     app.get(

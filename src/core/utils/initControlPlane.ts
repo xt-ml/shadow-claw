@@ -276,6 +276,37 @@ export async function executeClientControlCommand(
       };
     }
 
+    case "list-tools": {
+      try {
+        const { getWebMcpTools } =
+          await import("../../subsystems/mcp/webmcp.js");
+        const webMcpTools = await getWebMcpTools();
+        if (webMcpTools && webMcpTools.length > 0) {
+          return {
+            tools: webMcpTools.map((t) => ({
+              name: t.name,
+              description: t.description,
+              inputSchema: t.inputSchema,
+              annotations: t.annotations,
+            })),
+          };
+        }
+      } catch (_) {}
+
+      // Fallback: list built-in TOOL_DEFINITIONS
+      const { TOOL_DEFINITIONS } =
+        await import("../../subsystems/tools/index.js");
+      const { parseWebMcpInputSchema } =
+        await import("../../subsystems/mcp/webmcp.js");
+      return {
+        tools: TOOL_DEFINITIONS.map((t) => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: parseWebMcpInputSchema(t.input_schema),
+        })),
+      };
+    }
+
     case "invoke-tool": {
       if (!args.toolName) {
         throw new Error("Missing toolName parameter");
@@ -284,8 +315,82 @@ export async function executeClientControlCommand(
         (typeof document !== "undefined" && (document as any).modelContext) ||
         (typeof navigator !== "undefined" && (navigator as any).modelContext);
 
-      const result = await ctx.invoke(args.toolName, args.input);
-      return { result };
+      if (ctx) {
+        if (typeof ctx.getTools === "function") {
+          try {
+            const tools = await ctx.getTools();
+            const tool = Array.isArray(tools)
+              ? tools.find((t: any) => t.name === args.toolName)
+              : undefined;
+            if (tool && typeof tool.execute === "function") {
+              const res = await tool.execute(args.input || {});
+              return { result: res };
+            }
+          } catch (_) {}
+        }
+        if (typeof ctx.executeTool === "function") {
+          const res = await ctx.executeTool(
+            { name: args.toolName },
+            typeof args.input === "string"
+              ? args.input
+              : JSON.stringify(args.input || {}),
+          );
+          return { result: res };
+        }
+        if (typeof ctx.invoke === "function") {
+          const res = await ctx.invoke(args.toolName, args.input || {});
+          return { result: res };
+        }
+      }
+
+      // Worker fallback if agent worker is active
+      const { orchestratorStore } =
+        await import("../../stores/orchestrator.js");
+      const orch = options.orchestrator || orchestratorStore.orchestrator;
+      const worker: any = orch?.agentWorker;
+      if (worker && typeof worker.postMessage === "function") {
+        const callId =
+          Date.now().toString(36) + Math.random().toString(36).slice(2);
+        const result = await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            worker.removeEventListener("message", handler);
+            reject(new Error("Timeout waiting for tool execution"));
+          }, 60000);
+
+          const handler = (event: MessageEvent) => {
+            const data = event.data;
+            if (
+              data &&
+              data.type === "execute-tool-result" &&
+              data.callId === callId
+            ) {
+              clearTimeout(timeout);
+              worker.removeEventListener("message", handler);
+              if (data.error) {
+                reject(new Error(data.error));
+              } else {
+                resolve(data.result);
+              }
+            }
+          };
+
+          worker.addEventListener("message", handler);
+          worker.postMessage({
+            type: "execute-tool",
+            callId,
+            payload: {
+              name: args.toolName,
+              input: args.input || {},
+              groupId: args.groupId || orch.activeGroupId || "br:main",
+            },
+          });
+        });
+        return { result };
+      }
+
+      throw new Error(
+        `Tool ${args.toolName} could not be executed (no context or worker available)`,
+      );
     }
 
     case "trigger-backup": {
@@ -412,6 +517,8 @@ export function createDefaultControlPlaneClient(
         executeClientControlCommand("read-state", args, options),
       "invoke-tool": (args: any) =>
         executeClientControlCommand("invoke-tool", args, options),
+      "list-tools": (args: any) =>
+        executeClientControlCommand("list-tools", args, options),
       "trigger-backup": (args: any) =>
         executeClientControlCommand("trigger-backup", args, options),
     },

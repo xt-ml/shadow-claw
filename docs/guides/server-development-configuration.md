@@ -21,6 +21,10 @@ npx shadow-claw dev 9000 --host 0.0.0.0
 
 # Serve an existing pre-built dist/public directory
 npx shadow-claw serve 8888
+
+# Start backend services without building or serving the UI (headless mode)
+npx shadow-claw server 8888
+# Aliases: npx shadow-claw services, npx shadow-claw api
 ```
 
 ### In-Repo (`npm start`)
@@ -144,6 +148,8 @@ npx shadow-claw dev --https --ssl-dir /path/to/tls
 | `SHADOWCLAW_ROOT_PATH`            | Static files directory root         | `/path/to/dist/public`        |
 | `SHADOWCLAW_DATABASE_DIR`         | Server SQLite database directory    | `/path/to/.cache`             |
 | `SHADOWCLAW_CONTROL_TOKEN`        | Secret token for control-plane auth | `mysecrettoken`               |
+| `SHADOWCLAW_SERVE_STATIC`         | Enable/disable serving static UI    | `0`, `false`, `1`, `true`     |
+| `SHADOWCLAW_SERVICES_ONLY`        | Enable headless services-only mode  | `1`, `true`, `yes`            |
 
 ## Control Plane
 

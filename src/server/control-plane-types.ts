@@ -66,7 +66,15 @@ export type CommandAction =
   | "list-tasks"
   | "trigger-backup"
   | "invoke-tool"
+  | "list-tools"
   | "read-state";
+
+export interface RemoteToolDescription {
+  name: string;
+  description?: string;
+  inputSchema: Record<string, unknown>;
+  annotations?: Record<string, unknown>;
+}
 
 export interface CommandExecutePayload {
   commandId: string;

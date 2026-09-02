@@ -2,7 +2,7 @@
 
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/xt-ml/shadow-claw)
 
-A browser-native, fully-featured AI assistant — runs as a PWA, a native desktop app, a Node.js server, and via the `shadow-claw` CLI. TypeScript + Web Components + IndexedDB + File System API.
+A browser-native, fully-featured AI assistant whose core orchestration and tool-use loop run client-side in the browser. Deployable as a PWA or native Electron desktop app, backed by a Node.js service layer (local proxying, control plane, MCP), and driven via the `shadow-claw` CLI.
 
 [![ShadowClaw Screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/shadow-claw-screenshot-1920x1052.png)](https://xt-ml.github.io/shadow-claw/)
 
@@ -38,16 +38,18 @@ npm install && npm run dev  # Dev server → http://localhost:8888
 
 ## What is ShadowClaw?
 
-A fully-functional agent runtime built on browser-native technology — the orchestration and tool-use loop run client-side, with AI inference routing to remote APIs, local servers, or in-browser models depending on your configuration. Built with TypeScript, it provides:
+A fully-functional agent runtime built on browser-native technology — the orchestration and tool-use loop run entirely client-side in the browser, with AI inference routing to remote APIs, local servers, or in-browser models depending on your configuration. Built with TypeScript, it provides:
 
+- **Client-side orchestration**: The agent decision loop, system prompt building, and tool execution run off the main thread in a Web Worker inside the browser
 - **Multi-model support**: OpenRouter, Anthropic, Google Gemini, AWS Bedrock, Ollama, Llamafile, Mesh LLM, Transformers.js, and browser-native Prompt API
-- **Web Components UI**: Native Custom Elements + TC39 Signals for reactive updates
+- **Web Components UI**: Native Custom Elements + TC39 Signals for reactive updates across mobile PWA and Electron Desktop
 - **Persistent storage**: IndexedDB for messages/config, OPFS for files (namespaced per deployment subpath with automated legacy migration)
 - **Agent tools**: File I/O, shell (with optional WebVM), Git, HTTP, JavaScript execution
 - **Multi-conversation support**: Each conversation has isolated chat history, file workspace, and scheduled tasks
 - **Messaging channels**: Browser chat, PeerJS, Telegram Bot API, iMessage bridge (configurable)
 - **PWA + offline**: Service Worker, Web Push notifications, scheduled task execution even when closed
 - **Desktop app**: Electron wrapper with full parity to the web version
+- **CLI & Control Plane**: Command-line interface (`commander`) and dev server with task scheduling, backups, and an MCP server relaying CLI commands and browser tools
 
 ## Key Features
 
@@ -60,6 +62,7 @@ A fully-functional agent runtime built on browser-native technology — the orch
 - **Model registry** — Dynamic metadata fetch (context window, modality support)
 - **Attachment capabilities** — Native multimodal delivery with automatic text fallback
 - **Remote MCP** — Discover and execute tools from external MCP servers
+- **Stateless MCP server** — Expose ShadowClaw CLI commands and live browser tools to external agent hosts (Claude Desktop, Cursor, Goose) via STDIO (`npx shadow-claw mcp`) or Streamable HTTP (`POST /mcp`)
 - **A2UI interactive surfaces** — Render responsive UI components (Text, Button, TextField, Row/Column layouts) from agents via PeerJS WebRTC with two-way data binding
 - **Multi-Agent Shared State** — Synchronize agent knowledge across participants using `STATE_SNAPSHOT` and `STATE_DELTA` events
 - **Email integration** — IMAP/SMTP support with encrypted credentials
@@ -73,26 +76,28 @@ A fully-functional agent runtime built on browser-native technology — the orch
 
 ShadowClaw follows a **worker-isolated runtime** pattern:
 
-```mermaid
-graph TD
-  UI["Web Components<br>Chat, Files, Tasks"]
-  Orchestrator["Orchestrator<br>State Machine + Queue"]
-  Worker["Agent Worker<br>LLM + Tool Loop"]
-  Providers["Providers<br>OpenRouter, Bedrock, etc."]
-  Tools["Tool Execution<br>Bash, Git, Files, Fetch"]
-
-  UI --> Orchestrator
-  Orchestrator --> Worker
-  Worker --> Providers
-  Worker --> Tools
-
-  DB["IndexedDB<br>Messages, Config, Tasks"]
-  FS["OPFS<br>Workspace Files"]
-  Orchestrator --> DB
-  Orchestrator --> FS
-
-  SW["Service Worker<br>PWA, Push, Scheduling"]
-  UI --> SW
+```text
+┌─────────────────────────────────────────────────────────────┐
+│             Web Components (Chat, Files, Tasks)             │
+└──────────────┬──────────────────────────────┬───────────────┘
+               │                              │
+               ▼                              ▼
+┌────────────────────────────┐   ┌────────────────────────────┐
+│ Orchestrator (State+Queue) │   │ Service Worker (PWA, Push) │
+└──────┬──────────────┬──────┘   └────────────────────────────┘
+       │              │
+       │              └────────────────────────┐
+       ▼                                       ▼
+┌────────────────────────────┐   ┌────────────────────────────┐
+│ Agent Worker (LLM+Tools)   │   │ Storage (IndexedDB + OPFS) │
+└──────┬──────────────┬──────┘   │ Messages, Config, Files    │
+       │              │          └────────────────────────────┘
+       ▼              ▼
+┌────────────┐  ┌────────────┐
+│ Providers  │  │ Tool Exec  │
+│(OpenRouter,│  │(Bash, Git, │
+│Bedrock,etc)│  │Files, etc) │
+└────────────┘  └────────────┘
 ```
 
 **Key design principles:**
@@ -102,7 +107,7 @@ graph TD
 - **Reactive signals** — TC39 Signals (via `signal-polyfill`) drive all UI updates
 - **Storage isolation** — Each conversation gets a workspace (`shadowclaw/<groupId>/workspace/`); shared config in IndexedDB
 
-**Full architecture docs**: See [Architecture](docs/README.md#architecture) for orchestrator state machine, worker protocol, storage system, context management, and streaming.
+**Full architecture docs**: See [Architecture Overview](docs/architecture/overview.md) and [Worker-Isolated Agent Runtime](docs/decisions/worker-isolated-agent-runtime.md) for orchestrator state machine, worker protocol, storage system, context management, and streaming.
 
 ## Multi-Conversation Support
 

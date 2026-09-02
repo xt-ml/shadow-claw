@@ -160,4 +160,41 @@ describe("config", () => {
       ),
     );
   });
+
+  it("defaults serveStatic to true", async () => {
+    const { parseConfig } = await import("./config.js");
+    const config = parseConfig();
+
+    expect(config.serveStatic).toBe(true);
+  });
+
+  it("parses --no-static from CLI flags", async () => {
+    commanderMock.Command().opts.mockReturnValue({
+      static: false,
+      corsAllowOrigin: [],
+    });
+
+    const { parseConfig } = await import("./config.js");
+    const config = parseConfig();
+
+    expect(config.serveStatic).toBe(false);
+  });
+
+  it("parses serveStatic from SHADOWCLAW_SERVE_STATIC environment variable", async () => {
+    processMock.env.SHADOWCLAW_SERVE_STATIC = "false";
+
+    const { parseConfig } = await import("./config.js");
+    const config = parseConfig();
+
+    expect(config.serveStatic).toBe(false);
+  });
+
+  it("parses serveStatic from SHADOWCLAW_SERVICES_ONLY environment variable", async () => {
+    processMock.env.SHADOWCLAW_SERVICES_ONLY = "1";
+
+    const { parseConfig } = await import("./config.js");
+    const config = parseConfig();
+
+    expect(config.serveStatic).toBe(false);
+  });
 });

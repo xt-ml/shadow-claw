@@ -1,6 +1,6 @@
 # [ShadowClaw](https://xt-ml.github.io/shadow-claw/)
 
-> A browser-native, fully-featured AI assistant (TypeScript + Web Components + IndexedDB + File System API) whose orchestration and tool-use loop run client-side — AI inference routes to remote APIs, local servers, or in-browser models depending on your configuration. Runs as a PWA, a native desktop app via Electron, a standalone Node.js server, and via the `shadow-claw` CLI.
+> A browser-native, fully-featured AI assistant whose core orchestration and tool-use loop run client-side in the browser. Deployable as a PWA or native Electron desktop app, backed by a Node.js service layer (local proxying, control plane, MCP), and driven via the `shadow-claw` CLI. AI inference routes to remote APIs, local servers, or in-browser models depending on your configuration.
 
 ## Docs
 
@@ -19,7 +19,7 @@
 
 ## Optional
 
-- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): CLI, control plane, backup, Shell, VM, git, channels, tools, declarative tools, Agent Skills, providers, built-in AI Task APIs, notifications, Electron, reactive UI, crypto, and more
+- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): CLI, control plane, MCP server, backup, Shell, VM, git, channels, tools, declarative tools, Agent Skills, providers, built-in AI Task APIs, notifications, Electron, reactive UI, crypto, and more
 - [Guides](https://xt-ml.github.io/shadow-claw/docs/README.md#guides): Adding a provider/tool/channel/page/shell command
 - [Decisions](https://xt-ml.github.io/shadow-claw/docs/README.md#decisions): ADRs explaining bundled TypeScript, Signals, worker-isolated runtime, IndexedDB/OPFS storage
 - [e2e/README.md](https://xt-ml.github.io/shadow-claw/e2e/README.md): E2E test architecture

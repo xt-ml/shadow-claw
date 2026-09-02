@@ -151,4 +151,20 @@ describe("app", () => {
       recursive: true,
     });
   });
+
+  it("does not register static files middleware when serveStatic is false", async () => {
+    const { createApp } = await import("./app.js");
+    const { registerStaticFilesMiddleware } =
+      await import("./middleware/static-files.js");
+    const { registerProxyRoutes } = await import("./proxy.js");
+
+    const result = createApp({ ...config, serveStatic: false });
+
+    expect(result.app).toBe(appMock);
+    expect(result.scheduler).toBeDefined();
+    expect(registerStaticFilesMiddleware).not.toHaveBeenCalled();
+    expect(registerProxyRoutes).toHaveBeenCalledWith(appMock, {
+      verbose: false,
+    });
+  });
 });

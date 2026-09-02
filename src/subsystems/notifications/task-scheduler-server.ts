@@ -62,6 +62,7 @@ export class ServerTaskScheduler {
     }
 
     this._interval = setInterval(() => this.tick(), SCHEDULER_INTERVAL);
+    this._interval.unref?.();
 
     // Immediate first check
     this.tick();

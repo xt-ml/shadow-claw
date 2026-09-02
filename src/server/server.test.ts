@@ -164,6 +164,11 @@ describe("startServer HTTP / HTTPS selection", () => {
         if (cb) cb();
         return fakeServer;
       }),
+      on: jest.fn().mockReturnThis(),
+      close: jest.fn((cb: any) => {
+        if (cb) cb();
+        return fakeServer;
+      }),
     };
 
     httpMock = {
@@ -176,7 +181,7 @@ describe("startServer HTTP / HTTPS selection", () => {
 
     appMock = {
       createApp: jest.fn(() => ({
-        app: {},
+        app: { use: jest.fn(), post: jest.fn() },
         scheduler: { start: jest.fn() },
       })),
     };
@@ -195,6 +200,7 @@ describe("startServer HTTP / HTTPS selection", () => {
     controlPlaneMock = {
       createControlPlane: jest.fn(() => ({
         getToken: jest.fn(() => "test-token"),
+        close: jest.fn(),
       })),
     };
 
@@ -217,6 +223,11 @@ describe("startServer HTTP / HTTPS selection", () => {
     jest.unstable_mockModule("./control-plane.js", () => controlPlaneMock);
     jest.unstable_mockModule("./peer.js", () => ({
       attachPeerServer: jest.fn(),
+    }));
+    jest.unstable_mockModule("./server-peer.js", () => ({
+      ServerPeer: jest.fn(() => ({
+        start: jest.fn(() => Promise.resolve("peer-123")),
+      })),
     }));
   });
 
@@ -255,6 +266,7 @@ describe("startServer HTTP / HTTPS selection", () => {
       allowPrivateProxy: false,
       https: true,
       sslDir: "/ssl",
+      certPath: "/custom/cert.pem",
     });
 
     expect(tlsMock.ensureTlsCredentials).toHaveBeenCalledTimes(1);
@@ -262,6 +274,25 @@ describe("startServer HTTP / HTTPS selection", () => {
       { key: Buffer.from("fake-key"), cert: Buffer.from("fake-cert") },
       expect.anything(),
     );
-    expect(httpMock.createServer).not.toHaveBeenCalled();
+  });
+
+  it("handles verbose logging, peerjs, inferred bindHost, allowedOrigins, and services-only mode", async () => {
+    const { startServer } = await import("./server.js");
+    await startServer({
+      port: 8889,
+      bindHost: "0.0.0.0",
+      corsMode: "all",
+      allowedOrigins: new Set(["https://allowed.example.com"]),
+      verbose: true,
+      peerjs: true,
+      rootPath: "/root",
+      databaseDir: "/db",
+      allowPrivateProxy: false,
+      https: false,
+      sslDir: "/ssl",
+      serveStatic: false,
+    });
+
+    expect(httpMock.createServer).toHaveBeenCalled();
   });
 });

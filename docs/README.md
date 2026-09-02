@@ -49,22 +49,23 @@ Detailed docs for each major subsystem.
 | [LiteRT Provider](subsystems/providers.md)                              | In-browser WebGPU inference provider using Google LiteRT-LM                                                                                                     |
 | [CLI & Static Site Publishing](subsystems/cli.md)                       | `shadow-claw` CLI commands (`build`, `dev`, `serve`, `init`, `clients`, `send`, `backup`, `tasks`), dual-root path resolution, and npm packaging                |
 | [Control Plane & Client Bridge](subsystems/control-plane.md)            | Dual SSE/WebSocket control plane for CLI driving and persistent execution surface                                                                               |
+| [Stateless MCP Server](subsystems/mcp-server.md)                        | Official Stateless Model Context Protocol (2026-07-28) server for external agent hosts, CLI driving, and dynamic browser tool relay                             |
 | [File Backup Subsystem](subsystems/backup.md)                           | Remote workspace and OPFS file backups to server storage                                                                                                        |
 
 ### Guides
 
 Step-by-step instructions for common dev tasks.
 
-| Document                                                                       | What it covers                                                              |
-| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| [Adding a Provider](guides/adding-a-provider.md)                               | How to add a new LLM provider end-to-end                                    |
-| [Adding a Tool](guides/adding-a-tool.md)                                       | How to add a new agent tool                                                 |
-| [Adding a Shell Command](guides/adding-a-shell-command.md)                     | How to hook into the JS shell emulator                                      |
-| [Adding a UI Page](guides/adding-a-page.md)                                    | How to add a new Web Component page/section                                 |
-| [Adding a Channel](guides/adding-a-channel.md)                                 | How to add a new messaging channel                                          |
-| [Protocol-Agnostic Integrations](guides/protocol-agnostic-integrations.md)     | Plugin architecture and onboarding for external integrations                |
-| [Service Accounts & Credentials](guides/adding-service-accounts.md)            | How to manage encrypted credentials for channels and services               |
-| [Configuring Messaging Channels](guides/configuring-messaging-channels.md)     | User guide for Telegram and iMessage setup                                  |
+| Document                                                                       | What it covers                                                                                |
+| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| [Adding a Provider](guides/adding-a-provider.md)                               | How to add a new LLM provider end-to-end                                                      |
+| [Adding a Tool](guides/adding-a-tool.md)                                       | How to add a new agent tool                                                                   |
+| [Adding a Shell Command](guides/adding-a-shell-command.md)                     | How to hook into the JS shell emulator                                                        |
+| [Adding a UI Page](guides/adding-a-page.md)                                    | How to add a new Web Component page/section                                                   |
+| [Adding a Channel](guides/adding-a-channel.md)                                 | How to add a new messaging channel                                                            |
+| [Protocol-Agnostic Integrations](guides/protocol-agnostic-integrations.md)     | Plugin architecture and onboarding for external integrations                                  |
+| [Service Accounts & Credentials](guides/adding-service-accounts.md)            | How to manage encrypted credentials for channels and services                                 |
+| [Configuring Messaging Channels](guides/configuring-messaging-channels.md)     | User guide for Telegram and iMessage setup                                                    |
 | [Server Development Configuration](guides/server-development-configuration.md) | CLI flags, CORS modes, host binding, port configuration, opt-in HTTPS/TLS, CSP report logging |
 
 ### Decisions

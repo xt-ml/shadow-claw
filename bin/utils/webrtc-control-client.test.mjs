@@ -199,8 +199,10 @@ describe("IPC socket helpers", () => {
 describe("CliWebRtcListener", () => {
   let tempDir;
   let CliWebRtcListener;
+  let logSpy;
 
   beforeEach(async () => {
+    logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     tempDir = path.join(
       os.tmpdir(),
       "test-webrtc-listener-" +
@@ -213,6 +215,7 @@ describe("CliWebRtcListener", () => {
   });
 
   afterEach(() => {
+    logSpy?.mockRestore();
     try {
       if (fs.existsSync(tempDir)) {
         fs.rmSync(tempDir, { recursive: true, force: true });

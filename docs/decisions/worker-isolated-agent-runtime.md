@@ -20,6 +20,30 @@ The entire agent runtime runs in a **dedicated Web Worker** (`src/worker/worker.
 
 Communication is strictly message-based — the main thread and worker communicate only via `postMessage()` with typed payloads.
 
+### Architecture
+
+```mermaid
+graph TD
+  UI["Web Components<br>Chat, Files, Tasks"]
+  Orchestrator["Orchestrator<br>State Machine + Queue"]
+  Worker["Agent Worker<br>LLM + Tool Loop"]
+  Providers["Providers<br>OpenRouter, Bedrock, etc."]
+  Tools["Tool Execution<br>Bash, Git, Files, Fetch"]
+
+  UI --> Orchestrator
+  Orchestrator --> Worker
+  Worker --> Providers
+  Worker --> Tools
+
+  DB["IndexedDB<br>Messages, Config, Tasks"]
+  FS["OPFS<br>Workspace Files"]
+  Orchestrator --> DB
+  Orchestrator --> FS
+
+  SW["Service Worker<br>PWA, Push, Scheduling"]
+  UI --> SW
+```
+
 ### What runs in the worker
 
 - LLM API calls (`fetch()`)

@@ -9,6 +9,7 @@ import { DEFAULT_DEV_IP } from "../config/config.js";
 import { createApp } from "./app.js";
 import { attachPeerServer } from "./peer.js";
 import { createControlPlane } from "./control-plane.js";
+import { registerMcpRoutes } from "./routes/mcp.js";
 import { ServerPeer } from "./server-peer.js";
 import { parseConfig, ServerConfig } from "./config.js";
 import { ensureTlsCredentials } from "./tls.js";
@@ -42,6 +43,20 @@ export async function startServer(
     corsMode: config.corsMode,
   });
 
+  if (typeof (httpServer as any).on === "function") {
+    httpServer.on("close", () => {
+      scheduler.stop();
+      controlPlane.close();
+    });
+  }
+
+  registerMcpRoutes(app, {
+    controlPlane,
+    token: config.controlToken,
+    allowedOrigins: config.allowedOrigins,
+    corsMode: config.corsMode,
+  });
+
   let serverPeer: ServerPeer | null = null;
   if (config.peerjs) {
     attachPeerServer(httpServer, app);
@@ -53,6 +68,12 @@ export async function startServer(
     });
   }
 
+  if (config.serveStatic === false) {
+    app.use((_req, res) => {
+      res.status(404).json({ error: "Not found" });
+    });
+  }
+
   return new Promise<http.Server | https.Server>((resolve) => {
     httpServer.listen(config.port, config.bindHost, () => {
       const protocol = config.https ? "https" : "http";
@@ -61,6 +82,10 @@ export async function startServer(
       console.log(
         `Server running at ${protocol}://${config.bindHost}:${config.port}`,
       );
+
+      if (config.serveStatic === false) {
+        console.log("Services-only mode active (UI static serving disabled)");
+      }
 
       if (config.https) {
         const certLocation =
@@ -90,6 +115,9 @@ export async function startServer(
         `Control plane active at ${protocol}://${config.bindHost}:${config.port}/api/control/events (SSE) and ${wsProtocol}://${config.bindHost}:${config.port}/ws/control (WebSocket)`,
       );
       console.log(`Control token: ${controlPlane.getToken()}`);
+      console.log(
+        `MCP endpoint active at ${protocol}://${config.bindHost}:${config.port}/mcp (Stateless 2026-07-28)`,
+      );
 
       if (config.peerjs) {
         console.log("PeerJS signaling server enabled (routes at /peerjs/*)");

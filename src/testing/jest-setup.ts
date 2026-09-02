@@ -564,6 +564,7 @@ const expectedLogs = [
   "Ollama invoke error:",
   "Ollama models discovery error:",
   "Failed to check Prompt API onboarding:",
+  "[webrtc-listen]",
 ];
 
 function isExpectedLog(...args: any[]) {

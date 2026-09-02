@@ -111,6 +111,7 @@ interface CommandExecutePayload {
     | "list-tasks"
     | "trigger-backup"
     | "invoke-tool"
+    | "list-tools"
     | "read-state";
   args: Record<string, unknown>;
 }
@@ -155,7 +156,36 @@ Users can toggle between transports in **Settings $\rightarrow$ Integrations $\r
 - `list-tasks`: Queries scheduled tasks from IndexedDB.
 - `read-state`: Returns current active conversation group and state.
 - `invoke-tool`: Invokes WebMCP (`document.modelContext`) tools directly.
+- `list-tools`: Discovers available WebMCP and worker tools on the connected client.
 - `trigger-backup`: Initiates workspace upload via `BackupController`.
+
+---
+
+## Official Stateless MCP Server (2026-07-28)
+
+ShadowClaw implements an official Model Context Protocol server adhering to the **Stateless MCP Specification (2026-07-28)**.
+
+### Endpoints & Access
+
+- **Streamable HTTP:** `POST /mcp`
+  - Required headers: `MCP-Protocol-Version: 2026-07-28`
+  - Optional routing headers: `Mcp-Method: <method>`, `Mcp-Name: <toolName>`
+  - Authentication: `x-control-token: <token>` or `Authorization: Bearer <token>`
+- **CLI STDIO:** `npx shadow-claw mcp` (default transport)
+  - Connects external hosts (Claude Desktop, Goose, Cursor) directly over stdin/stdout.
+
+### Built-in MCP Tools
+
+- `shadowclaw_list_clients`: Inspect active connected browser and Electron clients.
+- `shadowclaw_send_message`: Dispatch prompt or message to a client's orchestrator queue.
+- `shadowclaw_read_state`: Read current orchestrator state, model, and active conversation group.
+- `shadowclaw_list_tasks`: Inspect scheduled tasks on a client.
+- `shadowclaw_manage_backup`: Trigger, inspect, or delete OPFS workspace snapshots.
+- `shadowclaw_server_status`: Query Node server status and connected client count.
+
+### Dynamic Client Tool Relaying
+
+When a browser client is connected, the MCP server automatically queries the client via `list-tools`, exposing tools such as `read_file`, `write_file`, `bash`, and `ask_user` directly to external MCP clients. Interactive tools support Multi Round-Trip Requests (MRTR) via `resultType: "input_required"`.
 
 ---
 

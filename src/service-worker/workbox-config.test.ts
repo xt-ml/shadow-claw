@@ -5,7 +5,7 @@ type WorkboxConfigShape = {
   navigateFallback?: string;
   navigateFallbackAllowlist?: RegExp[];
   runtimeCaching: Array<{
-    urlPattern: (ctx: { url: URL }) => boolean;
+    urlPattern: (ctx: { url: URL; sameOrigin?: boolean }) => boolean;
     handler: string;
   }>;
 };
@@ -94,14 +94,71 @@ describe("workbox runtime caching rules", () => {
     ).toBe(false);
   });
 
-  it("still caches regular same-origin app assets", () => {
+  it("does not cache control plane endpoints regardless of origin", () => {
     const matcher = workboxConfig.runtimeCaching[0]?.urlPattern;
 
     expect(
       matcher({
+        url: new URL("https://10.9.8.226:8888/api/control/events"),
+        sameOrigin: true,
+      }),
+    ).toBe(false);
+
+    expect(
+      matcher({
+        url: new URL("https://192.168.1.50:8888/api/control/health"),
+        sameOrigin: true,
+      }),
+    ).toBe(false);
+
+    expect(
+      matcher({
+        url: new URL("https://172.20.0.5:8888/api/control/messages"),
+        sameOrigin: false,
+      }),
+    ).toBe(false);
+
+    expect(
+      matcher({
+        url: new URL("https://xt-ml.github.io/api/control/events"),
+        sameOrigin: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("caches regular same-origin app assets on both local IPs and public domains", () => {
+    const matcher = workboxConfig.runtimeCaching[0]?.urlPattern;
+    // Running locally on loopback
+    expect(
+      matcher({
         url: new URL("http://localhost:8888/index.js"),
+        sameOrigin: true,
       }),
     ).toBe(true);
+
+    // Running locally on LAN IP
+    expect(
+      matcher({
+        url: new URL("http://192.168.1.50:8888/index.js"),
+        sameOrigin: true,
+      }),
+    ).toBe(true);
+
+    // Running on public domain (e.g. GitHub Pages)
+    expect(
+      matcher({
+        url: new URL("https://xt-ml.github.io/shadow-claw/index.js"),
+        sameOrigin: true,
+      }),
+    ).toBe(true);
+
+    // Cross-origin assets should not be cached
+    expect(
+      matcher({
+        url: new URL("https://10.9.8.226:8888/index.js"),
+        sameOrigin: false,
+      }),
+    ).toBe(false);
   });
 
   it("does not include unmatched globPatterns that trigger Workbox warnings", () => {

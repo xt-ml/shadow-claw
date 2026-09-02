@@ -53,7 +53,7 @@ module.exports = {
   runtimeCaching: [
     {
       // exclude loopback proxy paths, Hugging Face / model downloads, CDN hosts, and channel endpoints
-      urlPattern: ({ url }) => {
+      urlPattern: ({ url, sameOrigin }) => {
         // Skip VM asset paths to avoid flooding CacheStorage with high-volume chunk requests.
         if (
           url.pathname.startsWith("/assets/v86.9pfs/")
@@ -86,8 +86,11 @@ module.exports = {
           return false;
         }
 
-        const isLoopback =
-          hostname === "localhost" || hostname === "127.0.0.1";
+        // Never cache streaming control plane, proxy, or server-side API endpoints
+        const isControlPlanePath = url.pathname.startsWith("/api/control/");
+        if (isControlPlanePath) {
+          return false;
+        }
 
         const isShareTargetPath = url.pathname.endsWith(
           "/share/share-target.html",
@@ -101,7 +104,24 @@ module.exports = {
           url.pathname.startsWith("/schedule/") ||
           url.pathname.startsWith("/telegram/");
 
-        return !(isLoopback && isProxyPath);
+        const isLoopback =
+          hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname === "::1" ||
+          hostname === "[::1]";
+
+        if (isLoopback && isProxyPath) {
+          return false;
+        }
+
+        // When sameOrigin is provided by Workbox, only cache same-origin assets.
+        // Cross-origin requests (e.g. static site calling local control plane/LAN endpoints)
+        // should never be intercepted by Workbox runtime cache.
+        if (typeof sameOrigin === "boolean") {
+          return sameOrigin;
+        }
+
+        return true;
       },
 
       // apply a network-first strategy

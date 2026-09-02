@@ -319,6 +319,17 @@ describe("control-plane", () => {
   });
 
   describe("REST / SSE endpoints", () => {
+    it("GET /api/control/health returns 200 with ok status and version", async () => {
+      const res = await makeHttpRequest({
+        port,
+        path: "/api/control/health",
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.data.status).toBe("ok");
+      expect(res.data.controlPlane).toBe(true);
+    });
+
     it("GET /api/control/clients returns connected clients with valid token", async () => {
       const res = await makeHttpRequest({
         port,

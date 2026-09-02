@@ -555,6 +555,14 @@ export const test = base.extend({
 });
 ```
 
+### Control Plane & Stateless MCP Server Integration
+
+ShadowClaw's Control Plane and Stateless MCP Server bridges (`POST /mcp` and `shadow-claw mcp`) connect browser tabs to external tooling and agent hosts:
+
+- **Browser Integration:** When testing browser-side control plane handlers, `createDefaultControlPlaneClient` registers handlers for `list-tools`, `invoke-tool`, `send-message`, `read-state`, and `list-tasks`.
+- **E2E Tool Execution:** The MCP server dynamic relay (`src/server/mcp/tools/client-tool-relay.ts`) invokes tools via the Control Plane, which dispatches into the browser's Web Worker (`executeTool`), accessing live OPFS workspaces and returning structured JSON-RPC responses.
+- **Automated Integration Tests:** End-to-end server-to-client integration tests reside in `src/server/mcp/mcp-integration.test.ts` and CLI process tests in `bin/cli.test.mjs`.
+
 ## Architecture Decisions
 
 ### Why Component Objects?

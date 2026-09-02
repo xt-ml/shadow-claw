@@ -125,18 +125,19 @@ export function createApp(config: ServerConfig): {
       }),
   });
 
-  // ---------------- STATIC FILES ----------------
-  registerStaticFilesMiddleware(app, config.rootPath);
+  // ---------------- STATIC FILES & SPA FALLBACK ----------------
+  if (config.serveStatic !== false) {
+    registerStaticFilesMiddleware(app, config.rootPath);
 
-  // ---------------- 404 FALLBACK ----------------
-  // Redirect unsupported navigation requests to the root of the site instead of 404'ing
-  app.use((req, res, next) => {
-    if (req.method === "GET" && req.headers.accept?.includes("text/html")) {
-      res.redirect(req.baseUrl || "/");
-    } else {
-      next();
-    }
-  });
+    // Redirect unsupported navigation requests to the root of the site instead of 404'ing
+    app.use((req, res, next) => {
+      if (req.method === "GET" && req.headers.accept?.includes("text/html")) {
+        res.redirect(req.baseUrl || "/");
+      } else {
+        next();
+      }
+    });
+  }
 
   return { app, scheduler };
 }

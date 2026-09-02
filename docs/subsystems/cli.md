@@ -13,7 +13,8 @@ ShadowClaw provides a unified, first-class CLI tool (`shadow-claw` / `shadowclaw
 1. **Develop and preview template sites locally** (`npx shadow-claw dev`) with live reload, static file serving, and backend proxy capabilities.
 2. **Build standalone static distribution bundles** (`npx shadow-claw build --prod`) directly into `./dist/public` without cloning the ShadowClaw repository or copying foreign files in CI.
 3. **Serve pre-built static artifacts** (`npx shadow-claw serve`).
-4. **Scaffold starter templates** (`npx shadow-claw init`).
+4. **Run headless backend services without UI or frontend builds** (`npx shadow-claw server` / `services` / `api`).
+5. **Scaffold starter templates** (`npx shadow-claw init`).
 
 ---
 
@@ -93,7 +94,30 @@ Builds the site in development mode and starts the local server with live proxy,
 
 ### `shadow-claw serve [port]`
 
-Serves an already-built `dist/public` static directory and runs the proxy server without triggering a rebuild.
+Serves an already-built `dist/public` static directory and runs the proxy server without triggering a rebuild. Pass `--no-static` to disable static file and UI serving (services-only mode).
+
+### `shadow-claw server [port]` / `shadow-claw services [port]` / `shadow-claw api [port]`
+
+Starts only the backend server and services (Express API, proxy, task scheduler, Control Plane, Stateless MCP HTTP endpoint, and optional PeerJS signaling) without building or serving the frontend UI or requiring a `dist` folder.
+
+Ideal for scenarios where ShadowClaw frontends (such as static sites on GitHub Pages, Cloudflare Pages, or remote browser tabs) connect to a local or remote headless backend node.
+
+| Option / Argument           | Type    | Description                                                 | Default             |
+| :-------------------------- | :------ | :---------------------------------------------------------- | :------------------ |
+| `[port]` / `-p, --port`     | number  | Port to listen on                                           | `8888`              |
+| `--host <host>` / `--ip`    | string  | Bind host/IP                                                | `"127.0.0.1"`       |
+| `--content-root <dir>`      | string  | Content root directory                                      | `process.cwd()`     |
+| `--database-dir <dir>`      | string  | SQLite database directory                                   | `".cache/database"` |
+| `--cors-mode <mode>`        | string  | CORS policy: `localhost`, `private`, `all`                  | `"localhost"`       |
+| `--cors-allow-origin <url>` | string  | Explicit allowed origins (comma-separated)                  | `undefined`         |
+| `--control-token <token>`   | string  | Secret token for control-plane authentication               | Auto-generated      |
+| `--peerjs`                  | boolean | Enable built-in PeerJS signaling server                     | `false`             |
+| `--allow-private-proxy`     | boolean | Allow `/proxy` endpoint to reach private/loopback addresses | `false`             |
+| `--https`                   | boolean | Enable opt-in HTTPS server using dev TLS certificate        | `false`             |
+| `--cert <path>`             | string  | Path to custom TLS certificate (PEM)                        | `undefined`         |
+| `--key <path>`              | string  | Path to custom TLS private key (PEM)                        | `undefined`         |
+| `--ssl-dir <path>`          | string  | Directory for self-signed TLS certs                         | `".cache/tls"`      |
+| `-v, --verbose`             | boolean | Enable verbose request and proxy logging                    | `false`             |
 
 ### `shadow-claw init [dir]`
 
@@ -190,6 +214,33 @@ npx shadow-claw tasks --transport webrtc --client <browser-peer-id>
 | `--token <token>`         | string | Control token                                                           | `""`          |
 | `--peer-id <id>`          | string | Custom WebRTC CLI peer ID override                                      | `""`          |
 | `--cache-dir <dir>`       | string | Custom cache directory                                                  | `".cache"`    |
+
+### `shadow-claw mcp [options]`
+
+Runs the official Stateless Model Context Protocol (2026-07-28) server via STDIO or HTTP. Exposes ShadowClaw CLI capabilities and dynamically relayed tools from connected browser clients to external agent hosts (Claude Desktop, Cursor, Goose).
+
+```bash
+# Run in STDIO mode (default, for Claude Desktop or Cursor configuration)
+npx shadow-claw mcp
+
+# Run in Streamable HTTP mode on port 8888
+npx shadow-claw mcp --mcp-transport http --port 8888
+
+# Connect over WebRTC DataChannel to a specific browser client
+npx shadow-claw mcp --transport webrtc --client <browser-peer-id>
+```
+
+| Option                    | Type    | Description                                                          | Default       |
+| :------------------------ | :------ | :------------------------------------------------------------------- | :------------ |
+| `--mcp-transport <mode>`  | string  | MCP host transport: `stdio` or `http`                                | `"stdio"`     |
+| `--relay-client-tools`    | boolean | Discover and relay tools from connected browser clients              | `true`        |
+| `--client <id>`           | string  | Target client ID or PeerJS peer ID (defaults to first active client) | `""`          |
+| `--transport <transport>` | string  | Control plane client transport: `http` or `webrtc`                   | `"http"`      |
+| `--host <host>`           | string  | Control plane host                                                   | `"127.0.0.1"` |
+| `--port <port>`           | number  | Control plane port or HTTP MCP port                                  | `8888`        |
+| `--token <token>`         | string  | Control token                                                        | `""`          |
+| `--https`                 | boolean | Connect to server via HTTPS                                          | `false`       |
+| `-k, --insecure`          | boolean | Allow self-signed TLS certificates                                   | `true`        |
 
 ### `shadow-claw webrtc [action] [options]` / `shadow-claw peer-id [action] [options]`
 

@@ -3,6 +3,10 @@ import {
   shouldConnectControlPlane,
   detectCapabilities,
   createDefaultControlPlaneClient,
+  executeClientControlCommand,
+  getControlPlaneServerUrl,
+  getActiveControlPlaneClient,
+  stopControlPlaneClient,
 } from "./initControlPlane.js";
 
 describe("initControlPlane", () => {
@@ -48,6 +52,34 @@ describe("initControlPlane", () => {
           hostname: "my-shadowclaw-server.internal",
         }),
       ).toBe(true);
+    });
+
+    it("returns false when meta[name=shadowclaw-static-only] is present", () => {
+      const meta = document.createElement("meta");
+      meta.setAttribute("name", "shadowclaw-static-only");
+      document.head.appendChild(meta);
+
+      expect(
+        shouldConnectControlPlane({
+          protocol: "http:",
+          hostname: "localhost",
+        }),
+      ).toBe(false);
+
+      meta.remove();
+    });
+  });
+
+  describe("getControlPlaneServerUrl additional cases", () => {
+    it("derives http and ws URL from currentLoc when not static host and no customUrl", () => {
+      localStorage.removeItem("control_plane_url");
+      const urls = getControlPlaneServerUrl({
+        protocol: "http:",
+        host: "app.internal:8080",
+        hostname: "app.internal",
+      });
+      expect(urls.httpUrl).toBe("http://app.internal:8080");
+      expect(urls.wsUrl).toBe("ws://app.internal:8080/ws/control");
     });
   });
 
@@ -271,6 +303,297 @@ describe("initControlPlane", () => {
       expect(filteredResult.tasks.some((t: any) => t.id === "task-2")).toBe(
         false,
       );
+    });
+
+    it("handles list-tools returning discoverable tool definitions", async () => {
+      const client = createDefaultControlPlaneClient({
+        autoConnect: false,
+      });
+
+      const handler = (client as any)._handlers.get("list-tools");
+      expect(handler).toBeDefined();
+
+      const result = await handler({});
+      expect(result).toBeDefined();
+      expect(Array.isArray(result.tools)).toBe(true);
+      expect(result.tools.length).toBeGreaterThan(0);
+      const bashTool = result.tools.find((t: any) => t.name === "bash");
+      expect(bashTool).toBeDefined();
+      expect(bashTool.name).toBe("bash");
+      expect(bashTool.inputSchema).toBeDefined();
+    });
+
+    it("handles invoke-tool via modelContext if present", async () => {
+      const mockExecute = (jest
+        .fn() as any)
+        .mockResolvedValue({ output: "hello world" });
+      const origDescriptor = Object.getOwnPropertyDescriptor(
+        document,
+        "modelContext",
+      );
+      Object.defineProperty(document, "modelContext", {
+        value: {
+          getTools: (jest.fn() as any).mockResolvedValue([
+            {
+              name: "custom_echo",
+              execute: mockExecute,
+            },
+          ]),
+        },
+        configurable: true,
+        writable: true,
+      });
+
+      const client = createDefaultControlPlaneClient({
+        autoConnect: false,
+      });
+
+      const handler = (client as any)._handlers.get("invoke-tool");
+      expect(handler).toBeDefined();
+
+      const result = await handler({
+        toolName: "custom_echo",
+        input: { text: "hello" },
+      });
+
+      expect(result).toEqual({ result: { output: "hello world" } });
+      expect(mockExecute).toHaveBeenCalledWith({ text: "hello" });
+
+      if (origDescriptor) {
+        Object.defineProperty(document, "modelContext", origDescriptor);
+      } else {
+        delete (document as any).modelContext;
+      }
+    });
+
+    it("handles executeClientControlCommand send-message and validation", async () => {
+      const mockSubmit = jest.fn();
+      const mockSubmitMessage = jest.fn();
+
+      // Missing text
+      await expect(
+        executeClientControlCommand("send-message", {}),
+      ).rejects.toThrow("Missing text parameter");
+
+      // browserChat.submit
+      const res1 = await executeClientControlCommand(
+        "send-message",
+        { text: "msg1", groupId: "br:main" },
+        { orchestrator: { browserChat: { submit: mockSubmit } } as any },
+      );
+      expect(res1).toEqual({ queued: true, groupId: "br:main" });
+      expect(mockSubmit).toHaveBeenCalledWith("msg1", "br:main");
+
+      // submitMessage
+      const res2 = await executeClientControlCommand(
+        "send-message",
+        { text: "msg2", groupId: "br:group2" },
+        { orchestrator: { submitMessage: mockSubmitMessage } as any },
+      );
+      expect(res2).toEqual({ queued: true, groupId: "br:group2" });
+      expect(mockSubmitMessage).toHaveBeenCalledWith("msg2", "br:group2");
+    });
+
+    it("handles executeClientControlCommand read-state", async () => {
+      const res = await executeClientControlCommand(
+        "read-state",
+        {},
+        {
+          orchestrator: {
+            state: "thinking",
+            activeGroupId: "br:main",
+          } as any,
+        },
+      );
+      expect(res.state).toBe("thinking");
+      expect(res.activeGroupId).toBe("br:main");
+      expect(res.clientId).toBeDefined();
+    });
+
+    it("handles executeClientControlCommand invoke-tool with worker fallback and errors", async () => {
+      const origDocMC = Object.getOwnPropertyDescriptor(document, "modelContext");
+      const origNavMC = Object.getOwnPropertyDescriptor(navigator, "modelContext");
+      delete (document as any).modelContext;
+      delete (navigator as any).modelContext;
+
+      let workerHandler: any;
+      const mockWorker: any = {
+        addEventListener: jest.fn((event: string, handler: any) => {
+          if (event === "message") {
+            workerHandler = handler;
+          }
+        }),
+        removeEventListener: jest.fn(),
+        postMessage: jest.fn((msg: any) => {
+          setTimeout(() => {
+            if (msg.payload.name === "failing_tool") {
+              workerHandler({
+                data: {
+                  type: "execute-tool-result",
+                  callId: msg.callId,
+                  error: "Tool internal failure",
+                },
+              });
+            } else {
+              workerHandler({
+                data: {
+                  type: "execute-tool-result",
+                  callId: msg.callId,
+                  result: "Worker executed " + msg.payload.name,
+                },
+              });
+            }
+          }, 0);
+        }),
+      };
+
+      try {
+        // Successful worker execution
+        const successRes = await executeClientControlCommand(
+          "invoke-tool",
+          { toolName: "read_file", input: { path: "hello.txt" } },
+          { orchestrator: { agentWorker: mockWorker, activeGroupId: "br:main" } as any },
+        );
+        expect(successRes).toEqual({ result: "Worker executed read_file" });
+
+        // Failing worker execution
+        await expect(
+          executeClientControlCommand(
+            "invoke-tool",
+            { toolName: "failing_tool", input: {} },
+            { orchestrator: { agentWorker: mockWorker, activeGroupId: "br:main" } as any },
+          ),
+        ).rejects.toThrow("Tool internal failure");
+
+        // No context or worker
+        await expect(
+          executeClientControlCommand(
+            "invoke-tool",
+            { toolName: "read_file" },
+            { orchestrator: {} as any },
+          ),
+        ).rejects.toThrow("could not be executed");
+      } finally {
+        if (origDocMC) Object.defineProperty(document, "modelContext", origDocMC);
+        if (origNavMC) Object.defineProperty(navigator, "modelContext", origNavMC);
+      }
+    });
+
+    it("throws error for unknown command action", async () => {
+      await expect(
+        executeClientControlCommand("unknown-action-xyz", {}),
+      ).rejects.toThrow("Unknown action 'unknown-action-xyz'");
+    });
+
+    it("handles executeClientControlCommand trigger-backup", async () => {
+      const origFetch = globalThis.fetch;
+      (globalThis as any).fetch = (jest.fn() as any).mockResolvedValue({
+        ok: true,
+        text: async () => "ok",
+        json: async () => ({ success: true }),
+      });
+
+      const { getDb } = await import("../../db/db.js");
+      const db = await getDb();
+      const { getGroupDir } = await import("../../storage/getGroupDir.js");
+      const groupDir = await getGroupDir(db, "br:main");
+      const fh = await groupDir.getFileHandle("backup-sample.txt", { create: true });
+      const writable = await (fh as any).createWritable();
+      await writable.write(new TextEncoder().encode("sample data"));
+      await writable.close();
+
+      try {
+        const res = await executeClientControlCommand(
+          "trigger-backup",
+          { groupId: "br:main", token: "test-token" },
+          {},
+        );
+        expect(res).toBeDefined();
+        expect(res.success).toBe(true);
+      } finally {
+        globalThis.fetch = origFetch;
+      }
+    });
+
+    it("handles invoke-tool with executeTool and invoke fallbacks on modelContext", async () => {
+      // Missing toolName parameter
+      await expect(
+        executeClientControlCommand("invoke-tool", {}),
+      ).rejects.toThrow("Missing toolName parameter");
+
+      const origDocMC = Object.getOwnPropertyDescriptor(document, "modelContext");
+      const origNavMC = Object.getOwnPropertyDescriptor(navigator, "modelContext");
+      delete (navigator as any).modelContext;
+
+      // ctx.executeTool
+      const mockExecuteTool = (jest.fn() as any).mockResolvedValue("exec-res");
+      Object.defineProperty(document, "modelContext", {
+        value: {
+          executeTool: mockExecuteTool,
+        },
+        configurable: true,
+      });
+
+      const resExec = await executeClientControlCommand(
+        "invoke-tool",
+        { toolName: "t_exec", input: { a: 1 } },
+        {},
+      );
+      expect(resExec).toEqual({ result: "exec-res" });
+
+      // ctx.invoke
+      const mockInvoke = (jest.fn() as any).mockResolvedValue("invoke-res");
+      Object.defineProperty(document, "modelContext", {
+        value: {
+          invoke: mockInvoke,
+        },
+        configurable: true,
+      });
+
+      const resInv = await executeClientControlCommand(
+        "invoke-tool",
+        { toolName: "t_inv", input: { b: 2 } },
+        {},
+      );
+      expect(resInv).toEqual({ result: "invoke-res" });
+
+      if (origDocMC) Object.defineProperty(document, "modelContext", origDocMC);
+      if (origNavMC) Object.defineProperty(navigator, "modelContext", origNavMC);
+    });
+
+    it("handles send-message when orchestrator is not ready", async () => {
+      const { orchestratorStore } = await import("../../stores/orchestrator.js");
+      const origSend = orchestratorStore.sendMessage;
+      (orchestratorStore as any).sendMessage = undefined;
+      try {
+        const res = await executeClientControlCommand(
+          "send-message",
+          { text: "test" },
+          { orchestrator: null as any },
+        );
+        expect(res.queued).toBe(false);
+        expect(res.error).toBe("Orchestrator not ready");
+      } finally {
+        (orchestratorStore as any).sendMessage = origSend;
+      }
+    });
+
+    it("reads transport from localStorage in createDefaultControlPlaneClient", () => {
+      localStorage.setItem("control_plane_transport", "websocket");
+      const client = createDefaultControlPlaneClient({ autoConnect: false });
+      expect((client as any).transport).toBe("websocket");
+      localStorage.removeItem("control_plane_transport");
+    });
+
+    it("manages active client lifecycle and autoConnect", () => {
+      stopControlPlaneClient();
+      expect(getActiveControlPlaneClient()).toBeNull();
+
+      const client = createDefaultControlPlaneClient({ autoConnect: true });
+      expect(getActiveControlPlaneClient()).toBe(client);
+
+      stopControlPlaneClient();
+      expect(getActiveControlPlaneClient()).toBeNull();
     });
   });
 });

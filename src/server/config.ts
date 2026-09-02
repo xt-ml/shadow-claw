@@ -31,6 +31,7 @@ export interface ServerConfig {
   certPath?: string;
   keyPath?: string;
   sslDir: string;
+  serveStatic?: boolean;
 }
 
 export function parseConfig(): ServerConfig {
@@ -78,6 +79,10 @@ export function parseConfig(): ServerConfig {
     .option(
       "--ssl-dir <path>",
       "Directory for TLS certificate generation/storage",
+    )
+    .option(
+      "--no-static",
+      "Disable static file and UI serving (services-only mode)",
     );
 
   program.parse();
@@ -221,6 +226,18 @@ export function parseConfig(): ServerConfig {
       ? path.resolve(projectRoot, envSslDir)
       : path.resolve(databaseDir, "..", ".cache", "tls");
 
+  // Static assets serving logic
+  const envServeStatic =
+    env.SHADOWCLAW_SERVE_STATIC !== undefined
+      ? !["0", "false", "no"].includes(
+          env.SHADOWCLAW_SERVE_STATIC.toLowerCase().trim(),
+        )
+      : !["1", "true", "yes"].includes(
+          (env.SHADOWCLAW_SERVICES_ONLY || "").toLowerCase().trim(),
+        );
+  const serveStatic =
+    options.static !== undefined ? Boolean(options.static) : envServeStatic;
+
   return {
     port,
     bindHost,
@@ -236,5 +253,6 @@ export function parseConfig(): ServerConfig {
     certPath,
     keyPath,
     sslDir,
+    serveStatic,
   };
 }

@@ -14,6 +14,7 @@ import { runBackupCommand } from "./commands/backup.mjs";
 import { runTasksCommand } from "./commands/tasks.mjs";
 import { runPeerIdCommand } from "./commands/peer-id.mjs";
 import { runWebRtcListenCommand } from "./commands/webrtc-listen.mjs";
+import { runMcpCommand } from "./commands/mcp.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -332,6 +333,10 @@ program
     "--ssl-dir <path>",
     "Directory for TLS certificate generation/storage",
   )
+  .option(
+    "--no-static",
+    "Disable static file and UI serving (services-only mode)",
+  )
   .option("-v, --verbose", "Enable verbose request/proxy logging", false)
   .option("--open", "Automatically open default browser", false)
   .action(async (portArg, options) => {
@@ -352,8 +357,12 @@ program
         contentRoot,
         options.databaseDir || ".cache/database",
       );
+      const serveStatic = options.static !== false;
 
-      if (!(await pathExists(path.join(distPublicDir, "index.html")))) {
+      if (
+        serveStatic &&
+        !(await pathExists(path.join(distPublicDir, "index.html")))
+      ) {
         console.error(
           `Error: No index.html found in ${distPublicDir}. Run "shadow-claw build" first.`,
         );
@@ -428,11 +437,12 @@ program
         certPath,
         keyPath,
         sslDir,
+        serveStatic,
       });
 
       const protocol = isHttps ? "https" : "http";
       const localUrl = `${protocol}://${host}:${port}`;
-      if (options.open) {
+      if (serveStatic && options.open) {
         openBrowser(localUrl);
       }
     } catch (err) {
@@ -440,6 +450,148 @@ program
       process.exit(1);
     }
   });
+
+// ---------------------------------------------------------------------------
+// SERVER / SERVICES / API COMMAND (Services-only mode)
+// ---------------------------------------------------------------------------
+async function handleServer(portArg, options) {
+  try {
+    const contentRoot = path.resolve(options.contentRoot || process.cwd());
+    const port = parseInt(
+      portArg || options.port || process.env.PORT || "8888",
+      10,
+    );
+    const host =
+      options.host ||
+      options.ip ||
+      process.env.SHADOWCLAW_DEV_IP ||
+      "127.0.0.1";
+    const databaseDir = path.resolve(
+      contentRoot,
+      options.databaseDir || ".cache/database",
+    );
+
+    const isDist = await pathExists(path.join(toolchainRoot, "dist/server.js"));
+    const serverModulePath = isDist
+      ? path.join(toolchainRoot, "dist/server.js")
+      : path.join(toolchainRoot, "src/server/server.ts");
+
+    process.env.SHADOWCLAW_DATABASE_DIR = databaseDir;
+    process.env.SHADOWCLAW_DEV_IP = host;
+    process.env.SHADOWCLAW_SERVE_STATIC = "false";
+
+    const { startServer } = await import(serverModulePath);
+
+    const allowedOrigins = new Set(
+      (
+        options.corsAllowOrigin ||
+        process.env.SHADOWCLAW_CORS_ALLOWED_ORIGINS ||
+        "https://xt-ml.github.io"
+      )
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+    );
+
+    const isHttps = Boolean(
+      options.https ||
+      ["1", "true", "yes"].includes(
+        (process.env.SHADOWCLAW_HTTPS || "").toLowerCase().trim(),
+      ),
+    );
+    const certPath =
+      options.cert ||
+      (
+        process.env.SHADOWCLAW_TLS_CERT ||
+        process.env.SHADOWCLAW_CERT ||
+        ""
+      ).trim() ||
+      undefined;
+    const keyPath =
+      options.key ||
+      (
+        process.env.SHADOWCLAW_TLS_KEY ||
+        process.env.SHADOWCLAW_KEY ||
+        ""
+      ).trim() ||
+      undefined;
+    const sslDir = path.resolve(
+      contentRoot,
+      options.sslDir ||
+        process.env.SHADOWCLAW_SSL_DIR ||
+        process.env.SHADOWCLAW_TLS_DIR ||
+        ".cache/tls",
+    );
+
+    await startServer({
+      port,
+      bindHost: host,
+      corsMode: options.corsMode || "localhost",
+      allowedOrigins,
+      verbose: Boolean(options.verbose),
+      peerjs: Boolean(options.peerjs),
+      rootPath: "",
+      databaseDir,
+      controlToken:
+        options.controlToken ||
+        process.env.SHADOWCLAW_CONTROL_TOKEN ||
+        undefined,
+      allowPrivateProxy: Boolean(options.allowPrivateProxy),
+      https: isHttps,
+      certPath,
+      keyPath,
+      sslDir,
+      serveStatic: false,
+    });
+  } catch (err) {
+    console.error("Server error:", err);
+    process.exit(1);
+  }
+}
+
+program
+  .command("server [port]")
+  .aliases(["services", "api"])
+  .description(
+    "Start backend services (Express, MCP, control plane) without building or serving the UI (aliases: services, api)",
+  )
+  .option("-p, --port <port>", "Port to listen on (default: 8888)")
+  .option("--host <host>", "Bind host/IP", "127.0.0.1")
+  .option("--ip <host>", "Bind host/IP (alias)")
+  .option("--content-root <dir>", "Content root directory", process.cwd())
+  .option(
+    "--database-dir <dir>",
+    "Directory where SQLite databases are stored",
+    ".cache/database",
+  )
+  .option(
+    "--cors-mode <mode>",
+    "CORS policy: localhost | private | all",
+    "localhost",
+  )
+  .option(
+    "--cors-allow-origin <origin>",
+    "Explicit allowed origins (comma-separated)",
+  )
+  .option(
+    "--control-token <token>",
+    "Secret token for control-plane authentication",
+  )
+  .option("--peerjs", "Enable built-in PeerJS signaling server", false)
+  .option(
+    "--allow-private-proxy",
+    "Allow proxy to reach private/loopback addresses",
+    false,
+  )
+  .option("--https", "Enable HTTPS server", false)
+  .option("--cert <path>", "Path to existing TLS certificate file")
+  .option("--key <path>", "Path to existing TLS private key file")
+  .option(
+    "--ssl-dir <path>",
+    "Directory for TLS certificate generation/storage",
+  )
+  .option("-v, --verbose", "Enable verbose request/proxy logging", false)
+  .action(handleServer);
 
 // ---------------------------------------------------------------------------
 // INIT COMMAND
@@ -694,6 +846,37 @@ program
   .option("--cache-dir <dir>", "Custom cache directory")
   .action(async (options) => {
     await runTasksCommand(options);
+  });
+
+// ---------------------------------------------------------------------------
+// MCP COMMAND (Stateless 2026-07-28)
+// ---------------------------------------------------------------------------
+program
+  .command("mcp")
+  .description(
+    "Run the official Stateless Model Context Protocol (MCP 2026-07-28) server",
+  )
+  .option("--mcp-transport <transport>", "MCP transport: stdio | http", "stdio")
+  .option("--client <id>", "Target client ID (defaults to first active client)")
+  .option("--host <host>", "Control plane host")
+  .option("--port <port>", "Control plane port or HTTP MCP port")
+  .option("--token <token>", "Control token")
+  .option("--https", "Connect to server via HTTPS", false)
+  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
+  .option(
+    "--transport <transport>",
+    "Control plane client transport: http | webrtc",
+    "http",
+  )
+  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
+  .option(
+    "--relay-client-tools",
+    "Discover and relay tools from connected browser clients",
+    true,
+  )
+  .option("--no-relay-client-tools", "Disable relaying browser client tools")
+  .action(async (options) => {
+    await runMcpCommand(options);
   });
 
 program.parse(process.argv);

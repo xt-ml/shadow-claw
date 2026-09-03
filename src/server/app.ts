@@ -30,6 +30,7 @@ import { registerActivityLogRoutes } from "./routes/activity-log.js";
 import { registerCspReportRoutes } from "./routes/csp-report.js";
 import { registerOAuthRoutes } from "./routes/oauth.js";
 import { registerBackupRoutes } from "./routes/backup.js";
+import { registerDocsRoutes } from "./routes/docs.js";
 
 import type { Express } from "express";
 import type { ServerConfig } from "./config.js";
@@ -106,9 +107,10 @@ export function createApp(config: ServerConfig): {
     logger,
   });
 
-  // ---------------- PUSH & TASK ROUTES ----------------
+  // ---------------- PUSH, TASK & DOCS ROUTES ----------------
   registerPushRoutes(app);
   registerTaskScheduleRoutes(app);
+  registerDocsRoutes(app);
 
   const scheduler = new ServerTaskScheduler({
     getEnabledTasks: getEnabledScheduledTasks,

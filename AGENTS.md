@@ -47,6 +47,7 @@ ShadowClaw has been significantly deduplicated. Instead of a massive `AGENTS.md`
 | Control Plane & Client Bridge | [docs/subsystems/control-plane.md](docs/subsystems/control-plane.md)                     |
 | Stateless MCP Server          | [docs/subsystems/mcp-server.md](docs/subsystems/mcp-server.md)                           |
 | File Backup Subsystem         | [docs/subsystems/backup.md](docs/subsystems/backup.md)                                   |
+| OpenAPI & Discoverability     | [docs/subsystems/openapi.md](docs/subsystems/openapi.md)                                 |
 
 ## Conventions & Guardrails
 

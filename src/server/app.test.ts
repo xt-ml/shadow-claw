@@ -49,6 +49,9 @@ describe("app", () => {
     jest.unstable_mockModule("./routes/csp-report.js", () => ({
       registerCspReportRoutes: jest.fn(),
     }));
+    jest.unstable_mockModule("./routes/docs.js", () => ({
+      registerDocsRoutes: jest.fn(),
+    }));
     jest.unstable_mockModule(
       "../subsystems/notifications/push-store.js",
       () => ({
@@ -109,6 +112,7 @@ describe("app", () => {
     const { registerOAuthRoutes } = await import("./routes/oauth.js");
     const { registerBackupRoutes } = await import("./routes/backup.js");
     const { registerCspReportRoutes } = await import("./routes/csp-report.js");
+    const { registerDocsRoutes } = await import("./routes/docs.js");
     const { openPushStore } =
       await import("../subsystems/notifications/push-store.js");
     const { openClientStore } = await import("./client-registry.js");
@@ -128,6 +132,7 @@ describe("app", () => {
     expect(registerOAuthRoutes).toHaveBeenCalledWith(appMock);
     expect(registerBackupRoutes).toHaveBeenCalledTimes(1);
     expect(registerCspReportRoutes).toHaveBeenCalledTimes(1);
+    expect(registerDocsRoutes).toHaveBeenCalledWith(appMock);
     expect(createCspReportOnlyMiddleware).toHaveBeenCalledTimes(1);
     expect(openPushStore).toHaveBeenCalledWith(
       expect.stringContaining("push-subscriptions.db"),

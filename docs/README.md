@@ -51,6 +51,7 @@ Detailed docs for each major subsystem.
 | [Control Plane & Client Bridge](subsystems/control-plane.md)            | Dual SSE/WebSocket control plane for CLI driving and persistent execution surface                                                                               |
 | [Stateless MCP Server](subsystems/mcp-server.md)                        | Official Stateless Model Context Protocol (2026-07-28) server for external agent hosts, CLI driving, and dynamic browser tool relay                             |
 | [File Backup Subsystem](subsystems/backup.md)                           | Remote workspace and OPFS file backups to server storage                                                                                                        |
+| [OpenAPI & Endpoint Discoverability](subsystems/openapi.md)             | Official OpenAPI 3.1 specification, interactive Scalar documentation UI, and route-coverage contract testing                                                    |
 
 ### Guides
 

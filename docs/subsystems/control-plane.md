@@ -25,14 +25,14 @@ The Control Plane supports three interchangeable communication transports:
    - Useful for low-latency direct connections or environments where WebSockets are preferred.
 3. **WebRTC DataChannel (`webrtc`, Peer-to-Peer):**
    - Direct P2P browser-to-CLI communication via PeerJS DataChannels.
-   - CLI coordinates via `shadow-claw webrtc listen` and the local IPC socket bridge (`.cache/webrtc-ipc.sock`).
+   - CLI coordinates via `shadow-claw webrtc listen` and the local IPC socket bridge (`<cacheDir>/webrtc-ipc.sock`, defaulting to `.cache/webrtc-ipc.sock`).
    - Allows headless commands and automation without requiring an active control-plane HTTP/SSE session.
 
 ```mermaid
 graph TB
     subgraph CLI ["CLI & External Tools"]
         CLI_BIN["shadow-claw CLI (clients, send, backup, tasks)"]
-        CLI_LISTEN["webrtc listen (IPC Socket: .cache/webrtc-ipc.sock)"]
+        CLI_LISTEN["webrtc listen (IPC Socket: <cacheDir>/webrtc-ipc.sock)"]
         EXT_MCP["External MCP Clients (Hermes, Claude, Cursor)"]
     end
 
@@ -133,8 +133,8 @@ interface CommandResultPayload {
 ## Authentication & Security
 
 1. **Control Token:** Connections must supply a secret control token via query parameter (`?token=...`), header (`x-control-token`), or Bearer authorization header (`Authorization: Bearer <token>`).
-2. **Token Generation:** On server startup, a token is read from `SHADOWCLAW_CONTROL_TOKEN` or generated and persisted in SQLite (`clients.db` metadata table) and `.cache/control-token.json`.
-3. **WebRTC CLI Peer Identity & Trust:** CLI clients connecting over WebRTC identify using a persistent peer ID in `.cache/cli-peer-id`. This ID can be retrieved or renewed using `npx shadow-claw peer-id [--renew|--set <id>]` and must be added in the browser under **Settings → WebRTC/PeerJS → Trusted Peer IDs** when peer restrictions are enabled.
+2. **Token Generation:** On server startup, a token is read from `SHADOWCLAW_CONTROL_TOKEN` or generated and persisted in SQLite (`<cacheDir>/database/clients.db` metadata table) and `<cacheDir>/control-token.json` (defaulting to `.cache/...`).
+3. **WebRTC CLI Peer Identity & Trust:** CLI clients connecting over WebRTC identify using a persistent peer ID in `<cacheDir>/cli-peer-id` (defaulting to `.cache/cli-peer-id`). This ID can be retrieved or renewed using `npx shadow-claw peer-id [--renew|--set <id>]` and must be added in the browser under **Settings → WebRTC/PeerJS → Trusted Peer IDs** when peer restrictions are enabled.
 4. **Localhost Binding:** Binds to `127.0.0.1` by default.
 
 ---

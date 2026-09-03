@@ -38,6 +38,7 @@ export async function startServer(
     httpServer,
     app,
     token: config.controlToken,
+    cacheDir: config.cacheDir,
     verbose: config.verbose,
     allowedOrigins: config.allowedOrigins,
     corsMode: config.corsMode,
@@ -116,7 +117,7 @@ export async function startServer(
       );
       console.log(`Control token: ${controlPlane.getToken()}`);
       console.log(
-        `MCP endpoint active at ${protocol}://${config.bindHost}:${config.port}/mcp (Stateless 2026-07-28)`,
+        `MCP endpoint active at ${protocol}://${config.bindHost}:${config.port}/mcp`,
       );
 
       if (config.peerjs) {

@@ -7,6 +7,7 @@ const elementName = "shadow-claw-empty-state";
 export class ShadowClawEmptyState extends ShadowClawElement {
   static styles = shadowClawEmptyStateStyles;
   static template = shadowClawEmptyStateTemplate;
+  static observedAttributes = ["message", "hint", "compact", "warning"];
 
   attributeChangedCallback() {
     this.render();

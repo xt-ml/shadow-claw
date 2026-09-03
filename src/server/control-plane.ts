@@ -33,6 +33,7 @@ export interface ControlPlaneOptions {
   httpServer: http.Server | https.Server;
   app?: Express;
   token?: string;
+  cacheDir?: string;
   heartbeatTimeoutMs?: number;
   verbose?: boolean;
   allowedOrigins?: Set<string>;
@@ -74,7 +75,8 @@ export function createControlPlane(options: ControlPlaneOptions): ControlPlane {
     verbose = false,
   } = options;
 
-  const token = options.token || getOrCreateControlToken();
+  const token =
+    options.token || getOrCreateControlToken(undefined, options.cacheDir);
 
   const wss = new WebSocketServer({ noServer: true });
   const activeSockets = new Map<string, WebSocket>();
@@ -108,7 +110,7 @@ export function createControlPlane(options: ControlPlaneOptions): ControlPlane {
       return true;
     }
     try {
-      const currentToken = getOrCreateControlToken();
+      const currentToken = getOrCreateControlToken(undefined, options.cacheDir);
       if (currentToken && providedToken === currentToken) {
         return true;
       }

@@ -1,11 +1,33 @@
 {
   "name": "shadow-claw",
-  "version": "1.25.0",
+  "version": "1.26.0",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
   "author": "Karl Herrick <me@karlherrick.com>",
   "main": "dist/electron/main.cjs",
+  "exports": {
+    ".": {
+      "types": "./dist/lib/index.d.ts",
+      "import": "./dist/lib/index.js"
+    },
+    "./components": {
+      "types": "./dist/lib/components/index.d.ts",
+      "import": "./dist/lib/components/index.js"
+    },
+    "./components/*": {
+      "types": "./dist/lib/components/*.d.ts",
+      "import": "./dist/lib/components/*.js"
+    },
+    "./utils": {
+      "types": "./dist/lib/utils/index.d.ts",
+      "import": "./dist/lib/utils/index.js"
+    },
+    "./utils/*": {
+      "types": "./dist/lib/utils/*.d.ts",
+      "import": "./dist/lib/utils/*.js"
+    }
+  },
   "bin": {
     "shadow-claw": "bin/cli.mjs",
     "shadowclaw": "bin/cli.mjs"
@@ -35,14 +57,16 @@
     "assert:version": "node bin/assert-version-bump.mjs",
     "build:clean": "node bin/rimraf.mjs dist && node bin/rimraf.mjs dist-electron",
     "build:copy:all:assets": "cross-env COPY_ALL_ASSETS=true npm run build",
+    "build:lib": "npm run -s tsc:lib && rolldown -c rolldown.lib.config.mjs",
     "build:pkg:get:meta": "git rev-parse HEAD",
     "build:pkg:meta": "node -e \"import fs from 'node:fs/promises';const m=process.argv[1],f='dist/public/index.html',s=await fs.readFile(f,'utf8');await fs.writeFile(f,s.replace(/<meta\\s+name=\\\"revision\\\"[^>]*>/,'<meta name=\\\"revision\\\" content=\\\"'+m+'\\\" />'));\"",
     "build:prerender-main-memory-false": "cross-env PRERENDER_MAIN_MEMORY=false npm run -s build",
     "build:prod:prerender-main-memory-false": "cross-env PRERENDER_MAIN_MEMORY=false npm run -s build:prod",
     "build:prod:local": "cross-env NODE_ENV=production PAGES_ORIGIN=http://localhost:8888/shadow-claw/ PAGES_BASE_PATH=/shadow-claw/ npm run build",
-    "build:prod": "cross-env NODE_ENV=production npm run build",
+    "build:prod": "cross-env NODE_ENV=production npm run build && npm run build:lib",
     "build:service-worker": "npm run -s clean:service-worker && workbox generateSW src/service-worker/workbox-config.cjs",
-    "build": "npm run -s tsc && node bin/build/build.mjs",
+    "build:storybook": "STORYBOOK_DISABLE_TELEMETRY=true storybook build -o dist/storybook",
+    "build": "npm run -s build:clean && npm run -s tsc && node bin/build/build.mjs",
     "clean:service-worker": "node bin/rimraf.mjs dist/public/workbox-*.js && node bin/rimraf.mjs dist/public/service-worker.js",
     "deploy:gh-pages": "npm run -s build:prod && gh-pages -f -m \"npm run deploy:gh-pages\" -d dist/public -r git@github.com:xt-ml/shadow-claw.git",
     "dev": "npm run build && concurrently -P \"npm run rolldown -- --watch\" \"node --watch dist/server.js {@}\" --",
@@ -59,14 +83,16 @@
     "lighthouse": "npm run -s build:prod && npx @lhci/cli autorun",
     "rolldown": "rolldown -c rolldown.config.mjs",
     "start": "npm run build && node dist/server.js",
+    "storybook": "cross-env NODE_OPTIONS=\"--max-old-space-size=4096\" STORYBOOK_DISABLE_TELEMETRY=true storybook dev -p 6006",
     "test": "npm run -s tsc && cross-env NODE_OPTIONS=\"--no-warnings --experimental-vm-modules\" jest",
     "tsc:agent:worker": "tsc --noEmit -p tsconfig.agent.worker.json",
     "tsc:app": "tsc --noEmit -p tsconfig.json",
+    "tsc:lib": "tsc -p tsconfig.lib.json",
     "tsc:server": "tsc --noEmit -p tsconfig.server.json",
     "tsc:service:worker": "tsc --noEmit -p tsconfig.service.worker.json",
     "tsc:test": "tsc --noEmit -p tsconfig.test.json",
     "tsc:transformers:js:worker": "tsc --noEmit -p tsconfig.transformers-js.worker.json",
-    "tsc": "npm -s run tsc:app && npm -s run tsc:agent:worker && npm -s run tsc:transformers:js:worker && npm -s run tsc:service:worker && npm -s run tsc:server && npm -s run tsc:test"
+    "tsc": "npm -s run tsc:app && npm -s run tsc:lib && npm -s run tsc:agent:worker && npm -s run tsc:transformers:js:worker && npm -s run tsc:service:worker && npm -s run tsc:server && npm -s run tsc:test"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock": "^3.1087.0",
@@ -106,6 +132,8 @@
     "@mcp-b/webmcp-polyfill": "^3.0.0",
     "@mcp-b/webmcp-types": "^3.0.0",
     "@playwright/test": "^1.59.2",
+    "@storybook/addon-docs": "^10.6.0",
+    "@storybook/web-components-vite": "^10.6.0",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
     "@types/dom-chromium-ai": "^0.0.16",
@@ -134,6 +162,7 @@
     "jest-environment-jsdom": "^30.3.0",
     "jszip": "^3.10.1",
     "just-bash": "^2.14.2",
+    "lit": "^3.3.3",
     "path-browserify": "^1.0.1",
     "pdfjs-dist": "^5.7.284",
     "postcss": "^8.5.13",
@@ -143,10 +172,12 @@
     "rolldown": "^1.1.5",
     "rollup-plugin-copy": "^3.5.0",
     "signal-polyfill": "^0.2.2",
+    "storybook": "^10.6.0",
     "stream-browserify": "^3.0.0",
     "typescript": "^7.0.2",
     "util": "^0.12.5",
     "v86": "^0.5.355",
+    "vite": "^6.4.3",
     "workbox-cli": "^7.4.0",
     "workbox-window": "^7.4.0"
   },

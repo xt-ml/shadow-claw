@@ -15,6 +15,15 @@
   z-index: 9999;
 }
 
+:host([inline]) {
+  bottom: auto;
+  margin-top: 1rem;
+  pointer-events: auto;
+  position: static;
+  right: auto;
+  z-index: auto;
+}
+
 .toast-container {
   display: flex;
   flex-direction: column;

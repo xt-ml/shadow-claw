@@ -11,11 +11,39 @@ import {
 } from "@jest/globals";
 
 import config from "../rolldown.config.mjs";
+import libConfig from "../rolldown.lib.config.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 describe("rolldown.config.mjs", () => {
+  describe("library build config", () => {
+    it("exports module entries for the public library surface", () => {
+      expect(Array.isArray(libConfig)).toBe(true);
+      expect(libConfig.length).toBeGreaterThanOrEqual(1);
+
+      const entryInputs = libConfig
+        .map((entry) => entry.input)
+        .flatMap((input) =>
+          Array.isArray(input)
+            ? input
+            : typeof input === "object" && input !== null
+              ? Object.values(input)
+              : [input],
+        );
+
+      expect(entryInputs).toEqual(
+        expect.arrayContaining([
+          "src/index.ts",
+          "src/components/index.ts",
+          "src/utils/index.ts",
+          "src/components/common/shadow-claw-card/shadow-claw-card.ts",
+          "src/utils/ulid.ts",
+        ]),
+      );
+    });
+  });
+
   describe("bundle configurations and splitting", () => {
     it("exports an array of build configs", () => {
       expect(Array.isArray(config)).toBe(true);

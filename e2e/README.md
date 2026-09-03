@@ -536,10 +536,16 @@ Storage integration tests (`storage.test.ts`) and migration tests (`migrateLegac
 
 ### Adding a New Component
 
-1. Create component in `src/components/shadow-claw-<name>/shadow-claw-<name>.ts`
-2. Import and instantiate in relevant page object
-3. Expose component methods via page object (optional)
-4. Document in this README
+1. Create component in `src/components/shadow-claw-<name>/shadow-claw-<name>.ts` (declare `static observedAttributes` if reacting to attribute changes)
+2. Export component from `src/components/index.ts`
+3. Add co-located Storybook story in `src/components/shadow-claw-<name>/shadow-claw-<name>.stories.ts` for visual testing and interactive documentation (`npm run storybook`)
+4. Import and instantiate in relevant page object
+5. Expose component methods via page object (optional)
+6. Document in this README
+
+### Visual Verification with Storybook
+
+In addition to Playwright end-to-end integration tests, ShadowClaw uses Storybook (`npm run storybook`, `npm run build:storybook`) with `@storybook/web-components-vite` to test and document UI components in isolation (e.g., toasts, dialogs, cards, empty states, page headers, provider settings). Component stories (`*.stories.ts`) verify reactive attribute reflection, custom events, inline rendering, and light/dark themes.
 
 ### Extending Fixtures
 

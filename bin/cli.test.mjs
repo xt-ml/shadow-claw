@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -10,6 +17,15 @@ const execFileAsync = promisify(execFile);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const toolchainRoot = path.resolve(__dirname, "..");
 const cliPath = path.join(__dirname, "cli.mjs");
+
+async function pathExists(p) {
+  try {
+    await stat(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 describe("shadow-claw CLI", () => {
   let tempDir;
@@ -210,7 +226,7 @@ describe("shadow-claw CLI", () => {
     await execFileAsync(process.execPath, [cliPath, "init", targetDir]);
 
     const siteConfigStr = await readFile(
-      path.join(targetDir, "site-config.json"),
+      path.join(targetDir, "shadow-claw-config.json"),
       "utf8",
     );
     expect(siteConfigStr).toContain("My ShadowClaw Site");
@@ -358,6 +374,254 @@ slug: "custom-test"
       expect(mcpRes.status).toBe(200);
       const mcpData = JSON.parse(mcpRes.body);
       expect(mcpData.result.serverInfo.name).toBe("shadow-claw");
+    } finally {
+      child.kill("SIGTERM");
+    }
+  }, 15_000);
+
+  it("does not litter .cache in working directory when launched with --tmp", async () => {
+    const { spawn } = await import("node:child_process");
+    const cleanDir = path.join(tempDir, "clean-tmp-project");
+    await mkdir(cleanDir, { recursive: true });
+
+    const serverPort = "19889";
+    const child = spawn(
+      process.execPath,
+      [
+        cliPath,
+        "server",
+        "--port",
+        serverPort,
+        "--content-root",
+        cleanDir,
+        "--tmp",
+      ],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error(`Timeout waiting for server. Output: ${output}`));
+        }, 10_000);
+
+        const check = setInterval(() => {
+          if (output.includes("Services-only mode active")) {
+            clearInterval(check);
+            clearTimeout(timeout);
+            resolve();
+          }
+        }, 100);
+      });
+
+      // Verify that cleanDir does NOT have a .cache directory
+      const hasCache = await pathExists(path.join(cleanDir, ".cache"));
+      expect(hasCache).toBe(false);
+
+      // Verify that files were written to system tmpdir/shadow-claw
+      const { tmpdir } = await import("node:os");
+      const systemTmp = path.join(tmpdir(), "shadow-claw");
+      const tmpCacheExists = await pathExists(systemTmp);
+      expect(tmpCacheExists).toBe(true);
+    } finally {
+      child.kill("SIGTERM");
+    }
+  }, 15_000);
+
+  it("stores cache and database files in custom --cache-dir without littering content root", async () => {
+    const { spawn } = await import("node:child_process");
+    const cleanDir = path.join(tempDir, "clean-custom-project");
+    const customCache = path.join(tempDir, "my-external-cache");
+    await mkdir(cleanDir, { recursive: true });
+
+    const serverPort = "19890";
+    const child = spawn(
+      process.execPath,
+      [
+        cliPath,
+        "server",
+        "--port",
+        serverPort,
+        "--content-root",
+        cleanDir,
+        "--cache-dir",
+        customCache,
+      ],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error(`Timeout waiting for server. Output: ${output}`));
+        }, 10_000);
+
+        const check = setInterval(() => {
+          if (output.includes("Services-only mode active")) {
+            clearInterval(check);
+            clearTimeout(timeout);
+            resolve();
+          }
+        }, 100);
+      });
+
+      // cleanDir has NO .cache directory
+      const hasCache = await pathExists(path.join(cleanDir, ".cache"));
+      expect(hasCache).toBe(false);
+
+      // customCache contains the token and database
+      const hasToken = await pathExists(
+        path.join(customCache, "control-token.json"),
+      );
+      const hasDb = await pathExists(
+        path.join(customCache, "database", "clients.db"),
+      );
+      expect(hasToken).toBe(true);
+      expect(hasDb).toBe(true);
+    } finally {
+      child.kill("SIGTERM");
+    }
+  }, 15_000);
+
+  it("reads cacheDir from shadow-claw.config.json when launching server", async () => {
+    const { spawn } = await import("node:child_process");
+    const projectDir = path.join(tempDir, "config-cache-project");
+    await mkdir(projectDir, { recursive: true });
+
+    await writeFile(
+      path.join(projectDir, "shadow-claw.config.json"),
+      JSON.stringify({ cacheDir: "my-configured-cache" }),
+      "utf8",
+    );
+
+    const serverPort = "19891";
+    const child = spawn(
+      process.execPath,
+      [cliPath, "server", "--port", serverPort, "--content-root", projectDir],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error(`Timeout waiting for server. Output: ${output}`));
+        }, 10_000);
+
+        const check = setInterval(() => {
+          if (output.includes("Services-only mode active")) {
+            clearInterval(check);
+            clearTimeout(timeout);
+            resolve();
+          }
+        }, 100);
+      });
+
+      // Default .cache was NOT created
+      const hasDefaultCache = await pathExists(path.join(projectDir, ".cache"));
+      expect(hasDefaultCache).toBe(false);
+
+      // Configured cache contains the token and database
+      const configuredCache = path.join(projectDir, "my-configured-cache");
+      const hasToken = await pathExists(
+        path.join(configuredCache, "control-token.json"),
+      );
+      const hasDb = await pathExists(
+        path.join(configuredCache, "database", "clients.db"),
+      );
+      expect(hasToken).toBe(true);
+      expect(hasDb).toBe(true);
+    } finally {
+      child.kill("SIGTERM");
+    }
+  }, 15_000);
+
+  it("reads cacheDir from legacy site-config.json for backward compatibility", async () => {
+    const { spawn } = await import("node:child_process");
+    const projectDir = path.join(tempDir, "legacy-config-cache-project");
+    await mkdir(projectDir, { recursive: true });
+
+    await writeFile(
+      path.join(projectDir, "site-config.json"),
+      JSON.stringify({ cacheDir: "legacy-cache-folder" }),
+      "utf8",
+    );
+
+    const serverPort = "19892";
+    const child = spawn(
+      process.execPath,
+      [cliPath, "server", "--port", serverPort, "--content-root", projectDir],
+      {
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
+
+    let output = "";
+    child.stdout.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      output += chunk.toString();
+    });
+
+    try {
+      await new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error(`Timeout waiting for server. Output: ${output}`));
+        }, 10_000);
+
+        const check = setInterval(() => {
+          if (output.includes("Services-only mode active")) {
+            clearInterval(check);
+            clearTimeout(timeout);
+            resolve();
+          }
+        }, 100);
+      });
+
+      // Default .cache was NOT created
+      const hasDefaultCache = await pathExists(path.join(projectDir, ".cache"));
+      expect(hasDefaultCache).toBe(false);
+
+      // Legacy configured cache contains token and database
+      const legacyCache = path.join(projectDir, "legacy-cache-folder");
+      const hasToken = await pathExists(
+        path.join(legacyCache, "control-token.json"),
+      );
+      const hasDb = await pathExists(
+        path.join(legacyCache, "database", "clients.db"),
+      );
+      expect(hasToken).toBe(true);
+      expect(hasDb).toBe(true);
     } finally {
       child.kill("SIGTERM");
     }

@@ -1,29 +1,31 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "out",
+    "outDir": "dist/lib",
     "rootDir": "src",
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "noEmit": false,
     "lib": [
       "ESNext",
       "DOM"
     ]
   },
   "include": [
-    "src/**/*.css",
-    "src/**/*.html",
-    "src/**/*.ts",
+    "src/index.ts",
+    "src/components/**/*.ts",
+    "src/components/**/*.d.ts",
+    "src/utils/**/*.ts"
   ],
   "exclude": [
     "**/*.test.ts",
     "**/*.stories.ts",
     "coverage",
     "dist",
+    "dist-electron",
     "e2e",
     "node_modules",
     "src/server",
-    "src/worker",
-    "src/service-worker/fetch-proxy.ts",
-    "src/service-worker/push-handler.ts",
-    "src/service-worker/share-target.ts"
+    "src/worker"
   ]
 }

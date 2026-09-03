@@ -88,14 +88,21 @@ export function createApp(config: ServerConfig): {
   // ---------------- OAUTH ROUTES ----------------
   registerOAuthRoutes(app);
 
+  const cacheDir =
+    config.cacheDir ||
+    (process.env.SHADOWCLAW_CACHE_DIR || "").trim() ||
+    (path.basename(config.databaseDir) === "database"
+      ? path.dirname(config.databaseDir)
+      : path.resolve(config.databaseDir, ".."));
+
   // ---------------- ACTIVITY LOG ROUTES ----------------
   registerActivityLogRoutes(app, {
-    logsDir: path.resolve(config.databaseDir, "..", ".cache", "logs"),
+    logsDir: path.resolve(cacheDir, "logs"),
   });
 
   // ---------------- BACKUP ROUTES ----------------
   registerBackupRoutes(app, {
-    backupsDir: path.resolve(config.databaseDir, "..", ".cache", "backups"),
+    backupsDir: path.resolve(cacheDir, "backups"),
     token: config.controlToken,
     allowedOrigins: config.allowedOrigins,
     corsMode: config.corsMode,
@@ -103,7 +110,7 @@ export function createApp(config: ServerConfig): {
 
   // ---------------- CSP REPORT ROUTES ----------------
   registerCspReportRoutes(app, {
-    logsDir: path.resolve(config.databaseDir, "..", ".cache", "logs"),
+    logsDir: path.resolve(cacheDir, "logs"),
     logger,
   });
 

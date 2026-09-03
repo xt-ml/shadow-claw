@@ -35,7 +35,7 @@ Detailed docs for each major subsystem.
 | [Notifications & Scheduling](subsystems/notifications.md)               | Web Push, VAPID, server-side SQLite scheduler, recursion guards                                                                                                 |
 | [Providers & Rate Limiting](subsystems/providers.md)                    | LLM provider registry, adapter pattern, Prompt API (default), dynamic CPU/WASM fallback, CacheStorage model downloads, and 30s auto-closing error dialogs       |
 | [Electron Desktop](subsystems/electron.md)                              | Desktop app architecture, in-process server, power management                                                                                                   |
-| [Reactive UI](subsystems/reactive-ui.md)                                | Signals, `ShadowClawElement`, `reconcileList`, Web Components, stores                                                                                           |
+| [Reactive UI & Component Library](subsystems/reactive-ui.md)            | Signals, `ShadowClawElement`, `reconcileList`, Web Components, stores, ESM package exports, and Storybook workbench                                             |
 | [Model Registry & Capabilities](subsystems/providers.md#model-registry) | Dynamic model metadata fetching and modality capability detection                                                                                               |
 | [Attachment Capabilities](subsystems/attachment-capabilities.md)        | MIME-aware attachment handling and native vs fallback delivery                                                                                                  |
 | [Chat Template Sanitizer](subsystems/sanitizer.md)                      | Strip control tokens and structural markers from local model output                                                                                             |
@@ -103,7 +103,7 @@ The _why_ behind key choices.
 - Architecture docs describe _what is_ and _how it works_.
 - Guides describe _how to do things_.
 - Decision docs describe _why decisions were made_ and are append-only (supersede, don't edit).
-- For UI documentation, keep component organization guidance aligned with `src/components/common/` for shared primitives and `src/components/settings/` for settings feature components.
+- For UI documentation, keep component organization guidance aligned with `src/components/common/` for shared primitives and `src/components/settings/` for settings feature components. Verify and document visual component states with co-located Storybook stories (`npm run storybook`).
 - Keep references in this index in sync with actual files under `docs/`, plus root-level `README.md` and `e2e/README.md` when behavior changes cross boundaries.
 - When adding or renaming docs pages, update `docs/README.md` and verify the relevant references in `AGENTS.md`.
 - Use Mermaid diagrams generously — they render on GitHub and in most editors.

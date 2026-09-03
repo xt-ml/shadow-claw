@@ -20,7 +20,7 @@ ShadowClaw provides deep support for rendering user-supplied markdown, HTML, and
 
 ```mermaid
 graph TD
-  A["Embedded Config / site-config.json"] --> B["initCustomElementSecurityFromEmbeddedConfig()"]
+  A["Embedded Config / shadow-claw.config.json"] --> B["initCustomElementSecurityFromEmbeddedConfig()"]
   B --> C["activeAllowedElements Set"]
   B --> D["activeHostPatterns & Matchers"]
   B --> E["activeIframeSandboxPolicy"]
@@ -47,7 +47,7 @@ graph TD
 ### 1. Custom Element Validation (`isAllowedCustomElement`)
 
 - **Built-in Permitted Elements:** Standard HTML elements (no hyphen) and built-in ShadowClaw components (`shadow-claw` and `shadow-claw-*`) are always permitted.
-- **Dynamic Allowlist:** Custom elements (tags containing `-`) outside the built-in prefix must match explicitly configured allowlists populated from `site-config.json` or persistent IndexedDB configuration.
+- **Dynamic Allowlist:** Custom elements (tags containing `-`) outside the built-in prefix must match explicitly configured allowlists populated from `shadow-claw.config.json` (or legacy `site-config.json`) or persistent IndexedDB configuration.
 
 ### 2. Registry Guard (`installCustomElementsRegistryGuard`)
 
@@ -87,7 +87,7 @@ Validates remote custom element scripts dynamically:
 
 Configuration can be provided declaratively or loaded dynamically:
 
-### Embedded Site Configuration (`site-config.json`)
+### Declarative Configuration (`shadow-claw.config.json`)
 
 ```json
 {

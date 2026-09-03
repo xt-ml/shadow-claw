@@ -9,9 +9,10 @@ import http from "node:http";
 import https from "node:https";
 import path from "node:path";
 import fs from "node:fs";
+import { tmpdir } from "node:os";
 import { CliWebRtcControlClient } from "./webrtc-control-client.mjs";
 
-export function resolveControlToken(customToken) {
+export function resolveControlToken(customToken, cacheDir) {
   if (customToken && typeof customToken === "string") {
     return customToken.trim();
   }
@@ -20,11 +21,19 @@ export function resolveControlToken(customToken) {
     return process.env.SHADOWCLAW_CONTROL_TOKEN.trim();
   }
 
-  // 1. Try reading from .cache/control-token.json
+  const explicitCacheDir =
+    cacheDir || (process.env.SHADOWCLAW_CACHE_DIR || "").trim();
+  const tmpCacheDir = path.join(tmpdir(), "shadow-claw");
+
+  // 1. Try reading from control-token.json
   try {
     const candidates = [
+      ...(explicitCacheDir
+        ? [path.join(explicitCacheDir, "control-token.json")]
+        : []),
       path.join(process.cwd(), ".cache", "control-token.json"),
       path.join(process.cwd(), "control-token.json"),
+      path.join(tmpCacheDir, "control-token.json"),
     ];
     for (const filePath of candidates) {
       if (fs.existsSync(filePath)) {
@@ -45,8 +54,15 @@ export function resolveControlToken(customToken) {
     }
     if (sqlite && sqlite.DatabaseSync) {
       const candidates = [
+        ...(explicitCacheDir
+          ? [
+              path.join(explicitCacheDir, "database", "clients.db"),
+              path.join(explicitCacheDir, "clients.db"),
+            ]
+          : []),
         path.join(process.cwd(), "database", "clients.db"),
         path.join(process.cwd(), ".cache", "database", "clients.db"),
+        path.join(tmpCacheDir, "database", "clients.db"),
       ];
       for (const dbPath of candidates) {
         if (fs.existsSync(dbPath)) {
@@ -71,7 +87,8 @@ export class CliControlClient {
     this.host = options.host || process.env.SHADOWCLAW_HOST || "127.0.0.1";
     this.port =
       options.port || parseInt(process.env.SHADOWCLAW_PORT || "8888", 10);
-    this.token = options.token || resolveControlToken(options.token);
+    this.token =
+      options.token || resolveControlToken(options.token, options.cacheDir);
     const isHttps = Boolean(
       options.https ||
       ["1", "true", "yes"].includes(

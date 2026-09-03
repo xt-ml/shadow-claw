@@ -139,14 +139,15 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prere
   - Express server includes static file middleware serving fallback content from `pages/main` for `/files/main/`, `/static-main/`, and `/pages/`, alongside SPA redirect fallback middleware for clean URL reloads.
 - **DSD Shell Override**:
   - Enabled via the "Override pre-rendered content" toggle in Settings (`CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON`). Hides the initial DSD shell on boot, showing the skeleton loader until hydration finishes.
-- **Declarative Site Configuration (`site-config.json`)**:
-  - Template repositories and content publishers can declaratively brand and customize the site shell without editing ShadowClaw source files. The canonical location is the project root; compatible legacy content locations are also discovered:
+- **Declarative Configuration (`shadow-claw.config.json`)**:
+  - Template repositories and content publishers can declaratively brand and customize the site shell without editing ShadowClaw source files. The canonical location is `shadow-claw.config.json` in the project root (legacy `site-config.json` is also supported for backward compatibility):
     - **`site`**: `title`, `description`, `themeColor`, `lang`.
     - **`branding`**: `titleText`, `siteUrl`, `repoUrl`, `repoLabel`, `faviconPath`, `appleTouchIconPath`, `logoSlotHtml`.
     - **`sidebar`**: `pagesHidden`, `chatHidden`, `tasksHidden`, `filesHidden`, `defaultPage` (`"pages"` | `"chat"` | `"tasks"` | `"files"`).
     - **`pages`**: `sortOrder` (`"asc"` | `"desc"`), `defaultPinnedPage`.
     - **`theme`**: `stylesheet` (custom theme CSS stylesheet injected into head).
     - **`settings`**: `assistantName` (pre-seeds the default assistant name), `defaultToolsProfile` (pre-seeds the default tool profile e.g. `"__builtin_default"` or `"none"`), `enabledTools` (pre-seeds default enabled built-in tool array).
+    - **`cacheDir`** / **`server.cacheDir`**: Custom directory for storing cache, control tokens, and SQLite databases.
   - **Build-Time Application**: `bin/site-config/apply.mjs` patches `index.html`, `manifest.json`, `sitemap.xml` / `sitemap.txt`, and copies custom theme stylesheets into the build distribution. Stylesheets under `pages/resources/`, `pages/deps/`, `resources/`, `deps/`, `pages/assets/`, or `pages/main/assets/` are flattened to the distribution root and have that prefix removed from the generated `href`; other paths, such as `pages/main/theme.css`, retain their path.
   - **Branding Asset Precedence**: For `faviconPath` and `appleTouchIconPath`, content-specific locations under `pages/` and its supported resource/dependency paths are checked before bare repository-root defaults, so a published site's branding assets are not shadowed by ShadowClaw's built-in assets.
   - **DSD Shell Navigation Visibility**: `bin/prerender-dsd-shell/prerender-dsd-shell.mjs` applies `hidden` and `aria-hidden` attributes to sidebar navigation items at build time, preventing layout shift on first paint.
@@ -157,7 +158,7 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prere
 ### Static Publishing Build
 
 The production build is orchestrated by `bin/build/build.mjs`. It copies optional
-content, skills, and declarative tools, applies `site-config.json`, prerenders
+content, skills, and declarative tools, applies `shadow-claw.config.json` (or `site-config.json`), prerenders
 the DSD shell, generates any configured pretty paths, and builds the service
 worker. Published `skills/` and `tools/` entries are included in
 `static-main-manifest.json` and seeded only into the Main conversation. A

@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import {
   cp,
   mkdir,
@@ -139,8 +140,11 @@ describe("build without and with pages", () => {
       "index.html",
       "MEMORY.md",
     ]);
-    expect(
-      await readFile(path.join(tempProjectRoot, "site-config.json"), "utf8"),
-    ).toContain("ShadowClaw");
+    const configPath = [
+      path.join(tempProjectRoot, "shadow-claw.config.json"),
+      path.join(tempProjectRoot, "shadow-claw-config.json"),
+      path.join(tempProjectRoot, "site-config.json"),
+    ].find((p) => fs.existsSync(p));
+    expect(await readFile(configPath, "utf8")).toContain("ShadowClaw");
   });
 });

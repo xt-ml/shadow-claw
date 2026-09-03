@@ -8,7 +8,7 @@
 ShadowClaw is a browser-native AI assistant written in **TypeScript** (`.ts`) whose core orchestration and tool-use loop run client-side in the browser. It is deployable as a PWA, a native desktop app via Electron, backed by a Node.js server (local proxying, control plane, MCP), and driven via the `shadow-claw` CLI.
 The project uses a **Rolldown build pipeline** to bundle the application.
 
-**Stack:** HTML + TypeScript / ESM · Web Components · TC39 Signals · IndexedDB · OPFS · Web Workers · Service Worker (Workbox PWA · Web Push) · Express dev server · Electron desktop · AWS Bedrock · Jest + Playwright tests
+**Stack:** HTML + TypeScript / ESM · Web Components · TC39 Signals · IndexedDB · OPFS · Web Workers · Service Worker (Workbox PWA · Web Push) · Express dev server · Electron desktop · AWS Bedrock · Jest + Playwright tests · Storybook
 
 ## Subsystem Documentation
 
@@ -59,8 +59,9 @@ Tests are the source of truth for expected behavior. Before implementing a new f
 
 - Source files use `.ts` (TypeScript).
 - Tests live **next to** their source file: `src/core/orchestrator/orchestrator.ts` → `src/core/orchestrator/orchestrator.test.ts`.
+- Storybook stories live **next to** their component file: `src/components/shadow-claw-toast/shadow-claw-toast.ts` → `src/components/shadow-claw-toast/shadow-claw-toast.stories.ts`.
 - End-to-end tests live in `e2e/` and use Playwright with fixtures + Page Objects. Extensions are `.ts`.
-- Components are in `src/components/shadow-claw-*/shadow-claw-*.ts` (each in its own subdirectory with co-located `.html` and `.css` files). Many large components extract their logic into co-located `utils/` subdirectories.
+- Components are in `src/components/shadow-claw-*/shadow-claw-*.ts` (each in its own subdirectory with co-located `.html` and `.css` files). Many large components extract their logic into co-located `utils/` subdirectories. Common shared primitives reside in `src/components/common/` and settings panels in `src/components/settings/`.
 - `src/core/theme-init.ts` is a TypeScript bootstrap script compiled by Rolldown as a self-contained IIFE (`dist/public/theme-init.js`). It must remain free of module-level side effects that depend on the full app being ready.
 
 ### Types & Imports
@@ -69,6 +70,7 @@ Tests are the source of truth for expected behavior. Before implementing a new f
 - **A2UI types** live in `src/ui/a2ui/types.ts`. Utility functions are individual ESM files under `src/ui/a2ui/utils/`. Registries are under `src/ui/a2ui/registries/`. The old monolithic `src/ui/a2ui.ts` has been removed — do not recreate it.
 - **A2UI catalog renderers** live in `src/components/shadow-claw-a2ui/catalog/basic/` (one file per component, co-located tests). Do not add files directly under `catalog/` — always place them inside a named subdirectory (e.g., `basic/`).
 - External libraries are locally bundled using **Rolldown** and `npm install`. Node-only packages (Express, Jest, Workbox CLI, Electron) belong in `devDependencies`.
+- **Package Library Exports:** ShadowClaw exposes modular ESM exports declared in `package.json` under `.`, `./components`, `./components/*`, `./utils`, and `./utils/*`. Library bundles and TypeScript declaration files (`.d.ts`) are compiled via `npm run build:lib` (`npm run tsc:lib` + `rolldown -c rolldown.lib.config.mjs`) into `dist/lib/`.
 - **JSON Imports:** Always use ES import attributes (`with { type: "json" }`), not the deprecated `assert` syntax.
 
 ### JS Shell Capabilities & Limitations (Bash tool)
@@ -146,21 +148,29 @@ Markdown and HTML preview work should preserve the Settings-backed iframe host a
 
 ### Custom Element Security & Iframe Sandboxing
 
-- **Custom Element Guards:** `installCustomElementsRegistryGuard` and `installCustomElementDomGuard` (`src/security/custom-element-security.ts`) intercept unauthorized custom element registrations and dynamically strip unapproved custom elements from the DOM tree. Only core elements (`shadow-claw` and `shadow-claw-*`) or elements explicitly allowlisted via `site-config.json` or `CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS` are permitted.
+- **Custom Element Guards:** `installCustomElementsRegistryGuard` and `installCustomElementDomGuard` (`src/security/custom-element-security.ts`) intercept unauthorized custom element registrations and dynamically strip unapproved custom elements from the DOM tree. Only core elements (`shadow-claw` and `shadow-claw-*`) or elements explicitly allowlisted via `shadow-claw.config.json` (or legacy `site-config.json`) or `CONFIG_KEYS.ALLOWED_CUSTOM_ELEMENTS` are permitted.
 - **Iframe Sandboxing & CSP:** Sandboxed preview iframes omit `allow-same-origin` by default to enforce opaque-origin (`null`) isolation and eliminate Chrome sandbox escape warnings, using a nonce-gated Content Security Policy with domain restrictions generated via `getIframeCsp(nonce)`. Persistent storage for sandboxed custom elements (`IndexedDB` and `localStorage`) is provided via a transparent `postMessage` storage proxy bridge (`iframe-storage-bridge.js`) handled by `dispatchStorageProxyCommand.ts` and `iframe-storage-proxy.ts`.
 - **Iframe Attribute Cleanups:** When rendering preview iframes (such as in `shadow-claw-pages` and `shadow-claw-file-viewer`), rely on `allow="fullscreen"` and omit redundant `allowfullscreen` boolean attributes to avoid browser DevTools precedence warnings.
 - **Approved Script Loading:** Dynamic loading of custom element scripts is restricted to safe protocols and validated host patterns using `loadApprovedCustomElementScript`.
 
-### Declarative Site Configuration, Storage Namespacing & Dynamic Navigation
+### Component Lifecycle & Storybook Workbench
 
-- **Declarative Site Config (`site-config.json`):** Template repositories configure metadata, branding, tool defaults (`defaultToolsProfile`, `enabledTools`), custom element allowlists, and navigation visibility via `site-config.json`, which is patched into production artifacts at build time via `bin/site-config/apply.mjs` and seeded into IndexedDB at runtime via `applySiteConfigDefaults()`.
+- **Observed Attributes on Custom Elements:** Custom elements extending `ShadowClawElement` that dynamically react to attribute modifications must declare `static observedAttributes` (for example, `ShadowClawEmptyState` observing `["message", "hint", "compact", "warning"]`) so `attributeChangedCallback` triggers component re-rendering.
+- **Storybook Workbench:** Storybook (`npm run storybook` on port 6006, `npm run build:storybook` for static output in `dist/storybook`) uses `@storybook/web-components-vite` (v10) with custom HTML/CSS import attribute handling. Add co-located `*.stories.ts` files for UI components. Storybook defaults to dark mode (`.storybook/preview.ts`) and isolates component visual verification from end-to-end integration tests.
+- **Toast Inline Mode & Instance API:** `<shadow-claw-toast>` supports an `inline` attribute (`:host([inline])`) for non-fixed rendering inside documentation or story environments, and exposes a `.show(message, options)` instance method alongside `showToast` and `toastStore`.
+
+### Declarative Configuration, Storage Namespacing & Dynamic Navigation
+
+- **Declarative Configuration (`shadow-claw.config.json`):** Template repositories configure metadata, branding, tool defaults (`defaultToolsProfile`, `enabledTools`), custom element allowlists, navigation visibility, and server/cache storage (`cacheDir`, `server.cacheDir`) via `shadow-claw.config.json` (a superset format with backward compatibility for legacy `site-config.json`), which is patched into production artifacts at build time via `bin/site-config/apply.mjs` and seeded into IndexedDB at runtime via `applySiteConfigDefaults()`.
 - **Per-Deployment Storage Namespacing:** Use `namespacedStorage` for `localStorage` keys and `getDbName()` / `getOpfsRootName()` for IndexedDB/OPFS namespacing per deployment namespace (`getDeploymentNamespace()`) to prevent state leakage across subpath deployments. Legacy database stores are automatically migrated via `migrateLegacyDatabase.ts`.
 - **Dynamic Sidebar Navigation:** Sidebar navigation items (Pages, Chat, Tasks, Files) support runtime toggling and build-time DSD hiding. Ensure navigation fallback logic (`getDefaultSidebarPage`) resolves to the next visible item when active pages are hidden.
 
 ### CLI & Dual-Root Build Pipeline
 
-- **Dual-Root Path Resolution:** The build toolchain (`bin/build/build.mjs`) cleanly decouples `toolchainRoot` (the ShadowClaw package/repo root) from `contentRoot` (the consumer template project). In-repo builds (`resolve(contentRoot) === resolve(toolchainRoot)`) preserve the standalone in-tree compilation path. CLI/template consumer builds read pre-bundled web assets from `toolchainRoot/dist/public` and inject `pages/`, `site-config.json`, `assets/`, `.agents/`, and pretty routes from `contentRoot`, outputting to `<contentRoot>/dist/public`.
-- **CLI Commands (`bin/cli.mjs`):** The `shadow-claw` / `shadowclaw` CLI provides `build`, `dev`, `run`, `serve`, `server` (aliases: `services`, `api`), `init`, `clients`, `send`, `backup`, `tasks`, `webrtc`, and `peer-id` commands. It supports running dev and headless service servers programmatically via `startServer` (`src/server/server.ts`) with custom `--root-path` and `--database-dir` arguments. Dev/run/serve/server commands accept `--https`, `--cert <path>`, `--key <path>`, and `--ssl-dir <path>` for opt-in HTTPS with auto-generated self-signed certs; control plane commands (`clients`, `send`, `backup`, `tasks`) accept `--https` and `-k, --insecure` to reach an HTTPS control plane server.
+- **Dual-Root Path Resolution:** The build toolchain (`bin/build/build.mjs`) cleanly decouples `toolchainRoot` (the ShadowClaw package/repo root) from `contentRoot` (the consumer template project). In-repo builds (`resolve(contentRoot) === resolve(toolchainRoot)`) preserve the standalone in-tree compilation path. CLI/template consumer builds read pre-bundled web assets from `toolchainRoot/dist/public` and inject `pages/`, `shadow-claw.config.json` (or `site-config.json`), `assets/`, `.agents/`, and pretty routes from `contentRoot`, outputting to `<contentRoot>/dist/public`.
+- **CLI Commands (`bin/cli.mjs`):** The `shadow-claw` / `shadowclaw` CLI provides `build`, `dev`, `run`, `serve`, `server` (aliases: `services`, `api`), `init`, `clients`, `send`, `backup`, `tasks`, `webrtc`, and `peer-id` commands. It supports running dev and headless service servers programmatically via `startServer` (`src/server/server.ts`) with custom `--root-path`, `--cache-dir <dir>`, and `--database-dir` arguments.
+- **Cache Directory Selection & Storage Paths:** When launching `dev`, `run`, `serve`, or `server` and no existing cache is detected, ShadowClaw displays an upfront skip tip and interactively prompts to select between the current working directory (`.cache`), system temporary storage (`node:os` `tmpdir()`), or a custom directory. Prompting can be skipped via `--tmp`, `-y`, `--cache-dir <dir>`, `SHADOWCLAW_TMP`, or `SHADOWCLAW_CACHE_DIR`. Cancellation via SIGINT / Ctrl+C is caught cleanly without error traces. All server storage paths (SQLite databases under `<cacheDir>/database`, TLS certs under `<cacheDir>/tls`, logs under `<cacheDir>/logs`, backups under `<cacheDir>/backups`, control tokens at `<cacheDir>/control-token.json`, and WebRTC IPC sockets at `<cacheDir>/webrtc-ipc.sock`) resolve under the configured `<cacheDir>`.
+- **HTTPS & Control Plane:** Dev/run/serve/server commands accept `--https`, `--cert <path>`, `--key <path>`, and `--ssl-dir <path>` for opt-in HTTPS with auto-generated self-signed certs; control plane commands (`clients`, `send`, `backup`, `tasks`) accept `--https` and `-k, --insecure` to reach an HTTPS control plane server.
 - **Naming Conventions:** Refer to the product/brand in prose and documentation as **ShadowClaw**. Use kebab-case **`shadow-claw`** for package name, CLI commands (`npx shadow-claw`), repositories, directory paths, and custom elements.
 
 ## What to Avoid
@@ -170,7 +180,7 @@ Markdown and HTML preview work should preserve the Settings-backed iframe host a
 - **Do not** `postMessage` to the worker with ad-hoc shapes — use the typed protocol in `docs/architecture/worker-protocol.md`.
 - **Do not** store API keys in plaintext — always go through `src/security/crypto.ts`.
 - **Do not** import Electron modules from browser-side `.ts` files — Electron is desktop-only.
-- **Do not** register or inject unapproved custom elements without configuring them through `site-config.json` or `setAllowedCustomElements`.
+- **Do not** register or inject unapproved custom elements without configuring them through `shadow-claw.config.json` (or `site-config.json`) or `setAllowedCustomElements`.
 - **Do not** rely on `navigator.modelContext` alone for WebMCP detection; prefer `document.modelContext` with `navigator.modelContext` fallback for compatibility. Use `parseWebMcpInputSchema` to normalize schemas across Chrome 154+ (native object) and Chrome < 154 (DOMString JSON) versions, and `getWebMcpTools` for querying registered tools with graceful degradation.
 - **Do not** commit `dist-electron/`, `push-subscriptions.db`, `scheduled-tasks.db`, or `clients.db` — they are git-ignored.
 - **Do not** add new docs pages without updating `docs/README.md` and verifying references in `AGENTS.md`.

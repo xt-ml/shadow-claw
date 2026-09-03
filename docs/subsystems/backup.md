@@ -27,7 +27,7 @@ sequenceDiagram
     Client->>Client: Enumerate OPFS files
     loop For each file
         Client->>Server: POST /api/backup/upload {clientId, backupId, path, content}
-        Server->>FS: Write to .cache/backups/{clientId}/{backupId}/...
+        Server->>FS: Write to <cacheDir>/backups/{clientId}/{backupId}/...
     end
     Client->>Server: POST /api/backup/complete {clientId, backupId, fileCount, totalBytes}
     Server->>DB: Record backup record in SQLite
@@ -54,3 +54,9 @@ All endpoints require control token authentication via `x-control-token` header,
 ## Directory Traversal Guard
 
 All incoming upload paths are normalized and validated against path traversal attacks. Any paths attempting to escape the client snapshot directory are rejected with HTTP 400.
+
+---
+
+## Storage Location
+
+Backup snapshots are stored on disk at `<cacheDir>/backups/{clientId}/{backupId}/` (defaulting to `.cache/backups/`). The storage root respects `--cache-dir <dir>`, `SHADOWCLAW_CACHE_DIR`, `--tmp`, and `shadow-claw.config.json`. Backup catalog metadata and client associations are stored in SQLite (`<cacheDir>/database/clients.db`).

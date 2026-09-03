@@ -177,8 +177,31 @@ export class ShadowClawToast extends ShadowClawElement {
       container.appendChild(toastEl);
     });
   }
+
+  show = (
+    message: string,
+    options?: import("../../stores/toast.js").ToastOptions,
+  ): number => {
+    return toastStore.show(message, options);
+  };
 }
 
 if (!customElements.get(elementName)) {
   customElements.define(elementName, ShadowClawToast);
 }
+
+export {
+  toastStore,
+  type Toast,
+  type ToastType,
+  type ToastOptions,
+} from "../../stores/toast.js";
+export {
+  showToast,
+  showSuccess,
+  showError,
+  showWarning,
+  showInfo,
+  dismissToast,
+  clearAllToasts,
+} from "../../ui/toast.js";

@@ -16,6 +16,7 @@ export interface ServerConfig {
   verbose: boolean;
   peerjs: boolean;
   rootPath: string;
+  cacheDir?: string;
   databaseDir: string;
   /**
    * When true the private-IP SSRF block in /proxy is disabled,
@@ -70,6 +71,10 @@ export function parseConfig(): ServerConfig {
       "Directory where SQLite databases are stored",
     )
     .option(
+      "--cache-dir <path>",
+      "Directory where cache and databases are stored",
+    )
+    .option(
       "--control-token <token>",
       "Secret token for control-plane authentication",
     )
@@ -111,12 +116,21 @@ export function parseConfig(): ServerConfig {
     ? path.join(__dirname, "..") // from dist/
     : path.join(__dirname, "..", ".."); // from src/server/
 
+  const envCacheDir = (env.SHADOWCLAW_CACHE_DIR || "").trim();
+  const cacheDir = options.cacheDir
+    ? path.resolve(options.cacheDir)
+    : envCacheDir
+      ? path.resolve(projectRoot, envCacheDir)
+      : undefined;
+
   const envDatabaseDir = (env.SHADOWCLAW_DATABASE_DIR || "").trim();
   const databaseDir = options.databaseDir
     ? path.resolve(options.databaseDir)
     : envDatabaseDir
       ? path.resolve(projectRoot, envDatabaseDir)
-      : path.join(projectRoot, "database");
+      : cacheDir
+        ? path.join(cacheDir, "database")
+        : path.join(projectRoot, "database");
 
   // Port logic
   let port = DEFAULT_DEV_PORT;
@@ -224,7 +238,9 @@ export function parseConfig(): ServerConfig {
     ? path.resolve(options.sslDir)
     : envSslDir
       ? path.resolve(projectRoot, envSslDir)
-      : path.resolve(databaseDir, "..", ".cache", "tls");
+      : cacheDir
+        ? path.join(cacheDir, "tls")
+        : path.resolve(databaseDir, "..", ".cache", "tls");
 
   // Static assets serving logic
   const envServeStatic =
@@ -246,6 +262,7 @@ export function parseConfig(): ServerConfig {
     verbose: options.verbose || false,
     peerjs,
     rootPath,
+    cacheDir,
     databaseDir,
     controlToken,
     allowPrivateProxy,

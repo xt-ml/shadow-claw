@@ -36,7 +36,7 @@ graph TD
   Toolchain --> BaseAssets["Base UI Bundles (dist/public)<br/>Default icons, styles, workers"]
   Toolchain --> BuildScripts["bin/prerender-dsd-shell.mjs<br/>bin/site-config/apply.mjs<br/>bin/prerender-pretty-paths.mjs"]
 
-  Content --> SiteContent["pages/ (main, resources, deps)<br/>site-config.json<br/>assets/<br/>.agents/ (skills, tools)"]
+  Content --> SiteContent["pages/ (main, resources, deps)<br/>shadow-claw.config.json<br/>assets/<br/>.agents/ (skills, tools)"]
   Content --> OutDir["<contentRoot>/dist/public"]
 
   BaseAssets --> OutDir
@@ -47,7 +47,7 @@ graph TD
 ### 1. `toolchainRoot` vs `contentRoot`
 
 - **`toolchainRoot`**: The root directory of the installed `@xt-ml/shadow-claw` or `shadow-claw` package (or the repository checkout). Contains pre-compiled web bundles (`dist/public/index.js`, `theme-init.js`, `agent.worker.js`, etc.), build scripts (`bin/`), and default icons/styles.
-- **`contentRoot`**: The consumer project root (defaults to `process.cwd()`). Contains `pages/`, `site-config.json`, `assets/`, `.agents/skills`, `.agents/tools`, and receives the final output in `dist/public`.
+- **`contentRoot`**: The consumer project root (defaults to `process.cwd()`). Contains `pages/`, `shadow-claw.config.json` (or backward-compatible `site-config.json`), `assets/`, `.agents/skills`, `.agents/tools`, and receives the final output in `dist/public`.
 
 ### 2. Execution Modes
 
@@ -78,19 +78,24 @@ Builds a static site bundle into `./dist/public`.
 
 Builds the site in development mode and starts the local server with live proxy, task scheduler, and static serving.
 
-| Option / Argument        | Type    | Description                                                 | Default        |
-| :----------------------- | :------ | :---------------------------------------------------------- | :------------- |
-| `[port]` / `-p, --port`  | number  | Port to listen on                                           | `8888`         |
-| `--host <host>` / `--ip` | string  | Bind host/IP                                                | `"127.0.0.1"`  |
-| `--open`                 | boolean | Automatically open the default browser on start             | `false`        |
-| `--cors-mode <mode>`     | string  | CORS policy: `localhost`, `private`, `all`                  | `"localhost"`  |
-| `--peerjs`               | boolean | Enable built-in PeerJS signaling server                     | `false`        |
-| `--allow-private-proxy`  | boolean | Allow `/proxy` endpoint to reach private/loopback addresses | `false`        |
-| `--https`                | boolean | Enable opt-in HTTPS server using dev TLS certificate        | `false`        |
-| `--cert <path>`          | string  | Path to custom TLS certificate (PEM)                        | `undefined`    |
-| `--key <path>`           | string  | Path to custom TLS private key (PEM)                        | `undefined`    |
-| `--ssl-dir <path>`       | string  | Directory for self-signed TLS certs                         | `".cache/tls"` |
-| `-v, --verbose`          | boolean | Enable verbose request and proxy logging                    | `false`        |
+| Option / Argument        | Type    | Description                                                                        | Default        |
+| :----------------------- | :------ | :--------------------------------------------------------------------------------- | :------------- |
+| `[port]` / `-p, --port`  | number  | Port to listen on                                                                  | `8888`         |
+| `--host <host>` / `--ip` | string  | Bind host/IP                                                                       | `"127.0.0.1"`  |
+| `--open`                 | boolean | Automatically open the default browser on start                                    | `false`        |
+| `--cache-dir <path>`     | string  | Custom cache and database storage directory                                        | `".cache"`     |
+| `--tmp, --temp`          | boolean | Store cache, token, and databases in OS temporary directory (`node:os` `tmpdir()`) | `false`        |
+| `-y, --yes`              | boolean | Skip interactive cache directory prompt and accept defaults                        | `false`        |
+| `--cors-mode <mode>`     | string  | CORS policy: `localhost`, `private`, `all`                                         | `"localhost"`  |
+| `--peerjs`               | boolean | Enable built-in PeerJS signaling server                                            | `false`        |
+| `--allow-private-proxy`  | boolean | Allow `/proxy` endpoint to reach private/loopback addresses                        | `false`        |
+| `--https`                | boolean | Enable opt-in HTTPS server using dev TLS certificate                               | `false`        |
+| `--cert <path>`          | string  | Path to custom TLS certificate (PEM)                                               | `undefined`    |
+| `--key <path>`           | string  | Path to custom TLS private key (PEM)                                               | `undefined`    |
+| `--ssl-dir <path>`       | string  | Directory for self-signed TLS certs                                                | `".cache/tls"` |
+| `-v, --verbose`          | boolean | Enable verbose request and proxy logging                                           | `false`        |
+
+> **Note on Cache Directory Prompt:** If no existing `.cache` directory or databases are found on launch, ShadowClaw prompts interactively to let you choose between the current directory (`.cache`), system temporary storage (`tmpdir()`), or a custom path. Pass `--tmp`, `-y`, `--cache-dir`, or `SHADOWCLAW_CACHE_DIR` to skip the prompt.
 
 ### `shadow-claw serve [port]`
 
@@ -102,28 +107,31 @@ Starts only the backend server and services (Express API, proxy, task scheduler,
 
 Ideal for scenarios where ShadowClaw frontends (such as static sites on GitHub Pages, Cloudflare Pages, or remote browser tabs) connect to a local or remote headless backend node.
 
-| Option / Argument           | Type    | Description                                                 | Default             |
-| :-------------------------- | :------ | :---------------------------------------------------------- | :------------------ |
-| `[port]` / `-p, --port`     | number  | Port to listen on                                           | `8888`              |
-| `--host <host>` / `--ip`    | string  | Bind host/IP                                                | `"127.0.0.1"`       |
-| `--content-root <dir>`      | string  | Content root directory                                      | `process.cwd()`     |
-| `--database-dir <dir>`      | string  | SQLite database directory                                   | `".cache/database"` |
-| `--cors-mode <mode>`        | string  | CORS policy: `localhost`, `private`, `all`                  | `"localhost"`       |
-| `--cors-allow-origin <url>` | string  | Explicit allowed origins (comma-separated)                  | `undefined`         |
-| `--control-token <token>`   | string  | Secret token for control-plane authentication               | Auto-generated      |
-| `--peerjs`                  | boolean | Enable built-in PeerJS signaling server                     | `false`             |
-| `--allow-private-proxy`     | boolean | Allow `/proxy` endpoint to reach private/loopback addresses | `false`             |
-| `--https`                   | boolean | Enable opt-in HTTPS server using dev TLS certificate        | `false`             |
-| `--cert <path>`             | string  | Path to custom TLS certificate (PEM)                        | `undefined`         |
-| `--key <path>`              | string  | Path to custom TLS private key (PEM)                        | `undefined`         |
-| `--ssl-dir <path>`          | string  | Directory for self-signed TLS certs                         | `".cache/tls"`      |
-| `-v, --verbose`             | boolean | Enable verbose request and proxy logging                    | `false`             |
+| Option / Argument           | Type    | Description                                                                        | Default             |
+| :-------------------------- | :------ | :--------------------------------------------------------------------------------- | :------------------ |
+| `[port]` / `-p, --port`     | number  | Port to listen on                                                                  | `8888`              |
+| `--host <host>` / `--ip`    | string  | Bind host/IP                                                                       | `"127.0.0.1"`       |
+| `--content-root <dir>`      | string  | Content root directory                                                             | `process.cwd()`     |
+| `--cache-dir <path>`        | string  | Custom cache and database storage directory                                        | `".cache"`          |
+| `--tmp, --temp`             | boolean | Store cache, token, and databases in OS temporary directory (`node:os` `tmpdir()`) | `false`             |
+| `-y, --yes`                 | boolean | Skip interactive cache directory prompt and accept defaults                        | `false`             |
+| `--database-dir <dir>`      | string  | SQLite database directory (defaults to `<cacheDir>/database`)                      | `".cache/database"` |
+| `--cors-mode <mode>`        | string  | CORS policy: `localhost`, `private`, `all`                                         | `"localhost"`       |
+| `--cors-allow-origin <url>` | string  | Explicit allowed origins (comma-separated)                                         | `undefined`         |
+| `--control-token <token>`   | string  | Secret token for control-plane authentication                                      | Auto-generated      |
+| `--peerjs`                  | boolean | Enable built-in PeerJS signaling server                                            | `false`             |
+| `--allow-private-proxy`     | boolean | Allow `/proxy` endpoint to reach private/loopback addresses                        | `false`             |
+| `--https`                   | boolean | Enable opt-in HTTPS server using dev TLS certificate                               | `false`             |
+| `--cert <path>`             | string  | Path to custom TLS certificate (PEM)                                               | `undefined`         |
+| `--key <path>`              | string  | Path to custom TLS private key (PEM)                                               | `undefined`         |
+| `--ssl-dir <path>`          | string  | Directory for self-signed TLS certs (defaults to `<cacheDir>/tls`)                 | `".cache/tls"`      |
+| `-v, --verbose`             | boolean | Enable verbose request and proxy logging                                           | `false`             |
 
 ### `shadow-claw init [dir]`
 
 Scaffolds a new ShadowClaw content template in `[dir]` (or `process.cwd()`) with starter:
 
-- `site-config.json` (declarative branding, title, and sorting configuration)
+- `shadow-claw.config.json` (declarative branding, title, server, and sorting configuration)
 - `pages/main/index.html` (welcome home page)
 - `.gitignore` (`dist/`, `.cache/`, `node_modules/`)
 

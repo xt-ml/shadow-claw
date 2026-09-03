@@ -248,9 +248,9 @@ To test the WebMCP integration in Google Chrome, you can use the [Model Context 
 
 See the [Adding a Tool](../guides/adding-a-tool.md) guide.
 
-### Site Configuration Tool Defaults (`site-config.json`)
+### Configuration Tool Defaults (`shadow-claw.config.json`)
 
-Site templates can declaratively initialize tool defaults and profile selections via `site-config.json`:
+Project templates can declaratively initialize tool defaults and profile selections via `shadow-claw.config.json` (or backward-compatible `site-config.json`):
 
 ```json
 {

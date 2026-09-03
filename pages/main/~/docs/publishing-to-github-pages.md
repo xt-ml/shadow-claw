@@ -19,7 +19,7 @@ Clone the entire ShadowClaw repository, add your pages to `pages/main/`, push to
 
 ### Strategy B — Pages-only repo (Git clone & inject in CI)
 
-Your repo contains your content, an optional root-level `site-config.json`, and a GitHub Actions workflow. Content lives under `pages/`; the workflow checks out ShadowClaw as a build toolchain in CI and builds into `dist/public`.
+Your repo contains your content, an optional root-level `shadow-claw.config.json` (or `site-config.json`), and a GitHub Actions workflow. Content lives under `pages/`; the workflow checks out ShadowClaw as a build toolchain in CI and builds into `dist/public`.
 
 ### Strategy C — NPM Package & CLI (`npx shadow-claw`)
 
@@ -119,7 +119,7 @@ pages/
       about.md        ← any other pages
   routes.json         ← pretty-path config (optional)
 
-site-config.json      ← branding, default tool settings, and build configuration (optional)
+shadow-claw.config.json  ← branding, default tool settings, and build configuration (optional)
 ```
 
 Site configurations can also specify tool defaults under `settings`:
@@ -164,7 +164,7 @@ When visitors navigate to the root URL (`/`) of your published site, ShadowClaw 
 
 1. Both the static site prerenderer (`prerender-dsd-shell`) and runtime page store (`orchestratorStore`) gather all page files in `pages/main/`. If `pages/main/` is absent, both use the built-in default `index.html` and `MEMORY.md` pages.
 2. `MEMORY.md` is always moved to the bottom of the list.
-3. All remaining pages are sorted by `pages.sortOrder` from `site-config.json` (`"desc"` by default, natural numeric, or `"asc"`).
+3. All remaining pages are sorted by `pages.sortOrder` from `shadow-claw.config.json` (or `site-config.json`) (`"desc"` by default, natural numeric, or `"asc"`).
 4. The first file in this sorted list (`pages[0]`) becomes the default page rendered at `/`.
 
 **How to ensure your intended home page is rendered at `/`:**
@@ -341,4 +341,4 @@ jobs:
 
 ## Template repository
 
-A ready-to-fork starter template is available in the [`shadow-claw-template`](https://github.com/xt-ml/shadow-claw-template) repository. It contains the workflow, sample `pages/main/index.html`, `pages/main/~/content/about.md`, root-level `site-config.json`, and `pages/routes.json`.
+A ready-to-fork starter template is available in the [`shadow-claw-template`](https://github.com/xt-ml/shadow-claw-template) repository. It contains the workflow, sample `pages/main/index.html`, `pages/main/~/content/about.md`, root-level `shadow-claw.config.json`, and `pages/routes.json`.

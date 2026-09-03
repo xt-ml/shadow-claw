@@ -324,9 +324,9 @@ describe("initControlPlane", () => {
     });
 
     it("handles invoke-tool via modelContext if present", async () => {
-      const mockExecute = (jest
-        .fn() as any)
-        .mockResolvedValue({ output: "hello world" });
+      const mockExecute = (jest.fn() as any).mockResolvedValue({
+        output: "hello world",
+      });
       const origDescriptor = Object.getOwnPropertyDescriptor(
         document,
         "modelContext",
@@ -411,8 +411,14 @@ describe("initControlPlane", () => {
     });
 
     it("handles executeClientControlCommand invoke-tool with worker fallback and errors", async () => {
-      const origDocMC = Object.getOwnPropertyDescriptor(document, "modelContext");
-      const origNavMC = Object.getOwnPropertyDescriptor(navigator, "modelContext");
+      const origDocMC = Object.getOwnPropertyDescriptor(
+        document,
+        "modelContext",
+      );
+      const origNavMC = Object.getOwnPropertyDescriptor(
+        navigator,
+        "modelContext",
+      );
       delete (document as any).modelContext;
       delete (navigator as any).modelContext;
 
@@ -452,7 +458,12 @@ describe("initControlPlane", () => {
         const successRes = await executeClientControlCommand(
           "invoke-tool",
           { toolName: "read_file", input: { path: "hello.txt" } },
-          { orchestrator: { agentWorker: mockWorker, activeGroupId: "br:main" } as any },
+          {
+            orchestrator: {
+              agentWorker: mockWorker,
+              activeGroupId: "br:main",
+            } as any,
+          },
         );
         expect(successRes).toEqual({ result: "Worker executed read_file" });
 
@@ -461,7 +472,12 @@ describe("initControlPlane", () => {
           executeClientControlCommand(
             "invoke-tool",
             { toolName: "failing_tool", input: {} },
-            { orchestrator: { agentWorker: mockWorker, activeGroupId: "br:main" } as any },
+            {
+              orchestrator: {
+                agentWorker: mockWorker,
+                activeGroupId: "br:main",
+              } as any,
+            },
           ),
         ).rejects.toThrow("Tool internal failure");
 
@@ -474,8 +490,10 @@ describe("initControlPlane", () => {
           ),
         ).rejects.toThrow("could not be executed");
       } finally {
-        if (origDocMC) Object.defineProperty(document, "modelContext", origDocMC);
-        if (origNavMC) Object.defineProperty(navigator, "modelContext", origNavMC);
+        if (origDocMC)
+          Object.defineProperty(document, "modelContext", origDocMC);
+        if (origNavMC)
+          Object.defineProperty(navigator, "modelContext", origNavMC);
       }
     });
 
@@ -497,7 +515,9 @@ describe("initControlPlane", () => {
       const db = await getDb();
       const { getGroupDir } = await import("../../storage/getGroupDir.js");
       const groupDir = await getGroupDir(db, "br:main");
-      const fh = await groupDir.getFileHandle("backup-sample.txt", { create: true });
+      const fh = await groupDir.getFileHandle("backup-sample.txt", {
+        create: true,
+      });
       const writable = await (fh as any).createWritable();
       await writable.write(new TextEncoder().encode("sample data"));
       await writable.close();
@@ -521,8 +541,14 @@ describe("initControlPlane", () => {
         executeClientControlCommand("invoke-tool", {}),
       ).rejects.toThrow("Missing toolName parameter");
 
-      const origDocMC = Object.getOwnPropertyDescriptor(document, "modelContext");
-      const origNavMC = Object.getOwnPropertyDescriptor(navigator, "modelContext");
+      const origDocMC = Object.getOwnPropertyDescriptor(
+        document,
+        "modelContext",
+      );
+      const origNavMC = Object.getOwnPropertyDescriptor(
+        navigator,
+        "modelContext",
+      );
       delete (navigator as any).modelContext;
 
       // ctx.executeTool
@@ -558,11 +584,13 @@ describe("initControlPlane", () => {
       expect(resInv).toEqual({ result: "invoke-res" });
 
       if (origDocMC) Object.defineProperty(document, "modelContext", origDocMC);
-      if (origNavMC) Object.defineProperty(navigator, "modelContext", origNavMC);
+      if (origNavMC)
+        Object.defineProperty(navigator, "modelContext", origNavMC);
     });
 
     it("handles send-message when orchestrator is not ready", async () => {
-      const { orchestratorStore } = await import("../../stores/orchestrator.js");
+      const { orchestratorStore } =
+        await import("../../stores/orchestrator.js");
       const origSend = orchestratorStore.sendMessage;
       (orchestratorStore as any).sendMessage = undefined;
       try {

@@ -8,6 +8,32 @@
     "target": "esnext",
     "module": "esnext",
     "moduleResolution": "bundler",
+    "paths": {
+      "shadow-claw": [
+        "./src/index.ts"
+      ],
+      "shadow-claw/components": [
+        "./src/components/index.ts"
+      ],
+      "shadow-claw/components/shadow-claw-card": [
+        "./src/components/common/shadow-claw-card/shadow-claw-card.ts"
+      ],
+      "shadow-claw/components/shadow-claw-dialog": [
+        "./src/components/shadow-claw-dialog/shadow-claw-dialog.ts"
+      ],
+      "shadow-claw/components/shadow-claw-page-header": [
+        "./src/components/shadow-claw-page-header/shadow-claw-page-header.ts"
+      ],
+      "shadow-claw/components/shadow-claw-toast": [
+        "./src/components/shadow-claw-toast/shadow-claw-toast.ts"
+      ],
+      "shadow-claw/utils": [
+        "./src/utils/index.ts"
+      ],
+      "shadow-claw/utils/*": [
+        "./src/utils/*"
+      ]
+    },
     "skipLibCheck": true,
     "noEmit": false,
     "types": [

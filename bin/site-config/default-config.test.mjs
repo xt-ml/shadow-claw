@@ -4,23 +4,32 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import fs from "node:fs";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "../..");
-const siteConfigPath = path.join(projectRoot, "site-config.json");
+const candidatePaths = [
+  path.join(projectRoot, "shadow-claw-config.json"),
+  path.join(projectRoot, "shadow-claw.config.json"),
+  path.join(projectRoot, "shadowclaw.config.json"),
+  path.join(projectRoot, "site-config.json"),
+];
+const configPath =
+  candidatePaths.find((p) => fs.existsSync(p)) || candidatePaths[0];
 
 async function readJson(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
 }
 
-describe("shadow-claw default root site-config.json", () => {
+describe("shadow-claw default root configuration", () => {
   let config;
   let originalIndexHtml;
   let originalManifest;
   let original404Html;
 
   beforeAll(async () => {
-    config = await readJson(siteConfigPath);
+    config = await readJson(configPath);
     originalIndexHtml = await readFile(
       path.join(projectRoot, "index.html"),
       "utf8",

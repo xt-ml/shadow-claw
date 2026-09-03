@@ -121,35 +121,51 @@ npm start -- 8888 --https
 # Use custom TLS certificate and private key
 npx shadow-claw dev --https --cert /path/to/cert.pem --key /path/to/key.pem
 npm start -- 8888 --https --cert /path/to/cert.pem --key /path/to/key.pem
+```
 
-# Specify custom directory to store or load auto-generated certificate
-npx shadow-claw dev --https --ssl-dir /path/to/tls
+### Cache & Storage Configuration
+
+**Flags:** `--cache-dir`, `--tmp` / `--temp`, `-y` / `--yes`
+
+Control where SQLite databases, control tokens, self-signed TLS certificates, logs, backups, and WebRTC sockets are stored.
+
+```bash
+# Custom cache directory
+npx shadow-claw dev --cache-dir /var/lib/shadow-claw
+npm start -- --cache-dir /var/lib/shadow-claw
+
+# Temporary OS directory (tmpdir())
+npx shadow-claw dev --tmp
+npm start -- --tmp
+
+# Accept defaults and skip interactive cache prompt
+npx shadow-claw dev -y
 ```
 
 > [!NOTE]
-> When `--https` is specified without `--cert` and `--key`, the server uses OpenSSL (`openssl`) to automatically generate a self-signed development certificate (`cert.pem` and `key.pem`) in `.cache/tls` (or `--ssl-dir`). OpenSSL must be installed on your machine.
->
-> Self-signed certificates are intended for local development and testing; browsers will display a standard trust warning until the certificate is manually trusted.
+> **Interactive Cache Selection Prompt:** When launching the server (`dev`, `run`, `serve`, or `server`) and no existing `.cache` directory or databases are detected, ShadowClaw displays upfront skip tips and interactively prompts to choose between the local directory (`.cache`), system temporary storage (`node:os` `tmpdir()`), or a custom directory. Passing `--tmp`, `-y`, `--cache-dir <dir>`, `SHADOWCLAW_TMP`, or `SHADOWCLAW_CACHE_DIR` bypasses the prompt. Pressing Ctrl+C exits cleanly without error traces.
 
 ## Environment Variables
 
-| Variable                          | Purpose                             | Example                       |
-| --------------------------------- | ----------------------------------- | ----------------------------- |
-| `SHADOWCLAW_HOST`                 | Server host (fallback)              | `0.0.0.0`                     |
-| `SHADOWCLAW_IP`                   | Server host alias                   | `192.168.1.100`               |
-| `SHADOWCLAW_BIND_IP`              | Server host alias                   | `127.0.0.1`                   |
-| `SHADOWCLAW_HTTPS`                | Enable HTTPS dev server             | `1`, `true`, `yes`            |
-| `SHADOWCLAW_TLS_CERT`             | Path to custom TLS certificate      | `/path/to/cert.pem`           |
-| `SHADOWCLAW_TLS_KEY`              | Path to custom TLS private key      | `/path/to/key.pem`            |
-| `SHADOWCLAW_SSL_DIR`              | Directory for self-signed TLS certs | `/path/to/.cache/tls`         |
-| `SHADOWCLAW_CORS_MODE`            | CORS policy                         | `private`, `all`, `localhost` |
-| `SHADOWCLAW_CORS_ALLOWED_ORIGINS` | Explicit allowlist (CSV)            | `https://a.com,https://b.com` |
-| `SHADOWCLAW_ALLOW_PRIVATE_PROXY`  | Allow `/proxy` to reach private IPs | `1`, `true`, `yes`            |
-| `SHADOWCLAW_ROOT_PATH`            | Static files directory root         | `/path/to/dist/public`        |
-| `SHADOWCLAW_DATABASE_DIR`         | Server SQLite database directory    | `/path/to/.cache`             |
-| `SHADOWCLAW_CONTROL_TOKEN`        | Secret token for control-plane auth | `mysecrettoken`               |
-| `SHADOWCLAW_SERVE_STATIC`         | Enable/disable serving static UI    | `0`, `false`, `1`, `true`     |
-| `SHADOWCLAW_SERVICES_ONLY`        | Enable headless services-only mode  | `1`, `true`, `yes`            |
+| Variable                          | Purpose                                               | Example                       |
+| --------------------------------- | ----------------------------------------------------- | ----------------------------- |
+| `SHADOWCLAW_HOST`                 | Server host (fallback)                                | `0.0.0.0`                     |
+| `SHADOWCLAW_IP`                   | Server host alias                                     | `192.168.1.100`               |
+| `SHADOWCLAW_BIND_IP`              | Server host alias                                     | `127.0.0.1`                   |
+| `SHADOWCLAW_CACHE_DIR`            | Custom cache and database storage directory           | `/path/to/cache`              |
+| `SHADOWCLAW_TMP`                  | Use system temporary directory (`tmpdir()`) for cache | `1`, `true`, `yes`            |
+| `SHADOWCLAW_HTTPS`                | Enable HTTPS dev server                               | `1`, `true`, `yes`            |
+| `SHADOWCLAW_TLS_CERT`             | Path to custom TLS certificate                        | `/path/to/cert.pem`           |
+| `SHADOWCLAW_TLS_KEY`              | Path to custom TLS private key                        | `/path/to/key.pem`            |
+| `SHADOWCLAW_SSL_DIR`              | Directory for self-signed TLS certs                   | `/path/to/.cache/tls`         |
+| `SHADOWCLAW_CORS_MODE`            | CORS policy                                           | `private`, `all`, `localhost` |
+| `SHADOWCLAW_CORS_ALLOWED_ORIGINS` | Explicit allowlist (CSV)                              | `https://a.com,https://b.com` |
+| `SHADOWCLAW_ALLOW_PRIVATE_PROXY`  | Allow `/proxy` to reach private IPs                   | `1`, `true`, `yes`            |
+| `SHADOWCLAW_ROOT_PATH`            | Static files directory root                           | `/path/to/dist/public`        |
+| `SHADOWCLAW_DATABASE_DIR`         | Server SQLite database directory                      | `/path/to/.cache/database`    |
+| `SHADOWCLAW_CONTROL_TOKEN`        | Secret token for control-plane auth                   | `mysecrettoken`               |
+| `SHADOWCLAW_SERVE_STATIC`         | Enable/disable serving static UI                      | `0`, `false`, `1`, `true`     |
+| `SHADOWCLAW_SERVICES_ONLY`        | Enable headless services-only mode                    | `1`, `true`, `yes`            |
 
 ## Control Plane
 

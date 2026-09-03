@@ -27,7 +27,7 @@ graph TB
     subgraph ShadowClawServer ["ShadowClaw Server & CLI"]
         HTTP_ENDPOINT["POST /mcp<br>(Streamable HTTP)"]
         STDIO_ENDPOINT["shadow-claw mcp<br>(STDIO JSON-RPC Lines)"]
-        ENGINE["McpServer Core Engine<br>(Stateless 2026-07-28)"]
+        ENGINE["McpServer Core Engine<br>"]
         BUILTIN["Built-in Tools<br>(shadowclaw_*)"]
         RELAY["ClientToolRelay<br>(Dynamic WebMCP Discovery)"]
     end
@@ -77,7 +77,7 @@ Runs as part of the Express server (available automatically during `npx shadow-c
 
 ---
 
-## Protocol Details (Stateless 2026-07-28)
+## Protocol Details
 
 ### No Required Handshake & `server/discover`
 

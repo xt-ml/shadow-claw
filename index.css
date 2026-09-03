@@ -289,3 +289,19 @@ shadow-claw:not(:defined) {
   height: 1.5rem;
   width: 1.5rem;
 }
+
+dialog,
+.app-dialog {
+  background-color: var(--shadow-claw-bg-secondary);
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-l, 1.25rem);
+  box-shadow: var(--shadow-claw-shadow-lg);
+  color: var(--shadow-claw-text-primary);
+  padding: 0;
+}
+
+dialog::backdrop,
+.app-dialog::backdrop {
+  background: color-mix(in srgb, black 65%, transparent);
+  backdrop-filter: blur(2px);
+}

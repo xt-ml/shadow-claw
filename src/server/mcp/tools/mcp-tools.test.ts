@@ -197,7 +197,10 @@ describe("ShadowClaw Built-in MCP Tools", () => {
       jsonrpc: "2.0",
       id: 7,
       method: "tools/call",
-      params: { name: "shadowclaw_list_tasks", arguments: { groupId: "br:main" } },
+      params: {
+        name: "shadowclaw_list_tasks",
+        arguments: { groupId: "br:main" },
+      },
     });
     expect(res).not.toBeNull();
     if (res && "result" in res) {
@@ -237,7 +240,10 @@ describe("ShadowClaw Built-in MCP Tools", () => {
       jsonrpc: "2.0",
       id: 9,
       method: "tools/call",
-      params: { name: "shadowclaw_manage_backup", arguments: { action: "trigger" } },
+      params: {
+        name: "shadowclaw_manage_backup",
+        arguments: { action: "trigger" },
+      },
     });
     expect(resTrigger).not.toBeNull();
     if (resTrigger && "result" in resTrigger) {
@@ -250,20 +256,28 @@ describe("ShadowClaw Built-in MCP Tools", () => {
       jsonrpc: "2.0",
       id: 10,
       method: "tools/call",
-      params: { name: "shadowclaw_manage_backup", arguments: { action: "trigger" } },
+      params: {
+        name: "shadowclaw_manage_backup",
+        arguments: { action: "trigger" },
+      },
     });
     expect(resTriggerNoClient).not.toBeNull();
     if (resTriggerNoClient && "result" in resTriggerNoClient) {
       expect(resTriggerNoClient.result.isError).toBe(true);
     }
-    mockControlPlane.getConnectedClients.mockReturnValue([{ clientId: "client-1" }]);
+    mockControlPlane.getConnectedClients.mockReturnValue([
+      { clientId: "client-1" },
+    ]);
 
     // list
     const resList = await server.handleRequest({
       jsonrpc: "2.0",
       id: 11,
       method: "tools/call",
-      params: { name: "shadowclaw_manage_backup", arguments: { action: "list" } },
+      params: {
+        name: "shadowclaw_manage_backup",
+        arguments: { action: "list" },
+      },
     });
     expect(resList).not.toBeNull();
     if (resList && "result" in resList) {
@@ -275,7 +289,10 @@ describe("ShadowClaw Built-in MCP Tools", () => {
       jsonrpc: "2.0",
       id: 12,
       method: "tools/call",
-      params: { name: "shadowclaw_manage_backup", arguments: { action: "delete" } },
+      params: {
+        name: "shadowclaw_manage_backup",
+        arguments: { action: "delete" },
+      },
     });
     expect(resDeleteNoId).not.toBeNull();
     if (resDeleteNoId && "result" in resDeleteNoId) {
@@ -303,7 +320,10 @@ describe("ShadowClaw Built-in MCP Tools", () => {
       jsonrpc: "2.0",
       id: 14,
       method: "tools/call",
-      params: { name: "shadowclaw_manage_backup", arguments: { action: "invalid_action" } },
+      params: {
+        name: "shadowclaw_manage_backup",
+        arguments: { action: "invalid_action" },
+      },
     });
     expect(resUnsupported).not.toBeNull();
     if (resUnsupported && "result" in resUnsupported) {
@@ -314,7 +334,9 @@ describe("ShadowClaw Built-in MCP Tools", () => {
   it("executes shadowclaw_server_status", async () => {
     const server = new McpServer();
     const mockControlPlane: any = {
-      getConnectedClients: jest.fn().mockReturnValue([{ clientId: "client-1" }]),
+      getConnectedClients: jest
+        .fn()
+        .mockReturnValue([{ clientId: "client-1" }]),
     };
     registerBuiltInTools(server, mockControlPlane);
 
@@ -402,24 +424,28 @@ describe("Client Tool Relay", () => {
   it("handles ask_user interactive MRTR loop via client relay", async () => {
     const server = new McpServer();
     const mockControlPlane: any = {
-      getConnectedClients: jest.fn().mockReturnValue([{ clientId: "client-1" }]),
-      sendCommand: (jest.fn() as any).mockImplementation(async (_cid: string, action: string) => {
-        if (action === "list-tools") {
-          return {
-            success: true,
-            data: {
-              tools: [
-                {
-                  name: "ask_user",
-                  description: "Ask question",
-                  inputSchema: { type: "object", properties: {} },
-                },
-              ],
-            },
-          };
-        }
-        return { success: true };
-      }),
+      getConnectedClients: jest
+        .fn()
+        .mockReturnValue([{ clientId: "client-1" }]),
+      sendCommand: (jest.fn() as any).mockImplementation(
+        async (_cid: string, action: string) => {
+          if (action === "list-tools") {
+            return {
+              success: true,
+              data: {
+                tools: [
+                  {
+                    name: "ask_user",
+                    description: "Ask question",
+                    inputSchema: { type: "object", properties: {} },
+                  },
+                ],
+              },
+            };
+          }
+          return { success: true };
+        },
+      ),
     };
 
     const relay = createClientToolRelay(mockControlPlane);
@@ -464,24 +490,31 @@ describe("Client Tool Relay", () => {
   it("handles client tool relay errors and disconnected state", async () => {
     const server = new McpServer();
     const mockControlPlane: any = {
-      getConnectedClients: jest.fn().mockReturnValue([{ clientId: "client-1" }]),
-      sendCommand: (jest.fn() as any).mockImplementation(async (_cid: string, action: string) => {
-        if (action === "list-tools") {
-          return {
-            success: true,
-            data: {
-              tools: [
-                {
-                  name: "read_file",
-                  description: "Read workspace file",
-                  inputSchema: { type: "object", properties: { path: { type: "string" } } },
-                },
-              ],
-            },
-          };
-        }
-        return { success: false, error: "Execution failed on client" };
-      }),
+      getConnectedClients: jest
+        .fn()
+        .mockReturnValue([{ clientId: "client-1" }]),
+      sendCommand: (jest.fn() as any).mockImplementation(
+        async (_cid: string, action: string) => {
+          if (action === "list-tools") {
+            return {
+              success: true,
+              data: {
+                tools: [
+                  {
+                    name: "read_file",
+                    description: "Read workspace file",
+                    inputSchema: {
+                      type: "object",
+                      properties: { path: { type: "string" } },
+                    },
+                  },
+                ],
+              },
+            };
+          }
+          return { success: false, error: "Execution failed on client" };
+        },
+      ),
     };
 
     const relay = createClientToolRelay(mockControlPlane);
@@ -498,27 +531,34 @@ describe("Client Tool Relay", () => {
     expect(resErr).not.toBeNull();
     if (resErr && "result" in resErr) {
       expect(resErr.result.isError).toBe(true);
-      expect(resErr.result.content[0].text).toContain("Execution failed on client");
+      expect(resErr.result.content[0].text).toContain(
+        "Execution failed on client",
+      );
     }
 
     // Thrown exception in sendCommand
-    mockControlPlane.sendCommand.mockImplementation(async (_cid: string, action: string) => {
-      if (action === "list-tools") {
-        return {
-          success: true,
-          data: {
-            tools: [
-              {
-                name: "read_file",
-                description: "Read workspace file",
-                inputSchema: { type: "object", properties: { path: { type: "string" } } },
-              },
-            ],
-          },
-        };
-      }
-      throw new Error("Network timeout");
-    });
+    mockControlPlane.sendCommand.mockImplementation(
+      async (_cid: string, action: string) => {
+        if (action === "list-tools") {
+          return {
+            success: true,
+            data: {
+              tools: [
+                {
+                  name: "read_file",
+                  description: "Read workspace file",
+                  inputSchema: {
+                    type: "object",
+                    properties: { path: { type: "string" } },
+                  },
+                },
+              ],
+            },
+          };
+        }
+        throw new Error("Network timeout");
+      },
+    );
     const resException = await server.handleRequest({
       jsonrpc: "2.0",
       id: 7,

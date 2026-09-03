@@ -59,7 +59,7 @@ export async function runBuild(options = {}) {
   if (isInRepo) {
     chdir(projectRoot);
 
-    await run("npm run -s build:clean");
+    await run("node bin/rimraf.mjs dist/public");
     await mkdir("dist/public/assets", { recursive: true });
 
     if (copyAllAssets) {

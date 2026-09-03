@@ -112,19 +112,38 @@ Both operations are async and exposed as `onStylesReady` / `onTemplateReady` pro
 This is the preferred pattern for `effect()` disposers, `ResizeObserver` disconnects,
 and event listener teardown.
 
-### Component file structure
+### Component file structure & stories
 
-Every component lives in its own subdirectory:
+Every component lives in its own subdirectory with co-located template, styles, and Storybook stories:
 
 ```text
 src/components/shadow-claw-chat/
-├── shadow-claw-chat.ts     # Component class
-├── utils/                  # Extracted helper utilities
-├── shadow-claw-chat.html   # Shadow DOM template (fetched at runtime)
-└── shadow-claw-chat.css    # Shadow DOM styles (adopted at runtime)
+├── shadow-claw-chat.ts         # Component class
+├── shadow-claw-chat.stories.ts # Co-located Storybook story
+├── utils/                      # Extracted helper utilities
+├── shadow-claw-chat.html       # Shadow DOM template (fetched at runtime)
+└── shadow-claw-chat.css        # Shadow DOM styles (adopted at runtime)
 ```
 
+Shared common primitives reside in `src/components/common/` (e.g., `shadow-claw-actions`, `shadow-claw-card`, `shadow-claw-empty-state`, `shadow-claw-page-header-action-button`, `shadow-claw-provider-model-picker`, `shadow-claw-provider-module-settings`), while settings sections reside in `src/components/settings/`.
+
 Rolldown's `copy` plugin mirrors `.css` and `.html` files to `dist/public/` preserving the `src/`-relative path, so `fetch("components/shadow-claw-chat/shadow-claw-chat.css")` resolves correctly at runtime.
+
+### Observed Attributes & Attribute Reflection
+
+Components that re-render upon external attribute changes must declare `static observedAttributes`:
+
+```ts
+export class ShadowClawEmptyState extends ShadowClawElement {
+  static styles = shadowClawEmptyStateStyles;
+  static template = shadowClawEmptyStateTemplate;
+  static observedAttributes = ["message", "hint", "compact", "warning"];
+
+  attributeChangedCallback() {
+    this.render();
+  }
+}
+```
 
 ## Store Pattern
 
@@ -273,7 +292,7 @@ a 1-second countdown on the confirm button and an ARIA live region (`role="statu
 to auto-close the dialog and resolve the promise without blocking unattended agent loops.
 
 When activity-log disk logging is enabled from Settings, server-side log entries
-are persisted under `.cache/logs` in the app data directory.
+are persisted under `<cacheDir>/logs` (defaults to `.cache/logs`) in the app or server directory.
 
 ### Markdown rendering
 
@@ -283,6 +302,14 @@ are persisted under `.cache/logs` in the app data directory.
 - Double newlines remain separate `<p>` paragraphs
 - YAML frontmatter is parsed from the top of the file and can be rendered as a visible `<details>` block before the document body when enabled for the target surface
 - DOMPurify sanitizes all HTML output, including markdown-generated embeds
+
+### Toast Component & Notifications
+
+The `<shadow-claw-toast>` component renders non-intrusive notifications dispatched via `toastStore` or `showToast()`:
+
+- **Positioning**: Fixed to the bottom-right viewport by default with automatic stacking and timer dismissal.
+- **Inline Mode**: Supports an `inline` attribute (`:host([inline])`) for non-fixed rendering inside documentation, preview pages, or Storybook.
+- **Instance API**: Exposes `toastEl.show(message, options)` as a direct instance method, alongside exported utilities `showSuccess`, `showError`, `showWarning`, `showInfo`, and `dismissToast`.
 
 ### File Viewer & Sandboxed Previews
 
@@ -339,3 +366,44 @@ ShadowClaw uses a centralized frontend routing system based on the `shadow-claw-
 - **Default page**: Configurable starting page via `SIDEBAR_DEFAULT_PAGE`; persists across reloads
 - **Page list**: All saved pages stored in `PAGES_LIST` config key
 - **Horizontal Chat Split View**: Configurable via `CHAT_SPLIT_VIEW_ENABLED` and `CHAT_SPLIT_VIEW_HEIGHT`. When enabled, pins the Chat component at the bottom of the main view alongside other active pages (Pages, Tasks, Files). It is suppressed on mobile viewports (< 56rem) or when navigating directly to the primary Chat page.
+
+## Component Library Packaging & Modular Exports
+
+ShadowClaw exports its reusable Web Components and foundational utilities as a modern ESM library:
+
+```ts
+// Import individual components
+import {
+  ShadowClawToast,
+  showToast,
+} from "shadow-claw/components/shadow-claw-toast";
+import { ShadowClawCard } from "shadow-claw/components/shadow-claw-card";
+import { ShadowClawDialog } from "shadow-claw/components/shadow-claw-dialog";
+
+// Or import from barrels
+import {
+  ShadowClawEmptyState,
+  ShadowClawPageHeader,
+} from "shadow-claw/components";
+import { namespacedStorage, ulid } from "shadow-claw/utils";
+```
+
+### Library Build Pipeline
+
+1. **Type Definitions**: `npm run tsc:lib` runs `tsc -p tsconfig.lib.json` to emit `.d.ts` declaration maps under `dist/lib/`.
+2. **ESM Bundling**: `npm run build:lib` invokes Rolldown with `rolldown.lib.config.mjs` to produce tree-shakeable ESM bundles in `dist/lib/` corresponding to package export paths (`.`, `./components`, `./utils`).
+
+## Storybook Component Workbench
+
+ShadowClaw includes a dedicated component development workbench powered by Storybook 10:
+
+- **Framework**: `@storybook/web-components-vite` with Vite 6.
+- **Documentation**: `@storybook/addon-docs` with autodocs enabled across component stories.
+- **Import Attributes Plugin**: `.storybook/main.ts` includes an import attribute transform plugin to seamlessly import `.css` as `CSSStyleSheet` instances and `.html` templates into Storybook preview sandboxes.
+- **Theme Support**: `.storybook/preview.ts` defaults to dark mode (`#0f172a`), matching ShadowClaw's dark theme, with support for toggling to light mode and injecting root styling variables.
+- **Stories Organization**: Stories live co-located with components as `*.stories.ts` (e.g. `shadow-claw-toast.stories.ts`, `shadow-claw-dialog.stories.ts`, `shadow-claw-card.stories.ts`, `shadow-claw-empty-state.stories.ts`, `shadow-claw-page-header.stories.ts`, and settings stories).
+- **Run Locally**:
+  ```bash
+  npm run storybook          # Start dev workbench on http://localhost:6006
+  npm run build:storybook    # Build static Storybook site to dist/storybook
+  ```

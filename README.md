@@ -234,9 +234,9 @@ ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace con
 - **Safe iframe embeds** — HTML previews use a configurable iframe host allowlist in Settings, with safe defaults for common embedded content hosts
 - **Ebook-Style Navigation** — Functional Previous/Next pagination controls with HTML-entity decoded frontmatter headers, seamless page transitions, `ArrowLeft`/`ArrowRight` keyboard navigation, touch/mouse swipe gestures, and `aria-live` screen reader announcements
 - **Pre-rendered Content Override** — Optional setting (`OVERRIDE_PRERENDER_SKELETON`) suppresses Declarative Shadow DOM (DSD) pre-rendered content during boot to eliminate hydration flash
-- **Declarative Site Configuration** — Support for `site-config.json` enabling template repositories to customize site metadata, branding, custom theme stylesheets, custom element security allowlists, and navigation visibility without modifying core source
+- **Declarative Configuration** — Support for `shadow-claw.config.json` (with backward compatibility for `site-config.json`) enabling template repositories to customize metadata, branding, custom theme stylesheets, custom element security allowlists, navigation visibility, and server/cache storage (`cacheDir`) without modifying core source
 - **Dynamic Sidebar Navigation Visibility** — Runtime toggling of Pages, Chat, Tasks, and Files sidebar tabs via Settings, with automatic fallback routing and build-time DSD navigation attribute synchronization
-- **Content-Only Publishing** — Supports GitHub Pages publishing via the [`shadow-claw-template` template repository](https://github.com/xt-ml/shadow-claw-template) that pulls ShadowClaw as a CI-time build dependency; see the [publishing guide](pages/main/~/docs/publishing-to-github-pages.md) for root-level `site-config.json` and optional `pages/` behavior.
+- **Content-Only Publishing** — Supports GitHub Pages publishing via the [`shadow-claw-template` template repository](https://github.com/xt-ml/shadow-claw-template) that pulls ShadowClaw as a CI-time build dependency; see the [publishing guide](pages/main/~/docs/publishing-to-github-pages.md) for root-level `shadow-claw.config.json` and optional `pages/` behavior.
 
 Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first setup) which serves as a workspace-scoped system context for the agent. An `index.html` is also auto-created as the default home page.
 
@@ -246,6 +246,14 @@ Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first
 - **Slash Commands & Declarative Execution Pipelines** — User-invocable skills support `/skill-name` slash-command triggers. Skills with `execution: { type: "tools", tools: [...] }` execute tool pipelines directly on the worker thread via `executeToolChain` without scheduling Tasks or invoking LLM prompts. Supports `$pipe` output chaining and step-level or cascaded `suppressToast: true` and `suppressOutput: true` options.
 - **Declarative Tools** — Content repositories can define executable tools as JSON under `.agents/tools/main/` using sandboxed Bash or JavaScript, or delegate to existing tools without changing ShadowClaw source (e.g. `generate_random_number` in the starter template repository).
 - **Enhanced JS Tool Expression Evaluation** — The `javascript` tool automatically evaluates single expressions without explicit `return` statements by wrapping them in `return (<expression>);`.
+
+## Web Components & Component Workbench
+
+ShadowClaw packages its UI components as standard Web Components built on TC39 Signals and native Custom Elements:
+
+- **Modular Package Exports** — Import pre-bundled components and utilities directly via `shadow-claw/components` (e.g. `ShadowClawToast`, `ShadowClawCard`, `ShadowClawDialog`, `ShadowClawEmptyState`, `ShadowClawPageHeader`) and `shadow-claw/utils` (e.g. `namespacedStorage`, `ulid`). TypeScript declaration files (`.d.ts`) are provided out of the box.
+- **Storybook Workbench** — Interactive visual development environment powered by Storybook (`@storybook/web-components-vite`) with dark mode default, live controls, and isolated component testing (`npm run storybook`).
+- **Reactive Element Lifecycle** — Custom elements extending `ShadowClawElement` observe attributes (`observedAttributes`) for declarative reactive DOM updates.
 
 ## WebVM (Optional Alpine Linux)
 
@@ -269,7 +277,7 @@ ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and 
 - **30-second key expiry** for plaintext operations
 - **No plaintext secrets on disk** — encrypted before storage
 - **Trusted Types enforcement** — idempotent `"default"` policy (`src/security/default-trusted-types-policy.ts`) registered at boot via `theme-init.ts`; `getPolicy()` fallback prevents duplicate-creation errors on module reload
-- **Custom element security guards** — `installCustomElementsRegistryGuard` and `installCustomElementDomGuard` prevent unauthorized custom element registration and dynamic DOM injection, strictly enforcing allowlists from `site-config.json` or storage
+- **Custom element security guards** — `installCustomElementsRegistryGuard` and `installCustomElementDomGuard` prevent unauthorized custom element registration and dynamic DOM injection, strictly enforcing allowlists from `shadow-claw.config.json` (or `site-config.json`) or storage
 - **Iframe sandbox & CSP hardening** — sandboxed preview iframes omit `allow-same-origin` by default to enforce opaque-origin (`null`) isolation without Chrome sandbox escape warnings, while injecting a transparent `postMessage` storage proxy bridge (`iframe-storage-bridge.js`) to provide namespaced `IndexedDB` and `localStorage` persistence for custom elements, trapping `ServiceWorker`/`caches` `SecurityError` rejections, polyfilling `showOpenFilePicker`/`showSaveFilePicker`, and relaying programmatic/link navigation and declarative `BroadcastChannel` messages via `IframeBroadcastProxy`
 - **Iframe embed sanitization** — DOMPurify-based iframe allowlisting protects markdown and HTML previews, with Settings-backed host patterns and a safe default host list
 - **SSRF proxy hardening** — `/proxy` blocks non-HTTP/S schemes and private/loopback IP ranges by default; bypassed via `--allow-private-proxy` flag or the authenticated service-worker JSON format
@@ -341,7 +349,7 @@ Create model-specific or task-specific tool profiles to optimize the context win
 - Auto-activate profiles by model
 - Save custom selections
 - **Built-in Profile** — Default Prompt API profile is restricted to core file and script tools (`javascript`, `list_files`, `open_file`, `read_file`, `write_file`)
-- **Site-config tool defaults** — Pre-seed default tool profiles (`defaultToolsProfile`) and built-in tools (`enabledTools`) via `site-config.json`
+- **Declarative tool defaults** — Pre-seed default tool profiles (`defaultToolsProfile`) and built-in tools (`enabledTools`) via `shadow-claw.config.json` (or `site-config.json`)
 - **Declarative tool management & gating** — Declarative tool toggles persist in storage, update in-place in `<shadow-claw-tools>`, gate execution during LLM invocation, and synchronize automatically with WebMCP
 - **Execution-time allowlist enforcement** — Tool calls are re-validated at runtime against the active enabled tool list (profile/manual), not only generation-time schema hints
 - **Shared internet access control** — Toggles public internet access (`fetch` and shell networking) globally for the `bash` and `javascript` tools
@@ -391,6 +399,9 @@ npm run dev                  # Dev server (watch mode)
 npm run dev -- --https       # Dev server with opt-in HTTPS (auto-generates self-signed cert)
 npm start                    # Express server
 npm test                     # Jest (*.test.ts files live next to source)
+npm run storybook            # Storybook component workbench (port 6006)
+npm run build:storybook      # Build static Storybook documentation to dist/storybook
+npm run build:lib            # Build reusable ESM library and TypeScript declarations to dist/lib
 npm run e2e                  # Playwright E2E tests (e2e/*.test.ts)
 npm run e2e:install          # Install Playwright browser binaries
 npm run tsc                  # TypeScript type-check
@@ -410,14 +421,18 @@ The `shadow-claw` CLI connects to a running server or browser clients to interac
 
 ```bash
 npx shadow-claw clients                              # List connected browser/Electron clients
-npx shadow-claw send "your prompt" --client <id>    # Send a message to a connected client
+npx shadow-claw send "your prompt" --client <id>     # Send a message to a connected client
+npx shadow-claw tasks --client <id>                  # List scheduled tasks on a client
 npx shadow-claw backup                               # Trigger OPFS workspace backup
 npx shadow-claw backup list                          # List available backup snapshots
-npx shadow-claw backup delete --backup-id <id>      # Delete a backup snapshot
-npx shadow-claw tasks --client <id>                  # List scheduled tasks on a client
+npx shadow-claw backup delete --backup-id <id>       # Delete a backup snapshot
+npx shadow-claw server --tmp                         # Run services with temporary directory cache (/tmp/shadow-claw)
+npx shadow-claw server --cache-dir <dir>             # Run services with custom cache directory
 npx shadow-claw webrtc listen                        # Start headless WebRTC DataChannel daemon
 npx shadow-claw peer-id                              # Get or generate persistent CLI Peer ID
 ```
+
+When launching `dev`, `run`, `serve`, or `server` without an existing cache, ShadowClaw prompts interactively to select between the local directory (`.cache`), system temporary storage (`tmpdir()`), or a custom path (skip prompting via `--tmp`, `-y`, `--cache-dir <dir>`, or `SHADOWCLAW_CACHE_DIR`).
 
 Commands support `--transport webrtc` for direct peer-to-peer DataChannel execution with connected browser clients. Control plane authentication uses `SHADOWCLAW_CONTROL_TOKEN` (env) or `--token` flag, and supports HTTPS endpoints via `--https` (and `--insecure` for self-signed certs). The control plane endpoint and token are printed to the console on server start.
 

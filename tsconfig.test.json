@@ -17,6 +17,7 @@
     "src/**/*.ts",
   ],
   "exclude": [
+    "**/*.stories.ts",
     "node_modules",
     "dist",
     "e2e"

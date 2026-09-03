@@ -15,6 +15,7 @@ import { runTasksCommand } from "./commands/tasks.mjs";
 import { runPeerIdCommand } from "./commands/peer-id.mjs";
 import { runWebRtcListenCommand } from "./commands/webrtc-listen.mjs";
 import { runMcpCommand } from "./commands/mcp.mjs";
+import { resolveCacheDir } from "./utils/resolve-cache-dir.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -135,10 +136,15 @@ async function handleDev(portArg, options) {
       "127.0.0.1";
     const outDir = options.outDir || "dist/public";
     const distPublicDir = path.resolve(contentRoot, outDir);
-    const databaseDir = path.resolve(
+    const resolvedCache = await resolveCacheDir({
       contentRoot,
-      options.databaseDir || ".cache/database",
-    );
+      cacheDir: options.cacheDir,
+      databaseDir: options.databaseDir,
+      tmp: options.tmp || options.temp,
+      yes: options.yes,
+    });
+    const cacheDir = resolvedCache.cacheDir;
+    const databaseDir = resolvedCache.databaseDir;
 
     console.log(`Preparing ShadowClaw dev build for ${contentRoot}...`);
     await runBuild({
@@ -158,6 +164,7 @@ async function handleDev(portArg, options) {
       : path.join(toolchainRoot, "src/server/server.ts");
 
     process.env.SHADOWCLAW_ROOT_PATH = distPublicDir;
+    process.env.SHADOWCLAW_CACHE_DIR = cacheDir;
     process.env.SHADOWCLAW_DATABASE_DIR = databaseDir;
     process.env.SHADOWCLAW_DEV_IP = host;
 
@@ -201,7 +208,7 @@ async function handleDev(portArg, options) {
       options.sslDir ||
         process.env.SHADOWCLAW_SSL_DIR ||
         process.env.SHADOWCLAW_TLS_DIR ||
-        ".cache/tls",
+        path.join(cacheDir, "tls"),
     );
 
     await startServer({
@@ -212,6 +219,7 @@ async function handleDev(portArg, options) {
       verbose: Boolean(options.verbose),
       peerjs: Boolean(options.peerjs),
       rootPath: distPublicDir,
+      cacheDir,
       databaseDir,
       allowPrivateProxy: Boolean(options.allowPrivateProxy),
       https: isHttps,
@@ -261,6 +269,21 @@ program
     "--ssl-dir <path>",
     "Directory for TLS certificate generation/storage",
   )
+  .option("--database-dir <dir>", "Directory where SQLite databases are stored")
+  .option(
+    "--cache-dir <dir>",
+    "Custom cache directory for databases, tokens, and logs",
+  )
+  .option(
+    "--tmp, --temp",
+    "Store cache and databases in system temporary directory",
+    false,
+  )
+  .option(
+    "-y, --yes",
+    "Skip interactive cache directory prompt and use default .cache",
+    false,
+  )
   .option("-v, --verbose", "Enable verbose request/proxy logging", false)
   .option("--open", "Automatically open default browser", false)
   .action(handleDev);
@@ -294,6 +317,21 @@ program
   .option(
     "--ssl-dir <path>",
     "Directory for TLS certificate generation/storage",
+  )
+  .option("--database-dir <dir>", "Directory where SQLite databases are stored")
+  .option(
+    "--cache-dir <dir>",
+    "Custom cache directory for databases, tokens, and logs",
+  )
+  .option(
+    "--tmp, --temp",
+    "Store cache and databases in system temporary directory",
+    false,
+  )
+  .option(
+    "-y, --yes",
+    "Skip interactive cache directory prompt and use default .cache",
+    false,
   )
   .option("-v, --verbose", "Enable verbose request/proxy logging", false)
   .option("--open", "Automatically open default browser", false)
@@ -333,6 +371,21 @@ program
     "--ssl-dir <path>",
     "Directory for TLS certificate generation/storage",
   )
+  .option("--database-dir <dir>", "Directory where SQLite databases are stored")
+  .option(
+    "--cache-dir <dir>",
+    "Custom cache directory for databases, tokens, and logs",
+  )
+  .option(
+    "--tmp, --temp",
+    "Store cache and databases in system temporary directory",
+    false,
+  )
+  .option(
+    "-y, --yes",
+    "Skip interactive cache directory prompt and use default .cache",
+    false,
+  )
   .option(
     "--no-static",
     "Disable static file and UI serving (services-only mode)",
@@ -353,10 +406,15 @@ program
         "127.0.0.1";
       const outDir = options.outDir || "dist/public";
       const distPublicDir = path.resolve(contentRoot, outDir);
-      const databaseDir = path.resolve(
+      const resolvedCache = await resolveCacheDir({
         contentRoot,
-        options.databaseDir || ".cache/database",
-      );
+        cacheDir: options.cacheDir,
+        databaseDir: options.databaseDir,
+        tmp: options.tmp || options.temp,
+        yes: options.yes,
+      });
+      const cacheDir = resolvedCache.cacheDir;
+      const databaseDir = resolvedCache.databaseDir;
       const serveStatic = options.static !== false;
 
       if (
@@ -377,6 +435,7 @@ program
         : path.join(toolchainRoot, "src/server/server.ts");
 
       process.env.SHADOWCLAW_ROOT_PATH = distPublicDir;
+      process.env.SHADOWCLAW_CACHE_DIR = cacheDir;
       process.env.SHADOWCLAW_DATABASE_DIR = databaseDir;
       process.env.SHADOWCLAW_DEV_IP = host;
 
@@ -420,7 +479,7 @@ program
         options.sslDir ||
           process.env.SHADOWCLAW_SSL_DIR ||
           process.env.SHADOWCLAW_TLS_DIR ||
-          ".cache/tls",
+          path.join(cacheDir, "tls"),
       );
 
       await startServer({
@@ -431,6 +490,7 @@ program
         verbose: Boolean(options.verbose),
         peerjs: Boolean(options.peerjs),
         rootPath: distPublicDir,
+        cacheDir,
         databaseDir,
         allowPrivateProxy: Boolean(options.allowPrivateProxy),
         https: isHttps,
@@ -466,16 +526,22 @@ async function handleServer(portArg, options) {
       options.ip ||
       process.env.SHADOWCLAW_DEV_IP ||
       "127.0.0.1";
-    const databaseDir = path.resolve(
+    const resolvedCache = await resolveCacheDir({
       contentRoot,
-      options.databaseDir || ".cache/database",
-    );
+      cacheDir: options.cacheDir,
+      databaseDir: options.databaseDir,
+      tmp: options.tmp || options.temp,
+      yes: options.yes,
+    });
+    const cacheDir = resolvedCache.cacheDir;
+    const databaseDir = resolvedCache.databaseDir;
 
     const isDist = await pathExists(path.join(toolchainRoot, "dist/server.js"));
     const serverModulePath = isDist
       ? path.join(toolchainRoot, "dist/server.js")
       : path.join(toolchainRoot, "src/server/server.ts");
 
+    process.env.SHADOWCLAW_CACHE_DIR = cacheDir;
     process.env.SHADOWCLAW_DATABASE_DIR = databaseDir;
     process.env.SHADOWCLAW_DEV_IP = host;
     process.env.SHADOWCLAW_SERVE_STATIC = "false";
@@ -520,7 +586,7 @@ async function handleServer(portArg, options) {
       options.sslDir ||
         process.env.SHADOWCLAW_SSL_DIR ||
         process.env.SHADOWCLAW_TLS_DIR ||
-        ".cache/tls",
+        path.join(cacheDir, "tls"),
     );
 
     await startServer({
@@ -531,6 +597,7 @@ async function handleServer(portArg, options) {
       verbose: Boolean(options.verbose),
       peerjs: Boolean(options.peerjs),
       rootPath: "",
+      cacheDir,
       databaseDir,
       controlToken:
         options.controlToken ||
@@ -559,10 +626,20 @@ program
   .option("--host <host>", "Bind host/IP", "127.0.0.1")
   .option("--ip <host>", "Bind host/IP (alias)")
   .option("--content-root <dir>", "Content root directory", process.cwd())
+  .option("--database-dir <dir>", "Directory where SQLite databases are stored")
   .option(
-    "--database-dir <dir>",
-    "Directory where SQLite databases are stored",
-    ".cache/database",
+    "--cache-dir <dir>",
+    "Custom cache directory for databases, tokens, and logs",
+  )
+  .option(
+    "--tmp, --temp",
+    "Store cache and databases in system temporary directory",
+    false,
+  )
+  .option(
+    "-y, --yes",
+    "Skip interactive cache directory prompt and use default .cache",
+    false,
   )
   .option(
     "--cors-mode <mode>",
@@ -606,8 +683,14 @@ program
       const targetDir = path.resolve(dirArg || process.cwd());
       await mkdir(path.join(targetDir, "pages/main"), { recursive: true });
 
-      const siteConfigPath = path.join(targetDir, "site-config.json");
-      if (!(await pathExists(siteConfigPath))) {
+      const configPath = path.join(targetDir, "shadow-claw-config.json");
+      const legacyConfigPath1 = path.join(targetDir, "shadow-claw.config.json");
+      const legacyConfigPath2 = path.join(targetDir, "site-config.json");
+      if (
+        !(await pathExists(configPath)) &&
+        !(await pathExists(legacyConfigPath1)) &&
+        !(await pathExists(legacyConfigPath2))
+      ) {
         const defaultSiteConfig = {
           $schema: "https://json-schema.org/draft/2020-12/schema",
           site: {
@@ -624,11 +707,11 @@ program
           },
         };
         await writeFile(
-          siteConfigPath,
+          configPath,
           JSON.stringify(defaultSiteConfig, null, 2) + "\n",
           "utf8",
         );
-        console.log(`Created ${siteConfigPath}`);
+        console.log(`Created ${configPath}`);
       }
 
       const indexPath = path.join(targetDir, "pages/main/index.html");
@@ -849,7 +932,7 @@ program
   });
 
 // ---------------------------------------------------------------------------
-// MCP COMMAND (Stateless 2026-07-28)
+// MCP COMMAND
 // ---------------------------------------------------------------------------
 program
   .command("mcp")

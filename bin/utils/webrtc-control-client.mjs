@@ -17,7 +17,10 @@ import { ulid } from "./ulid.mjs";
 // ---------------------------------------------------------------------------
 
 export function getIpcSocketPath(cacheDir) {
-  const dir = cacheDir || path.join(process.cwd(), ".cache");
+  const dir =
+    cacheDir ||
+    (process.env.SHADOWCLAW_CACHE_DIR || "").trim() ||
+    path.join(process.cwd(), ".cache");
   return path.join(dir, "webrtc-ipc.sock");
 }
 
@@ -117,7 +120,10 @@ export function sendCommandViaIpc(ipc, targetPeerId, action, args, timeoutMs) {
 }
 
 export function getCliPeerIdFilePath(cacheDir) {
-  const dir = cacheDir || path.join(process.cwd(), ".cache");
+  const dir =
+    cacheDir ||
+    (process.env.SHADOWCLAW_CACHE_DIR || "").trim() ||
+    path.join(process.cwd(), ".cache");
   return path.join(dir, "cli-peer-id");
 }
 

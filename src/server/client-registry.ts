@@ -238,10 +238,11 @@ export interface ControlTokenFile {
  * Resolve the path to .cache/control-token.json
  */
 export function getControlTokenFilePath(cacheDir?: string): string {
-  if (cacheDir) {
-    return path.join(cacheDir, "control-token.json");
-  }
-  return path.join(process.cwd(), ".cache", "control-token.json");
+  const dir =
+    cacheDir ||
+    (process.env.SHADOWCLAW_CACHE_DIR || "").trim() ||
+    path.join(process.cwd(), ".cache");
+  return path.join(dir, "control-token.json");
 }
 
 /**
@@ -322,8 +323,10 @@ export function getOrCreateControlToken(
   configuredToken?: string,
   cacheDir?: string,
 ): string {
+  const effectiveCacheDir =
+    cacheDir || (process.env.SHADOWCLAW_CACHE_DIR || "").trim() || undefined;
   if (configuredToken) {
-    saveControlTokenFile(configuredToken, cacheDir);
+    saveControlTokenFile(configuredToken, effectiveCacheDir);
     if (db) {
       db.prepare(
         `
@@ -337,7 +340,7 @@ export function getOrCreateControlToken(
   }
 
   // 1. Check if token file already exists in .cache/control-token.json
-  const existingFile = readControlTokenFile(cacheDir);
+  const existingFile = readControlTokenFile(effectiveCacheDir);
   if (existingFile?.token) {
     if (db) {
       db.prepare(

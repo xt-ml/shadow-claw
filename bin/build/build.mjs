@@ -225,6 +225,7 @@ export async function runBuild(options = {}) {
       try {
         meta = execSync("npm run -s build:pkg:get:meta", {
           encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
         }).trim();
       } catch {}
       if (meta) {
@@ -389,24 +390,23 @@ export async function runBuild(options = {}) {
   }
 
   // 6b. Generate / sync Agent Skills Discovery index (.well-known/agent-skills/index.json)
-  if (await pathExists(contentSkills)) {
+  const distSkillsDir = join(distPublicDir, ".agents/skills");
+  if (await pathExists(distSkillsDir)) {
     try {
       const { generateSkillsIndex } =
         await import("../commands/skills-index.mjs");
-      await generateSkillsIndex(contentRoot);
-      const rootWellKnownIndex = join(
-        contentRoot,
-        ".well-known/agent-skills/index.json",
-      );
-      if (await pathExists(rootWellKnownIndex)) {
-        await cp(
-          join(contentRoot, ".well-known"),
-          join(distPublicDir, ".well-known"),
-          {
-            recursive: true,
-            force: true,
-          },
-        );
+      await generateSkillsIndex(distPublicDir, {
+        metadataRoot: contentRoot,
+        outDir: ".well-known/agent-skills",
+      });
+      // Also keep contentRoot/.well-known/agent-skills/index.json in sync if contentSkills exists
+      if (await pathExists(contentSkills)) {
+        try {
+          await generateSkillsIndex(contentRoot, {
+            toolchainRoot,
+            includeBundled: true,
+          });
+        } catch {}
       }
     } catch (err) {
       console.warn("Notice: Failed to auto-generate agent-skills index:", err);
@@ -508,12 +508,14 @@ export async function runBuild(options = {}) {
       meta = execSync("git rev-parse HEAD", {
         cwd: contentRoot,
         encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
       }).trim();
     } catch {
       try {
         meta = execSync("git rev-parse HEAD", {
           cwd: toolchainRoot,
           encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
         }).trim();
       } catch {}
     }

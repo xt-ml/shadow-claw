@@ -204,4 +204,75 @@ describe("build without and with pages", () => {
       await rm(tempConsumerRoot, { recursive: true, force: true });
     }
   });
+
+  it("builds an external consumer with custom skills and retains bundled skill-creator in .well-known index", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-custom-consumer-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await writeFile(
+        path.join(tempConsumerRoot, "shadow-claw.config.json"),
+        JSON.stringify({
+          site: {
+            title: "Custom Hub",
+            description: "Custom hub description.",
+          },
+        }),
+        "utf8",
+      );
+
+      const skillDir = path.join(
+        tempConsumerRoot,
+        ".agents",
+        "skills",
+        "main",
+        "custom-skill",
+      );
+      await mkdir(skillDir, { recursive: true });
+      await writeFile(
+        path.join(skillDir, "SKILL.md"),
+        "---\nname: custom-skill\ndescription: Custom consumer skill.\n---\n",
+        "utf8",
+      );
+
+      const { runBuild: runConsumerBuild } = await import("./build.mjs");
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: true,
+        quiet: true,
+        stdio: "pipe",
+      });
+
+      const consumerDistPublic = path.join(tempConsumerRoot, "dist/public");
+      const wellKnownPath = path.join(
+        consumerDistPublic,
+        ".well-known/agent-skills/index.json",
+      );
+      expect(fs.existsSync(wellKnownPath)).toBe(true);
+
+      const wellKnownIndex = JSON.parse(await readFile(wellKnownPath, "utf8"));
+      expect(wellKnownIndex.name).toBe("Custom Hub");
+      expect(wellKnownIndex.description).toBe("Custom hub description.");
+      expect(wellKnownIndex.skills.map((s) => s.name)).toEqual(
+        expect.arrayContaining(["custom-skill", "skill-creator"]),
+      );
+
+      const contentWellKnownPath = path.join(
+        tempConsumerRoot,
+        ".well-known/agent-skills/index.json",
+      );
+      expect(fs.existsSync(contentWellKnownPath)).toBe(true);
+      const contentIndex = JSON.parse(
+        await readFile(contentWellKnownPath, "utf8"),
+      );
+      expect(contentIndex.skills.map((s) => s.name)).toEqual(
+        expect.arrayContaining(["custom-skill", "skill-creator"]),
+      );
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
 });

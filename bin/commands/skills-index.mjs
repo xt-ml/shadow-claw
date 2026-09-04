@@ -8,7 +8,11 @@ import crypto from "node:crypto";
 import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 import matter from "gray-matter";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 /**
  * Computes a standardized sha256:{hex} digest from Buffer or string.
@@ -64,28 +68,84 @@ export async function generateSkillsIndex(
   const wellKnownDirRel = options.outDir || ".well-known/agent-skills";
 
   // 1. Read metadata from shadow-claw.config.json or package.json
-  let siteName = path.basename(resolvedRoot);
-  let siteDescription =
-    "Agent skills and tools collection, powered by ShadowClaw.";
+  const metadataRoot = options.metadataRoot
+    ? path.resolve(options.metadataRoot)
+    : resolvedRoot;
 
-  const configPath = path.join(resolvedRoot, "shadow-claw.config.json");
-  if (await pathExists(configPath)) {
-    try {
-      const configStr = await readFile(configPath, "utf8");
-      const config = JSON.parse(configStr);
-      if (config.site?.title) siteName = config.site.title;
-      if (config.site?.description) siteDescription = config.site.description;
-    } catch {}
-  } else {
-    const pkgPath = path.join(resolvedRoot, "package.json");
-    if (await pathExists(pkgPath)) {
+  let siteName = options.siteName;
+  let siteDescription = options.siteDescription;
+
+  const parent1 = path.dirname(metadataRoot);
+  const parent2 = path.dirname(parent1);
+
+  const configCandidates = [
+    options.configPath,
+    path.join(metadataRoot, "shadow-claw.config.json"),
+    path.join(metadataRoot, "shadow-claw-config.json"),
+    path.join(metadataRoot, "site-config.json"),
+    path.join(parent1, "shadow-claw.config.json"),
+    path.join(parent1, "shadow-claw-config.json"),
+    path.join(parent1, "site-config.json"),
+    path.join(parent2, "shadow-claw.config.json"),
+    path.join(parent2, "shadow-claw-config.json"),
+    path.join(parent2, "site-config.json"),
+  ].filter(Boolean);
+
+  let loadedConfig = null;
+  for (const candidate of configCandidates) {
+    if (await pathExists(candidate)) {
       try {
-        const pkgStr = await readFile(pkgPath, "utf8");
-        const pkg = JSON.parse(pkgStr);
-        if (pkg.name) siteName = pkg.name;
-        if (pkg.description) siteDescription = pkg.description;
+        const configStr = await readFile(candidate, "utf8");
+        loadedConfig = JSON.parse(configStr);
+        break;
       } catch {}
     }
+  }
+
+  if (loadedConfig) {
+    if (!siteName && loadedConfig.site?.title)
+      siteName = loadedConfig.site.title;
+    if (!siteDescription && loadedConfig.site?.description) {
+      siteDescription = loadedConfig.site.description;
+    }
+  }
+
+  if (!siteName || !siteDescription) {
+    const pkgCandidates = [
+      path.join(metadataRoot, "package.json"),
+      path.join(parent1, "package.json"),
+      path.join(parent2, "package.json"),
+    ];
+    for (const pkgPath of pkgCandidates) {
+      if (await pathExists(pkgPath)) {
+        try {
+          const pkg = JSON.parse(await readFile(pkgPath, "utf8"));
+          if (!siteName && pkg.name) siteName = pkg.name;
+          if (!siteDescription && pkg.description) {
+            siteDescription = pkg.description;
+          }
+          break;
+        } catch {}
+      }
+    }
+  }
+
+  if (!siteName) {
+    siteName = path.basename(metadataRoot);
+    if (siteName === "public" || siteName === "dist") {
+      siteName = path.basename(parent1);
+      if (
+        (siteName === "public" || siteName === "dist") &&
+        path.basename(parent2)
+      ) {
+        siteName = path.basename(parent2);
+      }
+    }
+  }
+
+  if (!siteDescription) {
+    siteDescription =
+      "Agent skills and tools collection, powered by ShadowClaw.";
   }
 
   // 2. Discover Tools (.agents/tools/**/*.json)
@@ -249,6 +309,61 @@ export async function generateSkillsIndex(
     });
   }
 
+  // 4b. Discover Bundled Skills from Toolchain (if requested or enabled)
+  const defaultToolchainRoot = path.resolve(__dirname, "../..");
+  const bundledSkillsDir = options.bundledSkillsDir
+    ? path.resolve(options.bundledSkillsDir)
+    : options.toolchainRoot
+      ? path.join(path.resolve(options.toolchainRoot), ".agents", "skills")
+      : options.includeBundled
+        ? path.join(defaultToolchainRoot, ".agents", "skills")
+        : null;
+
+  if (
+    bundledSkillsDir &&
+    (await pathExists(bundledSkillsDir)) &&
+    bundledSkillsDir !== skillsDir
+  ) {
+    const bundledSkillFiles = await findFilesRecursively(
+      bundledSkillsDir,
+      (name) => name === "SKILL.md",
+    );
+    for (const fullSkillPath of bundledSkillFiles) {
+      const relFromBundled = path.relative(bundledSkillsDir, fullSkillPath);
+      const relFromRoot = path.join(".agents", "skills", relFromBundled);
+      const relUrl = path.posix.normalize(
+        path.posix.relative(
+          wellKnownDirRel,
+          relFromRoot.split(path.sep).join(path.posix.sep),
+        ),
+      );
+      const rawContent = await readFile(fullSkillPath);
+      const digest = computeSha256(rawContent);
+
+      let frontmatter = {};
+      try {
+        const parsed = matter(rawContent.toString("utf8"));
+        frontmatter = parsed.data || {};
+      } catch {}
+
+      const parentDirName = path.basename(path.dirname(fullSkillPath));
+      const skillName = frontmatter.name || parentDirName;
+      const skillDesc = frontmatter.description || "";
+
+      if (discoveredSkills.some((s) => s.name === skillName)) {
+        continue;
+      }
+
+      discoveredSkills.push({
+        name: skillName,
+        type: "skill-md",
+        description: skillDesc,
+        url: relUrl,
+        digest,
+      });
+    }
+  }
+
   // 5. Construct Index Document
   const indexDoc = {
     $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
@@ -319,7 +434,11 @@ export async function runSkillsIndexCommand(dir, options = {}) {
   const targetDir = dir ? path.resolve(dir) : process.cwd();
   console.log(`Generating Agent Skills Discovery index for ${targetDir}...`);
 
-  const result = await generateSkillsIndex(targetDir, options);
+  const result = await generateSkillsIndex(targetDir, {
+    includeBundled: options.bundled !== false,
+    ...options,
+    configPath: options.config || options.configPath,
+  });
   const count = result.skills ? result.skills.length : 0;
   console.log(
     `Indexed ${count} skill(s) into .well-known/agent-skills/index.json`,

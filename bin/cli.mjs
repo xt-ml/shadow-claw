@@ -977,6 +977,15 @@ program
     "Output directory relative to content root (default: .well-known/agent-skills)",
   )
   .option("--out-file <file>", "Explicit destination path for index.json")
+  .option(
+    "--metadata-root <dir>",
+    "Directory to read site metadata from (default: content root)",
+  )
+  .option(
+    "--config <file>",
+    "Explicit path to shadow-claw.config.json or site-config.json",
+  )
+  .option("--no-bundled", "Exclude bundled ShadowClaw skills from index")
   .option("--stdout", "Print generated index.json to stdout", false)
   .option("--no-write", "Skip writing file to disk")
   .action(async (dir, options) => {

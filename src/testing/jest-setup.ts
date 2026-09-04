@@ -566,6 +566,8 @@ const expectedLogs = [
   "Failed to check Prompt API onboarding:",
   "[webrtc-listen]",
   "[ShadowClaw MCP]",
+  "fatal: not a git repository",
+  "Stopping at filesystem boundary",
 ];
 
 function isExpectedLog(...args: any[]) {
@@ -576,6 +578,17 @@ function isExpectedLog(...args: any[]) {
     .join(" ");
   return expectedLogs.some((expected) => str.includes(expected));
 }
+
+const originalStderrWrite = process.stderr.write.bind(process.stderr);
+(process.stderr as any).write = (chunk: any, ...args: any[]): boolean => {
+  const str = typeof chunk === "string" ? chunk : (chunk?.toString?.() ?? "");
+  if (isExpectedLog(str)) {
+    const cb = args.find((a) => typeof a === "function");
+    if (cb) cb();
+    return true;
+  }
+  return (originalStderrWrite as any)(chunk, ...args);
+};
 
 console.error = (...args: any[]) => {
   if (isExpectedLog(...args)) return;

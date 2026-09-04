@@ -158,4 +158,86 @@ metadata:
     await generateSkillsIndex(tempDir, { outFile: customOut });
     expect(fs.existsSync(customOut)).toBe(true);
   });
+
+  it("resolves site metadata from parent directory when indexing a subfolder like dist/public", async () => {
+    await writeFile(
+      path.join(tempDir, "shadow-claw.config.json"),
+      JSON.stringify({
+        site: {
+          title: "My Custom Knowledge Hub",
+          description: "A custom description for testing metadata resolution.",
+        },
+      }),
+      "utf8",
+    );
+
+    const distPublicDir = path.join(tempDir, "dist", "public");
+    const skillDir = path.join(
+      distPublicDir,
+      ".agents",
+      "skills",
+      "main",
+      "custom",
+    );
+    await mkdir(skillDir, { recursive: true });
+    await writeFile(
+      path.join(skillDir, "SKILL.md"),
+      "---\nname: custom\ndescription: Custom skill.\n---\n",
+      "utf8",
+    );
+
+    const res = await generateSkillsIndex(distPublicDir, { write: false });
+    expect(res.name).toBe("My Custom Knowledge Hub");
+    expect(res.description).toBe(
+      "A custom description for testing metadata resolution.",
+    );
+    expect(res.skills).toHaveLength(1);
+    expect(res.skills[0].name).toBe("custom");
+    expect(res.skills[0].url).toBe("../../.agents/skills/main/custom/SKILL.md");
+  });
+
+  it("discovers bundled skills when toolchainRoot is provided and merges them without duplicates", async () => {
+    const mockToolchain = path.join(tempDir, "toolchain");
+    const bundledSkillDir = path.join(
+      mockToolchain,
+      ".agents",
+      "skills",
+      "main",
+      "skill-creator",
+    );
+    await mkdir(bundledSkillDir, { recursive: true });
+    await writeFile(
+      path.join(bundledSkillDir, "SKILL.md"),
+      "---\nname: skill-creator\ndescription: Bundled skill creator.\n---\n",
+      "utf8",
+    );
+
+    const mockContent = path.join(tempDir, "content");
+    const contentSkillDir = path.join(
+      mockContent,
+      ".agents",
+      "skills",
+      "main",
+      "my-skill",
+    );
+    await mkdir(contentSkillDir, { recursive: true });
+    await writeFile(
+      path.join(contentSkillDir, "SKILL.md"),
+      "---\nname: my-skill\ndescription: Custom skill.\n---\n",
+      "utf8",
+    );
+
+    const res = await generateSkillsIndex(mockContent, {
+      toolchainRoot: mockToolchain,
+      write: false,
+    });
+    expect(res.skills).toHaveLength(2);
+    expect(res.skills.map((s) => s.name)).toEqual(
+      expect.arrayContaining(["my-skill", "skill-creator"]),
+    );
+    const creatorSkill = res.skills.find((s) => s.name === "skill-creator");
+    expect(creatorSkill.url).toBe(
+      "../../.agents/skills/main/skill-creator/SKILL.md",
+    );
+  });
 });

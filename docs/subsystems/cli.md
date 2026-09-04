@@ -308,14 +308,17 @@ npx shadow-claw skills:index --stdout --no-write
 npx shadow-claw skills:index --out-file custom/discovery/index.json
 ```
 
-| Option              | Type    | Description                                     | Default                      |
-| :------------------ | :------ | :---------------------------------------------- | :--------------------------- |
-| `--out-dir <dir>`   | string  | Output directory relative to content root       | `".well-known/agent-skills"` |
-| `--out-file <file>` | string  | Explicit destination file path for `index.json` | `undefined`                  |
-| `--stdout`          | boolean | Print generated JSON directly to stdout         | `false`                      |
-| `--no-write`        | boolean | Skip writing the generated index file to disk   | `false`                      |
+| Option                  | Type    | Description                                      | Default                      |
+| :---------------------- | :------ | :----------------------------------------------- | :--------------------------- |
+| `--out-dir <dir>`       | string  | Output directory relative to content root        | `".well-known/agent-skills"` |
+| `--out-file <file>`     | string  | Explicit destination file path for `index.json`  | `undefined`                  |
+| `--metadata-root <dir>` | string  | Directory to read site metadata from             | content root                 |
+| `--config <file>`       | string  | Path to `shadow-claw.config.json`                | auto-discovered              |
+| `--no-bundled`          | boolean | Exclude bundled ShadowClaw skills from discovery | `false`                      |
+| `--stdout`              | boolean | Print generated JSON directly to stdout          | `false`                      |
+| `--no-write`            | boolean | Skip writing the generated index file to disk    | `false`                      |
 
-> **Build Pipeline Integration:** `bin/build/build.mjs` automatically executes `generateSkillsIndex(contentRoot)` during builds whenever `.agents/skills` exists, and copies `.agents/scripts` along with `.well-known/agent-skills/index.json` into `dist/public`.
+> **Build Pipeline Integration:** `bin/build/build.mjs` automatically generates `.well-known/agent-skills/index.json` during builds into `dist/public`, indexing both content skills and bundled skills (such as `skill-creator`) using the content root's site metadata, and keeps `.agents/scripts` and repository `.well-known` synchronized.
 
 ---
 

@@ -60,6 +60,12 @@ describe("shadow-claw-control-plane", () => {
     expect(getControlPlaneTargetAddressSpace("https://172.20.0.1:8888")).toBe(
       "private",
     );
+    expect(getControlPlaneTargetAddressSpace("https://hostname:8888")).toBe(
+      "private",
+    );
+    expect(
+      getControlPlaneTargetAddressSpace("https://hostname.local:8888"),
+    ).toBe("private");
     expect(
       getControlPlaneTargetAddressSpace("https://my-server.example.com"),
     ).toBeUndefined();

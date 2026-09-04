@@ -53,7 +53,14 @@ export function getPushFetchOptions(
       host === "[::1]"
     ) {
       opts.targetAddressSpace = "loopback";
-    } else if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host)) {
+    } else if (
+      /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host) ||
+      !host.includes(".") ||
+      host.endsWith(".local") ||
+      host.endsWith(".lan") ||
+      host.endsWith(".home") ||
+      host.endsWith(".internal")
+    ) {
       opts.targetAddressSpace = "private";
     }
   } catch (_) {}

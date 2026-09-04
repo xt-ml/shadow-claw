@@ -105,4 +105,77 @@ describe("shouldBypassFetchProxy", () => {
       shouldBypassFetchProxy(classAUrl, "https://xt-ml.github.io/shadow-claw/"),
     ).toBe(true);
   });
+
+  it("bypasses single-label local hostnames like hostname", () => {
+    const pushUrl = new URL("https://hostname:8888/push/vapid-public-key");
+    expect(
+      shouldBypassFetchProxy(pushUrl, "https://xt-ml.github.io/shadow-claw/"),
+    ).toBe(true);
+
+    const taskUrl = new URL("https://hostname:8888/schedule/tasks");
+    expect(
+      shouldBypassFetchProxy(taskUrl, "https://xt-ml.github.io/shadow-claw/"),
+    ).toBe(true);
+  });
+
+  it("bypasses mDNS .local and local network domain endpoints", () => {
+    const localDomainUrl = new URL(
+      "https://hostname.local:8888/api/control/events",
+    );
+    expect(
+      shouldBypassFetchProxy(
+        localDomainUrl,
+        "https://xt-ml.github.io/shadow-claw/",
+      ),
+    ).toBe(true);
+
+    const lanDomainUrl = new URL("https://server.lan:8888/schedule/tasks");
+    expect(
+      shouldBypassFetchProxy(
+        lanDomainUrl,
+        "https://xt-ml.github.io/shadow-claw/",
+      ),
+    ).toBe(true);
+  });
+
+  it("bypasses built-in backend routes even on custom domains", () => {
+    const pushSubscribeUrl = new URL(
+      "https://custom.example.com/push/subscribe",
+    );
+    expect(
+      shouldBypassFetchProxy(
+        pushSubscribeUrl,
+        "https://xt-ml.github.io/shadow-claw/",
+      ),
+    ).toBe(true);
+
+    const scheduleUrl = new URL("https://custom.example.com/schedule/tasks");
+    expect(
+      shouldBypassFetchProxy(
+        scheduleUrl,
+        "https://xt-ml.github.io/shadow-claw/",
+      ),
+    ).toBe(true);
+
+    const controlUrl = new URL(
+      "https://custom.example.com/api/control/messages",
+    );
+    expect(
+      shouldBypassFetchProxy(
+        controlUrl,
+        "https://xt-ml.github.io/shadow-claw/",
+      ),
+    ).toBe(true);
+  });
+
+  it("bypasses requests destined for the proxy server itself", () => {
+    const targetUrl = new URL("https://proxy.example.com:9000/api/custom");
+    expect(
+      shouldBypassFetchProxy(
+        targetUrl,
+        "https://xt-ml.github.io/shadow-claw/",
+        "https://proxy.example.com:9000/proxy",
+      ),
+    ).toBe(true);
+  });
 });

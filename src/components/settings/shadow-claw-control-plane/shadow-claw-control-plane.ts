@@ -37,9 +37,13 @@ export function getControlPlaneTargetAddressSpace(
     if (isLoopback) {
       return "loopback";
     }
-    const isPrivate = /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(
-      hostname,
-    );
+    const isPrivate =
+      /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname) ||
+      !hostname.includes(".") ||
+      hostname.endsWith(".local") ||
+      hostname.endsWith(".lan") ||
+      hostname.endsWith(".home") ||
+      hostname.endsWith(".internal");
     if (isPrivate) {
       return "private";
     }

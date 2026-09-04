@@ -53,6 +53,7 @@ const {
   unsubscribeFromPush,
   getCurrentSubscription,
   urlBase64ToUint8Array,
+  getPushFetchOptions,
 } = await import("./push-client.js");
 
 describe("push-client", () => {
@@ -60,6 +61,60 @@ describe("push-client", () => {
     jest.clearAllMocks();
 
     mockPushManager.getSubscription.mockResolvedValue(null);
+  });
+
+  describe("getPushFetchOptions", () => {
+    it("sets targetAddressSpace loopback for localhost", () => {
+      expect(
+        getPushFetchOptions("http://localhost:8888/push/vapid-public-key"),
+      ).toEqual({
+        targetAddressSpace: "loopback",
+      });
+      expect(
+        getPushFetchOptions("http://127.0.0.1:8888/push/vapid-public-key"),
+      ).toEqual({
+        targetAddressSpace: "loopback",
+      });
+    });
+
+    it("sets targetAddressSpace private for private IP addresses", () => {
+      expect(
+        getPushFetchOptions("https://10.9.8.226:8888/push/vapid-public-key"),
+      ).toEqual({
+        targetAddressSpace: "private",
+      });
+      expect(
+        getPushFetchOptions("https://192.168.1.50:8888/push/vapid-public-key"),
+      ).toEqual({
+        targetAddressSpace: "private",
+      });
+    });
+
+    it("sets targetAddressSpace private for local single-label hostnames and .local domains", () => {
+      expect(
+        getPushFetchOptions("https://hostname:8888/push/vapid-public-key"),
+      ).toEqual({
+        targetAddressSpace: "private",
+      });
+      expect(
+        getPushFetchOptions(
+          "https://hostname.local:8888/push/vapid-public-key",
+        ),
+      ).toEqual({
+        targetAddressSpace: "private",
+      });
+      expect(
+        getPushFetchOptions("https://my-nas.lan:8888/push/vapid-public-key"),
+      ).toEqual({
+        targetAddressSpace: "private",
+      });
+    });
+
+    it("does not set targetAddressSpace for public domains", () => {
+      expect(
+        getPushFetchOptions("https://example.com/push/vapid-public-key"),
+      ).toEqual({});
+    });
   });
 
   describe("urlBase64ToUint8Array", () => {

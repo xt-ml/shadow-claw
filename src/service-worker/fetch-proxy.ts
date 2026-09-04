@@ -239,7 +239,7 @@ self.addEventListener("fetch", (event: FetchEvent) => {
     }
   }
 
-  if (shouldBypassFetchProxy(requestUrl, location.origin)) {
+  if (shouldBypassFetchProxy(requestUrl, location.origin, proxyUrl)) {
     return;
   }
 

@@ -16,11 +16,46 @@ const BYPASS_PROVIDERS = [
   "api.telegram.org",
 ];
 
+const BACKEND_ROUTE_PREFIXES = [
+  "/api/control/",
+  "/api/backup/",
+  "/api/activity-log/",
+  "/api/health",
+  "/push/",
+  "/schedule/",
+  "/mcp",
+  "/ws/",
+  "/peerjs/",
+];
+
+const LOCAL_DOMAINS = [".local", ".lan", ".home", ".internal"];
+
 export function shouldBypassFetchProxy(
   requestUrl: URL,
   locationOrigin: string,
+  proxyUrl?: string,
 ): boolean {
   if (requestUrl.origin === locationOrigin) {
+    return true;
+  }
+
+  // Never proxy requests directed to the proxy host itself (avoids self-proxy loops)
+  if (proxyUrl) {
+    try {
+      const proxyOrigin = new URL(proxyUrl, locationOrigin).origin;
+      if (requestUrl.origin === proxyOrigin) {
+        return true;
+      }
+    } catch (_) {}
+  }
+
+  // Never proxy requests to ShadowClaw built-in backend infrastructure routes
+  const pathname = requestUrl.pathname;
+  if (
+    BACKEND_ROUTE_PREFIXES.some(
+      (prefix) => pathname === prefix || pathname.startsWith(prefix),
+    )
+  ) {
     return true;
   }
 
@@ -59,6 +94,15 @@ export function shouldBypassFetchProxy(
   );
 
   if (isPrivateIp) {
+    return true;
+  }
+
+  // Local/private hostnames: single-label (no dots, e.g. "hostname") or local network domain suffixes
+  const isLocalHostname =
+    !hostname.includes(".") ||
+    LOCAL_DOMAINS.some((domain) => hostname.endsWith(domain));
+
+  if (isLocalHostname) {
     return true;
   }
 

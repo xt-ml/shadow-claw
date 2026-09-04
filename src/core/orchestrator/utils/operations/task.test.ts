@@ -57,4 +57,30 @@ describe("task operations", () => {
       expect.objectContaining({ method: "DELETE" }),
     );
   });
+
+  it("syncTaskToServer sets targetAddressSpace private for local hostnames", async () => {
+    await syncTaskToServer(
+      {
+        taskServerUrl: "https://hostname:8888/schedule",
+        taskServerEnabled: true,
+      } as any,
+      {
+        id: "t2",
+        groupId: "br:main",
+        prompt: "hello",
+        schedule: "*/5 * * * *",
+        enabled: true,
+        lastRun: null,
+        createdAt: 1,
+      } as any,
+    );
+
+    expect((globalThis as any).fetch).toHaveBeenCalledWith(
+      "https://hostname:8888/schedule/tasks",
+      expect.objectContaining({
+        method: "POST",
+        targetAddressSpace: "private",
+      }),
+    );
+  });
 });

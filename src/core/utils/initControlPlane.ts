@@ -293,7 +293,44 @@ export async function executeClientControlCommand(
         }
       } catch (_) {}
 
-      // Fallback: list built-in TOOL_DEFINITIONS
+      // Fallback: filter by conversation group toolTags if active
+      try {
+        const { orchestratorStore } =
+          await import("../../stores/orchestrator.js");
+        const orch =
+          options.orchestrator ||
+          orchestratorStore.orchestrator ||
+          (typeof document !== "undefined"
+            ? (document.querySelector("shadow-claw") as any)?.orchestrator
+            : null);
+        const activeGroupId =
+          args.groupId ||
+          orch?.activeGroupId ||
+          orchestratorStore.activeGroupId ||
+          "br:main";
+        const group = orchestratorStore.groups.find(
+          (g) => g.groupId === activeGroupId,
+        );
+
+        if (group?.toolTags && group.toolTags.length > 0) {
+          const { TOOL_DEFINITIONS } =
+            await import("../../subsystems/tools/index.js");
+          const { parseWebMcpInputSchema } =
+            await import("../../subsystems/mcp/webmcp.js");
+          const activeTools = TOOL_DEFINITIONS.filter((t) =>
+            group.toolTags!.includes(t.name),
+          );
+          return {
+            tools: activeTools.map((t) => ({
+              name: t.name,
+              description: t.description,
+              inputSchema: parseWebMcpInputSchema(t.input_schema),
+            })),
+          };
+        }
+      } catch (_) {}
+
+      // Default fallback: list built-in TOOL_DEFINITIONS
       const { TOOL_DEFINITIONS } =
         await import("../../subsystems/tools/index.js");
       const { parseWebMcpInputSchema } =
@@ -311,51 +348,185 @@ export async function executeClientControlCommand(
       if (!args.toolName) {
         throw new Error("Missing toolName parameter");
       }
+
+      // 1. Validate tool against active conversation group and toolsStore
+      try {
+        const { orchestratorStore } =
+          await import("../../stores/orchestrator.js");
+        const { toolsStore } = await import("../../stores/tools.js");
+        const orch =
+          options.orchestrator ||
+          orchestratorStore.orchestrator ||
+          (typeof document !== "undefined"
+            ? (document.querySelector("shadow-claw") as any)?.orchestrator
+            : null);
+        const activeGroupId =
+          args.groupId ||
+          orch?.activeGroupId ||
+          orchestratorStore.activeGroupId ||
+          "br:main";
+        const group = orchestratorStore.groups.find(
+          (g) => g.groupId === activeGroupId,
+        );
+
+        if (group?.toolTags && group.toolTags.length > 0) {
+          if (!group.toolTags.includes(args.toolName)) {
+            throw new Error(
+              `Tool '${args.toolName}' is not enabled in the active conversation (${activeGroupId}).`,
+            );
+          }
+        } else if (
+          toolsStore?.allTools &&
+          toolsStore.allTools.some((t: any) => t.name === args.toolName) &&
+          toolsStore?.enabledToolNames &&
+          toolsStore.enabledToolNames.size > 0
+        ) {
+          const isBuiltIn = toolsStore.enabledToolNames.has(args.toolName);
+          const isDeclarative = toolsStore.isDeclarativeToolEnabled(
+            args.toolName,
+          );
+          if (!isBuiltIn && !isDeclarative) {
+            throw new Error(
+              `Tool '${args.toolName}' is not enabled on this client.`,
+            );
+          }
+        }
+      } catch (err: any) {
+        if (err.message && err.message.includes("is not enabled")) {
+          throw err;
+        }
+      }
+
       const ctx =
         (typeof document !== "undefined" && (document as any).modelContext) ||
         (typeof navigator !== "undefined" && (navigator as any).modelContext);
 
       if (ctx) {
+        let matchedTool: any;
         if (typeof ctx.getTools === "function") {
           try {
             const tools = await ctx.getTools();
-            const tool = Array.isArray(tools)
-              ? tools.find((t: any) => t.name === args.toolName)
-              : undefined;
-            if (tool && typeof tool.execute === "function") {
-              const res = await tool.execute(args.input || {});
+            if (Array.isArray(tools) && tools.length > 0) {
+              matchedTool = tools.find((t: any) => t.name === args.toolName);
+              if (!matchedTool) {
+                throw new Error(
+                  `Tool '${args.toolName}' is not enabled or registered on this client.`,
+                );
+              }
+            } else {
+              matchedTool = Array.isArray(tools)
+                ? tools.find((t: any) => t.name === args.toolName)
+                : undefined;
+            }
+            if (matchedTool && typeof matchedTool.execute === "function") {
+              const res = await matchedTool.execute(
+                typeof args.input === "string"
+                  ? JSON.parse(args.input)
+                  : args.input || {},
+              );
               return { result: res };
             }
+          } catch (err: any) {
+            if (err.message && err.message.includes("is not enabled")) {
+              throw err;
+            }
+          }
+        }
+
+        const inputStr =
+          typeof args.input === "string"
+            ? args.input
+            : JSON.stringify(args.input || {});
+
+        if (typeof ctx.executeTool === "function") {
+          // 1. Pass the actual ModelContextTool object from getTools() if available (required by native Chromium)
+          if (matchedTool) {
+            try {
+              const res = await ctx.executeTool(matchedTool, inputStr);
+              return { result: res };
+            } catch (_) {}
+          }
+
+          // 2. Pass { name: toolName } object (accepted by polyfill / mocks)
+          try {
+            const res = await ctx.executeTool(
+              { name: args.toolName },
+              inputStr,
+            );
+            return { result: res };
+          } catch (_) {}
+
+          // 3. Pass toolName string directly (accepted by some preview shims)
+          try {
+            const res = await ctx.executeTool(args.toolName, inputStr);
+            return { result: res };
           } catch (_) {}
         }
-        if (typeof ctx.executeTool === "function") {
-          const res = await ctx.executeTool(
-            { name: args.toolName },
-            typeof args.input === "string"
-              ? args.input
-              : JSON.stringify(args.input || {}),
-          );
-          return { result: res };
+
+        // 4. Check navigator.modelContextTesting if present
+        if (
+          typeof navigator !== "undefined" &&
+          (navigator as any).modelContextTesting &&
+          typeof (navigator as any).modelContextTesting.executeTool ===
+            "function"
+        ) {
+          try {
+            const res = await (
+              navigator as any
+            ).modelContextTesting.executeTool(args.toolName, inputStr);
+            return { result: res };
+          } catch (_) {}
         }
+
+        // 5. Check callTool (MCP-B / extension runtime)
+        if (typeof ctx.callTool === "function") {
+          try {
+            const res = await ctx.callTool({
+              name: args.toolName,
+              arguments:
+                typeof args.input === "string"
+                  ? JSON.parse(args.input)
+                  : args.input || {},
+            });
+            return { result: res };
+          } catch (_) {}
+        }
+
+        // 6. Check invoke
         if (typeof ctx.invoke === "function") {
-          const res = await ctx.invoke(args.toolName, args.input || {});
-          return { result: res };
+          try {
+            const res = await ctx.invoke(
+              args.toolName,
+              typeof args.input === "string"
+                ? JSON.parse(args.input)
+                : args.input || {},
+            );
+            return { result: res };
+          } catch (_) {}
         }
       }
 
       // Worker fallback if agent worker is active
       const { orchestratorStore } =
         await import("../../stores/orchestrator.js");
-      const orch = options.orchestrator || orchestratorStore.orchestrator;
+      const orch =
+        options.orchestrator ||
+        orchestratorStore.orchestrator ||
+        (typeof document !== "undefined"
+          ? (document.querySelector("shadow-claw") as any)?.orchestrator
+          : null);
       const worker: any = orch?.agentWorker;
       if (worker && typeof worker.postMessage === "function") {
         const callId =
           Date.now().toString(36) + Math.random().toString(36).slice(2);
+        const isInteractive = args.toolName === "ask_user";
+        const fallbackTimeoutMs =
+          args.timeoutMs || (isInteractive ? 300000 : 60000);
         const result = await new Promise((resolve, reject) => {
           const timeout = setTimeout(() => {
             worker.removeEventListener("message", handler);
             reject(new Error("Timeout waiting for tool execution"));
-          }, 60000);
+          }, fallbackTimeoutMs);
 
           const handler = (event: MessageEvent) => {
             const data = event.data;
@@ -380,8 +551,11 @@ export async function executeClientControlCommand(
             callId,
             payload: {
               name: args.toolName,
-              input: args.input || {},
-              groupId: args.groupId || orch.activeGroupId || "br:main",
+              input:
+                typeof args.input === "string"
+                  ? JSON.parse(args.input)
+                  : args.input || {},
+              groupId: args.groupId || orch?.activeGroupId || "br:main",
             },
           });
         });

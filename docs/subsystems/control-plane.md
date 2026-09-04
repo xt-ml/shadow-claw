@@ -177,15 +177,21 @@ ShadowClaw implements an official Model Context Protocol server adhering to the 
 ### Built-in MCP Tools
 
 - `shadowclaw_list_clients`: Inspect active connected browser and Electron clients.
+- `shadowclaw_set_active_client`: Set active default target client for subsequent relayed tool calls and messages.
 - `shadowclaw_send_message`: Dispatch prompt or message to a client's orchestrator queue.
 - `shadowclaw_read_state`: Read current orchestrator state, model, and active conversation group.
 - `shadowclaw_list_tasks`: Inspect scheduled tasks on a client.
 - `shadowclaw_manage_backup`: Trigger, inspect, or delete OPFS workspace snapshots.
 - `shadowclaw_server_status`: Query Node server status and connected client count.
 
-### Dynamic Client Tool Relaying
+### Dynamic Client Tool Relaying & Multi-Client Targeting
 
-When a browser client is connected, the MCP server automatically queries the client via `list-tools`, exposing tools such as `read_file`, `write_file`, `bash`, and `ask_user` directly to external MCP clients. Interactive tools support Multi Round-Trip Requests (MRTR) via `resultType: "input_required"`.
+When browser clients are connected, the MCP server queries available tools via `list-tools` and exposes them dynamically:
+
+- **Multi-Client Discovery:** Relayed tool schemas include a `clientId` enum parameter listing only the clients that have that tool enabled.
+- **Client Resolution:** Tool calls target the specified `clientId`, the active default client (from `shadowclaw_set_active_client`), or fall back to the first client supporting the tool. Targets can be matched by full ID, numeric index, prefix, or device label. Disconnected clients are unregistered automatically.
+- **Client Execution Guards:** Browser clients validate incoming `invoke-tool` commands against the active conversation's tool tags (`group.toolTags`) and global configuration (`toolsStore.enabledToolNames`). Disabled tools are rejected with an explicit error.
+- **Interactive Tools:** Invocations of `ask_user` dispatch directly to the browser UI with an extended 300s timeout or fulfill via 2026-07-28 MRTR when `inputResponses` are provided.
 
 ---
 

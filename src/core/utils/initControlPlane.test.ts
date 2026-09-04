@@ -588,6 +588,193 @@ describe("initControlPlane", () => {
         Object.defineProperty(navigator, "modelContext", origNavMC);
     });
 
+    it("handles native Chromium WebMCP invoke-tool passing ModelContextTool to executeTool", async () => {
+      const origDocMC = Object.getOwnPropertyDescriptor(
+        document,
+        "modelContext",
+      );
+      const origNavMC = Object.getOwnPropertyDescriptor(
+        navigator,
+        "modelContext",
+      );
+      delete (navigator as any).modelContext;
+
+      const nativeModelContextTool = {
+        name: "list_files",
+        description: "List files and directories",
+        inputSchema: '{"type":"object"}',
+        title: "list_files",
+        origin: "http://localhost:8888",
+        window: globalThis.window,
+      };
+
+      const mockExecuteTool = (jest.fn() as any).mockImplementation(
+        async (tool: any, _inputArgsJson: string) => {
+          // Native Chromium strictly requires the tool object from getTools()
+          if (tool !== nativeModelContextTool) {
+            throw new TypeError(
+              "Failed to execute 'executeTool' on 'ModelContext': parameter 1 is not of type 'ModelContextTool'",
+            );
+          }
+          return `.agents/ MEMORY.md index.html -/`;
+        },
+      );
+
+      Object.defineProperty(document, "modelContext", {
+        value: {
+          getTools: (jest.fn() as any).mockResolvedValue([
+            nativeModelContextTool,
+          ]),
+          executeTool: mockExecuteTool,
+        },
+        configurable: true,
+      });
+
+      try {
+        const res = await executeClientControlCommand(
+          "invoke-tool",
+          { toolName: "list_files", input: {} },
+          {},
+        );
+
+        expect(res).toEqual({
+          result: ".agents/ MEMORY.md index.html -/",
+        });
+        expect(mockExecuteTool).toHaveBeenCalledWith(
+          nativeModelContextTool,
+          "{}",
+        );
+      } finally {
+        if (origDocMC)
+          Object.defineProperty(document, "modelContext", origDocMC);
+        if (origNavMC)
+          Object.defineProperty(navigator, "modelContext", origNavMC);
+      }
+    });
+
+    it("refuses to execute tool when tool is not registered on client or not enabled in active conversation", async () => {
+      const origDocMC = Object.getOwnPropertyDescriptor(
+        document,
+        "modelContext",
+      );
+      const origNavMC = Object.getOwnPropertyDescriptor(
+        navigator,
+        "modelContext",
+      );
+      delete (navigator as any).modelContext;
+
+      Object.defineProperty(document, "modelContext", {
+        value: {
+          getTools: (jest.fn() as any).mockResolvedValue([
+            {
+              name: "list_files",
+              description: "List files",
+              inputSchema: "{}",
+            },
+          ]),
+          executeTool: jest.fn(),
+        },
+        configurable: true,
+      });
+
+      try {
+        // 1. Client has WebMCP tools registered, but ask_user is not among them
+        await expect(
+          executeClientControlCommand("invoke-tool", { toolName: "ask_user" }),
+        ).rejects.toThrow(
+          "Tool 'ask_user' is not enabled or registered on this client.",
+        );
+
+        // 2. Conversation group has restricted toolTags
+        const { orchestratorStore } =
+          await import("../../stores/orchestrator.js");
+        const groupsSpy = jest
+          .spyOn(orchestratorStore, "groups", "get")
+          .mockReturnValue([
+            { groupId: "br:restricted", toolTags: ["read_file"] } as any,
+          ]);
+
+        try {
+          await expect(
+            executeClientControlCommand(
+              "invoke-tool",
+              { toolName: "write_file", groupId: "br:restricted" },
+              { orchestrator: { activeGroupId: "br:restricted" } as any },
+            ),
+          ).rejects.toThrow(
+            "Tool 'write_file' is not enabled in the active conversation (br:restricted).",
+          );
+        } finally {
+          groupsSpy.mockRestore();
+        }
+      } finally {
+        if (origDocMC)
+          Object.defineProperty(document, "modelContext", origDocMC);
+        if (origNavMC)
+          Object.defineProperty(navigator, "modelContext", origNavMC);
+      }
+    });
+
+    it("falls back to worker when modelContext executeTool throws", async () => {
+      const origDocMC = Object.getOwnPropertyDescriptor(
+        document,
+        "modelContext",
+      );
+      delete (document as any).modelContext;
+
+      let workerHandler: any;
+      const mockWorker: any = {
+        addEventListener: jest.fn((event: string, handler: any) => {
+          if (event === "message") {
+            workerHandler = handler;
+          }
+        }),
+        removeEventListener: jest.fn(),
+        postMessage: jest.fn((msg: any) => {
+          setTimeout(() => {
+            workerHandler({
+              data: {
+                type: "execute-tool-result",
+                callId: msg.callId,
+                result: "worker result for " + msg.payload.name,
+              },
+            });
+          }, 0);
+        }),
+      };
+
+      // Define modelContext where executeTool throws
+      Object.defineProperty(document, "modelContext", {
+        value: {
+          getTools: (jest.fn() as any).mockResolvedValue([]),
+          executeTool: (jest.fn() as any).mockRejectedValue(
+            new Error("Native runtime fault"),
+          ),
+        },
+        configurable: true,
+      });
+
+      try {
+        const res = await executeClientControlCommand(
+          "invoke-tool",
+          { toolName: "list_files", input: { path: "docs" } },
+          {
+            orchestrator: {
+              agentWorker: mockWorker,
+              activeGroupId: "br:main",
+            } as any,
+          },
+        );
+
+        expect(res).toEqual({
+          result: "worker result for list_files",
+        });
+      } finally {
+        if (origDocMC)
+          Object.defineProperty(document, "modelContext", origDocMC);
+      }
+    });
+
     it("handles send-message when orchestrator is not ready", async () => {
       const { orchestratorStore } =
         await import("../../stores/orchestrator.js");

@@ -20,17 +20,18 @@ function isSpaShellRequest(req: Request, pathname: string): boolean {
     return false;
   }
 
-  const fetchDest = String(req.headers["sec-fetch-dest"] || "").toLowerCase();
+  const headers = req.headers || {};
+  const fetchDest = String(headers["sec-fetch-dest"] || "").toLowerCase();
   if (fetchDest && fetchDest !== "document") {
     return false;
   }
 
-  const fetchMode = String(req.headers["sec-fetch-mode"] || "").toLowerCase();
-  const fetchUser = String(req.headers["sec-fetch-user"] || "").toLowerCase();
+  const fetchMode = String(headers["sec-fetch-mode"] || "").toLowerCase();
+  const fetchUser = String(headers["sec-fetch-user"] || "").toLowerCase();
   const isNavigationFetch =
     fetchDest === "document" || fetchMode === "navigate" || fetchUser === "?1";
 
-  const accept = String(req.headers.accept || "");
+  const accept = String(headers.accept || "");
   if (!isNavigationFetch && !accept.includes("text/html")) {
     return false;
   }
@@ -45,6 +46,38 @@ function isSpaShellRequest(req: Request, pathname: string): boolean {
   return SPA_ROUTE_PREFIXES.has(firstSegment);
 }
 
+const ALLOWED_ROOT_DOT_DIRS = new Set([".well-known", ".agents"]);
+
+function isAllowedDotFileRequest(pathname: string): boolean {
+  const segments = pathname.split("/").filter(Boolean);
+  const dotSegments = segments.filter(
+    (segment) => segment.length > 0 && segment.startsWith("."),
+  );
+
+  if (dotSegments.length === 0) {
+    return true;
+  }
+
+  if (dotSegments.length !== 1) {
+    return false;
+  }
+
+  const singleDot = dotSegments[0];
+  if (!ALLOWED_ROOT_DOT_DIRS.has(singleDot)) {
+    return false;
+  }
+
+  return segments[0] === singleDot || segments[1] === singleDot;
+}
+
+function hasAllowedDotSegment(pathname: string): boolean {
+  const segments = pathname.split("/").filter(Boolean);
+  return (
+    (segments.length > 0 && ALLOWED_ROOT_DOT_DIRS.has(segments[0])) ||
+    (segments.length > 1 && ALLOWED_ROOT_DOT_DIRS.has(segments[1]))
+  );
+}
+
 export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
   app.use(expressUrlrewrite(/^(.+)\/index\.html$/, "$1/"));
 
@@ -53,6 +86,15 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
     res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
 
     const requestPath = new URL(req.originalUrl, "http://localhost").pathname;
+    if (!isAllowedDotFileRequest(requestPath)) {
+      next();
+      return;
+    }
+
+    const sendFileOptions = hasAllowedDotSegment(requestPath)
+      ? { dotfiles: "allow" as const }
+      : undefined;
+
     const isWebVMAsset =
       requestPath.startsWith("/assets/v86.9pfs/") ||
       requestPath.startsWith("/assets/v86.ext2/");
@@ -63,7 +105,8 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
       res.setHeader("Cache-Control", "no-cache");
     }
 
-    const filePath = path.join(rootPath, req.url);
+    const urlPathname = new URL(req.url || "/", "http://localhost").pathname;
+    const filePath = path.join(rootPath, urlPathname);
     fs.stat(filePath, (err, stats) => {
       if (err || !stats) {
         if (isSpaShellRequest(req, requestPath)) {
@@ -81,7 +124,14 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
               fs.existsSync(strippedFilePath) &&
               fs.statSync(strippedFilePath).isFile()
             ) {
-              res.sendFile(strippedFilePath);
+              const strippedOptions = hasAllowedDotSegment(strippedSegmentPath)
+                ? { dotfiles: "allow" as const }
+                : undefined;
+              if (strippedOptions) {
+                res.sendFile(strippedFilePath, strippedOptions);
+              } else {
+                res.sendFile(strippedFilePath);
+              }
 
               return;
             }
@@ -151,13 +201,21 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
         const indexPath = path.join(filePath, "index.html");
         fs.access(indexPath, fs.constants.F_OK, (err2) => {
           if (!err2) {
-            res.sendFile(indexPath);
+            if (sendFileOptions) {
+              res.sendFile(indexPath, sendFileOptions);
+            } else {
+              res.sendFile(indexPath);
+            }
           } else {
             next();
           }
         });
       } else {
-        res.sendFile(filePath);
+        if (sendFileOptions) {
+          res.sendFile(filePath, sendFileOptions);
+        } else {
+          res.sendFile(filePath);
+        }
       }
     });
   });

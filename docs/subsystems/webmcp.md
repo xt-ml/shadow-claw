@@ -339,5 +339,14 @@ ShadowClaw provides `getWebMcpTools()` to safely query registered WebMCP tools a
 2. If `getTools()` is absent (older browser builds or polyfills lacking `getTools`), returns an empty array `[]` without throwing.
 3. Normalizes `inputSchema` on every returned tool so callers receive a JavaScript object regardless of Chrome version or polyfill implementation.
 
+### Native Execution Dispatch & Execution Guards
+
+When dispatching tool calls from external hosts via the Control Plane (`invoke-tool`):
+
+1. **Client-Side Gating:** Verifies whether the tool is active in the conversation group (`group.toolTags`) or enabled globally (`toolsStore.enabledToolNames`). Disabled tools are rejected before execution.
+2. **Native Tool Resolution:** Queries `ctx.getTools()` to find the registered `ModelContextTool` object and passes it to `ctx.executeTool(matchedTool, input)` (required by native Chromium).
+3. **Compatibility Fallbacks:** If the native call fails or `getTools()` does not yield a tool object, falls back through `{ name: toolName }`, string tool names, `navigator.modelContextTesting.executeTool`, extension `callTool`, or direct Web Worker execution via `executeTool(db, name, input, groupId, { allowedTools })`.
+4. **Interactive Timeout:** Extends timeout up to 300 seconds for interactive tools (`ask_user`) to support user review.
+
 **ShadowClaw's Role:**
 ShadowClaw acts primarily as a **Tool Provider** via `registerTool()`, exposing built-in tools (Bash, Git, etc.) to the browser context for consumption by external AI agents. With `getWebMcpTools()`, ShadowClaw also supports tool discovery with backwards-compatible schema parsing and graceful degradation when running on older browsers or polyfill targets.

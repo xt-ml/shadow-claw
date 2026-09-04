@@ -121,6 +121,22 @@ describe("build without and with pages", () => {
       manifest.skills.filter((s) => s.displayPath.endsWith("SKILL.md")),
     ).toHaveLength(2);
     expect(manifest.skillsPurgeId).toBe("skills-build-001");
+
+    const wellKnownIndexPath = path.join(
+      tempProjectRoot,
+      "dist/public/.well-known/agent-skills/index.json",
+    );
+    expect(fs.existsSync(wellKnownIndexPath)).toBe(true);
+    const wellKnownIndex = JSON.parse(
+      await readFile(wellKnownIndexPath, "utf8"),
+    );
+    expect(wellKnownIndex.$schema).toBe(
+      "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+    );
+    expect(wellKnownIndex.skills.map((s) => s.name)).toEqual(
+      expect.arrayContaining(["skill-creator", "example"]),
+    );
+    expect(wellKnownIndex.tools.map((t) => t.name)).toContain("echo");
   });
 
   it("builds with no pages directory and keeps default pages", async () => {
@@ -146,5 +162,46 @@ describe("build without and with pages", () => {
       path.join(tempProjectRoot, "site-config.json"),
     ].find((p) => fs.existsSync(p));
     expect(await readFile(configPath, "utf8")).toContain("ShadowClaw");
+
+    const wellKnownIndexPath = path.join(
+      tempProjectRoot,
+      "dist/public/.well-known/agent-skills/index.json",
+    );
+    expect(fs.existsSync(wellKnownIndexPath)).toBe(true);
+  });
+
+  it("builds an external consumer content root and falls back to toolchain .agents and .well-known", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-consumer-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const { runBuild: runConsumerBuild } = await import("./build.mjs");
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+      });
+
+      const consumerDistPublic = path.join(tempConsumerRoot, "dist/public");
+      expect(
+        fs.existsSync(
+          path.join(consumerDistPublic, ".well-known/agent-skills/index.json"),
+        ),
+      ).toBe(true);
+      expect(
+        fs.existsSync(
+          path.join(
+            consumerDistPublic,
+            ".agents/skills/main/skill-creator/SKILL.md",
+          ),
+        ),
+      ).toBe(true);
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
   });
 });

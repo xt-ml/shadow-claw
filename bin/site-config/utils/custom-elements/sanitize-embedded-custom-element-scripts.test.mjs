@@ -38,11 +38,20 @@ describe("sanitizeEmbeddedCustomElementScripts", () => {
     });
 
     const removesMissingSrc = sanitizeEmbeddedCustomElementScripts(
-      { customElements: { scripts: [{}, { src: "local.mjs" }] } },
+      {
+        customElements: {
+          scripts: [
+            {},
+            { src: "local.mjs" },
+            { src: "another.mjs", hasInit: true },
+          ],
+        },
+      },
       ["allowed.example.com"],
     );
     expect(removesMissingSrc.customElements.scripts).toEqual([
       { src: "local.mjs" },
+      { src: "another.mjs", hasInit: true },
     ]);
   });
 });

@@ -15,6 +15,7 @@ import { runTasksCommand } from "./commands/tasks.mjs";
 import { runPeerIdCommand } from "./commands/peer-id.mjs";
 import { runWebRtcListenCommand } from "./commands/webrtc-listen.mjs";
 import { runMcpCommand } from "./commands/mcp.mjs";
+import { runSkillsIndexCommand } from "./commands/skills-index.mjs";
 import { resolveCacheDir } from "./utils/resolve-cache-dir.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -960,6 +961,31 @@ program
   .option("--no-relay-client-tools", "Disable relaying browser client tools")
   .action(async (options) => {
     await runMcpCommand(options);
+  });
+
+// ---------------------------------------------------------------------------
+// AGENT SKILLS INDEX COMMAND
+// ---------------------------------------------------------------------------
+program
+  .command("skills:index [dir]")
+  .alias("agent-skills")
+  .description(
+    "Generate or update .well-known/agent-skills/index.json per the Agent Skills Discovery RFC",
+  )
+  .option(
+    "--out-dir <dir>",
+    "Output directory relative to content root (default: .well-known/agent-skills)",
+  )
+  .option("--out-file <file>", "Explicit destination path for index.json")
+  .option("--stdout", "Print generated index.json to stdout", false)
+  .option("--no-write", "Skip writing file to disk")
+  .action(async (dir, options) => {
+    try {
+      await runSkillsIndexCommand(dir, options);
+    } catch (err) {
+      console.error("Failed to generate skills index:", err);
+      process.exit(1);
+    }
   });
 
 program.parse(process.argv);

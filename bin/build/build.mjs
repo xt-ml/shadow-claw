@@ -18,11 +18,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const projectRoot = resolve(__dirname, "../..");
 
-async function run(command, options = {}) {
-  console.log(`> ${command}`);
-  execSync(command, { stdio: "inherit", ...options });
-}
-
 async function pathExists(p) {
   try {
     await stat(p);
@@ -33,6 +28,28 @@ async function pathExists(p) {
 }
 
 export async function runBuild(options = {}) {
+  const isQuiet =
+    options.quiet ?? (process.env.NODE_ENV === "test" && !process.env.VERBOSE);
+  const defaultStdio =
+    options.stdio ??
+    (process.env.NODE_ENV === "test" && !process.env.VERBOSE
+      ? "pipe"
+      : "inherit");
+
+  const log = (...args) => {
+    if (!isQuiet) {
+      console.log(...args);
+    }
+  };
+
+  async function run(command, runOptions = {}) {
+    if (!isQuiet && !runOptions.quiet) {
+      console.log(`> ${command}`);
+    }
+    const stdio = runOptions.stdio ?? defaultStdio;
+    execSync(command, { stdio, ...runOptions });
+  }
+
   const contentRoot = resolve(
     options.contentRoot || env.SHADOWCLAW_CONTENT_ROOT || process.cwd(),
   );
@@ -120,6 +137,39 @@ export async function runBuild(options = {}) {
       });
     } catch {}
 
+    try {
+      await cp(".agents/scripts", "dist/public/.agents/scripts", {
+        recursive: true,
+      });
+    } catch {}
+
+    // Generate / sync Agent Skills Discovery index (.well-known/agent-skills/index.json)
+    if (await pathExists(".agents/skills")) {
+      try {
+        const { generateSkillsIndex } =
+          await import("../commands/skills-index.mjs");
+        await generateSkillsIndex(projectRoot);
+        if (await pathExists(".well-known/agent-skills/index.json")) {
+          await cp(".well-known", "dist/public/.well-known", {
+            recursive: true,
+            force: true,
+          });
+        }
+      } catch (err) {
+        console.warn(
+          "Notice: Failed to auto-generate agent-skills index:",
+          err,
+        );
+      }
+    } else if (await pathExists(".well-known")) {
+      try {
+        await cp(".well-known", "dist/public/.well-known", {
+          recursive: true,
+          force: true,
+        });
+      } catch {}
+    }
+
     await run("npm run -s rolldown");
 
     if (prerenderMainMemory) {
@@ -141,14 +191,14 @@ export async function runBuild(options = {}) {
     } catch {}
 
     if (isProduction) {
-      console.log("Running production post-build steps...");
+      log("Running production post-build steps...");
 
       const pagesOrigin = options.pagesOrigin || env.PAGES_ORIGIN;
       const basePath =
         options.basePath || (env.PAGES_BASE_PATH ?? "/shadow-claw/");
 
-      console.log(`  PAGES_ORIGIN   : ${pagesOrigin || "(relative ./)"}`);
-      console.log(`  PAGES_BASE_PATH: ${basePath}`);
+      log(`  PAGES_ORIGIN   : ${pagesOrigin || "(relative ./)"}`);
+      log(`  PAGES_BASE_PATH: ${basePath}`);
 
       if (pagesOrigin) {
         try {
@@ -191,7 +241,7 @@ export async function runBuild(options = {}) {
     await run("npm run -s build:service-worker");
     await run("node bin/patch-service-worker-trusted-types.mjs");
 
-    console.log("Build completed successfully.");
+    log("Build completed successfully.");
     return;
   }
 
@@ -206,7 +256,7 @@ export async function runBuild(options = {}) {
   const toolchainDist = join(toolchainRoot, "dist/public");
   const toolchainBuilt = await pathExists(join(toolchainDist, "index.js"));
   if (!toolchainBuilt) {
-    console.log("Building ShadowClaw core toolchain...");
+    log("Building ShadowClaw core toolchain...");
     await run("npm run -s build:clean", { cwd: toolchainRoot });
     await run("npm run -s rolldown", { cwd: toolchainRoot });
   }
@@ -289,20 +339,101 @@ export async function runBuild(options = {}) {
     });
   }
 
-  // 6. Copy .agents from contentRoot
+  // 6. Copy .agents from contentRoot (fallback to toolchainRoot)
   const contentSkills = join(contentRoot, ".agents/skills");
   if (await pathExists(contentSkills)) {
     await cp(contentSkills, join(distPublicDir, ".agents/skills"), {
       recursive: true,
       force: true,
     });
+  } else {
+    const toolchainSkills = join(toolchainRoot, ".agents/skills");
+    if (await pathExists(toolchainSkills)) {
+      await cp(toolchainSkills, join(distPublicDir, ".agents/skills"), {
+        recursive: true,
+        force: true,
+      });
+    }
   }
+
   const contentTools = join(contentRoot, ".agents/tools");
   if (await pathExists(contentTools)) {
     await cp(contentTools, join(distPublicDir, ".agents/tools"), {
       recursive: true,
       force: true,
     });
+  } else {
+    const toolchainTools = join(toolchainRoot, ".agents/tools");
+    if (await pathExists(toolchainTools)) {
+      await cp(toolchainTools, join(distPublicDir, ".agents/tools"), {
+        recursive: true,
+        force: true,
+      });
+    }
+  }
+
+  const contentScripts = join(contentRoot, ".agents/scripts");
+  if (await pathExists(contentScripts)) {
+    await cp(contentScripts, join(distPublicDir, ".agents/scripts"), {
+      recursive: true,
+      force: true,
+    });
+  } else {
+    const toolchainScripts = join(toolchainRoot, ".agents/scripts");
+    if (await pathExists(toolchainScripts)) {
+      await cp(toolchainScripts, join(distPublicDir, ".agents/scripts"), {
+        recursive: true,
+        force: true,
+      });
+    }
+  }
+
+  // 6b. Generate / sync Agent Skills Discovery index (.well-known/agent-skills/index.json)
+  if (await pathExists(contentSkills)) {
+    try {
+      const { generateSkillsIndex } =
+        await import("../commands/skills-index.mjs");
+      await generateSkillsIndex(contentRoot);
+      const rootWellKnownIndex = join(
+        contentRoot,
+        ".well-known/agent-skills/index.json",
+      );
+      if (await pathExists(rootWellKnownIndex)) {
+        await cp(
+          join(contentRoot, ".well-known"),
+          join(distPublicDir, ".well-known"),
+          {
+            recursive: true,
+            force: true,
+          },
+        );
+      }
+    } catch (err) {
+      console.warn("Notice: Failed to auto-generate agent-skills index:", err);
+      const contentWellKnown = join(contentRoot, ".well-known");
+      if (await pathExists(contentWellKnown)) {
+        await cp(contentWellKnown, join(distPublicDir, ".well-known"), {
+          recursive: true,
+          force: true,
+        });
+      }
+    }
+  } else {
+    const contentWellKnown = join(contentRoot, ".well-known");
+    if (await pathExists(contentWellKnown)) {
+      await cp(contentWellKnown, join(distPublicDir, ".well-known"), {
+        recursive: true,
+        force: true,
+      });
+    } else {
+      const toolchainWellKnown = join(toolchainRoot, ".well-known");
+      if (await pathExists(toolchainWellKnown)) {
+        await cp(toolchainWellKnown, join(distPublicDir, ".well-known"), {
+          recursive: true,
+          force: true,
+        });
+      }
+    }
   }
 
   // 7. Prerender DSD Shell
@@ -348,11 +479,11 @@ export async function runBuild(options = {}) {
   } catch {}
 
   if (isProduction) {
-    console.log("Running production post-build steps...");
+    log("Running production post-build steps...");
 
     const pagesOrigin = options.pagesOrigin || env.PAGES_ORIGIN;
-    console.log(`  PAGES_ORIGIN   : ${pagesOrigin || "(relative ./)"}`);
-    console.log(`  PAGES_BASE_PATH: ${basePath}`);
+    log(`  PAGES_ORIGIN   : ${pagesOrigin || "(relative ./)"}`);
+    log(`  PAGES_BASE_PATH: ${basePath}`);
 
     if (pagesOrigin) {
       try {
@@ -425,7 +556,7 @@ export async function runBuild(options = {}) {
     await run(`node "${patchSwScript}" "${swPath}"`);
   }
 
-  console.log("Build completed successfully.");
+  log("Build completed successfully.");
 }
 
 const isMainModule =

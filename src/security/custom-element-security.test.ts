@@ -7,6 +7,7 @@ import {
   DEFAULT_IFRAME_SANDBOX_POLICY,
   getAllowedCustomElementHostPatterns,
   getAllowedCustomElements,
+  getApprovedCustomElementScriptDescriptors,
   getApprovedCustomElementScripts,
   getCustomElementPurifyConfig,
   getIframeCsp,
@@ -398,6 +399,12 @@ describe("custom-element-security", () => {
         expect(getApprovedCustomElementScripts()).toEqual([
           "https://kherrick.github.io/block-garden/block-garden-bundle-min.mjs",
         ]);
+        expect(getApprovedCustomElementScriptDescriptors()).toEqual([
+          {
+            src: "https://kherrick.github.io/block-garden/block-garden-bundle-min.mjs",
+            hasInit: false,
+          },
+        ]);
 
         const csp = getIframeCsp("test-nonce");
         expect(csp).toContain("script-src 'nonce-test-nonce'");
@@ -407,6 +414,50 @@ describe("custom-element-security", () => {
       } finally {
         siteConfigScript.remove();
         setIframeSandboxPolicy(DEFAULT_IFRAME_SANDBOX_POLICY);
+      }
+    });
+
+    it("parses object script descriptors with src and hasInit", () => {
+      const siteConfigScript = document.createElement("script");
+      siteConfigScript.id = "shadow-claw-site-config";
+      siteConfigScript.type = "application/json";
+      siteConfigScript.textContent = JSON.stringify({
+        customElements: {
+          allowedDomains: ["kherrick.github.io"],
+          scripts: [
+            { src: ".agents/scripts/main/pwgen-adapter.js", hasInit: true },
+            { src: "https://kherrick.github.io/x-pwgen.js", hasInit: false },
+            "local-element.js",
+          ],
+        },
+      });
+      document.head.appendChild(siteConfigScript);
+
+      try {
+        installCustomElementsRegistryGuard();
+
+        expect(getApprovedCustomElementScripts()).toEqual([
+          ".agents/scripts/main/pwgen-adapter.js",
+          "https://kherrick.github.io/x-pwgen.js",
+          "local-element.js",
+        ]);
+        expect(getApprovedCustomElementScriptDescriptors()).toEqual([
+          {
+            src: ".agents/scripts/main/pwgen-adapter.js",
+            hasInit: true,
+          },
+          {
+            src: "https://kherrick.github.io/x-pwgen.js",
+            hasInit: false,
+          },
+          {
+            src: "local-element.js",
+            hasInit: false,
+          },
+        ]);
+      } finally {
+        uninstallCustomElementsRegistryGuard();
+        siteConfigScript.remove();
       }
     });
   });

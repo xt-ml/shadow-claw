@@ -117,6 +117,7 @@ export interface ClientInfo {
 
 export type ClientToServerType =
   | "client:register"
+  | "client:unregister"
   | "client:heartbeat"
   | "command:result"
   | "backup:ready";

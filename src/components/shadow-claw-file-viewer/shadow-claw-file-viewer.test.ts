@@ -667,7 +667,7 @@ describe("shadow-claw-file-viewer", () => {
     configScript.textContent = JSON.stringify({
       customElements: {
         scripts: [
-          "pages/main/block-garden-adapter.js",
+          { src: "pages/main/block-garden-adapter.js", hasInit: true },
           "https://kherrick.github.io/block-garden/block-garden-bundle-min.mjs",
         ],
       },
@@ -685,6 +685,13 @@ describe("shadow-claw-file-viewer", () => {
     expect(srcdoc).toContain('src="/block-garden-adapter.js"');
     expect(srcdoc).toContain(
       'src="https://kherrick.github.io/block-garden/block-garden-bundle-min.mjs"',
+    );
+    // Has init script for block-garden-adapter.js because hasInit is true
+    expect(srcdoc).toContain('import("/block-garden-adapter.js")');
+    expect(srcdoc).toContain('m?.init === "function"');
+    // Does NOT have init script for block-garden-bundle-min.mjs
+    expect(srcdoc).not.toContain(
+      'import("https://kherrick.github.io/block-garden/block-garden-bundle-min.mjs")',
     );
 
     document.head.removeChild(configScript);

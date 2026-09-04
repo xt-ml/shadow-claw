@@ -596,8 +596,6 @@ export class ShadowClawA2UI extends ShadowClawElement {
       return;
     }
 
-    const db = await getDb();
-
     // Collect all deferred media elements
     const mediaElements = [
       ...Array.from(root.querySelectorAll("img[data-a2ui-workspace-src]")),
@@ -605,15 +603,22 @@ export class ShadowClawA2UI extends ShadowClawElement {
       ...Array.from(root.querySelectorAll("audio[data-a2ui-workspace-src]")),
     ];
 
+    // Also resolve poster URLs for videos
+    const videosWithPoster = Array.from(
+      root.querySelectorAll("video[data-a2ui-workspace-poster]"),
+    );
+
+    if (mediaElements.length === 0 && videosWithPoster.length === 0) {
+      return;
+    }
+
+    const db = await getDb();
+
     // Parallelize all media blob URL conversions using Promise.all
     await Promise.all(
       mediaElements.map((el) => this.#resolveSingleMediaToBlobUrl(el, db)),
     );
 
-    // Also resolve poster URLs for videos
-    const videosWithPoster = Array.from(
-      root.querySelectorAll("video[data-a2ui-workspace-poster]"),
-    );
     await Promise.all(
       videosWithPoster.map((el) =>
         this.#resolveVideoPosterToBlobUrl(el as HTMLVideoElement, db),

@@ -15,6 +15,7 @@ import { ulid } from "../utils/ulid.js";
 import {
   registerClient,
   updateClientHeartbeat,
+  unregisterClient,
   getAllClients,
   pruneStaleClients,
   getOrCreateControlToken,
@@ -60,6 +61,8 @@ export interface ControlPlane {
   ) => Promise<CommandResultPayload[]>;
   isClientConnected: (clientId: string) => boolean;
   getConnectedClients: () => ClientInfo[];
+  getActiveClientId?: () => string;
+  setActiveClientId?: (id: string) => void;
   getToken: () => string;
   close: () => void;
 }
@@ -296,6 +299,22 @@ export function createControlPlane(options: ControlPlaneOptions): ControlPlane {
         updateClientHeartbeat(hb.clientId);
         log(`Heartbeat from client: ${hb.clientId}`);
       }
+    } else if (type === "client:unregister") {
+      const unreg = payload as { clientId?: string };
+      const unregId =
+        (unreg?.clientId &&
+          typeof unreg.clientId === "string" &&
+          unreg.clientId.trim()) ||
+        (ws ? socketToClientId.get(ws) : undefined);
+      if (unregId) {
+        unregisterClient(unregId);
+        if (ws) {
+          activeSockets.delete(unregId);
+          socketToClientId.delete(ws);
+        }
+        sseClientsByClientId.delete(unregId);
+        log(`Client explicitly unregistered: ${unregId}`);
+      }
     } else if (type === "command:result") {
       const res = payload as CommandResultPayload;
       if (res?.commandId && pendingCommands.has(res.commandId)) {
@@ -327,6 +346,9 @@ export function createControlPlane(options: ControlPlaneOptions): ControlPlane {
         activeSockets.delete(clientId);
         socketToClientId.delete(ws);
         log(`Client disconnected: ${clientId}`);
+        if (!isClientConnected(clientId)) {
+          unregisterClient(clientId);
+        }
       }
     });
 
@@ -381,12 +403,13 @@ export function createControlPlane(options: ControlPlaneOptions): ControlPlane {
       });
     });
 
-    // List all registered clients
+    // List connected clients (or all registered clients if ?all=true)
     app.get(
       "/api/control/clients",
       adminAuthMiddleware,
-      (_req: Request, res: Response) => {
-        const clients = getAllClients();
+      (req: Request, res: Response) => {
+        const showAll = req.query.all === "true" || req.query.all === "1";
+        const clients = showAll ? getAllClients() : getConnectedClients();
         res.json({ clients });
       },
     );
@@ -468,6 +491,9 @@ export function createControlPlane(options: ControlPlaneOptions): ControlPlane {
           if (clientId && sseClientsByClientId.get(clientId) === res) {
             sseClientsByClientId.delete(clientId);
             log(`SSE client disconnected: ${clientId}`);
+            if (!isClientConnected(clientId)) {
+              unregisterClient(clientId);
+            }
           }
         });
       },
@@ -574,9 +600,23 @@ export function createControlPlane(options: ControlPlaneOptions): ControlPlane {
     return false;
   }
 
+  let activeClientId: string = "";
+
   function getConnectedClients(): ClientInfo[] {
     const all = getAllClients();
     return all.filter((c) => isClientConnected(c.clientId));
+  }
+
+  function getActiveClientId(): string {
+    if (activeClientId && isClientConnected(activeClientId)) {
+      return activeClientId;
+    }
+    const connected = getConnectedClients();
+    return connected.length > 0 ? connected[0].clientId : "";
+  }
+
+  function setActiveClientId(id: string): void {
+    activeClientId = id;
   }
 
   function close(): void {
@@ -615,6 +655,8 @@ export function createControlPlane(options: ControlPlaneOptions): ControlPlane {
     broadcastCommand,
     isClientConnected,
     getConnectedClients,
+    getActiveClientId,
+    setActiveClientId,
     getToken: () => token,
     close,
   };

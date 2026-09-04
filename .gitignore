@@ -12,3 +12,5 @@ dist-electron
 e2e-results
 node_modules
 out
+logs
+*.log

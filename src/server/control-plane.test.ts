@@ -224,6 +224,75 @@ describe("control-plane", () => {
 
       ws.close();
     });
+
+    it("removes client when WebSocket closes or sends client:unregister", async () => {
+      const ws = new WebSocket(
+        `ws://127.0.0.1:${port}/ws/control?token=${token}`,
+      );
+      await new Promise<void>((resolve) => ws.on("open", () => resolve()));
+
+      ws.send(
+        JSON.stringify({
+          id: "reg-unreg",
+          type: "client:register",
+          payload: {
+            clientId: "test-client-unreg",
+            deviceLabel: "Test Device",
+            capabilities: ["opfs"],
+            version: "1.0.0",
+          },
+        }),
+      );
+
+      // Wait for registration
+      await new Promise((resolve) => ws.once("message", resolve));
+
+      // 1. Should be listed as connected
+      let clients = controlPlane.getConnectedClients();
+      expect(clients.some((c) => c.clientId === "test-client-unreg")).toBe(
+        true,
+      );
+
+      const resConnected = await makeHttpRequest({
+        port,
+        path: "/api/control/clients",
+        headers: { "x-control-token": token },
+      });
+      expect(
+        resConnected.data.clients.some(
+          (c: any) => c.clientId === "test-client-unreg",
+        ),
+      ).toBe(true);
+
+      // 2. Send client:unregister
+      ws.send(
+        JSON.stringify({
+          id: "unreg-msg",
+          type: "client:unregister",
+          payload: { clientId: "test-client-unreg" },
+        }),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 30));
+
+      // 3. Should no longer be listed in getConnectedClients or /api/control/clients
+      clients = controlPlane.getConnectedClients();
+      expect(clients.some((c) => c.clientId === "test-client-unreg")).toBe(
+        false,
+      );
+
+      const resAfterUnreg = await makeHttpRequest({
+        port,
+        path: "/api/control/clients",
+        headers: { "x-control-token": token },
+      });
+      expect(
+        resAfterUnreg.data.clients.some(
+          (c: any) => c.clientId === "test-client-unreg",
+        ),
+      ).toBe(false);
+
+      ws.close();
+    });
   });
 
   describe("Command execution", () => {

@@ -385,7 +385,9 @@ Images, videos, and audio are resolved from:
 | `a2uiClientCapabilities` negotiation           | §clientCapabilities | `A2UIClientCapabilities` type defined; handshake not yet sent                             |
 | `functionResponse` routing in rooms            | §callFunction       | Single-agent rooms only; multi-owner room routing not yet implemented                     |
 
-## Testing
+## Testing & Storybook Workbench
+
+### Unit & E2E Testing
 
 Unit tests for individual utilities and catalog renderers live next to their source files
 (`*.test.ts`) and run via Jest. E2E tests for A2UI rendering and interaction patterns are
@@ -396,3 +398,11 @@ located in `e2e/` and use Playwright to verify:
 - User interactions (clicks, form input)
 - Surface deletion and cleanup
 - Dynamic list / template expansion with `@index` scope
+
+### Storybook Workbench (`npm run storybook`)
+
+All 18 Basic catalog components are comprehensively covered with interactive Storybook stories in `src/components/shadow-claw-a2ui/shadow-claw-a2ui.stories.ts`. The workbench verifies:
+
+- Surface container layout and styling across light and dark modes
+- Component rendering for Text, Button, TextField, Row, Column, Image, Icon, Video, AudioPlayer, List, Card, Tabs, Modal, Divider, CheckBox, ChoicePicker, Slider, and DateTimeInput
+- Interactive state inspection, controls, and data binding examples without requiring active LLM sessions or peer connections

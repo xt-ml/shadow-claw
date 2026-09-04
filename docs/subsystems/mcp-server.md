@@ -158,26 +158,50 @@ The host client fulfills the request by calling `tools/call` with `inputResponse
 
 ## Built-in Tools Reference
 
-| Tool Name                  | Description                                                                            | Key Arguments                                                                 |
-| :------------------------- | :------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------- |
-| `shadowclaw_list_clients`  | List all connected browser and Electron clients, status, and active capabilities.      | None                                                                          |
-| `shadowclaw_send_message`  | Dispatch a prompt or message directly into a client's AI conversation queue.           | `text` (required), `clientId`, `groupId`                                      |
-| `shadowclaw_read_state`    | Query orchestrator state (`idle`, `responding`), active conversation group, and model. | `clientId`                                                                    |
-| `shadowclaw_list_tasks`    | List scheduled background tasks configured on a connected client.                      | `clientId`, `groupId`                                                         |
-| `shadowclaw_manage_backup` | Trigger, list, or delete OPFS workspace snapshots on a client.                         | `action` (`trigger` \| `list` \| `delete`), `clientId`, `backupId`, `groupId` |
-| `shadowclaw_server_status` | Query Node server status, version, and connected client count.                         | None                                                                          |
+| Tool Name                      | Description                                                                            | Key Arguments                                                                 |
+| :----------------------------- | :------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------- |
+| `shadowclaw_list_clients`      | List all connected browser and Electron clients, status, and active capabilities.      | None                                                                          |
+| `shadowclaw_set_active_client` | Set the active default client for subsequent relayed tool executions and messages.     | `clientId` (required)                                                         |
+| `shadowclaw_send_message`      | Dispatch a prompt or message directly into a client's AI conversation queue.           | `text` (required), `clientId`, `groupId`                                      |
+| `shadowclaw_read_state`        | Query orchestrator state (`idle`, `responding`), active conversation group, and model. | `clientId`                                                                    |
+| `shadowclaw_list_tasks`        | List scheduled background tasks configured on a connected client.                      | `clientId`, `groupId`                                                         |
+| `shadowclaw_manage_backup`     | Trigger, list, or delete OPFS workspace snapshots on a client.                         | `action` (`trigger` \| `list` \| `delete`), `clientId`, `backupId`, `groupId` |
+| `shadowclaw_server_status`     | Query Node server status, version, and connected client count.                         | None                                                                          |
 
 ---
 
-## Dynamic In-Browser Tool Relaying
+## Dynamic In-Browser Tool Relaying & Multi-Client Targeting
 
-When an external host invokes a tool that belongs to a connected browser client (e.g. `read_file`, `write_file`, `bash`, `git_*`):
+When external hosts call tools belonging to connected browser clients (e.g. `read_file`, `write_file`, `bash`, `git_*`, or interactive `ask_user`):
 
-1. The MCP server dispatches an `invoke-tool` command across the Control Plane (SSE, WebSocket, or WebRTC).
-2. The browser tab receives the payload and routes execution:
-   - First through WebMCP (`document.modelContext.executeTool`).
-   - If WebMCP is unavailable, directly to the Agent Web Worker via `executeTool()`.
-3. The result is returned and formatted as standard MCP content blocks (`type: "text"`).
+### 1. Multi-Client Tool Discovery & Capability Schema
+
+- The MCP engine inspects all connected clients via the Control Plane (`list-tools`).
+- Tools aggregate across clients; if multiple clients are connected, the tool's input schema includes an optional `clientId` parameter with an `enum` restricted to client IDs that actually support and have that tool enabled.
+- Clients that disconnect are unregistered promptly, keeping tool listings and client target lists accurate.
+
+### 2. Client Resolution & Targeting
+
+Calls route using the following resolution precedence:
+
+1. **Explicit `clientId`:** Resolved against full client ID, 0-based client index (`"0"`, `"1"`), ULID prefix match, or device label match (e.g. `"Pixel"`, `"Desktop"`).
+2. **Active Client:** Set via `shadowclaw_set_active_client`. If the active client supports the tool, it receives the call.
+3. **First Supporting Client:** If no explicit or active match applies, falls back to the first available client that supports the tool.
+
+If the requested client does not support or have the tool enabled, the MCP server returns an immediate, descriptive error rejection.
+
+### 3. Client-Side Execution Guards
+
+When the browser tab receives an `invoke-tool` command:
+
+- The Control Plane client validates that the tool is registered on the client and permitted within the active conversation (`group.toolTags` allowlist) or global tools configuration (`toolsStore.enabledToolNames`).
+- Tools disabled in the active conversation are rejected with an explicit error.
+- Permitted tools execute via WebMCP (`document.modelContext.executeTool`, passing the native tool object or testing fallback) or fall back to the Agent Web Worker via `executeTool(db, name, input, groupId, { allowedTools })`.
+
+### 4. Interactive Human-in-the-Loop Tools (`ask_user`)
+
+- `ask_user` tool invocations are relayed to the client with an extended execution timeout (up to 300 seconds) to permit user review and response.
+- When invoked by external hosts supporting 2026-07-28 MRTR, `inputResponses` can supply the response directly to complete the call without hanging.
 
 ---
 

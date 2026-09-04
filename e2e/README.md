@@ -419,7 +419,7 @@ export const TIME_MINUTES_ONE = 60000;
 - **Proxy Security Testing**: Verify that the `/proxy` endpoint rejects non-HTTP/S schemes (`file:`, `ftp:`, etc.) with `400` and blocks private/loopback IP targets (`localhost`, `127.*`, `10.*`, `192.168.*`, `169.254.*`) with `403`. Use the unit tests in `src/server/utils/proxy-helpers.test.ts` for scheme and SSRF guard coverage; E2E tests should verify that the authenticated service-worker format (body-based JSON with `Content-Type: application/json`) is still allowed to reach local tool servers.
 - **Page Navigation Testing**: When testing pages or file viewer navigation, ensure keyboard events (`ArrowLeft`/`ArrowRight`) are properly guarded and do not trigger when the active element is an input or content-editable. Swipe gestures can be simulated using mouse events (`mousedown`, `mousemove`, `mouseup`) or touch events; ensure drag/text-selection does not trigger a false swipe. Assert that same-origin links are validated via `isPossibleAppRoute` so non-app routes (e.g. standalone demo subpaths) bypass SPA navigation and trigger native browser navigation (`window.open`).
 - **Sidebar Visibility & Fallback Testing**: When verifying sidebar toggle controls, assert that hiding the currently active view triggers automatic navigation to the next available visible view (`getDefaultSidebarPage`).
-- **Custom Element Guard Testing**: When testing custom elements in E2E or unit suites, verify that registering unapproved custom element tags throws a security error and DOM injection of unapproved custom element tags results in immediate removal by the DOM mutation guard.
+- **Custom Element Guard Testing**: When testing custom elements in E2E or unit suites, verify that registering unapproved custom element tags throws a security error and DOM injection of unapproved custom element tags results in immediate removal by the DOM mutation guard. For custom element script descriptors (`customElements.scripts`), verify that object entries (`{ src, hasInit }`) are correctly parsed alongside legacy URLs, and `init()` is executed exclusively when `hasInit: true`.
 - **Sandboxed Iframe & Storage Proxy Testing**: Verify preview iframe navigation and storage bridges in `file-viewer-preview-bridge.js` and `iframe-storage-bridge.js`. Assert that link clicks and programmatic navigation (`location.href`, `location.assign()`, `location.replace()`) relay navigation messages to the parent frame via `postMessage`, rebuilding the iframe `srcdoc` with injected `location.search` parameters before custom element scripts execute. Assert that `IndexedDB` and `localStorage` CRUD operations are proxied via `shadow-claw-storage-proxy` to parent storage, `showOpenFilePicker` and `showSaveFilePicker` degrade gracefully to input/download triggers, ServiceWorker/caches getters are trapped without `SecurityError` rejections, and `IframeBroadcastProxy` relays BroadcastChannel messages while suppressing command echo feedback loops via `isRelayingCommandFromParent`.
 
 ### ❌ DON'T
@@ -455,12 +455,14 @@ The build, CLI, and prerender test suites live under `bin/` and run through the
 project Jest configuration. The build integration test covers both the normal
 `pages/` layout and a project with no `pages/` directory (which publishes the
 built-in `index.html` and `MEMORY.md` defaults), as well as the unified `shadow-claw`
-CLI tool commands (`build`, `dev`, `run`, `serve`, `init`, `clients`, `send`, `backup`, `tasks`, `webrtc`, `peer-id`, `--version`).
+CLI tool commands (`build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send`, `backup`, `tasks`, `mcp`, `skills:index`, `webrtc`, `peer-id`, `--version`).
 
 ```bash
 NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
   npx jest --runInBand bin/cli.test.mjs \
   bin/commands/peer-id.test.mjs \
+  bin/commands/mcp.test.mjs \
+  bin/commands/skills-index.test.mjs \
   bin/utils/control-client.test.mjs \
   bin/utils/webrtc-control-client.test.mjs \
   bin/build/build.test.mjs \
@@ -545,7 +547,7 @@ Storage integration tests (`storage.test.ts`) and migration tests (`migrateLegac
 
 ### Visual Verification with Storybook
 
-In addition to Playwright end-to-end integration tests, ShadowClaw uses Storybook (`npm run storybook`, `npm run build:storybook`) with `@storybook/web-components-vite` to test and document UI components in isolation (e.g., toasts, dialogs, cards, empty states, page headers, provider settings). Component stories (`*.stories.ts`) verify reactive attribute reflection, custom events, inline rendering, and light/dark themes.
+In addition to Playwright end-to-end integration tests, ShadowClaw uses Storybook (`npm run storybook`, `npm run build:storybook`) with `@storybook/web-components-vite` to test and document UI components in isolation (e.g., toasts, dialogs, cards, empty states, page headers, provider settings, and all 18 A2UI basic catalog components in `shadow-claw-a2ui.stories.ts`). Component stories (`*.stories.ts`) verify reactive attribute reflection, custom events, inline rendering, and light/dark themes.
 
 ### Extending Fixtures
 
@@ -567,7 +569,8 @@ ShadowClaw's Control Plane and Stateless MCP Server bridges (`POST /mcp` and `sh
 
 - **Browser Integration:** When testing browser-side control plane handlers, `createDefaultControlPlaneClient` registers handlers for `list-tools`, `invoke-tool`, `send-message`, `read-state`, and `list-tasks`.
 - **E2E Tool Execution:** The MCP server dynamic relay (`src/server/mcp/tools/client-tool-relay.ts`) invokes tools via the Control Plane, which dispatches into the browser's Web Worker (`executeTool`), accessing live OPFS workspaces and returning structured JSON-RPC responses.
-- **Automated Integration Tests:** End-to-end server-to-client integration tests reside in `src/server/mcp/mcp-integration.test.ts` and CLI process tests in `bin/cli.test.mjs`.
+- **Multi-Client Targeting & Execution Guards:** Relayed tools expose a `clientId` enum parameter limited to connected clients supporting each tool. Calls route to explicit clients or the active client (`shadowclaw_set_active_client`), with server-side client capability validation and client-side execution guards (`allowedTools` / conversation tool tags). Interactive tools like `ask_user` support human-in-the-loop responses with extended timeouts.
+- **Automated Integration Tests:** End-to-end server-to-client integration tests reside in `src/server/mcp/mcp-integration.test.ts`, tool relay tests in `src/server/mcp/tools/mcp-tools.test.ts`, and CLI process tests in `bin/cli.test.mjs` and `bin/commands/mcp.test.mjs`.
 
 ## Architecture Decisions
 

@@ -62,7 +62,7 @@ A fully-functional agent runtime built on browser-native technology — the orch
 - **Model registry** — Dynamic metadata fetch (context window, modality support)
 - **Attachment capabilities** — Native multimodal delivery with automatic text fallback
 - **Remote MCP** — Discover and execute tools from external MCP servers
-- **Stateless MCP server** — Expose ShadowClaw CLI commands and live browser tools to external agent hosts (Claude Desktop, Cursor, Goose) via STDIO (`npx shadow-claw mcp`) or Streamable HTTP (`POST /mcp`)
+- **Stateless MCP server** — Expose ShadowClaw CLI commands and live browser tools to external agent hosts (Claude Desktop, Cursor, Goose) via STDIO (`npx shadow-claw mcp`) or Streamable HTTP (`POST /mcp`), featuring multi-client tool targeting (`shadowclaw_set_active_client`), per-tool client capability validation, client-side execution guards, and interactive `ask_user` relaying
 - **A2UI interactive surfaces** — Render responsive UI components (Text, Button, TextField, Row/Column layouts) from agents via PeerJS WebRTC with two-way data binding
 - **Multi-Agent Shared State** — Synchronize agent knowledge across participants using `STATE_SNAPSHOT` and `STATE_DELTA` events
 - **Email integration** — IMAP/SMTP support with encrypted credentials
@@ -243,6 +243,7 @@ Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first
 ## Agent Skills and Declarative Tools
 
 - **Workspace Agent Skills** — Discovers `.agents/skills/**/SKILL.md` instruction packages, presents model-invocable skill descriptions in the system prompt, and loads instructions plus bundled resources through `activate_skill`. Default bundled skills include `skill-creator`.
+- **Agent Skills Discovery Index** — Automatically indexes skills, tools, and scripts into `/.well-known/agent-skills/index.json` complying with Agent Skills Discovery RFC v0.2.0, computing SHA-256 digests and RFC 3986 relative URLs. Integrated into static builds (`bin/build/build.mjs`) and runnable via `npx shadow-claw skills:index [dir]` (alias `agent-skills`).
 - **Slash Commands & Declarative Execution Pipelines** — User-invocable skills support `/skill-name` slash-command triggers. Skills with `execution: { type: "tools", tools: [...] }` execute tool pipelines directly on the worker thread via `executeToolChain` without scheduling Tasks or invoking LLM prompts. Supports `$pipe` output chaining and step-level or cascaded `suppressToast: true` and `suppressOutput: true` options.
 - **Declarative Tools** — Content repositories can define executable tools as JSON under `.agents/tools/main/` using sandboxed Bash or JavaScript, or delegate to existing tools without changing ShadowClaw source (e.g. `generate_random_number` in the starter template repository).
 - **Enhanced JS Tool Expression Evaluation** — The `javascript` tool automatically evaluates single expressions without explicit `return` statements by wrapping them in `return (<expression>);`.
@@ -252,7 +253,7 @@ Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first
 ShadowClaw packages its UI components as standard Web Components built on TC39 Signals and native Custom Elements:
 
 - **Modular Package Exports** — Import pre-bundled components and utilities directly via `shadow-claw/components` (e.g. `ShadowClawToast`, `ShadowClawCard`, `ShadowClawDialog`, `ShadowClawEmptyState`, `ShadowClawPageHeader`) and `shadow-claw/utils` (e.g. `namespacedStorage`, `ulid`). TypeScript declaration files (`.d.ts`) are provided out of the box.
-- **Storybook Workbench** — Interactive visual development environment powered by Storybook (`@storybook/web-components-vite`) with dark mode default, live controls, and isolated component testing (`npm run storybook`).
+- **Storybook Workbench** — Interactive visual development environment powered by Storybook (`@storybook/web-components-vite`) with dark mode default, live controls, and isolated component testing (`npm run storybook`), including all 18 A2UI catalog components and UI primitives.
 - **Reactive Element Lifecycle** — Custom elements extending `ShadowClawElement` observe attributes (`observedAttributes`) for declarative reactive DOM updates.
 
 ## WebVM (Optional Alpine Linux)
@@ -277,7 +278,7 @@ ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and 
 - **30-second key expiry** for plaintext operations
 - **No plaintext secrets on disk** — encrypted before storage
 - **Trusted Types enforcement** — idempotent `"default"` policy (`src/security/default-trusted-types-policy.ts`) registered at boot via `theme-init.ts`; `getPolicy()` fallback prevents duplicate-creation errors on module reload
-- **Custom element security guards** — `installCustomElementsRegistryGuard` and `installCustomElementDomGuard` prevent unauthorized custom element registration and dynamic DOM injection, strictly enforcing allowlists from `shadow-claw.config.json` (or `site-config.json`) or storage
+- **Custom element security guards** — `installCustomElementsRegistryGuard` and `installCustomElementDomGuard` prevent unauthorized custom element registration and dynamic DOM injection, strictly enforcing allowlists from `shadow-claw.config.json` (or `site-config.json`) or storage. Script declarations support URLs and `{ src, hasInit }` descriptors (standardized on `src`), invoking `init()` exclusively when `hasInit: true` is configured.
 - **Iframe sandbox & CSP hardening** — sandboxed preview iframes omit `allow-same-origin` by default to enforce opaque-origin (`null`) isolation without Chrome sandbox escape warnings, while injecting a transparent `postMessage` storage proxy bridge (`iframe-storage-bridge.js`) to provide namespaced `IndexedDB` and `localStorage` persistence for custom elements, trapping `ServiceWorker`/`caches` `SecurityError` rejections, polyfilling `showOpenFilePicker`/`showSaveFilePicker`, and relaying programmatic/link navigation and declarative `BroadcastChannel` messages via `IframeBroadcastProxy`
 - **Iframe embed sanitization** — DOMPurify-based iframe allowlisting protects markdown and HTML previews, with Settings-backed host patterns and a safe default host list
 - **SSRF proxy hardening** — `/proxy` blocks non-HTTP/S schemes and private/loopback IP ranges by default; bypassed via `--allow-private-proxy` flag or the authenticated service-worker JSON format
@@ -430,6 +431,7 @@ npx shadow-claw server --tmp                         # Run services with tempora
 npx shadow-claw server --cache-dir <dir>             # Run services with custom cache directory
 npx shadow-claw webrtc listen                        # Start headless WebRTC DataChannel daemon
 npx shadow-claw peer-id                              # Get or generate persistent CLI Peer ID
+npx shadow-claw skills:index                         # Generate or update .well-known/agent-skills/index.json
 ```
 
 When launching `dev`, `run`, `serve`, or `server` without an existing cache, ShadowClaw prompts interactively to select between the local directory (`.cache`), system temporary storage (`tmpdir()`), or a custom path (skip prompting via `--tmp`, `-y`, `--cache-dir <dir>`, or `SHADOWCLAW_CACHE_DIR`).

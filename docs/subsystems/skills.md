@@ -78,6 +78,33 @@ ShadowClaw includes standard default skills under `.agents/skills/main/`:
 
 - **`skill-creator`**: Guide for creating, editing, reviewing, and validating declarative skills and supporting resources. (Example skills such as **`toast-random-number`** are included in the `shadow-claw-template` repository).
 
+## Agent Skills Discovery Index (RFC v0.2.0)
+
+ShadowClaw implements the **Agent Skills Discovery RFC (v0.2.0)** (`https://schemas.agentskills.io/discovery/0.2.0/schema.json`), generating a standardized machine-readable discovery index at `/.well-known/agent-skills/index.json`.
+
+### Features:
+
+- **Manifest Parsing:** Parses YAML frontmatter across `.agents/skills/**/SKILL.md` to extract skill names, descriptions, compatibility, and execution tool/script configurations.
+- **Dependency Tracking:** Links skills to their referenced declarative tools (`.agents/tools/main/*.json`) and companion scripts (`.agents/scripts/main/*`).
+- **Cryptographic Verification:** Calculates SHA-256 digests (`sha256:<hex>`) for all indexed skills, tools, and scripts to enable tamper detection and caching.
+- **RFC 3986 Relative URLs:** Emits standardized relative URLs (e.g. `../../.agents/skills/main/...`) relative to the `.well-known/agent-skills/index.json` location.
+
+### CLI Generator:
+
+The index can be generated or refreshed on demand via the CLI:
+
+```bash
+npx shadow-claw skills:index [dir]
+# Alias:
+npx shadow-claw agent-skills [dir]
+```
+
+Options include `--out-dir <dir>`, `--out-file <file>`, `--stdout`, and `--no-write`.
+
+### Build Pipeline Integration:
+
+During `shadow-claw build` (`bin/build/build.mjs`), the build runner automatically invokes `generateSkillsIndex(contentRoot)` when `.agents/skills` is present. It writes the index to `<contentRoot>/.well-known/agent-skills/index.json`, copies `.agents/scripts` into `dist/public/.agents/scripts`, and publishes `.well-known` directly into `dist/public/.well-known`.
+
 ## Static publishing
 
 For content-only sites, files under `.agents/skills/main/` are copied into the build manifest and seeded into the Main conversation's workspace. They are not copied into other conversation workspaces. A skills purge marker can clear the previously seeded `.agents/skills/main/` directory before the current published skills are seeded; see the template README for the marker format.
@@ -92,3 +119,6 @@ For content-only sites, files under `.agents/skills/main/` are copied into the b
 - `src/core/orchestrator/utils/enqueue.ts` — slash command detection and execution dispatching
 - `src/worker/utils/toolChain.ts` — shared `executeToolChain` and `$pipe` resolution engine
 - `src/worker/utils/handleMessage.ts` — `execute-skill-tools` worker message handler
+- `bin/commands/skills-index.mjs` — Agent Skills Discovery index generator and CLI command
+- `bin/commands/skills-index.test.mjs` — Jest test suite for discovery index generation
+- `bin/build/build.mjs` — static build pipeline integration and asset synchronization

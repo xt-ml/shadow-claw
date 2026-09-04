@@ -106,6 +106,22 @@ export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
     },
   },
   {
+    name: "shadowclaw_set_active_client",
+    description:
+      "Set the active default connected client used when no clientId is explicitly provided in tool calls.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        clientId: {
+          type: "string",
+          description:
+            "Target client ID (or index '0', '1', prefix, or device label) to make active.",
+        },
+      },
+      required: ["clientId"],
+    },
+  },
+  {
     name: "shadowclaw_server_status",
     description:
       "Query ShadowClaw Node server status, version, and active client count.",
@@ -120,10 +136,6 @@ export function resolveTargetClientId(
   controlPlane: any,
   requestedId?: unknown,
 ): string {
-  if (typeof requestedId === "string" && requestedId.trim()) {
-    return requestedId.trim();
-  }
-
   try {
     const clients =
       typeof controlPlane.getConnectedClients === "function"
@@ -133,11 +145,43 @@ export function resolveTargetClientId(
           : [];
 
     if (Array.isArray(clients) && clients.length > 0) {
+      if (typeof requestedId === "string" && requestedId.trim()) {
+        const trimmed = requestedId.trim();
+        const exact = clients.find(
+          (c: any) => (c.clientId || c.id) === trimmed,
+        );
+        if (exact) return exact.clientId || exact.id;
+
+        const idx = parseInt(trimmed, 10);
+        if (!isNaN(idx) && idx >= 0 && idx < clients.length) {
+          return clients[idx].clientId || clients[idx].id;
+        }
+
+        const prefix = clients.find(
+          (c: any) =>
+            (c.clientId || c.id || "").startsWith(trimmed) ||
+            (c.clientId || "").replace(/^client-/, "").startsWith(trimmed),
+        );
+        if (prefix) return prefix.clientId || prefix.id;
+
+        const byLabel = clients.find((c: any) =>
+          c.deviceLabel?.toLowerCase().includes(trimmed.toLowerCase()),
+        );
+        if (byLabel) return byLabel.clientId || byLabel.id;
+
+        return trimmed;
+      }
+
+      if (typeof controlPlane.getActiveClientId === "function") {
+        const active = controlPlane.getActiveClientId();
+        if (active) return active;
+      }
+
       return clients[0].clientId || clients[0].id || "";
     }
   } catch (_) {}
 
-  return "";
+  return typeof requestedId === "string" ? requestedId.trim() : "";
 }
 
 export function registerBuiltInTools(
@@ -353,6 +397,37 @@ export function registerBuiltInTools(
                 text: `Unsupported backup action: '${action}'`,
               },
             ],
+          };
+        }
+
+        case "shadowclaw_set_active_client": {
+          const targetId = resolveTargetClientId(controlPlane, args.clientId);
+          if (!targetId) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: `Error: Client '${args.clientId}' not found among connected clients.`,
+                },
+              ],
+            };
+          }
+
+          if (typeof controlPlane.setActiveClientId === "function") {
+            controlPlane.setActiveClientId(targetId);
+          }
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Active default client set to: ${targetId}`,
+              },
+            ],
+            _meta: {
+              activeClientId: targetId,
+            },
           };
         }
 

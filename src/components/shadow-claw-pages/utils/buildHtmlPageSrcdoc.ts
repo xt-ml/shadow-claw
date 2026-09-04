@@ -10,7 +10,7 @@ import {
   getIframeThemeStyleHtml,
 } from "../../../ui/iframe-theme.js";
 import {
-  getApprovedCustomElementScripts,
+  getApprovedCustomElementScriptDescriptors,
   getIframeCsp,
   isAllowedCustomElement,
 } from "../../../security/custom-element-security.js";
@@ -85,7 +85,7 @@ export async function buildHtmlPageSrcdoc({
     "/assets/iframe-storage-bridge.js",
   );
 
-  const approvedScripts = getApprovedCustomElementScripts();
+  const approvedScripts = getApprovedCustomElementScriptDescriptors();
   const cspContent = getIframeCsp(nonce);
 
   const configScript =
@@ -98,11 +98,11 @@ export async function buildHtmlPageSrcdoc({
       : "";
 
   const searchScriptHtml = searchParams
-    ? `<script nonce="${nonce}">(function(){try{Object.defineProperty(window.location,"search",{get:function(){return ${JSON.stringify(searchParams)};},configurable:true});}catch(e){}})();</script>`
+    ? `<script nonce="${nonce}">(function(){try{Object.defineProperty(globalThis.location,"search",{get:function(){return ${JSON.stringify(searchParams)};},configurable:true});}catch(e){}})();</script>`
     : "";
 
   const customElementScriptsHtml = approvedScripts
-    .map((src) => {
+    .map(({ src, hasInit }) => {
       const isExternal =
         src.startsWith("http://") ||
         src.startsWith("https://") ||
@@ -112,7 +112,15 @@ export async function buildHtmlPageSrcdoc({
         : applyBasePath(
             src.startsWith("/") ? src : `/${src.replace(/^pages\/main\//, "")}`,
           );
-      return `<script type="module" src="${resolvedSrc}" nonce="${nonce}"></script>`;
+      const tags = [
+        `<script type="module" src="${resolvedSrc}" nonce="${nonce}"></script>`,
+      ];
+      if (hasInit) {
+        tags.push(
+          `<script type="module" nonce="${nonce}">import("${resolvedSrc}").then((m) => { try { if (typeof m?.init === "function") m.init(); } catch (e) { console.error("[ShadowClaw] Error executing init for " + ${JSON.stringify(resolvedSrc)}, e); } }).catch(() => {});</script>`,
+        );
+      }
+      return tags.join("\n");
     })
     .join("\n");
 

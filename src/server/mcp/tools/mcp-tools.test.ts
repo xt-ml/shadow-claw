@@ -2,6 +2,7 @@ import { describe, it, expect, jest } from "@jest/globals";
 import {
   registerBuiltInTools,
   SHADOWCLAW_BUILTIN_TOOLS,
+  resolveTargetClientId,
 } from "./built-in-tools.js";
 import { createClientToolRelay } from "./client-tool-relay.js";
 import { McpServer } from "../mcp-server.js";
@@ -584,5 +585,144 @@ describe("Client Tool Relay", () => {
       expect(resNoClient.result.isError).toBe(true);
       expect(resNoClient.result.content[0].text).toContain("No connected");
     }
+  });
+
+  describe("resolveTargetClientId and multi-client routing", () => {
+    it("resolves target client by exact ID, index, prefix, and label", () => {
+      const mockControlPlane: any = {
+        getConnectedClients: jest.fn().mockReturnValue([
+          {
+            clientId: "client-01m1kxw07jtfvh0c4gmbfty2wz",
+            deviceLabel: "Linux Desktop",
+          },
+          {
+            clientId: "client-01m1n03c284hrtybdvx33zv7r4",
+            deviceLabel: "Pixel Phone",
+          },
+        ]),
+      };
+
+      // Default (no requestedId) -> first client
+      expect(resolveTargetClientId(mockControlPlane)).toBe(
+        "client-01m1kxw07jtfvh0c4gmbfty2wz",
+      );
+
+      // Exact ID
+      expect(
+        resolveTargetClientId(
+          mockControlPlane,
+          "client-01m1n03c284hrtybdvx33zv7r4",
+        ),
+      ).toBe("client-01m1n03c284hrtybdvx33zv7r4");
+
+      // Index "1"
+      expect(resolveTargetClientId(mockControlPlane, "1")).toBe(
+        "client-01m1n03c284hrtybdvx33zv7r4",
+      );
+
+      // Prefix match
+      expect(resolveTargetClientId(mockControlPlane, "01m1n03")).toBe(
+        "client-01m1n03c284hrtybdvx33zv7r4",
+      );
+
+      // Device label match
+      expect(resolveTargetClientId(mockControlPlane, "Pixel")).toBe(
+        "client-01m1n03c284hrtybdvx33zv7r4",
+      );
+    });
+
+    it("executes shadowclaw_set_active_client and routes multi-client tools", async () => {
+      const server = new McpServer();
+      let activeId = "";
+      const mockControlPlane: any = {
+        getConnectedClients: jest.fn().mockReturnValue([
+          { clientId: "c1", deviceLabel: "Client 1" },
+          { clientId: "c2", deviceLabel: "Client 2" },
+        ]),
+        setActiveClientId: jest.fn((id: string) => {
+          activeId = id;
+        }),
+        getActiveClientId: jest.fn(() => activeId),
+        sendCommand: jest.fn().mockImplementation(async (cid, action) => {
+          if (action === "list-tools") {
+            return {
+              success: true,
+              data: {
+                tools: [
+                  {
+                    name: "list_files",
+                    description: "List files",
+                    inputSchema: { type: "object", properties: {} },
+                  },
+                ],
+              },
+            };
+          }
+          if (action === "invoke-tool") {
+            return {
+              success: true,
+              data: { result: `Output from ${cid}` },
+            };
+          }
+          return { success: true };
+        }),
+      };
+
+      registerBuiltInTools(server, mockControlPlane);
+      const relay = createClientToolRelay(mockControlPlane);
+      relay.attachToServer(server);
+
+      // 1. Discover tools across multi-client: schema should have clientId enum
+      const tools = await server.getTools();
+      const listFilesTool = tools.find((t) => t.name === "list_files");
+      expect(listFilesTool).toBeDefined();
+      const props = listFilesTool?.inputSchema.properties as any;
+      expect(props?.clientId).toBeDefined();
+      expect(props?.clientId.enum).toEqual(["c1", "c2"]);
+
+      // 2. Run shadowclaw_set_active_client
+      const setRes = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 20,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_set_active_client",
+          arguments: { clientId: "c2" },
+        },
+      });
+
+      expect(mockControlPlane.setActiveClientId).toHaveBeenCalledWith("c2");
+      expect(setRes).not.toBeNull();
+
+      // 3. Invoking tool with explicit clientId c1 routes to c1
+      const callRes1 = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 21,
+        method: "tools/call",
+        params: {
+          name: "list_files",
+          arguments: { clientId: "c1" },
+        },
+      });
+
+      if (callRes1 && "result" in callRes1) {
+        expect(callRes1.result.content[0].text).toBe("Output from c1");
+      }
+
+      // 4. Invoking tool without clientId routes to active client c2
+      const callRes2 = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 22,
+        method: "tools/call",
+        params: {
+          name: "list_files",
+          arguments: {},
+        },
+      });
+
+      if (callRes2 && "result" in callRes2) {
+        expect(callRes2.result.content[0].text).toBe("Output from c2");
+      }
+    });
   });
 });

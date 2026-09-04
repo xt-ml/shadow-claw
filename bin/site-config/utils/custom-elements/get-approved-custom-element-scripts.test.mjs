@@ -9,6 +9,7 @@ describe("getApprovedCustomElementScripts", () => {
         "https://bad.example.com/x.mjs",
         "https://allowed.example.com/x.mjs",
         { src: "local.mjs" },
+        { src: "adapter.mjs", hasInit: true },
       ],
       ["allowed.example.com"],
       (message) => warns.push(message),
@@ -17,6 +18,7 @@ describe("getApprovedCustomElementScripts", () => {
     expect(approved).toEqual([
       "https://allowed.example.com/x.mjs",
       { src: "local.mjs" },
+      { src: "adapter.mjs", hasInit: true },
     ]);
     expect(warns).toEqual([
       "[Security] Skipping script from unapproved domain during build: https://bad.example.com/x.mjs",

@@ -288,6 +288,35 @@ npx shadow-claw webrtc listen --trusted-peer <browser-peer-id>
 2. In the browser, navigate to **Settings → WebRTC/PeerJS → Trusted Peer IDs** and add the CLI's peer ID.
 3. Once connected, dispatch commands with `npx shadow-claw send --transport webrtc --client <browser-peer-id> [--group <groupId>] "message"`.
 
+### `shadow-claw skills:index [dir]` (alias `agent-skills`)
+
+Generates or updates the Agent Skills Discovery index (`.well-known/agent-skills/index.json`) adhering to the **[Agent Skills Discovery RFC (v0.2.0)](https://schemas.agentskills.io/discovery/0.2.0/schema.json)**.
+
+Scans `.agents/skills/**/SKILL.md`, `.agents/tools/main/*.json`, and `.agents/scripts/main/*`, computes SHA-256 digests (`sha256:...`) and RFC 3986 relative URLs, and links skill tool execution and script dependencies.
+
+```bash
+# Generate discovery index for current repository/content root
+npx shadow-claw skills:index
+
+# Generate index for a specific directory
+npx shadow-claw skills:index ./my-assistant
+
+# Output index.json content to stdout without writing to disk
+npx shadow-claw skills:index --stdout --no-write
+
+# Specify custom output path
+npx shadow-claw skills:index --out-file custom/discovery/index.json
+```
+
+| Option              | Type    | Description                                     | Default                      |
+| :------------------ | :------ | :---------------------------------------------- | :--------------------------- |
+| `--out-dir <dir>`   | string  | Output directory relative to content root       | `".well-known/agent-skills"` |
+| `--out-file <file>` | string  | Explicit destination file path for `index.json` | `undefined`                  |
+| `--stdout`          | boolean | Print generated JSON directly to stdout         | `false`                      |
+| `--no-write`        | boolean | Skip writing the generated index file to disk   | `false`                      |
+
+> **Build Pipeline Integration:** `bin/build/build.mjs` automatically executes `generateSkillsIndex(contentRoot)` during builds whenever `.agents/skills` exists, and copies `.agents/scripts` along with `.well-known/agent-skills/index.json` into `dist/public`.
+
 ---
 
 ## NPM Packaging & Prepack Lifecycle

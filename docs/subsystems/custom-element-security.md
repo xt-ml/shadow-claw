@@ -73,13 +73,15 @@ Registers `uponSanitizeElement` and `afterSanitizeElements` hooks with DOMPurify
 - **Local Static CORS Headers:** ShadowClaw's static file middleware sets `Access-Control-Allow-Origin: *` so sandboxed opaque-origin (`null`) iframes can fetch local custom element adapter scripts and assets during development.
 - **Nonce-gated CSP:** Generates strict `script-src`, `worker-src`, `connect-src`, `style-src`, and `img-src` directives dynamically incorporating active nonce tokens and approved script hosts.
 
-### 6. Approved Script Loader (`loadApprovedCustomElementScript`)
+### 6. Approved Script Loader & Script Descriptors (`CustomElementScriptDescriptor`)
 
-Validates remote custom element scripts dynamically:
+Validates and executes custom element scripts safely:
 
-- Validates URL protocols (restricting to `http:`/`https:`) and validates hostnames against `activeHostMatchers`.
-- Converts URLs to Trusted Types via `toTrustedScriptUrl()`.
-- Custom element scripts execute exclusively inside sandboxed preview `<iframe>` environments (`iframe.srcdoc`) with `allow="fullscreen"` permissions, eliminating duplicate initialization and protecting the main application shell context.
+- **Protocol & Host Validation:** Validates URL protocols (restricting to `http:`/`https:` or relative same-origin paths) and validates hostnames against `activeHostMatchers`. Converts URLs to Trusted Types via `toTrustedScriptUrl()`.
+- **Script Descriptor Format:** Script entries in `customElements.scripts` support both traditional string URLs and object descriptors `{ src: string, hasInit?: boolean }` (standardized on `src`).
+- **Explicit `hasInit` Execution Gating:** Scripts defined with `{ src: "...", hasInit: true }` trigger an automated `import("${src}").then((m) => { if (typeof m?.init === "function") m.init(); })` within the preview iframe. Standard custom elements or descriptors where `hasInit` is false/omitted are loaded without running an `init()` method, preventing unintended function executions.
+- **Descriptors API:** The security subsystem exposes `getApprovedCustomElementScriptDescriptors(): CustomElementScriptDescriptor[]` for full descriptor access and `getApprovedCustomElementScripts(): string[]` for URL-only strings.
+- **Single-Load Execution:** Custom element scripts execute exclusively inside sandboxed preview `<iframe>` environments (`iframe.srcdoc`) with `allow="fullscreen"` permissions, eliminating duplicate initialization and protecting the main application shell context.
 
 ---
 
@@ -92,14 +94,22 @@ Configuration can be provided declaratively or loaded dynamically:
 ```json
 {
   "customElements": {
-    "allowedElements": ["my-chart", "math-formula"],
-    "allowedDomains": ["cdn.jsdelivr.net", "*.cdnjs.cloudflare.com"],
-    "scripts": ["https://cdn.jsdelivr.net/npm/my-chart/dist/index.js"]
+    "allowedElements": ["my-chart", "math-formula", "x-pwgen"],
+    "allowedDomains": [
+      "cdn.jsdelivr.net",
+      "*.cdnjs.cloudflare.com",
+      "kherrick.github.io"
+    ],
+    "scripts": [
+      "https://cdn.jsdelivr.net/npm/my-chart/dist/index.js",
+      { "src": ".agents/scripts/main/pwgen-adapter.js", "hasInit": true },
+      { "src": "https://kherrick.github.io/x-pwgen.js", "hasInit": false }
+    ]
   },
   "security": {
     "iframeSandbox": "allow-modals allow-scripts allow-popups",
     "allowSameOrigin": false,
-    "scriptSrc": ["https://cdn.jsdelivr.net"],
+    "scriptSrc": ["https://cdn.jsdelivr.net", "https://kherrick.github.io"],
     "connectSrc": ["https://api.example.com"]
   }
 }

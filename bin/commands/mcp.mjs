@@ -72,6 +72,22 @@ export const CLI_BUILTIN_TOOLS = [
     },
   },
   {
+    name: "shadowclaw_set_active_client",
+    description:
+      "Set the active default connected client used when no clientId is explicitly provided in tool calls.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        clientId: {
+          type: "string",
+          description:
+            "Target client ID (or index '0', '1', prefix, or device label) to make active.",
+        },
+      },
+      required: ["clientId"],
+    },
+  },
+  {
     name: "shadowclaw_manage_backup",
     description:
       "Trigger or manage OPFS workspace backups for a connected client (trigger, list, or delete).",
@@ -95,6 +111,7 @@ export function createCliMcpEngine(options = {}) {
   const client = options.client || new CliControlClient(options);
   const relayClientTools = options.relayClientTools !== false;
   const targetClientId = options.targetClientId || options.clientTarget;
+  let activeClientId = targetClientId || "";
 
   const serverInfo = {
     name: "shadow-claw",
@@ -107,47 +124,138 @@ export function createCliMcpEngine(options = {}) {
   };
 
   async function resolveTargetId(requestedId) {
-    if (requestedId && typeof requestedId === "string" && requestedId.trim()) {
-      return requestedId.trim();
-    }
-    if (targetClientId) {
-      return targetClientId;
-    }
+    const candidate = requestedId || activeClientId || targetClientId;
     try {
       const clients = await client.listClients();
       if (Array.isArray(clients) && clients.length > 0) {
+        if (candidate && typeof candidate === "string" && candidate.trim()) {
+          const trimmed = candidate.trim();
+          const exact = clients.find((c) => (c.clientId || c.id) === trimmed);
+          if (exact) return exact.clientId || exact.id;
+
+          const idx = parseInt(trimmed, 10);
+          if (!isNaN(idx) && idx >= 0 && idx < clients.length) {
+            return clients[idx].clientId || clients[idx].id;
+          }
+
+          const prefix = clients.find(
+            (c) =>
+              (c.clientId || c.id || "").startsWith(trimmed) ||
+              (c.clientId || "").replace(/^client-/, "").startsWith(trimmed),
+          );
+          if (prefix) return prefix.clientId || prefix.id;
+
+          const byLabel = clients.find((c) =>
+            c.deviceLabel?.toLowerCase().includes(trimmed.toLowerCase()),
+          );
+          if (byLabel) return byLabel.clientId || byLabel.id;
+
+          return trimmed;
+        }
+
         return clients[0].clientId || clients[0].id || "";
       }
     } catch (_) {}
-    return "";
+    return typeof candidate === "string" ? candidate.trim() : "";
   }
+
+  const toolSupportingClientsMap = new Map();
+  const toolDefMap = new Map();
 
   async function getRelayedTools() {
     if (!relayClientTools) {
       return [];
     }
-    const clientId = await resolveTargetId();
-    if (!clientId) {
+    let clients = [];
+    try {
+      clients = await client.listClients();
+    } catch (_) {}
+
+    if (!Array.isArray(clients) || clients.length === 0) {
+      toolSupportingClientsMap.clear();
+      toolDefMap.clear();
       return [];
     }
-    try {
-      const res = await client.sendCommand(clientId, "list-tools", {});
-      if (
-        res &&
-        res.success &&
-        res.data?.tools &&
-        Array.isArray(res.data.tools)
-      ) {
-        return res.data.tools.map((t) => ({
-          name: t.name,
-          description:
-            t.description || `Relayed tool '${t.name}' from connected client.`,
-          inputSchema: t.inputSchema || { type: "object", properties: {} },
-          annotations: t.annotations,
-        }));
-      }
-    } catch (_) {}
-    return [];
+
+    toolSupportingClientsMap.clear();
+    toolDefMap.clear();
+
+    for (const c of clients) {
+      const cid = c.clientId || c.id;
+      if (!cid) continue;
+
+      try {
+        const res = await client.sendCommand(cid, "list-tools", {});
+        if (
+          res &&
+          res.success &&
+          res.data?.tools &&
+          Array.isArray(res.data.tools)
+        ) {
+          for (const t of res.data.tools) {
+            if (!toolDefMap.has(t.name)) {
+              toolDefMap.set(t.name, t);
+              toolSupportingClientsMap.set(t.name, []);
+            }
+            toolSupportingClientsMap.get(t.name).push(c);
+          }
+        }
+      } catch (_) {}
+    }
+
+    const activeTargetId = await resolveTargetId();
+    const relayedTools = [];
+
+    for (const [toolName, t] of toolDefMap.entries()) {
+      const supportingClients = toolSupportingClientsMap.get(toolName) || [];
+      const supportingClientIds = supportingClients
+        .map((cl) => cl.clientId || cl.id)
+        .filter(Boolean);
+
+      const preferredClient =
+        supportingClients.find(
+          (cl) => (cl.clientId || cl.id) === activeTargetId,
+        ) || supportingClients[0];
+      const toolDefaultId =
+        preferredClient?.clientId || preferredClient?.id || "";
+      const toolDefaultLabel = preferredClient?.deviceLabel || "Client";
+
+      const existingSchema =
+        t.inputSchema && typeof t.inputSchema === "object"
+          ? t.inputSchema
+          : { type: "object", properties: {} };
+
+      const properties = {
+        ...(existingSchema.properties || {}),
+        clientId: {
+          type: "string",
+          description: `Target ShadowClaw client ID (optional; defaults to ${toolDefaultId} [${toolDefaultLabel}]). Available on: ${supportingClients.map((cl) => `${cl.clientId || cl.id} (${cl.deviceLabel || "Client"})`).join(", ")}`,
+          enum: supportingClientIds,
+        },
+      };
+
+      const clientNote =
+        clients.length > 1
+          ? supportingClients.length > 1
+            ? ` [Default: ${toolDefaultLabel} (${toolDefaultId.slice(0, 14)}...)]`
+            : ` [Client: ${toolDefaultLabel} (${toolDefaultId.slice(0, 14)}...)]`
+          : "";
+
+      relayedTools.push({
+        name: t.name,
+        description:
+          (t.description || `Relayed tool '${t.name}' from connected client.`) +
+          clientNote,
+        inputSchema: {
+          ...existingSchema,
+          type: "object",
+          properties,
+        },
+        annotations: t.annotations,
+      });
+    }
+
+    return relayedTools;
   }
 
   async function handleMessage(request, headers = {}) {
@@ -256,6 +364,48 @@ export function createCliMcpEngine(options = {}) {
                 { type: "text", text: JSON.stringify({ clients }, null, 2) },
               ],
               _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+            },
+          };
+        }
+
+        if (toolName === "shadowclaw_set_active_client") {
+          const targetId = await resolveTargetId(args.clientId);
+          if (!targetId) {
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: true,
+                content: [
+                  {
+                    type: "text",
+                    text: `Error: Client '${args.clientId}' not found among connected clients.`,
+                  },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          }
+          activeClientId = targetId;
+          console.error(
+            `[ShadowClaw MCP] Active default client set to: ${activeClientId}`,
+          );
+          return {
+            jsonrpc: "2.0",
+            id: reqId,
+            result: {
+              resultType: "complete",
+              content: [
+                {
+                  type: "text",
+                  text: `Active default client set to: ${activeClientId}`,
+                },
+              ],
+              _meta: {
+                activeClientId,
+                "io.modelcontextprotocol/serverInfo": serverInfo,
+              },
             },
           };
         }
@@ -391,26 +541,12 @@ export function createCliMcpEngine(options = {}) {
           };
         }
 
-        // Relayed interactive ask_user tool (MRTR)
-        if (toolName === "ask_user") {
-          if (!inputResponses || !inputResponses["response"]) {
-            return {
-              jsonrpc: "2.0",
-              id: reqId,
-              result: {
-                resultType: "input_required",
-                inputRequests: [
-                  {
-                    id: "response",
-                    type: "prompt",
-                    message:
-                      args.question || args.prompt || "User input requested",
-                  },
-                ],
-                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
-              },
-            };
-          }
+        // Relayed interactive ask_user tool with MRTR response fulfillment if provided
+        if (
+          toolName === "ask_user" &&
+          inputResponses &&
+          inputResponses["response"]
+        ) {
           return {
             jsonrpc: "2.0",
             id: reqId,
@@ -425,7 +561,29 @@ export function createCliMcpEngine(options = {}) {
         }
 
         // Relayed client tools (invoke-tool)
-        const targetId = await resolveTargetId(args.clientId);
+        if (toolDefMap.size === 0) {
+          await getRelayedTools();
+        }
+
+        const supportingClients = toolSupportingClientsMap.get(toolName) || [];
+        const supportingClientIds = supportingClients
+          .map((cl) => cl.clientId || cl.id)
+          .filter(Boolean);
+
+        let targetId = "";
+        if (args.clientId) {
+          targetId = await resolveTargetId(args.clientId);
+        } else {
+          const activeSessionId = await resolveTargetId();
+          if (supportingClientIds.includes(activeSessionId)) {
+            targetId = activeSessionId;
+          } else if (supportingClientIds.length > 0) {
+            targetId = supportingClientIds[0];
+          } else {
+            targetId = activeSessionId;
+          }
+        }
+
         if (!targetId) {
           return {
             jsonrpc: "2.0",
@@ -441,11 +599,51 @@ export function createCliMcpEngine(options = {}) {
           };
         }
 
+        if (
+          supportingClientIds.length > 0 &&
+          !supportingClientIds.includes(targetId)
+        ) {
+          return {
+            jsonrpc: "2.0",
+            id: reqId,
+            result: {
+              resultType: "complete",
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: `Error: Tool '${toolName}' is not enabled or available on client '${targetId}'. (Available on: ${supportingClientIds.join(", ")})`,
+                },
+              ],
+              _meta: {
+                clientId: targetId,
+                "io.modelcontextprotocol/serverInfo": serverInfo,
+              },
+            },
+          };
+        }
+
         try {
-          const res = await client.sendCommand(targetId, "invoke-tool", {
-            toolName,
-            input: args,
-          });
+          console.error(
+            `[ShadowClaw MCP] Executing '${toolName}' on client: ${targetId}`,
+          );
+          const toolArgs = { ...args };
+          delete toolArgs.clientId;
+          const isInteractive = toolName === "ask_user";
+          const res = isInteractive
+            ? await client.sendCommand(
+                targetId,
+                "invoke-tool",
+                {
+                  toolName,
+                  input: toolArgs,
+                },
+                300000,
+              )
+            : await client.sendCommand(targetId, "invoke-tool", {
+                toolName,
+                input: toolArgs,
+              });
 
           const rawResult =
             res.data?.result !== undefined ? res.data.result : res.data;
@@ -454,14 +652,31 @@ export function createCliMcpEngine(options = {}) {
               ? rawResult
               : JSON.stringify(rawResult, null, 2);
 
+          const errorMessage =
+            res.error ||
+            (res.data && res.data.error) ||
+            "Unknown tool execution error";
+
           return {
             jsonrpc: "2.0",
             id: reqId,
             result: {
               resultType: "complete",
               isError: !res.success,
-              content: [{ type: "text", text: textOutput || "" }],
-              _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              content: [
+                {
+                  type: "text",
+                  text: res.success
+                    ? textOutput || ""
+                    : textOutput && textOutput !== "null" && textOutput !== "{}"
+                      ? `${textOutput}\n${errorMessage}`
+                      : `Tool execution error: ${errorMessage}`,
+                },
+              ],
+              _meta: {
+                clientId: targetId,
+                "io.modelcontextprotocol/serverInfo": serverInfo,
+              },
             },
           };
         } catch (err) {
@@ -472,7 +687,10 @@ export function createCliMcpEngine(options = {}) {
               resultType: "complete",
               isError: true,
               content: [{ type: "text", text: `Tool error: ${err.message}` }],
-              _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              _meta: {
+                clientId: targetId,
+                "io.modelcontextprotocol/serverInfo": serverInfo,
+              },
             },
           };
         }
@@ -511,6 +729,10 @@ export function createCliMcpEngine(options = {}) {
 
   return {
     handleMessage,
+    getActiveClientId: () => activeClientId,
+    setActiveClientId: (id) => {
+      activeClientId = id;
+    },
   };
 }
 

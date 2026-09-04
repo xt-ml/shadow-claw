@@ -16,6 +16,11 @@ describe("static-files-middleware", () => {
     fsMock = {
       stat: jest.fn(),
       access: jest.fn(),
+      existsSync: jest.fn(() => false),
+      statSync: jest.fn(() => ({
+        isFile: () => false,
+        isDirectory: () => false,
+      })),
       constants: { F_OK: 0 },
     };
     rewriteMock = jest.fn(() => (_req: any, _res: any, next: any) => next());
@@ -360,5 +365,142 @@ describe("static-files-middleware", () => {
       expect.stringContaining("pages/main/posts/2026/07/01/screenshot.png"),
     );
     expect(next).not.toHaveBeenCalled();
+  });
+
+  it("serves .well-known files with dotfiles allow option", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const req = {
+      originalUrl: "/.well-known/agent-skills/index.json",
+      url: "/.well-known/agent-skills/index.json",
+    };
+    const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+    const next = jest.fn();
+
+    fsMock.stat.mockImplementation((_path: string, cb: any) =>
+      cb(null, { isDirectory: () => false }),
+    );
+
+    middleware(req, res, next);
+
+    expect(res.sendFile).toHaveBeenCalledWith(
+      expect.stringContaining("/root/.well-known/agent-skills/index.json"),
+      { dotfiles: "allow" },
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("serves .agents files with dotfiles allow option", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const req = {
+      originalUrl: "/.agents/skills/main/toast/SKILL.md",
+      url: "/.agents/skills/main/toast/SKILL.md",
+    };
+    const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+    const next = jest.fn();
+
+    fsMock.stat.mockImplementation((_path: string, cb: any) =>
+      cb(null, { isDirectory: () => false }),
+    );
+
+    middleware(req, res, next);
+
+    expect(res.sendFile).toHaveBeenCalledWith(
+      expect.stringContaining("/root/.agents/skills/main/toast/SKILL.md"),
+      { dotfiles: "allow" },
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("serves index.html in allowed dot directories with dotfiles allow option", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const req = {
+      originalUrl: "/.well-known/agent-skills/",
+      url: "/.well-known/agent-skills/",
+    };
+    const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+    const next = jest.fn();
+
+    fsMock.stat.mockImplementation((_path: string, cb: any) =>
+      cb(null, { isDirectory: () => true }),
+    );
+    fsMock.access.mockImplementation((_path: string, _mode: any, cb: any) =>
+      cb(null),
+    );
+
+    middleware(req, res, next);
+
+    expect(res.sendFile).toHaveBeenCalledWith(
+      expect.stringContaining("/root/.well-known/agent-skills/index.html"),
+      { dotfiles: "allow" },
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("serves allowed dotfiles with subpath prefix and dotfiles allow option", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const req = {
+      originalUrl: "/shadow-claw/.well-known/agent-skills/index.json",
+      url: "/shadow-claw/.well-known/agent-skills/index.json",
+    };
+    const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+    const next = jest.fn();
+
+    // The direct stat under /root/shadow-claw/... will fail (ENOENT), but stripped subpath stat succeeds
+    fsMock.stat.mockImplementation((targetPath: string, cb: any) => {
+      if (targetPath.includes("/root/shadow-claw/")) {
+        cb(new Error("ENOENT"));
+      } else {
+        cb(null, { isFile: () => true, isDirectory: () => false });
+      }
+    });
+
+    fsMock.existsSync.mockImplementation((p: string) =>
+      p.includes(".well-known"),
+    );
+    fsMock.statSync.mockImplementation(() => ({ isFile: () => true }));
+
+    middleware(req, res, next);
+
+    expect(res.sendFile).toHaveBeenCalledWith(
+      expect.stringContaining("/root/.well-known/agent-skills/index.json"),
+      { dotfiles: "allow" },
+    );
+    expect(next).not.toHaveBeenCalled();
+  });
+
+  it("blocks disallowed dotfiles from being served", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const disallowedPaths = [
+      "/.git/config",
+      "/.env",
+      "/.cache/db.sqlite",
+      "/.well-known/.env",
+      "/.agents/.git",
+      "/pages/.secret.txt",
+    ];
+
+    for (const disallowedPath of disallowedPaths) {
+      const req = {
+        originalUrl: disallowedPath,
+        url: disallowedPath,
+      };
+      const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+      const next = jest.fn();
+
+      middleware(req, res, next);
+
+      expect(res.sendFile).not.toHaveBeenCalled();
+      expect(next).toHaveBeenCalled();
+    }
   });
 });

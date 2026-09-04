@@ -1,6 +1,6 @@
 {
   "name": "shadow-claw",
-  "version": "1.26.0",
+  "version": "1.27.0",
   "type": "module",
   "license": "AGPL-3.0",
   "description": "Browser-native personal AI assistant.",
@@ -33,6 +33,8 @@
     "shadowclaw": "bin/cli.mjs"
   },
   "files": [
+    ".agents",
+    ".well-known",
     "bin",
     "dist",
     "assets",

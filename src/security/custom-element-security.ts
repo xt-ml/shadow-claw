@@ -150,10 +150,10 @@ export function isSafeCustomElementSource(urlStr: string): boolean {
 
   try {
     const base =
-      typeof window !== "undefined" &&
-      window.location?.origin &&
-      window.location.origin !== "null"
-        ? window.location.origin
+      typeof globalThis !== "undefined" &&
+      globalThis.location?.origin &&
+      globalThis.location.origin !== "null"
+        ? globalThis.location.origin
         : "http://localhost";
     const url = new URL(trimmed, base);
 
@@ -163,10 +163,10 @@ export function isSafeCustomElementSource(urlStr: string): boolean {
 
     // Same-origin is trusted
     if (
-      typeof window !== "undefined" &&
-      window.location?.origin &&
-      window.location.origin !== "null" &&
-      url.origin === window.location.origin
+      typeof globalThis !== "undefined" &&
+      globalThis.location?.origin &&
+      globalThis.location.origin !== "null" &&
+      url.origin === globalThis.location.origin
     ) {
       return true;
     }
@@ -240,8 +240,8 @@ export function getIframeCsp(nonce: string): string {
     try {
       const parsed = new URL(
         scriptUrl,
-        typeof window !== "undefined" && window.location?.origin
-          ? window.location.origin
+        typeof globalThis !== "undefined" && globalThis.location?.origin
+          ? globalThis.location.origin
           : "http://localhost",
       );
       allowedScriptHosts.add(parsed.origin);
@@ -372,10 +372,15 @@ export function initCustomElementSecurityFromEmbeddedConfig(): void {
   }
 }
 
+export interface CustomElementScriptDescriptor {
+  src: string;
+  hasInit: boolean;
+}
+
 /**
- * Retrieve approved custom element script URLs from the embedded site config.
+ * Retrieve approved custom element script descriptors from the embedded site config.
  */
-export function getApprovedCustomElementScripts(): string[] {
+export function getApprovedCustomElementScriptDescriptors(): CustomElementScriptDescriptor[] {
   if (typeof document === "undefined") {
     return [];
   }
@@ -395,15 +400,28 @@ export function getApprovedCustomElementScripts(): string[] {
 
     if (Array.isArray(scripts)) {
       return scripts
-        .map((s: any) => (typeof s === "string" ? s : s?.src))
+        .map((s: any) => {
+          const src = typeof s === "string" ? s : s?.src;
+          const hasInit =
+            typeof s === "object" && s !== null ? Boolean(s.hasInit) : false;
+          return { src, hasInit };
+        })
         .filter(
-          (s): s is string =>
-            typeof s === "string" && isSafeCustomElementSource(s),
+          (entry): entry is CustomElementScriptDescriptor =>
+            typeof entry.src === "string" &&
+            isSafeCustomElementSource(entry.src),
         );
     }
   } catch {}
 
   return [];
+}
+
+/**
+ * Retrieve approved custom element script URLs from the embedded site config.
+ */
+export function getApprovedCustomElementScripts(): string[] {
+  return getApprovedCustomElementScriptDescriptors().map((d) => d.src);
 }
 
 /**

@@ -247,6 +247,9 @@ export class ControlPlaneClient {
 
   public disconnect(): void {
     this._isDestroyed = true;
+    try {
+      this._sendUnregister();
+    } catch (_) {}
     this._cleanupConnection();
     if (this._reconnectTimer) {
       clearTimeout(this._reconnectTimer);
@@ -327,6 +330,18 @@ export class ControlPlaneClient {
     this._sendMessage({
       id: ulid(),
       type: "client:heartbeat",
+      payload,
+    });
+  }
+
+  private _sendUnregister(): void {
+    if (!this._clientId) return;
+    const payload = {
+      clientId: this._clientId,
+    };
+    this._sendMessage({
+      id: ulid(),
+      type: "client:unregister",
       payload,
     });
   }

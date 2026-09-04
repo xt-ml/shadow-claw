@@ -23,7 +23,7 @@ import { handleCompact } from "./handleCompact.js";
 import { handleInvoke } from "./handleInvoke.js";
 import { pendingTasks } from "./pendingTasks.js";
 import { post } from "./post.js";
-import { setToolState } from "./tool-state.js";
+import { getToolState, setToolState } from "./tool-state.js";
 import { resolveMcpReauth } from "../tools/remote-mcp/utils/resolveMcpReauth.js";
 
 /** In-flight abort controllers for group tasks */
@@ -570,11 +570,14 @@ export async function handleMessage(event: MessageEvent): Promise<void> {
 
     case "execute-tool":
       try {
+        const toolState = getToolState(payload.groupId);
+        const allowedTools = toolState?.enabledTools;
         const result = await executeTool(
           db,
           payload.name,
           payload.input,
           payload.groupId,
+          { allowedTools },
         );
         (self as any).postMessage({
           type: "execute-tool-result",

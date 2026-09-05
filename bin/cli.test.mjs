@@ -60,6 +60,12 @@ describe("shadow-claw CLI", () => {
       "--help",
     ]);
     expect(stdout).toContain("Usage: shadow-claw");
+    expect(stdout).toContain("Development:");
+    expect(stdout).toContain("Server:");
+    expect(stdout).toContain("Control Plane & Client Bridge:");
+    expect(stdout).toContain("WebRTC:");
+    expect(stdout).toContain("Project:");
+    expect(stdout).toContain("Help & Utility:");
     expect(stdout).toContain("build");
     expect(stdout).toContain("dev");
     expect(stdout).toContain("run");
@@ -73,6 +79,27 @@ describe("shadow-claw CLI", () => {
     expect(stdout).toContain("peer-id");
     expect(stdout).toContain("webrtc");
     expect(stdout).toContain("mcp");
+  });
+
+  it("groups subcommand options into logical categories in help", async () => {
+    const { stdout: devHelp } = await execFileAsync(process.execPath, [
+      cliPath,
+      "dev",
+      "--help",
+    ]);
+    expect(devHelp).toContain("Server & Network Options:");
+    expect(devHelp).toContain("Site & Build Options:");
+    expect(devHelp).toContain("Security & Proxy Options:");
+    expect(devHelp).toContain("TLS / HTTPS Options:");
+    expect(devHelp).toContain("Storage & Database Options:");
+
+    const { stdout: webrtcHelp } = await execFileAsync(process.execPath, [
+      cliPath,
+      "webrtc",
+      "--help",
+    ]);
+    expect(webrtcHelp).toContain("Identity Options:");
+    expect(webrtcHelp).toContain("Signaling & Listener Options");
   });
 
   it("outputs server command help with server --help and aliases", async () => {

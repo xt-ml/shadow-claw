@@ -63,16 +63,33 @@ program
   .version(version, "-v, --version", "Output the current version");
 
 // ---------------------------------------------------------------------------
+// DEVELOPMENT COMMANDS
+// ---------------------------------------------------------------------------
+program.commandsGroup("Development:");
+
+// ---------------------------------------------------------------------------
 // BUILD COMMAND
 // ---------------------------------------------------------------------------
 program
   .command("build")
   .description("Build the static site bundle for production or staging")
+  .optionsGroup("Build Mode Options:")
   .option(
     "--prod, --production",
     "Build in production mode with minification and optimizations",
     false,
   )
+  .option(
+    "--prerender-pages <mode>",
+    "Prerender page mode (all, auto, none)",
+    "auto",
+  )
+  .option(
+    "--copy-all-assets",
+    "Copy entire assets/ directory into output",
+    false,
+  )
+  .optionsGroup("Path & Routing Options:")
   .option(
     "--origin <url>",
     "Canonical origin URL (e.g. https://user.github.io/repo/)",
@@ -84,16 +101,6 @@ program
     "dist/public",
   )
   .option("--content-root <dir>", "Content root directory", process.cwd())
-  .option(
-    "--prerender-pages <mode>",
-    "Prerender page mode (all, auto, none)",
-    "auto",
-  )
-  .option(
-    "--copy-all-assets",
-    "Copy entire assets/ directory into output",
-    false,
-  )
   .action(async (options) => {
     try {
       const contentRoot = path.resolve(options.contentRoot || process.cwd());
@@ -243,26 +250,32 @@ async function handleDev(portArg, options) {
 program
   .command("dev [port]")
   .description("Build and launch the development server")
+  .optionsGroup("Server & Network Options:")
   .option("-p, --port <port>", "Port to listen on (default: 8888)")
   .option("--host <host>", "Bind host/IP", "127.0.0.1")
   .option("--ip <host>", "Bind host/IP (alias)")
+  .option("--open", "Automatically open default browser", false)
+  .option("-v, --verbose", "Enable verbose request/proxy logging", false)
+  .optionsGroup("Site & Build Options:")
   .option("--content-root <dir>", "Content root directory", process.cwd())
   .option(
     "--out-dir <dir>",
     "Output directory relative to content root",
     "dist/public",
   )
+  .optionsGroup("Security & Proxy Options:")
   .option(
     "--cors-mode <mode>",
     "CORS policy: localhost | private | all",
     "localhost",
   )
-  .option("--peerjs", "Enable built-in PeerJS signaling server", false)
   .option(
     "--allow-private-proxy",
     "Allow proxy to reach private/loopback addresses",
     false,
   )
+  .option("--peerjs", "Enable built-in PeerJS signaling server", false)
+  .optionsGroup("TLS / HTTPS Options:")
   .option("--https", "Enable HTTPS dev server", false)
   .option("--cert <path>", "Path to existing TLS certificate file")
   .option("--key <path>", "Path to existing TLS private key file")
@@ -270,6 +283,7 @@ program
     "--ssl-dir <path>",
     "Directory for TLS certificate generation/storage",
   )
+  .optionsGroup("Storage & Database Options:")
   .option("--database-dir <dir>", "Directory where SQLite databases are stored")
   .option(
     "--cache-dir <dir>",
@@ -285,33 +299,37 @@ program
     "Skip interactive cache directory prompt and use default .cache",
     false,
   )
-  .option("-v, --verbose", "Enable verbose request/proxy logging", false)
-  .option("--open", "Automatically open default browser", false)
   .action(handleDev);
 
 program
   .command("run [port]")
   .description("Alias for dev: build and launch the development server")
+  .optionsGroup("Server & Network Options:")
   .option("-p, --port <port>", "Port to listen on (default: 8888)")
   .option("--host <host>", "Bind host/IP", "127.0.0.1")
   .option("--ip <host>", "Bind host/IP (alias)")
+  .option("--open", "Automatically open default browser", false)
+  .option("-v, --verbose", "Enable verbose request/proxy logging", false)
+  .optionsGroup("Site & Build Options:")
   .option("--content-root <dir>", "Content root directory", process.cwd())
   .option(
     "--out-dir <dir>",
     "Output directory relative to content root",
     "dist/public",
   )
+  .optionsGroup("Security & Proxy Options:")
   .option(
     "--cors-mode <mode>",
     "CORS policy: localhost | private | all",
     "localhost",
   )
-  .option("--peerjs", "Enable built-in PeerJS signaling server", false)
   .option(
     "--allow-private-proxy",
     "Allow proxy to reach private/loopback addresses",
     false,
   )
+  .option("--peerjs", "Enable built-in PeerJS signaling server", false)
+  .optionsGroup("TLS / HTTPS Options:")
   .option("--https", "Enable HTTPS dev server", false)
   .option("--cert <path>", "Path to existing TLS certificate file")
   .option("--key <path>", "Path to existing TLS private key file")
@@ -319,6 +337,7 @@ program
     "--ssl-dir <path>",
     "Directory for TLS certificate generation/storage",
   )
+  .optionsGroup("Storage & Database Options:")
   .option("--database-dir <dir>", "Directory where SQLite databases are stored")
   .option(
     "--cache-dir <dir>",
@@ -334,9 +353,12 @@ program
     "Skip interactive cache directory prompt and use default .cache",
     false,
   )
-  .option("-v, --verbose", "Enable verbose request/proxy logging", false)
-  .option("--open", "Automatically open default browser", false)
   .action(handleDev);
+
+// ---------------------------------------------------------------------------
+// SERVER COMMANDS
+// ---------------------------------------------------------------------------
+program.commandsGroup("Server:");
 
 // ---------------------------------------------------------------------------
 // SERVE COMMAND
@@ -346,25 +368,35 @@ program
   .description(
     "Serve an existing static site build and start the backend proxy",
   )
+  .optionsGroup("Server & Network Options:")
   .option("-p, --port <port>", "Port to listen on (default: 8888)")
   .option("--host <host>", "Bind host/IP", "127.0.0.1")
+  .option(
+    "--no-static",
+    "Disable static file and UI serving (services-only mode)",
+  )
+  .option("--open", "Automatically open default browser", false)
+  .option("-v, --verbose", "Enable verbose request/proxy logging", false)
+  .optionsGroup("Site Options:")
   .option("--content-root <dir>", "Content root directory", process.cwd())
   .option(
     "--out-dir <dir>",
     "Output directory relative to content root",
     "dist/public",
   )
+  .optionsGroup("Security & Proxy Options:")
   .option(
     "--cors-mode <mode>",
     "CORS policy: localhost | private | all",
     "localhost",
   )
-  .option("--peerjs", "Enable built-in PeerJS signaling server", false)
   .option(
     "--allow-private-proxy",
     "Allow proxy to reach private/loopback addresses",
     false,
   )
+  .option("--peerjs", "Enable built-in PeerJS signaling server", false)
+  .optionsGroup("TLS / HTTPS Options:")
   .option("--https", "Enable HTTPS dev server", false)
   .option("--cert <path>", "Path to existing TLS certificate file")
   .option("--key <path>", "Path to existing TLS private key file")
@@ -372,6 +404,7 @@ program
     "--ssl-dir <path>",
     "Directory for TLS certificate generation/storage",
   )
+  .optionsGroup("Storage & Database Options:")
   .option("--database-dir <dir>", "Directory where SQLite databases are stored")
   .option(
     "--cache-dir <dir>",
@@ -387,12 +420,6 @@ program
     "Skip interactive cache directory prompt and use default .cache",
     false,
   )
-  .option(
-    "--no-static",
-    "Disable static file and UI serving (services-only mode)",
-  )
-  .option("-v, --verbose", "Enable verbose request/proxy logging", false)
-  .option("--open", "Automatically open default browser", false)
   .action(async (portArg, options) => {
     try {
       const contentRoot = path.resolve(options.contentRoot || process.cwd());
@@ -623,25 +650,12 @@ program
   .description(
     "Start backend services (Express, MCP, control plane) without building or serving the UI (aliases: services, api)",
   )
+  .optionsGroup("Server & Network Options:")
   .option("-p, --port <port>", "Port to listen on (default: 8888)")
   .option("--host <host>", "Bind host/IP", "127.0.0.1")
   .option("--ip <host>", "Bind host/IP (alias)")
-  .option("--content-root <dir>", "Content root directory", process.cwd())
-  .option("--database-dir <dir>", "Directory where SQLite databases are stored")
-  .option(
-    "--cache-dir <dir>",
-    "Custom cache directory for databases, tokens, and logs",
-  )
-  .option(
-    "--tmp, --temp",
-    "Store cache and databases in system temporary directory",
-    false,
-  )
-  .option(
-    "-y, --yes",
-    "Skip interactive cache directory prompt and use default .cache",
-    false,
-  )
+  .option("-v, --verbose", "Enable verbose request/proxy logging", false)
+  .optionsGroup("Security & Proxy Options:")
   .option(
     "--cors-mode <mode>",
     "CORS policy: localhost | private | all",
@@ -661,6 +675,7 @@ program
     "Allow proxy to reach private/loopback addresses",
     false,
   )
+  .optionsGroup("TLS / HTTPS Options:")
   .option("--https", "Enable HTTPS server", false)
   .option("--cert <path>", "Path to existing TLS certificate file")
   .option("--key <path>", "Path to existing TLS private key file")
@@ -668,12 +683,254 @@ program
     "--ssl-dir <path>",
     "Directory for TLS certificate generation/storage",
   )
-  .option("-v, --verbose", "Enable verbose request/proxy logging", false)
+  .optionsGroup("Storage & Database Options:")
+  .option("--content-root <dir>", "Content root directory", process.cwd())
+  .option("--database-dir <dir>", "Directory where SQLite databases are stored")
+  .option(
+    "--cache-dir <dir>",
+    "Custom cache directory for databases, tokens, and logs",
+  )
+  .option(
+    "--tmp, --temp",
+    "Store cache and databases in system temporary directory",
+    false,
+  )
+  .option(
+    "-y, --yes",
+    "Skip interactive cache directory prompt and use default .cache",
+    false,
+  )
   .action(handleServer);
 
 // ---------------------------------------------------------------------------
-// INIT COMMAND
+// MCP COMMAND
 // ---------------------------------------------------------------------------
+program
+  .command("mcp")
+  .description(
+    "Run the official Stateless Model Context Protocol (MCP 2026-07-28) server",
+  )
+  .optionsGroup("MCP Protocol Options:")
+  .option("--mcp-transport <transport>", "MCP transport: stdio | http", "stdio")
+  .option(
+    "--relay-client-tools",
+    "Discover and relay tools from connected browser clients",
+    true,
+  )
+  .option("--no-relay-client-tools", "Disable relaying browser client tools")
+  .optionsGroup("Target Client Options:")
+  .option("--client <id>", "Target client ID (defaults to first active client)")
+  .optionsGroup("Control Plane Connection Options:")
+  .option("--host <host>", "Control plane host")
+  .option("--port <port>", "Control plane port or HTTP MCP port")
+  .option("--token <token>", "Control token")
+  .option("--https", "Connect to server via HTTPS", false)
+  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
+  .optionsGroup("Transport & Peer Options:")
+  .option(
+    "--transport <transport>",
+    "Control plane client transport: http | webrtc",
+    "http",
+  )
+  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
+  .action(async (options) => {
+    await runMcpCommand(options);
+  });
+
+// ---------------------------------------------------------------------------
+// CONTROL PLANE & CLIENT BRIDGE COMMANDS
+// ---------------------------------------------------------------------------
+program.commandsGroup("Control Plane & Client Bridge:");
+
+program
+  .command("clients")
+  .description("List connected / registered browser and Electron clients")
+  .optionsGroup("Control Plane Connection Options:")
+  .option("--host <host>", "Control plane host")
+  .option("--port <port>", "Control plane port")
+  .option("--token <token>", "Control token")
+  .option("--https", "Connect to server via HTTPS", false)
+  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
+  .optionsGroup("Transport & Peer Options:")
+  .option("--transport <transport>", "Transport to use: http | webrtc", "http")
+  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
+  .option(
+    "--renew-peer-id",
+    "Renew WebRTC CLI peer ID before connecting",
+    false,
+  )
+  .option("--cache-dir <dir>", "Custom cache directory")
+  .action(async (options) => {
+    await runClientsCommand(options);
+  });
+
+program
+  .command("send <message>")
+  .description("Send a message/prompt to a connected client")
+  .optionsGroup("Target Options:")
+  .option("--client <id>", "Target client ID (defaults to first available)")
+  .option("--group <groupId>", "Target conversation group ID")
+  .optionsGroup("Control Plane Connection Options:")
+  .option("--host <host>", "Control plane host")
+  .option("--port <port>", "Control plane port")
+  .option("--token <token>", "Control token")
+  .option("--https", "Connect to server via HTTPS", false)
+  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
+  .optionsGroup("Transport & Peer Options:")
+  .option("--transport <transport>", "Transport to use: http | webrtc", "http")
+  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
+  .option("--renew-peer-id", "Renew WebRTC CLI peer ID before sending", false)
+  .option("--cache-dir <dir>", "Custom cache directory")
+  .action(async (message, options) => {
+    await runSendCommand(message, options);
+  });
+
+program
+  .command("tasks")
+  .description("List scheduled tasks on a connected client")
+  .optionsGroup("Target Options:")
+  .option("--client <id>", "Target client ID")
+  .option("--group <groupId>", "Filter tasks by conversation group ID")
+  .optionsGroup("Control Plane Connection Options:")
+  .option("--host <host>", "Control plane host")
+  .option("--port <port>", "Control plane port")
+  .option("--token <token>", "Control token")
+  .option("--https", "Connect to server via HTTPS", false)
+  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
+  .optionsGroup("Transport & Peer Options:")
+  .option("--transport <transport>", "Transport to use: http | webrtc", "http")
+  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
+  .option(
+    "--renew-peer-id",
+    "Renew WebRTC CLI peer ID before connecting",
+    false,
+  )
+  .option("--cache-dir <dir>", "Custom cache directory")
+  .action(async (options) => {
+    await runTasksCommand(options);
+  });
+
+program
+  .command("backup [action]")
+  .description(
+    "Trigger or manage client workspace backups (trigger | list | delete)",
+  )
+  .optionsGroup("Target Options:")
+  .option("--client <id>", "Client ID")
+  .option("--backup-id <id>", "Backup ID (for delete)")
+  .option("--group <groupId>", "Specific workspace group ID")
+  .optionsGroup("Control Plane Connection Options:")
+  .option("--host <host>", "Control plane host")
+  .option("--port <port>", "Control plane port")
+  .option("--token <token>", "Control token")
+  .option("--https", "Connect to server via HTTPS", false)
+  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
+  .optionsGroup("Transport & Peer Options:")
+  .option("--transport <transport>", "Transport to use: http | webrtc", "http")
+  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
+  .option(
+    "--renew-peer-id",
+    "Renew WebRTC CLI peer ID before connecting",
+    false,
+  )
+  .option("--cache-dir <dir>", "Custom cache directory")
+  .action(async (action, options) => {
+    await runBackupCommand(action || "trigger", options);
+  });
+
+// ---------------------------------------------------------------------------
+// WEBRTC COMMANDS
+// ---------------------------------------------------------------------------
+program.commandsGroup("WebRTC:");
+
+program
+  .command("webrtc [action] [customId]")
+  .summary(
+    "Manage WebRTC CLI configuration and peer identity (.cache/cli-peer-id)",
+  )
+  .description(
+    "Manage WebRTC CLI configuration and peer identity (.cache/cli-peer-id)\n\n" +
+      "  Actions:\n" +
+      "    (default)  Show or generate the CLI peer ID\n" +
+      "    listen     Register as a live PeerJS peer — browser tabs can then\n" +
+      "               connect directly without a control-plane connection",
+  )
+  .optionsGroup("Identity Options:")
+  .option(
+    "-r, --renew",
+    "Force renewal / generation of a new WebRTC CLI peer ID",
+  )
+  .option("--set <id>", "Set a specific custom WebRTC CLI peer ID")
+  .option("--cache-dir <dir>", "Custom cache directory (defaults to .cache)")
+  .option("-q, --quiet", "Output only the peer ID string")
+  .option("--json", "Output peer ID and file path as JSON")
+  .optionsGroup("Signaling & Listener Options (for listen action):")
+  .option("--host <host>", "PeerJS signaling server host (for listen)")
+  .option("--port <port>", "PeerJS signaling server port (for listen)", "8888")
+  .option("--path <path>", "PeerJS signaling server path (for listen)", "/")
+  .option(
+    "--secure",
+    "Use TLS (wss://) for the signaling server (for listen)",
+    false,
+  )
+  .option(
+    "--https",
+    "Alias for --secure: use TLS (wss://) for the signaling server",
+    false,
+  )
+  .option(
+    "--trusted-peer <id>",
+    "Accept connections only from this peer ID (repeatable, for listen)",
+    (v, prev) => (prev ? [...prev, v] : [v]),
+    [],
+  )
+  .option("--verbose", "Verbose connection logging (for listen)", false)
+  .option("--renew-peer-id", "Renew CLI peer ID before listening", false)
+  .option(
+    "-k, --insecure",
+    "Allow self-signed TLS certificates for the signaling server (wss://)",
+    true,
+  )
+  .action(async (action, customId, options) => {
+    if (action === "listen") {
+      await runWebRtcListenCommand(options);
+      return;
+    }
+    const opts = { ...options };
+    if (customId && !opts.set) {
+      opts.set = customId;
+    }
+    await runPeerIdCommand(action, opts);
+  });
+
+program
+  .command("peer-id [action] [customId]")
+  .alias("webrtc-peer-id")
+  .description(
+    "Get, generate, or renew the WebRTC CLI peer ID stored in .cache/cli-peer-id",
+  )
+  .optionsGroup("Identity Options:")
+  .option(
+    "-r, --renew",
+    "Force renewal / generation of a new WebRTC CLI peer ID",
+  )
+  .option("--set <id>", "Set a specific custom WebRTC CLI peer ID")
+  .option("--cache-dir <dir>", "Custom cache directory (defaults to .cache)")
+  .option("-q, --quiet", "Output only the peer ID string")
+  .option("--json", "Output peer ID and file path as JSON")
+  .action(async (action, customId, options) => {
+    const opts = { ...options };
+    if (customId && !opts.set) {
+      opts.set = customId;
+    }
+    await runPeerIdCommand(action, opts);
+  });
+
+// ---------------------------------------------------------------------------
+// PROJECT & PROTOCOL COMMANDS
+// ---------------------------------------------------------------------------
+program.commandsGroup("Project:");
+
 program
   .command("init [dir]")
   .description(
@@ -754,224 +1011,13 @@ slug: "home"
     }
   });
 
-// ---------------------------------------------------------------------------
-// PEER-ID / WEBRTC COMMAND
-// ---------------------------------------------------------------------------
-program
-  .command("peer-id [action] [customId]")
-  .alias("webrtc-peer-id")
-  .description(
-    "Get, generate, or renew the WebRTC CLI peer ID stored in .cache/cli-peer-id",
-  )
-  .option(
-    "-r, --renew",
-    "Force renewal / generation of a new WebRTC CLI peer ID",
-  )
-  .option("--set <id>", "Set a specific custom WebRTC CLI peer ID")
-  .option("--cache-dir <dir>", "Custom cache directory (defaults to .cache)")
-  .option("-q, --quiet", "Output only the peer ID string")
-  .option("--json", "Output peer ID and file path as JSON")
-  .action(async (action, customId, options) => {
-    const opts = { ...options };
-    if (customId && !opts.set) {
-      opts.set = customId;
-    }
-    await runPeerIdCommand(action, opts);
-  });
-
-program
-  .command("webrtc [action] [customId]")
-  .description(
-    "Manage WebRTC CLI configuration and peer identity (.cache/cli-peer-id)\n\n" +
-      "  Actions:\n" +
-      "    (default)  Show or generate the CLI peer ID\n" +
-      "    listen     Register as a live PeerJS peer — browser tabs can then\n" +
-      "               connect directly without a control-plane connection",
-  )
-  .option(
-    "-r, --renew",
-    "Force renewal / generation of a new WebRTC CLI peer ID",
-  )
-  .option("--set <id>", "Set a specific custom WebRTC CLI peer ID")
-  .option("--cache-dir <dir>", "Custom cache directory (defaults to .cache)")
-  .option("-q, --quiet", "Output only the peer ID string")
-  .option("--json", "Output peer ID and file path as JSON")
-  // listen-specific options
-  .option("--host <host>", "PeerJS signaling server host (for listen)")
-  .option("--port <port>", "PeerJS signaling server port (for listen)", "8888")
-  .option("--path <path>", "PeerJS signaling server path (for listen)", "/")
-  .option(
-    "--secure",
-    "Use TLS (wss://) for the signaling server (for listen)",
-    false,
-  )
-  .option(
-    "--https",
-    "Alias for --secure: use TLS (wss://) for the signaling server",
-    false,
-  )
-  .option(
-    "--trusted-peer <id>",
-    "Accept connections only from this peer ID (repeatable, for listen)",
-    (v, prev) => (prev ? [...prev, v] : [v]),
-    [],
-  )
-  .option("--verbose", "Verbose connection logging (for listen)", false)
-  .option("--renew-peer-id", "Renew CLI peer ID before listening", false)
-  .option(
-    "-k, --insecure",
-    "Allow self-signed TLS certificates for the signaling server (wss://)",
-    true,
-  )
-  .action(async (action, customId, options) => {
-    if (action === "listen") {
-      await runWebRtcListenCommand(options);
-      return;
-    }
-    const opts = { ...options };
-    if (customId && !opts.set) {
-      opts.set = customId;
-    }
-    await runPeerIdCommand(action, opts);
-  });
-
-// ---------------------------------------------------------------------------
-// CLIENTS COMMAND
-// ---------------------------------------------------------------------------
-program
-  .command("clients")
-  .description("List connected / registered browser and Electron clients")
-  .option("--host <host>", "Control plane host")
-  .option("--port <port>", "Control plane port")
-  .option("--token <token>", "Control token")
-  .option("--https", "Connect to server via HTTPS", false)
-  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
-  .option("--transport <transport>", "Transport to use: http | webrtc", "http")
-  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
-  .option(
-    "--renew-peer-id",
-    "Renew WebRTC CLI peer ID before connecting",
-    false,
-  )
-  .option("--cache-dir <dir>", "Custom cache directory")
-  .action(async (options) => {
-    await runClientsCommand(options);
-  });
-
-// ---------------------------------------------------------------------------
-// SEND COMMAND
-// ---------------------------------------------------------------------------
-program
-  .command("send <message>")
-  .description("Send a message/prompt to a connected client")
-  .option("--client <id>", "Target client ID (defaults to first available)")
-  .option("--group <groupId>", "Target conversation group ID")
-  .option("--host <host>", "Control plane host")
-  .option("--port <port>", "Control plane port")
-  .option("--token <token>", "Control token")
-  .option("--https", "Connect to server via HTTPS", false)
-  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
-  .option("--transport <transport>", "Transport to use: http | webrtc", "http")
-  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
-  .option("--renew-peer-id", "Renew WebRTC CLI peer ID before sending", false)
-  .option("--cache-dir <dir>", "Custom cache directory")
-  .action(async (message, options) => {
-    await runSendCommand(message, options);
-  });
-
-// ---------------------------------------------------------------------------
-// BACKUP COMMAND
-// ---------------------------------------------------------------------------
-program
-  .command("backup [action]")
-  .description(
-    "Trigger or manage client workspace backups (trigger | list | delete)",
-  )
-  .option("--client <id>", "Client ID")
-  .option("--backup-id <id>", "Backup ID (for delete)")
-  .option("--group <groupId>", "Specific workspace group ID")
-  .option("--host <host>", "Control plane host")
-  .option("--port <port>", "Control plane port")
-  .option("--token <token>", "Control token")
-  .option("--https", "Connect to server via HTTPS", false)
-  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
-  .option("--transport <transport>", "Transport to use: http | webrtc", "http")
-  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
-  .option(
-    "--renew-peer-id",
-    "Renew WebRTC CLI peer ID before connecting",
-    false,
-  )
-  .option("--cache-dir <dir>", "Custom cache directory")
-  .action(async (action, options) => {
-    await runBackupCommand(action || "trigger", options);
-  });
-
-// ---------------------------------------------------------------------------
-// TASKS COMMAND
-// ---------------------------------------------------------------------------
-program
-  .command("tasks")
-  .description("List scheduled tasks on a connected client")
-  .option("--client <id>", "Target client ID")
-  .option("--group <groupId>", "Filter tasks by conversation group ID")
-  .option("--host <host>", "Control plane host")
-  .option("--port <port>", "Control plane port")
-  .option("--token <token>", "Control token")
-  .option("--https", "Connect to server via HTTPS", false)
-  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
-  .option("--transport <transport>", "Transport to use: http | webrtc", "http")
-  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
-  .option(
-    "--renew-peer-id",
-    "Renew WebRTC CLI peer ID before connecting",
-    false,
-  )
-  .option("--cache-dir <dir>", "Custom cache directory")
-  .action(async (options) => {
-    await runTasksCommand(options);
-  });
-
-// ---------------------------------------------------------------------------
-// MCP COMMAND
-// ---------------------------------------------------------------------------
-program
-  .command("mcp")
-  .description(
-    "Run the official Stateless Model Context Protocol (MCP 2026-07-28) server",
-  )
-  .option("--mcp-transport <transport>", "MCP transport: stdio | http", "stdio")
-  .option("--client <id>", "Target client ID (defaults to first active client)")
-  .option("--host <host>", "Control plane host")
-  .option("--port <port>", "Control plane port or HTTP MCP port")
-  .option("--token <token>", "Control token")
-  .option("--https", "Connect to server via HTTPS", false)
-  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
-  .option(
-    "--transport <transport>",
-    "Control plane client transport: http | webrtc",
-    "http",
-  )
-  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
-  .option(
-    "--relay-client-tools",
-    "Discover and relay tools from connected browser clients",
-    true,
-  )
-  .option("--no-relay-client-tools", "Disable relaying browser client tools")
-  .action(async (options) => {
-    await runMcpCommand(options);
-  });
-
-// ---------------------------------------------------------------------------
-// AGENT SKILLS INDEX COMMAND
-// ---------------------------------------------------------------------------
 program
   .command("skills:index [dir]")
   .alias("agent-skills")
   .description(
     "Generate or update .well-known/agent-skills/index.json per the Agent Skills Discovery RFC",
   )
+  .optionsGroup("Output & Path Options:")
   .option(
     "--out-dir <dir>",
     "Output directory relative to content root (default: .well-known/agent-skills)",
@@ -985,6 +1031,7 @@ program
     "--config <file>",
     "Explicit path to shadow-claw.config.json or site-config.json",
   )
+  .optionsGroup("Generation Options:")
   .option("--no-bundled", "Exclude bundled ShadowClaw skills from index")
   .option("--stdout", "Print generated index.json to stdout", false)
   .option("--no-write", "Skip writing file to disk")
@@ -996,5 +1043,11 @@ program
       process.exit(1);
     }
   });
+
+// ---------------------------------------------------------------------------
+// HELP & UTILITY COMMANDS
+// ---------------------------------------------------------------------------
+program.commandsGroup("Help & Utility:");
+program.helpCommand("help [command]", "display help for command");
 
 program.parse(process.argv);

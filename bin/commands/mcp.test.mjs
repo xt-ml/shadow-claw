@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   describe,
   it,
@@ -7,6 +10,11 @@ import {
   afterEach,
 } from "@jest/globals";
 import { createCliMcpEngine } from "./mcp.mjs";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(
+  fs.readFileSync(path.resolve(__dirname, "../../package.json"), "utf8"),
+);
 
 describe("CLI MCP Engine (createCliMcpEngine)", () => {
   let errorSpy;
@@ -41,7 +49,7 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
     expect(res.id).toBe(1);
     expect(res.result.protocolVersion).toBe("2026-07-28");
     expect(res.result.serverInfo.name).toBe("shadow-claw");
-    expect(res.result.serverInfo.version).toBe("1.27.1");
+    expect(res.result.serverInfo.version).toBe(pkg.version);
   });
 
   it("processes tools/list including built-in and client tools", async () => {

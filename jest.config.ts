@@ -6,6 +6,7 @@ const coveragePathIgnorePatterns = [
 ];
 
 export default {
+  silent: true,
   workerIdleMemoryLimit: "512MB",
   extensionsToTreatAsEsm: [".ts"],
   modulePathIgnorePatterns: ["<rootDir>/dist/"],

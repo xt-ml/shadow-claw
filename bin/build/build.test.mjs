@@ -143,7 +143,7 @@ describe("build without and with pages", () => {
       "utf8",
     );
     expect(builtIndexHtml).toMatch(
-      /<meta\s+name="version"\s+content="1\.27\.1"/,
+      /<meta\s+name="version"\s+content="\d+\.\d+\.\d+"/,
     );
   });
 

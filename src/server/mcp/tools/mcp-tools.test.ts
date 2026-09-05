@@ -11,6 +11,7 @@ import {
   closePushStore,
   saveSubscription,
 } from "../../../subsystems/notifications/push-store.js";
+import { getPackageVersion } from "../../utils/packageVersion.js";
 
 describe("ShadowClaw Built-in MCP Tools", () => {
   it("registers all built-in ShadowClaw control tools", () => {
@@ -358,7 +359,7 @@ describe("ShadowClaw Built-in MCP Tools", () => {
       expect(res.result.content[0].text).toContain("ShadowClaw");
       expect(res.result.content[0].text).toContain("healthy");
       const statusData = JSON.parse(res.result.content[0].text);
-      expect(statusData.version).toBe("1.27.1");
+      expect(statusData.version).toBe(getPackageVersion());
     }
   });
 

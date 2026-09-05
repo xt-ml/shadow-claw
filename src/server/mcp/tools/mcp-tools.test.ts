@@ -357,6 +357,8 @@ describe("ShadowClaw Built-in MCP Tools", () => {
     if (res && "result" in res) {
       expect(res.result.content[0].text).toContain("ShadowClaw");
       expect(res.result.content[0].text).toContain("healthy");
+      const statusData = JSON.parse(res.result.content[0].text);
+      expect(statusData.version).toBe("1.27.1");
     }
   });
 

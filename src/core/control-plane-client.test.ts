@@ -256,7 +256,7 @@ describe("control-plane-client", () => {
         clientId: "client-test-1",
         deviceLabel: "Test Device",
         capabilities: ["webmcp", "opfs"],
-        version: "1.23.4",
+        version: "1.27.1",
         transport: "websocket",
       });
 

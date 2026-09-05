@@ -24,6 +24,7 @@ import {
   type McpToolsListResult,
   type ServerDiscoverResult,
 } from "./types.js";
+import { getPackageVersion } from "../utils/packageVersion.js";
 
 export type McpToolHandler = (
   args: Record<string, unknown>,
@@ -47,7 +48,7 @@ export class McpServer {
 
   constructor(options: McpServerOptions = {}) {
     this._name = options.name || "shadow-claw";
-    this._version = options.version || "1.25.0";
+    this._version = options.version || getPackageVersion();
     this._toolProvider = options.toolProvider;
 
     if (options.tools) {

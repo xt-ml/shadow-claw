@@ -8,6 +8,7 @@
 import type { McpServer } from "../mcp-server.js";
 import type { McpTool } from "../types.js";
 import { broadcastPush } from "../../../subsystems/notifications/push-routes.js";
+import { getPackageVersion } from "../../utils/packageVersion.js";
 
 export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
   {
@@ -469,7 +470,7 @@ export function registerBuiltInTools(
                 text: JSON.stringify(
                   {
                     server: "ShadowClaw",
-                    version: "1.25.0",
+                    version: getPackageVersion(),
                     connectedClients: clients.length,
                     status: "healthy",
                   },

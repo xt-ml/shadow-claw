@@ -17,6 +17,11 @@ describe("McpServer", () => {
   }
 
   describe("server/discover", () => {
+    it("defaults version to package.json version 1.27.1 when no version is provided", () => {
+      const server = new McpServer();
+      expect(server.serverInfo.version).toBe("1.27.1");
+    });
+
     it("returns discovery response with 2026-07-28 and capabilities", async () => {
       const server = createServer();
       const res = await server.handleRequest({

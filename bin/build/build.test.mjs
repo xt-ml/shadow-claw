@@ -137,6 +137,14 @@ describe("build without and with pages", () => {
       expect.arrayContaining(["skill-creator", "example"]),
     );
     expect(wellKnownIndex.tools.map((t) => t.name)).toContain("echo");
+
+    const builtIndexHtml = await readFile(
+      path.join(tempProjectRoot, "dist/public/index.html"),
+      "utf8",
+    );
+    expect(builtIndexHtml).toMatch(
+      /<meta\s+name="version"\s+content="1\.27\.1"/,
+    );
   });
 
   it("builds with no pages directory and keeps default pages", async () => {

@@ -105,7 +105,7 @@ describe("OpenAPI Route Coverage & Drift Guardrail", () => {
   it("should have valid OpenAPI 3.1 root metadata", () => {
     expect(openApiSpec.openapi).toBe("3.1.0");
     expect(openApiSpec.info.title).toBe("ShadowClaw API");
-    expect(openApiSpec.info.version).toBeDefined();
+    expect(openApiSpec.info.version).toBe("1.27.1");
     expect(openApiSpec.paths).toBeDefined();
   });
 

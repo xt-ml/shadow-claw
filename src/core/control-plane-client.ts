@@ -71,7 +71,7 @@ export class ControlPlaneClient {
     this._peerId = options.peerId;
     this._deviceLabel = options.deviceLabel || "ShadowClaw Browser Client";
     this._capabilities = options.capabilities || ["webmcp", "opfs", "push"];
-    this._version = options.version || "1.23.4";
+    this._version = options.version || "1.27.1";
     this._token = options.token;
     this._heartbeatIntervalMs = options.heartbeatIntervalMs || 10000;
     this._reconnectDelayMs = options.reconnectDelayMs || 1000;
@@ -111,6 +111,10 @@ export class ControlPlaneClient {
 
   public get transport(): ControlPlaneTransport {
     return this._transport;
+  }
+
+  public get version(): string {
+    return this._version;
   }
 
   public registerHandler(action: string, handler: CommandHandler): void {

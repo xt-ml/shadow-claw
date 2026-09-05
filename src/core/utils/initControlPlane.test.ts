@@ -7,6 +7,7 @@ import {
   getControlPlaneServerUrl,
   getActiveControlPlaneClient,
   stopControlPlaneClient,
+  detectClientVersion,
 } from "./initControlPlane.js";
 
 describe("initControlPlane", () => {
@@ -87,6 +88,65 @@ describe("initControlPlane", () => {
     it("detects available browser capabilities", () => {
       const capabilities = detectCapabilities();
       expect(Array.isArray(capabilities)).toBe(true);
+    });
+  });
+
+  describe("detectClientVersion", () => {
+    afterEach(() => {
+      document
+        .querySelectorAll('meta[name="version"], meta[name="revision"]')
+        .forEach((el) => el.remove());
+    });
+
+    it("returns default fallback 1.27.1 when no DOM metadata is present", () => {
+      expect(detectClientVersion()).toBe("1.27.1");
+    });
+
+    it("returns '<semver> (<short-rev>)' when both version and revision are present", () => {
+      const metaVersion = document.createElement("meta");
+      metaVersion.setAttribute("name", "version");
+      metaVersion.setAttribute("content", "1.27.1");
+      document.head.appendChild(metaVersion);
+
+      const metaRevision = document.createElement("meta");
+      metaRevision.setAttribute("name", "revision");
+      metaRevision.setAttribute(
+        "content",
+        "ad65dc305c71a18cb2152e4f47da1491148fb07f",
+      );
+      document.head.appendChild(metaRevision);
+
+      expect(detectClientVersion()).toBe("1.27.1 (ad65dc3)");
+    });
+
+    it("returns '<semver>' when only version is present", () => {
+      const metaVersion = document.createElement("meta");
+      metaVersion.setAttribute("name", "version");
+      metaVersion.setAttribute("content", "1.27.1");
+      document.head.appendChild(metaVersion);
+
+      expect(detectClientVersion()).toBe("1.27.1");
+    });
+
+    it("returns '<short-rev>' when only revision is present", () => {
+      const metaRevision = document.createElement("meta");
+      metaRevision.setAttribute("name", "revision");
+      metaRevision.setAttribute(
+        "content",
+        "ad65dc305c71a18cb2152e4f47da1491148fb07f",
+      );
+      document.head.appendChild(metaRevision);
+
+      expect(detectClientVersion()).toBe("ad65dc3");
+    });
+
+    it("handles 7-char short revision directly", () => {
+      const metaRevision = document.createElement("meta");
+      metaRevision.setAttribute("name", "revision");
+      metaRevision.setAttribute("content", "ad65dc3");
+      document.head.appendChild(metaRevision);
+
+      expect(detectClientVersion()).toBe("ad65dc3");
     });
   });
 
@@ -798,6 +858,24 @@ describe("initControlPlane", () => {
       const client = createDefaultControlPlaneClient({ autoConnect: false });
       expect((client as any).transport).toBe("websocket");
       localStorage.removeItem("control_plane_transport");
+    });
+
+    it("passes detected or custom version to ControlPlaneClient", () => {
+      const metaVersion = document.createElement("meta");
+      metaVersion.setAttribute("name", "version");
+      metaVersion.setAttribute("content", "1.27.1");
+      document.head.appendChild(metaVersion);
+
+      const client1 = createDefaultControlPlaneClient({ autoConnect: false });
+      expect((client1 as any).version).toBe("1.27.1");
+
+      const client2 = createDefaultControlPlaneClient({
+        autoConnect: false,
+        version: "custom-v2",
+      });
+      expect((client2 as any).version).toBe("custom-v2");
+
+      metaVersion.remove();
     });
 
     it("manages active client lifecycle and autoConnect", () => {

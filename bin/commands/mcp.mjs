@@ -8,7 +8,22 @@
 
 import readline from "node:readline";
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { CliControlClient } from "../utils/control-client.mjs";
+
+const __mcp_dirname = path.dirname(fileURLToPath(import.meta.url));
+function getCliVersion() {
+  try {
+    const pkgPath = path.resolve(__mcp_dirname, "../../package.json");
+    if (fs.existsSync(pkgPath)) {
+      const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8"));
+      if (pkg.version) return pkg.version;
+    }
+  } catch {}
+  return "1.27.1";
+}
 
 export const CLI_BUILTIN_TOOLS = [
   {
@@ -139,7 +154,7 @@ export function createCliMcpEngine(options = {}) {
 
   const serverInfo = {
     name: "shadow-claw",
-    version: "1.25.0",
+    version: options.version || getCliVersion(),
   };
 
   const capabilities = {

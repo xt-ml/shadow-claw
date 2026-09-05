@@ -202,11 +202,43 @@ export function detectDeviceLabel(): string {
   return `${device} ${browser}`;
 }
 
+export function detectClientVersion(): string {
+  let version = "";
+  let revision = "";
+
+  if (typeof document !== "undefined") {
+    version =
+      document
+        .querySelector('meta[name="version"]')
+        ?.getAttribute("content")
+        ?.trim() || "";
+    revision =
+      document
+        .querySelector('meta[name="revision"]')
+        ?.getAttribute("content")
+        ?.trim() || "";
+  }
+
+  const shortRevision = revision.length > 7 ? revision.slice(0, 7) : revision;
+
+  if (version && shortRevision) {
+    return `${version} (${shortRevision})`;
+  }
+  if (version) {
+    return version;
+  }
+  if (shortRevision) {
+    return shortRevision;
+  }
+  return "1.27.1";
+}
+
 export interface InitControlPlaneOptions {
   orchestrator?: any;
   clientId?: string;
   transport?: ControlPlaneTransport;
   autoConnect?: boolean;
+  version?: string;
 }
 
 let activeClient: ControlPlaneClient | null = null;
@@ -263,6 +295,7 @@ export async function executeClientControlCommand(
         clientId,
         deviceLabel,
         capabilities,
+        version: options.version || detectClientVersion(),
         activeGroupId:
           options.orchestrator?.activeGroupId ||
           orchestratorStore.activeGroupId ||
@@ -646,6 +679,7 @@ export function createDefaultControlPlaneClient(
     getOrCreateControlPlaneClientId();
   const capabilities = detectCapabilities();
   const deviceLabel = detectDeviceLabel();
+  const version = options.version || detectClientVersion();
 
   let configuredTransport: ControlPlaneTransport | null = null;
   if (typeof localStorage !== "undefined") {
@@ -678,6 +712,7 @@ export function createDefaultControlPlaneClient(
     clientId,
     deviceLabel,
     capabilities,
+    version,
     peerId,
     transport,
     httpUrl,

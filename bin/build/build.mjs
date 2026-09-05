@@ -190,6 +190,22 @@ export async function runBuild(options = {}) {
       await run(`node bin/site-config/apply.mjs dist/public ${siteConfigPath}`);
     } catch {}
 
+    try {
+      const pkgJson = JSON.parse(await readFile("package.json", "utf8"));
+      if (pkgJson.version) {
+        const idxPath = "dist/public/index.html";
+        const idxHtml = await readFile(idxPath, "utf8");
+        await writeFile(
+          idxPath,
+          idxHtml.replace(
+            /<meta\s+name="version"[^>]*>/,
+            `<meta name="version" content="${pkgJson.version}" />`,
+          ),
+          "utf8",
+        );
+      }
+    } catch {}
+
     if (isProduction) {
       log("Running production post-build steps...");
 
@@ -470,12 +486,31 @@ export async function runBuild(options = {}) {
   const basePath = defaultBasePath;
 
   try {
-    const idxHtml = await readFile(indexPath, "utf8");
-    const updatedHtml = idxHtml.replace(
+    let idxHtml = await readFile(indexPath, "utf8");
+    idxHtml = idxHtml.replace(
       /<base\s+href="[^"]*"\s*\/?>/i,
       `<base href="${basePath}" />`,
     );
-    await writeFile(indexPath, updatedHtml, "utf8");
+
+    let pkgVersion = "";
+    try {
+      const pkgPath = await findFirstExistingPath([
+        join(contentRoot, "package.json"),
+        join(toolchainRoot, "package.json"),
+      ]);
+      if (pkgPath) {
+        const pkg = JSON.parse(await readFile(pkgPath, "utf8"));
+        pkgVersion = pkg.version || "";
+      }
+    } catch {}
+
+    if (pkgVersion) {
+      idxHtml = idxHtml.replace(
+        /<meta\s+name="version"[^>]*>/,
+        `<meta name="version" content="${pkgVersion}" />`,
+      );
+    }
+    await writeFile(indexPath, idxHtml, "utf8");
   } catch {}
 
   if (isProduction) {
@@ -519,6 +554,7 @@ export async function runBuild(options = {}) {
         }).trim();
       } catch {}
     }
+
     if (meta) {
       const idxHtml = await readFile(indexPath, "utf8");
       await writeFile(

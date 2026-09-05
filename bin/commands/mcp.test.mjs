@@ -41,6 +41,7 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
     expect(res.id).toBe(1);
     expect(res.result.protocolVersion).toBe("2026-07-28");
     expect(res.result.serverInfo.name).toBe("shadow-claw");
+    expect(res.result.serverInfo.version).toBe("1.27.1");
   });
 
   it("processes tools/list including built-in and client tools", async () => {

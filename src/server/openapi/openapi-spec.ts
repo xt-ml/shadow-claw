@@ -8,12 +8,13 @@ import { integrationPaths } from "./paths/integrations.js";
 import { proxyPaths } from "./paths/proxies.js";
 import { diagnosticPaths } from "./paths/diagnostics.js";
 import { mcpPaths } from "./paths/mcp.js";
+import { getPackageVersion } from "../utils/packageVersion.js";
 
 export const openApiSpec: OpenApiSpec = {
   openapi: "3.1.0",
   info: {
     title: "ShadowClaw API",
-    version: "1.25.0",
+    version: getPackageVersion(),
     description:
       "Official REST and streaming API specification for ShadowClaw personal AI assistant and control plane server.",
     license: {

@@ -36,7 +36,6 @@ export function registerMcpRoutes(
     options.mcpServer ||
     new McpServer({
       name: "shadow-claw",
-      version: "1.25.0",
     });
 
   // Register ShadowClaw built-in and client-relayed tools

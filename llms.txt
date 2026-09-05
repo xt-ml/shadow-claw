@@ -1,6 +1,32 @@
 # [ShadowClaw](https://xt-ml.github.io/shadow-claw/)
 
-> A browser-native, fully-featured AI assistant whose core orchestration and tool-use loop run client-side in the browser. Deployable as a PWA or native Electron desktop app, backed by a Node.js service layer (local proxying, control plane, MCP), and driven via the `shadow-claw` CLI. AI inference routes to remote APIs, local servers, or in-browser models depending on your configuration.
+> A browser-native AI assistant featuring client-side orchestration of the full agentic loop (reasoning, state machine, dynamic context windowing, and tool execution) running off the main thread in a Web Worker in the browser or Electron. Instantly launchable via `npx shadow-claw dev --open`, driven by a full-featured CLI, and backed by a 24/7 Node.js service layer (control plane, task scheduler, proxying, and MCP).
+
+## Quick Start & CLI
+
+Run instantly without cloning the repo:
+
+- `npx shadow-claw dev --open` — Start local services and launch the assistant in your browser immediately.
+- `npx shadow-claw init <dir>` — Scaffold a custom template or knowledge hub.
+- `npx shadow-claw server` — Run headless 24/7 backend services (task scheduler, MCP, REST API).
+- `npx shadow-claw send "prompt"` — Dispatch prompts to connected clients directly from your terminal.
+- [CLI Reference](https://xt-ml.github.io/shadow-claw/docs/subsystems/cli.md) — Complete guide to all CLI commands, flags, and control plane options.
+
+## When to Use This
+
+ShadowClaw is best suited for:
+
+- **Client-side orchestration of the agentic loop:** When you want the entire agent decision loop—state machine, prompt assembly, dynamic context windowing, and tool dispatch—to execute client-side off the main thread in a browser Web Worker or Electron.
+- **Zero-install instant launch & CLI driving:** Starting immediately with `npx shadow-claw dev --open`, scaffolding custom templates with `npx shadow-claw init`, or driving connected browser sessions, tasks, and backups through the `shadow-claw` CLI.
+- **Ultra-safe sandboxed execution:** Running real code, bash, and system operations inside isolated client-side environments—including an in-browser WebVM (v86 Alpine Linux running in WASM inside a Web Worker), `just-bash` POSIX emulation, and sandboxed OPFS/IndexedDB storage.
+- **Control plane & client bridge:** Driving browser and Electron execution surfaces from external tools, scripts, or CLI commands via real-time SSE, WebSockets, or WebRTC.
+- **Headless server & background services:** Running a persistent 24/7 Node backend (`shadow-claw server`) to manage client schedules in SQLite, tick cron schedules, wake dormant clients via Web Push, and serve REST APIs and MCP endpoints.
+- **Model Context Protocol (MCP) integrations:** Interfacing with external coding agents (Claude Desktop, Cursor, Goose) via STDIO or Streamable HTTP.
+- **Static knowledge hubs:** Authoring and deploying static documentation and agent-assisted knowledge repositories.
+
+When to look elsewhere:
+
+- Workloads requiring an unsandboxed, host-native server agent where the entire LLM prompt/tool execution loop must run directly against the server's bare-metal OS rather than sandboxed client execution surfaces.
 
 ## Docs
 
@@ -16,6 +42,15 @@
 - [Storage System](https://xt-ml.github.io/shadow-claw/docs/architecture/storage.md)
 - [Context Management](https://xt-ml.github.io/shadow-claw/docs/architecture/context-management.md)
 - [Streaming](https://xt-ml.github.io/shadow-claw/docs/architecture/streaming.md)
+- [Control Plane & Client Bridge](https://xt-ml.github.io/shadow-claw/docs/subsystems/control-plane.md)
+
+## MCP & Discovery
+
+- [MCP Server Card (SEP-2127)](https://xt-ml.github.io/shadow-claw/.well-known/mcp.json): Standardized remote MCP discovery document
+- [AI Catalog (SEP-2127)](https://xt-ml.github.io/shadow-claw/.well-known/ai-catalog.json): Decentralized AI artifact catalog
+- [MCP Servers Manifest (Discussion #1147)](https://xt-ml.github.io/shadow-claw/.well-known/mcp/servers.json): Server endpoint manifest
+- [Protected Resource Metadata (RFC 9728)](https://xt-ml.github.io/shadow-claw/.well-known/oauth-protected-resource): OAuth PRM discovery
+- [Stateless MCP Server Subsystem](https://xt-ml.github.io/shadow-claw/docs/subsystems/mcp-server.md): Complete architectural documentation for MCP Streamable HTTP & STDIO transports
 
 ## Optional
 

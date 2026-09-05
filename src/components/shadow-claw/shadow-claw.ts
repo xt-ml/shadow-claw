@@ -88,6 +88,7 @@ export class ShadowClaw extends ShadowClawElement {
   };
 
   vmStatusCleanup: (() => void) | null = null;
+  appLifecycleCleanup: (() => void) | null = null;
 
   constructor() {
     super();
@@ -249,6 +250,11 @@ export class ShadowClaw extends ShadowClawElement {
     if (this.vmStatusCleanup) {
       this.vmStatusCleanup();
       this.vmStatusCleanup = null;
+    }
+
+    if (this.appLifecycleCleanup) {
+      this.appLifecycleCleanup();
+      this.appLifecycleCleanup = null;
     }
 
     if (this.terminalPlacementFrame !== null) {

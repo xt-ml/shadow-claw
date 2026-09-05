@@ -346,6 +346,35 @@ export class PeerJsChannel implements Channel {
     this._initPeer();
   }
 
+  ensureConnected(force: boolean = false): void {
+    if (!this.running || !this.isConfigured()) {
+      return;
+    }
+
+    if (this._reconnectTimer !== null) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    this._reconnectAttempts = 0;
+
+    const peer = this.peer as any;
+    if (!peer || peer.destroyed || (force && !peer.open)) {
+      if (peer && !peer.destroyed) {
+        try {
+          peer.destroy();
+        } catch (_) {}
+      }
+      this.peer = null;
+      this._initPeer();
+    } else if (peer.disconnected) {
+      try {
+        peer.reconnect?.();
+      } catch {
+        this._initPeer();
+      }
+    }
+  }
+
   stop(): void {
     this.running = false;
     if (this._reconnectTimer !== null) {

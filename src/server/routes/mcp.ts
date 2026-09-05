@@ -16,6 +16,7 @@ import { McpServer } from "../mcp/mcp-server.js";
 import { registerBuiltInTools } from "../mcp/tools/built-in-tools.js";
 import { createClientToolRelay } from "../mcp/tools/client-tool-relay.js";
 import { getOrCreateControlToken } from "../client-registry.js";
+import { getPackageVersion } from "../utils/packageVersion.js";
 
 export interface McpRouteOptions {
   mcpServer?: McpServer;
@@ -142,7 +143,7 @@ export function registerMcpRoutes(
   }
 
   if (app && typeof app.post === "function") {
-    app.post("/mcp", async (req: Request, res: Response) => {
+    const mcpPostHandler = async (req: Request, res: Response) => {
       // 1. Origin header security check for DNS rebinding protection
       const origin = req.headers.origin;
       if (origin && !isTrustedOrigin(origin, req.headers.host)) {
@@ -164,6 +165,15 @@ export function registerMcpRoutes(
         : isLocalRequest(req);
 
       if (!isAuthenticated) {
+        const scheme =
+          req.secure || req.headers["x-forwarded-proto"] === "https"
+            ? "https"
+            : "http";
+        const host = req.headers.host || "127.0.0.1";
+        res.setHeader(
+          "WWW-Authenticate",
+          `Bearer resource_metadata="${scheme}://${host}/.well-known/oauth-protected-resource"`,
+        );
         res.status(401).json({
           jsonrpc: "2.0",
           id: req.body?.id ?? null,
@@ -221,7 +231,134 @@ export function registerMcpRoutes(
       }
 
       res.status(statusCode).json(response);
+    };
+
+    app.post("/mcp", mcpPostHandler);
+    app.post("/.well-known/mcp", mcpPostHandler);
+  }
+
+  if (app && typeof app.get === "function") {
+    const getBaseUrl = (req: Request) => {
+      const scheme =
+        req.secure || req.headers["x-forwarded-proto"] === "https"
+          ? "https"
+          : "http";
+      const host = req.headers.host || "127.0.0.1";
+      return `${scheme}://${host}`;
+    };
+
+    // MCP Server Card Discovery (SEP-2127 / well-known discovery)
+    const handleServerCard = (req: Request, res: Response) => {
+      const origin = getBaseUrl(req);
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.json({
+        $schema: "https://modelcontextprotocol.io/schemas/server-card/v1.json",
+        name: "shadow-claw",
+        version: getPackageVersion(),
+        description:
+          "Browser-native personal AI assistant with local and remote LLM orchestration, Web Workers, OPFS storage, and agentic tool execution.",
+        title: "ShadowClaw MCP Server",
+        websiteUrl: `${origin}/shadow-claw/`,
+        repository: {
+          url: "https://github.com/xt-ml/shadow-claw",
+          source: "github",
+        },
+        icons: [
+          {
+            src: `${origin}/assets/icons/favicon.svg`,
+            mimeType: "image/svg+xml",
+            sizes: ["any"],
+          },
+          {
+            src: `${origin}/assets/icons/512.png`,
+            mimeType: "image/png",
+            sizes: ["512x512"],
+          },
+        ],
+        remotes: [
+          {
+            type: "streamable-http",
+            url: `${origin}/mcp`,
+            supportedProtocolVersions: [
+              "2026-07-28",
+              "2025-11-25",
+              "2024-11-05",
+            ],
+            headers: [
+              {
+                name: "MCP-Protocol-Version",
+                default: "2026-07-28",
+                isRequired: false,
+              },
+              {
+                name: "x-control-token",
+                description: "Control plane token for authorized client access",
+                isSecret: true,
+                isRequired: false,
+              },
+            ],
+          },
+        ],
+      });
+    };
+
+    app.get("/.well-known/mcp", handleServerCard);
+    app.get("/.well-known/mcp.json", handleServerCard);
+    app.get("/mcp/server-card", handleServerCard);
+
+    // AI Catalog Discovery (SEP-2127)
+    app.get("/.well-known/ai-catalog.json", (req: Request, res: Response) => {
+      const origin = getBaseUrl(req);
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.json({
+        $schema: "https://agent-card.github.io/schemas/ai-catalog/v1.json",
+        version: "1.0",
+        name: "ShadowClaw AI Catalog",
+        servers: [
+          {
+            name: "shadow-claw",
+            card: `${origin}/.well-known/mcp.json`,
+          },
+        ],
+      });
     });
+
+    // MCP Servers Manifest (Discussion #1147)
+    app.get("/.well-known/mcp/servers.json", (req: Request, res: Response) => {
+      const origin = getBaseUrl(req);
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.json({
+        version: "1.0",
+        servers: [
+          {
+            name: "shadow-claw",
+            description: "ShadowClaw Browser-Native AI Assistant MCP Server",
+            endpoint: `${origin}/mcp`,
+            capabilities: ["tools", "extensions"],
+            card: `${origin}/.well-known/mcp.json`,
+          },
+        ],
+      });
+    });
+
+    // Protected Resource Metadata (RFC 9728)
+    const handleProtectedResource = (req: Request, res: Response) => {
+      const origin = getBaseUrl(req);
+      res.setHeader("Content-Type", "application/json; charset=utf-8");
+      res.json({
+        resource: `${origin}/mcp`,
+        authorization_servers: [origin],
+        bearer_methods_supported: ["header"],
+        resource_documentation:
+          "https://xt-ml.github.io/shadow-claw/docs/subsystems/mcp-server.md",
+      });
+    };
+
+    app.get("/.well-known/oauth-protected-resource", handleProtectedResource);
+    app.get(
+      "/.well-known/oauth-protected-resource.json",
+      handleProtectedResource,
+    );
   }
 
   return mcpServer;

@@ -74,6 +74,8 @@ import {
 
 import { syncWebMcpRegistration } from "./utils/syncWebMcpRegistration.js";
 import { DEFAULT_DIRECT_TOOL_COMMAND_POLICY } from "./utils/types.js";
+import { ensureControlPlaneConnected } from "../utils/initControlPlane.js";
+import { applyAllChannelRunningStates } from "./utils/operations/channel.js";
 
 import type { ShadowClawDatabase } from "../../db/db.js";
 import type { A2UIAction } from "../../ui/a2ui/types.js";
@@ -103,6 +105,9 @@ export class Orchestrator {
   directToolCommandPolicy: DirectToolCommandPolicy = {
     ...DEFAULT_DIRECT_TOOL_COMMAND_POLICY,
   };
+
+  ensureControlPlaneConnected: typeof ensureControlPlaneConnected =
+    ensureControlPlaneConnected;
 
   events: EventBus = new EventBus();
   gitProxyUrl: string = "/git-proxy";
@@ -285,6 +290,44 @@ export class Orchestrator {
     }
 
     unregisterWebMcpTools();
+  }
+
+  /**
+   * Ensure all enabled external connections (Control Plane, Channels, Task Server)
+   * are actively connected and healthy (e.g. on initial app load, wake-up from sleep,
+   * switching back from another app, or regaining network connectivity).
+   */
+  async ensureAllConnections(options: { force?: boolean } = {}): Promise<void> {
+    const force = options.force ?? false;
+
+    // 1. Control Plane
+    try {
+      await this.ensureControlPlaneConnected({
+        orchestrator: this,
+        db: this.db || undefined,
+        force,
+      });
+    } catch (err) {
+      console.warn("Error ensuring Control Plane connection:", err);
+    }
+
+    // 2. Messaging Channels
+    try {
+      applyAllChannelRunningStates(this, force);
+    } catch (err) {
+      console.warn("Error ensuring channel connections:", err);
+    }
+
+    // 3. Server Task Scheduling & Local Scheduler
+    if (this.taskServerEnabled && this.db) {
+      void orchestratorStore.replayTaskSyncOutbox(this.db);
+      void orchestratorStore.loadTasks(this.db);
+    }
+
+    if (this.scheduler) {
+      this.scheduler.start();
+      void this.scheduler.tick();
+    }
   }
 
   stopCurrentRequest(groupId = DEFAULT_GROUP_ID): void {

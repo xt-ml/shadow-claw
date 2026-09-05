@@ -10,6 +10,7 @@ import {
 } from "./setPagesSidebarHidden.js";
 import { showPage } from "./showPage.js";
 import { supportsNavigationApi } from "./supportsNavigationApi.js";
+import { setupAppLifecycle } from "./setupAppLifecycle.js";
 import { syncPageHeaderMainVisibilityOverride } from "./syncPageHeaderMainVisibilityOverride.js";
 
 import { toggleActivityLogVisibility } from "./toggleActivityLogVisibility.js";
@@ -298,4 +299,17 @@ export function bindEventListeners(
   const currentTheme = tStore.resolved;
   updateThemeIcons(shadow, currentTheme);
   updateHostTheme(currentTheme, shadowClaw.classList);
+
+  if (shadowClaw.appLifecycleCleanup) {
+    shadowClaw.appLifecycleCleanup();
+    shadowClaw.appLifecycleCleanup = null;
+  }
+
+  if (shadowClaw.orchestrator) {
+    shadowClaw.appLifecycleCleanup = setupAppLifecycle(
+      win,
+      doc,
+      shadowClaw.orchestrator,
+    );
+  }
 }

@@ -10,6 +10,75 @@
       content="width=device-width, initial-scale=1.0, viewport-fit=cover"
     />
     <meta name="description" content="ShadowClaw - Browser-native AI agent." />
+    <link rel="canonical" href="https://xt-ml.github.io/shadow-claw/" />
+    <meta property="og:title" content="ShadowClaw" />
+    <meta
+      property="og:description"
+      content="Browser-native personal AI assistant with local and remote LLM orchestration, Web Workers, OPFS storage, and agentic tool execution."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://xt-ml.github.io/shadow-claw/" />
+    <meta
+      property="og:image"
+      content="https://xt-ml.github.io/shadow-claw/assets/icons/512.png"
+    />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="ShadowClaw" />
+    <meta
+      name="twitter:description"
+      content="Browser-native personal AI assistant with local and remote LLM orchestration, Web Workers, OPFS storage, and agentic tool execution."
+    />
+    <meta
+      name="twitter:image"
+      content="https://xt-ml.github.io/shadow-claw/assets/icons/512.png"
+    />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "SoftwareApplication",
+            "@id": "https://xt-ml.github.io/shadow-claw/#software",
+            "name": "ShadowClaw",
+            "description": "Browser-native personal AI assistant with local and remote LLM orchestration, Web Workers, OPFS storage, and agentic tool execution.",
+            "url": "https://xt-ml.github.io/shadow-claw/",
+            "applicationCategory": "DeveloperApplication",
+            "operatingSystem": "Web, Browser, Desktop",
+            "offers": {
+              "@type": "Offer",
+              "price": "0",
+              "priceCurrency": "USD"
+            },
+            "author": {
+              "@type": "Organization",
+              "name": "xt-ml",
+              "url": "https://github.com/xt-ml"
+            },
+            "codeRepository": "https://github.com/xt-ml/shadow-claw",
+            "license": "https://github.com/xt-ml/shadow-claw/blob/main/LICENSE"
+          },
+          {
+            "@type": "WebSite",
+            "@id": "https://xt-ml.github.io/shadow-claw/#website",
+            "url": "https://xt-ml.github.io/shadow-claw/",
+            "name": "ShadowClaw",
+            "description": "Official website and live deployment of ShadowClaw browser-native AI assistant.",
+            "publisher": {
+              "@type": "Organization",
+              "name": "xt-ml",
+              "url": "https://github.com/xt-ml"
+            }
+          },
+          {
+            "@type": "Organization",
+            "@id": "https://xt-ml.github.io/shadow-claw/#organization",
+            "name": "xt-ml",
+            "url": "https://github.com/xt-ml",
+            "sameAs": ["https://github.com/xt-ml"]
+          }
+        ]
+      }
+    </script>
     <meta name="theme-color" content="#fff" />
     <meta
       http-equiv="origin-trial"
@@ -334,7 +403,7 @@
             ry="8"
           ></ellipse>
         </svg>
-        <span class="header-title">ShadowClaw</span>
+        <h1 class="header-title">ShadowClaw</h1>
       </a>
       <a
         aria-label="Shadow Claw Project on GitHub"
@@ -354,6 +423,43 @@
           ></path>
         </svg>
       </a>
+      <noscript>
+        <div
+          style="
+            padding: 2rem;
+            max-width: 50rem;
+            margin: 0 auto;
+            line-height: 1.6;
+          "
+        >
+          <h2>Browser-Native Personal AI Assistant</h2>
+          <p>
+            ShadowClaw is an open-source, browser-native AI assistant designed
+            for autonomous orchestration, client-side tool execution, and
+            private local storage via Origin Private File System (OPFS) and
+            IndexedDB.
+          </p>
+          <h3>Agent & Developer Resources</h3>
+          <ul>
+            <li><a href="llms.txt">llms.txt (Agent Context & Guidance)</a></li>
+            <li>
+              <a href=".well-known/mcp.json">MCP Server Card (SEP-2127)</a>
+            </li>
+            <li>
+              <a href=".well-known/ai-catalog.json">AI Catalog Discovery</a>
+            </li>
+            <li>
+              <a href=".well-known/mcp/servers.json">MCP Servers Manifest</a>
+            </li>
+            <li><a href="sitemap.xml">XML Sitemap</a></li>
+            <li>
+              <a href="https://github.com/xt-ml/shadow-claw"
+                >GitHub Repository</a
+              >
+            </li>
+          </ul>
+        </div>
+      </noscript>
     </shadow-claw>
 
     <script type="module" src="index.js"></script>

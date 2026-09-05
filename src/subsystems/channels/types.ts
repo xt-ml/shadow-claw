@@ -26,8 +26,10 @@ export type KnownChannelType =
   | "telegram";
 
 export interface Channel {
+  ensureConnected?(force?: boolean): void;
   onMessage(callback: ChannelMessageCallback): void;
   onTyping?(callback: ChannelTypingCallback): void;
+  running?: boolean;
   send(
     groupId: string,
     text: string,

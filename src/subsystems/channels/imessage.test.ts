@@ -291,4 +291,40 @@ describe("IMessageChannel", () => {
     const mode = await channel.ensureApiMode();
     expect(mode).toBe("beeper-desktop");
   });
+
+  it("ensureConnected aborts hanging poll, resets backoff, and launches fresh poll", async () => {
+    const channel = new IMessageChannel();
+    channel.configure("https://bridge.example", "secret", []);
+
+    let pollCount = 0;
+    jest.spyOn(channel, "requestJson").mockImplementation((async (
+      _path: string,
+      _opts: any,
+      _timeout: number,
+      signal?: AbortSignal,
+    ) => {
+      pollCount++;
+      return new Promise((_resolve, reject) => {
+        signal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      });
+    }) as any);
+
+    channel.start();
+    expect(channel.running).toBe(true);
+    expect(pollCount).toBe(1);
+
+    // Simulate high backoff
+    channel.reconnectDelayMs = 30000;
+    const oldAbort = channel.abortController;
+
+    channel.ensureConnected();
+
+    expect(channel.reconnectDelayMs).toBe(1000);
+    expect(oldAbort?.signal.aborted).toBe(true);
+    expect(pollCount).toBe(2);
+
+    channel.stop();
+  });
 });

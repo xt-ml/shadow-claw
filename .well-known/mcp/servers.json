@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "servers": [
+    {
+      "name": "shadow-claw",
+      "description": "ShadowClaw Browser-Native AI Assistant MCP Server",
+      "endpoint": "http://localhost:8888/mcp",
+      "capabilities": [
+        "tools",
+        "extensions"
+      ],
+      "card": "https://xt-ml.github.io/shadow-claw/.well-known/mcp.json"
+    }
+  ]
+}

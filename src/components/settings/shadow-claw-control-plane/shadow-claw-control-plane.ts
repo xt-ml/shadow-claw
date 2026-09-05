@@ -313,7 +313,7 @@ export class ShadowClawControlPlane extends ShadowClawElement {
 
       const {
         isControlPlaneEnabled,
-        createDefaultControlPlaneClient,
+        ensureControlPlaneConnected,
         shouldConnectControlPlane,
       } = await import("../../../core/utils/initControlPlane.js");
 
@@ -321,8 +321,10 @@ export class ShadowClawControlPlane extends ShadowClawElement {
         (await isControlPlaneEnabled(this.db)) &&
         shouldConnectControlPlane()
       ) {
-        createDefaultControlPlaneClient({
+        await ensureControlPlaneConnected({
           orchestrator: this.orchestrator || undefined,
+          db: this.db,
+          force: true,
           transport,
         });
       }
@@ -375,7 +377,7 @@ export class ShadowClawControlPlane extends ShadowClawElement {
 
       const {
         isControlPlaneEnabled,
-        createDefaultControlPlaneClient,
+        ensureControlPlaneConnected,
         shouldConnectControlPlane,
       } = await import("../../../core/utils/initControlPlane.js");
 
@@ -383,8 +385,10 @@ export class ShadowClawControlPlane extends ShadowClawElement {
         (await isControlPlaneEnabled(this.db)) &&
         shouldConnectControlPlane()
       ) {
-        createDefaultControlPlaneClient({
+        await ensureControlPlaneConnected({
           orchestrator: this.orchestrator || undefined,
+          db: this.db,
+          force: true,
         });
       }
 
@@ -428,15 +432,17 @@ export class ShadowClawControlPlane extends ShadowClawElement {
       }
 
       const {
-        createDefaultControlPlaneClient,
+        ensureControlPlaneConnected,
         stopControlPlaneClient,
         shouldConnectControlPlane,
       } = await import("../../../core/utils/initControlPlane.js");
 
       if (enabled) {
         if (shouldConnectControlPlane()) {
-          createDefaultControlPlaneClient({
+          await ensureControlPlaneConnected({
             orchestrator: this.orchestrator || undefined,
+            db: this.db,
+            force: true,
           });
         }
         showSuccess("Control plane client enabled and connected", 3000);

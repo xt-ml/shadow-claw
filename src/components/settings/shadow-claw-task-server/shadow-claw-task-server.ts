@@ -108,6 +108,12 @@ export class ShadowClawTaskServer extends ShadowClawElement {
 
     try {
       await setTaskServerEnabled(this.orchestrator, this.db, enabled);
+      if (
+        enabled &&
+        typeof this.orchestrator.ensureAllConnections === "function"
+      ) {
+        void this.orchestrator.ensureAllConnections();
+      }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError("Error saving Task Server setting: " + errorMsg, 6000);
@@ -135,6 +141,12 @@ export class ShadowClawTaskServer extends ShadowClawElement {
 
     try {
       await setTaskServerUrl(this.orchestrator, this.db, url || "/schedule");
+      if (
+        this.orchestrator.taskServerEnabled &&
+        typeof this.orchestrator.ensureAllConnections === "function"
+      ) {
+        void this.orchestrator.ensureAllConnections();
+      }
       showSuccess("Task Server URL saved", 3000);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);

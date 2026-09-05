@@ -753,3 +753,50 @@ export function stopControlPlaneClient(): void {
     activeClient = null;
   }
 }
+
+export async function ensureControlPlaneConnected(
+  options: InitControlPlaneOptions & { db?: any; force?: boolean } = {},
+): Promise<ControlPlaneClient | null> {
+  let db = options.db;
+  if (!db) {
+    try {
+      db = await getDb();
+    } catch (_) {}
+  }
+
+  const enabled = await isControlPlaneEnabled(db);
+  if (!enabled) {
+    stopControlPlaneClient();
+    return null;
+  }
+
+  if (!shouldConnectControlPlane()) {
+    return null;
+  }
+
+  // Synchronize configuration from db to localStorage so synchronous lookups remain consistent
+  if (typeof localStorage !== "undefined" && db) {
+    try {
+      const { getConfig } = await import("../../db/getConfig.js");
+      const [url, transport] = await Promise.all([
+        getConfig(db, CONFIG_KEYS.CONTROL_PLANE_URL),
+        getConfig(db, CONFIG_KEYS.CONTROL_PLANE_TRANSPORT),
+      ]);
+      if (url) {
+        localStorage.setItem(CONFIG_KEYS.CONTROL_PLANE_URL, url);
+      }
+      if (transport) {
+        localStorage.setItem(CONFIG_KEYS.CONTROL_PLANE_TRANSPORT, transport);
+      }
+      localStorage.setItem(CONFIG_KEYS.CONTROL_PLANE_ENABLED, "true");
+    } catch (_) {}
+  }
+
+  const client = getActiveControlPlaneClient();
+  if (client) {
+    client.ensureConnected(options.force);
+    return client;
+  }
+
+  return createDefaultControlPlaneClient(options);
+}

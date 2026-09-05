@@ -4,6 +4,7 @@ import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { registerMcpRoutes } from "./mcp.js";
 import { McpServer } from "../mcp/mcp-server.js";
+import { getPackageVersion } from "../utils/packageVersion.js";
 
 function makeHttpRequest(options: {
   method?: string;
@@ -219,6 +220,12 @@ describe("MCP Streamable HTTP Route (POST /mcp)", () => {
     });
 
     expect(res.status).toBe(401);
+    expect(res.headers["www-authenticate"]).toContain(
+      'Bearer resource_metadata="',
+    );
+    expect(res.headers["www-authenticate"]).toContain(
+      "/.well-known/oauth-protected-resource",
+    );
   });
 
   it("authenticates via Bearer Authorization header and query parameter", async () => {
@@ -300,5 +307,90 @@ describe("MCP Streamable HTTP Route (POST /mcp)", () => {
       },
     });
     expect(resLocal.status).toBe(200);
+  });
+
+  it("handles Streamable HTTP requests at POST /.well-known/mcp", async () => {
+    const res = await makeHttpRequest({
+      port,
+      path: "/.well-known/mcp",
+      method: "POST",
+      headers: {
+        "x-control-token": testToken,
+        "mcp-protocol-version": "2026-07-28",
+      },
+      body: {
+        jsonrpc: "2.0",
+        id: 101,
+        method: "server/discover",
+      },
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.data.result.serverInfo.name).toBe("shadow-claw-http-test");
+  });
+
+  it("serves MCP Server Card discovery at GET /.well-known/mcp, /.well-known/mcp.json, and /mcp/server-card", async () => {
+    for (const p of [
+      "/.well-known/mcp",
+      "/.well-known/mcp.json",
+      "/mcp/server-card",
+    ]) {
+      const res = await makeHttpRequest({
+        port,
+        path: p,
+        method: "GET",
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.headers["content-type"]).toContain("application/json");
+      expect(res.data.name).toBe("shadow-claw");
+      expect(res.data.version).toBe(getPackageVersion());
+      expect(res.data.title).toBe("ShadowClaw MCP Server");
+      expect(Array.isArray(res.data.remotes)).toBe(true);
+      expect(res.data.remotes[0].type).toBe("streamable-http");
+      expect(res.data.remotes[0].supportedProtocolVersions).toContain(
+        "2026-07-28",
+      );
+    }
+  });
+
+  it("serves AI Catalog discovery at GET /.well-known/ai-catalog.json", async () => {
+    const res = await makeHttpRequest({
+      port,
+      path: "/.well-known/ai-catalog.json",
+      method: "GET",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/json");
+    expect(res.data.name).toBe("ShadowClaw AI Catalog");
+    expect(Array.isArray(res.data.servers)).toBe(true);
+  });
+
+  it("serves MCP Servers manifest at GET /.well-known/mcp/servers.json", async () => {
+    const res = await makeHttpRequest({
+      port,
+      path: "/.well-known/mcp/servers.json",
+      method: "GET",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/json");
+    expect(res.data.version).toBe("1.0");
+    expect(res.data.servers[0].name).toBe("shadow-claw");
+  });
+
+  it("serves Protected Resource Metadata at GET /.well-known/oauth-protected-resource", async () => {
+    const res = await makeHttpRequest({
+      port,
+      path: "/.well-known/oauth-protected-resource",
+      method: "GET",
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.headers["content-type"]).toContain("application/json");
+    expect(res.data.resource).toContain("/mcp");
+    expect(Array.isArray(res.data.authorization_servers)).toBe(true);
+    expect(res.data.scopes_supported).toBeUndefined();
   });
 });

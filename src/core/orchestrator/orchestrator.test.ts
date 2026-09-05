@@ -1894,4 +1894,53 @@ describe("Orchestrator", () => {
       }
     });
   });
+
+  describe("ensureAllConnections", () => {
+    it("coordinates Control Plane, channels, task server, and scheduler", async () => {
+      const o = new Orchestrator();
+      const fakeDb = {} as any;
+      o.db = fakeDb;
+      o.taskServerEnabled = true;
+
+      const mockScheduler = {
+        start: jest.fn(),
+        tick: jest.fn().mockResolvedValue(undefined as never),
+      };
+      o.scheduler = mockScheduler as any;
+
+      const ensureControlPlaneSpy = jest
+        .spyOn(o, "ensureControlPlaneConnected")
+        .mockResolvedValue(null as any);
+
+      const peerjsEnsureSpy = jest.fn();
+      (o.peerjs as any).ensureConnected = peerjsEnsureSpy;
+      o.peerjs.running = true;
+      o.channelEnabledByType.peerjs = true;
+      o.peerjsMyPeerId = "my-peer";
+
+      const replaySpy = jest
+        .spyOn(orchestratorStore, "replayTaskSyncOutbox")
+        .mockResolvedValue();
+      const loadTasksSpy = jest
+        .spyOn(orchestratorStore, "loadTasks")
+        .mockResolvedValue();
+
+      await o.ensureAllConnections({ force: true });
+
+      expect(ensureControlPlaneSpy).toHaveBeenCalledWith({
+        orchestrator: o,
+        db: fakeDb,
+        force: true,
+      });
+      expect(peerjsEnsureSpy).toHaveBeenCalledWith(true);
+      expect(replaySpy).toHaveBeenCalledWith(fakeDb);
+      expect(loadTasksSpy).toHaveBeenCalledWith(fakeDb);
+      expect(mockScheduler.start).toHaveBeenCalled();
+      expect(mockScheduler.tick).toHaveBeenCalled();
+
+      ensureControlPlaneSpy.mockRestore();
+      replaySpy.mockRestore();
+      loadTasksSpy.mockRestore();
+    });
+  });
 });

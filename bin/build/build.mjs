@@ -149,19 +149,15 @@ export async function runBuild(options = {}) {
         const { generateSkillsIndex } =
           await import("../commands/skills-index.mjs");
         await generateSkillsIndex(projectRoot);
-        if (await pathExists(".well-known/agent-skills/index.json")) {
-          await cp(".well-known", "dist/public/.well-known", {
-            recursive: true,
-            force: true,
-          });
-        }
       } catch (err) {
         console.warn(
           "Notice: Failed to auto-generate agent-skills index:",
           err,
         );
       }
-    } else if (await pathExists(".well-known")) {
+    }
+
+    if (await pathExists(".well-known")) {
       try {
         await cp(".well-known", "dist/public/.well-known", {
           recursive: true,
@@ -203,6 +199,26 @@ export async function runBuild(options = {}) {
           ),
           "utf8",
         );
+
+        for (const relPath of [
+          ".well-known/mcp.json",
+          ".well-known/mcp/server-card.json",
+        ]) {
+          const cardPath = join("dist/public", relPath);
+          if (await pathExists(cardPath)) {
+            try {
+              const card = JSON.parse(await readFile(cardPath, "utf8"));
+              if (card.version !== pkgJson.version) {
+                card.version = pkgJson.version;
+                await writeFile(
+                  cardPath,
+                  JSON.stringify(card, null, 2) + "\n",
+                  "utf8",
+                );
+              }
+            } catch {}
+          }
+        }
       }
     } catch {}
 
@@ -405,7 +421,23 @@ export async function runBuild(options = {}) {
     }
   }
 
-  // 6b. Generate / sync Agent Skills Discovery index (.well-known/agent-skills/index.json)
+  // 6b. Copy .well-known discovery files & generate/sync Agent Skills index
+  const toolchainWellKnown = join(toolchainRoot, ".well-known");
+  if (await pathExists(toolchainWellKnown)) {
+    await cp(toolchainWellKnown, join(distPublicDir, ".well-known"), {
+      recursive: true,
+      force: true,
+    });
+  }
+
+  const contentWellKnown = join(contentRoot, ".well-known");
+  if (contentRoot !== toolchainRoot && (await pathExists(contentWellKnown))) {
+    await cp(contentWellKnown, join(distPublicDir, ".well-known"), {
+      recursive: true,
+      force: true,
+    });
+  }
+
   const distSkillsDir = join(distPublicDir, ".agents/skills");
   if (await pathExists(distSkillsDir)) {
     try {
@@ -426,29 +458,6 @@ export async function runBuild(options = {}) {
       }
     } catch (err) {
       console.warn("Notice: Failed to auto-generate agent-skills index:", err);
-      const contentWellKnown = join(contentRoot, ".well-known");
-      if (await pathExists(contentWellKnown)) {
-        await cp(contentWellKnown, join(distPublicDir, ".well-known"), {
-          recursive: true,
-          force: true,
-        });
-      }
-    }
-  } else {
-    const contentWellKnown = join(contentRoot, ".well-known");
-    if (await pathExists(contentWellKnown)) {
-      await cp(contentWellKnown, join(distPublicDir, ".well-known"), {
-        recursive: true,
-        force: true,
-      });
-    } else {
-      const toolchainWellKnown = join(toolchainRoot, ".well-known");
-      if (await pathExists(toolchainWellKnown)) {
-        await cp(toolchainWellKnown, join(distPublicDir, ".well-known"), {
-          recursive: true,
-          force: true,
-        });
-      }
     }
   }
 
@@ -509,6 +518,26 @@ export async function runBuild(options = {}) {
         /<meta\s+name="version"[^>]*>/,
         `<meta name="version" content="${pkgVersion}" />`,
       );
+
+      for (const relPath of [
+        ".well-known/mcp.json",
+        ".well-known/mcp/server-card.json",
+      ]) {
+        const cardPath = join(distPublicDir, relPath);
+        if (await pathExists(cardPath)) {
+          try {
+            const card = JSON.parse(await readFile(cardPath, "utf8"));
+            if (card.version !== pkgVersion) {
+              card.version = pkgVersion;
+              await writeFile(
+                cardPath,
+                JSON.stringify(card, null, 2) + "\n",
+                "utf8",
+              );
+            }
+          } catch {}
+        }
+      }
     }
     await writeFile(indexPath, idxHtml, "utf8");
   } catch {}

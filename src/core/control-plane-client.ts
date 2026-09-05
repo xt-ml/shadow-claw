@@ -129,6 +129,36 @@ export class ControlPlaneClient {
     return this._state;
   }
 
+  public ensureConnected(force: boolean = false): void {
+    this._isDestroyed = false;
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    this._currentReconnectDelay = this._reconnectDelayMs;
+
+    if (this._transport === "websocket") {
+      const isWsOpen =
+        this._ws &&
+        (this._ws.readyState === 1 ||
+          this._ws.readyState === (this._WebSocketClass as any)?.OPEN);
+      if (force || !isWsOpen || this._state !== "connected") {
+        this._cleanupConnection();
+        this.connect();
+      }
+    } else {
+      // SSE transport
+      const isEsOpen =
+        this._es &&
+        (this._es.readyState === 1 ||
+          this._es.readyState === (this._EventSourceClass as any)?.OPEN);
+      if (force || !isEsOpen || this._state !== "connected") {
+        this._cleanupConnection();
+        this.connect();
+      }
+    }
+  }
+
   public connect(): void {
     if (
       this._isDestroyed ||

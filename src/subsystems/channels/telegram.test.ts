@@ -508,4 +508,42 @@ describe("TelegramChannel", () => {
       ),
     ).toBe(true);
   });
+
+  it("ensureConnected aborts hanging poll, resets backoff, and launches fresh poll", async () => {
+    const channel = new TelegramChannel();
+    channel.configure("test-token", ["123"]);
+
+    let fetchCount = 0;
+    jest.spyOn(globalThis, "fetch").mockImplementation((async (
+      _url: any,
+      opts: any,
+    ) => {
+      fetchCount++;
+      // Return a promise that hangs until aborted
+      return new Promise((_resolve, reject) => {
+        opts?.signal?.addEventListener("abort", () => {
+          reject(new DOMException("Aborted", "AbortError"));
+        });
+      });
+    }) as any);
+
+    channel.start();
+    expect(channel.running).toBe(true);
+    expect(fetchCount).toBe(1);
+
+    // Simulate high backoff delay
+    channel.pollRetryDelayMs = 30_000;
+
+    const oldSessionId = channel.pollSessionId;
+    const oldAbort = channel.abortController;
+
+    channel.ensureConnected();
+
+    expect(channel.pollRetryDelayMs).toBe(1_000);
+    expect(oldAbort?.signal.aborted).toBe(true);
+    expect(channel.pollSessionId).toBe(oldSessionId + 1);
+    expect(fetchCount).toBe(2);
+
+    channel.stop();
+  });
 });

@@ -27,6 +27,8 @@ describe("bindEventListeners", () => {
   let mockUpdateHeaderMainToggle: jest.Mock<any>;
   let mockUpdateHostTheme: jest.Mock<any>;
   let mockUpdateThemeIcons: jest.Mock<any>;
+  let mockSetupAppLifecycle: jest.Mock<any>;
+  let mockLifecycleCleanup: jest.Mock<any>;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -53,6 +55,11 @@ describe("bindEventListeners", () => {
     }));
     jest.unstable_mockModule("./supportsNavigationApi.js", () => ({
       supportsNavigationApi: jest.fn(),
+    }));
+    mockLifecycleCleanup = jest.fn();
+    mockSetupAppLifecycle = jest.fn(() => mockLifecycleCleanup);
+    jest.unstable_mockModule("./setupAppLifecycle.js", () => ({
+      setupAppLifecycle: mockSetupAppLifecycle,
     }));
     jest.unstable_mockModule(
       "./syncPageHeaderMainVisibilityOverride.js",
@@ -937,6 +944,56 @@ describe("bindEventListeners", () => {
       expect(mockUpdateHostTheme).toHaveBeenCalledWith(
         Themes.Dark,
         shadowClaw.classList,
+      );
+    });
+  });
+
+  describe("app lifecycle", () => {
+    it("should set up app lifecycle listener when orchestrator is present", () => {
+      shadowClaw.orchestrator = { ensureAllConnections: jest.fn() };
+
+      bindEventListeners(
+        win,
+        doc,
+        shadow,
+        shadowClaw,
+        db,
+        oStore,
+        fStore,
+        tStore,
+        url,
+      );
+
+      expect(mockSetupAppLifecycle).toHaveBeenCalledWith(
+        win,
+        doc,
+        shadowClaw.orchestrator,
+      );
+      expect(shadowClaw.appLifecycleCleanup).toBe(mockLifecycleCleanup);
+    });
+
+    it("should clean up previous app lifecycle listener before setting up new one", () => {
+      const prevCleanup = jest.fn();
+      shadowClaw.appLifecycleCleanup = prevCleanup;
+      shadowClaw.orchestrator = { ensureAllConnections: jest.fn() };
+
+      bindEventListeners(
+        win,
+        doc,
+        shadow,
+        shadowClaw,
+        db,
+        oStore,
+        fStore,
+        tStore,
+        url,
+      );
+
+      expect(prevCleanup).toHaveBeenCalled();
+      expect(mockSetupAppLifecycle).toHaveBeenCalledWith(
+        win,
+        doc,
+        shadowClaw.orchestrator,
       );
     });
   });

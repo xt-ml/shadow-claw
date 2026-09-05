@@ -21,11 +21,15 @@ jest.unstable_mockModule(
   }),
 );
 
+const mockEnsureAllConnections = jest
+  .fn()
+  .mockResolvedValue(undefined as never);
 jest.unstable_mockModule("../../../stores/orchestrator.js", () => ({
   orchestratorStore: {
     orchestrator: {
       taskServerUrl: "/test-schedule",
       taskServerEnabled: true,
+      ensureAllConnections: mockEnsureAllConnections,
     },
     ready: true,
   },
@@ -81,6 +85,7 @@ describe("shadow-claw-task-server", () => {
       "https://new-server.com",
     );
     expect(showSuccess).toHaveBeenCalled();
+    expect(mockEnsureAllConnections).toHaveBeenCalled();
   });
 
   it("should save task server enabled toggle", async () => {
@@ -95,5 +100,14 @@ describe("shadow-claw-task-server", () => {
       expect.anything(),
       false,
     );
+
+    mockEnsureAllConnections.mockClear();
+    await el.saveTaskServerEnabled(true);
+    expect(mockSetTaskServerEnabled).toHaveBeenCalledWith(
+      orchestratorStore.orchestrator,
+      expect.anything(),
+      true,
+    );
+    expect(mockEnsureAllConnections).toHaveBeenCalled();
   });
 });

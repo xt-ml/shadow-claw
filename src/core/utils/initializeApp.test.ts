@@ -108,9 +108,35 @@ describe("initializeApp", () => {
     } as unknown as Document;
 
     const { initializeApp } = await import("./initializeApp.js");
-
     const result = await initializeApp(doc, true);
     expect(result).toBeUndefined();
     expect(doc.querySelector).not.toHaveBeenCalled();
+  });
+
+  it("calls ensureAllConnections({ force: false }) on uiElement.orchestrator after whenReady", async () => {
+    const mockEnsureAllConnections = jest
+      .fn()
+      .mockResolvedValue(undefined as never);
+    const doc = {
+      querySelector: jest.fn(() => ({
+        orchestrator: {
+          ensureAllConnections: mockEnsureAllConnections,
+        },
+      })),
+      body: { appendChild: jest.fn((el) => el) },
+      createElement: jest.fn(() => ({
+        orchestrator: {
+          ensureAllConnections: mockEnsureAllConnections,
+        },
+      })),
+    } as unknown as Document;
+
+    const { initializeApp } = await import("./initializeApp.js");
+
+    const promise = initializeApp(doc, false);
+    resolveReady();
+    await promise;
+
+    expect(mockEnsureAllConnections).toHaveBeenCalledWith({ force: false });
   });
 });

@@ -191,6 +191,7 @@ export function applyChannelRunningState(
     | "peerjsMyPeerId"
   >,
   channelType: ChannelType,
+  force: boolean = false,
 ): void {
   const channel = getChannelByType(state, channelType);
   if (!channel) {
@@ -198,7 +199,11 @@ export function applyChannelRunningState(
   }
 
   if (shouldRunChannel(state, channelType)) {
-    channel.start();
+    if (!channel.running) {
+      channel.start();
+    } else if (typeof (channel as any).ensureConnected === "function") {
+      (channel as any).ensureConnected(force);
+    }
 
     return;
   }
@@ -218,11 +223,12 @@ export function applyAllChannelRunningStates(
     | "imessageServerUrl"
     | "peerjsMyPeerId"
   >,
+  force: boolean = false,
 ): void {
-  applyChannelRunningState(state, "browser");
-  applyChannelRunningState(state, "telegram");
-  applyChannelRunningState(state, "imessage");
-  applyChannelRunningState(state, "peerjs");
+  applyChannelRunningState(state, "browser", force);
+  applyChannelRunningState(state, "telegram", force);
+  applyChannelRunningState(state, "imessage", force);
+  applyChannelRunningState(state, "peerjs", force);
 }
 
 export function clearPeerJsTypingState(groupId: string): void {

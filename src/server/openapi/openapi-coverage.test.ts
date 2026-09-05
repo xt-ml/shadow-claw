@@ -6,6 +6,7 @@ import { createApp } from "../app.js";
 import { createControlPlane } from "../control-plane.js";
 import { registerMcpRoutes } from "../routes/mcp.js";
 import { openApiSpec } from "./openapi-spec.js";
+import { getPackageVersion } from "../utils/packageVersion.js";
 import type { ServerConfig } from "../config.js";
 
 const REST_METHODS = new Set(["get", "post", "put", "delete", "patch"]);
@@ -105,7 +106,7 @@ describe("OpenAPI Route Coverage & Drift Guardrail", () => {
   it("should have valid OpenAPI 3.1 root metadata", () => {
     expect(openApiSpec.openapi).toBe("3.1.0");
     expect(openApiSpec.info.title).toBe("ShadowClaw API");
-    expect(openApiSpec.info.version).toBe("1.27.1");
+    expect(openApiSpec.info.version).toBe(getPackageVersion());
     expect(openApiSpec.paths).toBeDefined();
   });
 

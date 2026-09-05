@@ -134,6 +134,17 @@ export class IMessageChannel implements Channel {
     void this.poll();
   }
 
+  ensureConnected(): void {
+    if (!this.isConfigured() || !this.running) {
+      return;
+    }
+
+    this.reconnectDelayMs = 1000;
+    this.abortController?.abort();
+    this.abortController = new AbortController();
+    void this.poll();
+  }
+
   stop(): void {
     this.running = false;
     this.abortController?.abort();

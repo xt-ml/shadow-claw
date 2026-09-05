@@ -54,8 +54,13 @@ class MockClientWebSocket {
 
 // Mock EventSource implementation for SSE client testing
 class MockEventSource {
+  static readonly CONNECTING = 0;
+  static readonly OPEN = 1;
+  static readonly CLOSED = 2;
+
   static instances: MockEventSource[] = [];
   url: string;
+  readyState: number = 0; // CONNECTING
   onopen: (() => void) | null = null;
   onmessage: ((event: { data: string }) => void) | null = null;
   onerror: ((err: any) => void) | null = null;
@@ -64,9 +69,11 @@ class MockEventSource {
 
   constructor(url: string) {
     this.url = url;
+    this.readyState = MockEventSource.CONNECTING;
     MockEventSource.instances.push(this);
     setTimeout(() => {
       if (!this.closed) {
+        this.readyState = MockEventSource.OPEN;
         this.onopen?.();
       }
     }, 10);
@@ -80,6 +87,7 @@ class MockEventSource {
 
   close() {
     this.closed = true;
+    this.readyState = MockEventSource.CLOSED;
   }
 
   // Helper for test to simulate server event
@@ -222,6 +230,42 @@ describe("control-plane-client", () => {
       expect(resultPost.body.payload.commandId).toBe("cmd-id-123");
       expect(resultPost.body.payload.success).toBe(true);
       expect(resultPost.body.payload.data).toEqual({ echo: "hello sse" });
+
+      client.disconnect();
+    });
+
+    it("ensureConnected reconnects and resets backoff for SSE when forced or disconnected", async () => {
+      const client = new ControlPlaneClient({
+        clientId: "sse-client-reconnect",
+        reconnectDelayMs: 500,
+        maxReconnectDelayMs: 30000,
+        EventSourceClass: MockEventSource as any,
+        fetchFn: mockFetch as any,
+      });
+
+      client.connect();
+      expect(MockEventSource.instances).toHaveLength(1);
+      jest.advanceTimersByTime(15);
+      expect(client.getState()).toBe("connected");
+
+      // Calling ensureConnected(false) when healthy is a no-op
+      client.ensureConnected(false);
+      expect(MockEventSource.instances).toHaveLength(1);
+
+      // Simulate disconnection and exponential backoff
+      const es1 = MockEventSource.instances[0];
+      es1.close();
+      es1.onerror?.(new Error("Network drop"));
+      expect(client.getState()).toBe("disconnected");
+
+      // Advance by small time so reconnect delay increases
+      jest.advanceTimersByTime(200);
+
+      // Mobile sleep wake-up: ensureConnected(true) immediately reconnects without waiting for backoff timer
+      client.ensureConnected(true);
+      expect(MockEventSource.instances).toHaveLength(2);
+      jest.advanceTimersByTime(15);
+      expect(client.getState()).toBe("connected");
 
       client.disconnect();
     });
@@ -408,6 +452,43 @@ describe("control-plane-client", () => {
       expect(client.getState()).toBe("connected");
       const ws2 = MockClientWebSocket.instances[1];
       expect(ws2.sentMessages).toHaveLength(1); // Re-registers on connect
+
+      client.disconnect();
+    });
+
+    it("ensureConnected reconnects and resets backoff for WebSocket when forced or disconnected", async () => {
+      const client = new ControlPlaneClient({
+        transport: "websocket",
+        url: "ws://127.0.0.1:8888/ws/control",
+        clientId: "client-ws-ensure",
+        reconnectDelayMs: 500,
+        WebSocketClass: MockClientWebSocket as any,
+      });
+
+      client.connect();
+      expect(MockClientWebSocket.instances).toHaveLength(1);
+      jest.advanceTimersByTime(15);
+      expect(client.getState()).toBe("connected");
+
+      // Non-forced ensureConnected is a no-op when connected
+      client.ensureConnected(false);
+      expect(MockClientWebSocket.instances).toHaveLength(1);
+
+      // Force reconnect (e.g. mobile sleep / app switch wake-up)
+      client.ensureConnected(true);
+      expect(MockClientWebSocket.instances).toHaveLength(2);
+      jest.advanceTimersByTime(15);
+      expect(client.getState()).toBe("connected");
+
+      // Also verify when disconnected and timer is active
+      const ws2 = MockClientWebSocket.instances[1];
+      ws2.close();
+      expect(client.getState()).toBe("disconnected");
+
+      client.ensureConnected(false);
+      expect(MockClientWebSocket.instances).toHaveLength(3);
+      jest.advanceTimersByTime(15);
+      expect(client.getState()).toBe("connected");
 
       client.disconnect();
     });

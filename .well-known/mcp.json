@@ -1,0 +1,52 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schemas/server-card/v1.json",
+  "name": "shadow-claw",
+  "version": "1.27.1",
+  "description": "Browser-native personal AI assistant with local and remote LLM orchestration, Web Workers, OPFS storage, and agentic tool execution.",
+  "title": "ShadowClaw MCP Server",
+  "websiteUrl": "https://xt-ml.github.io/shadow-claw/",
+  "repository": {
+    "url": "https://github.com/xt-ml/shadow-claw",
+    "source": "github"
+  },
+  "icons": [
+    {
+      "src": "https://xt-ml.github.io/shadow-claw/assets/icons/favicon.svg",
+      "mimeType": "image/svg+xml",
+      "sizes": [
+        "any"
+      ]
+    },
+    {
+      "src": "https://xt-ml.github.io/shadow-claw/assets/icons/512.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "http://localhost:8888/mcp",
+      "supportedProtocolVersions": [
+        "2026-07-28",
+        "2025-11-25",
+        "2024-11-05"
+      ],
+      "headers": [
+        {
+          "name": "MCP-Protocol-Version",
+          "default": "2026-07-28",
+          "isRequired": false
+        },
+        {
+          "name": "x-control-token",
+          "description": "Control plane token for authorized client access",
+          "isSecret": true,
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}

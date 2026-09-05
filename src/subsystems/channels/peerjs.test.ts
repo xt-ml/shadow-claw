@@ -38,11 +38,19 @@ class MockDataConnection {
 
 class MockPeer {
   destroyed = false;
+  disconnected = false;
+  open = true;
   id: string;
+  reconnect = jest.fn(() => {
+    this.disconnected = false;
+    this.open = true;
+    this.emit("open", this.id);
+  });
   private handlers: Map<string, EventHandler[]> = new Map();
 
   constructor(id: string, _opts?: unknown) {
     this.id = id;
+    this.open = true;
     setTimeout(() => this.emit("open", id), 0);
   }
 
@@ -55,6 +63,7 @@ class MockPeer {
 
   destroy() {
     this.destroyed = true;
+    this.open = false;
     this.emit("disconnected");
   }
 
@@ -828,6 +837,53 @@ describe("PeerJsChannel", () => {
       ch.trustedPeerIds = new Set(["cli"]);
       expect((ch as any)._isTrustedPeer("cli-12345")).toBe(true);
       expect((ch as any)._isTrustedPeer("other-12345")).toBe(false);
+    });
+
+    it("ensureConnected reconnects disconnected peer and resets backoff", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-test-peer", []);
+      ch.start();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const peer = (ch as any).peer as MockPeer;
+      expect(peer).toBeDefined();
+
+      // Simulate disconnect
+      peer.disconnected = true;
+      peer.open = false;
+      (ch as any)._reconnectAttempts = 3;
+      (ch as any)._reconnectTimer = setTimeout(() => {}, 8000);
+
+      ch.ensureConnected(false);
+
+      expect((ch as any)._reconnectTimer).toBeNull();
+      expect((ch as any)._reconnectAttempts).toBe(0);
+      expect(peer.reconnect).toHaveBeenCalled();
+
+      ch.stop();
+    });
+
+    it("ensureConnected re-initializes a destroyed peer instance", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-test-peer-2", []);
+      ch.start();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const initialPeer = (ch as any).peer as MockPeer;
+      expect(initialPeer).toBeDefined();
+
+      // Destroy peer instance
+      initialPeer.destroy();
+      expect(initialPeer.destroyed).toBe(true);
+
+      ch.ensureConnected(true);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      const newPeer = (ch as any).peer as MockPeer;
+      expect(newPeer).not.toBe(initialPeer);
+      expect(newPeer.destroyed).toBe(false);
+
+      ch.stop();
     });
   });
 });

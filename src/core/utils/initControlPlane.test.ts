@@ -3,6 +3,7 @@ import {
   shouldConnectControlPlane,
   detectCapabilities,
   createDefaultControlPlaneClient,
+  ensureControlPlaneConnected,
   executeClientControlCommand,
   getControlPlaneServerUrl,
   getActiveControlPlaneClient,
@@ -887,6 +888,65 @@ describe("initControlPlane", () => {
 
       stopControlPlaneClient();
       expect(getActiveControlPlaneClient()).toBeNull();
+    });
+  });
+
+  describe("ensureControlPlaneConnected", () => {
+    afterEach(() => {
+      stopControlPlaneClient();
+      localStorage.removeItem("control_plane_enabled");
+      localStorage.removeItem("control_plane_url");
+      localStorage.removeItem("control_plane_transport");
+    });
+
+    it("returns null when control plane is disabled", async () => {
+      localStorage.setItem("control_plane_enabled", "false");
+      const client = await ensureControlPlaneConnected();
+      expect(client).toBeNull();
+      expect(getActiveControlPlaneClient()).toBeNull();
+    });
+
+    it("syncs config from db to localStorage and connects when enabled", async () => {
+      const mockDb = {
+        transaction: () => ({
+          objectStore: () => ({
+            get: () => ({
+              onsuccess: null,
+              onerror: null,
+            }),
+          }),
+        }),
+      } as any;
+
+      // Mock getConfig
+      jest.unstable_mockModule("../../db/getConfig.js", () => ({
+        getConfig: jest.fn(async (_db: any, key: string) => {
+          if (key === "control_plane_enabled") return "true";
+          if (key === "control_plane_url") return "http://192.168.1.50:8888";
+          if (key === "control_plane_transport") return "websocket";
+          return undefined;
+        }),
+      }));
+
+      localStorage.removeItem("control_plane_enabled");
+      localStorage.removeItem("control_plane_url");
+
+      const client = await ensureControlPlaneConnected({ db: mockDb });
+      expect(client).not.toBeNull();
+      expect(getActiveControlPlaneClient()).toBe(client);
+      expect(localStorage.getItem("control_plane_enabled")).toBe("true");
+      expect(localStorage.getItem("control_plane_url")).toBe(
+        "http://192.168.1.50:8888",
+      );
+
+      // Subsequent call reuses active client and calls ensureConnected
+      const ensureConnectedSpy = jest.spyOn(client!, "ensureConnected");
+      const client2 = await ensureControlPlaneConnected({
+        db: mockDb,
+        force: true,
+      });
+      expect(client2).toBe(client);
+      expect(ensureConnectedSpy).toHaveBeenCalledWith(true);
     });
   });
 });

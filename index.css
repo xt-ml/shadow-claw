@@ -262,7 +262,9 @@ shadow-claw:not(:defined) {
   align-items: center;
   display: none;
   font-size: var(--shadow-claw-header-title-font-size, 1.5rem);
-  margin-left: 0.5rem;
+  font-weight: 700;
+  line-height: 1;
+  margin: 0 0 0 0.5rem;
 }
 
 @media (min-width: 30rem) {

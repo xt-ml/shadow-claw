@@ -5,6 +5,7 @@ import {
   MCP_PROTOCOL_VERSION_2026_07_28,
   type McpTool,
 } from "./types.js";
+import { getPackageVersion } from "../utils/packageVersion.js";
 
 describe("McpServer", () => {
   function createServer(tools: McpTool[] = []) {
@@ -17,9 +18,9 @@ describe("McpServer", () => {
   }
 
   describe("server/discover", () => {
-    it("defaults version to package.json version 1.27.1 when no version is provided", () => {
+    it("defaults version to package.json version when no version is provided", () => {
       const server = new McpServer();
-      expect(server.serverInfo.version).toBe("1.27.1");
+      expect(server.serverInfo.version).toBe(getPackageVersion());
     });
 
     it("returns discovery response with 2026-07-28 and capabilities", async () => {

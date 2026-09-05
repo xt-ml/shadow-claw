@@ -1,0 +1,11 @@
+{
+  "$schema": "https://agent-card.github.io/schemas/ai-catalog/v1.json",
+  "version": "1.0",
+  "name": "ShadowClaw AI Catalog",
+  "servers": [
+    {
+      "name": "shadow-claw",
+      "card": "https://xt-ml.github.io/shadow-claw/.well-known/mcp.json"
+    }
+  ]
+}

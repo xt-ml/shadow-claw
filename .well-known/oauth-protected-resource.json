@@ -1,0 +1,10 @@
+{
+  "resource": "http://localhost:8888/mcp",
+  "authorization_servers": [
+    "http://localhost:8888"
+  ],
+  "bearer_methods_supported": [
+    "header"
+  ],
+  "resource_documentation": "https://xt-ml.github.io/shadow-claw/docs/subsystems/mcp-server.md"
+}

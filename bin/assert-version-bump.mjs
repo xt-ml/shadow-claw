@@ -49,15 +49,21 @@ export async function assertVersionBump({
   pkgName,
   publishedVersion,
   silent = false,
+  wellKnownMcpVersion,
+  wellKnownServerCardVersion,
 }) {
   if (!silent) {
     console.log(`Checking version bump for package "${pkgName}"...`);
-    console.log(`- Local package.json version     : ${localPkgVersion}`);
+    console.log(
+      `- Local package.json version             : ${localPkgVersion}`,
+    );
   }
 
   if (localLockVersion) {
     if (!silent) {
-      console.log(`- Local package-lock.json version: ${localLockVersion}`);
+      console.log(
+        `- Local package-lock.json version        : ${localLockVersion}`,
+      );
     }
     if (localPkgVersion !== localLockVersion) {
       throw new Error(
@@ -66,9 +72,40 @@ export async function assertVersionBump({
     }
   }
 
+  if (wellKnownMcpVersion !== undefined && wellKnownMcpVersion !== null) {
+    if (!silent) {
+      console.log(
+        `- Local .well-known/mcp.json version     : ${wellKnownMcpVersion}`,
+      );
+    }
+    if (localPkgVersion !== wellKnownMcpVersion) {
+      throw new Error(
+        `Version mismatch: package.json (${localPkgVersion}) does not match .well-known/mcp.json (${wellKnownMcpVersion})!`,
+      );
+    }
+  }
+
+  if (
+    wellKnownServerCardVersion !== undefined &&
+    wellKnownServerCardVersion !== null
+  ) {
+    if (!silent) {
+      console.log(
+        `- Local .well-known/mcp/server-card version: ${wellKnownServerCardVersion}`,
+      );
+    }
+    if (localPkgVersion !== wellKnownServerCardVersion) {
+      throw new Error(
+        `Version mismatch: package.json (${localPkgVersion}) does not match .well-known/mcp/server-card.json (${wellKnownServerCardVersion})!`,
+      );
+    }
+  }
+
   if (publishedVersion) {
     if (!silent) {
-      console.log(`- Published npm registry version : ${publishedVersion}`);
+      console.log(
+        `- Published npm registry version         : ${publishedVersion}`,
+      );
     }
     const cmp = compareSemver(localPkgVersion, publishedVersion);
     if (cmp <= 0) {
@@ -97,6 +134,25 @@ async function main() {
   const pkgName = pkg.name;
   const localPkgVersion = pkg.version;
   const localLockVersion = lock?.version;
+
+  let wellKnownMcpVersion = null;
+  try {
+    const mcpJson = JSON.parse(
+      await readFile(path.join(rootDir, ".well-known/mcp.json"), "utf8"),
+    );
+    wellKnownMcpVersion = mcpJson?.version || null;
+  } catch {}
+
+  let wellKnownServerCardVersion = null;
+  try {
+    const serverCard = JSON.parse(
+      await readFile(
+        path.join(rootDir, ".well-known/mcp/server-card.json"),
+        "utf8",
+      ),
+    );
+    wellKnownServerCardVersion = serverCard?.version || null;
+  } catch {}
 
   let publishedVersion = null;
   try {
@@ -129,6 +185,8 @@ async function main() {
     localLockVersion,
     pkgName,
     publishedVersion,
+    wellKnownMcpVersion,
+    wellKnownServerCardVersion,
   });
 }
 

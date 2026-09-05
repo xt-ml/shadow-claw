@@ -35,21 +35,14 @@ export async function initializeApp(
 
     await orchestratorStore.whenReady;
 
-    if (typeof window !== "undefined") {
+    if (
+      typeof window !== "undefined" &&
+      typeof uiElement.orchestrator?.ensureAllConnections === "function"
+    ) {
       try {
-        const {
-          createDefaultControlPlaneClient,
-          shouldConnectControlPlane,
-          isControlPlaneEnabledSync,
-        } = await import("./initControlPlane.js");
-
-        if (isControlPlaneEnabledSync() && shouldConnectControlPlane()) {
-          createDefaultControlPlaneClient({
-            orchestrator: uiElement.orchestrator,
-          });
-        }
+        await uiElement.orchestrator.ensureAllConnections({ force: false });
       } catch (err) {
-        console.warn("[ControlPlane] Failed to initialize:", err);
+        console.warn("[App] Failed to ensure connections on initialize:", err);
       }
     }
 

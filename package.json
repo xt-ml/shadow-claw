@@ -55,6 +55,7 @@
   },
   "homepage": "https://github.com/xt-ml/shadow-claw#readme",
   "scripts": {
+    "version": "node bin/version.mjs",
     "prepack": "npm run build:prod",
     "assert:version": "node bin/assert-version-bump.mjs",
     "build:clean": "node bin/rimraf.mjs dist && node bin/rimraf.mjs dist-electron",

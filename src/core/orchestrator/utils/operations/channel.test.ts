@@ -192,6 +192,23 @@ describe("channel operations", () => {
     expect(state.peerjs.stop).toHaveBeenCalled();
   });
 
+  it("applyChannelRunningState invokes ensureConnected if channel is already running", () => {
+    const ensureConnectedMock = jest.fn();
+    const state = makeState({
+      channelEnabledByType: { telegram: true } as any,
+      telegramBotToken: "token",
+      telegram: {
+        running: true,
+        start: jest.fn(),
+        stop: jest.fn(),
+        ensureConnected: ensureConnectedMock,
+      } as any,
+    });
+
+    applyAllChannelRunningStates(state, true);
+    expect(ensureConnectedMock).toHaveBeenCalledWith(true);
+  });
+
   it("clearPeerJsTypingState invokes store update", () => {
     clearPeerJsTypingState("peer:group1");
   });

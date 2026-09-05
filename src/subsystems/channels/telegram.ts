@@ -117,6 +117,19 @@ export class TelegramChannel implements Channel {
     void this.poll(sessionId, controller);
   }
 
+  ensureConnected(): void {
+    if (!this.token || !this.running) {
+      return;
+    }
+
+    this.resetPollBackoff();
+    this.abortController?.abort();
+    const sessionId = ++this.pollSessionId;
+    const controller = new AbortController();
+    this.abortController = controller;
+    void this.poll(sessionId, controller);
+  }
+
   stop(): void {
     this.running = false;
     this.resetPollBackoff();

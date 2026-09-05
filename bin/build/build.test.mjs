@@ -267,6 +267,30 @@ describe("build without and with pages", () => {
         expect.arrayContaining(["custom-skill", "skill-creator"]),
       );
 
+      // Verify standardized MCP discovery files from toolchain were copied
+      const consumerMcpJsonPath = path.join(
+        consumerDistPublic,
+        ".well-known/mcp.json",
+      );
+      const consumerServerCardPath = path.join(
+        consumerDistPublic,
+        ".well-known/mcp/server-card.json",
+      );
+      const consumerAiCatalogPath = path.join(
+        consumerDistPublic,
+        ".well-known/ai-catalog.json",
+      );
+
+      expect(fs.existsSync(consumerMcpJsonPath)).toBe(true);
+      expect(fs.existsSync(consumerServerCardPath)).toBe(true);
+      expect(fs.existsSync(consumerAiCatalogPath)).toBe(true);
+
+      const consumerMcpJson = JSON.parse(
+        await readFile(consumerMcpJsonPath, "utf8"),
+      );
+      expect(consumerMcpJson.name).toBe("shadow-claw");
+      expect(consumerMcpJson.version).toBeDefined();
+
       const contentWellKnownPath = path.join(
         tempConsumerRoot,
         ".well-known/agent-skills/index.json",

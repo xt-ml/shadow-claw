@@ -272,15 +272,20 @@ export class CliControlClient {
     return data;
   }
 
-  async broadcastNotification({ title = "ShadowClaw", body } = {}) {
+  async broadcastNotification({ title = "ShadowClaw", body, clientId } = {}) {
     const data = await this._request({
       path: "/push/broadcast",
       method: "POST",
       body: {
         title,
         body,
+        ...(clientId ? { clientId } : {}),
       },
     });
     return data;
+  }
+
+  async sendNotification(options) {
+    return this.broadcastNotification(options);
   }
 }

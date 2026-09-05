@@ -9,6 +9,7 @@ import { McpServer } from "../mcp-server.js";
 import {
   openPushStore,
   closePushStore,
+  saveSubscription,
 } from "../../../subsystems/notifications/push-store.js";
 
 describe("ShadowClaw Built-in MCP Tools", () => {
@@ -422,6 +423,55 @@ describe("ShadowClaw Built-in MCP Tools", () => {
         expect(resAlias.result.isError).toBeFalsy();
         expect(resAlias.result.content[0].text).toContain(
           "no devices are currently subscribed",
+        );
+      }
+
+      // 4. Targeted push with unknown client returns informative warning
+      const resNotFound = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 19,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_send_notification",
+          arguments: {
+            body: "Direct message",
+            clientId: "nonexistent-client-id",
+          },
+        },
+      });
+      expect(resNotFound).not.toBeNull();
+      if (resNotFound && "result" in resNotFound) {
+        expect(resNotFound.result.isError).toBeFalsy();
+        expect(resNotFound.result.content[0].text).toContain(
+          "No push subscriptions found for client 'nonexistent-client-id'",
+        );
+      }
+
+      // 5. Targeted push delivering to a registered client
+      saveSubscription({
+        endpoint: "https://fcm.googleapis.com/fcm/send/target-device",
+        keys: { p256dh: "key-target", auth: "auth-target" },
+        clientId: "client-target-55",
+        deviceLabel: "Workstation",
+      });
+
+      const resTargeted = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 20,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_send_notification",
+          arguments: {
+            body: "Direct workstation alert",
+            clientId: "client-target-55",
+          },
+        },
+      });
+      expect(resTargeted).not.toBeNull();
+      if (resTargeted && "result" in resTargeted) {
+        expect(resTargeted.result.isError).toBeFalsy();
+        expect(resTargeted.result.content[0].text).toContain(
+          "Push notification sent to client 'client-target-55'",
         );
       }
     } finally {

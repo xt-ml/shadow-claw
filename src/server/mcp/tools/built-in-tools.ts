@@ -134,7 +134,7 @@ export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
   {
     name: "shadowclaw_send_notification",
     description:
-      "Broadcast an OS-level push notification to subscribed devices via Web Push (VAPID). Works even when the client browser tab is closed, asleep, or running in the background.",
+      "Broadcast an OS-level push notification to subscribed devices via Web Push (VAPID), or send to a specific registered client. Works even when the client browser tab is closed, asleep, or running in the background.",
     inputSchema: {
       type: "object",
       properties: {
@@ -145,6 +145,11 @@ export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
         body: {
           type: "string",
           description: "Notification body message text.",
+        },
+        clientId: {
+          type: "string",
+          description:
+            "Target client ID, prefix, or device label of a specific client that has registered in the past. If omitted, broadcasts to all subscribed devices.",
         },
       },
       required: ["body"],
@@ -492,17 +497,37 @@ export function registerBuiltInTools(
           }
 
           const title = String(args.title || "ShadowClaw").trim();
+          const targetClientId =
+            typeof args.clientId === "string" && args.clientId.trim()
+              ? args.clientId.trim()
+              : undefined;
+
           try {
-            const res = await broadcastPush({ title, body });
+            const res = await broadcastPush(
+              { title, body },
+              targetClientId ? { clientId: targetClientId } : undefined,
+            );
             const sentCount = res?.sent ?? 0;
             const failedCount = res?.failed ?? 0;
-            const msg = res?.noSubscribers
-              ? "Warning: Push notification broadcast completed, but no devices are currently subscribed to push notifications. Enable push notifications in ShadowClaw Settings on the client first."
-              : `Push notification broadcast sent: ${sentCount} recipient(s) delivered, ${failedCount} failed.`;
+            let msg: string;
+
+            if (res?.notFound) {
+              msg = `Warning: No push subscriptions found for client '${targetClientId}'. Ensure push notifications were registered by this client in ShadowClaw Settings.`;
+            } else if (res?.noSubscribers) {
+              msg =
+                "Warning: Push notification broadcast completed, but no devices are currently subscribed to push notifications. Enable push notifications in ShadowClaw Settings on the client first.";
+            } else if (targetClientId) {
+              msg = `Push notification sent to client '${targetClientId}': ${sentCount} recipient(s) delivered, ${failedCount} failed.`;
+            } else {
+              msg = `Push notification broadcast sent: ${sentCount} recipient(s) delivered, ${failedCount} failed.`;
+            }
 
             return {
               content: [{ type: "text", text: msg }],
-              _meta: res,
+              _meta: {
+                ...res,
+                ...(targetClientId ? { targetClientId } : {}),
+              },
             };
           } catch (err: any) {
             return {

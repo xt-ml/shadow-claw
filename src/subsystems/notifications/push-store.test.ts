@@ -7,6 +7,8 @@ import {
   getSubscription,
   getAllSubscriptions,
   removeSubscriptionById,
+  getSubscriptionsByClientId,
+  findSubscriptionsForClient,
 } from "./push-store.js";
 
 // Use in-memory DB for tests
@@ -146,6 +148,63 @@ describe("push-store", () => {
       const all = getAllSubscriptions();
       // Most recently added should come first
       expect(all[0].endpoint).toBe(MOCK_SUBSCRIPTION_2.endpoint);
+    });
+  });
+
+  describe("client-targeted subscriptions", () => {
+    it("stores and retrieves subscriptions with clientId and deviceLabel", () => {
+      saveSubscription({
+        ...MOCK_SUBSCRIPTION,
+        clientId: "client-01jtest123",
+        deviceLabel: "Pixel 9 Pro",
+      });
+
+      const sub = getSubscription(MOCK_SUBSCRIPTION.endpoint);
+      expect(sub).toBeDefined();
+      expect(sub?.client_id).toBe("client-01jtest123");
+      expect(sub?.device_label).toBe("Pixel 9 Pro");
+
+      const byClient = getSubscriptionsByClientId("client-01jtest123");
+      expect(byClient).toHaveLength(1);
+      expect(byClient[0].endpoint).toBe(MOCK_SUBSCRIPTION.endpoint);
+    });
+
+    it("finds subscriptions by exact clientId, prefix, device label, and row ID", () => {
+      saveSubscription({
+        ...MOCK_SUBSCRIPTION,
+        clientId: "client-01jtest123",
+        deviceLabel: "Pixel 9 Pro",
+      });
+      saveSubscription({
+        ...MOCK_SUBSCRIPTION_2,
+        clientId: "client-02ktest456",
+        deviceLabel: "MacBook Air",
+      });
+
+      // Exact clientId
+      const exact = findSubscriptionsForClient("client-01jtest123");
+      expect(exact).toHaveLength(1);
+      expect(exact[0].endpoint).toBe(MOCK_SUBSCRIPTION.endpoint);
+
+      // Prefix clientId without 'client-'
+      const prefix = findSubscriptionsForClient("01jtest");
+      expect(prefix).toHaveLength(1);
+      expect(prefix[0].endpoint).toBe(MOCK_SUBSCRIPTION.endpoint);
+
+      // Device label substring (case-insensitive)
+      const byLabel = findSubscriptionsForClient("macbook");
+      expect(byLabel).toHaveLength(1);
+      expect(byLabel[0].endpoint).toBe(MOCK_SUBSCRIPTION_2.endpoint);
+
+      // Row ID
+      const all = getAllSubscriptions();
+      const byId = findSubscriptionsForClient(String(all[0].id));
+      expect(byId).toHaveLength(1);
+      expect(byId[0].id).toBe(all[0].id);
+
+      // Non-existent target
+      const notFound = findSubscriptionsForClient("nonexistent-device");
+      expect(notFound).toHaveLength(0);
     });
   });
 });

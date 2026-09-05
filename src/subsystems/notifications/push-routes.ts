@@ -15,25 +15,54 @@ import {
   removeSubscriptionById,
   getSubscription,
   getAllSubscriptions,
+  findSubscriptionsForClient,
+  type PushSubscriptionRow,
 } from "./push-store.js";
 import type { Express } from "express";
 
+export interface BroadcastPushOptions {
+  clientId?: string;
+}
+
+export interface BroadcastPushResult {
+  sent: number;
+  failed: number;
+  noSubscribers?: true;
+  notFound?: true;
+}
+
 /**
- * Broadcast a push notification payload to all subscriptions.
- * Used by both the /push/broadcast route and the server-side task scheduler.
+ * Broadcast a push notification payload to all subscriptions, or send to a specific client.
+ * Used by /push/broadcast, MCP send_notification tool, and the server-side task scheduler.
  */
 export async function broadcastPush(
   payload: any,
-): Promise<{ sent: number; failed: number; noSubscribers?: true }> {
-  const subs = getAllSubscriptions();
+  options?: BroadcastPushOptions,
+): Promise<BroadcastPushResult> {
+  const targetClientId =
+    options?.clientId ||
+    (typeof payload?.clientId === "string" &&
+    payload.type !== "remote-command" &&
+    payload.clientId.trim()
+      ? payload.clientId.trim()
+      : undefined);
 
-  if (subs.length === 0) {
-    return { sent: 0, failed: 0, noSubscribers: true };
+  let subs: PushSubscriptionRow[];
+  if (targetClientId) {
+    subs = findSubscriptionsForClient(targetClientId);
+    if (subs.length === 0) {
+      return { sent: 0, failed: 0, notFound: true };
+    }
+  } else {
+    subs = getAllSubscriptions();
+    if (subs.length === 0) {
+      return { sent: 0, failed: 0, noSubscribers: true };
+    }
   }
 
   const keys = getOrCreateVapidKeys();
   const notification = JSON.stringify(payload);
-  const options = {
+  const sendOptions = {
     TTL: 60 * 60,
     vapidDetails: {
       subject: keys.subject,
@@ -53,7 +82,11 @@ export async function broadcastPush(
       };
 
       try {
-        await webpush.sendNotification(pushSubscription, notification, options);
+        await webpush.sendNotification(
+          pushSubscription,
+          notification,
+          sendOptions,
+        );
         sent++;
       } catch (err: any) {
         failed++;
@@ -86,7 +119,25 @@ export function registerPushRoutes(app: Express): void {
       return res.status(400).json({ error: "Invalid subscription object" });
     }
 
-    saveSubscription(subscription);
+    const clientId =
+      subscription.clientId ||
+      subscription.client_id ||
+      (typeof req.query?.clientId === "string"
+        ? req.query.clientId
+        : undefined);
+
+    const deviceLabel =
+      subscription.deviceLabel ||
+      subscription.device_label ||
+      (typeof req.query?.deviceLabel === "string"
+        ? req.query.deviceLabel
+        : undefined);
+
+    saveSubscription({
+      ...subscription,
+      clientId,
+      deviceLabel,
+    });
     res.sendStatus(201);
   });
 
@@ -177,19 +228,22 @@ export function registerPushRoutes(app: Express): void {
     res.sendStatus(200);
   });
 
-  // Broadcast a notification to all subscriptions
+  // Broadcast a notification to all subscriptions (or to a specific client if clientId is provided)
   app.post("/push/broadcast", async (req, res) => {
-    const { title, body } = req.body || {};
+    const { title, body, clientId } = req.body || {};
 
     if (!body) {
       return res.status(400).json({ error: "Missing body" });
     }
 
     try {
-      const result = await broadcastPush({
-        title: title || "ShadowClaw",
-        body,
-      });
+      const result = await broadcastPush(
+        {
+          title: title || "ShadowClaw",
+          body,
+        },
+        clientId ? { clientId } : undefined,
+      );
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err.message });

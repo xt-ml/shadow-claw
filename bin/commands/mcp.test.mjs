@@ -84,6 +84,11 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
     expect(toolNames).toContain("shadowclaw_send_message");
     expect(toolNames).toContain("shadowclaw_send_notification");
     expect(toolNames).toContain("read_file");
+
+    const notifTool = res.result.tools.find(
+      (t) => t.name === "shadowclaw_send_notification",
+    );
+    expect(notifTool.inputSchema.properties).toHaveProperty("clientId");
   });
 
   it("processes tools/call for shadowclaw_send_notification directly via broadcastNotification", async () => {
@@ -168,6 +173,73 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
     expect(res.result.isError).toBe(true);
     expect(res.result.content[0].text).toContain("cannot be empty");
     expect(mockClient.broadcastNotification).not.toHaveBeenCalled();
+  });
+
+  it("targets a specific client in shadowclaw_send_notification", async () => {
+    const mockClient = {
+      listClients: jest.fn().mockResolvedValue([]),
+      broadcastNotification: jest.fn().mockResolvedValue({
+        sent: 1,
+        failed: 0,
+      }),
+    };
+
+    const engine = createCliMcpEngine({ client: mockClient });
+    const res = await engine.handleMessage({
+      jsonrpc: "2.0",
+      id: 33,
+      method: "tools/call",
+      params: {
+        name: "shadowclaw_send_notification",
+        arguments: {
+          title: "Direct Alert",
+          body: "Direct push message",
+          clientId: "client-target-99",
+        },
+      },
+    });
+
+    expect(res).toBeDefined();
+    expect(res.result.isError).toBe(false);
+    expect(res.result.content[0].text).toContain(
+      "Push notification sent to client 'client-target-99': 1 recipient(s) delivered, 0 failed.",
+    );
+    expect(mockClient.broadcastNotification).toHaveBeenCalledWith({
+      title: "Direct Alert",
+      body: "Direct push message",
+      clientId: "client-target-99",
+    });
+  });
+
+  it("handles notFound warning when targeted client has no push subscriptions", async () => {
+    const mockClient = {
+      listClients: jest.fn().mockResolvedValue([]),
+      broadcastNotification: jest.fn().mockResolvedValue({
+        sent: 0,
+        failed: 0,
+        notFound: true,
+      }),
+    };
+
+    const engine = createCliMcpEngine({ client: mockClient });
+    const res = await engine.handleMessage({
+      jsonrpc: "2.0",
+      id: 34,
+      method: "tools/call",
+      params: {
+        name: "shadowclaw_send_notification",
+        arguments: {
+          body: "Alert",
+          clientId: "missing-client-id",
+        },
+      },
+    });
+
+    expect(res).toBeDefined();
+    expect(res.result.isError).toBe(false);
+    expect(res.result.content[0].text).toContain(
+      "No push subscriptions found for client 'missing-client-id'",
+    );
   });
 
   it("processes tools/call for shadowclaw_send_message", async () => {

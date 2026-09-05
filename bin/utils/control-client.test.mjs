@@ -114,4 +114,26 @@ describe("CliControlClient", () => {
       body: "Test Body",
     });
   });
+
+  it("sends targeted push notification with clientId via sendNotification", async () => {
+    const client = new CliControlClient({
+      host: "127.0.0.1",
+      port,
+      token,
+    });
+
+    const result = await client.sendNotification({
+      title: "Targeted Alert",
+      body: "Hello specific client",
+      clientId: "client-target-42",
+    });
+
+    expect(result).toBeDefined();
+    expect(result.sent).toBe(1);
+    expect(result.received).toEqual({
+      title: "Targeted Alert",
+      body: "Hello specific client",
+      clientId: "client-target-42",
+    });
+  });
 });

@@ -45,6 +45,8 @@ export const pushPaths: Record<string, OpenApiPathItem> = {
                     auth: { type: "string" },
                   },
                 },
+                clientId: { type: "string" },
+                deviceLabel: { type: "string" },
               },
             },
           },
@@ -165,6 +167,7 @@ export const pushPaths: Record<string, OpenApiPathItem> = {
               properties: {
                 title: { type: "string", default: "ShadowClaw" },
                 body: { type: "string" },
+                clientId: { type: "string" },
               },
             },
           },

@@ -166,7 +166,7 @@ The host client fulfills the request by calling `tools/call` with `inputResponse
 | `shadowclaw_read_state`        | Query orchestrator state (`idle`, `responding`), active conversation group, and model. | `clientId`                                                                    |
 | `shadowclaw_list_tasks`        | List scheduled background tasks configured on a connected client.                      | `clientId`, `groupId`                                                         |
 | `shadowclaw_manage_backup`     | Trigger, list, or delete OPFS workspace snapshots on a client.                         | `action` (`trigger` \| `list` \| `delete`), `clientId`, `backupId`, `groupId` |
-| `shadowclaw_send_notification` | Broadcast an OS push notification to all subscribed devices via Web Push (VAPID).      | `body` (required), `title` (optional)                                         |
+| `shadowclaw_send_notification` | Broadcast an OS push notification to all subscribed devices or a specific registered client via Web Push (VAPID). | `body` (required), `title` (optional), `clientId` (optional)                  |
 | `shadowclaw_server_status`     | Query Node server status, version, and connected client count.                         | None                                                                          |
 
 ---

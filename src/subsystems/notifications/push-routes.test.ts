@@ -23,6 +23,8 @@ jest.unstable_mockModule("./push-store.js", () => ({
   removeSubscriptionById: jest.fn(),
   getSubscription: jest.fn(),
   getAllSubscriptions: jest.fn(() => []),
+  getSubscriptionsByClientId: jest.fn(() => []),
+  findSubscriptionsForClient: jest.fn(() => []),
 }));
 
 const { registerPushRoutes, broadcastPush } = await import("./push-routes.js");
@@ -108,6 +110,24 @@ describe("push-routes", () => {
       const subscription: any = {
         endpoint: "https://fcm.example.com/abc",
         keys: { p256dh: "key1", auth: "key2" },
+      };
+      const req = createMockReq(subscription);
+      const res = createMockRes();
+      await app.routes.post["/push/subscribe"](req, res);
+      expect(store.saveSubscription).toHaveBeenCalledWith({
+        ...subscription,
+        clientId: undefined,
+        deviceLabel: undefined,
+      });
+      expect(res.statusCode).toBe(201);
+    });
+
+    it("saves the subscription with clientId and deviceLabel", async () => {
+      const subscription: any = {
+        endpoint: "https://fcm.example.com/abc-with-client",
+        keys: { p256dh: "key1", auth: "key2" },
+        clientId: "client-test-777",
+        deviceLabel: "Test Device 777",
       };
       const req = createMockReq(subscription);
       const res = createMockRes();
@@ -308,6 +328,33 @@ describe("push-routes", () => {
       await app.routes.post["/push/broadcast"](req, res);
       expect(res.statusCode).toBe(400);
     });
+
+    it("targets a specific client when clientId is provided in POST /push/broadcast", async () => {
+      (store.findSubscriptionsForClient as any).mockReturnValue([
+        {
+          id: 1,
+          endpoint: "https://fcm.example.com/client-specific",
+          keys_p256dh: "k1",
+          keys_auth: "k2",
+          client_id: "client-target-99",
+        },
+      ]);
+      webpush.sendNotification.mockResolvedValueOnce({
+        statusCode: 201,
+      } as any);
+
+      const req = createMockReq({
+        body: "Specific client alert",
+        clientId: "client-target-99",
+      });
+      const res = createMockRes();
+      await app.routes.post["/push/broadcast"](req, res);
+      expect(res.statusCode).toBe(200);
+      expect(store.findSubscriptionsForClient).toHaveBeenCalledWith(
+        "client-target-99",
+      );
+      expect(res._json.sent).toBe(1);
+    });
   });
 
   describe("POST /push/command", () => {
@@ -366,6 +413,41 @@ describe("push-routes", () => {
       const result = await broadcastPush({ title: "Test", body: "Hello" });
       expect(result.noSubscribers).toBeUndefined();
       expect(result.sent).toBe(1);
+    });
+
+    it("targets a specific client and returns notFound when no subscription matches", async () => {
+      (store.findSubscriptionsForClient as any).mockReturnValue([]);
+      const result = await broadcastPush(
+        { title: "Test", body: "Hello" },
+        { clientId: "unknown-client" },
+      );
+      expect(result).toEqual({ sent: 0, failed: 0, notFound: true });
+      expect(store.findSubscriptionsForClient).toHaveBeenCalledWith(
+        "unknown-client",
+      );
+    });
+
+    it("targets a specific client and sends push when matching subscription exists", async () => {
+      (store.findSubscriptionsForClient as any).mockReturnValue([
+        {
+          id: 1,
+          endpoint: "https://fcm.example.com/target-sub",
+          keys_p256dh: "k1",
+          keys_auth: "k2",
+          client_id: "client-target-123",
+        },
+      ]);
+      webpush.sendNotification.mockResolvedValueOnce({
+        statusCode: 201,
+      } as any);
+      const result = await broadcastPush(
+        { title: "Test", body: "Hello" },
+        { clientId: "client-target-123" },
+      );
+      expect(result).toEqual({ sent: 1, failed: 0 });
+      expect(store.findSubscriptionsForClient).toHaveBeenCalledWith(
+        "client-target-123",
+      );
     });
   });
 });

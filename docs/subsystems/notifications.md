@@ -69,7 +69,10 @@ When the agent calls `send_notification({ title, body, groupId })`:
 
 ### shadowclaw_send_notification (MCP Tool)
 
-External hosts, agents, and IDEs can invoke `shadowclaw_send_notification` via Model Context Protocol (MCP). Unlike in-browser tools, this tool executes **server-side** directly against the VAPID broadcast subsystem:
+External hosts, agents, and IDEs can invoke `shadowclaw_send_notification` via Model Context Protocol (MCP). Unlike in-browser tools, this tool executes **server-side** directly against the VAPID push subsystem:
+- Accepts `body` (required), `title` (optional), and `clientId` (optional).
+- When `clientId` is omitted, broadcasts to all subscribed devices.
+- When `clientId` is provided, resolves the target client (by exact ID, prefix, or device label) against push subscriptions registered in the past and delivers the notification only to that client.
 - Does **not** require an active client WebSocket/SSE connection.
 - Bypasses client tool relaying, eliminating timeouts when client devices are asleep or in the background.
 - Delivers push notifications across the vendor push network (FCM / APNs) directly to registered devices.

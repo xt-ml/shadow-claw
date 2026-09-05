@@ -94,7 +94,10 @@ export async function getVapidPublicKey(): Promise<string> {
  * Subscribe to push notifications.
  * Requests permission, creates a push subscription, and sends it to the server.
  */
-export async function subscribeToPush(): Promise<PushSubscription> {
+export async function subscribeToPush(
+  clientId?: string,
+  deviceLabel?: string,
+): Promise<PushSubscription> {
   const registration = await navigator.serviceWorker.ready;
   const publicKey = await getVapidPublicKey();
 
@@ -103,13 +106,28 @@ export async function subscribeToPush(): Promise<PushSubscription> {
     applicationServerKey: urlBase64ToUint8Array(publicKey) as any,
   });
 
+  const resolvedClientId =
+    clientId ||
+    (typeof localStorage !== "undefined"
+      ? localStorage.getItem(CONFIG_KEYS.CONTROL_PLANE_CLIENT_ID) || undefined
+      : undefined);
+
+  const subJson =
+    typeof subscription.toJSON === "function"
+      ? subscription.toJSON()
+      : JSON.parse(JSON.stringify(subscription));
+
   const url = await getPushUrl("/push/subscribe");
   await fetch(
     url,
     getPushFetchOptions(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(subscription),
+      body: JSON.stringify({
+        ...subJson,
+        ...(resolvedClientId ? { clientId: resolvedClientId } : {}),
+        ...(deviceLabel ? { deviceLabel } : {}),
+      }),
     }),
   );
 

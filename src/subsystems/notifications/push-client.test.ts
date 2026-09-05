@@ -172,6 +172,21 @@ describe("push-client", () => {
       expect(postCall[1].method).toBe("POST");
       expect(postCall[1].targetAddressSpace).toBe("loopback");
     });
+
+    it("includes clientId and deviceLabel in the request body", async () => {
+      (fetch as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ publicKey: "test-vapid-key" }),
+        })
+        .mockResolvedValueOnce({ ok: true });
+
+      await subscribeToPush("client-explicit-123", "Pixel 9 Pro");
+      const postCall = (fetch as any).mock.calls[1];
+      const body = JSON.parse(postCall[1].body);
+      expect(body.clientId).toBe("client-explicit-123");
+      expect(body.deviceLabel).toBe("Pixel 9 Pro");
+    });
   });
 
   describe("unsubscribeFromPush", () => {

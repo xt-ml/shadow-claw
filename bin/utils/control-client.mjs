@@ -271,4 +271,16 @@ export class CliControlClient {
     });
     return data;
   }
+
+  async broadcastNotification({ title = "ShadowClaw", body } = {}) {
+    const data = await this._request({
+      path: "/push/broadcast",
+      method: "POST",
+      body: {
+        title,
+        body,
+      },
+    });
+    return data;
+  }
 }

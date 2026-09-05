@@ -73,6 +73,12 @@ export function createClientToolRelay(
           Array.isArray(res.data.tools)
         ) {
           for (const t of res.data.tools) {
+            if (
+              t.name === "send_notification" ||
+              t.name.startsWith("shadowclaw_")
+            ) {
+              continue;
+            }
             if (!toolDefMap.has(t.name)) {
               toolDefMap.set(t.name, t);
               toolSupportingClientsMap.set(t.name, []);

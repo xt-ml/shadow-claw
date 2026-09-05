@@ -35,6 +35,10 @@ describe("CliControlClient", () => {
       token,
     });
 
+    app.post("/push/broadcast", (req, res) => {
+      res.json({ sent: 1, failed: 0, received: req.body });
+    });
+
     await new Promise((resolve) => {
       server.listen(0, "127.0.0.1", () => {
         port = server.address().port;
@@ -89,5 +93,25 @@ describe("CliControlClient", () => {
     const client2 = new CliControlClient();
     expect(client2.protocol).toBe("https");
     delete process.env.SHADOWCLAW_HTTPS;
+  });
+
+  it("broadcasts push notifications via broadcastNotification", async () => {
+    const client = new CliControlClient({
+      host: "127.0.0.1",
+      port,
+      token,
+    });
+
+    const result = await client.broadcastNotification({
+      title: "Test Title",
+      body: "Test Body",
+    });
+
+    expect(result).toBeDefined();
+    expect(result.sent).toBe(1);
+    expect(result.received).toEqual({
+      title: "Test Title",
+      body: "Test Body",
+    });
   });
 });

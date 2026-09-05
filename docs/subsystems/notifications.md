@@ -67,6 +67,13 @@ When the agent calls `send_notification({ title, body, groupId })`:
 3. Orchestrator POSTs to `/push/broadcast`
 4. Server sends push to all subscribed clients via `web-push.sendNotification()`
 
+### shadowclaw_send_notification (MCP Tool)
+
+External hosts, agents, and IDEs can invoke `shadowclaw_send_notification` via Model Context Protocol (MCP). Unlike in-browser tools, this tool executes **server-side** directly against the VAPID broadcast subsystem:
+- Does **not** require an active client WebSocket/SSE connection.
+- Bypasses client tool relaying, eliminating timeouts when client devices are asleep or in the background.
+- Delivers push notifications across the vendor push network (FCM / APNs) directly to registered devices.
+
 ### Service worker (push-handler.ts)
 
 On `push` event:

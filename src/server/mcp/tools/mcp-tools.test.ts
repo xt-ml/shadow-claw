@@ -6,6 +6,10 @@ import {
 } from "./built-in-tools.js";
 import { createClientToolRelay } from "./client-tool-relay.js";
 import { McpServer } from "../mcp-server.js";
+import {
+  openPushStore,
+  closePushStore,
+} from "../../../subsystems/notifications/push-store.js";
 
 describe("ShadowClaw Built-in MCP Tools", () => {
   it("registers all built-in ShadowClaw control tools", () => {
@@ -35,6 +39,7 @@ describe("ShadowClaw Built-in MCP Tools", () => {
     expect(toolNames).toContain("shadowclaw_read_state");
     expect(toolNames).toContain("shadowclaw_list_tasks");
     expect(toolNames).toContain("shadowclaw_manage_backup");
+    expect(toolNames).toContain("shadowclaw_send_notification");
   });
 
   it("executes shadowclaw_list_clients", async () => {
@@ -351,6 +356,76 @@ describe("ShadowClaw Built-in MCP Tools", () => {
     if (res && "result" in res) {
       expect(res.result.content[0].text).toContain("ShadowClaw");
       expect(res.result.content[0].text).toContain("healthy");
+    }
+  });
+
+  it("executes shadowclaw_send_notification and handles empty subscribers / validation", async () => {
+    openPushStore(":memory:");
+    try {
+      const server = new McpServer();
+      const mockControlPlane: any = {
+        getConnectedClients: jest.fn().mockReturnValue([]),
+      };
+      registerBuiltInTools(server, mockControlPlane);
+
+      // 1. Validation error on empty body
+      const resEmpty = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 16,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_send_notification",
+          arguments: { body: "" },
+        },
+      });
+      expect(resEmpty).not.toBeNull();
+      if (resEmpty && "result" in resEmpty) {
+        expect(resEmpty.result.isError).toBe(true);
+        expect(resEmpty.result.content[0].text).toContain("cannot be empty");
+      }
+
+      // 2. Broadcast with 0 subscribers returns informative warning
+      const resBroadcast = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 17,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_send_notification",
+          arguments: {
+            title: "Test Alert",
+            body: "Testing push",
+          },
+        },
+      });
+      expect(resBroadcast).not.toBeNull();
+      if (resBroadcast && "result" in resBroadcast) {
+        expect(resBroadcast.result.isError).toBeFalsy();
+        expect(resBroadcast.result.content[0].text).toContain(
+          "no devices are currently subscribed",
+        );
+      }
+
+      // 3. Alias send_notification works as well
+      const resAlias = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 18,
+        method: "tools/call",
+        params: {
+          name: "send_notification",
+          arguments: {
+            body: "Testing alias push",
+          },
+        },
+      });
+      expect(resAlias).not.toBeNull();
+      if (resAlias && "result" in resAlias) {
+        expect(resAlias.result.isError).toBeFalsy();
+        expect(resAlias.result.content[0].text).toContain(
+          "no devices are currently subscribed",
+        );
+      }
+    } finally {
+      closePushStore();
     }
   });
 });

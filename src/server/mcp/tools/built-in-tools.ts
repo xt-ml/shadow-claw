@@ -7,6 +7,7 @@
 
 import type { McpServer } from "../mcp-server.js";
 import type { McpTool } from "../types.js";
+import { broadcastPush } from "../../../subsystems/notifications/push-routes.js";
 
 export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
   {
@@ -128,6 +129,25 @@ export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
     inputSchema: {
       type: "object",
       properties: {},
+    },
+  },
+  {
+    name: "shadowclaw_send_notification",
+    description:
+      "Broadcast an OS-level push notification to subscribed devices via Web Push (VAPID). Works even when the client browser tab is closed, asleep, or running in the background.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "Notification title (default: 'ShadowClaw').",
+        },
+        body: {
+          type: "string",
+          description: "Notification body message text.",
+        },
+      },
+      required: ["body"],
     },
   },
 ];
@@ -454,6 +474,47 @@ export function registerBuiltInTools(
               },
             ],
           };
+        }
+
+        case "shadowclaw_send_notification":
+        case "send_notification": {
+          const body = String(args.body || "").trim();
+          if (!body) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: "Error: Notification 'body' parameter cannot be empty.",
+                },
+              ],
+            };
+          }
+
+          const title = String(args.title || "ShadowClaw").trim();
+          try {
+            const res = await broadcastPush({ title, body });
+            const sentCount = res?.sent ?? 0;
+            const failedCount = res?.failed ?? 0;
+            const msg = res?.noSubscribers
+              ? "Warning: Push notification broadcast completed, but no devices are currently subscribed to push notifications. Enable push notifications in ShadowClaw Settings on the client first."
+              : `Push notification broadcast sent: ${sentCount} recipient(s) delivered, ${failedCount} failed.`;
+
+            return {
+              content: [{ type: "text", text: msg }],
+              _meta: res,
+            };
+          } catch (err: any) {
+            return {
+              isError: true,
+              content: [
+                {
+                  type: "text",
+                  text: `Failed to send push notification: ${err.message}`,
+                },
+              ],
+            };
+          }
         }
 
         default:

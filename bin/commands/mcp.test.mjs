@@ -82,7 +82,92 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
     const toolNames = res.result.tools.map((t) => t.name);
     expect(toolNames).toContain("shadowclaw_list_clients");
     expect(toolNames).toContain("shadowclaw_send_message");
+    expect(toolNames).toContain("shadowclaw_send_notification");
     expect(toolNames).toContain("read_file");
+  });
+
+  it("processes tools/call for shadowclaw_send_notification directly via broadcastNotification", async () => {
+    const mockClient = {
+      listClients: jest.fn().mockResolvedValue([]),
+      broadcastNotification: jest.fn().mockResolvedValue({
+        sent: 2,
+        failed: 0,
+      }),
+    };
+
+    const engine = createCliMcpEngine({ client: mockClient });
+    const res = await engine.handleMessage({
+      jsonrpc: "2.0",
+      id: 30,
+      method: "tools/call",
+      params: {
+        name: "shadowclaw_send_notification",
+        arguments: { title: "Custom Alert", body: "Server push message" },
+      },
+    });
+
+    expect(res).toBeDefined();
+    expect(res.result.resultType).toBe("complete");
+    expect(res.result.isError).toBe(false);
+    expect(res.result.content[0].text).toContain(
+      "2 recipient(s) delivered, 0 failed",
+    );
+    expect(mockClient.broadcastNotification).toHaveBeenCalledWith({
+      title: "Custom Alert",
+      body: "Server push message",
+    });
+  });
+
+  it("processes tools/call for send_notification alias directly via broadcastNotification", async () => {
+    const mockClient = {
+      listClients: jest.fn().mockResolvedValue([]),
+      broadcastNotification: jest.fn().mockResolvedValue({
+        sent: 1,
+        failed: 0,
+      }),
+    };
+
+    const engine = createCliMcpEngine({ client: mockClient });
+    const res = await engine.handleMessage({
+      jsonrpc: "2.0",
+      id: 31,
+      method: "tools/call",
+      params: {
+        name: "send_notification",
+        arguments: { body: "Fallback push" },
+      },
+    });
+
+    expect(res).toBeDefined();
+    expect(res.result.resultType).toBe("complete");
+    expect(res.result.isError).toBe(false);
+    expect(mockClient.broadcastNotification).toHaveBeenCalledWith({
+      title: "ShadowClaw",
+      body: "Fallback push",
+    });
+  });
+
+  it("handles empty body validation for shadowclaw_send_notification", async () => {
+    const mockClient = {
+      listClients: jest.fn().mockResolvedValue([]),
+      broadcastNotification: jest.fn(),
+    };
+
+    const engine = createCliMcpEngine({ client: mockClient });
+    const res = await engine.handleMessage({
+      jsonrpc: "2.0",
+      id: 32,
+      method: "tools/call",
+      params: {
+        name: "shadowclaw_send_notification",
+        arguments: { body: "" },
+      },
+    });
+
+    expect(res).toBeDefined();
+    expect(res.result.isError).toBe(true);
+    expect(res.result.content[0].text).toContain("cannot be empty");
+    expect(mockClient.broadcastNotification).not.toHaveBeenCalled();
   });
 
   it("processes tools/call for shadowclaw_send_message", async () => {

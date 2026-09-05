@@ -105,6 +105,25 @@ export const CLI_BUILTIN_TOOLS = [
       },
     },
   },
+  {
+    name: "shadowclaw_send_notification",
+    description:
+      "Broadcast an OS-level push notification to subscribed devices via Web Push (VAPID). Works even when the client browser tab is closed, asleep, or running in the background.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "Notification title (default: 'ShadowClaw').",
+        },
+        body: {
+          type: "string",
+          description: "The notification body message text.",
+        },
+      },
+      required: ["body"],
+    },
+  },
 ];
 
 export function createCliMcpEngine(options = {}) {
@@ -193,6 +212,12 @@ export function createCliMcpEngine(options = {}) {
           Array.isArray(res.data.tools)
         ) {
           for (const t of res.data.tools) {
+            if (
+              t.name === "send_notification" ||
+              t.name.startsWith("shadowclaw_")
+            ) {
+              continue;
+            }
             if (!toolDefMap.has(t.name)) {
               toolDefMap.set(t.name, t);
               toolSupportingClientsMap.set(t.name, []);
@@ -316,7 +341,9 @@ export function createCliMcpEngine(options = {}) {
           combined.set(t.name, t);
         }
         for (const t of relayed) {
-          combined.set(t.name, t);
+          if (!combined.has(t.name)) {
+            combined.set(t.name, t);
+          }
         }
 
         const sortedTools = Array.from(combined.values()).sort((a, b) =>
@@ -539,6 +566,70 @@ export function createCliMcpEngine(options = {}) {
               _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
             },
           };
+        }
+
+        if (
+          toolName === "shadowclaw_send_notification" ||
+          toolName === "send_notification"
+        ) {
+          const body = String(args.body || "").trim();
+          if (!body) {
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: true,
+                content: [
+                  {
+                    type: "text",
+                    text: "Error: Notification 'body' parameter cannot be empty.",
+                  },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          }
+
+          const title = String(args.title || "ShadowClaw").trim();
+          try {
+            const res = await client.broadcastNotification({ title, body });
+            const sentCount = res?.sent ?? 0;
+            const failedCount = res?.failed ?? 0;
+            const msg = res?.noSubscribers
+              ? "Warning: Push notification broadcast completed, but no devices are currently subscribed to push notifications. Ensure push notifications are enabled in ShadowClaw Settings on the client first."
+              : `Push notification broadcast sent: ${sentCount} recipient(s) delivered, ${failedCount} failed.`;
+
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: false,
+                content: [{ type: "text", text: msg }],
+                _meta: {
+                  ...res,
+                  "io.modelcontextprotocol/serverInfo": serverInfo,
+                },
+              },
+            };
+          } catch (err) {
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: true,
+                content: [
+                  {
+                    type: "text",
+                    text: `Failed to send push notification: ${err.message}`,
+                  },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          }
         }
 
         // Relayed interactive ask_user tool with MRTR response fulfillment if provided

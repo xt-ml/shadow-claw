@@ -217,6 +217,15 @@ To prevent storage state leakage when multiple instances are deployed under subp
    When booting a namespaced deployment for the first time, ShadowClaw checks if data was previously stored under `"shadowclaw"`.
    - **IndexedDB**: Copies all object stores into the new namespaced database in a single non-destructive pass, setting `DB_MIGRATED_FROM_LEGACY`.
    - **OPFS**: Recursively copies all legacy workspace directories and files from `"shadowclaw"` into `"shadowclaw-${namespace}"` (with Safari worker write fallback), setting `OPFS_MIGRATED_FROM_LEGACY`.
-   The legacy storage is left intact as a fallback seed.
+     The legacy storage is left intact as a fallback seed.
 5. **Namespaced `localStorage` (`namespacedStorage.ts`):**
    Key pattern `shadowclaw:${namespace}:${key}` with automatic one-time copy-on-read from legacy unprefixed keys.
+
+## Files Browser Safeguards & Clipboard Operations
+
+The Files browser (`src/components/shadow-claw-files/`) incorporates robust safeguards for file and directory manipulation:
+
+- **Clipboard-Driven Actions**: Supports Cut, Copy, and Paste for files and directories across workspaces. The Paste action is dynamically hidden when the clipboard is empty.
+- **Folder Self-Paste Protection**: When copying or moving directories, operations recursively validate target paths, strictly preventing pasting a directory into itself or any of its descendants.
+- **Inter-Group Transfers**: Files and folders can be moved or copied across different conversation groups (`sourceGroupId` $\rightarrow$ `targetGroupId`).
+- **Conflict Resolution**: When an item with the same name exists at the destination, the UI prompts with non-destructive options to either rename the incoming item or overwrite the existing target.

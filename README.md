@@ -1,10 +1,15 @@
 # 🦞 [ShadowClaw](https://xt-ml.github.io/shadow-claw/)
 
+[![npm version](https://img.shields.io/npm/v/shadow-claw.svg)](https://www.npmjs.com/package/shadow-claw)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/xt-ml/shadow-claw)
 
-A browser-native, fully-featured AI assistant whose core orchestration and tool-use loop run client-side in the browser. Deployable as a PWA or native Electron desktop app, backed by a Node.js service layer (local proxying, control plane, MCP), and driven via the `shadow-claw` CLI.
+ShadowClaw is a browser-native AI assistant whose core orchestration, state machine, dynamic context windowing, and tool-execution loop run client-side off the main thread in a Web Worker. Sandboxed local execution uses the `just-bash` POSIX emulator by default (with optional WebVM Alpine Linux) backed by OPFS storage, with UI reactivity powered by native Web Components and TC39 Signals. Inference routes across in-browser models (defaulting to the Prompt API with polyfill support, alongside LiteRT WebGPU), local servers, and cloud providers, backed by a Node.js control plane and Stateless MCP server connecting over SSE, WebSockets, or WebRTC DataChannels.
 
 [![ShadowClaw Screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/shadow-claw-screenshot-1920x1052.png)](https://xt-ml.github.io/shadow-claw/)
+
+_Watch a demo:_ [Peer-to-peer Browser Native Agents in action (YouTube)](https://www.youtube.com/watch?v=h1les1A3gcg)
+
+---
 
 ## Quick Start
 
@@ -14,7 +19,7 @@ A browser-native, fully-featured AI assistant whose core orchestration and tool-
 npx shadow-claw dev --open
 ```
 
-Open Settings, select your AI provider (or use the in-browser Prompt API / local models), and start chatting.
+Open Settings, configure your preferred provider (or run with the default Prompt API), and start chatting.
 
 ### 2. Scaffold a Project or Knowledge Hub
 
@@ -34,43 +39,35 @@ cd shadow-claw
 npm install && npm run dev  # Dev server → http://localhost:8888
 ```
 
-**Desktop App:** `npm run electron` or `npm run electron:build` for distributable installer.
+**Desktop App:** `npm run electron` or `npm run electron:build` for a distributable installer.
 
-## What is ShadowClaw?
+---
 
-A fully-functional agent runtime built on browser-native technology — the orchestration and tool-use loop run entirely client-side in the browser, with AI inference routing to remote APIs, local servers, or in-browser models depending on your configuration. Built with TypeScript, it provides:
+## Table of Contents
 
-- **Client-side orchestration**: The agent decision loop, system prompt building, and tool execution run off the main thread in a Web Worker inside the browser
-- **Multi-model support**: OpenRouter, Anthropic, Google Gemini, AWS Bedrock, Ollama, Llamafile, Mesh LLM, Transformers.js, and browser-native Prompt API
-- **Web Components UI**: Native Custom Elements + TC39 Signals for reactive updates across mobile PWA and Electron Desktop
-- **Persistent storage**: IndexedDB for messages/config, OPFS for files (namespaced per deployment subpath with automated legacy migration)
-- **Agent tools**: File I/O, shell (with optional WebVM), Git, HTTP, JavaScript execution
-- **Multi-conversation support**: Each conversation has isolated chat history, file workspace, and scheduled tasks
-- **Messaging channels**: Browser chat, PeerJS, Telegram Bot API, iMessage bridge (configurable)
-- **PWA + offline**: Service Worker, Web Push notifications, scheduled task execution even when closed
-- **Desktop app**: Electron wrapper with full parity to the web version
-- **CLI & Control Plane**: Command-line interface (`commander`) and dev server with task scheduling, backups, and an MCP server relaying CLI commands and browser tools
+- [Core Capabilities](#core-capabilities)
+- [Architecture](#architecture)
+- [Multi-Conversation Support](#multi-conversation-support)
+- [Providers & Models](#providers--models)
+- [Agent Tools & WebMCP](#agent-tools--webmcp)
+- [Conversations & Messaging Channels](#conversations--messaging-channels)
+- [Documentation Index](#documentation-index)
+- [Development](#development)
+- [CLI Runtime Commands](#cli-runtime-commands)
+- [License](#license)
 
-## Key Features
+---
 
-- **Streaming responses** — Token-by-token text updates with live chat bubble
-- **Dynamic context windowing** — Token-aware message history (not fixed-size window)
-- **Tool profiles** — Per-model/provider tool customization and system prompt overrides
-- **Conversation-scoped subagent policy** — Per-conversation subagent mode (`automatic` or `manual`) with optional pinned provider/model
-- **Conversation-scoped agent token budget** — Optional per-conversation max output tokens override (clamped to selected model limits)
-- **Conversation-scoped provider runtime overrides** — Per-conversation runtime overrides for Bedrock proxy and Llamafile (auth/profile/region/host/mode/offline/port)
-- **Model registry** — Dynamic metadata fetch (context window, modality support)
-- **Attachment capabilities** — Native multimodal delivery with automatic text fallback
-- **Remote MCP** — Discover and execute tools from external MCP servers
-- **Stateless MCP server** — Expose ShadowClaw CLI commands and live browser tools to external agent hosts (Claude Desktop, Cursor, Goose) via STDIO (`npx shadow-claw mcp`) or Streamable HTTP (`POST /mcp`), featuring multi-client tool targeting (`shadowclaw_set_active_client`), per-tool client capability validation, client-side execution guards, and interactive `ask_user` relaying
-- **A2UI interactive surfaces** — Render responsive UI components (Text, Button, TextField, Row/Column layouts) from agents via PeerJS WebRTC with two-way data binding
-- **Multi-Agent Shared State** — Synchronize agent knowledge across participants using `STATE_SNAPSHOT` and `STATE_DELTA` events
-- **Email integration** — IMAP/SMTP support with encrypted credentials
-- **Web Share Target** — Receive files/URLs directly from OS share sheet
-- **Scheduled tasks** — Cron expressions with server-side persistence and Web Push
-- **Git integration** — Clone, branch, merge (with conflict reports), push/pull
-- **File viewer** — Syntax highlighting (locally bundled CSS, no CDN), PDF preview, media playback, Web Share, native/fallback fullscreen, relative image workspace resolving, and configurable iframe embed sanitization; hardened opaque-origin iframe sandbox (no `allow-same-origin`) with transparent `postMessage` storage proxy bridge (`IndexedDB`/`localStorage`), programmatic navigation interception (`location.href`, `assign()`, `replace()`), `showOpenFilePicker`/`showSaveFilePicker` polyfills, and declarative `BroadcastChannel` proxying
-- **Files browser** — Clipboard-driven Cut/Copy/Paste actions, hidden Paste button when empty, folder self-paste protection, inter-group transfers, and conflict resolution (rename/overwrite)
+## Core Capabilities
+
+- **Client-Side Worker Orchestration:** The agent decision loop, system prompt building, and tool execution run off the main thread in a dedicated Web Worker to keep the UI smooth and responsive.
+- **In-Browser Inference by Default:** Uses the Prompt API (`window.LanguageModel`) by default (`DEFAULT_PROVIDER = "prompt_api"`). When native support is not present, integrated polyfills (`prompt-api-polyfill` and `built-in-ai-task-apis-polyfills` backed by Transformers.js / ONNX) enable cross-browser execution.
+- **Multi-Model Routing:** Route queries to Cloud providers (OpenRouter, Anthropic, Gemini, AWS Bedrock), local engines (Ollama, Llamafile, Transformers.js), or in-browser WebGPU models (LiteRT-LM).
+- **Sandboxed Execution & Storage:** Client-side compute via sandboxed JavaScript and the default `just-bash` POSIX shell emulator (with optional WebVM Alpine Linux), backed by Origin Private File System (OPFS) and IndexedDB namespaced per deployment subpath.
+- **PWA & Electron Desktop Parity:** Deployable as a progressive web app with Service Worker and Web Push, or as a native desktop application with full feature parity.
+- **Control Plane, CLI & Native MCP Server:** Backed by a Node.js service layer and CLI (`shadow-claw`) that provides background cron scheduling, remote backups, direct WebRTC DataChannel connectivity, and a Stateless MCP server featuring both native server management tools and dynamic browser tool relaying to external agent hosts (Claude Desktop, Cursor, Goose).
+
+---
 
 ## Architecture
 
@@ -102,59 +99,63 @@ ShadowClaw follows a **worker-isolated runtime** pattern:
 
 **Key design principles:**
 
-- **Agent in Web Worker** — LLM calls, tool execution, and WebVM all run off-main-thread to keep UI responsive
-- **Message-based protocol** — Strict `postMessage` boundaries between main thread and worker
-- **Reactive signals** — TC39 Signals (via `signal-polyfill`) drive all UI updates
-- **Storage isolation** — Each conversation gets a workspace (`shadowclaw/<groupId>/workspace/`); shared config in IndexedDB
+- **Agent in Web Worker** — LLM calls, tool execution, and WebVM all run off-main-thread to keep the UI responsive.
+- **Message-based protocol** — Strict `postMessage` boundaries between the main thread and worker.
+- **Reactive signals** — TC39 Signals (via `signal-polyfill`) drive all UI updates.
+- **Storage isolation** — Each conversation gets a dedicated workspace (`shadowclaw/<groupId>/workspace/`); shared configuration lives in IndexedDB.
 
-**Full architecture docs**: See [Architecture Overview](docs/architecture/overview.md) and [Worker-Isolated Agent Runtime](docs/decisions/worker-isolated-agent-runtime.md) for orchestrator state machine, worker protocol, storage system, context management, and streaming.
+**Full architecture docs:** See [System Overview](docs/architecture/overview.md) and [Worker-Isolated Agent Runtime](docs/decisions/worker-isolated-agent-runtime.md) for orchestrator state machine, worker protocol, storage system, context management, and streaming.
+
+---
 
 ## Multi-Conversation Support
 
 Each conversation has:
 
-- Independent chat history
-- Isolated file workspace
-- Scheduled tasks
-- Editable `MEMORY.md` (loaded as system context)
-- Optional per-conversation tool tagging
-- Optional per-conversation pinned provider/model and max output tokens
-- Accessible sidebar with drag-and-drop reordering and clone support
-- Unread indicators with pulsing highlights
+- Independent chat history and token-aware context windowing
+- Isolated file workspace in OPFS with clipboard safeguards and conflict resolution
+- Scheduled tasks and cron automations
+- Editable `MEMORY.md` (loaded automatically as system context)
+- Optional per-conversation tool tagging and declarative tool overrides
+- Optional per-conversation pinned provider/model and token budget limits
+- Accessible sidebar with drag-and-drop reordering, clone support, and unread indicators
 
 Last-active conversation persists across reloads. On first launch, a default "Main" conversation is auto-created.
 
-**Full guide**: [docs/architecture/orchestrator.md](docs/architecture/orchestrator.md)
+**Full guide:** [docs/architecture/orchestrator.md](docs/architecture/orchestrator.md)
+
+---
 
 ## Providers & Models
 
 ShadowClaw supports multiple LLM providers with a unified adapter pattern:
 
-| Category    | Examples                                                             | Notes                              |
-| ----------- | -------------------------------------------------------------------- | ---------------------------------- |
-| **Cloud**   | OpenRouter, OpenAI, Anthropic, Google Gemini, AWS Bedrock, Vertex AI | API key required                   |
-| **Local**   | Ollama, Llamafile, Mesh LLM, Transformers.js                         | Runs on local server or in-browser |
-| **Browser** | Prompt API (`window.LanguageModel`), LiteRT                          | Experimental, keyless, Gemini Nano |
+| Category    | Examples                                                             | Notes                                                                |
+| :---------- | :------------------------------------------------------------------- | :------------------------------------------------------------------- |
+| **Browser** | Prompt API (`window.LanguageModel`), LiteRT                          | Default provider (`prompt_api`) with polyfill support; LiteRT WebGPU |
+| **Local**   | Ollama, Llamafile, Mesh LLM, Transformers.js                         | Runs on local server or in-browser                                   |
+| **Cloud**   | OpenRouter, OpenAI, Anthropic, Google Gemini, AWS Bedrock, Vertex AI | API key required                                                     |
 
-**Features:**
+**Provider Highlights:**
 
-- Streaming responses (OpenAI + Anthropic formats)
-- Adaptive rate limiting with `retry-after` support and 30-second auto-closing, ARIA-accessible countdown dialogs for fatal errors and throttling
-- Dynamic model registry with capability metadata (context, modalities, tool support)
-- Multi-format support (OpenAI, Anthropic, Prompt API)
-- Prompt API session retry loop & hardware feature probing — automatically probes WebGPU adapter capabilities (requiring `shader-f16` support), retries `LanguageModel.create()` during downloads, and dynamically falls back to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) if WebGPU initialization fails or software emulation is detected.
-- Polyfill model cache — Service Worker `CacheFirst` caching strategy stores Hugging Face polyfill model binaries (`.onnx`, `.onnx_data`) for offline performance
+- **Prompt API Default & Polyfill Fallbacks:** Uses `prompt_api` by default. When native `window.LanguageModel` is absent, built-in polyfills (`prompt-api-polyfill` and `built-in-ai-task-apis-polyfills` backed by Transformers.js / ONNX) enable execution across browsers.
+- **Hardware Feature Probing & Fallbacks:** Probes WebGPU adapter capabilities (`shader-f16`), retries during downloads, and dynamically falls back to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) if WebGPU initialization fails or software emulation is detected.
+- **Polyfill Model Cache:** Service Worker `CacheFirst` caching strategy stores Hugging Face polyfill model binaries (`.onnx`, `.onnx_data`) for offline performance.
+- **Streaming & Resilience:** Streaming responses across OpenAI and Anthropic formats; adaptive rate limiting with `retry-after` handling and 30-second auto-closing, ARIA-accessible countdown dialogs for fatal errors and throttling.
+- **Model Registry:** Dynamic metadata fetch (context window, modality support, tool support).
 
-**Setup & details**: [docs/guides/adding-a-provider.md](docs/guides/adding-a-provider.md) | [docs/subsystems/providers.md](docs/subsystems/providers.md)
+**Setup & details:** [docs/guides/adding-a-provider.md](docs/guides/adding-a-provider.md) | [docs/subsystems/providers.md](docs/subsystems/providers.md)
 
-## Agent Tools
+---
+
+## Agent Tools & WebMCP
 
 The agent has access to **50+ tools** including:
 
 | Category        | Tools                                                                                                                                                                                             |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| :-------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Files**       | `read_file`, `write_file`, `patch_file`, `delete_file`, `move_file`, `copy_file`, `create_directory`, `list_files`, `open_file`, `attach_file_to_chat`, `send_file`, `search_files`, `diff_files` |
-| **Shell**       | `bash` (WebVM or just-bash emulator)                                                                                                                                                              |
+| **Shell**       | `bash` (default `just-bash` emulator, optional WebVM)                                                                                                                                             |
 | **Built-in AI** | `summarize_text`, `write_text`, `rewrite_text`, `proofread_text`, `detect_language`, `translate_text` (defaults to Active Conversation LLM backend with opt-in local browser Task API polyfill)   |
 | **Git**         | `git_clone`, `git_init`, `git_add`, `git_unstage`, `git_commit`, `git_push`, `git_pull`, `git_fetch`, `git_merge`, `git_diff`, and more                                                           |
 | **Web**         | `fetch_url`, `fetch_file`, `web_search` (DuckDuckGo via configurable CORS search proxy and URL templates)                                                                                         |
@@ -169,44 +170,13 @@ The agent has access to **50+ tools** including:
 | **Rooms**       | `create_room`, `invite_to_room`, `leave_room`, `list_room_members`                                                                                                                                |
 | **A2UI**        | `list_components`, `render_component`                                                                                                                                                             |
 
-### Testing WebMCP Integration
+### WebMCP Integration
 
-**WebMCP integration**: When `document.modelContext` is available (with `navigator.modelContext` fallback for Chrome < 152), tools are also registered through the browser's Model Context Protocol (`@mcp-b/webmcp-polyfill` v3). ShadowClaw provides `parseWebMcpInputSchema` to normalize input schemas across Chrome 154+ (native object) and Chrome < 154 (DOMString JSON) versions, and `getWebMcpTools()` to safely query registered tools with graceful degradation.
+When running in browsers supporting the Model Context Protocol (or via `@mcp-b/webmcp-polyfill`), ShadowClaw automatically registers its tool catalog on `document.modelContext` with normalized input schemas across Chrome versions and signal-based abort handling, routing tool execution safely through the Web Worker.
 
-```ts
-// get available tools (safely normalizes input schemas across Chrome versions)
-var tools = await document.modelContext.getTools();
+**Full reference:** [docs/subsystems/tools.md](docs/subsystems/tools.md) | [docs/subsystems/webmcp.md](docs/subsystems/webmcp.md)
 
-// format the tool list
-var formattedToolsJSON = JSON.stringify(
-  tools.map(
-    ({ annotations, description, inputSchema, name, origin, title }) => ({
-      annotations,
-      description,
-      inputSchema,
-      name,
-      origin,
-      title,
-    }),
-  ),
-  null,
-  2,
-);
-
-// list available tools
-console.log(formattedToolsJSON);
-
-// get the toast tool
-var [toastTool] = tools.filter((v) => v.description.includes("Show a toast"));
-
-// run the toast tool
-await document.modelContext.executeTool(
-  toastTool,
-  '{ "message": "Hello from 🦞 Shadow Claw!"}',
-);
-```
-
-**Full reference**: [docs/subsystems/tools.md](docs/subsystems/tools.md) | [docs/subsystems/webmcp.md](docs/subsystems/webmcp.md)
+---
 
 ## Conversations & Messaging Channels
 
@@ -219,184 +189,27 @@ ShadowClaw supports **four messaging channels** by default:
 
 Each channel creates isolated conversations with their own message history and workspace.
 
-**Setup & architecture**: [docs/guides/configuring-messaging-channels.md](docs/guides/configuring-messaging-channels.md) (setup) | [docs/subsystems/channels.md](docs/subsystems/channels.md) (architecture + custom channels)
+**Setup & architecture:** [docs/guides/configuring-messaging-channels.md](docs/guides/configuring-messaging-channels.md) (setup) | [docs/subsystems/channels.md](docs/subsystems/channels.md) (architecture + custom channels)
 
-## Pages System
+---
 
-ShadowClaw includes a **Pages sidebar** for organizing and viewing workspace content.
+## Documentation Index
 
-- **Render markdown & HTML** — Save any markdown or HTML file as a page for structured preview, including optional visible YAML frontmatter metadata
-- **Workspace-relative links** — Links and images in pages resolve relative to the workspace
-- **Page sidebar** — Persistent list of saved pages with drag-and-drop reordering and responsive mobile sidebar collapse
-- **Static Main Site Seeding** — Automatically seeds default main pages from the `pages/main/` manifest, respecting page suppression rules; when `pages/` is absent, built-in `index.html` and `MEMORY.md` defaults are used
-- **Static Pretty Paths & DSD Pre-rendering** — Build-time pre-rendering for `routes.json` (usually `pages/routes.json`) generates static HTML with Declarative Shadow DOM templates for clean URLs across Node.js, Electron, and GitHub Pages; missing routes are skipped, pages flagged for purge are excluded from the output manifest, and same-origin links are validated via `isPossibleAppRoute` so non-app paths fall back to native browser navigation
-- **Page Suppression** — Deleting pages suppresses auto-reseeding (`SUPPRESSED_PAGES_LIST`) until re-added
-- **Safe iframe embeds** — HTML previews use a configurable iframe host allowlist in Settings, with safe defaults for common embedded content hosts
-- **Ebook-Style Navigation** — Functional Previous/Next pagination controls with HTML-entity decoded frontmatter headers, seamless page transitions, `ArrowLeft`/`ArrowRight` keyboard navigation, touch/mouse swipe gestures, and `aria-live` screen reader announcements
-- **Pre-rendered Content Override** — Optional setting (`OVERRIDE_PRERENDER_SKELETON`) suppresses Declarative Shadow DOM (DSD) pre-rendered content during boot to eliminate hydration flash
-- **Declarative Configuration** — Support for `shadow-claw.config.json` (with backward compatibility for `site-config.json`) enabling template repositories to customize metadata, branding, custom theme stylesheets, custom element security allowlists, navigation visibility, and server/cache storage (`cacheDir`) without modifying core source
-- **Dynamic Sidebar Navigation Visibility** — Runtime toggling of Pages, Chat, Tasks, and Files sidebar tabs via Settings, with automatic fallback routing and build-time DSD navigation attribute synchronization
-- **Content-Only Publishing** — Supports GitHub Pages publishing via the [`shadow-claw-template` template repository](https://github.com/xt-ml/shadow-claw-template) that pulls ShadowClaw as a CI-time build dependency; see the [publishing guide](pages/main/~/docs/publishing-to-github-pages.md) for root-level `shadow-claw.config.json` and optional `pages/` behavior.
+Comprehensive architectural specifications, subsystem deep-dives, step-by-step guides, and ADRs live in [`docs/`](docs/README.md):
 
-Pages complement the **main group MEMORY** (auto-created as `MEMORY.md` on first setup) which serves as a workspace-scoped system context for the agent. An `index.html` is also auto-created as the default home page.
+- **[Architecture](docs/README.md#architecture):** [System Overview](docs/architecture/overview.md) · [Orchestrator & State Machine](docs/architecture/orchestrator.md) · [Worker Protocol](docs/architecture/worker-protocol.md) · [Storage System](docs/architecture/storage.md) · [Context Management](docs/architecture/context-management.md) · [Streaming](docs/architecture/streaming.md)
+- **[Subsystems](docs/README.md#subsystems):** [Shell Emulator](docs/subsystems/shell.md) · [WebVM](docs/subsystems/vm.md) · [Git Integration](docs/subsystems/git.md) · [Channels](docs/subsystems/channels.md) · [Tools & Profiles](docs/subsystems/tools.md) · [Providers & Model Registry](docs/subsystems/providers.md) · [Notifications & Scheduling](docs/subsystems/notifications.md) · [Electron Desktop](docs/subsystems/electron.md) · [Reactive UI & Web Components](docs/subsystems/reactive-ui.md) · [Remote MCP](docs/subsystems/remote-mcp.md) · [Stateless MCP Server](docs/subsystems/mcp-server.md) · [WebMCP](docs/subsystems/webmcp.md) · [Crypto & Secrets](docs/subsystems/crypto.md) · [Control Plane](docs/subsystems/control-plane.md) · [Pages System](docs/subsystems/pages.md) · [Agent Skills](docs/subsystems/skills.md) · [Security Hardening](docs/subsystems/custom-element-security.md) · [File Backup](docs/subsystems/backup.md) · [Web Share Target](docs/subsystems/share-target.md) · [OpenAPI](docs/subsystems/openapi.md)
+- **[Guides](docs/README.md#guides):** [Adding a Provider](docs/guides/adding-a-provider.md) · [Adding a Tool](docs/guides/adding-a-tool.md) · [Adding a Shell Command](docs/guides/adding-a-shell-command.md) · [Adding a UI Page](docs/guides/adding-a-page.md) · [Adding a Channel](docs/guides/adding-a-channel.md) · [Protocol-Agnostic Integrations](docs/guides/protocol-agnostic-integrations.md) · [Service Accounts & Credentials](docs/guides/adding-service-accounts.md) · [Configuring Messaging Channels](docs/guides/configuring-messaging-channels.md) · [Server Development Configuration](docs/guides/server-development-configuration.md) · [Publishing to GitHub Pages](docs/guides/publishing-to-github-pages.md)
+- **[Decisions](docs/README.md#decisions):** ADRs on [Bundled TypeScript Architecture](docs/decisions/bundled-typescript-architecture.md), [Native Web Components and Signals](docs/decisions/native-web-components-and-signals.md), [Worker-Isolated Agent Runtime](docs/decisions/worker-isolated-agent-runtime.md), [IndexedDB and OPFS Storage](docs/decisions/indexeddb-and-opfs-storage.md), and [Peer-to-Peer Protocol (A2A via AGUI)](docs/decisions/peer-protocol-a2a-agui.md)
+- **[Agent Conventions](AGENTS.md):** Architectural guardrails and conventions for AI coding agents
+- **[E2E Testing Architecture](e2e/README.md):** Playwright fixtures, page objects, and feature-gated testing
 
-## Agent Skills and Declarative Tools
-
-- **Workspace Agent Skills** — Discovers `.agents/skills/**/SKILL.md` instruction packages, presents model-invocable skill descriptions in the system prompt, and loads instructions plus bundled resources through `activate_skill`. Default bundled skills include `skill-creator`.
-- **Agent Skills Discovery Index** — Automatically indexes skills, tools, and scripts into `/.well-known/agent-skills/index.json` complying with Agent Skills Discovery RFC v0.2.0, computing SHA-256 digests and RFC 3986 relative URLs. Integrated into static builds (`bin/build/build.mjs`) and runnable via `npx shadow-claw skills:index [dir]` (alias `agent-skills`).
-- **Slash Commands & Declarative Execution Pipelines** — User-invocable skills support `/skill-name` slash-command triggers. Skills with `execution: { type: "tools", tools: [...] }` execute tool pipelines directly on the worker thread via `executeToolChain` without scheduling Tasks or invoking LLM prompts. Supports `$pipe` output chaining and step-level or cascaded `suppressToast: true` and `suppressOutput: true` options.
-- **Declarative Tools** — Content repositories can define executable tools as JSON under `.agents/tools/main/` using sandboxed Bash or JavaScript, or delegate to existing tools without changing ShadowClaw source (e.g. `generate_random_number` in the starter template repository).
-- **Enhanced JS Tool Expression Evaluation** — The `javascript` tool automatically evaluates single expressions without explicit `return` statements by wrapping them in `return (<expression>);`.
-
-## Web Components & Component Workbench
-
-ShadowClaw packages its UI components as standard Web Components built on TC39 Signals and native Custom Elements:
-
-- **Modular Package Exports** — Import pre-bundled components and utilities directly via `shadow-claw/components` (e.g. `ShadowClawToast`, `ShadowClawCard`, `ShadowClawDialog`, `ShadowClawEmptyState`, `ShadowClawPageHeader`) and `shadow-claw/utils` (e.g. `namespacedStorage`, `ulid`). TypeScript declaration files (`.d.ts`) are provided out of the box.
-- **Storybook Workbench** — Interactive visual development environment powered by Storybook (`@storybook/web-components-vite`) with dark mode default, live controls, and isolated component testing (`npm run storybook`), including all 18 A2UI catalog components and UI primitives.
-- **Reactive Element Lifecycle** — Custom elements extending `ShadowClawElement` observe attributes (`observedAttributes`) for declarative reactive DOM updates.
-
-## WebVM (Optional Alpine Linux)
-
-For advanced `bash` operations, ShadowClaw includes an optional **WebVM** (`v86` Alpine Linux) that runs in the Web Worker.
-
-- **Boot modes**: `auto` (9p, lighter weight), `ext2` (full filesystem), or `disabled` (fallback to JavaScript shell)
-- **Coordination**: Terminal sessions and tool execution share exclusive access with graceful handoffs
-- **Workspace sync**: 9p mode syncs VM `/workspace` changes back to OPFS so Files view stays in sync
-- **Interactive terminal**: Full shell access via `<shadow-claw-terminal>` component
-
-**Full guide**: [docs/subsystems/vm.md](docs/subsystems/vm.md)
-
-## Storage & Security
-
-ShadowClaw uses **IndexedDB** for structured data (messages, config, tasks) and **OPFS** for files.
-
-**Security:**
-
-- **AES-256-GCM encryption** for API keys at rest
-- **TC39 private fields** to prevent accidental leakage via console
-- **30-second key expiry** for plaintext operations
-- **No plaintext secrets on disk** — encrypted before storage
-- **Trusted Types enforcement** — idempotent `"default"` policy (`src/security/default-trusted-types-policy.ts`) registered at boot via `theme-init.ts`; `getPolicy()` fallback prevents duplicate-creation errors on module reload
-- **Custom element security guards** — `installCustomElementsRegistryGuard` and `installCustomElementDomGuard` prevent unauthorized custom element registration and dynamic DOM injection, strictly enforcing allowlists from `shadow-claw.config.json` (or `site-config.json`) or storage. Script declarations support URLs and `{ src, hasInit }` descriptors (standardized on `src`), invoking `init()` exclusively when `hasInit: true` is configured.
-- **Iframe sandbox & CSP hardening** — sandboxed preview iframes omit `allow-same-origin` by default to enforce opaque-origin (`null`) isolation without Chrome sandbox escape warnings, while injecting a transparent `postMessage` storage proxy bridge (`iframe-storage-bridge.js`) to provide namespaced `IndexedDB` and `localStorage` persistence for custom elements, trapping `ServiceWorker`/`caches` `SecurityError` rejections, polyfilling `showOpenFilePicker`/`showSaveFilePicker`, and relaying programmatic/link navigation and declarative `BroadcastChannel` messages via `IframeBroadcastProxy`
-- **Iframe embed sanitization** — DOMPurify-based iframe allowlisting protects markdown and HTML previews, with Settings-backed host patterns and a safe default host list
-- **SSRF proxy hardening** — `/proxy` blocks non-HTTP/S schemes and private/loopback IP ranges by default; bypassed via `--allow-private-proxy` flag or the authenticated service-worker JSON format
-- **Prompt injection defense** — external tool outputs (`fetch_url`, `web_search`, `remote_mcp_call_tool`) are structurally wrapped in `UNTRUSTED` delimiters; system prompt includes explicit anti-injection instructions when untrusted-content tools are active
-
-**File I/O:**
-
-- **OPFS** — browser-sandboxed storage (`shadowclaw/<groupId>/workspace/`)
-- **Per-deployment storage namespacing** — IndexedDB (`shadowclaw_<namespace>`), OPFS (`shadow-claw-opfs-<namespace>`), and localStorage (`shadowclaw:<namespace>:<key>`) are namespaced per deployment subpath with automated legacy database migration (`migrateLegacyDatabase.ts`)
-- **Local Folder** — user-selected directory via File System Access API
-- **Centralized write paths** — cross-browser fallback for Safari compatibility
-- **Zip export/import** — for conversation backup/restore
-- **Copy/move safety** — folder copy/move operations prevent pasting a folder into itself or one of its descendants, and support inter-group operations with conflict resolution
-
-**Full details**: [docs/architecture/storage.md](docs/architecture/storage.md) | [docs/subsystems/crypto.md](docs/subsystems/crypto.md) | [docs/subsystems/custom-element-security.md](docs/subsystems/custom-element-security.md)
-
-## Scheduled Tasks & Web Push
-
-ShadowClaw supports **cron-based scheduled tasks** with Web Push notifications. Tasks fire even when the app is closed.
-
-- Task expressions use standard **5-field cron syntax**
-- **Task sequences** — Execute a single text prompt, or sequentially run a list of agent tools
-- **Server-side persistence** — SQLite database ensures reliable firing (can be toggled via Settings)
-- **Web Push integration** — OS-level notifications when tasks trigger
-- **Recursion guard** — prevents infinite task → notification → task loops
-- **Client/Server parity** — Express dev server and Electron both support full scheduling
-- **Fresh Context & Subagent isolation** — Toggle task execution to bypass conversation history (fresh context) or run isolated in the background (subagent)
-
-**Setup & architecture**: [docs/subsystems/notifications.md](docs/subsystems/notifications.md)
-
-## Advanced Features
-
-### Remote MCP Integration
-
-Connect external **Model Context Protocol (MCP) servers** to extend agent capabilities dynamically. Tools from remote servers are discovered and executed transparently.
-
-- Bearer, Basic, and custom header authentication
-- OAuth token refresh support
-- Automatic reconnection on failure
-
-**Full guide**: [docs/subsystems/remote-mcp.md](docs/subsystems/remote-mcp.md)
-
-### Protocol-Agnostic Integrations
-
-Email (IMAP/SMTP), RSS, webhooks, and other integrations via a **plugin architecture**.
-
-- Encrypted credential storage
-- Typed action dispatch
-- Configurable plugin catalog
-
-**Full guide**: [docs/guides/protocol-agnostic-integrations.md](docs/guides/protocol-agnostic-integrations.md)
-
-### Web Share Target
-
-Receive files, URLs, and text directly from your OS share sheet into ShadowClaw.
-
-- Supported on all PWA-capable browsers and Android
-- Files are persisted to workspace
-- Auto-opens dated conversation with imported files
-
-**Full details**: [manifest.json](manifest.json) | [src/service-worker/share-target.ts](src/service-worker/share-target.ts)
-
-### Tool Profiles & Customization
-
-Create model-specific or task-specific tool profiles to optimize the context window.
-
-- Enable/disable individual tools
-- Override system prompt per profile
-- Auto-activate profiles by model
-- Save custom selections
-- **Built-in Profile** — Default Prompt API profile is restricted to core file and script tools (`javascript`, `list_files`, `open_file`, `read_file`, `write_file`)
-- **Declarative tool defaults** — Pre-seed default tool profiles (`defaultToolsProfile`) and built-in tools (`enabledTools`) via `shadow-claw.config.json` (or `site-config.json`)
-- **Declarative tool management & gating** — Declarative tool toggles persist in storage, update in-place in `<shadow-claw-tools>`, gate execution during LLM invocation, and synchronize automatically with WebMCP
-- **Execution-time allowlist enforcement** — Tool calls are re-validated at runtime against the active enabled tool list (profile/manual), not only generation-time schema hints
-- **Shared internet access control** — Toggles public internet access (`fetch` and shell networking) globally for the `bash` and `javascript` tools
-
-**Full guide**: [docs/subsystems/tools.md](docs/subsystems/tools.md#tool-profiles)
-
-### Attachment Capabilities
-
-Native multimodal delivery with automatic text fallback.
-
-- Model registry fetches capability metadata dynamically
-- Attachments sent as native content blocks when supported
-- Automatic fallback to OCR/markdown for unsupported formats
-
-**Full details**: [docs/subsystems/attachment-capabilities.md](docs/subsystems/attachment-capabilities.md)
-
-### Dynamic Context & Auto-Compaction
-
-Instead of fixed-size message windows, context is **token-aware and adaptive**.
-
-- System prompt + max output tokens budgeted first
-- Messages walked newest-to-oldest within budget
-- Large outputs truncated at line boundaries
-- UI progress bar tracks context usage
-- **Token estimation & cache tracking** — Tracks token usage and cache hits/misses across context window
-- Auto-compaction triggers at 80% usage
-
-**Full details**: [docs/architecture/context-management.md](docs/architecture/context-management.md)
-
-## Documentation
-
-Architecture docs, subsystem guides, and decision records live in [`docs/`](docs/README.md):
-
-- **[Architecture](docs/README.md#architecture)** — Orchestrator, worker protocol, storage, context, streaming
-- **[Subsystems](docs/README.md#subsystems)** — Shell, VM, git, channels, tools, providers, notifications, Electron, reactive UI, crypto
-- **[Guides](docs/README.md#guides)** — Adding providers, tools, shell commands, pages, channels
-- **[Decisions](docs/README.md#decisions)** — ADRs for bundled architecture, TypeScript, Signals, worker-owned VM, IndexedDB
-
-Agent-specific conventions and guardrails: [`AGENTS.md`](AGENTS.md)
-
-E2E test architecture: [`e2e/README.md`](e2e/README.md)
+---
 
 ## Development
 
 ```bash
-npm run dev                  # Dev server (watch mode)
+npm run dev                  # Dev server (watch mode on http://localhost:8888)
 npm run dev -- --https       # Dev server with opt-in HTTPS (auto-generates self-signed cert)
 npm start                    # Express server
 npm test                     # Jest (*.test.ts files live next to source)
@@ -405,7 +218,7 @@ npm run build:storybook      # Build static Storybook documentation to dist/stor
 npm run build:lib            # Build reusable ESM library and TypeScript declarations to dist/lib
 npm run e2e                  # Playwright E2E tests (e2e/*.test.ts)
 npm run e2e:install          # Install Playwright browser binaries
-npm run tsc                  # TypeScript type-check
+npm run tsc                  # Full TypeScript type-check across all workspaces
 npm run build                # Bundle application via Rolldown + generate service worker
 npm run build:service-worker # Generate the Workbox service worker
 npm run build:prod           # Production bundle build
@@ -427,6 +240,7 @@ npx shadow-claw tasks --client <id>                  # List scheduled tasks on a
 npx shadow-claw backup                               # Trigger OPFS workspace backup
 npx shadow-claw backup list                          # List available backup snapshots
 npx shadow-claw backup delete --backup-id <id>       # Delete a backup snapshot
+npx shadow-claw mcp                                  # Run official Stateless MCP server (STDIO)
 npx shadow-claw server --tmp                         # Run services with temporary directory cache (/tmp/shadow-claw)
 npx shadow-claw server --cache-dir <dir>             # Run services with custom cache directory
 npx shadow-claw webrtc listen                        # Start headless WebRTC DataChannel daemon
@@ -434,9 +248,13 @@ npx shadow-claw peer-id                              # Get or generate persisten
 npx shadow-claw skills:index                         # Generate or update .well-known/agent-skills/index.json
 ```
 
-When launching `dev`, `run`, `serve`, or `server` without an existing cache, ShadowClaw prompts interactively to select between the local directory (`.cache`), system temporary storage (`tmpdir()`), or a custom path (skip prompting via `--tmp`, `-y`, `--cache-dir <dir>`, or `SHADOWCLAW_CACHE_DIR`).
+When launching `dev`, `run`, `serve`, or `server` without an existing cache, ShadowClaw prompts interactively to select between `.cache`, `tmpdir()`, or a custom path (skip prompting via `--tmp`, `-y`, `--cache-dir <dir>`, or `SHADOWCLAW_CACHE_DIR`).
 
-Commands support `--transport webrtc` for direct peer-to-peer DataChannel execution with connected browser clients. Control plane authentication uses `SHADOWCLAW_CONTROL_TOKEN` (env) or `--token` flag, and supports HTTPS endpoints via `--https` (and `--insecure` for self-signed certs). The control plane endpoint and token are printed to the console on server start.
+Commands support `--transport webrtc` for direct peer-to-peer DataChannel execution with connected browser clients. Control plane authentication automatically resolves tokens across flags, environment variables (`SHADOWCLAW_CONTROL_TOKEN`), system temporary directory (`tmpdir()`), parent directories, and SQLite with automatic fallback retry on 401 Unauthorized errors, and supports HTTPS endpoints via `--https` (and `--insecure` for self-signed certs).
+
+**Full CLI reference:** [docs/subsystems/cli.md](docs/subsystems/cli.md)
+
+---
 
 ## License
 

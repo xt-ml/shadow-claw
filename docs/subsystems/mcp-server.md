@@ -28,8 +28,8 @@ graph TB
         HTTP_ENDPOINT["POST /mcp<br>(Streamable HTTP)"]
         STDIO_ENDPOINT["shadow-claw mcp<br>(STDIO JSON-RPC Lines)"]
         ENGINE["McpServer Core Engine<br>"]
-        BUILTIN["Built-in Tools<br>(shadowclaw_*)"]
-        RELAY["ClientToolRelay<br>(Dynamic WebMCP Discovery)"]
+        BUILTIN["Built-in Tools<br>(shadowclaw_server_*)"]
+        RELAY["ClientToolRelay<br>(Dynamic WebMCP Discovery:<br>shadowclaw_client_*)"]
     end
 
     subgraph ControlPlane ["Control Plane Bridge"]
@@ -106,7 +106,7 @@ Response:
     },
     "serverInfo": {
       "name": "shadow-claw",
-      "version": "1.25.0"
+      "version": "1.28.1"
     }
   }
 }
@@ -158,25 +158,26 @@ The host client fulfills the request by calling `tools/call` with `inputResponse
 
 ## Built-in Tools Reference
 
-| Tool Name                      | Description                                                                            | Key Arguments                                                                 |
-| :----------------------------- | :------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------- |
-| `shadowclaw_list_clients`      | List all connected browser and Electron clients, status, and active capabilities.      | None                                                                          |
-| `shadowclaw_set_active_client` | Set the active default client for subsequent relayed tool executions and messages.     | `clientId` (required)                                                         |
-| `shadowclaw_send_message`      | Dispatch a prompt or message directly into a client's AI conversation queue.           | `text` (required), `clientId`, `groupId`                                      |
-| `shadowclaw_read_state`        | Query orchestrator state (`idle`, `responding`), active conversation group, and model. | `clientId`                                                                    |
-| `shadowclaw_list_tasks`        | List scheduled background tasks configured on a connected client.                      | `clientId`, `groupId`                                                         |
-| `shadowclaw_manage_backup`     | Trigger, list, or delete OPFS workspace snapshots on a client.                         | `action` (`trigger` \| `list` \| `delete`), `clientId`, `backupId`, `groupId` |
-| `shadowclaw_send_notification` | Broadcast an OS push notification to all subscribed devices or a specific registered client via Web Push (VAPID). | `body` (required), `title` (optional), `clientId` (optional)                  |
-| `shadowclaw_server_status`     | Query Node server status, version, and connected client count.                         | None                                                                          |
+| Tool Name                             | Description                                                                                                       | Key Arguments                                                                 |
+| :------------------------------------ | :---------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------- |
+| `shadowclaw_server_list_clients`      | List all connected browser and Electron clients, status, and active capabilities.                                 | None                                                                          |
+| `shadowclaw_server_set_active_client` | Set the active default client for subsequent relayed tool executions and messages.                                | `clientId` (required)                                                         |
+| `shadowclaw_server_send_message`      | Dispatch a prompt or message directly into a client's AI conversation queue.                                      | `text` (required), `clientId`, `groupId`                                      |
+| `shadowclaw_server_read_state`        | Query orchestrator state (`idle`, `responding`), active conversation group, and model.                            | `clientId`                                                                    |
+| `shadowclaw_server_list_tasks`        | List scheduled background tasks configured on a connected client.                                                 | `clientId`, `groupId`                                                         |
+| `shadowclaw_server_manage_backup`     | Trigger, list, or delete OPFS workspace snapshots on a client.                                                    | `action` (`trigger` \| `list` \| `delete`), `clientId`, `backupId`, `groupId` |
+| `shadowclaw_server_send_notification` | Broadcast an OS push notification to all subscribed devices or a specific registered client via Web Push (VAPID). | `body` (required), `title` (optional), `clientId` (optional)                  |
+| `shadowclaw_server_status`            | Query Node server status, version, and connected client count.                                                    | None                                                                          |
 
 ---
 
 ## Dynamic In-Browser Tool Relaying & Multi-Client Targeting
 
-When external hosts call tools belonging to connected browser clients (e.g. `read_file`, `write_file`, `bash`, `git_*`, or interactive `ask_user`):
+When external hosts call tools belonging to connected browser clients (e.g. `shadowclaw_client_read_file`, `shadowclaw_client_write_file`, `shadowclaw_client_bash`, `shadowclaw_client_git_*`, or interactive `shadowclaw_client_ask_user`):
 
-### 1. Multi-Client Tool Discovery & Capability Schema
+### 1. Tool Naming Convention & Multi-Client Discovery
 
+- **Naming Convention:** All live tools discovered from connected browser clients are prefixed with `shadowclaw_client_` (such as `shadowclaw_client_read_file`, `shadowclaw_client_javascript`, `shadowclaw_client_list_files`, `shadowclaw_client_open_file`, `shadowclaw_client_patch_file`). This ensures client-side WebMCP tools are immediately distinguishable from built-in CLI and server tools (`shadowclaw_server_*`) in MCP Inspector, Claude Desktop, and other MCP clients. Tool calls transparently proxy to the actual tool name on the target client (unprefixed tool names are also supported for backward compatibility).
 - The MCP engine inspects all connected clients via the Control Plane (`list-tools`).
 - Tools aggregate across clients; if multiple clients are connected, the tool's input schema includes an optional `clientId` parameter with an `enum` restricted to client IDs that actually support and have that tool enabled.
 - Clients that disconnect are unregistered promptly, keeping tool listings and client target lists accurate.
@@ -186,7 +187,7 @@ When external hosts call tools belonging to connected browser clients (e.g. `rea
 Calls route using the following resolution precedence:
 
 1. **Explicit `clientId`:** Resolved against full client ID, 0-based client index (`"0"`, `"1"`), ULID prefix match, or device label match (e.g. `"Pixel"`, `"Desktop"`).
-2. **Active Client:** Set via `shadowclaw_set_active_client`. If the active client supports the tool, it receives the call.
+2. **Active Client:** Set via `shadowclaw_server_set_active_client`. If the active client supports the tool, it receives the call.
 3. **First Supporting Client:** If no explicit or active match applies, falls back to the first available client that supports the tool.
 
 If the requested client does not support or have the tool enabled, the MCP server returns an immediate, descriptive error rejection.
@@ -232,4 +233,18 @@ When the browser tab receives an `invoke-tool` command:
     }
   }
 }
+```
+
+---
+
+## Testing with MCP Inspector
+
+You can test and inspect the Stateless MCP server interactively with the official [`@modelcontextprotocol/inspector`](https://github.com/modelcontextprotocol/inspector):
+
+```bash
+# Test local STDIO server
+npx @modelcontextprotocol/inspector npx shadow-claw mcp
+
+# Test against a remote or custom HTTPS host
+npx @modelcontextprotocol/inspector npx shadow-claw mcp --host exampleHostname --https
 ```

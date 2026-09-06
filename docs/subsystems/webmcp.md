@@ -350,3 +350,46 @@ When dispatching tool calls from external hosts via the Control Plane (`invoke-t
 
 **ShadowClaw's Role:**
 ShadowClaw acts primarily as a **Tool Provider** via `registerTool()`, exposing built-in tools (Bash, Git, etc.) to the browser context for consumption by external AI agents. With `getWebMcpTools()`, ShadowClaw also supports tool discovery with backwards-compatible schema parsing and graceful degradation when running on older browsers or polyfill targets.
+
+---
+
+## Testing WebMCP Integration
+
+When `document.modelContext` is available (with `navigator.modelContext` fallback for Chrome < 152), tools are registered through the browser's Model Context Protocol (`@mcp-b/webmcp-polyfill` v3). ShadowClaw provides `parseWebMcpInputSchema` to normalize input schemas across Chrome 154+ (native object) and Chrome < 154 (DOMString JSON) versions, and `getWebMcpTools()` to safely query registered tools with graceful degradation.
+
+To test registered tools directly from the browser DevTools console:
+
+```ts
+// get available tools (safely normalizes input schemas across Chrome versions)
+var tools = await document.modelContext.getTools();
+
+// format the tool list
+var formattedToolsJSON = JSON.stringify(
+  tools.map(
+    ({ annotations, description, inputSchema, name, origin, title }) => ({
+      annotations,
+      description,
+      inputSchema,
+      name,
+      origin,
+      title,
+    }),
+  ),
+  null,
+  2,
+);
+
+// list available tools
+console.log(formattedToolsJSON);
+
+// get the toast tool
+var [toastTool] = tools.filter((v) => v.description.includes("Show a toast"));
+
+// run the toast tool
+await document.modelContext.executeTool(
+  toastTool,
+  '{ "message": "Hello from 🦞 Shadow Claw!"}',
+);
+```
+
+You can also use the [Model Context Tool Inspector](https://chromewebstore.google.com/detail/model-context-tool-inspec/gbpdfapgefenggkahomfgkhfehlcenpd) Chrome extension for interactive visual debugging.

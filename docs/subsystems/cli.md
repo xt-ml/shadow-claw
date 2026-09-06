@@ -95,7 +95,7 @@ Builds the site in development mode and starts the local server with live proxy,
 | `--ssl-dir <path>`       | string  | Directory for self-signed TLS certs                                                | `".cache/tls"` |
 | `-v, --verbose`          | boolean | Enable verbose request and proxy logging                                           | `false`        |
 
-> **Note on Cache Directory Prompt:** If no existing `.cache` directory or databases are found on launch, ShadowClaw prompts interactively to let you choose between the current directory (`.cache`), system temporary storage (`tmpdir()`), or a custom path. Pass `--tmp`, `-y`, `--cache-dir`, or `SHADOWCLAW_CACHE_DIR` to skip the prompt.
+> **Note on Cache Directory Prompt:** If no existing `.cache` directory or databases are found on launch, ShadowClaw prompts interactively to let you choose between the current directory (`.cache`), system temporary storage (`tmpdir()`), or a custom path. Pass `--tmp`, `-y`, `--cache-dir`, or `SHADOWCLAW_CACHE_DIR` to skip the prompt. The control plane endpoint and token are printed to the console on server start.
 
 ### `shadow-claw serve [port]`
 
@@ -231,6 +231,9 @@ Runs the official Stateless Model Context Protocol (2026-07-28) server via STDIO
 # Run in STDIO mode (default, for Claude Desktop or Cursor configuration)
 npx shadow-claw mcp
 
+# Test via the official MCP Inspector over HTTPS
+npx @modelcontextprotocol/inspector npx shadow-claw mcp --host exampleHostname --https
+
 # Run in Streamable HTTP mode on port 8888
 npx shadow-claw mcp --mcp-transport http --port 8888
 
@@ -246,9 +249,14 @@ npx shadow-claw mcp --transport webrtc --client <browser-peer-id>
 | `--transport <transport>` | string  | Control plane client transport: `http` or `webrtc`                   | `"http"`      |
 | `--host <host>`           | string  | Control plane host                                                   | `"127.0.0.1"` |
 | `--port <port>`           | number  | Control plane port or HTTP MCP port                                  | `8888`        |
-| `--token <token>`         | string  | Control token                                                        | `""`          |
+| `--token <token>`         | string  | Control token                                                        | Auto-resolved |
 | `--https`                 | boolean | Connect to server via HTTPS                                          | `false`       |
 | `-k, --insecure`          | boolean | Allow self-signed TLS certificates                                   | `true`        |
+| `--cache-dir <dir>`       | string  | Custom cache directory for control token and databases               | `""`          |
+
+> **Client & Server Tool Naming:** Built-in server and CLI tools are exposed with the `shadowclaw_server_` prefix (e.g. `shadowclaw_server_list_clients`, `shadowclaw_server_send_message`, `shadowclaw_server_status`), while relayed client tools use `shadowclaw_client_` (e.g. `shadowclaw_client_read_file`, `shadowclaw_client_javascript`, `shadowclaw_client_list_files`). Legacy and unprefixed aliases are preserved for backward compatibility.
+>
+> **Control Token Auto-Discovery:** Control plane commands automatically search candidate tokens across the `--token` flag, `SHADOWCLAW_CONTROL_TOKEN`, the system temporary directory (`<tmpdir>/shadow-claw/control-token[-<port>].json`), ancestor directory trees, user config/cache directories, and SQLite database metadata. If a 401 Unauthorized response is encountered, the client automatically retries across remaining candidate tokens.
 
 ### `shadow-claw webrtc [action] [options]` / `shadow-claw peer-id [action] [options]`
 

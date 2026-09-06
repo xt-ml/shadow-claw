@@ -733,6 +733,10 @@ program
     "http",
   )
   .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
+  .option(
+    "--cache-dir <dir>",
+    "Custom cache directory for control token and databases",
+  )
   .action(async (options) => {
     await runMcpCommand(options);
   });

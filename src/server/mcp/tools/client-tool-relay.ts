@@ -7,8 +7,27 @@
  */
 
 import type { McpServer } from "../mcp-server.js";
-import type { McpTool, McpToolCallResult } from "../types.js";
-import { resolveTargetClientId } from "./built-in-tools.js";
+import {
+  MCP_CLIENT_TOOL_PREFIX,
+  type McpTool,
+  type McpToolCallResult,
+} from "../types.js";
+import {
+  resolveTargetClientId,
+  getDynamicSendNotificationTool,
+} from "./built-in-tools.js";
+
+function getClientRawToolName(name: string): string {
+  return name.startsWith(MCP_CLIENT_TOOL_PREFIX)
+    ? name.slice(MCP_CLIENT_TOOL_PREFIX.length)
+    : name;
+}
+
+function toClientExposedToolName(name: string): string {
+  return !name.startsWith(MCP_CLIENT_TOOL_PREFIX)
+    ? `${MCP_CLIENT_TOOL_PREFIX}${name}`
+    : name;
+}
 
 export interface ClientToolRelayOptions {
   targetClientId?: string;
@@ -51,46 +70,44 @@ export function createClientToolRelay(
             : [];
     } catch (_) {}
 
-    if (!Array.isArray(clients) || clients.length === 0) {
-      toolSupportingClientsMap.clear();
-      toolDefMap.clear();
-      return [];
-    }
-
     toolSupportingClientsMap.clear();
     toolDefMap.clear();
 
-    for (const c of clients) {
-      const cid = (c as any).clientId || (c as any).id;
-      if (!cid) continue;
+    if (Array.isArray(clients) && clients.length > 0) {
+      for (const c of clients) {
+        const cid = (c as any).clientId || (c as any).id;
+        if (!cid) continue;
 
-      try {
-        const res = await controlPlane.sendCommand(cid, "list-tools", {});
-        if (
-          res &&
-          res.success &&
-          res.data?.tools &&
-          Array.isArray(res.data.tools)
-        ) {
-          for (const t of res.data.tools) {
-            if (
-              t.name === "send_notification" ||
-              t.name.startsWith("shadowclaw_")
-            ) {
-              continue;
+        try {
+          const res = await controlPlane.sendCommand(cid, "list-tools", {});
+          if (
+            res &&
+            res.success &&
+            res.data?.tools &&
+            Array.isArray(res.data.tools)
+          ) {
+            for (const t of res.data.tools) {
+              const rawName = getClientRawToolName(t.name);
+              if (
+                rawName === "send_notification" ||
+                (rawName.startsWith("shadowclaw_") &&
+                  !rawName.startsWith("shadowclaw_client_"))
+              ) {
+                continue;
+              }
+              if (!toolDefMap.has(rawName)) {
+                toolDefMap.set(rawName, t);
+                toolSupportingClientsMap.set(rawName, []);
+              }
+              toolSupportingClientsMap.get(rawName)!.push(c);
             }
-            if (!toolDefMap.has(t.name)) {
-              toolDefMap.set(t.name, t);
-              toolSupportingClientsMap.set(t.name, []);
-            }
-            toolSupportingClientsMap.get(t.name)!.push(c);
           }
+        } catch (err) {
+          console.warn(
+            `[ClientToolRelay] Failed to query tools from client ${cid}:`,
+            err,
+          );
         }
-      } catch (err) {
-        console.warn(
-          `[ClientToolRelay] Failed to query tools from client ${cid}:`,
-          err,
-        );
       }
     }
 
@@ -100,8 +117,8 @@ export function createClientToolRelay(
     );
     const toolMap = new Map<string, McpTool>();
 
-    for (const [toolName, t] of toolDefMap.entries()) {
-      const supportingClients = toolSupportingClientsMap.get(toolName) || [];
+    for (const [rawToolName, t] of toolDefMap.entries()) {
+      const supportingClients = toolSupportingClientsMap.get(rawToolName) || [];
       const supportingClientIds = supportingClients
         .map((cl: any) => cl.clientId || cl.id)
         .filter(Boolean);
@@ -135,10 +152,13 @@ export function createClientToolRelay(
             : ` [Client: ${toolDefaultLabel} (${toolDefaultId.slice(0, 14)}...)]`
           : "";
 
-      toolMap.set(toolName, {
-        name: t.name,
+      const exposedName = toClientExposedToolName(rawToolName);
+
+      toolMap.set(exposedName, {
+        name: exposedName,
         description:
-          (t.description || `Relayed tool '${t.name}' from connected client.`) +
+          (t.description ||
+            `Relayed tool '${rawToolName}' from connected client.`) +
           clientNote,
         inputSchema: {
           ...existingSchema,
@@ -148,6 +168,9 @@ export function createClientToolRelay(
         annotations: t.annotations,
       });
     }
+
+    const dynamicNotifTool = getDynamicSendNotificationTool(controlPlane);
+    toolMap.set(dynamicNotifTool.name, dynamicNotifTool);
 
     cachedTools = Array.from(toolMap.values());
     cacheTime = now;
@@ -165,6 +188,16 @@ export function createClientToolRelay(
             tool.name,
             async (args, meta, inputResponses) => {
               return executeRelayedTool(tool.name, args, meta, inputResponses);
+            },
+          );
+        }
+        const rawName = getClientRawToolName(tool.name);
+        if (!registeredHandlers.has(rawName)) {
+          registeredHandlers.add(rawName);
+          server.registerToolHandler(
+            rawName,
+            async (args, meta, inputResponses) => {
+              return executeRelayedTool(rawName, args, meta, inputResponses);
             },
           );
         }
@@ -202,7 +235,11 @@ export function createClientToolRelay(
       await discoverTools();
     }
 
-    const supportingClients = toolSupportingClientsMap.get(toolName) || [];
+    const rawToolName = getClientRawToolName(toolName);
+    const supportingClients =
+      toolSupportingClientsMap.get(rawToolName) ||
+      toolSupportingClientsMap.get(toolName) ||
+      [];
     const supportingClientIds = supportingClients
       .map((cl: any) => cl.clientId || cl.id)
       .filter(Boolean);
@@ -253,7 +290,7 @@ export function createClientToolRelay(
     }
 
     // Interactive tool handling: ask_user via MRTR
-    if (toolName === "ask_user") {
+    if (rawToolName === "ask_user" || toolName === "ask_user") {
       if (!inputResponses || !inputResponses["response"]) {
         const question =
           (args.question as string) ||
@@ -302,7 +339,7 @@ export function createClientToolRelay(
       const toolArgs = { ...args };
       delete toolArgs.clientId;
       const res = await controlPlane.sendCommand(clientId, "invoke-tool", {
-        toolName,
+        toolName: rawToolName,
         input: toolArgs,
       });
 

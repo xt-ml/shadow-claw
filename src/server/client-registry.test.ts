@@ -14,6 +14,7 @@ import {
   getControlTokenFilePath,
 } from "./client-registry.js";
 import fs from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 
 beforeEach(() => {
@@ -245,6 +246,14 @@ describe("client-registry", () => {
       const rawJson = JSON.parse(fs.readFileSync(filePath, "utf8"));
       expect(rawJson.token).toBe("my-secret-test-token");
       expect(rawJson.createdAt).toBe(1700000000000);
+    });
+
+    it("mirrors saved token to system tmp directory", () => {
+      saveControlTokenFile("tmp-mirrored-token", tempCacheDir, 1700000000000);
+      const tmpFile = path.join(tmpdir(), "shadow-claw", "control-token.json");
+      expect(fs.existsSync(tmpFile)).toBe(true);
+      const content = JSON.parse(fs.readFileSync(tmpFile, "utf8"));
+      expect(content.token).toBe("tmp-mirrored-token");
     });
   });
 });

@@ -7,12 +7,100 @@
 
 import type { McpServer } from "../mcp-server.js";
 import type { McpTool } from "../types.js";
-import { broadcastPush } from "../../../subsystems/notifications/push-routes.js";
+import {
+  broadcastPush,
+  getRegisteredPushClients,
+  type PushClientRecord,
+} from "../../../subsystems/notifications/push-routes.js";
 import { getPackageVersion } from "../../utils/packageVersion.js";
+
+export function buildSendNotificationTool(
+  pushClients: Array<
+    PushClientRecord | { clientId: string; deviceLabel?: string }
+  > = [],
+  name: string = "shadowclaw_server_send_notification",
+): McpTool {
+  const sortedPushClients = [...pushClients].sort((a, b) =>
+    a.clientId.localeCompare(b.clientId),
+  );
+  const pushClientIds = sortedPushClients
+    .map((c) => c.clientId)
+    .filter(Boolean);
+
+  const baseDescription =
+    "Broadcast an OS-level push notification to subscribed devices via Web Push (VAPID), or send to a specific registered client. Works even when the client browser tab is closed, asleep, or running in the background.";
+
+  const clientIdProp: any = {
+    type: "string",
+    description:
+      pushClientIds.length > 0
+        ? `Target client ID, prefix, or device label of a specific client registered for push notifications (optional; if omitted, broadcasts to all subscribed devices). Available on: ${sortedPushClients.map((c) => `${c.clientId} (${c.deviceLabel || "Client"})`).join(", ")}`
+        : "Target client ID, prefix, or device label of a specific client that has registered in the past. If omitted, broadcasts to all subscribed devices.",
+  };
+
+  if (pushClientIds.length > 0) {
+    clientIdProp.enum = pushClientIds;
+  }
+
+  return {
+    name,
+    description: baseDescription,
+    inputSchema: {
+      type: "object",
+      properties: {
+        title: {
+          type: "string",
+          description: "Notification title (default: 'ShadowClaw').",
+        },
+        body: {
+          type: "string",
+          description: "Notification body message text.",
+        },
+        clientId: clientIdProp,
+      },
+      required: ["body"],
+    },
+  };
+}
+
+export function getDynamicSendNotificationTool(
+  controlPlane?: any,
+  name: string = "shadowclaw_server_send_notification",
+): McpTool {
+  let pushClients: PushClientRecord[] = [];
+  try {
+    pushClients = getRegisteredPushClients();
+  } catch (_) {}
+
+  if (controlPlane && Array.isArray(pushClients) && pushClients.length > 0) {
+    try {
+      const connected =
+        typeof controlPlane.getConnectedClients === "function"
+          ? controlPlane.getConnectedClients()
+          : typeof controlPlane.listClients === "function"
+            ? controlPlane.listClients()
+            : [];
+      if (Array.isArray(connected)) {
+        for (const pc of pushClients) {
+          if (!pc.deviceLabel) {
+            const match = connected.find(
+              (c: any) => (c.clientId || c.id) === pc.clientId,
+            );
+            if (match && match.deviceLabel) {
+              pc.deviceLabel = match.deviceLabel;
+            }
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  return buildSendNotificationTool(pushClients, name);
+}
 
 export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
   {
-    name: "shadowclaw_list_clients",
+    name: "shadowclaw_server_list_clients",
     description:
       "List connected browser and Electron clients, including device type, ID, and active capabilities.",
     inputSchema: {
@@ -21,7 +109,7 @@ export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
     },
   },
   {
-    name: "shadowclaw_send_message",
+    name: "shadowclaw_server_send_message",
     description:
       "Send a message or prompt to a connected ShadowClaw client's active AI orchestrator queue.",
     inputSchema: {
@@ -46,7 +134,7 @@ export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
     },
   },
   {
-    name: "shadowclaw_read_state",
+    name: "shadowclaw_server_read_state",
     description:
       "Read the current orchestrator state (idle, responding, etc.), active group ID, and capabilities from a connected client.",
     inputSchema: {
@@ -61,7 +149,7 @@ export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
     },
   },
   {
-    name: "shadowclaw_list_tasks",
+    name: "shadowclaw_server_list_tasks",
     description:
       "List scheduled background tasks configured on a connected client (optionally filtered by conversation group).",
     inputSchema: {
@@ -80,7 +168,7 @@ export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
     },
   },
   {
-    name: "shadowclaw_manage_backup",
+    name: "shadowclaw_server_manage_backup",
     description:
       "Trigger or manage OPFS workspace file backups for a connected client (trigger, list, or delete).",
     inputSchema: {
@@ -108,7 +196,7 @@ export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
     },
   },
   {
-    name: "shadowclaw_set_active_client",
+    name: "shadowclaw_server_set_active_client",
     description:
       "Set the active default connected client used when no clientId is explicitly provided in tool calls.",
     inputSchema: {
@@ -132,30 +220,7 @@ export const SHADOWCLAW_BUILTIN_TOOLS: McpTool[] = [
       properties: {},
     },
   },
-  {
-    name: "shadowclaw_send_notification",
-    description:
-      "Broadcast an OS-level push notification to subscribed devices via Web Push (VAPID), or send to a specific registered client. Works even when the client browser tab is closed, asleep, or running in the background.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        title: {
-          type: "string",
-          description: "Notification title (default: 'ShadowClaw').",
-        },
-        body: {
-          type: "string",
-          description: "Notification body message text.",
-        },
-        clientId: {
-          type: "string",
-          description:
-            "Target client ID, prefix, or device label of a specific client that has registered in the past. If omitted, broadcasts to all subscribed devices.",
-        },
-      },
-      required: ["body"],
-    },
-  },
+  buildSendNotificationTool(),
 ];
 
 export function resolveTargetClientId(
@@ -214,9 +279,14 @@ export function registerBuiltInTools(
   server: McpServer,
   controlPlane: any,
 ): void {
+  server.setToolProvider(async () => {
+    return [getDynamicSendNotificationTool(controlPlane)];
+  });
+
   for (const tool of SHADOWCLAW_BUILTIN_TOOLS) {
-    server.registerTool(tool, async (args) => {
+    const handler = async (args: Record<string, any>) => {
       switch (tool.name) {
+        case "shadowclaw_server_list_clients":
         case "shadowclaw_list_clients": {
           const clients =
             typeof controlPlane.getConnectedClients === "function"
@@ -235,6 +305,7 @@ export function registerBuiltInTools(
           };
         }
 
+        case "shadowclaw_server_send_message":
         case "shadowclaw_send_message": {
           const text = String(args.text || "").trim();
           if (!text) {
@@ -278,6 +349,7 @@ export function registerBuiltInTools(
           };
         }
 
+        case "shadowclaw_server_read_state":
         case "shadowclaw_read_state": {
           const targetId = resolveTargetClientId(controlPlane, args.clientId);
           if (!targetId) {
@@ -308,6 +380,7 @@ export function registerBuiltInTools(
           };
         }
 
+        case "shadowclaw_server_list_tasks":
         case "shadowclaw_list_tasks": {
           const targetId = resolveTargetClientId(controlPlane, args.clientId);
           if (!targetId) {
@@ -337,6 +410,7 @@ export function registerBuiltInTools(
           };
         }
 
+        case "shadowclaw_server_manage_backup":
         case "shadowclaw_manage_backup": {
           const action = String(args.action || "trigger").toLowerCase();
           const targetId = resolveTargetClientId(controlPlane, args.clientId);
@@ -426,6 +500,7 @@ export function registerBuiltInTools(
           };
         }
 
+        case "shadowclaw_server_set_active_client":
         case "shadowclaw_set_active_client": {
           const targetId = resolveTargetClientId(controlPlane, args.clientId);
           if (!targetId) {
@@ -457,7 +532,8 @@ export function registerBuiltInTools(
           };
         }
 
-        case "shadowclaw_server_status": {
+        case "shadowclaw_server_status":
+        case "shadowclaw_status": {
           const clients =
             typeof controlPlane.getConnectedClients === "function"
               ? controlPlane.getConnectedClients()
@@ -482,6 +558,7 @@ export function registerBuiltInTools(
           };
         }
 
+        case "shadowclaw_server_send_notification":
         case "shadowclaw_send_notification":
         case "send_notification": {
           const body = String(args.body || "").trim();
@@ -549,6 +626,20 @@ export function registerBuiltInTools(
             content: [{ type: "text", text: `Unknown tool: '${tool.name}'` }],
           };
       }
-    });
+    };
+
+    server.registerTool(tool, handler);
+
+    if (tool.name.startsWith("shadowclaw_server_")) {
+      const legacyAlias = `shadowclaw_${tool.name.slice("shadowclaw_server_".length)}`;
+      server.registerToolHandler(legacyAlias, handler);
+    }
+    if (
+      tool.name === "shadowclaw_server_send_notification" ||
+      tool.name === "shadowclaw_send_notification"
+    ) {
+      server.registerToolHandler("shadowclaw_send_notification", handler);
+      server.registerToolHandler("send_notification", handler);
+    }
   }
 }

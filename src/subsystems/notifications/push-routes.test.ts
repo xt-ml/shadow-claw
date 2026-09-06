@@ -25,6 +25,7 @@ jest.unstable_mockModule("./push-store.js", () => ({
   getAllSubscriptions: jest.fn(() => []),
   getSubscriptionsByClientId: jest.fn(() => []),
   findSubscriptionsForClient: jest.fn(() => []),
+  getRegisteredPushClients: jest.fn(() => []),
 }));
 
 const { registerPushRoutes, broadcastPush } = await import("./push-routes.js");
@@ -176,6 +177,36 @@ describe("push-routes", () => {
       expect(res._json).toHaveLength(1);
 
       expect(res._json[0].id).toBe(1);
+    });
+  });
+
+  describe("GET /push/clients", () => {
+    it("registers the route", () => {
+      expect(app.routes.get["/push/clients"]).toBeDefined();
+    });
+
+    it("returns registered push clients", async () => {
+      (store.getRegisteredPushClients as any).mockReturnValue([
+        {
+          clientId: "client-abc",
+          deviceLabel: "Mac Chrome",
+          subscriptionCount: 1,
+          lastSeen: "2026-09-01",
+        },
+      ]);
+      const req = createMockReq();
+      const res = createMockRes();
+      await app.routes.get["/push/clients"](req, res);
+      expect(res._json).toEqual({
+        clients: [
+          {
+            clientId: "client-abc",
+            deviceLabel: "Mac Chrome",
+            subscriptionCount: 1,
+            lastSeen: "2026-09-01",
+          },
+        ],
+      });
     });
   });
 

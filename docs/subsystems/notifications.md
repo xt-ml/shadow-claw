@@ -53,9 +53,11 @@ On server start, `push-store.ts` generates a VAPID key pair (if none exists) and
 The client subscribes via:
 
 ```text
-POST /push/subscribe    { subscription: PushSubscription }
-DELETE /push/subscribe  { endpoint }
-GET /push/status        { subscribed: bool, endpoint? }
+POST /push/subscribe     { subscription: PushSubscription }
+DELETE /push/subscribe   { endpoint }
+GET /push/subscriptions  { Array<PushSubscriptionRow> }
+GET /push/clients        { clients: Array<PushClientRecord> }
+GET /push/status         { subscribed: bool, endpoint? }
 ```
 
 ### send_notification tool
@@ -67,9 +69,10 @@ When the agent calls `send_notification({ title, body, groupId })`:
 3. Orchestrator POSTs to `/push/broadcast`
 4. Server sends push to all subscribed clients via `web-push.sendNotification()`
 
-### shadowclaw_send_notification (MCP Tool)
+### shadowclaw_server_send_notification (MCP Tool)
 
-External hosts, agents, and IDEs can invoke `shadowclaw_send_notification` via Model Context Protocol (MCP). Unlike in-browser tools, this tool executes **server-side** directly against the VAPID push subsystem:
+External hosts, agents, and IDEs can invoke `shadowclaw_server_send_notification` (legacy alias `shadowclaw_send_notification`) via Model Context Protocol (MCP). Unlike in-browser tools, this tool executes **server-side** directly against the VAPID push subsystem:
+
 - Accepts `body` (required), `title` (optional), and `clientId` (optional).
 - When `clientId` is omitted, broadcasts to all subscribed devices.
 - When `clientId` is provided, resolves the target client (by exact ID, prefix, or device label) against push subscriptions registered in the past and delivers the notification only to that client.

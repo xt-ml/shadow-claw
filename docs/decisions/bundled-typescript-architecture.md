@@ -2,7 +2,6 @@
 
 **Status:** Active
 **Date:** 2026-04-19
-**Commit:** `7d0540e` — "Build pipeline overhaul: TypeScript, Rollup, Electron, and E2E improvements"
 
 ## Context
 

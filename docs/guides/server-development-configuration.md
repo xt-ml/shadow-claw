@@ -123,6 +123,21 @@ npx shadow-claw dev --https --cert /path/to/cert.pem --key /path/to/key.pem
 npm start -- 8888 --https --cert /path/to/cert.pem --key /path/to/key.pem
 ```
 
+#### Manual TLS Certificate Generation (OpenSSL)
+
+To manually generate a self-signed certificate with Subject Alternative Name (SAN) extensions covering local hostnames and IP addresses:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -nodes -days 398 \
+  -keyout .cache/tls/key.pem \
+  -out .cache/tls/cert.pem \
+  -subj "/CN=book" \
+  -addext "subjectAltName=DNS:exampleHostname,IP:192.168.1.200,DNS:localhost,IP:127.0.0.1" \
+  -addext "extendedKeyUsage=serverAuth"
+```
+
+Certificates placed in `.cache/tls/key.pem` and `.cache/tls/cert.pem` are automatically loaded when running with `--https` (via `SHADOWCLAW_SSL_DIR` / `config.sslDir`) without requiring explicit `--cert` or `--key` flags.
+
 ### Cache & Storage Configuration
 
 **Flags:** `--cache-dir`, `--tmp` / `--temp`, `-y` / `--yes`

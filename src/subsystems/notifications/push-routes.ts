@@ -16,9 +16,13 @@ import {
   getSubscription,
   getAllSubscriptions,
   findSubscriptionsForClient,
+  getRegisteredPushClients,
   type PushSubscriptionRow,
+  type PushClientRecord,
 } from "./push-store.js";
 import type { Express } from "express";
+
+export { getRegisteredPushClients, type PushClientRecord };
 
 export interface BroadcastPushOptions {
   clientId?: string;
@@ -157,6 +161,12 @@ export function registerPushRoutes(app: Express): void {
   app.get("/push/subscriptions", (_req, res) => {
     const subs = getAllSubscriptions();
     res.json(subs);
+  });
+
+  // List unique registered clients with push subscriptions
+  app.get("/push/clients", (_req, res) => {
+    const clients = getRegisteredPushClients();
+    res.json({ clients });
   });
 
   // Send a notification to a specific subscription

@@ -36,15 +36,17 @@ describe("ShadowClaw Built-in MCP Tools", () => {
     registerBuiltInTools(server, mockControlPlane);
 
     const toolNames = SHADOWCLAW_BUILTIN_TOOLS.map((t) => t.name);
-    expect(toolNames).toContain("shadowclaw_list_clients");
-    expect(toolNames).toContain("shadowclaw_send_message");
-    expect(toolNames).toContain("shadowclaw_read_state");
-    expect(toolNames).toContain("shadowclaw_list_tasks");
-    expect(toolNames).toContain("shadowclaw_manage_backup");
-    expect(toolNames).toContain("shadowclaw_send_notification");
+    expect(toolNames).toContain("shadowclaw_server_list_clients");
+    expect(toolNames).toContain("shadowclaw_server_send_message");
+    expect(toolNames).toContain("shadowclaw_server_read_state");
+    expect(toolNames).toContain("shadowclaw_server_list_tasks");
+    expect(toolNames).toContain("shadowclaw_server_manage_backup");
+    expect(toolNames).toContain("shadowclaw_server_set_active_client");
+    expect(toolNames).toContain("shadowclaw_server_status");
+    expect(toolNames).toContain("shadowclaw_server_send_notification");
   });
 
-  it("executes shadowclaw_list_clients", async () => {
+  it("executes shadowclaw_server_list_clients", async () => {
     const server = new McpServer();
     const mockControlPlane: any = {
       getConnectedClients: jest.fn().mockReturnValue([
@@ -65,7 +67,7 @@ describe("ShadowClaw Built-in MCP Tools", () => {
       id: 1,
       method: "tools/call",
       params: {
-        name: "shadowclaw_list_clients",
+        name: "shadowclaw_server_list_clients",
         arguments: {},
       },
     });
@@ -76,6 +78,21 @@ describe("ShadowClaw Built-in MCP Tools", () => {
       const text = res.result.content[0].text;
       expect(text).toContain("client-abc");
       expect(text).toContain("MacBook Chrome");
+    }
+
+    // Legacy alias also works
+    const resAlias = await server.handleRequest({
+      jsonrpc: "2.0",
+      id: 11,
+      method: "tools/call",
+      params: {
+        name: "shadowclaw_list_clients",
+        arguments: {},
+      },
+    });
+    expect(resAlias).not.toBeNull();
+    if (resAlias && "result" in resAlias) {
+      expect(resAlias.result.content[0].text).toContain("client-abc");
     }
   });
 
@@ -481,6 +498,60 @@ describe("ShadowClaw Built-in MCP Tools", () => {
       closePushStore();
     }
   });
+
+  it("dynamically populates clientId enum and description for shadowclaw_server_send_notification when push clients are registered", async () => {
+    openPushStore(":memory:");
+    try {
+      saveSubscription({
+        endpoint: "https://fcm.googleapis.com/fcm/send/device1",
+        keys: { p256dh: "k1", auth: "a1" },
+        clientId: "client-push-001",
+        deviceLabel: "Pixel 9 Pro",
+      });
+      saveSubscription({
+        endpoint: "https://fcm.googleapis.com/fcm/send/device2",
+        keys: { p256dh: "k2", auth: "a2" },
+        clientId: "client-push-002",
+        deviceLabel: "MacBook Air",
+      });
+
+      const server = new McpServer();
+      const mockControlPlane: any = {
+        getConnectedClients: jest.fn().mockReturnValue([]),
+      };
+      registerBuiltInTools(server, mockControlPlane);
+      const relay = createClientToolRelay(mockControlPlane);
+      relay.attachToServer(server);
+
+      const res = await server.handleRequest({
+        jsonrpc: "2.0",
+        id: 99,
+        method: "tools/list",
+      });
+
+      expect(res).not.toBeNull();
+      if (res && "result" in res) {
+        const notifTool = res.result.tools.find(
+          (t: any) => t.name === "shadowclaw_server_send_notification",
+        );
+        expect(notifTool).toBeDefined();
+        const clientIdProp = notifTool.inputSchema.properties.clientId;
+        expect(clientIdProp).toBeDefined();
+        expect(clientIdProp.enum).toEqual([
+          "client-push-001",
+          "client-push-002",
+        ]);
+        expect(clientIdProp.description).toContain(
+          "client-push-001 (Pixel 9 Pro)",
+        );
+        expect(clientIdProp.description).toContain(
+          "client-push-002 (MacBook Air)",
+        );
+      }
+    } finally {
+      closePushStore();
+    }
+  });
 });
 
 describe("Client Tool Relay", () => {
@@ -528,7 +599,9 @@ describe("Client Tool Relay", () => {
 
     // Tools list should discover relayed tool
     const tools = await server.getTools();
-    const readFileTool = tools.find((t) => t.name === "read_file");
+    const readFileTool = tools.find(
+      (t) => t.name === "shadowclaw_client_read_file",
+    );
     expect(readFileTool).toBeDefined();
     expect(readFileTool?.description).toBe("Read workspace file");
 
@@ -538,7 +611,7 @@ describe("Client Tool Relay", () => {
       id: 3,
       method: "tools/call",
       params: {
-        name: "read_file",
+        name: "shadowclaw_client_read_file",
         arguments: { path: "notes.txt" },
       },
     });
@@ -547,6 +620,21 @@ describe("Client Tool Relay", () => {
     if (res && "result" in res) {
       expect(res.result.resultType).toBe("complete");
       expect(res.result.content[0].text).toContain("File content here");
+    }
+
+    // Calling via unprefixed name also works as backward-compatible alias
+    const resAlias = await server.handleRequest({
+      jsonrpc: "2.0",
+      id: 31,
+      method: "tools/call",
+      params: {
+        name: "read_file",
+        arguments: { path: "notes.txt" },
+      },
+    });
+    expect(resAlias).not.toBeNull();
+    if (resAlias && "result" in resAlias) {
+      expect(resAlias.result.content[0].text).toContain("File content here");
     }
   });
 
@@ -802,7 +890,9 @@ describe("Client Tool Relay", () => {
 
       // 1. Discover tools across multi-client: schema should have clientId enum
       const tools = await server.getTools();
-      const listFilesTool = tools.find((t) => t.name === "list_files");
+      const listFilesTool = tools.find(
+        (t) => t.name === "shadowclaw_client_list_files",
+      );
       expect(listFilesTool).toBeDefined();
       const props = listFilesTool?.inputSchema.properties as any;
       expect(props?.clientId).toBeDefined();
@@ -828,7 +918,7 @@ describe("Client Tool Relay", () => {
         id: 21,
         method: "tools/call",
         params: {
-          name: "list_files",
+          name: "shadowclaw_client_list_files",
           arguments: { clientId: "c1" },
         },
       });
@@ -843,7 +933,7 @@ describe("Client Tool Relay", () => {
         id: 22,
         method: "tools/call",
         params: {
-          name: "list_files",
+          name: "shadowclaw_client_list_files",
           arguments: {},
         },
       });

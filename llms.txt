@@ -10,6 +10,7 @@ Run instantly without cloning the repo:
 - `npx shadow-claw init <dir>` — Scaffold a custom template or knowledge hub.
 - `npx shadow-claw server` — Run headless 24/7 backend services (task scheduler, MCP, REST API).
 - `npx shadow-claw send "prompt"` — Dispatch prompts to connected clients directly from your terminal.
+- `npx shadow-claw mcp` — Run the official Stateless Model Context Protocol (2026-07-28) server over STDIO or HTTP.
 - [CLI Reference](https://xt-ml.github.io/shadow-claw/docs/subsystems/cli.md) — Complete guide to all CLI commands, flags, and control plane options.
 
 ## When to Use This
@@ -43,6 +44,7 @@ When to look elsewhere:
 - [Context Management](https://xt-ml.github.io/shadow-claw/docs/architecture/context-management.md)
 - [Streaming](https://xt-ml.github.io/shadow-claw/docs/architecture/streaming.md)
 - [Control Plane & Client Bridge](https://xt-ml.github.io/shadow-claw/docs/subsystems/control-plane.md)
+- [Web Share Target](https://xt-ml.github.io/shadow-claw/docs/subsystems/share-target.md)
 
 ## MCP & Discovery
 
@@ -54,8 +56,8 @@ When to look elsewhere:
 
 ## Optional
 
-- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): CLI, control plane, MCP server, backup, Shell, VM, git, channels, tools, declarative tools, Agent Skills, providers, built-in AI Task APIs, notifications, Electron, reactive UI, component library, Storybook, crypto, and more
-- [Guides](https://xt-ml.github.io/shadow-claw/docs/README.md#guides): Adding a provider/tool/channel/page/shell command
+- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): CLI, control plane, MCP server, backup, Shell, VM, git, channels, tools, declarative tools, Agent Skills, providers, built-in AI Task APIs, notifications, Electron, reactive UI, component library, Storybook, crypto, WebMCP, Web Share Target, and more
+- [Guides](https://xt-ml.github.io/shadow-claw/docs/README.md#guides): Adding a provider/tool/channel/page/shell command, server development configuration, and publishing to GitHub Pages
 - [Decisions](https://xt-ml.github.io/shadow-claw/docs/README.md#decisions): ADRs explaining bundled TypeScript, Signals, worker-isolated runtime, IndexedDB/OPFS storage
 - [e2e/README.md](https://xt-ml.github.io/shadow-claw/e2e/README.md): E2E test architecture
 - **Static Publishing**: See the content-repo template for agnostic GitHub Pages deployments without AGPL restrictions.

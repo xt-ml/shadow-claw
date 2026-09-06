@@ -89,15 +89,48 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
     expect(res).toBeDefined();
     expect(res.result.resultType).toBe("complete");
     const toolNames = res.result.tools.map((t) => t.name);
-    expect(toolNames).toContain("shadowclaw_list_clients");
-    expect(toolNames).toContain("shadowclaw_send_message");
-    expect(toolNames).toContain("shadowclaw_send_notification");
-    expect(toolNames).toContain("read_file");
+    expect(toolNames).toContain("shadowclaw_server_list_clients");
+    expect(toolNames).toContain("shadowclaw_server_send_message");
+    expect(toolNames).toContain("shadowclaw_server_send_notification");
+    expect(toolNames).toContain("shadowclaw_server_status");
+    expect(toolNames).toContain("shadowclaw_client_read_file");
 
     const notifTool = res.result.tools.find(
-      (t) => t.name === "shadowclaw_send_notification",
+      (t) => t.name === "shadowclaw_server_send_notification",
     );
     expect(notifTool.inputSchema.properties).toHaveProperty("clientId");
+  });
+
+  it("populates clientId enum and description for shadowclaw_server_send_notification when push clients are registered", async () => {
+    const mockClient = {
+      listClients: jest.fn().mockResolvedValue([]),
+      listPushClients: jest.fn().mockResolvedValue([
+        { clientId: "client-pwa-1", deviceLabel: "Android Pixel" },
+        { clientId: "client-pwa-2", deviceLabel: "iPad Safari" },
+      ]),
+    };
+
+    const engine = createCliMcpEngine({
+      client: mockClient,
+      relayClientTools: false,
+    });
+    const res = await engine.handleMessage({
+      jsonrpc: "2.0",
+      id: 20,
+      method: "tools/list",
+    });
+
+    expect(res).toBeDefined();
+    expect(res.result.resultType).toBe("complete");
+    const notifTool = res.result.tools.find(
+      (t) => t.name === "shadowclaw_server_send_notification",
+    );
+    expect(notifTool).toBeDefined();
+    const clientIdProp = notifTool.inputSchema.properties.clientId;
+    expect(clientIdProp).toBeDefined();
+    expect(clientIdProp.enum).toEqual(["client-pwa-1", "client-pwa-2"]);
+    expect(clientIdProp.description).toContain("client-pwa-1 (Android Pixel)");
+    expect(clientIdProp.description).toContain("client-pwa-2 (iPad Safari)");
   });
 
   it("processes tools/call for shadowclaw_send_notification directly via broadcastNotification", async () => {
@@ -251,7 +284,7 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
     );
   });
 
-  it("processes tools/call for shadowclaw_send_message", async () => {
+  it("processes tools/call for shadowclaw_server_send_message and legacy alias", async () => {
     const mockClient = {
       listClients: jest
         .fn()
@@ -268,7 +301,7 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
       id: 3,
       method: "tools/call",
       params: {
-        name: "shadowclaw_send_message",
+        name: "shadowclaw_server_send_message",
         arguments: { text: "Test message" },
       },
     });
@@ -279,9 +312,55 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
       text: "Test message",
       groupId: undefined,
     });
+
+    // Legacy alias
+    const resAlias = await engine.handleMessage({
+      jsonrpc: "2.0",
+      id: 4,
+      method: "tools/call",
+      params: {
+        name: "shadowclaw_send_message",
+        arguments: { text: "Legacy test message" },
+      },
+    });
+    expect(resAlias).toBeDefined();
+    expect(resAlias.result.resultType).toBe("complete");
+    expect(mockClient.sendCommand).toHaveBeenCalledWith("c1", "send-message", {
+      text: "Legacy test message",
+      groupId: undefined,
+    });
   });
 
-  it("processes tools/call for relayed client tool (e.g. list_files)", async () => {
+  it("processes tools/call for shadowclaw_server_status", async () => {
+    const mockClient = {
+      listClients: jest
+        .fn()
+        .mockResolvedValue([{ clientId: "c1" }, { clientId: "c2" }]),
+    };
+
+    const engine = createCliMcpEngine({
+      client: mockClient,
+      version: "1.28.1",
+    });
+    const res = await engine.handleMessage({
+      jsonrpc: "2.0",
+      id: 5,
+      method: "tools/call",
+      params: {
+        name: "shadowclaw_server_status",
+        arguments: {},
+      },
+    });
+
+    expect(res).toBeDefined();
+    expect(res.result.resultType).toBe("complete");
+    const statusData = JSON.parse(res.result.content[0].text);
+    expect(statusData.server).toBe("ShadowClaw");
+    expect(statusData.connectedClients).toBe(2);
+    expect(statusData.status).toBe("healthy");
+  });
+
+  it("processes tools/call for relayed client tool (e.g. shadowclaw_client_list_files)", async () => {
     const mockClient = {
       listClients: jest
         .fn()
@@ -307,7 +386,7 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
       id: 4,
       method: "tools/call",
       params: {
-        name: "list_files",
+        name: "shadowclaw_client_list_files",
         arguments: {},
       },
     });
@@ -321,6 +400,20 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
       toolName: "list_files",
       input: {},
     });
+
+    // Also verify backward compatibility: calling with unprefixed name also proxies
+    const resUnprefixed = await engine.handleMessage({
+      jsonrpc: "2.0",
+      id: 41,
+      method: "tools/call",
+      params: {
+        name: "list_files",
+        arguments: {},
+      },
+    });
+    expect(resUnprefixed.result.content[0].text).toBe(
+      ".agents/ MEMORY.md index.html -/",
+    );
   });
 
   it("handles tools/call relayed client tool failure with informative error content", async () => {
@@ -342,7 +435,7 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
       id: 5,
       method: "tools/call",
       params: {
-        name: "list_files",
+        name: "shadowclaw_client_list_files",
         arguments: { path: "restricted" },
       },
     });
@@ -413,7 +506,7 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
     });
 
     const listFilesTool = listRes.result.tools.find(
-      (t) => t.name === "list_files",
+      (t) => t.name === "shadowclaw_client_list_files",
     );
     expect(listFilesTool).toBeDefined();
     expect(listFilesTool.description).toContain("[Default: Linux Desktop");
@@ -424,7 +517,9 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
     ]);
 
     // ask_user should ONLY be available on client-alpha
-    const askUserTool = listRes.result.tools.find((t) => t.name === "ask_user");
+    const askUserTool = listRes.result.tools.find(
+      (t) => t.name === "shadowclaw_client_ask_user",
+    );
     expect(askUserTool).toBeDefined();
     expect(askUserTool.description).toContain("[Client: Linux Desktop");
     expect(askUserTool.inputSchema.properties.clientId.enum).toEqual([
@@ -437,7 +532,7 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
       id: 11,
       method: "tools/call",
       params: {
-        name: "list_files",
+        name: "shadowclaw_client_list_files",
         arguments: { clientId: "client-beta" },
       },
     });
@@ -473,7 +568,7 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
       id: 13,
       method: "tools/call",
       params: {
-        name: "list_files",
+        name: "shadowclaw_client_list_files",
         arguments: {},
       },
     });
@@ -488,14 +583,14 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
       id: 14,
       method: "tools/call",
       params: {
-        name: "ask_user",
+        name: "shadowclaw_client_ask_user",
         arguments: { clientId: "client-beta", question: "Prompt client beta?" },
       },
     });
 
     expect(unsupportedRes.result.isError).toBe(true);
     expect(unsupportedRes.result.content[0].text).toContain(
-      "Tool 'ask_user' is not enabled or available on client 'client-beta'",
+      "Tool 'shadowclaw_client_ask_user' is not enabled or available on client 'client-beta'",
     );
     expect(unsupportedRes.result.content[0].text).toContain(
       "Available on: client-alpha",
@@ -508,7 +603,7 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
       id: 15,
       method: "tools/call",
       params: {
-        name: "ask_user",
+        name: "shadowclaw_client_ask_user",
         arguments: { question: "Are you ready?" },
       },
     });
@@ -530,11 +625,49 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
       id: 16,
       method: "tools/call",
       params: {
-        name: "ask_user",
+        name: "shadowclaw_client_ask_user",
         arguments: { question: "Are you ready?" },
         inputResponses: { response: "Yes, ready to go!" },
       },
     });
     expect(fulfilledRes.result.content[0].text).toBe("Yes, ready to go!");
+  });
+
+  it("handles client.listClients error gracefully in shadowclaw_server_list_clients and legacy alias", async () => {
+    const mockClient = {
+      listClients: jest
+        .fn()
+        .mockRejectedValue(new Error("Unauthorized: Invalid control token")),
+    };
+
+    const engine = createCliMcpEngine({ client: mockClient });
+    const res = await engine.handleMessage({
+      jsonrpc: "2.0",
+      id: 99,
+      method: "tools/call",
+      params: {
+        name: "shadowclaw_server_list_clients",
+        arguments: {},
+      },
+    });
+
+    expect(res).toBeDefined();
+    expect(res.id).toBe(99);
+    expect(res.result.isError).toBe(true);
+    expect(res.result.content[0].text).toContain(
+      "Error listing clients: Unauthorized: Invalid control token",
+    );
+
+    // Legacy alias
+    const resAlias = await engine.handleMessage({
+      jsonrpc: "2.0",
+      id: 100,
+      method: "tools/call",
+      params: {
+        name: "shadowclaw_list_clients",
+        arguments: {},
+      },
+    });
+    expect(resAlias.result.isError).toBe(true);
   });
 });

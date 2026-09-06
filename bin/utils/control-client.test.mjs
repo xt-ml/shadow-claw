@@ -136,4 +136,18 @@ describe("CliControlClient", () => {
       clientId: "client-target-42",
     });
   });
+
+  it("automatically falls back to secondary candidate tokens on 401 Unauthorized", async () => {
+    const client = new CliControlClient({
+      host: "127.0.0.1",
+      port,
+      token: "initial-wrong-token",
+    });
+    // Supply candidate tokens where first is wrong and second is correct
+    client.candidateTokens = ["initial-wrong-token", token];
+
+    const clients = await client.listClients();
+    expect(Array.isArray(clients)).toBe(true);
+    expect(client.token).toBe(token);
+  });
 });

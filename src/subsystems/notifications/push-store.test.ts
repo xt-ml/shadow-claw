@@ -9,6 +9,7 @@ import {
   removeSubscriptionById,
   getSubscriptionsByClientId,
   findSubscriptionsForClient,
+  getRegisteredPushClients,
 } from "./push-store.js";
 
 // Use in-memory DB for tests
@@ -205,6 +206,54 @@ describe("push-store", () => {
       // Non-existent target
       const notFound = findSubscriptionsForClient("nonexistent-device");
       expect(notFound).toHaveLength(0);
+    });
+  });
+
+  describe("getRegisteredPushClients", () => {
+    it("returns empty array when no subscriptions exist", () => {
+      expect(getRegisteredPushClients()).toEqual([]);
+    });
+
+    it("returns deduplicated registered push clients with device labels and counts", () => {
+      saveSubscription({
+        ...MOCK_SUBSCRIPTION,
+        clientId: "client-01jtest123",
+        deviceLabel: "Pixel 9 Pro",
+      });
+      // Second subscription from same client (e.g. renewed endpoint)
+      saveSubscription({
+        endpoint: "https://fcm.googleapis.com/fcm/send/abc123-renewed",
+        keys: MOCK_SUBSCRIPTION.keys,
+        clientId: "client-01jtest123",
+        deviceLabel: "Pixel 9 Pro",
+      });
+      // Different client
+      saveSubscription({
+        ...MOCK_SUBSCRIPTION_2,
+        clientId: "client-02ktest456",
+        deviceLabel: "MacBook Air",
+      });
+
+      const clients = getRegisteredPushClients();
+      expect(clients).toHaveLength(2);
+
+      const client1 = clients.find((c) => c.clientId === "client-01jtest123");
+      expect(client1).toBeDefined();
+      expect(client1?.deviceLabel).toBe("Pixel 9 Pro");
+      expect(client1?.subscriptionCount).toBe(2);
+
+      const client2 = clients.find((c) => c.clientId === "client-02ktest456");
+      expect(client2).toBeDefined();
+      expect(client2?.deviceLabel).toBe("MacBook Air");
+      expect(client2?.subscriptionCount).toBe(1);
+    });
+
+    it("falls back to subscription id when clientId is omitted", () => {
+      saveSubscription(MOCK_SUBSCRIPTION);
+      const clients = getRegisteredPushClients();
+      expect(clients).toHaveLength(1);
+      const all = getAllSubscriptions();
+      expect(clients[0].clientId).toBe(String(all[0].id));
     });
   });
 });

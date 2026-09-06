@@ -19,6 +19,9 @@ export const SUPPORTED_PROTOCOL_VERSIONS = [
 export type SupportedProtocolVersion =
   (typeof SUPPORTED_PROTOCOL_VERSIONS)[number];
 
+export const MCP_CLIENT_TOOL_PREFIX = "shadowclaw_client_";
+export const MCP_SERVER_TOOL_PREFIX = "shadowclaw_server_";
+
 // Standard JSON-RPC and MCP error codes
 export const MCP_ERROR_CODES = {
   ParseError: -32700,

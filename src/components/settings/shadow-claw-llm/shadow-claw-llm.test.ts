@@ -58,6 +58,8 @@ jest.unstable_mockModule("../../../config/config.js", () => ({
     TRANSFORMERS_JS_DTYPE_STRATEGY: "transformers_js_dtype_strategy",
   },
   DEFAULT_MAX_ITERATIONS: 50,
+  DEFAULT_CONTROL_PLANE_ENABLED: false,
+  DEFAULT_CONTROL_PLANE_TRANSPORT: "http",
   DEFAULT_SUBAGENT_MAX_PARALLEL: 5,
   DEFAULT_SUBAGENT_WORKSPACE_MODE: "automatic",
   DEFAULT_PROMPT_API_FALLBACK_MODEL: "onnx-community/Qwen3-0.6B-ONNX",

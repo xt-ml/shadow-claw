@@ -2,6 +2,8 @@ import { exit } from "node:process";
 import http from "node:http";
 import https from "node:https";
 import path from "node:path";
+import fs from "node:fs";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import tcpPortUsed from "tcp-port-used";
 
@@ -116,6 +118,34 @@ export async function startServer(
         `Control plane active at ${protocol}://${config.bindHost}:${config.port}/api/control/events (SSE) and ${wsProtocol}://${config.bindHost}:${config.port}/ws/control (WebSocket)`,
       );
       console.log(`Control token: ${controlPlane.getToken()}`);
+      try {
+        const tmpDir = path.join(tmpdir(), "shadow-claw");
+        if (!fs.existsSync(tmpDir)) {
+          fs.mkdirSync(tmpDir, { recursive: true });
+        }
+        const tokenFilePayload =
+          JSON.stringify(
+            {
+              token: controlPlane.getToken(),
+              port: config.port,
+              bindHost: config.bindHost,
+              createdAt: Date.now(),
+              createdAtIso: new Date().toISOString(),
+            },
+            null,
+            2,
+          ) + "\n";
+        fs.writeFileSync(
+          path.join(tmpDir, `control-token-${config.port}.json`),
+          tokenFilePayload,
+          "utf8",
+        );
+        fs.writeFileSync(
+          path.join(tmpDir, "control-token.json"),
+          tokenFilePayload,
+          "utf8",
+        );
+      } catch (_) {}
       console.log(
         `MCP endpoint active at ${protocol}://${config.bindHost}:${config.port}/mcp`,
       );

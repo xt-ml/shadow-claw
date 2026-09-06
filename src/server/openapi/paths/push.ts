@@ -101,6 +101,54 @@ export const pushPaths: Record<string, OpenApiPathItem> = {
       },
     },
   },
+  "/push/clients": {
+    get: {
+      tags: ["Push Notifications"],
+      summary: "List Registered Push Clients",
+      description:
+        "Retrieves unique registered clients that have active Web Push subscriptions, including device labels and subscription counts.",
+      responses: {
+        "200": {
+          description: "List of registered push clients",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                properties: {
+                  clients: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      required: ["clientId"],
+                      properties: {
+                        clientId: {
+                          type: "string",
+                          description: "Unique client ID",
+                        },
+                        deviceLabel: {
+                          type: "string",
+                          description: "Client device label",
+                        },
+                        subscriptionCount: {
+                          type: "integer",
+                          description: "Number of active push subscriptions",
+                        },
+                        lastSeen: {
+                          type: "string",
+                          description:
+                            "Timestamp of latest subscription creation",
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
   "/push/send": {
     post: {
       tags: ["Push Notifications"],

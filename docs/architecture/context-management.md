@@ -65,6 +65,13 @@ export function estimateMessageTokens(message: ConversationMessage): number {
 }
 ```
 
+### Token Estimation & Cache Tracking
+
+In addition to estimating context consumption before LLM invocation, ShadowClaw tracks live token metrics and prompt caching statistics returned by providers:
+
+- **Token Usage Tracking:** Tracks prompt/input tokens, output/completion tokens, and total token usage per turn.
+- **Cache Hits & Misses:** Captures cache read hits (`cache_read_input_tokens`) and cache creation (`cache_creation_input_tokens`) from Anthropic and AWS Bedrock responses, accumulating them in `StreamAccumulator` (`src/worker/StreamAccumulator/`) and recording them in conversation history.
+
 ## Output Truncation
 
 **File:** `src/context/truncateToolOutput.ts`

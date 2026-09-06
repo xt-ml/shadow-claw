@@ -2,7 +2,6 @@
 
 **Status:** Active
 **Date:** Early project — established in original architecture
-**Commit:** `7d0540e` — co-located component assets introduced
 
 ## Context
 

@@ -41,6 +41,13 @@ export interface PushSubscriptionInput {
   device_label?: string;
 }
 
+export interface PushClientRecord {
+  clientId: string;
+  deviceLabel?: string;
+  subscriptionCount: number;
+  lastSeen?: string;
+}
+
 /**
  * Open (or create) the push subscriptions SQLite database.
  */
@@ -291,4 +298,42 @@ export function findSubscriptionsForClient(
   if (byLabel.length > 0) return byLabel;
 
   return [];
+}
+
+/**
+ * Get unique registered clients that have push subscriptions.
+ */
+export function getRegisteredPushClients(): PushClientRecord[] {
+  if (!db) {
+    return [];
+  }
+
+  try {
+    const all = getAllSubscriptions();
+    const map = new Map<string, PushClientRecord>();
+
+    for (const sub of all) {
+      const cid = (sub.client_id || "").trim() || String(sub.id);
+      if (!cid) continue;
+
+      const existing = map.get(cid);
+      if (!existing) {
+        map.set(cid, {
+          clientId: cid,
+          deviceLabel: sub.device_label || undefined,
+          subscriptionCount: 1,
+          lastSeen: sub.created_at,
+        });
+      } else {
+        existing.subscriptionCount += 1;
+        if (!existing.deviceLabel && sub.device_label) {
+          existing.deviceLabel = sub.device_label;
+        }
+      }
+    }
+
+    return Array.from(map.values());
+  } catch (_) {
+    return [];
+  }
 }

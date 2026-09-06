@@ -7,6 +7,7 @@
 
 import { randomBytes } from "node:crypto";
 import fs from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import type { ClientInfo, BackupRecord } from "./control-plane-types.js";
@@ -279,6 +280,19 @@ export function saveControlTokenFile(
 
   try {
     fs.writeFileSync(filePath, JSON.stringify(payload, null, 2) + "\n", "utf8");
+  } catch (_) {}
+
+  // Mirror to system tmp directory so CLI commands run from any working directory can locate it
+  try {
+    const tmpCacheDir = path.join(tmpdir(), "shadow-claw");
+    if (!fs.existsSync(tmpCacheDir)) {
+      fs.mkdirSync(tmpCacheDir, { recursive: true });
+    }
+    fs.writeFileSync(
+      path.join(tmpCacheDir, "control-token.json"),
+      JSON.stringify(payload, null, 2) + "\n",
+      "utf8",
+    );
   } catch (_) {}
 
   return payload;

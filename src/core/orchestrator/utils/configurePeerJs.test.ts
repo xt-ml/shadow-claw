@@ -60,6 +60,8 @@ const mockConfig = {
   getModelMaxTokens: jest.fn().mockReturnValue(128000),
   buildTriggerPattern: jest.fn().mockReturnValue(new RegExp("")),
   DEFAULT_GROUP_ID: "br:main",
+  DEFAULT_CONTROL_PLANE_ENABLED: false,
+  DEFAULT_CONTROL_PLANE_TRANSPORT: "http",
   OPFS_ROOT: "shadowclaw",
   LLAMAFILE_PROXY_URL: "/proxy/llamafile",
 };

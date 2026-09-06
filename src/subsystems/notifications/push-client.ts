@@ -106,11 +106,31 @@ export async function subscribeToPush(
     applicationServerKey: urlBase64ToUint8Array(publicKey) as any,
   });
 
-  const resolvedClientId =
+  let resolvedClientId =
     clientId ||
     (typeof localStorage !== "undefined"
       ? localStorage.getItem(CONFIG_KEYS.CONTROL_PLANE_CLIENT_ID) || undefined
       : undefined);
+
+  let resolvedDeviceLabel = deviceLabel;
+
+  if (!resolvedClientId || !resolvedDeviceLabel) {
+    try {
+      const initCp = await import("../../core/utils/initControlPlane.js");
+      if (
+        !resolvedClientId &&
+        typeof initCp.getOrCreateControlPlaneClientId === "function"
+      ) {
+        resolvedClientId = initCp.getOrCreateControlPlaneClientId();
+      }
+      if (
+        !resolvedDeviceLabel &&
+        typeof initCp.detectDeviceLabel === "function"
+      ) {
+        resolvedDeviceLabel = initCp.detectDeviceLabel();
+      }
+    } catch (_) {}
+  }
 
   const subJson =
     typeof subscription.toJSON === "function"
@@ -126,7 +146,7 @@ export async function subscribeToPush(
       body: JSON.stringify({
         ...subJson,
         ...(resolvedClientId ? { clientId: resolvedClientId } : {}),
-        ...(deviceLabel ? { deviceLabel } : {}),
+        ...(resolvedDeviceLabel ? { deviceLabel: resolvedDeviceLabel } : {}),
       }),
     }),
   );

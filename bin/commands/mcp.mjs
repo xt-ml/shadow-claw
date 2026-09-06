@@ -25,9 +25,24 @@ function getCliVersion() {
   return "1.27.1";
 }
 
+export const MCP_CLIENT_TOOL_PREFIX = "shadowclaw_client_";
+export const MCP_SERVER_TOOL_PREFIX = "shadowclaw_server_";
+
+function getClientRawToolName(name) {
+  return typeof name === "string" && name.startsWith(MCP_CLIENT_TOOL_PREFIX)
+    ? name.slice(MCP_CLIENT_TOOL_PREFIX.length)
+    : name;
+}
+
+function toClientExposedToolName(name) {
+  return typeof name === "string" && !name.startsWith(MCP_CLIENT_TOOL_PREFIX)
+    ? `${MCP_CLIENT_TOOL_PREFIX}${name}`
+    : name;
+}
+
 export const CLI_BUILTIN_TOOLS = [
   {
-    name: "shadowclaw_list_clients",
+    name: "shadowclaw_server_list_clients",
     description:
       "List connected browser and Electron clients, including device type, ID, and active capabilities.",
     inputSchema: {
@@ -36,7 +51,7 @@ export const CLI_BUILTIN_TOOLS = [
     },
   },
   {
-    name: "shadowclaw_send_message",
+    name: "shadowclaw_server_send_message",
     description:
       "Send a message or prompt to a connected ShadowClaw client's active AI orchestrator queue.",
     inputSchema: {
@@ -61,7 +76,7 @@ export const CLI_BUILTIN_TOOLS = [
     },
   },
   {
-    name: "shadowclaw_read_state",
+    name: "shadowclaw_server_read_state",
     description:
       "Read the current orchestrator state, active group ID, and capabilities from a connected client.",
     inputSchema: {
@@ -75,7 +90,7 @@ export const CLI_BUILTIN_TOOLS = [
     },
   },
   {
-    name: "shadowclaw_list_tasks",
+    name: "shadowclaw_server_list_tasks",
     description:
       "List scheduled background tasks configured on a connected client.",
     inputSchema: {
@@ -87,7 +102,7 @@ export const CLI_BUILTIN_TOOLS = [
     },
   },
   {
-    name: "shadowclaw_set_active_client",
+    name: "shadowclaw_server_set_active_client",
     description:
       "Set the active default connected client used when no clientId is explicitly provided in tool calls.",
     inputSchema: {
@@ -103,7 +118,7 @@ export const CLI_BUILTIN_TOOLS = [
     },
   },
   {
-    name: "shadowclaw_manage_backup",
+    name: "shadowclaw_server_manage_backup",
     description:
       "Trigger or manage OPFS workspace backups for a connected client (trigger, list, or delete).",
     inputSchema: {
@@ -121,7 +136,16 @@ export const CLI_BUILTIN_TOOLS = [
     },
   },
   {
-    name: "shadowclaw_send_notification",
+    name: "shadowclaw_server_status",
+    description:
+      "Query ShadowClaw Node server status, version, and active client count.",
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "shadowclaw_server_send_notification",
     description:
       "Broadcast an OS-level push notification to subscribed devices via Web Push (VAPID), or send to a specific registered client. Works even when the client browser tab is closed, asleep, or running in the background.",
     inputSchema: {
@@ -232,17 +256,19 @@ export function createCliMcpEngine(options = {}) {
           Array.isArray(res.data.tools)
         ) {
           for (const t of res.data.tools) {
+            const rawName = getClientRawToolName(t.name);
             if (
-              t.name === "send_notification" ||
-              t.name.startsWith("shadowclaw_")
+              rawName === "send_notification" ||
+              (rawName.startsWith("shadowclaw_") &&
+                !rawName.startsWith("shadowclaw_client_"))
             ) {
               continue;
             }
-            if (!toolDefMap.has(t.name)) {
-              toolDefMap.set(t.name, t);
-              toolSupportingClientsMap.set(t.name, []);
+            if (!toolDefMap.has(rawName)) {
+              toolDefMap.set(rawName, t);
+              toolSupportingClientsMap.set(rawName, []);
             }
-            toolSupportingClientsMap.get(t.name).push(c);
+            toolSupportingClientsMap.get(rawName).push(c);
           }
         }
       } catch (_) {}
@@ -251,8 +277,8 @@ export function createCliMcpEngine(options = {}) {
     const activeTargetId = await resolveTargetId();
     const relayedTools = [];
 
-    for (const [toolName, t] of toolDefMap.entries()) {
-      const supportingClients = toolSupportingClientsMap.get(toolName) || [];
+    for (const [rawToolName, t] of toolDefMap.entries()) {
+      const supportingClients = toolSupportingClientsMap.get(rawToolName) || [];
       const supportingClientIds = supportingClients
         .map((cl) => cl.clientId || cl.id)
         .filter(Boolean);
@@ -286,10 +312,13 @@ export function createCliMcpEngine(options = {}) {
             : ` [Client: ${toolDefaultLabel} (${toolDefaultId.slice(0, 14)}...)]`
           : "";
 
+      const exposedName = toClientExposedToolName(rawToolName);
+
       relayedTools.push({
-        name: t.name,
+        name: exposedName,
         description:
-          (t.description || `Relayed tool '${t.name}' from connected client.`) +
+          (t.description ||
+            `Relayed tool '${rawToolName}' from connected client.`) +
           clientNote,
         inputSchema: {
           ...existingSchema,
@@ -355,6 +384,39 @@ export function createCliMcpEngine(options = {}) {
       }
 
       case "tools/list": {
+        let pushClients = [];
+        try {
+          if (typeof client.listPushClients === "function") {
+            pushClients = await client.listPushClients();
+          } else if (typeof client.listPushSubscriptions === "function") {
+            const subs = await client.listPushSubscriptions();
+            if (Array.isArray(subs)) {
+              const map = new Map();
+              for (const sub of subs) {
+                const cid =
+                  (sub.client_id || "").trim() ||
+                  (sub.id ? String(sub.id) : "");
+                if (cid && !map.has(cid)) {
+                  map.set(cid, {
+                    clientId: cid,
+                    deviceLabel: sub.device_label || undefined,
+                  });
+                }
+              }
+              pushClients = Array.from(map.values());
+            }
+          }
+        } catch (_) {}
+
+        const sortedPushClients = Array.isArray(pushClients)
+          ? [...pushClients].sort((a, b) =>
+              (a.clientId || "").localeCompare(b.clientId || ""),
+            )
+          : [];
+        const pushClientIds = sortedPushClients
+          .map((c) => c.clientId)
+          .filter(Boolean);
+
         const relayed = await getRelayedTools();
         const combined = new Map();
         for (const t of CLI_BUILTIN_TOOLS) {
@@ -363,6 +425,32 @@ export function createCliMcpEngine(options = {}) {
         for (const t of relayed) {
           if (!combined.has(t.name)) {
             combined.set(t.name, t);
+          }
+        }
+
+        if (pushClientIds.length > 0) {
+          for (const targetName of [
+            "shadowclaw_server_send_notification",
+            "shadowclaw_send_notification",
+          ]) {
+            const existing = combined.get(targetName);
+            if (existing) {
+              combined.set(targetName, {
+                ...existing,
+                inputSchema: {
+                  ...existing.inputSchema,
+                  type: "object",
+                  properties: {
+                    ...(existing.inputSchema?.properties || {}),
+                    clientId: {
+                      type: "string",
+                      description: `Target client ID, prefix, or device label of a specific client registered for push notifications (optional; if omitted, broadcasts to all subscribed devices). Available on: ${sortedPushClients.map((c) => `${c.clientId} (${c.deviceLabel || "Client"})`).join(", ")}`,
+                      enum: pushClientIds,
+                    },
+                  },
+                },
+              });
+            }
           }
         }
 
@@ -400,22 +488,46 @@ export function createCliMcpEngine(options = {}) {
         }
 
         // Built-in tools
-        if (toolName === "shadowclaw_list_clients") {
-          const clients = await client.listClients();
-          return {
-            jsonrpc: "2.0",
-            id: reqId,
-            result: {
-              resultType: "complete",
-              content: [
-                { type: "text", text: JSON.stringify({ clients }, null, 2) },
-              ],
-              _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
-            },
-          };
+        if (
+          toolName === "shadowclaw_server_list_clients" ||
+          toolName === "shadowclaw_list_clients"
+        ) {
+          try {
+            const clients = await client.listClients();
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                content: [
+                  { type: "text", text: JSON.stringify({ clients }, null, 2) },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          } catch (err) {
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: true,
+                content: [
+                  {
+                    type: "text",
+                    text: `Error listing clients: ${err.message}`,
+                  },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          }
         }
 
-        if (toolName === "shadowclaw_set_active_client") {
+        if (
+          toolName === "shadowclaw_server_set_active_client" ||
+          toolName === "shadowclaw_set_active_client"
+        ) {
           const targetId = await resolveTargetId(args.clientId);
           if (!targetId) {
             return {
@@ -457,7 +569,10 @@ export function createCliMcpEngine(options = {}) {
           };
         }
 
-        if (toolName === "shadowclaw_send_message") {
+        if (
+          toolName === "shadowclaw_server_send_message" ||
+          toolName === "shadowclaw_send_message"
+        ) {
           const targetId = await resolveTargetId(args.clientId);
           if (!targetId) {
             return {
@@ -476,119 +591,254 @@ export function createCliMcpEngine(options = {}) {
               },
             };
           }
-          const res = await client.sendCommand(targetId, "send-message", {
-            text: args.text,
-            groupId: args.groupId,
-          });
-          return {
-            jsonrpc: "2.0",
-            id: reqId,
-            result: {
-              resultType: "complete",
-              isError: !res.success,
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(res.data || res, null, 2),
-                },
-              ],
-              _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
-            },
-          };
+          try {
+            const res = await client.sendCommand(targetId, "send-message", {
+              text: args.text,
+              groupId: args.groupId,
+            });
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: !res.success,
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(res.data || res, null, 2),
+                  },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          } catch (err) {
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: true,
+                content: [
+                  {
+                    type: "text",
+                    text: `Error sending message: ${err.message}`,
+                  },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          }
         }
 
-        if (toolName === "shadowclaw_read_state") {
+        if (
+          toolName === "shadowclaw_server_read_state" ||
+          toolName === "shadowclaw_read_state"
+        ) {
           const targetId = await resolveTargetId(args.clientId);
-          const res = await client.sendCommand(targetId, "read-state", {});
-          return {
-            jsonrpc: "2.0",
-            id: reqId,
-            result: {
-              resultType: "complete",
-              isError: !res.success,
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(res.data || res, null, 2),
-                },
-              ],
-              _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
-            },
-          };
+          try {
+            const res = await client.sendCommand(targetId, "read-state", {});
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: !res.success,
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(res.data || res, null, 2),
+                  },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          } catch (err) {
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: true,
+                content: [
+                  {
+                    type: "text",
+                    text: `Error reading state: ${err.message}`,
+                  },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          }
         }
 
-        if (toolName === "shadowclaw_list_tasks") {
+        if (
+          toolName === "shadowclaw_server_list_tasks" ||
+          toolName === "shadowclaw_list_tasks"
+        ) {
           const targetId = await resolveTargetId(args.clientId);
-          const res = await client.sendCommand(targetId, "list-tasks", {
-            groupId: args.groupId,
-          });
-          return {
-            jsonrpc: "2.0",
-            id: reqId,
-            result: {
-              resultType: "complete",
-              isError: !res.success,
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(res.data || res, null, 2),
-                },
-              ],
-              _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
-            },
-          };
+          try {
+            const res = await client.sendCommand(targetId, "list-tasks", {
+              groupId: args.groupId,
+            });
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: !res.success,
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(res.data || res, null, 2),
+                  },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          } catch (err) {
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: true,
+                content: [
+                  {
+                    type: "text",
+                    text: `Error listing tasks: ${err.message}`,
+                  },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          }
         }
 
-        if (toolName === "shadowclaw_manage_backup") {
+        if (
+          toolName === "shadowclaw_server_manage_backup" ||
+          toolName === "shadowclaw_manage_backup"
+        ) {
           const action = args.action || "trigger";
           const targetId = await resolveTargetId(args.clientId);
-          if (action === "list") {
-            const backups = await client.listBackups(targetId);
+          try {
+            if (action === "list") {
+              const backups = await client.listBackups(targetId);
+              return {
+                jsonrpc: "2.0",
+                id: reqId,
+                result: {
+                  resultType: "complete",
+                  content: [
+                    {
+                      type: "text",
+                      text: JSON.stringify({ backups }, null, 2),
+                    },
+                  ],
+                  _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+                },
+              };
+            }
+            if (action === "delete") {
+              const res = await client.deleteBackup(args.backupId, targetId);
+              return {
+                jsonrpc: "2.0",
+                id: reqId,
+                result: {
+                  resultType: "complete",
+                  content: [
+                    { type: "text", text: JSON.stringify(res, null, 2) },
+                  ],
+                  _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+                },
+              };
+            }
+            const res = await client.sendCommand(targetId, "trigger-backup", {
+              groupId: args.groupId,
+            });
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: !res.success,
+                content: [
+                  {
+                    type: "text",
+                    text: JSON.stringify(res.data || res, null, 2),
+                  },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          } catch (err) {
+            return {
+              jsonrpc: "2.0",
+              id: reqId,
+              result: {
+                resultType: "complete",
+                isError: true,
+                content: [
+                  {
+                    type: "text",
+                    text: `Error managing backup: ${err.message}`,
+                  },
+                ],
+                _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+              },
+            };
+          }
+        }
+
+        if (
+          toolName === "shadowclaw_server_status" ||
+          toolName === "shadowclaw_status"
+        ) {
+          try {
+            const clients = await client.listClients();
             return {
               jsonrpc: "2.0",
               id: reqId,
               result: {
                 resultType: "complete",
                 content: [
-                  { type: "text", text: JSON.stringify({ backups }, null, 2) },
+                  {
+                    type: "text",
+                    text: JSON.stringify(
+                      {
+                        server: "ShadowClaw",
+                        version: serverInfo.version,
+                        connectedClients: clients.length,
+                        status: "healthy",
+                      },
+                      null,
+                      2,
+                    ),
+                  },
                 ],
                 _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
               },
             };
-          }
-          if (action === "delete") {
-            const res = await client.deleteBackup(args.backupId, targetId);
+          } catch (err) {
             return {
               jsonrpc: "2.0",
               id: reqId,
               result: {
                 resultType: "complete",
-                content: [{ type: "text", text: JSON.stringify(res, null, 2) }],
+                isError: true,
+                content: [
+                  {
+                    type: "text",
+                    text: `Error querying server status: ${err.message}`,
+                  },
+                ],
                 _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
               },
             };
           }
-          const res = await client.sendCommand(targetId, "trigger-backup", {
-            groupId: args.groupId,
-          });
-          return {
-            jsonrpc: "2.0",
-            id: reqId,
-            result: {
-              resultType: "complete",
-              isError: !res.success,
-              content: [
-                {
-                  type: "text",
-                  text: JSON.stringify(res.data || res, null, 2),
-                },
-              ],
-              _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
-            },
-          };
         }
 
         if (
+          toolName === "shadowclaw_server_send_notification" ||
           toolName === "shadowclaw_send_notification" ||
           toolName === "send_notification"
         ) {
@@ -671,9 +921,11 @@ export function createCliMcpEngine(options = {}) {
           }
         }
 
+        const rawToolName = getClientRawToolName(toolName);
+
         // Relayed interactive ask_user tool with MRTR response fulfillment if provided
         if (
-          toolName === "ask_user" &&
+          (rawToolName === "ask_user" || toolName === "ask_user") &&
           inputResponses &&
           inputResponses["response"]
         ) {
@@ -695,7 +947,10 @@ export function createCliMcpEngine(options = {}) {
           await getRelayedTools();
         }
 
-        const supportingClients = toolSupportingClientsMap.get(toolName) || [];
+        const supportingClients =
+          toolSupportingClientsMap.get(rawToolName) ||
+          toolSupportingClientsMap.get(toolName) ||
+          [];
         const supportingClientIds = supportingClients
           .map((cl) => cl.clientId || cl.id)
           .filter(Boolean);
@@ -755,23 +1010,23 @@ export function createCliMcpEngine(options = {}) {
 
         try {
           console.error(
-            `[ShadowClaw MCP] Executing '${toolName}' on client: ${targetId}`,
+            `[ShadowClaw MCP] Executing '${rawToolName}' on client: ${targetId}`,
           );
           const toolArgs = { ...args };
           delete toolArgs.clientId;
-          const isInteractive = toolName === "ask_user";
+          const isInteractive = rawToolName === "ask_user";
           const res = isInteractive
             ? await client.sendCommand(
                 targetId,
                 "invoke-tool",
                 {
-                  toolName,
+                  toolName: rawToolName,
                   input: toolArgs,
                 },
                 300000,
               )
             : await client.sendCommand(targetId, "invoke-tool", {
-                toolName,
+                toolName: rawToolName,
                 input: toolArgs,
               });
 
@@ -885,8 +1140,22 @@ export async function runMcpCommand(options = {}) {
       let data = "";
       req.on("data", (chunk) => (data += chunk));
       req.on("end", async () => {
+        let body;
         try {
-          const body = JSON.parse(data);
+          body = JSON.parse(data);
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: null,
+              error: { code: -32700, message: "Parse error" },
+            }),
+          );
+          return;
+        }
+
+        try {
           const headers = {
             "mcp-protocol-version": req.headers["mcp-protocol-version"],
             "mcp-method": req.headers["mcp-method"],
@@ -906,12 +1175,15 @@ export async function runMcpCommand(options = {}) {
           });
           res.end(JSON.stringify(reply));
         } catch (err) {
-          res.writeHead(400, { "Content-Type": "application/json" });
+          res.writeHead(500, { "Content-Type": "application/json" });
           res.end(
             JSON.stringify({
               jsonrpc: "2.0",
-              id: null,
-              error: { code: -32700, message: "Parse error" },
+              id: body?.id ?? null,
+              error: {
+                code: -32603,
+                message: err?.message || "Internal error",
+              },
             }),
           );
         }
@@ -944,8 +1216,20 @@ export async function runMcpCommand(options = {}) {
     const trimmed = line.trim();
     if (!trimmed) return;
 
+    let request;
     try {
-      const request = JSON.parse(trimmed);
+      request = JSON.parse(trimmed);
+    } catch {
+      const errorResponse = {
+        jsonrpc: "2.0",
+        id: null,
+        error: { code: -32700, message: "Parse error" },
+      };
+      process.stdout.write(JSON.stringify(errorResponse) + "\n");
+      return;
+    }
+
+    try {
       const response = await engine.handleMessage(request);
       if (response !== null) {
         process.stdout.write(JSON.stringify(response) + "\n");
@@ -953,8 +1237,8 @@ export async function runMcpCommand(options = {}) {
     } catch (err) {
       const errorResponse = {
         jsonrpc: "2.0",
-        id: null,
-        error: { code: -32700, message: "Parse error" },
+        id: request?.id ?? null,
+        error: { code: -32603, message: err?.message || "Internal error" },
       };
       process.stdout.write(JSON.stringify(errorResponse) + "\n");
     }

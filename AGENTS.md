@@ -23,6 +23,7 @@ ShadowClaw has been significantly deduplicated. Instead of a massive `AGENTS.md`
 | Token / Context Management    | [docs/architecture/context-management.md](docs/architecture/context-management.md)       |
 | Streaming (SSE / UI)          | [docs/architecture/streaming.md](docs/architecture/streaming.md)                         |
 | Accounts & Credentials        | [docs/subsystems/accounts.md](docs/subsystems/accounts.md)                               |
+| Agent Skills                  | [docs/subsystems/skills.md](docs/subsystems/skills.md)                                   |
 | Attachment Capabilities       | [docs/subsystems/attachment-capabilities.md](docs/subsystems/attachment-capabilities.md) |
 | A2UI Interactive Surfaces     | [docs/subsystems/a2ui.md](docs/subsystems/a2ui.md)                                       |
 | AGUI Events & Adapter         | [docs/subsystems/agui.md](docs/subsystems/agui.md)                                       |
@@ -42,6 +43,7 @@ ShadowClaw has been significantly deduplicated. Instead of a massive `AGENTS.md`
 | Trusted Types Tinyfill        | [docs/subsystems/trusted-types-tinyfill.md](docs/subsystems/trusted-types-tinyfill.md)   |
 | UI & Signals (Web Components) | [docs/subsystems/reactive-ui.md](docs/subsystems/reactive-ui.md)                         |
 | WebMCP Integration            | [docs/subsystems/webmcp.md](docs/subsystems/webmcp.md)                                   |
+| Web Share Target              | [docs/subsystems/share-target.md](docs/subsystems/share-target.md)                       |
 | WebVM (v86 Alpine)            | [docs/subsystems/vm.md](docs/subsystems/vm.md)                                           |
 | CLI & Static Site Publishing  | [docs/subsystems/cli.md](docs/subsystems/cli.md)                                         |
 | Control Plane & Client Bridge | [docs/subsystems/control-plane.md](docs/subsystems/control-plane.md)                     |
@@ -170,10 +172,27 @@ Markdown and HTML preview work should preserve the Settings-backed iframe host a
 
 - **Dual-Root Path Resolution:** The build toolchain (`bin/build/build.mjs`) cleanly decouples `toolchainRoot` (the ShadowClaw package/repo root) from `contentRoot` (the consumer template project). In-repo builds (`resolve(contentRoot) === resolve(toolchainRoot)`) preserve the standalone in-tree compilation path. CLI/template consumer builds read pre-bundled web assets from `toolchainRoot/dist/public` and inject `pages/`, `shadow-claw.config.json` (or `site-config.json`), `assets/`, `.agents/`, and pretty routes from `contentRoot`, outputting to `<contentRoot>/dist/public`.
 - **CLI Commands (`bin/cli.mjs`):** The `shadow-claw` / `shadowclaw` CLI provides `build`, `dev`, `run`, `serve`, `server` (aliases: `services`, `api`), `init`, `clients`, `send`, `backup`, `tasks`, `mcp`, `skills:index` (alias `agent-skills`), `webrtc`, and `peer-id` commands. It supports running dev and headless service servers programmatically via `startServer` (`src/server/server.ts`) with custom `--root-path`, `--cache-dir <dir>`, and `--database-dir` arguments.
-- **Cache Directory Selection & Storage Paths:** When launching `dev`, `run`, `serve`, or `server` and no existing cache is detected, ShadowClaw displays an upfront skip tip and interactively prompts to select between the current working directory (`.cache`), system temporary storage (`node:os` `tmpdir()`), or a custom directory. Prompting can be skipped via `--tmp`, `-y`, `--cache-dir <dir>`, `SHADOWCLAW_TMP`, or `SHADOWCLAW_CACHE_DIR`. Cancellation via SIGINT / Ctrl+C is caught cleanly without error traces. All server storage paths (SQLite databases under `<cacheDir>/database`, TLS certs under `<cacheDir>/tls`, logs under `<cacheDir>/logs`, backups under `<cacheDir>/backups`, control tokens at `<cacheDir>/control-token.json`, and WebRTC IPC sockets at `<cacheDir>/webrtc-ipc.sock`) resolve under the configured `<cacheDir>`.
-- **HTTPS & Control Plane:** Dev/run/serve/server commands accept `--https`, `--cert <path>`, `--key <path>`, and `--ssl-dir <path>` for opt-in HTTPS with auto-generated self-signed certs; control plane commands (`clients`, `send`, `backup`, `tasks`) accept `--https` and `-k, --insecure` to reach an HTTPS control plane server.
-- **Stateless MCP Server & Multi-Client Targeting:** The MCP server engine (`bin/commands/mcp.mjs`, `src/server/mcp/`) dynamically queries connected clients and exposes an optional `clientId` enum on relayed tools restricted to clients supporting each tool. Active client routing can be inspected and switched via `shadowclaw_set_active_client`. Server-side validation rejects unsupported client tool calls early, and client-side control plane handlers strictly validate active conversation allowlists (`allowedTools` / conversation tool tags). The interactive `ask_user` tool is relayed directly to the browser UI with an extended 300s timeout or fulfilled via MRTR.
+- **Cache Directory Selection & Storage Paths:** When launching `dev`, `run`, `serve`, or `server` and no existing cache is detected, ShadowClaw displays an upfront skip tip and interactively prompts to select between the current working directory (`.cache`), system temporary storage (`node:os` `tmpdir()`), or a custom directory. Prompting can be skipped via `--tmp`, `-y`, `--cache-dir <dir>`, `SHADOWCLAW_TMP`, or `SHADOWCLAW_CACHE_DIR`. Cancellation via SIGINT / Ctrl+C is caught cleanly without error traces. All server storage paths (SQLite databases under `<cacheDir>/database`, TLS certs under `<cacheDir>/tls`, logs under `<cacheDir>/logs`, backups under `<cacheDir>/backups`, control tokens at `<cacheDir>/control-token.json`, and WebRTC IPC sockets at `<cacheDir>/webrtc-ipc.sock`) resolve under the configured `<cacheDir>`. On server start, control token files are also mirrored to `<tmpdir>/shadow-claw/control-token[-<port>].json` for cross-directory auto-discovery.
+- **HTTPS & Control Plane:** Dev/run/serve/server commands accept `--https`, `--cert <path>`, `--key <path>`, and `--ssl-dir <path>` for opt-in HTTPS with auto-generated self-signed certs; control plane commands (`clients`, `send`, `backup`, `tasks`, `mcp`) accept `--https` and `-k, --insecure` to reach an HTTPS control plane server. Control clients automatically discover tokens from flags, `SHADOWCLAW_CONTROL_TOKEN`, system temp files, parent directory trees, and SQLite, and automatically retry across remaining candidate tokens on HTTP 401 Unauthorized responses.
+- **Stateless MCP Server & Multi-Client Targeting:** The MCP server engine (`bin/commands/mcp.mjs`, `src/server/mcp/`) exposes built-in server management tools prefixed with `shadowclaw_server_` (`MCP_SERVER_TOOL_PREFIX`) and dynamically queries connected clients to expose live client tools prefixed with `shadowclaw_client_` (`MCP_CLIENT_TOOL_PREFIX`, such as `shadowclaw_client_read_file`, `shadowclaw_client_javascript`, `shadowclaw_client_list_files`), with unprefixed and legacy aliases preserved for backward compatibility. It exposes an optional `clientId` enum on relayed tools restricted to clients supporting each tool. Active client routing can be inspected and switched via `shadowclaw_server_set_active_client`. Server-side validation rejects unsupported client tool calls early, and client-side control plane handlers strictly validate active conversation allowlists (`allowedTools` / conversation tool tags). The interactive `ask_user` tool is relayed directly to the browser UI with an extended 300s timeout or fulfilled via MRTR.
 - **Naming Conventions:** Refer to the product/brand in prose and documentation as **ShadowClaw**. Use kebab-case **`shadow-claw`** for package name, CLI commands (`npx shadow-claw`), repositories, directory paths, and custom elements.
+
+### Files Browser Safeguards & Workspace Transfers
+
+- Directory operations enforce recursive ancestor checks to prevent self-paste and nesting loops (cannot paste a directory into itself or its descendants).
+- File and folder operations support moving and copying across different conversation groups (`sourceGroupId` $\rightarrow$ `targetGroupId`).
+- Destination name collisions present non-destructive rename or overwrite dialog choices.
+
+### Web Share Target API Integration
+
+- Declaratively registered in `manifest.json` targeting `share/share-target.html` (POST multipart/form-data) to receive text, URLs, and files from OS share sheets.
+- Intercepted by the Service Worker (`src/service-worker/share-target.ts`), storing binary/metadata records into IndexedDB `pendingShares` and redirecting with HTTP 303 to `/?shared=1`.
+- Consumed on application launch by `processPendingSharedPayloads.ts` and `src/share-target/pending-shares.ts`, creating or locating a dated conversation group (`br:shared-YYYY-MM-DD`) and persisting imported files directly into OPFS workspace storage.
+
+### Provider Runtime Overrides & Token Metrics
+
+- Conversations support fine-grained runtime overrides for local engines and cloud proxies via `providerRuntimeOverrides` in group metadata, including AWS Bedrock (`authMode`, `profile`, `region`) and Llamafile (`host`, `mode`, `offline`, `port`).
+- Token metrics and prompt caching statistics (cache read hits, cache creation) are captured from provider responses and tracked in `StreamAccumulator`.
 
 ## What to Avoid
 

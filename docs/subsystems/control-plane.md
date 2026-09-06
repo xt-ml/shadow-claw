@@ -133,7 +133,7 @@ interface CommandResultPayload {
 ## Authentication & Security
 
 1. **Control Token:** Connections must supply a secret control token via query parameter (`?token=...`), header (`x-control-token`), or Bearer authorization header (`Authorization: Bearer <token>`).
-2. **Token Generation:** On server startup, a token is read from `SHADOWCLAW_CONTROL_TOKEN` or generated and persisted in SQLite (`<cacheDir>/database/clients.db` metadata table) and `<cacheDir>/control-token.json` (defaulting to `.cache/...`).
+2. **Token Generation & Auto-Discovery:** On server startup, a token is read from `SHADOWCLAW_CONTROL_TOKEN` or generated and persisted in SQLite (`<cacheDir>/database/clients.db` metadata table) and `<cacheDir>/control-token.json` (defaulting to `.cache/...`). The token is also mirrored to `<tmpdir>/shadow-claw/control-token[-<port>].json` in the OS temporary directory so CLI commands run from any working directory can automatically locate it. CLI control clients automatically search across candidate tokens (flags, env, system temp files, parent directory trees, and SQLite) and fall back across remaining candidates on HTTP 401 Unauthorized errors. The control plane endpoint and token are printed to the console on server start.
 3. **WebRTC CLI Peer Identity & Trust:** CLI clients connecting over WebRTC identify using a persistent peer ID in `<cacheDir>/cli-peer-id` (defaulting to `.cache/cli-peer-id`). This ID can be retrieved or renewed using `npx shadow-claw peer-id [--renew|--set <id>]` and must be added in the browser under **Settings → WebRTC/PeerJS → Trusted Peer IDs** when peer restrictions are enabled.
 4. **Localhost Binding:** Binds to `127.0.0.1` by default.
 
@@ -176,12 +176,13 @@ ShadowClaw implements an official Model Context Protocol server adhering to the 
 
 ### Built-in MCP Tools
 
-- `shadowclaw_list_clients`: Inspect active connected browser and Electron clients.
-- `shadowclaw_set_active_client`: Set active default target client for subsequent relayed tool calls and messages.
-- `shadowclaw_send_message`: Dispatch prompt or message to a client's orchestrator queue.
-- `shadowclaw_read_state`: Read current orchestrator state, model, and active conversation group.
-- `shadowclaw_list_tasks`: Inspect scheduled tasks on a client.
-- `shadowclaw_manage_backup`: Trigger, inspect, or delete OPFS workspace snapshots.
+- `shadowclaw_server_list_clients`: Inspect active connected browser and Electron clients.
+- `shadowclaw_server_set_active_client`: Set active default target client for subsequent relayed tool calls and messages.
+- `shadowclaw_server_send_message`: Dispatch prompt or message to a client's orchestrator queue.
+- `shadowclaw_server_read_state`: Read current orchestrator state, model, and active conversation group.
+- `shadowclaw_server_list_tasks`: Inspect scheduled tasks on a client.
+- `shadowclaw_server_manage_backup`: Trigger, inspect, or delete OPFS workspace snapshots.
+- `shadowclaw_server_send_notification`: Broadcast OS-level push notifications via Web Push (VAPID).
 - `shadowclaw_server_status`: Query Node server status and connected client count.
 
 ### Dynamic Client Tool Relaying & Multi-Client Targeting
@@ -189,7 +190,7 @@ ShadowClaw implements an official Model Context Protocol server adhering to the 
 When browser clients are connected, the MCP server queries available tools via `list-tools` and exposes them dynamically:
 
 - **Multi-Client Discovery:** Relayed tool schemas include a `clientId` enum parameter listing only the clients that have that tool enabled.
-- **Client Resolution:** Tool calls target the specified `clientId`, the active default client (from `shadowclaw_set_active_client`), or fall back to the first client supporting the tool. Targets can be matched by full ID, numeric index, prefix, or device label. Disconnected clients are unregistered automatically.
+- **Client Resolution:** Tool calls target the specified `clientId`, the active default client (from `shadowclaw_server_set_active_client`), or fall back to the first client supporting the tool. Targets can be matched by full ID, numeric index, prefix, or device label. Disconnected clients are unregistered automatically.
 - **Client Execution Guards:** Browser clients validate incoming `invoke-tool` commands against the active conversation's tool tags (`group.toolTags`) and global configuration (`toolsStore.enabledToolNames`). Disabled tools are rejected with an explicit error.
 - **Interactive Tools:** Invocations of `ask_user` dispatch directly to the browser UI with an extended 300s timeout or fulfill via 2026-07-28 MRTR when `inputResponses` are provided.
 

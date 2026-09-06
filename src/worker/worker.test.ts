@@ -36,6 +36,8 @@ describe("worker and worker/agent.js", () => {
         VM_BASH_FULL_INTERNET_ACCESS: "vm_bash_full_internet_access",
       },
       DEFAULT_GROUP_ID: "br:main",
+      DEFAULT_CONTROL_PLANE_ENABLED: false,
+      DEFAULT_CONTROL_PLANE_TRANSPORT: "http",
       DEFAULT_MAX_ITERATIONS: 50,
       FETCH_MAX_RESPONSE: 1000,
       DEFAULT_VM_BOOT_HOST: "http://localhost:8888",

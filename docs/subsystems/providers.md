@@ -283,6 +283,15 @@ Models are fetched dynamically via the provider API (e.g., `GET /models`). The m
 
 **Auto-profile activation:** When a model is selected, the orchestrator checks if any saved tool profile specifies that model. If a match is found, the profile is automatically activated (e.g., the `DEFAULT_BUILTIN_PROFILE` activates with safe built-in defaults).
 
+### Conversation-Scoped Provider Runtime Overrides
+
+Conversations support fine-grained runtime overrides for local engines and cloud proxies via `providerRuntimeOverrides`:
+
+- **AWS Bedrock Proxy (`bedrock_proxy`)**: Overrides `authMode` (`"provider_chain"` | `"sso"`), AWS `profile` name, and AWS `region` per conversation group.
+- **Llamafile (`llamafile`)**: Overrides connection `host`, execution `mode` (`"cli"` | `"server"`), `offline` flag, and listening `port` per conversation group.
+
+Overrides are stored in group metadata in IndexedDB and forwarded during worker agent invocation (`invokeAgent`), allowing different conversations to target distinct AWS profiles or local llamafile server instances concurrently.
+
 ## Adding a New Provider
 
 See the [Adding a Provider](../guides/adding-a-provider.md) guide.

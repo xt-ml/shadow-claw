@@ -109,3 +109,12 @@ To facilitate configuration portability while preserving security, settings expo
 
 - **Backup Encryption**: When exporting settings, standard configuration values remain in plaintext, but any encrypted keys (API keys, git tokens, etc.) are decrypted via `crypto.ts` and re-encrypted using a user-provided password.
 - **Restore Decryption**: When importing settings, the module prompts for the password to decrypt the sensitive values, which are then securely re-encrypted with the local environment's browser-specific `CryptoKey` and saved back into IndexedDB.
+
+## Runtime Credential Protection & Environment Hardening
+
+Beyond at-rest encryption in IndexedDB, ShadowClaw hardens sensitive credential handling in memory:
+
+- **TC39 Private Fields**: The `Orchestrator` uses TC39 private fields (`#encryptedApiKey`) to store runtime secrets, ensuring keys cannot be extracted via global object inspection or the browser devtools console.
+- **Transient Memory Cache (30s TTL)**: Plaintext API keys needed for provider requests are decrypted on demand and cached in memory with a strict 30-second time-to-live (`#apiKeyCache`). Secrets are never written to disk in plaintext.
+- **Idempotent Default Trusted Types Policy**: An application-wide `"default"` Trusted Types policy (`src/security/default-trusted-types-policy.ts`) is registered early during bootstrap in `src/core/theme-init.ts`. It safely checks `trustedTypes.getPolicy("default")` before creation to prevent duplicate policy errors during hot reloads or multi-module execution.
+- **Environment Hardening**: In production contexts, critical Web APIs (`window.crypto.subtle`) are safeguarded against unauthorized tampering.

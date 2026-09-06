@@ -187,6 +187,23 @@ describe("push-client", () => {
       expect(body.clientId).toBe("client-explicit-123");
       expect(body.deviceLabel).toBe("Pixel 9 Pro");
     });
+
+    it("automatically resolves clientId and deviceLabel if omitted", async () => {
+      (fetch as any)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ publicKey: "test-vapid-key" }),
+        })
+        .mockResolvedValueOnce({ ok: true });
+
+      await subscribeToPush();
+      const postCall = (fetch as any).mock.calls[1];
+      const body = JSON.parse(postCall[1].body);
+      expect(body.clientId).toBeDefined();
+      expect(typeof body.clientId).toBe("string");
+      expect(body.deviceLabel).toBeDefined();
+      expect(typeof body.deviceLabel).toBe("string");
+    });
   });
 
   describe("unsubscribeFromPush", () => {

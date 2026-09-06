@@ -239,17 +239,18 @@ describe("End-to-End MCP Server & Control Plane Relay", () => {
     const toolNames = res.body.result.tools.map((t: any) => t.name);
 
     // Built-in tools
-    expect(toolNames).toContain("shadowclaw_list_clients");
-    expect(toolNames).toContain("shadowclaw_send_message");
-    expect(toolNames).toContain("shadowclaw_read_state");
-    expect(toolNames).toContain("shadowclaw_list_tasks");
+    expect(toolNames).toContain("shadowclaw_server_list_clients");
+    expect(toolNames).toContain("shadowclaw_server_send_message");
+    expect(toolNames).toContain("shadowclaw_server_read_state");
+    expect(toolNames).toContain("shadowclaw_server_list_tasks");
 
     // Relayed browser tools
-    expect(toolNames).toContain("read_file");
-    expect(toolNames).toContain("workspace_status");
+    expect(toolNames).toContain("shadowclaw_client_read_file");
+    expect(toolNames).toContain("shadowclaw_client_workspace_status");
+    expect(toolNames).toContain("shadowclaw_client_ask_user");
   });
 
-  it("calls built-in tool shadowclaw_read_state and returns browser state", async () => {
+  it("calls built-in tool shadowclaw_server_read_state and returns browser state", async () => {
     const res = await postMcp(
       port,
       token,
@@ -258,11 +259,14 @@ describe("End-to-End MCP Server & Control Plane Relay", () => {
         id: 3,
         method: "tools/call",
         params: {
-          name: "shadowclaw_read_state",
+          name: "shadowclaw_server_read_state",
           arguments: { clientId: "test-browser-client-e2e" },
         },
       },
-      { "mcp-method": "tools/call", "mcp-name": "shadowclaw_read_state" },
+      {
+        "mcp-method": "tools/call",
+        "mcp-name": "shadowclaw_server_read_state",
+      },
     );
 
     expect(res.status).toBe(200);
@@ -270,9 +274,28 @@ describe("End-to-End MCP Server & Control Plane Relay", () => {
     const content = res.body.result.content[0].text;
     expect(content).toContain("br:main");
     expect(content).toContain("claude-3-5-sonnet");
+
+    // Calling via legacy alias shadowclaw_read_state also succeeds
+    const resAlias = await postMcp(
+      port,
+      token,
+      {
+        jsonrpc: "2.0",
+        id: 31,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_read_state",
+          arguments: { clientId: "test-browser-client-e2e" },
+        },
+      },
+      { "mcp-method": "tools/call", "mcp-name": "shadowclaw_read_state" },
+    );
+    expect(resAlias.status).toBe(200);
+    expect(resAlias.body.result.resultType).toBe("complete");
+    expect(resAlias.body.result.content[0].text).toContain("br:main");
   });
 
-  it("calls relayed browser tool read_file across Control Plane and receives response", async () => {
+  it("calls relayed browser tool shadowclaw_client_read_file across Control Plane and receives response", async () => {
     const res = await postMcp(
       port,
       token,
@@ -281,11 +304,14 @@ describe("End-to-End MCP Server & Control Plane Relay", () => {
         id: 4,
         method: "tools/call",
         params: {
-          name: "read_file",
+          name: "shadowclaw_client_read_file",
           arguments: { path: "src/main.ts" },
         },
       },
-      { "mcp-method": "tools/call", "mcp-name": "read_file" },
+      {
+        "mcp-method": "tools/call",
+        "mcp-name": "shadowclaw_client_read_file",
+      },
     );
 
     expect(res.status).toBe(200);
@@ -293,6 +319,26 @@ describe("End-to-End MCP Server & Control Plane Relay", () => {
     expect(res.body.result.isError).toBeFalsy();
     const text = res.body.result.content[0].text;
     expect(text).toContain(
+      "Content of file src/main.ts: Hello from Browser OPFS!",
+    );
+
+    // Also verify backward compatibility: calling with unprefixed name also proxies
+    const resUnprefixed = await postMcp(
+      port,
+      token,
+      {
+        jsonrpc: "2.0",
+        id: 41,
+        method: "tools/call",
+        params: {
+          name: "read_file",
+          arguments: { path: "src/main.ts" },
+        },
+      },
+      { "mcp-method": "tools/call", "mcp-name": "read_file" },
+    );
+    expect(resUnprefixed.status).toBe(200);
+    expect(resUnprefixed.body.result.content[0].text).toContain(
       "Content of file src/main.ts: Hello from Browser OPFS!",
     );
   });
@@ -307,11 +353,14 @@ describe("End-to-End MCP Server & Control Plane Relay", () => {
         id: 5,
         method: "tools/call",
         params: {
-          name: "ask_user",
+          name: "shadowclaw_client_ask_user",
           arguments: { question: "Are you ready?" },
         },
       },
-      { "mcp-method": "tools/call", "mcp-name": "ask_user" },
+      {
+        "mcp-method": "tools/call",
+        "mcp-name": "shadowclaw_client_ask_user",
+      },
     );
 
     expect(res1.status).toBe(200);
@@ -328,12 +377,15 @@ describe("End-to-End MCP Server & Control Plane Relay", () => {
         id: 6,
         method: "tools/call",
         params: {
-          name: "ask_user",
+          name: "shadowclaw_client_ask_user",
           arguments: { question: "Are you ready?" },
           inputResponses: { response: "Yes, ready to proceed!" },
         },
       },
-      { "mcp-method": "tools/call", "mcp-name": "ask_user" },
+      {
+        "mcp-method": "tools/call",
+        "mcp-name": "shadowclaw_client_ask_user",
+      },
     );
 
     expect(res2.status).toBe(200);

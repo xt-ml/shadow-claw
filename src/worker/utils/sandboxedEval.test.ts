@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { jest } from "@jest/globals";
 
 describe("sandboxedEval", () => {
@@ -19,7 +18,7 @@ describe("sandboxedEval", () => {
     global.URL.revokeObjectURL = jest.fn();
 
     // Mock Blob
-    global.Blob = jest.fn().mockImplementation((parts, options) => ({
+    (global as any).Blob = jest.fn().mockImplementation((parts, options) => ({
       parts,
       options,
     }));

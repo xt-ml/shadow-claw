@@ -1780,8 +1780,6 @@ export class PeerJsChannel implements Channel {
     }
   }
 
-
-
   /**
    * Pause execution if the underlying WebRTC DataChannel send buffer
    * exceeds the drain threshold, preventing buffer bloat during large transfers.
@@ -1858,10 +1856,7 @@ export class PeerJsChannel implements Channel {
       }
 
       writeGroupFileBytes(db, groupId, finalName, bytes).catch((err) => {
-        console.error(
-          "PeerJsChannel: failed to write inbound file bytes",
-          err,
-        );
+        console.error("PeerJsChannel: failed to write inbound file bytes", err);
       });
     });
   }

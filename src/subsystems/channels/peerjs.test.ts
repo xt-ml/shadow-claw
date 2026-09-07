@@ -115,9 +115,8 @@ jest.unstable_mockModule("../../utils/utils.js", () => ({
 }));
 
 const { PeerJsChannel, transferProgressSignal } = await import("./peerjs.js");
-const { writeGroupFileBytes } = (await import(
-  "../../storage/writeGroupFileBytes.js"
-)) as any;
+const { writeGroupFileBytes } =
+  (await import("../../storage/writeGroupFileBytes.js")) as any;
 
 function flushMicrotasks(): Promise<void> {
   return new Promise((r) => setTimeout(r, 10));

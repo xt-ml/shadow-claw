@@ -76,4 +76,60 @@ describe("resolveWorkspaceLinkPath", () => {
     );
     expect(result).toBeNull();
   });
+
+  it("resolves files and subfolders with spaces (both literal and percent-encoded)", () => {
+    expect(
+      resolveWorkspaceLinkPath(
+        "My File With Spaces In The Name.md",
+        "index.md",
+        groupId,
+        origin,
+      ),
+    ).toBe("My File With Spaces In The Name.md");
+
+    expect(
+      resolveWorkspaceLinkPath(
+        "./My File With Spaces In The Name.md",
+        "index.md",
+        groupId,
+        origin,
+      ),
+    ).toBe("My File With Spaces In The Name.md");
+
+    expect(
+      resolveWorkspaceLinkPath(
+        "./My%20File%20With%20Spaces%20In%20The%20Name.md",
+        "index.md",
+        groupId,
+        origin,
+      ),
+    ).toBe("My File With Spaces In The Name.md");
+
+    expect(
+      resolveWorkspaceLinkPath(
+        "sub folder/My File With Spaces In The Name.md",
+        "index.md",
+        groupId,
+        origin,
+      ),
+    ).toBe("sub folder/My File With Spaces In The Name.md");
+
+    expect(
+      resolveWorkspaceLinkPath(
+        "sub%20folder/My%20File%20With%20Spaces%20In%20The%20Name.md",
+        "index.md",
+        groupId,
+        origin,
+      ),
+    ).toBe("sub folder/My File With Spaces In The Name.md");
+
+    expect(
+      resolveWorkspaceLinkPath(
+        "./child.md",
+        "sub folder/index.md",
+        groupId,
+        origin,
+      ),
+    ).toBe("sub folder/child.md");
+  });
 });

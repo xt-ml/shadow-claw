@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { jest } from "@jest/globals";
 
 describe("handleInvoke.js", () => {
@@ -48,7 +47,7 @@ describe("handleInvoke.js", () => {
 
     // Mock withRetry to pass through the function call without actual delays.
     // This keeps handleInvoke tests focused; retry logic is tested in withRetry.test.mjs.
-    mockWithRetry = jest.fn(async (fn) => fn());
+    mockWithRetry = jest.fn(async (fn: any) => fn());
 
     mockGetToolState = jest.fn();
     mockClearToolState = jest.fn();
@@ -512,7 +511,7 @@ describe("handleInvoke.js", () => {
 
     (mockExecuteTool as any).mockResolvedValue("output");
 
-    (global as any).fetch = jest.fn().mockResolvedValue({
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
       ok: true,
       json: (jest.fn() as any).mockResolvedValue({} as any),
     });
@@ -589,7 +588,7 @@ describe("handleInvoke.js", () => {
 
     (mockExecuteTool as any).mockResolvedValue("output");
 
-    (global as any).fetch = jest.fn().mockResolvedValue({
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
       ok: true,
       json: (jest.fn() as any).mockResolvedValue({} as any),
     });
@@ -637,7 +636,7 @@ describe("handleInvoke.js", () => {
 
     (mockExecuteTool as any).mockResolvedValue("output");
 
-    (global as any).fetch = jest.fn().mockResolvedValue({
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
       ok: true,
       json: (jest.fn() as any).mockResolvedValue({} as any),
     });
@@ -992,9 +991,9 @@ describe("handleInvoke.js", () => {
 
     mockBuildSystemPrompt.mockReturnValue("new built prompt");
 
-    (global as any).fetch = jest.fn().mockResolvedValue({
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({}),
+      json: (jest.fn() as any).mockResolvedValue({}),
     });
 
     await handleInvoke({} as any, payload);
@@ -1041,9 +1040,9 @@ describe("handleInvoke.js", () => {
       content: [{ type: "text", text: "hello" }],
     });
 
-    (global as any).fetch = jest.fn().mockResolvedValue({
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({}),
+      json: (jest.fn() as any).mockResolvedValue({}),
     });
 
     await handleInvoke({} as any, payload);
@@ -1089,9 +1088,9 @@ describe("handleInvoke.js", () => {
       content: [{ type: "text", text: "Cannot run tools right now." }],
     });
 
-    (global as any).fetch = jest.fn().mockResolvedValue({
+    (global as any).fetch = (jest.fn() as any).mockResolvedValue({
       ok: true,
-      json: jest.fn().mockResolvedValue({}),
+      json: (jest.fn() as any).mockResolvedValue({}),
     });
 
     await handleInvoke({} as any, payload);

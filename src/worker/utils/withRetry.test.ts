@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { jest } from "@jest/globals";
 import {
   computeDelay,
@@ -8,15 +7,6 @@ import {
   isRetryableFetchError,
   RETRYABLE_STATUS_CODES,
 } from "./withRetry.js";
-
-// Helper: flush the microtask queue so async code reaches the next setTimeout
-const flushMicrotasks = () =>
-  new Promise((r) =>
-    jest
-      .requireActual("timers")
-      .then(() => r())
-      .catch(() => r()),
-  );
 
 // Simpler helper – just drain the microtask queue
 const tick = () => new Promise((resolve) => resolve(undefined));
@@ -117,8 +107,7 @@ describe("withRetry", () => {
   });
 
   it("retries on failure and succeeds", async () => {
-    const fn = jest
-      .fn()
+    const fn = (jest.fn() as any)
       .mockRejectedValueOnce(new Error("fail"))
       .mockResolvedValue("ok");
 
@@ -172,8 +161,7 @@ describe("withRetry", () => {
 
   it("calls onRetry callback before each retry", async () => {
     const onRetry = jest.fn();
-    const fn = jest
-      .fn()
+    const fn = (jest.fn() as any)
       .mockRejectedValueOnce(new Error("fail1"))
       .mockRejectedValueOnce(new Error("fail2"))
       .mockResolvedValue("ok");
@@ -251,8 +239,7 @@ describe("withRetry", () => {
   });
 
   it("handles non-Error throws", async () => {
-    const fn = jest
-      .fn()
+    const fn = (jest.fn() as any)
       .mockRejectedValueOnce("string error")
       .mockResolvedValue("ok");
 

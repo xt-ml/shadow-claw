@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { jest } from "@jest/globals";
 
 import {
@@ -12,7 +11,7 @@ describe("post", () => {
   it("posts to self when available", () => {
     const originalSelf = globalThis.self;
     const spy = jest.fn();
-    globalThis.self = { postMessage: spy };
+    globalThis.self = { postMessage: spy } as any;
 
     post({ ok: true });
 
@@ -90,7 +89,7 @@ describe("subagent collector", () => {
 
     const spy = jest.fn();
     const originalSelf = globalThis.self;
-    globalThis.self = { postMessage: spy };
+    globalThis.self = { postMessage: spy } as any;
 
     post({
       type: "response",
@@ -109,7 +108,7 @@ describe("subagent collector", () => {
 
     const spy = jest.fn();
     const originalSelf = globalThis.self;
-    globalThis.self = { postMessage: spy };
+    globalThis.self = { postMessage: spy } as any;
 
     // Message with no payload — should not crash
     expect(() => post({ type: "ping" })).not.toThrow();

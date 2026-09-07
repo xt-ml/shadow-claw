@@ -82,27 +82,33 @@ function parseFrontmatterResiliently(source: string): FrontmatterParseResult {
         fallbackData.description = desc;
       }
 
-      const userInvocableMatch = rawFm.match(/^user-invocable:\s*(true|false)/mi);
+      const userInvocableMatch = rawFm.match(
+        /^user-invocable:\s*(true|false)/im,
+      );
       if (userInvocableMatch) {
         fallbackData["user-invocable"] =
           userInvocableMatch[1].toLowerCase() === "true";
       }
 
       const disableModelMatch = rawFm.match(
-        /^disable-model-invocation:\s*(true|false)/mi,
+        /^disable-model-invocation:\s*(true|false)/im,
       );
       if (disableModelMatch) {
         fallbackData["disable-model-invocation"] =
           disableModelMatch[1].toLowerCase() === "true";
       }
 
-      const toolsMatch = rawFm.match(/^allowed-tools:\s*["']?([^"'\r\n]+)["']?/m);
+      const toolsMatch = rawFm.match(
+        /^allowed-tools:\s*["']?([^"'\r\n]+)["']?/m,
+      );
       if (toolsMatch) {
         fallbackData["allowed-tools"] = toolsMatch[1].trim();
       }
 
       // Check for bullet list allowed-tools
-      const toolListMatch = rawFm.match(/allowed-tools:\s*\n((?:\s*-\s*[^\r\n]+\r?\n?)+)/m);
+      const toolListMatch = rawFm.match(
+        /allowed-tools:\s*\n((?:\s*-\s*[^\r\n]+\r?\n?)+)/m,
+      );
       if (toolListMatch) {
         const tools = toolListMatch[1]
           .split(/\r?\n/)
@@ -177,10 +183,7 @@ export function parseSkill(path: string, source: string): SkillRecord {
       if (key === "execution" || value === null || value === undefined) {
         continue;
       }
-      if (
-        key === "allowed-tools" ||
-        key === "allowedTools"
-      ) {
+      if (key === "allowed-tools" || key === "allowedTools") {
         if (allowedToolsRaw) {
           metadataEntries.push([key, allowedToolsRaw]);
         }

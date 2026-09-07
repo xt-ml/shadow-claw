@@ -6,6 +6,7 @@ import { splitFrontmatter } from "../../common/utils/frontmatter.mjs";
 import { CONFIG_KEYS } from "../../config/config.js";
 import {
   applyBasePath,
+  decodePathSegment,
   getFileRouteDirPath,
   getWorkspaceRouteRequestPath,
   isPossibleAppRoute,
@@ -1068,7 +1069,10 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
     if (!isAbsolute) {
       const baseNormalized = basePath.replace(/\\/g, "/").replace(/^\/+/, "");
-      const baseParts = baseNormalized.split("/").filter(Boolean);
+      const baseParts = baseNormalized
+        .split("/")
+        .filter(Boolean)
+        .map((segment) => decodePathSegment(segment));
       baseParts.pop();
       stack.push(...baseParts);
     }
@@ -1088,7 +1092,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
         continue;
       }
 
-      stack.push(part);
+      stack.push(decodePathSegment(part));
     }
 
     return stack.length > 0 ? stack.join("/") : null;

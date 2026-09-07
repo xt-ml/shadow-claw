@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { jest } from "@jest/globals";
 
 describe("handleCompact.js", () => {
@@ -158,9 +157,9 @@ describe("handleCompact.js", () => {
       baseUrl: "http://p1",
     });
 
-    (global as any).fetch = jest
-      .fn()
-      .mockRejectedValue(new Error("network fail"));
+    (global as any).fetch = (jest.fn() as any).mockRejectedValue(
+      new Error("network fail"),
+    );
 
     await handleCompact({} as any, {
       groupId: "g1",

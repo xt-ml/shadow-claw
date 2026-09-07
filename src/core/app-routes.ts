@@ -31,7 +31,7 @@ function encodePathSegment(value: string): string {
   return encodeURIComponent(value);
 }
 
-function decodePathSegment(value: string): string {
+export function decodePathSegment(value: string): string {
   try {
     return decodeURIComponent(value);
   } catch {

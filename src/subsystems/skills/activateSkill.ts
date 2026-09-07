@@ -10,9 +10,7 @@ export async function executeActivateSkill(
   const discovery = await discoverSkills(db, groupId);
   const availableSkillNames = discovery.skills.map((s) => s.name);
   const availableList =
-    availableSkillNames.length > 0
-      ? availableSkillNames.join(", ")
-      : "(none)";
+    availableSkillNames.length > 0 ? availableSkillNames.join(", ") : "(none)";
 
   if (!name) {
     let msg = `Error: activate_skill requires a skill name. Available skills: ${availableList}.`;

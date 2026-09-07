@@ -6,6 +6,7 @@ import {
   DEFAULT_PROMPT_API_FALLBACK_MODEL,
   DEFAULT_PROVIDER,
 } from "../../config/config.js";
+import { decodePathSegment } from "../../core/app-routes.js";
 
 import { shouldInstallE2eBridge } from "../../testing/e2e-bridge.js";
 
@@ -1160,7 +1161,10 @@ export class ShadowClawChat extends ShadowClawElement {
       return null;
     }
 
-    const parts = normalized.split("/").filter(Boolean);
+    const parts = normalized
+      .split("/")
+      .filter(Boolean)
+      .map((part) => decodePathSegment(part));
     if (parts.some((part) => part === "..")) {
       return null;
     }

@@ -1000,6 +1000,23 @@ describe("chat workspace link resolution", () => {
     );
   });
 
+  it("resolves links with spaces and percent-encoded spaces", () => {
+    const instance = Object.create(ShadowClawChat.prototype);
+    expect(
+      instance.resolveWorkspaceLinkPath("My File With Spaces In The Name.md"),
+    ).toBe("My File With Spaces In The Name.md");
+    expect(
+      instance.resolveWorkspaceLinkPath(
+        "./My%20File%20With%20Spaces%20In%20The%20Name.md",
+      ),
+    ).toBe("My File With Spaces In The Name.md");
+    expect(
+      instance.resolveWorkspaceLinkPath(
+        "sub%20folder/My%20File%20With%20Spaces.md",
+      ),
+    ).toBe("sub folder/My File With Spaces.md");
+  });
+
   it("defers relative image src loading until workspace resolution", () => {
     const instance = Object.create(ShadowClawChat.prototype);
     const html =

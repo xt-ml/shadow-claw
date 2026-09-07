@@ -9,6 +9,8 @@
 import hljs from "highlight.js";
 import { marked } from "marked";
 
+import { normalizeMarkdownLinks } from "./markdown-links.js";
+
 import {
   createFrontmatterDetailsElement,
   PostFrontmatter,
@@ -164,9 +166,12 @@ export async function renderMarkdown(
     const parsed: { data: PostFrontmatter; content: string } =
       splitFrontmatter(src);
 
+    // Normalize links and images with spaces in URLs
+    const normalizedContent = normalizeMarkdownLinks(parsed.content);
+
     // Parse markdown to HTML
     const headingCounts = new Map<string, number>();
-    const html = await marked.parse(parsed.content, {
+    const html = await marked.parse(normalizedContent, {
       gfm: true,
       breaks: options?.breaks ?? false,
       headingCounts,

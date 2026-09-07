@@ -1,6 +1,7 @@
 import {
   applyBasePath,
   buildRoutePath,
+  decodePathSegment,
   getAppBasePath,
   getDeploymentNamespace,
   getFileRouteDirPath,
@@ -143,6 +144,70 @@ describe("app-routes", () => {
     ).toEqual({
       groupId: "br:main",
       path: "posts/2003-08-27.md",
+    });
+  });
+
+  it("decodes percent-encoded segments in getWorkspaceRouteRequestPath", () => {
+    expect(
+      getWorkspaceRouteRequestPath(
+        "/files/main/My%20File%20With%20Spaces%20In%20The%20Name.md",
+      ),
+    ).toEqual({
+      groupId: "br:main",
+      path: "My File With Spaces In The Name.md",
+    });
+
+    expect(
+      getWorkspaceRouteRequestPath(
+        "/files/main/sub%20folder/My%20File%20With%20Spaces%20In%20The%20Name.md",
+      ),
+    ).toEqual({
+      groupId: "br:main",
+      path: "sub folder/My File With Spaces In The Name.md",
+    });
+  });
+
+  describe("decodePathSegment", () => {
+    it("decodes percent-encoded strings", () => {
+      expect(decodePathSegment("My%20File.md")).toBe("My File.md");
+      expect(decodePathSegment("folder%20name")).toBe("folder name");
+    });
+
+    it("leaves unencoded strings untouched", () => {
+      expect(decodePathSegment("simple.md")).toBe("simple.md");
+      expect(decodePathSegment("already has spaces.md")).toBe(
+        "already has spaces.md",
+      );
+    });
+
+    it("safely handles malformed percent encoding without throwing", () => {
+      expect(decodePathSegment("100%real")).toBe("100%real");
+    });
+  });
+
+  it("parses route URLs with spaces in filenames and subfolders", () => {
+    const route = parseRouteFromUrl(
+      new URL(
+        "http://localhost:8888/files/main/My%20File%20With%20Spaces%20In%20The%20Name.md",
+      ),
+    );
+    expect(route).toEqual({
+      page: "files",
+      groupId: "br:main",
+      path: "My File With Spaces In The Name.md",
+      anchor: undefined,
+    });
+
+    const nestedRoute = parseRouteFromUrl(
+      new URL(
+        "http://localhost:8888/files/main/sub%20folder/My%20File%20With%20Spaces%20In%20The%20Name.md",
+      ),
+    );
+    expect(nestedRoute).toEqual({
+      page: "files",
+      groupId: "br:main",
+      path: "sub folder/My File With Spaces In The Name.md",
+      anchor: undefined,
     });
   });
 

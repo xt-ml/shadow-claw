@@ -1,6 +1,7 @@
 import { renderMarkdown } from "../../content/markdown.js";
 import { CONFIG_KEYS } from "../../config/config.js";
 import { effect } from "../../core/effect.js";
+import { decodePathSegment } from "../../core/app-routes.js";
 
 import { getDb, ShadowClawDatabase } from "../../db/db.js";
 import { getConfig } from "../../db/getConfig.js";
@@ -629,7 +630,10 @@ export class ShadowClawTasks extends ShadowClawElement {
       return null;
     }
 
-    const parts = normalized.split("/").filter(Boolean);
+    const parts = normalized
+      .split("/")
+      .filter(Boolean)
+      .map((part) => decodePathSegment(part));
     if (parts.some((part) => part === "..")) {
       return null;
     }

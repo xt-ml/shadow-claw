@@ -115,4 +115,37 @@ describe("renderMarkdown", () => {
     expect(html).not.toContain("<iframe");
     expect(html).not.toContain("phishing-site.example.com");
   });
+
+  it("renders markdown links with spaces in relative filenames and URLs", async () => {
+    const markdown = [
+      "[My File With Spaces In The Name.md](./My File With Spaces In The Name.md)",
+      "[My File With Spaces In The Name.md](My File With Spaces In The Name.md)",
+      "[Subfolder Doc](sub folder/My File With Spaces In The Name.md)",
+      "[External](https://karlherrick.com/What About This)",
+    ].join("\n\n");
+
+    const html = await renderMarkdown(markdown);
+
+    expect(html).toContain(
+      '<a href="./My%20File%20With%20Spaces%20In%20The%20Name.md">My File With Spaces In The Name.md</a>',
+    );
+    expect(html).toContain(
+      '<a href="My%20File%20With%20Spaces%20In%20The%20Name.md">My File With Spaces In The Name.md</a>',
+    );
+    expect(html).toContain(
+      '<a href="sub%20folder/My%20File%20With%20Spaces%20In%20The%20Name.md">Subfolder Doc</a>',
+    );
+    expect(html).toContain(
+      '<a href="https://karlherrick.com/What%20About%20This">External</a>',
+    );
+  });
+
+  it("renders markdown images with spaces in relative filenames", async () => {
+    const markdown = "![My Image](./sub folder/My Image With Spaces.png)";
+    const html = await renderMarkdown(markdown);
+
+    expect(html).toContain(
+      '<img src="./sub%20folder/My%20Image%20With%20Spaces.png" alt="My Image">',
+    );
+  });
 });

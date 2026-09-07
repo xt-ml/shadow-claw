@@ -78,6 +78,20 @@ exports.marked = {
       return renderHeadingBlock(text, hashes.length);
     });
 
+    // Handle images: ![alt](url) or ![alt](<url>)
+    res = res.replace(/!\[([^\]]*)\]\((?:<([^>]+)>|([^ )\t]+))(?:\s+["']([^"']*)["'])?\)/g, (_, alt, url1, url2, title) => {
+      const src = (url1 || url2 || "").replace(/ /g, "%20");
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+      return `<img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}"${titleAttr}>`;
+    });
+
+    // Handle links: [text](url) or [text](<url>)
+    res = res.replace(/\[([^\]]+)\]\((?:<([^>]+)>|([^ )\t]+))(?:\s+["']([^"']*)["'])?\)/g, (_, text, url1, url2, title) => {
+      const href = (url1 || url2 || "").replace(/ /g, "%20");
+      const titleAttr = title ? ` title="${escapeHtml(title)}"` : "";
+      return `<a href="${escapeHtml(href)}"${titleAttr}>${text}</a>`;
+    });
+
     res = res.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
     res = res.replace(/\n\n/g, "</p><p>");
 

@@ -1445,6 +1445,31 @@ describe("shadow-claw-file-viewer", () => {
       );
     });
 
+    it("rewrites relative asset hrefs with spaces in markdown preview HTML", () => {
+      const component = new ShadowClawFileViewer();
+      const inputHtml =
+        '<p><a href="./My%20File%20With%20Spaces%20In%20The%20Name.md">file</a></p>';
+      const rewritten = component.rewriteWorkspacePreviewHtml(
+        inputHtml,
+        "index.md",
+      );
+      expect(rewritten).toContain(
+        'href="/files/test-group/My%20File%20With%20Spaces%20In%20The%20Name.md"',
+      );
+    });
+
+    it("rewrites relative asset hrefs in subfolders with spaces in markdown preview HTML", () => {
+      const component = new ShadowClawFileViewer();
+      const inputHtml = '<p><a href="sub%20folder/My%20File.md">file</a></p>';
+      const rewritten = component.rewriteWorkspacePreviewHtml(
+        inputHtml,
+        "index.md",
+      );
+      expect(rewritten).toContain(
+        'href="/files/test-group/sub%20folder/My%20File.md"',
+      );
+    });
+
     it("rewrites relative asset hrefs when subpath base path is active", () => {
       document.querySelectorAll("base").forEach((el) => el.remove());
       const baseEl = document.createElement("base");
@@ -1528,6 +1553,59 @@ describe("shadow-claw-file-viewer", () => {
           "weather/archive/index.md",
         ),
       ).toBe("weather/README.md");
+    });
+
+    it("resolves files and subfolders with spaces (both literal and percent-encoded)", () => {
+      const component = new ShadowClawFileViewer();
+
+      expect(
+        component.resolveWorkspaceLinkPath(
+          "My File With Spaces In The Name.md",
+          "README.md",
+        ),
+      ).toBe("My File With Spaces In The Name.md");
+
+      expect(
+        component.resolveWorkspaceLinkPath(
+          "./My File With Spaces In The Name.md",
+          "README.md",
+        ),
+      ).toBe("My File With Spaces In The Name.md");
+
+      expect(
+        component.resolveWorkspaceLinkPath(
+          "./My%20File%20With%20Spaces%20In%20The%20Name.md",
+          "README.md",
+        ),
+      ).toBe("My File With Spaces In The Name.md");
+
+      expect(
+        component.resolveWorkspaceLinkPath(
+          "sub folder/My File With Spaces In The Name.md",
+          "README.md",
+        ),
+      ).toBe("sub folder/My File With Spaces In The Name.md");
+
+      expect(
+        component.resolveWorkspaceLinkPath(
+          "sub%20folder/My%20File%20With%20Spaces%20In%20The%20Name.md",
+          "README.md",
+        ),
+      ).toBe("sub folder/My File With Spaces In The Name.md");
+
+      expect(
+        component.resolveWorkspaceLinkPath(
+          "./child note.md",
+          "my sub folder/README.md",
+        ),
+      ).toBe("my sub folder/child note.md");
+
+      expect(
+        component.resolveWorkspaceLinkPath(
+          "../other folder/doc.md",
+          "my sub folder/README.md",
+        ),
+      ).toBe("other folder/doc.md");
     });
 
     it("rejects external and root-escape links", () => {

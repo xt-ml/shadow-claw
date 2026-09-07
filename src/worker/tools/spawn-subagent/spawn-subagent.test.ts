@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { jest } from "@jest/globals";
 
 describe("executeSpawnSubagentTool", () => {
@@ -131,7 +130,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("calls handleInvoke with a subagent groupId starting with 'subagent:'", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       // Simulate the subagent posting a response message
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
@@ -161,7 +160,7 @@ describe("executeSpawnSubagentTool", () => {
   it("uses a unique ulid for subagent groupId", async () => {
     mockUlid.mockReturnValueOnce("ulid-aaa").mockReturnValueOnce("ulid-bbb");
 
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -186,7 +185,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("excludes spawn_subagent from the subagent's tool list to prevent recursion", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -212,7 +211,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("uses the provided tools list when specified in input", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -238,7 +237,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("in manual mode, overrides model when specified as pinned model", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -267,7 +266,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("in automatic mode, ignores LLM-emitted model and falls back to parent ctx model", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -299,7 +298,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("clamps subagent max tokens by selected model limit", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -329,7 +328,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("uses conversation subagent max tokens override but keeps model-safe clamp", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -360,7 +359,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("uses the selected subagent model limit when auto max tokens is enabled", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -391,7 +390,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("in manual mode, overrides provider to a different provider with its api key", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -421,7 +420,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("in automatic mode, ignores LLM-emitted provider and falls back to parent ctx provider", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -452,7 +451,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("in automatic mode, maps profile 'fast', 'smart', 'powerful' to their configured provider/model", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -507,7 +506,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("in automatic mode, falls back to parent model/provider if profile is not configured or current", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -552,7 +551,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("in manual mode, ignores profile selection and uses pinned model/provider", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -609,7 +608,7 @@ describe("executeSpawnSubagentTool", () => {
       return undefined;
     });
 
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -642,7 +641,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("forwards storageHandle from parent context", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -679,7 +678,7 @@ describe("executeSpawnSubagentTool", () => {
       return undefined;
     });
 
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -716,7 +715,7 @@ describe("executeSpawnSubagentTool", () => {
       return undefined;
     });
 
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -754,7 +753,7 @@ describe("executeSpawnSubagentTool", () => {
     });
 
     mockUlid.mockReturnValueOnce("iso-123");
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -779,7 +778,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("uses conversation-level manual subagent provider/model defaults when tool input omits them", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -809,7 +808,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("manual subagent defaults override per-tool provider/model inputs", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {
@@ -947,7 +946,7 @@ describe("executeSpawnSubagentTool", () => {
   });
 
   it("overrides system_prompt when specified", async () => {
-    mockHandleInvoke.mockImplementation((_db: any, payload: any) => {
+    mockHandleInvoke.mockImplementation((_db: any, _payload: any) => {
       const collectors = mockRegisterSubagentCollector.mock.calls;
       const lastCall = collectors[collectors.length - 1];
       if (lastCall) {

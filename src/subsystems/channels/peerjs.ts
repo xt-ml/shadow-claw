@@ -1220,6 +1220,9 @@ export class PeerJsChannel implements Channel {
       return;
     }
 
+    // Attach chunk progress interceptor to track inbound file transfers
+    this._attachChunkProgressTracker(conn);
+
     // Register the connection
     this.connections.set(remotePeerId, conn);
     this._updateConnectedPeersSignal();
@@ -1271,6 +1274,58 @@ export class PeerJsChannel implements Channel {
         this._updateConnectedPeersSignal();
       }
     });
+  }
+
+  /**
+   * Intercept incoming BinaryPack chunk handling on DataConnection to track
+   * file reception progress without requiring a custom PeerJS fork.
+   */
+  private _attachChunkProgressTracker(conn: DataConnection): void {
+    const connAny = conn as any;
+    if (connAny._chunkProgressPatched) {
+      return;
+    }
+    connAny._chunkProgressPatched = true;
+
+    const origHandleChunk = connAny._handleChunk;
+    if (typeof origHandleChunk === "function") {
+      connAny._handleChunk = function (data: any) {
+        if (data && typeof data === "object" && "__peerData" in data) {
+          const id = data.__peerData;
+          const currentCount = this._chunkedData?.[id]?.count ?? 0;
+          const total = data.total;
+
+          if (
+            typeof globalThis.dispatchEvent === "function" &&
+            typeof CustomEvent === "function"
+          ) {
+            globalThis.dispatchEvent(
+              new CustomEvent("peerjs-dc-handle-chunk", {
+                detail: {
+                  chunkInfo: {
+                    count: currentCount,
+                    total,
+                  },
+                },
+              }),
+            );
+          } else {
+            const received = currentCount + 1;
+            transferProgressSignal.set({
+              count: received,
+              total,
+              direction: "receive",
+            });
+
+            if (received >= total) {
+              setTimeout(() => transferProgressSignal.set(null), 1500);
+            }
+          }
+        }
+
+        return origHandleChunk.call(this, data);
+      };
+    }
   }
 
   /**

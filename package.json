@@ -124,7 +124,7 @@
     "node-datachannel": "^0.33.2",
     "nodemailer": "^8.0.7",
     "peer": "^1.0.2",
-    "peerjs": "github:kherrick/peerjs#v1.5.4-custom-events.0",
+    "peerjs": "^1.5.5",
     "prompt-api-polyfill": "^1.20.4",
     "qrcode": "^1.5.4",
     "smart-buffer": "^4.2.0",

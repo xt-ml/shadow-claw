@@ -10,6 +10,7 @@ class MockDataConnection {
   open = true;
   peer: string;
   remotePeerId: string;
+  _chunkedData: Record<string, any> = {};
 
   send = jest.fn();
   private handlers: Map<string, EventHandler[]> = new Map();
@@ -17,6 +18,13 @@ class MockDataConnection {
   constructor(remotePeerId: string) {
     this.remotePeerId = remotePeerId;
     this.peer = remotePeerId;
+  }
+
+  _handleChunk(data: any) {
+    const id = data.__peerData;
+    const chunkInfo = this._chunkedData[id] || { count: 0, total: data.total };
+    chunkInfo.count++;
+    this._chunkedData[id] = chunkInfo;
   }
 
   close() {
@@ -691,6 +699,49 @@ describe("PeerJsChannel", () => {
       expect(transferProgressSignal.get()).toEqual({
         count: 2,
         total: 3,
+        direction: "receive",
+      });
+    });
+
+    it("intercepts _handleChunk on incoming DataConnection and updates transferProgressSignal", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-id", []);
+      ch.start();
+
+      await flushMicrotasks();
+
+      const incomingConn = new MockDataConnection("remote-chunk-peer");
+      lastPeerInstance!.emit("connection", incomingConn);
+      incomingConn.emit("open");
+
+      const { transferProgressSignal } = await import("./peerjs.js");
+      transferProgressSignal.set(null);
+
+      // Simulate first chunk arriving
+      incomingConn._handleChunk({
+        __peerData: 42,
+        n: 0,
+        total: 5,
+        data: new Uint8Array([1, 2, 3]),
+      });
+
+      expect(transferProgressSignal.get()).toEqual({
+        count: 1,
+        total: 5,
+        direction: "receive",
+      });
+
+      // Simulate second chunk arriving
+      incomingConn._handleChunk({
+        __peerData: 42,
+        n: 1,
+        total: 5,
+        data: new Uint8Array([4, 5, 6]),
+      });
+
+      expect(transferProgressSignal.get()).toEqual({
+        count: 2,
+        total: 5,
         direction: "receive",
       });
     });

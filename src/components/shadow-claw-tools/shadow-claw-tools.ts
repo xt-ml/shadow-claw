@@ -12,6 +12,7 @@ import { showError, showInfo, showSuccess } from "../../ui/toast.js";
 import { ulid } from "../../utils/ulid.js";
 
 import type { Orchestrator } from "../../core/orchestrator/orchestrator.js";
+import type { RemoteManifest } from "../../subsystems/tools/remote/types.js";
 import {
   setWebMcpMode,
   setWebMcpToolsEnabled,
@@ -33,6 +34,7 @@ export class ShadowClawTools extends ShadowClawElement {
   static template = shadowClawToolsTemplate;
 
   orchestrator: Orchestrator | null = null;
+  currentRemoteManifest: RemoteManifest | null = null;
 
   constructor() {
     super();
@@ -468,6 +470,62 @@ export class ShadowClawTools extends ShadowClawElement {
         await toolsStore.deleteProfile(db, activeId);
         showSuccess("Profile deleted");
       });
+
+    // Dialog controls — Import
+    const importDialog = root.querySelector(
+      ".tools__import-dialog",
+    ) as HTMLDialogElement | null;
+    const importCloseBtn = root.querySelector(".tools__import-dialog-close");
+    const importCancelBtn = root.querySelector(".tools__import-cancel-btn");
+    const importForm = root.querySelector(
+      ".tools__import-dialog-form",
+    ) as HTMLFormElement | null;
+    const importFetchBtn = root.querySelector(".tools__import-fetch-btn");
+
+    root.querySelector(".tools__import-btn")?.addEventListener("click", () => {
+      if (importDialog && importForm) {
+        importForm.reset();
+        this.resetImportDialogState();
+        importDialog.showModal();
+      }
+    });
+
+    importCloseBtn?.addEventListener("click", () => importDialog?.close());
+    importCancelBtn?.addEventListener("click", () => importDialog?.close());
+    importDialog?.addEventListener("click", (e) => {
+      if (e.target === importDialog) {
+        importDialog.close();
+      }
+    });
+
+    root.querySelectorAll(".tools__preset-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const url = (btn as HTMLElement).dataset.url;
+        const input = root.querySelector(
+          ".tools__import-url-input",
+        ) as HTMLInputElement | null;
+        if (input && url) {
+          input.value = url;
+          this.handleFetchSite(db, url);
+        }
+      });
+    });
+
+    importFetchBtn?.addEventListener("click", () => {
+      const input = root.querySelector(
+        ".tools__import-url-input",
+      ) as HTMLInputElement | null;
+      if (input && input.value.trim()) {
+        this.handleFetchSite(db, input.value.trim());
+      }
+    });
+
+    importForm?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (importForm) {
+        this.handleImportSubmit(db, importForm);
+      }
+    });
   }
 
   handleBackup() {
@@ -1028,6 +1086,327 @@ export class ShadowClawTools extends ShadowClawElement {
       ".tools__profile-dialog",
     ) as HTMLDialogElement | null;
     profileDialog?.close();
+  }
+
+  resetImportDialogState() {
+    this.currentRemoteManifest = null;
+    const root = this.shadowRoot;
+    if (!root) return;
+
+    const statusEl = root.querySelector(
+      ".tools__import-manifest-status",
+    ) as HTMLElement | null;
+    if (statusEl) statusEl.hidden = true;
+
+    const siteName = root.querySelector(".tools__import-site-name");
+    if (siteName) siteName.textContent = "";
+
+    const siteDesc = root.querySelector(".tools__import-site-desc");
+    if (siteDesc) siteDesc.textContent = "";
+
+    const catalog = root.querySelector(".tools__import-catalog");
+    if (catalog) catalog.replaceChildren();
+
+    const submitBtn = root.querySelector(
+      ".tools__import-submit-btn",
+    ) as HTMLButtonElement | null;
+    if (submitBtn) submitBtn.disabled = true;
+  }
+
+  async handleFetchSite(_db: ShadowClawDatabase, url: string) {
+    const root = this.shadowRoot;
+    if (!root) return;
+
+    const fetchBtn = root.querySelector(
+      ".tools__import-fetch-btn",
+    ) as HTMLButtonElement | null;
+    const origText = fetchBtn?.textContent || "🔍 Fetch";
+    if (fetchBtn) {
+      fetchBtn.disabled = true;
+      fetchBtn.textContent = "Fetching...";
+    }
+
+    try {
+      const resolved = await toolsStore.fetchRemoteDiscoveryManifest(url);
+      this.currentRemoteManifest = resolved.manifest;
+
+      const siteName = root.querySelector(".tools__import-site-name");
+      if (siteName)
+        siteName.textContent = resolved.manifest.name || "Remote Site";
+
+      const siteDesc = root.querySelector(".tools__import-site-desc");
+      if (siteDesc) {
+        siteDesc.textContent =
+          resolved.manifest.description || "No description provided.";
+      }
+
+      this.renderImportCatalog(resolved.manifest);
+
+      const statusEl = root.querySelector(
+        ".tools__import-manifest-status",
+      ) as HTMLElement | null;
+      if (statusEl) statusEl.hidden = false;
+
+      const submitBtn = root.querySelector(
+        ".tools__import-submit-btn",
+      ) as HTMLButtonElement | null;
+      if (submitBtn) submitBtn.disabled = false;
+
+      showInfo(
+        `Discovered ${(resolved.manifest.tools || []).length} tools, ${(resolved.manifest.skills || []).length} skills from ${resolved.manifest.name}`,
+      );
+    } catch (err) {
+      this.resetImportDialogState();
+      showError(
+        `Failed to fetch site: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      if (fetchBtn) {
+        fetchBtn.disabled = false;
+        fetchBtn.textContent = origText;
+      }
+    }
+  }
+
+  renderImportCatalog(manifest: RemoteManifest) {
+    const root = this.shadowRoot;
+    if (!root) return;
+
+    const catalog = root.querySelector(".tools__import-catalog");
+    if (!catalog) return;
+    catalog.replaceChildren();
+
+    // 1. Render Tools
+    const tools = manifest.tools || [];
+    if (tools.length > 0) {
+      const category = document.createElement("div");
+      category.className = "tools__import-category";
+
+      const header = document.createElement("div");
+      header.className = "tools__import-category-header";
+      header.textContent = `🛠️ Tools (${tools.length})`;
+      category.appendChild(header);
+
+      for (const tool of tools) {
+        const item = document.createElement("div");
+        item.className = "tools__import-item";
+
+        const itemHeader = document.createElement("div");
+        itemHeader.className = "tools__import-item-header";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.name = "importTool";
+        checkbox.value = tool.name;
+        checkbox.checked = true;
+        checkbox.id = `import_tool_${tool.name}`;
+        itemHeader.appendChild(checkbox);
+
+        const titleLabel = document.createElement("label");
+        titleLabel.htmlFor = checkbox.id;
+        titleLabel.className = "tools__import-item-title";
+        titleLabel.textContent = tool.name;
+        itemHeader.appendChild(titleLabel);
+
+        const badge = document.createElement("span");
+        badge.className = "tools__item-badge tools__item-badge--declarative";
+        badge.textContent = tool.executionType || "declarative";
+        itemHeader.appendChild(badge);
+
+        item.appendChild(itemHeader);
+
+        if (tool.description) {
+          const desc = document.createElement("div");
+          desc.className = "tools__import-item-desc";
+          desc.textContent = tool.description;
+          item.appendChild(desc);
+        }
+
+        category.appendChild(item);
+      }
+
+      catalog.appendChild(category);
+    }
+
+    // 2. Render Skills
+    const skills = manifest.skills || [];
+    if (skills.length > 0) {
+      const category = document.createElement("div");
+      category.className = "tools__import-category";
+
+      const header = document.createElement("div");
+      header.className = "tools__import-category-header";
+      header.textContent = `🧠 Agent Skills (${skills.length})`;
+      category.appendChild(header);
+
+      for (const skill of skills) {
+        const item = document.createElement("div");
+        item.className = "tools__import-item";
+
+        const itemHeader = document.createElement("div");
+        itemHeader.className = "tools__import-item-header";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.name = "importSkill";
+        checkbox.value = skill.name;
+        checkbox.checked = true;
+        checkbox.id = `import_skill_${skill.name}`;
+        itemHeader.appendChild(checkbox);
+
+        const titleLabel = document.createElement("label");
+        titleLabel.htmlFor = checkbox.id;
+        titleLabel.className = "tools__import-item-title";
+        titleLabel.textContent = skill.name;
+        itemHeader.appendChild(titleLabel);
+
+        const badge = document.createElement("span");
+        badge.className = "tools__item-badge";
+        badge.textContent = "skill";
+        itemHeader.appendChild(badge);
+
+        item.appendChild(itemHeader);
+
+        if (skill.description) {
+          const desc = document.createElement("div");
+          desc.className = "tools__import-item-desc";
+          desc.textContent = skill.description;
+          item.appendChild(desc);
+        }
+
+        category.appendChild(item);
+      }
+
+      catalog.appendChild(category);
+    }
+
+    // 3. Render Scripts
+    const scripts = manifest.scripts || [];
+    if (scripts.length > 0) {
+      const category = document.createElement("div");
+      category.className = "tools__import-category";
+
+      const header = document.createElement("div");
+      header.className = "tools__import-category-header";
+      header.textContent = `📜 Companion Scripts (${scripts.length})`;
+      category.appendChild(header);
+
+      for (const script of scripts) {
+        const item = document.createElement("div");
+        item.className = "tools__import-item";
+
+        const itemHeader = document.createElement("div");
+        itemHeader.className = "tools__import-item-header";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.name = "importScript";
+        checkbox.value = script.name;
+        checkbox.checked = true;
+        checkbox.id = `import_script_${script.name}`;
+        itemHeader.appendChild(checkbox);
+
+        const titleLabel = document.createElement("label");
+        titleLabel.htmlFor = checkbox.id;
+        titleLabel.className = "tools__import-item-title";
+        titleLabel.textContent = script.name;
+        itemHeader.appendChild(titleLabel);
+
+        const badge = document.createElement("span");
+        badge.className = "tools__item-badge";
+        badge.textContent = "script";
+        itemHeader.appendChild(badge);
+
+        item.appendChild(itemHeader);
+
+        if (script.description) {
+          const desc = document.createElement("div");
+          desc.className = "tools__import-item-desc";
+          desc.textContent = script.description;
+          item.appendChild(desc);
+        }
+
+        category.appendChild(item);
+      }
+
+      catalog.appendChild(category);
+    }
+  }
+
+  async handleImportSubmit(db: ShadowClawDatabase, form: HTMLFormElement) {
+    if (!this.currentRemoteManifest) {
+      showError("No remote discovery manifest loaded.");
+      return;
+    }
+
+    const formData = new FormData(form);
+    const toolNames = formData.getAll("importTool").map(String);
+    const skillNames = formData.getAll("importSkill").map(String);
+    const scriptNames = formData.getAll("importScript").map(String);
+
+    if (
+      toolNames.length === 0 &&
+      skillNames.length === 0 &&
+      scriptNames.length === 0
+    ) {
+      showError("Please select at least one tool, skill, or script to import.");
+      return;
+    }
+
+    const autoEnable =
+      (form.querySelector(".tools__import-auto-enable") as HTMLInputElement)
+        ?.checked ?? true;
+    const overwrite =
+      (form.querySelector(".tools__import-overwrite") as HTMLInputElement)
+        ?.checked ?? false;
+
+    const submitBtn = form.querySelector(
+      ".tools__import-submit-btn",
+    ) as HTMLButtonElement | null;
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Importing...";
+    }
+
+    try {
+      const result = await toolsStore.importFromRemoteSite(
+        db,
+        this.currentRemoteManifest,
+        { toolNames, skillNames, scriptNames },
+        { autoEnable, overwrite },
+      );
+
+      const importedToolsCount = result.tools.filter(
+        (t) => t.status === "imported",
+      ).length;
+      const importedSkillsCount = result.skills.filter(
+        (s) => s.status === "imported",
+      ).length;
+      const importedScriptsCount = result.scripts.filter(
+        (sc) => sc.status === "imported",
+      ).length;
+
+      const totalCount =
+        importedToolsCount + importedSkillsCount + importedScriptsCount;
+
+      showSuccess(
+        `Successfully imported ${totalCount} items from ${this.currentRemoteManifest.name || "site"}!`,
+      );
+
+      const dialog = this.shadowRoot?.querySelector(
+        ".tools__import-dialog",
+      ) as HTMLDialogElement | null;
+      dialog?.close();
+    } catch (err) {
+      showError(
+        `Import failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Import Selected";
+      }
+    }
   }
 }
 

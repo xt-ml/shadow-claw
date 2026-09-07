@@ -314,3 +314,74 @@ tools from loading. The declarative wrapper must be enabled in the active tool
 list; when it delegates to another tool, that target must also pass the normal
 runtime allowlist check. Bash receives serialized arguments on stdin, while
 JavaScript receives them in `data`.
+
+### Remote Tool, Skill & Script Sharing
+
+ShadowClaw supports discovering and importing tools, skills, and companion scripts across peer sites and compatible templates over HTTP:
+
+- **Discovery Standard**: Adheres to the Agent Skills Discovery RFC v0.2.0 (`/.well-known/agent-skills/index.json`), automatically produced by `skills:index` and the static build pipeline. Relative URLs (`../../.agents/...`) resolve to the published static assets on GitHub Pages or custom origins.
+- **Integrity Validation**: Verifies SHA-256 digests (`sha256:...`) against downloaded artifacts to ensure code integrity before persisting to storage.
+- **OPFS Persistence**: Imported tools (`.agents/tools/`), skills (`.agents/skills/`), and companion scripts (`.agents/scripts/`) are persisted directly into the user's OPFS workspace and automatically indexed by `loadDeclarativeTools` and `discoverSkills`.
+- **UI Importer (`<shadow-claw-tools>`)**: Accessible via the "Import" action in the Tool Configuration header. Provides source URL entry, quick-pick presets (e.g. pwgen Knowledge Hub, Block Garden Knowledge Hub), catalog inspection with schema/code preview, and selective batch import with auto-enablement options.
+
+### Runtime vs. Build-Time Security Boundaries
+
+When importing tools and scripts, it is essential to distinguish between **headless logic** and **GUI / custom element presentation**:
+
+#### 1. Headless / Programmatic Execution (Immediate at Runtime)
+
+- Declarative tools (`.agents/tools/**/*.json`), declarative skills, and companion utility scripts (`.agents/scripts/**/*.js`) run inside Web Workers and isolated JavaScript execution sandboxes.
+- Calculations, text processing, CLI helpers, and algorithmic tasks (such as password generation or data parsing) execute immediately without requiring any GUI or configuration changes.
+
+#### 2. GUI & Custom Element Boundaries (Declarative at Config/Build Time)
+
+- **Runtime Cannot Escalate Privileges**: Client scripts and user HTML documents stored in OPFS cannot dynamically register custom elements in the browser registry or bypass Content Security Policy (CSP) at runtime.
+- **Why Inline Scripts Fail in User HTML**:
+  - **DOMPurify Sanitization**: When rendering markdown and HTML file previews, ShadowClaw's HTML sanitizer unconditionally strips `<script>` tags to prevent Cross-Site Scripting (XSS).
+  - **Nonce-Gated CSP**: Preview iframes enforce a strict Content Security Policy (`script-src 'nonce-...'`) with a random nonce generated per render. Un-nonced inline scripts are blocked by the browser.
+  - **OPFS Storage Routing**: OPFS files reside in browser-internal IndexedDB/OPFS storage; they are not served as network HTTP routes that browser ES module loaders can fetch via standard `import` statements.
+  - **Custom Element Guards**: Custom elements containing a hyphen (`-`) are intercepted and stripped by DOMPurify unless explicitly allowlisted.
+
+#### 3. Configuring Custom Elements & Adapters
+
+To enable interactive custom elements (such as `<block-garden>` or `<x-pwgen>`) and companion adapters within ShadowClaw, configure `shadow-claw.config.json` (or site-config):
+
+```json
+{
+  "customElements": {
+    "allowedElements": [
+      "block-garden",
+      "block-garden-option",
+      "block-garden-select"
+    ],
+    "allowedDomains": ["kherrick.github.io", "cdn.jsdelivr.net"],
+    "scripts": [
+      {
+        "src": "https://kherrick.github.io/block-garden-knowledge-hub/.agents/scripts/main/block-garden-adapter.js",
+        "hasInit": true
+      },
+      "https://kherrick.github.io/block-garden/block-garden-bundle-min.mjs"
+    ]
+  },
+  "security": {
+    "connectSrc": [
+      "'self'",
+      "blob:",
+      "data:",
+      "https://kherrick.github.io",
+      "https://cdn.jsdelivr.net"
+    ]
+  }
+}
+```
+
+When declared in configuration:
+
+- **Automatic Nonce Injection**: ShadowClaw injects the approved script bundles into the preview iframe's `<head>` with the matching CSP nonce.
+- **Lifecycle Execution**: Descriptors configured with `hasInit: true` automatically invoke `import(...).then(m => m.init())`, initializing responsive container bounds, control buttons, and event bridges.
+- **Bidirectional IPC Relay**: ShadowClaw's `iframe-broadcast-proxy.ts` automatically proxies `BroadcastChannel` messages between the background agent worker and the sandboxed iframe.
+- **Clean HTML Markup**: User HTML pages only need the clean HTML element tags (e.g. `<block-garden id="live-block-garden" data-no-nav></block-garden>`), with **no inline `<script>` tags**.
+
+#### 4. Pinned Page Requirement for Live Interactive Tools
+
+Tools that interact with live graphical contexts over `BroadcastChannel` (such as `/fireworks`, `/konami_code`, or `/scan_for_nearby_ores`) require the target custom element to remain mounted in the DOM. Users should keep the page hosting the custom element **pinned in view** (e.g. in the Pages view or Split View) while triggering commands from Chat. Closing an unpinned modal unmounts the preview iframe and closes the IPC bridge.

@@ -26,6 +26,12 @@
       >
         ♻️ Restore
       </shadow-claw-page-header-action-button>
+      <shadow-claw-page-header-action-button
+        class="tools__import-btn"
+        slot="actions"
+      >
+        🌐 Import
+      </shadow-claw-page-header-action-button>
     </shadow-claw-page-header>
 
     <input
@@ -473,6 +479,114 @@
             Cancel
           </button>
           <button class="tools__btn-save" type="submit">Save Profile</button>
+        </div>
+      </form>
+    </shadow-claw-dialog>
+
+    <shadow-claw-dialog
+      dialog-aria-labelledby="importDialogTitle"
+      dialog-class="tools__import-dialog"
+    >
+      <div class="tools__dialog-header">
+        <h3 class="tools__dialog-title" id="importDialogTitle">
+          🌐 Import Tools, Skills &amp; Scripts
+        </h3>
+        <button
+          aria-label="Close dialog"
+          class="tools__dialog-close tools__import-dialog-close"
+          type="button"
+        >
+          ✕
+        </button>
+      </div>
+      <form class="tools__import-dialog-form">
+        <div class="tools__dialog-body">
+          <div class="tools__form-group">
+            <label class="tools__form-label" for="importUrlInput">
+              Site or Discovery URL
+            </label>
+            <div class="tools__import-url-row">
+              <input
+                class="tools__form-input tools__import-url-input"
+                id="importUrlInput"
+                name="url"
+                placeholder="https://kherrick.github.io/pwgen-knowledge-hub"
+                required
+                type="url"
+              />
+              <button
+                class="tools__toolbar-btn tools__import-fetch-btn"
+                type="button"
+              >
+                🔍 Fetch
+              </button>
+            </div>
+            <div class="tools__form-hint">
+              Enter any ShadowClaw site URL (e.g. GitHub Pages) or Discovery
+              Index endpoint.
+            </div>
+          </div>
+
+          <div class="tools__form-group">
+            <label class="tools__form-label"> Quick-Pick Presets </label>
+            <div class="tools__import-presets">
+              <button
+                class="tools__preset-btn"
+                data-url="https://kherrick.github.io/pwgen-knowledge-hub"
+                type="button"
+              >
+                🔑 pwgen Knowledge Hub
+              </button>
+              <button
+                class="tools__preset-btn"
+                data-url="https://kherrick.github.io/block-garden-knowledge-hub"
+                type="button"
+              >
+                🌱 Block Garden Knowledge Hub
+              </button>
+            </div>
+          </div>
+
+          <div class="tools__import-manifest-status" hidden>
+            <div class="tools__import-site-info">
+              <h4 class="tools__import-site-name"></h4>
+              <p class="tools__import-site-desc"></p>
+            </div>
+
+            <div class="tools__import-catalog">
+              <!-- Dynamically populated catalog of tools, skills, scripts -->
+            </div>
+
+            <div class="tools__form-group tools__import-options">
+              <label class="tools__checkbox-label">
+                <input
+                  checked
+                  class="tools__import-auto-enable"
+                  type="checkbox"
+                />
+                Automatically enable imported tools
+              </label>
+              <label class="tools__checkbox-label">
+                <input class="tools__import-overwrite" type="checkbox" />
+                Overwrite existing tools/skills if names match
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="tools__dialog-footer">
+          <button
+            class="tools__btn-cancel tools__import-cancel-btn"
+            type="button"
+          >
+            Cancel
+          </button>
+          <button
+            class="tools__btn-save tools__import-submit-btn"
+            disabled
+            type="submit"
+          >
+            Import Selected
+          </button>
         </div>
       </form>
     </shadow-claw-dialog>

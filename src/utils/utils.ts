@@ -296,7 +296,18 @@ export function bufferToHex(buffer: ArrayBuffer): string {
  */
 export async function computeSha256(input: HashInput): Promise<string> {
   const data = await toArrayBuffer(input);
-  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const subtle =
+    globalThis.crypto?.subtle ??
+    (globalThis as any).window?.crypto?.subtle ??
+    (typeof process !== "undefined"
+      ? (await import("node:crypto")).webcrypto?.subtle
+      : undefined);
+
+  if (!subtle) {
+    throw new Error("crypto.subtle is not available in current environment");
+  }
+
+  const hashBuffer = await subtle.digest("SHA-256", data);
 
   return bufferToHex(hashBuffer);
 }

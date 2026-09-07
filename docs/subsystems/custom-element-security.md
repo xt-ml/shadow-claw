@@ -85,6 +85,17 @@ Validates and executes custom element scripts safely:
 - **Descriptors API:** The security subsystem exposes `getApprovedCustomElementScriptDescriptors(): CustomElementScriptDescriptor[]` for full descriptor access and `getApprovedCustomElementScripts(): string[]` for URL-only strings.
 - **Single-Load Execution:** Custom element scripts execute exclusively inside sandboxed preview `<iframe>` environments (`iframe.srcdoc`) with `allow="fullscreen"` permissions, eliminating duplicate initialization and protecting the main application shell context.
 
+### 7. Imported Artifacts & Runtime Isolation Boundary
+
+ShadowClaw's Remote Tool Importer allows users to import tools, skills, and companion scripts from external discovery manifests into the local OPFS workspace (`.agents/tools/`, `.agents/skills/`, `.agents/scripts/`).
+
+To preserve sandbox integrity against malicious or unvetted remote scripts:
+
+- **No Dynamic Privilege Escalation**: Storing a script in OPFS does **not** grant it permission to register custom elements in the browser DOM, load arbitrary external resources, or execute un-nonced scripts inside preview iframes.
+- **Strict DOMPurify Sanitization**: All HTML and markdown preview surfaces strictly strip `<script>` tags and unapproved custom elements before rendering. A user document cannot run an inline `<script type="module">` to load an OPFS script.
+- **Declarative Allowlisting**: Any custom element tag, external bundle, or adapter script must be declared in `shadow-claw.config.json` under `customElements`. This ensures that custom elements are vetted at configuration time rather than arbitrarily injected at runtime.
+- **BroadcastChannel Proxy Relay**: When approved custom elements are loaded inside preview iframes, `iframe-broadcast-proxy.ts` relays `BroadcastChannel` messages across the sandbox boundary so background agent worker tools can communicate with the component safely without breaking origin isolation.
+
 ---
 
 ## Configuration & Seeding

@@ -174,7 +174,13 @@ The agent has access to **50+ tools** including:
 
 When running in browsers supporting the Model Context Protocol (or via `@mcp-b/webmcp-polyfill`), ShadowClaw automatically registers its tool catalog on `document.modelContext` with normalized input schemas across Chrome versions and signal-based abort handling, routing tool execution safely through the Web Worker.
 
-**Full reference:** [docs/subsystems/tools.md](docs/subsystems/tools.md) | [docs/subsystems/webmcp.md](docs/subsystems/webmcp.md)
+### Declarative Tools, Skills & Remote Importer
+
+- **Declarative Tools & Skills**: Extend assistant capabilities by placing JSON tool definitions in `.agents/tools/main/*.json` and markdown skill descriptors in `.agents/skills/**/SKILL.md`.
+- **Remote Artifact Importer**: Accessible via the "Import" action in Tool Configuration (`<shadow-claw-tools>`). Discovers tools, companion scripts, and skills over HTTP conforming to the Agent Skills Discovery RFC v0.2.0 (`/.well-known/agent-skills/index.json`), verifies SHA-256 digests, and persists them directly into the user's OPFS workspace.
+- **Security Boundaries**: Stored tools and companion scripts execute headless logic in Web Workers immediately. Custom element UI components (e.g. `<block-garden>`, `<x-pwgen>`) and external domain origins are strictly guarded and must be declared in `shadow-claw.config.json` under `customElements` and `security.connectSrc`.
+
+**Full reference:** [docs/subsystems/tools.md](docs/subsystems/tools.md) | [docs/subsystems/skills.md](docs/subsystems/skills.md) | [docs/subsystems/webmcp.md](docs/subsystems/webmcp.md)
 
 ---
 

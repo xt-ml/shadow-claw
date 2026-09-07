@@ -25,5 +25,29 @@
   },
   "settings": {
     "defaultToolsProfile": "__builtin_default"
+  },
+  "customElements": {
+    "allowedElements": [
+      "block-garden",
+      "block-garden-option",
+      "block-garden-select"
+    ],
+    "allowedDomains": ["kherrick.github.io", "cdn.jsdelivr.net"],
+    "scripts": [
+      {
+        "src": "https://kherrick.github.io/block-garden-knowledge-hub/.agents/scripts/main/block-garden-adapter.js",
+        "hasInit": true
+      },
+      "https://kherrick.github.io/block-garden/block-garden-bundle-min.mjs"
+    ]
+  },
+  "security": {
+    "connectSrc": [
+      "'self'",
+      "blob:",
+      "data:",
+      "https://kherrick.github.io",
+      "https://cdn.jsdelivr.net"
+    ]
   }
 }

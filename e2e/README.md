@@ -273,6 +273,13 @@ The `<shadow-claw-tools>` component includes interactive controls for managing t
 - **Internet Access Toggle** (`.tools__internet-access-toggle` / `#toolsInternetAccessOptIn`): A checkbox to toggle the shared full public internet access setting (`vm_bash_full_internet_access`) for both `bash` and `javascript` tools.
 - **Web Search Proxy Toggle & Settings**: Checkbox (`.tools__web-search-proxy-toggle`), custom CORS proxy endpoint input (`.tools__web-search-proxy-input`), and custom search URL template input (`.tools__web-search-template-input`) to configure search routing for `web_search`.
 - **Declarative Tool Toggles & Badges**: Checkboxes (`.tools__declarative-tool-toggle`) and `"declarative"` badges allowing independent enablement/disablement of declarative tools discovered in `.agents/tools/main/`.
+- **Remote Tool & Skill Importer (`.tools__import-btn` / `#toolsImportBtn`)**:
+  - Launches the Remote Tool Import modal (`.tools-import-modal`).
+  - Source URL input (`.tools-import-input`) and quick-pick presets selector (`.tools-import-preset-select`) targeting RFC v0.2.0 manifests (`/.well-known/agent-skills/index.json`).
+  - Discovery catalog inspection with category tabs (tools, skills, scripts), item cards, checkbox selections, and expandable schema/code preview drawers (`.tools-import-detail-dialog`).
+  - Options for automatic enablement of imported tools (`#toolsImportAutoEnable`) and destination overwrite toggle (`#toolsImportOverwrite`).
+  - Executes batch downloading, SHA-256 integrity verification, and OPFS persistence to `.agents/tools/main/`, `.agents/skills/main/`, and `.agents/scripts/main/`.
+  - Testing considerations: mock remote manifest endpoints via Playwright route interception (`page.route('**/.well-known/agent-skills/index.json', ...)`) and verify OPFS persistence via the `__SHADOWCLAW_E2E__` bridge.
 - **WebMCP Toggle** (`.tools__webmcp-toggle`): Toggles integration with browser's Model Context Protocol.
 - **WebMCP Mode selector** (`.tools__webmcp-mode`): Selects the WebMCP execution mode.
 

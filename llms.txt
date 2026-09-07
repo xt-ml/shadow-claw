@@ -51,12 +51,13 @@ When to look elsewhere:
 - [MCP Server Card (SEP-2127)](https://xt-ml.github.io/shadow-claw/.well-known/mcp.json): Standardized remote MCP discovery document
 - [AI Catalog (SEP-2127)](https://xt-ml.github.io/shadow-claw/.well-known/ai-catalog.json): Decentralized AI artifact catalog
 - [MCP Servers Manifest (Discussion #1147)](https://xt-ml.github.io/shadow-claw/.well-known/mcp/servers.json): Server endpoint manifest
+- [Agent Skills & Tool Discovery (RFC v0.2.0)](https://xt-ml.github.io/shadow-claw/.well-known/agent-skills/index.json): Decentralized discovery index for remote tools, skills, and companion scripts
 - [Protected Resource Metadata (RFC 9728)](https://xt-ml.github.io/shadow-claw/.well-known/oauth-protected-resource): OAuth PRM discovery
 - [Stateless MCP Server Subsystem](https://xt-ml.github.io/shadow-claw/docs/subsystems/mcp-server.md): Complete architectural documentation for MCP Streamable HTTP & STDIO transports
 
 ## Optional
 
-- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): CLI, control plane, MCP server, backup, Shell, VM, git, channels, tools, declarative tools, Agent Skills, providers, built-in AI Task APIs, notifications, Electron, reactive UI, component library, Storybook, crypto, WebMCP, Web Share Target, and more
+- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): CLI, control plane, MCP server, backup, Shell, VM, git, channels, tools, declarative tools, Remote Tool & Skill Importer, Agent Skills, providers, built-in AI Task APIs, notifications, Electron, reactive UI, component library, Storybook, crypto, WebMCP, Web Share Target, and more
 - [Guides](https://xt-ml.github.io/shadow-claw/docs/README.md#guides): Adding a provider/tool/channel/page/shell command, server development configuration, and publishing to GitHub Pages
 - [Decisions](https://xt-ml.github.io/shadow-claw/docs/README.md#decisions): ADRs explaining bundled TypeScript, Signals, worker-isolated runtime, IndexedDB/OPFS storage
 - [e2e/README.md](https://xt-ml.github.io/shadow-claw/e2e/README.md): E2E test architecture

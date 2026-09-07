@@ -6,6 +6,9 @@ const mockLoadDeclarativeTools = jest.fn();
 const mockFindDeclarativeTool = jest.fn();
 const mockParseDeclarativeTool = jest.fn();
 
+const mockImportRemoteArtifacts = jest.fn();
+const mockFetchDiscoveryManifest = jest.fn();
+
 jest.unstable_mockModule("../db/getConfig.js", () => ({
   getConfig: mockGetConfig,
 }));
@@ -19,6 +22,17 @@ jest.unstable_mockModule("../subsystems/tools/declarative.js", () => ({
   findDeclarativeTool: mockFindDeclarativeTool,
   parseDeclarativeTool: mockParseDeclarativeTool,
 }));
+
+jest.unstable_mockModule("../subsystems/tools/remote/discovery.js", () => ({
+  fetchDiscoveryManifest: mockFetchDiscoveryManifest,
+}));
+
+jest.unstable_mockModule(
+  "../subsystems/tools/remote/importArtifacts.js",
+  () => ({
+    importRemoteArtifacts: mockImportRemoteArtifacts,
+  }),
+);
 
 const { ToolsStore } = await import("./tools.js");
 const { DEFAULT_BUILTIN_PROFILE } =
@@ -285,5 +299,68 @@ describe("ToolsStore — declarative tools management", () => {
     expect(refreshed).toHaveLength(1);
     expect(store.declarativeTools).toHaveLength(1);
     expect(store.enabledDeclarativeTools).toHaveLength(1);
+  });
+
+  describe("Remote Site Integration", () => {
+    it("fetches remote site manifest via fetchRemoteDiscoveryManifest", async () => {
+      const mockResult = {
+        manifest: { name: "Sample Site", tools: [] },
+        siteUrl: "https://example.com",
+        manifestUrl: "https://example.com/.well-known/agent-skills/index.json",
+      };
+      (mockFetchDiscoveryManifest as any).mockResolvedValueOnce(mockResult);
+
+      const res = await store.fetchRemoteDiscoveryManifest(
+        "https://example.com",
+      );
+      expect(res).toBe(mockResult);
+      expect(mockFetchDiscoveryManifest).toHaveBeenCalledWith(
+        "https://example.com",
+      );
+    });
+
+    it("imports from remote site and refreshes declarative tools", async () => {
+      const fakeManifest = { name: "Sample Site", tools: [{ name: "calc" }] };
+      const fakeResult = {
+        tools: [
+          {
+            name: "calc",
+            path: ".agents/tools/main/calc.json",
+            status: "imported",
+          },
+        ],
+        skills: [],
+        scripts: [],
+        diagnostics: [],
+      };
+      (mockImportRemoteArtifacts as any).mockResolvedValueOnce(fakeResult);
+      (mockLoadDeclarativeTools as any).mockResolvedValueOnce({
+        tools: [
+          {
+            name: "calc",
+            description: "Calculator",
+            execution: { type: "javascript", code: "return 1;" },
+          },
+        ],
+      });
+
+      const res = await store.importFromRemoteSite(
+        db,
+        fakeManifest as any,
+        { toolNames: ["calc"] },
+        { autoEnable: true },
+      );
+
+      expect(res).toBe(fakeResult);
+      expect(mockImportRemoteArtifacts).toHaveBeenCalledWith(
+        db,
+        "br:main",
+        fakeManifest,
+        { toolNames: ["calc"] },
+        { autoEnable: true },
+      );
+      expect(mockLoadDeclarativeTools).toHaveBeenCalledWith(db, "br:main");
+      expect(store.declarativeTools).toHaveLength(1);
+    });
   });
 });

@@ -97,6 +97,8 @@ jest.unstable_mockModule("../../stores/tools.js", () => ({
     saveToActiveProfile: jest.fn(),
     addProfile: jest.fn(),
     deleteProfile: jest.fn(),
+    fetchRemoteDiscoveryManifest: jest.fn(),
+    importFromRemoteSite: jest.fn(),
   },
 }));
 
@@ -537,6 +539,99 @@ describe("shadow-claw-tools", () => {
     expect(toolsStore.addProfile).toHaveBeenCalledWith(
       db,
       expect.objectContaining({ name: "Dev Profile", providerId: "anthropic" }),
+    );
+
+    // 6. Remote Site Import flow
+    const fakeManifest = {
+      name: "pwgen Knowledge Hub",
+      description: "Password Generator Knowledge Hub",
+      tools: [
+        {
+          name: "pwgen",
+          description: "Generate password",
+          url: "https://example.com/tools/pwgen.json",
+        },
+      ],
+      skills: [
+        {
+          name: "pwgen",
+          description: "Pwgen skill",
+          url: "https://example.com/skills/pwgen/SKILL.md",
+        },
+      ],
+      scripts: [
+        {
+          name: "pwgen",
+          description: "Pwgen engine script",
+          url: "https://example.com/scripts/pwgen.js",
+        },
+      ],
+    };
+
+    toolsStore.fetchRemoteDiscoveryManifest.mockResolvedValueOnce({
+      manifest: fakeManifest,
+      siteUrl: "https://example.com",
+      manifestUrl: "https://example.com/.well-known/agent-skills/index.json",
+    });
+
+    await el.handleFetchSite(db, "https://example.com");
+    expect(toolsStore.fetchRemoteDiscoveryManifest).toHaveBeenCalledWith(
+      "https://example.com",
+    );
+    expect(el.currentRemoteManifest).toBe(fakeManifest);
+
+    const root = el.shadowRoot;
+    const siteNameEl = root?.querySelector(".tools__import-site-name");
+    expect(siteNameEl?.textContent).toBe("pwgen Knowledge Hub");
+
+    const catalogItems = root?.querySelectorAll(".tools__import-item");
+    expect(catalogItems?.length).toBe(3); // 1 tool + 1 skill + 1 script
+
+    toolsStore.importFromRemoteSite.mockResolvedValueOnce({
+      tools: [
+        {
+          name: "pwgen",
+          path: ".agents/tools/main/pwgen.json",
+          status: "imported",
+        },
+      ],
+      skills: [
+        {
+          name: "pwgen",
+          path: ".agents/skills/main/pwgen/SKILL.md",
+          status: "imported",
+        },
+      ],
+      scripts: [
+        {
+          name: "pwgen",
+          path: ".agents/scripts/main/pwgen.js",
+          status: "imported",
+        },
+      ],
+      diagnostics: [],
+    });
+
+    const importForm = root?.querySelector(
+      ".tools__import-dialog-form",
+    ) as HTMLFormElement;
+    await el.handleImportSubmit(db, importForm);
+
+    expect(toolsStore.importFromRemoteSite).toHaveBeenCalledWith(
+      db,
+      fakeManifest,
+      expect.objectContaining({
+        toolNames: ["pwgen"],
+        skillNames: ["pwgen"],
+        scriptNames: ["pwgen"],
+      }),
+      expect.objectContaining({
+        autoEnable: true,
+        overwrite: false,
+      }),
+    );
+    expect(showSuccess).toHaveBeenCalledWith(
+      expect.stringContaining("Successfully imported 3 items"),
     );
 
     document.body.removeChild(el);

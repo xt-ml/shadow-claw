@@ -6,9 +6,17 @@ import { setConfig } from "../db/setConfig.js";
 import { TOOL_DEFINITIONS } from "../subsystems/tools/tools.js";
 import { DEFAULT_BUILTIN_PROFILE } from "../subsystems/tools/builtin-profiles.js";
 import { loadDeclarativeTools } from "../subsystems/tools/declarative.js";
+import { fetchDiscoveryManifest } from "../subsystems/tools/remote/discovery.js";
+import { importRemoteArtifacts } from "../subsystems/tools/remote/importArtifacts.js";
 import type { DeclarativeToolDefinition } from "../subsystems/tools/declarative.js";
 import type { ShadowClawDatabase } from "../db/types.js";
 import type { ToolDefinition, ToolProfile } from "../subsystems/tools/tools.js";
+import type {
+  ImportOptions,
+  ImportResult,
+  RemoteManifest,
+  ResolvedRemoteManifest,
+} from "../subsystems/tools/remote/types.js";
 
 export class ToolsStore {
   private _activeProfile: Signal.Computed<ToolProfile | null>;
@@ -201,6 +209,40 @@ export class ToolsStore {
     const nextSet = new Set(toolNames);
     this._declarativeToolNamesEnabled.set(nextSet);
     await setConfig(db, CONFIG_KEYS.DECLARATIVE_TOOLS_ENABLED, toolNames);
+  }
+
+  /**
+   * Fetches remote site discovery manifest.
+   */
+  async fetchRemoteDiscoveryManifest(
+    siteUrl: string,
+  ): Promise<ResolvedRemoteManifest> {
+    return await fetchDiscoveryManifest(siteUrl);
+  }
+
+  /**
+   * Imports tools, skills, and scripts from a remote site into OPFS and refreshes declarative tools.
+   */
+  async importFromRemoteSite(
+    db: ShadowClawDatabase,
+    manifest: RemoteManifest,
+    selection: {
+      toolNames?: string[];
+      skillNames?: string[];
+      scriptNames?: string[];
+    },
+    options?: ImportOptions,
+  ): Promise<ImportResult> {
+    const groupId = options?.groupId || "br:main";
+    const result = await importRemoteArtifacts(
+      db,
+      groupId,
+      manifest,
+      selection,
+      options,
+    );
+    await this.refreshDeclarativeTools(db, groupId);
+    return result;
   }
 
   /**

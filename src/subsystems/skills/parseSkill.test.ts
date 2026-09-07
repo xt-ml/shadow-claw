@@ -83,4 +83,75 @@ describe("parseSkill", () => {
 
     expect(result.execution).toBeUndefined();
   });
+
+  it("resiliently parses frontmatter with unquoted colons, URLs, and quotes in description", () => {
+    const rawSkill = `---
+name: bible-lookup
+description: Look up Bible verses from the bible-tools/data repository (https://bible-tools.github.io/data/). Supports multiple translations in Arabic (ar), German (de), English (en: ASV, KJV, WEB), Spanish (es), and French (fr). Trigger phrases: "bible lookup", "look up a bible verse", "bible verse", "find bible verse", "bible reference", "what does the bible say about", "scripture reference", "look up verse", "bible passage".
+user-invocable: true
+metadata:
+  allowed-tools:
+    - fetch_url
+    - javascript
+---
+
+# Bible Lookup Skill
+
+Instructions here.`;
+
+    const result = parseSkill(
+      ".agents/skills/main/bible-lookup/SKILL.md",
+      rawSkill,
+    );
+
+    expect(result.name).toBe("bible-lookup");
+    expect(result.description).toContain(
+      "Look up Bible verses from the bible-tools/data repository",
+    );
+    expect(result.description).toContain("(en: ASV, KJV, WEB)");
+    expect(result.userInvocable).toBe(true);
+    expect(result.allowedTools).toBe("fetch_url javascript");
+    expect(result.metadata?.["allowed-tools"]).toBe("fetch_url javascript");
+    expect(result.body).toBe("# Bible Lookup Skill\n\nInstructions here.");
+    expect(result.path).toBe(".agents/skills/main/bible-lookup/SKILL.md");
+    expect(result.basePath).toBe(".agents/skills/main/bible-lookup");
+  });
+
+  it("normalizes array allowed-tools into a space-separated string", () => {
+    const result = parseSkill(
+      "skills/tools/SKILL.md",
+      `---\nname: tools-test\ndescription: Test tools array\nmetadata:\n  allowed-tools:\n    - read_file\n    - write_file\n    - javascript\n---\nbody`,
+    );
+
+    expect(result.allowedTools).toBe("read_file write_file javascript");
+    expect(result.metadata?.["allowed-tools"]).toBe(
+      "read_file write_file javascript",
+    );
+  });
+
+  it("recovers via fallback extraction when YAML syntax is malformed", () => {
+    const brokenYaml = `---
+name: broken-yaml-skill
+description: Resilient fallback description with : colons and [broken brackets
+user-invocable: true
+disable-model-invocation: false
+allowed-tools:
+  - tool_a
+  - tool_b
+some_random_key: {unclosed object
+---
+
+# Fallback Body`;
+
+    const result = parseSkill("skills/broken/SKILL.md", brokenYaml);
+
+    expect(result.name).toBe("broken-yaml-skill");
+    expect(result.description).toBe(
+      "Resilient fallback description with : colons and [broken brackets",
+    );
+    expect(result.userInvocable).toBe(true);
+    expect(result.disableModelInvocation).toBe(false);
+    expect(result.allowedTools).toBe("tool_a tool_b");
+    expect(result.body).toBe("# Fallback Body");
+  });
 });

@@ -7,7 +7,7 @@ Agent skills in ShadowClaw are configured via YAML frontmatter at the top of `SK
 ```yaml
 ---
 name: skill-name
-description: Clear, concise model-facing trigger description.
+description: "Clear, concise model-facing trigger description."
 user-invocable: true
 disable-model-invocation: false
 argument-hint: "[arguments]"
@@ -18,16 +18,18 @@ license: MIT
 ---
 ```
 
+> **Quoting Rule**: Always enclose `description` in double quotes (`"..."`) or use a YAML folded block scalar (`>`). Descriptions often contain URLs (`https://`), colons (`trigger:` or `en:`), quotes, or parentheses that break unquoted YAML frontmatter.
+
 ## Attribute Reference
 
 | Attribute                  | Type      | Required | Description                                                                                               |
 | :------------------------- | :-------- | :------- | :-------------------------------------------------------------------------------------------------------- |
 | `name`                     | `string`  | **Yes**  | Skill identifier (1–64 lowercase alphanumeric characters and single hyphens).                             |
-| `description`              | `string`  | **Yes**  | Model-facing description used for skill discovery and activation (max 1024 characters).                   |
+| `description`              | `string`  | **Yes**  | Model-facing description used for skill discovery and activation (max 1024 characters). **Always wrap in double quotes.** |
 | `user-invocable`           | `boolean` | No       | When `true` (default), allows users to invoke the skill directly via slash commands (e.g. `/skill-name`). |
 | `disable-model-invocation` | `boolean` | No       | When `true`, hides the skill from model discovery so it is only triggered via slash command.              |
 | `argument-hint`            | `string`  | No       | Display placeholder in the UI search/autocomplete menu when typing slash commands.                        |
-| `metadata`                 | `object`  | No       | Key-value dictionary for custom metadata, tool permissions (`allowed-tools`), and `execution` pipelines.  |
+| `metadata`                 | `object`  | No       | Key-value dictionary for custom metadata, tool permissions (`allowed-tools` string or list), and `execution` pipelines. |
 | `compatibility`            | `string`  | No       | Platform compatibility requirements or version strings.                                                   |
 | `license`                  | `string`  | No       | Open-source software license string (e.g. `MIT`, `AGPL-3.0`).                                             |
 

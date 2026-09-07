@@ -23,9 +23,10 @@ Use this skill when creating, modifying, reviewing, or validating a ShadowClaw a
    - For new skills, define the trigger prompt, intended execution outcome, required tools, and output artifacts.
 2. **Configure Frontmatter**
    - Provide a clear, concise trigger description in `description` (1024 characters max).
+   - **Always enclose `description` in double quotes** (`description: "..."`) or use a YAML block scalar (`>`). Colons (`:`), URLs, and trigger phrases inside unquoted YAML break parsing.
    - Set `user-invocable: true` if the skill should be triggerable via slash command (e.g. `/skill-name`).
    - Use `disable-model-invocation: true` for skills intended strictly for slash-command execution.
-   - Place non-standard configuration (such as `allowed-tools`) within the standard `metadata` block to maintain Agent Skills specification compliance.
+   - Place non-standard configuration (such as `allowed-tools`) within the standard `metadata` block to maintain Agent Skills specification compliance. Specify tools as a space-separated string or a list.
 3. **Structure & Draft Content**
    - Write instructions in `SKILL.md` using clear, modular procedures.
    - Place deterministic operations in `javascript` tool calls; use `read_file` and `write_file` for workspace persistence.
@@ -35,5 +36,5 @@ Use this skill when creating, modifying, reviewing, or validating a ShadowClaw a
    - Pass outputs between steps using `{ "$pipe": "prev" }` or step/tool identifiers.
    - Optionally apply `suppressToast: true` or `suppressOutput: true` at the execution root or per step to suppress notifications and output blocks.
 5. **Verify & Validate**
-   - Re-read the saved `SKILL.md` and verify valid YAML frontmatter syntax.
+   - Re-read the saved `SKILL.md` and verify valid YAML frontmatter syntax (ensure `description` is enclosed in double quotes).
    - Ensure the skill name uses 1–64 lowercase alphanumeric characters or hyphens and all referenced resource paths exist.

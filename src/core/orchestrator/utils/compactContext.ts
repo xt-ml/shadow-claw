@@ -112,6 +112,8 @@ export async function compactContext(
     compactTools,
     toolsStore.systemPromptOverride,
     peerState,
+    undefined,
+    { groupId },
   );
 
   let modelForContext = effectiveModel;

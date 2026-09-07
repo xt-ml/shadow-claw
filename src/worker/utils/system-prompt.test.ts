@@ -188,4 +188,63 @@ describe("buildSystemPrompt", () => {
       /ignore previous instructions|you are now|new task/i,
     );
   });
+
+  it("includes send_file strategy referencing both peer and room conversations", () => {
+    const prompt = buildSystemPrompt(
+      "TestBot",
+      "",
+      [
+        {
+          name: "send_file",
+          description: "Send a file",
+          input_schema: { type: "object", properties: {} },
+        },
+      ],
+      undefined,
+    );
+    expect(prompt).toContain("send_file");
+    expect(prompt).toContain("peer:");
+    expect(prompt).toContain("room:");
+  });
+
+  it("injects conversation context for peer, room, and local groups", () => {
+    const peerPrompt = buildSystemPrompt(
+      "TestBot",
+      "",
+      [],
+      undefined,
+      undefined,
+      undefined,
+      { groupId: "peer:node-42" },
+    );
+    expect(peerPrompt).toContain(
+      "Current Conversation Context: Direct PeerJS P2P session (groupId: peer:node-42).",
+    );
+
+    const roomPrompt = buildSystemPrompt(
+      "TestBot",
+      "",
+      [],
+      undefined,
+      undefined,
+      undefined,
+      { groupId: "room:dev-team" },
+    );
+    expect(roomPrompt).toContain(
+      "Current Conversation Context: PeerJS Multi-party Room session (groupId: room:dev-team).",
+    );
+
+    const localPrompt = buildSystemPrompt(
+      "TestBot",
+      "",
+      [],
+      undefined,
+      undefined,
+      undefined,
+      { groupId: "main" },
+    );
+    expect(localPrompt).toContain(
+      "Current Conversation Context: Local browser conversation (groupId: main).",
+    );
+  });
 });

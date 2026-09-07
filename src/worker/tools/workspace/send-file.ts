@@ -14,8 +14,10 @@ export async function executeSendFile(
     return "Error: send_file requires a valid path string.";
   }
 
-  if (!groupId.startsWith("peer:")) {
-    return "Error: send_file only works in peer conversations (groupId must start with 'peer:'). The current conversation is not a peer session.";
+  const isPeer = groupId.startsWith("peer:");
+  const isRoom = groupId.startsWith("room:");
+  if (!isPeer && !isRoom) {
+    return "Error: send_file only works in peer or room conversations (groupId must start with 'peer:' or 'room:'). The current conversation is not a peer session.";
   }
 
   const sfPath = normalizeWorkspacePath(input.path);
@@ -37,5 +39,6 @@ export async function executeSendFile(
     type: "send-file",
   });
 
-  return `Sending file to peer: ${sfPath}. The transfer will proceed in the background — you can continue chatting.`;
+  const targetLabel = isRoom ? "room" : "peer";
+  return `Sending file to ${targetLabel}: ${sfPath}. The transfer will proceed in the background — you can continue chatting.`;
 }

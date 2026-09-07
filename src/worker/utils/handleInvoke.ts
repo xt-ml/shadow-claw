@@ -361,6 +361,9 @@ export async function handleInvoke(
           memory,
           currentTools,
           updatedState.systemPromptOverride,
+          undefined,
+          undefined,
+          { groupId },
         );
       }
 

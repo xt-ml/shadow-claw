@@ -260,6 +260,7 @@ export class Orchestrator {
     });
 
     this.roomChannel.setManager(this.roomManager);
+    this.roomChannel.setPeerJs(this.peerjs);
     this.peerjs.setRoomNotificationHandler((from, method, params) =>
       this.roomManager.handleNotification(from, method, params),
     );
@@ -567,6 +568,8 @@ export class Orchestrator {
       activeTools,
       toolsStore.systemPromptOverride,
       peerState,
+      undefined,
+      { groupId },
     );
 
     const groups = await listGroups(db);

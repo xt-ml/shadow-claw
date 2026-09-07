@@ -114,7 +114,10 @@ jest.unstable_mockModule("../../utils/utils.js", () => ({
   computeSha256: jest.fn(async () => "mock-hash"),
 }));
 
-const { PeerJsChannel } = await import("./peerjs.js");
+const { PeerJsChannel, transferProgressSignal } = await import("./peerjs.js");
+const { writeGroupFileBytes } = (await import(
+  "../../storage/writeGroupFileBytes.js"
+)) as any;
 
 function flushMicrotasks(): Promise<void> {
   return new Promise((r) => setTimeout(r, 10));
@@ -770,6 +773,344 @@ describe("PeerJsChannel", () => {
       );
     });
 
+    it("chunks outbound file attachments into __file_header and __file_chunk frames", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-id", []);
+      ch.start();
+
+      await flushMicrotasks();
+
+      const incomingConn = new MockDataConnection("remote-peer-files");
+      lastPeerInstance!.emit("connection", incomingConn);
+      incomingConn.emit("open");
+
+      await ch.send("peer:remote-peer-files", "See [notes](notes.txt)", [
+        { path: "image.png", mimeType: "image/png" } as any,
+      ]);
+
+      // Verify header contains totalChunks
+      expect(incomingConn.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "__file_header",
+          name: "image.png",
+          mimeType: "image/png",
+          totalChunks: expect.any(Number),
+        }),
+      );
+
+      // Verify chunk frame was sent
+      expect(incomingConn.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "__file_chunk",
+          name: "image.png",
+          index: 0,
+          totalChunks: expect.any(Number),
+          data: expect.any(ArrayBuffer),
+        }),
+      );
+    });
+
+    it("reassembles inbound __file_chunk frames and writes complete file to DB", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-id", []);
+      ch.start();
+
+      await flushMicrotasks();
+
+      const incomingConn = new MockDataConnection("remote-peer-chunk-sender");
+      lastPeerInstance!.emit("connection", incomingConn);
+      incomingConn.emit("open");
+
+      transferProgressSignal.set(null);
+
+      // Inbound header
+      incomingConn.emit("data", {
+        type: "__file_header",
+        id: "tx-1",
+        name: "test.bin",
+        mimeType: "application/octet-stream",
+        size: 6,
+        totalChunks: 2,
+        chunkSize: 3,
+      });
+
+      // Inbound chunk 0
+      incomingConn.emit("data", {
+        type: "__file_chunk",
+        id: "tx-1",
+        name: "test.bin",
+        index: 0,
+        totalChunks: 2,
+        data: new Uint8Array([10, 20, 30]).buffer,
+      });
+
+      expect(transferProgressSignal.get()).toEqual({
+        count: 1,
+        total: 2,
+        direction: "receive",
+      });
+      expect(writeGroupFileBytes).not.toHaveBeenCalled();
+
+      // Inbound chunk 1
+      incomingConn.emit("data", {
+        type: "__file_chunk",
+        id: "tx-1",
+        name: "test.bin",
+        index: 1,
+        totalChunks: 2,
+        data: new Uint8Array([40, 50, 60]).buffer,
+      });
+
+      expect(transferProgressSignal.get()).toEqual({
+        count: 2,
+        total: 2,
+        direction: "receive",
+      });
+
+      await flushMicrotasks();
+
+      expect(writeGroupFileBytes).toHaveBeenCalledWith(
+        expect.anything(),
+        "peer:remote-peer-chunk-sender",
+        "test.bin",
+        new Uint8Array([10, 20, 30, 40, 50, 60]),
+      );
+    });
+
+    it("reassembles out-of-order __file_chunk frames correctly", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-id", []);
+      ch.start();
+
+      await flushMicrotasks();
+
+      const incomingConn = new MockDataConnection("remote-peer-ooo");
+      lastPeerInstance!.emit("connection", incomingConn);
+      incomingConn.emit("open");
+
+      incomingConn.emit("data", {
+        type: "__file_header",
+        id: "tx-ooo",
+        name: "ooo.bin",
+        mimeType: "application/octet-stream",
+        size: 9,
+        totalChunks: 3,
+        chunkSize: 3,
+      });
+
+      // Send chunk index 2 first
+      incomingConn.emit("data", {
+        type: "__file_chunk",
+        id: "tx-ooo",
+        name: "ooo.bin",
+        index: 2,
+        totalChunks: 3,
+        data: new Uint8Array([7, 8, 9]).buffer,
+      });
+
+      // Then chunk index 0
+      incomingConn.emit("data", {
+        type: "__file_chunk",
+        id: "tx-ooo",
+        name: "ooo.bin",
+        index: 0,
+        totalChunks: 3,
+        data: new Uint8Array([1, 2, 3]).buffer,
+      });
+
+      // Finally chunk index 1
+      incomingConn.emit("data", {
+        type: "__file_chunk",
+        id: "tx-ooo",
+        name: "ooo.bin",
+        index: 1,
+        totalChunks: 3,
+        data: new Uint8Array([4, 5, 6]).buffer,
+      });
+
+      await flushMicrotasks();
+
+      expect(writeGroupFileBytes).toHaveBeenCalledWith(
+        expect.anything(),
+        "peer:remote-peer-ooo",
+        "ooo.bin",
+        new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9]),
+      );
+    });
+
+    it("does not flicker or overwrite transferProgressSignal when raw chunks arrive during an application file transfer", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-id", []);
+      ch.start();
+
+      await flushMicrotasks();
+
+      const incomingConn = new MockDataConnection("remote-peer-flicker-test");
+      lastPeerInstance!.emit("connection", incomingConn);
+      incomingConn.emit("open");
+
+      transferProgressSignal.set(null);
+
+      // Inbound application file header for a 10-chunk file
+      incomingConn.emit("data", {
+        type: "__file_header",
+        id: "tx-flicker",
+        name: "test-flicker.bin",
+        mimeType: "application/octet-stream",
+        size: 100,
+        totalChunks: 10,
+        chunkSize: 10,
+      });
+
+      // Transfer progress is immediately initialized upon header receipt
+      expect(transferProgressSignal.get()).toEqual({
+        count: 0,
+        total: 10,
+        direction: "receive",
+      });
+
+      // Simulate a raw PeerJS binarypack frame chunk arriving on the connection
+      // (e.g. if the message was fragmented at the WebRTC layer)
+      incomingConn._handleChunk({
+        __peerData: 99,
+        n: 0,
+        total: 2,
+        data: new Uint8Array([1, 2]),
+      });
+
+      // The raw PeerJS frame must NOT overwrite the application file progress with count: 1, total: 2
+      expect(transferProgressSignal.get()).toEqual({
+        count: 0,
+        total: 10,
+        direction: "receive",
+      });
+
+      // Deliver application chunk 0
+      incomingConn.emit("data", {
+        type: "__file_chunk",
+        id: "tx-flicker",
+        name: "test-flicker.bin",
+        index: 0,
+        totalChunks: 10,
+        data: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).buffer,
+      });
+
+      expect(transferProgressSignal.get()).toEqual({
+        count: 1,
+        total: 10,
+        direction: "receive",
+      });
+
+      // Simulate second subchunk of the raw frame completing (which previously triggered setTimeout(() => null, 1500))
+      incomingConn._handleChunk({
+        __peerData: 99,
+        n: 1,
+        total: 2,
+        data: new Uint8Array([3, 4]),
+      });
+
+      // Still unaffected
+      expect(transferProgressSignal.get()).toEqual({
+        count: 1,
+        total: 10,
+        direction: "receive",
+      });
+    });
+
+    it("cancels pending clear timeouts when subsequent chunks arrive", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-id", []);
+      ch.start();
+
+      await flushMicrotasks();
+
+      jest.useFakeTimers();
+      try {
+        const incomingConn = new MockDataConnection("remote-peer-timer-test");
+        lastPeerInstance!.emit("connection", incomingConn);
+        incomingConn.emit("open");
+
+        transferProgressSignal.set(null);
+
+        // Header
+        incomingConn.emit("data", {
+          type: "__file_header",
+          id: "tx-timer",
+          name: "timer.bin",
+          mimeType: "application/octet-stream",
+          size: 20,
+          totalChunks: 2,
+          chunkSize: 10,
+        });
+
+        expect(transferProgressSignal.get()).toEqual({
+          count: 0,
+          total: 2,
+          direction: "receive",
+        });
+
+        // Chunk 0
+        incomingConn.emit("data", {
+          type: "__file_chunk",
+          id: "tx-timer",
+          name: "timer.bin",
+          index: 0,
+          totalChunks: 2,
+          data: new Uint8Array(10).buffer,
+        });
+
+        expect(transferProgressSignal.get()).toEqual({
+          count: 1,
+          total: 2,
+          direction: "receive",
+        });
+
+        // Advance timer by 1000ms (not yet 1500ms)
+        jest.advanceTimersByTime(1000);
+
+        // Progress should still be 1/2
+        expect(transferProgressSignal.get()).toEqual({
+          count: 1,
+          total: 2,
+          direction: "receive",
+        });
+
+        // Deliver chunk 1
+        incomingConn.emit("data", {
+          type: "__file_chunk",
+          id: "tx-timer",
+          name: "timer.bin",
+          index: 1,
+          totalChunks: 2,
+          data: new Uint8Array(10).buffer,
+        });
+
+        expect(transferProgressSignal.get()).toEqual({
+          count: 2,
+          total: 2,
+          direction: "receive",
+        });
+
+        // Advance another 1000ms (total 2000ms from start, but only 1000ms from chunk 1)
+        jest.advanceTimersByTime(1000);
+
+        // Progress must NOT have reset to null yet (as 1500ms hasn't passed since chunk 1 completed)
+        expect(transferProgressSignal.get()).toEqual({
+          count: 2,
+          total: 2,
+          direction: "receive",
+        });
+
+        // Advance remaining 600ms (now 1600ms from completion)
+        jest.advanceTimersByTime(600);
+
+        // Now it should be cleared
+        expect(transferProgressSignal.get()).toBeNull();
+      } finally {
+        jest.useRealTimers();
+      }
+    });
+
     it("sends A2UI and A2UIAction envelopes", async () => {
       const ch = new PeerJsChannel();
       ch.configure("my-id", []);
@@ -935,6 +1276,93 @@ describe("PeerJsChannel", () => {
       expect(newPeer.destroyed).toBe(false);
 
       ch.stop();
+    });
+
+    it("streams attachments to all room members with room groupId in file header", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-id", []);
+      ch.start();
+
+      await flushMicrotasks();
+
+      const memberConn1 = new MockDataConnection("peer-1");
+      const memberConn2 = new MockDataConnection("peer-2");
+      lastPeerInstance!.emit("connection", memberConn1);
+      lastPeerInstance!.emit("connection", memberConn2);
+      memberConn1.emit("open");
+      memberConn2.emit("open");
+
+      const room = {
+        roomId: "test-room",
+        name: "Test Room",
+        hostPeerId: "my-id",
+        members: [
+          { peerId: "my-id", alias: "Me", kind: "agent" as const },
+          { peerId: "peer-1", alias: "Peer 1", kind: "human" as const },
+          { peerId: "peer-2", alias: "Peer 2", kind: "human" as const },
+        ],
+        createdAt: 1,
+      };
+
+      await (ch as any).sendAttachmentsToRoom(room, "room:test-room", [
+        { path: "shared.pdf", mimeType: "application/pdf" } as any,
+      ]);
+
+      expect(memberConn1.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "__file_header",
+          name: "shared.pdf",
+          groupId: "room:test-room",
+        }),
+      );
+      expect(memberConn2.send).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: "__file_header",
+          name: "shared.pdf",
+          groupId: "room:test-room",
+        }),
+      );
+    });
+
+    it("saves inbound file to target room groupId when specified in __file_header", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-id", []);
+      ch.start();
+
+      await flushMicrotasks();
+
+      const incomingConn = new MockDataConnection("remote-peer-sender");
+      lastPeerInstance!.emit("connection", incomingConn);
+      incomingConn.emit("open");
+
+      incomingConn.emit("data", {
+        type: "__file_header",
+        id: "room-tx-1",
+        name: "room-file.txt",
+        mimeType: "text/plain",
+        size: 3,
+        totalChunks: 1,
+        chunkSize: 10,
+        groupId: "room:target-room",
+      });
+
+      incomingConn.emit("data", {
+        type: "__file_chunk",
+        id: "room-tx-1",
+        name: "room-file.txt",
+        index: 0,
+        totalChunks: 1,
+        data: new Uint8Array([1, 2, 3]).buffer,
+      });
+
+      await flushMicrotasks();
+
+      expect(writeGroupFileBytes).toHaveBeenCalledWith(
+        expect.anything(),
+        "room:target-room",
+        "room-file.txt",
+        new Uint8Array([1, 2, 3]),
+      );
     });
   });
 });

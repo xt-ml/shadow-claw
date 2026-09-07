@@ -28,7 +28,9 @@ describe("executeSendFile", () => {
 
   it("returns error if groupId is not a peer conversation", async () => {
     const res = await executeSendFile({} as any, { path: "doc.txt" }, "main");
-    expect(res).toContain("Error: send_file only works in peer conversations");
+    expect(res).toContain(
+      "Error: send_file only works in peer or room conversations",
+    );
   });
 
   it("returns error on empty path after normalization", async () => {
@@ -77,6 +79,27 @@ describe("executeSendFile", () => {
     });
     expect(res).toBe(
       "Sending file to peer: shared/report.pdf. The transfer will proceed in the background — you can continue chatting.",
+    );
+  });
+
+  it("posts send-file message and returns success response on valid room transfer", async () => {
+    mockGroupFileExists.mockResolvedValue(true);
+
+    const res = await executeSendFile(
+      {} as any,
+      { path: "docs/specs.pdf" },
+      "room:room-42",
+    );
+
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "send-file",
+      payload: {
+        groupId: "room:room-42",
+        path: "docs/specs.pdf",
+      },
+    });
+    expect(res).toBe(
+      "Sending file to room: docs/specs.pdf. The transfer will proceed in the background — you can continue chatting.",
     );
   });
 });

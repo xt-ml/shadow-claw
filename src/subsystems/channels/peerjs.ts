@@ -20,6 +20,7 @@ import type {
   Channel,
   ChannelMessageCallback,
   ChannelTypingCallback,
+  RoomMeta,
 } from "./types.js";
 
 // A2A Protocol imports
@@ -63,6 +64,55 @@ export const transferProgressSignal = new Signal.State<{
   total: number;
   direction: "send" | "receive";
 } | null>(null);
+
+let transferProgressClearTimeout: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Update transfer progress signal and cancel any pending delayed clear timer.
+ */
+export function updateTransferProgress(
+  progress: {
+    count: number;
+    total: number;
+    direction: "send" | "receive";
+  } | null,
+): void {
+  if (transferProgressClearTimeout !== null) {
+    clearTimeout(transferProgressClearTimeout);
+    transferProgressClearTimeout = null;
+  }
+  transferProgressSignal.set(progress);
+}
+
+/**
+ * Clear transfer progress after a delay, ensuring any existing timer is reset.
+ */
+export function clearTransferProgressDelayed(delayMs = 1500): void {
+  if (transferProgressClearTimeout !== null) {
+    clearTimeout(transferProgressClearTimeout);
+  }
+  transferProgressClearTimeout = setTimeout(() => {
+    transferProgressSignal.set(null);
+    transferProgressClearTimeout = null;
+  }, delayMs);
+}
+
+/** Maximum chunk size in bytes for application-level file transfers (15 KB to stay safely under PeerJS 16,300 MTU after msgpack framing) */
+export const FILE_CHUNK_SIZE = 15360;
+
+/** Threshold for WebRTC DataChannel bufferedAmount backpressure (64 KB) */
+export const FILE_BUFFER_DRAIN_THRESHOLD = 65536;
+
+interface InboundFileTransfer {
+  transferId: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  totalChunks: number;
+  receivedChunks: Map<number, Uint8Array>;
+  receivedBytes: number;
+  targetGroupId?: string;
+}
 
 export interface PeerJsServerConfig {
   host?: string;
@@ -142,23 +192,31 @@ export class PeerJsChannel implements Channel {
     | null = null;
   /** Per-connection task managers keyed by remote peer ID */
   private _taskManagers = new Map<string, PeerTaskManager>();
+  /** Inbound multi-chunk file transfers keyed by transferId */
+  private _inboundTransfers = new Map<string, InboundFileTransfer>();
 
   constructor() {
     if (typeof globalThis.addEventListener === "function") {
       globalThis.addEventListener("peerjs-dc-handle-chunk", (e: any) => {
         if (e?.detail?.chunkInfo) {
+          // If an application-level multi-chunk file transfer is in progress,
+          // ignore underlying PeerJS binarypack frame chunks to prevent fighting/flickering.
+          if (this._inboundTransfers.size > 0) {
+            return;
+          }
+
           // PeerJS dispatches `count` BEFORE incrementing it (0-indexed pre-increment),
           // so the actual number of received chunks is count + 1.
           const { count: rawCount, total } = e.detail.chunkInfo;
           const received = rawCount + 1;
-          transferProgressSignal.set({
+          updateTransferProgress({
             count: received,
             total,
             direction: "receive",
           });
 
           if (received >= total) {
-            setTimeout(() => transferProgressSignal.set(null), 1500);
+            clearTransferProgressDelayed(1500);
           }
         }
       });
@@ -317,6 +375,113 @@ export class PeerJsChannel implements Channel {
     this._roomNotificationHandler = handler;
   }
 
+  /**
+   * Stream file attachments to all other members in a room over WebRTC DataConnections,
+   * tagged with the room groupId.
+   */
+  async sendAttachmentsToRoom(
+    room: RoomMeta,
+    groupId: string,
+    attachments: MessageAttachment[],
+  ): Promise<void> {
+    const me = this.myPeerId;
+    const fileAttachments = (attachments || []).filter(
+      (a): a is MessageAttachment & { path: string } => !!a.path,
+    );
+    if (fileAttachments.length === 0) {
+      return;
+    }
+
+    try {
+      const db = await getDb();
+      for (const att of fileAttachments) {
+        let bytes: Uint8Array;
+        try {
+          bytes = await readGroupFileBytes(db, groupId, att.path);
+        } catch (err) {
+          console.warn(
+            `PeerJsChannel: failed to read file ${att.path} for room:`,
+            err,
+          );
+          continue;
+        }
+
+        const canonicalName = att.path;
+        const mimeType = att.mimeType || "application/octet-stream";
+        const totalChunks = Math.max(
+          1,
+          Math.ceil(bytes.length / FILE_CHUNK_SIZE),
+        );
+
+        for (const member of room.members) {
+          if (member.peerId === me) {
+            continue;
+          }
+
+          const conn = this._getOrOpenConnection(member.peerId);
+          if (!conn) {
+            continue;
+          }
+
+          try {
+            await this._waitForOpen(conn);
+            const transferId = ulid();
+
+            conn.send({
+              type: "__file_header",
+              id: transferId,
+              name: canonicalName,
+              mimeType,
+              size: bytes.length,
+              totalChunks,
+              chunkSize: FILE_CHUNK_SIZE,
+              groupId,
+            });
+
+            for (let i = 0; i < totalChunks; i++) {
+              const start = i * FILE_CHUNK_SIZE;
+              const end = Math.min(start + FILE_CHUNK_SIZE, bytes.length);
+              const chunk = bytes.subarray(start, end);
+              const chunkBuf = chunk.buffer.slice(
+                chunk.byteOffset,
+                chunk.byteOffset + chunk.byteLength,
+              );
+
+              conn.send({
+                type: "__file_chunk",
+                id: transferId,
+                name: canonicalName,
+                index: i,
+                totalChunks,
+                data: chunkBuf,
+              });
+
+              updateTransferProgress({
+                count: i + 1,
+                total: totalChunks,
+                direction: "send",
+              });
+
+              await this._waitForBufferDrain(conn);
+            }
+
+            clearTransferProgressDelayed(1500);
+          } catch (err) {
+            console.warn(
+              `PeerJsChannel: failed to stream file ${att.path} to room member ${member.peerId}:`,
+              err,
+            );
+          }
+        }
+      }
+    } catch (err) {
+      console.error(
+        "PeerJsChannel: failed to access DB for room file transfer",
+        err,
+      );
+    }
+  }
+
   setTyping(groupId: string, typing: boolean): void {
     const remotePeerId = groupId.replace(/^peer:/, "");
     const conn = this.connections.get(remotePeerId);
@@ -466,20 +631,56 @@ export class PeerJsChannel implements Channel {
             const mimeType =
               (att as any).mimeType || "application/octet-stream";
 
+            const transferId = ulid();
+            const totalChunks = Math.max(
+              1,
+              Math.ceil(bytes.length / FILE_CHUNK_SIZE),
+            );
+
             // Send the header
             conn.send({
               type: "__file_header",
+              id: transferId,
               name: canonicalName,
               mimeType,
               size: bytes.length,
+              totalChunks,
+              chunkSize: FILE_CHUNK_SIZE,
+              groupId,
             });
 
-            // Send the raw binary buffer so PeerJS chunks it natively.
-            // We start tracking progress before the send call so the UI
-            // shows immediately rather than after the first chunk.
-            const trackPromise = this._trackSendProgress(conn, bytes.length);
-            conn.send(bytes.buffer);
-            await trackPromise;
+            // Send each chunk frame sequentially with flow control
+            for (let i = 0; i < totalChunks; i++) {
+              const start = i * FILE_CHUNK_SIZE;
+              const end = Math.min(start + FILE_CHUNK_SIZE, bytes.length);
+              const chunk = bytes.subarray(start, end);
+
+              // Copy into a clean ArrayBuffer slice for transfer
+              const chunkBuf = chunk.buffer.slice(
+                chunk.byteOffset,
+                chunk.byteOffset + chunk.byteLength,
+              );
+
+              conn.send({
+                type: "__file_chunk",
+                id: transferId,
+                name: canonicalName,
+                index: i,
+                totalChunks,
+                data: chunkBuf,
+              });
+
+              updateTransferProgress({
+                count: i + 1,
+                total: totalChunks,
+                direction: "send",
+              });
+
+              // Apply backpressure if the DataChannel buffer is filling up
+              await this._waitForBufferDrain(conn);
+            }
+
+            clearTransferProgressDelayed(1500);
 
             // Prepare the metadata part for the A2A envelope
             fileParts.push({
@@ -1045,41 +1246,8 @@ export class PeerJsChannel implements Channel {
     if (data instanceof ArrayBuffer || data instanceof Uint8Array) {
       if (this._pendingInboundFile) {
         const canonicalName = this._pendingInboundFile.name;
-        const groupId = `peer:${remotePeerId}`;
         const bytes = new Uint8Array(data as ArrayBuffer);
-
-        getDb().then(async (db) => {
-          let finalName = canonicalName;
-          let counter = 1;
-
-          while (await groupFileExists(db, groupId, finalName)) {
-            const lastDotIndex = canonicalName.lastIndexOf(".");
-            const hasExt =
-              lastDotIndex > 0 && lastDotIndex < canonicalName.length - 1;
-
-            if (hasExt) {
-              const base = canonicalName.substring(0, lastDotIndex);
-              const ext = canonicalName.substring(lastDotIndex);
-              finalName = `${base} (${counter})${ext}`;
-            } else {
-              finalName = `${canonicalName} (${counter})`;
-            }
-
-            counter++;
-          }
-
-          if (finalName !== canonicalName) {
-            this._inboundRemap.set(canonicalName, finalName);
-          }
-
-          writeGroupFileBytes(db, groupId, finalName, bytes).catch((err) => {
-            console.error(
-              "PeerJsChannel: failed to write inbound file bytes",
-              err,
-            );
-          });
-        });
-
+        this._saveInboundFile(remotePeerId, canonicalName, bytes);
         this._pendingInboundFile = null;
       }
 
@@ -1093,11 +1261,93 @@ export class PeerJsChannel implements Channel {
     const msg = data as Record<string, unknown>;
 
     if (msg.type === "__file_header") {
+      const transferId = (msg.id as string) || (msg.name as string);
+      const totalChunks = (msg.totalChunks as number) || 1;
+      const existing = this._inboundTransfers.get(transferId);
+
+      this._inboundTransfers.set(transferId, {
+        transferId,
+        name: msg.name as string,
+        mimeType: (msg.mimeType as string) || "application/octet-stream",
+        size: (msg.size as number) || 0,
+        totalChunks,
+        receivedChunks: existing?.receivedChunks || new Map(),
+        receivedBytes: existing?.receivedBytes || 0,
+        targetGroupId:
+          typeof msg.groupId === "string" ? msg.groupId : undefined,
+      });
+
       this._pendingInboundFile = {
         name: msg.name as string,
         mimeType: msg.mimeType as string,
         size: msg.size as number,
       };
+
+      updateTransferProgress({
+        count: 0,
+        total: totalChunks,
+        direction: "receive",
+      });
+
+      return;
+    }
+
+    if (msg.type === "__file_chunk") {
+      const transferId = (msg.id as string) || (msg.name as string);
+      let transfer = this._inboundTransfers.get(transferId);
+      if (!transfer) {
+        const totalChunks = (msg.totalChunks as number) || 1;
+        transfer = {
+          transferId,
+          name: msg.name as string,
+          mimeType: "application/octet-stream",
+          size: 0,
+          totalChunks,
+          receivedChunks: new Map(),
+          receivedBytes: 0,
+        };
+        this._inboundTransfers.set(transferId, transfer);
+      }
+
+      const index = typeof msg.index === "number" ? msg.index : 0;
+      const chunkData =
+        msg.data instanceof ArrayBuffer
+          ? new Uint8Array(msg.data)
+          : msg.data instanceof Uint8Array
+            ? msg.data
+            : new Uint8Array((msg.data as any) || []);
+
+      if (!transfer.receivedChunks.has(index)) {
+        transfer.receivedChunks.set(index, chunkData);
+        transfer.receivedBytes += chunkData.byteLength;
+      }
+
+      updateTransferProgress({
+        count: transfer.receivedChunks.size,
+        total: transfer.totalChunks,
+        direction: "receive",
+      });
+
+      if (transfer.receivedChunks.size >= transfer.totalChunks) {
+        const completeBytes = new Uint8Array(
+          transfer.size || transfer.receivedBytes,
+        );
+        let offset = 0;
+        for (let i = 0; i < transfer.totalChunks; i++) {
+          const part = transfer.receivedChunks.get(i);
+          if (part) {
+            completeBytes.set(part, offset);
+            offset += part.byteLength;
+          }
+        }
+
+        const targetGroupId = transfer.targetGroupId || `peer:${remotePeerId}`;
+        this._saveInboundFile(targetGroupId, transfer.name, completeBytes);
+        this._inboundTransfers.delete(transferId);
+        this._pendingInboundFile = null;
+
+        clearTransferProgressDelayed(1500);
+      }
 
       return;
     }
@@ -1287,38 +1537,43 @@ export class PeerJsChannel implements Channel {
     }
     connAny._chunkProgressPatched = true;
 
+    const self = this;
     const origHandleChunk = connAny._handleChunk;
     if (typeof origHandleChunk === "function") {
       connAny._handleChunk = function (data: any) {
         if (data && typeof data === "object" && "__peerData" in data) {
-          const id = data.__peerData;
-          const currentCount = this._chunkedData?.[id]?.count ?? 0;
-          const total = data.total;
+          // If an application-level multi-chunk file transfer is in progress, ignore
+          // raw PeerJS binarypack frame chunks to prevent fighting/flickering.
+          if (self._inboundTransfers.size === 0) {
+            const id = data.__peerData;
+            const currentCount = this._chunkedData?.[id]?.count ?? 0;
+            const total = data.total;
 
-          if (
-            typeof globalThis.dispatchEvent === "function" &&
-            typeof CustomEvent === "function"
-          ) {
-            globalThis.dispatchEvent(
-              new CustomEvent("peerjs-dc-handle-chunk", {
-                detail: {
-                  chunkInfo: {
-                    count: currentCount,
-                    total,
+            if (
+              typeof globalThis.dispatchEvent === "function" &&
+              typeof CustomEvent === "function"
+            ) {
+              globalThis.dispatchEvent(
+                new CustomEvent("peerjs-dc-handle-chunk", {
+                  detail: {
+                    chunkInfo: {
+                      count: currentCount,
+                      total,
+                    },
                   },
-                },
-              }),
-            );
-          } else {
-            const received = currentCount + 1;
-            transferProgressSignal.set({
-              count: received,
-              total,
-              direction: "receive",
-            });
+                }),
+              );
+            } else {
+              const received = currentCount + 1;
+              updateTransferProgress({
+                count: received,
+                total,
+                direction: "receive",
+              });
 
-            if (received >= total) {
-              setTimeout(() => transferProgressSignal.set(null), 1500);
+              if (received >= total) {
+                clearTransferProgressDelayed(1500);
+              }
             }
           }
         }
@@ -1525,49 +1780,89 @@ export class PeerJsChannel implements Channel {
     }
   }
 
+
+
   /**
-   * Track outbound send progress by polling RTCDataChannel.bufferedAmount.
-   * Resolves when all queued data has been flushed to the network.
+   * Pause execution if the underlying WebRTC DataChannel send buffer
+   * exceeds the drain threshold, preventing buffer bloat during large transfers.
    */
-  private _trackSendProgress(
+  private async _waitForBufferDrain(
     conn: DataConnection,
-    totalBytes: number,
+    threshold: number = FILE_BUFFER_DRAIN_THRESHOLD,
   ): Promise<void> {
-    return new Promise<void>((resolve) => {
-      const rawDc = (conn as any)._dc as RTCDataChannel | undefined;
-      if (!rawDc || totalBytes === 0) {
-        this.transferProgressSignal.set(null);
-        resolve();
+    const rawDc =
+      ((conn as any).dataChannel as RTCDataChannel | undefined) ||
+      ((conn as any)._dc as RTCDataChannel | undefined);
+    if (!rawDc || typeof rawDc.bufferedAmount !== "number") {
+      return;
+    }
+    if (rawDc.bufferedAmount <= threshold) {
+      return;
+    }
 
-        return;
-      }
-
-      this.transferProgressSignal.set({
-        count: 0,
-        total: totalBytes,
-        direction: "send",
-      });
-
+    await new Promise<void>((resolve) => {
       const poll = setInterval(() => {
-        const buffered = rawDc.bufferedAmount;
-        const sent = Math.max(0, totalBytes - buffered);
-        this.transferProgressSignal.set({
-          count: sent,
-          total: totalBytes,
-          direction: "send",
-        });
-
-        if (buffered === 0) {
+        if (!rawDc || rawDc.bufferedAmount <= threshold) {
           clearInterval(poll);
-          this.transferProgressSignal.set({
-            count: totalBytes,
-            total: totalBytes,
-            direction: "send",
-          });
-          setTimeout(() => this.transferProgressSignal.set(null), 1500);
           resolve();
         }
-      }, 80);
+      }, 20);
+
+      if (typeof rawDc.addEventListener === "function") {
+        const onLow = () => {
+          clearInterval(poll);
+          rawDc.removeEventListener("bufferedamountlow", onLow);
+          resolve();
+        };
+        try {
+          rawDc.bufferedAmountLowThreshold = threshold;
+          rawDc.addEventListener("bufferedamountlow", onLow, { once: true });
+        } catch {
+          // Fall back to polling if bufferedAmountLowThreshold throws
+        }
+      }
+    });
+  }
+
+  /**
+   * Persist complete received file bytes into group storage, handling
+   * duplicate filename incrementing and path remapping.
+   */
+  private _saveInboundFile(
+    groupId: string,
+    canonicalName: string,
+    bytes: Uint8Array,
+  ): void {
+    getDb().then(async (db) => {
+      let finalName = canonicalName;
+      let counter = 1;
+
+      while (await groupFileExists(db, groupId, finalName)) {
+        const lastDotIndex = canonicalName.lastIndexOf(".");
+        const hasExt =
+          lastDotIndex > 0 && lastDotIndex < canonicalName.length - 1;
+
+        if (hasExt) {
+          const base = canonicalName.substring(0, lastDotIndex);
+          const ext = canonicalName.substring(lastDotIndex);
+          finalName = `${base} (${counter})${ext}`;
+        } else {
+          finalName = `${canonicalName} (${counter})`;
+        }
+
+        counter++;
+      }
+
+      if (finalName !== canonicalName) {
+        this._inboundRemap.set(canonicalName, finalName);
+      }
+
+      writeGroupFileBytes(db, groupId, finalName, bytes).catch((err) => {
+        console.error(
+          "PeerJsChannel: failed to write inbound file bytes",
+          err,
+        );
+      });
     });
   }
 

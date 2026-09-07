@@ -53,4 +53,39 @@ describe("RoomChannel", () => {
 
     expect(received).toEqual([msg]);
   });
+
+  it("streams attachments to room members via peerjs before broadcasting", async () => {
+    const channel = new RoomChannel();
+    const manager = {
+      ...makeManager(),
+      get: jest.fn().mockReturnValue({
+        roomId: "abc",
+        name: "Test Room",
+        hostPeerId: "host1",
+        members: [{ peerId: "host1" }, { peerId: "peer2" }],
+        createdAt: 1,
+      }),
+    };
+    const mockPeerJs = {
+      sendAttachmentsToRoom: jest.fn<any>().mockResolvedValue(undefined),
+    };
+
+    channel.setManager(manager as any);
+    channel.setPeerJs(mockPeerJs as any);
+
+    const attachments = [{ fileName: "doc.pdf", path: "doc.pdf" }];
+    await channel.send("room:abc", "here is the file", attachments);
+
+    expect(manager.get).toHaveBeenCalledWith("abc");
+    expect(mockPeerJs.sendAttachmentsToRoom).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: "abc" }),
+      "room:abc",
+      attachments,
+    );
+    expect(manager.broadcast).toHaveBeenCalledWith(
+      "abc",
+      "here is the file",
+      attachments,
+    );
+  });
 });

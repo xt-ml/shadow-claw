@@ -190,6 +190,7 @@ export async function invokeAgent(
     toolsStore.systemPromptOverride,
     peerState,
     skillDiscovery.skills,
+    { groupId },
   );
 
   // Build conversation context with dynamic token-aware windowing

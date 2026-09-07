@@ -21,6 +21,7 @@ import type {
   InboundMessage,
 } from "./types.js";
 
+import type { PeerJsChannel } from "./peerjs.js";
 import type { RoomManager } from "./room-manager.js";
 
 export class RoomChannel implements Channel {
@@ -31,6 +32,7 @@ export class RoomChannel implements Channel {
   typingCallback: ChannelTypingCallback | null = null;
 
   private _manager: RoomManager | null = null;
+  private _peerjs: PeerJsChannel | null = null;
 
   /** Deliver an inbound room message (called by the {@link RoomManager}). */
   deliverInbound(msg: InboundMessage): void {
@@ -48,6 +50,11 @@ export class RoomChannel implements Channel {
   /** Wire the room manager used for transport. */
   setManager(manager: RoomManager): void {
     this._manager = manager;
+  }
+
+  /** Wire the PeerJS channel used for WebRTC file streaming. */
+  setPeerJs(peerjs: PeerJsChannel): void {
+    this._peerjs = peerjs;
   }
 
   setTyping(_groupId: string, _typing: boolean): void {
@@ -72,6 +79,14 @@ export class RoomChannel implements Channel {
     }
 
     const roomId = roomIdFromGroupId(groupId);
+
+    if (attachments && attachments.length > 0 && this._peerjs) {
+      const room = this._manager.get(roomId);
+      if (room) {
+        await this._peerjs.sendAttachmentsToRoom(room, groupId, attachments);
+      }
+    }
+
     this._manager.broadcast(roomId, text, attachments);
   }
 }

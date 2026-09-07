@@ -3,6 +3,10 @@ import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
 import type { ToolDefinition } from "../../subsystems/tools/types.js";
 import type { SkillRecord } from "../../subsystems/skills/types.js";
 
+export interface ConversationContext {
+  groupId?: string;
+}
+
 /**
  * Build system prompt
  */
@@ -13,6 +17,7 @@ export function buildSystemPrompt(
   promptOverride?: string,
   sharedState?: Record<string, unknown>,
   skills?: SkillRecord[],
+  conversationContext?: ConversationContext,
 ): string {
   const defs = tools || TOOL_DEFINITIONS;
   const hasTools = defs.length > 0;
@@ -48,6 +53,21 @@ export function buildSystemPrompt(
     "- Manage tasks. If you create a task, make sure to disable (or delete) it when it's no longer needed.",
     "- Strip <internal> tags from your responses.",
   ];
+
+  if (conversationContext?.groupId) {
+    const gid = conversationContext.groupId;
+    let channelDescription = `Local browser conversation (groupId: ${gid})`;
+    if (gid.startsWith("peer:")) {
+      channelDescription = `Direct PeerJS P2P session (groupId: ${gid})`;
+    } else if (gid.startsWith("room:")) {
+      channelDescription = `PeerJS Multi-party Room session (groupId: ${gid})`;
+    } else if (gid.startsWith("tg:")) {
+      channelDescription = `Telegram session (groupId: ${gid})`;
+    } else if (gid.startsWith("im:")) {
+      channelDescription = `iMessage session (groupId: ${gid})`;
+    }
+    parts.push("", `Current Conversation Context: ${channelDescription}.`);
+  }
 
   // ── Prompt Injection Defense (Option A) ─────────────────────────────────
   // Only inject when tools that return externally-controlled text are active.
@@ -127,7 +147,7 @@ export function buildSystemPrompt(
 
     if (has("send_file")) {
       strategyLines.push(
-        "- Use send_file to transfer a workspace file directly to the connected peer over the P2P data channel. Only use it when the conversation groupId starts with 'peer:'. It is non-blocking — you can continue responding while the file transfers in the background. Do NOT use send_file in browser-local or other non-peer conversations.",
+        "- Use send_file to transfer a workspace file directly to connected peer(s) over the P2P data channel. It works in both direct peer conversations (groupId starting with 'peer:') and multi-party rooms (groupId starting with 'room:'). It is non-blocking — you can continue responding while the file transfers in the background. Do NOT use send_file in browser-local or other non-peer conversations.",
       );
     }
 

@@ -1005,6 +1005,9 @@ describe("handleInvoke.js", () => {
       "memory content",
       [{ name: "new_tool", description: "A new tool" }],
       "overridden prompt",
+      undefined,
+      undefined,
+      { groupId: "g1" },
     );
 
     // Verify 2nd iteration used the NEW prompt and tools

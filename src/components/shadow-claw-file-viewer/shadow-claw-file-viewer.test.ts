@@ -665,6 +665,9 @@ describe("shadow-claw-file-viewer", () => {
     configScript.id = "shadow-claw-site-config";
     configScript.type = "application/json";
     configScript.textContent = JSON.stringify({
+      theme: {
+        stylesheet: "pages/resources/theme.css",
+      },
       customElements: {
         scripts: [
           { src: "pages/main/block-garden-adapter.js", hasInit: true },
@@ -696,6 +699,25 @@ describe("shadow-claw-file-viewer", () => {
 
     document.head.removeChild(configScript);
     setAllowedCustomElementHostPatterns([]);
+  });
+
+  it("does not inject theme stylesheet link into html iframe srcdoc when theme stylesheet is not configured", async () => {
+    const component = new ShadowClawFileViewer();
+    const configScript = document.createElement("script");
+    configScript.id = "shadow-claw-site-config";
+    configScript.type = "application/json";
+    configScript.textContent = JSON.stringify({});
+    document.head.appendChild(configScript);
+
+    const srcdoc = await component.buildIframePreviewSrcdoc({
+      name: "index.html",
+      path: "pages/main/index.html",
+      content: "<p>Hello</p>",
+    });
+
+    expect(srcdoc).not.toContain('<link rel="stylesheet" href="/theme.css">');
+
+    document.head.removeChild(configScript);
   });
 
   it("rewrites relative image src to /files routes in html iframe srcdoc", async () => {

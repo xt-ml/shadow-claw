@@ -8,6 +8,7 @@ import { sanitizeSrcdocHtml } from "../../../security/trusted-types.js";
 import {
   getIframeHtmlClass,
   getIframeThemeStyleHtml,
+  getIframeThemeStylesheetLink,
 } from "../../../ui/iframe-theme.js";
 import {
   getApprovedCustomElementScriptDescriptors,
@@ -124,9 +125,7 @@ export async function buildHtmlPageSrcdoc({
     })
     .join("\n");
 
-  const themeStylesheetLink = `<link rel="stylesheet" href="${applyBasePath(
-    "/theme.css",
-  )}">`;
+  const themeStylesheetLink = getIframeThemeStylesheetLink();
 
   return [
     "<!doctype html>",

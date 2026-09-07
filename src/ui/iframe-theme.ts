@@ -1,3 +1,82 @@
+import { applyBasePath } from "../core/app-routes.js";
+
+/**
+ * Prefixes whose contents are flattened into the distribution root.
+ */
+const FLATTENED_STYLESHEET_PREFIXES = [
+  "pages/resources/",
+  "pages/deps/",
+  "resources/",
+  "deps/",
+  "pages/assets/",
+  "pages/main/assets/",
+];
+
+/**
+ * Resolves a configured theme.stylesheet path to its actual distribution path.
+ */
+export function resolveThemeStylesheetHref(stylesheet: string): string {
+  for (const prefix of FLATTENED_STYLESHEET_PREFIXES) {
+    if (stylesheet.startsWith(prefix)) {
+      return stylesheet.slice(prefix.length);
+    }
+  }
+  return stylesheet;
+}
+
+/**
+ * Generates an optional `<link rel="stylesheet">` tag for the preview iframe
+ * only when a theme stylesheet is explicitly configured in site configuration.
+ * When not configured, returns an empty string to avoid 404 requests.
+ */
+export function getIframeThemeStylesheetLink(siteConfig?: unknown): string {
+  let stylesheet: string | undefined;
+
+  if (siteConfig && typeof siteConfig === "object") {
+    const rawTheme = (siteConfig as { theme?: { stylesheet?: unknown } }).theme;
+    if (
+      typeof rawTheme?.stylesheet === "string" &&
+      rawTheme.stylesheet.trim()
+    ) {
+      stylesheet = rawTheme.stylesheet.trim();
+    }
+  } else if (typeof document !== "undefined") {
+    const configScript = document.getElementById("shadow-claw-site-config");
+    if (configScript?.textContent) {
+      try {
+        const config = JSON.parse(configScript.textContent);
+        const rawTheme = config?.theme;
+        if (
+          typeof rawTheme?.stylesheet === "string" &&
+          rawTheme.stylesheet.trim()
+        ) {
+          stylesheet = rawTheme.stylesheet.trim();
+        }
+      } catch {}
+    }
+  }
+
+  if (!stylesheet) {
+    return "";
+  }
+
+  const isExternal =
+    stylesheet.startsWith("http://") ||
+    stylesheet.startsWith("https://") ||
+    stylesheet.startsWith("//");
+
+  if (isExternal) {
+    return `<link rel="stylesheet" href="${stylesheet}">`;
+  }
+
+  const resolvedHref = resolveThemeStylesheetHref(stylesheet);
+  const normalizedPath = resolvedHref.startsWith("/")
+    ? resolvedHref
+    : `/${resolvedHref}`;
+
+  return `<link rel="stylesheet" href="${applyBasePath(normalizedPath)}">`;
+}
+
 /**
  * Generates the CSS style block and html root class for sandboxed preview iframes
  * (file viewer and pages HTML preview) to synchronize theme CSS variables,

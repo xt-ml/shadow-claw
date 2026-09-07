@@ -35,6 +35,7 @@ import { showError, showSuccess } from "../../ui/toast.js";
 import {
   getIframeHtmlClass,
   getIframeThemeStyleHtml,
+  getIframeThemeStylesheetLink,
 } from "../../ui/iframe-theme.js";
 import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
 
@@ -1431,9 +1432,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       })
       .join("\n");
 
-    const themeStylesheetLink = `<link rel="stylesheet" href="${applyBasePath(
-      "/theme.css",
-    )}">`;
+    const themeStylesheetLink = getIframeThemeStylesheetLink();
 
     return [
       "<!doctype html>",

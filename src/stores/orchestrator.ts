@@ -2558,6 +2558,26 @@ export class OrchestratorStore {
         await updateGroupToolTags(db, DEFAULT_GROUP_ID, undefined);
       }
 
+      // If site configuration declares internet access, ensure it is honored
+      const declaredInternetAccess =
+        config.settings?.internetAccess ??
+        config.settings?.vm_bash_full_internet_access ??
+        config.settings?.fullInternetAccess ??
+        config.internetAccess;
+      if (declaredInternetAccess === true) {
+        const currentInternet = await getConfig(
+          db,
+          CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS,
+        );
+        if (currentInternet !== "true") {
+          await setConfig(db, CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS, "true");
+          if (this.orchestrator) {
+            this.orchestrator.vmBashFullInternetAccess = true;
+          }
+          this._vmBashFullInternetAccess.set(true);
+        }
+      }
+
       const isSeeded = await getConfig(db, CONFIG_KEYS.SITE_CONFIG_SEEDED);
       if (isSeeded) {
         return;
@@ -2634,6 +2654,22 @@ export class OrchestratorStore {
         const { assistantName } = config.settings;
         if (assistantName && typeof assistantName === "string") {
           await setConfig(db, CONFIG_KEYS.ASSISTANT_NAME, assistantName);
+        }
+        const allowInternet =
+          config.settings.internetAccess ??
+          config.settings.vm_bash_full_internet_access ??
+          config.settings.fullInternetAccess ??
+          config.internetAccess;
+        if (typeof allowInternet === "boolean") {
+          await setConfig(
+            db,
+            CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS,
+            String(allowInternet),
+          );
+          if (this.orchestrator) {
+            this.orchestrator.vmBashFullInternetAccess = allowInternet;
+          }
+          this._vmBashFullInternetAccess.set(allowInternet);
         }
       }
 

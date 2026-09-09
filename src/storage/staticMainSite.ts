@@ -425,7 +425,21 @@ export async function seedStaticMainSite(
     try {
       await deleteGroupDirectory(db, groupId, ".agents/skills/main");
     } catch (error) {
-      // A fresh workspace has no bundled-skill directory to remove yet.
+      if (
+        !(
+          error &&
+          typeof error === "object" &&
+          "name" in error &&
+          error.name === "NotFoundError"
+        )
+      ) {
+        throw error;
+      }
+    }
+    try {
+      await deleteGroupDirectory(db, groupId, ".agents/tools/main");
+    } catch (error) {
+      // A fresh workspace has no bundled-tool directory to remove yet.
       if (
         !(
           error &&
@@ -543,7 +557,7 @@ export async function seedStaticMainSite(
     for (const tool of manifest.tools || []) {
       const toolPath = `.agents/tools/main/${tool.displayPath}`;
       try {
-        if (!(await groupFileExists(db, groupId, toolPath))) {
+        if (didPurgeSkills || !(await groupFileExists(db, groupId, toolPath))) {
           await writeGroupFile(db, groupId, toolPath, tool.content);
         }
       } catch (error) {

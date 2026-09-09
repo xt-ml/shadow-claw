@@ -2853,6 +2853,39 @@ describe("OrchestratorStore", () => {
       }
     });
 
+    it("applies internetAccess from site-config to vmBashFullInternetAccess", async () => {
+      const store = new OrchestratorStore();
+      const events = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
+        vmBashFullInternetAccess: false,
+      };
+
+      const configElement = document.createElement("script");
+      configElement.id = "shadow-claw-site-config";
+      configElement.type = "application/json";
+      configElement.textContent = JSON.stringify({
+        settings: {
+          internetAccess: true,
+        },
+      });
+      document.head.appendChild(configElement);
+
+      try {
+        await store.init({} as any, orch);
+        expect(orch.vmBashFullInternetAccess).toBe(true);
+        expect(store._vmBashFullInternetAccess.get()).toBe(true);
+      } finally {
+        configElement.remove();
+      }
+    });
+
     it("clears legacy group-level toolTags on DEFAULT_GROUP_ID if present", async () => {
       const store = new OrchestratorStore();
       const events = createEvents();

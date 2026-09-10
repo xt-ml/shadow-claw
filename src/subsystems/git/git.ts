@@ -17,6 +17,39 @@ if (!globalThis.Buffer) {
   globalThis.Buffer = Buffer;
 }
 
+export function getGitTargetAddressSpace(
+  url: string,
+): "loopback" | "private" | undefined {
+  try {
+    const locOrigin =
+      typeof location !== "undefined" && location.origin
+        ? location.origin
+        : typeof globalThis !== "undefined" && globalThis.location?.origin
+          ? globalThis.location.origin
+          : "http://127.0.0.1:8888";
+    const u = new URL(url, locOrigin);
+    const host = u.hostname.toLowerCase();
+    if (
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "::1" ||
+      host === "[::1]"
+    ) {
+      return "loopback";
+    } else if (
+      /^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(host) ||
+      !host.includes(".") ||
+      host.endsWith(".local") ||
+      host.endsWith(".lan") ||
+      host.endsWith(".home") ||
+      host.endsWith(".internal")
+    ) {
+      return "private";
+    }
+  } catch (_) {}
+  return undefined;
+}
+
 const httpClient = {
   async request({
     url,
@@ -34,12 +67,18 @@ const httpClient = {
       body = await collectBody(body);
     }
 
-    const res = await fetch(url, {
+    const targetAddressSpace = getGitTargetAddressSpace(url);
+    const fetchOptions: RequestInit & { targetAddressSpace?: string } = {
       method,
       headers,
       body,
       credentials: "omit",
-    });
+    };
+    if (targetAddressSpace) {
+      fetchOptions.targetAddressSpace = targetAddressSpace;
+    }
+
+    const res = await fetch(url, fetchOptions);
 
     const iter =
       res.body && typeof res.body.getReader === "function"
@@ -572,6 +611,13 @@ const DEFAULT_DEPTH = 20;
 export function getProxyUrl(
   preference: "local" | "public" | "custom",
   customUrl?: string,
+  loc?: {
+    protocol?: string;
+    host?: string;
+    hostname?: string;
+    origin?: string;
+    href?: string;
+  },
 ): string {
   if (preference === "custom" && customUrl) {
     return customUrl;
@@ -582,16 +628,50 @@ export function getProxyUrl(
   }
 
   // Default to local proxy
-  const { protocol, host, hostname } = globalThis.location;
+  const currentLoc =
+    loc ||
+    (typeof globalThis !== "undefined" && globalThis.location
+      ? globalThis.location
+      : typeof self !== "undefined" && (self as any).location
+        ? (self as any).location
+        : typeof window !== "undefined" && window.location
+          ? window.location
+          : null);
 
-  // If running on localhost/127.0.0.1, use the current host (works for dev)
-  if (hostname === "localhost" || hostname === "127.0.0.1") {
-    return `${protocol}//${host}/git-proxy`;
+  const rawProtocol = currentLoc?.protocol || "";
+  const isHttps =
+    rawProtocol === "https:" ||
+    rawProtocol === "https" ||
+    (typeof currentLoc?.origin === "string" &&
+      currentLoc.origin.startsWith("https:")) ||
+    (typeof currentLoc?.href === "string" &&
+      currentLoc.href.startsWith("https://"));
+  const scheme = isHttps ? "https:" : "http:";
+
+  const host = currentLoc?.host || "";
+  const hostname = currentLoc?.hostname || "";
+
+  const isLoopback =
+    hostname === "localhost" ||
+    hostname === "127.0.0.1" ||
+    hostname === "::1" ||
+    hostname === "[::1]" ||
+    hostname === "0.0.0.0" ||
+    host.startsWith("localhost:") ||
+    host.startsWith("127.0.0.1:") ||
+    host.startsWith("[::1]:");
+
+  const isStaticHost =
+    currentLoc &&
+    (currentLoc.protocol === "file:" ||
+      (hostname &&
+        (hostname.endsWith(".github.io") || hostname.endsWith(".pages.dev"))));
+
+  if (host && (isLoopback || !isStaticHost)) {
+    return `${scheme}//${host}/git-proxy`;
   }
 
-  // If on a remote host, default to local dev server port
-
-  return `http://${DEFAULT_DEV_HOST}:${DEFAULT_DEV_PORT}/git-proxy`;
+  return `${scheme}//${DEFAULT_DEV_HOST}:${DEFAULT_DEV_PORT}/git-proxy`;
 }
 
 /**

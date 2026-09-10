@@ -83,6 +83,7 @@ jest.unstable_mockModule("@zip.js/zip.js", () => ({}) as any);
 describe("git", () => {
   let buildAuthCallbacks: Function;
   let ensureDir: Function;
+  let getGitTargetAddressSpace: Function;
   let getProxyUrl: Function;
   let gitAdd: Function;
   let gitBranch: Function;
@@ -124,6 +125,7 @@ describe("git", () => {
 
     buildAuthCallbacks = mod.buildAuthCallbacks;
     ensureDir = mod.ensureDir;
+    getGitTargetAddressSpace = mod.getGitTargetAddressSpace;
     getProxyUrl = mod.getProxyUrl;
     gitAdd = mod.gitAdd;
     gitBranch = mod.gitBranch;
@@ -743,6 +745,103 @@ describe("git", () => {
       const url = getProxyUrl("local");
 
       expect(url).toContain("git-proxy");
+    });
+
+    it("uses https when running under https on localhost:8888", () => {
+      expect(
+        getProxyUrl("local", undefined, {
+          protocol: "https:",
+          host: "localhost:8888",
+          hostname: "localhost",
+        }),
+      ).toBe("https://localhost:8888/git-proxy");
+    });
+
+    it("uses https when running under https on a remote host", () => {
+      expect(
+        getProxyUrl("local", undefined, {
+          protocol: "https:",
+          host: "xt-ml.github.io",
+          hostname: "xt-ml.github.io",
+        }),
+      ).toBe("https://localhost:8888/git-proxy");
+    });
+
+    it("uses https when running under https with empty or loopback hostname", () => {
+      expect(
+        getProxyUrl("local", undefined, {
+          protocol: "https:",
+          host: "localhost:8888",
+          hostname: "",
+        }),
+      ).toBe("https://localhost:8888/git-proxy");
+
+      expect(
+        getProxyUrl("local", undefined, {
+          protocol: "https:",
+          host: "[::1]:8888",
+          hostname: "[::1]",
+        }),
+      ).toBe("https://[::1]:8888/git-proxy");
+    });
+
+    it("preserves http when running under http", () => {
+      expect(
+        getProxyUrl("local", undefined, {
+          protocol: "http:",
+          host: "localhost:8888",
+          hostname: "localhost",
+        }),
+      ).toBe("http://localhost:8888/git-proxy");
+
+      expect(
+        getProxyUrl("local", undefined, {
+          protocol: "http:",
+          host: "xt-ml.github.io",
+          hostname: "xt-ml.github.io",
+        }),
+      ).toBe("http://localhost:8888/git-proxy");
+    });
+
+    it("uses custom URL when provided", () => {
+      expect(getProxyUrl("custom", "https://proxy.example.com/git")).toBe(
+        "https://proxy.example.com/git",
+      );
+    });
+  });
+
+  describe("getGitTargetAddressSpace", () => {
+    it("returns loopback for localhost and 127.0.0.1 and [::1]", () => {
+      expect(
+        getGitTargetAddressSpace("http://localhost:8888/git-proxy/test"),
+      ).toBe("loopback");
+      expect(
+        getGitTargetAddressSpace("https://127.0.0.1:8888/git-proxy/test"),
+      ).toBe("loopback");
+      expect(
+        getGitTargetAddressSpace("https://[::1]:8888/git-proxy/test"),
+      ).toBe("loopback");
+    });
+
+    it("returns private for private networks and local domains", () => {
+      expect(
+        getGitTargetAddressSpace("https://192.168.1.10:8888/git-proxy/test"),
+      ).toBe("private");
+      expect(
+        getGitTargetAddressSpace("https://10.0.0.5:8888/git-proxy/test"),
+      ).toBe("private");
+      expect(getGitTargetAddressSpace("https://tv:8888/git-proxy/test")).toBe(
+        "private",
+      );
+      expect(
+        getGitTargetAddressSpace("https://my-nas.local:8888/git-proxy/test"),
+      ).toBe("private");
+    });
+
+    it("returns undefined for public domains", () => {
+      expect(
+        getGitTargetAddressSpace("https://github.com/user/repo.git"),
+      ).toBeUndefined();
     });
   });
 

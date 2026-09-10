@@ -33,6 +33,13 @@ export interface GitToolDeps {
   getProxyUrl: (
     pref: "local" | "public" | "custom",
     customUrl?: string,
+    loc?: {
+      protocol?: string;
+      host?: string;
+      hostname?: string;
+      origin?: string;
+      href?: string;
+    },
   ) => string;
   getRemoteUrl: (input: {
     groupRoot?: FileSystemDirectoryHandle;

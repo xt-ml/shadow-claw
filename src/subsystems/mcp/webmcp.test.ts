@@ -330,9 +330,32 @@ describe("webmcp integration", () => {
 
     expect(listTasksRegistration).toBeDefined();
     expect(listTasksRegistration.annotations).toEqual({
-      readOnlyHint: false,
+      readOnlyHint: true,
+      consequentialHint: false,
       untrustedContentHint: true,
     });
+
+    // Verify consequential tools receive consequentialHint: true
+    const consequentialToolNames = [
+      "bash",
+      "delete_file",
+      "delete_task",
+      "git_delete_repo",
+      "git_delete_branch",
+      "git_reset",
+      "git_push",
+      "email_send_message",
+      "clear_chat",
+    ];
+
+    for (const toolName of consequentialToolNames) {
+      const reg = mockRegisterTool.mock.calls
+        .map((args: any[]) => args[0])
+        .find((r: any) => r.name === toolName);
+      expect(reg).toBeDefined();
+      expect(reg.annotations.consequentialHint).toBe(true);
+      expect(reg.annotations.readOnlyHint).toBe(false);
+    }
 
     // Test that execute sends a postMessage
     const executePromise = listTasksRegistration.execute({ foo: "bar" });
@@ -485,5 +508,234 @@ describe("webmcp integration", () => {
     // should register all tools again.
     await registerWebMcpTools(null, jest.fn(), "group-webmcp");
     expect(mockRegisterTool.mock.calls.length).toBe(firstCount * 2);
+  });
+
+  describe("executeWebMcpTool", () => {
+    it("executes tool passing JavaScript object directly on Chrome 155+ (PR #246/#251)", async () => {
+      const { executeWebMcpTool } = await import("./webmcp.js");
+
+      const mockTool = { name: "my_tool" };
+      const mockModelContext = {
+        executeTool: jest.fn(async (tool: any, input: any) => {
+          expect(tool).toBe(mockTool);
+          expect(typeof input).toBe("object");
+          expect(input).toEqual({ answer: 42 });
+          return "result-ok";
+        }),
+      };
+
+      const res = await executeWebMcpTool(mockModelContext, mockTool, {
+        answer: 42,
+      });
+      expect(res).toBe("result-ok");
+      expect(mockModelContext.executeTool).toHaveBeenCalledTimes(1);
+      expect(mockModelContext.executeTool).toHaveBeenCalledWith(
+        mockTool,
+        { answer: 42 },
+        undefined,
+      );
+    });
+
+    it("falls back to stringified JSON when executeTool throws 'Failed to parse input' (Chrome < 155 / polyfill)", async () => {
+      const { executeWebMcpTool } = await import("./webmcp.js");
+
+      const mockTool = { name: "my_tool" };
+      const calls: any[] = [];
+      const mockModelContext = {
+        executeTool: jest.fn(async (tool: any, input: any) => {
+          calls.push({ tool, input });
+          if (typeof input !== "string") {
+            throw new Error(
+              "Failed to parse input arguments: expected DOMString",
+            );
+          }
+          return "legacy-result";
+        }),
+      };
+
+      const res = await executeWebMcpTool(mockModelContext, mockTool, {
+        answer: 42,
+      });
+
+      expect(res).toBe("legacy-result");
+      expect(calls).toHaveLength(2);
+      expect(calls[0].input).toEqual({ answer: 42 });
+      expect(calls[1].input).toBe(JSON.stringify({ answer: 42 }));
+    });
+
+    it("falls back to stringified JSON when executeTool throws TypeError (WebIDL parameter rejection)", async () => {
+      const { executeWebMcpTool } = await import("./webmcp.js");
+
+      const mockTool = { name: "my_tool" };
+      const calls: any[] = [];
+      const mockModelContext = {
+        executeTool: jest.fn(async (_tool: any, input: any) => {
+          calls.push(input);
+          if (typeof input !== "string") {
+            throw new TypeError(
+              "Failed to execute 'executeTool' on 'ModelContext': parameter 2 is not of type 'DOMString'",
+            );
+          }
+          return "typeerror-fallback-result";
+        }),
+      };
+
+      const res = await executeWebMcpTool(mockModelContext, mockTool, {
+        param: "value",
+      });
+
+      expect(res).toBe("typeerror-fallback-result");
+      expect(calls).toHaveLength(2);
+      expect(calls[0]).toEqual({ param: "value" });
+      expect(calls[1]).toBe(JSON.stringify({ param: "value" }));
+    });
+
+    it("normalizes string input and executes with parsed object first then string fallback", async () => {
+      const { executeWebMcpTool } = await import("./webmcp.js");
+
+      const mockTool = { name: "my_tool" };
+      const calls: any[] = [];
+      const mockModelContext = {
+        executeTool: jest.fn(async (_tool: any, input: any) => {
+          calls.push(input);
+          if (typeof input !== "string") {
+            throw new Error("Failed to parse input");
+          }
+          return "string-input-result";
+        }),
+      };
+
+      const res = await executeWebMcpTool(
+        mockModelContext,
+        mockTool,
+        '{"foo":"bar"}',
+      );
+
+      expect(res).toBe("string-input-result");
+      expect(calls).toHaveLength(2);
+      expect(calls[0]).toEqual({ foo: "bar" });
+      expect(calls[1]).toBe('{"foo":"bar"}');
+    });
+
+    it("handles undefined/null input by passing empty object then empty JSON string on fallback", async () => {
+      const { executeWebMcpTool } = await import("./webmcp.js");
+
+      const mockTool = { name: "my_tool" };
+      const calls: any[] = [];
+      const mockModelContext = {
+        executeTool: jest.fn(async (_tool: any, input: any) => {
+          calls.push(input);
+          if (typeof input !== "string") {
+            throw new Error("Failed to parse input");
+          }
+          return "empty-result";
+        }),
+      };
+
+      const res = await executeWebMcpTool(mockModelContext, mockTool);
+
+      expect(res).toBe("empty-result");
+      expect(calls).toHaveLength(2);
+      expect(calls[0]).toEqual({});
+      expect(calls[1]).toBe("{}");
+    });
+
+    it("propagates other errors without attempting string fallback", async () => {
+      const { executeWebMcpTool } = await import("./webmcp.js");
+
+      const mockTool = { name: "my_tool" };
+      const mockModelContext = {
+        executeTool: jest.fn(async () => {
+          throw new Error("Tool internal execution failed");
+        }),
+      };
+
+      await expect(
+        executeWebMcpTool(mockModelContext, mockTool, { foo: "bar" }),
+      ).rejects.toThrow("Tool internal execution failed");
+
+      expect(mockModelContext.executeTool).toHaveBeenCalledTimes(1);
+    });
+
+    it("passes execution options or signal context to executeTool", async () => {
+      const { executeWebMcpTool } = await import("./webmcp.js");
+
+      const mockTool = { name: "my_tool" };
+      const controller = new AbortController();
+      const mockModelContext = {
+        executeTool: jest.fn(async (_tool: any, _input: any, options: any) => {
+          expect(options).toEqual({ signal: controller.signal });
+          return "with-signal";
+        }),
+      };
+
+      const res = await executeWebMcpTool(
+        mockModelContext,
+        mockTool,
+        { foo: "bar" },
+        { signal: controller.signal },
+      );
+
+      expect(res).toBe("with-signal");
+    });
+  });
+
+  describe("resolveWebMcpToolAnnotations", () => {
+    it("marks destructive and high-stakes tools with consequentialHint: true", async () => {
+      const { resolveWebMcpToolAnnotations, CONSEQUENTIAL_TOOL_NAMES } =
+        await import("./webmcp.js");
+
+      for (const toolName of CONSEQUENTIAL_TOOL_NAMES) {
+        const annotations = resolveWebMcpToolAnnotations(toolName);
+        expect(annotations.consequentialHint).toBe(true);
+        expect(annotations.readOnlyHint).toBe(false);
+        expect(annotations.untrustedContentHint).toBe(true);
+      }
+    });
+
+    it("marks read-only query tools with readOnlyHint: true and consequentialHint: false", async () => {
+      const { resolveWebMcpToolAnnotations, READ_ONLY_TOOL_NAMES } =
+        await import("./webmcp.js");
+
+      for (const toolName of READ_ONLY_TOOL_NAMES) {
+        const annotations = resolveWebMcpToolAnnotations(toolName);
+        expect(annotations.readOnlyHint).toBe(true);
+        expect(annotations.consequentialHint).toBe(false);
+        expect(annotations.untrustedContentHint).toBe(true);
+      }
+    });
+
+    it("marks regular state-mutating tools with readOnlyHint: false and consequentialHint: false", async () => {
+      const { resolveWebMcpToolAnnotations } = await import("./webmcp.js");
+
+      const mutatingTools = [
+        "write_file",
+        "patch_file",
+        "create_task",
+        "update_task",
+        "show_toast",
+        "send_notification",
+      ];
+
+      for (const toolName of mutatingTools) {
+        const annotations = resolveWebMcpToolAnnotations(toolName);
+        expect(annotations.readOnlyHint).toBe(false);
+        expect(annotations.consequentialHint).toBe(false);
+        expect(annotations.untrustedContentHint).toBe(true);
+      }
+    });
+
+    it("allows custom annotations to override defaults", async () => {
+      const { resolveWebMcpToolAnnotations } = await import("./webmcp.js");
+
+      const custom = resolveWebMcpToolAnnotations("read_file", {
+        consequentialHint: true,
+        customMeta: "important",
+      });
+
+      expect(custom.consequentialHint).toBe(true);
+      expect(custom.readOnlyHint).toBe(true);
+      expect(custom.customMeta).toBe("important");
+    });
   });
 });

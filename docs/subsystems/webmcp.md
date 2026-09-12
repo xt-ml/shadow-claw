@@ -101,12 +101,17 @@ Returns `true` on success, `false` if the ModelContext API is unavailable.
 Registration is **idempotent** — tools already in `registeredToolNames` are skipped on
 subsequent calls. The event loop is yielded between each registration to avoid blocking.
 
-Each tool is registered with these annotations:
+Each tool is registered with annotations resolved by `resolveWebMcpToolAnnotations(toolName)`:
+
+- `consequentialHint`: `true` for high-stakes, irreversible, or real-world actions requiring user confirmation (Chrome 154.0.8017.0+ / Issue #176). E.g. `bash`, `delete_file`, `delete_task`, `git_delete_repo`, `git_delete_branch`, `git_reset`, `git_push`, `email_send_message`, `clear_chat`.
+- `readOnlyHint`: `true` for query/inspection tools that do not mutate state (e.g. `read_file`, `list_files`, `git_status`, `list_tasks`). `false` for mutating or consequential tools.
+- `untrustedContentHint`: `true` (tool outputs may contain untrusted user or external web data).
 
 ```ts
 annotations: {
-  readOnlyHint: false,       // tools may mutate state
-  untrustedContentHint: true // outputs may contain untrusted content
+  readOnlyHint: isReadOnly,          // true for read-only query tools
+  consequentialHint: isConsequential, // true for destructive / irreversible actions
+  untrustedContentHint: true,        // outputs may contain untrusted content
 }
 ```
 
@@ -130,6 +135,15 @@ Queries tools registered on `document.modelContext.getTools()` while practicing 
 1. Feature-detects `getTools()` on `modelContext`.
 2. If `getTools()` is absent (older browser builds or basic polyfills), returns an empty array `[]` without throwing.
 3. Normalizes `inputSchema` on every returned tool so callers receive a JavaScript object regardless of Chrome version or polyfill implementation.
+
+### `executeWebMcpTool(modelContext, tool, input?, options?): Promise<unknown>`
+
+Executes a tool on a WebMCP `ModelContext` instance with backwards compatibility for Chrome 155+ (PR #246 & #251):
+
+1. Accepts an optional JavaScript object directly or a JSON string.
+2. Calls `modelContext.executeTool(tool, inputObject, options)` first.
+3. If the host environment rejects with an error starting with `"Failed to parse input"` (Chrome < 155 / `@mcp-b/webmcp-polyfill`) or a WebIDL `TypeError`, it retries with `JSON.stringify(inputObject)`.
+4. Propagates all other errors without retrying.
 
 ### `unregisterWebMcpTools(): void`
 
@@ -186,7 +200,7 @@ If a tool's `input` configuration contains a special `{ "$pipe": ... }` object, 
 - `{ "$pipe": <number> }` — Resolves to the raw output of a specific index (0-indexed).
 - `{ "$pipe": "<toolName>" }` — Resolves to the raw output of the most recent step that ran a tool with name `<toolName>`.
 
-#### Example — Piping URL contents to a command without using the filesystem:
+#### Example — Piping URL contents to a command without using the filesystem
 
 ```json
 {
@@ -210,7 +224,7 @@ If a tool's `input` configuration contains a special `{ "$pipe": ... }` object, 
 
 If a tool returns structured content (such as `ToolResultContentBlock[]`), the resolver automatically extracts the text fields and flattens them into a clean string, ensuring seamless Unix-like stdout-to-stdin compatibility.
 
-#### Example — Piping to a JavaScript sandbox:
+#### Example — Piping to a JavaScript sandbox
 
 ```json
 {
@@ -331,6 +345,28 @@ ShadowClaw handles this gracefully with `extractAbortSignal(context)`:
 - **Pre-aborted signals:** Rejects immediately without posting to the agent worker.
 - **Chrome < 153 & Legacy Callers (`execute(input)`):** Gracefully falls back to standard execution without signal context when no second argument is provided.
 
+### Input Argument Format Compatibility (PR #246, #251 / Chrome 155+)
+
+Starting in Chrome 155.0.8052.0 (PRs #246 and #251), `document.modelContext.executeTool()` accepts an optional JavaScript object directly (`executeTool(tool, inputObject)`) instead of requiring stringified JSON (`DOMString`). Note that the returned promise rejects if the input object is neither a valid JavaScript object nor serializable to a JSON string.
+
+In Chrome < 155 and early polyfills (including `@mcp-b/webmcp-polyfill` up to 5.1.0), `executeTool()` strictly expects a stringified JSON string (`DOMString`) and rejects with `"Failed to parse input arguments"` or a WebIDL `TypeError` when passed an object.
+
+ShadowClaw provides `executeWebMcpTool()` to execute tools with seamless backwards compatibility across Chrome versions and polyfill environments:
+
+```ts
+import { executeWebMcpTool } from "./webmcp.js";
+
+const result = await executeWebMcpTool(document.modelContext, toastTool, {
+  message: "Hello from 🦞 Shadow Claw!",
+});
+```
+
+Internally, `executeWebMcpTool()`:
+
+1. Passes the JavaScript object to `executeTool(tool, inputObject, options)` first.
+2. If `executeTool` rejects with an error starting with `"Failed to parse input"` or a `TypeError`, it transparently retries with `JSON.stringify(inputObject)`.
+3. Propagates all other application or execution errors without retrying.
+
 ### Tool Querying & Graceful Degradation (`getWebMcpTools`)
 
 ShadowClaw provides `getWebMcpTools()` to safely query registered WebMCP tools across different browser environments:
@@ -344,18 +380,18 @@ ShadowClaw provides `getWebMcpTools()` to safely query registered WebMCP tools a
 When dispatching tool calls from external hosts via the Control Plane (`invoke-tool`):
 
 1. **Client-Side Gating:** Verifies whether the tool is active in the conversation group (`group.toolTags`) or enabled globally (`toolsStore.enabledToolNames`). Disabled tools are rejected before execution.
-2. **Native Tool Resolution:** Queries `ctx.getTools()` to find the registered `ModelContextTool` object and passes it to `ctx.executeTool(matchedTool, input)` (required by native Chromium).
+2. **Native Tool Resolution:** Queries `ctx.getTools()` to find the registered `ModelContextTool` object and passes it to `executeWebMcpTool(ctx, matchedTool, input)` (required by native Chromium).
 3. **Compatibility Fallbacks:** If the native call fails or `getTools()` does not yield a tool object, falls back through `{ name: toolName }`, string tool names, `navigator.modelContextTesting.executeTool`, extension `callTool`, or direct Web Worker execution via `executeTool(db, name, input, groupId, { allowedTools })`.
 4. **Interactive Timeout:** Extends timeout up to 300 seconds for interactive tools (`ask_user`) to support user review.
 
 **ShadowClaw's Role:**
-ShadowClaw acts primarily as a **Tool Provider** via `registerTool()`, exposing built-in tools (Bash, Git, etc.) to the browser context for consumption by external AI agents. With `getWebMcpTools()`, ShadowClaw also supports tool discovery with backwards-compatible schema parsing and graceful degradation when running on older browsers or polyfill targets.
+ShadowClaw acts primarily as a **Tool Provider** via `registerTool()`, exposing built-in tools (Bash, Git, etc.) to the browser context for consumption by external AI agents. With `getWebMcpTools()` and `executeWebMcpTool()`, ShadowClaw also acts as a robust tool consumer supporting tool discovery and execution with backwards-compatible schema and argument parsing and graceful degradation when running on older browsers or polyfill targets.
 
 ---
 
 ## Testing WebMCP Integration
 
-When `document.modelContext` is available (with `navigator.modelContext` fallback for Chrome < 152), tools are registered through the browser's Model Context Protocol (`@mcp-b/webmcp-polyfill` v3). ShadowClaw provides `parseWebMcpInputSchema` to normalize input schemas across Chrome 154+ (native object) and Chrome < 154 (DOMString JSON) versions, and `getWebMcpTools()` to safely query registered tools with graceful degradation.
+When `document.modelContext` is available (with `navigator.modelContext` fallback for Chrome < 152), tools are registered through the browser's Model Context Protocol (`@mcp-b/webmcp-polyfill` v3). ShadowClaw provides `parseWebMcpInputSchema` to normalize input schemas across Chrome 154+ (native object) and Chrome < 154 (DOMString JSON) versions, `getWebMcpTools()` to safely query registered tools with graceful degradation, and `executeWebMcpTool()` to execute tools with backwards-compatible argument handling across Chrome 155+ and legacy environments.
 
 To test registered tools directly from the browser DevTools console:
 
@@ -385,11 +421,20 @@ console.log(formattedToolsJSON);
 // get the toast tool
 var [toastTool] = tools.filter((v) => v.description.includes("Show a toast"));
 
-// run the toast tool
-await document.modelContext.executeTool(
-  toastTool,
-  '{ "message": "Hello from 🦞 Shadow Claw!"}',
-);
+// run the toast tool (Chrome 155+ object syntax with backwards-compatible fallback)
+const inputObject = { message: "Hello from 🦞 Shadow Claw!" };
+try {
+  await document.modelContext.executeTool(toastTool, inputObject);
+} catch (e) {
+  if (e.message?.startsWith("Failed to parse input")) {
+    await document.modelContext.executeTool(
+      toastTool,
+      JSON.stringify(inputObject),
+    );
+  } else {
+    throw e;
+  }
+}
 ```
 
 You can also use the [Model Context Tool Inspector](https://chromewebstore.google.com/detail/model-context-tool-inspec/gbpdfapgefenggkahomfgkhfehlcenpd) Chrome extension for interactive visual debugging.

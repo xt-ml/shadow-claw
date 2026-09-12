@@ -236,6 +236,72 @@ export async function getWebMcpTools(): Promise<
 }
 
 /**
+ * Gracefully execute a WebMCP tool on a ModelContext instance with backwards compatibility.
+ *
+ * Starting in Chrome 155.0.8052.0 (PR #246, PR #251), `document.modelContext.executeTool()`
+ * accepts an optional JavaScript object directly instead of a JSON DOMString.
+ * In Chrome < 155 and earlier polyfills, `executeTool()` required a stringified JSON arguments string.
+ *
+ * This function practices graceful degradation:
+ * 1. Prepares both an `inputObject` (for Chrome 155+) and an `inputStr` (for Chrome < 155 & polyfills).
+ * 2. Attempts to execute `executeTool(tool, inputObject, options)` first.
+ * 3. Catches errors starting with "Failed to parse input" (or TypeErrors from WebIDL DOMString checks)
+ *    and retries transparently with `JSON.stringify(inputObject)`.
+ * 4. Re-throws any unrelated execution errors.
+ */
+export async function executeWebMcpTool(
+  modelContext: any,
+  tool: any,
+  input?: unknown,
+  options?: WebMcpExecuteContext | AbortSignal,
+): Promise<unknown> {
+  if (!modelContext || typeof modelContext.executeTool !== "function") {
+    throw new Error("ModelContext executeTool is not available");
+  }
+
+  let inputObject: Record<string, unknown>;
+  let inputStr: string;
+
+  if (typeof input === "string") {
+    inputStr = input;
+    try {
+      const parsed = JSON.parse(input);
+      inputObject =
+        parsed && typeof parsed === "object" && !Array.isArray(parsed)
+          ? (parsed as Record<string, unknown>)
+          : {};
+    } catch {
+      inputObject = {};
+    }
+  } else if (input && typeof input === "object" && !Array.isArray(input)) {
+    inputObject = input as Record<string, unknown>;
+    try {
+      inputStr = JSON.stringify(input);
+    } catch {
+      inputStr = "{}";
+    }
+  } else {
+    inputObject = {};
+    inputStr = "{}";
+  }
+
+  try {
+    return await modelContext.executeTool(tool, inputObject, options);
+  } catch (err: any) {
+    const isParseError =
+      typeof err?.message === "string" &&
+      err.message.startsWith("Failed to parse input");
+    const isTypeError = err instanceof TypeError;
+
+    if (isParseError || isTypeError) {
+      return await modelContext.executeTool(tool, inputStr, options);
+    }
+
+    throw err;
+  }
+}
+
+/**
  * Feature detection for the WebMCP imperative API.
  *
  * To test this integration in Google Chrome, use the Model Context Tool
@@ -244,6 +310,83 @@ export async function getWebMcpTools(): Promise<
  */
 export function isWebMcpSupported(): boolean {
   return !!getModelContextApi();
+}
+
+/**
+ * Consequential tools that perform high-stakes, irreversible, or external real-world actions
+ * (such as deleting data, executing arbitrary system commands, or transmitting live communications).
+ * Signals consuming agents to require explicit user confirmation prior to execution (Chrome 154.0.8017.0+).
+ */
+export const CONSEQUENTIAL_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "bash",
+  "clear_chat",
+  "delete_file",
+  "delete_task",
+  "email_send_message",
+  "git_delete_branch",
+  "git_delete_repo",
+  "git_push",
+  "git_reset",
+]);
+
+/**
+ * Read-only tools that query information without mutating state.
+ */
+export const READ_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "ask_user",
+  "detect_language",
+  "diff_files",
+  "email_read_messages",
+  "fetch_url",
+  "get_current_time",
+  "git_branches",
+  "git_diff",
+  "git_list_repos",
+  "git_log",
+  "git_read_file_at_ref",
+  "git_show",
+  "git_status",
+  "list_components",
+  "list_files",
+  "list_room_members",
+  "list_tasks",
+  "list_tool_profiles",
+  "proofread_text",
+  "read_file",
+  "remote_mcp_list_tools",
+  "rewrite_text",
+  "search_files",
+  "summarize_text",
+  "translate_text",
+  "web_search",
+  "write_text",
+]);
+
+export interface WebMcpToolAnnotations {
+  readOnlyHint?: boolean;
+  consequentialHint?: boolean;
+  untrustedContentHint?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Resolve annotations for a WebMCP tool registration.
+ * Allows custom annotations (from declarative or customized tool definitions)
+ * to override defaults.
+ */
+export function resolveWebMcpToolAnnotations(
+  toolName: string,
+  customAnnotations?: Record<string, unknown>,
+): WebMcpToolAnnotations {
+  const isConsequential = CONSEQUENTIAL_TOOL_NAMES.has(toolName);
+  const isReadOnly = !isConsequential && READ_ONLY_TOOL_NAMES.has(toolName);
+
+  return {
+    readOnlyHint: isReadOnly,
+    consequentialHint: isConsequential,
+    untrustedContentHint: true,
+    ...(customAnnotations || {}),
+  };
 }
 
 /**
@@ -292,10 +435,10 @@ export async function registerWebMcpTools(
         name: def.name,
         description: def.description,
         inputSchema: parseWebMcpInputSchema(def.input_schema),
-        annotations: {
-          readOnlyHint: false,
-          untrustedContentHint: true,
-        },
+        annotations: resolveWebMcpToolAnnotations(
+          def.name,
+          (def as any).annotations,
+        ),
         execute: (
           input: Record<string, unknown>,
           context?: WebMcpExecuteContext | AbortSignal,

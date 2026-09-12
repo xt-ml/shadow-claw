@@ -162,7 +162,7 @@ When any tool that returns untrusted external content is active (`fetch_url`, `w
 **Layer B — Structural wrapping (`wrapUntrustedContent`)**
 The utility in `src/worker/utils/wrapUntrustedContent.ts` wraps externally-sourced body content in labeled delimiters:
 
-```
+```text
 --- BEGIN EXTERNAL CONTENT (UNTRUSTED: <toolName>) ---
 <content>
 --- END EXTERNAL CONTENT ---
@@ -235,9 +235,10 @@ When a user manually toggles individual tools:
 
 When the browser WebMCP API is available (`document.modelContext`, with `navigator.modelContext` fallback), tools are also registered via `src/subsystems/mcp/webmcp.ts` so browser-side model contexts can invoke the same tool surface through `registerWebMcpTools()`.
 
-WebMCP mode can be toggled between `"polyfill"` and `"native"` in Tool Configuration:
+WebMCP mode can be toggled between `"polyfill"` and `"native"` in Tool Configuration. Tools are registered with accurate metadata annotations:
 
-- `readOnlyHint: false`
+- `readOnlyHint`: `true` for non-mutating query tools, `false` for mutating/consequential tools
+- `consequentialHint`: `true` for destructive, irreversible, or external real-world actions (`bash`, `delete_file`, `delete_task`, `git_push`, `email_send_message`, etc.) requiring user confirmation (Chrome 154.0.8017.0+ / WebMCP issue #176)
 - `untrustedContentHint: true` (tool output may contain untrusted/user or external data)
 
 Tool registration is managed with `AbortController` signals passed to `registerTool(...)`, and shutdown aborts those signals while also attempting legacy `unregisterTool` when available.

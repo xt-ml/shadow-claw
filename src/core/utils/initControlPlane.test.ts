@@ -703,8 +703,129 @@ describe("initControlPlane", () => {
         });
         expect(mockExecuteTool).toHaveBeenCalledWith(
           nativeModelContextTool,
-          "{}",
+          {},
+          undefined,
         );
+      } finally {
+        if (origDocMC)
+          Object.defineProperty(document, "modelContext", origDocMC);
+        if (origNavMC)
+          Object.defineProperty(navigator, "modelContext", origNavMC);
+      }
+    });
+
+    it("handles Chrome 155+ WebMCP invoke-tool passing JavaScript object directly to executeTool", async () => {
+      const origDocMC = Object.getOwnPropertyDescriptor(
+        document,
+        "modelContext",
+      );
+      const origNavMC = Object.getOwnPropertyDescriptor(
+        navigator,
+        "modelContext",
+      );
+      delete (navigator as any).modelContext;
+
+      const nativeModelContextTool = {
+        name: "list_files",
+        description: "List files and directories",
+        inputSchema: { type: "object" },
+        title: "list_files",
+        origin: "http://localhost:8888",
+        window: globalThis.window,
+      };
+
+      const mockExecuteTool = jest.fn(async (tool: any, input: any) => {
+        if (tool !== nativeModelContextTool) {
+          throw new TypeError("parameter 1 is not of type 'ModelContextTool'");
+        }
+        if (typeof input !== "object" || input === null) {
+          throw new TypeError("parameter 2 is not of type 'Object'");
+        }
+        return "chrome-155-object-result";
+      });
+
+      Object.defineProperty(document, "modelContext", {
+        value: {
+          getTools: jest.fn(async () => [nativeModelContextTool]),
+          executeTool: mockExecuteTool,
+        },
+        configurable: true,
+      });
+
+      try {
+        const res = await executeClientControlCommand(
+          "invoke-tool",
+          { toolName: "list_files", input: { recursive: true } },
+          {},
+        );
+
+        expect(res).toEqual({ result: "chrome-155-object-result" });
+        expect(mockExecuteTool).toHaveBeenCalledTimes(1);
+        expect(mockExecuteTool).toHaveBeenCalledWith(
+          nativeModelContextTool,
+          {
+            recursive: true,
+          },
+          undefined,
+        );
+      } finally {
+        if (origDocMC)
+          Object.defineProperty(document, "modelContext", origDocMC);
+        if (origNavMC)
+          Object.defineProperty(navigator, "modelContext", origNavMC);
+      }
+    });
+
+    it("gracefully falls back to stringified input in invoke-tool when executeTool throws 'Failed to parse input'", async () => {
+      const origDocMC = Object.getOwnPropertyDescriptor(
+        document,
+        "modelContext",
+      );
+      const origNavMC = Object.getOwnPropertyDescriptor(
+        navigator,
+        "modelContext",
+      );
+      delete (navigator as any).modelContext;
+
+      const nativeModelContextTool = {
+        name: "list_files",
+        description: "List files and directories",
+        inputSchema: '{"type":"object"}',
+        title: "list_files",
+        origin: "http://localhost:8888",
+        window: globalThis.window,
+      };
+
+      const calls: any[] = [];
+      const mockExecuteTool = jest.fn(async (_tool: any, input: any) => {
+        calls.push(input);
+        if (typeof input !== "string") {
+          throw new Error(
+            "Failed to parse input arguments: expected DOMString",
+          );
+        }
+        return "legacy-chrome-string-result";
+      });
+
+      Object.defineProperty(document, "modelContext", {
+        value: {
+          getTools: jest.fn(async () => [nativeModelContextTool]),
+          executeTool: mockExecuteTool,
+        },
+        configurable: true,
+      });
+
+      try {
+        const res = await executeClientControlCommand(
+          "invoke-tool",
+          { toolName: "list_files", input: { path: "src" } },
+          {},
+        );
+
+        expect(res).toEqual({ result: "legacy-chrome-string-result" });
+        expect(calls).toHaveLength(2);
+        expect(calls[0]).toEqual({ path: "src" });
+        expect(calls[1]).toBe(JSON.stringify({ path: "src" }));
       } finally {
         if (origDocMC)
           Object.defineProperty(document, "modelContext", origDocMC);

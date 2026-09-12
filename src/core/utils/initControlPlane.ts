@@ -466,35 +466,39 @@ export async function executeClientControlCommand(
           }
         }
 
-        const inputStr =
-          typeof args.input === "string"
-            ? args.input
-            : JSON.stringify(args.input || {});
+        const { executeWebMcpTool } =
+          await import("../../subsystems/mcp/webmcp.js");
 
         if (typeof ctx.executeTool === "function") {
           // 1. Pass the actual ModelContextTool object from getTools() if available (required by native Chromium)
           if (matchedTool) {
             try {
-              const res = await ctx.executeTool(matchedTool, inputStr);
+              const res = await executeWebMcpTool(ctx, matchedTool, args.input);
               return { result: res };
             } catch (_) {}
           }
 
           // 2. Pass { name: toolName } object (accepted by polyfill / mocks)
           try {
-            const res = await ctx.executeTool(
+            const res = await executeWebMcpTool(
+              ctx,
               { name: args.toolName },
-              inputStr,
+              args.input,
             );
             return { result: res };
           } catch (_) {}
 
           // 3. Pass toolName string directly (accepted by some preview shims)
           try {
-            const res = await ctx.executeTool(args.toolName, inputStr);
+            const res = await executeWebMcpTool(ctx, args.toolName, args.input);
             return { result: res };
           } catch (_) {}
         }
+
+        const inputStr =
+          typeof args.input === "string"
+            ? args.input
+            : JSON.stringify(args.input || {});
 
         // 4. Check navigator.modelContextTesting if present
         if (

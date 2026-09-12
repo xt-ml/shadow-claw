@@ -7,6 +7,7 @@ import {
   getContextLimit,
   normalizeMeshLlmResult,
   parseResponse,
+  supportsPromptCaching,
 } from "./providers.js";
 
 describe("providers.js", () => {
@@ -934,6 +935,334 @@ describe("providers.js", () => {
 
       expect(result.tools[0].cache_control).toBeUndefined();
       expect(result.system).toBe("System prompt");
+    });
+
+    it("should allow prompt caching to be enabled explicitly for any non-legacy model", () => {
+      const tools = [
+        {
+          name: "test_tool",
+          description: "A tool",
+          input_schema: { type: "object" },
+        },
+      ];
+
+      const result = formatRequest(
+        anthropicProvider,
+        [{ role: "user", content: "hello" }],
+        tools,
+        {
+          model: "custom-unlisted-model",
+          maxTokens: 1000,
+          system: "System prompt",
+          promptCaching: true,
+        } as any,
+      );
+
+      expect(result.tools[0].cache_control).toEqual({ type: "ephemeral" });
+      expect(result.system).toEqual([
+        {
+          type: "text",
+          text: "System prompt",
+          cache_control: { type: "ephemeral" },
+        },
+      ]);
+    });
+
+    it("should guard against prompt caching for legacy models even when promptCaching: true is set", () => {
+      const tools = [
+        {
+          name: "test_tool",
+          description: "A tool",
+          input_schema: { type: "object" },
+        },
+      ];
+
+      const result = formatRequest(
+        anthropicProvider,
+        [{ role: "user", content: "hello" }],
+        tools,
+        {
+          model: "claude-2.1",
+          maxTokens: 1000,
+          system: "System prompt",
+          promptCaching: true,
+        } as any,
+      );
+
+      expect(result.tools[0].cache_control).toBeUndefined();
+      expect(result.system).toBe("System prompt");
+    });
+
+    it("should guard against prompt caching for dot-delimited legacy model IDs when promptCaching: true is set", () => {
+      const tools = [
+        {
+          name: "test_tool",
+          description: "A tool",
+          input_schema: { type: "object" },
+        },
+      ];
+
+      const result = formatRequest(
+        anthropicProvider,
+        [{ role: "user", content: "hello" }],
+        tools,
+        {
+          model: "claude.2.1",
+          maxTokens: 1000,
+          system: "System prompt",
+          promptCaching: true,
+        } as any,
+      );
+
+      expect(result.tools[0].cache_control).toBeUndefined();
+      expect(result.system).toBe("System prompt");
+    });
+
+    it("should place cache_control on the last user turn in multi-turn conversations", () => {
+      const tools = [
+        {
+          name: "test_tool",
+          description: "A tool",
+          input_schema: { type: "object" },
+        },
+      ];
+
+      const messages = [
+        { role: "user", content: "First turn" },
+        { role: "assistant", content: "Assistant response" },
+        { role: "user", content: "Second turn" },
+      ];
+
+      const result = formatRequest(anthropicProvider, messages, tools, {
+        model: "claude-3-5-sonnet-20241022",
+        maxTokens: 1000,
+        system: "System prompt",
+      } as any);
+
+      expect(result.messages[0].content).toBe("First turn");
+      expect(result.messages[2].content).toEqual([
+        {
+          type: "text",
+          text: "Second turn",
+          cache_control: { type: "ephemeral" },
+        },
+      ]);
+    });
+
+    it("should never mutate caller input message objects or arrays", () => {
+      const originalUserTurn = { role: "user", content: "First turn" };
+      const originalAssistantTurn = {
+        role: "assistant",
+        content: "Assistant response",
+      };
+      const originalSecondUserTurn = { role: "user", content: "Second turn" };
+      const callerMessages = [
+        originalUserTurn,
+        originalAssistantTurn,
+        originalSecondUserTurn,
+      ];
+
+      const result = formatRequest(anthropicProvider, callerMessages, [], {
+        model: "claude-3-5-sonnet-20241022",
+        maxTokens: 1000,
+        system: "System prompt",
+      } as any);
+
+      // Caller objects must be unchanged
+      expect(originalUserTurn.content).toBe("First turn");
+      expect(originalSecondUserTurn.content).toBe("Second turn");
+      expect((originalSecondUserTurn as any).cache_control).toBeUndefined();
+      expect(callerMessages[0]).toBe(originalUserTurn);
+      expect(callerMessages[2]).toBe(originalSecondUserTurn);
+
+      // Formatted result gets the cache breakpoint
+      expect(result.messages[2].content).toEqual([
+        {
+          type: "text",
+          text: "Second turn",
+          cache_control: { type: "ephemeral" },
+        },
+      ]);
+    });
+
+    it("should dynamically enable prompt caching when ModelRegistry metadata specifies support", () => {
+      modelRegistry.registerModelInfo("arbitrary-proxy-model", {
+        contextWindow: 100000,
+        maxOutput: 4096,
+        supportsPromptCaching: true,
+      });
+
+      const tools = [
+        {
+          name: "test_tool",
+          description: "A tool",
+          input_schema: { type: "object" },
+        },
+      ];
+
+      const result = formatRequest(
+        anthropicProvider,
+        [{ role: "user", content: "hello" }],
+        tools,
+        {
+          model: "arbitrary-proxy-model",
+          maxTokens: 1000,
+          system: "System prompt",
+        } as any,
+      );
+
+      expect(result.tools[0].cache_control).toEqual({ type: "ephemeral" });
+    });
+
+    it("should dynamically disable prompt caching when ModelRegistry metadata specifies false", () => {
+      modelRegistry.registerModelInfo("claude-3-5-sonnet-cached", {
+        contextWindow: 200000,
+        maxOutput: 8192,
+        supportsPromptCaching: false,
+      });
+
+      const tools = [
+        {
+          name: "test_tool",
+          description: "A tool",
+          input_schema: { type: "object" },
+        },
+      ];
+
+      const result = formatRequest(
+        anthropicProvider,
+        [{ role: "user", content: "hello" }],
+        tools,
+        {
+          model: "claude-3-5-sonnet-cached",
+          maxTokens: 1000,
+          system: "System prompt",
+        } as any,
+      );
+
+      expect(result.tools[0].cache_control).toBeUndefined();
+    });
+
+    it("should guard against prompt caching when ModelRegistry explicitly specifies false even if promptCaching: true is set", () => {
+      modelRegistry.registerModelInfo("explicit-no-cache-model", {
+        contextWindow: 128000,
+        maxOutput: 4096,
+        supportsPromptCaching: false,
+      });
+
+      const tools = [
+        {
+          name: "test_tool",
+          description: "A tool",
+          input_schema: { type: "object" },
+        },
+      ];
+
+      const result = formatRequest(
+        anthropicProvider,
+        [{ role: "user", content: "hello" }],
+        tools,
+        {
+          model: "explicit-no-cache-model",
+          maxTokens: 1000,
+          system: "System prompt",
+          promptCaching: true,
+        } as any,
+      );
+
+      expect(result.tools[0].cache_control).toBeUndefined();
+      expect(result.system).toBe("System prompt");
+    });
+
+    it("should preserve pre-existing cache_control on content blocks during mapAnthropicContent", () => {
+      const messages = [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "Explicitly tagged block",
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+        },
+      ];
+
+      const result = formatRequest(anthropicProvider, messages, [], {
+        model: "claude-3-5-sonnet-20241022",
+        maxTokens: 1000,
+        system: "",
+      } as any);
+
+      expect(result.messages[0].content[0]).toEqual({
+        type: "text",
+        text: "Explicitly tagged block",
+        cache_control: { type: "ephemeral" },
+      });
+    });
+  });
+
+  describe("supportsPromptCaching", () => {
+    it("returns false for empty or non-string inputs", () => {
+      expect(supportsPromptCaching("")).toBe(false);
+      expect(supportsPromptCaching("   ")).toBe(false);
+      expect(supportsPromptCaching(null as any)).toBe(false);
+      expect(supportsPromptCaching(undefined as any)).toBe(false);
+    });
+
+    it("identifies Claude 3.5 models (with dashes and dots)", () => {
+      expect(supportsPromptCaching("claude-3-5-sonnet-20241022")).toBe(true);
+      expect(supportsPromptCaching("claude-3-5-sonnet-latest")).toBe(true);
+      expect(supportsPromptCaching("claude-3.5-sonnet")).toBe(true);
+      expect(supportsPromptCaching("claude-3-5-haiku-20241022")).toBe(true);
+      expect(supportsPromptCaching("claude-3.5-haiku")).toBe(true);
+    });
+
+    it("identifies Claude 3.7 models (with dashes and dots)", () => {
+      expect(supportsPromptCaching("claude-3-7-sonnet-20250219")).toBe(true);
+      expect(supportsPromptCaching("claude-3.7-sonnet")).toBe(true);
+      expect(
+        supportsPromptCaching("anthropic/claude-3.7-sonnet:thinking"),
+      ).toBe(true);
+    });
+
+    it("identifies Claude 3 Haiku and Claude 3 Opus", () => {
+      expect(supportsPromptCaching("claude-3-haiku-20240307")).toBe(true);
+      expect(supportsPromptCaching("claude-3-haiku")).toBe(true);
+      expect(supportsPromptCaching("claude-3-opus-20240229")).toBe(true);
+      expect(supportsPromptCaching("claude-3-opus")).toBe(true);
+    });
+
+    it("identifies Claude 4+ and Claude 5+ standard families", () => {
+      expect(supportsPromptCaching("claude-sonnet-4")).toBe(true);
+      expect(supportsPromptCaching("claude-opus-4")).toBe(true);
+      expect(supportsPromptCaching("claude-haiku-4")).toBe(true);
+      expect(supportsPromptCaching("claude-4-sonnet")).toBe(true);
+      expect(supportsPromptCaching("claude-sonnet-5")).toBe(true);
+      expect(supportsPromptCaching("claude-opus-5")).toBe(true);
+    });
+
+    it("identifies AWS Bedrock inference profile IDs", () => {
+      expect(
+        supportsPromptCaching("anthropic.claude-3-5-sonnet-20241022-v2:0"),
+      ).toBe(true);
+      expect(
+        supportsPromptCaching("us.anthropic.claude-3-7-sonnet-20250219-v1:0"),
+      ).toBe(true);
+      expect(
+        supportsPromptCaching("eu.anthropic.claude-3-5-haiku-20241022-v1:0"),
+      ).toBe(true);
+    });
+
+    it("rejects non-Anthropic models, legacy Claude models, and unspecified families", () => {
+      expect(supportsPromptCaching("amazon.nova-pro-v1:0")).toBe(false);
+      expect(supportsPromptCaching("claude-2.1")).toBe(false);
+      expect(supportsPromptCaching("claude-2.0")).toBe(false);
+      expect(supportsPromptCaching("claude-2")).toBe(false);
+      expect(supportsPromptCaching("anthropic.claude-v2")).toBe(false);
+      expect(supportsPromptCaching("claude-instant-1.2")).toBe(false);
+      expect(supportsPromptCaching("claude-1.3")).toBe(false);
+      expect(supportsPromptCaching("gpt-4o")).toBe(false);
     });
   });
 

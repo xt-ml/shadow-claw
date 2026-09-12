@@ -18,6 +18,7 @@ export interface ModelMetadata {
   supportsVideoInput?: boolean;
   supportsDocumentInput?: boolean;
   routesByRequestFeatures?: boolean;
+  supportsPromptCaching?: boolean;
 }
 
 /**
@@ -34,10 +35,48 @@ class ModelRegistry {
   models: Map<string, ModelMetadata> = new Map();
 
   /**
-   * Get metadata for a model ID. Lookup is case-insensitive.
+   * Get metadata for a model ID. Lookup is case-insensitive and resilient
+   * to provider prefixes (e.g. "anthropic/claude-3.7-sonnet" vs "claude-3.7-sonnet")
+   * and variant tags (e.g. ":thinking").
    */
   getModelInfo(modelId: string): ModelMetadata | null {
-    return this.models.get(modelId.toLowerCase()) ?? null;
+    if (!modelId || typeof modelId !== "string") {
+      return null;
+    }
+
+    const key = modelId.toLowerCase().trim();
+    const direct = this.models.get(key);
+    if (direct) {
+      return direct;
+    }
+
+    // Try without provider prefix (e.g. "anthropic/claude-3.7-sonnet" -> "claude-3.7-sonnet")
+    if (key.includes("/")) {
+      const bare = key.split("/").pop();
+      if (bare && this.models.has(bare)) {
+        return this.models.get(bare)!;
+      }
+    } else {
+      // Or if key doesn't have provider prefix, find a registered model ending in "/<key>".
+      // Note: Assumes bare model names are reasonably unique across registered providers.
+      // If duplicates exist, the first registered match is returned.
+      for (const [regKey, meta] of this.models.entries()) {
+        if (regKey.endsWith(`/${key}`)) {
+          return meta;
+        }
+      }
+    }
+
+    // Try stripping tag/variant suffix (e.g. "anthropic/claude-3.7-sonnet:thinking" -> "anthropic/claude-3.7-sonnet")
+    if (key.includes(":")) {
+      const withoutTag = key.split(":")[0];
+      const match = this.getModelInfo(withoutTag);
+      if (match) {
+        return match;
+      }
+    }
+
+    return null;
   }
 
   /**
@@ -158,6 +197,18 @@ class ModelRegistry {
             "structured",
           );
         const reasoning = this.extractReasoning(model);
+        const supportsPromptCaching =
+          typeof model.supports_prompt_caching === "boolean"
+            ? model.supports_prompt_caching
+            : typeof model.supportsPromptCaching === "boolean"
+              ? model.supportsPromptCaching
+              : this.supportedParametersInclude(
+                    model,
+                    "cache_control",
+                    "prompt_caching",
+                  )
+                ? true
+                : undefined;
 
         // HuggingFace Router structure nests info inside `providers` array
         if (
@@ -179,6 +230,7 @@ class ModelRegistry {
           ...(supportsVideoInput !== undefined && { supportsVideoInput }),
           ...(reasoning && { reasoning }),
           ...(routesByRequestFeatures && { routesByRequestFeatures }),
+          ...(supportsPromptCaching !== undefined && { supportsPromptCaching }),
         });
       }
 

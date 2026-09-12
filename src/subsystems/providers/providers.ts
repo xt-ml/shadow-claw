@@ -183,22 +183,92 @@ function mapOpenAiUserContent(blocks: any[], model: string): any[] {
   return content;
 }
 
-function supportsPromptCaching(model: string): boolean {
+function normalizeModelId(model: string): string {
+  if (typeof model !== "string" || model.trim().length === 0) {
+    return "";
+  }
+
+  return model
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function isLegacyClaudeModel(model: string): boolean {
+  const id = normalizeModelId(model);
+  if (!id) {
+    return false;
+  }
+
+  return (
+    id.includes("claude-1") ||
+    id.includes("claude-2") ||
+    id.includes("claude-v1") ||
+    id.includes("claude-v2") ||
+    id.includes("claude-instant")
+  );
+}
+
+/**
+ * Check if a model supports Anthropic/Bedrock prompt caching.
+ *
+ * 1. Checks ModelRegistry for dynamic capability metadata (e.g. from OpenRouter
+ *    `supported_parameters` or explicit registration).
+ * 2. Normalizes model identifiers (handling dots, slashes, uppercase).
+ * 3. Rejects legacy models (Claude 1, 2, instant).
+ * 4. Matches modern Claude 3, 3.5, 3.7, 4+, 5+ families.
+ */
+export function supportsPromptCaching(model: string): boolean {
   if (typeof model !== "string" || model.trim().length === 0) {
     return false;
   }
 
-  const id = model.toLowerCase();
+  // 1. Dynamic metadata lookup (avoids hardcoded strings when provider supplies capabilities)
+  const modelInfo = modelRegistry.getModelInfo(model);
+  if (typeof modelInfo?.supportsPromptCaching === "boolean") {
+    return modelInfo.supportsPromptCaching;
+  }
 
-  return (
+  // 2. Normalize model identifier (lowercased, non-alphanumeric converted to hyphens)
+  const id = normalizeModelId(model);
+
+  // Legacy Claude models that explicitly do NOT support prompt caching
+  if (isLegacyClaudeModel(id)) {
+    return false;
+  }
+
+  // Claude 3.5 & 3.7 families (Sonnet, Haiku)
+  if (
     id.includes("claude-3-5-sonnet") ||
-    id.includes("claude-3-7-sonnet") ||
-    id.includes("claude-opus-4") ||
-    id.includes("claude-sonnet-4") ||
-    id.includes("claude-haiku-4")
-  );
+    id.includes("claude-3-5-haiku") ||
+    id.includes("claude-3-7-sonnet")
+  ) {
+    return true;
+  }
+
+  // Claude 3 Haiku & Claude 3 Opus
+  if (id.includes("claude-3-haiku") || id.includes("claude-3-opus")) {
+    return true;
+  }
+
+  // Claude 4+ & 5+ families (Sonnet 4+, Opus 4+, Haiku 4+, Sonnet 5, Opus 5, etc.)
+  // Matches "claude-sonnet-4", "claude-opus-4", "claude-haiku-4", "claude-sonnet-5", "claude-4-sonnet", etc.
+  if (
+    /claude-(?:sonnet|opus|haiku)-[4-9]/.test(id) ||
+    /claude-[4-9]-(?:sonnet|opus|haiku)/.test(id)
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
+/**
+ * Maps incoming content blocks to Anthropic Messages format.
+ * Preserves caller-specified `cache_control` blocks if already present on incoming blocks
+ * (e.g. from orchestrators or replayed conversation history).
+ */
 function mapAnthropicContent(blocks: any[], model: string): any[] {
   const content: any[] = [];
   const canSendImages = canSendNativeImage(model);
@@ -210,7 +280,11 @@ function mapAnthropicContent(blocks: any[], model: string): any[] {
         continue;
       }
 
-      content.push({ type: "text", text });
+      content.push({
+        type: "text",
+        text,
+        ...(block.cache_control && { cache_control: block.cache_control }),
+      });
 
       continue;
     }
@@ -269,6 +343,7 @@ function mapAnthropicContent(blocks: any[], model: string): any[] {
             media_type: block.mimeType,
             data: block.data,
           },
+          ...(block.cache_control && { cache_control: block.cache_control }),
         });
       } else if (
         block.mediaType === "document" &&
@@ -283,11 +358,13 @@ function mapAnthropicContent(blocks: any[], model: string): any[] {
             media_type: "application/pdf",
             data: block.data,
           },
+          ...(block.cache_control && { cache_control: block.cache_control }),
         });
       } else {
         content.push({
           type: "text",
           text: formatAttachmentFallbackText(block),
+          ...(block.cache_control && { cache_control: block.cache_control }),
         });
       }
     }
@@ -600,16 +677,22 @@ class AnthropicAdapter extends BaseAdapter {
     },
   ): any {
     const { model, maxTokens, system, reasoning } = options;
+    const modelInfo = modelRegistry.getModelInfo(model);
+    const explicitlyUnsupported =
+      isLegacyClaudeModel(model) || modelInfo?.supportsPromptCaching === false;
     const cacheEnabled =
-      options.promptCaching !== false && supportsPromptCaching(model);
+      !explicitlyUnsupported &&
+      (options.promptCaching === true ||
+        (options.promptCaching !== false && supportsPromptCaching(model)));
 
     // Messages are already in Anthropic format internally.
     // Filter out system messages (system is passed separately).
+    // Always clone message objects so formatting never mutates the caller's array.
     const filteredMessages = messages
       .filter((msg) => msg.role !== "system")
       .map((msg) => {
         if (!Array.isArray(msg.content)) {
-          return msg;
+          return { ...msg };
         }
 
         return {
@@ -634,6 +717,47 @@ class AnthropicAdapter extends BaseAdapter {
       cacheEnabled && typeof system === "string" && system.trim().length > 0
         ? [{ type: "text", text: system, cache_control: { type: "ephemeral" } }]
         : system;
+
+    // For multi-turn conversations, place a cache breakpoint on the last user turn (up to 4 total checkpoints).
+    // Mutates only the newly cloned message objects in filteredMessages, leaving caller references untouched.
+    if (cacheEnabled && filteredMessages.length > 1) {
+      for (let i = filteredMessages.length - 1; i >= 0; i--) {
+        const msg = filteredMessages[i];
+        if (msg.role === "user") {
+          if (typeof msg.content === "string") {
+            filteredMessages[i] = {
+              ...msg,
+              content: [
+                {
+                  type: "text",
+                  text: msg.content,
+                  cache_control: { type: "ephemeral" },
+                },
+              ],
+            };
+          } else if (Array.isArray(msg.content) && msg.content.length > 0) {
+            const updated = [...msg.content];
+            const lastIdx = updated.length - 1;
+            const lastBlock = updated[lastIdx];
+            if (
+              lastBlock &&
+              typeof lastBlock === "object" &&
+              !lastBlock.cache_control
+            ) {
+              updated[lastIdx] = {
+                ...lastBlock,
+                cache_control: { type: "ephemeral" },
+              };
+              filteredMessages[i] = {
+                ...msg,
+                content: updated,
+              };
+            }
+          }
+          break;
+        }
+      }
+    }
 
     const request: any = {
       model,

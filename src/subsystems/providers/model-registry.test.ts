@@ -19,9 +19,148 @@ describe("ModelRegistry", () => {
     });
   });
 
+  it("should register and get model info with supportsPromptCaching", () => {
+    modelRegistry.registerModelInfo("test-cached-model", {
+      contextWindow: 128000,
+      maxOutput: 4096,
+      supportsPromptCaching: true,
+    });
+
+    const info = modelRegistry.getModelInfo("test-cached-model");
+    expect(info).toEqual({
+      contextWindow: 128000,
+      maxOutput: 4096,
+      supportsPromptCaching: true,
+    });
+  });
+
+  it("should extract supportsPromptCaching from supported_parameters in fetchModelInfo", async () => {
+    const mockData: any = {
+      data: [
+        {
+          id: "custom/cached-model",
+          context_length: 128000,
+          supported_parameters: ["tools", "cache_control"],
+        },
+        {
+          id: "custom/non-cached-model",
+          context_length: 32000,
+          supported_parameters: ["tools"],
+        },
+        {
+          id: "custom/explicit-cached-model",
+          context_length: 64000,
+          supports_prompt_caching: true,
+        },
+      ],
+    };
+
+    const originalFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = async () => ({
+      ok: true,
+      json: async () => mockData,
+    });
+
+    try {
+      await modelRegistry.fetchModelInfo({
+        id: "openrouter",
+        modelsUrl: "https://openrouter.ai/api/v1/models",
+        headers: {},
+      } as any);
+
+      expect(
+        modelRegistry.getModelInfo("custom/cached-model")
+          ?.supportsPromptCaching,
+      ).toBe(true);
+      expect(
+        modelRegistry.getModelInfo("custom/non-cached-model")
+          ?.supportsPromptCaching,
+      ).toBeUndefined();
+      expect(
+        modelRegistry.getModelInfo("custom/explicit-cached-model")
+          ?.supportsPromptCaching,
+      ).toBe(true);
+    } finally {
+      (globalThis as any).fetch = originalFetch;
+    }
+  });
+
   it("should return null for unknown model", () => {
     const info = modelRegistry.getModelInfo("unknown");
     expect(info).toBeNull();
+  });
+
+  it("should resolve models with prefix aliases, without prefixes, and with tag suffixes", () => {
+    modelRegistry.registerModelInfo("anthropic/claude-3.7-sonnet", {
+      contextWindow: 200000,
+      maxOutput: 8192,
+      supportsPromptCaching: true,
+    });
+    modelRegistry.registerModelInfo("gpt-4o", {
+      contextWindow: 128000,
+      maxOutput: 4096,
+    });
+
+    // Lookup bare name when registered with provider prefix
+    expect(
+      modelRegistry.getModelInfo("claude-3.7-sonnet")?.supportsPromptCaching,
+    ).toBe(true);
+    // Lookup with tag suffix
+    expect(
+      modelRegistry.getModelInfo("anthropic/claude-3.7-sonnet:thinking")
+        ?.supportsPromptCaching,
+    ).toBe(true);
+    // Lookup with provider prefix when registered as bare name
+    expect(modelRegistry.getModelInfo("openai/gpt-4o")?.contextWindow).toBe(
+      128000,
+    );
+  });
+
+  it("should update alias metadata when a model is re-registered with updated capabilities", () => {
+    modelRegistry.registerModelInfo("provider/dynamic-model", {
+      contextWindow: 100000,
+      maxOutput: 4096,
+      supportsPromptCaching: false,
+    });
+
+    expect(
+      modelRegistry.getModelInfo("dynamic-model")?.supportsPromptCaching,
+    ).toBe(false);
+
+    // Re-register with updated capabilities (e.g. on provider model refresh)
+    modelRegistry.registerModelInfo("provider/dynamic-model", {
+      contextWindow: 128000,
+      maxOutput: 8192,
+      supportsPromptCaching: true,
+    });
+
+    expect(
+      modelRegistry.getModelInfo("dynamic-model")?.supportsPromptCaching,
+    ).toBe(true);
+    expect(modelRegistry.getModelInfo("dynamic-model")?.contextWindow).toBe(
+      128000,
+    );
+  });
+
+  it("should not retain stale alias lookups when models map is cleared directly", () => {
+    modelRegistry.registerModelInfo("provider/temp-model", {
+      contextWindow: 100000,
+      maxOutput: 4096,
+    });
+
+    expect(modelRegistry.getModelInfo("temp-model")).not.toBeNull();
+
+    // Directly clear models Map as done in external test setups
+    modelRegistry.models.clear();
+
+    // Re-register a different model
+    modelRegistry.registerModelInfo("provider/other-model", {
+      contextWindow: 50000,
+      maxOutput: 2048,
+    });
+
+    expect(modelRegistry.getModelInfo("temp-model")).toBeNull();
+    expect(modelRegistry.getModelInfo("other-model")).not.toBeNull();
   });
 
   it("should fetch model info from OpenRouter format", async () => {

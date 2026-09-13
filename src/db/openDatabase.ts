@@ -2,14 +2,13 @@ import { DB_VERSION, getDbName } from "../config/config.js";
 import { setDB } from "./db.js";
 import { migrateLegacyDatabase } from "./migrateLegacyDatabase.js";
 import { migrateLegacyOpfs } from "../storage/migrateLegacyOpfs.js";
-import type { ShadowClawDatabase } from "./types.js";
 
 /**
  * Open (or create) the IndexedDB database.
  */
-export function openDatabase(): Promise<ShadowClawDatabase> {
+export function openDatabase(): Promise<IDBDatabase> {
   return new Promise(async (resolve, reject) => {
-    let db: ShadowClawDatabase;
+    let db: IDBDatabase;
 
     const dbName = getDbName();
     const request = indexedDB.open(dbName, DB_VERSION);

@@ -14,6 +14,21 @@ export interface StorageStatus {
 let explicitRoot: FileSystemDirectoryHandle | null = null;
 
 /**
+ * Set the storage root to a real filesystem directory (headless CLI mode).
+ * Call this early in the agent bootstrap, before any tool or skill execution.
+ */
+export function setStorageRootFromPath(fsPath: string): void {
+  const handler = (globalThis as any).__setStorageRootFromPath;
+  if (typeof handler === "function") {
+    handler(fsPath);
+    return;
+  }
+  throw new Error(
+    "setStorageRootFromPath requires node-fs-handle in Node.js environments",
+  );
+}
+
+/**
  * Verify whether a directory handle is actually functional by attempting
  * to iterate its entries.
  */
@@ -137,9 +152,9 @@ export async function getStorageRoot(
 }
 
 /**
- * Set an explicit storage root handle (used to sync handle to workers).
+ * Set an explicit storage root handle (used to sync handle to workers or in headless CLI mode).
  */
-export function setStorageRoot(handle: FileSystemDirectoryHandle): void {
+export function setStorageRoot(handle: FileSystemDirectoryHandle | null): void {
   explicitRoot = handle;
 }
 

@@ -63,6 +63,7 @@ export class ShadowClaw extends ShadowClawElement {
   static template = shadowClawTemplate;
 
   activityLogCollapsedOverride: boolean | null = null;
+  appLifecycleCleanup: (() => void) | null = null;
   chatSidebarHidden: boolean = false;
   chatSplitViewEnabled: boolean = false;
   currentPage: string = orchestratorStore.sidebarDefaultPage;
@@ -88,7 +89,6 @@ export class ShadowClaw extends ShadowClawElement {
   };
 
   vmStatusCleanup: (() => void) | null = null;
-  appLifecycleCleanup: (() => void) | null = null;
 
   constructor() {
     super();

@@ -1,7 +1,7 @@
-import { ShadowClawDatabase } from "../../../../db/types";
-import { parseBooleanConfig } from "./parseBooleanConfig";
-import { getConfig } from "../../../../db/getConfig";
-import { CONFIG_KEYS } from "../../../../config/config";
+import { ShadowClawDatabase } from "../../../../db/types.js";
+import { parseBooleanConfig } from "./parseBooleanConfig.js";
+import { getConfig } from "../../../../db/getConfig.js";
+import { CONFIG_KEYS } from "../../../../config/config.js";
 
 export async function getAllowFullInternetAccess(
   db: ShadowClawDatabase,

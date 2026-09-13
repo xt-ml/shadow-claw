@@ -1,11 +1,54 @@
+import { isHeadlessMode } from "../../../config/headless.js";
 import { ulid } from "../../../utils/ulid.js";
 import { post } from "../../utils/post.js";
+
+export type NativeAiTaskHandler = (
+  taskType: string,
+  input: Record<string, any>,
+  groupId?: string,
+  context?: { db?: any; invokeContext?: any },
+) => Promise<any>;
+
+let customNativeAiTaskHandler: NativeAiTaskHandler | null = null;
+
+export function setNativeAiTaskHandler(
+  handler: NativeAiTaskHandler | null,
+): void {
+  customNativeAiTaskHandler = handler;
+}
+
+export interface BuiltinToolContext {
+  db?: any;
+  invokeContext?: any;
+}
 
 async function requestNativeTask(
   groupId: string | undefined,
   taskType: string,
   input: Record<string, any>,
+  context?: BuiltinToolContext,
 ): Promise<any> {
+  if (customNativeAiTaskHandler) {
+    return await customNativeAiTaskHandler(taskType, input, groupId, context);
+  }
+
+  if (isHeadlessMode()) {
+    const { executeNativeAiTask } =
+      await import("../../../subsystems/providers/executeNativeAiTask.js");
+    const invokeContext = context?.invokeContext;
+    return await executeNativeAiTask({
+      taskType,
+      input,
+      groupId,
+      providerId: invokeContext?.provider,
+      model: invokeContext?.model,
+      apiKey: invokeContext?.apiKey,
+      maxTokens: invokeContext?.maxTokens,
+      headers: invokeContext?.providerHeaders,
+      db: context?.db || invokeContext?.db,
+    });
+  }
+
   const id = ulid();
   post({
     type: "request-native-ai-task",
@@ -23,6 +66,7 @@ async function requestNativeTask(
 export async function executeSummarizeText(
   input: Record<string, any>,
   groupId?: string,
+  context?: BuiltinToolContext,
 ): Promise<string> {
   const text = String(input.text || "").trim();
   if (!text) {
@@ -30,14 +74,19 @@ export async function executeSummarizeText(
   }
 
   try {
-    return await requestNativeTask(groupId, "summarize", {
-      text,
-      type: input.type,
-      format: input.format,
-      length: input.length,
-      preference: input.preference,
-      context: input.context,
-    });
+    return await requestNativeTask(
+      groupId,
+      "summarize",
+      {
+        text,
+        type: input.type,
+        format: input.format,
+        length: input.length,
+        preference: input.preference,
+        context: input.context,
+      },
+      context,
+    );
   } catch (err) {
     return `Error summarizing text: ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -46,6 +95,7 @@ export async function executeSummarizeText(
 export async function executeWriteText(
   input: Record<string, any>,
   groupId?: string,
+  context?: BuiltinToolContext,
 ): Promise<string> {
   const prompt = String(input.prompt || "").trim();
   if (!prompt) {
@@ -53,10 +103,15 @@ export async function executeWriteText(
   }
 
   try {
-    return await requestNativeTask(groupId, "write", {
-      prompt,
-      context: input.context,
-    });
+    return await requestNativeTask(
+      groupId,
+      "write",
+      {
+        prompt,
+        context: input.context,
+      },
+      context,
+    );
   } catch (err) {
     return `Error writing text: ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -65,6 +120,7 @@ export async function executeWriteText(
 export async function executeRewriteText(
   input: Record<string, any>,
   groupId?: string,
+  context?: BuiltinToolContext,
 ): Promise<string> {
   const text = String(input.text || "").trim();
   if (!text) {
@@ -72,12 +128,17 @@ export async function executeRewriteText(
   }
 
   try {
-    return await requestNativeTask(groupId, "rewrite", {
-      text,
-      tone: input.tone,
-      length: input.length,
-      context: input.context,
-    });
+    return await requestNativeTask(
+      groupId,
+      "rewrite",
+      {
+        text,
+        tone: input.tone,
+        length: input.length,
+        context: input.context,
+      },
+      context,
+    );
   } catch (err) {
     return `Error rewriting text: ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -86,6 +147,7 @@ export async function executeRewriteText(
 export async function executeProofreadText(
   input: Record<string, any>,
   groupId?: string,
+  context?: BuiltinToolContext,
 ): Promise<string> {
   const text = String(input.text || "").trim();
   if (!text) {
@@ -93,10 +155,15 @@ export async function executeProofreadText(
   }
 
   try {
-    return await requestNativeTask(groupId, "proofread", {
-      text,
-      context: input.context,
-    });
+    return await requestNativeTask(
+      groupId,
+      "proofread",
+      {
+        text,
+        context: input.context,
+      },
+      context,
+    );
   } catch (err) {
     return `Error proofreading text: ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -105,6 +172,7 @@ export async function executeProofreadText(
 export async function executeDetectLanguage(
   input: Record<string, any>,
   groupId?: string,
+  context?: BuiltinToolContext,
 ): Promise<string> {
   const text = String(input.text || "").trim();
   if (!text) {
@@ -112,10 +180,17 @@ export async function executeDetectLanguage(
   }
 
   try {
-    const results = await requestNativeTask(groupId, "detect-language", {
-      text,
-    });
-    return JSON.stringify(results, null, 2);
+    const results = await requestNativeTask(
+      groupId,
+      "detect-language",
+      {
+        text,
+      },
+      context,
+    );
+    return typeof results === "string"
+      ? results
+      : JSON.stringify(results, null, 2);
   } catch (err) {
     return `Error detecting language: ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -124,6 +199,7 @@ export async function executeDetectLanguage(
 export async function executeTranslateText(
   input: Record<string, any>,
   groupId?: string,
+  context?: BuiltinToolContext,
 ): Promise<string> {
   const text = String(input.text || "").trim();
   const sourceLanguage = String(input.sourceLanguage || "").trim();
@@ -134,11 +210,16 @@ export async function executeTranslateText(
   }
 
   try {
-    return await requestNativeTask(groupId, "translate", {
-      text,
-      sourceLanguage,
-      targetLanguage,
-    });
+    return await requestNativeTask(
+      groupId,
+      "translate",
+      {
+        text,
+        sourceLanguage,
+        targetLanguage,
+      },
+      context,
+    );
   } catch (err) {
     return `Error translating text: ${err instanceof Error ? err.message : String(err)}`;
   }
@@ -147,6 +228,7 @@ export async function executeTranslateText(
 export async function executeEmbedText(
   input: Record<string, any>,
   groupId?: string,
+  context?: BuiltinToolContext,
 ): Promise<string> {
   const text = input.text;
   if (!text || (Array.isArray(text) && text.length === 0)) {
@@ -154,11 +236,18 @@ export async function executeEmbedText(
   }
 
   try {
-    const result = await requestNativeTask(groupId, "semantic-embedder", {
-      text,
-      taskType: input.taskType,
-    });
-    return JSON.stringify(result, null, 2);
+    const result = await requestNativeTask(
+      groupId,
+      "semantic-embedder",
+      {
+        text,
+        taskType: input.taskType,
+      },
+      context,
+    );
+    return typeof result === "string"
+      ? result
+      : JSON.stringify(result, null, 2);
   } catch (err) {
     return `Error generating embeddings: ${err instanceof Error ? err.message : String(err)}`;
   }

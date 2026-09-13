@@ -40,7 +40,7 @@ export async function consumePendingShares(
     let tx: IDBTransaction;
 
     try {
-      tx = db.transaction(PENDING_SHARES_STORE, "readwrite");
+      tx = (db as IDBDatabase).transaction(PENDING_SHARES_STORE, "readwrite");
     } catch (error) {
       if (error instanceof DOMException && error.name === "NotFoundError") {
         resolve([]);

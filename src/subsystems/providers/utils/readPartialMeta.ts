@@ -1,6 +1,6 @@
 import { isCacheStorageAvailable } from "./isCacheStorageAvailable.js";
 import { metaKey } from "./metaKey.js";
-import { DEFAULT_MODEL_CACHE_NAME, ModelPartialMeta } from "./types.js";
+import { DEFAULT_MODEL_CACHE_NAME, type ModelPartialMeta } from "./types.js";
 
 /**
  * Read and parse the partial download metadata from CacheStorage.

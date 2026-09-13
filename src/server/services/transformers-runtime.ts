@@ -162,6 +162,7 @@ export interface TransformersRuntimeService {
     maxCompletionTokens: number;
     verbose: boolean;
     onToken?: (text: string) => void;
+    onProgress?: (info: any) => void;
     abortSignal?: AbortSignal;
   }): Promise<{ text: string; promptTokens: number; completionTokens: number }>;
   fetchDynamicModels(): Promise<TransformersModelMetadata[]>;
@@ -170,6 +171,7 @@ export interface TransformersRuntimeService {
   prewarmModel(params: {
     modelId: string;
     verbose: boolean;
+    onProgress?: (info: any) => void;
   }): Promise<{ modelId: string; loader: string; cacheDir: string }>;
   disposeRuntime(modelId: string): Promise<void>;
 
@@ -236,6 +238,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
 
       void disposeRuntime(modelId);
     }, TRANSFORMERS_JS_RUNTIME_IDLE_MS);
+    timer.unref?.();
     cleanupTimers.set(modelId, timer);
   }
 
@@ -437,6 +440,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
   async function loadRuntime(
     modelId: string,
     verbose: boolean,
+    onProgress?: (info: any) => void,
   ): Promise<TransformersJsRuntime> {
     const supportedModelIds = STATIC_MODELS.map((m) => m.id);
     if (!supportedModelIds.includes(modelId)) {
@@ -463,6 +467,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
       const transformers = await import(TRANSFORMERS_JS_MODULE_ID);
       await ensureDiskCacheConfig(transformers);
       const AutoProcessor = Reflect.get(transformers, "AutoProcessor");
+      const AutoTokenizer = Reflect.get(transformers, "AutoTokenizer");
       const Gemma4Processor = Reflect.get(transformers, "Gemma4Processor");
       const Gemma4ForConditionalGeneration = Reflect.get(
         transformers,
@@ -490,7 +495,8 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
       ) {
         loaderCandidates.push({
           name: "Gemma4ForConditionalGeneration",
-          from_pretrained: Gemma4ForConditionalGeneration.from_pretrained,
+          from_pretrained: (m: string, opts: any) =>
+            Gemma4ForConditionalGeneration.from_pretrained(m, opts),
         });
       }
 
@@ -500,7 +506,8 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
       ) {
         loaderCandidates.push({
           name: "AutoModelForImageTextToText",
-          from_pretrained: AutoModelForImageTextToText.from_pretrained,
+          from_pretrained: (m: string, opts: any) =>
+            AutoModelForImageTextToText.from_pretrained(m, opts),
         });
       }
 
@@ -510,12 +517,14 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
       ) {
         loaderCandidates.push({
           name: "AutoModelForCausalLM",
-          from_pretrained: AutoModelForCausalLM.from_pretrained,
+          from_pretrained: (m: string, opts: any) =>
+            AutoModelForCausalLM.from_pretrained(m, opts),
         });
       }
 
       if (
-        typeof AutoProcessor?.from_pretrained !== "function" ||
+        (typeof AutoProcessor?.from_pretrained !== "function" &&
+          typeof AutoTokenizer?.from_pretrained !== "function") ||
         loaderCandidates.length === 0 ||
         typeof TextStreamer !== "function"
       ) {
@@ -526,7 +535,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
         }
 
         throw new Error(
-          "Transformers.js runtime is unavailable. Ensure @huggingface/transformers exports AutoProcessor and at least one model loader.",
+          "Transformers.js runtime is unavailable. Ensure @huggingface/transformers exports AutoProcessor or AutoTokenizer and at least one model loader.",
         );
       }
 
@@ -541,11 +550,85 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
         modelId,
       });
 
-      const processor = isGemma4Model
-        ? await (typeof Gemma4Processor?.from_pretrained === "function"
-            ? Gemma4Processor.from_pretrained(modelId)
-            : AutoProcessor.from_pretrained(modelId))
-        : await AutoProcessor.from_pretrained(modelId);
+      const handleProgress = (info: any, label: string) => {
+        if (info?.status === "progress_total") {
+          const pct = Number(info.progress);
+          setDownloadStatus({
+            status: "running",
+            progress: Number.isFinite(pct)
+              ? Math.max(0, Math.min(1, pct / 100))
+              : null,
+            message: `Downloading ${modelId} (${label})...`,
+            modelId,
+          });
+        }
+        try {
+          onProgress?.(info);
+        } catch {}
+      };
+
+      let processor: any = null;
+      if (isGemma4Model) {
+        const processorLoader =
+          typeof Gemma4Processor?.from_pretrained === "function"
+            ? Gemma4Processor
+            : AutoProcessor;
+        if (typeof processorLoader?.from_pretrained === "function") {
+          try {
+            processor = await processorLoader.from_pretrained(modelId, {
+              progress_callback: (info: any) =>
+                handleProgress(info, "processor"),
+            });
+          } catch (error) {
+            if (typeof AutoTokenizer?.from_pretrained === "function") {
+              if (verbose) {
+                console.warn(
+                  `[Transformers.js] Processor failed for ${modelId}, falling back to AutoTokenizer:`,
+                  error,
+                );
+              }
+              processor = await AutoTokenizer.from_pretrained(modelId, {
+                progress_callback: (info: any) =>
+                  handleProgress(info, "tokenizer"),
+              });
+            } else {
+              throw error;
+            }
+          }
+        } else if (typeof AutoTokenizer?.from_pretrained === "function") {
+          processor = await AutoTokenizer.from_pretrained(modelId, {
+            progress_callback: (info: any) => handleProgress(info, "tokenizer"),
+          });
+        }
+      } else {
+        if (typeof AutoProcessor?.from_pretrained === "function") {
+          try {
+            processor = await AutoProcessor.from_pretrained(modelId, {
+              progress_callback: (info: any) =>
+                handleProgress(info, "processor"),
+            });
+          } catch (error) {
+            if (typeof AutoTokenizer?.from_pretrained === "function") {
+              if (verbose) {
+                console.warn(
+                  `[Transformers.js] AutoProcessor failed for ${modelId}, falling back to AutoTokenizer:`,
+                  error,
+                );
+              }
+              processor = await AutoTokenizer.from_pretrained(modelId, {
+                progress_callback: (info: any) =>
+                  handleProgress(info, "tokenizer"),
+              });
+            } else {
+              throw error;
+            }
+          }
+        } else if (typeof AutoTokenizer?.from_pretrained === "function") {
+          processor = await AutoTokenizer.from_pretrained(modelId, {
+            progress_callback: (info: any) => handleProgress(info, "tokenizer"),
+          });
+        }
+      }
 
       let model: any = null;
       let modelLoaderName = "";
@@ -560,19 +643,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
               {
                 dtype,
                 device: "cpu",
-                progress_callback: (info: any) => {
-                  if (info?.status === "progress_total") {
-                    const pct = Number(info.progress);
-                    setDownloadStatus({
-                      status: "running",
-                      progress: Number.isFinite(pct)
-                        ? Math.max(0, Math.min(1, pct / 100))
-                        : null,
-                      message: `Downloading ${modelId} (${dtype})...`,
-                      modelId,
-                    });
-                  }
-                },
+                progress_callback: (info: any) => handleProgress(info, dtype),
               },
             );
             modelLoaderName = `Gemma4ForConditionalGeneration/${dtype}`;
@@ -590,19 +661,8 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
               model = await candidate.from_pretrained?.(modelId, {
                 dtype,
                 device: "cpu",
-                progress_callback: (info: any) => {
-                  if (info?.status === "progress_total") {
-                    const pct = Number(info.progress);
-                    setDownloadStatus({
-                      status: "running",
-                      progress: Number.isFinite(pct)
-                        ? Math.max(0, Math.min(1, pct / 100))
-                        : null,
-                      message: `Downloading ${modelId} (${candidate.name}/${dtype})...`,
-                      modelId,
-                    });
-                  }
-                },
+                progress_callback: (info: any) =>
+                  handleProgress(info, `${candidate.name}/${dtype}`),
               });
               modelLoaderName = `${candidate.name}/${dtype}`;
 
@@ -785,18 +845,22 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
         maxCompletionTokens,
         verbose,
         onToken,
+        onProgress,
         abortSignal,
       } = params;
       const requestTimeoutMs = getRequestTimeoutMs();
       markRuntimeInUse(modelId);
       let runtime: TransformersJsRuntime;
       try {
-        runtime = await awaitOperation(loadRuntime(modelId, verbose), {
-          modelId,
-          phase: "model load",
-          timeoutMs: requestTimeoutMs,
-          abortSignal,
-        });
+        runtime = await awaitOperation(
+          loadRuntime(modelId, verbose, onProgress),
+          {
+            modelId,
+            phase: "model load",
+            timeoutMs: requestTimeoutMs,
+            abortSignal,
+          },
+        );
       } catch (error) {
         releaseRuntime(modelId);
 
@@ -849,9 +913,15 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
           });
         }
 
-        const inputs = await runtime.processor(prompt, null, null, {
-          add_special_tokens: false,
-        });
+        const tokenizer = runtime.processor?.tokenizer || runtime.processor;
+
+        const inputs = runtime.processor?.tokenizer
+          ? await runtime.processor(prompt, null, null, {
+              add_special_tokens: false,
+            })
+          : await runtime.processor(prompt, {
+              add_special_tokens: false,
+            });
 
         const streamed: string[] = [];
 
@@ -861,7 +931,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
             ...(abortSignal ? { signal: abortSignal } : {}),
             max_new_tokens: maxCompletionTokens,
             do_sample: false,
-            streamer: new runtime.TextStreamer(runtime.processor.tokenizer, {
+            streamer: new runtime.TextStreamer(tokenizer, {
               skip_prompt: true,
               skip_special_tokens: true,
               callback_function: (text: string) => {
@@ -889,10 +959,18 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
 
         let text = sanitizeOutputText(streamed.join("")).trim();
         if (!text) {
-          const decoded = runtime.processor.batch_decode(
-            outputs.slice(null, [inputs.input_ids.dims.at(-1), null]),
-            { skip_special_tokens: true },
-          );
+          const decodeFn =
+            typeof tokenizer?.batch_decode === "function"
+              ? tokenizer.batch_decode.bind(tokenizer)
+              : typeof runtime.processor?.batch_decode === "function"
+                ? runtime.processor.batch_decode.bind(runtime.processor)
+                : null;
+          const decoded = decodeFn
+            ? decodeFn(
+                outputs.slice(null, [inputs.input_ids.dims.at(-1), null]),
+                { skip_special_tokens: true },
+              )
+            : null;
           text = sanitizeOutputText(String(decoded?.[0] || "")).trim();
         }
 
@@ -994,8 +1072,8 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
     },
 
     async prewarmModel(params) {
-      const { modelId, verbose } = params;
-      const runtime = await loadRuntime(modelId, verbose);
+      const { modelId, verbose, onProgress } = params;
+      const runtime = await loadRuntime(modelId, verbose, onProgress);
 
       return {
         modelId,

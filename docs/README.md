@@ -46,11 +46,12 @@ Detailed docs for each major subsystem.
 | [Web Share Target](subsystems/share-target.md)                   | OS share sheet integration receiving files, URLs, and text into OPFS workspaces via PWA Web Share Target API                                                                                                                |
 | [Pages System](subsystems/pages.md)                              | Workspace-relative pages rendering, sidebar navigation, static site seeding, pretty paths, same-origin route validation, and production asset inlining                                                                      |
 | [Custom Element Security](subsystems/custom-element-security.md) | Custom element registry & DOM guards, allowlists, script descriptors ({ src, hasInit }), iframe sandbox policies, and nonce-gated CSP                                                                                       |
-| [CLI & Static Site Publishing](subsystems/cli.md)                | `shadow-claw` CLI commands (`build`, `dev`, `serve`, `server`, `init`, `clients`, `send`, `backup`, `tasks`, `mcp`, `skills:index`), dual-root path resolution, and npm packaging                                           |
+| [CLI & Static Site Publishing](subsystems/cli.md)                | `shadow-claw` CLI commands (`agent`, `build`, `dev`, `serve`, `server`, `init`, `clients`, `send`, `backup`, `tasks`, `mcp`, `skills:index`), headless agent participant, dual-root path resolution, and npm packaging      |
 | [Control Plane & Client Bridge](subsystems/control-plane.md)     | SSE, WebSocket, and WebRTC DataChannel control plane for CLI driving, headless automation, and persistent browser execution surfaces                                                                                        |
 | [Stateless MCP Server](subsystems/mcp-server.md)                 | Official Stateless Model Context Protocol (2026-07-28) server for external agent hosts, featuring native server management tools (`shadowclaw_server_*`), multi-client tool targeting, and dynamic browser tool relaying    |
 | [File Backup Subsystem](subsystems/backup.md)                    | Remote workspace and OPFS file backups to server storage                                                                                                                                                                    |
 | [OpenAPI & Endpoint Discoverability](subsystems/openapi.md)      | Official OpenAPI 3.1 specification, interactive Scalar documentation UI, and route-coverage contract testing                                                                                                                |
+| [Local Models & Hugging Face](subsystems/local-models.md)        | On-demand downloading from Hugging Face Hub, disk caching in `assets/cache/transformers.js`, and proxy pre-warming                                                                                                          |
 
 ### Guides
 
@@ -73,13 +74,14 @@ Step-by-step instructions for common dev tasks.
 
 The _why_ behind key choices.
 
-| Document                                                                            | Decision                                                   |
-| ----------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| [Bundled TypeScript Architecture](decisions/bundled-typescript-architecture.md)     | Rationale for the transition to Rolldown + TypeScript      |
-| [Native Web Components and Signals](decisions/native-web-components-and-signals.md) | Why native standards for UI and reactivity                 |
-| [Worker-Isolated Agent Runtime](decisions/worker-isolated-agent-runtime.md)         | Why the agent and VM run in dedicated workers              |
-| [IndexedDB and OPFS Storage](decisions/indexeddb-and-opfs-storage.md)               | Why IndexedDB and OPFS for persistent storage              |
-| [Peer-to-Peer Protocol (A2A via AGUI)](decisions/peer-protocol-a2a-agui.md)         | Architecture and constraints for inter-agent communication |
+| Document                                                                            | Decision                                                                                 |
+| ----------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| [Headless CLI Agent Participant](decisions/headless-cli-agent-participant.md)       | Architecture, capability negotiation, and SQLite backend for server-side agent execution |
+| [Bundled TypeScript Architecture](decisions/bundled-typescript-architecture.md)     | Rationale for the transition to Rolldown + TypeScript                                    |
+| [Native Web Components and Signals](decisions/native-web-components-and-signals.md) | Why native standards for UI and reactivity                                               |
+| [Worker-Isolated Agent Runtime](decisions/worker-isolated-agent-runtime.md)         | Why the agent and VM run in dedicated workers                                            |
+| [IndexedDB and OPFS Storage](decisions/indexeddb-and-opfs-storage.md)               | Why IndexedDB and OPFS for persistent storage                                            |
+| [Peer-to-Peer Protocol (A2A via AGUI)](decisions/peer-protocol-a2a-agui.md)         | Architecture and constraints for inter-agent communication                               |
 
 ---
 

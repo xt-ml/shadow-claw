@@ -1,4 +1,4 @@
-import { ToolDefinition } from "./types.js";
+import type { ToolDefinition } from "./types.js";
 
 export const summarize_text: ToolDefinition = {
   name: "summarize_text",

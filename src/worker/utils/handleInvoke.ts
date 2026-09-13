@@ -3,6 +3,7 @@ import {
   getProvider,
   ProviderConfig,
 } from "../../config/config.js";
+import { isHeadlessMode, filterHeadlessTools } from "../../config/headless.js";
 
 import { buildDynamicContext } from "../../context/buildDynamicContext.js";
 import { estimateTokens } from "../../context/estimateTokens.js";
@@ -220,6 +221,44 @@ function formatToolFallbackResponseText(text: string): string {
   return `Tool result:\n${trimmed}`;
 }
 
+export type NodeTransformersCompletionExecutor = (options: {
+  modelId: string;
+  messages: any[];
+  maxTokens?: number;
+  verbose?: boolean;
+  onToken?: (text: string) => void;
+  onProgress?: (info: any) => void;
+  abortSignal?: AbortSignal;
+}) => Promise<any>;
+
+let _nodeTransformersCompletionExecutor: NodeTransformersCompletionExecutor | null =
+  null;
+
+export function setNodeTransformersCompletionExecutor(
+  executor: NodeTransformersCompletionExecutor | null,
+): void {
+  _nodeTransformersCompletionExecutor = executor;
+}
+
+export type NodeLlamafileCompletionExecutor = (options: {
+  model: string;
+  messages: any[];
+  maxTokens?: number;
+  abortSignal?: AbortSignal;
+  verbose?: boolean;
+  onToken?: (text: string) => void;
+  service?: any;
+}) => Promise<any>;
+
+let _nodeLlamafileCompletionExecutor: NodeLlamafileCompletionExecutor | null =
+  null;
+
+export function setNodeLlamafileCompletionExecutor(
+  executor: NodeLlamafileCompletionExecutor | null,
+): void {
+  _nodeLlamafileCompletionExecutor = executor;
+}
+
 /**
  * Handle agent invocation with tool-use loop
  */
@@ -320,6 +359,10 @@ export async function handleInvoke(
       ? enabledTools
       : TOOL_DEFINITIONS;
 
+    if (isHeadlessMode()) {
+      currentTools = filterHeadlessTools(currentTools as any);
+    }
+
     let currentSystemPrompt = systemPrompt;
     let latestToolResultsFallbackText = "";
 
@@ -419,7 +462,90 @@ export async function handleInvoke(
 
       let result: any;
 
-      if (useStreaming) {
+      if (
+        isHeadlessMode() &&
+        providerId === "transformers_js_local" &&
+        _nodeTransformersCompletionExecutor
+      ) {
+        if (useStreaming) {
+          post({
+            payload: { groupId },
+            type: "streaming-start",
+          });
+        }
+
+        const rawResult = await _nodeTransformersCompletionExecutor({
+          modelId: model,
+          messages: payloadMessages,
+          maxTokens: safeMaxTokens,
+          abortSignal,
+          verbose: Boolean(payload.verbose),
+          onToken: (text: string) => {
+            if (useStreaming && text) {
+              post({
+                payload: { groupId, text },
+                type: "streaming-chunk",
+              });
+            }
+          },
+          onProgress: (info: any) => {
+            if (
+              info?.status === "progress" ||
+              info?.status === "progress_total"
+            ) {
+              let pct: number | null = null;
+              if (typeof info.progress === "number") {
+                const rawPct =
+                  info.progress <= 1 && info.progress > 0 && !info.total
+                    ? info.progress * 100
+                    : typeof info.loaded === "number" &&
+                        typeof info.total === "number" &&
+                        info.total > 0
+                      ? (info.loaded / info.total) * 100
+                      : info.progress;
+                pct = Math.max(0, Math.min(100, Math.round(rawPct)));
+              }
+              post({
+                payload: {
+                  groupId,
+                  label: "Model Progress",
+                  message: `${info.file || model}: ${pct !== null ? `${pct}%` : "loading..."}`,
+                },
+                type: "status",
+              });
+            }
+          },
+        });
+        result = parseResponse(typedProvider, rawResult);
+      } else if (
+        isHeadlessMode() &&
+        providerId === "llamafile" &&
+        _nodeLlamafileCompletionExecutor
+      ) {
+        if (useStreaming) {
+          post({
+            payload: { groupId },
+            type: "streaming-start",
+          });
+        }
+
+        const rawResult = await _nodeLlamafileCompletionExecutor({
+          model,
+          messages: payloadMessages,
+          maxTokens: safeMaxTokens,
+          abortSignal,
+          verbose: Boolean(payload.verbose),
+          onToken: (text: string) => {
+            if (useStreaming && text) {
+              post({
+                payload: { groupId, text },
+                type: "streaming-chunk",
+              });
+            }
+          },
+        });
+        result = parseResponse(typedProvider, rawResult);
+      } else if (useStreaming) {
         result = await callWithStreaming(
           providerId,
           typedProvider,

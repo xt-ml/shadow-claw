@@ -1101,4 +1101,290 @@ describe("handleInvoke.js", () => {
       payload: { groupId: "g1", text: "Cannot run tools right now." },
     });
   });
+
+  it("filters out BROWSER_ONLY_TOOLS in headless mode", async () => {
+    const { setHeadlessMode } = await import("../../config/headless.js");
+    setHeadlessMode(true);
+
+    try {
+      const payload: any = {
+        groupId: "server:main",
+        messages: [{ role: "user", content: "what tools" }],
+        provider: "p1",
+        enabledTools: [
+          { name: "read_file", description: "Read files" },
+          { name: "render_component", description: "Render component" },
+          { name: "clear_chat", description: "Clear chat" },
+          { name: "bash", description: "Bash" },
+        ],
+      };
+
+      (mockGetProvider as any).mockReturnValue({
+        name: "P1",
+        baseUrl: "http://p1",
+        format: "openai",
+      });
+      (mockFormatRequest as any).mockReturnValue({ body: "req" });
+      (mockParseResponse as any).mockReturnValueOnce({
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: "Here are the tools" }],
+      });
+
+      (global as any).fetch = (jest.fn() as any).mockResolvedValue({
+        ok: true,
+        json: (jest.fn() as any).mockResolvedValue({}),
+      });
+
+      await handleInvoke({} as any, payload);
+
+      // Verify formatRequest was called with browser-only tools filtered out
+      expect(mockFormatRequest).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        [
+          { name: "read_file", description: "Read files" },
+          { name: "bash", description: "Bash" },
+        ],
+        expect.anything(),
+      );
+    } finally {
+      const { setHeadlessMode } = await import("../../config/headless.js");
+      setHeadlessMode(false);
+    }
+  });
+
+  it("executes in-process node transformers completion in headless mode for transformers_js_local", async () => {
+    const { setHeadlessMode } = await import("../../config/headless.js");
+    const { setTransformersServiceForTests } =
+      await import("../tools/node-transformers-executor.js");
+
+    setHeadlessMode(true);
+    const mockService = {
+      runChatCompletion: jest.fn(async () => ({
+        text: "Direct node result",
+        promptTokens: 10,
+        completionTokens: 5,
+      })),
+    };
+    setTransformersServiceForTests(mockService as any);
+
+    try {
+      const payload: any = {
+        groupId: "server:main",
+        messages: [{ role: "user", content: "test in process" }],
+        provider: "transformers_js_local",
+        model: "onnx-community/Qwen3-0.6B-ONNX",
+      };
+
+      (mockGetProvider as any).mockReturnValue({
+        id: "transformers_js_local",
+        name: "Transformers.js (Local Proxy)",
+        baseUrl: "http://localhost:8888/v1/chat/completions",
+        format: "openai",
+      });
+
+      (mockParseResponse as any).mockImplementation((_p: any, raw: any) => ({
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: raw.choices[0].message.content }],
+      }));
+
+      // Ensure fetch is NOT called
+      const fetchSpy = jest.fn();
+      (global as any).fetch = fetchSpy;
+
+      await handleInvoke({} as any, payload);
+
+      expect(mockService.runChatCompletion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelId: "onnx-community/Qwen3-0.6B-ONNX",
+        }),
+      );
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "response",
+        payload: { groupId: "server:main", text: "Direct node result" },
+      });
+    } finally {
+      setHeadlessMode(false);
+      setTransformersServiceForTests(null);
+      const { setNodeTransformersCompletionExecutor } =
+        await import("./handleInvoke.js");
+      setNodeTransformersCompletionExecutor(null);
+    }
+  });
+
+  it("streams in-process node transformers completion in headless mode when streaming is enabled", async () => {
+    const { setHeadlessMode } = await import("../../config/headless.js");
+    const { setTransformersServiceForTests } =
+      await import("../tools/node-transformers-executor.js");
+
+    setHeadlessMode(true);
+    const mockService = {
+      runChatCompletion: jest.fn(async (opts: any) => {
+        if (opts.onProgress) {
+          opts.onProgress({
+            status: "progress",
+            progress: 0.5,
+            file: "model.onnx",
+          });
+        }
+        if (opts.onToken) {
+          opts.onToken("Hello");
+          opts.onToken(" world");
+        }
+        return {
+          text: "Hello world",
+          promptTokens: 5,
+          completionTokens: 2,
+        };
+      }),
+    };
+    setTransformersServiceForTests(mockService as any);
+
+    try {
+      const payload: any = {
+        groupId: "server:main",
+        messages: [{ role: "user", content: "stream test" }],
+        provider: "transformers_js_local",
+        model: "onnx-community/Qwen3-0.6B-ONNX",
+        streaming: true,
+      };
+
+      (mockGetProvider as any).mockReturnValue({
+        id: "transformers_js_local",
+        name: "Transformers.js (Local Proxy)",
+        baseUrl: "http://localhost:8888/v1/chat/completions",
+        format: "openai",
+        supportsStreaming: true,
+      });
+
+      (mockParseResponse as any).mockImplementation((_p: any, raw: any) => ({
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: raw.choices[0].message.content }],
+      }));
+
+      await handleInvoke({} as any, payload);
+
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "streaming-start",
+        payload: { groupId: "server:main" },
+      });
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "streaming-chunk",
+        payload: { groupId: "server:main", text: "Hello" },
+      });
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "streaming-chunk",
+        payload: { groupId: "server:main", text: " world" },
+      });
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "status",
+        payload: {
+          groupId: "server:main",
+          label: "Model Progress",
+          message: "model.onnx: 50%",
+        },
+      });
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "streaming-done",
+        payload: { groupId: "server:main", text: "Hello world" },
+      });
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "response",
+        payload: { groupId: "server:main", text: "Hello world" },
+      });
+    } finally {
+      setHeadlessMode(false);
+      setTransformersServiceForTests(null);
+      const { setNodeTransformersCompletionExecutor } =
+        await import("./handleInvoke.js");
+      setNodeTransformersCompletionExecutor(null);
+    }
+  });
+
+  it("accurately formats Transformers.js 0..100 percentages without exceeding 100%", async () => {
+    const { setHeadlessMode } = await import("../../config/headless.js");
+    const { setTransformersServiceForTests } =
+      await import("../tools/node-transformers-executor.js");
+
+    setHeadlessMode(true);
+    const mockService = {
+      runChatCompletion: jest.fn(async (opts: any) => {
+        if (opts.onProgress) {
+          opts.onProgress({
+            status: "progress",
+            progress: 93.39,
+            file: "tokenizer.json",
+          });
+          opts.onProgress({
+            status: "progress",
+            progress: 100,
+            file: "tokenizer.json",
+          });
+          opts.onProgress({ status: "progress_total", progress: 100 });
+        }
+        return {
+          text: "Done",
+          promptTokens: 2,
+          completionTokens: 1,
+        };
+      }),
+    };
+    setTransformersServiceForTests(mockService as any);
+
+    try {
+      const payload: any = {
+        groupId: "server:main",
+        messages: [{ role: "user", content: "test pct" }],
+        provider: "transformers_js_local",
+        model: "onnx-community/Qwen3-0.6B-ONNX",
+        streaming: false,
+      };
+
+      (mockGetProvider as any).mockReturnValue({
+        id: "transformers_js_local",
+        name: "Transformers.js (Local Proxy)",
+        baseUrl: "http://localhost:8888/v1/chat/completions",
+        format: "openai",
+      });
+
+      (mockParseResponse as any).mockImplementation((_p: any, raw: any) => ({
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: raw.choices[0].message.content }],
+      }));
+
+      await handleInvoke({} as any, payload);
+
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "status",
+        payload: {
+          groupId: "server:main",
+          label: "Model Progress",
+          message: "tokenizer.json: 93%",
+        },
+      });
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "status",
+        payload: {
+          groupId: "server:main",
+          label: "Model Progress",
+          message: "tokenizer.json: 100%",
+        },
+      });
+      expect(mockPost).toHaveBeenCalledWith({
+        type: "status",
+        payload: {
+          groupId: "server:main",
+          label: "Model Progress",
+          message: "onnx-community/Qwen3-0.6B-ONNX: 100%",
+        },
+      });
+    } finally {
+      setHeadlessMode(false);
+      setTransformersServiceForTests(null);
+      const { setNodeTransformersCompletionExecutor } =
+        await import("./handleInvoke.js");
+      setNodeTransformersCompletionExecutor(null);
+    }
+  });
 });

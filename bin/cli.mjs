@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import "./utils/suppress-warnings.mjs";
+
 import { exec } from "node:child_process";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -21,6 +23,40 @@ import { resolveCacheDir } from "./utils/resolve-cache-dir.mjs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const toolchainRoot = path.resolve(__dirname, "..");
+
+const terminationCleanups = new Set();
+export function registerTerminationCleanup(fn) {
+  if (typeof fn === "function") {
+    terminationCleanups.add(fn);
+    return () => terminationCleanups.delete(fn);
+  }
+  return () => {};
+}
+
+let isTerminating = false;
+const handleTermination = (signal, exitCode) => {
+  if (isTerminating) {
+    process.exit(exitCode);
+  }
+  isTerminating = true;
+  for (const cleanup of terminationCleanups) {
+    try {
+      cleanup(signal);
+    } catch {}
+  }
+  process.stderr.write(`\nProcess interrupted (${signal}).\n`);
+  process.exit(exitCode);
+};
+
+process.on("SIGINT", () => handleTermination("SIGINT", 130));
+process.on("SIGTERM", () => handleTermination("SIGTERM", 143));
+process.on("exit", () => {
+  for (const cleanup of terminationCleanups) {
+    try {
+      cleanup("exit");
+    } catch {}
+  }
+});
 
 async function getPackageVersion() {
   try {
@@ -1046,6 +1082,90 @@ program
       console.error("Failed to generate skills index:", err);
       process.exit(1);
     }
+  });
+
+// ---------------------------------------------------------------------------
+// HEADLESS AGENT COMMANDS
+// ---------------------------------------------------------------------------
+program.commandsGroup("Headless Agent:");
+
+program
+  .command("agent [action] [args...]")
+  .description(
+    "Run the headless CLI agent (init | model | skills | tools | tool | skill | run)",
+  )
+  .optionsGroup("Agent Options:")
+  .option("--workspace <dir>", "Workspace directory (default: .cache)")
+  .option("--database-dir <dir>", "Directory where SQLite databases are stored")
+  .option("--cache-dir <dir>", "Custom cache directory for databases and logs")
+  .option(
+    "--tmp, --temp",
+    "Store cache, token, and databases in OS temporary directory",
+  )
+  .option(
+    "-y, --yes",
+    "Skip interactive cache directory prompt and accept defaults",
+  )
+  .option("--group <groupId>", "Conversation group ID", "server:main")
+  .option("--provider <provider>", "LLM provider ID")
+  .option("--model <model>", "Model name")
+  .option(
+    "--download",
+    "Prewarm and download the model during agent init or execution",
+    false,
+  )
+  .option("--api-key <key>", "API key")
+  .option("-v, --verbose", "Enable verbose execution logging", false)
+  .option(
+    "-o, --output <file>",
+    "Write command output to a file instead of stdout",
+  )
+  .option(
+    "--stream",
+    "Stream response tokens to stdout as they arrive (default: true)",
+    true,
+  )
+  .option("--no-stream", "Disable streaming response tokens to stdout")
+  .option(
+    "--progress",
+    "Show progress bar during model downloads (default: true)",
+    true,
+  )
+  .option("--no-progress", "Disable download progress bar")
+  .option("--system-prompt <text>", "Override system prompt with inline text")
+  .option(
+    "--system-prompt-file <file>",
+    "Load system prompt from a text or markdown file",
+  )
+  .option(
+    "--tools <tools>",
+    "Comma-separated list of tools to enable (e.g. bash,read_file)",
+  )
+  .option(
+    "--tools-profile <name>",
+    "Tools profile to activate (e.g. __builtin_default)",
+  )
+  .option(
+    "-r, --remote",
+    "List or search available models from Hugging Face onnx-community repository",
+    false,
+  )
+  .option(
+    "--huggingface, --hf",
+    "Alias for --remote to query Hugging Face",
+    false,
+  )
+  .option("--query <query>", "Filter models by search query")
+  .option("-q, --quiet", "Suppress all non-error output", false)
+  .action(async (action, args, options) => {
+    try {
+      const { register } = await import("node:module");
+      if (typeof register === "function") {
+        register("./utils/ts-loader.mjs", import.meta.url);
+      }
+    } catch {}
+    const { runAgentCommand } = await import("./commands/agent.mjs");
+    await runAgentCommand(action, args, options);
   });
 
 // ---------------------------------------------------------------------------

@@ -59,6 +59,13 @@ export class ShadowClawToast extends ShadowClawElement {
     return "i";
   }
 
+  show = (
+    message: string,
+    options?: import("../../stores/toast.js").ToastOptions,
+  ): number => {
+    return toastStore.show(message, options);
+  };
+
   async dismissWithAnimation(toastId: number) {
     if (this.exitingToasts.has(toastId)) {
       return;
@@ -177,13 +184,6 @@ export class ShadowClawToast extends ShadowClawElement {
       container.appendChild(toastEl);
     });
   }
-
-  show = (
-    message: string,
-    options?: import("../../stores/toast.js").ToastOptions,
-  ): number => {
-    return toastStore.show(message, options);
-  };
 }
 
 if (!customElements.get(elementName)) {

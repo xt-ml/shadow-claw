@@ -251,37 +251,6 @@ export class ShadowClawStorage extends ShadowClawElement {
   }
 
   /**
-   * Handle toggling unique ID prefix for uploaded files.
-   */
-  async onUploadAppendUlidToggle(enabled: boolean) {
-    if (!this.db) {
-      return;
-    }
-
-    try {
-      const { setConfig } = await import("../../../db/setConfig.js");
-      await setConfig(
-        this.db,
-        CONFIG_KEYS.FILES_UPLOAD_APPEND_ULID,
-        enabled ? "true" : "false",
-      );
-
-      showSuccess(
-        enabled
-          ? "Unique ID prefix on file upload enabled"
-          : "Unique ID prefix on file upload disabled",
-        2500,
-      );
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError(
-        "Error saving unique ID file upload setting: " + errorMsg,
-        6000,
-      );
-    }
-  }
-
-  /**
    * Handle resetting storage directory.
    */
   async handleResetStorageDir() {
@@ -310,6 +279,37 @@ export class ShadowClawStorage extends ShadowClawElement {
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       showError(`Failed to reset storage location: ${errorMsg}`, 6000);
+    }
+  }
+
+  /**
+   * Handle toggling unique ID prefix for uploaded files.
+   */
+  async onUploadAppendUlidToggle(enabled: boolean) {
+    if (!this.db) {
+      return;
+    }
+
+    try {
+      const { setConfig } = await import("../../../db/setConfig.js");
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.FILES_UPLOAD_APPEND_ULID,
+        enabled ? "true" : "false",
+      );
+
+      showSuccess(
+        enabled
+          ? "Unique ID prefix on file upload enabled"
+          : "Unique ID prefix on file upload disabled",
+        2500,
+      );
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError(
+        "Error saving unique ID file upload setting: " + errorMsg,
+        6000,
+      );
     }
   }
 

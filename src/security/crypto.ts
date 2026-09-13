@@ -1,5 +1,3 @@
-import type { ShadowClawDatabase } from "../db/db.js";
-
 /**
  * ShadowClaw — Web Crypto helpers for API key encryption
  *
@@ -15,7 +13,7 @@ const IV_LENGTH = 12;
 /**
  * Open the keystore database
  */
-function openKeyStore(): Promise<ShadowClawDatabase> {
+function openKeyStore(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(KEYSTORE_DB, 1);
     req.onupgradeneeded = () => {
@@ -30,7 +28,7 @@ function openKeyStore(): Promise<ShadowClawDatabase> {
  * Retrieve the non-extractable AES-256-GCM key, creating it on first use.
  */
 async function getOrCreateKey(): Promise<CryptoKey | null> {
-  const db: ShadowClawDatabase = await openKeyStore();
+  const db: IDBDatabase = await openKeyStore();
 
   if (!db) {
     return null;

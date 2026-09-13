@@ -6,59 +6,65 @@
 
 ## What is ShadowClaw?
 
-ShadowClaw is a **browser-native AI assistant** — a fully functional agent runtime whose orchestration and tool-use loop run client-side, with AI inference routing to remote APIs, local servers, or in-browser models depending on your configuration. It runs as a PWA in any modern browser, as a native desktop app via Electron, as a standalone Node.js server, and is driven via the `shadow-claw` CLI.
+ShadowClaw is a **dual-runtime AI assistant** combining a rich, interactive frontend client with a first-class, host-native server-side agent participant:
+
+1. **Interactive Frontend Client (Browser & Electron)**: Runs the complete orchestration state machine, context management, and tool-use loop off the main thread in a dedicated Web Worker, with UI reactivity powered by native Web Components and TC39 Signals, and sandboxed storage across OPFS and IndexedDB.
+2. **Headless Server-Side Client (`shadow-claw agent`)**: Runs the exact same reasoning loop, declarative skills, and tool chain pipelines natively on Node.js—backed by SQLite (`node:sqlite`), native filesystem handles (`NodeFsDirectoryHandle`), and direct host OS shell execution (`node:child_process`).
+
+Inference routes across in-browser models (Prompt API with polyfill fallbacks, LiteRT WebGPU), local servers (Ollama, Llamafile, Transformers.js with automatic Hugging Face downloading), and cloud providers (defaulting to OpenRouter with `openrouter/free`).
 
 **Stack at a glance:**
 
-| Layer         | Technology                                                          |
-| ------------- | ------------------------------------------------------------------- |
-| Language      | TypeScript (`.ts`) — all source files                               |
-| Build         | Rolldown (frontend, worker, service workers, server, Electron)      |
-| UI            | Native Web Components + Shadow DOM                                  |
-| Reactivity    | TC39 Signals via `signal-polyfill`                                  |
-| State         | IndexedDB (messages, config, tasks, sessions)                       |
-| Files         | OPFS + File System Access API                                       |
-| Agent Runtime | Web Worker (`src/worker/worker.ts` → `dist/public/agent.worker.js`) |
-| Shell         | `just-bash` POSIX emulator + optional WebVM (v86)                   |
-| Git           | isomorphic-git + native filesystem handles (in-browser)             |
-| PWA           | Service Worker (Workbox) + Web Push                                 |
-| Server        | Express (`src/server/` package)                                     |
-| Desktop       | Electron (`electron/main.ts` → `dist/electron/main.cjs`)            |
-| Testing       | Jest (unit, `*.test.ts`) + Playwright (E2E, `e2e/*.test.ts`)        |
+| Layer         | Technology                                                                                                 |
+| ------------- | ---------------------------------------------------------------------------------------------------------- |
+| Language      | TypeScript (`.ts`) — all source files                                                                      |
+| Build         | Rolldown (frontend, worker, service workers, server, headless agent, Electron)                             |
+| UI            | Native Web Components + Shadow DOM                                                                         |
+| Reactivity    | TC39 Signals via `signal-polyfill`                                                                         |
+| State         | IndexedDB (browser) / SQLite via `node:sqlite` (headless CLI)                                              |
+| Files         | OPFS (browser) / `NodeFsDirectoryHandle` via `node:fs` (headless CLI)                                      |
+| Agent Runtime | Web Worker (`dist/public/agent.worker.js`) / Node.js headless agent participant (`dist/headless-agent.js`) |
+| Shell         | `just-bash` POSIX emulator + WebVM (v86) in browser; native `node:child_process` in headless CLI           |
+| Git           | isomorphic-git + native filesystem handles                                                                 |
+| PWA           | Service Worker (Workbox) + Web Push                                                                        |
+| Server        | Express (`src/server/` package)                                                                            |
+| Desktop       | Electron (`electron/main.ts` → `dist/electron/main.cjs`)                                                   |
+| Testing       | Jest (unit, `*.test.ts`, headless tests) + Playwright (E2E, `e2e/*.test.ts`)                               |
 
 ## Architecture Diagram
 
 ```mermaid
 graph TD
-  User["👤 User"] --> UI["<shadow-claw> Web Component<br>Chat · Files · Tasks · Settings"]
+  User["👤 User / Terminal"] --> Runtimes["ShadowClaw Runtimes"]
+  Runtimes --> UI["Browser / Electron Client<br>Web Components · Signals"]
+  Runtimes --> CLI["Headless CLI Client<br>shadow-claw agent"]
+
   UI --> Orchestrator["Orchestrator<br>(main thread, orchestrator.ts)"]
-  Orchestrator --> MessageQueue["Message Queue<br>FIFO per group"]
-  Orchestrator --> StateFSM["State Machine<br>idle → thinking → responding"]
-  Orchestrator --> TaskScheduler["Task Scheduler<br>cron expressions"]
-  Orchestrator --> Router["Router<br>channel dispatch<br>via ChannelRegistry"]
-  MessageQueue --> Worker["Agent Worker<br>(Web Worker, worker.ts)"]
-  Worker --> Provider["☁️ Provider API<br>OpenRouter / Bedrock / Gemini / Prompt API"]
-  Worker --> Capabilities["Model Registry & Capabilities<br>MIME-aware routing"]
-  Worker --> ToolExec["Tool Execution<br>bash · js · files · fetch · git"]
-  ToolExec --> JSShell["JS Shell Emulator<br>just-bash AST · pipes · redirects"]
-  ToolExec --> WebVM["v86 Alpine Linux VM<br>(optional, WASM)"]
-  Orchestrator --> IndexedDB["IndexedDB<br>messages · sessions · tasks · config"]
-  Orchestrator --> OPFS["OPFS / Local Folder<br>per-group workspace<br>MEMORY.md"]
-  UI --> ServiceWorker["Service Worker<br>PWA · offline cache · push"]
-  ServiceWorker --> ServerScheduler["Server Task Scheduler<br>SQLite · cron · push triggers"]
+  Orchestrator --> Worker["Agent Worker<br>(Web Worker, worker.ts)"]
+
+  CLI --> HeadlessAgent["Headless Agent Participant<br>(Node.js, headless-agent.ts)"]
+
+  Worker --> CoreEngine["Shared Tool & Reasoning Core<br>handleInvoke · executeTool · executeToolChain"]
+  HeadlessAgent --> CoreEngine
+
+  CoreEngine --> Providers["☁️ Providers & Local Engines<br>OpenRouter · Hugging Face · Ollama · Bedrock · Prompt API"]
+  CoreEngine --> Tools["Tool Execution Matrix<br>Files · Git · Bash · Tasks · Fetch · MCP"]
+
+  Worker --> BrowserStorage["Browser Storage: IndexedDB + OPFS<br>br:main"]
+  HeadlessAgent --> ServerStorage["Server Storage: SQLite + NodeFs<br>server:main"]
 ```
 
 ## Design Philosophy
 
-### 1. Browser-native first
+### 1. Dual runtime with browser-native frontend excellence
 
-The AI runtime and UI are built on browser-native technology regardless of deployment target. The Express server provides a suite of backend services including:
+The frontend UI and client-side agent runtime are built on browser-native technology (Web Components, TC39 Signals, Web Workers, OPFS, IndexedDB). In parallel, the headless agent participant (`shadow-claw agent`) extends the same core prompt assembly, skill parsing, and tool dispatch natively to Node.js, SQLite, and real host filesystems. The Express server provides a suite of backend services including:
 
 - CORS proxying for LLM providers (Bedrock, Vertex AI, Gemini, etc.)
 - Web Push notification delivery and VAPID management
 - Server-side task scheduling (SQLite-backed, fires when no tab is open)
 - Static file serving and SPA routing
-- Transformers.js and Llamafile local model runtimes
+- Transformers.js and Llamafile local model runtimes with on-demand Hugging Face model downloading
 
 ### 2. TypeScript everywhere, Rolldown for bundling
 

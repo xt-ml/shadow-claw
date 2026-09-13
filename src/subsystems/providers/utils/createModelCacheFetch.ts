@@ -4,8 +4,8 @@ import { loadModelStream } from "./loadModelStream.js";
 import { readPartialMeta } from "./readPartialMeta.js";
 import {
   DEFAULT_MODEL_CACHE_NAME,
-  ModelCacheOptions,
-  ModelCacheStreamProgressCallback,
+  type ModelCacheOptions,
+  type ModelCacheStreamProgressCallback,
 } from "./types.js";
 
 let activeModelCacheProgressHook: ModelCacheStreamProgressCallback | null =

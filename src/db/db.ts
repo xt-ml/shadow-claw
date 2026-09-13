@@ -37,3 +37,10 @@ export function setDB(db: ShadowClawDatabase): void {
     dbResolve = null;
   }
 }
+
+/**
+ * Reset the database instance (useful in tests and headless session resets).
+ */
+export function resetDB(): void {
+  shadowAgentDatabase = null;
+}

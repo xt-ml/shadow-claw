@@ -51,6 +51,11 @@ describe("LlamafileManagerService", () => {
 
       const resolved = await service.resolveBinary("model1");
       expect(resolved.fileName).toBe("model1.llamafile");
+
+      const resolvedWithPrefix = await service.resolveBinary(
+        "mozilla-ai/model1.llamafile",
+      );
+      expect(resolvedWithPrefix.fileName).toBe("model1.llamafile");
     });
 
     it("throws error if model is not found", async () => {
@@ -415,6 +420,61 @@ describe("LlamafileManagerService", () => {
 
       expect(res.status).toHaveBeenCalledWith(502);
       expect(res.send).toHaveBeenCalledWith("Bad Gateway");
+    });
+
+    it("rejects immediately if request is already destroyed or aborted before spawn", async () => {
+      statMock.mockResolvedValue({ isDirectory: () => true });
+      readdirMock.mockResolvedValue([
+        { name: "model1.llamafile", isFile: () => true },
+      ]);
+      accessMock.mockResolvedValue(undefined);
+
+      const service = await getService();
+      const mockReq: any = new EventEmitter();
+      mockReq.destroyed = true;
+      mockReq.headers = {};
+      mockReq.socket = new EventEmitter();
+
+      const mockRes: any = new EventEmitter();
+
+      await expect(
+        service.invokeCli(
+          mockReq,
+          mockRes,
+          {
+            model: "model1",
+            messages: [{ role: "user", content: "hello" }],
+          },
+          { model: "model1", offline: false },
+          false,
+        ),
+      ).rejects.toThrow(/already closed or aborted/);
+
+      expect(spawnMock).not.toHaveBeenCalled();
+    });
+
+    it("terminates all active processes and requests with terminateAll()", async () => {
+      const { cleanupAllLlamafileProcesses, killChildProcessSync } =
+        await import("./llamafile-manager.js");
+
+      const killSpy = jest
+        .spyOn(process, "kill")
+        .mockImplementation(() => true);
+
+      const fakeChild: any = new EventEmitter();
+      fakeChild.pid = 9999;
+      fakeChild.exitCode = null;
+      fakeChild.signalCode = null;
+      fakeChild.killed = false;
+
+      // Test killChildProcessSync
+      killChildProcessSync(fakeChild, true);
+      expect(killSpy).toHaveBeenCalledWith(-9999, "SIGKILL");
+      expect(killSpy).toHaveBeenCalledWith(9999, "SIGKILL");
+
+      cleanupAllLlamafileProcesses();
+
+      killSpy.mockRestore();
     });
   });
 });

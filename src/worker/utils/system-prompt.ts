@@ -1,4 +1,5 @@
 import { ASSISTANT_NAME } from "../../config/config.js";
+import { isHeadlessMode, filterHeadlessTools } from "../../config/headless.js";
 import { TOOL_DEFINITIONS } from "../../subsystems/tools/tools.js";
 import type { ToolDefinition } from "../../subsystems/tools/types.js";
 import type { SkillRecord } from "../../subsystems/skills/types.js";
@@ -19,7 +20,8 @@ export function buildSystemPrompt(
   skills?: SkillRecord[],
   conversationContext?: ConversationContext,
 ): string {
-  const defs = tools || TOOL_DEFINITIONS;
+  const rawDefs = tools || TOOL_DEFINITIONS;
+  const defs = isHeadlessMode() ? filterHeadlessTools(rawDefs) : rawDefs;
   const hasTools = defs.length > 0;
   const toolNames = new Set(defs.map((t) => t.name));
   const has = (name: string) => toolNames.has(name);
@@ -33,8 +35,12 @@ export function buildSystemPrompt(
         .join("\n")
     : "- None. No tools are currently enabled.";
 
+  const roleDescription = isHeadlessMode()
+    ? `You are ${assistantName || ASSISTANT_NAME}, an AI assistant operating in a host-native headless environment.`
+    : `You are ${assistantName || ASSISTANT_NAME}, a personal AI assistant running in the client's browser.`;
+
   const parts = [
-    `You are ${assistantName || ASSISTANT_NAME}, a personal AI assistant running in the client's browser.`,
+    roleDescription,
     "",
     "You have access to the following tools:",
     "",
@@ -57,7 +63,9 @@ export function buildSystemPrompt(
   if (conversationContext?.groupId) {
     const gid = conversationContext.groupId;
     let channelDescription = `Local browser conversation (groupId: ${gid})`;
-    if (gid.startsWith("peer:")) {
+    if (gid.startsWith("server:")) {
+      channelDescription = `Host-native headless agent session (groupId: ${gid})`;
+    } else if (gid.startsWith("peer:")) {
       channelDescription = `Direct PeerJS P2P session (groupId: ${gid})`;
     } else if (gid.startsWith("room:")) {
       channelDescription = `PeerJS Multi-party Room session (groupId: ${gid})`;

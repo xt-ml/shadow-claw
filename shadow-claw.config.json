@@ -15,7 +15,9 @@
     "themeColor": "#000000"
   },
   "sitemapPath": "sitemap.xml",
-  "assets": ["assets"],
+  "assets": [
+    "assets"
+  ],
   "sidebar": {
     "pagesHidden": false,
     "chatHidden": false,
@@ -26,13 +28,20 @@
   "settings": {
     "defaultToolsProfile": "__builtin_default"
   },
+  "agent": {
+    "defaultProvider": "transformers_js_local",
+    "defaultModel": "onnx-community/gemma-3-1b-it-ONNX-GQA"
+  },
   "customElements": {
     "allowedElements": [
       "block-garden",
       "block-garden-option",
       "block-garden-select"
     ],
-    "allowedDomains": ["kherrick.github.io", "cdn.jsdelivr.net"],
+    "allowedDomains": [
+      "kherrick.github.io",
+      "cdn.jsdelivr.net"
+    ],
     "scripts": [
       {
         "src": "https://kherrick.github.io/block-garden-knowledge-hub/.agents/scripts/main/block-garden-adapter.js",

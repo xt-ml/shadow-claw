@@ -2,7 +2,6 @@ import { getConfig } from "./getConfig.js";
 import { openDatabase } from "./openDatabase.js";
 import { migrateLegacyDatabase } from "./migrateLegacyDatabase.js";
 import { CONFIG_KEYS, LEGACY_DB_NAME } from "../config/config.js";
-import type { ShadowClawDatabase } from "./types.js";
 
 describe("migrateLegacyDatabase", () => {
   beforeEach(() => {
@@ -15,22 +14,20 @@ describe("migrateLegacyDatabase", () => {
 
   it("copies legacy IndexedDB records into new namespaced DB once", async () => {
     // 1. Setup legacy database named "shadowclaw"
-    const legacyDb: ShadowClawDatabase = await new Promise(
-      (resolve, reject) => {
-        const req = indexedDB.open(LEGACY_DB_NAME, 2);
-        req.onupgradeneeded = () => {
-          const db = req.result;
-          if (!db.objectStoreNames.contains("messages")) {
-            db.createObjectStore("messages", { keyPath: "id" });
-          }
-          if (!db.objectStoreNames.contains("config")) {
-            db.createObjectStore("config", { keyPath: "key" });
-          }
-        };
-        req.onsuccess = () => resolve(req.result);
-        req.onerror = () => reject(req.error);
-      },
-    );
+    const legacyDb: IDBDatabase = await new Promise((resolve, reject) => {
+      const req = indexedDB.open(LEGACY_DB_NAME, 2);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains("messages")) {
+          db.createObjectStore("messages", { keyPath: "id" });
+        }
+        if (!db.objectStoreNames.contains("config")) {
+          db.createObjectStore("config", { keyPath: "key" });
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
 
     // Populate legacy DB
     await new Promise<void>((resolve, reject) => {

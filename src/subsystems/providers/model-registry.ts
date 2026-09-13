@@ -1,4 +1,4 @@
-import { ProviderConfig } from "../../config/config.js";
+import type { ProviderConfig } from "../../config/config.js";
 
 export interface ModelMetadata {
   contextWindow: number;

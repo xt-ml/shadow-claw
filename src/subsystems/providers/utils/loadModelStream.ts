@@ -3,8 +3,8 @@ import { downloadModelToCache } from "./downloadModelToCache.js";
 import { readPartialMeta } from "./readPartialMeta.js";
 import {
   DEFAULT_MODEL_CACHE_NAME,
-  ModelCacheOptions,
-  ModelProgressCallback,
+  type ModelCacheOptions,
+  type ModelProgressCallback,
 } from "./types.js";
 
 /**

@@ -20,6 +20,7 @@ import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
 
 import type { ConfigEntryRecord } from "../../config/settings-backup.js";
 import type { Orchestrator } from "../../core/orchestrator/orchestrator.js";
+import { isSqliteDatabase } from "../../db/sqlite/types.js";
 import type { ShadowClawDatabase } from "../../db/types.js";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
@@ -533,9 +534,20 @@ export class ShadowClawSettings extends ShadowClawElement {
       throw new Error("Database is unavailable");
     }
 
+    if (isSqliteDatabase(this.db)) {
+      const raw = this.db.db;
+      const rows = (raw
+        .prepare("SELECT key, value FROM config ORDER BY key")
+        .all() ?? []) as any[];
+      return rows
+        .filter((row) => row && typeof row.key === "string")
+        .map((row) => ({ key: row.key, value: row.value }));
+    }
+
+    const idb = this.db as IDBDatabase;
     return await new Promise((resolve, reject) => {
       try {
-        const tx = this.db?.transaction("config", "readonly");
+        const tx = idb.transaction("config", "readonly");
         if (!tx) {
           reject(new Error("Failed to open read transaction"));
 
@@ -1175,9 +1187,27 @@ export class ShadowClawSettings extends ShadowClawElement {
       throw new Error("Database is unavailable");
     }
 
+    if (isSqliteDatabase(this.db)) {
+      const raw = this.db.db;
+      raw.prepare("DELETE FROM config").run();
+      const insertStmt = raw.prepare(
+        "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
+      );
+      for (const entry of entries) {
+        insertStmt.run(
+          entry.key,
+          typeof entry.value === "string"
+            ? entry.value
+            : JSON.stringify(entry.value),
+        );
+      }
+      return;
+    }
+
+    const idb = this.db as IDBDatabase;
     await new Promise<void>((resolve, reject) => {
       try {
-        const tx = this.db?.transaction("config", "readwrite");
+        const tx = idb.transaction("config", "readwrite");
         if (!tx) {
           reject(new Error("Failed to open write transaction"));
 

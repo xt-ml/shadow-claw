@@ -1,5 +1,5 @@
 import { chunkKey } from "./chunkKey.js";
-import { DEFAULT_MODEL_CACHE_NAME, ModelPartialMeta } from "./types.js";
+import { DEFAULT_MODEL_CACHE_NAME, type ModelPartialMeta } from "./types.js";
 
 /**
  * Return a ReadableStream that lazily reads all cached chunks in order,

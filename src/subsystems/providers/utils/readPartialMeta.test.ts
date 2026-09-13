@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 import { readPartialMeta } from "./readPartialMeta.js";
-import { DEFAULT_MODEL_CACHE_NAME, ModelPartialMeta } from "./types.js";
+import { DEFAULT_MODEL_CACHE_NAME, type ModelPartialMeta } from "./types.js";
 
 describe("readPartialMeta", () => {
   let originalCaches: any;

@@ -1,41 +1,46 @@
-# ShadowClaw E2E Test Architecture
+# ShadowClaw E2E & Integration Test Architecture
 
-End-to-end test suite for ShadowClaw using Playwright with the Page Object Model pattern.
+Comprehensive testing guide for ShadowClaw covering the **browser-native E2E test suite** (Playwright Page Object Model) and the **server-side headless agent integration tests** (Jest).
 
 ## Architecture Overview
 
-```text
+ShadowClaw features a **dual test architecture** tailored to its two runtime modes:
+
+1. **Browser E2E Test Suite (`e2e/`)**: Powered by Playwright using the Page Object Model (POM). Validates frontend user interfaces, Web Components, reactive signals, Web Worker orchestrator loops, sandboxed OPFS/IndexedDB storage, WebVM/just-bash shell emulation, and PWA/Electron workflows.
+2. **Server-Side Headless Agent & CLI Integration Tests (`bin/` & `src/`)**: Powered by Jest. Validates the host-native CLI agent participant (`shadow-claw agent run`), direct tool inspection and execution (`shadow-claw agent tools`, `shadow-claw agent tool`), SQLite database storage (`src/db/sqlite/`), Node filesystem handle abstraction (`src/storage/node-fs-handle.ts`), and headless tool capability execution (`src/worker/utils/executeTool.headless.test.ts`).
+
+### Browser E2E Directory Structure
+
 e2e/
-├── components/                    # Reusable component objects for UI regions
-│   ├── nav.component.ts           # Navigation between pages + settings, auth, and back to chat
-│   ├── message-input.component.ts # Message input field + send button
-│   ├── chat-actions.component.ts  # Chat actions (stop, clear, new conversation)
-│   ├── file-browser.component.ts  # File browser component
-│   └── conversations.component.ts # Conversations list and conversation-selection logic
-├── pages/                         # Page objects representing app views
-│   ├── app.page.ts                # Root app + navigation
-│   ├── chat.page.ts               # Chat interface
-│   ├── files.page.ts              # Files browser
-│   ├── tasks.page.ts              # Task scheduler
-│   └── settings.page.ts           # Settings panel
-├── shared/                        # Low-level utilities and helpers
-│   └── index.ts                   # DB helpers, constants, wait functions
-├── fixtures.ts                    # Shared test fixtures (app, chat, files, tasks, settings, conversations)
-├── *.test.ts                      # Test suites
-│   └── chat.test.ts               # Chat interface verification
-│   └── conversations.test.ts      # Conversation CRUD + delete-dialog keyboard accessibility
-│   └── files.test.ts              # File browser upload + file/folder creation operations
-│   └── navigation.test.ts         # App-level navigation and page switching
-│   └── settings.test.ts           # Settings persistence (max iterations, streaming, assistant name)
-│   └── streaming-chat.test.ts     # Chat flow with mock SSE streaming + non-streaming
-│   └── task-crud.test.ts          # Task CRUD (create, edit, toggle, delete)
-│   └── tasks.test.ts              # Task interface and toggle verification
-│   └── file-viewer.test.ts        # File viewer component integration coverage
-│   └── share-target.test.ts       # Web Share Target import flow
-│   └── orchestrator.test.ts       # System integration coverage
-│   └── storage.test.ts            # System integration coverage
-└── README.md                      # This file
-```
+├── components/ # Reusable component objects for UI regions
+│ ├── nav.component.ts # Navigation between pages + settings, auth, and back to chat
+│ ├── message-input.component.ts # Message input field + send button
+│ ├── chat-actions.component.ts # Chat actions (stop, clear, new conversation)
+│ ├── file-browser.component.ts # File browser component
+│ └── conversations.component.ts # Conversations list and conversation-selection logic
+├── pages/ # Page objects representing app views
+│ ├── app.page.ts # Root app + navigation
+│ ├── chat.page.ts # Chat interface
+│ ├── files.page.ts # Files browser
+│ ├── tasks.page.ts # Task scheduler
+│ └── settings.page.ts # Settings panel
+├── shared/ # Low-level utilities and helpers
+│ └── index.ts # DB helpers, constants, wait functions
+├── fixtures.ts # Shared test fixtures (app, chat, files, tasks, settings, conversations)
+├── \*.test.ts # Test suites
+│ └── chat.test.ts # Chat interface verification
+│ └── conversations.test.ts # Conversation CRUD + delete-dialog keyboard accessibility
+│ └── files.test.ts # File browser upload + file/folder creation operations
+│ └── navigation.test.ts # App-level navigation and page switching
+│ └── settings.test.ts # Settings persistence (max iterations, streaming, assistant name)
+│ └── streaming-chat.test.ts # Chat flow with mock SSE streaming + non-streaming
+│ └── task-crud.test.ts # Task CRUD (create, edit, toggle, delete)
+│ └── tasks.test.ts # Task interface and toggle verification
+│ └── file-viewer.test.ts # File viewer component integration coverage
+│ └── share-target.test.ts # Web Share Target import flow
+│ └── orchestrator.test.ts # System integration coverage
+│ └── storage.test.ts # System integration coverage
+└── README.md # This file
 
 ## Security and Test Bridge
 
@@ -456,17 +461,22 @@ npm run e2e -- --project=chromium
 npm run e2e -- --reporter=html
 ```
 
-### Build & CLI Regression Tests
+### Build, CLI & Headless Agent Regression Tests
 
-The build, CLI, and prerender test suites live under `bin/` and run through the
-project Jest configuration. The build integration test covers both the normal
-`pages/` layout and a project with no `pages/` directory (which publishes the
-built-in `index.html` and `MEMORY.md` defaults), as well as the unified `shadow-claw`
-CLI tool commands (`build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send`, `backup`, `tasks`, `mcp`, `skills:index`, `webrtc`, `peer-id`, `--version`).
+The build, CLI, prerender, and headless agent test suites live under `bin/` and `src/` and run through the project Jest configuration. Coverage includes:
+
+- **CLI Commands & Utilities**: `build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send`, `backup`, `tasks`, `mcp`, `skills:index`, `webrtc`, `peer-id`, `--version`, `agent` (`bin/commands/agent.test.mjs`), and `agent model` (`bin/commands/agent-models.test.mjs`).
+- **Model Download & Progress Bar Utilities**: Hugging Face ONNX model querying, downloading, and local caching (`bin/utils/local-models.test.mjs`), terminal progress bar (`bin/utils/progress-bar.test.mjs`), and cache directory resolution (`bin/utils/resolve-cache-dir.test.mjs`).
+- **Headless Agent Subsystems**: SQLite database implementation (`src/db/sqlite/*.test.ts`), Node.js filesystem directory handle polyfill (`src/storage/node-fs-handle.test.ts`), headless tool execution and capability matrix (`src/worker/utils/executeTool.headless.test.ts`, `src/worker/tools/builtin-ai/builtin-ai.headless.test.ts`), and default provider/model configuration (`src/config/headless.test.ts`).
+- **Host-Native Offline Model Executors**: In-process Node.js Transformers.js execution (`src/worker/tools/node-transformers-executor.test.ts`, `src/server/services/transformers-runtime.test.ts`), Llamafile manager & executor (`src/worker/tools/node-llamafile-executor.test.ts`, `src/server/services/llamafile-manager.test.ts`), and agent invocation loop (`src/worker/utils/handleInvoke.test.ts`).
 
 ```bash
 NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
   npx jest --runInBand bin/cli.test.mjs \
+  bin/commands/agent.test.mjs \
+  bin/commands/agent-models.test.mjs \
+  bin/utils/local-models.test.mjs \
+  bin/utils/progress-bar.test.mjs \
   bin/commands/peer-id.test.mjs \
   bin/commands/mcp.test.mjs \
   bin/commands/skills-index.test.mjs \
@@ -474,7 +484,14 @@ NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
   bin/utils/webrtc-control-client.test.mjs \
   bin/build/build.test.mjs \
   bin/prerender-dsd-shell/prerender-dsd-shell.test.mjs \
-  bin/prerender-pretty-paths/prerender-pretty-paths.test.mjs
+  bin/prerender-pretty-paths/prerender-pretty-paths.test.mjs \
+  src/db/sqlite/openSqliteDatabase.test.ts \
+  src/storage/node-fs-handle.test.ts \
+  src/worker/utils/executeTool.headless.test.ts \
+  src/worker/tools/node-transformers-executor.test.ts \
+  src/worker/tools/node-llamafile-executor.test.ts \
+  src/worker/utils/handleInvoke.test.ts \
+  src/config/headless.test.ts
 ```
 
 ## Debugging Tips

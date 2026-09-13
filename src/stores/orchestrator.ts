@@ -2651,9 +2651,45 @@ export class OrchestratorStore {
       }
 
       if (config.settings && typeof config.settings === "object") {
-        const { assistantName } = config.settings;
+        const {
+          assistantName,
+          defaultProvider,
+          provider,
+          defaultModel,
+          model,
+        } = config.settings;
         if (assistantName && typeof assistantName === "string") {
           await setConfig(db, CONFIG_KEYS.ASSISTANT_NAME, assistantName);
+        }
+
+        const configuredProvider = defaultProvider ?? provider;
+        if (
+          typeof configuredProvider === "string" &&
+          configuredProvider.trim().length > 0
+        ) {
+          const currentProvider = await getConfig(db, CONFIG_KEYS.PROVIDER);
+          if (!currentProvider) {
+            const providerVal = configuredProvider.trim();
+            await setConfig(db, CONFIG_KEYS.PROVIDER, providerVal);
+            if (this.orchestrator) {
+              this.orchestrator.provider = providerVal;
+            }
+          }
+        }
+
+        const configuredModel = defaultModel ?? model;
+        if (
+          typeof configuredModel === "string" &&
+          configuredModel.trim().length > 0
+        ) {
+          const currentModel = await getConfig(db, CONFIG_KEYS.MODEL);
+          if (!currentModel) {
+            const modelVal = configuredModel.trim();
+            await setConfig(db, CONFIG_KEYS.MODEL, modelVal);
+            if (this.orchestrator) {
+              this.orchestrator.model = modelVal;
+            }
+          }
         }
         const allowInternet =
           config.settings.internetAccess ??

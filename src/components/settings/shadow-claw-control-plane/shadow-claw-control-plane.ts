@@ -123,62 +123,6 @@ export class ShadowClawControlPlane extends ShadowClawElement {
     });
   }
 
-  async render() {
-    const root = this.shadowRoot;
-    if (!root) {
-      return;
-    }
-
-    const cpEnabledToggle = root.querySelector(
-      '[data-setting="control-plane-enabled-toggle"]',
-    ) as HTMLInputElement | null;
-    if (cpEnabledToggle && this.db) {
-      try {
-        const { isControlPlaneEnabled } =
-          await import("../../../core/utils/initControlPlane.js");
-        cpEnabledToggle.checked = await isControlPlaneEnabled(this.db);
-      } catch (_) {
-        cpEnabledToggle.checked = DEFAULT_CONTROL_PLANE_ENABLED;
-      }
-    }
-
-    const cpUrlInput = root.querySelector(
-      '[data-setting="control-plane-url-input"]',
-    ) as HTMLInputElement | null;
-    if (cpUrlInput && this.db) {
-      try {
-        const stored = await getConfig(this.db, CONFIG_KEYS.CONTROL_PLANE_URL);
-        cpUrlInput.value = stored || "";
-      } catch (_) {
-        cpUrlInput.value = "";
-      }
-    }
-
-    const transportSelect = root.querySelector(
-      '[data-setting="control-plane-transport-select"]',
-    ) as HTMLSelectElement | null;
-    if (transportSelect && this.db) {
-      try {
-        const stored = await getConfig(
-          this.db,
-          CONFIG_KEYS.CONTROL_PLANE_TRANSPORT,
-        );
-        transportSelect.value = stored || DEFAULT_CONTROL_PLANE_TRANSPORT;
-      } catch (_) {
-        transportSelect.value = DEFAULT_CONTROL_PLANE_TRANSPORT;
-      }
-    }
-  }
-
-  async requestAppDialog(options: AppDialogOptions): Promise<boolean> {
-    const el = document.querySelector("shadow-claw") as any;
-    if (el && typeof el.requestDialog === "function") {
-      return await el.requestDialog(options);
-    }
-
-    return false;
-  }
-
   /**
    * Performs a direct fetch probe to the Control Plane server.
    * Executed during user gestures (e.g. Test Connection / Save URL) to trigger
@@ -235,52 +179,111 @@ export class ShadowClawControlPlane extends ShadowClawElement {
     }
   }
 
-  /**
-   * Interactive handler to test connection and surface diagnostic modal if needed.
-   */
-  async testControlPlaneConnection(): Promise<boolean> {
+  async render() {
     const root = this.shadowRoot;
     if (!root) {
-      return false;
+      return;
     }
 
-    const input = root.querySelector(
+    const cpEnabledToggle = root.querySelector(
+      '[data-setting="control-plane-enabled-toggle"]',
+    ) as HTMLInputElement | null;
+    if (cpEnabledToggle && this.db) {
+      try {
+        const { isControlPlaneEnabled } =
+          await import("../../../core/utils/initControlPlane.js");
+        cpEnabledToggle.checked = await isControlPlaneEnabled(this.db);
+      } catch (_) {
+        cpEnabledToggle.checked = DEFAULT_CONTROL_PLANE_ENABLED;
+      }
+    }
+
+    const cpUrlInput = root.querySelector(
       '[data-setting="control-plane-url-input"]',
     ) as HTMLInputElement | null;
-    const testBtn = root.querySelector(
-      '[data-action="test-control-plane-connection"]',
-    ) as HTMLButtonElement | null;
+    if (cpUrlInput && this.db) {
+      try {
+        const stored = await getConfig(this.db, CONFIG_KEYS.CONTROL_PLANE_URL);
+        cpUrlInput.value = stored || "";
+      } catch (_) {
+        cpUrlInput.value = "";
+      }
+    }
 
-    const rawUrl = input?.value.trim() || "http://127.0.0.1:8888";
+    const transportSelect = root.querySelector(
+      '[data-setting="control-plane-transport-select"]',
+    ) as HTMLSelectElement | null;
+    if (transportSelect && this.db) {
+      try {
+        const stored = await getConfig(
+          this.db,
+          CONFIG_KEYS.CONTROL_PLANE_TRANSPORT,
+        );
+        transportSelect.value = stored || DEFAULT_CONTROL_PLANE_TRANSPORT;
+      } catch (_) {
+        transportSelect.value = DEFAULT_CONTROL_PLANE_TRANSPORT;
+      }
+    }
+  }
 
-    if (testBtn) {
-      testBtn.disabled = true;
-      testBtn.textContent = "⏳ Testing...";
+  async requestAppDialog(options: AppDialogOptions): Promise<boolean> {
+    const el = document.querySelector("shadow-claw") as any;
+    if (el && typeof el.requestDialog === "function") {
+      return await el.requestDialog(options);
+    }
+
+    return false;
+  }
+
+  async saveControlPlaneEnabled(enabled: boolean) {
+    if (!this.db) {
+      return;
     }
 
     try {
-      const result = await this.probeControlPlane(rawUrl);
-
-      if (result.success) {
-        showSuccess(`Successfully reached Control Plane at ${rawUrl}`, 4000);
-        return true;
+      if (enabled) {
+        const storedUrl =
+          (await getConfig(this.db, CONFIG_KEYS.CONTROL_PLANE_URL)) ||
+          "http://127.0.0.1:8888";
+        void this.probeControlPlane(storedUrl);
       }
 
-      const errorMsg = result.error || "Unknown connection error";
-      showError(`Connection test failed: ${errorMsg}`, 6000);
-
-      await this.requestAppDialog({
-        title: "Control Plane Connection Failed",
-        message: `Unable to connect to "${rawUrl}".\n\n• TLS / Certificate: If using HTTPS with a self-signed certificate, ensure the certificate is installed and trusted in Chrome (chrome://certificate-manager/localcerts/usercerts).\n• Chrome Permissions: In Site Settings, ensure "Local network access" is allowed.\n• Server Status: Verify the ShadowClaw dev server is running and listening on this host/port.`,
-        confirmLabel: "OK",
-      });
-
-      return false;
-    } finally {
-      if (testBtn) {
-        testBtn.disabled = false;
-        testBtn.textContent = "🔌 Test Connection";
+      await setConfig(
+        this.db,
+        CONFIG_KEYS.CONTROL_PLANE_ENABLED,
+        enabled ? "true" : "false",
+      );
+      if (typeof localStorage !== "undefined") {
+        try {
+          localStorage.setItem(
+            CONFIG_KEYS.CONTROL_PLANE_ENABLED,
+            enabled ? "true" : "false",
+          );
+        } catch (_) {}
       }
+
+      const {
+        ensureControlPlaneConnected,
+        stopControlPlaneClient,
+        shouldConnectControlPlane,
+      } = await import("../../../core/utils/initControlPlane.js");
+
+      if (enabled) {
+        if (shouldConnectControlPlane()) {
+          await ensureControlPlaneConnected({
+            orchestrator: this.orchestrator || undefined,
+            db: this.db,
+            force: true,
+          });
+        }
+        showSuccess("Control plane client enabled and connected", 3000);
+      } else {
+        stopControlPlaneClient();
+        showSuccess("Control plane client disabled", 3000);
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      showError("Error saving Control Plane setting: " + errorMsg, 6000);
     }
   }
 
@@ -404,55 +407,52 @@ export class ShadowClawControlPlane extends ShadowClawElement {
     }
   }
 
-  async saveControlPlaneEnabled(enabled: boolean) {
-    if (!this.db) {
-      return;
+  /**
+   * Interactive handler to test connection and surface diagnostic modal if needed.
+   */
+  async testControlPlaneConnection(): Promise<boolean> {
+    const root = this.shadowRoot;
+    if (!root) {
+      return false;
+    }
+
+    const input = root.querySelector(
+      '[data-setting="control-plane-url-input"]',
+    ) as HTMLInputElement | null;
+    const testBtn = root.querySelector(
+      '[data-action="test-control-plane-connection"]',
+    ) as HTMLButtonElement | null;
+
+    const rawUrl = input?.value.trim() || "http://127.0.0.1:8888";
+
+    if (testBtn) {
+      testBtn.disabled = true;
+      testBtn.textContent = "⏳ Testing...";
     }
 
     try {
-      if (enabled) {
-        const storedUrl =
-          (await getConfig(this.db, CONFIG_KEYS.CONTROL_PLANE_URL)) ||
-          "http://127.0.0.1:8888";
-        void this.probeControlPlane(storedUrl);
+      const result = await this.probeControlPlane(rawUrl);
+
+      if (result.success) {
+        showSuccess(`Successfully reached Control Plane at ${rawUrl}`, 4000);
+        return true;
       }
 
-      await setConfig(
-        this.db,
-        CONFIG_KEYS.CONTROL_PLANE_ENABLED,
-        enabled ? "true" : "false",
-      );
-      if (typeof localStorage !== "undefined") {
-        try {
-          localStorage.setItem(
-            CONFIG_KEYS.CONTROL_PLANE_ENABLED,
-            enabled ? "true" : "false",
-          );
-        } catch (_) {}
-      }
+      const errorMsg = result.error || "Unknown connection error";
+      showError(`Connection test failed: ${errorMsg}`, 6000);
 
-      const {
-        ensureControlPlaneConnected,
-        stopControlPlaneClient,
-        shouldConnectControlPlane,
-      } = await import("../../../core/utils/initControlPlane.js");
+      await this.requestAppDialog({
+        title: "Control Plane Connection Failed",
+        message: `Unable to connect to "${rawUrl}".\n\n• TLS / Certificate: If using HTTPS with a self-signed certificate, ensure the certificate is installed and trusted in Chrome (chrome://certificate-manager/localcerts/usercerts).\n• Chrome Permissions: In Site Settings, ensure "Local network access" is allowed.\n• Server Status: Verify the ShadowClaw dev server is running and listening on this host/port.`,
+        confirmLabel: "OK",
+      });
 
-      if (enabled) {
-        if (shouldConnectControlPlane()) {
-          await ensureControlPlaneConnected({
-            orchestrator: this.orchestrator || undefined,
-            db: this.db,
-            force: true,
-          });
-        }
-        showSuccess("Control plane client enabled and connected", 3000);
-      } else {
-        stopControlPlaneClient();
-        showSuccess("Control plane client disabled", 3000);
+      return false;
+    } finally {
+      if (testBtn) {
+        testBtn.disabled = false;
+        testBtn.textContent = "🔌 Test Connection";
       }
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
-      showError("Error saving Control Plane setting: " + errorMsg, 6000);
     }
   }
 }

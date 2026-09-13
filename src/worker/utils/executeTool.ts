@@ -1,4 +1,5 @@
 import { CONFIG_KEYS, FETCH_MAX_RESPONSE } from "../../config/config.js";
+import { isHeadlessMode, BROWSER_ONLY_TOOLS } from "../../config/headless.js";
 
 import { getConfig } from "../../db/getConfig.js";
 import { ShadowClawDatabase } from "../../db/types.js";
@@ -77,6 +78,7 @@ import { executeActivateSkill } from "../../subsystems/skills/activateSkill.js";
 import { toolsStore } from "../../stores/tools.js";
 import {
   executeDetectLanguage,
+  executeEmbedText,
   executeProofreadText,
   executeRewriteText,
   executeSummarizeText,
@@ -182,6 +184,10 @@ export async function executeTool(
       if (BLOCKED_TOOLS.has(name)) {
         return `Tool "${name}" is not allowed during scheduled task execution to prevent recursion.`;
       }
+    }
+
+    if (isHeadlessMode() && BROWSER_ONLY_TOOLS.has(name)) {
+      return `Tool "${name}" is not available in headless CLI mode. It requires a browser UI.`;
     }
 
     switch (name) {
@@ -496,27 +502,52 @@ export async function executeTool(
       }
 
       case "summarize_text": {
-        return await executeSummarizeText(input, groupId);
+        return await executeSummarizeText(input, groupId, {
+          db,
+          invokeContext: options?.invokeContext,
+        });
       }
 
       case "write_text": {
-        return await executeWriteText(input, groupId);
+        return await executeWriteText(input, groupId, {
+          db,
+          invokeContext: options?.invokeContext,
+        });
       }
 
       case "rewrite_text": {
-        return await executeRewriteText(input, groupId);
+        return await executeRewriteText(input, groupId, {
+          db,
+          invokeContext: options?.invokeContext,
+        });
       }
 
       case "proofread_text": {
-        return await executeProofreadText(input, groupId);
+        return await executeProofreadText(input, groupId, {
+          db,
+          invokeContext: options?.invokeContext,
+        });
       }
 
       case "detect_language": {
-        return await executeDetectLanguage(input, groupId);
+        return await executeDetectLanguage(input, groupId, {
+          db,
+          invokeContext: options?.invokeContext,
+        });
       }
 
       case "translate_text": {
-        return await executeTranslateText(input, groupId);
+        return await executeTranslateText(input, groupId, {
+          db,
+          invokeContext: options?.invokeContext,
+        });
+      }
+
+      case "embed_text": {
+        return await executeEmbedText(input, groupId, {
+          db,
+          invokeContext: options?.invokeContext,
+        });
       }
 
       default: {

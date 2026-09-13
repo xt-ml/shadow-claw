@@ -247,4 +247,48 @@ describe("buildSystemPrompt", () => {
       "Current Conversation Context: Local browser conversation (groupId: main).",
     );
   });
+
+  describe("headless mode system prompt", () => {
+    afterEach(async () => {
+      const { setHeadlessMode } = await import("../../config/headless.js");
+      setHeadlessMode(false);
+    });
+
+    it("uses headless assistant role description and context", async () => {
+      const { setHeadlessMode } = await import("../../config/headless.js");
+      setHeadlessMode(true);
+
+      const prompt = buildSystemPrompt(
+        "ShadowClaw",
+        "",
+        [],
+        undefined,
+        undefined,
+        undefined,
+        { groupId: "server:main" },
+      );
+      expect(prompt).toContain(
+        "You are ShadowClaw, an AI assistant operating in a host-native headless environment.",
+      );
+      expect(prompt).not.toContain("running in the client's browser");
+      expect(prompt).toContain(
+        "Current Conversation Context: Host-native headless agent session (groupId: server:main).",
+      );
+    });
+
+    it("filters out browser-only tools from default tools list in headless mode", async () => {
+      const { setHeadlessMode } = await import("../../config/headless.js");
+      setHeadlessMode(true);
+
+      const prompt = buildSystemPrompt("ShadowClaw", "");
+      expect(prompt).toContain("- **read_file**:");
+      expect(prompt).toContain("- **bash**:");
+      expect(prompt).not.toContain("- **clear_chat**:");
+      expect(prompt).not.toContain("- **render_component**:");
+      expect(prompt).not.toContain("- **show_toast**:");
+      expect(prompt).not.toContain("- **ask_user**:");
+      expect(prompt).not.toContain("- **open_file**:");
+      expect(prompt).not.toContain("- **create_room**:");
+    });
+  });
 });

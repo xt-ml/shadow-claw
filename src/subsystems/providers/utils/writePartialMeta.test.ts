@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 import { writePartialMeta } from "./writePartialMeta.js";
-import { DEFAULT_MODEL_CACHE_NAME, ModelPartialMeta } from "./types.js";
+import { DEFAULT_MODEL_CACHE_NAME, type ModelPartialMeta } from "./types.js";
 
 // Mock Response for Jest/jsdom environment if needed
 if (typeof (globalThis as any).Response === "undefined") {

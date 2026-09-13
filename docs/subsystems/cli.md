@@ -15,6 +15,7 @@ ShadowClaw provides a unified, first-class CLI tool (`shadow-claw` / `shadowclaw
 3. **Serve pre-built static artifacts** (`npx shadow-claw serve`).
 4. **Run headless backend services without UI or frontend builds** (`npx shadow-claw server` / `services` / `api`).
 5. **Scaffold starter templates** (`npx shadow-claw init`).
+6. **Execute headless server-side agent prompts, skills, and tools natively** (`npx shadow-claw agent`) without requiring a live browser tab, backed by SQLite, native filesystem handles, and host OS shell execution.
 
 ---
 
@@ -134,6 +135,172 @@ Scaffolds a new ShadowClaw content template in `[dir]` (or `process.cwd()`) with
 - `shadow-claw.config.json` (declarative branding, title, server, and sorting configuration)
 - `pages/main/index.html` (welcome home page)
 - `.gitignore` (`dist/`, `.cache/`, `node_modules/`)
+
+### `shadow-claw agent [action] [args...] [options]`
+
+Runs the headless CLI agent participant—executing the same tool-use loop, prompt assembly, and declarative skill pipelines as the browser, backed by Node.js, `node:sqlite`, native filesystem handles (`NodeFsDirectoryHandle`), and direct OS shell execution.
+
+```bash
+# Initialize a headless agent workspace (interactive model selection & optional prewarming)
+npx shadow-claw agent init [dir]
+npx shadow-claw agent init [dir] --download
+
+# Manage local models (list, download with progress bar, set default, query remote)
+npx shadow-claw agent model list
+npx shadow-claw agent model download onnx-community/gemma-3-1b-it-ONNX-GQA
+npx shadow-claw agent model set onnx-community/gemma-3-1b-it-ONNX-GQA
+npx shadow-claw agent model remote --query gemma
+
+# Run a one-shot agent prompt against the workspace (streams to stdout)
+npx shadow-claw agent --workspace ./my-project run "what time is it"
+
+# List discovered skills in the workspace
+npx shadow-claw agent skills
+
+# List available tools with capability tags (headless-safe vs browser-only)
+npx shadow-claw agent tools
+
+# Inspect a tool definition / schema
+npx shadow-claw agent tool read_file
+
+# Execute a tool directly with JSON arguments
+npx shadow-claw agent tool read_file '{"path": "package.json"}'
+
+# Execute a skill's tool chain pipeline directly
+npx shadow-claw agent skill <name>
+```
+
+#### Subcommands
+
+| Subcommand        | Arguments           | Description                                                                                                                                                                                                                                     |
+| :---------------- | :------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `init`            | `[dir]`             | Initializes workspace directory with `.agents/skills`, `.agents/tools`, `database/`, and default `shadow-claw.config.json`. In interactive TTY environments, prompts for default model and offers immediate prewarm downloading (`--download`). |
+| `model`, `models` | `[action] [id]`     | Inspects, queries, downloads, or configures local models (`list`, `remote`, `download`, `set`). Defaults to `list`.                                                                                                                             |
+| `run`             | `<prompt>`          | Executes a one-shot agent invocation. Persists messages to SQLite, formats conversation history, runs tool loop, streams output to stdout, and exits. Accepts `-` to read the prompt from stdin, or combines `<prompt>` with piped stdin data.  |
+| `skills`          | `[dir]`             | Discovers and prints all available skills in `.agents/skills/` along with user-invocable status and diagnostics.                                                                                                                                |
+| `tools`           | none                | Lists all registered tools (built-in and declarative) annotated with `[headless-safe]` or `[browser-only]` capability tags.                                                                                                                     |
+| `tool`            | `<name> [jsonArgs]` | When called with only `<name>`, prints the tool description and JSON Schema. When called with `[jsonArgs]`, executes the tool headlessly and prints the result. Accepts JSON arguments or plain text from stdin (auto-mapped to tool schema).   |
+| `skill`           | `<name>`            | Executes a skill's declarative tool pipeline (`execution.type: "tools"`) or runs the skill body as an LLM prompt.                                                                                                                               |
+
+#### Options
+
+| Option                         | Type    | Description                                                                          | Default                                   |
+| :----------------------------- | :------ | :----------------------------------------------------------------------------------- | :---------------------------------------- |
+| `--workspace <dir>`            | string  | Workspace directory for file I/O and configuration                                   | `".cache"`                                |
+| `--database-dir <dir>`         | string  | Directory where SQLite databases (`shadow-claw.db`) are stored                       | `<workspace>/database`                    |
+| `--cache-dir <dir>`            | string  | Custom cache directory for databases, models, and logs                               | `undefined`                               |
+| `--tmp, --temp`                | boolean | Store cache, token, and databases in OS temporary directory (`tmpdir()`)             | `false`                                   |
+| `-y, --yes`                    | boolean | Skip interactive prompts and accept defaults                                         | `false`                                   |
+| `--group <groupId>`            | string  | Conversation group identifier                                                        | `"server:main"`                           |
+| `--provider <provider>`        | string  | LLM provider ID (`transformers_js_local`, `openrouter`, `llamafile`, `gemini`, etc.) | auto-resolved (`"transformers_js_local"`) |
+| `--model <model>`              | string  | Model identifier (e.g. `onnx-community/gemma-3-1b-it-ONNX-GQA`)                      | auto-resolved (curated local default)     |
+| `--download`                   | boolean | Prewarm and download the model during agent init or before execution                 | `false`                                   |
+| `--api-key <key>`              | string  | API key for cloud providers                                                          | auto-resolved from env                    |
+| `--stream` / `--no-stream`     | boolean | Stream response tokens to stdout as they arrive                                      | `true`                                    |
+| `--progress` / `--no-progress` | boolean | Show terminal progress bar during model downloads                                    | `true`                                    |
+| `--system-prompt <text>`       | string  | Override system prompt with inline text                                              | `undefined`                               |
+| `--system-prompt-file <file>`  | string  | Load system prompt from a text or markdown file                                      | `undefined`                               |
+| `--tools <tools>`              | string  | Comma-separated list of tools to enable (e.g. `bash,read_file`)                      | `undefined`                               |
+| `--tools-profile <name>`       | string  | Tools profile to activate (e.g. `__builtin_default`)                                 | `undefined`                               |
+| `-r, --remote`, `--hf`         | boolean | List or search available models from Hugging Face `onnx-community` repository        | `false`                                   |
+| `--query <query>`              | string  | Filter remote or local models by search query                                        | `undefined`                               |
+| `-v, --verbose`                | boolean | Enable verbose tool activity and diagnostic logging                                  | `false`                                   |
+| `-o, --output <file>`          | string  | Write command output to a file instead of stdout                                     | `undefined`                               |
+| `-q, --quiet`                  | boolean | Suppress all non-error output                                                        | `false`                                   |
+
+> **First-Run Cache Directory Wizard:** When running the agent without an explicit `--workspace`, `--cache-dir`, or `--tmp` in a directory where no `.cache` or database exists, ShadowClaw prompts interactively (identical to `dev` and `serve`) to let you choose between the current directory (`.cache`), system temporary storage (`tmpdir()`), or a custom path. Pass `-y`, `--yes`, `--tmp`, or `--workspace <dir>` to skip the prompt.
+
+#### Local Model Management (`agent model`)
+
+The `agent model` command suite provides inspection, remote searching, downloading, and configuration for local ONNX and GGUF models:
+
+```bash
+# List local cached models with context length and active default marker
+npx shadow-claw agent model list
+
+# Query Hugging Face for available onnx-community models
+npx shadow-claw agent model remote --query gemma
+npx shadow-claw agent model list --remote
+
+# Download a model with interactive progress bar (stored in .cache/models/)
+npx shadow-claw agent model download onnx-community/gemma-3-1b-it-ONNX-GQA
+
+# Set the active default model in shadow-claw.config.json
+npx shadow-claw agent model set onnx-community/gemma-3-1b-it-ONNX-GQA
+```
+
+#### Node-Native Offline Execution
+
+In headless mode, model inference does not require an external browser tab or running web dev server:
+
+- **Transformers.js Local (`node-transformers-executor.ts`)**: Runs ONNX models directly in the Node.js process using `@huggingface/transformers` (device: CPU/q4). Downloads missing files automatically on-demand with progress reporting on `stderr`.
+- **Llamafile Local (`node-llamafile-executor.ts`)**: Downloads and spawns host-native Llamafile binaries on dynamic ports, verifies health, streams tokens, and terminates cleanly when finished.
+- **Built-in AI Tasks (`executeNativeAiTask.ts`)**: Headless agent dispatches task-based tools (`summarize_text`, `rewrite_text`, etc.) through the node runtime.
+
+#### Standard Input (stdin), Piping & Output Redirection
+
+The headless agent CLI commands are designed for Unix pipeline composability, separating data output from diagnostic logging:
+
+- **Clean Stream Separation**: Command output (agent assistant replies or tool execution results) is emitted directly to **`stdout`**, while progress logs, lifecycle banners, model metadata, and status messages go to **`stderr`**. This ensures standard stdout redirects (`>`) and pipes (`|`) receive clean data without log contamination.
+- **File Output (`-o, --output <file>`)**: Writes the command output directly to a file (creating parent directories as needed) while preserving clean stdout for further piping or logging.
+- **Quiet Mode (`-q, --quiet`)**: Suppresses all non-error output, lifecycle banners, and progress logging to stderr.
+
+##### Piping into `agent tool`
+
+When piping input into `npx shadow-claw agent tool <name>`:
+
+1. **JSON Input**: If stdin contains valid JSON, it is parsed directly as the tool's input arguments.
+2. **Plain-Text Auto-Mapping**: If stdin contains plain text, the CLI inspects the tool's schema and automatically maps the text to the tool's primary string input property, checking candidate field names in order: `text` > `prompt` > `content` > `input` > first defined string parameter.
+3. **Explicit Stdin Argument (`-`)**: Passing `-` as the argument (`npx shadow-claw agent tool <name> -`) explicitly forces reading input from stdin.
+
+```bash
+# Pipe plain text — auto-mapped to the tool's schema field (text > prompt > content > input)
+echo "how are you doing today" | npx shadow-claw agent tool rewrite_text
+
+# Pipe JSON input directly
+echo '{"path":"file.txt","content":"hello"}' | npx shadow-claw agent tool write_file
+
+# Quiet mode: suppress all non-error output and save to file
+npx shadow-claw agent tool read_file '{"path":"README.md"}' -q -o readme.txt
+
+# Pipe tool output directly into another command (clean stdout)
+npx shadow-claw agent tool read_file '{"path":"README.md"}' -q | wc -l
+```
+
+##### Piping into `agent run`
+
+When piping input into `npx shadow-claw agent run`:
+
+1. **Full Prompt from Stdin (`-`)**: Passing `-` as the prompt argument instructs the agent to use the piped stdin content as the complete prompt.
+2. **Combined Prompt & Context**: Supplying both a `<prompt>` argument and piped stdin automatically concatenates them with a double newline (`<prompt>\n\n<stdin>`), allowing you to provide instructions alongside piped document content or command outputs.
+3. **File Output**: Use `-o, --output <file>` to save the generated assistant response to a file while keeping stdout available.
+
+```bash
+# Combine a CLI prompt with piped document content
+cat doc.txt | npx shadow-claw agent run "Summarize this" -o /tmp/out.txt
+
+# Use "-" as the prompt argument to take stdin as the full prompt
+cat prompt.txt | npx shadow-claw agent run -
+
+# Pipe plain text into an agent prompt and redirect output to a file
+echo "Summarize: ..." | npx shadow-claw agent run -o summary.txt
+```
+
+#### Process Interruption & Clean Termination
+
+The CLI runtime installs central termination signal handlers (`SIGINT` code 130, `SIGTERM` code 143, and `exit`) via `registerTerminationCleanup` in `bin/cli.mjs`. When an agent run or server session is interrupted (e.g. Ctrl+C), all active child processes, Llamafile daemons, and temporary descriptors are terminated cleanly without leaving orphan processes behind.
+
+#### Credential Auto-Resolution & Exit Codes
+
+The headless agent checks credentials in the following order:
+
+1. CLI options (`--provider`, `--model`, `--api-key`)
+2. Environment variables (`SHADOW_CLAW_PROVIDER`, `SHADOW_CLAW_MODEL`, `OPENROUTER_API_KEY`, `HUGGINGFACE_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, etc.)
+3. SQLite database configuration (`CONFIG_KEYS.PROVIDER`, `CONFIG_KEYS.MODEL`)
+4. Workspace configuration (`agent.defaultProvider`, `agent.defaultModel` or `settings.defaultProvider`, `settings.defaultModel` in `shadow-claw.config.json`)
+5. Provider defaults (`"transformers_js_local"` with `"onnx-community/gemma-3-1b-it-ONNX-GQA"` for offline execution, or `"openrouter"` with `"openrouter/free"`)
+
+If credentials are required but missing, or if the LLM provider returns an API error, `agent run` outputs actionable diagnostic messages to `stderr` and terminates with **exit code `1`**, ensuring scripts and CI/CD pipelines fail reliably.
 
 ### `shadow-claw clients [options]`
 

@@ -183,6 +183,7 @@ export interface InvokePayload {
   systemPrompt: string;
   workspaceGroupId?: string;
   subagentTask?: boolean;
+  verbose?: boolean;
 }
 
 export interface ManageToolsPayload {

@@ -42,6 +42,10 @@ All providers are declared in `src/config/config.ts` under `PROVIDERS`:
 | `llamafile`               | `openai`          | ✅        | ❌               |
 | `mesh-llm`                | `mesh-llm`        | ✅        | ❌               |
 
+> **Default Provider Strategy:** In the browser client, ShadowClaw defaults out-of-the-box to **Prompt API** (`prompt_api`) with guided onboarding and built-in task API polyfills. For headless CLI agent execution (`shadow-claw agent`), it defaults out-of-the-box to **OpenRouter** (`openrouter` with default model `openrouter/free`). Projects can also declaratively configure a default provider and model in `shadow-claw.config.json` under `settings.defaultProvider` and `settings.defaultModel`.
+>
+> **Local Models & Hugging Face:** For offline or local model execution, configure `defaultProvider: "transformers_js_local"` or `defaultProvider: "huggingface"`. See [`local-models.md`](./local-models.md) for architecture details on downloading model weights and dependencies from Hugging Face.
+>
 > **Llamafile Note:** The local proxy context size for Llamafile defaults to 8192 tokens but can be configured via the `LLAMAFILE_CTX_SIZE` environment variable (e.g., `LLAMAFILE_CTX_SIZE=32768`).
 
 ### Provider shape

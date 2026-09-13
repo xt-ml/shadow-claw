@@ -2,11 +2,7 @@ import { isLlamafileResolutionError } from "../../../components/common/help/llam
 import { detectProviderHelpType } from "../../../components/common/help/providers.js";
 import { isTransformersJsResolutionError } from "../../../components/common/help/transformers.js";
 
-import {
-  CONFIG_KEYS,
-  DEFAULT_GROUP_ID,
-  getProvider,
-} from "../../../config/config.js";
+import { CONFIG_KEYS, DEFAULT_GROUP_ID } from "../../../config/config.js";
 
 import { deleteTask } from "../../../db/deleteTask.js";
 import { getAllTasks } from "../../../db/getAllTasks.js";
@@ -22,12 +18,6 @@ import { getRemoteMcpConnection } from "../../../subsystems/mcp/mcp-connections.
 import { reconnectMcpOAuth } from "../../../subsystems/mcp/mcp-reconnect.js";
 import { getPushUrl } from "../../../subsystems/notifications/push-client.js";
 
-import {
-  buildHeaders,
-  formatRequest,
-  parseResponse,
-} from "../../../subsystems/providers/providers.js";
-
 import { showToast } from "../../../ui/toast.js";
 
 import {
@@ -38,7 +28,6 @@ import {
 import {
   detectLanguage,
   embedText,
-  ensureBuiltinAiPolyfills,
   proofreadText,
   rewriteText,
   summarizeText,
@@ -52,6 +41,7 @@ import {
   stopTransformersProgressPolling,
 } from "./operations/provider.js";
 import { createRoom, inviteToRoom, leaveRoom } from "./operations/room.js";
+import { executeNativeAiTask } from "../../../subsystems/providers/executeNativeAiTask.js";
 import { deleteTaskFromServer, syncTaskToServer } from "./operations/task.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
@@ -770,140 +760,17 @@ async function executeActiveProviderTask(
     inFlightInfo?.providerConfig?.defaultModel ||
     o.model;
 
-  let prompt = "";
-  if (taskType === "translate") {
-    prompt = `Translate the following text from ${input.sourceLanguage || "auto"} to ${input.targetLanguage}. Provide ONLY the raw translated text without commentary or quotation marks:\n\n${input.text}`;
-  } else if (taskType === "summarize") {
-    prompt = `Summarize the following text (type: ${input.type || "tldr"}, format: ${input.format || "plain-text"}, length: ${input.length || "medium"}). Provide ONLY the summary:\n\n${input.text}`;
-  } else if (taskType === "write") {
-    prompt = `Draft content for the following request (context: ${input.context || "none"}):\n\n${input.prompt}`;
-  } else if (taskType === "rewrite") {
-    prompt = `Rewrite the following text (tone: ${input.tone || "standard"}, length: ${input.length || "as-is"}):\n\n${input.text}`;
-  } else if (taskType === "proofread") {
-    prompt = `Proofread and correct grammar, spelling, and style in the following text. Provide ONLY the corrected text:\n\n${input.text}`;
-  } else if (taskType === "detect-language") {
-    prompt = `Detect the language of the following text. Return ONLY a JSON array of objects with "detectedLanguage" (BCP 47 code) and "confidence" (0.0 - 1.0), e.g. [{"detectedLanguage":"en","confidence":0.99}]:\n\n${input.text}`;
-  } else if (taskType === "semantic-embedder") {
-    prompt = `Provide a concise semantic description/representation for the following content:\n\n${JSON.stringify(input.text)}`;
-  } else {
-    throw new Error(`Unknown task type: ${taskType}`);
-  }
-
-  if (effectiveProviderId === "prompt_api") {
-    await ensureBuiltinAiPolyfills();
-    const g = globalThis as any;
-    const LanguageModelApi = g.LanguageModel || g.ai?.languageModel;
-    if (LanguageModelApi && typeof LanguageModelApi.create === "function") {
-      let session;
-      try {
-        session = await LanguageModelApi.create();
-      } catch (err) {
-        console.warn(
-          "Prompt API session creation failed in active provider task:",
-          err,
-        );
-      }
-      if (session) {
-        try {
-          const raw = await session.prompt(prompt);
-          const textResult = String(raw || "").trim();
-          if (taskType === "detect-language") {
-            try {
-              const parsed = JSON.parse(textResult);
-              return Array.isArray(parsed) ? parsed : [parsed];
-            } catch {
-              return [{ detectedLanguage: "en", confidence: 0.8 }];
-            }
-          }
-          return textResult;
-        } finally {
-          if (typeof session.destroy === "function") {
-            session.destroy();
-          }
-        }
-      }
-    }
-  }
-
-  const provider = getProvider(effectiveProviderId);
-  if (
-    !provider ||
-    !provider.baseUrl ||
-    provider.baseUrl.startsWith("builtin://") ||
-    provider.baseUrl.startsWith("local://") ||
-    provider.format === "prompt_api" ||
-    provider.format === "transformers_js"
-  ) {
-    if (taskType === "summarize") {
-      return await summarizeText(input.text, input);
-    } else if (taskType === "write") {
-      return await writeText(input.prompt, input);
-    } else if (taskType === "rewrite") {
-      return await rewriteText(input.text, input);
-    } else if (taskType === "proofread") {
-      return await proofreadText(input.text, input);
-    } else if (taskType === "detect-language") {
-      return await detectLanguage(input.text);
-    } else if (taskType === "translate") {
-      return await translateText(input.text, {
-        sourceLanguage: input.sourceLanguage || "auto",
-        targetLanguage: input.targetLanguage || "en",
-        ...input,
-      });
-    } else if (taskType === "semantic-embedder") {
-      return await embedText(input.text, input);
-    }
-    throw new Error(
-      `Provider ${effectiveProviderId} not found and no local fallback available`,
-    );
-  }
-
   const apiKey = (await getApiKeyForRequest(o)) || "";
-  const headers = {
-    ...buildHeaders(provider, apiKey),
-    ...getProviderRuntimeHeaders(o, effectiveProviderId, ""),
-  };
+  const headers = getProviderRuntimeHeaders(o, effectiveProviderId, "");
 
-  const body = formatRequest(
-    provider,
-    [{ role: "user", content: prompt }],
-    [],
-    {
-      maxTokens: o.maxTokens || 2048,
-      model: effectiveModel,
-      system:
-        "You are a specialized text task assistant. Fulfill the user request directly and accurately without conversational filler.",
-    },
-  );
-
-  const res = await fetch(provider.baseUrl, {
-    body: JSON.stringify(body),
+  return await executeNativeAiTask({
+    taskType,
+    input,
+    groupId,
+    providerId: effectiveProviderId,
+    model: effectiveModel,
+    apiKey,
     headers,
-    method: "POST",
+    maxTokens: o.maxTokens,
   });
-
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`Active provider task API error ${res.status}: ${errText}`);
-  }
-
-  const json = await res.json();
-  const parsed = parseResponse(provider, json);
-  const textResult =
-    parsed.content
-      ?.filter((b: any) => b.type === "text")
-      ?.map((b: any) => b.text)
-      ?.join("")
-      ?.trim() || "";
-
-  if (taskType === "detect-language") {
-    try {
-      const detected = JSON.parse(textResult);
-      return Array.isArray(detected) ? detected : [detected];
-    } catch {
-      return [{ detectedLanguage: "en", confidence: 0.8 }];
-    }
-  }
-
-  return textResult;
 }

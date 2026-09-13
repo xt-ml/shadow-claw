@@ -231,6 +231,9 @@ export const OPFS_ROOT = "shadowclaw";
 /** Default group for browser chat */
 export const DEFAULT_GROUP_ID = "br:main";
 
+/** Default group for server/headless CLI agent execution */
+export const DEFAULT_SERVER_GROUP_ID = "server:main";
+
 /** Telegram Bot API base URL */
 export const TELEGRAM_API_BASE = "https://api.telegram.org/bot";
 

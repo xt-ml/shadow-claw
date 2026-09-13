@@ -1,7 +1,6 @@
 # Storage System
 
-> ShadowClaw's file I/O layer supports two backends — OPFS (Origin Private File System)
-> and user-selected local directories — with cross-browser write fallbacks.
+> ShadowClaw's file I/O layer supports three backends — OPFS (Origin Private File System), user-selected local directories via the File System Access API, and host-native filesystem access via `NodeFsDirectoryHandle` in headless CLI mode.
 
 **Source:** `src/storage/`
 
@@ -10,23 +9,33 @@
 ```mermaid
 graph TD
   App[Application Code] --> StorageAPI["storage.ts<br>(unified API)"]
-  StorageAPI --> OPFS["OPFS Backend<br>shadowclaw/<groupId>/workspace/"]
-  StorageAPI --> LocalFS["Local Folder Backend<br>File System Access API<br>user-chosen directory"]
+  StorageAPI --> OPFS["OPFS Backend (Browser)<br>shadowclaw/<groupId>/workspace/"]
+  StorageAPI --> LocalFS["Local Folder Backend (Browser)<br>File System Access API<br>user-chosen directory"]
+  StorageAPI --> NodeFS["Node FS Backend (Headless CLI)<br>NodeFsDirectoryHandle<br>real host filesystem"]
   StorageAPI --> WritePath["writeFileHandle.ts<br>(cross-browser writes)"]
-  WritePath --> Standard["createWritable()<br>Modern browsers"]
+  WritePath --> Standard["createWritable()<br>Modern browsers & Node"]
   WritePath --> Sync["createSyncAccessHandle()<br>OPFS-only, workers"]
   WritePath --> WorkerFB["writeOpfsPathViaWorker()<br>Safari main-thread fallback"]
 ```
 
 ## Storage Root Resolution
 
-The storage root is resolved lazily:
+The storage root is resolved dynamically:
 
-1. Check `CONFIG_KEYS.STORAGE_HANDLE` — user-selected directory via `showDirectoryPicker()`
-2. If no local handle: fall back to OPFS root at `/shadowclaw/` via `navigator.storage.getDirectory()`
-3. If OPFS is restricted or throws a `SecurityError` (e.g. Firefox Private Browsing mode), transparently fall back to an in-memory `FileSystemDirectoryHandle` implementation (`src/storage/memoryStorage.ts`), keeping the application functional and notifying the user.
-4. Maintain a cached `explicitRoot` handle (invalidated on stale errors)
-5. Probe handle access with `probeHandleAccess()` — uses capability checks since Electron/browsers may misreport `queryPermission`
+1. **Headless CLI Participant**: If running in Node.js via `shadow-claw agent`, `setStorageRootFromPath(workspaceDir)` sets `explicitRoot` to a `NodeFsDirectoryHandle` targeting the host workspace directory.
+2. **User-Selected Local Directory**: In the browser, checks `CONFIG_KEYS.STORAGE_HANDLE` for a directory picked via `showDirectoryPicker()`.
+3. **OPFS Default**: In browser contexts without a local handle, falls back to OPFS root at `/shadowclaw/` via `navigator.storage.getDirectory()`.
+4. **In-Memory Fallback**: If OPFS is restricted or throws a `SecurityError` (e.g. Firefox Private Browsing mode), transparently falls back to an in-memory `FileSystemDirectoryHandle` implementation (`src/storage/memoryStorage.ts`), keeping the application functional and notifying the user.
+5. Maintains a cached `explicitRoot` handle (invalidated on stale errors).
+6. Probes handle access with `probeHandleAccess()` — uses capability checks since Electron/browsers may misreport `queryPermission`.
+
+## Headless Filesystem Backend (`NodeFsDirectoryHandle`)
+
+To enable the headless CLI agent (`shadow-claw agent`) to execute the same file tools and declarative skill discovery as the browser without code duplication, `NodeFsDirectoryHandle` (`src/storage/node-fs-handle.ts`) implements the standard Web `FileSystemDirectoryHandle` and `FileSystemFileHandle` interfaces using `node:fs` and `node:path`:
+
+- Implements `getDirectoryHandle`, `getFileHandle`, `entries()`, `removeEntry()`, and `createWritable()`.
+- Browser bundles (`index.js`, `agent.worker.js`) do not import or bundle Node modules. `node-fs-handle.ts` self-registers its adapter dynamically when loaded in Node environments.
+- In headless mode, `getGroupDir(db, groupId)` resolves directly to the workspace root, allowing tools (`read_file`, `write_file`, `git_*`, `search_files`) to read and edit host project files directly.
 
 ## Group Workspace Structure
 
@@ -45,6 +54,8 @@ Each conversation has an isolated workspace:
                     └── ...
 ```
 
+In headless CLI mode (`server:main`), the storage root maps directly to the workspace directory without group nesting.
+
 **Path normalization** (`src/storage/parsePath.ts`):
 
 - Strips leading `/workspace/` and `/` characters
@@ -53,7 +64,7 @@ Each conversation has an isolated workspace:
 
 **GroupId sanitization:**
 
-- Colons (`:` in `br:main`) are replaced with dashes for filesystem compatibility
+- Colons (`:` in `br:main` or `server:main`) are replaced with dashes for filesystem compatibility
 
 ## Write Path Selection
 

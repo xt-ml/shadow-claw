@@ -3,6 +3,7 @@ import { DEFAULT_GROUP_ID } from "../../../config/config.js";
 import { applyAnchorWithRetry } from "./applyAnchorWithRetry.js";
 import { showPage } from "./showPage.js";
 
+import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { ShadowClawAppRoute } from "../../../core/app-routes.js";
 import type { FileViewerStore } from "../../../stores/file-viewer.js";
 import type { OrchestratorStore } from "../../../stores/orchestrator.js";
@@ -11,7 +12,7 @@ import type { ShadowClaw } from "../shadow-claw.js";
 export async function applyRoute(
   shadow: ShadowRoot | null,
   shadowClaw: ShadowClaw,
-  db: IDBDatabase | null,
+  db: ShadowClawDatabase,
   fStore: FileViewerStore,
   oStore: OrchestratorStore,
   route: ShadowClawAppRoute,

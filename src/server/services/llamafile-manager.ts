@@ -6,6 +6,7 @@
  */
 
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { constants as fsConstants } from "node:fs";
 import { access, stat, readdir } from "node:fs/promises";
 import path from "node:path";
@@ -28,6 +29,7 @@ import {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const require = createRequire(import.meta.url);
 const LLAMAFILE_EXTENSION = ".llamafile";
 
 export const DEFAULT_LLAMAFILE_HOST = "127.0.0.1";
@@ -46,6 +48,87 @@ const LLAMAFILE_ALLOWED_LOOPBACK_HOSTS = new Set([
 ]);
 
 export type LlamafileMode = "server" | "cli";
+
+export interface TrackedLlamafileProcess {
+  child: ReturnType<typeof spawn>;
+  runDetached: boolean;
+  killSync: () => void;
+}
+
+const allActiveLlamafileProcesses = new Set<TrackedLlamafileProcess>();
+
+export function killChildProcessSync(
+  child: ReturnType<typeof spawn>,
+  runDetached: boolean,
+): void {
+  if (child.exitCode !== null || child.signalCode !== null || child.killed) {
+    return;
+  }
+
+  if (process.platform === "win32") {
+    if (typeof child.pid === "number") {
+      try {
+        const cp = require("node:child_process");
+        if (typeof cp.execFileSync === "function") {
+          cp.execFileSync("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
+            stdio: "ignore",
+            windowsHide: true,
+          });
+        }
+      } catch {}
+    }
+    return;
+  }
+
+  try {
+    if (typeof child.pid === "number") {
+      if (runDetached) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch {}
+      }
+      try {
+        process.kill(child.pid, "SIGKILL");
+      } catch {}
+    }
+  } catch {}
+}
+
+export function cleanupAllLlamafileProcesses(): void {
+  for (const item of allActiveLlamafileProcesses) {
+    try {
+      item.killSync();
+    } catch {}
+  }
+  allActiveLlamafileProcesses.clear();
+}
+
+let processListenersInstalled = false;
+
+export function ensureLlamafileProcessExitHandlers(): void {
+  if (processListenersInstalled) {
+    return;
+  }
+  processListenersInstalled = true;
+
+  process.on("exit", () => {
+    cleanupAllLlamafileProcesses();
+  });
+  process.on("SIGINT", () => {
+    cleanupAllLlamafileProcesses();
+  });
+  process.on("SIGTERM", () => {
+    cleanupAllLlamafileProcesses();
+  });
+  if (process.platform !== "win32") {
+    process.on("SIGHUP", () => {
+      cleanupAllLlamafileProcesses();
+    });
+  }
+}
+
+// Automatically ensure exit handlers are installed upon module import
+ensureLlamafileProcessExitHandlers();
 
 export interface LlamafileManagerService {
   listBinaries(): Promise<
@@ -69,10 +152,12 @@ export interface LlamafileManagerService {
     opts: { model: string; offline: boolean },
     verbose: boolean,
   ): Promise<void>;
+  terminateAll(): void;
 
   // Test helpers
   __getOfflineSupportCache(): Map<string, boolean>;
   __getActiveRequests(): Map<string, () => void>;
+  __getActiveProcesses(): Set<TrackedLlamafileProcess>;
 }
 
 function parseLlamafileMode(value: unknown): LlamafileMode {
@@ -342,6 +427,26 @@ export function createLlamafileManagerService(): LlamafileManagerService {
   const activeRequests = new Map<string, () => void>();
   const offlineSupportCache = new Map<string, boolean>();
 
+  function registerTrackedProcess(
+    child: ReturnType<typeof spawn>,
+    runDetached: boolean,
+  ): () => void {
+    const item: TrackedLlamafileProcess = {
+      child,
+      runDetached,
+      killSync: () => killChildProcessSync(child, runDetached),
+    };
+    allActiveLlamafileProcesses.add(item);
+    const unregister = () => {
+      allActiveLlamafileProcesses.delete(item);
+    };
+    child.once("close", unregister);
+    child.once("error", unregister);
+    child.once("exit", unregister);
+
+    return unregister;
+  }
+
   async function listBinaries(): Promise<
     Array<{ fileName: string; id: string; absolutePath: string }>
   > {
@@ -394,9 +499,29 @@ export function createLlamafileManagerService(): LlamafileManagerService {
     const binaries = await listBinaries();
     const normalizedModel = model.trim();
 
+    const directMatch = binaries.find(
+      (entry) =>
+        entry.id === normalizedModel ||
+        entry.fileName === normalizedModel ||
+        entry.absolutePath === normalizedModel,
+    );
+
+    if (directMatch) {
+      return directMatch;
+    }
+
+    const baseName = path.basename(normalizedModel);
+    const idWithoutExt = baseName.endsWith(LLAMAFILE_EXTENSION)
+      ? baseName.slice(0, -LLAMAFILE_EXTENSION.length)
+      : baseName;
+
     const match = binaries.find(
       (item) =>
-        item.id === normalizedModel || item.fileName === normalizedModel,
+        item.id === normalizedModel ||
+        item.fileName === normalizedModel ||
+        item.fileName === baseName ||
+        item.id === idWithoutExt ||
+        item.fileName === `${idWithoutExt}${LLAMAFILE_EXTENSION}`,
     );
     if (!match) {
       throw new Error(
@@ -418,21 +543,28 @@ export function createLlamafileManagerService(): LlamafileManagerService {
       return headerValue;
     }
 
-    if (typeof body?.requestId === "string") {
+    if (typeof body?.requestId === "string" && body.requestId.trim()) {
       return body.requestId.trim();
     }
 
-    return "";
+    const bodyRequestId =
+      body?.llamafile && typeof body.llamafile === "object"
+        ? String(body.llamafile.requestId || "").trim()
+        : "";
+    if (bodyRequestId) {
+      return bodyRequestId;
+    }
+
+    return (
+      getFirstHeaderValue(req.headers["x-request-id"]).trim() ||
+      `req_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    );
   }
 
   function registerCancellation(
     requestId: string,
     cancel: () => void,
   ): () => void {
-    if (!requestId) {
-      return () => {};
-    }
-
     activeRequests.set(requestId, cancel);
 
     return () => {
@@ -442,13 +574,54 @@ export function createLlamafileManagerService(): LlamafileManagerService {
     };
   }
 
+  function cancelRequest(requestId: string): boolean {
+    const cancel = activeRequests.get(requestId);
+    if (!cancel) {
+      return false;
+    }
+
+    activeRequests.delete(requestId);
+    cancel();
+
+    return true;
+  }
+
+  function getLlamafileRuntimeOptions(req: Request): {
+    mode: LlamafileMode;
+    host: string;
+    port: number;
+    offline: boolean;
+  } {
+    const headerMode = req.headers["x-llamafile-mode"];
+    const headerHost = req.headers["x-llamafile-host"];
+    const headerPort = req.headers["x-llamafile-port"];
+    const headerOffline = req.headers["x-llamafile-offline"];
+
+    const bodyLlamafile =
+      req.body &&
+      typeof req.body === "object" &&
+      req.body.llamafile &&
+      typeof req.body.llamafile === "object"
+        ? req.body.llamafile
+        : {};
+
+    const mode = parseLlamafileMode(bodyLlamafile.mode ?? headerMode);
+    const host = normalizeLlamafileHost(bodyLlamafile.host ?? headerHost);
+    const port = normalizeLlamafilePort(bodyLlamafile.port ?? headerPort);
+    const offline = normalizeLlamafileOffline(
+      bodyLlamafile.offline ?? headerOffline,
+    );
+
+    return { mode, host, port, offline };
+  }
+
   function isEnoexecError(error: unknown): boolean {
     const code =
-      typeof error === "object" && error !== null && "code" in error
+      error && typeof error === "object"
         ? String((error as any).code ?? "")
         : "";
     const message =
-      typeof error === "object" && error !== null && "message" in error
+      error && typeof error === "object"
         ? String((error as any).message ?? "")
         : String(error ?? "");
 
@@ -540,16 +713,18 @@ export function createLlamafileManagerService(): LlamafileManagerService {
     }
 
     try {
+      const runDetached = process.platform !== "win32";
       const child = await spawnProcess(
         absolutePath,
         ["--help"],
         {
           cwd: path.dirname(absolutePath),
           env: { ...process.env },
-          detached: false,
+          detached: runDetached,
         },
         false,
       );
+      registerTrackedProcess(child, runDetached);
       let output = "";
       child.stdout?.on("data", (chunk: Buffer) => {
         output += chunk.toString("utf8");
@@ -592,59 +767,9 @@ export function createLlamafileManagerService(): LlamafileManagerService {
   return {
     listBinaries,
     resolveBinary,
-
     getLlamafileRequestId,
-
-    cancelRequest(requestId: string): boolean {
-      const cancel = activeRequests.get(requestId);
-      if (!cancel) {
-        return false;
-      }
-
-      cancel();
-
-      return true;
-    },
-
-    getLlamafileRuntimeOptions(req: Request) {
-      const body = req.body && typeof req.body === "object" ? req.body : {};
-      const optionsFromBody =
-        body.llamafile && typeof body.llamafile === "object"
-          ? body.llamafile
-          : {};
-
-      const headerMode = getFirstHeaderValue(req.headers["x-llamafile-mode"]);
-      const bodyMode =
-        typeof optionsFromBody.mode === "string"
-          ? optionsFromBody.mode.trim()
-          : "";
-      const model = typeof body.model === "string" ? body.model.trim() : "";
-
-      let inferredMode: LlamafileMode;
-      if (headerMode === "cli" || headerMode === "server") {
-        inferredMode = parseLlamafileMode(headerMode);
-      } else if (bodyMode === "cli" || bodyMode === "server") {
-        inferredMode = parseLlamafileMode(bodyMode);
-      } else {
-        inferredMode = model ? "cli" : "server";
-      }
-
-      const mode = inferredMode;
-      const host = normalizeLlamafileHost(
-        getFirstHeaderValue(req.headers["x-llamafile-host"]) ||
-          optionsFromBody.host,
-      );
-      const port = normalizeLlamafilePort(
-        getFirstHeaderValue(req.headers["x-llamafile-port"]) ||
-          optionsFromBody.port,
-      );
-      const offline = normalizeLlamafileOffline(
-        getFirstHeaderValue(req.headers["x-llamafile-offline"]) ||
-          optionsFromBody.offline,
-      );
-
-      return { mode, host, port, offline };
-    },
+    cancelRequest,
+    getLlamafileRuntimeOptions,
 
     async invokeCli(
       req: Request,
@@ -653,6 +778,14 @@ export function createLlamafileManagerService(): LlamafileManagerService {
       opts: { model: string; offline: boolean },
       verbose: boolean,
     ) {
+      if (
+        (req as any).destroyed ||
+        (req as any).aborted ||
+        req.socket?.destroyed
+      ) {
+        throw new Error("Request already closed or aborted");
+      }
+
       const { absolutePath } = await resolveBinary(opts.model);
       const requestId = getLlamafileRequestId(req, body);
 
@@ -663,6 +796,14 @@ export function createLlamafileManagerService(): LlamafileManagerService {
         const fullMessage = `Binary not executable or not found: ${absolutePath} (${details})`;
 
         throw new Error(fullMessage);
+      }
+
+      if (
+        (req as any).destroyed ||
+        (req as any).aborted ||
+        req.socket?.destroyed
+      ) {
+        throw new Error("Request already closed or aborted");
       }
 
       const wantsStreaming = body.stream === true;
@@ -718,7 +859,19 @@ export function createLlamafileManagerService(): LlamafileManagerService {
         );
       }
 
+      registerTrackedProcess(child, runDetached);
+
+      if (
+        (req as any).destroyed ||
+        (req as any).aborted ||
+        req.socket?.destroyed
+      ) {
+        killChildProcessSync(child, runDetached);
+        throw new Error("Request already closed or aborted");
+      }
+
       if (!child.stdout || !child.stderr) {
+        killChildProcessSync(child, runDetached);
         throw new Error("Failed to setup child process streams");
       }
 
@@ -737,7 +890,7 @@ export function createLlamafileManagerService(): LlamafileManagerService {
         }
       };
 
-      const killChild = (signal: NodeJS.Signals) => {
+      const killChild = (signal: NodeJS.Signals = "SIGTERM") => {
         if (
           child.exitCode !== null ||
           child.signalCode !== null ||
@@ -746,26 +899,54 @@ export function createLlamafileManagerService(): LlamafileManagerService {
           return;
         }
 
+        if (signal === "SIGKILL") {
+          killChildProcessSync(child, runDetached);
+
+          return;
+        }
+
         if (process.platform === "win32") {
           if (typeof child.pid !== "number") {
             return;
           }
 
-          const killer = spawn(
-            "taskkill",
-            ["/PID", String(child.pid), "/T", "/F"],
-            { stdio: "ignore", windowsHide: true },
-          );
-          killer.unref();
+          try {
+            const cp = require("node:child_process");
+            if (typeof cp.execFileSync === "function") {
+              cp.execFileSync(
+                "taskkill",
+                ["/PID", String(child.pid), "/T", "/F"],
+                {
+                  stdio: "ignore",
+                  windowsHide: true,
+                },
+              );
+              return;
+            }
+          } catch {}
+
+          try {
+            const killer = spawn(
+              "taskkill",
+              ["/PID", String(child.pid), "/T", "/F"],
+              { stdio: "ignore", windowsHide: true },
+            );
+            killer.unref();
+          } catch {}
 
           return;
         }
 
         try {
           if (runDetached && typeof child.pid === "number") {
-            process.kill(-child.pid, signal);
-          } else {
-            child.kill(signal);
+            try {
+              process.kill(-child.pid, signal);
+            } catch {}
+          }
+          if (typeof child.pid === "number") {
+            try {
+              process.kill(child.pid, signal);
+            } catch {}
           }
         } catch {}
       };
@@ -800,7 +981,7 @@ export function createLlamafileManagerService(): LlamafileManagerService {
           }
 
           killChild("SIGKILL");
-        }, 1000);
+        }, 500);
       };
 
       const cleanupCancellationListeners = () => {
@@ -1019,11 +1200,23 @@ export function createLlamafileManagerService(): LlamafileManagerService {
       });
     },
 
+    terminateAll() {
+      for (const cancel of activeRequests.values()) {
+        try {
+          cancel();
+        } catch {}
+      }
+      cleanupAllLlamafileProcesses();
+    },
+
     __getOfflineSupportCache() {
       return offlineSupportCache;
     },
     __getActiveRequests() {
       return activeRequests;
+    },
+    __getActiveProcesses() {
+      return allActiveLlamafileProcesses;
     },
   };
 }

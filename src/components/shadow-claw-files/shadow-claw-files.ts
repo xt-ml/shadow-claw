@@ -1546,38 +1546,6 @@ export class ShadowClawFiles extends ShadowClawElement {
     input.value = "";
   }
 
-  async removePageAssignmentIfNeeded(
-    db: ShadowClawDatabase,
-    filePath: string,
-  ): Promise<void> {
-    const groupId = orchestratorStore.activeGroupId;
-    const isSavedPage = orchestratorStore.pages.some((page) => {
-      return page.groupId === groupId && page.path === filePath;
-    });
-
-    if (!isSavedPage) {
-      return;
-    }
-
-    await orchestratorStore.removePage(db, filePath, groupId);
-  }
-
-  async requestConfirmation(options: {
-    title: string;
-    message: string;
-    confirmLabel?: string;
-    cancelLabel?: string;
-  }): Promise<boolean> {
-    const appShell = document.querySelector("shadow-claw") as any;
-    if (appShell && typeof appShell.requestDialog === "function") {
-      return await appShell.requestDialog({ mode: "confirm", ...options });
-    }
-
-    showWarning(options.message, 4500);
-
-    return false;
-  }
-
   async promptUploadConflict(
     fileName: string,
     existingNames: Set<string>,
@@ -1701,6 +1669,38 @@ export class ShadowClawFiles extends ShadowClawElement {
       }
       renameInput.select();
     });
+  }
+
+  async removePageAssignmentIfNeeded(
+    db: ShadowClawDatabase,
+    filePath: string,
+  ): Promise<void> {
+    const groupId = orchestratorStore.activeGroupId;
+    const isSavedPage = orchestratorStore.pages.some((page) => {
+      return page.groupId === groupId && page.path === filePath;
+    });
+
+    if (!isSavedPage) {
+      return;
+    }
+
+    await orchestratorStore.removePage(db, filePath, groupId);
+  }
+
+  async requestConfirmation(options: {
+    title: string;
+    message: string;
+    confirmLabel?: string;
+    cancelLabel?: string;
+  }): Promise<boolean> {
+    const appShell = document.querySelector("shadow-claw") as any;
+    if (appShell && typeof appShell.requestDialog === "function") {
+      return await appShell.requestDialog({ mode: "confirm", ...options });
+    }
+
+    showWarning(options.message, 4500);
+
+    return false;
   }
 
   async uploadFileList(db: ShadowClawDatabase, files: FileList | File[]) {

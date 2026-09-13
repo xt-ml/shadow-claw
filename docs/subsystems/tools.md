@@ -106,10 +106,55 @@ The dedicated **Tool Configuration** view (`<shadow-claw-tools>`, accessible via
 `executeTool(db, name, input, groupId, options)` in `src/worker/utils/executeTool.ts` is the single dispatcher. It:
 
 1. Re-validates `name` against `options.allowedTools` when provided (runtime allowlist enforcement)
-2. Checks recursion guard (scheduled task restrictions)
-3. Switches on tool `name`
-4. Calls the appropriate handler in `src/worker/tools/`
-5. Returns result as string or JSON
+2. Checks runtime environment (`isHeadlessMode()`): if running in headless CLI mode and `name` belongs to `BROWSER_ONLY_TOOLS`, returns a descriptive capability diagnostic message rather than failing silently
+3. Checks recursion guard (scheduled task restrictions)
+4. Switches on tool `name`
+5. Calls the appropriate handler in `src/worker/tools/`
+6. Returns result as string or JSON
+
+### Headless Capability Matrix
+
+Tools adapt automatically based on the active runtime:
+
+| Tool Set                                                                                                                                                                                                                                  | Headless Status   | Behavior in Headless Mode                                                                                                                          |
+| :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :---------------- | :------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bash`                                                                                                                                                                                                                                    | `[headless-safe]` | Executes commands directly against the host OS via `node:child_process` (`native-bash-executor.ts`), bypassing VM limitations.                     |
+| Files (`read_file`, `write_file`, `list_files`, etc.)                                                                                                                                                                                     | `[headless-safe]` | Operates directly on the host workspace directory via `NodeFsDirectoryHandle`.                                                                     |
+| `git_*` (22 tools)                                                                                                                                                                                                                        | `[headless-safe]` | Executes via `isomorphic-git` against the host filesystem.                                                                                         |
+| `fetch_url`, `fetch_file`, `web_search`                                                                                                                                                                                                   | `[headless-safe]` | Pure network execution, unconstrained by browser DOM.                                                                                              |
+| `create_task`, `list_tasks`, `update_task`, etc.                                                                                                                                                                                          | `[headless-safe]` | Persists and manages tasks via `node:sqlite`.                                                                                                      |
+| `javascript`                                                                                                                                                                                                                              | `[headless-safe]` | Evaluates single expressions or multi-statement code in the Node.js execution runtime.                                                             |
+| `get_current_time`, `update_memory`                                                                                                                                                                                                       | `[headless-safe]` | Pure computation and host filesystem persistence (`MEMORY.md`).                                                                                    |
+| `remote_mcp_*`, `manage_email`                                                                                                                                                                                                            | `[headless-safe]` | Network and protocol relaying without DOM dependencies.                                                                                            |
+| `ask_user`, `render_component`, `list_components`, `open_file`, `attach_file_to_chat`, `clear_chat`, `create_room`, `invite_to_room`, `leave_room`, `list_room_members`, `send_file`, `show_toast`, `send_notification`, `spawn_subagent` | `[browser-only]`  | Returns: `Tool "<name>" is not available in headless CLI mode. It requires a browser UI.` Never presented to the model in headless prompt schemas. |
+
+### Direct Tool Inspection & Execution via CLI
+
+The CLI provides direct inspection and standalone headless execution for all registered tools, supporting direct JSON arguments, JSON stdin piping, and plain-text schema auto-mapping:
+
+```bash
+# List all registered tools with capability tags
+npx shadow-claw agent tools
+
+# Inspect JSON Schema and description for a specific tool
+npx shadow-claw agent tool read_file
+
+# Execute a tool directly with JSON input argument
+npx shadow-claw agent tool read_file '{"path": "package.json"}'
+npx shadow-claw agent tool bash '{"command": "uname -a"}'
+
+# Pipe JSON input directly from stdin
+echo '{"path":"file.txt","content":"hello"}' | npx shadow-claw agent tool write_file
+
+# Pipe plain text — automatically mapped to the tool's schema field (text > prompt > content > input)
+echo "how are you doing today" | npx shadow-claw agent tool rewrite_text
+
+# Write output to a file (stdout stays clean for further piping)
+npx shadow-claw agent tool read_file '{"path":"README.md"}' -q -o readme.txt
+
+# Pipe tool output into another command (clean stdout; logs and progress go to stderr)
+npx shadow-claw agent tool read_file '{"path":"README.md"}' -q | wc -l
+```
 
 ### File tools
 

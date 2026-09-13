@@ -633,6 +633,32 @@ const configs = [
     ],
     ...commonResolve("node"),
   },
+  // Headless CLI Agent
+  {
+    input: "src/worker/headless-agent.ts",
+    output: {
+      dir: "dist",
+      entryFileNames: "headless-agent.js",
+      format: "esm",
+      sourcemap: !isProduction,
+      codeSplitting: false,
+      minify: isProduction,
+    },
+    external: [
+      /^node:.*/,
+      "@aws-sdk/client-bedrock",
+      "@aws-sdk/client-bedrock-runtime",
+      "@aws-sdk/credential-providers",
+      "@google/genai",
+      "@huggingface/transformers",
+      "gray-matter",
+      "isomorphic-git",
+      "just-bash",
+      "express",
+      "electron",
+    ],
+    ...commonResolve("node"),
+  },
   // Electron Main Process
   {
     input: "electron/main.ts",

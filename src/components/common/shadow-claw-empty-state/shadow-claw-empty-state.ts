@@ -5,9 +5,9 @@ import shadowClawEmptyStateTemplate from "./shadow-claw-empty-state.html" with {
 const elementName = "shadow-claw-empty-state";
 
 export class ShadowClawEmptyState extends ShadowClawElement {
+  static observedAttributes = ["message", "hint", "compact", "warning"];
   static styles = shadowClawEmptyStateStyles;
   static template = shadowClawEmptyStateTemplate;
-  static observedAttributes = ["message", "hint", "compact", "warning"];
 
   attributeChangedCallback() {
     this.render();

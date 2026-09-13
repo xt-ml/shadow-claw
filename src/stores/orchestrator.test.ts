@@ -257,7 +257,7 @@ jest.unstable_mockModule("../db/reorderTasks.js", () => ({
 
 const { OrchestratorStore, accumulateTokenUsage } =
   await import("./orchestrator.js");
-const { DEFAULT_GROUP_ID } = await import("../config/config.js");
+const { DEFAULT_GROUP_ID, CONFIG_KEYS } = await import("../config/config.js");
 
 function createEvents() {
   const handlers = new Map<string, Set<Function>>();
@@ -2850,6 +2850,100 @@ describe("OrchestratorStore", () => {
         configElement.remove();
         setAllEnabledSpy.mockRestore();
         setAllDeclarativeEnabledSpy.mockRestore();
+      }
+    });
+
+    it("seeds defaultProvider and defaultModel from site-config when not yet configured", async () => {
+      const store = new OrchestratorStore();
+      const events = createEvents();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
+      };
+
+      const configElement = document.createElement("script");
+      configElement.id = "shadow-claw-site-config";
+      configElement.type = "application/json";
+      configElement.textContent = JSON.stringify({
+        settings: {
+          defaultProvider: "openrouter",
+          defaultModel: "openrouter/free",
+        },
+      });
+      document.head.appendChild(configElement);
+
+      mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+        if (key === CONFIG_KEYS.PROVIDER) return null;
+        if (key === CONFIG_KEYS.MODEL) return null;
+        return undefined;
+      });
+
+      (mockListGroups as any).mockResolvedValue([]);
+
+      try {
+        await store.init({} as any, orch);
+        expect(mockSetConfig).toHaveBeenCalledWith(
+          {} as any,
+          CONFIG_KEYS.PROVIDER,
+          "openrouter",
+        );
+        expect(mockSetConfig).toHaveBeenCalledWith(
+          {} as any,
+          CONFIG_KEYS.MODEL,
+          "openrouter/free",
+        );
+      } finally {
+        configElement.remove();
+      }
+    });
+
+    it("keeps default provider as Prompt API without seeding when site-config omits defaultProvider", async () => {
+      const store = new OrchestratorStore();
+      const events = createEvents();
+      const orch: any = {
+        events,
+        provider: "prompt_api",
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+        taskServerEnabled: true,
+      };
+
+      const configElement = document.createElement("script");
+      configElement.id = "shadow-claw-site-config";
+      configElement.type = "application/json";
+      configElement.textContent = JSON.stringify({
+        settings: {
+          defaultToolsProfile: "__builtin_default",
+        },
+      });
+      document.head.appendChild(configElement);
+
+      mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+        if (key === CONFIG_KEYS.PROVIDER) return null;
+        if (key === CONFIG_KEYS.MODEL) return null;
+        return undefined;
+      });
+
+      (mockListGroups as any).mockResolvedValue([]);
+
+      try {
+        await store.init({} as any, orch);
+        expect(mockSetConfig).not.toHaveBeenCalledWith(
+          expect.anything(),
+          CONFIG_KEYS.PROVIDER,
+          expect.anything(),
+        );
+        expect(orch.provider).toBe("prompt_api");
+      } finally {
+        configElement.remove();
       }
     });
 

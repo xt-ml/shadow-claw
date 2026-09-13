@@ -32,9 +32,9 @@ const elementName = "shadow-claw-tools";
 export class ShadowClawTools extends ShadowClawElement {
   static styles = shadowClawToolsStyles;
   static template = shadowClawToolsTemplate;
+  currentRemoteManifest: RemoteManifest | null = null;
 
   orchestrator: Orchestrator | null = null;
-  currentRemoteManifest: RemoteManifest | null = null;
 
   constructor() {
     super();
@@ -570,6 +570,196 @@ export class ShadowClawTools extends ShadowClawElement {
     cloneDialog.showModal();
   }
 
+  renderImportCatalog(manifest: RemoteManifest) {
+    const root = this.shadowRoot;
+    if (!root) return;
+
+    const catalog = root.querySelector(".tools__import-catalog");
+    if (!catalog) return;
+    catalog.replaceChildren();
+
+    // 1. Render Tools
+    const tools = manifest.tools || [];
+    if (tools.length > 0) {
+      const category = document.createElement("div");
+      category.className = "tools__import-category";
+
+      const header = document.createElement("div");
+      header.className = "tools__import-category-header";
+      header.textContent = `🛠️ Tools (${tools.length})`;
+      category.appendChild(header);
+
+      for (const tool of tools) {
+        const item = document.createElement("div");
+        item.className = "tools__import-item";
+
+        const itemHeader = document.createElement("div");
+        itemHeader.className = "tools__import-item-header";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.name = "importTool";
+        checkbox.value = tool.name;
+        checkbox.checked = true;
+        checkbox.id = `import_tool_${tool.name}`;
+        itemHeader.appendChild(checkbox);
+
+        const titleLabel = document.createElement("label");
+        titleLabel.htmlFor = checkbox.id;
+        titleLabel.className = "tools__import-item-title";
+        titleLabel.textContent = tool.name;
+        itemHeader.appendChild(titleLabel);
+
+        const badge = document.createElement("span");
+        badge.className = "tools__item-badge tools__item-badge--declarative";
+        badge.textContent = tool.executionType || "declarative";
+        itemHeader.appendChild(badge);
+
+        item.appendChild(itemHeader);
+
+        if (tool.description) {
+          const desc = document.createElement("div");
+          desc.className = "tools__import-item-desc";
+          desc.textContent = tool.description;
+          item.appendChild(desc);
+        }
+
+        category.appendChild(item);
+      }
+
+      catalog.appendChild(category);
+    }
+
+    // 2. Render Skills
+    const skills = manifest.skills || [];
+    if (skills.length > 0) {
+      const category = document.createElement("div");
+      category.className = "tools__import-category";
+
+      const header = document.createElement("div");
+      header.className = "tools__import-category-header";
+      header.textContent = `🧠 Agent Skills (${skills.length})`;
+      category.appendChild(header);
+
+      for (const skill of skills) {
+        const item = document.createElement("div");
+        item.className = "tools__import-item";
+
+        const itemHeader = document.createElement("div");
+        itemHeader.className = "tools__import-item-header";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.name = "importSkill";
+        checkbox.value = skill.name;
+        checkbox.checked = true;
+        checkbox.id = `import_skill_${skill.name}`;
+        itemHeader.appendChild(checkbox);
+
+        const titleLabel = document.createElement("label");
+        titleLabel.htmlFor = checkbox.id;
+        titleLabel.className = "tools__import-item-title";
+        titleLabel.textContent = skill.name;
+        itemHeader.appendChild(titleLabel);
+
+        const badge = document.createElement("span");
+        badge.className = "tools__item-badge";
+        badge.textContent = "skill";
+        itemHeader.appendChild(badge);
+
+        item.appendChild(itemHeader);
+
+        if (skill.description) {
+          const desc = document.createElement("div");
+          desc.className = "tools__import-item-desc";
+          desc.textContent = skill.description;
+          item.appendChild(desc);
+        }
+
+        category.appendChild(item);
+      }
+
+      catalog.appendChild(category);
+    }
+
+    // 3. Render Scripts
+    const scripts = manifest.scripts || [];
+    if (scripts.length > 0) {
+      const category = document.createElement("div");
+      category.className = "tools__import-category";
+
+      const header = document.createElement("div");
+      header.className = "tools__import-category-header";
+      header.textContent = `📜 Companion Scripts (${scripts.length})`;
+      category.appendChild(header);
+
+      for (const script of scripts) {
+        const item = document.createElement("div");
+        item.className = "tools__import-item";
+
+        const itemHeader = document.createElement("div");
+        itemHeader.className = "tools__import-item-header";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.name = "importScript";
+        checkbox.value = script.name;
+        checkbox.checked = true;
+        checkbox.id = `import_script_${script.name}`;
+        itemHeader.appendChild(checkbox);
+
+        const titleLabel = document.createElement("label");
+        titleLabel.htmlFor = checkbox.id;
+        titleLabel.className = "tools__import-item-title";
+        titleLabel.textContent = script.name;
+        itemHeader.appendChild(titleLabel);
+
+        const badge = document.createElement("span");
+        badge.className = "tools__item-badge";
+        badge.textContent = "script";
+        itemHeader.appendChild(badge);
+
+        item.appendChild(itemHeader);
+
+        if (script.description) {
+          const desc = document.createElement("div");
+          desc.className = "tools__import-item-desc";
+          desc.textContent = script.description;
+          item.appendChild(desc);
+        }
+
+        category.appendChild(item);
+      }
+
+      catalog.appendChild(category);
+    }
+  }
+
+  resetImportDialogState() {
+    this.currentRemoteManifest = null;
+    const root = this.shadowRoot;
+    if (!root) return;
+
+    const statusEl = root.querySelector(
+      ".tools__import-manifest-status",
+    ) as HTMLElement | null;
+    if (statusEl) statusEl.hidden = true;
+
+    const siteName = root.querySelector(".tools__import-site-name");
+    if (siteName) siteName.textContent = "";
+
+    const siteDesc = root.querySelector(".tools__import-site-desc");
+    if (siteDesc) siteDesc.textContent = "";
+
+    const catalog = root.querySelector(".tools__import-catalog");
+    if (catalog) catalog.replaceChildren();
+
+    const submitBtn = root.querySelector(
+      ".tools__import-submit-btn",
+    ) as HTMLButtonElement | null;
+    if (submitBtn) submitBtn.disabled = true;
+  }
+
   setupEffects(db: ShadowClawDatabase) {
     const root = this.shadowRoot;
     if (!root) {
@@ -1037,82 +1227,6 @@ export class ShadowClawTools extends ShadowClawElement {
     cloneDialog?.close();
   }
 
-  async handleRestore(db: ShadowClawDatabase, input: HTMLInputElement) {
-    const file = input.files?.[0];
-    if (!file) {
-      return;
-    }
-
-    try {
-      const text = await file.text();
-      await toolsStore.importBackup(db, text);
-      showSuccess("Tools config restored");
-    } catch (err) {
-      showError(
-        `Failed to restore: ${err instanceof Error ? err.message : String(err)}`,
-      );
-    }
-
-    input.value = "";
-  }
-
-  async handleSaveProfile(db: ShadowClawDatabase, form: HTMLFormElement) {
-    const data = new FormData(form);
-    const name = String(data.get("name") || "").trim();
-    const providerId = String(data.get("providerId") || "").trim();
-    const model = String(data.get("model") || "").trim();
-
-    if (!name) {
-      showError("Profile name is required");
-
-      return;
-    }
-
-    const profile = {
-      id: ulid(),
-      name,
-      providerId: providerId || undefined,
-      model: model || undefined,
-      enabledToolNames: [...toolsStore.enabledToolNames],
-      customTools: [...toolsStore.customTools],
-      systemPromptOverride: toolsStore.systemPromptOverride,
-    };
-
-    await toolsStore.addProfile(db, profile);
-    await toolsStore.activateProfile(db, profile.id);
-    showSuccess(`Profile "${name}" created and activated`);
-
-    const profileDialog = this.shadowRoot?.querySelector(
-      ".tools__profile-dialog",
-    ) as HTMLDialogElement | null;
-    profileDialog?.close();
-  }
-
-  resetImportDialogState() {
-    this.currentRemoteManifest = null;
-    const root = this.shadowRoot;
-    if (!root) return;
-
-    const statusEl = root.querySelector(
-      ".tools__import-manifest-status",
-    ) as HTMLElement | null;
-    if (statusEl) statusEl.hidden = true;
-
-    const siteName = root.querySelector(".tools__import-site-name");
-    if (siteName) siteName.textContent = "";
-
-    const siteDesc = root.querySelector(".tools__import-site-desc");
-    if (siteDesc) siteDesc.textContent = "";
-
-    const catalog = root.querySelector(".tools__import-catalog");
-    if (catalog) catalog.replaceChildren();
-
-    const submitBtn = root.querySelector(
-      ".tools__import-submit-btn",
-    ) as HTMLButtonElement | null;
-    if (submitBtn) submitBtn.disabled = true;
-  }
-
   async handleFetchSite(_db: ShadowClawDatabase, url: string) {
     const root = this.shadowRoot;
     if (!root) return;
@@ -1165,171 +1279,6 @@ export class ShadowClawTools extends ShadowClawElement {
         fetchBtn.disabled = false;
         fetchBtn.textContent = origText;
       }
-    }
-  }
-
-  renderImportCatalog(manifest: RemoteManifest) {
-    const root = this.shadowRoot;
-    if (!root) return;
-
-    const catalog = root.querySelector(".tools__import-catalog");
-    if (!catalog) return;
-    catalog.replaceChildren();
-
-    // 1. Render Tools
-    const tools = manifest.tools || [];
-    if (tools.length > 0) {
-      const category = document.createElement("div");
-      category.className = "tools__import-category";
-
-      const header = document.createElement("div");
-      header.className = "tools__import-category-header";
-      header.textContent = `🛠️ Tools (${tools.length})`;
-      category.appendChild(header);
-
-      for (const tool of tools) {
-        const item = document.createElement("div");
-        item.className = "tools__import-item";
-
-        const itemHeader = document.createElement("div");
-        itemHeader.className = "tools__import-item-header";
-
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.name = "importTool";
-        checkbox.value = tool.name;
-        checkbox.checked = true;
-        checkbox.id = `import_tool_${tool.name}`;
-        itemHeader.appendChild(checkbox);
-
-        const titleLabel = document.createElement("label");
-        titleLabel.htmlFor = checkbox.id;
-        titleLabel.className = "tools__import-item-title";
-        titleLabel.textContent = tool.name;
-        itemHeader.appendChild(titleLabel);
-
-        const badge = document.createElement("span");
-        badge.className = "tools__item-badge tools__item-badge--declarative";
-        badge.textContent = tool.executionType || "declarative";
-        itemHeader.appendChild(badge);
-
-        item.appendChild(itemHeader);
-
-        if (tool.description) {
-          const desc = document.createElement("div");
-          desc.className = "tools__import-item-desc";
-          desc.textContent = tool.description;
-          item.appendChild(desc);
-        }
-
-        category.appendChild(item);
-      }
-
-      catalog.appendChild(category);
-    }
-
-    // 2. Render Skills
-    const skills = manifest.skills || [];
-    if (skills.length > 0) {
-      const category = document.createElement("div");
-      category.className = "tools__import-category";
-
-      const header = document.createElement("div");
-      header.className = "tools__import-category-header";
-      header.textContent = `🧠 Agent Skills (${skills.length})`;
-      category.appendChild(header);
-
-      for (const skill of skills) {
-        const item = document.createElement("div");
-        item.className = "tools__import-item";
-
-        const itemHeader = document.createElement("div");
-        itemHeader.className = "tools__import-item-header";
-
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.name = "importSkill";
-        checkbox.value = skill.name;
-        checkbox.checked = true;
-        checkbox.id = `import_skill_${skill.name}`;
-        itemHeader.appendChild(checkbox);
-
-        const titleLabel = document.createElement("label");
-        titleLabel.htmlFor = checkbox.id;
-        titleLabel.className = "tools__import-item-title";
-        titleLabel.textContent = skill.name;
-        itemHeader.appendChild(titleLabel);
-
-        const badge = document.createElement("span");
-        badge.className = "tools__item-badge";
-        badge.textContent = "skill";
-        itemHeader.appendChild(badge);
-
-        item.appendChild(itemHeader);
-
-        if (skill.description) {
-          const desc = document.createElement("div");
-          desc.className = "tools__import-item-desc";
-          desc.textContent = skill.description;
-          item.appendChild(desc);
-        }
-
-        category.appendChild(item);
-      }
-
-      catalog.appendChild(category);
-    }
-
-    // 3. Render Scripts
-    const scripts = manifest.scripts || [];
-    if (scripts.length > 0) {
-      const category = document.createElement("div");
-      category.className = "tools__import-category";
-
-      const header = document.createElement("div");
-      header.className = "tools__import-category-header";
-      header.textContent = `📜 Companion Scripts (${scripts.length})`;
-      category.appendChild(header);
-
-      for (const script of scripts) {
-        const item = document.createElement("div");
-        item.className = "tools__import-item";
-
-        const itemHeader = document.createElement("div");
-        itemHeader.className = "tools__import-item-header";
-
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.name = "importScript";
-        checkbox.value = script.name;
-        checkbox.checked = true;
-        checkbox.id = `import_script_${script.name}`;
-        itemHeader.appendChild(checkbox);
-
-        const titleLabel = document.createElement("label");
-        titleLabel.htmlFor = checkbox.id;
-        titleLabel.className = "tools__import-item-title";
-        titleLabel.textContent = script.name;
-        itemHeader.appendChild(titleLabel);
-
-        const badge = document.createElement("span");
-        badge.className = "tools__item-badge";
-        badge.textContent = "script";
-        itemHeader.appendChild(badge);
-
-        item.appendChild(itemHeader);
-
-        if (script.description) {
-          const desc = document.createElement("div");
-          desc.className = "tools__import-item-desc";
-          desc.textContent = script.description;
-          item.appendChild(desc);
-        }
-
-        category.appendChild(item);
-      }
-
-      catalog.appendChild(category);
     }
   }
 
@@ -1407,6 +1356,57 @@ export class ShadowClawTools extends ShadowClawElement {
         submitBtn.textContent = "Import Selected";
       }
     }
+  }
+
+  async handleRestore(db: ShadowClawDatabase, input: HTMLInputElement) {
+    const file = input.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      await toolsStore.importBackup(db, text);
+      showSuccess("Tools config restored");
+    } catch (err) {
+      showError(
+        `Failed to restore: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+
+    input.value = "";
+  }
+
+  async handleSaveProfile(db: ShadowClawDatabase, form: HTMLFormElement) {
+    const data = new FormData(form);
+    const name = String(data.get("name") || "").trim();
+    const providerId = String(data.get("providerId") || "").trim();
+    const model = String(data.get("model") || "").trim();
+
+    if (!name) {
+      showError("Profile name is required");
+
+      return;
+    }
+
+    const profile = {
+      id: ulid(),
+      name,
+      providerId: providerId || undefined,
+      model: model || undefined,
+      enabledToolNames: [...toolsStore.enabledToolNames],
+      customTools: [...toolsStore.customTools],
+      systemPromptOverride: toolsStore.systemPromptOverride,
+    };
+
+    await toolsStore.addProfile(db, profile);
+    await toolsStore.activateProfile(db, profile.id);
+    showSuccess(`Profile "${name}" created and activated`);
+
+    const profileDialog = this.shadowRoot?.querySelector(
+      ".tools__profile-dialog",
+    ) as HTMLDialogElement | null;
+    profileDialog?.close();
   }
 }
 

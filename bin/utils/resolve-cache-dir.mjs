@@ -15,6 +15,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import readline from "node:readline/promises";
+import tty from "node:tty";
 
 /**
  * Returns the default system temporary cache directory for ShadowClaw.
@@ -82,9 +83,11 @@ export function detectExistingCache(
     path.join(cacheDir, "cli-peer-id"),
     databaseDir,
     path.join(databaseDir, "clients.db"),
+    path.join(databaseDir, "agent.db"),
     path.join(databaseDir, "scheduled-tasks.db"),
     path.join(databaseDir, "push-subscriptions.db"),
     path.join(root, "database", "clients.db"),
+    path.join(root, "database", "agent.db"),
   ];
 
   for (const candidate of candidates) {
@@ -109,16 +112,44 @@ export async function promptForCacheDir({
   const defaultLocalCache = path.join(root, ".cache");
   const systemTmpCache = getSystemTmpCacheDir();
 
+  let input = stdin;
+  let output = stdout;
+  let closeInputOnFinish = false;
+  let ttyFd = null;
+
+  // When stdin is redirected (e.g. piped tool input), but an interactive terminal is present,
+  // open /dev/tty (or CONIN$ on Windows) so the interactive wizard can prompt the user,
+  // and direct prompt output to stderr so stdout remains clean for piping.
+  if (stdin === process.stdin && !process.stdin.isTTY) {
+    if (!process.env.CI && (process.stderr.isTTY || process.stdout.isTTY)) {
+      try {
+        const ttyDevice = process.platform === "win32" ? "CONIN$" : "/dev/tty";
+        ttyFd = fs.openSync(ttyDevice, "r");
+        input = new tty.ReadStream(ttyFd);
+        output = process.stderr.isTTY ? process.stderr : process.stdout;
+        closeInputOnFinish = true;
+      } catch (_) {
+        try {
+          const ttyDevice =
+            process.platform === "win32" ? "CONIN$" : "/dev/tty";
+          input = fs.createReadStream(ttyDevice);
+          output = process.stderr.isTTY ? process.stderr : process.stdout;
+          closeInputOnFinish = true;
+        } catch (_) {}
+      }
+    }
+  }
+
   const rl = readline.createInterface({
-    input: stdin,
-    output: stdout,
+    input,
+    output,
   });
 
   let exited = false;
   const handleSigint = () => {
     if (exited) return;
     exited = true;
-    stdout.write("\nOperation cancelled.\n");
+    output.write("\nOperation cancelled.\n");
     try {
       rl.close();
     } catch (_) {}
@@ -126,19 +157,29 @@ export async function promptForCacheDir({
   };
 
   rl.on("SIGINT", handleSigint);
-  if (stdin && typeof stdin.on === "function" && stdin !== process.stdin) {
-    stdin.on("SIGINT", handleSigint);
+  if (input && typeof input.on === "function" && input !== process.stdin) {
+    input.on("SIGINT", handleSigint);
   }
   const processSigintListener = () => handleSigint();
   process.on("SIGINT", processSigintListener);
 
+  const dataListener = (chunk) => {
+    const str = typeof chunk === "string" ? chunk : chunk.toString("binary");
+    if (str.includes("\x03") || str.includes("\x04")) {
+      handleSigint();
+    }
+  };
+  if (input && typeof input.on === "function") {
+    input.on("data", dataListener);
+  }
+
   try {
-    stdout.write(
+    output.write(
       "\nShadowClaw needs a directory to store cache and database files:\n",
     );
-    stdout.write("  - .cache/control-token.json\n");
-    stdout.write(
-      "  - .cache/database/ (clients.db, scheduled-tasks.db, push-subscriptions.db)\n\n",
+    output.write("  - .cache/control-token.json\n");
+    output.write(
+      "  - .cache/database/ (clients.db, scheduled-tasks.db, push-subscriptions.db, agent.db)\n\n",
     );
     stdout.write(
       `No existing .cache directory was detected in:\n  ${root}\n\n`,
@@ -211,18 +252,31 @@ export async function promptForCacheDir({
 
     // Direct path entered
     const resolved = path.resolve(root, answer);
-    stdout.write(`Using directory: ${resolved}\n\n`);
+    output.write(`Using directory: ${resolved}\n\n`);
     return resolved;
   } finally {
     process.removeListener("SIGINT", processSigintListener);
-    if (
-      stdin &&
-      typeof stdin.removeListener === "function" &&
-      stdin !== process.stdin
-    ) {
-      stdin.removeListener("SIGINT", handleSigint);
+    if (input && typeof input.removeListener === "function") {
+      if (input !== process.stdin) {
+        input.removeListener("SIGINT", handleSigint);
+      }
+      input.removeListener("data", dataListener);
     }
-    rl.close();
+    try {
+      rl.close();
+    } catch (_) {}
+    if (closeInputOnFinish) {
+      if (input && typeof input.destroy === "function") {
+        try {
+          input.destroy();
+        } catch (_) {}
+      }
+      if (ttyFd != null) {
+        try {
+          fs.closeSync(ttyFd);
+        } catch (_) {}
+      }
+    }
   }
 }
 
@@ -313,10 +367,18 @@ export async function resolveCacheDir(options = {}) {
   }
 
   // 7. Non-interactive environment guard (not a TTY or CI=true)
+  const isDirectTTY = options.stdin
+    ? Boolean(options.stdin.isTTY)
+    : Boolean(process.stdin.isTTY);
+  const hasAlternateTTY =
+    !options.stdin &&
+    !process.stdin.isTTY &&
+    Boolean(process.stderr.isTTY || process.stdout.isTTY);
+
   const isTTY =
     options.isTTY !== undefined
       ? Boolean(options.isTTY)
-      : Boolean(options.stdin ? options.stdin.isTTY : process.stdin.isTTY);
+      : isDirectTTY || hasAlternateTTY;
 
   const isCI =
     options.isCI !== undefined
@@ -328,7 +390,7 @@ export async function resolveCacheDir(options = {}) {
             !["0", "false"].includes(process.env.CI.toLowerCase()),
           );
 
-  if (!isTTY || isCI) {
+  if (!isTTY || isCI || options.quiet) {
     return { cacheDir: defaultCacheDir, databaseDir: defaultDatabaseDir };
   }
 

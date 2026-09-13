@@ -1,6 +1,7 @@
 import { clearGroupMessages } from "./clearGroupMessages.js";
 import { saveMessage } from "./saveMessage.js";
 import { saveSession } from "./saveSession.js";
+import { isSqliteDatabase } from "./sqlite/types.js";
 import type { ShadowClawDatabase } from "./types.js";
 
 export interface ChatData {
@@ -21,20 +22,25 @@ export async function importChatData(
     await clearGroupMessages(db, groupId);
 
     // Delete existing session for this group
-    const tx1 = db?.transaction("sessions", "readwrite");
-    if (!tx1) {
-      throw new Error(
-        "cannot get existing session for this group from transaction",
-      );
+    if (db && isSqliteDatabase(db)) {
+      db.db.prepare("DELETE FROM sessions WHERE groupId = ?").run(groupId);
+    } else {
+      const idb = db as IDBDatabase;
+      const tx1 = idb?.transaction("sessions", "readwrite");
+      if (!tx1) {
+        throw new Error(
+          "cannot get existing session for this group from transaction",
+        );
+      }
+
+      const sessionStore = tx1.objectStore("sessions");
+      await new Promise((resolve, reject) => {
+        const request = sessionStore.delete(groupId);
+
+        request.onsuccess = () => resolve(undefined);
+        request.onerror = () => reject(request.error);
+      });
     }
-
-    const sessionStore = tx1.objectStore("sessions");
-    await new Promise((resolve, reject) => {
-      const request = sessionStore.delete(groupId);
-
-      request.onsuccess = () => resolve(undefined);
-      request.onerror = () => reject(request.error);
-    });
 
     // Import messages
     if (data.messages && Array.isArray(data.messages)) {

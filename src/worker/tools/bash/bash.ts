@@ -5,7 +5,7 @@ import {
 } from "../../../config/config.js";
 
 import { getConfig } from "../../../db/getConfig.js";
-import { ShadowClawDatabase } from "../../../db/types.js";
+import type { ShadowClawDatabase } from "../../../db/types.js";
 
 import {
   bootVM,
@@ -22,6 +22,21 @@ import { waitForVMReady } from "./utils/waitForVMReady.js";
 
 import { writeGroupFile } from "../../../storage/writeGroupFile.js";
 import { deleteGroupFile } from "../../../storage/deleteGroupFile.js";
+import { isHeadlessMode } from "../../../config/headless.js";
+
+export type HeadlessBashExecutor = (options: {
+  command: string;
+  stdin?: string;
+  timeoutSec: number;
+}) => Promise<string>;
+
+let _headlessBashExecutor: HeadlessBashExecutor | null = null;
+
+export function setHeadlessBashExecutor(
+  executor: HeadlessBashExecutor | null,
+): void {
+  _headlessBashExecutor = executor;
+}
 
 export async function executeBash(
   db: ShadowClawDatabase,
@@ -51,6 +66,18 @@ export async function executeBash(
   const stdinFile = ".shadowclaw_stdin";
 
   let command = input.command;
+
+  // Headless mode uses real OS shell via registered headless executor
+  if (isHeadlessMode()) {
+    const executor =
+      _headlessBashExecutor ?? (globalThis as any).__headlessBashExecutor;
+    if (typeof executor === "function") {
+      return executor({ command, stdin, timeoutSec });
+    }
+    throw new Error(
+      "Headless bash executor is not configured. Register nativeBashExecutor before executing bash in headless mode.",
+    );
+  }
   if (hasStdin) {
     if (bootMode === "ext2") {
       const eofMarker = `EOF_SC_${Date.now()}`;

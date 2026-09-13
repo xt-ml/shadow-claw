@@ -1,6 +1,6 @@
 import { jest } from "@jest/globals";
 import { assembleChunkedStream } from "./assembleChunkedStream.js";
-import { DEFAULT_MODEL_CACHE_NAME, ModelPartialMeta } from "./types.js";
+import { DEFAULT_MODEL_CACHE_NAME, type ModelPartialMeta } from "./types.js";
 
 function makeBodyStream(data: Uint8Array): ReadableStream<Uint8Array> {
   return new ReadableStream<Uint8Array>({

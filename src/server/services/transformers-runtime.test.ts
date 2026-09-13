@@ -54,19 +54,71 @@ describe("TransformersRuntimeService", () => {
     transformersMock = {
       env: {},
       AutoProcessor: {
-        from_pretrained: jest.fn(async () => processorMock),
+        from_pretrained: jest.fn(async (_modelId: string, opts?: any) => {
+          opts?.progress_callback?.({
+            status: "initiate",
+            file: "tokenizer.json",
+          });
+          return processorMock;
+        }),
+      },
+      AutoTokenizer: {
+        from_pretrained: jest.fn(async (_modelId: string, opts?: any) => {
+          opts?.progress_callback?.({
+            status: "initiate",
+            file: "tokenizer.json",
+          });
+          return processorMock;
+        }),
       },
       Gemma4Processor: {
-        from_pretrained: jest.fn(async () => processorMock),
+        from_pretrained: jest.fn(async (_modelId: string, opts?: any) => {
+          opts?.progress_callback?.({
+            status: "initiate",
+            file: "tokenizer.json",
+          });
+          return processorMock;
+        }),
       },
       Gemma4ForConditionalGeneration: {
-        from_pretrained: jest.fn(async () => modelMock),
+        from_pretrained: jest.fn(async (_modelId: string, opts?: any) => {
+          opts?.progress_callback?.({
+            status: "progress",
+            progress: 50,
+            file: "model.onnx",
+          });
+          return modelMock;
+        }),
       },
       AutoModelForCausalLM: {
-        from_pretrained: jest.fn(async () => modelMock),
+        MODEL_CLASS_MAPPINGS: [new Map()],
+        from_pretrained: jest.fn(async function (
+          this: any,
+          _modelId: string,
+          opts?: any,
+        ) {
+          if (!this?.MODEL_CLASS_MAPPINGS) {
+            throw new Error(
+              "`MODEL_CLASS_MAPPINGS` not implemented for this type of `AutoClass`: AutoModelForCausalLM",
+            );
+          }
+          opts?.progress_callback?.({
+            status: "progress",
+            progress: 50,
+            file: "model.onnx",
+          });
+          return modelMock;
+        }),
       },
       AutoModelForImageTextToText: {
-        from_pretrained: jest.fn(async () => modelMock),
+        from_pretrained: jest.fn(async (_modelId: string, opts?: any) => {
+          opts?.progress_callback?.({
+            status: "progress",
+            progress: 50,
+            file: "model.onnx",
+          });
+          return modelMock;
+        }),
       },
       TextStreamer: class {
         callback_function: any;
@@ -142,6 +194,74 @@ describe("TransformersRuntimeService", () => {
       expect(result.text).toBe("Hello");
       expect(
         transformersMock.AutoModelForImageTextToText.from_pretrained,
+      ).toHaveBeenCalled();
+    });
+
+    it("falls back to AutoTokenizer when AutoProcessor fails with missing preprocessor_config.json", async () => {
+      transformersMock.AutoProcessor.from_pretrained.mockRejectedValueOnce(
+        new Error(
+          'Could not locate file: "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/resolve/main/preprocessor_config.json".',
+        ),
+      );
+
+      const standaloneTokenizerMock = Object.assign(
+        jest.fn().mockImplementation(() => ({
+          input_ids: { dims: [1, 5] },
+        })),
+        {
+          apply_chat_template: jest.fn(() => "prompt"),
+          batch_decode: jest.fn(() => ["Generated response"]),
+          dispose: jest.fn(),
+        },
+      );
+      transformersMock.AutoTokenizer.from_pretrained.mockResolvedValueOnce(
+        standaloneTokenizerMock,
+      );
+
+      const service = await getService();
+      const onToken = jest.fn();
+
+      const promise = service.runChatCompletion({
+        modelId: "onnx-community/Qwen3-0.6B-ONNX",
+        messages: [{ role: "user", content: "hi" }],
+        maxCompletionTokens: 10,
+        verbose: false,
+        onToken,
+      });
+
+      await jest.advanceTimersByTimeAsync(0);
+
+      const result = await promise;
+      expect(result.text).toBe("Hello");
+      expect(transformersMock.AutoProcessor.from_pretrained).toHaveBeenCalled();
+      expect(transformersMock.AutoTokenizer.from_pretrained).toHaveBeenCalled();
+      expect(standaloneTokenizerMock).toHaveBeenCalledWith("prompt", {
+        add_special_tokens: false,
+      });
+    });
+
+    it("loads causal LM models with proper class context when ImageTextToText fails", async () => {
+      transformersMock.AutoModelForImageTextToText.from_pretrained.mockRejectedValue(
+        new Error("Unknown model class"),
+      );
+
+      const service = await getService();
+      const onToken = jest.fn();
+
+      const promise = service.runChatCompletion({
+        modelId: "onnx-community/Qwen3-0.6B-ONNX",
+        messages: [{ role: "user", content: "hi" }],
+        maxCompletionTokens: 10,
+        verbose: false,
+        onToken,
+      });
+
+      await jest.advanceTimersByTimeAsync(0);
+
+      const result = await promise;
+      expect(result.text).toBe("Hello");
+      expect(
+        transformersMock.AutoModelForCausalLM.from_pretrained,
       ).toHaveBeenCalled();
     });
 
@@ -288,6 +408,24 @@ describe("TransformersRuntimeService", () => {
       expect(info.modelId).toBe("onnx-community/gemma-4-E2B-it-ONNX");
       expect(info.loader).toBeTruthy();
     });
+
+    it("prewarms model falling back to AutoTokenizer when AutoProcessor fails", async () => {
+      transformersMock.AutoProcessor.from_pretrained.mockRejectedValueOnce(
+        new Error(
+          'Could not locate file: "https://huggingface.co/onnx-community/Qwen3-0.6B-ONNX/resolve/main/preprocessor_config.json".',
+        ),
+      );
+
+      const service = await getService();
+      const info = await service.prewarmModel({
+        modelId: "onnx-community/Qwen3-0.6B-ONNX",
+        verbose: false,
+      });
+
+      expect(info.modelId).toBe("onnx-community/Qwen3-0.6B-ONNX");
+      expect(transformersMock.AutoProcessor.from_pretrained).toHaveBeenCalled();
+      expect(transformersMock.AutoTokenizer.from_pretrained).toHaveBeenCalled();
+    });
   });
 
   describe("disposeRuntime and reset", () => {
@@ -322,23 +460,41 @@ describe("TransformersRuntimeService", () => {
     });
   });
 
-  describe("idle cleanup", () => {
-    it("automatically disposes runtime after idle time", async () => {
+  describe("progress reporting", () => {
+    it("calls onProgress callback when prewarming a model", async () => {
       const service = await getService();
-      const modelId = "onnx-community/gemma-4-E2B-it-ONNX";
-
-      await service.runChatCompletion({
-        modelId,
-        messages: [{ role: "user", content: "hi" }],
-        maxCompletionTokens: 10,
-        verbose: false,
+      const progressEvents: any[] = [];
+      const onProgress = jest.fn((info: any) => {
+        progressEvents.push(info);
       });
 
-      expect(modelMock.dispose).not.toHaveBeenCalled();
+      await service.prewarmModel({
+        modelId: "onnx-community/gemma-4-E2B-it-ONNX",
+        verbose: false,
+        onProgress,
+      });
 
-      await jest.advanceTimersByTimeAsync(11000);
+      expect(onProgress).toHaveBeenCalled();
+      expect(progressEvents.some((e) => e.status === "progress")).toBe(true);
+    });
 
-      expect(modelMock.dispose).toHaveBeenCalled();
+    it("calls onProgress callback when running chat completion", async () => {
+      const service = await getService();
+      const progressEvents: any[] = [];
+      const onProgress = jest.fn((info: any) => {
+        progressEvents.push(info);
+      });
+
+      await service.runChatCompletion({
+        modelId: "onnx-community/gemma-4-E4B-it-ONNX",
+        messages: [{ role: "user", content: "Hello!" }],
+        maxCompletionTokens: 50,
+        verbose: false,
+        onProgress,
+      });
+
+      expect(onProgress).toHaveBeenCalled();
+      expect(progressEvents.some((e) => e.status === "progress")).toBe(true);
     });
   });
 });

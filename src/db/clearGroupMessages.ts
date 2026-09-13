@@ -1,15 +1,36 @@
+import { isSqliteDatabase } from "./sqlite/types.js";
 import type { ShadowClawDatabase } from "./types.js";
 
 /**
- * Delete all messages for a given group
+ * Delete all messages for a given group.
+ *
+ * Accepts an optional `db` parameter for headless/SQLite usage.
  */
 export function clearGroupMessages(
-  db: ShadowClawDatabase,
-  groupId: string,
+  dbOrGroupId: ShadowClawDatabase | string,
+  groupIdOrNothing?: string,
 ): Promise<void> {
+  let db: ShadowClawDatabase | null = null;
+  let groupId: string;
+
+  if (typeof dbOrGroupId === "string") {
+    groupId = dbOrGroupId;
+  } else {
+    db = dbOrGroupId;
+    groupId = groupIdOrNothing!;
+  }
+
+  // SQLite fast path
+  if (db && isSqliteDatabase(db)) {
+    const raw = db.db;
+    raw.prepare("DELETE FROM messages WHERE groupId = ?").run(groupId);
+    return Promise.resolve();
+  }
+
   return new Promise((resolve, reject) => {
     try {
-      const tx = db?.transaction("messages", "readwrite");
+      const idb = db as IDBDatabase | null;
+      const tx = idb?.transaction("messages", "readwrite");
 
       if (!tx) {
         return reject(

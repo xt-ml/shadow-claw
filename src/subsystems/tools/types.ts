@@ -37,3 +37,8 @@ export interface ToolProfile {
   // Optional system prompt override
   systemPromptOverride?: string;
 }
+
+export const ToolDefinition = undefined;
+export const DeclarativeToolExecution = undefined;
+export const DeclarativeToolDefinition = undefined;
+export const ToolProfile = undefined;

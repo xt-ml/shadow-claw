@@ -8,8 +8,8 @@ import {
   DEFAULT_CHUNK_SIZE,
   DEFAULT_MAX_DOWNLOAD_ATTEMPTS,
   DEFAULT_MODEL_CACHE_NAME,
-  ModelCacheOptions,
-  ModelProgressCallback,
+  type ModelCacheOptions,
+  type ModelProgressCallback,
 } from "./types.js";
 import { writePartialMeta } from "./writePartialMeta.js";
 

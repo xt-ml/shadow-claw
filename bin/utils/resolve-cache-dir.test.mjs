@@ -335,4 +335,36 @@ describe("resolve-cache-dir utility", () => {
     expect(exitCode).toBe(130);
     expect(output).toContain("Operation cancelled.");
   });
+
+  it("handles Ctrl+C (\\x03) character on input stream gracefully", async () => {
+    const { PassThrough } = await import("node:stream");
+    const stdin = new PassThrough();
+    let output = "";
+    const stdout = new Writable({
+      write(chunk, _encoding, callback) {
+        output += chunk.toString();
+        callback();
+      },
+    });
+
+    let exitCode = null;
+    const onExit = (code) => {
+      exitCode = code;
+    };
+
+    const promise = promptForCacheDir({
+      contentRoot: tempDir,
+      stdin,
+      stdout,
+      onExit,
+    });
+
+    // Write \x03 (Ctrl+C) into stream
+    stdin.write("\x03");
+
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    expect(exitCode).toBe(130);
+    expect(output).toContain("Operation cancelled.");
+  });
 });

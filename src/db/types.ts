@@ -5,8 +5,9 @@ import type {
 
 import type { ChannelType } from "../subsystems/channels/types.js";
 import type { A2UIAction, A2UIEnvelope } from "../ui/a2ui/types.js";
+import type { ShadowClawSqliteDatabase } from "./sqlite/types.js";
 
-export type ShadowClawDatabase = IDBDatabase | null;
+export type ShadowClawDatabase = IDBDatabase | ShadowClawSqliteDatabase | null;
 
 export interface ConfigEntry {
   value: string; // JSON-encoded or raw string

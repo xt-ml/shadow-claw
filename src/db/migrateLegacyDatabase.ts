@@ -1,14 +1,13 @@
 import { CONFIG_KEYS, LEGACY_DB_NAME } from "../config/config.js";
 import { getConfig } from "./getConfig.js";
 import { setConfig } from "./setConfig.js";
-import type { ShadowClawDatabase } from "./types.js";
 
 /**
  * Perform a one-time migration from the legacy unnamespaced database "shadowclaw"
  * to the new namespaced database if not already done.
  */
 export async function migrateLegacyDatabase(
-  targetDb: ShadowClawDatabase,
+  targetDb: IDBDatabase | null,
 ): Promise<void> {
   if (!targetDb || targetDb.name === LEGACY_DB_NAME) {
     return;
@@ -27,7 +26,7 @@ export async function migrateLegacyDatabase(
   }
 
   try {
-    const legacyDb = await new Promise<ShadowClawDatabase | null>((resolve) => {
+    const legacyDb = await new Promise<IDBDatabase | null>((resolve) => {
       const req = indexedDB.open(LEGACY_DB_NAME);
       req.onsuccess = () => {
         const db = req.result;

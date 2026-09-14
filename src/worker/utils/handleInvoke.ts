@@ -224,6 +224,7 @@ function formatToolFallbackResponseText(text: string): string {
 export type NodeTransformersCompletionExecutor = (options: {
   modelId: string;
   messages: any[];
+  tools?: any[];
   maxTokens?: number;
   verbose?: boolean;
   onToken?: (text: string) => void;
@@ -477,6 +478,7 @@ export async function handleInvoke(
         const rawResult = await _nodeTransformersCompletionExecutor({
           modelId: model,
           messages: payloadMessages,
+          tools: currentTools as any[],
           maxTokens: safeMaxTokens,
           abortSignal,
           verbose: Boolean(payload.verbose),

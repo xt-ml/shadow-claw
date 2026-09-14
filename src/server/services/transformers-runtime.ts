@@ -159,6 +159,7 @@ export interface TransformersRuntimeService {
   runChatCompletion(params: {
     modelId: string;
     messages: any[];
+    tools?: any[];
     maxCompletionTokens: number;
     verbose: boolean;
     onToken?: (text: string) => void;
@@ -842,6 +843,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
       const {
         modelId,
         messages,
+        tools,
         maxCompletionTokens,
         verbose,
         onToken,
@@ -877,6 +879,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
               enable_thinking: false,
               add_generation_prompt: true,
               tokenize: false,
+              ...(tools && tools.length > 0 && { tools }),
             });
           } catch {
             prompt = await renderChatTemplate({
@@ -896,6 +899,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
                 enable_thinking: false,
                 add_generation_prompt: true,
                 tokenize: false,
+                ...(tools && tools.length > 0 && { tools }),
               },
             );
           } catch {

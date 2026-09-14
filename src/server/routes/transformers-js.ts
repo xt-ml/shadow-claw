@@ -20,10 +20,7 @@ import {
   sendStreamingProxyError,
 } from "../utils/openai-sse.js";
 
-import {
-  parseLooseToolCallInput,
-  parseLooseFunctionCallArgs,
-} from "../utils/proxy-helpers.js";
+import { parseLocalModelToolCall } from "../../subsystems/providers/utils/parseLocalModelToolCall.js";
 
 import type { Express } from "express";
 
@@ -113,6 +110,10 @@ export function registerTransformersJsRoutes(
           ? Math.min(Math.floor(maxCompletionTokensRaw), 4096)
           : 512;
 
+      const tools = Array.isArray(requestBody.tools)
+        ? requestBody.tools
+        : undefined;
+
       if (requestBody.stream === true) {
         const abortController = new AbortController();
         const abortInference = () => abortController.abort();
@@ -130,6 +131,7 @@ export function registerTransformersJsRoutes(
           .runChatCompletion({
             modelId,
             messages,
+            tools,
             maxCompletionTokens,
             verbose,
             abortSignal: abortController.signal,
@@ -152,37 +154,7 @@ export function registerTransformersJsRoutes(
 
         const finalText = (streamedChunks.join("") || result.text || "").trim();
 
-        const parseToolCallText = (text: string) => {
-          const trimmed = text
-            .replace(/<\s*turn\|>\s*|<\|end_of_turn\|>|<\|eot_id\|>/gi, "")
-            .trim();
-          const legacyMatch = trimmed.match(
-            /^call\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([\s\S]*)\}\s*$/,
-          );
-
-          if (legacyMatch?.[1]) {
-            const name = legacyMatch[1];
-            const rawArgs = legacyMatch[2]?.trim() || "";
-            const input = parseLooseToolCallInput(rawArgs);
-
-            return { name, input };
-          }
-
-          const executeToolMatch = trimmed.match(
-            /^<\s*execute_tool\s*>\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*<\s*\/\s*execute_tool\s*>\s*$/i,
-          );
-          if (executeToolMatch?.[1]) {
-            const name = executeToolMatch[1];
-            const rawArgs = executeToolMatch[2]?.trim() || "";
-            const input = parseLooseFunctionCallArgs(rawArgs);
-
-            return { name, input };
-          }
-
-          return null;
-        };
-
-        const toolCall = parseToolCallText(finalText);
+        const toolCall = parseLocalModelToolCall(finalText);
         if (toolCall) {
           writeOpenAiToolCallChunk(res, modelId, toolCall);
           writeOpenAiDoneChunk(res, modelId, "tool_calls");
@@ -208,6 +180,7 @@ export function registerTransformersJsRoutes(
         .runChatCompletion({
           modelId,
           messages,
+          tools,
           maxCompletionTokens,
           verbose,
           abortSignal: abortController.signal,
@@ -228,37 +201,7 @@ export function registerTransformersJsRoutes(
         total_tokens: result.promptTokens + result.completionTokens,
       };
 
-      const parseToolCallText = (text: string) => {
-        const trimmed = text
-          .replace(/<\s*turn\|>\s*|<\|end_of_turn\|>|<\|eot_id\|>/gi, "")
-          .trim();
-        const legacyMatch = trimmed.match(
-          /^call\s*:\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\{([\s\S]*)\}\s*$/,
-        );
-
-        if (legacyMatch?.[1]) {
-          const name = legacyMatch[1];
-          const rawArgs = legacyMatch[2]?.trim() || "";
-          const input = parseLooseToolCallInput(rawArgs);
-
-          return { name, input };
-        }
-
-        const executeToolMatch = trimmed.match(
-          /^<\s*execute_tool\s*>\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\(([^)]*)\)\s*<\s*\/\s*execute_tool\s*>\s*$/i,
-        );
-        if (executeToolMatch?.[1]) {
-          const name = executeToolMatch[1];
-          const rawArgs = executeToolMatch[2]?.trim() || "";
-          const input = parseLooseFunctionCallArgs(rawArgs);
-
-          return { name, input };
-        }
-
-        return null;
-      };
-
-      const toolCall = parseToolCallText(result.text || "");
+      const toolCall = parseLocalModelToolCall(result.text || "");
       const message = toolCall
         ? {
             role: "assistant",

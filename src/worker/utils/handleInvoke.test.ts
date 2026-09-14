@@ -1213,6 +1213,169 @@ describe("handleInvoke.js", () => {
     }
   });
 
+  it("forwards currentTools to in-process node transformers executor in headless mode", async () => {
+    const { setHeadlessMode } = await import("../../config/headless.js");
+    const { setTransformersServiceForTests } =
+      await import("../tools/node-transformers-executor.js");
+
+    setHeadlessMode(true);
+    const mockService = {
+      runChatCompletion: jest.fn(async () => ({
+        text: "Direct node result",
+        promptTokens: 10,
+        completionTokens: 5,
+      })),
+    };
+    setTransformersServiceForTests(mockService as any);
+
+    try {
+      const payload: any = {
+        groupId: "server:main",
+        messages: [{ role: "user", content: "What is the weather?" }],
+        provider: "transformers_js_local",
+        model: "onnx-community/Qwen3-0.6B-ONNX",
+        enabledTools: [
+          { name: "fetch_url", description: "Fetch a URL", input_schema: {} },
+        ],
+      };
+
+      (mockGetProvider as any).mockReturnValue({
+        id: "transformers_js_local",
+        name: "Transformers.js (Local Proxy)",
+        baseUrl: "http://localhost:8888/v1/chat/completions",
+        format: "openai",
+      });
+
+      (mockParseResponse as any).mockImplementation((_p: any, raw: any) => ({
+        stop_reason: "end_turn",
+        content: [{ type: "text", text: raw.choices[0].message.content }],
+      }));
+
+      await handleInvoke({} as any, payload);
+
+      // The tools from the payload must be forwarded to the runtime service
+      expect(mockService.runChatCompletion).toHaveBeenCalledWith(
+        expect.objectContaining({
+          modelId: "onnx-community/Qwen3-0.6B-ONNX",
+          tools: expect.arrayContaining([
+            expect.objectContaining({
+              type: "function",
+              function: expect.objectContaining({ name: "fetch_url" }),
+            }),
+          ]),
+        }),
+      );
+    } finally {
+      setHeadlessMode(false);
+      setTransformersServiceForTests(null);
+      const { setNodeTransformersCompletionExecutor } =
+        await import("./handleInvoke.js");
+      setNodeTransformersCompletionExecutor(null);
+    }
+  });
+
+  it("converts Gemma call: tool response into OpenAI tool_calls for headless transformers executor", async () => {
+    const { setHeadlessMode } = await import("../../config/headless.js");
+    const { setTransformersServiceForTests } =
+      await import("../tools/node-transformers-executor.js");
+
+    setHeadlessMode(true);
+    const mockService = {
+      runChatCompletion: jest.fn(async () => ({
+        // Gemma 4 emits this after special-token stripping
+        text: 'call:fetch_url{"url":"https://wttr.in/Chicago?format=j1"}',
+        promptTokens: 20,
+        completionTokens: 15,
+      })),
+    };
+    setTransformersServiceForTests(mockService as any);
+
+    try {
+      const payload: any = {
+        groupId: "server:main",
+        messages: [
+          { role: "user", content: "What is the weather in Chicago?" },
+        ],
+        provider: "transformers_js_local",
+        model: "onnx-community/gemma-4-E2B-it-ONNX",
+        enabledTools: [
+          {
+            name: "fetch_url",
+            description: "Fetch a URL and return response body.",
+            input_schema: {
+              type: "object",
+              properties: { url: { type: "string" } },
+              required: ["url"],
+            },
+          },
+        ],
+      };
+
+      (mockGetProvider as any).mockReturnValue({
+        id: "transformers_js_local",
+        name: "Transformers.js (Local Proxy)",
+        baseUrl: "http://localhost:8888/v1/chat/completions",
+        format: "openai",
+      });
+
+      (mockParseResponse as any).mockImplementation((_p: any, raw: any) => {
+        const choice = raw.choices?.[0];
+        if (choice?.finish_reason === "tool_calls") {
+          return {
+            stop_reason: "tool_use",
+            content: [
+              {
+                type: "tool_use",
+                id: choice.message.tool_calls[0].id,
+                name: choice.message.tool_calls[0].function.name,
+                input: JSON.parse(
+                  choice.message.tool_calls[0].function.arguments,
+                ),
+              },
+            ],
+          };
+        }
+        return {
+          stop_reason: "end_turn",
+          content: [{ type: "text", text: choice?.message?.content }],
+        };
+      });
+
+      await handleInvoke({} as any, payload);
+
+      // parseResponse must have received the structured tool_calls response
+      expect(mockParseResponse).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          choices: expect.arrayContaining([
+            expect.objectContaining({
+              finish_reason: "tool_calls",
+              message: expect.objectContaining({
+                tool_calls: expect.arrayContaining([
+                  expect.objectContaining({
+                    type: "function",
+                    function: expect.objectContaining({
+                      name: "fetch_url",
+                      arguments: JSON.stringify({
+                        url: "https://wttr.in/Chicago?format=j1",
+                      }),
+                    }),
+                  }),
+                ]),
+              }),
+            }),
+          ]),
+        }),
+      );
+    } finally {
+      setHeadlessMode(false);
+      setTransformersServiceForTests(null);
+      const { setNodeTransformersCompletionExecutor } =
+        await import("./handleInvoke.js");
+      setNodeTransformersCompletionExecutor(null);
+    }
+  });
+
   it("streams in-process node transformers completion in headless mode when streaming is enabled", async () => {
     const { setHeadlessMode } = await import("../../config/headless.js");
     const { setTransformersServiceForTests } =

@@ -13,6 +13,10 @@ _Watch a demo:_ [Peer-to-peer Browser Native Agents in action (YouTube)](https:/
 
 On the server side, the headless CLI agent participant (`shadow-claw agent`) runs the same reasoning loop, declarative skills, and tool chain pipeline directly against host Node.js environments—backed by SQLite (`node:sqlite`), native filesystem handles, and host OS shell execution. Inference routes seamlessly across cloud providers (defaulting to OpenRouter with configurable fallbacks), local engines (Ollama, Llamafile, Transformers.js with automatic Hugging Face downloading), and in-browser models (Prompt API with polyfills, LiteRT WebGPU).
 
+![ShadowClaw CLI agent writing a paragraph](https://xt-ml.github.io/shadow-claw/assets/screencasts/shadow-claw-cli-agent-writing-paragraph.gif)
+
+_Watch a demo:_ [Running AI Agents Locally: ShadowClaw Setup and Prompt Testing (YouTube)](https://www.youtube.com/watch?v=zVxPGHipdvU)
+
 ---
 
 ## Quick Start

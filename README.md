@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/shadow-claw.svg)](https://www.npmjs.com/package/shadow-claw)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/xt-ml/shadow-claw)
 
-ShadowClaw is a dual-runtime AI assistant featuring both a rich, interactive frontend client and a host-native headless server-side agent participant.
+**ShadowClaw** is a multi-runtime AI assistant featuring a rich interactive frontend client, a host-native headless server-side agent participant, and a local control plane that bridges them both.
 
 In the frontend client (browser PWA or native Electron desktop app), the core orchestration state machine, dynamic context windowing, and tool-execution loop run off the main thread in a dedicated Web Worker, with sandboxed local execution via `just-bash` (or optional WebVM Alpine Linux) backed by OPFS and IndexedDB storage, and reactive UI powered by native Web Components and TC39 Signals.
 
@@ -11,11 +11,22 @@ In the frontend client (browser PWA or native Electron desktop app), the core or
 
 _Watch a demo:_ [Peer-to-peer Browser Native Agents in action (YouTube)](https://www.youtube.com/watch?v=h1les1A3gcg)
 
-On the server side, the headless CLI agent participant (`shadow-claw agent`) runs the same reasoning loop, declarative skills, and tool chain pipeline directly against host Node.js environments—backed by SQLite (`node:sqlite`), native filesystem handles, and host OS shell execution. Inference routes seamlessly across cloud providers (defaulting to OpenRouter with configurable fallbacks), local engines (Ollama, Llamafile, Transformers.js with automatic Hugging Face downloading), and in-browser models (Prompt API with polyfills, LiteRT WebGPU).
+On the server side, the headless CLI agent participant (`shadow-claw agent`) runs the same reasoning loop, declarative skills, and tool chain pipeline directly against host Node.js environments—backed by SQLite (`node:sqlite`), native filesystem handles, and host OS shell execution. Inference routes seamlessly across cloud providers, as well as local engines.
 
 ![ShadowClaw CLI agent writing a paragraph](https://xt-ml.github.io/shadow-claw/assets/screencasts/shadow-claw-cli-agent-writing-paragraph.gif)
 
 _Watch a demo:_ [Running AI Agents Locally: ShadowClaw Setup and Prompt Testing (YouTube)](https://www.youtube.com/watch?v=zVxPGHipdvU)
+
+Tying the two runtimes together is the **server-side control plane** (`shadow-claw server`): a local Express daemon and client bridge that acts as a real-time bidirectional gateway connecting browser/Electron tabs, the CLI, and external AI clients. Connected browser tabs register over SSE, WebSocket, or WebRTC, becoming live execution surfaces with access to in-browser OPFS storage and WebMCP tools. External tools and CLI commands can dispatch prompts (`shadow-claw send`), trigger backups, or query state across any connected tab.
+
+For external AI hosts, ShadowClaw provides multiple ways to interact with the browser agent and server:
+
+- **In-browser WebMCP tools:** Exposed over `document.modelContext`
+- **CLI participant:** `shadow-claw agent` is a full-featured CLI agent that can be run from the terminal or CI/CD pipelines.
+- **Control Plane API:** `shadow-claw server` exposes a REST API that allows external AI clients to interact with the agent and server.
+- **An official MCP server** across two transports:
+  - **Streamable HTTP (`POST /mcp`):** Built directly into `shadow-claw server`, allowing HTTP-capable MCP clients to query and drive connected tabs over local network endpoints.
+  - **STDIO Bridge (`shadow-claw mcp`):** Connects desktop MCP clients directly over standard input/output. It discovers active browser tabs via the control plane and dynamically relays their in-browser tools (`shadowclaw_client_*` such as OPFS `read_file`, `write_file`, and `bash`), alongside built-in server tools (`shadowclaw_server_*`).
 
 ---
 
@@ -129,7 +140,7 @@ ShadowClaw follows a **dual-runtime agent pattern**, sharing a unified tool-use 
 │ └──────────────────────────┬───────────────────────────┘ │ └──────────────┬───────────────┘ │
 ├────────────────────────────┴─────────────────────────────┴────────────────┴─────────────────┤
 │                             SHARED AGENTIC CORE & TOOLS                                     │
-│          handleInvoke · executeTool · executeToolChain · discoverSkills · Memory             │
+│          handleInvoke · executeTool · executeToolChain · discoverSkills · Memory            │
 ├──────────────────────────────────────────────────────────┬──────────────────────────────────┤
 │ ┌──────────────────────────────────────────────────────┐ │ ┌──────────────────────────────┐ │
 │ │  Browser Execution Layer                             │ │ │  Host OS Execution Layer     │ │

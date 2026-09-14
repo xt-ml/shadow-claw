@@ -41,6 +41,8 @@ export async function getAgentCore() {
     const skills =
       await import("../../src/subsystems/skills/discoverSkills.js");
     const tools = await import("../../src/subsystems/tools/index.js");
+    const builtinProfiles =
+      await import("../../src/subsystems/tools/builtin-profiles.js");
     const executeTool = await import("../../src/worker/utils/executeTool.js");
     const toolChain = await import("../../src/worker/utils/toolChain.js");
     const post = await import("../../src/worker/utils/post.js");
@@ -72,6 +74,7 @@ export async function getAgentCore() {
       ...getRecentMsg,
       ...skills,
       ...tools,
+      ...builtinProfiles,
       ...executeTool,
       ...toolChain,
       ...post,

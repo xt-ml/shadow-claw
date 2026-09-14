@@ -237,11 +237,7 @@ export async function runAgentTools(options = {}) {
     const target = String(options.toolsProfile || options.profile)
       .trim()
       .toLowerCase();
-    const defaultBuiltinProfile =
-      core.DEFAULT_BUILTIN_PROFILE ||
-      (await import("../../src/subsystems/tools/builtin-profiles.js")
-        .then((m) => m.DEFAULT_BUILTIN_PROFILE)
-        .catch(() => null));
+    const defaultBuiltinProfile = core.DEFAULT_BUILTIN_PROFILE || null;
     let dbProfiles = [];
     if (typeof core.getConfig === "function") {
       try {
@@ -800,11 +796,7 @@ async function resolveToolsAndProfile(
   let profileSystemPromptOverride = null;
 
   async function getKnownProfiles() {
-    const defaultBuiltinProfile =
-      core.DEFAULT_BUILTIN_PROFILE ||
-      (await import("../../src/subsystems/tools/builtin-profiles.js")
-        .then((m) => m.DEFAULT_BUILTIN_PROFILE)
-        .catch(() => null));
+    const defaultBuiltinProfile = core.DEFAULT_BUILTIN_PROFILE || null;
 
     let dbProfiles = [];
     if (typeof core.getConfig === "function") {

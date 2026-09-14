@@ -3,11 +3,15 @@
 [![npm version](https://img.shields.io/npm/v/shadow-claw.svg)](https://www.npmjs.com/package/shadow-claw)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/xt-ml/shadow-claw)
 
-ShadowClaw is a dual-runtime AI assistant featuring both a rich, interactive frontend client and a host-native headless server-side agent participant. In the frontend client (browser PWA or native Electron desktop app), the core orchestration state machine, dynamic context windowing, and tool-execution loop run off the main thread in a dedicated Web Worker, with sandboxed local execution via `just-bash` (or optional WebVM Alpine Linux) backed by OPFS and IndexedDB storage, and reactive UI powered by native Web Components and TC39 Signals. On the server side, the headless CLI agent participant (`shadow-claw agent`) runs the same reasoning loop, declarative skills, and tool chain pipeline directly against host Node.js environments—backed by SQLite (`node:sqlite`), native filesystem handles, and host OS shell execution. Inference routes seamlessly across cloud providers (defaulting to OpenRouter with configurable fallbacks), local engines (Ollama, Llamafile, Transformers.js with automatic Hugging Face downloading), and in-browser models (Prompt API with polyfills, LiteRT WebGPU).
+ShadowClaw is a dual-runtime AI assistant featuring both a rich, interactive frontend client and a host-native headless server-side agent participant.
+
+In the frontend client (browser PWA or native Electron desktop app), the core orchestration state machine, dynamic context windowing, and tool-execution loop run off the main thread in a dedicated Web Worker, with sandboxed local execution via `just-bash` (or optional WebVM Alpine Linux) backed by OPFS and IndexedDB storage, and reactive UI powered by native Web Components and TC39 Signals.
 
 [![ShadowClaw Screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/shadow-claw-screenshot-1920x1052.png)](https://xt-ml.github.io/shadow-claw/)
 
 _Watch a demo:_ [Peer-to-peer Browser Native Agents in action (YouTube)](https://www.youtube.com/watch?v=h1les1A3gcg)
+
+On the server side, the headless CLI agent participant (`shadow-claw agent`) runs the same reasoning loop, declarative skills, and tool chain pipeline directly against host Node.js environments—backed by SQLite (`node:sqlite`), native filesystem handles, and host OS shell execution. Inference routes seamlessly across cloud providers (defaulting to OpenRouter with configurable fallbacks), local engines (Ollama, Llamafile, Transformers.js with automatic Hugging Face downloading), and in-browser models (Prompt API with polyfills, LiteRT WebGPU).
 
 ---
 

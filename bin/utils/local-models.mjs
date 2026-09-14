@@ -452,9 +452,14 @@ export async function downloadLocalModel(modelId, options = {}) {
 
   let service = injectedService;
   if (!service) {
-    const { createTransformersRuntimeService } =
-      await import("../../src/server/services/transformers-runtime.js");
-    service = createTransformersRuntimeService();
+    const { getAgentCore } = await import("./agent-core.mjs");
+    const core = await getAgentCore();
+    if (typeof core.createTransformersRuntimeService !== "function") {
+      throw new Error(
+        "createTransformersRuntimeService is not available in agent core",
+      );
+    }
+    service = core.createTransformersRuntimeService();
   }
 
   const showProgress = progress !== false && !noProgress;

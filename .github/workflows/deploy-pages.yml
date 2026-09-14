@@ -53,6 +53,7 @@ jobs:
           name: lighthouse-reports
           path: .lighthouseci/
           retention-days: 90
+          include-hidden-files: true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

@@ -44,12 +44,6 @@ jobs:
       - name: Run E2E tests
         run: npm run e2e
 
-      - name: Build production site for Lighthouse
-        run: npm run build:prod
-
-      - name: Run Lighthouse Audits
-        run: npx @lhci/cli autorun
-
       - name: Upload test & E2E artifacts
         uses: actions/upload-artifact@v4
         if: always()
@@ -59,7 +53,6 @@ jobs:
             coverage/
             e2e-results/
             playwright-report/
-            .lighthouseci/
           retention-days: 90
 
       - name: Create or update GitHub Release

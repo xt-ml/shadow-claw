@@ -189,24 +189,27 @@ function swWatchPlugin() {
             console.log(
               "Running post-build steps (prerender & service worker)...",
             );
+            const { prerenderDsdShell } =
+              await import("./dist/cli/prerender/dsd-shell/prerender-dsd-shell.js");
+            const { patchServiceWorkerTrustedTypesFile } =
+              await import("./dist/cli/tools/patch-service-worker-trusted-types.js");
+
             const prerenderMainMemory =
               process.env.PRERENDER_MAIN_MEMORY !== "false";
-            if (prerenderMainMemory) {
-              await execAsync(
-                "node bin/prerender-dsd-shell/prerender-dsd-shell.mjs dist/public/index.html pages/main",
-              );
-            } else {
-              await execAsync(
-                "node bin/prerender-dsd-shell/prerender-dsd-shell.mjs dist/public/index.html --no-seed",
-              );
-            }
+            await prerenderDsdShell({
+              indexPath: "dist/public/index.html",
+              sourcePath: "pages/main",
+              noSeed: !prerenderMainMemory,
+            });
 
             // build the service worker
             await execAsync("npm run -s build:service-worker");
 
             // Post-process the generated service worker so its importScripts calls use
             // TrustedScriptURL values in Trusted Types report-only environments.
-            await execAsync("node bin/patch-service-worker-trusted-types.mjs");
+            await patchServiceWorkerTrustedTypesFile(
+              "dist/public/service-worker.js",
+            );
             console.log("Post-build steps completed successfully.");
           } catch (err) {
             console.error("Post-build steps failed:", err);
@@ -620,6 +623,7 @@ const configs = [
       minify: isProduction,
     },
     external: [
+      /\.node$/,
       "@aws-sdk/client-bedrock",
       "@aws-sdk/client-bedrock-runtime",
       "@aws-sdk/credential-providers",
@@ -629,6 +633,8 @@ const configs = [
       "express-urlrewrite",
       "tcp-port-used",
       "web-push",
+      "@mongodb-js/zstd",
+      "node-liblzma",
       "electron",
     ],
     ...commonResolve("node"),
@@ -645,6 +651,7 @@ const configs = [
       minify: isProduction,
     },
     external: [
+      /\.node$/,
       /^node:.*/,
       "@aws-sdk/client-bedrock",
       "@aws-sdk/client-bedrock-runtime",
@@ -654,8 +661,41 @@ const configs = [
       "gray-matter",
       "isomorphic-git",
       "just-bash",
+      "@mongodb-js/zstd",
+      "node-liblzma",
       "express",
       "electron",
+    ],
+    ...commonResolve("node"),
+  },
+  // CLI Commands
+  {
+    input: {
+      cli: "src/cli/cli.ts",
+      "build/build": "src/cli/build/build.ts",
+      "tools/version": "src/cli/tools/version.ts",
+      "tools/assert-version-bump": "src/cli/tools/assert-version-bump.ts",
+    },
+    output: {
+      dir: "dist/cli",
+      entryFileNames: "[name].js",
+      chunkFileNames: "chunk-[hash].js",
+      format: "esm",
+      sourcemap: !isProduction,
+      codeSplitting: true,
+      minify: isProduction,
+    },
+    external: [
+      /\.node$/,
+      /^node:.*/,
+      "commander",
+      "@mongodb-js/zstd",
+      "node-liblzma",
+      "express",
+      "cors",
+      "compression",
+      "isomorphic-git",
+      "@mcp-b/webmcp-polyfill",
     ],
     ...commonResolve("node"),
   },

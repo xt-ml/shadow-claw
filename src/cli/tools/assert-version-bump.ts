@@ -1,0 +1,218 @@
+import { getProjectRoot } from "../utils/resolve-project-root.js";
+import { execSync } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import process from "node:process";
+import { pathToFileURL } from "node:url";
+
+const rootDir = getProjectRoot(import.meta.url);
+
+export interface ParsedSemver {
+  major: number;
+  minor: number;
+  patch: number;
+  prerelease: string | null;
+  raw: string;
+}
+
+export function parseSemver(v: string): ParsedSemver | null {
+  const clean = String(v || "")
+    .trim()
+    .replace(/^[v^~]/, "");
+  const match = clean.match(
+    /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+([0-9A-Za-z.-]+))?$/,
+  );
+  if (!match) return null;
+  return {
+    major: parseInt(match[1], 10),
+    minor: parseInt(match[2], 10),
+    patch: parseInt(match[3], 10),
+    prerelease: match[4] || null,
+    raw: clean,
+  };
+}
+
+export function compareSemver(a: string, b: string): number {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  if (!pa || !pb) return String(a).localeCompare(String(b));
+
+  if (pa.major !== pb.major) return pa.major > pb.major ? 1 : -1;
+  if (pa.minor !== pb.minor) return pa.minor > pb.minor ? 1 : -1;
+  if (pa.patch !== pb.patch) return pa.patch > pb.patch ? 1 : -1;
+
+  if (pa.prerelease && !pb.prerelease) return -1;
+  if (!pa.prerelease && pb.prerelease) return 1;
+  if (pa.prerelease && pb.prerelease) {
+    return pa.prerelease.localeCompare(pb.prerelease);
+  }
+  return 0;
+}
+
+export interface AssertVersionBumpOptions {
+  localPkgVersion: string;
+  localLockVersion?: string | null;
+  pkgName: string;
+  publishedVersion?: string | null;
+  silent?: boolean;
+  wellKnownMcpVersion?: string | null;
+  wellKnownServerCardVersion?: string | null;
+}
+
+export async function assertVersionBump({
+  localPkgVersion,
+  localLockVersion,
+  pkgName,
+  publishedVersion,
+  silent = false,
+  wellKnownMcpVersion,
+  wellKnownServerCardVersion,
+}: AssertVersionBumpOptions): Promise<void> {
+  if (!silent) {
+    console.log(`Checking version bump for package "${pkgName}"...`);
+    console.log(
+      `- Local package.json version             : ${localPkgVersion}`,
+    );
+  }
+
+  if (localLockVersion) {
+    if (!silent) {
+      console.log(
+        `- Local package-lock.json version        : ${localLockVersion}`,
+      );
+    }
+    if (localPkgVersion !== localLockVersion) {
+      throw new Error(
+        `Version mismatch: package.json (${localPkgVersion}) does not match package-lock.json (${localLockVersion})!`,
+      );
+    }
+  }
+
+  if (wellKnownMcpVersion !== undefined && wellKnownMcpVersion !== null) {
+    if (!silent) {
+      console.log(
+        `- Local .well-known/mcp.json version     : ${wellKnownMcpVersion}`,
+      );
+    }
+    if (localPkgVersion !== wellKnownMcpVersion) {
+      throw new Error(
+        `Version mismatch: package.json (${localPkgVersion}) does not match .well-known/mcp.json (${wellKnownMcpVersion})!`,
+      );
+    }
+  }
+
+  if (
+    wellKnownServerCardVersion !== undefined &&
+    wellKnownServerCardVersion !== null
+  ) {
+    if (!silent) {
+      console.log(
+        `- Local .well-known/mcp/server-card version: ${wellKnownServerCardVersion}`,
+      );
+    }
+    if (localPkgVersion !== wellKnownServerCardVersion) {
+      throw new Error(
+        `Version mismatch: package.json (${localPkgVersion}) does not match .well-known/mcp/server-card.json (${wellKnownServerCardVersion})!`,
+      );
+    }
+  }
+
+  if (publishedVersion) {
+    if (!silent) {
+      console.log(
+        `- Published npm registry version         : ${publishedVersion}`,
+      );
+    }
+    const cmp = compareSemver(localPkgVersion, publishedVersion);
+    if (cmp <= 0) {
+      throw new Error(
+        `Version assertion failed: Local version (${localPkgVersion}) must be greater than published npm version (${publishedVersion}). Please bump the version before publishing.`,
+      );
+    }
+    if (!silent) {
+      console.log(
+        `✓ Version assertion passed: ${localPkgVersion} > ${publishedVersion}`,
+      );
+    }
+  }
+}
+
+export async function main(): Promise<void> {
+  const pkgJsonPath = path.join(rootDir, "package.json");
+  const lockJsonPath = path.join(rootDir, "package-lock.json");
+
+  const pkg = JSON.parse(await readFile(pkgJsonPath, "utf8"));
+  let lock: any;
+  try {
+    lock = JSON.parse(await readFile(lockJsonPath, "utf8"));
+  } catch {}
+
+  const pkgName = pkg.name;
+  const localPkgVersion = pkg.version;
+  const localLockVersion = lock?.version;
+
+  let wellKnownMcpVersion: string | null = null;
+  try {
+    const mcpJson = JSON.parse(
+      await readFile(path.join(rootDir, ".well-known/mcp.json"), "utf8"),
+    );
+    wellKnownMcpVersion = mcpJson?.version || null;
+  } catch {}
+
+  let wellKnownServerCardVersion: string | null = null;
+  try {
+    const serverCard = JSON.parse(
+      await readFile(
+        path.join(rootDir, ".well-known/mcp/server-card.json"),
+        "utf8",
+      ),
+    );
+    wellKnownServerCardVersion = serverCard?.version || null;
+  } catch {}
+
+  let publishedVersion: string | null = null;
+  try {
+    const rawOut = execSync(`npm view ${pkgName} version --json`, {
+      encoding: "utf8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+    if (rawOut) {
+      publishedVersion = JSON.parse(rawOut);
+    }
+  } catch (err: any) {
+    const errStr = String(err.stderr || err.message || "");
+    if (
+      errStr.includes("E404") ||
+      errStr.includes("404") ||
+      errStr.includes("code E404")
+    ) {
+      console.log(
+        `- Package "${pkgName}" not found on npm registry (initial release allowed).`,
+      );
+      return;
+    }
+    console.warn(
+      `Warning: Could not fetch version from npm view: ${errStr.trim()}`,
+    );
+  }
+
+  await assertVersionBump({
+    localPkgVersion,
+    localLockVersion,
+    pkgName,
+    publishedVersion,
+    wellKnownMcpVersion,
+    wellKnownServerCardVersion,
+  });
+}
+
+const isMainModule =
+  process.argv[1] &&
+  import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href;
+
+if (isMainModule) {
+  main().catch((err) => {
+    console.error(`\n[FATAL] ${err.message}\n`);
+    process.exit(1);
+  });
+}

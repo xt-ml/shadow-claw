@@ -2,7 +2,7 @@
 
 > Command-line interface and dual-root build engine for ShadowClaw and downstream templates.
 
-**Source:** `bin/cli.mjs` · `bin/build/build.mjs` · `bin/site-config/apply.mjs` · `package.json`
+**Source:** `src/cli/cli.ts` · `src/cli/build/build.ts` · `src/cli/site-config/apply.ts` · `package.json`
 
 ---
 
@@ -23,8 +23,8 @@ ShadowClaw provides a unified, first-class CLI tool (`shadow-claw` / `shadowclaw
 
 ```mermaid
 graph TD
-  User["Developer / CI Action"] --> CLI["bin/cli.mjs (shadow-claw)"]
-  CLI --> Builder["bin/build/build.mjs (runBuild)"]
+  User["Developer / CI Action"] --> CLI["src/cli/cli.ts (dist/cli/cli.js)"]
+  CLI --> Builder["src/cli/build/build.ts (runBuild)"]
 
   subgraph Roots["Dual-Root Split"]
     Toolchain["toolchainRoot (ShadowClaw package / repo)"]
@@ -35,7 +35,7 @@ graph TD
   Builder --> Content
 
   Toolchain --> BaseAssets["Base UI Bundles (dist/public)<br/>Default icons, styles, workers"]
-  Toolchain --> BuildScripts["bin/prerender-dsd-shell.mjs<br/>bin/site-config/apply.mjs<br/>bin/prerender-pretty-paths.mjs"]
+  Toolchain --> BuildScripts["src/cli/prerender/dsd-shell/prerender-dsd-shell.ts<br/>src/cli/site-config/apply.ts<br/>src/cli/prerender/pretty-paths/prerender-pretty-paths.ts"]
 
   Content --> SiteContent["pages/ (main, resources, deps)<br/>shadow-claw.config.json<br/>assets/<br/>.agents/ (skills, tools)"]
   Content --> OutDir["<contentRoot>/dist/public"]
@@ -47,7 +47,7 @@ graph TD
 
 ### 1. `toolchainRoot` vs `contentRoot`
 
-- **`toolchainRoot`**: The root directory of the installed `@xt-ml/shadow-claw` or `shadow-claw` package (or the repository checkout). Contains pre-compiled web bundles (`dist/public/index.js`, `theme-init.js`, `agent.worker.js`, etc.), build scripts (`bin/`), and default icons/styles.
+- **`toolchainRoot`**: The root directory of the installed `@xt-ml/shadow-claw` or `shadow-claw` package (or the repository checkout). Resolved dynamically via `getProjectRoot` (`src/cli/utils/resolve-project-root.ts`). Contains pre-compiled web bundles (`dist/public/index.js`, `theme-init.js`, `agent.worker.js`, etc.), CLI scripts (`dist/cli/` and `bin/`), and default icons/styles.
 - **`contentRoot`**: The consumer project root (defaults to `process.cwd()`). Contains `pages/`, `shadow-claw.config.json` (or backward-compatible `site-config.json`), `assets/`, `.agents/skills`, `.agents/tools`, and receives the final output in `dist/public`.
 
 ### 2. Execution Modes
@@ -55,7 +55,7 @@ graph TD
 - **In-Repo Mode (`resolve(contentRoot) === resolve(toolchainRoot)`)**:
   When invoked from inside the `xt-ml/shadow-claw` repo (e.g. `npm run build`, `npm run build:prod`, `npm run dev`), executes the exact standalone build pipeline, compiling TypeScript via Rolldown and generating in-tree `dist/public`.
 - **CLI / External Consumer Mode (`resolve(contentRoot) !== resolve(toolchainRoot)`)**:
-  When invoked on a template repository (e.g. `block-garden-knowledge-hub`, `pwgen-knowledge-hub`, or `shadow-claw-template`), reads base runtime bundles from `toolchainRoot/dist/public`, overlays and merges consumer files from `contentRoot`, applies site branding (`site-config/apply.mjs`), performs DSD shell and pretty path prerendering, and writes directly into `<contentRoot>/dist/public`.
+  When invoked on a template repository (e.g. `block-garden-knowledge-hub`, `pwgen-knowledge-hub`, or `shadow-claw-template`), reads base runtime bundles from `toolchainRoot/dist/public` (excluding heavy local model cache directories to prevent disk exhaustion), overlays and merges consumer files from `contentRoot`, applies site branding (`src/cli/site-config/apply.ts`), performs DSD shell and pretty path prerendering, and writes directly into `<contentRoot>/dist/public`.
 
 ---
 
@@ -288,7 +288,7 @@ echo "Summarize: ..." | npx shadow-claw agent run -o summary.txt
 
 #### Process Interruption & Clean Termination
 
-The CLI runtime installs central termination signal handlers (`SIGINT` code 130, `SIGTERM` code 143, and `exit`) via `registerTerminationCleanup` in `bin/cli.mjs`. When an agent run or server session is interrupted (e.g. Ctrl+C), all active child processes, Llamafile daemons, and temporary descriptors are terminated cleanly without leaving orphan processes behind.
+The CLI runtime installs central termination signal handlers (`SIGINT` code 130, `SIGTERM` code 143, and `exit`) via `registerTerminationCleanup` in `src/cli/cli.ts`. When an agent run or server session is interrupted (e.g. Ctrl+C), all active child processes, Llamafile daemons, and temporary descriptors are terminated cleanly without leaving orphan processes behind.
 
 #### Credential Auto-Resolution & Exit Codes
 
@@ -493,7 +493,7 @@ npx shadow-claw skills:index --out-file custom/discovery/index.json
 | `--stdout`              | boolean | Print generated JSON directly to stdout          | `false`                      |
 | `--no-write`            | boolean | Skip writing the generated index file to disk    | `false`                      |
 
-> **Build Pipeline Integration:** `bin/build/build.mjs` automatically generates `.well-known/agent-skills/index.json` during builds into `dist/public`, indexing both content skills and bundled skills (such as `skill-creator`) using the content root's site metadata, and keeps `.agents/scripts` and repository `.well-known` synchronized.
+> **Build Pipeline Integration:** `src/cli/build/build.ts` (invoked via `bin/build.mjs`) automatically generates `.well-known/agent-skills/index.json` during builds into `dist/public`, indexing both content skills and bundled skills (such as `skill-creator`) using the content root's site metadata, and keeps `.agents/scripts` and repository `.well-known` synchronized.
 
 ---
 

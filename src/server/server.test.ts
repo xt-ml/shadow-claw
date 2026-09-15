@@ -295,4 +295,30 @@ describe("startServer HTTP / HTTPS selection", () => {
 
     expect(httpMock.createServer).toHaveBeenCalled();
   });
+
+  it("shuts down the standalone server on SIGINT", async () => {
+    const { installServerTerminationHandlers } = await import("./server.js");
+    const server = {
+      closeAllConnections: jest.fn(),
+      close: jest.fn((callback: () => void) => callback()),
+    };
+    const processOnce = jest.spyOn(process, "once");
+    const processExit = jest
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined) as never);
+
+    installServerTerminationHandlers(server as any, processExit as never);
+
+    const sigintHandler = processOnce.mock.calls.find(
+      ([signal]) => signal === "SIGINT",
+    )?.[1] as (() => void) | undefined;
+    sigintHandler?.();
+
+    expect(server.closeAllConnections).toHaveBeenCalledTimes(1);
+    expect(server.close).toHaveBeenCalledTimes(1);
+    expect(processExit).toHaveBeenCalledWith(130);
+
+    processExit.mockRestore();
+    processOnce.mockRestore();
+  });
 });

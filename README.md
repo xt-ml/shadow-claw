@@ -206,7 +206,7 @@ ShadowClaw resolves default LLM providers and models via a strict precedence cas
 
 - **In-Browser Inference Default:** Defaults to Prompt API (`prompt_api`) with guided onboarding and task API polyfills, enabling local, private, and zero-configuration browser execution.
 - **OpenRouter Default for Headless CLI:** Headless execution via `shadow-claw agent` defaults out-of-the-box to `openrouter` with `openrouter/free`.
-- **Local Models & Hugging Face Hub:** Automatic on-demand downloading from Hugging Face Hub, disk caching under `assets/cache/transformers.js`, and pre-warming endpoints (`POST /transformers-js-proxy/prewarm`). See [Local Models Guide](docs/subsystems/local-models.md).
+- **Local Models & Hugging Face Hub:** Automatic on-demand downloading from Hugging Face Hub, disk caching under `assets/cache/transformers.js`, and pre-warming endpoints (`POST /transformers-js-proxy/prewarm`). Unified local model tool calling extracts tool invocations across in-process Node executors and server proxy routes using OpenAI function schemas formatted directly for tokenizer chat templates. See [Local Models Guide](docs/subsystems/local-models.md).
 - **Prompt API & Polyfill Fallbacks:** In the browser client, uses native `window.LanguageModel` when available, with built-in polyfills (`prompt-api-polyfill` and `built-in-ai-task-apis-polyfills` backed by Transformers.js / ONNX) for cross-browser execution.
 - **Hardware Feature Probing & Fallbacks:** Probes WebGPU adapter capabilities (`shader-f16`), retries during downloads, and dynamically falls back to WebAssembly CPU (`device: "wasm"`, `dtype: "q4"`) if WebGPU initialization fails or software emulation is detected.
 - **Streaming & Resilience:** Streaming responses across OpenAI and Anthropic formats; adaptive rate limiting with `retry-after` handling and 30-second auto-closing, ARIA-accessible countdown dialogs for fatal errors and throttling.
@@ -298,6 +298,7 @@ npm test                     # Jest (*.test.ts files live next to source)
 npm run storybook            # Storybook component workbench (port 6006)
 npm run build:storybook      # Build static Storybook documentation to dist/storybook
 npm run build:lib            # Build reusable ESM library and TypeScript declarations to dist/lib
+npm run build:cli            # Compile CLI commands and utilities to dist/cli via Rolldown
 npm run e2e                  # Playwright E2E tests (e2e/*.test.ts)
 npm run e2e:install          # Install Playwright browser binaries
 npm run tsc                  # Full TypeScript type-check across all workspaces

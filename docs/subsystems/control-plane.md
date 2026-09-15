@@ -2,7 +2,7 @@
 
 > Bidirectional communication gateway connecting CLI commands, external MCP clients, and connected browser/Electron tabs.
 
-**Source:** `src/server/control-plane.ts` · `src/server/client-registry.ts` · `src/core/control-plane-client.ts` · `bin/commands/`
+**Source:** `src/server/control-plane.ts` · `src/server/client-registry.ts` · `src/core/control-plane-client.ts` · `src/cli/commands/`
 
 ---
 

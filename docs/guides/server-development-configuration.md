@@ -2,7 +2,7 @@
 
 > Configure host, port, and CORS behavior for the Express development server.
 
-**Source:** `src/server/server.ts` · `bin/build.sh`
+**Source:** `src/server/server.ts` · `src/cli/build/build.ts`
 
 ## Overview
 

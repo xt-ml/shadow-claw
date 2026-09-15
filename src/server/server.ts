@@ -182,9 +182,26 @@ const isMainModule =
   path.resolve(process.argv[1]) ===
     path.resolve(fileURLToPath(import.meta.url));
 
+export function installServerTerminationHandlers(
+  server: http.Server | https.Server,
+  exitProcess: (code: number) => never = exit,
+): void {
+  const shutdown = (exitCode: number) => {
+    server.closeAllConnections();
+    server.close(() => exitProcess(exitCode));
+  };
+
+  process.once("SIGINT", () => shutdown(130));
+  process.once("SIGTERM", () => shutdown(143));
+}
+
 if (isMainModule) {
-  startServer().catch((error) => {
-    console.error(error);
-    exit(1);
-  });
+  startServer()
+    .then((server) => {
+      installServerTerminationHandlers(server);
+    })
+    .catch((error) => {
+      console.error(error);
+      exit(1);
+    });
 }

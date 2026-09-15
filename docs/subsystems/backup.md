@@ -2,7 +2,7 @@
 
 > Automated and remote workspace backups from connected browser/Electron clients to server filesystem storage.
 
-**Source:** `src/server/routes/backup.ts` · `src/server/client-registry.ts` · `src/core/backup-controller.ts` · `bin/commands/backup.mjs`
+**Source:** `src/server/routes/backup.ts` · `src/server/client-registry.ts` · `src/core/backup-controller.ts` · `src/cli/commands/backup.ts`
 
 ---
 

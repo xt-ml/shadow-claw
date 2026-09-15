@@ -89,7 +89,7 @@ async function resolveApiKey(
   providerId: string,
   options: ExecuteNativeAiTaskOptions,
 ): Promise<string> {
-  if (options.apiKey) {
+  if (options.apiKey !== undefined) {
     return options.apiKey;
   }
 

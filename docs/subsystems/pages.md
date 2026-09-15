@@ -118,7 +118,7 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 
 ## Pre-rendered Content, Routing & Pretty Paths
 
-Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prerender-dsd-shell/prerender-dsd-shell.mjs` and `bin/prerender-pretty-paths/prerender-pretty-paths.mjs` support static server-side rendering with pretty path resolution:
+Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `src/cli/prerender/dsd-shell/prerender-dsd-shell.ts` and `src/cli/prerender/pretty-paths/prerender-pretty-paths.ts` support static server-side rendering with pretty path resolution:
 
 - **Production Asset Inlining**:
   - In production builds (`npm run build:prod`), critical assets (`index.css`, `theme-init.js`, and `service-worker/init.js`) are inlined directly into `index.html` and pre-rendered pages to eliminate render-blocking round-trips.
@@ -148,23 +148,23 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `bin/prere
     - **`theme`**: `stylesheet` (custom theme CSS stylesheet injected into head).
     - **`settings`**: `assistantName` (pre-seeds the default assistant name), `defaultToolsProfile` (pre-seeds the default tool profile e.g. `"__builtin_default"` or `"none"`), `enabledTools` (pre-seeds default enabled built-in tool array).
     - **`cacheDir`** / **`server.cacheDir`**: Custom directory for storing cache, control tokens, and SQLite databases.
-  - **Build-Time Application**: `bin/site-config/apply.mjs` patches `index.html`, `manifest.json`, `sitemap.xml` / `sitemap.txt`, and copies custom theme stylesheets into the build distribution. Stylesheets under `pages/resources/`, `pages/deps/`, `resources/`, `deps/`, `pages/assets/`, or `pages/main/assets/` are flattened to the distribution root and have that prefix removed from the generated `href`; other paths, such as `pages/main/theme.css`, retain their path.
+  - **Build-Time Application**: `src/cli/site-config/apply.ts` patches `index.html`, `manifest.json`, `sitemap.xml` / `sitemap.txt`, and copies custom theme stylesheets into the build distribution. Stylesheets under `pages/resources/`, `pages/deps/`, `resources/`, `deps/`, `pages/assets/`, or `pages/main/assets/` are flattened to the distribution root and have that prefix removed from the generated `href`; other paths, such as `pages/main/theme.css`, retain their path.
   - **Branding Asset Precedence**: For `faviconPath` and `appleTouchIconPath`, content-specific locations under `pages/` and its supported resource/dependency paths are checked before bare repository-root defaults, so a published site's branding assets are not shadowed by ShadowClaw's built-in assets.
-  - **DSD Shell Navigation Visibility**: `bin/prerender-dsd-shell/prerender-dsd-shell.mjs` applies `hidden` and `aria-hidden` attributes to sidebar navigation items at build time, preventing layout shift on first paint.
+  - **DSD Shell Navigation Visibility**: `src/cli/prerender/dsd-shell/prerender-dsd-shell.ts` applies `hidden` and `aria-hidden` attributes to sidebar navigation items at build time, preventing layout shift on first paint.
   - **Runtime Seeding**: `orchestratorStore.init()` reads the embedded `<script id="shadow-claw-site-config" type="application/json">` via `applySiteConfigDefaults()` to seed preferences into IndexedDB on first load.
   - **Reset**: Settings → Storage → **Reset Site Config** clears the local seed marker. The embedded defaults become eligible to apply again after the next reload; current settings are not overwritten immediately.
   - **Interactive User Controls**: Users can toggle sidebar visibility runtime in Settings under **Navigation**, triggering reactive events (`sidebar-pages-visibility-change`, `sidebar-chat-visibility-change`, `sidebar-tasks-visibility-change`, `sidebar-files-visibility-change`) with graceful fallback routing via `getDefaultSidebarPage()`.
 
 ### Static Publishing Build
 
-The production build is orchestrated by `bin/build/build.mjs`. It copies optional
+The production build is orchestrated by `src/cli/build/build.ts` (invoked via `bin/build.mjs`). It copies optional
 content, skills, and declarative tools, applies `shadow-claw.config.json` (or `site-config.json`), prerenders
 the DSD shell, generates any configured pretty paths, and builds the service
 worker. Published `skills/` and `tools/` entries are included in
 `static-main-manifest.json` and seeded only into the Main conversation. A
 repository may omit `pages/` entirely; the build still succeeds and publishes
 the built-in default Pages content. The regression suite in
-`bin/build/build.test.mjs` covers both a normal `pages/` tree and the
+`src/cli/build/build.test.ts` covers both a normal `pages/` tree and the
 absent-directory case.
 
 ---

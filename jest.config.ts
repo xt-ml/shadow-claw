@@ -44,6 +44,7 @@ export default {
         "/dist/",
         "/e2e/",
         "/bin/",
+        "/cli/",
         "/server/",
         "/notifications/",
       ],
@@ -107,10 +108,10 @@ export default {
       },
     },
     {
-      displayName: "bin",
+      displayName: "cli",
       testEnvironment: "node",
       setupFilesAfterEnv: ["<rootDir>/src/testing/jest-setup.ts"],
-      roots: ["<rootDir>/bin"],
+      roots: ["<rootDir>/src/cli", "<rootDir>/bin"],
       resolver: "<rootDir>/src/testing/jest-ts-resolver.cjs",
       coveragePathIgnorePatterns,
       extensionsToTreatAsEsm: [".ts"],
@@ -121,7 +122,7 @@ export default {
         "^node:sqlite$":
           "<rootDir>/src/subsystems/notifications/__mocks__/node-sqlite.cjs",
       },
-      testMatch: ["<rootDir>/bin/**/*.test.mjs"],
+      testMatch: ["<rootDir>/src/cli/**/*.test.ts"],
     },
   ],
 };

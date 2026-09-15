@@ -72,6 +72,13 @@ export interface BootstrapAgentOptions {
   cacheDir?: string;
   quiet?: boolean;
   verbose?: boolean;
+  tmp?: boolean;
+  temp?: boolean;
+  yes?: boolean;
+  y?: boolean;
+  isTTY?: boolean;
+  stdin?: any;
+  stdout?: any;
 }
 
 /**
@@ -132,6 +139,9 @@ export interface AgentRunResult {
   success: boolean;
   response?: string;
   error?: string;
+  model?: string;
+  provider?: string;
+  [key: string]: unknown;
 }
 
 /**
@@ -197,4 +207,31 @@ export interface AgentToolResult {
   headlessSafe?: boolean;
   output?: unknown;
   error?: string;
+}
+
+/**
+ * Options for runAgentModel.
+ */
+export interface AgentModelOptions {
+  workspace?: string;
+  cacheDir?: string;
+  quiet?: boolean;
+  verbose?: boolean;
+  progress?: boolean;
+  noProgress?: boolean;
+  download?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Result returned by runAgentModel.
+ */
+export interface AgentModelResult {
+  success: boolean;
+  subaction?: string;
+  model?: string;
+  models?: unknown[];
+  path?: string;
+  error?: string;
+  [key: string]: unknown;
 }

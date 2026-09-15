@@ -2,7 +2,7 @@
 
 > Architecture and roadmap for running local LLMs, downloading model weights and dependencies from Hugging Face, and transitioning between OpenRouter and offline execution.
 
-**Source:** `src/server/services/transformers-runtime.ts` · `src/server/routes/transformers-js.ts` · `src/config/config.ts` · `bin/commands/agent.mjs`
+**Source:** `src/server/services/transformers-runtime.ts` · `src/server/routes/transformers-js.ts` · `src/config/config.ts` · `src/cli/commands/agent.ts` · `src/subsystems/providers/utils/parseLocalModelToolCall.ts` · `src/worker/tools/node-transformers-executor.ts`
 
 ---
 
@@ -120,3 +120,11 @@ Client / CLI Agent
               ├── Pre-warms pipeline and loads ONNX runtime (device: CPU / q4)
               └── Executes inference via TextStreamer
 ```
+
+### 3. Unified Local Model Tool Calling (`parseLocalModelToolCall`)
+
+Located at `src/subsystems/providers/utils/parseLocalModelToolCall.ts`, this utility standardizes tool invocation formatting and parsing across local models:
+
+- **Schema Normalization**: Converts internal tool definitions (`ToolDefinition`) into standard OpenAI-compatible function definitions (`{ type: "function", function: { name, description, parameters } }`).
+- **Tokenizer Template Integration**: Passes tool schemas directly into the tokenizer's Jinja chat template via `tools: currentTools`, allowing models trained on tool use (such as Qwen and Gemma) to structure tool calls natively.
+- **Robust Extraction**: Parses tool call syntax from model outputs (e.g. `<tool_call>{"name": "...", "arguments": {...}}</tool_call>`, markdown code blocks, or raw JSON) across both the HTTP proxy route (`src/server/routes/transformers-js.ts`) and in-process Node execution (`src/worker/tools/node-transformers-executor.ts`).

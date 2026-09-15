@@ -179,9 +179,11 @@ sequenceDiagram
 
 | Directory                       | Contents                                                                     |
 | ------------------------------- | ---------------------------------------------------------------------------- |
-| `bin/`                          | CLI entry points (`bin/cli.mjs`), build pipeline (`bin/build/`), and scripts |
+| `bin/`                          | CLI wrapper entry points (`bin/cli.mjs`, `bin/build.mjs`, etc.)              |
+| `dist/cli/`                     | Bundled CLI commands and utilities compiled from `src/cli/` via Rolldown     |
 | `pages/`                        | Static site pages and routes (for in-repo deployment)                        |
 | `src/`                          | All application source code                                                  |
+| `src/cli/`                      | TypeScript CLI implementation, commands, build pipeline, and prerenderers    |
 | `src/components/`               | Web Components (`<shadow-claw-*>`), each in its own subdirectory             |
 | `src/components/common/`        | Reusable shared components (`empty-state`, `card`, `actions`)                |
 | `src/components/settings/`      | Recommended home for settings feature components (incremental migration)     |

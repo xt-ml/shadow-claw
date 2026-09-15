@@ -2,7 +2,7 @@
 
 > First-class Model Context Protocol (MCP) server exposing ShadowClaw CLI capabilities, server endpoints, and live browser WebMCP tools to external agent hosts.
 
-**Source:** `src/server/mcp/` · `src/server/routes/mcp.ts` · `bin/commands/mcp.mjs` · `bin/cli.mjs`
+**Source:** `src/server/mcp/` · `src/server/routes/mcp.ts` · `src/cli/commands/mcp.ts` · `src/cli/cli.ts`
 
 ---
 

@@ -21,6 +21,7 @@
     "e2e",
     "node_modules",
     "src/server",
+    "src/cli",
     "src/worker",
     "src/service-worker/fetch-proxy.ts",
     "src/service-worker/push-handler.ts",

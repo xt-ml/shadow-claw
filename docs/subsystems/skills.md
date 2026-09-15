@@ -105,7 +105,7 @@ Options include `--out-dir <dir>`, `--out-file <file>`, `--stdout`, and `--no-wr
 
 ### Build Pipeline Integration:
 
-During `shadow-claw build` (`bin/build/build.mjs`), the build runner automatically invokes `generateSkillsIndex(contentRoot)` when `.agents/skills` is present. It writes the index to `<contentRoot>/.well-known/agent-skills/index.json`, copies `.agents/scripts` into `dist/public/.agents/scripts`, and publishes `.well-known` directly into `dist/public/.well-known`.
+During `shadow-claw build` (`bin/build.mjs`), the build runner automatically invokes `generateSkillsIndex(contentRoot)` when `.agents/skills` is present. It writes the index to `<contentRoot>/.well-known/agent-skills/index.json`, copies `.agents/scripts` into `dist/public/.agents/scripts`, and publishes `.well-known` directly into `dist/public/.well-known`.
 
 ## Static publishing
 
@@ -121,6 +121,6 @@ For content-only sites, files under `.agents/skills/main/` are copied into the b
 - `src/core/orchestrator/utils/enqueue.ts` — slash command detection and execution dispatching
 - `src/worker/utils/toolChain.ts` — shared `executeToolChain` and `$pipe` resolution engine
 - `src/worker/utils/handleMessage.ts` — `execute-skill-tools` worker message handler
-- `bin/commands/skills-index.mjs` — Agent Skills Discovery index generator and CLI command
-- `bin/commands/skills-index.test.mjs` — Jest test suite for discovery index generation
-- `bin/build/build.mjs` — static build pipeline integration and asset synchronization
+- `src/cli/commands/skills-index.ts` — Agent Skills Discovery index generator and CLI command
+- `src/cli/commands/skills-index.test.ts` — Jest test suite for discovery index generation
+- `src/cli/build/build.ts` (invoked via `bin/build.mjs`) — static build pipeline integration and asset synchronization

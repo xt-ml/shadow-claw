@@ -20,6 +20,7 @@
     "**/*.stories.ts",
     "node_modules",
     "dist",
-    "e2e"
+    "e2e",
+    "src/cli"
   ]
 }

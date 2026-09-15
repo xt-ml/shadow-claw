@@ -7,7 +7,7 @@ Comprehensive testing guide for ShadowClaw covering the **browser-native E2E tes
 ShadowClaw features a **dual test architecture** tailored to its two runtime modes:
 
 1. **Browser E2E Test Suite (`e2e/`)**: Powered by Playwright using the Page Object Model (POM). Validates frontend user interfaces, Web Components, reactive signals, Web Worker orchestrator loops, sandboxed OPFS/IndexedDB storage, WebVM/just-bash shell emulation, and PWA/Electron workflows.
-2. **Server-Side Headless Agent & CLI Integration Tests (`bin/` & `src/`)**: Powered by Jest. Validates the host-native CLI agent participant (`shadow-claw agent run`), direct tool inspection and execution (`shadow-claw agent tools`, `shadow-claw agent tool`), SQLite database storage (`src/db/sqlite/`), Node filesystem handle abstraction (`src/storage/node-fs-handle.ts`), and headless tool capability execution (`src/worker/utils/executeTool.headless.test.ts`).
+2. **Server-Side Headless Agent & CLI Integration Tests (`src/cli/` & `src/`)**: Powered by Jest. Validates the host-native CLI agent participant (`shadow-claw agent run`), direct tool inspection and execution (`shadow-claw agent tools`, `shadow-claw agent tool`), SQLite database storage (`src/db/sqlite/`), Node filesystem handle abstraction (`src/storage/node-fs-handle.ts`), and headless tool capability execution (`src/worker/utils/executeTool.headless.test.ts`).
 
 ### Browser E2E Directory Structure
 
@@ -463,28 +463,28 @@ npm run e2e -- --reporter=html
 
 ### Build, CLI & Headless Agent Regression Tests
 
-The build, CLI, prerender, and headless agent test suites live under `bin/` and `src/` and run through the project Jest configuration. Coverage includes:
+The build, CLI, prerender, and headless agent test suites live under `src/cli/` and `src/` and run through the project Jest configuration. Coverage includes:
 
-- **CLI Commands & Utilities**: `build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send`, `backup`, `tasks`, `mcp`, `skills:index`, `webrtc`, `peer-id`, `--version`, `agent` (`bin/commands/agent.test.mjs`), and `agent model` (`bin/commands/agent-models.test.mjs`).
-- **Model Download & Progress Bar Utilities**: Hugging Face ONNX model querying, downloading, and local caching (`bin/utils/local-models.test.mjs`), terminal progress bar (`bin/utils/progress-bar.test.mjs`), and cache directory resolution (`bin/utils/resolve-cache-dir.test.mjs`).
+- **CLI Commands & Utilities**: `build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send`, `backup`, `tasks`, `mcp`, `skills:index`, `webrtc`, `peer-id`, `--version`, `agent` (`src/cli/commands/agent.test.ts`), and `agent model` (`src/cli/commands/agent-models.test.ts`).
+- **Model Download & Progress Bar Utilities**: Hugging Face ONNX model querying, downloading, and local caching (`src/cli/utils/local-models.test.ts`), terminal progress bar (`src/cli/utils/progress-bar.test.ts`), and cache directory resolution (`src/cli/utils/resolve-cache-dir.test.ts`).
 - **Headless Agent Subsystems**: SQLite database implementation (`src/db/sqlite/*.test.ts`), Node.js filesystem directory handle polyfill (`src/storage/node-fs-handle.test.ts`), headless tool execution and capability matrix (`src/worker/utils/executeTool.headless.test.ts`, `src/worker/tools/builtin-ai/builtin-ai.headless.test.ts`), and default provider/model configuration (`src/config/headless.test.ts`).
 - **Host-Native Offline Model Executors**: In-process Node.js Transformers.js execution (`src/worker/tools/node-transformers-executor.test.ts`, `src/server/services/transformers-runtime.test.ts`), Llamafile manager & executor (`src/worker/tools/node-llamafile-executor.test.ts`, `src/server/services/llamafile-manager.test.ts`), and agent invocation loop (`src/worker/utils/handleInvoke.test.ts`).
 
 ```bash
 NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
-  npx jest --runInBand bin/cli.test.mjs \
-  bin/commands/agent.test.mjs \
-  bin/commands/agent-models.test.mjs \
-  bin/utils/local-models.test.mjs \
-  bin/utils/progress-bar.test.mjs \
-  bin/commands/peer-id.test.mjs \
-  bin/commands/mcp.test.mjs \
-  bin/commands/skills-index.test.mjs \
-  bin/utils/control-client.test.mjs \
-  bin/utils/webrtc-control-client.test.mjs \
-  bin/build/build.test.mjs \
-  bin/prerender-dsd-shell/prerender-dsd-shell.test.mjs \
-  bin/prerender-pretty-paths/prerender-pretty-paths.test.mjs \
+  npx jest --runInBand src/cli/cli.test.ts \
+  src/cli/commands/agent.test.ts \
+  src/cli/commands/agent-models.test.ts \
+  src/cli/utils/local-models.test.ts \
+  src/cli/utils/progress-bar.test.ts \
+  src/cli/commands/peer-id.test.ts \
+  src/cli/commands/mcp.test.ts \
+  src/cli/commands/skills-index.test.ts \
+  src/cli/utils/control-client.test.ts \
+  src/cli/utils/webrtc-control-client.test.ts \
+  src/cli/build/build.test.ts \
+  src/cli/prerender/dsd-shell/prerender-dsd-shell.test.ts \
+  src/cli/prerender/pretty-paths/prerender-pretty-paths.test.ts \
   src/db/sqlite/openSqliteDatabase.test.ts \
   src/storage/node-fs-handle.test.ts \
   src/worker/utils/executeTool.headless.test.ts \
@@ -596,7 +596,7 @@ ShadowClaw's Control Plane and Stateless MCP Server bridges (`POST /mcp` and `sh
 - **Tool Naming Convention:** Built-in server and CLI tools are prefixed with `shadowclaw_server_` (`MCP_SERVER_TOOL_PREFIX`), while live tools relayed from connected browser clients are prefixed with `shadowclaw_client_` (`MCP_CLIENT_TOOL_PREFIX`, e.g. `shadowclaw_client_read_file`, `shadowclaw_client_list_files`), with legacy aliases supported for backward compatibility.
 - **Multi-Client Targeting & Execution Guards:** Relayed tools expose a `clientId` enum parameter limited to connected clients supporting each tool. Calls route to explicit clients or the active client (`shadowclaw_server_set_active_client`), with server-side client capability validation and client-side execution guards (`allowedTools` / conversation tool tags). Interactive tools like `ask_user` support human-in-the-loop responses with extended timeouts.
 - **Control Token Auto-Discovery & Retry:** CLI control clients automatically discover tokens from flags, `SHADOWCLAW_CONTROL_TOKEN`, system temporary directory (`tmpdir()`), parent directories, and SQLite, and automatically retry across remaining candidate tokens on HTTP 401 Unauthorized responses.
-- **Automated Integration Tests:** End-to-end server-to-client integration tests reside in `src/server/mcp/mcp-integration.test.ts`, tool relay tests in `src/server/mcp/tools/mcp-tools.test.ts`, CLI process tests in `bin/cli.test.mjs` and `bin/commands/mcp.test.mjs`, and Web Share Target flow verification in `e2e/share-target.test.ts`.
+- **Automated Integration Tests:** End-to-end server-to-client integration tests reside in `src/server/mcp/mcp-integration.test.ts`, tool relay tests in `src/server/mcp/tools/mcp-tools.test.ts`, CLI process tests in `src/cli/cli.test.ts` and `src/cli/commands/mcp.test.ts`, and Web Share Target flow verification in `e2e/share-target.test.ts`.
 
 ## Architecture Decisions
 

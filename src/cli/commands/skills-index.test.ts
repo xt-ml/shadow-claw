@@ -2,8 +2,11 @@ import fs from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { describe, it, expect, beforeEach, afterEach } from "@jest/globals";
-import { computeSha256, generateSkillsIndex } from "./skills-index.js";
+import {
+  computeSha256,
+  generateSkillsIndex,
+  runSkillsIndexCommand,
+} from "./skills-index.js";
 
 describe("skills-index command and generator", () => {
   let tempDir: string;
@@ -230,5 +233,84 @@ metadata:
     expect(creatorSkill.url).toBe(
       "../../.agents/skills/main/skill-creator/SKILL.md",
     );
+  });
+
+  it("does not include bundled skills by default in runSkillsIndexCommand for an external directory", async () => {
+    const mockProject = path.join(tempDir, "external-project");
+    const toolDir = path.join(mockProject, ".agents", "tools", "main");
+    await mkdir(toolDir, { recursive: true });
+    await writeFile(
+      path.join(toolDir, "get_weather.json"),
+      JSON.stringify({ name: "get_weather", description: "Get weather" }),
+      "utf8",
+    );
+
+    const res = await runSkillsIndexCommand(mockProject, { write: true });
+    expect(res.tools).toHaveLength(1);
+    expect(res.tools[0].name).toBe("get_weather");
+    expect(res.skills).toHaveLength(0);
+
+    // Verify .agents/skills was not created with phantom skill-creator
+    const phantomSkillPath = path.join(
+      mockProject,
+      ".agents",
+      "skills",
+      "main",
+      "skill-creator",
+    );
+    expect(fs.existsSync(phantomSkillPath)).toBe(false);
+
+    // Verify written index.json matches
+    const written = JSON.parse(
+      await fs.promises.readFile(
+        path.join(mockProject, ".well-known", "agent-skills", "index.json"),
+        "utf8",
+      ),
+    );
+    expect(written.skills).toHaveLength(0);
+    expect(written.tools).toHaveLength(1);
+  });
+
+  it("materializes bundled skill files onto disk when bundled: true is passed to runSkillsIndexCommand", async () => {
+    const mockToolchain = path.join(tempDir, "custom-toolchain");
+    const bundledSkillDir = path.join(
+      mockToolchain,
+      ".agents",
+      "skills",
+      "main",
+      "skill-creator",
+    );
+    await mkdir(bundledSkillDir, { recursive: true });
+    await writeFile(
+      path.join(bundledSkillDir, "SKILL.md"),
+      "---\nname: skill-creator\ndescription: Bundled skill creator.\n---\n",
+      "utf8",
+    );
+
+    const mockProject = path.join(tempDir, "bundled-project");
+    const res = await runSkillsIndexCommand(mockProject, {
+      bundled: true,
+      toolchainRoot: mockToolchain,
+      write: true,
+    });
+
+    expect(res.skills).toHaveLength(1);
+    expect(res.skills[0].name).toBe("skill-creator");
+    expect(res.skills[0].url).toBe(
+      "../../.agents/skills/main/skill-creator/SKILL.md",
+    );
+
+    // Verify the file was actually materialized onto disk so the relative URL is not a 404
+    const materializedSkill = path.join(
+      mockProject,
+      ".agents",
+      "skills",
+      "main",
+      "skill-creator",
+      "SKILL.md",
+    );
+    expect(fs.existsSync(materializedSkill)).toBe(true);
+    const content = await fs.promises.readFile(materializedSkill, "utf8");
+    expect(content).toContain("skill-creator");
   });
 });

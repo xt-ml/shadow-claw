@@ -1071,6 +1071,11 @@ program
     "Explicit path to shadow-claw.config.json or site-config.json",
   )
   .optionsGroup("Generation Options:")
+  .option(
+    "--bundled",
+    "Include and materialize bundled ShadowClaw skills in index and .agents/skills",
+    false,
+  )
   .option("--no-bundled", "Exclude bundled ShadowClaw skills from index")
   .option("--stdout", "Print generated index.json to stdout", false)
   .option("--no-write", "Skip writing file to disk")

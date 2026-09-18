@@ -6,7 +6,14 @@ import { getProjectRoot } from "../utils/resolve-project-root.js";
  */
 
 import crypto from "node:crypto";
-import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
+import {
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import matter from "gray-matter";
@@ -381,6 +388,17 @@ export async function generateSkillsIndex(
         continue;
       }
 
+      // Materialize bundled skill files onto disk if writing is enabled and file does not yet exist
+      if (options.write !== false) {
+        const targetSkillFile = path.join(resolvedRoot, relFromRoot);
+        if (!(await pathExists(targetSkillFile))) {
+          const sourceSkillDir = path.dirname(fullSkillPath);
+          const targetSkillDir = path.dirname(targetSkillFile);
+          await mkdir(targetSkillDir, { recursive: true });
+          await cp(sourceSkillDir, targetSkillDir, { recursive: true });
+        }
+      }
+
       discoveredSkills.push({
         name: skillName,
         type: "skill-md",
@@ -465,7 +483,7 @@ export async function runSkillsIndexCommand(
   console.log(`Generating Agent Skills Discovery index for ${targetDir}...`);
 
   const result = await generateSkillsIndex(targetDir, {
-    includeBundled: options.bundled !== false,
+    includeBundled: Boolean(options.bundled),
     ...options,
     configPath: options.config || options.configPath,
   });

@@ -307,6 +307,17 @@ describe("build without and with pages", () => {
       expect(contentIndex.skills.map((s: any) => s.name)).toEqual(
         expect.arrayContaining(["custom-skill", "skill-creator"]),
       );
+
+      // Verify skill-creator was materialized on disk so the advertised relative URL does not 404
+      const contentSkillCreatorPath = path.join(
+        tempConsumerRoot,
+        ".agents",
+        "skills",
+        "main",
+        "skill-creator",
+        "SKILL.md",
+      );
+      expect(fs.existsSync(contentSkillCreatorPath)).toBe(true);
     } finally {
       logSpy.mockRestore();
       await rm(tempConsumerRoot, { recursive: true, force: true });

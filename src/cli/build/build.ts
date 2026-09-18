@@ -417,21 +417,22 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     });
   }
 
-  // 6. Copy .agents from contentRoot (fallback to toolchainRoot)
+  // 6. Copy .agents from contentRoot and toolchainRoot
   const contentSkills = join(contentRoot, ".agents/skills");
   if (await pathExists(contentSkills)) {
     await cp(contentSkills, join(distPublicDir, ".agents/skills"), {
       recursive: true,
       force: true,
     });
-  } else {
-    const toolchainSkills = join(toolchainRoot, ".agents/skills");
-    if (await pathExists(toolchainSkills)) {
-      await cp(toolchainSkills, join(distPublicDir, ".agents/skills"), {
-        recursive: true,
-        force: true,
-      });
-    }
+  }
+
+  const toolchainSkills = join(toolchainRoot, ".agents/skills");
+  if (contentRoot !== toolchainRoot && (await pathExists(toolchainSkills))) {
+    await cp(toolchainSkills, join(distPublicDir, ".agents/skills"), {
+      recursive: true,
+      force: false,
+      errorOnExist: false,
+    });
   }
 
   const contentTools = join(contentRoot, ".agents/tools");

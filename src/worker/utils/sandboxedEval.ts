@@ -87,6 +87,21 @@ function getBlockedGlobals(allowFullInternetAccess: boolean): string[] {
   return [...BASE_BLOCKED_GLOBALS, "fetch"];
 }
 
+export type HeadlessEvalExecutor = (
+  code: string,
+  timeoutMs: number,
+  allowFullInternetAccess: boolean,
+  data?: string,
+) => Promise<{ ok: true; value: unknown } | { ok: false; error: string }>;
+
+let _headlessEvalExecutor: HeadlessEvalExecutor | null = null;
+
+export function setHeadlessEvalExecutor(
+  executor: HeadlessEvalExecutor | null,
+): void {
+  _headlessEvalExecutor = executor;
+}
+
 /**
  * Execute user-supplied JavaScript in a sandboxed, timeout-enforced context.
  */
@@ -96,6 +111,26 @@ export async function sandboxedEval(
   allowFullInternetAccess: boolean = false,
   data?: string,
 ): Promise<{ ok: true; value: unknown } | { ok: false; error: string }> {
+  if (typeof Worker === "undefined") {
+    if (_headlessEvalExecutor) {
+      return _headlessEvalExecutor(
+        code,
+        timeoutMs,
+        allowFullInternetAccess,
+        data,
+      );
+    }
+    const globalExecutor = (globalThis as any).__headlessEvalExecutor;
+    if (typeof globalExecutor === "function") {
+      return globalExecutor(code, timeoutMs, allowFullInternetAccess, data);
+    }
+
+    return {
+      ok: false,
+      error: "Web Workers are not supported in this environment.",
+    };
+  }
+
   // Build the worker source inline via a Blob URL
   const workerSource = buildWorkerSource(code, allowFullInternetAccess, data);
   const blob = new Blob([workerSource], { type: "application/javascript" });
@@ -266,6 +301,7 @@ const restoreGlobals = applyGlobalShadows();
       const Function = undefined;
       ${allowFullInternetAccess ? "" : "const fetch = undefined;"}
       const $PIPE_DATA = ${JSON.stringify(data ?? "")};
+      const data = $PIPE_DATA;
 
     ${code}
     })();

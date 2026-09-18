@@ -368,7 +368,7 @@ ShadowClaw supports discovering and importing tools, skills, and companion scrip
 - **Discovery Standard**: Adheres to the Agent Skills Discovery RFC v0.2.0 (`/.well-known/agent-skills/index.json`), automatically produced by `skills:index` and the static build pipeline. Relative URLs (`../../.agents/...`) resolve to the published static assets on GitHub Pages or custom origins.
 - **Integrity Validation**: Verifies SHA-256 digests (`sha256:...`) against downloaded artifacts to ensure code integrity before persisting to storage.
 - **OPFS Persistence**: Imported tools (`.agents/tools/`), skills (`.agents/skills/`), and companion scripts (`.agents/scripts/`) are persisted directly into the user's OPFS workspace and automatically indexed by `loadDeclarativeTools` and `discoverSkills`.
-- **UI Importer (`<shadow-claw-tools>`)**: Accessible via the "Import" action in the Tool Configuration header. Provides source URL entry, quick-pick presets (e.g. pwgen Knowledge Hub, Block Garden Knowledge Hub), catalog inspection with schema/code preview, and selective batch import with auto-enablement options.
+- **UI Importer (`<shadow-claw-tools>`)**: Accessible via the "Import" action in the Tool Configuration header. Provides source URL entry, quick-pick presets (e.g. pwgen Knowledge Hub, Block Garden Knowledge Hub, Weather Agent), catalog inspection with schema/code preview, and selective batch import with auto-enablement options.
 
 ### Runtime vs. Build-Time Security Boundaries
 

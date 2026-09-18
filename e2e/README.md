@@ -7,7 +7,7 @@ Comprehensive testing guide for ShadowClaw covering the **browser-native E2E tes
 ShadowClaw features a **dual test architecture** tailored to its two runtime modes:
 
 1. **Browser E2E Test Suite (`e2e/`)**: Powered by Playwright using the Page Object Model (POM). Validates frontend user interfaces, Web Components, reactive signals, Web Worker orchestrator loops, sandboxed OPFS/IndexedDB storage, WebVM/just-bash shell emulation, and PWA/Electron workflows.
-2. **Server-Side Headless Agent & CLI Integration Tests (`src/cli/` & `src/`)**: Powered by Jest. Validates the host-native CLI agent participant (`shadow-claw agent run`), direct tool inspection and execution (`shadow-claw agent tools`, `shadow-claw agent tool`), SQLite database storage (`src/db/sqlite/`), Node filesystem handle abstraction (`src/storage/node-fs-handle.ts`), and headless tool capability execution (`src/worker/utils/executeTool.headless.test.ts`).
+2. **Server-Side Headless Agent & CLI Integration Tests (`src/cli/` & `src/`)**: Powered by Jest. Validates the host-native CLI agent participant (`shadow-claw agent run`), direct tool inspection and execution (`shadow-claw agent tools`, `shadow-claw agent tool`), remote skill and tool discovery and importing (`shadow-claw agent import`), SQLite database storage (`src/db/sqlite/`), Node filesystem handle abstraction (`src/storage/node-fs-handle.ts`), and headless tool capability execution (`src/worker/utils/executeTool.headless.test.ts`).
 
 ### Browser E2E Directory Structure
 
@@ -465,7 +465,7 @@ npm run e2e -- --reporter=html
 
 The build, CLI, prerender, and headless agent test suites live under `src/cli/` and `src/` and run through the project Jest configuration. Coverage includes:
 
-- **CLI Commands & Utilities**: `build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send`, `backup`, `tasks`, `mcp`, `skills:index`, `webrtc`, `peer-id`, `--version`, `agent` (`src/cli/commands/agent.test.ts`), and `agent model` (`src/cli/commands/agent-models.test.ts`).
+- **CLI Commands & Utilities**: `build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send`, `backup`, `tasks`, `mcp`, `skills:index`, `webrtc`, `peer-id`, `--version`, `agent` (`src/cli/commands/agent.test.ts` covering init, models, tools, skills, tool execution, and remote RFC v0.2.0 skill/tool/script import workflows), and `agent model` (`src/cli/commands/agent-models.test.ts`).
 - **Model Download & Progress Bar Utilities**: Hugging Face ONNX model querying, downloading, and local caching (`src/cli/utils/local-models.test.ts`), terminal progress bar (`src/cli/utils/progress-bar.test.ts`), and cache directory resolution (`src/cli/utils/resolve-cache-dir.test.ts`).
 - **Headless Agent Subsystems**: SQLite database implementation (`src/db/sqlite/*.test.ts`), Node.js filesystem directory handle polyfill (`src/storage/node-fs-handle.test.ts`), headless tool execution and capability matrix (`src/worker/utils/executeTool.headless.test.ts`, `src/worker/tools/builtin-ai/builtin-ai.headless.test.ts`), and default provider/model configuration (`src/config/headless.test.ts`).
 - **Host-Native Offline Model Executors**: In-process Node.js Transformers.js execution (`src/worker/tools/node-transformers-executor.test.ts`, `src/server/services/transformers-runtime.test.ts`), Llamafile manager & executor (`src/worker/tools/node-llamafile-executor.test.ts`, `src/server/services/llamafile-manager.test.ts`), and agent invocation loop (`src/worker/utils/handleInvoke.test.ts`).

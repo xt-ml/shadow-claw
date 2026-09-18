@@ -65,6 +65,9 @@ cat doc.txt | npx shadow-claw agent run "Summarize this" -o summary.txt
 # Inspect available tools and skills
 npx shadow-claw agent tools
 npx shadow-claw agent skills
+
+# Discover and import remote skills, declarative tools, and companion scripts
+npx shadow-claw agent import https://xt-ml.github.io/shadow-claw-agent-cli-weather/
 ```
 
 ### 3. Scaffold a Project or Knowledge Hub
@@ -108,7 +111,7 @@ npm install && npm run dev  # Dev server → http://localhost:8888
 
 - **Client-Side Worker Orchestration:** The frontend agent decision loop, system prompt building, and tool execution run off the main thread in a dedicated Web Worker to keep the UI smooth and responsive.
 - **In-Browser Inference by Default:** Uses the Prompt API (`window.LanguageModel`) by default in the browser client (`DEFAULT_PROVIDER = "prompt_api"`) with guided onboarding. When native support is not present, integrated polyfills (`prompt-api-polyfill` and `built-in-ai-task-apis-polyfills` backed by Transformers.js / ONNX) enable cross-browser execution.
-- **Headless Server-Side Agent Client:** Execute the same tool-use loop, prompt assembly, and declarative skill tool chains directly from the terminal or CI/CD pipelines via `shadow-claw agent` (`init`, `model`, `skills`, `tools`, `tool`, `skill`, `run`), with native host OS shell access (`node:child_process`), SQLite persistence (`node:sqlite`), real filesystem access (`NodeFsDirectoryHandle`), and in-process offline model execution via Transformers.js ONNX and Llamafile (featuring visual download progress bars and streaming) or cloud providers.
+- **Headless Server-Side Agent Client:** Execute the same tool-use loop, prompt assembly, and declarative skill tool chains directly from the terminal or CI/CD pipelines via `shadow-claw agent` (`init`, `model`, `skills`, `tools`, `tool`, `skill`, `import`, `run`), with native host OS shell access (`node:child_process`), SQLite persistence (`node:sqlite`), real filesystem access (`NodeFsDirectoryHandle`), and in-process offline model execution via Transformers.js ONNX and Llamafile (featuring visual download progress bars and streaming) or cloud providers.
 - **Configurable Multi-Model Routing:** Route queries to Cloud providers (OpenRouter, Anthropic, Gemini, OpenAI, AWS Bedrock), local engines (Ollama, Llamafile, Transformers.js with on-demand Hugging Face model downloading and disk caching), or in-browser WebGPU models (LiteRT-LM).
 - **Dual-Dispatch Sandboxing & Storage:** Client-side compute via sandboxed JavaScript and `just-bash` (or WebVM Alpine Linux) backed by Origin Private File System (OPFS) and IndexedDB; paired with host-native Node filesystem handles and SQLite database persistence on the server side.
 - **PWA & Electron Desktop Parity:** Deployable as a progressive web app with Service Worker and Web Push, or as a native desktop application with full feature parity.
@@ -330,6 +333,7 @@ npx shadow-claw agent tools                          # List tools with capabilit
 npx shadow-claw agent tool <name> [jsonArgs]         # Inspect tool schema or execute directly
 echo "hello" | npx shadow-claw agent tool <name>     # Pipe text directly into tool (schema auto-mapping)
 npx shadow-claw agent skill <name>                   # Execute a declarative skill tool chain
+npx shadow-claw agent import <url> [options]         # Discover and import remote RFC v0.2.0 skills and tools
 
 # Browser & Client Interactivity
 npx shadow-claw clients                              # List connected browser/Electron clients

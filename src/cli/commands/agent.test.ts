@@ -1855,3 +1855,424 @@ describe("runAgentRun — SIGINT cancellation and process cleanup", () => {
     expect(cleanupCalled).toBe(true);
   });
 });
+
+/**
+ * TDD tests for the `agent import` subcommand.
+ */
+describe("agent import", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "sc-agent-import-test-"));
+  });
+
+  afterEach(async () => {
+    const { closeSqliteDatabase } =
+      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+        closeSqliteDatabase: () => {},
+      }));
+    closeSqliteDatabase?.();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("requires a URL argument and returns error if missing", async () => {
+    const { runAgentCommand, runAgentImport } = await import("./agent.js");
+    const resultCommand = await runAgentCommand("import", [], {
+      workspace: tmpDir,
+      quiet: true,
+    });
+    expect(resultCommand.success).toBe(false);
+    expect(resultCommand.error).toMatch(/required/i);
+
+    const resultDirect = await runAgentImport("", {
+      workspace: tmpDir,
+      quiet: true,
+    });
+    expect(resultDirect.success).toBe(false);
+    expect(resultDirect.error).toMatch(/required/i);
+  });
+
+  it("fetches manifest and imports all tools, skills, and scripts by default", async () => {
+    const { runAgentImport, runAgentTools, runAgentSkills } =
+      await import("./agent.js");
+
+    const manifest = {
+      $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+      name: "Weather Station Hub",
+      description: "Weather station declarative tools and skills",
+      skills: [
+        {
+          name: "weather-briefing",
+          type: "skill-md",
+          description: "Daily weather briefing",
+          url: "../../.agents/skills/main/weather-briefing/SKILL.md",
+        },
+      ],
+      tools: [
+        {
+          name: "get_current_weather",
+          description: "Fetch real-time weather",
+          url: "../../.agents/tools/main/get_current_weather.json",
+        },
+      ],
+      scripts: [
+        {
+          name: "weather_helper",
+          url: "../../.agents/scripts/main/weather_helper.js",
+        },
+      ],
+    };
+
+    const skillContent = `---
+name: weather-briefing
+description: Daily weather briefing
+user-invocable: true
+---
+# Weather Briefing
+Fetch today's weather.
+`;
+
+    const toolContent = JSON.stringify({
+      name: "get_current_weather",
+      description: "Fetch real-time weather",
+      input_schema: {
+        type: "object",
+        properties: {
+          location: { type: "string" },
+        },
+      },
+      execution: {
+        type: "javascript",
+        code: "return JSON.stringify({ temp: 21, condition: 'Sunny' });",
+      },
+    });
+
+    const scriptContent = 'export function helper() { return "weather"; }';
+
+    const mockFetch = jest.fn<any>().mockImplementation(async (url: any) => {
+      const urlStr = String(url);
+      if (urlStr.endsWith("index.json") || urlStr.includes(".well-known")) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => manifest,
+          text: async () => JSON.stringify(manifest),
+        };
+      }
+      if (urlStr.endsWith("get_current_weather.json")) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          text: async () => toolContent,
+        };
+      }
+      if (urlStr.endsWith("SKILL.md")) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          text: async () => skillContent,
+        };
+      }
+      if (urlStr.endsWith("weather_helper.js")) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          text: async () => scriptContent,
+        };
+      }
+      return {
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        text: async () => "Not found",
+      };
+    });
+
+    const result = await runAgentImport("https://example.com/weather", {
+      workspace: tmpDir,
+      fetchFn: mockFetch as any,
+      quiet: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.importedCount).toBe(3);
+    expect(result.failedCount).toBe(0);
+
+    // Verify files were written to disk in workspace
+    const toolFile = path.join(
+      tmpDir,
+      ".agents/tools/main/get_current_weather.json",
+    );
+    const skillFile = path.join(
+      tmpDir,
+      ".agents/skills/main/weather-briefing/SKILL.md",
+    );
+    const scriptFile = path.join(
+      tmpDir,
+      ".agents/scripts/main/weather_helper.js",
+    );
+
+    expect(JSON.parse(await readFile(toolFile, "utf8"))).toEqual(
+      JSON.parse(toolContent),
+    );
+    expect(await readFile(skillFile, "utf8")).toBe(skillContent);
+    expect(await readFile(scriptFile, "utf8")).toBe(scriptContent);
+
+    // Verify declarative tools are listed in agent tools
+    const toolsResult = await runAgentTools({ workspace: tmpDir, quiet: true });
+    const importedTool = toolsResult.tools.find(
+      (t: any) => t.name === "get_current_weather",
+    );
+    expect(importedTool).toBeDefined();
+    expect(importedTool.description).toBe("Fetch real-time weather");
+    expect(importedTool.headlessSafe).toBe(true);
+
+    // Verify skills are listed in agent skills
+    const skillsResult = await runAgentSkills({
+      workspace: tmpDir,
+      quiet: true,
+    });
+    const importedSkill = skillsResult.skills.find(
+      (s: any) => s.name === "weather-briefing",
+    );
+    expect(importedSkill).toBeDefined();
+  });
+
+  it("supports selective filtering using options.tools", async () => {
+    const { runAgentImport } = await import("./agent.js");
+
+    const manifest = {
+      $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+      name: "Selective Station",
+      tools: [
+        {
+          name: "tool_alpha",
+          description: "Tool Alpha",
+          url: "../../.agents/tools/main/tool_alpha.json",
+        },
+        {
+          name: "tool_beta",
+          description: "Tool Beta",
+          url: "../../.agents/tools/main/tool_beta.json",
+        },
+      ],
+    };
+
+    const makeTool = (name: string) =>
+      JSON.stringify({
+        name,
+        description: `Description of ${name}`,
+        input_schema: { type: "object", properties: {} },
+        execution: { type: "javascript", code: "return 'ok';" },
+      });
+
+    const mockFetch = jest.fn<any>().mockImplementation(async (url: any) => {
+      const urlStr = String(url);
+      if (urlStr.includes(".well-known")) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          json: async () => manifest,
+          text: async () => JSON.stringify(manifest),
+        };
+      }
+      if (urlStr.endsWith("tool_alpha.json")) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          text: async () => makeTool("tool_alpha"),
+        };
+      }
+      if (urlStr.endsWith("tool_beta.json")) {
+        return {
+          ok: true,
+          status: 200,
+          statusText: "OK",
+          text: async () => makeTool("tool_beta"),
+        };
+      }
+      return { ok: false, status: 404, statusText: "Not Found" };
+    });
+
+    const result = await runAgentImport("https://example.com/hub", {
+      workspace: tmpDir,
+      tools: "tool_alpha",
+      fetchFn: mockFetch as any,
+      quiet: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.importedCount).toBe(1);
+    expect(result.result?.tools[0].name).toBe("tool_alpha");
+    expect(result.result?.tools[0].status).toBe("imported");
+
+    // tool_alpha exists, tool_beta does not
+    await expect(
+      access(
+        path.join(tmpDir, ".agents/tools/main/tool_alpha.json"),
+        constants.F_OK,
+      ),
+    ).resolves.toBeUndefined();
+    await expect(
+      access(
+        path.join(tmpDir, ".agents/tools/main/tool_beta.json"),
+        constants.F_OK,
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("skips existing files unless overwrite is true", async () => {
+    const { runAgentImport } = await import("./agent.js");
+
+    const manifest = {
+      name: "Overwrite Station",
+      tools: [
+        {
+          name: "tool_target",
+          description: "Target tool",
+          url: "../../.agents/tools/main/tool_target.json",
+        },
+      ],
+    };
+
+    const toolV1 = JSON.stringify({
+      name: "tool_target",
+      description: "Version 1",
+      input_schema: { type: "object", properties: {} },
+      execution: { type: "javascript", code: "return 1;" },
+    });
+
+    const toolV2 = JSON.stringify({
+      name: "tool_target",
+      description: "Version 2",
+      input_schema: { type: "object", properties: {} },
+      execution: { type: "javascript", code: "return 2;" },
+    });
+
+    let currentTool = toolV1;
+    const mockFetch = jest.fn<any>().mockImplementation(async (url: any) => {
+      const urlStr = String(url);
+      if (urlStr.includes(".well-known")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => manifest,
+          text: async () => JSON.stringify(manifest),
+        };
+      }
+      return { ok: true, status: 200, text: async () => currentTool };
+    });
+
+    // 1st import: imported
+    const res1 = await runAgentImport("https://example.com", {
+      workspace: tmpDir,
+      fetchFn: mockFetch as any,
+      quiet: true,
+    });
+    expect(res1.importedCount).toBe(1);
+
+    // 2nd import without overwrite: skipped
+    currentTool = toolV2;
+    const res2 = await runAgentImport("https://example.com", {
+      workspace: tmpDir,
+      fetchFn: mockFetch as any,
+      quiet: true,
+    });
+    expect(res2.skippedCount).toBe(1);
+    expect(res2.importedCount).toBe(0);
+    const contentUnchanged = JSON.parse(
+      await readFile(
+        path.join(tmpDir, ".agents/tools/main/tool_target.json"),
+        "utf8",
+      ),
+    );
+    expect(contentUnchanged.description).toBe("Version 1");
+
+    // 3rd import with overwrite: true: imported
+    const res3 = await runAgentImport("https://example.com", {
+      workspace: tmpDir,
+      overwrite: true,
+      fetchFn: mockFetch as any,
+      quiet: true,
+    });
+    expect(res3.importedCount).toBe(1);
+    const contentUpdated = JSON.parse(
+      await readFile(
+        path.join(tmpDir, ".agents/tools/main/tool_target.json"),
+        "utf8",
+      ),
+    );
+    expect(contentUpdated.description).toBe("Version 2");
+  });
+
+  it("handles network failure gracefully", async () => {
+    const { runAgentImport } = await import("./agent.js");
+
+    const mockFetch = jest
+      .fn<any>()
+      .mockRejectedValue(new Error("Network unreachable"));
+
+    const result = await runAgentImport("https://broken.example.com", {
+      workspace: tmpDir,
+      fetchFn: mockFetch as any,
+      quiet: true,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/Network unreachable/i);
+  });
+
+  it("dispatches via runAgentCommand('import', ...)", async () => {
+    const { runAgentCommand } = await import("./agent.js");
+
+    const manifest = {
+      name: "Dispatch Station",
+      tools: [
+        {
+          name: "dispatch_tool",
+          description: "Dispatch tool",
+          url: "../../.agents/tools/main/dispatch_tool.json",
+        },
+      ],
+    };
+
+    const toolJson = JSON.stringify({
+      name: "dispatch_tool",
+      description: "Dispatch test",
+      input_schema: { type: "object", properties: {} },
+      execution: { type: "javascript", code: "return 'dispatched';" },
+    });
+
+    const mockFetch = jest.fn<any>().mockImplementation(async (url: any) => {
+      const urlStr = String(url);
+      if (urlStr.includes(".well-known")) {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => manifest,
+          text: async () => JSON.stringify(manifest),
+        };
+      }
+      return { ok: true, status: 200, text: async () => toolJson };
+    });
+
+    const result = await runAgentCommand(
+      "import",
+      ["https://example.com/dispatch"],
+      {
+        workspace: tmpDir,
+        fetchFn: mockFetch as any,
+        quiet: true,
+      },
+    );
+
+    expect(result.success).toBe(true);
+    expect(result.importedCount).toBe(1);
+  });
+});

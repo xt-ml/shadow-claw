@@ -111,6 +111,23 @@ During `shadow-claw build` (`bin/build.mjs`), the build runner automatically inv
 
 For content-only sites, files under `.agents/skills/main/` are copied into the build manifest and seeded into the Main conversation's workspace. They are not copied into other conversation workspaces. A skills purge marker can clear the previously seeded `.agents/skills/main/` directory before the current published skills are seeded; see the template README for the marker format.
 
+## Remote Skill Discovery and Importing
+
+Skills can be discovered and imported across compatible templates and peer sites adhering to the Agent Skills Discovery RFC v0.2.0 specification:
+
+- **Browser UI**: Accessible via the "Import" modal in `<shadow-claw-tools>` (`/settings/tool-configuration`), providing quick-pick presets (pwgen Knowledge Hub, Block Garden Knowledge Hub, Weather Agent) or custom site URLs.
+- **Headless CLI**: Discover and import skills directly into an agent workspace via:
+
+  ```bash
+  # Import all skills, tools, and scripts
+  npx shadow-claw agent import https://xt-ml.github.io/shadow-claw-agent-cli-weather/
+
+  # Selectively import specific skills
+  npx shadow-claw agent import https://example.com/ --skills "my-skill"
+  ```
+
+- **Verification & Storage**: Artifacts are validated against SHA-256 digests and saved into `.agents/skills/main/<name>/SKILL.md` (and accompanying resources) in the workspace directory.
+
 ## Source locations
 
 - `src/subsystems/skills/parseSkill.ts` — frontmatter parsing, validation, and suppression cascading

@@ -1091,7 +1091,7 @@ program.commandsGroup("Headless Agent:");
 program
   .command("agent [action] [args...]")
   .description(
-    "Run the headless CLI agent (init | model | skills | tools | tool | skill | run)",
+    "Run the headless CLI agent (init | model | skills | tools | tool | skill | import | run)",
   )
   .optionsGroup("Agent Options:")
   .option("--workspace <dir>", "Workspace directory (default: .cache)")
@@ -1138,7 +1138,31 @@ program
   )
   .option(
     "--tools <tools>",
-    "Comma-separated list of tools to enable (e.g. bash,read_file)",
+    "Comma-separated list of tools to enable or import (e.g. bash,read_file)",
+  )
+  .option(
+    "--skills <skills>",
+    "Comma-separated list of skills to filter or import",
+  )
+  .option("--scripts <scripts>", "Comma-separated list of scripts to import")
+  .option(
+    "--all",
+    "Import all tools, skills, and scripts from discovery manifest",
+    false,
+  )
+  .option(
+    "--overwrite",
+    "Overwrite existing skills, tools, or scripts during import",
+    false,
+  )
+  .option(
+    "--auto-enable",
+    "Automatically enable imported declarative tools (default: true)",
+    true,
+  )
+  .option(
+    "--no-auto-enable",
+    "Do not automatically enable imported declarative tools",
   )
   .option(
     "--tools-profile <name>",

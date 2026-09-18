@@ -4,6 +4,7 @@
  */
 
 import type { ShadowClawDatabase } from "../db/types.js";
+import type { ImportResult } from "../subsystems/tools/remote/types.js";
 
 /**
  * Dedicated agent configuration section in shadow-claw.config.json.
@@ -232,6 +233,44 @@ export interface AgentModelResult {
   model?: string;
   models?: unknown[];
   path?: string;
+  error?: string;
+  [key: string]: unknown;
+}
+
+/**
+ * Options for runAgentImport.
+ */
+export interface AgentImportOptions {
+  workspace?: string;
+  group?: string;
+  databaseDir?: string;
+  cacheDir?: string;
+  tools?: string | string[];
+  skills?: string | string[];
+  scripts?: string | string[];
+  all?: boolean;
+  overwrite?: boolean;
+  autoEnable?: boolean;
+  targetSubdir?: string;
+  siteSlug?: string;
+  quiet?: boolean;
+  verbose?: boolean;
+  fetchFn?: typeof fetch;
+  [key: string]: unknown;
+}
+
+/**
+ * Result returned by runAgentImport.
+ */
+export interface AgentImportResult {
+  success: boolean;
+  manifest?: unknown;
+  siteUrl?: string;
+  manifestUrl?: string;
+  result?: ImportResult;
+  importedCount?: number;
+  skippedCount?: number;
+  failedCount?: number;
   error?: string;
   [key: string]: unknown;
 }

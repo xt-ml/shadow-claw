@@ -12,11 +12,14 @@ import {
 } from "./utils/handleInvoke.js";
 import { executeNodeTransformersCompletion } from "./tools/node-transformers-executor.js";
 import { executeNodeLlamafileCompletion } from "./tools/node-llamafile-executor.js";
+import { setHeadlessEvalExecutor } from "./utils/sandboxedEval.js";
+import { nativeEvalExecutor } from "./utils/native-eval-executor.js";
 
 // Automatically wire native OS process execution for headless CLI agent
 setHeadlessBashExecutor(nativeBashExecutor);
 setNodeTransformersCompletionExecutor(executeNodeTransformersCompletion);
 setNodeLlamafileCompletionExecutor(executeNodeLlamafileCompletion);
+setHeadlessEvalExecutor(nativeEvalExecutor);
 
 export { executeTool } from "./utils/executeTool.js";
 export { executeToolChain } from "./utils/toolChain.js";
@@ -53,6 +56,16 @@ export { TOOL_DEFINITIONS } from "../subsystems/tools/index.js";
 export { DEFAULT_BUILTIN_PROFILE } from "../subsystems/tools/builtin-profiles.js";
 export { loadDeclarativeTools } from "../subsystems/tools/declarative.js";
 export {
+  resolveDiscoveryUrl,
+  fetchDiscoveryManifest,
+} from "../subsystems/tools/remote/discovery.js";
+export {
+  importRemoteArtifacts,
+  importRemoteTool,
+  importRemoteSkill,
+  importRemoteScript,
+} from "../subsystems/tools/remote/importArtifacts.js";
+export {
   getProvider,
   getDefaultProvider,
   getAvailableProviders,
@@ -81,4 +94,5 @@ export { executeNodeTransformersCompletion } from "./tools/node-transformers-exe
 export { createTransformersRuntimeService } from "../server/services/transformers-runtime.js";
 export { cleanupAllLlamafileProcesses } from "../server/services/llamafile-manager.js";
 export { nativeBashExecutor, setHeadlessBashExecutor };
+export { nativeEvalExecutor, setHeadlessEvalExecutor };
 export type * from "./headless-types.js";

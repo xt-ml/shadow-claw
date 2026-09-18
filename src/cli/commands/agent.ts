@@ -21,6 +21,8 @@ import type {
   AgentRunResult,
   AgentModelOptions,
   AgentModelResult,
+  AgentImportOptions,
+  AgentImportResult,
 } from "../../worker/headless-types.js";
 
 import { bootstrapHeadlessAgent } from "./agent-bootstrap.js";
@@ -254,6 +256,8 @@ export async function runAgentTools(
   options: AgentToolsOptions & Record<string, any> = {},
 ): Promise<any> {
   const { db, core } = await bootstrapHeadlessAgent(options);
+  const groupId =
+    options.group || core.DEFAULT_SERVER_GROUP_ID || DEFAULT_SERVER_GROUP_ID;
 
   let profileToolNames: Set<string> | null = null;
   if (options.toolsProfile || options.profile) {
@@ -283,7 +287,21 @@ export async function runAgentTools(
     }
   }
 
-  const tools = (core.TOOL_DEFINITIONS || []).map((def) => ({
+  const allTools = [...(core.TOOL_DEFINITIONS || [])];
+  if (typeof core.loadDeclarativeTools === "function") {
+    try {
+      const decl = await core.loadDeclarativeTools(db, groupId);
+      if (decl && Array.isArray(decl.tools)) {
+        for (const dt of decl.tools) {
+          if (!allTools.some((t) => t.name === dt.name)) {
+            allTools.push(dt);
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const tools = allTools.map((def) => ({
     name: def.name,
     description: def.description,
     headlessSafe: !BROWSER_ONLY_TOOLS.has(def.name),
@@ -310,11 +328,14 @@ export async function runAgentTool(
     options.group || core.DEFAULT_SERVER_GROUP_ID || DEFAULT_SERVER_GROUP_ID;
 
   // Find tool in built-in TOOL_DEFINITIONS or declarative tools
-  let toolDef = (core.TOOL_DEFINITIONS || []).find((t) => t.name === toolName);
+  let toolDef = (core.TOOL_DEFINITIONS || []).find(
+    (t: any) => t.name === toolName,
+  );
+
   if (!toolDef && typeof core.loadDeclarativeTools === "function") {
     try {
       const decl = await core.loadDeclarativeTools(db, groupId);
-      toolDef = decl.tools.find((t) => t.name === toolName);
+      toolDef = decl.tools.find((t: any) => t.name === toolName);
     } catch {}
   }
 
@@ -370,12 +391,10 @@ export async function runAgentTool(
 
     let invokeContext: any = undefined;
     try {
-      const resolved = await resolveAgentProvider(
-        db,
-        core,
-        workspaceDir,
-        options,
-      );
+      const resolved = await resolveAgentProvider(db, core, workspaceDir, {
+        ...options,
+        interactive: false,
+      });
       invokeContext = {
         db,
         provider: resolved.providerId,
@@ -471,7 +490,7 @@ export async function runAgentSkill(
     skill.execution?.type === "tools" &&
     Array.isArray(skill.execution.tools)
   ) {
-    const normalizedTools = skill.execution.tools.map((t) => ({
+    const normalizedTools = skill.execution.tools.map((t: any) => ({
       name: t.name || t.tool,
       input: t.input || t.arguments || {},
       suppressOutput: t.suppressOutput,
@@ -565,7 +584,8 @@ export async function resolveAgentProvider(
             process.env.CI &&
             !["0", "false"].includes(process.env.CI.toLowerCase()),
           );
-  const isInteractive = isTTY && !isCI && !options.quiet;
+  const isInteractive =
+    isTTY && !isCI && !options.quiet && options.interactive !== false;
 
   if (!providerId) {
     if (isInteractive) {
@@ -726,7 +746,7 @@ export async function resolveAgentProvider(
         const processSigintListener = () => handleSigint();
         process.on("SIGINT", processSigintListener);
 
-        const dataListener = (chunk) => {
+        const dataListener = (chunk: any) => {
           const str =
             typeof chunk === "string" ? chunk : chunk.toString("binary");
           if (str.includes("\x03") || str.includes("\x04")) {
@@ -883,11 +903,13 @@ async function resolveToolsAndProfile(
         ? options.tools
         : String(options.tools).split(",")
     )
-      .map((t) => String(t).trim())
+      .map((t: unknown) => String(t).trim())
       .filter(Boolean);
 
     enabledTools = requestedNames
-      .map((name) => allAvailableTools.find((t) => t.name === name))
+      .map((name: unknown) =>
+        allAvailableTools.find((t) => t.name === String(name)),
+      )
       .filter(Boolean);
     return { enabledTools, profileSystemPromptOverride };
   }
@@ -1098,7 +1120,7 @@ export async function runAgentRun(
   let hasStreamedChunks = false;
   const pendingWrites: Promise<void>[] = [];
 
-  core.setPostHandler(async (message) => {
+  core.setPostHandler(async (message: any) => {
     switch (message.type) {
       case "streaming-start":
         hasStreamedChunks = true;
@@ -1197,15 +1219,15 @@ export async function runAgentRun(
               groupId: taskGroupId,
               db,
             })
-            .then((res) => {
-              const resolvers = globalThis.pendingNativeAiResolvers;
+            .then((res: unknown) => {
+              const resolvers = (globalThis as any).pendingNativeAiResolvers;
               if (resolvers && resolvers[id]) {
                 resolvers[id].resolve(res);
                 delete resolvers[id];
               }
             })
-            .catch((err) => {
-              const resolvers = globalThis.pendingNativeAiResolvers;
+            .catch((err: unknown) => {
+              const resolvers = (globalThis as any).pendingNativeAiResolvers;
               if (resolvers && resolvers[id]) {
                 resolvers[id].reject(err);
                 delete resolvers[id];
@@ -1602,6 +1624,218 @@ export async function runAgentModel(
 }
 
 /**
+ * Import tools, skills, and companion scripts from a remote discovery manifest or site URL.
+ * @param {string} urlOrSite
+ * @param {import("../../src/worker/headless-types.js").AgentImportOptions} [options]
+ * @returns {Promise<import("../../src/worker/headless-types.js").AgentImportResult>}
+ */
+export async function runAgentImport(
+  urlOrSite: string,
+  options: AgentImportOptions & Record<string, any> = {},
+): Promise<AgentImportResult> {
+  const trimmedUrl = (urlOrSite || "").trim();
+  if (!trimmedUrl) {
+    const errorMsg =
+      "Error: Discovery URL or site URL required. Usage: shadow-claw agent import <url> [options]";
+    if (!options.quiet) {
+      console.error(errorMsg);
+    }
+    process.exitCode = 1;
+    return { success: false, error: errorMsg };
+  }
+
+  const { db, core } = await bootstrapHeadlessAgent(options);
+  const groupId =
+    options.group || core.DEFAULT_SERVER_GROUP_ID || DEFAULT_SERVER_GROUP_ID;
+
+  const fetchDiscoveryManifest =
+    core.fetchDiscoveryManifest ||
+    (await import("../../subsystems/tools/remote/discovery.js"))
+      .fetchDiscoveryManifest;
+  const importRemoteArtifacts =
+    core.importRemoteArtifacts ||
+    (await import("../../subsystems/tools/remote/importArtifacts.js"))
+      .importRemoteArtifacts;
+
+  const fetchFn = options.fetchFn || globalThis.fetch;
+
+  if (!options.quiet) {
+    console.log(`Fetching discovery manifest from ${trimmedUrl}...`);
+  }
+
+  let resolvedManifest: any;
+  try {
+    resolvedManifest = await fetchDiscoveryManifest(trimmedUrl, fetchFn);
+  } catch (err: any) {
+    const errorMsg = `Failed to fetch discovery manifest: ${err instanceof Error ? err.message : String(err)}`;
+    if (!options.quiet) {
+      console.error(`Error: ${errorMsg}`);
+    }
+    process.exitCode = 1;
+    return { success: false, error: errorMsg };
+  }
+
+  const { manifest, siteUrl, manifestUrl } = resolvedManifest;
+
+  const manifestTools = manifest.tools || [];
+  const manifestSkills = manifest.skills || [];
+  const manifestScripts = manifest.scripts || [];
+
+  if (!options.quiet) {
+    console.log(
+      `Discovered: ${manifest.name || "Remote Site"} (${manifestSkills.length} skill${manifestSkills.length === 1 ? "" : "s"}, ${manifestTools.length} tool${manifestTools.length === 1 ? "" : "s"}, ${manifestScripts.length} script${manifestScripts.length === 1 ? "" : "s"})`,
+    );
+  }
+
+  const allToolNames = manifestTools.map((t: any) => t.name);
+  const allSkillNames = manifestSkills.map((s: any) => s.name);
+  const allScriptNames = manifestScripts.map((s: any) => s.name);
+
+  let toolNames: string[];
+  let skillNames: string[];
+  let scriptNames: string[];
+
+  const hasExplicitFilter = Boolean(
+    options.tools || options.skills || options.scripts,
+  );
+
+  if (hasExplicitFilter && !options.all) {
+    const parseList = (val: any) => {
+      if (!val) return [];
+      if (Array.isArray(val))
+        return val.map((v) => String(v).trim()).filter(Boolean);
+      return String(val)
+        .split(",")
+        .map((v) => v.trim())
+        .filter(Boolean);
+    };
+    toolNames = parseList(options.tools);
+    skillNames = parseList(options.skills);
+    scriptNames = parseList(options.scripts);
+  } else {
+    toolNames = allToolNames;
+    skillNames = allSkillNames;
+    scriptNames = allScriptNames;
+  }
+
+  const autoEnable = options.autoEnable !== false;
+  const overwrite = Boolean(options.overwrite);
+
+  let importResult: any;
+  try {
+    importResult = await importRemoteArtifacts(
+      db,
+      groupId,
+      manifest,
+      { toolNames, skillNames, scriptNames },
+      {
+        autoEnable,
+        overwrite,
+        fetchFn,
+        siteSlug: options.siteSlug,
+        targetSubdir: options.targetSubdir,
+      },
+    );
+  } catch (err: any) {
+    const errorMsg = `Import failed: ${err instanceof Error ? err.message : String(err)}`;
+    if (!options.quiet) {
+      console.error(`Error: ${errorMsg}`);
+    }
+    process.exitCode = 1;
+    return { success: false, error: errorMsg };
+  }
+
+  const importedTools = importResult.tools.filter(
+    (t: any) => t.status === "imported",
+  );
+  const importedSkills = importResult.skills.filter(
+    (s: any) => s.status === "imported",
+  );
+  const importedScripts = importResult.scripts.filter(
+    (sc: any) => sc.status === "imported",
+  );
+
+  const skippedTools = importResult.tools.filter(
+    (t: any) => t.status === "skipped",
+  );
+  const skippedSkills = importResult.skills.filter(
+    (s: any) => s.status === "skipped",
+  );
+  const skippedScripts = importResult.scripts.filter(
+    (sc: any) => sc.status === "skipped",
+  );
+
+  const failedTools = importResult.tools.filter(
+    (t: any) => t.status === "failed",
+  );
+  const failedSkills = importResult.skills.filter(
+    (s: any) => s.status === "failed",
+  );
+  const failedScripts = importResult.scripts.filter(
+    (sc: any) => sc.status === "failed",
+  );
+
+  const importedCount =
+    importedTools.length + importedSkills.length + importedScripts.length;
+  const skippedCount =
+    skippedTools.length + skippedSkills.length + skippedScripts.length;
+  const failedCount =
+    failedTools.length + failedSkills.length + failedScripts.length;
+
+  if (!options.quiet) {
+    console.log("\nImporting artifacts:");
+    for (const item of [
+      ...importResult.tools,
+      ...importResult.skills,
+      ...importResult.scripts,
+    ]) {
+      const type = importResult.tools.includes(item)
+        ? "tool"
+        : importResult.skills.includes(item)
+          ? "skill"
+          : "script";
+      if (item.status === "imported") {
+        console.log(`  [${type}] ${item.name} -> ${item.path} (imported)`);
+      } else if (item.status === "skipped") {
+        console.log(
+          `  [${type}] ${item.name} -> ${item.path} (skipped, already exists - use --overwrite to replace)`,
+        );
+      } else {
+        console.log(
+          `  [${type}] ${item.name} (failed: ${item.error || "unknown error"})`,
+        );
+      }
+    }
+
+    if (failedCount > 0) {
+      console.log(
+        `\nCompleted with ${failedCount} error${failedCount === 1 ? "" : "s"}. Successfully imported ${importedCount} items, ${skippedCount} skipped.`,
+      );
+    } else {
+      console.log(
+        `\nSuccessfully imported ${importedCount} item${importedCount === 1 ? "" : "s"} (${importedTools.length} tool${importedTools.length === 1 ? "" : "s"}, ${importedSkills.length} skill${importedSkills.length === 1 ? "" : "s"}, ${importedScripts.length} script${importedScripts.length === 1 ? "" : "s"}).`,
+      );
+    }
+  }
+
+  const success = failedCount === 0 || importedCount > 0;
+  if (!success) {
+    process.exitCode = 1;
+  }
+
+  return {
+    success,
+    manifest,
+    siteUrl,
+    manifestUrl,
+    result: importResult,
+    importedCount,
+    skippedCount,
+    failedCount,
+  };
+}
+
+/**
  * Main dispatcher for the `agent` command group.
  */
 export async function runAgentCommand(
@@ -1714,9 +1948,25 @@ export async function runAgentCommand(
       return await runAgentModel(subaction, modelId, actualOptions);
     }
 
+    case "import": {
+      const url = actualArgs[0];
+      if (!url) {
+        console.error(
+          "Error: Discovery URL or site URL required. Usage: shadow-claw agent import <url> [options]",
+        );
+        process.exitCode = 1;
+        return {
+          success: false,
+          error:
+            "Discovery URL or site URL required. Usage: shadow-claw agent import <url> [options]",
+        };
+      }
+      return await runAgentImport(url, actualOptions);
+    }
+
     default: {
       console.log(
-        "Usage: shadow-claw agent <init|model|skills|tools|tool|skill|run> [args...]",
+        "Usage: shadow-claw agent <init|model|skills|tools|tool|skill|import|run> [args...]",
       );
     }
   }

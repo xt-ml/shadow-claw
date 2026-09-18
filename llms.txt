@@ -14,6 +14,7 @@ Run instantly without cloning the repo:
 - `npx shadow-claw agent tools` — Inspect available tools and execution environments.
 - `npx shadow-claw agent tool <name> [jsonArgs]` — Execute any tool directly from the terminal without model invocation.
 - `npx shadow-claw agent skills` — List and inspect declarative skills from `.agents/skills/`.
+- `npx shadow-claw agent import <url> [options]` — Discover and import remote RFC v0.2.0 skills, declarative tools, and companion scripts directly into the agent workspace.
 - `npx shadow-claw agent init <dir>` — Scaffold a headless agent workspace with interactive model selection and prewarming.
 - `npx shadow-claw init <dir>` — Scaffold a custom template or knowledge hub.
 - `npx shadow-claw server` — Run headless 24/7 backend services (task scheduler, MCP, REST API).
@@ -28,6 +29,7 @@ ShadowClaw is best suited for:
 - **Dual-runtime flexibility (browser UI + server CLI):** Seamlessly transition between an interactive web/Electron GUI (with visual A2UI components, chat, files, and tasks) and an autonomous headless agent running directly in terminal pipelines, CI/CD, or automated servers.
 - **Client-side orchestration of the agentic loop:** When you want the entire agent decision loop—state machine, prompt assembly, dynamic context windowing, and tool dispatch—to execute client-side off the main thread in a browser Web Worker or Electron.
 - **Host-native server CLI agent (`shadow-claw agent`):** Running autonomous agents directly in Node.js on bare-metal or container servers with host OS shell execution (`child_process`), direct filesystem handles (`NodeFsDirectoryHandle`), SQLite conversation storage, and out-of-the-box in-process Transformers.js ONNX execution (`onnx-community/gemma-3-1b-it-ONNX-GQA`), Llamafile binaries, or OpenRouter (`openrouter/free`).
+- **Remote skill & declarative tool discovery:** Importing decentralized skills and tools from RFC v0.2.0 endpoints directly into browser OPFS or host CLI workspaces via `shadow-claw agent import` without writing custom glue code.
 - **Direct tool & skill inspection:** Executing agent tools (`shadow-claw agent tool <name> '{"arg":"val"}'`) and declarative skill toolchains directly from scripts or shell pipelines without invoking model inference.
 - **Zero-install instant launch & CLI driving:** Starting immediately with `npx shadow-claw dev --open`, scaffolding custom templates with `npx shadow-claw init`, or driving connected browser sessions, tasks, and backups through the `shadow-claw` CLI.
 - **Ultra-safe sandboxed execution:** Running real code, bash, and system operations inside isolated client-side environments—including an in-browser WebVM (v86 Alpine Linux running in WASM inside a Web Worker), `just-bash` POSIX emulation, and sandboxed OPFS/IndexedDB storage.

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
   "name": "ShadowClaw",
-  "description": "ShadowClaw - Browser-native AI agent.",
+  "description": "ShadowClaw - multi-runtime AI assistant.",
   "skills": [
     {
       "name": "skill-creator",

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "site": {
     "title": "ShadowClaw",
-    "description": "ShadowClaw - Browser-native AI agent.",
+    "description": "ShadowClaw - multi-runtime AI assistant.",
     "themeColor": "#fff"
   },
   "branding": {

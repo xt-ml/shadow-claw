@@ -1302,6 +1302,11 @@ describe("runAgentRun — verbose logging of prompting steps", () => {
   afterEach(async () => {
     process.stderr.write = originalStderrWrite;
     process.stdout.write = originalStdoutWrite;
+    const { closeSqliteDatabase } =
+      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+        closeSqliteDatabase: () => {},
+      }));
+    closeSqliteDatabase?.();
     await rm(tmpDir, { recursive: true, force: true });
   });
 
@@ -1368,6 +1373,13 @@ describe("runAgentRun — verbose logging of prompting steps", () => {
         payload: { label: "Model Progress", message: "tokenizer.json: 100%" },
       });
       core.post({
+        type: "thinking-log",
+        payload: {
+          label: "Result: lookup_location_coords",
+          message: "JavaScript error: fetch is not a function",
+        },
+      });
+      core.post({
         type: "response",
         payload: { groupId: payload.groupId, text: "Result here" },
       });
@@ -1385,6 +1397,97 @@ describe("runAgentRun — verbose logging of prompting steps", () => {
     expect(stderrOutput).toContain("[Agent] Connecting to");
     expect(stderrOutput).toContain("[Tool] bash");
     expect(stderrOutput).toContain("[Model Progress] tokenizer.json: 100%");
+    expect(stderrOutput).toContain(
+      "[Result: lookup_location_coords] JavaScript error: fetch is not a function",
+    );
+  });
+});
+
+describe("runAgentRun — internet access options and configuration", () => {
+  let tmpDir;
+
+  beforeEach(async () => {
+    tmpDir = await mkdtemp(path.join(tmpdir(), "sc-agent-internet-test-"));
+  });
+
+  afterEach(async () => {
+    const { closeSqliteDatabase } =
+      await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+        closeSqliteDatabase: () => {},
+      }));
+    closeSqliteDatabase?.();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("persists internet access when --allow-internet is passed", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    const { getAgentCore } = await import("../utils/agent-core.js");
+    const core = await getAgentCore();
+
+    let capturedDb = null;
+    const mockInvokeHandler = async (db, payload) => {
+      capturedDb = db;
+      core.post({
+        type: "response",
+        payload: { groupId: payload.groupId, text: "Done" },
+      });
+    };
+
+    const result = await runAgentRun("Test internet", {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-test",
+      allowInternet: true,
+      invokeHandler: mockInvokeHandler,
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedDb).not.toBeNull();
+    const internet = await core.getConfig(
+      capturedDb,
+      core.CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS,
+    );
+    expect(internet).toBe("true");
+  });
+
+  it("persists internet access when configured in shadow-claw.config.json", async () => {
+    const { runAgentRun } = await import("./agent.js");
+    const { getAgentCore } = await import("../utils/agent-core.js");
+    const core = await getAgentCore();
+
+    await writeFile(
+      path.join(tmpDir, "shadow-claw.config.json"),
+      JSON.stringify({
+        settings: {
+          vm_bash_full_internet_access: true,
+        },
+      }),
+      "utf8",
+    );
+
+    let capturedDb = null;
+    const mockInvokeHandler = async (db, payload) => {
+      capturedDb = db;
+      core.post({
+        type: "response",
+        payload: { groupId: payload.groupId, text: "Done" },
+      });
+    };
+
+    const result = await runAgentRun("Test internet from config", {
+      workspace: tmpDir,
+      provider: "openrouter",
+      apiKey: "sk-test",
+      invokeHandler: mockInvokeHandler,
+    });
+
+    expect(result.success).toBe(true);
+    expect(capturedDb).not.toBeNull();
+    const internet = await core.getConfig(
+      capturedDb,
+      core.CONFIG_KEYS.VM_BASH_FULL_INTERNET_ACCESS,
+    );
+    expect(internet).toBe("true");
   });
 });
 

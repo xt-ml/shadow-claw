@@ -80,6 +80,8 @@ export interface BootstrapAgentOptions {
   isTTY?: boolean;
   stdin?: any;
   stdout?: any;
+  internetAccess?: boolean;
+  allowInternet?: boolean;
 }
 
 /**
@@ -129,6 +131,8 @@ export interface AgentRunOptions {
   tools?: string | string[] | boolean;
   toolsProfile?: string;
   noTools?: boolean;
+  internetAccess?: boolean;
+  allowInternet?: boolean;
   invokeHandler?: (db: ShadowClawDatabase, payload: any) => Promise<void>;
   [key: string]: unknown;
 }

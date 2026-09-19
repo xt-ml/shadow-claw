@@ -1,9 +1,9 @@
 {
   "name": "shadow-claw",
-  "version": "1.36.0",
+  "version": "1.37.0",
   "type": "module",
   "license": "AGPL-3.0",
-  "description": "Browser-native personal AI assistant.",
+  "description": "ShadowClaw - multi-runtime AI assistant.",
   "author": "Karl Herrick <me@karlherrick.com>",
   "main": "dist/electron/main.cjs",
   "exports": {

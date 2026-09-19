@@ -98,6 +98,13 @@ describe("agent-bootstrap", () => {
     });
     expect(logSpy).toHaveBeenCalledWith("[Tool] read_file (completed)");
 
+    // thinking-log message
+    postHandler!({
+      type: "thinking-log",
+      payload: { label: "Result: read_file", message: "file content" },
+    });
+    expect(logSpy).toHaveBeenCalledWith("[Result: read_file] file content");
+
     // request-native-ai-task
     const mockTaskPromise = Promise.resolve({ result: 42 });
     mockCore.executeNativeAiTask.mockReturnValue(mockTaskPromise);
@@ -118,5 +125,57 @@ describe("agent-bootstrap", () => {
 
     logSpy.mockRestore();
     errorSpy.mockRestore();
+  });
+
+  it("syncs internet access to database when passed in options", async () => {
+    mockCore.setConfig = jest.fn();
+    mockCore.CONFIG_KEYS = {
+      VM_BASH_FULL_INTERNET_ACCESS: "vm_bash_full_internet_access",
+    };
+
+    const wsDir = path.join(tmpDir, "ws");
+    await bootstrapHeadlessAgent({
+      workspace: wsDir,
+      allowInternet: true,
+      quiet: true,
+      core: mockCore,
+    } as any);
+
+    expect(mockCore.setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "vm_bash_full_internet_access",
+      "true",
+    );
+  });
+
+  it("syncs internet access to database when configured in shadow-claw.config.json", async () => {
+    mockCore.setConfig = jest.fn();
+    mockCore.CONFIG_KEYS = {
+      VM_BASH_FULL_INTERNET_ACCESS: "vm_bash_full_internet_access",
+    };
+
+    const wsDir = path.join(tmpDir, "ws");
+    fs.mkdirSync(wsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(wsDir, "shadow-claw.config.json"),
+      JSON.stringify({
+        settings: {
+          vm_bash_full_internet_access: true,
+        },
+      }),
+      "utf8",
+    );
+
+    await bootstrapHeadlessAgent({
+      workspace: wsDir,
+      quiet: true,
+      core: mockCore,
+    } as any);
+
+    expect(mockCore.setConfig).toHaveBeenCalledWith(
+      expect.anything(),
+      "vm_bash_full_internet_access",
+      "true",
+    );
   });
 });

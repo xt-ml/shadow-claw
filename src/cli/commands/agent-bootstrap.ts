@@ -4,6 +4,7 @@ import path from "node:path";
 import process from "node:process";
 
 import { getAgentCore } from "../utils/agent-core.js";
+import { loadWorkspaceConfig } from "../utils/load-workspace-config.js";
 import { resolveCacheDir } from "../utils/resolve-cache-dir.js";
 import type {
   BootstrapAgentOptions,
@@ -69,7 +70,34 @@ export async function bootstrapHeadlessAgent(
   // 5. Configure filesystem storage root
   core.setStorageRootFromPath(workspaceDir);
 
-  // 6. Route post messages to stdout / console & native AI task handling
+  // 6. Synchronize internet access setting to SQLite DB
+  const workspaceConfigData = await loadWorkspaceConfig(workspaceDir);
+  const workspaceConfig = workspaceConfigData?.config || {};
+  const workspaceSettings =
+    (workspaceConfig.settings as Record<string, unknown>) || {};
+  const declaredInternetAccess =
+    options.internetAccess ??
+    options.allowInternet ??
+    workspaceSettings.internetAccess ??
+    workspaceSettings.vm_bash_full_internet_access ??
+    workspaceSettings.fullInternetAccess ??
+    workspaceConfig.internetAccess;
+
+  if (
+    declaredInternetAccess !== undefined &&
+    typeof core.setConfig === "function"
+  ) {
+    const internetAccessKey =
+      core.CONFIG_KEYS?.VM_BASH_FULL_INTERNET_ACCESS ||
+      "vm_bash_full_internet_access";
+    await core.setConfig(
+      db,
+      internetAccessKey,
+      declaredInternetAccess ? "true" : "false",
+    );
+  }
+
+  // 7. Route post messages to stdout / console & native AI task handling
   core.setPostHandler((message: any) => {
     switch (message.type) {
       case "response":
@@ -87,6 +115,12 @@ export async function bootstrapHeadlessAgent(
           console.log(
             `[Tool] ${message.payload.tool} (${message.payload.status || "executing"})`,
           );
+        }
+        break;
+      case "thinking-log":
+        if (!options.quiet && options.verbose && message.payload) {
+          const label = message.payload.label || message.payload.level || "Log";
+          console.log(`[${label}] ${message.payload.message || ""}`);
         }
         break;
       case "request-native-ai-task":

@@ -1121,6 +1121,10 @@ program
   .option("--api-key <key>", "API key")
   .option("-v, --verbose", "Enable verbose execution logging", false)
   .option(
+    "--allow-internet, --internet-access",
+    "Allow full internet access for Bash and JavaScript tools (sets vm_bash_full_internet_access)",
+  )
+  .option(
     "-o, --output <file>",
     "Write command output to a file instead of stdout",
   )

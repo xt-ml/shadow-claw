@@ -44,7 +44,7 @@ describe("shadow-claw default root configuration", () => {
 
     expect(patched).toContain("<title>ShadowClaw</title>");
     expect(patched).toContain(
-      '<meta name="description" content="ShadowClaw - Browser-native AI agent." />',
+      '<meta name="description" content="ShadowClaw - multi-runtime AI assistant." />',
     );
     expect(patched).toContain('<meta name="theme-color" content="#fff" />');
   });

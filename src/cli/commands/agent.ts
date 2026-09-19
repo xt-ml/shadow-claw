@@ -3,12 +3,10 @@
  * Headless CLI agent participant supporting init, skills, tools, skill, and run.
  */
 
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
-import { constants } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import type {
-  ShadowClawWorkspaceConfig,
   AgentInitOptions,
   AgentInitResult,
   AgentSkillsOptions,
@@ -47,58 +45,8 @@ const BROWSER_ONLY_TOOLS = new Set([
 
 const DEFAULT_SERVER_GROUP_ID = "server:main";
 
-const CONFIG_CANDIDATES = [
-  "shadow-claw.config.json",
-  "shadow-claw-config.json",
-  "shadowclaw.config.json",
-  "site-config.json",
-];
-
-async function fileExists(p: string): Promise<boolean> {
-  try {
-    await access(p, constants.F_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Load and parse workspace configuration if present.
- * @param {string} workspace
- * @returns {Promise<{ configPath: string, config: import("../../src/worker/headless-types.js").ShadowClawWorkspaceConfig } | null>}
- */
-export async function loadWorkspaceConfig(
-  workspace?: string,
-  contentRoot?: string,
-): Promise<{ configPath: string; config: ShadowClawWorkspaceConfig } | null> {
-  const dirs: string[] = [];
-  if (workspace) dirs.push(path.resolve(workspace));
-  if (contentRoot) {
-    const resolvedRoot = path.resolve(contentRoot);
-    if (!dirs.includes(resolvedRoot)) dirs.push(resolvedRoot);
-  }
-  if (workspace && path.basename(path.resolve(workspace)) === ".cache") {
-    const parent = path.dirname(path.resolve(workspace));
-    if (!dirs.includes(parent)) dirs.push(parent);
-  }
-
-  for (const dir of dirs) {
-    for (const candidate of CONFIG_CANDIDATES) {
-      const p = path.join(dir, candidate);
-      if (await fileExists(p)) {
-        try {
-          const raw = await readFile(p, "utf8");
-          const parsed = JSON.parse(raw);
-          if (parsed && typeof parsed === "object") {
-            return { configPath: p, config: parsed };
-          }
-        } catch {}
-      }
-    }
-  }
-  return null;
-}
+import { loadWorkspaceConfig } from "../utils/load-workspace-config.js";
+export { loadWorkspaceConfig };
 
 /**
  * Initialize a headless agent workspace directory.
@@ -1052,6 +1000,28 @@ export async function runAgentRun(
     return { success: false, error: err.message };
   }
 
+  const declaredInternetAccess =
+    options.internetAccess ??
+    options.allowInternet ??
+    workspaceSettings?.internetAccess ??
+    workspaceSettings?.vm_bash_full_internet_access ??
+    workspaceSettings?.fullInternetAccess ??
+    workspaceConfig?.internetAccess;
+
+  if (
+    declaredInternetAccess !== undefined &&
+    typeof core.setConfig === "function"
+  ) {
+    const internetAccessKey =
+      core.CONFIG_KEYS?.VM_BASH_FULL_INTERNET_ACCESS ||
+      "vm_bash_full_internet_access";
+    await core.setConfig(
+      db,
+      internetAccessKey,
+      declaredInternetAccess ? "true" : "false",
+    );
+  }
+
   const requiresApiKey = providerConfig.requiresApiKey !== false;
   if (requiresApiKey && !apiKey) {
     const envVar =
@@ -1182,6 +1152,12 @@ export async function runAgentRun(
           const toolName = message.payload.tool || "tool";
           const status = message.payload.status || "executing";
           process.stderr.write(`[Tool] ${toolName} (${status})\n`);
+        }
+        break;
+      case "thinking-log":
+        if (options.verbose && !options.quiet && message.payload) {
+          const label = message.payload.label || message.payload.level || "Log";
+          process.stderr.write(`[${label}] ${message.payload.message || ""}\n`);
         }
         break;
       case "status":

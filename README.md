@@ -7,7 +7,7 @@
 
 In the frontend client (browser PWA or native Electron desktop app), the core orchestration state machine, dynamic context windowing, and tool-execution loop run off the main thread in a dedicated Web Worker, with sandboxed local execution via `just-bash` (or optional WebVM Alpine Linux) backed by OPFS and IndexedDB storage, and reactive UI powered by native Web Components and TC39 Signals.
 
-[![ShadowClaw Screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/shadow-claw-screenshot-1920x1052.png)](https://xt-ml.github.io/shadow-claw/)
+[![ShadowClaw Screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/shadow-claw-screenshot-1024x768.png)](https://xt-ml.github.io/shadow-claw/)
 
 _Watch a demo:_ [Peer-to-peer Browser Native Agents in action (YouTube)](https://www.youtube.com/watch?v=h1les1A3gcg)
 
@@ -28,7 +28,7 @@ For external AI hosts, ShadowClaw provides multiple ways to interact with the br
   - **Streamable HTTP (`POST /mcp`):** Built directly into `shadow-claw server`, allowing HTTP-capable MCP clients to query and drive connected tabs over local network endpoints.
   - **STDIO Bridge (`shadow-claw mcp`):** Connects desktop MCP clients directly over standard input/output. It discovers active browser tabs via the control plane and dynamically relays their in-browser tools (`shadowclaw_client_*` such as OPFS `read_file`, `write_file`, and `bash`), alongside built-in server tools (`shadowclaw_server_*`).
 
----
+## [See Apps Using ShadowClaw](#apps-using-shadowclaw)
 
 ## Quick Start
 
@@ -357,6 +357,42 @@ When launching `dev`, `run`, `serve`, or `server` without an existing cache, Sha
 Commands support `--transport webrtc` for direct peer-to-peer DataChannel execution with connected browser clients. Control plane authentication automatically resolves tokens across flags, environment variables (`SHADOWCLAW_CONTROL_TOKEN`), system temporary directory (`tmpdir()`), parent directories, and SQLite with automatic fallback retry on 401 Unauthorized errors, and supports HTTPS endpoints via `--https` (and `--insecure` for self-signed certs).
 
 **Full CLI reference:** [docs/subsystems/cli.md](docs/subsystems/cli.md)
+
+---
+
+## Apps Using ShadowClaw
+
+### [ShadowClaw Template](https://xt-ml.github.io/shadow-claw-template/)
+
+[![Agent Skills](https://img.shields.io/badge/Agent_Skills-Discovery-8b5cf6?style=flat)](https://xt-ml.github.io/shadow-claw-template/.well-known/agent-skills/index.json)
+
+A ready-to-fork starter template for publishing custom static sites, documentation portals, and personal AI assistants using ShadowClaw as the build and runtime engine, complete with GitHub Actions workflows, declarative site configuration, pretty-path routing, and bundled skills.
+
+[![ShadowClaw Template screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/xt-ml.github.io_shadow-claw-template-1024x768.png)](https://xt-ml.github.io/shadow-claw-template/)
+
+### [Block Garden Knowledge Hub](https://kherrick.github.io/block-garden-knowledge-hub/)
+
+[![Agent Skills](https://img.shields.io/badge/Agent_Skills-Discovery-8b5cf6?style=flat)](https://kherrick.github.io/block-garden-knowledge-hub/.well-known/agent-skills/index.json)
+
+An interactive documentation portal and technical reference guide for Block Garden—a 3D voxel sandbox exploration, procedural world generation, and farming game engine—featuring embedded custom elements, modding APIs, and in-game agent tools.
+
+[![Block Garden Knowledge Hub screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/kherrick.github.io_block-garden-knowledge-hub-1024x768.png)](https://kherrick.github.io/block-garden-knowledge-hub/)
+
+### [pwgen Knowledge Hub](https://kherrick.github.io/pwgen-knowledge-hub/)
+
+[![Agent Skills](https://img.shields.io/badge/Agent_Skills-Discovery-8b5cf6?style=flat)](https://kherrick.github.io/pwgen-knowledge-hub/.well-known/agent-skills/index.json)
+
+An interactive documentation platform and demonstration engine for the classic Unix `pwgen` password generator compiled to WebAssembly, featuring `<x-pwgen>` custom elements, entropy analysis, and declarative password-generation agent tools.
+
+[![pwgen Knowledge Hub screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/kherrick.github.io_pwgen-knowledge-hub-1024x768.png)](https://kherrick.github.io/pwgen-knowledge-hub/)
+
+### [ShadowClaw Agent CLI Weather](https://xt-ml.github.io/shadow-claw-agent-cli-weather/)
+
+[![Agent Skills](https://img.shields.io/badge/Agent_Skills-Discovery-8b5cf6?style=flat)](https://xt-ml.github.io/shadow-claw-agent-cli-weather/.well-known/agent-skills/index.json)
+
+A lightweight, headless weather station, forecasting engine, and outdoor operational advisor powered by the ShadowClaw CLI, Open-Meteo, and Unix stream pipelines, featuring well-known agent skills discovery and automated window scanning.
+
+[![ShadowClaw Agent CLI Weather documentation screenshot](https://xt-ml.github.io/shadow-claw/assets/screenshots/xt-ml.github.io_shadow-claw-agent-cli-weather-1024x768.png)](https://xt-ml.github.io/shadow-claw-agent-cli-weather/)
 
 ---
 

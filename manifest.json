@@ -1,6 +1,6 @@
 {
   "background_color": "#000000",
-  "description": "ShadowClaw - Browser-native AI agent.",
+  "description": "ShadowClaw - multi-runtime AI assistant.",
   "display": "standalone",
   "id": "shadow-claw",
   "name": "ShadowClaw",

@@ -39,6 +39,7 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
     activeGroupId: "test-group",
     setCurrentPath: jest.fn(),
     loadFiles: jest.fn(),
+    sendFileToPeer: jest.fn<any>().mockResolvedValue(undefined),
   },
 }));
 
@@ -2238,6 +2239,134 @@ describe("shadow-claw-file-viewer", () => {
       // 8. resetContent
       component.resetContent();
       expect(component.isFullscreenMode).toBe(false);
+
+      document.body.removeChild(component);
+    });
+  });
+
+  describe("peer file sharing menu", () => {
+    it("includes modal-share-dropdown in template", async () => {
+      const template = await Promise.resolve(
+        ShadowClawFileViewer.template.map((e: Element) => e.outerHTML).join(""),
+      );
+
+      expect(template).toContain("modal-share-dropdown");
+      expect(template).toContain("modal-share-peer-btn");
+    });
+
+    it("hides share dropdown and shows single share button in standard non-peer conversations", async () => {
+      const component = new ShadowClawFileViewer();
+      document.body.appendChild(component);
+      await component.render();
+
+      (orchestratorStore as any).activeGroupId = "main";
+      (fileViewerStore as any).file = {
+        name: "test.txt",
+        path: "test.txt",
+        groupId: "main",
+        kind: "text",
+        content: "hello",
+      };
+
+      Object.defineProperty(navigator, "share", {
+        value: jest.fn(),
+        configurable: true,
+      });
+
+      await component.updateView(1);
+
+      const root = component.shadowRoot!;
+      const shareBtn = root.querySelector(".modal-share-btn");
+      const shareDropdown = root.querySelector(".modal-share-dropdown");
+
+      // In non-peer conversations, the peer dropdown MUST be hidden
+      expect(shareDropdown?.classList.contains("hidden")).toBe(true);
+      // Single share button should be visible (since device share is supported)
+      expect(shareBtn?.classList.contains("hidden")).toBe(false);
+
+      document.body.removeChild(component);
+    });
+
+    it("shows share dropdown with 'Send to peer' option and hides single share button in peer: conversation", async () => {
+      const component = new ShadowClawFileViewer();
+      document.body.appendChild(component);
+      await component.render();
+
+      (orchestratorStore as any).activeGroupId = "peer:peer-bob";
+      (fileViewerStore as any).file = {
+        name: "presentation.pdf",
+        path: "docs/presentation.pdf",
+        groupId: "peer:peer-bob",
+        mimeType: "application/pdf",
+        kind: "pdf",
+        content: "",
+      };
+
+      await component.updateView(1);
+
+      const root = component.shadowRoot!;
+      const shareBtn = root.querySelector(".modal-share-btn");
+      const shareDropdown = root.querySelector(".modal-share-dropdown");
+      const peerLabel = root.querySelector(".modal-share-peer-label");
+      const peerBtn = root.querySelector(
+        ".modal-share-peer-btn",
+      ) as HTMLButtonElement;
+
+      // In peer conversation, dropdown MUST be visible and single button hidden
+      expect(shareDropdown?.classList.contains("hidden")).toBe(false);
+      expect(shareBtn?.classList.contains("hidden")).toBe(true);
+      expect(peerLabel?.textContent).toBe("Send to peer");
+
+      // Clicking peer share option invokes sendFileToPeer
+      peerBtn.click();
+      expect(orchestratorStore.sendFileToPeer).toHaveBeenCalledWith(
+        "docs/presentation.pdf",
+        "peer:peer-bob",
+        expect.objectContaining({
+          fileName: "presentation.pdf",
+          mimeType: "application/pdf",
+        }),
+      );
+
+      document.body.removeChild(component);
+    });
+
+    it("shows share dropdown with 'Send to room peers' option in room: conversation", async () => {
+      const component = new ShadowClawFileViewer();
+      document.body.appendChild(component);
+      await component.render();
+
+      (orchestratorStore as any).activeGroupId = "room:alpha-room";
+      (fileViewerStore as any).file = {
+        name: "code.ts",
+        path: "code.ts",
+        groupId: "room:alpha-room",
+        mimeType: "text/typescript",
+        kind: "text",
+        content: "const a = 1;",
+      };
+
+      await component.updateView(1);
+
+      const root = component.shadowRoot!;
+      const shareDropdown = root.querySelector(".modal-share-dropdown");
+      const peerLabel = root.querySelector(".modal-share-peer-label");
+      const peerBtn = root.querySelector(
+        ".modal-share-peer-btn",
+      ) as HTMLButtonElement;
+
+      expect(shareDropdown?.classList.contains("hidden")).toBe(false);
+      expect(peerLabel?.textContent).toBe("Send to room peers");
+
+      peerBtn.click();
+      expect(orchestratorStore.sendFileToPeer).toHaveBeenCalledWith(
+        "code.ts",
+        "room:alpha-room",
+        expect.objectContaining({
+          fileName: "code.ts",
+          mimeType: "text/typescript",
+        }),
+      );
 
       document.body.removeChild(component);
     });

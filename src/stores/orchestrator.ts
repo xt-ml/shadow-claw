@@ -71,7 +71,7 @@ import {
 import { suppressPage, unsuppressPage } from "../storage/suppressedPages.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
 import { AGUIAdapter } from "../ui/agui-adapter.js";
-import { showError } from "../ui/toast.js";
+import { showError, showSuccess } from "../ui/toast.js";
 import { applyJsonPatch } from "../utils/jsonPatch.js";
 import { ulid } from "../utils/ulid.js";
 import { toolsStore } from "./tools.js";
@@ -667,6 +667,74 @@ export class OrchestratorStore {
         this._activeGroupId.get(),
         attachments,
       );
+    }
+  }
+
+  /**
+   * Send a workspace file to remote peer(s) in the active peer or room conversation.
+   */
+  async sendFileToPeer(
+    filePath: string,
+    groupId: string = this._activeGroupId.get(),
+    options?: { mimeType?: string; size?: number; fileName?: string },
+  ): Promise<void> {
+    const isPeer = groupId.startsWith("peer:");
+    const isRoom = groupId.startsWith("room:");
+
+    if (!isPeer && !isRoom) {
+      const errorMsg =
+        "Can only send files to peers in a peer or room conversation.";
+      showError(errorMsg, 4500);
+      throw new Error(errorMsg);
+    }
+
+    const router = this.orchestrator?.router;
+    if (!router) {
+      const errorMsg = "Network router is not initialized.";
+      showError(errorMsg, 4500);
+      throw new Error(errorMsg);
+    }
+
+    const fileName = options?.fileName || filePath.split("/").pop() || filePath;
+    const mimeType = options?.mimeType || "application/octet-stream";
+    const size = options?.size || 0;
+
+    router.setTyping(groupId, true);
+    try {
+      const attachment: MessageAttachment = {
+        path: filePath,
+        fileName,
+        mimeType,
+        size,
+      };
+
+      await router.send(groupId, "", [attachment]);
+
+      if (this._db) {
+        const stored: StoredMessage = {
+          id: ulid(),
+          groupId,
+          sender: "You",
+          content: "",
+          timestamp: Date.now(),
+          channel: isRoom ? "room" : "peerjs",
+          attachments: [attachment],
+          isFromMe: false,
+          isTrigger: false,
+        };
+        await saveMessage(this._db, stored);
+        this.orchestrator?.events.emit("message", stored);
+      }
+
+      const targetLabel = isRoom ? "room peers" : "peer";
+      showSuccess(`Sent ${fileName} to ${targetLabel}`, 2500);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("sendFileToPeer error:", err);
+      showError(`Failed to send file: ${message}`, 6000);
+      throw err;
+    } finally {
+      router.setTyping(groupId, false);
     }
   }
 

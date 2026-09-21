@@ -764,6 +764,16 @@ export class ShadowClawFiles extends ShadowClawElement {
         ? `<button type="button" class="files__action-btn files__page-toggle" title="${isSavedPage ? "Remove from Pages" : "Set as Page"}" aria-label="${isSavedPage ? "Remove" : "Set"} ${escapeHtml(name)} as page">${isSavedPage ? "📕" : "📘"}</button>`
         : "";
 
+      const isPeerOrRoom =
+        orchestratorStore.activeGroupId.startsWith("peer:") ||
+        orchestratorStore.activeGroupId.startsWith("room:");
+      const isRoom = orchestratorStore.activeGroupId.startsWith("room:");
+      const peerActionTitle = isRoom ? "Send to room peers" : "Send to peer";
+      const peerActionHtml =
+        !isDir && isPeerOrRoom
+          ? `<button type="button" class="files__action-btn files__send-peer" title="${escapeHtml(peerActionTitle)}" aria-label="${escapeHtml(peerActionTitle)} ${escapeHtml(name)}">📡</button>`
+          : "";
+
       const actionsContainer = document.createElement("div");
       actionsContainer.className = "files__actions";
       actionsContainer.setAttribute(
@@ -776,6 +786,7 @@ export class ShadowClawFiles extends ShadowClawElement {
         <button type="button" class="files__action-btn files__copy" title="Copy" aria-label="Copy ${escapeHtml(name)}">📋</button>
         ${pageActionHtml}
         <button type="button" class="files__action-btn files__download" title="${escapeHtml(downloadTitle)}" aria-label="${escapeHtml(downloadTitle)} ${escapeHtml(name)}">📥</button>
+        ${peerActionHtml}
         <button type="button" class="files__action-btn files__rename" title="Rename" aria-label="Rename ${escapeHtml(name)}">✏️</button>
         <button type="button" class="files__action-btn files__action-btn--delete files__delete" title="Delete" aria-label="Delete ${escapeHtml(name)}">🗑️</button>`,
       );
@@ -920,6 +931,30 @@ export class ShadowClawFiles extends ShadowClawElement {
             }
 
             downloadBtn.textContent = "📥";
+          }
+        });
+      }
+
+      // Send to peer button
+      const sendPeerBtn = item.querySelector(".files__send-peer");
+      if (sendPeerBtn) {
+        sendPeerBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          item.classList.remove("show-actions");
+          const itemPath =
+            currentPath === "." ? file : `${currentPath}/${file}`;
+
+          try {
+            if (sendPeerBtn instanceof HTMLButtonElement) {
+              sendPeerBtn.disabled = true;
+            }
+            await orchestratorStore.sendFileToPeer(itemPath);
+          } catch {
+            // Toast error handled in sendFileToPeer
+          } finally {
+            if (sendPeerBtn instanceof HTMLButtonElement) {
+              sendPeerBtn.disabled = false;
+            }
           }
         });
       }

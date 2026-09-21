@@ -332,11 +332,27 @@ The file viewer component (`<shadow-claw-file-viewer>`) provides dual-mode code 
 - **Native Fullscreen & Fallback:** The modal supports a fullscreen mode that utilizes the native browser Fullscreen API (handling prefixes like `webkit`). If native fullscreen is blocked by security context, lacks permission, or is not initiated by a user gesture, the component falls back to a CSS-based modal class (`modal-content--fullscreen`) that expands to fill the entire viewport.
 - **Responsive Layout:** On compact screens (viewport width under 640px), the Cancel and Save button labels automatically hide, displaying only the action icon to prevent modal header button overflow while editing.
 
+#### Peer & Room File Sharing & Web Share Dropdown
+
+- **Contextual Share Dropdown (`.modal-share-dropdown`):** In peer (`peer:...`) and peer room (`room:...`) conversations, the File Viewer replaces the single device share button with a dropdown `<details>` menu containing:
+  - **Send to peer(s) (`.modal-share-peer-btn`):** Dispatches the file directly across the active WebRTC connection via `orchestratorStore.sendFileToPeer()`, showing typing indicators during transmission and rendering the sent file card into the conversation stream.
+  - **Share via device... (`.modal-share-device-btn`):** Triggers the OS native Web Share sheet (`navigator.share`) if supported on the host platform.
+- **Context Isolation:** In standard non-peer conversations (such as `main` or `tg:...`), peer sharing options are strictly hidden, falling back to a single device share button (or hiding the button entirely if `navigator.share` is unavailable). Outside clicks automatically close the share dropdown.
+
+### Files Component (`<shadow-claw-files>`)
+
+The `<shadow-claw-files>` component provides full workspace file and directory management:
+
+- **Directory Navigation & Breadcrumbs:** Seamless navigation through subdirectories within the active group workspace with breadcrumb path hierarchy.
+- **Safe Clipboard Operations:** Cut, copy, and paste with recursive ancestor validation to strictly prevent circular nesting (pasting a directory into itself or its descendants).
+- **Inter-Group Transfers & Conflict Resolution:** Copy and move items between different conversation group workspaces with non-destructive rename and overwrite prompts.
+- **Contextual Peer Sharing Action (`.files__send-peer`):** In peer (`peer:...`) or room (`room:...`) conversations, file items render a dedicated "Send to peer" or "Send to room peers" action button (`📡`). Clicking this button invokes `orchestratorStore.sendFileToPeer(filePath)`, transferring the file via WebRTC DataChannels and logging the attachment into chat history. This action is omitted for directories and strictly hidden in standard non-peer conversations.
+
 ### Pages Component
 
 The pages component (`<shadow-claw-pages>`) renders markdown and HTML files as navigable workspace pages.
 
-#### Architecture
+#### Page Architecture
 
 - **Page references** stored in `SavedPageRef` (groupId + path)
 - **Markdown rendering** via `renderMarkdown` with DOMPurify sanitization
@@ -403,6 +419,7 @@ ShadowClaw includes a dedicated component development workbench powered by Story
 - **Theme Support**: `.storybook/preview.ts` defaults to dark mode (`#0f172a`), matching ShadowClaw's dark theme, with support for toggling to light mode and injecting root styling variables.
 - **Stories Organization**: Stories live co-located with components as `*.stories.ts` (e.g. `shadow-claw-toast.stories.ts`, `shadow-claw-dialog.stories.ts`, `shadow-claw-card.stories.ts`, `shadow-claw-empty-state.stories.ts`, `shadow-claw-page-header.stories.ts`, and settings stories).
 - **Run Locally**:
+
   ```bash
   npm run storybook          # Start dev workbench on http://localhost:6006
   npm run build:storybook    # Build static Storybook site to dist/storybook

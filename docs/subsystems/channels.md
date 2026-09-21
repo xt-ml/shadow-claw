@@ -7,12 +7,13 @@
 
 ## Built-in Channels
 
-| Channel  | Type       | Prefix  | Source                                    | Purpose                             |
-| -------- | ---------- | ------- | ----------------------------------------- | ----------------------------------- |
-| Browser  | `browser`  | `br:`   | `src/subsystems/channels/browser-chat.ts` | In-browser chat UI                  |
-| PeerJS   | `peerjs`   | `peer:` | `src/subsystems/channels/peerjs.ts`       | WebRTC P2P via PeerJS data channels |
-| Telegram | `telegram` | `tg:`   | `src/subsystems/channels/telegram.ts`     | Telegram Bot API integration        |
-| iMessage | `imessage` | `im:`   | `src/subsystems/channels/imessage.ts`     | iMessage bridge via HTTP service    |
+| Channel  | Type       | Prefix  | Source                                    | Purpose                               |
+| -------- | ---------- | ------- | ----------------------------------------- | ------------------------------------- |
+| Browser  | `browser`  | `br:`   | `src/subsystems/channels/browser-chat.ts` | In-browser chat UI                    |
+| PeerJS   | `peerjs`   | `peer:` | `src/subsystems/channels/peerjs.ts`       | WebRTC P2P via PeerJS data channels   |
+| Room     | `room`     | `room:` | `src/subsystems/channels/room.ts`         | Multi-peer WebRTC group collaboration |
+| Telegram | `telegram` | `tg:`   | `src/subsystems/channels/telegram.ts`     | Telegram Bot API integration          |
+| iMessage | `imessage` | `im:`   | `src/subsystems/channels/imessage.ts`     | iMessage bridge via HTTP service      |
 
 ## Architecture
 

@@ -220,10 +220,12 @@
   display: none;
   flex-wrap: wrap;
   gap: 0.25rem;
+  justify-content: flex-end;
+  max-width: 6.5rem;
   position: absolute;
-  right: 2.75rem;
+  right: 2.5rem;
   top: 0.25rem;
-  width: 6rem;
+  width: auto;
   z-index: 10;
 }
 

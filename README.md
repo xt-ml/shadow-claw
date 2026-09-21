@@ -269,7 +269,7 @@ ShadowClaw supports **four messaging channels** by default:
 
 - `br:` — In-browser chat
 - `im:` — iMessage bridge
-- `peer:` — PeerJS WebRTC (includes Peer Rooms for multi-agent collaboration)
+- `peer:` — PeerJS WebRTC (includes direct peer and room file sharing in Files and File Viewer, and Peer Rooms for multi-agent collaboration)
 - `tg:` — Telegram Bot API
 
 Each channel creates isolated conversations with their own message history and workspace (`server:main` reserved for server/CLI automation).

@@ -291,6 +291,33 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       await this.handleShareFile();
     });
 
+    const shareDropdown = root.querySelector(".modal-share-dropdown");
+    const sharePeerBtn = root.querySelector(".modal-share-peer-btn");
+    const shareDeviceBtn = root.querySelector(".modal-share-device-btn");
+
+    sharePeerBtn?.addEventListener("click", async () => {
+      if (shareDropdown instanceof HTMLDetailsElement) {
+        shareDropdown.removeAttribute("open");
+      }
+      await this.handleSendFileToPeer();
+    });
+
+    shareDeviceBtn?.addEventListener("click", async () => {
+      if (shareDropdown instanceof HTMLDetailsElement) {
+        shareDropdown.removeAttribute("open");
+      }
+      await this.handleShareFile();
+    });
+
+    root.addEventListener("click", (event: Event) => {
+      if (shareDropdown instanceof HTMLDetailsElement && shareDropdown.open) {
+        const target = event.target as HTMLElement;
+        if (!shareDropdown.contains(target)) {
+          shareDropdown.removeAttribute("open");
+        }
+      }
+    });
+
     const editBtn = root.querySelector(".modal-edit-btn");
     editBtn?.addEventListener("click", async () => {
       this.isFileEditMode = !this.isFileEditMode;
@@ -1683,6 +1710,37 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
   }
 
+  async handleSendFileToPeer() {
+    const file = fileViewerStore.file;
+    if (!file || !file.path) {
+      showError("No file is currently open.", 4500);
+
+      return;
+    }
+
+    const activeGroupId = file.groupId || orchestratorStore.activeGroupId || "";
+    const isPeer = activeGroupId.startsWith("peer:");
+    const isRoom = activeGroupId.startsWith("room:");
+
+    if (!isPeer && !isRoom) {
+      showError(
+        "Can only send files to peers in a peer or room conversation.",
+        4500,
+      );
+
+      return;
+    }
+
+    try {
+      await orchestratorStore.sendFileToPeer(file.path, activeGroupId, {
+        fileName: file.name,
+        mimeType: file.mimeType,
+      });
+    } catch {
+      // Toast error handled in sendFileToPeer
+    }
+  }
+
   async openFolderInFilesView(path: string) {
     if (!this.db) {
       return;
@@ -2109,10 +2167,42 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     const closeBtn = modal.querySelector(".modal-close-btn");
     const cancelBtn = modal.querySelector(".modal-cancel-btn");
 
+    const activeGroupId =
+      file?.groupId || orchestratorStore.activeGroupId || "";
+    const isPeer = activeGroupId.startsWith("peer:");
+    const isRoom = activeGroupId.startsWith("room:");
+    const isPeerOrRoom = isPeer || isRoom;
+    const canDeviceShare = this.canShareCurrentFile(file);
+
+    const shareDropdown = modal.querySelector(".modal-share-dropdown");
+    const sharePeerLabel = modal.querySelector(".modal-share-peer-label");
+    const shareDeviceBtn = modal.querySelector(".modal-share-device-btn");
+
+    if (shareDropdown instanceof HTMLElement) {
+      if (isPeerOrRoom) {
+        shareDropdown.classList.remove("hidden");
+        if (sharePeerLabel) {
+          sharePeerLabel.textContent = isRoom
+            ? "Send to room peers"
+            : "Send to peer";
+        }
+        if (shareDeviceBtn instanceof HTMLButtonElement) {
+          shareDeviceBtn.classList.toggle("hidden", !canDeviceShare);
+          shareDeviceBtn.disabled = !canDeviceShare;
+        }
+      } else {
+        shareDropdown.classList.add("hidden");
+      }
+    }
+
     if (shareBtn instanceof HTMLButtonElement) {
-      const canShare = this.canShareCurrentFile(file);
-      shareBtn.classList.toggle("hidden", !canShare);
-      shareBtn.disabled = !canShare;
+      if (isPeerOrRoom) {
+        shareBtn.classList.add("hidden");
+        shareBtn.disabled = true;
+      } else {
+        shareBtn.classList.toggle("hidden", !canDeviceShare);
+        shareBtn.disabled = !canDeviceShare;
+      }
     }
 
     if (closeBtn instanceof HTMLButtonElement) {

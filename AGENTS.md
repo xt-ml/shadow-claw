@@ -213,6 +213,7 @@ Markdown and HTML preview work should preserve the Settings-backed iframe host a
 - Directory operations enforce recursive ancestor checks to prevent self-paste and nesting loops (cannot paste a directory into itself or its descendants).
 - File and folder operations support moving and copying across different conversation groups (`sourceGroupId` $\rightarrow$ `targetGroupId`).
 - Destination name collisions present non-destructive rename or overwrite dialog choices.
+- Peer and Room File Sharing: Files displayed in `<shadow-claw-files>` conditionally expose a "Send to peer" / "Send to room peers" action button (`.files__send-peer`) and `<shadow-claw-file-viewer>` provides a Share dropdown menu (`.modal-share-dropdown`) with peer transfer options when the active conversation is a peer (`peer:...`) or room (`room:...`). These sharing options are strictly hidden in standard non-peer conversations. File transfers dispatch through `orchestratorStore.sendFileToPeer()`, streaming in 64 KB chunks over WebRTC DataChannels with typing indicators and local message persistence.
 
 ### Web Share Target API Integration
 

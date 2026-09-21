@@ -168,10 +168,13 @@ export class PeerJsChannel implements Channel {
 
   private peer: InstanceType<typeof Peer> | null = null;
 
+  private _inboundSavePromises = new Map<string, Promise<void>>();
+
   private _pendingInboundFile: {
     name: string;
     mimeType: string;
     size: number;
+    targetGroupId?: string;
   } | null = null;
   /** Pending JSON-RPC response callbacks keyed by request ID */
   private _pendingRequests = new Map<
@@ -1247,7 +1250,14 @@ export class PeerJsChannel implements Channel {
       if (this._pendingInboundFile) {
         const canonicalName = this._pendingInboundFile.name;
         const bytes = new Uint8Array(data as ArrayBuffer);
-        this._saveInboundFile(remotePeerId, canonicalName, bytes);
+        const targetGroupId =
+          this._pendingInboundFile.targetGroupId || `peer:${remotePeerId}`;
+        const savePromise = this._saveInboundFile(
+          targetGroupId,
+          canonicalName,
+          bytes,
+        );
+        this._inboundSavePromises.set(canonicalName, savePromise);
         this._pendingInboundFile = null;
       }
 
@@ -1265,6 +1275,12 @@ export class PeerJsChannel implements Channel {
       const totalChunks = (msg.totalChunks as number) || 1;
       const existing = this._inboundTransfers.get(transferId);
 
+      const isRoom =
+        typeof msg.groupId === "string" && msg.groupId.startsWith("room:");
+      const targetGroupId = isRoom
+        ? (msg.groupId as string)
+        : `peer:${remotePeerId}`;
+
       this._inboundTransfers.set(transferId, {
         transferId,
         name: msg.name as string,
@@ -1273,14 +1289,14 @@ export class PeerJsChannel implements Channel {
         totalChunks,
         receivedChunks: existing?.receivedChunks || new Map(),
         receivedBytes: existing?.receivedBytes || 0,
-        targetGroupId:
-          typeof msg.groupId === "string" ? msg.groupId : undefined,
+        targetGroupId,
       });
 
       this._pendingInboundFile = {
         name: msg.name as string,
         mimeType: msg.mimeType as string,
         size: msg.size as number,
+        targetGroupId,
       };
 
       updateTransferProgress({
@@ -1342,7 +1358,12 @@ export class PeerJsChannel implements Channel {
         }
 
         const targetGroupId = transfer.targetGroupId || `peer:${remotePeerId}`;
-        this._saveInboundFile(targetGroupId, transfer.name, completeBytes);
+        const savePromise = this._saveInboundFile(
+          targetGroupId,
+          transfer.name,
+          completeBytes,
+        );
+        this._inboundSavePromises.set(transfer.name, savePromise);
         this._inboundTransfers.delete(transferId);
         this._pendingInboundFile = null;
 
@@ -1826,12 +1847,13 @@ export class PeerJsChannel implements Channel {
    * Persist complete received file bytes into group storage, handling
    * duplicate filename incrementing and path remapping.
    */
-  private _saveInboundFile(
+  private async _saveInboundFile(
     groupId: string,
     canonicalName: string,
     bytes: Uint8Array,
-  ): void {
-    getDb().then(async (db) => {
+  ): Promise<void> {
+    try {
+      const db = await getDb();
       let finalName = canonicalName;
       let counter = 1;
 
@@ -1855,10 +1877,20 @@ export class PeerJsChannel implements Channel {
         this._inboundRemap.set(canonicalName, finalName);
       }
 
-      writeGroupFileBytes(db, groupId, finalName, bytes).catch((err) => {
-        console.error("PeerJsChannel: failed to write inbound file bytes", err);
-      });
-    });
+      await writeGroupFileBytes(db, groupId, finalName, bytes);
+
+      try {
+        const { orchestratorStore } =
+          await import("../../stores/orchestrator.js");
+        if (orchestratorStore.activeGroupId === groupId) {
+          await orchestratorStore.loadFiles(db);
+        }
+      } catch {
+        // Safe to ignore in non-UI / headless contexts
+      }
+    } catch (err) {
+      console.error("PeerJsChannel: failed to write inbound file bytes", err);
+    }
   }
 
   private _updateConnectedPeersSignal(): void {
@@ -1916,6 +1948,17 @@ export class PeerJsChannel implements Channel {
         text += part.text;
       } else if (part.kind === "file") {
         let rawPath = part.name || "attachment";
+
+        const pendingSave = this._inboundSavePromises.get(rawPath);
+        if (pendingSave) {
+          try {
+            await pendingSave;
+          } catch {
+            // Error logged in _saveInboundFile
+          } finally {
+            this._inboundSavePromises.delete(rawPath);
+          }
+        }
 
         if (this._inboundRemap.has(rawPath)) {
           const remappedName = this._inboundRemap.get(rawPath)!;

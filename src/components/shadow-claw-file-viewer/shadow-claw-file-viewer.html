@@ -4,13 +4,47 @@
       <div class="modal-header">
         <h3 class="modal-title">File:</h3>
         <div class="modal-header-actions">
-          <button
-            aria-label="Share file"
-            class="modal-share-btn hidden"
-            type="button"
-          >
-            ↗<span class="btn-label"> Share</span>
-          </button>
+          <div class="modal-share-container">
+            <button
+              aria-label="Share file"
+              class="modal-share-btn hidden"
+              type="button"
+            >
+              ↗<span class="btn-label"> Share</span>
+            </button>
+            <details class="modal-share-dropdown hidden">
+              <summary
+                class="modal-share-summary"
+                aria-label="Share file options"
+                role="button"
+              >
+                ↗<span class="btn-label"> Share</span>
+                <span class="modal-share-arrow" aria-hidden="true">▾</span>
+              </summary>
+              <div class="modal-share-menu" role="menu">
+                <button
+                  type="button"
+                  class="modal-share-menu-item modal-share-peer-btn"
+                  role="menuitem"
+                >
+                  <span class="modal-share-menu-icon" aria-hidden="true"
+                    >📡</span
+                  >
+                  <span class="modal-share-peer-label">Send to peer</span>
+                </button>
+                <button
+                  type="button"
+                  class="modal-share-menu-item modal-share-device-btn"
+                  role="menuitem"
+                >
+                  <span class="modal-share-menu-icon" aria-hidden="true"
+                    >↗</span
+                  >
+                  <span>Share via device…</span>
+                </button>
+              </div>
+            </details>
+          </div>
           <div class="modal-view-modes">
             <button
               aria-pressed="false"

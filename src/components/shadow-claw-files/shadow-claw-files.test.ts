@@ -2,6 +2,7 @@ import { jest } from "@jest/globals";
 
 const mockAddPage = jest.fn();
 const mockRemovePage = jest.fn();
+const mockSendFileToPeer = jest.fn<any>().mockResolvedValue(undefined);
 
 jest.unstable_mockModule("../../storage/deleteAllGroupFiles.js", () => ({
   deleteAllGroupFiles: jest.fn(),
@@ -92,6 +93,7 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => ({
     pages: [] as Array<{ groupId: string; path: string }>,
     addPage: mockAddPage,
     removePage: mockRemovePage,
+    sendFileToPeer: mockSendFileToPeer,
     loadFiles: jest.fn<any>().mockResolvedValue(undefined),
     db: {},
     triggerFilesRefresh: jest.fn(),
@@ -1532,6 +1534,75 @@ describe("shadow-claw-files", () => {
       expect(
         listContainer.querySelector("shadow-claw-empty-state"),
       ).not.toBeNull();
+
+      document.body.removeChild(component);
+    });
+  });
+
+  describe("peer file sharing actions", () => {
+    it("does not render send-peer action button when in default/main group", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      (orchestratorStore as any).activeGroupId = "main";
+      (orchestratorStore as any).files = ["notes.txt"];
+      component.updateFileList({} as any);
+
+      const sendPeerBtn =
+        component.shadowRoot?.querySelector(".files__send-peer");
+      expect(sendPeerBtn).toBeNull();
+
+      document.body.removeChild(component);
+    });
+
+    it("renders send-peer action button for files in a peer: conversation and invokes sendFileToPeer on click", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      (orchestratorStore as any).activeGroupId = "peer:peer-123";
+      (orchestratorStore as any).currentPath = ".";
+      (orchestratorStore as any).files = ["shared-doc.pdf", "subfolder/"];
+      component.updateFileList({} as any);
+
+      const items = component.shadowRoot?.querySelectorAll(".files__item");
+      expect(items?.length).toBe(2);
+
+      // File item: should have send-peer button with "Send to peer"
+      const fileItem = items?.[0];
+      const sendPeerBtn = fileItem?.querySelector(".files__send-peer");
+      expect(sendPeerBtn).not.toBeNull();
+      expect(sendPeerBtn?.getAttribute("title")).toBe("Send to peer");
+
+      // Folder item: should NOT have send-peer button
+      const folderItem = items?.[1];
+      expect(folderItem?.querySelector(".files__send-peer")).toBeNull();
+
+      // Click the send to peer button
+      (sendPeerBtn as HTMLButtonElement).click();
+      expect(mockSendFileToPeer).toHaveBeenCalledWith("shared-doc.pdf");
+
+      document.body.removeChild(component);
+    });
+
+    it("renders send-peer action button with 'Send to room peers' for files in a room: conversation", async () => {
+      const component = new ShadowClawFiles();
+      document.body.appendChild(component);
+      await component.render();
+
+      (orchestratorStore as any).activeGroupId = "room:room-456";
+      (orchestratorStore as any).currentPath = "docs";
+      (orchestratorStore as any).files = ["guide.md"];
+      component.updateFileList({} as any);
+
+      const sendPeerBtn =
+        component.shadowRoot?.querySelector(".files__send-peer");
+      expect(sendPeerBtn).not.toBeNull();
+      expect(sendPeerBtn?.getAttribute("title")).toBe("Send to room peers");
+
+      (sendPeerBtn as HTMLButtonElement).click();
+      expect(mockSendFileToPeer).toHaveBeenCalledWith("docs/guide.md");
 
       document.body.removeChild(component);
     });

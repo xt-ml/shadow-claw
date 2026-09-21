@@ -1363,5 +1363,169 @@ describe("PeerJsChannel", () => {
         new Uint8Array([1, 2, 3]),
       );
     });
+
+    it("saves inbound file to peer groupId (peer:<remotePeerId>) even when __file_header specifies recipient peer groupId", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-id", []);
+      ch.start();
+
+      await flushMicrotasks();
+
+      const incomingConn = new MockDataConnection("remote-peer-sender");
+      lastPeerInstance!.emit("connection", incomingConn);
+      incomingConn.emit("open");
+
+      incomingConn.emit("data", {
+        type: "__file_header",
+        id: "peer-tx-1",
+        name: "files.md",
+        mimeType: "text/markdown",
+        size: 6,
+        totalChunks: 1,
+        chunkSize: 10,
+        groupId: "peer:my-id",
+      });
+
+      incomingConn.emit("data", {
+        type: "__file_chunk",
+        id: "peer-tx-1",
+        name: "files.md",
+        index: 0,
+        totalChunks: 1,
+        data: new Uint8Array([1, 2, 3, 4, 5, 6]).buffer,
+      });
+
+      await flushMicrotasks();
+
+      expect(writeGroupFileBytes).toHaveBeenCalledWith(
+        expect.anything(),
+        "peer:remote-peer-sender",
+        "files.md",
+        new Uint8Array([1, 2, 3, 4, 5, 6]),
+      );
+    });
+
+    it("saves inbound file to peer:<remotePeerId> for raw ArrayBuffer data transfer", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-id", []);
+      ch.start();
+
+      await flushMicrotasks();
+
+      const incomingConn = new MockDataConnection("remote-peer-raw");
+      lastPeerInstance!.emit("connection", incomingConn);
+      incomingConn.emit("open");
+
+      // Inbound header
+      incomingConn.emit("data", {
+        type: "__file_header",
+        id: "raw-tx-1",
+        name: "raw.bin",
+        mimeType: "application/octet-stream",
+        size: 4,
+        totalChunks: 1,
+        chunkSize: 4,
+        groupId: "peer:my-id",
+      });
+
+      // Raw array buffer data frame
+      incomingConn.emit("data", new Uint8Array([7, 8, 9, 10]).buffer);
+
+      await flushMicrotasks();
+
+      expect(writeGroupFileBytes).toHaveBeenCalledWith(
+        expect.anything(),
+        "peer:remote-peer-raw",
+        "raw.bin",
+        new Uint8Array([7, 8, 9, 10]),
+      );
+    });
+
+    it("awaits pending file transfer and delivers attachment correctly in A2A SendMessage", async () => {
+      const ch = new PeerJsChannel();
+      ch.configure("my-id", []);
+      ch.start();
+
+      const messageCallback = jest.fn();
+      ch.onMessage(messageCallback);
+
+      await flushMicrotasks();
+
+      const incomingConn = new MockDataConnection("sender-peer-123");
+      lastPeerInstance!.emit("connection", incomingConn);
+      incomingConn.emit("open");
+
+      // 1. Send file header
+      incomingConn.emit("data", {
+        type: "__file_header",
+        id: "tx-full-flow",
+        name: "document.pdf",
+        mimeType: "application/pdf",
+        size: 5,
+        totalChunks: 1,
+        chunkSize: 10,
+        groupId: "peer:my-id",
+      });
+
+      // 2. Send file chunk
+      incomingConn.emit("data", {
+        type: "__file_chunk",
+        id: "tx-full-flow",
+        name: "document.pdf",
+        index: 0,
+        totalChunks: 1,
+        data: new Uint8Array([11, 22, 33, 44, 55]).buffer,
+      });
+
+      // 3. Send A2A SendMessage
+      incomingConn.emit("data", {
+        jsonrpc: "2.0",
+        id: "rpc-msg-1",
+        method: "message/send",
+        params: {
+          message: {
+            messageId: "msg-123",
+            role: "agent",
+            parts: [
+              {
+                kind: "file",
+                name: "document.pdf",
+                mimeType: "application/pdf",
+                size: 5,
+              },
+              {
+                kind: "text",
+                text: "Here is the document",
+              },
+            ],
+          },
+        },
+      });
+
+      await flushMicrotasks();
+
+      expect(writeGroupFileBytes).toHaveBeenCalledWith(
+        expect.anything(),
+        "peer:sender-peer-123",
+        "document.pdf",
+        new Uint8Array([11, 22, 33, 44, 55]),
+      );
+
+      expect(messageCallback).toHaveBeenCalledWith(
+        expect.objectContaining({
+          groupId: "peer:sender-peer-123",
+          sender: "sender-peer-123",
+          content: "Here is the document",
+          attachments: [
+            {
+              fileName: "document.pdf",
+              mimeType: "application/pdf",
+              path: "document.pdf",
+              size: 5,
+            },
+          ],
+        }),
+      );
+    });
   });
 });

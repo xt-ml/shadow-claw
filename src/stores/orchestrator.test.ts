@@ -30,6 +30,7 @@ const mockSetStaticMainSiteSeeded = jest.fn() as any;
 const mockGetStaticMainManifest = jest.fn() as any;
 const mockCopyGroupDirectory = jest.fn() as any;
 const mockDeleteMessage = jest.fn() as any;
+const mockSaveMessage = jest.fn() as any;
 
 jest.unstable_mockModule(
   "../core/orchestrator/utils/operations/provider.js",
@@ -248,6 +249,10 @@ jest.unstable_mockModule("../storage/copyGroupDirectory.js", () => ({
 
 jest.unstable_mockModule("../db/deleteMessage.js", () => ({
   deleteMessage: mockDeleteMessage,
+}));
+
+jest.unstable_mockModule("../db/saveMessage.js", () => ({
+  saveMessage: mockSaveMessage,
 }));
 
 const mockReorderTasks = jest.fn() as any;
@@ -3147,6 +3152,145 @@ describe("OrchestratorStore", () => {
       mockGetAllTasks.mockResolvedValue([]);
       await store.clearAllTasks(mockDb);
       expect(store.tasks).toEqual([]);
+    });
+  });
+
+  describe("sendFileToPeer", () => {
+    it("throws and warns if active group is not peer: or room:", async () => {
+      const store = new OrchestratorStore();
+      store.orchestrator = {
+        router: { send: jest.fn(), setTyping: jest.fn() },
+      } as any;
+      store._activeGroupId.set("main");
+
+      await expect(store.sendFileToPeer("file.txt")).rejects.toThrow(
+        "Can only send files to peers in a peer or room conversation.",
+      );
+      expect((store.orchestrator as any).router.send).not.toHaveBeenCalled();
+    });
+
+    it("throws if router is not initialized", async () => {
+      const store = new OrchestratorStore();
+      store.orchestrator = { router: null } as any;
+      store._activeGroupId.set("peer:remote-123");
+
+      await expect(store.sendFileToPeer("file.txt")).rejects.toThrow(
+        "Network router is not initialized.",
+      );
+    });
+
+    it("sends file via router in peer conversation, saves message, and emits event", async () => {
+      const store = new OrchestratorStore();
+      const mockRouter = {
+        send: jest.fn<any>().mockResolvedValue(undefined),
+        setTyping: jest.fn(),
+      };
+      const mockEvents = { emit: jest.fn() };
+      store.orchestrator = {
+        router: mockRouter,
+        events: mockEvents,
+      } as any;
+      const mockDb = {} as any;
+      (store as any)._db = mockDb;
+      store._activeGroupId.set("peer:peer-abc");
+
+      await store.sendFileToPeer("docs/notes.pdf", undefined, {
+        mimeType: "application/pdf",
+        fileName: "notes.pdf",
+        size: 1024,
+      });
+
+      expect(mockRouter.setTyping).toHaveBeenCalledWith("peer:peer-abc", true);
+      expect(mockRouter.send).toHaveBeenCalledWith("peer:peer-abc", "", [
+        {
+          path: "docs/notes.pdf",
+          fileName: "notes.pdf",
+          mimeType: "application/pdf",
+          size: 1024,
+        },
+      ]);
+      expect(mockSaveMessage).toHaveBeenCalledWith(
+        mockDb,
+        expect.objectContaining({
+          groupId: "peer:peer-abc",
+          sender: "You",
+          channel: "peerjs",
+          attachments: [
+            {
+              path: "docs/notes.pdf",
+              fileName: "notes.pdf",
+              mimeType: "application/pdf",
+              size: 1024,
+            },
+          ],
+        }),
+      );
+      expect(mockEvents.emit).toHaveBeenCalledWith(
+        "message",
+        expect.objectContaining({
+          groupId: "peer:peer-abc",
+          sender: "You",
+        }),
+      );
+      expect(mockRouter.setTyping).toHaveBeenCalledWith("peer:peer-abc", false);
+    });
+
+    it("sends file to room peers when in a room: conversation", async () => {
+      const store = new OrchestratorStore();
+      const mockRouter = {
+        send: jest.fn<any>().mockResolvedValue(undefined),
+        setTyping: jest.fn(),
+      };
+      const mockEvents = { emit: jest.fn() };
+      store.orchestrator = {
+        router: mockRouter,
+        events: mockEvents,
+      } as any;
+      const mockDb = {} as any;
+      (store as any)._db = mockDb;
+      store._activeGroupId.set("room:design-room");
+
+      await store.sendFileToPeer("specs.md");
+
+      expect(mockRouter.setTyping).toHaveBeenCalledWith(
+        "room:design-room",
+        true,
+      );
+      expect(mockRouter.send).toHaveBeenCalledWith("room:design-room", "", [
+        {
+          path: "specs.md",
+          fileName: "specs.md",
+          mimeType: "application/octet-stream",
+          size: 0,
+        },
+      ]);
+      expect(mockSaveMessage).toHaveBeenCalledWith(
+        mockDb,
+        expect.objectContaining({
+          groupId: "room:design-room",
+          channel: "room",
+        }),
+      );
+      expect(mockRouter.setTyping).toHaveBeenCalledWith(
+        "room:design-room",
+        false,
+      );
+    });
+
+    it("clears typing in finally if router.send fails", async () => {
+      const store = new OrchestratorStore();
+      const mockRouter = {
+        send: jest.fn<any>().mockRejectedValue(new Error("Connection lost")),
+        setTyping: jest.fn(),
+      };
+      store.orchestrator = { router: mockRouter } as any;
+      store._activeGroupId.set("peer:peer-xyz");
+
+      await expect(store.sendFileToPeer("data.csv")).rejects.toThrow(
+        "Connection lost",
+      );
+      expect(mockRouter.setTyping).toHaveBeenCalledWith("peer:peer-xyz", true);
+      expect(mockRouter.setTyping).toHaveBeenCalledWith("peer:peer-xyz", false);
     });
   });
 });

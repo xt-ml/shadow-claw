@@ -130,6 +130,110 @@ pre {
   color: var(--shadow-claw-text-primary);
 }
 
+.modal-share-container {
+  display: inline-flex;
+  position: relative;
+}
+
+.modal-share-dropdown {
+  position: relative;
+}
+
+.modal-share-summary {
+  align-items: center;
+  background-color: transparent;
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-m);
+  color: var(--shadow-claw-text-secondary);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 0.75rem;
+  font-weight: 600;
+  gap: 0.25rem;
+  list-style: none;
+  min-height: 2rem;
+  padding: 0.375rem 0.625rem;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.modal-share-summary::-webkit-details-marker {
+  display: none;
+}
+
+.modal-share-summary:hover,
+.modal-share-dropdown[open] .modal-share-summary {
+  border-color: var(--shadow-claw-text-primary);
+  box-shadow: var(--shadow-claw-shadow-md);
+  color: var(--shadow-claw-text-primary);
+}
+
+.modal-share-arrow {
+  font-size: 0.625rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
+}
+
+.modal-share-dropdown[open] .modal-share-arrow {
+  transform: rotate(180deg);
+}
+
+.modal-share-menu {
+  background-color: var(--shadow-claw-bg-secondary);
+  border: 0.0625rem solid var(--shadow-claw-border-color);
+  border-radius: var(--shadow-claw-radius-m);
+  box-shadow: var(--shadow-claw-shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 11rem;
+  padding: 0.375rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.375rem);
+  z-index: 100;
+}
+
+.modal-share-menu-item {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--shadow-claw-radius-s);
+  color: var(--shadow-claw-text-primary);
+  cursor: pointer;
+  display: flex;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  text-align: left;
+  transition:
+    background-color 0.1s,
+    color 0.1s;
+  white-space: nowrap;
+  width: 100%;
+}
+
+.modal-share-menu-item:hover,
+.modal-share-menu-item:focus-visible {
+  background-color: var(--shadow-claw-accent-primary);
+  color: var(--shadow-claw-on-primary);
+  outline: none;
+}
+
+.modal-share-menu-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.modal-share-menu-icon {
+  display: inline-flex;
+  font-size: 0.875rem;
+  justify-content: center;
+  width: 1.125rem;
+}
+
 .modal-save-btn {
   background-color: var(--shadow-claw-text-primary);
   border-color: var(--shadow-claw-text-primary);

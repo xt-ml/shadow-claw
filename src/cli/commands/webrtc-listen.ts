@@ -20,6 +20,7 @@ import {
   getIpcSocketPath,
   clearIpcFile,
 } from "../utils/webrtc-control-client.js";
+import { sanitizeAttachmentFileName } from "../../content/message-attachments.js";
 
 export interface WebRtcListenOptions {
   host?: string;
@@ -33,6 +34,200 @@ export interface WebRtcListenOptions {
   cacheDir?: string;
   renewPeerId?: boolean;
   verbose?: boolean;
+  agent?: boolean;
+  model?: string;
+  provider?: string;
+  apiKey?: string;
+  systemPrompt?: string;
+  systemPromptFile?: string;
+  tools?: string;
+  workspace?: string;
+  transfersDir?: string;
+  allowInternet?: boolean;
+  handlers?: Record<string, (args: any, context?: any) => Promise<any> | any>;
+  runAgent?: (prompt: string, options?: any) => Promise<any>;
+}
+
+export function createDefaultWebRtcHandlers(
+  options: WebRtcListenOptions = {},
+): Record<string, (args?: any, context?: any) => Promise<any> | any> {
+  const isAgentEnabled = options.agent !== false;
+  const workspaceDir =
+    options.workspace ||
+    options.cacheDir ||
+    (process.env.SHADOWCLAW_CACHE_DIR || "").trim() ||
+    path.join(process.cwd(), ".cache");
+  const transfersDir =
+    options.transfersDir || path.join(workspaceDir, "transfers");
+
+  const handlers: Record<
+    string,
+    (args?: any, context?: any) => Promise<any> | any
+  > = {
+    "send-message": async (args: any, context?: any) => {
+      const text = args?.text ?? args?.prompt ?? args?.message;
+      if (!text || typeof text !== "string" || !text.trim()) {
+        throw new Error("Missing text or prompt parameter");
+      }
+
+      const remotePeerId = context?.remotePeerId || "remote";
+      const targetGroupId = args.groupId || `peer:${remotePeerId}`;
+
+      if (!isAgentEnabled) {
+        if (options.verbose) {
+          console.log(
+            `[webrtc-listen] Message received from ${remotePeerId} (agent disabled): "${text.trim()}"`,
+          );
+        }
+        return {
+          success: true,
+          queued: true,
+          groupId: targetGroupId,
+          text: "Message received (agent disabled)",
+        };
+      }
+
+      if (options.verbose) {
+        console.log(
+          `[webrtc-listen] Prompt from ${remotePeerId}: "${text.length > 80 ? text.slice(0, 77) + "..." : text}"`,
+        );
+      }
+
+      const runAgentFn =
+        options.runAgent ||
+        (async (promptText: string, runOpts: any) => {
+          const { runAgentRun } = await import("./agent.js");
+          return runAgentRun(promptText, runOpts);
+        });
+
+      const agentResult = await runAgentFn(text.trim(), {
+        workspace: options.workspace,
+        cacheDir: options.cacheDir,
+        model: options.model,
+        provider: options.provider,
+        apiKey: options.apiKey,
+        systemPrompt: options.systemPrompt,
+        systemPromptFile: options.systemPromptFile,
+        tools: options.tools,
+        allowInternet: options.allowInternet,
+        group: targetGroupId,
+        quiet: !options.verbose,
+        stream: false,
+      });
+
+      if (!agentResult?.success) {
+        throw new Error(agentResult?.error || "Agent execution failed");
+      }
+
+      return {
+        success: true,
+        reply: agentResult.response,
+        text: agentResult.response,
+        model: agentResult.model,
+        provider: agentResult.provider,
+        groupId: targetGroupId,
+      };
+    },
+
+    prompt: async (args: any, context?: any) => {
+      return handlers["send-message"](args, context);
+    },
+
+    "send-file": async (args: any, context?: any) => {
+      const { fileName, data, prompt, groupId } = args || {};
+      if (!fileName || typeof fileName !== "string" || !data) {
+        throw new Error("Missing fileName or data in send-file args");
+      }
+
+      const safeName = sanitizeAttachmentFileName(fileName);
+      await fs.promises.mkdir(transfersDir, { recursive: true });
+
+      const targetPath = path.join(transfersDir, safeName);
+      const fileBuf = Buffer.isBuffer(data)
+        ? data
+        : Buffer.from(data, "base64");
+      await fs.promises.writeFile(targetPath, fileBuf);
+
+      const remotePeerId = context?.remotePeerId || "remote";
+      const targetGroupId = groupId || `peer:${remotePeerId}`;
+
+      if (options.verbose) {
+        console.log(
+          `[webrtc-listen] Saved file "${safeName}" (${fileBuf.length} bytes) to ${targetPath}`,
+        );
+      }
+
+      let reply: string | undefined;
+      if (
+        prompt &&
+        typeof prompt === "string" &&
+        prompt.trim() &&
+        isAgentEnabled
+      ) {
+        const runAgentFn =
+          options.runAgent ||
+          (async (promptText: string, runOpts: any) => {
+            const { runAgentRun } = await import("./agent.js");
+            return runAgentRun(promptText, runOpts);
+          });
+
+        const agentPrompt = `[Attached file: ${safeName} (${fileBuf.length} bytes) saved at ${targetPath}]\n\n${prompt.trim()}`;
+        const agentResult = await runAgentFn(agentPrompt, {
+          workspace: options.workspace,
+          cacheDir: options.cacheDir,
+          model: options.model,
+          provider: options.provider,
+          apiKey: options.apiKey,
+          systemPrompt: options.systemPrompt,
+          systemPromptFile: options.systemPromptFile,
+          tools: options.tools,
+          allowInternet: options.allowInternet,
+          group: targetGroupId,
+          quiet: !options.verbose,
+          stream: false,
+        });
+
+        if (agentResult?.success) {
+          reply = agentResult.response;
+        }
+      }
+
+      return {
+        success: true,
+        fileName: safeName,
+        path: targetPath,
+        size: fileBuf.length,
+        reply,
+        text: reply,
+      };
+    },
+
+    "transfer-file": async (args: any, context?: any) => {
+      return handlers["send-file"](args, context);
+    },
+
+    "list-tools": async () => {
+      try {
+        const { TOOL_DEFINITIONS } =
+          await import("../../subsystems/tools/index.js");
+        return {
+          tools: TOOL_DEFINITIONS.map((t) => t.name),
+        };
+      } catch (_) {
+        return { tools: [] };
+      }
+    },
+
+    ping: async (_args?: any) => {
+      return {
+        ok: true,
+        peerId: options.peerId || "",
+        timestamp: Date.now(),
+      };
+    },
+  };
+
+  return handlers;
 }
 
 export interface WebRtcListenerLike {
@@ -228,6 +423,16 @@ export async function runWebRtcListenCommand(
   console.log(`  Settings → WebRTC/PeerJS → Trusted Peer IDs → "${cliPeerId}"`);
   console.log("");
 
+  const defaultHandlers = createDefaultWebRtcHandlers({
+    ...options,
+    peerId: cliPeerId,
+  });
+
+  const combinedHandlers = {
+    ...defaultHandlers,
+    ...(options.handlers || {}),
+  };
+
   const listener = new CliWebRtcListener({
     host,
     port,
@@ -239,6 +444,7 @@ export async function runWebRtcListenCommand(
     cacheDir: options.cacheDir,
     renewPeerId: Boolean(options.renewPeerId),
     verbose: Boolean(options.verbose),
+    handlers: combinedHandlers,
   });
 
   const pendingIpc = new Map<string, (payload: any) => void>();

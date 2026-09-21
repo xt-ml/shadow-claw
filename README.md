@@ -230,7 +230,7 @@ The agent has access to **50+ tools** including:
 | **Git**         | `git_clone`, `git_init`, `git_add`, `git_unstage`, `git_commit`, `git_push`, `git_pull`, `git_fetch`, `git_merge`, `git_diff`, and more                                                           |
 | **Web**         | `fetch_url`, `fetch_file`, `web_search` (DuckDuckGo via configurable CORS search proxy and URL templates)                                                                                         |
 | **Compute**     | `javascript` (sandboxed in browser, native Node in headless)                                                                                                                                      |
-| **Agents**      | `spawn_subagent` (parallel task delegation), `ask_user` (human-in-the-loop pause)                                                                                                                 |
+| **Agents**      | `spawn_subagent` (parallel task delegation), `prompt_peer` (P2P agent prompt dispatch), `list_peers` (P2P peer discovery), `ask_user` (human-in-the-loop pause)                                   |
 | **Time**        | `get_current_time` (ISO 8601 or IANA timezone)                                                                                                                                                    |
 | **Tasks**       | `create_task`, `list_tasks`, `update_task`, `delete_task`, `enable_task`, `disable_task`, `run_task`                                                                                              |
 | **UI**          | `show_toast`, `send_notification`, `clear_chat`                                                                                                                                                   |
@@ -334,10 +334,12 @@ npx shadow-claw agent tool <name> [jsonArgs]         # Inspect tool schema or ex
 echo "hello" | npx shadow-claw agent tool <name>     # Pipe text directly into tool (schema auto-mapping)
 npx shadow-claw agent skill <name>                   # Execute a declarative skill tool chain
 npx shadow-claw agent import <url> [options]         # Discover and import remote RFC v0.2.0 skills and tools
+npx shadow-claw agent listen                         # Start headless agent WebRTC listener with orchestration loop
 
 # Browser & Client Interactivity
 npx shadow-claw clients                              # List connected browser/Electron clients
-npx shadow-claw send "your prompt" --client <id>     # Send a message to a connected client
+npx shadow-claw send "your prompt" --client <id>     # Send a prompt to a connected client or peer agent (supports -f, --file)
+npx shadow-claw send-file <file> --client <peerId>   # Transfer a file to a peer over WebRTC with optional --prompt
 npx shadow-claw tasks --client <id>                  # List scheduled tasks on a client
 npx shadow-claw backup                               # Trigger OPFS workspace backup
 npx shadow-claw backup list                          # List available backup snapshots

@@ -53,6 +53,7 @@ Tool definitions live in modular files under `src/subsystems/tools/` and are ass
 | `email.ts`         | `manage_email`, `email_read_messages`, `email_send_message`                                                                                                                                                                                                                                                                                            |
 | `rooms.ts`         | `create_room`, `invite_to_room`, `leave_room`, `list_room_members`                                                                                                                                                                                                                                                                                     |
 | `a2ui.ts`          | `list_components`, `render_component`                                                                                                                                                                                                                                                                                                                  |
+| `peer.ts`          | `prompt_peer`, `list_peers`                                                                                                                                                                                                                                                                                                                            |
 
 All are re-exported from `src/subsystems/tools/index.ts` as the `TOOL_DEFINITIONS` array.
 
@@ -227,6 +228,8 @@ The utility in `src/worker/utils/wrapUntrustedContent.ts` wraps externally-sourc
 - **`get_current_time`** — Returns the current time as an ISO 8601 string (UTC) or formatted for an IANA `timezone` (e.g. `America/New_York`) via `Intl.DateTimeFormat`; use this instead of relying on `bash`
 - **`ask_user`** — Halts the agent and sends an `ask-user` postMessage to the UI, where the user answers (optionally choosing from predefined `options`). The worker blocks until the main thread sends back an `ask-user-response` message that resolves the pending promise via `globalThis.pendingAskUserResolvers`
 - **`spawn_subagent`** — Delegates a task to a parallel, isolated agent invocation; subject to `SUBAGENT_MAX_PARALLEL` concurrency limit. In automatic subagent max-token mode, the default output budget follows the selected subagent model limit (then clamps to that model's maximum).
+- **`prompt_peer`** — Dispatches a prompt or task instructions directly to another connected WebRTC peer or agent and returns their reply.
+- **`list_peers`** — Discovers and lists currently connected WebRTC peers along with their agent cards, identities, and advertised capabilities.
 
 ### Git tools
 

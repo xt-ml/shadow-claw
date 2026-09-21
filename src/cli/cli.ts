@@ -10,6 +10,7 @@ import { Command } from "commander";
 import { runBuild } from "./build/build.js";
 import { runClientsCommand } from "./commands/clients.js";
 import { runSendCommand } from "./commands/send.js";
+import { runSendFileCommand } from "./commands/send-file.js";
 import { runBackupCommand } from "./commands/backup.js";
 import { runTasksCommand } from "./commands/tasks.js";
 import { runPeerIdCommand } from "./commands/peer-id.js";
@@ -805,10 +806,11 @@ program
 
 program
   .command("send <message>")
-  .description("Send a message/prompt to a connected client")
+  .description("Send a message/prompt to a connected client or peer agent")
   .optionsGroup("Target Options:")
   .option("--client <id>", "Target client ID (defaults to first available)")
   .option("--group <groupId>", "Target conversation group ID")
+  .option("-f, --file <path>", "Attach a local file to send with the message")
   .optionsGroup("Control Plane Connection Options:")
   .option("--host <host>", "Control plane host")
   .option("--port <port>", "Control plane port")
@@ -820,8 +822,52 @@ program
   .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
   .option("--renew-peer-id", "Renew WebRTC CLI peer ID before sending", false)
   .option("--cache-dir <dir>", "Custom cache directory")
+  .option(
+    "--timeout <seconds>",
+    "Timeout in seconds to wait for response",
+    "120",
+  )
+  .option("--json", "Output response payload as JSON", false)
   .action(async (message, options) => {
     await runSendCommand(message, options);
+  });
+
+program
+  .command("send-file <file>")
+  .description(
+    "Transfer a file to a connected peer or client over WebRTC or HTTP",
+  )
+  .optionsGroup("Target Options:")
+  .option("--client <id>", "Target client ID (defaults to first available)")
+  .option(
+    "--prompt <prompt>",
+    "Accompanying prompt or instructions for the receiving agent",
+  )
+  .option("--name <fileName>", "Override remote file name")
+  .option("--group <groupId>", "Target conversation group ID")
+  .optionsGroup("Control Plane Connection Options:")
+  .option("--host <host>", "Control plane host")
+  .option("--port <port>", "Control plane port")
+  .option("--token <token>", "Control token")
+  .option("--https", "Connect to server via HTTPS", false)
+  .option("-k, --insecure", "Allow self-signed TLS certificates", true)
+  .optionsGroup("Transport & Peer Options:")
+  .option(
+    "--transport <transport>",
+    "Transport to use: http | webrtc",
+    "webrtc",
+  )
+  .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
+  .option("--renew-peer-id", "Renew WebRTC CLI peer ID before sending", false)
+  .option("--cache-dir <dir>", "Custom cache directory")
+  .option(
+    "--timeout <seconds>",
+    "Transfer and execution timeout in seconds",
+    "120",
+  )
+  .option("--json", "Output response payload as JSON", false)
+  .action(async (file, options) => {
+    await runSendFileCommand(file, options);
   });
 
 program
@@ -929,6 +975,34 @@ program
     "-k, --insecure",
     "Allow self-signed TLS certificates for the signaling server (wss://)",
     true,
+  )
+  .optionsGroup("Agent & Orchestration Options (for listen action):")
+  .option(
+    "--agent",
+    "Enable agent orchestration loop for incoming prompts (default: true)",
+    true,
+  )
+  .option("--no-agent", "Disable agent orchestration loop for incoming prompts")
+  .option("--model <model>", "Model name for the listening agent")
+  .option("--provider <provider>", "LLM provider ID for the listening agent")
+  .option("--api-key <key>", "API key for the listening agent")
+  .option(
+    "--system-prompt <text>",
+    "Override system prompt for the listening agent",
+  )
+  .option(
+    "--system-prompt-file <file>",
+    "Load system prompt from file for the listening agent",
+  )
+  .option(
+    "--tools <tools>",
+    "Comma-separated list of tools to enable for the listening agent",
+  )
+  .option("--workspace <dir>", "Workspace directory for the listening agent")
+  .option("--transfers-dir <dir>", "Directory to store received files")
+  .option(
+    "--allow-internet",
+    "Allow internet access for bash and javascript tools",
   )
   .action(async (action, customId, options) => {
     if (action === "listen") {
@@ -1096,7 +1170,7 @@ program.commandsGroup("Headless Agent:");
 program
   .command("agent [action] [args...]")
   .description(
-    "Run the headless CLI agent (init | model | skills | tools | tool | skill | import | run)",
+    "Run the headless CLI agent (init | model | skills | tools | tool | skill | import | run | listen)",
   )
   .optionsGroup("Agent Options:")
   .option("--workspace <dir>", "Workspace directory (default: .cache)")

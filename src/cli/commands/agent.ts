@@ -1940,9 +1940,22 @@ export async function runAgentCommand(
       return await runAgentImport(url, actualOptions);
     }
 
+    case "listen": {
+      const listenFn =
+        actualOptions.listenFn ||
+        (async (opts: any) => {
+          const { runWebRtcListenCommand } = await import("./webrtc-listen.js");
+          return runWebRtcListenCommand(opts);
+        });
+      return await listenFn({
+        ...actualOptions,
+        agent: true,
+      });
+    }
+
     default: {
       console.log(
-        "Usage: shadow-claw agent <init|model|skills|tools|tool|skill|import|run> [args...]",
+        "Usage: shadow-claw agent <init|model|skills|tools|tool|skill|import|run|listen> [args...]",
       );
     }
   }

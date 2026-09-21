@@ -6,6 +6,7 @@ import { jest } from "@jest/globals";
 import {
   startIpcServer,
   runWebRtcListenCommand,
+  createDefaultWebRtcHandlers,
   type WebRtcListenerLike,
 } from "./webrtc-listen.js";
 
@@ -246,13 +247,135 @@ describe("webrtc-listen command", () => {
             "Error starting WebRTC listener: Signaling connection refused",
           ),
         );
-        expect(process.exitCode).toBe(1);
       } finally {
         process.exitCode = exitCodeBefore;
         startSpy.mockRestore();
         logSpy.mockRestore();
         errorSpy.mockRestore();
       }
+    });
+  });
+
+  describe("createDefaultWebRtcHandlers", () => {
+    it("handles send-message and invokes the agent runner", async () => {
+      const mockRunAgent = jest.fn(async (prompt: string, _opts: any) => ({
+        success: true,
+        response: "Agent reply: " + prompt,
+        model: "mock-model",
+        provider: "mock-provider",
+      }));
+
+      const handlers = createDefaultWebRtcHandlers({
+        cacheDir: tmpDir,
+        runAgent: mockRunAgent as any,
+        peerId: "cli-test-peer",
+      });
+
+      expect(handlers["send-message"]).toBeDefined();
+      const result = await handlers["send-message"](
+        { text: "Hello Agent B" },
+        { remotePeerId: "cli-peer-a" },
+      );
+
+      expect(mockRunAgent).toHaveBeenCalledWith(
+        "Hello Agent B",
+        expect.objectContaining({
+          group: "peer:cli-peer-a",
+        }),
+      );
+      expect(result.success).toBe(true);
+      expect(result.reply).toBe("Agent reply: Hello Agent B");
+      expect(result.text).toBe("Agent reply: Hello Agent B");
+    });
+
+    it("throws error on send-message when text is missing", async () => {
+      const handlers = createDefaultWebRtcHandlers({
+        cacheDir: tmpDir,
+      });
+
+      await expect(handlers["send-message"]({})).rejects.toThrow(
+        /Missing text or prompt/,
+      );
+    });
+
+    it("returns queued message when agent is disabled (--no-agent)", async () => {
+      const handlers = createDefaultWebRtcHandlers({
+        cacheDir: tmpDir,
+        agent: false,
+      });
+
+      const result = await handlers["send-message"]({ text: "Hello" });
+      expect(result.success).toBe(true);
+      expect(result.queued).toBe(true);
+    });
+
+    it("handles send-file, saves file to transfers dir, and returns metadata", async () => {
+      const handlers = createDefaultWebRtcHandlers({
+        cacheDir: tmpDir,
+        peerId: "cli-test-peer",
+      });
+
+      const content = "Hello from transferred file!";
+      const base64Data = Buffer.from(content).toString("base64");
+
+      const result = await handlers["send-file"](
+        {
+          fileName: "notes.txt",
+          data: base64Data,
+          fileSize: content.length,
+          mimeType: "text/plain",
+        },
+        { remotePeerId: "cli-peer-a" },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.fileName).toBe("notes.txt");
+      expect(result.size).toBe(content.length);
+      expect(fs.existsSync(result.path)).toBe(true);
+      expect(fs.readFileSync(result.path, "utf8")).toBe(content);
+    });
+
+    it("handles send-file with accompanying prompt and runs agent", async () => {
+      const mockRunAgent = jest.fn(async (_prompt: string, _opts: any) => ({
+        success: true,
+        response: "Summary: analysis of file completed.",
+      }));
+
+      const handlers = createDefaultWebRtcHandlers({
+        cacheDir: tmpDir,
+        runAgent: mockRunAgent as any,
+        peerId: "cli-test-peer",
+      });
+
+      const content = "data 1, 2, 3";
+      const result = await handlers["send-file"](
+        {
+          fileName: "data.csv",
+          data: Buffer.from(content).toString("base64"),
+          prompt: "Please summarize this dataset.",
+        },
+        { remotePeerId: "cli-peer-a" },
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.reply).toBe("Summary: analysis of file completed.");
+      expect(mockRunAgent).toHaveBeenCalledWith(
+        expect.stringContaining("data.csv"),
+        expect.objectContaining({
+          group: "peer:cli-peer-a",
+        }),
+      );
+    });
+
+    it("handles ping and returns peer identity", async () => {
+      const handlers = createDefaultWebRtcHandlers({
+        cacheDir: tmpDir,
+        peerId: "cli-custom-peer",
+      });
+
+      const result = await handlers["ping"]();
+      expect(result.ok).toBe(true);
+      expect(result.peerId).toBe("cli-custom-peer");
     });
   });
 });

@@ -38,10 +38,55 @@ describe("runSendCommand", () => {
 
     await runSendCommand("Hello ShadowClaw", { client: "client-target" });
 
-    expect(sendSpy).toHaveBeenCalledWith("client-target", "send-message", {
-      text: "Hello ShadowClaw",
-      groupId: undefined,
-    });
+    expect(sendSpy).toHaveBeenCalledWith(
+      "client-target",
+      "send-message",
+      {
+        text: "Hello ShadowClaw",
+        groupId: undefined,
+      },
+      120000,
+    );
     expect(logSpy).toHaveBeenCalledWith("Message successfully dispatched.");
+  });
+
+  it("displays agent response text when reply is present in result", async () => {
+    jest
+      .spyOn(CliControlClient.prototype, "sendCommand")
+      .mockResolvedValueOnce({
+        success: true,
+        data: { reply: "I am ready to help you." },
+      });
+
+    await runSendCommand("What can you do?", { client: "client-target" });
+
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Response from client-target:"),
+    );
+    expect(logSpy).toHaveBeenCalledWith(
+      expect.stringContaining("I am ready to help you."),
+    );
+  });
+
+  it("delegates to sendFile when --file option is provided", async () => {
+    const sendFileSpy = jest
+      .spyOn(CliControlClient.prototype, "sendFile")
+      .mockResolvedValueOnce({
+        success: true,
+        data: { reply: "File analyzed successfully." },
+      });
+
+    await runSendCommand("Please analyze this", {
+      client: "client-target",
+      file: "data.txt",
+    });
+
+    expect(sendFileSpy).toHaveBeenCalledWith(
+      "client-target",
+      "data.txt",
+      expect.objectContaining({
+        prompt: "Please analyze this",
+      }),
+    );
   });
 });

@@ -14,10 +14,20 @@ export async function executeSendFile(
     return "Error: send_file requires a valid path string.";
   }
 
-  const isPeer = groupId.startsWith("peer:");
-  const isRoom = groupId.startsWith("room:");
+  const explicitPeerId =
+    input.peer_id && typeof input.peer_id === "string" && input.peer_id.trim()
+      ? input.peer_id.trim()
+      : "";
+  const targetGroupId = explicitPeerId
+    ? explicitPeerId.startsWith("peer:")
+      ? explicitPeerId
+      : `peer:${explicitPeerId}`
+    : groupId;
+
+  const isPeer = targetGroupId.startsWith("peer:");
+  const isRoom = targetGroupId.startsWith("room:");
   if (!isPeer && !isRoom) {
-    return "Error: send_file only works in peer or room conversations (groupId must start with 'peer:' or 'room:'). The current conversation is not a peer session.";
+    return "Error: send_file only works in peer or room conversations (groupId must start with 'peer:' or 'room:') or when peer_id is specified.";
   }
 
   const sfPath = normalizeWorkspacePath(input.path);
@@ -35,7 +45,7 @@ export async function executeSendFile(
   }
 
   post({
-    payload: { groupId, path: sfPath },
+    payload: { groupId: targetGroupId, path: sfPath },
     type: "send-file",
   });
 

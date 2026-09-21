@@ -102,4 +102,23 @@ describe("executeSendFile", () => {
       "Sending file to room: docs/specs.pdf. The transfer will proceed in the background — you can continue chatting.",
     );
   });
+
+  it("posts send-file message when explicit peer_id is supplied in non-peer group", async () => {
+    mockGroupFileExists.mockResolvedValue(true);
+
+    const res = await executeSendFile(
+      {} as any,
+      { path: "docs/specs.pdf", peer_id: "cli-remote-99" },
+      "server:main",
+    );
+
+    expect(mockPost).toHaveBeenCalledWith({
+      type: "send-file",
+      payload: {
+        groupId: "peer:cli-remote-99",
+        path: "docs/specs.pdf",
+      },
+    });
+    expect(res).toContain("Sending file to peer: docs/specs.pdf");
+  });
 });

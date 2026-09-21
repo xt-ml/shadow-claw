@@ -279,16 +279,19 @@ export const send_file: ToolDefinition = {
   name: "send_file",
   description:
     "Send a workspace file directly to connected peer(s) over the P2P (PeerJS/WebRTC) data channel. " +
-    "Use this when the user is in a peer conversation or room and asks to send or transfer a file. " +
-    "Do NOT use this for local-browser or other non-peer conversations — it only works when the active conversation " +
-    "is a peer or room session (peer: or room: group). The file is read from the current group workspace and transferred in binary chunks " +
-    "so there is no size limit.",
+    "Use this when the user is in a peer conversation or room, or specify peer_id to send to a remote peer directly. " +
+    "The file is read from the current workspace and transferred over WebRTC in binary chunks so there is no size limit.",
   input_schema: {
     type: "object",
     properties: {
       path: {
         type: "string",
         description: "File path relative to the group workspace root",
+      },
+      peer_id: {
+        type: "string",
+        description:
+          "Optional target PeerJS peer ID (or peer: groupId). If omitted, sends to the current peer/room conversation.",
       },
     },
     required: ["path"],

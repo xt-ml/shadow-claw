@@ -14,12 +14,15 @@ import { executeNodeTransformersCompletion } from "./tools/node-transformers-exe
 import { executeNodeLlamafileCompletion } from "./tools/node-llamafile-executor.js";
 import { setHeadlessEvalExecutor } from "./utils/sandboxedEval.js";
 import { nativeEvalExecutor } from "./utils/native-eval-executor.js";
+import { setPeerClientFactory } from "./tools/peer/prompt-peer.js";
+import { nativePeerClientFactory } from "./tools/peer/native-peer-client.js";
 
 // Automatically wire native OS process execution for headless CLI agent
 setHeadlessBashExecutor(nativeBashExecutor);
 setNodeTransformersCompletionExecutor(executeNodeTransformersCompletion);
 setNodeLlamafileCompletionExecutor(executeNodeLlamafileCompletion);
 setHeadlessEvalExecutor(nativeEvalExecutor);
+setPeerClientFactory(nativePeerClientFactory);
 
 export { executeTool } from "./utils/executeTool.js";
 export { executeToolChain } from "./utils/toolChain.js";
@@ -95,4 +98,5 @@ export { createTransformersRuntimeService } from "../server/services/transformer
 export { cleanupAllLlamafileProcesses } from "../server/services/llamafile-manager.js";
 export { nativeBashExecutor, setHeadlessBashExecutor };
 export { nativeEvalExecutor, setHeadlessEvalExecutor };
+export { nativePeerClientFactory, setPeerClientFactory };
 export type * from "./headless-types.js";

@@ -92,6 +92,9 @@ import {
   translate_text,
 } from "./builtin-ai.js";
 
+import { list_peers, prompt_peer } from "./peer.js";
+
+export { list_peers, prompt_peer };
 export { activate_skill } from "../skills/tool.js";
 
 export const TOOL_DEFINITIONS: ToolDefinition[] = [
@@ -143,6 +146,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   leave_room,
   list_components,
   list_files,
+  list_peers,
   list_room_members,
   list_tasks,
   list_tool_profiles,
@@ -151,6 +155,7 @@ export const TOOL_DEFINITIONS: ToolDefinition[] = [
   move_file,
   open_file,
   patch_file,
+  prompt_peer,
   proofread_text,
   read_file,
   remote_mcp_call_tool,

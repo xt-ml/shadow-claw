@@ -40,6 +40,10 @@ import { executeCreateRoom } from "../tools/rooms/create-room.js";
 import { executeInviteToRoom } from "../tools/rooms/invite-to-room.js";
 import { executeLeaveRoom } from "../tools/rooms/leave-room.js";
 import { executeListRoomMembers } from "../tools/rooms/list-room-members.js";
+import {
+  executePromptPeer,
+  executeListPeers,
+} from "../tools/peer/prompt-peer.js";
 import { executeSpawnSubagentTool } from "../tools/spawn-subagent/spawn-subagent.js";
 import { executeCreateTask } from "../tools/tasks/create-task.js";
 import { executeDeleteTask } from "../tools/tasks/delete-task.js";
@@ -344,6 +348,14 @@ export async function executeTool(
 
       case "list_room_members": {
         return await executeListRoomMembers(db, input, groupId);
+      }
+
+      case "prompt_peer": {
+        return await executePromptPeer(db, input, groupId);
+      }
+
+      case "list_peers": {
+        return await executeListPeers(db, input, groupId);
       }
 
       case "manage_email":

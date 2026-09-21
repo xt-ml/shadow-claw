@@ -16,7 +16,7 @@ export interface WebRtcClientOptions {
 
 export interface WebRtcListenerOptions extends WebRtcClientOptions {
   verbose?: boolean;
-  handlers?: Record<string, (args: any) => Promise<any> | any>;
+  handlers?: Record<string, (args: any, context?: any) => Promise<any> | any>;
   trustedPeerIds?: string[];
   renewPeerId?: boolean;
 }
@@ -427,6 +427,44 @@ export class CliWebRtcControlClient {
     });
   }
 
+  async sendFile(
+    targetPeerId: string,
+    filePath: string,
+    options: {
+      prompt?: string;
+      name?: string;
+      groupId?: string;
+      timeoutMs?: number;
+    } = {},
+  ): Promise<any> {
+    const resolvedPath = path.resolve(filePath);
+    if (!fs.existsSync(resolvedPath)) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    const stat = fs.statSync(resolvedPath);
+    if (stat.isDirectory()) {
+      throw new Error(`Cannot send directory: ${filePath}`);
+    }
+
+    const fileName = options.name || path.basename(resolvedPath);
+    const data = fs.readFileSync(resolvedPath).toString("base64");
+    const timeoutMs = options.timeoutMs || 120000;
+
+    return this.sendCommand(
+      targetPeerId,
+      "send-file",
+      {
+        fileName,
+        data,
+        fileSize: stat.size,
+        prompt: options.prompt,
+        groupId: options.groupId,
+      },
+      timeoutMs,
+    );
+  }
+
   close(): void {
     if (this.peer) {
       try {
@@ -448,7 +486,7 @@ export class CliWebRtcListener {
   rejectUnauthorized: boolean;
   cacheDir?: string;
   verbose: boolean;
-  handlers: Record<string, (args: any) => Promise<any> | any>;
+  handlers: Record<string, (args: any, context?: any) => Promise<any> | any>;
   trustedPeerIds: Set<string>;
   cliPeerId: string;
   _peer: any;
@@ -532,7 +570,7 @@ export class CliWebRtcListener {
 
   async _handleCommand(
     conn: any,
-    _remotePeerId: string,
+    remotePeerId: string,
     msg: any,
   ): Promise<void> {
     const payload = msg.payload || {};
@@ -553,7 +591,7 @@ export class CliWebRtcListener {
     }
 
     try {
-      const data = await handler(args || {});
+      const data = await handler(args || {}, { remotePeerId, conn });
       conn.send({
         id: ulid(),
         type: "command:result",
@@ -619,6 +657,48 @@ export class CliWebRtcListener {
           });
         } catch (_) {}
         return;
+      }
+
+      // Handle A2A JSON-RPC SendMessage
+      if (
+        (msg.method === "SendMessage" ||
+          msg.method === "SendStreamingMessage") &&
+        msg.id
+      ) {
+        try {
+          const parts = msg.params?.message?.parts || [];
+          const textPart = parts.find((p: any) => typeof p?.text === "string");
+          const text = textPart ? textPart.text : "";
+          const handler =
+            this.handlers["send-message"] || this.handlers["prompt"];
+          if (handler) {
+            const res = await handler(
+              { text, groupId: msg.params?.contextId },
+              { remotePeerId, conn },
+            );
+            const replyText = res?.reply || res?.text || "";
+            conn.send({
+              jsonrpc: "2.0",
+              id: msg.id,
+              result: {
+                messageId: ulid(),
+                role: "ROLE_AGENT",
+                parts: [{ text: replyText }],
+              },
+            });
+            return;
+          }
+        } catch (err: any) {
+          conn.send({
+            jsonrpc: "2.0",
+            id: msg.id,
+            error: {
+              code: -32603,
+              message: err?.message || String(err),
+            },
+          });
+          return;
+        }
       }
 
       if (msg.type === "command:execute") {

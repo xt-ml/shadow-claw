@@ -312,4 +312,115 @@ describe("CliWebRtcListener", () => {
     expect(listener._reconnectAttempts).toBe(0);
     expect(listener._reconnectTimer).toBeNull();
   });
+
+  it("_handleCommand passes remotePeerId and conn in context", async () => {
+    let capturedContext: any = null;
+    const listener = new CliWebRtcListener({
+      cacheDir: tempDir,
+      handlers: {
+        "test-action": async (_args: any, context: any) => {
+          capturedContext = context;
+          return { done: true };
+        },
+      },
+    });
+
+    const mockConn = {
+      send: jest.fn(),
+    };
+
+    await listener._handleCommand(mockConn, "remote-peer-42", {
+      payload: {
+        commandId: "cmd-1",
+        action: "test-action",
+        args: { foo: "bar" },
+      },
+    });
+
+    expect(mockConn.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "command:result",
+        payload: expect.objectContaining({
+          commandId: "cmd-1",
+          success: true,
+          data: { done: true },
+        }),
+      }),
+    );
+    expect(capturedContext).toEqual({
+      remotePeerId: "remote-peer-42",
+      conn: mockConn,
+    });
+  });
+
+  it("_setupConnection processes A2A SendMessage requests", async () => {
+    const listener = new CliWebRtcListener({
+      cacheDir: tempDir,
+      handlers: {
+        "send-message": async (args: any) => ({
+          reply: `A2A Echo: ${args.text}`,
+        }),
+      },
+    });
+
+    let dataHandler: ((data: any) => void) | null = null;
+    const mockConn = {
+      on: jest.fn((event: string, handler: any) => {
+        if (event === "data") dataHandler = handler;
+      }),
+      send: jest.fn(),
+    };
+
+    listener._setupConnection(mockConn, "a2a-peer-1");
+    expect(dataHandler).not.toBeNull();
+
+    await dataHandler!({
+      jsonrpc: "2.0",
+      id: "req-123",
+      method: "SendMessage",
+      params: {
+        message: {
+          parts: [{ text: "Hello from A2A" }],
+        },
+      },
+    });
+
+    expect(mockConn.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jsonrpc: "2.0",
+        id: "req-123",
+        result: expect.objectContaining({
+          role: "ROLE_AGENT",
+          parts: [{ text: "A2A Echo: Hello from A2A" }],
+        }),
+      }),
+    );
+  });
+
+  it("CliWebRtcControlClient.sendFile reads file and sends send-file command", async () => {
+    const client = new CliWebRtcControlClient({ cacheDir: tempDir });
+    const sendSpy = jest
+      .spyOn(client, "sendCommand")
+      .mockResolvedValueOnce({ success: true, data: { status: "received" } });
+
+    const filePath = path.join(tempDir, "sample.txt");
+    fs.writeFileSync(filePath, "test file content", "utf8");
+
+    const result = await client.sendFile("target-peer", filePath, {
+      prompt: "Inspect this file",
+    });
+
+    expect(result.success).toBe(true);
+    expect(sendSpy).toHaveBeenCalledWith(
+      "target-peer",
+      "send-file",
+      expect.objectContaining({
+        fileName: "sample.txt",
+        data: Buffer.from("test file content").toString("base64"),
+        fileSize: 17,
+        prompt: "Inspect this file",
+      }),
+      120000,
+    );
+  });
 });

@@ -416,6 +416,44 @@ export class CliControlClient {
     return data;
   }
 
+  async sendFile(
+    clientId: string,
+    filePath: string,
+    options: {
+      prompt?: string;
+      name?: string;
+      groupId?: string;
+      timeoutMs?: number;
+    } = {},
+  ): Promise<any> {
+    const resolvedPath = path.resolve(filePath);
+    if (!fs.existsSync(resolvedPath)) {
+      throw new Error(`File not found: ${filePath}`);
+    }
+
+    const stat = fs.statSync(resolvedPath);
+    if (stat.isDirectory()) {
+      throw new Error(`Cannot send directory: ${filePath}`);
+    }
+
+    const fileName = options.name || path.basename(resolvedPath);
+    const data = fs.readFileSync(resolvedPath).toString("base64");
+    const timeoutMs = options.timeoutMs || 120000;
+
+    return this.sendCommand(
+      clientId,
+      "send-file",
+      {
+        fileName,
+        data,
+        fileSize: stat.size,
+        prompt: options.prompt,
+        groupId: options.groupId,
+      },
+      timeoutMs,
+    );
+  }
+
   async listBackups(clientId?: string): Promise<any[]> {
     const query = clientId ? `?clientId=${encodeURIComponent(clientId)}` : "";
     const data = await this._request({

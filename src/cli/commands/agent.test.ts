@@ -2378,4 +2378,21 @@ Fetch today's weather.
     expect(result.success).toBe(true);
     expect(result.importedCount).toBe(1);
   });
+
+  it("dispatches via runAgentCommand('listen', ...)", async () => {
+    const { runAgentCommand } = await import("./agent.js");
+    const mockListen = jest.fn(async () => {});
+
+    await runAgentCommand("listen", [], {
+      workspace: tmpDir,
+      model: "test-model",
+      listenFn: mockListen as any,
+    });
+
+    expect(mockListen).toHaveBeenCalledTimes(1);
+    const calledOpts = (mockListen as any).mock.calls[0][0];
+    expect(calledOpts.workspace).toBe(tmpDir);
+    expect(calledOpts.model).toBe("test-model");
+    expect(calledOpts.agent).toBe(true);
+  });
 });

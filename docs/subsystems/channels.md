@@ -80,6 +80,16 @@ The primary channel that bridges the in-browser chat UI with the orchestrator.
 | `onDisplay(cb)`              | Register handler for response display                                                    |
 | `onTyping(cb)`               | Register handler for typing indicator                                                    |
 
+## PeerJS & Room Channels
+
+**Files:** `src/subsystems/channels/peerjs.ts` (prefix: `peer:`) and `src/subsystems/channels/room.ts` (prefix: `room:`)
+
+Enable peer-to-peer and multi-peer group chat over WebRTC DataChannels using PeerJS.
+
+- **Chunked File Transfers:** Files and attachments are streamed across WebRTC DataChannels in 64 KB binary chunks (`FILE_CHUNK_SIZE = 65536`) using `__file_header` and `__file_chunk` protocol frames. Received chunks are assembled in OPFS/memory and persisted to the target group workspace directory.
+- **Direct UI File Sharing:** The user interface exposes direct peer file transmission from both the Files browser (`<shadow-claw-files>` via `.files__send-peer`) and File Viewer modal (`<shadow-claw-file-viewer>` via `.modal-share-peer-btn`). Calling `orchestratorStore.sendFileToPeer(filePath)` controls typing indicators during transfer, dispatches through `router.send(groupId, "", [attachment])`, and writes the attachment card to the sender's local conversation history.
+- **Agent Peer Discovery & Autonomous Transfer:** CLI agents and browser peers can query connected peers via `list_peers`, exchange messages via `prompt_peer`, and transmit files programmatically via `send_file` (or CLI `shadow-claw send-file <file> --client <peerId>`). For an end-to-end CLI workflow, see [CLI Peer-to-Peer File Transfer](cli.md#step-by-step-transferring-files-between-cli-peers).
+
 ## Telegram Channel
 
 **File:** `src/subsystems/channels/telegram.ts` (prefix: `tg:`)

@@ -338,12 +338,16 @@ npx shadow-claw send "Hello to peer" --client <browser-peer-id> --group "peer:<c
 
 # Send over WebRTC DataChannel transport (routes via webrtc listen IPC or direct connection)
 npx shadow-claw send "Hello from CLI" --transport webrtc --client <browser-peer-id>
+
+# Attach a local file to the prompt
+npx shadow-claw send "Analyze this dataset" --file ./data.csv --transport webrtc --client <peer-id>
 ```
 
 | Option                    | Type    | Description                                                                                 | Default       |
 | :------------------------ | :------ | :------------------------------------------------------------------------------------------ | :------------ |
 | `--client <id>`           | string  | Target client ID or PeerJS peer ID (defaults to first available connected client)           | `""`          |
 | `--group <groupId>`       | string  | Target conversation group ID (`br:main`, `peer:<peerId>`, etc.). Defaults to active group.  | Active group  |
+| `-f, --file <path>`       | string  | Attach a local file to send with the message                                                | `""`          |
 | `--transport <transport>` | string  | Transport mechanism: `http` (Control Plane REST/WebSocket) or `webrtc` (WebRTC DataChannel) | `"http"`      |
 | `--host <host>`           | string  | Control plane / signaling server host                                                       | `"127.0.0.1"` |
 | `--port <port>`           | number  | Control plane / signaling server port                                                       | `8888`        |
@@ -351,7 +355,34 @@ npx shadow-claw send "Hello from CLI" --transport webrtc --client <browser-peer-
 | `--https`                 | boolean | Connect to server control plane via HTTPS                                                   | `false`       |
 | `-k, --insecure`          | boolean | Allow self-signed TLS certificates for local control plane connections                      | `true`        |
 | `--peer-id <id>`          | string  | Custom WebRTC CLI peer ID override                                                          | `""`          |
+| `--timeout <seconds>`     | string  | Timeout in seconds to wait for response                                                     | `"120"`       |
+| `--json`                  | boolean | Output response payload as JSON                                                             | `false`       |
 | `--cache-dir <dir>`       | string  | Custom cache directory for token and peer ID storage                                        | `".cache"`    |
+
+### `shadow-claw send-file <file> [options]`
+
+Transfers a file to a connected peer or client over WebRTC or HTTP, with optional accompanying instructions for the receiving agent.
+
+```bash
+# Transfer a file to a remote peer over WebRTC
+npx shadow-claw send-file ./report.pdf --client cli-01m1...
+
+# Transfer a file and prompt the remote agent to process it
+npx shadow-claw send-file ./dataset.csv --client cli-01m1... --prompt "Summarize the top anomalies in this dataset"
+
+# Specify custom remote file name
+npx shadow-claw send-file ./temp.bin --name final-metrics.bin --client cli-01m1...
+```
+
+| Option                    | Type    | Description                                                     | Default       |
+| :------------------------ | :------ | :-------------------------------------------------------------- | :------------ |
+| `--client <id>`           | string  | Target client ID or PeerJS peer ID                              | First peer    |
+| `--prompt <prompt>`       | string  | Accompanying prompt or instructions for the receiving agent     | `""`          |
+| `--name <fileName>`       | string  | Override the remote file name                                   | File basename |
+| `--group <groupId>`       | string  | Target conversation group ID (`br:main`, `peer:<peerId>`, etc.) | `""`          |
+| `--transport <transport>` | string  | Transport mechanism: `webrtc` (default) or `http`               | `"webrtc"`    |
+| `--timeout <seconds>`     | string  | Transfer and execution timeout in seconds                       | `"120"`       |
+| `--json`                  | boolean | Output response payload as JSON                                 | `false`       |
 
 ### `shadow-claw backup [trigger|list|delete] [options]`
 
@@ -455,23 +486,139 @@ npx shadow-claw peer-id --set my-custom-peer-id
 npx shadow-claw peer-id -q
 ```
 
-#### 2. Running WebRTC Listener (`webrtc listen`)
+#### 2. Running WebRTC & Agent Listener (`agent listen` / `webrtc listen`)
 
-Registers the CLI as a live PeerJS peer on the signaling server so browser tabs can initiate direct P2P connections without requiring a control plane connection. It also launches a local Unix socket IPC bridge (`.cache/webrtc-ipc.sock`) to coordinate concurrent `send` commands without peer ID conflicts.
+Registers the CLI as a live PeerJS peer on the signaling server so other CLI agents and browser tabs can connect directly over WebRTC. By default, incoming prompts and transferred files trigger the headless agent orchestration loop (`runAgentRun`), allowing peer-to-peer agent prompting and data exchange.
+
+It also launches a local Unix socket IPC bridge (`.cache/webrtc-ipc.sock`) to coordinate concurrent `send` commands without peer ID conflicts.
 
 ```bash
-# Start WebRTC listener
-npx shadow-claw webrtc listen
+# Start an agent listener with default config
+npx shadow-claw agent listen
 
-# Restrict incoming connections to specific browser peer IDs
-npx shadow-claw webrtc listen --trusted-peer <browser-peer-id>
+# Specify model and custom workspace
+npx shadow-claw agent listen --model gpt-4o-mini --workspace ./agent-workspace
+
+# Restrict incoming connections to specific peer IDs
+npx shadow-claw agent listen --trusted-peer <peer-id>
+
+# Run as a bare DataChannel relay without invoking the LLM orchestration loop
+npx shadow-claw webrtc listen --no-agent
 ```
 
-**Browser Setup Workflow:**
+**Peer-to-Peer Agent Collaboration Workflow:**
 
-1. Run `npx shadow-claw webrtc listen` to display the CLI peer ID (e.g. `cli-01m1...`).
-2. In the browser, navigate to **Settings → WebRTC/PeerJS → Trusted Peer IDs** and add the CLI's peer ID.
-3. Once connected, dispatch commands with `npx shadow-claw send --transport webrtc --client <browser-peer-id> [--group <groupId>] "message"`.
+1. On Agent A, start the listener: `npx shadow-claw agent listen`. Note the displayed CLI Peer ID (`cli-01m1...`).
+2. On Agent B, send prompts or files to Agent A:
+
+   ```bash
+   # Agent B prompts Agent A
+   npx shadow-claw send --transport webrtc --client <peer-id-A> "Analyze recent logs"
+
+   # Agent B sends a file with analysis instructions
+   npx shadow-claw send-file ./server.log --client <peer-id-A> --prompt "Find fatal errors"
+   ```
+
+3. Inside the orchestration loop, agents can also autonomously use the `prompt_peer`, `list_peers`, and `send_file` tools to coordinate with other agents.
+
+#### Step-by-Step: Transferring Files Between CLI Peers
+
+This end-to-end walkthrough demonstrates how to transfer a file directly between two CLI peers over WebRTC, optionally triggering the receiving agent to process the file and return its findings.
+
+##### 1. Start the Signaling Server
+
+WebRTC connections require an initial signaling handshake. Start ShadowClaw's server with PeerJS enabled:
+
+```bash
+# Start server with PeerJS signaling enabled (default port: 8888)
+npm start -- --peerjs
+# or
+npx shadow-claw start --peerjs
+```
+
+The server hosts the PeerJS signaling endpoint at `ws://127.0.0.1:8888/` (or `wss://` when TLS is enabled).
+
+##### 2. Start Receiver Peer (Peer A)
+
+On the receiving machine (or in a separate terminal with its own cache/workspace):
+
+```bash
+# Run listener with full agent orchestration (processes prompts on arrival)
+npx shadow-claw agent listen --cache-dir .cache-peer-a --workspace ./peer-a-workspace
+
+# Or run as a bare file receiver without LLM processing
+npx shadow-claw webrtc listen --no-agent --cache-dir .cache-peer-a
+```
+
+When started, the listener displays its registration information:
+
+```text
+WebRTC CLI Peer ID : cli-01j9abc123def456
+Signaling server   : ws://127.0.0.1:8888/
+Trusted peers      : (any — add --trusted-peer <id> to restrict)
+```
+
+> [!NOTE]
+> Transferred files are automatically saved to `<workspace>/transfers/<fileName>` (or `.cache/transfers/<fileName>`).
+
+##### 3. Send File from Sender Peer (Peer B)
+
+On the sending machine (or a second terminal window):
+
+```bash
+# Basic direct file transfer over WebRTC
+npx shadow-claw send-file ./metrics.csv --client cli-01j9abc123def456
+
+# Transfer on the same host using a dedicated cache directory for Peer B
+npx shadow-claw send-file ./metrics.csv --client cli-01j9abc123def456 --cache-dir .cache-peer-b
+
+# Transfer with custom remote destination filename
+npx shadow-claw send-file ./metrics.csv --name q3-metrics.csv --client cli-01j9abc123def456
+
+# Transfer with an accompanying prompt (triggers Peer A's agent to analyze the file)
+npx shadow-claw send-file ./metrics.csv \
+  --client cli-01j9abc123def456 \
+  --prompt "Analyze this CSV for any unexpected latency spikes and summarize"
+```
+
+##### 4. Verify Transfer and Output
+
+On Peer B (Sender):
+
+```text
+Sending "metrics.csv" (4820 bytes) to cli-01j9abc123def456...
+File "metrics.csv" successfully transferred to cli-01j9abc123def456.
+Remote location: /peer-a-workspace/transfers/metrics.csv
+
+Response from cli-01j9abc123def456:
+----------------------------------------
+I analyzed the transferred CSV at /peer-a-workspace/transfers/metrics.csv:
+1. Two latency spikes occurred between 02:14 UTC and 02:18 UTC.
+2. Error rates normalized after 02:22 UTC.
+----------------------------------------
+```
+
+On Peer A (Receiver):
+The file is immediately present on disk:
+
+```bash
+ls -l ./peer-a-workspace/transfers/metrics.csv
+```
+
+##### 5. Autonomous Transfer Within the Agent Loop
+
+When running an autonomous agent (`shadow-claw agent run`), agents can discover peers and initiate file transfers programmatically using built-in agent tools:
+
+1. **`list_peers`**: Discover active peer IDs.
+2. **`send_file`**: Send a workspace file with an optional prompt to another peer:
+   ```json
+   {
+     "file_path": "reports/summary.md",
+     "peer_id": "cli-01j9abc123def456",
+     "prompt": "Please review this summary report."
+   }
+   ```
+3. **`prompt_peer`**: Follow up with queries or instructions to the remote peer.
 
 ### `shadow-claw skills:index [dir]` (alias `agent-skills`)
 

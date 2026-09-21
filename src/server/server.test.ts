@@ -302,14 +302,14 @@ describe("startServer HTTP / HTTPS selection", () => {
       closeAllConnections: jest.fn(),
       close: jest.fn((callback: () => void) => callback()),
     };
-    const processOnce = jest.spyOn(process, "once");
+    const processOn = jest.spyOn(process, "on");
     const processExit = jest
       .spyOn(process, "exit")
       .mockImplementation((() => undefined) as never);
 
     installServerTerminationHandlers(server as any, processExit as never);
 
-    const sigintHandler = processOnce.mock.calls.find(
+    const sigintHandler = processOn.mock.calls.find(
       ([signal]) => signal === "SIGINT",
     )?.[1] as (() => void) | undefined;
     sigintHandler?.();
@@ -319,6 +319,70 @@ describe("startServer HTTP / HTTPS selection", () => {
     expect(processExit).toHaveBeenCalledWith(130);
 
     processExit.mockRestore();
-    processOnce.mockRestore();
+    processOn.mockRestore();
+  });
+
+  it("forces immediate exit on subsequent SIGINT during shutdown", async () => {
+    const { installServerTerminationHandlers } = await import("./server.js");
+    const server = {
+      closeAllConnections: jest.fn(),
+      close: jest.fn(), // Deliberately hangs without calling callback
+    };
+    const processOn = jest.spyOn(process, "on");
+    const processExit = jest
+      .spyOn(process, "exit")
+      .mockImplementation((() => undefined) as never);
+
+    installServerTerminationHandlers(server as any, processExit as never);
+
+    const sigintHandler = processOn.mock.calls.find(
+      ([signal]) => signal === "SIGINT",
+    )?.[1] as (() => void) | undefined;
+
+    // First SIGINT starts graceful shutdown
+    sigintHandler?.();
+    expect(server.closeAllConnections).toHaveBeenCalledTimes(1);
+    expect(server.close).toHaveBeenCalledTimes(1);
+    expect(processExit).not.toHaveBeenCalled();
+
+    // Second SIGINT forces immediate exit
+    sigintHandler?.();
+    expect(processExit).toHaveBeenCalledWith(130);
+
+    processExit.mockRestore();
+    processOn.mockRestore();
+  });
+
+  it("forces exit after timeout when server.close hangs", async () => {
+    jest.useFakeTimers();
+    try {
+      const { installServerTerminationHandlers } = await import("./server.js");
+      const server = {
+        closeAllConnections: jest.fn(),
+        close: jest.fn(), // Deliberately hangs without calling callback
+      };
+      const processOn = jest.spyOn(process, "on");
+      const processExit = jest
+        .spyOn(process, "exit")
+        .mockImplementation((() => undefined) as never);
+
+      installServerTerminationHandlers(server as any, processExit as never);
+
+      const sigintHandler = processOn.mock.calls.find(
+        ([signal]) => signal === "SIGINT",
+      )?.[1] as (() => void) | undefined;
+
+      sigintHandler?.();
+      expect(processExit).not.toHaveBeenCalled();
+
+      // Fast-forward past force exit timer (1500ms)
+      jest.advanceTimersByTime(1600);
+      expect(processExit).toHaveBeenCalledWith(130);
+
+      processExit.mockRestore();
+      processOn.mockRestore();
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

@@ -46,10 +46,29 @@ export async function startServer(
     corsMode: config.corsMode,
   });
 
+  const upgradedSockets = new Set<any>();
+  if (typeof (httpServer as any).on === "function") {
+    httpServer.on("upgrade", (_req, socket) => {
+      upgradedSockets.add(socket);
+      socket.once?.("close", () => {
+        upgradedSockets.delete(socket);
+      });
+    });
+  }
+
   if (typeof (httpServer as any).on === "function") {
     httpServer.on("close", () => {
-      scheduler.stop();
-      controlPlane.close();
+      try {
+        scheduler.stop();
+      } catch (_) {}
+      try {
+        controlPlane.close();
+      } catch (_) {}
+      if (serverPeer) {
+        try {
+          serverPeer.close();
+        } catch (_) {}
+      }
     });
   }
 
@@ -69,6 +88,32 @@ export async function startServer(
       path: "/peerjs",
       verbose: config.verbose,
     });
+  }
+
+  if (typeof (httpServer as any).close === "function") {
+    const originalClose = httpServer.close.bind(httpServer);
+    (httpServer as any).close = function (
+      callback?: (err?: Error) => void,
+    ): http.Server | https.Server {
+      try {
+        scheduler.stop();
+      } catch (_) {}
+      try {
+        controlPlane.close();
+      } catch (_) {}
+      if (serverPeer) {
+        try {
+          serverPeer.close();
+        } catch (_) {}
+      }
+      for (const socket of upgradedSockets) {
+        try {
+          socket.destroy();
+        } catch (_) {}
+      }
+      upgradedSockets.clear();
+      return originalClose(callback);
+    };
   }
 
   if (config.serveStatic === false) {
@@ -186,13 +231,34 @@ export function installServerTerminationHandlers(
   server: http.Server | https.Server,
   exitProcess: (code: number) => never = exit,
 ): void {
+  let shuttingDown = false;
+
   const shutdown = (exitCode: number) => {
-    server.closeAllConnections();
-    server.close(() => exitProcess(exitCode));
+    if (shuttingDown) {
+      exitProcess(exitCode);
+      return;
+    }
+    shuttingDown = true;
+
+    const forceTimer = setTimeout(() => {
+      exitProcess(exitCode);
+    }, 1500);
+    if (typeof forceTimer.unref === "function") {
+      forceTimer.unref();
+    }
+
+    try {
+      server.closeAllConnections?.();
+    } catch (_) {}
+
+    server.close?.(() => {
+      clearTimeout(forceTimer);
+      exitProcess(exitCode);
+    });
   };
 
-  process.once("SIGINT", () => shutdown(130));
-  process.once("SIGTERM", () => shutdown(143));
+  process.on("SIGINT", () => shutdown(130));
+  process.on("SIGTERM", () => shutdown(143));
 }
 
 if (isMainModule) {

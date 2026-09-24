@@ -31,154 +31,19 @@ function getCliVersion(): string {
 export const MCP_CLIENT_TOOL_PREFIX = "shadowclaw_client_";
 export const MCP_SERVER_TOOL_PREFIX = "shadowclaw_server_";
 
-function getClientRawToolName(name: string): string {
-  return typeof name === "string" && name.startsWith(MCP_CLIENT_TOOL_PREFIX)
-    ? name.slice(MCP_CLIENT_TOOL_PREFIX.length)
-    : name;
-}
+import {
+  getClientRawToolName,
+  toClientExposedToolName,
+} from "../../server/mcp/tools/client-tool-names.js";
+import {
+  BUILTIN_TOOL_DEFINITIONS,
+  resolveTargetClientId,
+} from "../../server/mcp/tools/built-in-tool-definitions.js";
+import type { McpTool } from "../../server/mcp/types.js";
 
-function toClientExposedToolName(name: string): string {
-  return typeof name === "string" && !name.startsWith(MCP_CLIENT_TOOL_PREFIX)
-    ? `${MCP_CLIENT_TOOL_PREFIX}${name}`
-    : name;
-}
+export type McpToolDefinition = McpTool;
 
-export interface McpToolDefinition {
-  name: string;
-  description: string;
-  inputSchema: Record<string, any>;
-  annotations?: Record<string, any>;
-}
-
-export const CLI_BUILTIN_TOOLS: McpToolDefinition[] = [
-  {
-    name: "shadowclaw_server_list_clients",
-    description:
-      "List connected browser and Electron clients, including device type, ID, and active capabilities.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-  },
-  {
-    name: "shadowclaw_server_send_message",
-    description:
-      "Send a message or prompt to a connected ShadowClaw client's active AI orchestrator queue.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        text: {
-          type: "string",
-          description: "The prompt or message text to dispatch.",
-        },
-        clientId: {
-          type: "string",
-          description:
-            "Target client ID. If omitted, targets the first available connected client.",
-        },
-        groupId: {
-          type: "string",
-          description:
-            "Target conversation group ID (e.g. 'br:main'). If omitted, targets the active group.",
-        },
-      },
-      required: ["text"],
-    },
-  },
-  {
-    name: "shadowclaw_server_read_state",
-    description:
-      "Read the current orchestrator state, active group ID, and capabilities from a connected client.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        clientId: {
-          type: "string",
-          description: "Target client ID.",
-        },
-      },
-    },
-  },
-  {
-    name: "shadowclaw_server_list_tasks",
-    description:
-      "List scheduled background tasks configured on a connected client.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        clientId: { type: "string" },
-        groupId: { type: "string" },
-      },
-    },
-  },
-  {
-    name: "shadowclaw_server_set_active_client",
-    description:
-      "Set the active default connected client used when no clientId is explicitly provided in tool calls.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        clientId: {
-          type: "string",
-          description:
-            "Target client ID (or index '0', '1', prefix, or device label) to make active.",
-        },
-      },
-      required: ["clientId"],
-    },
-  },
-  {
-    name: "shadowclaw_server_manage_backup",
-    description:
-      "Trigger or manage OPFS workspace backups for a connected client (trigger, list, or delete).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        action: {
-          type: "string",
-          enum: ["trigger", "list", "delete"],
-          default: "trigger",
-        },
-        clientId: { type: "string" },
-        backupId: { type: "string" },
-        groupId: { type: "string" },
-      },
-    },
-  },
-  {
-    name: "shadowclaw_server_status",
-    description:
-      "Query ShadowClaw Node server status, version, and active client count.",
-    inputSchema: {
-      type: "object",
-      properties: {},
-    },
-  },
-  {
-    name: "shadowclaw_server_send_notification",
-    description:
-      "Broadcast an OS-level push notification to subscribed devices via Web Push (VAPID), or send to a specific registered client. Works even when the client browser tab is closed, asleep, or running in the background.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        title: {
-          type: "string",
-          description: "Notification title (default: 'ShadowClaw').",
-        },
-        body: {
-          type: "string",
-          description: "The notification body message text.",
-        },
-        clientId: {
-          type: "string",
-          description:
-            "Target client ID, prefix, or device label of a specific client that has registered in the past. If omitted, broadcasts to all subscribed devices.",
-        },
-      },
-      required: ["body"],
-    },
-  },
-];
+export const CLI_BUILTIN_TOOLS: McpToolDefinition[] = BUILTIN_TOOL_DEFINITIONS;
 
 export interface CliMcpEngineOptions extends ControlClientOptions {
   client?: any;
@@ -217,38 +82,12 @@ export function createCliMcpEngine(
     const candidate = requestedId || activeClientId || targetClientId;
     try {
       const clients = await client.listClients();
-      if (Array.isArray(clients) && clients.length > 0) {
-        if (candidate && typeof candidate === "string" && candidate.trim()) {
-          const trimmed = candidate.trim();
-          const exact = clients.find(
-            (c: any) => (c.clientId || c.id) === trimmed,
-          );
-          if (exact) return exact.clientId || exact.id;
-
-          const idx = parseInt(trimmed, 10);
-          if (!isNaN(idx) && idx >= 0 && idx < clients.length) {
-            return clients[idx].clientId || clients[idx].id;
-          }
-
-          const prefix = clients.find(
-            (c: any) =>
-              (c.clientId || c.id || "").startsWith(trimmed) ||
-              (c.clientId || "").replace(/^client-/, "").startsWith(trimmed),
-          );
-          if (prefix) return prefix.clientId || prefix.id;
-
-          const byLabel = clients.find((c: any) =>
-            c.deviceLabel?.toLowerCase().includes(trimmed.toLowerCase()),
-          );
-          if (byLabel) return byLabel.clientId || byLabel.id;
-
-          return trimmed;
-        }
-
-        return clients[0].clientId || clients[0].id || "";
-      }
+      return resolveTargetClientId(
+        { getConnectedClients: () => clients },
+        candidate,
+      );
     } catch (_) {}
-    return typeof candidate === "string" ? candidate.trim() : "";
+    return resolveTargetClientId(client, candidate);
   }
 
   const toolSupportingClientsMap = new Map<string, any[]>();

@@ -19,6 +19,7 @@ Run instantly without cloning the repo:
 - `npx shadow-claw agent init <dir>` — Scaffold a headless agent workspace with interactive model selection and prewarming.
 - `npx shadow-claw init <dir>` — Scaffold a custom template or knowledge hub.
 - `npx shadow-claw server` — Run headless 24/7 backend services (task scheduler, MCP, REST API).
+- `npx shadow-claw server --a2a` — Expose the A2A v1.0 agent card, JSON-RPC, and SSE endpoints.
 - `npx shadow-claw send "prompt"` — Dispatch prompts to connected clients or peer agents directly from your terminal (supports -f, --file).
 - `npx shadow-claw send-file <file> --client <peerId>` — Transfer files directly to connected peers over WebRTC with optional prompt instructions.
 - `npx shadow-claw mcp` — Run the official Stateless Model Context Protocol (2026-07-28) server over STDIO or HTTP.
@@ -74,7 +75,7 @@ When to look elsewhere:
 
 ## Optional
 
-- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): CLI, control plane, MCP server, backup, Shell, VM, git, channels, tools, declarative tools, Remote Tool & Skill Importer, Agent Skills, providers, local models & Hugging Face, built-in AI Task APIs, notifications, Electron, reactive UI, component library, Storybook, crypto, WebMCP, Web Share Target, and more
+- [Subsystems](https://xt-ml.github.io/shadow-claw/docs/README.md#subsystems): CLI, control plane, MCP server, backup, Shell, VM, git, channels, tools, declarative tools, Remote Tool & Skill Importer, Agent Skills, providers, local models & Hugging Face, built-in AI Task APIs, notifications, Electron, reactive UI, component library, Storybook, modular library exports, shared utilities, crypto, WebMCP, Web Share Target, and more
 - [Guides](https://xt-ml.github.io/shadow-claw/docs/README.md#guides): Adding a provider/tool/channel/page/shell command, server development configuration, and publishing to GitHub Pages
 - [Decisions](https://xt-ml.github.io/shadow-claw/docs/README.md#decisions): ADRs explaining bundled TypeScript, Signals, worker-isolated runtime, IndexedDB/OPFS storage, and headless CLI agent participant
 - [e2e/README.md](https://xt-ml.github.io/shadow-claw/e2e/README.md): E2E & integration test architecture

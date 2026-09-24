@@ -1,6 +1,6 @@
 import { CONFIG_KEYS } from "../../../config/config.js";
 import { setConfig } from "../../../db/setConfig.js";
-import { normalizeStringList } from "./normalizeStringList.js";
+import { normalizeStringList } from "../../../utils/normalizeStringList.js";
 import { getChannelEnabled } from "./operations/channel.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";

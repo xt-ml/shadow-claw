@@ -1,7 +1,7 @@
 import { ShadowClawDatabase } from "../../../../db/db.js";
 import { groupFileExists } from "../../../../storage/groupFileExists.js";
 import { ulid } from "../../../../utils/ulid.js";
-import { sanitizeFilename } from "./sanitizeFilename.js";
+import { sanitizeFilename } from "../../../../utils/filename.js";
 
 export async function resolveUniqueAttachmentPath(
   db: ShadowClawDatabase,

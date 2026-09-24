@@ -63,7 +63,7 @@ import {
   formatTimestamp,
   handleSpecialLinkNavigation,
 } from "../../utils/utils.js";
-import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
+import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
 import {
   isNativePromptApiSupported,
   isPromptApiPotentiallySupported,

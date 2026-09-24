@@ -20,13 +20,10 @@ import {
 import { listRemoteMcpConnections } from "../../../subsystems/mcp/mcp-connections.js";
 
 import { asEmailAttachmentInputs } from "./utils/asEmailAttachmentInputs.js";
-import { asNumber } from "./utils/asNumber.js";
-import { asStringArray } from "./utils/asStringArray.js";
-import { asUidArray } from "./utils/asUidArray.js";
-import { base64ToBytes } from "./utils/base64ToBytes.js";
-import { basename } from "./utils/basename.js";
-import { bytesToBase64 } from "./utils/bytesToBase64.js";
-import { guessMimeTypeFromFilename } from "./utils/guessMimeTypeFromFilename.js";
+import { asNumber, asStringArray, asUidArray } from "../../../utils/coerce.js";
+import { base64ToBytes, bytesToBase64 } from "../../../utils/base64.js";
+import { basename } from "../../../utils/filename.js";
+import { guessMimeTypeFromFilename } from "../../../utils/mime.js";
 import { resolveIntegrationEmailAuth } from "./utils/resolveIntegrationEmailAuth.js";
 import { resolveUniqueAttachmentPath } from "./utils/resolveUniqueAttachmentPath.js";
 

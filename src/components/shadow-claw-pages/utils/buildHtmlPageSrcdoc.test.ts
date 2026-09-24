@@ -62,4 +62,50 @@ describe("buildHtmlPageSrcdoc", () => {
       '<link rel="stylesheet" href="/pages/main/theme.css">',
     );
   });
+
+  it("does not inject custom element scripts when page content does not contain custom elements", async () => {
+    setAllowedCustomElements(["block-garden"]);
+    const script = document.createElement("script");
+    script.id = "shadow-claw-site-config";
+    script.type = "application/json";
+    script.textContent = JSON.stringify({
+      customElements: {
+        allowedElements: ["block-garden"],
+        scripts: ["pages/main/block-garden.js"],
+      },
+    });
+    document.head.appendChild(script);
+
+    const html = await buildHtmlPageSrcdoc({
+      content: "<p>Just plain text without custom elements</p>",
+      filePath: "index.html",
+      groupId: "main",
+      origin: "http://localhost:3000",
+    });
+
+    expect(html).not.toContain('<script type="module" src="/block-garden.js"');
+  });
+
+  it("injects custom element scripts when page content contains custom elements", async () => {
+    setAllowedCustomElements(["block-garden"]);
+    const script = document.createElement("script");
+    script.id = "shadow-claw-site-config";
+    script.type = "application/json";
+    script.textContent = JSON.stringify({
+      customElements: {
+        allowedElements: ["block-garden"],
+        scripts: ["pages/main/block-garden.js"],
+      },
+    });
+    document.head.appendChild(script);
+
+    const html = await buildHtmlPageSrcdoc({
+      content: '<block-garden id="game"></block-garden>',
+      filePath: "index.html",
+      groupId: "main",
+      origin: "http://localhost:3000",
+    });
+
+    expect(html).toContain('src="/block-garden.js"');
+  });
 });

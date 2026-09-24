@@ -1,4 +1,5 @@
 import { isHeadlessMode } from "../../../config/headless.js";
+import { executeNativeAiTask } from "../../../subsystems/providers/executeNativeAiTask.js";
 import { ulid } from "../../../utils/ulid.js";
 import { post } from "../../utils/post.js";
 
@@ -33,8 +34,6 @@ async function requestNativeTask(
   }
 
   if (isHeadlessMode()) {
-    const { executeNativeAiTask } =
-      await import("../../../subsystems/providers/executeNativeAiTask.js");
     const invokeContext = context?.invokeContext;
     return await executeNativeAiTask({
       taskType,

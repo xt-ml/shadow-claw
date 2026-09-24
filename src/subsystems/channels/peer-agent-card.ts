@@ -94,7 +94,7 @@ export function createGetAgentCardRequest(): A2AJsonRpcRequest {
  * Create a GetAgentCard JSON-RPC response with the local agent card.
  */
 export function createGetAgentCardResponse(
-  requestId: string,
+  requestId: string | number | null,
   card: AgentCard,
 ): A2AJsonRpcResponse {
   return {

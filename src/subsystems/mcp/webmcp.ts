@@ -49,6 +49,37 @@ function ensurePolyfill(): void {
 }
 
 /**
+ * Returns true when the `@mcp-b/webmcp-polyfill` v5.1.0+ security gate will
+ * allow `registerTool()` to proceed.
+ *
+ * The polyfill's `validateOriginAgentCluster()` throws `DOMException("",
+ * "SecurityError")` when `globalThis.originAgentCluster === false` (and the
+ * protocol is not `file:`). Chrome automatically origin-isolates HTTPS pages so
+ * this is never an issue there. Firefox ≥ 138 exposes `originAgentCluster` but
+ * returns `false` unless the server sends `Origin-Agent-Cluster: ?1` — a
+ * header that GitHub Pages does not set. This check lets us detect Firefox
+ * (and any other browser with the same behaviour) early and skip registration
+ * with a single descriptive warning instead of N per-tool `DOMException`s.
+ *
+ * Native mode bypasses the polyfill entirely and is unaffected.
+ */
+function isOriginAgentClusterCompatible(): boolean {
+  // If the property is absent the browser is old enough not to enforce the
+  // check — allow registration to proceed.
+  if (typeof globalThis.originAgentCluster === "undefined") {
+    return true;
+  }
+
+  // file: protocol is explicitly exempt in the polyfill guard.
+  const protocol = globalThis.location?.protocol;
+  if (protocol === "file:") {
+    return true;
+  }
+
+  return globalThis.originAgentCluster !== false;
+}
+
+/**
  * Access the WebMCP ModelContext API.
  *
  * In polyfill mode: installs the `@mcp-b/webmcp-polyfill` which surfaces
@@ -416,6 +447,25 @@ export async function registerWebMcpTools(
     return true;
   }
 
+  // In polyfill mode, the polyfill's validateOriginAgentCluster() guard throws
+  // DOMException("", "SecurityError") when originAgentCluster === false.
+  // Chrome automatically origin-isolates HTTPS pages so this never occurs
+  // there, but Firefox returns false unless the server sends
+  // Origin-Agent-Cluster: ?1 (a header GitHub Pages does not set).
+  // Pre-checking here avoids N identical per-tool DOMException spam and
+  // surfaces a single, actionable warning instead.
+  if (currentMode === "polyfill" && !isOriginAgentClusterCompatible()) {
+    console.warn(
+      "WebMCP polyfill registration skipped: this browser reports " +
+        "originAgentCluster = false. The @mcp-b/webmcp-polyfill v5.1.0+ " +
+        "requires an origin-keyed agent cluster (Chrome enforces this " +
+        "automatically for HTTPS; Firefox requires the server to send " +
+        "Origin-Agent-Cluster: ?1). WebMCP tools are unavailable in this " +
+        "browser session.",
+    );
+    return false;
+  }
+
   const modelContext = getModelContextApi();
   if (!modelContext) {
     return false;
@@ -530,11 +580,30 @@ export async function registerWebMcpTools(
         (err.message.includes("already registered") ||
           err.message.includes("Duplicate tool name"));
 
-      if (!isDuplicate) {
-        console.error(`Failed to register tool ${def.name}:`, err);
-
-        throw err;
+      if (isDuplicate) {
+        continue;
       }
+
+      // A SecurityError DOMException (typically with an empty message) means
+      // the polyfill's origin-agent-cluster or permissions-policy gate
+      // rejected the registration. This is not recoverable for this session —
+      // bail out cleanly rather than spamming one error per remaining tool.
+      const isSecurityError =
+        err instanceof DOMException && err.name === "SecurityError";
+
+      if (isSecurityError) {
+        console.warn(
+          "WebMCP tool registration aborted: browser security policy " +
+            "(SecurityError) prevented registration. Remaining tools will " +
+            "not be registered for this session.",
+          err,
+        );
+        return false;
+      }
+
+      console.error(`Failed to register tool ${def.name}:`, err);
+
+      throw err;
     }
   }
 

@@ -4,7 +4,7 @@ import { inferAttachmentMimeType } from "../../../content/message-attachments.js
 import { getConfig } from "../../../db/getConfig.js";
 import { readGroupFileBytes } from "../../../storage/readGroupFileBytes.js";
 import { loadChannelEnabled } from "./operations/channel.js";
-import { parseStoredStringList } from "./parseStoredStringList.js";
+import { parseStoredStringList } from "../../../utils/parseStoredStringList.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
 import type { Orchestrator } from "../orchestrator.js";

@@ -1,6 +1,4 @@
 import { CONFIG_KEYS, FETCH_MAX_RESPONSE } from "../../config/config.js";
-import { isHeadlessMode, BROWSER_ONLY_TOOLS } from "../../config/headless.js";
-
 import { getConfig } from "../../db/getConfig.js";
 import { ShadowClawDatabase } from "../../db/types.js";
 
@@ -77,7 +75,6 @@ import { executeSearchFiles } from "../tools/workspace/search-files.js";
 import { executeSendFile } from "../tools/workspace/send-file.js";
 import { executeUpdateMemory } from "../tools/workspace/update-memory.js";
 import { executeWriteFile } from "../tools/workspace/write-file.js";
-import { findDeclarativeTool } from "../../subsystems/tools/declarative.js";
 import { executeActivateSkill } from "../../subsystems/skills/activateSkill.js";
 import { toolsStore } from "../../stores/tools.js";
 import {
@@ -95,6 +92,8 @@ import {
   RETRYABLE_STATUS_CODES,
   withRetry,
 } from "./withRetry.js";
+import { runToolGuards } from "./guards.js";
+import { executeDeclarativeTool } from "./declarativeToolExecutor.js";
 
 import type { ToolResultContentBlock } from "../../content/types.js";
 import type { SubagentInvokeContext } from "../tools/spawn-subagent/spawn-subagent.js";
@@ -115,27 +114,357 @@ async function loadGitSubsystem(): Promise<GitSubsystem> {
   return gitSubsystemPromise;
 }
 
-function toAllowedToolNameSet(
-  allowedTools:
-    | ReadonlyArray<string | { name?: unknown } | undefined>
-    | undefined,
-): Set<string> | null {
-  if (!Array.isArray(allowedTools)) {
-    return null;
-  }
+export type ExecuteToolOptions = {
+  allowedTools?: ReadonlyArray<string | { name?: unknown }>;
+  invokeContext?: SubagentInvokeContext;
+  isScheduledTask?: boolean;
+  isTaskExecution?: boolean;
+  declarativeDepth?: number;
+};
 
-  const names = allowedTools
-    .map((tool) =>
-      typeof tool === "string"
-        ? tool
-        : typeof tool?.name === "string"
-          ? tool.name
-          : null,
-    )
-    .filter(Boolean);
+type ToolHandler = (
+  db: ShadowClawDatabase,
+  input: Record<string, any>,
+  groupId: string,
+  options: ExecuteToolOptions,
+) => Promise<ToolResult> | ToolResult;
 
-  return new Set(names);
+async function executeGitToolDispatcher(
+  db: ShadowClawDatabase,
+  name: string,
+  input: Record<string, any>,
+  groupId: string,
+): Promise<ToolResult> {
+  const git = await loadGitSubsystem();
+  return await executeGitTool(db, name, input, groupId, {
+    configKeys: {
+      GIT_CORS_PROXY: CONFIG_KEYS.GIT_CORS_PROXY,
+      GIT_PROXY_URL: CONFIG_KEYS.GIT_PROXY_URL,
+      GIT_AUTHOR_NAME: CONFIG_KEYS.GIT_AUTHOR_NAME,
+      GIT_AUTHOR_EMAIL: CONFIG_KEYS.GIT_AUTHOR_EMAIL,
+    },
+    getConfig,
+    getGroupDir,
+    getProxyUrl: git.getProxyUrl,
+    getRemoteUrl: git.getRemoteUrl,
+    gitAdd: git.gitAdd,
+    gitBranch: git.gitBranch,
+    gitCheckout: git.gitCheckout,
+    gitClone: git.gitClone,
+    gitCommit: git.gitCommit,
+    gitConfig: git.gitConfig,
+    gitDeleteBranch: git.gitDeleteBranch,
+    gitDeleteRepo: git.gitDeleteRepo,
+    gitDiff: git.gitDiff,
+    gitFetch: git.gitFetch,
+    gitInit: git.gitInit,
+    gitListBranches: git.gitListBranches,
+    gitListRepos: git.gitListRepos,
+    gitListTags: git.gitListTags,
+    gitLog: git.gitLog,
+    gitMerge: git.gitMerge,
+    gitPull: git.gitPull,
+    gitPush: git.gitPush,
+    gitReadFileAtRef: git.gitReadFileAtRef,
+    gitRemote: git.gitRemote,
+    gitReset: git.gitReset,
+    gitShow: git.gitShow,
+    gitStatus: git.gitStatus,
+    gitTag: git.gitTag,
+    gitUnstage: git.gitUnstage,
+    readGroupFile,
+    resolveGitCredentials,
+  });
 }
+
+const TOOL_HANDLERS = new Map<string, ToolHandler>();
+
+// Basic filesystem / execution tools
+TOOL_HANDLERS.set("bash", (db, input, groupId) =>
+  executeBash(db, input, groupId),
+);
+TOOL_HANDLERS.set("read_file", (db, input, groupId) =>
+  executeReadFile(db, input, groupId),
+);
+TOOL_HANDLERS.set("open_file", (db, input, groupId) =>
+  executeOpenFile(db, input, groupId),
+);
+TOOL_HANDLERS.set("attach_file_to_chat", (db, input, groupId) =>
+  executeAttachFile(db, input, groupId),
+);
+TOOL_HANDLERS.set("send_file", (db, input, groupId) =>
+  executeSendFile(db, input, groupId),
+);
+TOOL_HANDLERS.set("write_file", (db, input, groupId) =>
+  executeWriteFile(db, input, groupId),
+);
+TOOL_HANDLERS.set("delete_file", (db, input, groupId) =>
+  executeDeleteFile(db, input, groupId),
+);
+TOOL_HANDLERS.set("move_file", (db, input, groupId) =>
+  executeMoveFile(db, input, groupId),
+);
+TOOL_HANDLERS.set("copy_file", (db, input, groupId) =>
+  executeCopyFile(db, input, groupId),
+);
+TOOL_HANDLERS.set("create_directory", (db, input, groupId) =>
+  executeCreateDirectory(db, input, groupId),
+);
+TOOL_HANDLERS.set("patch_file", (db, input, groupId) =>
+  executePatchFile(db, input, groupId),
+);
+TOOL_HANDLERS.set("list_files", (db, input, groupId) =>
+  executeListFiles(db, input, groupId),
+);
+TOOL_HANDLERS.set("manage_tools", (_db, input, groupId) =>
+  executeManageTools(input, groupId),
+);
+TOOL_HANDLERS.set("list_tool_profiles", (db) => executeListToolProfiles(db));
+TOOL_HANDLERS.set("fetch_url", (db, input, groupId) =>
+  executeFetchUrlTool(db, input, groupId, {
+    buildAuthHeaders,
+    fetchImpl: fetch,
+    fetchMaxResponse: FETCH_MAX_RESPONSE,
+    isRetryableFetchError,
+    post,
+    resolveGitCredentials,
+    resolveServiceCredentials,
+    retryableStatusCodes: RETRYABLE_STATUS_CODES,
+    stripHtml,
+    uploadGroupFile,
+    withRetry,
+  }),
+);
+TOOL_HANDLERS.set("fetch_file", (db, input, groupId) =>
+  executeFetchFileTool(db, input, groupId, {
+    buildAuthHeaders,
+    fetchImpl: fetch,
+    isRetryableFetchError,
+    post,
+    resolveGitCredentials,
+    resolveServiceCredentials,
+    retryableStatusCodes: RETRYABLE_STATUS_CODES,
+    uploadGroupFile,
+    withRetry,
+    writeGroupFile,
+  }),
+);
+TOOL_HANDLERS.set("update_memory", (db, input, groupId) =>
+  executeUpdateMemory(db, input, groupId),
+);
+TOOL_HANDLERS.set("create_task", (_db, input, groupId) =>
+  executeCreateTask(input, groupId),
+);
+TOOL_HANDLERS.set("javascript", (db, input) => executeJavascript(db, input));
+TOOL_HANDLERS.set("activate_skill", (db, input, groupId) =>
+  executeActivateSkill(db, input, groupId),
+);
+TOOL_HANDLERS.set("list_tasks", (db, _input, groupId) =>
+  executeListTasks(db, groupId),
+);
+TOOL_HANDLERS.set("update_task", (db, input, groupId) =>
+  executeUpdateTask(db, input, groupId),
+);
+TOOL_HANDLERS.set("enable_task", (db, input, groupId) =>
+  executeEnableTask(db, input, groupId),
+);
+TOOL_HANDLERS.set("disable_task", (db, input, groupId) =>
+  executeDisableTask(db, input, groupId),
+);
+TOOL_HANDLERS.set("delete_task", (_db, input, groupId) =>
+  executeDeleteTask(input, groupId),
+);
+TOOL_HANDLERS.set("run_task", (db, input, groupId) =>
+  executeRunTask(db, input, groupId),
+);
+TOOL_HANDLERS.set("clear_chat", (_db, _input, groupId) =>
+  executeClearChat(groupId),
+);
+TOOL_HANDLERS.set("show_toast", (_db, input) => executeShowToast(input));
+TOOL_HANDLERS.set("send_notification", (_db, input, groupId) =>
+  executeSendNotification(input, groupId),
+);
+TOOL_HANDLERS.set("create_room", (_db, input) => executeCreateRoom(input));
+TOOL_HANDLERS.set("invite_to_room", (_db, input, groupId) =>
+  executeInviteToRoom(input, groupId),
+);
+TOOL_HANDLERS.set("leave_room", (_db, input, groupId) =>
+  executeLeaveRoom(input, groupId),
+);
+TOOL_HANDLERS.set("list_room_members", (db, input, groupId) =>
+  executeListRoomMembers(db, input, groupId),
+);
+TOOL_HANDLERS.set("prompt_peer", (db, input, groupId) =>
+  executePromptPeer(db, input, groupId),
+);
+TOOL_HANDLERS.set("list_peers", (db, input, groupId) =>
+  executeListPeers(db, input, groupId),
+);
+
+// Email & integration tools
+const executeEmail = (
+  db: ShadowClawDatabase,
+  input: Record<string, any>,
+  groupId: string,
+) => executeManageEmailTool(db, input, groupId);
+TOOL_HANDLERS.set("manage_email", executeEmail);
+TOOL_HANDLERS.set("manage_integration", executeEmail);
+TOOL_HANDLERS.set("email_read_messages", (db, input, groupId) =>
+  executeTool(
+    db,
+    "manage_email",
+    { ...input, action: "read_messages" },
+    groupId,
+  ),
+);
+TOOL_HANDLERS.set("integration_read_messages", (db, input, groupId) =>
+  executeTool(
+    db,
+    "manage_email",
+    { ...input, action: "read_messages" },
+    groupId,
+  ),
+);
+TOOL_HANDLERS.set("email_send_message", (db, input, groupId) =>
+  executeTool(
+    db,
+    "manage_email",
+    { ...input, action: "send_message" },
+    groupId,
+  ),
+);
+TOOL_HANDLERS.set("integration_send_message", (db, input, groupId) =>
+  executeTool(
+    db,
+    "manage_email",
+    { ...input, action: "send_message" },
+    groupId,
+  ),
+);
+
+// Remote MCP tools
+TOOL_HANDLERS.set("remote_mcp_list_tools", (db, input, groupId) =>
+  executeRemoteMcpListTools(db, input, groupId, {
+    callRemoteMcpTool,
+    listRemoteMcpTools,
+    McpReauthRequiredError,
+    post,
+  }),
+);
+TOOL_HANDLERS.set("remote_mcp_call_tool", (db, input, groupId) =>
+  executeRemoteMcpCallTool(db, input, groupId, {
+    callRemoteMcpTool,
+    listRemoteMcpTools,
+    McpReauthRequiredError,
+    post,
+  }),
+);
+
+// Git tools (isomorphic-git)
+const GIT_TOOL_NAMES = [
+  "git_clone",
+  "git_checkout",
+  "git_branch",
+  "git_status",
+  "git_add",
+  "git_log",
+  "git_diff",
+  "git_branches",
+  "git_list_repos",
+  "git_delete_repo",
+  "git_commit",
+  "git_pull",
+  "git_push",
+  "git_merge",
+  "git_reset",
+  "git_fetch",
+  "git_read_file_at_ref",
+  "git_show",
+  "git_delete_branch",
+  "git_init",
+  "git_tag",
+  "git_remote",
+  "git_config",
+  "git_unstage",
+];
+for (const gitName of GIT_TOOL_NAMES) {
+  TOOL_HANDLERS.set(gitName, (db, input, groupId) =>
+    executeGitToolDispatcher(db, gitName, input, groupId),
+  );
+}
+
+// UI / auxiliary tools
+TOOL_HANDLERS.set("list_components", () => executeListComponents());
+TOOL_HANDLERS.set("render_component", (_db, input, groupId) =>
+  executeRenderComponent(input, groupId),
+);
+TOOL_HANDLERS.set("spawn_subagent", async (_db, input, groupId, options) => {
+  if (!options?.invokeContext) {
+    return "Error: spawn_subagent requires an active agent invocation context. This tool cannot be called directly.";
+  }
+  return await executeSpawnSubagentTool(input, groupId, options.invokeContext);
+});
+TOOL_HANDLERS.set("get_current_time", (_db, input) =>
+  executeGetCurrentTime(input),
+);
+TOOL_HANDLERS.set("search_files", (db, input, groupId) =>
+  executeSearchFiles(db, input, groupId, {
+    maxFileBytes: toolsStore.searchFilesMaxFileBytes,
+    maxFilesVisited: toolsStore.searchFilesMaxFilesVisited,
+    skipDirs: toolsStore.searchFilesSkipDirsSet,
+  }),
+);
+TOOL_HANDLERS.set("diff_files", (db, input, groupId) =>
+  executeDiffFiles(db, input, groupId),
+);
+TOOL_HANDLERS.set("ask_user", (_db, input, groupId) =>
+  executeAskUser(input, groupId),
+);
+TOOL_HANDLERS.set("web_search", (_db, input) => executeWebSearch(input));
+
+// Builtin AI tasks
+TOOL_HANDLERS.set("summarize_text", (db, input, groupId, options) =>
+  executeSummarizeText(input, groupId, {
+    db,
+    invokeContext: options?.invokeContext,
+  }),
+);
+TOOL_HANDLERS.set("write_text", (db, input, groupId, options) =>
+  executeWriteText(input, groupId, {
+    db,
+    invokeContext: options?.invokeContext,
+  }),
+);
+TOOL_HANDLERS.set("rewrite_text", (db, input, groupId, options) =>
+  executeRewriteText(input, groupId, {
+    db,
+    invokeContext: options?.invokeContext,
+  }),
+);
+TOOL_HANDLERS.set("proofread_text", (db, input, groupId, options) =>
+  executeProofreadText(input, groupId, {
+    db,
+    invokeContext: options?.invokeContext,
+  }),
+);
+TOOL_HANDLERS.set("detect_language", (db, input, groupId, options) =>
+  executeDetectLanguage(input, groupId, {
+    db,
+    invokeContext: options?.invokeContext,
+  }),
+);
+TOOL_HANDLERS.set("translate_text", (db, input, groupId, options) =>
+  executeTranslateText(input, groupId, {
+    db,
+    invokeContext: options?.invokeContext,
+  }),
+);
+TOOL_HANDLERS.set("embed_text", (db, input, groupId, options) =>
+  executeEmbedText(input, groupId, {
+    db,
+    invokeContext: options?.invokeContext,
+  }),
+);
 
 /**
  * Execute a tool
@@ -145,468 +474,27 @@ export async function executeTool(
   name: string,
   input: Record<string, any>,
   groupId: string,
-  options: {
-    allowedTools?: ReadonlyArray<string | { name?: unknown }>;
-    invokeContext?: SubagentInvokeContext;
-    isScheduledTask?: boolean;
-    isTaskExecution?: boolean;
-    declarativeDepth?: number;
-  } = {},
+  options: ExecuteToolOptions = {},
 ): Promise<ToolResult> {
   try {
-    // Re-validate the requested tool against the active profile. Generation-time
-    // constraints (JSON schema enums) are a hint, not a guarantee.
-    const allowedToolNames = toAllowedToolNameSet(options.allowedTools);
-    if (allowedToolNames && !allowedToolNames.has(name)) {
-      return `Tool "${name}" is not allowed in the current context. Do not call it again. Use one of the available tools or ask for help.`;
+    const guardError = runToolGuards(name, options);
+    if (guardError) {
+      return guardError;
     }
 
-    // Block run_task in any task execution context (scheduled OR manual) to
-    // prevent runaway self-triggering loops. run_task is only safe from the
-    // top-level agent conversation, not from within a task itself.
-    if (options.isScheduledTask || options.isTaskExecution) {
-      if (name === "run_task") {
-        return `Tool "run_task" cannot be called from within a task execution to prevent infinite loops.`;
-      }
+    const handler = TOOL_HANDLERS.get(name);
+    if (handler) {
+      return await handler(db, input, groupId, options);
     }
 
-    // Block task-mutation and notification tools during scheduled task execution
-    // to prevent infinite recursion (task → notification → task loops).
-    if (options.isScheduledTask) {
-      const BLOCKED_TOOLS = new Set([
-        "create_task",
-        "update_task",
-        "delete_task",
-        "enable_task",
-        "disable_task",
-        "send_notification",
-        "create_room",
-        "invite_to_room",
-        "leave_room",
-      ]);
-
-      if (BLOCKED_TOOLS.has(name)) {
-        return `Tool "${name}" is not allowed during scheduled task execution to prevent recursion.`;
-      }
-    }
-
-    if (isHeadlessMode() && BROWSER_ONLY_TOOLS.has(name)) {
-      return `Tool "${name}" is not available in headless CLI mode. It requires a browser UI.`;
-    }
-
-    switch (name) {
-      case "bash": {
-        return await executeBash(db, input, groupId);
-      }
-
-      case "read_file": {
-        return await executeReadFile(db, input, groupId);
-      }
-
-      case "open_file": {
-        return await executeOpenFile(db, input, groupId);
-      }
-
-      case "attach_file_to_chat": {
-        return await executeAttachFile(db, input, groupId);
-      }
-
-      case "send_file": {
-        return await executeSendFile(db, input, groupId);
-      }
-
-      case "write_file": {
-        return await executeWriteFile(db, input, groupId);
-      }
-
-      case "delete_file": {
-        return await executeDeleteFile(db, input, groupId);
-      }
-
-      case "move_file": {
-        return await executeMoveFile(db, input, groupId);
-      }
-
-      case "copy_file": {
-        return await executeCopyFile(db, input, groupId);
-      }
-
-      case "create_directory": {
-        return await executeCreateDirectory(db, input, groupId);
-      }
-
-      case "patch_file": {
-        return await executePatchFile(db, input, groupId);
-      }
-
-      case "list_files": {
-        return await executeListFiles(db, input, groupId);
-      }
-
-      case "manage_tools": {
-        return executeManageTools(input, groupId);
-      }
-
-      case "list_tool_profiles": {
-        return await executeListToolProfiles(db);
-      }
-
-      case "fetch_url": {
-        return await executeFetchUrlTool(db, input, groupId, {
-          buildAuthHeaders,
-          fetchImpl: fetch,
-          fetchMaxResponse: FETCH_MAX_RESPONSE,
-          isRetryableFetchError,
-          post,
-          resolveGitCredentials,
-          resolveServiceCredentials,
-          retryableStatusCodes: RETRYABLE_STATUS_CODES,
-          stripHtml,
-          uploadGroupFile,
-          withRetry,
-        });
-      }
-
-      case "fetch_file": {
-        return await executeFetchFileTool(db, input, groupId, {
-          buildAuthHeaders,
-          fetchImpl: fetch,
-          isRetryableFetchError,
-          post,
-          resolveGitCredentials,
-          resolveServiceCredentials,
-          retryableStatusCodes: RETRYABLE_STATUS_CODES,
-          uploadGroupFile,
-          withRetry,
-          writeGroupFile,
-        });
-      }
-
-      case "update_memory": {
-        return await executeUpdateMemory(db, input, groupId);
-      }
-
-      case "create_task": {
-        return executeCreateTask(input, groupId);
-      }
-
-      case "javascript": {
-        return await executeJavascript(db, input);
-      }
-
-      case "activate_skill": {
-        return await executeActivateSkill(db, input, groupId);
-      }
-
-      case "list_tasks": {
-        return await executeListTasks(db, groupId);
-      }
-
-      case "update_task": {
-        return await executeUpdateTask(db, input, groupId);
-      }
-
-      case "enable_task": {
-        return await executeEnableTask(db, input, groupId);
-      }
-
-      case "disable_task": {
-        return await executeDisableTask(db, input, groupId);
-      }
-
-      case "delete_task": {
-        return executeDeleteTask(input, groupId);
-      }
-
-      case "run_task": {
-        return await executeRunTask(db, input, groupId);
-      }
-
-      case "clear_chat": {
-        return executeClearChat(groupId);
-      }
-
-      case "show_toast": {
-        return executeShowToast(input);
-      }
-
-      case "send_notification": {
-        return executeSendNotification(input, groupId);
-      }
-
-      case "create_room": {
-        return executeCreateRoom(input);
-      }
-
-      case "invite_to_room": {
-        return executeInviteToRoom(input, groupId);
-      }
-
-      case "leave_room": {
-        return executeLeaveRoom(input, groupId);
-      }
-
-      case "list_room_members": {
-        return await executeListRoomMembers(db, input, groupId);
-      }
-
-      case "prompt_peer": {
-        return await executePromptPeer(db, input, groupId);
-      }
-
-      case "list_peers": {
-        return await executeListPeers(db, input, groupId);
-      }
-
-      case "manage_email":
-      case "manage_integration": {
-        return executeManageEmailTool(db, input, groupId);
-      }
-
-      case "email_read_messages":
-      case "integration_read_messages": {
-        return executeTool(
-          db,
-          "manage_email",
-          { ...input, action: "read_messages" },
-          groupId,
-        );
-      }
-
-      case "email_send_message":
-      case "integration_send_message": {
-        return executeTool(
-          db,
-          "manage_email",
-          { ...input, action: "send_message" },
-          groupId,
-        );
-      }
-
-      case "remote_mcp_list_tools": {
-        return await executeRemoteMcpListTools(db, input, groupId, {
-          callRemoteMcpTool,
-          listRemoteMcpTools,
-          McpReauthRequiredError,
-          post,
-        });
-      }
-
-      case "remote_mcp_call_tool": {
-        return await executeRemoteMcpCallTool(db, input, groupId, {
-          callRemoteMcpTool,
-          listRemoteMcpTools,
-          McpReauthRequiredError,
-          post,
-        });
-      }
-
-      // ── Git tools (isomorphic-git) ───────────────────────────────
-      case "git_clone":
-      case "git_checkout":
-      case "git_branch":
-      case "git_status":
-      case "git_add":
-      case "git_log":
-      case "git_diff":
-      case "git_branches":
-      case "git_list_repos":
-      case "git_delete_repo":
-      case "git_commit":
-      case "git_pull":
-      case "git_push":
-      case "git_merge":
-      case "git_reset":
-      case "git_fetch":
-      case "git_read_file_at_ref":
-      case "git_show":
-      case "git_delete_branch":
-      case "git_init":
-      case "git_tag":
-      case "git_remote":
-      case "git_config":
-      case "git_unstage": {
-        const git = await loadGitSubsystem();
-
-        return await executeGitTool(db, name, input, groupId, {
-          configKeys: {
-            GIT_CORS_PROXY: CONFIG_KEYS.GIT_CORS_PROXY,
-            GIT_PROXY_URL: CONFIG_KEYS.GIT_PROXY_URL,
-            GIT_AUTHOR_NAME: CONFIG_KEYS.GIT_AUTHOR_NAME,
-            GIT_AUTHOR_EMAIL: CONFIG_KEYS.GIT_AUTHOR_EMAIL,
-          },
-          getConfig,
-          getGroupDir,
-          getProxyUrl: git.getProxyUrl,
-          getRemoteUrl: git.getRemoteUrl,
-          gitAdd: git.gitAdd,
-          gitBranch: git.gitBranch,
-          gitCheckout: git.gitCheckout,
-          gitClone: git.gitClone,
-          gitCommit: git.gitCommit,
-          gitConfig: git.gitConfig,
-          gitDeleteBranch: git.gitDeleteBranch,
-          gitDeleteRepo: git.gitDeleteRepo,
-          gitDiff: git.gitDiff,
-          gitFetch: git.gitFetch,
-          gitInit: git.gitInit,
-          gitListBranches: git.gitListBranches,
-          gitListRepos: git.gitListRepos,
-          gitListTags: git.gitListTags,
-          gitLog: git.gitLog,
-          gitMerge: git.gitMerge,
-          gitPull: git.gitPull,
-          gitPush: git.gitPush,
-          gitReadFileAtRef: git.gitReadFileAtRef,
-          gitRemote: git.gitRemote,
-          gitReset: git.gitReset,
-          gitShow: git.gitShow,
-          gitStatus: git.gitStatus,
-          gitTag: git.gitTag,
-          gitUnstage: git.gitUnstage,
-          readGroupFile,
-          resolveGitCredentials,
-        });
-      }
-
-      case "list_components": {
-        return executeListComponents();
-      }
-
-      case "render_component": {
-        return executeRenderComponent(input, groupId);
-      }
-
-      case "spawn_subagent": {
-        if (!options.invokeContext) {
-          return "Error: spawn_subagent requires an active agent invocation context. This tool cannot be called directly.";
-        }
-
-        return await executeSpawnSubagentTool(
-          input,
-          groupId,
-          options.invokeContext,
-        );
-      }
-
-      case "get_current_time": {
-        return executeGetCurrentTime(input);
-      }
-
-      case "search_files": {
-        return await executeSearchFiles(db, input, groupId, {
-          maxFileBytes: toolsStore.searchFilesMaxFileBytes,
-          maxFilesVisited: toolsStore.searchFilesMaxFilesVisited,
-          skipDirs: toolsStore.searchFilesSkipDirsSet,
-        });
-      }
-
-      case "diff_files": {
-        return await executeDiffFiles(db, input, groupId);
-      }
-
-      case "ask_user": {
-        return await executeAskUser(input, groupId);
-      }
-
-      case "web_search": {
-        return await executeWebSearch(input);
-      }
-
-      case "summarize_text": {
-        return await executeSummarizeText(input, groupId, {
-          db,
-          invokeContext: options?.invokeContext,
-        });
-      }
-
-      case "write_text": {
-        return await executeWriteText(input, groupId, {
-          db,
-          invokeContext: options?.invokeContext,
-        });
-      }
-
-      case "rewrite_text": {
-        return await executeRewriteText(input, groupId, {
-          db,
-          invokeContext: options?.invokeContext,
-        });
-      }
-
-      case "proofread_text": {
-        return await executeProofreadText(input, groupId, {
-          db,
-          invokeContext: options?.invokeContext,
-        });
-      }
-
-      case "detect_language": {
-        return await executeDetectLanguage(input, groupId, {
-          db,
-          invokeContext: options?.invokeContext,
-        });
-      }
-
-      case "translate_text": {
-        return await executeTranslateText(input, groupId, {
-          db,
-          invokeContext: options?.invokeContext,
-        });
-      }
-
-      case "embed_text": {
-        return await executeEmbedText(input, groupId, {
-          db,
-          invokeContext: options?.invokeContext,
-        });
-      }
-
-      default: {
-        const declarativeTool = await findDeclarativeTool(db, groupId, name);
-        if (!declarativeTool) {
-          return `Unknown tool: ${name}`;
-        }
-
-        const declarativeDepth = options.declarativeDepth || 0;
-        if (declarativeDepth >= 8) {
-          return `Tool error (${name}): declarative tool nesting limit exceeded.`;
-        }
-
-        if (declarativeTool.execution.type === "tool") {
-          const target = declarativeTool.execution.name;
-          if (!target) {
-            return `Tool error (${name}): declarative tool target is missing.`;
-          }
-
-          return await executeTool(
-            db,
-            target,
-            declarativeTool.execution.input
-              ? { ...input, ...declarativeTool.execution.input }
-              : input,
-            groupId,
-            { ...options, declarativeDepth: declarativeDepth + 1 },
-          );
-        }
-
-        if (declarativeTool.execution.type === "bash") {
-          return await executeBash(
-            db,
-            {
-              command: declarativeTool.execution.command,
-              stdin: JSON.stringify(input),
-            },
-            groupId,
-          );
-        }
-
-        return await executeJavascript(db, {
-          code: declarativeTool.execution.code,
-          data: JSON.stringify(input),
-        });
-      }
-    }
+    return await executeDeclarativeTool(
+      db,
+      name,
+      input,
+      groupId,
+      options,
+      executeTool,
+    );
   } catch (err) {
     return `Tool error (${name}): ${err instanceof Error ? err.message : String(err)}`;
   }

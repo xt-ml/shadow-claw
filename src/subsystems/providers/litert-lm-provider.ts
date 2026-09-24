@@ -63,9 +63,9 @@ let liteRtEnginePromiseModelId: string | null = null;
 
 import {
   DEFAULT_CHUNK_SIZE,
-  loadModelStream,
   type ModelProgressCallback as LiteRtProgressCallback,
-} from "./utils/index.js";
+} from "./utils/types.js";
+import { loadModelStream } from "./utils/loadModelStream.js";
 
 /**
  * Persistent Cache Storage bucket for downloaded `.litertlm` model weights.

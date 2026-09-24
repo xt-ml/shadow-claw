@@ -254,126 +254,72 @@ const commonResolve = (platform = "browser", extraPlugins = []) => {
   };
 };
 
-export const libraryEntries = {
-  index: "src/index.ts",
-  "components/index": "src/components/index.ts",
-  "components/shadow-claw-element": "src/components/shadow-claw-element.ts",
-  "components/shadow-claw-card":
-    "src/components/common/shadow-claw-card/shadow-claw-card.ts",
-  "components/common/shadow-claw-card":
-    "src/components/common/shadow-claw-card/shadow-claw-card.ts",
-  "components/shadow-claw-actions":
-    "src/components/common/shadow-claw-actions/shadow-claw-actions.ts",
-  "components/common/shadow-claw-actions":
-    "src/components/common/shadow-claw-actions/shadow-claw-actions.ts",
-  "components/shadow-claw-empty-state":
-    "src/components/common/shadow-claw-empty-state/shadow-claw-empty-state.ts",
-  "components/common/shadow-claw-empty-state":
-    "src/components/common/shadow-claw-empty-state/shadow-claw-empty-state.ts",
-  "components/shadow-claw-page-header-action-button":
-    "src/components/common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.ts",
-  "components/common/shadow-claw-page-header-action-button":
-    "src/components/common/shadow-claw-page-header-action-button/shadow-claw-page-header-action-button.ts",
-  "components/shadow-claw-provider-model-picker":
-    "src/components/common/shadow-claw-provider-model-picker/shadow-claw-provider-model-picker.ts",
-  "components/common/shadow-claw-provider-model-picker":
-    "src/components/common/shadow-claw-provider-model-picker/shadow-claw-provider-model-picker.ts",
-  "components/shadow-claw-provider-module-settings":
-    "src/components/common/shadow-claw-provider-module-settings/shadow-claw-provider-module-settings.ts",
-  "components/common/shadow-claw-provider-module-settings":
-    "src/components/common/shadow-claw-provider-module-settings/shadow-claw-provider-module-settings.ts",
-  "components/shadow-claw-a2ui":
-    "src/components/shadow-claw-a2ui/shadow-claw-a2ui.ts",
-  "components/shadow-claw-a2ui-interceptor":
-    "src/components/shadow-claw-a2ui-interceptor/shadow-claw-a2ui-interceptor.ts",
-  "components/shadow-claw-channels":
-    "src/components/shadow-claw-channels/shadow-claw-channels.ts",
-  "components/shadow-claw-chat":
-    "src/components/shadow-claw-chat/shadow-claw-chat.ts",
-  "components/shadow-claw-conversations":
-    "src/components/shadow-claw-conversations/shadow-claw-conversations.ts",
-  "components/shadow-claw-dialog":
-    "src/components/shadow-claw-dialog/shadow-claw-dialog.ts",
-  "components/shadow-claw-file-viewer":
-    "src/components/shadow-claw-file-viewer/shadow-claw-file-viewer.ts",
-  "components/shadow-claw-files":
-    "src/components/shadow-claw-files/shadow-claw-files.ts",
-  "components/shadow-claw-page-header":
-    "src/components/shadow-claw-page-header/shadow-claw-page-header.ts",
-  "components/shadow-claw-pages":
-    "src/components/shadow-claw-pages/shadow-claw-pages.ts",
-  "components/shadow-claw-pdf-viewer":
-    "src/components/shadow-claw-pdf-viewer/shadow-claw-pdf-viewer.ts",
-  "components/shadow-claw-settings":
-    "src/components/shadow-claw-settings/shadow-claw-settings.ts",
-  "components/shadow-claw-tasks":
-    "src/components/shadow-claw-tasks/shadow-claw-tasks.ts",
-  "components/shadow-claw-terminal":
-    "src/components/shadow-claw-terminal/shadow-claw-terminal.ts",
-  "components/shadow-claw-toast":
-    "src/components/shadow-claw-toast/shadow-claw-toast.ts",
-  "components/shadow-claw-tools":
-    "src/components/shadow-claw-tools/shadow-claw-tools.ts",
-  "components/shadow-claw": "src/components/shadow-claw/shadow-claw.ts",
-  "components/shadow-claw-accounts":
-    "src/components/settings/shadow-claw-accounts/shadow-claw-accounts.ts",
-  "components/settings/shadow-claw-accounts":
-    "src/components/settings/shadow-claw-accounts/shadow-claw-accounts.ts",
-  "components/shadow-claw-channel-config":
-    "src/components/settings/shadow-claw-channel-config/shadow-claw-channel-config.ts",
-  "components/settings/shadow-claw-channel-config":
-    "src/components/settings/shadow-claw-channel-config/shadow-claw-channel-config.ts",
-  "components/shadow-claw-control-plane":
-    "src/components/settings/shadow-claw-control-plane/shadow-claw-control-plane.ts",
-  "components/settings/shadow-claw-control-plane":
-    "src/components/settings/shadow-claw-control-plane/shadow-claw-control-plane.ts",
-  "components/shadow-claw-git":
-    "src/components/settings/shadow-claw-git/shadow-claw-git.ts",
-  "components/settings/shadow-claw-git":
-    "src/components/settings/shadow-claw-git/shadow-claw-git.ts",
-  "components/shadow-claw-integrations":
-    "src/components/settings/shadow-claw-integrations/shadow-claw-integrations.ts",
-  "components/settings/shadow-claw-integrations":
-    "src/components/settings/shadow-claw-integrations/shadow-claw-integrations.ts",
-  "components/shadow-claw-llm":
-    "src/components/settings/shadow-claw-llm/shadow-claw-llm.ts",
-  "components/settings/shadow-claw-llm":
-    "src/components/settings/shadow-claw-llm/shadow-claw-llm.ts",
-  "components/shadow-claw-mcp-remote":
-    "src/components/settings/shadow-claw-mcp-remote/shadow-claw-mcp-remote.ts",
-  "components/settings/shadow-claw-mcp-remote":
-    "src/components/settings/shadow-claw-mcp-remote/shadow-claw-mcp-remote.ts",
-  "components/shadow-claw-networking":
-    "src/components/settings/shadow-claw-networking/shadow-claw-networking.ts",
-  "components/settings/shadow-claw-networking":
-    "src/components/settings/shadow-claw-networking/shadow-claw-networking.ts",
-  "components/shadow-claw-notifications":
-    "src/components/settings/shadow-claw-notifications/shadow-claw-notifications.ts",
-  "components/settings/shadow-claw-notifications":
-    "src/components/settings/shadow-claw-notifications/shadow-claw-notifications.ts",
-  "components/shadow-claw-peerjs":
-    "src/components/settings/shadow-claw-peerjs/shadow-claw-peerjs.ts",
-  "components/settings/shadow-claw-peerjs":
-    "src/components/settings/shadow-claw-peerjs/shadow-claw-peerjs.ts",
-  "components/shadow-claw-storage":
-    "src/components/settings/shadow-claw-storage/shadow-claw-storage.ts",
-  "components/settings/shadow-claw-storage":
-    "src/components/settings/shadow-claw-storage/shadow-claw-storage.ts",
-  "components/shadow-claw-task-server":
-    "src/components/settings/shadow-claw-task-server/shadow-claw-task-server.ts",
-  "components/settings/shadow-claw-task-server":
-    "src/components/settings/shadow-claw-task-server/shadow-claw-task-server.ts",
-  "components/shadow-claw-webvm":
-    "src/components/settings/shadow-claw-webvm/shadow-claw-webvm.ts",
-  "components/settings/shadow-claw-webvm":
-    "src/components/settings/shadow-claw-webvm/shadow-claw-webvm.ts",
-  "utils/index": "src/utils/index.ts",
-  "utils/base64": "src/utils/base64.ts",
-  "utils/jsonPatch": "src/utils/jsonPatch.ts",
-  "utils/namespacedStorage": "src/utils/namespacedStorage.ts",
-  "utils/ulid": "src/utils/ulid.ts",
-  "utils/utils": "src/utils/utils.ts",
-};
+/**
+ * Automatically discovers library entry points across src/components and src/utils.
+ * Eliminates the need to manually list dozens of individual component and utility files.
+ */
+export function getLibraryEntries(rootDir = __dirname) {
+  const entries = {
+    index: "src/index.ts",
+    "components/index": "src/components/index.ts",
+  };
+
+  const shadowClawElementPath = join(
+    rootDir,
+    "src/components/shadow-claw-element.ts",
+  );
+  if (fs.existsSync(shadowClawElementPath)) {
+    entries["components/shadow-claw-element"] =
+      "src/components/shadow-claw-element.ts";
+  }
+
+  const componentDirs = [
+    "src/components",
+    "src/components/common",
+    "src/components/settings",
+  ];
+
+  for (const relDir of componentDirs) {
+    const absDir = join(rootDir, relDir);
+    if (!fs.existsSync(absDir)) continue;
+    for (const item of fs.readdirSync(absDir, { withFileTypes: true })) {
+      if (
+        item.isDirectory() &&
+        (item.name.startsWith("shadow-claw-") || item.name === "shadow-claw")
+      ) {
+        const relFilePath = `${relDir}/${item.name}/${item.name}.ts`;
+        const absFilePath = join(rootDir, relFilePath);
+        if (fs.existsSync(absFilePath)) {
+          entries[`components/${item.name}`] = relFilePath;
+          if (relDir.includes("/common")) {
+            entries[`components/common/${item.name}`] = relFilePath;
+          } else if (relDir.includes("/settings")) {
+            entries[`components/settings/${item.name}`] = relFilePath;
+          }
+        }
+      }
+    }
+  }
+
+  const utilsDir = join(rootDir, "src/utils");
+  if (fs.existsSync(utilsDir)) {
+    for (const item of fs.readdirSync(utilsDir, { withFileTypes: true })) {
+      if (
+        item.isFile() &&
+        item.name.endsWith(".ts") &&
+        !item.name.endsWith(".test.ts") &&
+        !item.name.endsWith(".d.ts")
+      ) {
+        const utilName = item.name.replace(/\.ts$/, "");
+        entries[`utils/${utilName}`] = `src/utils/${item.name}`;
+      }
+    }
+  }
+
+  return entries;
+}
+
+export const libraryEntries = getLibraryEntries();
 
 export const libraryConfig = {
   input: libraryEntries,

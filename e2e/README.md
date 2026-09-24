@@ -466,9 +466,9 @@ npm run e2e -- --reporter=html
 
 The build, CLI, prerender, and headless agent test suites live under `src/cli/` and `src/` and run through the project Jest configuration. Coverage includes:
 
-- **CLI Commands & Utilities**: `build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send` (`src/cli/commands/send.test.ts` covering prompts, file attachments, and remote replies), `send-file` (`src/cli/commands/send-file.test.ts` covering direct P2P transfers and prompt execution), `backup`, `tasks`, `mcp`, `skills:index`, `webrtc` / `webrtc listen` (`src/cli/commands/webrtc-listen.test.ts` covering orchestration loop dispatch, transfer handling, and ping), `peer-id`, `--version`, `agent` (`src/cli/commands/agent.test.ts` covering init, models, tools, skills, tool execution, remote RFC v0.2.0 imports, and `agent listen`), and `agent model` (`src/cli/commands/agent-models.test.ts`).
+- **CLI Commands & Utilities**: `build`, `dev`, `run`, `serve`, `server`, `init`, `clients`, `send` (`src/cli/commands/send.test.ts` covering prompts, file attachments, and remote replies), `send-file` (`src/cli/commands/send-file.test.ts` covering direct P2P transfers and prompt execution), `backup`, `tasks`, `mcp`, `skills:index`, `webrtc` / `webrtc listen` (`src/cli/commands/webrtc-listen.test.ts` covering orchestration loop dispatch, transfer handling, and ping), `peer-id`, `--version`, `agent` (`src/cli/commands/agent.test.ts` covering init, models, tools, skills, tool execution, remote RFC v0.2.0 imports, and `agent listen`), `agent model` (`src/cli/commands/agent-models.test.ts`), and native AI tasks (`src/cli/commands/native-ai-task-handler.test.ts`).
 - **Model Download & Progress Bar Utilities**: Hugging Face ONNX model querying, downloading, and local caching (`src/cli/utils/local-models.test.ts`), terminal progress bar (`src/cli/utils/progress-bar.test.ts`), and cache directory resolution (`src/cli/utils/resolve-cache-dir.test.ts`).
-- **Headless Agent Subsystems**: SQLite database implementation (`src/db/sqlite/*.test.ts`), Node.js filesystem directory handle polyfill (`src/storage/node-fs-handle.test.ts`), headless tool execution and capability matrix (`src/worker/utils/executeTool.headless.test.ts`, `src/worker/tools/builtin-ai/builtin-ai.headless.test.ts`), peer collaboration tools (`src/worker/tools/peer/prompt-peer.test.ts`, `src/worker/tools/workspace/send-file.test.ts`), and default provider/model configuration (`src/config/headless.test.ts`).
+- **Headless Agent Subsystems**: SQLite database implementation (`src/db/sqlite/*.test.ts`), Node.js filesystem directory handle polyfill (`src/storage/node-fs-handle.test.ts`), headless tool execution, guards, and capability matrix (`src/worker/utils/executeTool.headless.test.ts`, `src/worker/utils/declarativeToolExecutor.test.ts`, `src/worker/utils/guards.test.ts`, `src/worker/tools/builtin-ai/builtin-ai.headless.test.ts`), peer collaboration tools (`src/worker/tools/peer/prompt-peer.test.ts`, `src/worker/tools/workspace/send-file.test.ts`), shared cross-cutting utilities (`src/utils/*.test.ts`), and default provider/model configuration (`src/config/headless.test.ts`).
 - **Host-Native Offline Model Executors**: In-process Node.js Transformers.js execution (`src/worker/tools/node-transformers-executor.test.ts`, `src/server/services/transformers-runtime.test.ts`), Llamafile manager & executor (`src/worker/tools/node-llamafile-executor.test.ts`, `src/server/services/llamafile-manager.test.ts`), and agent invocation loop (`src/worker/utils/handleInvoke.test.ts`).
 
 ```bash
@@ -476,6 +476,7 @@ NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
   npx jest --runInBand src/cli/cli.test.ts \
   src/cli/commands/agent.test.ts \
   src/cli/commands/agent-models.test.ts \
+  src/cli/commands/native-ai-task-handler.test.ts \
   src/cli/commands/send.test.ts \
   src/cli/commands/send-file.test.ts \
   src/cli/commands/webrtc-listen.test.ts \
@@ -483,6 +484,8 @@ NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
   src/cli/utils/progress-bar.test.ts \
   src/cli/commands/peer-id.test.ts \
   src/cli/commands/mcp.test.ts \
+  src/server/mcp/tools/built-in-tool-definitions.test.ts \
+  src/server/mcp/tools/client-tool-names.test.ts \
   src/cli/commands/skills-index.test.ts \
   src/cli/utils/control-client.test.ts \
   src/cli/utils/webrtc-control-client.test.ts \
@@ -491,6 +494,9 @@ NODE_OPTIONS="--no-warnings --experimental-vm-modules" \
   src/cli/prerender/pretty-paths/prerender-pretty-paths.test.ts \
   src/db/sqlite/openSqliteDatabase.test.ts \
   src/storage/node-fs-handle.test.ts \
+  src/utils/index.test.ts \
+  src/worker/utils/guards.test.ts \
+  src/worker/utils/declarativeToolExecutor.test.ts \
   src/worker/utils/executeTool.headless.test.ts \
   src/worker/tools/peer/prompt-peer.test.ts \
   src/worker/tools/workspace/send-file.test.ts \
@@ -602,7 +608,7 @@ ShadowClaw's Control Plane and Stateless MCP Server bridges (`POST /mcp` and `sh
 - **Tool Naming Convention:** Built-in server and CLI tools are prefixed with `shadowclaw_server_` (`MCP_SERVER_TOOL_PREFIX`), while live tools relayed from connected browser clients are prefixed with `shadowclaw_client_` (`MCP_CLIENT_TOOL_PREFIX`, e.g. `shadowclaw_client_read_file`, `shadowclaw_client_list_files`), with legacy aliases supported for backward compatibility.
 - **Multi-Client Targeting & Execution Guards:** Relayed tools expose a `clientId` enum parameter limited to connected clients supporting each tool. Calls route to explicit clients or the active client (`shadowclaw_server_set_active_client`), with server-side client capability validation and client-side execution guards (`allowedTools` / conversation tool tags). Interactive tools like `ask_user` support human-in-the-loop responses with extended timeouts.
 - **Control Token Auto-Discovery & Retry:** CLI control clients automatically discover tokens from flags, `SHADOWCLAW_CONTROL_TOKEN`, system temporary directory (`tmpdir()`), parent directories, and SQLite, and automatically retry across remaining candidate tokens on HTTP 401 Unauthorized responses.
-- **Automated Integration Tests:** End-to-end server-to-client integration tests reside in `src/server/mcp/mcp-integration.test.ts`, tool relay tests in `src/server/mcp/tools/mcp-tools.test.ts`, CLI process tests in `src/cli/cli.test.ts` and `src/cli/commands/mcp.test.ts`, and Web Share Target flow verification in `e2e/share-target.test.ts`.
+- **Automated Integration Tests:** End-to-end server-to-client integration tests reside in `src/server/mcp/mcp-integration.test.ts`, tool relay tests in `src/server/mcp/tools/mcp-tools.test.ts` and `src/server/mcp/tools/client-tool-names.test.ts`, built-in tool definitions in `src/server/mcp/tools/built-in-tool-definitions.test.ts`, CLI process tests in `src/cli/cli.test.ts` and `src/cli/commands/mcp.test.ts`, and Web Share Target flow verification in `e2e/share-target.test.ts`.
 
 ## Architecture Decisions
 

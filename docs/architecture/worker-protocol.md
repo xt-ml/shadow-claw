@@ -3,7 +3,7 @@
 > The agent worker runs in a dedicated Web Worker thread, owning the LLM tool-use loop,
 > tool execution, streaming, and the WebVM. All communication is message-based.
 
-**Source:** `src/worker/worker.ts` · `src/worker/utils/handleMessage.ts` · `src/worker/utils/handleInvoke.ts` · `src/worker/utils/executeTool.ts`
+**Source:** `src/worker/worker.ts` · `src/worker/utils/handleMessage.ts` · `src/worker/utils/handleInvoke.ts` · `src/worker/utils/executeTool.ts` · `src/worker/utils/guards.ts` · `src/worker/utils/declarativeToolExecutor.ts`
 
 ## Message Protocol
 
@@ -186,7 +186,7 @@ This keeps UI and worker cancellation behavior consistent while preventing orpha
 
 `executeTool(db, name, input, groupId, options)` in `src/worker/utils/executeTool.ts` is the single dispatcher for all tools.
 
-Before dispatch, `executeTool` re-validates tool names against `options.allowedTools` (when provided) so runtime execution cannot bypass active tool profiles or manual enabled-tool selections.
+Before dispatch, `executeTool` runs centralized execution guards via `runToolGuards` (`src/worker/utils/guards.ts`), enforcing allowlists (`allowedTools`), recursion limits during scheduled tasks, and headless capability gates. Declarative tools are delegated to `executeDeclarativeTool` (`src/worker/utils/declarativeToolExecutor.ts`).
 
 ### File tools
 

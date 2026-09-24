@@ -6,6 +6,8 @@ import {
 } from "../core/app-routes.js";
 import { shouldBypassFetchProxy } from "./fetch-proxy-rules.js";
 
+import { getMimeType } from "../utils/mime.js";
+
 /**
  * Intercept cross-origin requests and proxy them through the local /proxy endpoint
  * to circumvent CORS restrictions for the agent worker's fetch_url tool.
@@ -13,64 +15,17 @@ import { shouldBypassFetchProxy } from "./fetch-proxy-rules.js";
 let useProxy = false;
 let proxyUrl = "/proxy";
 
-const MIME_TYPE_BY_EXTENSION: Record<string, string> = {
-  "3gp": "video/3gpp",
-  aac: "audio/aac",
-  apng: "image/apng",
-  avi: "video/x-msvideo",
-  avif: "image/avif",
-  bin: "application/octet-stream",
-  css: "text/css; charset=utf-8",
-  db: "application/vnd.sqlite3",
-  dll: "application/octet-stream",
-  dmg: "application/octet-stream",
-  dylib: "application/octet-stream",
-  exe: "application/vnd.microsoft.portable-executable",
-  flac: "audio/flac",
-  flv: "video/x-flv",
-  gif: "image/gif",
-  gz: "application/gzip",
-  heic: "image/heic",
-  heif: "image/heif",
-  htm: "text/html; charset=utf-8",
-  html: "text/html; charset=utf-8",
-  iso: "application/octet-stream",
-  jpeg: "image/jpeg",
-  jpg: "image/jpeg",
-  js: "application/javascript; charset=utf-8",
-  json: "application/json; charset=utf-8",
-  m4a: "audio/mp4",
-  m4v: "video/mp4",
-  mjs: "application/javascript; charset=utf-8",
-  mkv: "video/x-matroska",
-  mov: "video/mp4",
-  mp3: "audio/mpeg",
-  mp4: "video/mp4",
-  pdf: "application/pdf",
-  png: "image/png",
-  rar: "application/vnd.rar",
-  so: "application/octet-stream",
-  sqlite: "application/vnd.sqlite3",
-  sqlite3: "application/vnd.sqlite3",
-  svg: "image/svg+xml",
-  tar: "application/x-tar",
-  tif: "image/tiff",
-  tiff: "image/tiff",
-  ts: "video/mp2t",
-  txt: "text/plain; charset=utf-8",
-  wasm: "application/wasm",
-  wav: "audio/wav",
-  weba: "audio/webm",
-  webm: "video/webm",
-  webp: "image/webp",
-  wmv: "video/x-ms-wmv",
-  zip: "application/zip",
-};
-
 function mimeTypeFromPath(path: string): string {
-  const ext = path.split(".").pop()?.toLowerCase() || "";
+  const mime = getMimeType(path, "application/octet-stream")!;
+  if (
+    mime.startsWith("text/") ||
+    mime === "application/javascript" ||
+    mime === "application/json"
+  ) {
+    return `${mime}; charset=utf-8`;
+  }
 
-  return MIME_TYPE_BY_EXTENSION[ext] || "application/octet-stream";
+  return mime;
 }
 
 function shouldServeWorkspaceRouteRequest(request: Request): boolean {

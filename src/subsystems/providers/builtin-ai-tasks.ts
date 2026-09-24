@@ -12,7 +12,7 @@
  * when native browser support is not present.
  */
 
-import { createModelCacheFetch } from "./utils/index.js";
+import { createModelCacheFetch } from "./utils/createModelCacheFetch.js";
 import { getDb } from "../../db/db.js";
 import { getConfig } from "../../db/getConfig.js";
 import {

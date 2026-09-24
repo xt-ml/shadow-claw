@@ -41,13 +41,6 @@
     "allowedDomains": [
       "kherrick.github.io",
       "cdn.jsdelivr.net"
-    ],
-    "scripts": [
-      {
-        "src": "https://kherrick.github.io/block-garden-knowledge-hub/.agents/scripts/main/block-garden-adapter.js",
-        "hasInit": true
-      },
-      "https://kherrick.github.io/block-garden/block-garden-bundle-min.mjs"
     ]
   },
   "security": {

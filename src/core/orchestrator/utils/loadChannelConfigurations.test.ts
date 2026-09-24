@@ -41,7 +41,7 @@ jest.unstable_mockModule("../../../storage/readGroupFileBytes.js", () => ({
   readGroupFileBytes: mockReadGroupFileBytes,
 }));
 
-jest.unstable_mockModule("./parseStoredStringList.js", () => ({
+jest.unstable_mockModule("../../../utils/parseStoredStringList.js", () => ({
   parseStoredStringList: mockParseStoredStringList,
 }));
 

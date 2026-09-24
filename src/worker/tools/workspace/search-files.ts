@@ -1,7 +1,7 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
 import { listGroupFiles } from "../../../storage/listGroupFiles.js";
 import { readGroupFileBytes } from "../../../storage/readGroupFileBytes.js";
-import { isBinaryContent } from "./utils/isBinaryContent.js";
+import { isBinaryContent } from "../../../utils/isBinary.js";
 
 /** Maximum number of result lines returned. */
 const MAX_RESULTS = 500;

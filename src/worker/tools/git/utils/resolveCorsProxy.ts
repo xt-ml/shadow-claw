@@ -1,5 +1,5 @@
-import { ShadowClawDatabase } from "../../../../db/types";
-import { GitToolDeps } from "../../../../subsystems/git/types";
+import { ShadowClawDatabase } from "../../../../db/types.js";
+import { GitToolDeps } from "../../../../subsystems/git/types.js";
 
 export async function resolveCorsProxy(
   db: ShadowClawDatabase,

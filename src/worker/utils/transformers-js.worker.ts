@@ -6,11 +6,11 @@ import {
   env,
 } from "@huggingface/transformers";
 
+import { createModelCacheFetch } from "../../subsystems/providers/utils/createModelCacheFetch.js";
 import {
-  createModelCacheFetch,
   normalizeMessagesForChatTemplate,
   mapToolsForChatTemplate,
-} from "../../subsystems/providers/utils/index.js";
+} from "../../subsystems/providers/utils/chatTemplate.js";
 
 import {
   getPreferredDtypes,

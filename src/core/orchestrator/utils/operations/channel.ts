@@ -3,7 +3,7 @@ import { getConfig as _defaultGetConfig } from "../../../../db/getConfig.js";
 import { setConfig as _defaultSetConfig } from "../../../../db/setConfig.js";
 import { encryptValue } from "../../../../security/crypto.js";
 import { orchestratorStore } from "../../../../stores/orchestrator.js";
-import { normalizeStringList } from "../normalizeStringList.js";
+import { normalizeStringList } from "../../../../utils/normalizeStringList.js";
 
 import type { MessageAttachment } from "../../../../content/types.js";
 import type { ShadowClawDatabase } from "../../../../db/db.js";

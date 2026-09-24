@@ -17,7 +17,7 @@ import {
 
 import { post } from "../../utils/post.js";
 import { executeViaShellFallback } from "./utils/executeViaShellFallback.js";
-import { getAllowFullInternetAccess } from "./utils/getAllowFullInternetAccess.js";
+import { getAllowFullInternetAccess } from "../utils/getAllowFullInternetAccess.js";
 import { waitForVMReady } from "./utils/waitForVMReady.js";
 
 import { writeGroupFile } from "../../../storage/writeGroupFile.js";

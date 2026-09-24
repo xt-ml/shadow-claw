@@ -1,7 +1,7 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
 import { readGroupFileBytes } from "../../../storage/readGroupFileBytes.js";
-import { getImageMimeType } from "./utils/getImageMimeType.js";
-import { isBinaryContent } from "./utils/isBinaryContent.js";
+import { getImageMimeType } from "../../../utils/mime.js";
+import { isBinaryContent } from "../../../utils/isBinary.js";
 
 import { MAX_INLINE_IMAGE_BYTES } from "./types.js";
 

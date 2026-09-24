@@ -1,6 +1,6 @@
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import { getConfig } from "../../../db/getConfig.js";
-import { isTruthyConfigValue } from "../../../common/utils/config-value.mjs";
+import { isTruthyConfigValue } from "../../../utils/parseBooleanConfig.js";
 
 /**
  * Resolves a frontmatter toggle configuration boolean from database with fallback.

@@ -12,7 +12,7 @@ import { fileViewerStore } from "../../stores/file-viewer.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 
 import { showError, showInfo, showSuccess } from "../../ui/toast.js";
-import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
+import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
 import { escapeHtml } from "../../utils/utils.js";
 
 import "../common/shadow-claw-empty-state/shadow-claw-empty-state.js";

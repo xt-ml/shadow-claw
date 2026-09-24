@@ -12,6 +12,11 @@ import { createApp } from "./app.js";
 import { attachPeerServer } from "./peer.js";
 import { createControlPlane } from "./control-plane.js";
 import { registerMcpRoutes } from "./routes/mcp.js";
+import { registerA2ARoutes } from "./a2a/routes.js";
+import { A2AHttpServer } from "./a2a/a2a-http-server.js";
+import { buildHttpAgentCard } from "./a2a/agent-card-builder.js";
+import { discoverServerSkills } from "./a2a/discover-server-skills.js";
+import { createA2ATaskExecutor } from "./a2a/a2a-task-executor.js";
 import { ServerPeer } from "./server-peer.js";
 import { parseConfig, ServerConfig } from "./config.js";
 import { ensureTlsCredentials } from "./tls.js";
@@ -78,6 +83,39 @@ export async function startServer(
     allowedOrigins: config.allowedOrigins,
     corsMode: config.corsMode,
   });
+
+  if (config.a2aEnabled) {
+    const protocol = config.https ? "https" : "http";
+    const host =
+      config.bindHost === "0.0.0.0" || config.bindHost === "::"
+        ? "127.0.0.1"
+        : config.bindHost;
+    const baseUrl = `${protocol}://${host}:${config.port}`;
+
+    // Discover skills from the workspace using the same path as the CLI agent
+    const skills = await discoverServerSkills(config.rootPath).catch(() => []);
+
+    const agentCard = buildHttpAgentCard({
+      baseUrl,
+      name: `ShadowClaw Server (${config.bindHost}:${config.port})`,
+      skills,
+    });
+
+    const taskExecutor = createA2ATaskExecutor({
+      workspace: config.rootPath,
+      quiet: !config.verbose,
+      verbose: config.verbose,
+    });
+
+    const a2aHttpServer = new A2AHttpServer({
+      agentCard,
+      taskExecutor,
+    });
+    registerA2ARoutes(app, {
+      httpServer: a2aHttpServer,
+      token: config.controlToken,
+    });
+  }
 
   let serverPeer: ServerPeer | null = null;
   if (config.peerjs) {

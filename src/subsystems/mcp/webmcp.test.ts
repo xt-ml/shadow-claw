@@ -738,4 +738,83 @@ describe("webmcp integration", () => {
       expect(custom.customMeta).toBe("important");
     });
   });
+
+  describe("Firefox originAgentCluster compatibility", () => {
+    const origOAC = Object.getOwnPropertyDescriptor(
+      globalThis,
+      "originAgentCluster",
+    );
+
+    afterEach(() => {
+      // Restore originAgentCluster to its original state
+      if (origOAC) {
+        Object.defineProperty(globalThis, "originAgentCluster", origOAC);
+      } else {
+        delete (globalThis as any).originAgentCluster;
+      }
+    });
+
+    it("skips polyfill registration and returns false when originAgentCluster === false (Firefox without Origin-Agent-Cluster header)", async () => {
+      Object.defineProperty(globalThis, "originAgentCluster", {
+        configurable: true,
+        value: false,
+      });
+
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+
+      const result = await registerWebMcpTools(null, jest.fn());
+
+      expect(result).toBe(false);
+      // Must not have attempted any registerTool calls
+      expect(mockRegisterTool).not.toHaveBeenCalled();
+      // Must emit exactly one descriptive warning
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0][0]).toContain("originAgentCluster");
+
+      warnSpy.mockRestore();
+    });
+
+    it("proceeds normally when originAgentCluster === true (Chrome default)", async () => {
+      Object.defineProperty(globalThis, "originAgentCluster", {
+        configurable: true,
+        value: true,
+      });
+
+      const result = await registerWebMcpTools(null, jest.fn());
+
+      expect(result).toBe(true);
+      expect(mockRegisterTool).toHaveBeenCalled();
+    });
+
+    it("proceeds normally when originAgentCluster is undefined (older browsers)", async () => {
+      delete (globalThis as any).originAgentCluster;
+
+      const result = await registerWebMcpTools(null, jest.fn());
+
+      expect(result).toBe(true);
+      expect(mockRegisterTool).toHaveBeenCalled();
+    });
+
+    it("bails out cleanly on SecurityError DOMException from registerTool without cascading per-tool errors", async () => {
+      // Simulate a polyfill that passes the pre-check but throws SecurityError on the first registerTool call
+      const securityError = new DOMException("", "SecurityError");
+      mockRegisterTool.mockRejectedValueOnce(securityError);
+
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+      const errorSpy = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      const result = await registerWebMcpTools(null, jest.fn());
+
+      expect(result).toBe(false);
+      // One warn, zero errors — no per-tool error spam
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0][0]).toContain("SecurityError");
+      expect(errorSpy).not.toHaveBeenCalled();
+
+      warnSpy.mockRestore();
+      errorSpy.mockRestore();
+    });
+  });
 });

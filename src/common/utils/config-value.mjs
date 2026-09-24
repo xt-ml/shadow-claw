@@ -1,15 +1,5 @@
 /**
- * Coerce persisted config values into a boolean.
- * Accepts common true-ish values stored in IndexedDB/localStorage.
- *
- * @param {unknown} value
- * @param {boolean} [defaultValue=false]
- * @returns {boolean}
+ * @deprecated Import `isTruthyConfigValue` from `../../utils/parseBooleanConfig.js` instead.
+ * This shim exists only for backward compatibility and will be removed.
  */
-export function isTruthyConfigValue(value, defaultValue = false) {
-  if (value === undefined || value === null) {
-    return defaultValue;
-  }
-
-  return value === true || value === "true" || value === 1 || value === "1";
-}
+export { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";

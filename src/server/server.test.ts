@@ -245,6 +245,7 @@ describe("startServer HTTP / HTTPS selection", () => {
       allowPrivateProxy: false,
       https: false,
       sslDir: "/ssl",
+      a2aEnabled: false,
     });
 
     expect(httpMock.createServer).toHaveBeenCalledTimes(1);
@@ -267,6 +268,7 @@ describe("startServer HTTP / HTTPS selection", () => {
       https: true,
       sslDir: "/ssl",
       certPath: "/custom/cert.pem",
+      a2aEnabled: false,
     });
 
     expect(tlsMock.ensureTlsCredentials).toHaveBeenCalledTimes(1);
@@ -291,6 +293,7 @@ describe("startServer HTTP / HTTPS selection", () => {
       https: false,
       sslDir: "/ssl",
       serveStatic: false,
+      a2aEnabled: false,
     });
 
     expect(httpMock.createServer).toHaveBeenCalled();

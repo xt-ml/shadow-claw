@@ -37,7 +37,8 @@ import {
   getIframeThemeStyleHtml,
   getIframeThemeStylesheetLink,
 } from "../../ui/iframe-theme.js";
-import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
+import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
+import { getImageMimeType } from "../../utils/mime.js";
 
 import "../shadow-claw-dialog/shadow-claw-dialog.js";
 import { IframeBroadcastProxy } from "../shadow-claw-pages/utils/iframe-broadcast-proxy.js";
@@ -56,6 +57,7 @@ import {
   getApprovedCustomElementScriptDescriptors,
   getIframeCsp,
   getIframeSandboxPolicy,
+  hasApprovedCustomElement,
   isAllowedCustomElement,
 } from "../../security/custom-element-security.js";
 import ShadowClawElement from "../shadow-claw-element.js";
@@ -850,18 +852,7 @@ export class ShadowClawFileViewer extends ShadowClawElement {
   }
 
   mimeTypeForImageExt(ext: string): string {
-    const map: Record<string, string> = {
-      apng: "image/apng",
-      avif: "image/avif",
-      gif: "image/gif",
-      jpg: "image/jpeg",
-      jpeg: "image/jpeg",
-      png: "image/png",
-      svg: "image/svg+xml",
-      webp: "image/webp",
-    };
-
-    return map[ext] ?? "image/jpeg";
+    return getImageMimeType(ext) ?? "image/jpeg";
   }
 
   renderBinaryPreview(content: HTMLElement, file: any) {
@@ -1434,30 +1425,35 @@ export class ShadowClawFileViewer extends ShadowClawElement {
       ? `<script nonce="${nonce}">(function(){try{Object.defineProperty(globalThis.location,"search",{get:function(){return ${JSON.stringify(searchParams)};},configurable:true});}catch(e){}})();</script>`
       : "";
 
-    const customElementScriptsHtml = approvedScripts
-      .map(({ src, hasInit }) => {
-        const isExternal =
-          src.startsWith("http://") ||
-          src.startsWith("https://") ||
-          src.startsWith("//");
-        const resolvedSrc = isExternal
-          ? src
-          : applyBasePath(
-              src.startsWith("/")
-                ? src
-                : `/${src.replace(/^pages\/main\//, "")}`,
-            );
-        const tags = [
-          `<script type="module" src="${resolvedSrc}" nonce="${nonce}"></script>`,
-        ];
-        if (hasInit) {
-          tags.push(
-            `<script type="module" nonce="${nonce}">import("${resolvedSrc}").then((m) => { try { if (typeof m?.init === "function") m.init(); } catch (e) { console.error("[ShadowClaw] Error executing init for " + ${JSON.stringify(resolvedSrc)}, e); } }).catch(() => {});</script>`,
-          );
-        }
-        return tags.join("\n");
-      })
-      .join("\n");
+    const shouldInjectCustomElementScripts =
+      approvedScripts.length > 0 && hasApprovedCustomElement(safeContent);
+
+    const customElementScriptsHtml = shouldInjectCustomElementScripts
+      ? approvedScripts
+          .map(({ src, hasInit }) => {
+            const isExternal =
+              src.startsWith("http://") ||
+              src.startsWith("https://") ||
+              src.startsWith("//");
+            const resolvedSrc = isExternal
+              ? src
+              : applyBasePath(
+                  src.startsWith("/")
+                    ? src
+                    : `/${src.replace(/^pages\/main\//, "")}`,
+                );
+            const tags = [
+              `<script type="module" src="${resolvedSrc}" nonce="${nonce}"></script>`,
+            ];
+            if (hasInit) {
+              tags.push(
+                `<script type="module" nonce="${nonce}">import("${resolvedSrc}").then((m) => { try { if (typeof m?.init === "function") m.init(); } catch (e) { console.error("[ShadowClaw] Error executing init for " + ${JSON.stringify(resolvedSrc)}, e); } }).catch(() => {});</script>`,
+              );
+            }
+            return tags.join("\n");
+          })
+          .join("\n")
+      : "";
 
     const themeStylesheetLink = getIframeThemeStylesheetLink();
 

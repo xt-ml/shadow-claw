@@ -49,6 +49,26 @@ describe("attachment-capabilities", () => {
     it("returns file for unknown binary", () => {
       expect(getAttachmentCategory("application/zip")).toBe("file");
     });
+
+    it("returns image for image file by extension when mimeType empty", () => {
+      expect(getAttachmentCategory("", "photo.jpg")).toBe("image");
+      expect(getAttachmentCategory("", "photo.png")).toBe("image");
+      expect(getAttachmentCategory("", "photo.heic")).toBe("image");
+    });
+
+    it("returns video for video file by extension when mimeType empty", () => {
+      expect(getAttachmentCategory("", "movie.mp4")).toBe("video");
+      expect(getAttachmentCategory("", "clip.mkv")).toBe("video");
+    });
+
+    it("returns audio for audio file by extension when mimeType empty", () => {
+      expect(getAttachmentCategory("", "song.mp3")).toBe("audio");
+      expect(getAttachmentCategory("", "track.flac")).toBe("audio");
+    });
+
+    it("returns document for pdf by extension when mimeType empty", () => {
+      expect(getAttachmentCategory("", "report.pdf")).toBe("document");
+    });
   });
 
   describe("getModelAttachmentCapabilities", () => {

@@ -2,7 +2,7 @@ import { CONFIG_KEYS } from "../../config/config.js";
 import { effect } from "../../core/effect.js";
 import { getDb } from "../../db/db.js";
 import { getConfig } from "../../db/getConfig.js";
-import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
+import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
 
 import { setSanitizedHtml } from "../../security/trusted-types.js";
 import { copyGroupEntry } from "../../storage/copyGroupEntry.js";

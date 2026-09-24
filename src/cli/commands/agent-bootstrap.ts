@@ -6,6 +6,7 @@ import process from "node:process";
 import { getAgentCore } from "../utils/agent-core.js";
 import { loadWorkspaceConfig } from "../utils/load-workspace-config.js";
 import { resolveCacheDir } from "../utils/resolve-cache-dir.js";
+import { handleNativeAiTaskMessage } from "./native-ai-task-handler.js";
 import type {
   BootstrapAgentOptions,
   BootstrapAgentResult,
@@ -98,58 +99,37 @@ export async function bootstrapHeadlessAgent(
   }
 
   // 7. Route post messages to stdout / console & native AI task handling
+  const messageHandlers: Record<string, (message: any) => void> = {
+    response: (msg) => {
+      if (!options.quiet && msg.payload?.text) {
+        console.log(msg.payload.text);
+      }
+    },
+    error: (msg) => {
+      if (!options.quiet && msg.payload?.error) {
+        console.error(`Error: ${msg.payload.error}`);
+      }
+    },
+    "tool-activity": (msg) => {
+      if (!options.quiet && options.verbose && msg.payload) {
+        console.log(
+          `[Tool] ${msg.payload.tool} (${msg.payload.status || "executing"})`,
+        );
+      }
+    },
+    "thinking-log": (msg) => {
+      if (!options.quiet && options.verbose && msg.payload) {
+        const label = msg.payload.label || msg.payload.level || "Log";
+        console.log(`[${label}] ${msg.payload.message || ""}`);
+      }
+    },
+    "request-native-ai-task": (msg) => {
+      handleNativeAiTaskMessage(core, db, msg.payload);
+    },
+  };
+
   core.setPostHandler((message: any) => {
-    switch (message.type) {
-      case "response":
-        if (!options.quiet && message.payload?.text) {
-          console.log(message.payload.text);
-        }
-        break;
-      case "error":
-        if (!options.quiet && message.payload?.error) {
-          console.error(`Error: ${message.payload.error}`);
-        }
-        break;
-      case "tool-activity":
-        if (!options.quiet && options.verbose && message.payload) {
-          console.log(
-            `[Tool] ${message.payload.tool} (${message.payload.status || "executing"})`,
-          );
-        }
-        break;
-      case "thinking-log":
-        if (!options.quiet && options.verbose && message.payload) {
-          const label = message.payload.label || message.payload.level || "Log";
-          console.log(`[${label}] ${message.payload.message || ""}`);
-        }
-        break;
-      case "request-native-ai-task":
-        if (message.payload && typeof core.executeNativeAiTask === "function") {
-          const { id, groupId: taskGroupId, taskType, input } = message.payload;
-          core
-            .executeNativeAiTask({
-              taskType,
-              input,
-              groupId: taskGroupId,
-              db,
-            })
-            .then((res: any) => {
-              const resolvers = (globalThis as any).pendingNativeAiResolvers;
-              if (resolvers && resolvers[id]) {
-                resolvers[id].resolve(res);
-                delete resolvers[id];
-              }
-            })
-            .catch((err: any) => {
-              const resolvers = (globalThis as any).pendingNativeAiResolvers;
-              if (resolvers && resolvers[id]) {
-                resolvers[id].reject(err);
-                delete resolvers[id];
-              }
-            });
-        }
-        break;
-    }
+    messageHandlers[message.type]?.(message);
   });
 
   return { db, workspaceDir, dbPath, core };

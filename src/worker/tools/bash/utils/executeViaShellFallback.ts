@@ -1,7 +1,7 @@
 import { executeShell } from "../../../../shell/shell.js";
 import { formatShellOutput } from "../../../utils/formatShellOutput.js";
 
-import type { ShadowClawDatabase } from "../../../../db/types";
+import type { ShadowClawDatabase } from "../../../../db/types.js";
 
 export async function executeViaShellFallback(
   db: ShadowClawDatabase,

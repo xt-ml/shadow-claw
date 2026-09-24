@@ -43,6 +43,7 @@ describe("tls credentials", () => {
       allowPrivateProxy: false,
       https: true,
       sslDir: "/app/.cache/tls",
+      a2aEnabled: false,
     };
 
     jest.spyOn(console, "error").mockImplementation(() => {});

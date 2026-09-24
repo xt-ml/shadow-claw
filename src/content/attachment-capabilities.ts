@@ -1,4 +1,5 @@
 import { modelRegistry } from "../subsystems/providers/model-registry.js";
+import { getMimeType } from "../utils/mime.js";
 
 export type AttachmentCategory =
   | "text"
@@ -21,7 +22,11 @@ export function getAttachmentCategory(
   mimeType = "",
   fileName = "",
 ): AttachmentCategory {
-  const normalizedMime = mimeType.toLowerCase();
+  const resolvedMime =
+    mimeType && mimeType !== "application/octet-stream"
+      ? mimeType
+      : getMimeType(fileName) || mimeType;
+  const normalizedMime = resolvedMime.toLowerCase();
   const normalizedName = fileName.toLowerCase();
 
   if (

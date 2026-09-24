@@ -114,6 +114,25 @@ describe("peer-protocol types and guards", () => {
       expect(isJsonRpcRequest(req)).toBe(true);
     });
 
+    // JSON-RPC 2.0 spec §4: id MUST be a String, Number, or NULL
+    it("returns true for requests with numeric id (JSON-RPC 2.0 spec §4)", () => {
+      expect(
+        isJsonRpcRequest({ jsonrpc: "2.0", id: 1, method: "SendMessage" }),
+      ).toBe(true);
+      expect(
+        isJsonRpcRequest({ jsonrpc: "2.0", id: 0, method: "SendMessage" }),
+      ).toBe(true);
+      expect(
+        isJsonRpcRequest({ jsonrpc: "2.0", id: 42, method: "GetTask" }),
+      ).toBe(true);
+    });
+
+    it("returns true for requests with null id (JSON-RPC 2.0 spec §4)", () => {
+      expect(
+        isJsonRpcRequest({ jsonrpc: "2.0", id: null, method: "SendMessage" }),
+      ).toBe(true);
+    });
+
     it("returns false for responses", () => {
       const resp: A2AJsonRpcResponse = {
         jsonrpc: "2.0",

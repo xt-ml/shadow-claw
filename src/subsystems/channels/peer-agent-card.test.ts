@@ -99,7 +99,7 @@ describe("peer-agent-card", () => {
       expect(req.jsonrpc).toBe("2.0");
       expect(req.method).toBe(A2A_METHOD.GET_AGENT_CARD);
       expect(typeof req.id).toBe("string");
-      expect(req.id.length).toBeGreaterThan(0);
+      expect((req.id as string).length).toBeGreaterThan(0);
     });
   });
 

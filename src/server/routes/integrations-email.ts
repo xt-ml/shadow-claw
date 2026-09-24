@@ -2,6 +2,7 @@ import { ImapFlow } from "imapflow";
 import * as nodemailer from "nodemailer";
 
 import type { Express } from "express";
+import { asNumber, asStringArray } from "../../utils/coerce.js";
 
 interface ReadEmailRequestBody {
   authType?: string;
@@ -126,39 +127,6 @@ function collectAttachmentInfo(
       typeof child?.part === "string" ? child.part : `${part}.${index + 1}`;
     collectAttachmentInfo(child, out, childPart);
   });
-}
-
-function asStringArray(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return [];
-  }
-
-  return value
-    .filter((item): item is string => typeof item === "string")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function asNumber(
-  value: unknown,
-  fallback: number,
-  options?: { min?: number; max?: number },
-): number {
-  const parsed = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(parsed)) {
-    return fallback;
-  }
-
-  let result = parsed;
-  if (typeof options?.min === "number") {
-    result = Math.max(options.min, result);
-  }
-
-  if (typeof options?.max === "number") {
-    result = Math.min(options.max, result);
-  }
-
-  return result;
 }
 
 function isAuthenticationError(error: unknown): error is EmailAuthErrorLike {

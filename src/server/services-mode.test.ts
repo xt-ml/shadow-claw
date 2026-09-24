@@ -84,6 +84,7 @@ describe("Services-only mode (headless server)", () => {
       https: false,
       sslDir: path.join(tempDir, "tls"),
       serveStatic: false,
+      a2aEnabled: false,
     };
 
     server = await startServer(config);

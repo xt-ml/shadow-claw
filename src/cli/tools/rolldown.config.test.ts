@@ -23,11 +23,33 @@ const rolldownLibConfigUrl = pathToFileURL(
   path.resolve(projectRoot, "rolldown.lib.config.mjs"),
 ).href;
 
-const config = (await import(rolldownConfigUrl)).default;
+const {
+  default: config,
+  getLibraryEntries,
+  libraryEntries,
+} = await import(rolldownConfigUrl);
 const libConfig = (await import(rolldownLibConfigUrl)).default;
 
 describe("rolldown.config.mjs", () => {
   describe("library build config", () => {
+    it("dynamically discovers components and utils via getLibraryEntries", () => {
+      expect(typeof getLibraryEntries).toBe("function");
+      const discovered = getLibraryEntries();
+      expect(discovered).toEqual(libraryEntries);
+      expect(discovered["index"]).toBe("src/index.ts");
+      expect(discovered["components/index"]).toBe("src/components/index.ts");
+      expect(discovered["utils/index"]).toBe("src/utils/index.ts");
+      expect(discovered["utils/base64"]).toBe("src/utils/base64.ts");
+      expect(discovered["components/shadow-claw-toast"]).toBe(
+        "src/components/shadow-claw-toast/shadow-claw-toast.ts",
+      );
+      expect(discovered["components/shadow-claw-card"]).toBe(
+        "src/components/common/shadow-claw-card/shadow-claw-card.ts",
+      );
+      expect(discovered["components/common/shadow-claw-card"]).toBe(
+        "src/components/common/shadow-claw-card/shadow-claw-card.ts",
+      );
+    });
     it("exports module entries for the public library surface", () => {
       expect(Array.isArray(libConfig)).toBe(true);
       expect(libConfig.length).toBeGreaterThanOrEqual(1);

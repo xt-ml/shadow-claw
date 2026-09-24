@@ -16,7 +16,7 @@ import { getDb } from "../../db/db.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { showError, showInfo, showSuccess } from "../../ui/toast.js";
 import { formatDateForFilename } from "../../utils/utils.js";
-import { isTruthyConfigValue } from "../../common/utils/config-value.mjs";
+import { isTruthyConfigValue } from "../../utils/parseBooleanConfig.js";
 
 import type { ConfigEntryRecord } from "../../config/settings-backup.js";
 import type { Orchestrator } from "../../core/orchestrator/orchestrator.js";

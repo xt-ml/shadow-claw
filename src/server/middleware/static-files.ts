@@ -84,6 +84,12 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
   app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    // Opt the page into an origin-keyed agent cluster. Chrome does this
+    // automatically for HTTPS origins; Firefox >= 138 requires an explicit
+    // header. Without it, globalThis.originAgentCluster === false in Firefox,
+    // which causes the @mcp-b/webmcp-polyfill to throw SecurityError on every
+    // registerTool() call and prevents WebMCP tool registration entirely.
+    res.setHeader("Origin-Agent-Cluster", "?1");
 
     const requestPath = new URL(req.originalUrl, "http://localhost").pathname;
     if (!isAllowedDotFileRequest(requestPath)) {

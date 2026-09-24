@@ -411,20 +411,22 @@ export interface A2AJsonRpcError {
 
 /**
  * JSON-RPC 2.0 Request (has `id` and `method`)
+ * Per spec §4, `id` MUST be a String, Number, or NULL value.
  */
 export interface A2AJsonRpcRequest {
   jsonrpc: "2.0";
-  id: string;
+  id: string | number | null;
   method: string;
   params?: unknown;
 }
 
 /**
  * JSON-RPC 2.0 Response (has `id` and either `result` or `error`)
+ * Per spec §4, `id` MUST be a String, Number, or NULL value.
  */
 export interface A2AJsonRpcResponse {
   jsonrpc: "2.0";
-  id: string;
+  id: string | number | null;
   result?: unknown;
   error?: A2AJsonRpcError;
 }
@@ -622,7 +624,9 @@ export function isJsonRpcRequest(msg: unknown): msg is A2AJsonRpcRequest {
     typeof msg === "object" &&
     msg !== null &&
     (msg as any).jsonrpc === "2.0" &&
-    typeof (msg as any).id === "string" &&
+    ((msg as any).id === null ||
+      typeof (msg as any).id === "string" ||
+      typeof (msg as any).id === "number") &&
     typeof (msg as any).method === "string"
   );
 }
@@ -632,7 +636,9 @@ export function isJsonRpcResponse(msg: unknown): msg is A2AJsonRpcResponse {
     typeof msg === "object" &&
     msg !== null &&
     (msg as any).jsonrpc === "2.0" &&
-    typeof (msg as any).id === "string" &&
+    ((msg as any).id === null ||
+      typeof (msg as any).id === "string" ||
+      typeof (msg as any).id === "number") &&
     !("method" in (msg as any))
   );
 }

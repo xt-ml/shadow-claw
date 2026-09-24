@@ -35,6 +35,7 @@ describe("OpenAPI Route Coverage & Drift Guardrail", () => {
       peerjs: false,
       allowPrivateProxy: false,
       serveStatic: false,
+      a2aEnabled: false,
     };
 
     const { app, scheduler } = createApp(config);

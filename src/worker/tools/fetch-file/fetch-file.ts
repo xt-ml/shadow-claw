@@ -1,9 +1,9 @@
-import { hasPathTraversal } from "../workspace/utils/hasPathTraversal.js";
-import { normalizeWorkspacePath } from "../workspace/utils/normalizeWorkspacePath.js";
+import { hasPathTraversal } from "../../../utils/hasPathTraversal.js";
+import { normalizeWorkspacePath } from "../../../utils/normalizeWorkspacePath.js";
 
-import { HttpError } from "./utils/HttpError.js";
+import { HttpError } from "../utils/HttpError.js";
 import { isBinaryContentType } from "./utils/isBinaryContentType.js";
-import { parseAuthMode } from "./utils/parseAuthMode.js";
+import { parseAuthMode } from "../utils/parseAuthMode.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { AccountAuthMode } from "../../../subsystems/accounts/service-accounts.js";

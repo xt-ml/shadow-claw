@@ -2,7 +2,7 @@
 
 > Modular tool definitions giving the agent capabilities, with profiles for per-provider/model customization.
 
-**Source:** `src/subsystems/tools/` · `src/worker/utils/executeTool.ts` · `src/stores/tools.ts`
+**Source:** `src/subsystems/tools/` · `src/worker/utils/executeTool.ts` · `src/worker/utils/guards.ts` · `src/worker/utils/declarativeToolExecutor.ts` · `src/stores/tools.ts`
 
 ## Tool Architecture
 
@@ -106,12 +106,10 @@ The dedicated **Tool Configuration** view (`<shadow-claw-tools>`, accessible via
 
 `executeTool(db, name, input, groupId, options)` in `src/worker/utils/executeTool.ts` is the single dispatcher. It:
 
-1. Re-validates `name` against `options.allowedTools` when provided (runtime allowlist enforcement)
-2. Checks runtime environment (`isHeadlessMode()`): if running in headless CLI mode and `name` belongs to `BROWSER_ONLY_TOOLS`, returns a descriptive capability diagnostic message rather than failing silently
-3. Checks recursion guard (scheduled task restrictions)
-4. Switches on tool `name`
-5. Calls the appropriate handler in `src/worker/tools/`
-6. Returns result as string or JSON
+1. Runs centralized tool guards via `runToolGuards` (`src/worker/utils/guards.ts`), enforcing runtime allowlists (`allowedTools`), recursion guards (blocking task management tools during scheduled tasks and `run_task` inside tasks), and headless capability restrictions (`BROWSER_ONLY_TOOLS`)
+2. Switches on tool `name` to dispatch to the appropriate handler in `src/worker/tools/`
+3. Dispatches declarative tools to `executeDeclarativeTool` (`src/worker/utils/declarativeToolExecutor.ts`) for bash, javascript, or delegated tool executions up to 8 levels deep
+4. Returns result as string or JSON
 
 ### Headless Capability Matrix
 

@@ -1,20 +1,20 @@
-import { ShadowClawDatabase } from "../../../db/types";
+import { ShadowClawDatabase } from "../../../db/types.js";
 
 import {
   invokeWithLiteRtLm,
   isLiteRtLmSupported,
-} from "../../../subsystems/providers/litert-lm-provider";
+} from "../../../subsystems/providers/litert-lm-provider.js";
 
 import {
   invokeWithPromptApi,
   isPromptApiSupported,
-} from "../../../subsystems/providers/prompt-api-provider";
+} from "../../../subsystems/providers/prompt-api-provider.js";
 
-import { invokeWithTransformersJs } from "../../../subsystems/providers/transformers-js-provider";
+import { invokeWithTransformersJs } from "../../../subsystems/providers/transformers-js-provider.js";
 
-import { InvokePayload } from "../../../subsystems/worker/types";
-import { handleInvoke } from "../../../worker/utils/handleInvoke";
-import { post as workerPost } from "../../../worker/utils/post";
+import { InvokePayload } from "../../../subsystems/worker/types.js";
+import { handleInvoke } from "../../../worker/utils/handleInvoke.js";
+import { post as workerPost } from "../../../worker/utils/post.js";
 
 type SubagentPayload = InvokePayload & { isScheduledTask?: boolean };
 

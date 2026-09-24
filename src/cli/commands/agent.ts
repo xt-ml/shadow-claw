@@ -24,6 +24,7 @@ import type {
 } from "../../worker/headless-types.js";
 
 import { bootstrapHeadlessAgent } from "./agent-bootstrap.js";
+import { handleNativeAiTaskMessage } from "./native-ai-task-handler.js";
 import { readStdin, mapTextToToolInput } from "../utils/stdin.js";
 
 const BROWSER_ONLY_TOOLS = new Set([
@@ -1091,29 +1092,28 @@ export async function runAgentRun(
   const pendingWrites: Promise<void>[] = [];
 
   core.setPostHandler(async (message: any) => {
-    switch (message.type) {
-      case "streaming-start":
+    const messageHandlers: Record<string, (msg: any) => void> = {
+      "streaming-start": () => {
         hasStreamedChunks = true;
-        break;
-      case "streaming-chunk":
-        if (message.payload?.text) {
+      },
+      "streaming-chunk": (msg) => {
+        if (msg.payload?.text) {
           hasStreamedChunks = true;
-          capturedResponse = (capturedResponse || "") + message.payload.text;
+          capturedResponse = (capturedResponse || "") + msg.payload.text;
           if (!options.quiet && !options.output) {
-            process.stdout.write(message.payload.text);
+            process.stdout.write(msg.payload.text);
           }
         }
-        break;
-      case "streaming-done":
-      case "streaming-end":
-        break;
-      case "response":
-        if (message.payload?.text) {
-          capturedResponse = message.payload.text;
+      },
+      "streaming-done": () => {},
+      "streaming-end": () => {},
+      response: (msg) => {
+        if (msg.payload?.text) {
+          capturedResponse = msg.payload.text;
           if (options.output) {
             const writePromise = writeFile(
               path.resolve(options.output),
-              message.payload.text,
+              msg.payload.text,
               "utf8",
             )
               .then(() => {
@@ -1125,58 +1125,56 @@ export async function runAgentRun(
             pendingWrites.push(writePromise);
           } else if (!options.quiet) {
             if (hasStreamedChunks) {
-              if (!message.payload.text.endsWith("\n")) {
+              if (!msg.payload.text.endsWith("\n")) {
                 process.stdout.write("\n");
               }
             } else {
-              process.stdout.write(message.payload.text + "\n");
+              process.stdout.write(msg.payload.text + "\n");
             }
           }
         }
-        break;
-      case "intermediate-response":
-        if (options.verbose && !options.quiet && message.payload?.text) {
-          process.stderr.write(`[Thought] ${message.payload.text}\n`);
+      },
+      "intermediate-response": (msg) => {
+        if (options.verbose && !options.quiet && msg.payload?.text) {
+          process.stderr.write(`[Thought] ${msg.payload.text}\n`);
         }
-        break;
-      case "error":
-        if (message.payload?.error) {
-          capturedError = message.payload.error;
+      },
+      error: (msg) => {
+        if (msg.payload?.error) {
+          capturedError = msg.payload.error;
           if (!options.quiet) {
-            console.error(`Error: ${message.payload.error}`);
+            console.error(`Error: ${msg.payload.error}`);
           }
         }
-        break;
-      case "tool-activity":
-        if (options.verbose && !options.quiet && message.payload) {
-          const toolName = message.payload.tool || "tool";
-          const status = message.payload.status || "executing";
+      },
+      "tool-activity": (msg) => {
+        if (options.verbose && !options.quiet && msg.payload) {
+          const toolName = msg.payload.tool || "tool";
+          const status = msg.payload.status || "executing";
           process.stderr.write(`[Tool] ${toolName} (${status})\n`);
         }
-        break;
-      case "thinking-log":
-        if (options.verbose && !options.quiet && message.payload) {
-          const label = message.payload.label || message.payload.level || "Log";
-          process.stderr.write(`[${label}] ${message.payload.message || ""}\n`);
+      },
+      "thinking-log": (msg) => {
+        if (options.verbose && !options.quiet && msg.payload) {
+          const label = msg.payload.label || msg.payload.level || "Log";
+          process.stderr.write(`[${label}] ${msg.payload.message || ""}\n`);
         }
-        break;
-      case "status":
-        if (options.verbose && !options.quiet && message.payload) {
-          const label = message.payload.label
-            ? `[${message.payload.label}] `
-            : "";
-          process.stderr.write(`${label}${message.payload.message || ""}\n`);
+      },
+      status: (msg) => {
+        if (options.verbose && !options.quiet && msg.payload) {
+          const label = msg.payload.label ? `[${msg.payload.label}] ` : "";
+          process.stderr.write(`${label}${msg.payload.message || ""}\n`);
         }
-        break;
-      case "log":
-        if (options.verbose && !options.quiet && message.payload) {
-          const label = message.payload.label || message.payload.level || "Log";
-          process.stderr.write(`[${label}] ${message.payload.message || ""}\n`);
+      },
+      log: (msg) => {
+        if (options.verbose && !options.quiet && msg.payload) {
+          const label = msg.payload.label || msg.payload.level || "Log";
+          process.stderr.write(`[${label}] ${msg.payload.message || ""}\n`);
         }
-        break;
-      case "token-usage":
-        if (options.verbose && !options.quiet && message.payload?.usage) {
-          const u = message.payload.usage;
+      },
+      "token-usage": (msg) => {
+        if (options.verbose && !options.quiet && msg.payload?.usage) {
+          const u = msg.payload.usage;
           const promptT = u.prompt_tokens ?? u.input_tokens ?? 0;
           const compT = u.completion_tokens ?? u.output_tokens ?? 0;
           const totalT = u.total_tokens ?? promptT + compT;
@@ -1184,34 +1182,13 @@ export async function runAgentRun(
             `[Tokens] Prompt: ${promptT}, Completion: ${compT}, Total: ${totalT}\n`,
           );
         }
-        break;
-      case "request-native-ai-task":
-        if (message.payload && typeof core.executeNativeAiTask === "function") {
-          const { id, groupId: taskGroupId, taskType, input } = message.payload;
-          core
-            .executeNativeAiTask({
-              taskType,
-              input,
-              groupId: taskGroupId,
-              db,
-            })
-            .then((res: unknown) => {
-              const resolvers = (globalThis as any).pendingNativeAiResolvers;
-              if (resolvers && resolvers[id]) {
-                resolvers[id].resolve(res);
-                delete resolvers[id];
-              }
-            })
-            .catch((err: unknown) => {
-              const resolvers = (globalThis as any).pendingNativeAiResolvers;
-              if (resolvers && resolvers[id]) {
-                resolvers[id].reject(err);
-                delete resolvers[id];
-              }
-            });
-        }
-        break;
-    }
+      },
+      "request-native-ai-task": (msg) => {
+        handleNativeAiTaskMessage(core, db, msg.payload);
+      },
+    };
+
+    messageHandlers[message.type]?.(message);
   });
 
   let toolResolution;

@@ -4,7 +4,7 @@ jest.unstable_mockModule("../../utils/sandboxedEval.js", () => ({
   sandboxedEval: jest.fn(),
 }));
 
-jest.unstable_mockModule("./utils/getAllowFullInternetAccess.js", () => ({
+jest.unstable_mockModule("../utils/getAllowFullInternetAccess.js", () => ({
   getAllowFullInternetAccess: jest.fn<any>().mockResolvedValue(false),
 }));
 

@@ -197,4 +197,16 @@ describe("config", () => {
 
     expect(config.serveStatic).toBe(false);
   });
+
+  it("parses the A2A enablement flag", async () => {
+    commanderMock.Command().opts.mockReturnValue({
+      a2a: true,
+      corsAllowOrigin: [],
+    });
+
+    const { parseConfig } = await import("./config.js");
+    const config = parseConfig();
+
+    expect(config.a2aEnabled).toBe(true);
+  });
 });

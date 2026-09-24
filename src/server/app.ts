@@ -53,7 +53,7 @@ export function createApp(config: ServerConfig): {
   app.use(createCorsMiddleware(config, logger, verbose));
 
   // ---------------- SECURITY HEADERS (REPORT-ONLY) ----------------
-  app.use(createCspReportOnlyMiddleware());
+  app.use(createCspReportOnlyMiddleware({ rootPath: config.rootPath }));
 
   // ---------------- PARSERS & COMPRESSION ----------------
   app.use(

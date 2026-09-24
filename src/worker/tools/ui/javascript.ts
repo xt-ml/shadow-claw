@@ -1,6 +1,6 @@
 import { ShadowClawDatabase } from "../../../db/types.js";
 import { sandboxedEval } from "../../utils/sandboxedEval.js";
-import { getAllowFullInternetAccess } from "./utils/getAllowFullInternetAccess.js";
+import { getAllowFullInternetAccess } from "../utils/getAllowFullInternetAccess.js";
 
 export async function executeJavascript(
   db: ShadowClawDatabase,

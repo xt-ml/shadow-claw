@@ -115,6 +115,7 @@ npm install && npm run dev  # Dev server → http://localhost:8888
 - **Configurable Multi-Model Routing:** Route queries to Cloud providers (OpenRouter, Anthropic, Gemini, OpenAI, AWS Bedrock), local engines (Ollama, Llamafile, Transformers.js with on-demand Hugging Face model downloading and disk caching), or in-browser WebGPU models (LiteRT-LM).
 - **Dual-Dispatch Sandboxing & Storage:** Client-side compute via sandboxed JavaScript and `just-bash` (or WebVM Alpine Linux) backed by Origin Private File System (OPFS) and IndexedDB; paired with host-native Node filesystem handles and SQLite database persistence on the server side.
 - **PWA & Electron Desktop Parity:** Deployable as a progressive web app with Service Worker and Web Push, or as a native desktop application with full feature parity.
+- **Modular Package Library Exports & Standardized Utilities:** Exposes modular ESM exports declared in `package.json` under `.`, `./cli`, `./cli/*`, `./components`, `./components/*`, `./utils`, and `./utils/*`, compiled via Rolldown with dynamic entry point discovery for reusable components and standardized cross-cutting utilities (`base64`, `coerce`, `delay`, `filename`, `isBinary`, `mime`, `normalizeStringList`, `normalizeWorkspacePath`, `parseBooleanConfig`, `parseStoredStringList`, `ulid`).
 - **Control Plane, CLI & Native MCP Server:** Backed by a Node.js service layer and CLI (`shadow-claw`) that provides background cron scheduling, remote backups, direct WebRTC DataChannel connectivity, and a Stateless MCP server featuring both native server management tools and dynamic browser tool relaying to external agent hosts (Claude Desktop, Cursor, Goose).
 
 ---
@@ -162,6 +163,7 @@ ShadowClaw follows a **dual-runtime agent pattern**, sharing a unified tool-use 
 - **Group Separation** — Browser channel uses `br:main` (and `br:<id>`), while headless CLI automation defaults to `server:main`.
 - **Worker Isolation on Frontend** — In browser and Electron runtimes, LLM calls, tool execution, and WebVM all run off-main-thread to keep the UI at 60fps.
 - **Reactive Signals** — TC39 Signals (via `signal-polyfill`) drive all UI updates.
+- **Standardized Shared Utilities** — Centralizes cross-cutting helpers in `src/utils/` (`shadow-claw/utils`) and tool-family helpers in `src/worker/tools/utils/` to eliminate single-function silos and duplicate implementations.
 
 **Full architecture docs:** See [System Overview](docs/architecture/overview.md), [Worker-Isolated Agent Runtime](docs/decisions/worker-isolated-agent-runtime.md), and [Headless CLI Agent Participant](docs/decisions/headless-cli-agent-participant.md).
 

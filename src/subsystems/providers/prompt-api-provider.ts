@@ -14,10 +14,12 @@ import {
 import {
   DEFAULT_PROMPT_API_MODEL_SIZE_BYTES,
   PromptApiProgressAggregator,
+} from "./utils/promptApiProgressAggregator.js";
+import {
   setModelCacheProgressHook,
   clearModelCacheProgressHook,
-  normalizeMessagesForChatTemplate,
-} from "./utils/index.js";
+} from "./utils/createModelCacheFetch.js";
+import { normalizeMessagesForChatTemplate } from "./utils/chatTemplate.js";
 
 import type { SubagentInvokeContext } from "../../worker/tools/spawn-subagent/spawn-subagent.js";
 

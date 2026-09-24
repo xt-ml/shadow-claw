@@ -425,6 +425,34 @@ export function getApprovedCustomElementScripts(): string[] {
 }
 
 /**
+ * Check if HTML content contains any approved custom element tags.
+ */
+export function hasApprovedCustomElement(html: string): boolean {
+  if (!html || typeof html !== "string") {
+    return false;
+  }
+  const allowed = getAllowedCustomElements();
+  if (allowed.length > 0) {
+    return allowed.some((tag) => {
+      const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const regex = new RegExp(`<${escaped}[\\s>/]`, "i");
+      return regex.test(html);
+    });
+  }
+
+  // If no explicit allowed elements are set, check for any non-shadow-claw custom element
+  const customTagRegex = /<([a-z][a-z0-9_]*-[a-z0-9_-]*)[\\s>/]/gi;
+  let match: RegExpExecArray | null;
+  while ((match = customTagRegex.exec(html)) !== null) {
+    const tagName = match[1].toLowerCase();
+    if (!tagName.startsWith("shadow-claw")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Load allowed custom elements and host patterns from IndexedDB.
  */
 export async function loadCustomElementSecurityFromDb(

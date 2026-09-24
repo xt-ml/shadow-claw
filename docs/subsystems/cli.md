@@ -121,12 +121,20 @@ Ideal for scenarios where ShadowClaw frontends (such as static sites on GitHub P
 | `--cors-allow-origin <url>` | string  | Explicit allowed origins (comma-separated)                                         | `undefined`         |
 | `--control-token <token>`   | string  | Secret token for control-plane authentication                                      | Auto-generated      |
 | `--peerjs`                  | boolean | Enable built-in PeerJS signaling server                                            | `false`             |
+| `--a2a`                     | boolean | Enable the A2A v1.0 agent card, JSON-RPC, and SSE endpoints                        | `false`             |
 | `--allow-private-proxy`     | boolean | Allow `/proxy` endpoint to reach private/loopback addresses                        | `false`             |
 | `--https`                   | boolean | Enable opt-in HTTPS server using dev TLS certificate                               | `false`             |
 | `--cert <path>`             | string  | Path to custom TLS certificate (PEM)                                               | `undefined`         |
 | `--key <path>`              | string  | Path to custom TLS private key (PEM)                                               | `undefined`         |
 | `--ssl-dir <path>`          | string  | Directory for self-signed TLS certs (defaults to `<cacheDir>/tls`)                 | `".cache/tls"`      |
 | `-v, --verbose`             | boolean | Enable verbose request and proxy logging                                           | `false`             |
+
+When `--a2a` is enabled, the server exposes `GET /.well-known/agent-card.json`,
+`POST /a2a`, and `GET /a2a/tasks/:taskId`. Set `SHADOWCLAW_A2A=1` to enable the
+same endpoints through the environment. Discovery is public; JSON-RPC and SSE
+requests use the control token when one is configured. The native
+`A2AHttpClient` can discover and call a known server, but `shadow-claw server`
+does not automatically connect to or manage a peer registry.
 
 ### `shadow-claw init [dir]`
 

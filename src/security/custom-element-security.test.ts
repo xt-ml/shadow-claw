@@ -12,6 +12,7 @@ import {
   getCustomElementPurifyConfig,
   getIframeCsp,
   getIframeSandboxPolicy,
+  hasApprovedCustomElement,
   installCustomElementDomGuard,
   installCustomElementsRegistryGuard,
   isAllowedCustomElement,
@@ -459,6 +460,57 @@ describe("custom-element-security", () => {
         uninstallCustomElementsRegistryGuard();
         siteConfigScript.remove();
       }
+    });
+  });
+
+  describe("hasApprovedCustomElement", () => {
+    it("returns false for null, undefined, or empty content", () => {
+      expect(hasApprovedCustomElement("")).toBe(false);
+      expect(hasApprovedCustomElement(null as any)).toBe(false);
+      expect(hasApprovedCustomElement(undefined as any)).toBe(false);
+    });
+
+    it("returns false for regular HTML without custom elements", () => {
+      expect(
+        hasApprovedCustomElement(
+          "<h1>Title</h1><p>Hello world</p><article></article>",
+        ),
+      ).toBe(false);
+    });
+
+    it("returns false for built-in shadow-claw elements", () => {
+      expect(
+        hasApprovedCustomElement(
+          "<shadow-claw><shadow-claw-pages></shadow-claw-pages></shadow-claw>",
+        ),
+      ).toBe(false);
+    });
+
+    it("detects configured allowed elements in HTML", () => {
+      setAllowedCustomElements(["block-garden", "x-pwgen"]);
+      expect(
+        hasApprovedCustomElement('<block-garden id="live"></block-garden>'),
+      ).toBe(true);
+      expect(hasApprovedCustomElement('<x-pwgen length="16" />')).toBe(true);
+      expect(
+        hasApprovedCustomElement(
+          "<div><block-garden>content</block-garden></div>",
+        ),
+      ).toBe(true);
+      expect(hasApprovedCustomElement("<other-element></other-element>")).toBe(
+        false,
+      );
+    });
+
+    it("detects generic non-shadow-claw custom elements when allowedElements is empty", () => {
+      setAllowedCustomElements([]);
+      expect(
+        hasApprovedCustomElement("<my-custom-widget></my-custom-widget>"),
+      ).toBe(true);
+      expect(hasApprovedCustomElement("<div><h1>Hello</h1></div>")).toBe(false);
+      expect(
+        hasApprovedCustomElement("<shadow-claw-toast></shadow-claw-toast>"),
+      ).toBe(false);
     });
   });
 });

@@ -1,7 +1,6 @@
 import { jest } from "@jest/globals";
+import { computeDelay, sleep } from "../../utils/delay.js";
 import {
-  computeDelay,
-  sleep,
   withRetry,
   isRetryableHttpError,
   isRetryableFetchError,
@@ -374,5 +373,55 @@ describe("RETRYABLE_STATUS_CODES", () => {
     expect(RETRYABLE_STATUS_CODES.has(401)).toBe(false);
     expect(RETRYABLE_STATUS_CODES.has(403)).toBe(false);
     expect(RETRYABLE_STATUS_CODES.has(404)).toBe(false);
+  });
+});
+
+// ── isNetworkError shared path ─────────────────────────────────────
+// These keywords are handled by the private isNetworkError() helper.
+// Both isRetryableHttpError and isRetryableFetchError must agree on them.
+
+describe("isNetworkError shared path (via both isRetryable* predicates)", () => {
+  const NETWORK_KEYWORDS = [
+    "network error",
+    "ECONNRESET",
+    "ECONNREFUSED",
+    "ETIMEDOUT",
+    "fetch failed",
+    "EAI_AGAIN",
+    "EAI_NONAME",
+    "getaddrinfo EAI_AGAIN cdnjs.cloudflare.com",
+  ];
+
+  const NON_NETWORK_MESSAGES = [
+    "Invalid JSON",
+    "Permission denied",
+    "Unexpected token",
+    "Cannot read properties",
+  ];
+
+  describe("isRetryableHttpError", () => {
+    it.each(NETWORK_KEYWORDS)("returns true for network keyword: %s", (msg) => {
+      expect(isRetryableHttpError(new Error(msg))).toBe(true);
+    });
+
+    it.each(NON_NETWORK_MESSAGES)(
+      "returns false for non-network message: %s",
+      (msg) => {
+        expect(isRetryableHttpError(new Error(msg))).toBe(false);
+      },
+    );
+  });
+
+  describe("isRetryableFetchError", () => {
+    it.each(NETWORK_KEYWORDS)("returns true for network keyword: %s", (msg) => {
+      expect(isRetryableFetchError(new Error(msg))).toBe(true);
+    });
+
+    it.each(NON_NETWORK_MESSAGES)(
+      "returns false for non-network message: %s",
+      (msg) => {
+        expect(isRetryableFetchError(new Error(msg))).toBe(false);
+      },
+    );
   });
 });

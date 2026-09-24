@@ -25,7 +25,7 @@ jest.unstable_mockModule("../../../db/setConfig.js", () => ({
   setConfig: mockSetConfig,
 }));
 
-jest.unstable_mockModule("./normalizeStringList.js", () => ({
+jest.unstable_mockModule("../../../utils/normalizeStringList.js", () => ({
   normalizeStringList: mockNormalizeStringList,
 }));
 

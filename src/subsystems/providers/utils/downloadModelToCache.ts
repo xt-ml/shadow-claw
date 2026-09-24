@@ -1,6 +1,5 @@
-import { backoffDelayMs } from "./backoffDelayMs.js";
+import { computeDelay, sleep } from "../../../utils/delay.js";
 import { chunkKey } from "./chunkKey.js";
-import { delayWithAbort } from "./delayWithAbort.js";
 import { flushChunkToCache } from "./flushChunkToCache.js";
 import { isCacheStorageAvailable } from "./isCacheStorageAvailable.js";
 import { readPartialMeta } from "./readPartialMeta.js";
@@ -85,7 +84,7 @@ export async function downloadModelToCache(
 
       lastError = err;
       if (attempt < maxAttempts) {
-        await delayWithAbort(backoffDelayMs(attempt), abortSignal);
+        await sleep(computeDelay(attempt - 1, 1_000, 15_000, 0), abortSignal);
         continue;
       }
       break;
@@ -106,7 +105,7 @@ export async function downloadModelToCache(
         `ModelCache: Failed to fetch model from '${targetUrl}': ${response.status} ${response.statusText}`,
       );
       if (response.status >= 500 && attempt < maxAttempts) {
-        await delayWithAbort(backoffDelayMs(attempt), abortSignal);
+        await sleep(computeDelay(attempt - 1, 1_000, 15_000, 0), abortSignal);
         continue;
       }
 

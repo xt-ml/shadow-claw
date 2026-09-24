@@ -2,7 +2,7 @@
 
 > First-class Model Context Protocol (MCP) server exposing ShadowClaw CLI capabilities, server endpoints, and live browser WebMCP tools to external agent hosts.
 
-**Source:** `src/server/mcp/` · `src/server/routes/mcp.ts` · `src/cli/commands/mcp.ts` · `src/cli/cli.ts`
+**Source:** `src/server/mcp/` · `src/server/mcp/tools/built-in-tool-definitions.ts` · `src/server/mcp/tools/client-tool-names.ts` · `src/server/routes/mcp.ts` · `src/cli/commands/mcp.ts` · `src/cli/cli.ts`
 
 ---
 
@@ -168,6 +168,8 @@ The host client fulfills the request by calling `tools/call` with `inputResponse
 | `shadowclaw_server_manage_backup`     | Trigger, list, or delete OPFS workspace snapshots on a client.                                                    | `action` (`trigger` \| `list` \| `delete`), `clientId`, `backupId`, `groupId` |
 | `shadowclaw_server_send_notification` | Broadcast an OS push notification to all subscribed devices or a specific registered client via Web Push (VAPID). | `body` (required), `title` (optional), `clientId` (optional)                  |
 | `shadowclaw_server_status`            | Query Node server status, version, and connected client count.                                                    | None                                                                          |
+
+Static schemas and metadata for built-in tools are declared in `src/server/mcp/tools/built-in-tool-definitions.ts` (`BUILTIN_TOOL_DEFINITIONS`), while client tool name parsing and prefix normalization helpers are provided by `src/server/mcp/tools/client-tool-names.ts` (`getClientRawToolName`, `toClientExposedToolName`).
 
 ---
 

@@ -13,7 +13,7 @@ import { resetStorageDirectory } from "../../../storage/storage.js";
 
 import { orchestratorStore } from "../../../stores/orchestrator.js";
 import { showError, showSuccess, showWarning } from "../../../ui/toast.js";
-import { isTruthyConfigValue } from "../../../common/utils/config-value.mjs";
+import { isTruthyConfigValue } from "../../../utils/parseBooleanConfig.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 

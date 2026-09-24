@@ -33,6 +33,7 @@ export interface ServerConfig {
   keyPath?: string;
   sslDir: string;
   serveStatic?: boolean;
+  a2aEnabled: boolean;
 }
 
 export function parseConfig(): ServerConfig {
@@ -88,6 +89,11 @@ export function parseConfig(): ServerConfig {
     .option(
       "--no-static",
       "Disable static file and UI serving (services-only mode)",
+    )
+    .option(
+      "--a2a",
+      "Enable A2A (Agent-to-Agent v1.0) server endpoint and discovery",
+      false,
     );
 
   program.parse();
@@ -254,6 +260,13 @@ export function parseConfig(): ServerConfig {
   const serveStatic =
     options.static !== undefined ? Boolean(options.static) : envServeStatic;
 
+  // A2A logic
+  const a2aEnabled =
+    Boolean(options.a2a) ||
+    ["1", "true", "yes"].includes(
+      (env.SHADOWCLAW_A2A || "").toLowerCase().trim(),
+    );
+
   return {
     port,
     bindHost,
@@ -271,5 +284,6 @@ export function parseConfig(): ServerConfig {
     keyPath,
     sslDir,
     serveStatic,
+    a2aEnabled,
   };
 }

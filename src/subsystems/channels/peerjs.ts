@@ -176,7 +176,7 @@ export class PeerJsChannel implements Channel {
     size: number;
     targetGroupId?: string;
   } | null = null;
-  /** Pending JSON-RPC response callbacks keyed by request ID */
+  /** Pending JSON-RPC response callbacks keyed by request ID (coerced to string) */
   private _pendingRequests = new Map<
     string,
     {
@@ -1043,10 +1043,11 @@ export class PeerJsChannel implements Channel {
   ): void {
     // Response to a pending request (e.g., GetAgentCard response)
     if (isJsonRpcResponse(msg)) {
-      const pending = this._pendingRequests.get(msg.id);
+      const key = String(msg.id ?? "");
+      const pending = this._pendingRequests.get(key);
       if (pending) {
         clearTimeout(pending.timer);
-        this._pendingRequests.delete(msg.id);
+        this._pendingRequests.delete(key);
         pending.resolve(msg as A2AJsonRpcResponse);
       }
 
@@ -1067,82 +1068,71 @@ export class PeerJsChannel implements Channel {
 
     // JSON-RPC Request (has id — expects a response)
     if (isJsonRpcRequest(msg)) {
-      switch (method) {
-        case A2A_METHOD.GET_AGENT_CARD:
-          this._handleGetAgentCard(remotePeerId, msg as A2AJsonRpcRequest);
+      const requestHandlers: Record<
+        string,
+        (remotePeerId: string, req: A2AJsonRpcRequest) => void
+      > = {
+        [A2A_METHOD.GET_AGENT_CARD]: (p, r) => this._handleGetAgentCard(p, r),
+        [A2A_METHOD.SEND_MESSAGE]: (p, r) => this._handleA2ASendMessage(p, r),
+        [A2A_METHOD.CANCEL_TASK]: (p, r) => this._handleA2ACancelTask(p, r),
+        [A2A_METHOD.GET_TASK]: (p, r) => this._handleA2AGetTask(p, r),
+      };
 
-          break;
-        case A2A_METHOD.SEND_MESSAGE:
-          this._handleA2ASendMessage(remotePeerId, msg as A2AJsonRpcRequest);
+      const handler = requestHandlers[method];
+      if (handler) {
+        handler(remotePeerId, msg as A2AJsonRpcRequest);
 
-          break;
-        case A2A_METHOD.CANCEL_TASK:
-          this._handleA2ACancelTask(remotePeerId, msg as A2AJsonRpcRequest);
+        return;
+      }
 
-          break;
-        case A2A_METHOD.GET_TASK:
-          this._handleA2AGetTask(remotePeerId, msg as A2AJsonRpcRequest);
-
-          break;
-        default:
-          // Legacy "message/send" (existing format) — process as before
-          if (method === "message/send") {
-            const params = msg.params as any;
-            if (params?.message?.parts && Array.isArray(params.message.parts)) {
-              this._processInboundA2AEnvelope(
-                remotePeerId,
-                params.message.parts,
-              ).catch((err) =>
-                console.error(
-                  "PeerJsChannel: failed to process inbound A2A envelope",
-                  err,
-                ),
-              );
-            }
-          } else {
-            this._sendJsonRpcError(remotePeerId, msg.id as string, {
-              code: A2A_ERROR_CODE.METHOD_NOT_FOUND,
-              message: `Method not found: ${method}`,
-            });
-          }
+      // Legacy "message/send" (existing format) — process as before
+      if (method === "message/send") {
+        const params = msg.params as any;
+        if (params?.message?.parts && Array.isArray(params.message.parts)) {
+          this._processInboundA2AEnvelope(
+            remotePeerId,
+            params.message.parts,
+          ).catch((err) =>
+            console.error(
+              "PeerJsChannel: failed to process inbound A2A envelope",
+              err,
+            ),
+          );
+        }
+      } else {
+        this._sendJsonRpcError(remotePeerId, msg.id as string, {
+          code: A2A_ERROR_CODE.METHOD_NOT_FOUND,
+          message: `Method not found: ${method}`,
+        });
       }
 
       return;
     }
 
     // JSON-RPC Notification (no id — no response expected)
-    switch (method) {
-      case AGUI_METHOD.EVENT:
-        this._handleAGUIEventNotification(remotePeerId, msg.params);
-
-        break;
-      case A2A_STREAM_METHOD.STATUS_UPDATE:
-        this._handleTaskStatusNotification(remotePeerId, msg.params);
-
-        break;
-      case A2A_STREAM_METHOD.ARTIFACT_UPDATE:
-        // Future: handle artifact streaming notifications
-
-        break;
-      case "message/send":
-        // Legacy notification format (no id)
-        {
-          const params = msg.params as any;
-          if (params?.message?.parts && Array.isArray(params.message.parts)) {
-            this._processInboundA2AEnvelope(
-              remotePeerId,
-              params.message.parts,
-            ).catch((err) =>
+    const notificationHandlers: Record<
+      string,
+      (remotePeerId: string, params: unknown) => void
+    > = {
+      [AGUI_METHOD.EVENT]: (p, params) =>
+        this._handleAGUIEventNotification(p, params),
+      [A2A_STREAM_METHOD.STATUS_UPDATE]: (p, params) =>
+        this._handleTaskStatusNotification(p, params),
+      [A2A_STREAM_METHOD.ARTIFACT_UPDATE]: () => {},
+      "message/send": (p, params: any) => {
+        if (params?.message?.parts && Array.isArray(params.message.parts)) {
+          this._processInboundA2AEnvelope(p, params.message.parts).catch(
+            (err) =>
               console.error(
                 "PeerJsChannel: failed to process inbound A2A envelope",
                 err,
               ),
-            );
-          }
+          );
         }
+      },
+    };
 
-        break;
-    }
+    notificationHandlers[method]?.(remotePeerId, msg.params);
   }
 
   /**
@@ -1720,17 +1710,16 @@ export class PeerJsChannel implements Channel {
    * Register a pending JSON-RPC request (with 10s timeout).
    */
   private _registerPendingRequest(
-    requestId: string,
+    requestId: string | number | null,
     callback: (response: A2AJsonRpcResponse) => void,
   ): void {
+    const key = String(requestId ?? "");
     const timer = setTimeout(() => {
-      this._pendingRequests.delete(requestId);
-      console.warn(
-        `PeerJsChannel: JSON-RPC request ${requestId} timed out (10s)`,
-      );
+      this._pendingRequests.delete(key);
+      console.warn(`PeerJsChannel: JSON-RPC request ${key} timed out (10s)`);
     }, 10_000);
 
-    this._pendingRequests.set(requestId, {
+    this._pendingRequests.set(key, {
       resolve: callback,
       timer,
     });
@@ -1780,7 +1769,7 @@ export class PeerJsChannel implements Channel {
    */
   private _sendJsonRpcError(
     remotePeerId: string,
-    requestId: string,
+    requestId: string | number | null,
     error: { code: number; message: string; data?: unknown[] },
   ): void {
     const conn = this.connections.get(remotePeerId);

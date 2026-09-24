@@ -572,7 +572,8 @@ describe("prompt-api-provider", () => {
   });
 
   it("integrates with createModelCacheFetch streaming progress during model download", async () => {
-    const { getModelCacheProgressHook } = await import("./utils/index.js");
+    const { getModelCacheProgressHook } =
+      await import("./utils/createModelCacheFetch.js");
 
     const clonePrompt = (jest.fn() as any).mockResolvedValue("summary");
     const cloneDestroy = (jest.fn() as any).mockResolvedValue(undefined);

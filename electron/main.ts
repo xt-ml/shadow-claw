@@ -64,7 +64,7 @@ function startServer(databaseDir: string): Promise<number> {
     srv.use(express.json({ limit: "1000mb" }));
 
     // Report-only CSP parity with the dev server.
-    srv.use(createCspReportOnlyMiddleware());
+    srv.use(createCspReportOnlyMiddleware({ rootPath: ROOT }));
 
     // Proxy routes shared with serve.js
     registerProxyRoutes(srv);

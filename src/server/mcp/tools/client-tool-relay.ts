@@ -7,27 +7,16 @@
  */
 
 import type { McpServer } from "../mcp-server.js";
-import {
-  MCP_CLIENT_TOOL_PREFIX,
-  type McpTool,
-  type McpToolCallResult,
-} from "../types.js";
+import { type McpTool, type McpToolCallResult } from "../types.js";
 import {
   resolveTargetClientId,
   getDynamicSendNotificationTool,
 } from "./built-in-tools.js";
 
-function getClientRawToolName(name: string): string {
-  return name.startsWith(MCP_CLIENT_TOOL_PREFIX)
-    ? name.slice(MCP_CLIENT_TOOL_PREFIX.length)
-    : name;
-}
-
-function toClientExposedToolName(name: string): string {
-  return !name.startsWith(MCP_CLIENT_TOOL_PREFIX)
-    ? `${MCP_CLIENT_TOOL_PREFIX}${name}`
-    : name;
-}
+import {
+  getClientRawToolName,
+  toClientExposedToolName,
+} from "./client-tool-names.js";
 
 export interface ClientToolRelayOptions {
   targetClientId?: string;

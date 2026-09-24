@@ -177,31 +177,32 @@ sequenceDiagram
 
 ## Key Directories
 
-| Directory                       | Contents                                                                     |
-| ------------------------------- | ---------------------------------------------------------------------------- |
-| `bin/`                          | CLI wrapper entry points (`bin/cli.mjs`, `bin/build.mjs`, etc.)              |
-| `dist/cli/`                     | Bundled CLI commands and utilities compiled from `src/cli/` via Rolldown     |
-| `pages/`                        | Static site pages and routes (for in-repo deployment)                        |
-| `src/`                          | All application source code                                                  |
-| `src/cli/`                      | TypeScript CLI implementation, commands, build pipeline, and prerenderers    |
-| `src/components/`               | Web Components (`<shadow-claw-*>`), each in its own subdirectory             |
-| `src/components/common/`        | Reusable shared components (`empty-state`, `card`, `actions`)                |
-| `src/components/settings/`      | Recommended home for settings feature components (incremental migration)     |
-| `src/context/`                  | Token estimation, dynamic windowing, output truncation                       |
-| `src/db/`                       | IndexedDB layer (granular modules for each DB operation)                     |
-| `src/server/`                   | Express server, control plane, proxy routes, WebRTC, and backup APIs         |
-| `src/service-worker/`           | Service worker modules                                                       |
-| `src/shell/`                    | JS shell emulator + OPFS bridge                                              |
-| `src/storage/`                  | OPFS + File System Access API abstractions                                   |
-| `src/stores/`                   | Reactive signal-based state stores                                           |
-| `src/subsystems/channels/`      | Channel registry + browser chat channel                                      |
-| `src/subsystems/git/`           | isomorphic-git operations + OPFS sync                                        |
-| `src/subsystems/notifications/` | Web Push + server-side SQLite task scheduling                                |
-| `src/subsystems/tools/`         | Agent tool definitions (modular `.ts` files)                                 |
-| `src/worker/tools/`             | Agent tool execution handlers                                                |
-| `src/worker/`                   | Worker internals (invoke handler, tool executor, stream parser, retry logic) |
-| `electron/`                     | Electron desktop app entry point                                             |
-| `e2e/`                          | Playwright E2E tests (Page Object Model pattern)                             |
+| Directory                       | Contents                                                                                                                                                                                                  |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `bin/`                          | CLI wrapper entry points (`bin/cli.mjs`, `bin/build.mjs`, etc.)                                                                                                                                           |
+| `dist/cli/`                     | Bundled CLI commands and utilities compiled from `src/cli/` via Rolldown                                                                                                                                  |
+| `pages/`                        | Static site pages and routes (for in-repo deployment)                                                                                                                                                     |
+| `src/`                          | All application source code                                                                                                                                                                               |
+| `src/cli/`                      | TypeScript CLI implementation, commands, build pipeline, and prerenderers                                                                                                                                 |
+| `src/components/`               | Web Components (`<shadow-claw-*>`), each in its own subdirectory                                                                                                                                          |
+| `src/components/common/`        | Reusable shared components (`empty-state`, `card`, `actions`)                                                                                                                                             |
+| `src/components/settings/`      | Recommended home for settings feature components (incremental migration)                                                                                                                                  |
+| `src/context/`                  | Token estimation, dynamic windowing, output truncation                                                                                                                                                    |
+| `src/db/`                       | IndexedDB layer (granular modules for each DB operation)                                                                                                                                                  |
+| `src/server/`                   | Express server, control plane, proxy routes, WebRTC, and backup APIs                                                                                                                                      |
+| `src/service-worker/`           | Service worker modules                                                                                                                                                                                    |
+| `src/shell/`                    | JS shell emulator + OPFS bridge                                                                                                                                                                           |
+| `src/storage/`                  | OPFS + File System Access API abstractions                                                                                                                                                                |
+| `src/stores/`                   | Reactive signal-based state stores                                                                                                                                                                        |
+| `src/subsystems/channels/`      | Channel registry + browser chat channel                                                                                                                                                                   |
+| `src/subsystems/git/`           | isomorphic-git operations + OPFS sync                                                                                                                                                                     |
+| `src/subsystems/notifications/` | Web Push + server-side SQLite task scheduling                                                                                                                                                             |
+| `src/subsystems/tools/`         | Agent tool definitions (modular `.ts` files)                                                                                                                                                              |
+| `src/worker/tools/`             | Agent tool execution handlers                                                                                                                                                                             |
+| `src/worker/`                   | Worker internals (invoke handler, tool executor, stream parser, retry logic)                                                                                                                              |
+| `src/utils/`                    | Reusable application-wide utilities (`base64`, `coerce`, `delay`, `filename`, `isBinary`, `mime`, `normalizeStringList`, `normalizeWorkspacePath`, `parseBooleanConfig`, `parseStoredStringList`, `ulid`) |
+| `electron/`                     | Electron desktop app entry point                                                                                                                                                                          |
+| `e2e/`                          | Playwright E2E tests (Page Object Model pattern)                                                                                                                                                          |
 
 ## Source directory categories
 
@@ -211,6 +212,6 @@ sequenceDiagram
 - `src/security/` contains cryptography, credential helpers, and trusted types wrappers.
 - `src/subsystems/` contains full integrations and cross-cutting feature bundles such as `git`, `mcp`, `providers`, `notifications`, and `channels`.
 - `src/ui/` contains page-level UI glue and view scaffolding that is not a standalone Web Component.
-- `src/utils/` contains generic utilities and reusable helpers used across the application.
+- `src/utils/` contains generic, cross-cutting utilities and reusable helpers (`base64`, `coerce`, `delay`, `filename`, `isBinary`, `mime`, `normalizeStringList`, `normalizeWorkspacePath`, `parseBooleanConfig`, `parseStoredStringList`, `ulid`) exported via package library exports (`shadow-claw/utils`).
 
 Stable root directories also include `src/components/`, `src/stores/`, `src/worker/`, `src/shell/`, `src/storage/`, `src/server/`, `src/service-worker/`, and `electron/`.

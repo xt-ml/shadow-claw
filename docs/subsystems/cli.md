@@ -89,6 +89,7 @@ Builds the site in development mode and starts the local server with live proxy,
 | `-y, --yes`              | boolean | Skip interactive cache directory prompt and accept defaults                        | `false`        |
 | `--cors-mode <mode>`     | string  | CORS policy: `localhost`, `private`, `all`                                         | `"localhost"`  |
 | `--peerjs`               | boolean | Enable built-in PeerJS signaling server                                            | `false`        |
+| `--a2a`                  | boolean | Enable the A2A v1.0 agent card, JSON-RPC, and SSE endpoints                        | `false`        |
 | `--allow-private-proxy`  | boolean | Allow `/proxy` endpoint to reach private/loopback addresses                        | `false`        |
 | `--https`                | boolean | Enable opt-in HTTPS server using dev TLS certificate                               | `false`        |
 | `--cert <path>`          | string  | Path to custom TLS certificate (PEM)                                               | `undefined`    |
@@ -100,11 +101,11 @@ Builds the site in development mode and starts the local server with live proxy,
 
 ### `shadow-claw serve [port]`
 
-Serves an already-built `dist/public` static directory and runs the proxy server without triggering a rebuild. Pass `--no-static` to disable static file and UI serving (services-only mode).
+Serves an already-built `dist/public` static directory and starts the backend services without triggering a rebuild. This includes the Express API, proxy, scheduler, control plane, and HTTP MCP endpoint. Pass `--no-static` to run those backend services without serving the UI. Use `--peerjs` and `--a2a` to enable the optional PeerJS signaling and A2A endpoints.
 
 ### `shadow-claw server [port]` / `shadow-claw services [port]` / `shadow-claw api [port]`
 
-Starts only the backend server and services (Express API, proxy, task scheduler, Control Plane, Stateless MCP HTTP endpoint, and optional PeerJS signaling) without building or serving the frontend UI or requiring a `dist` folder.
+Starts only the backend services (Express API, proxy, task scheduler, Control Plane, and HTTP MCP endpoint) without building or serving the frontend UI or requiring a `dist` folder. Use `--peerjs` to enable PeerJS signaling and `--a2a` to enable the A2A agent card, JSON-RPC, and SSE endpoints.
 
 Ideal for scenarios where ShadowClaw frontends (such as static sites on GitHub Pages, Cloudflare Pages, or remote browser tabs) connect to a local or remote headless backend node.
 
@@ -129,7 +130,7 @@ Ideal for scenarios where ShadowClaw frontends (such as static sites on GitHub P
 | `--ssl-dir <path>`          | string  | Directory for self-signed TLS certs (defaults to `<cacheDir>/tls`)                 | `".cache/tls"`      |
 | `-v, --verbose`             | boolean | Enable verbose request and proxy logging                                           | `false`             |
 
-When `--a2a` is enabled, the server exposes `GET /.well-known/agent-card.json`,
+When `--a2a` is enabled on `dev`, `run`, `serve`, or `server`, the backend exposes `GET /.well-known/agent-card.json`,
 `POST /a2a`, and `GET /a2a/tasks/:taskId`. Set `SHADOWCLAW_A2A=1` to enable the
 same endpoints through the environment. Discovery is public; JSON-RPC and SSE
 requests use the control token when one is configured. The native
@@ -441,7 +442,7 @@ npx shadow-claw tasks --transport webrtc --client <browser-peer-id>
 
 ### `shadow-claw mcp [options]`
 
-Runs the official Stateless Model Context Protocol (2026-07-28) server via STDIO or HTTP. Exposes ShadowClaw CLI capabilities and dynamically relayed tools from connected browser clients to external agent hosts (Claude Desktop, Cursor, Goose).
+Runs only the standalone official Stateless Model Context Protocol (2026-07-28) server via STDIO or HTTP. It exposes ShadowClaw CLI capabilities and dynamically relayed tools from connected browser clients to external agent hosts (Claude Desktop, Cursor, Goose); it does not start the backend services, PeerJS signaling, or A2A endpoints.
 
 ```bash
 # Run in STDIO mode (default, for Claude Desktop or Cursor configuration)

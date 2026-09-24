@@ -78,6 +78,15 @@ async function pathExists(p) {
   }
 }
 
+function isA2AEnabled(options) {
+  return Boolean(
+    options.a2a ||
+    ["1", "true", "yes"].includes(
+      (process.env.SHADOWCLAW_A2A || "").toLowerCase().trim(),
+    ),
+  );
+}
+
 function openBrowser(url) {
   const start =
     process.platform === "darwin"
@@ -262,6 +271,7 @@ async function handleDev(portArg, options) {
       allowedOrigins,
       verbose: Boolean(options.verbose),
       peerjs: Boolean(options.peerjs),
+      a2aEnabled: isA2AEnabled(options),
       rootPath: distPublicDir,
       cacheDir,
       databaseDir,
@@ -311,6 +321,11 @@ program
     false,
   )
   .option("--peerjs", "Enable built-in PeerJS signaling server", false)
+  .option(
+    "--a2a",
+    "Enable A2A v1.0 agent card, JSON-RPC, and SSE endpoints",
+    false,
+  )
   .optionsGroup("TLS / HTTPS Options:")
   .option("--https", "Enable HTTPS dev server", false)
   .option("--cert <path>", "Path to existing TLS certificate file")
@@ -365,6 +380,11 @@ program
     false,
   )
   .option("--peerjs", "Enable built-in PeerJS signaling server", false)
+  .option(
+    "--a2a",
+    "Enable A2A v1.0 agent card, JSON-RPC, and SSE endpoints",
+    false,
+  )
   .optionsGroup("TLS / HTTPS Options:")
   .option("--https", "Enable HTTPS dev server", false)
   .option("--cert <path>", "Path to existing TLS certificate file")
@@ -402,7 +422,7 @@ program.commandsGroup("Server:");
 program
   .command("serve [port]")
   .description(
-    "Serve an existing static site build and start the backend proxy",
+    "Serve static files and start backend services (optional: --peerjs, --a2a)",
   )
   .optionsGroup("Server & Network Options:")
   .option("-p, --port <port>", "Port to listen on (default: 8888)")
@@ -432,6 +452,11 @@ program
     false,
   )
   .option("--peerjs", "Enable built-in PeerJS signaling server", false)
+  .option(
+    "--a2a",
+    "Enable A2A v1.0 agent card, JSON-RPC, and SSE endpoints",
+    false,
+  )
   .optionsGroup("TLS / HTTPS Options:")
   .option("--https", "Enable HTTPS dev server", false)
   .option("--cert <path>", "Path to existing TLS certificate file")
@@ -553,6 +578,7 @@ program
         allowedOrigins,
         verbose: Boolean(options.verbose),
         peerjs: Boolean(options.peerjs),
+        a2aEnabled: isA2AEnabled(options),
         rootPath: distPublicDir,
         cacheDir,
         databaseDir,
@@ -660,6 +686,7 @@ async function handleServer(portArg, options) {
       allowedOrigins,
       verbose: Boolean(options.verbose),
       peerjs: Boolean(options.peerjs),
+      a2aEnabled: isA2AEnabled(options),
       rootPath: "",
       cacheDir,
       databaseDir,
@@ -684,7 +711,7 @@ program
   .command("server [port]")
   .aliases(["services", "api"])
   .description(
-    "Start backend services (Express, MCP, control plane) without building or serving the UI (aliases: services, api)",
+    "Start backend services (HTTP MCP, control plane, scheduler, and proxy) without serving static files (optional: --peerjs, --a2a; aliases: services, api)",
   )
   .optionsGroup("Server & Network Options:")
   .option("-p, --port <port>", "Port to listen on (default: 8888)")
@@ -706,6 +733,11 @@ program
     "Secret token for control-plane authentication",
   )
   .option("--peerjs", "Enable built-in PeerJS signaling server", false)
+  .option(
+    "--a2a",
+    "Enable A2A v1.0 agent card, JSON-RPC, and SSE endpoints",
+    false,
+  )
   .option(
     "--allow-private-proxy",
     "Allow proxy to reach private/loopback addresses",
@@ -744,7 +776,7 @@ program
 program
   .command("mcp")
   .description(
-    "Run the official Stateless Model Context Protocol (MCP 2026-07-28) server",
+    "Start the standalone MCP server only (does not start backend services, PeerJS, or A2A)",
   )
   .optionsGroup("MCP Protocol Options:")
   .option("--mcp-transport <transport>", "MCP transport: stdio | http", "stdio")

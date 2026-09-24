@@ -79,6 +79,15 @@ describe("shadow-claw CLI", () => {
     expect(stdout).toContain("run");
     expect(stdout).toContain("serve");
     expect(stdout).toContain("server");
+    const normalizedHelp = stdout.replace(/\s+/g, " ");
+    expect(normalizedHelp).toContain(
+      "Serve static files and start backend services (optional: --peerjs, --a2a)",
+    );
+    expect(normalizedHelp).toContain("Start backend services (HTTP MCP");
+    expect(normalizedHelp).toContain("without serving static files");
+    expect(normalizedHelp).toContain("optional: --peerjs, --a2a");
+    expect(normalizedHelp).toContain("Start the standalone MCP server only");
+    expect(normalizedHelp).toContain("does not start backend services, PeerJS");
     expect(stdout).toContain("init");
     expect(stdout).toContain("clients");
     expect(stdout).toContain("send");
@@ -98,6 +107,7 @@ describe("shadow-claw CLI", () => {
     expect(devHelp).toContain("Server & Network Options:");
     expect(devHelp).toContain("Site & Build Options:");
     expect(devHelp).toContain("Security & Proxy Options:");
+    expect(devHelp).toContain("--a2a");
     expect(devHelp).toContain("TLS / HTTPS Options:");
     expect(devHelp).toContain("Storage & Database Options:");
 
@@ -140,6 +150,18 @@ describe("shadow-claw CLI", () => {
       "--help",
     ]);
     expect(outServe).toContain("--no-static");
+    expect(outServe).toContain("--a2a");
+
+    const { stdout: outRun } = await execFileAsync(process.execPath, [
+      cliPath,
+      "run",
+      "--help",
+    ]);
+    expect(outRun).toContain("--a2a");
+
+    expect(outServer).toContain("--a2a");
+    expect(outServices).toContain("--a2a");
+    expect(outApi).toContain("--a2a");
   });
 
   it("outputs MCP command help with mcp --help", async () => {

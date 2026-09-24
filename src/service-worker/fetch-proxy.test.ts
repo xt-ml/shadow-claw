@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, jest } from "@jest/globals";
 describe("service-worker fetch proxy", () => {
   let fetchListener: ((event: any) => void) | null = null;
   let messageListener: ((event: any) => void) | null = null;
-  let networkFetch: jest.Mock;
+  let networkFetch: jest.Mock<any>;
 
   const imageBytes = new Uint8Array([255, 216, 255, 217]);
 
@@ -241,17 +241,35 @@ describe("service-worker fetch proxy", () => {
     expect(networkFetch).not.toHaveBeenCalled();
   });
 
-  it("does not intercept workspace-route navigation/document requests", async () => {
+  it("intercepts same-origin navigation requests to inject Origin-Agent-Cluster", async () => {
     const navigationRequest = createWorkspaceImageRequest({
       method: "GET",
       mode: "navigate",
       destination: "document",
     });
 
-    const response = dispatchFetchIntercept(navigationRequest);
+    const response = await dispatchFetch(navigationRequest);
 
-    expect(response).toBeNull();
-    expect(networkFetch).not.toHaveBeenCalled();
+    expect(networkFetch).toHaveBeenCalledWith(navigationRequest);
+    expect(response.headers.get("Origin-Agent-Cluster")).toBe("?1");
+  });
+
+  it("does not override an Origin-Agent-Cluster header already set by the network response", async () => {
+    networkFetch.mockResolvedValueOnce(
+      new TestResponse("doc", {
+        status: 200,
+        headers: { "Origin-Agent-Cluster": "?0" },
+      }) as unknown as Response,
+    );
+    const navigationRequest = createWorkspaceImageRequest({
+      method: "GET",
+      mode: "navigate",
+      destination: "document",
+    });
+
+    const response = await dispatchFetch(navigationRequest);
+
+    expect(response.headers.get("Origin-Agent-Cluster")).toBe("?0");
   });
 
   it("serves bytes for no-cors image requests (iframe/img-like shape)", async () => {

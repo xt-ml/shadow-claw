@@ -7,6 +7,7 @@ import {
 } from "../security/default-trusted-types-policy.js";
 
 const RELOAD_FALLBACK_TIMEOUT_MS = 3000;
+const OAC_RELOAD_KEY = "shadowclaw-oac-reload-attempted";
 const UPDATE_INTENT_KEY = "shadowclaw-sw-update-intent";
 const UPDATE_INTENT_MAX_AGE_MS = 30000;
 const MAX_FALLBACK_RELOAD_ATTEMPTS = 2;
@@ -278,6 +279,42 @@ export function shouldReloadAfterControllerChange(): boolean {
   return hasActiveUpdateIntent();
 }
 
+/**
+ * True when this page was served without an origin-keyed agent cluster (the
+ * host can't send `Origin-Agent-Cluster: ?1`, e.g. GitHub Pages) and we
+ * haven't yet tried the one-time reload that lets the newly-controlling
+ * service worker inject the header on the next navigation (see
+ * `fetchWithOriginAgentCluster` in fetch-proxy.ts). Without this, Firefox
+ * keeps `globalThis.originAgentCluster === false` for the tab's lifetime and
+ * `@mcp-b/webmcp-polyfill` refuses to register tools.
+ */
+export function shouldReloadForOriginAgentCluster(): boolean {
+  if (globalThis.originAgentCluster !== false) {
+    return false;
+  }
+
+  const protocol = globalThis.location?.protocol;
+  if (protocol !== "http:" && protocol !== "https:") {
+    return false;
+  }
+
+  try {
+    return !globalThis.sessionStorage?.getItem(OAC_RELOAD_KEY);
+  } catch {
+    return false;
+  }
+}
+
+function reloadForOriginAgentCluster() {
+  try {
+    globalThis.sessionStorage?.setItem(OAC_RELOAD_KEY, "1");
+  } catch {
+    return;
+  }
+
+  reloadCurrentPage();
+}
+
 function handleServiceWorkerControllerChange() {
   const shouldReload = shouldReloadAfterControllerChange();
 
@@ -288,6 +325,12 @@ function handleServiceWorkerControllerChange() {
   // explicitly initiated an update flow.
   if (shouldReload) {
     reloadCurrentPage();
+
+    return;
+  }
+
+  if (shouldReloadForOriginAgentCluster()) {
+    reloadForOriginAgentCluster();
   }
 }
 

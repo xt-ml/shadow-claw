@@ -234,4 +234,53 @@ describe("service-worker init", () => {
 
     expect(globalThis.sessionStorage.getItem(UPDATE_FAILURE_KEY)).toBeNull();
   });
+
+  describe("Origin-Agent-Cluster reload compatibility", () => {
+    afterEach(() => {
+      delete (globalThis as any).originAgentCluster;
+    });
+
+    it("does not reload when originAgentCluster is already true", async () => {
+      Object.defineProperty(globalThis, "originAgentCluster", {
+        configurable: true,
+        value: true,
+      });
+
+      await import("./init.js");
+      serviceWorkerListeners.controllerchange?.();
+
+      expect(
+        globalThis.sessionStorage.getItem("shadowclaw-oac-reload-attempted"),
+      ).toBeNull();
+    });
+
+    it("reloads once when originAgentCluster is false on http(s)", async () => {
+      Object.defineProperty(globalThis, "originAgentCluster", {
+        configurable: true,
+        value: false,
+      });
+
+      const mod = await import("./init.js");
+      expect(mod.shouldReloadForOriginAgentCluster()).toBe(true);
+
+      serviceWorkerListeners.controllerchange?.();
+
+      expect(
+        globalThis.sessionStorage.getItem("shadowclaw-oac-reload-attempted"),
+      ).toBe("1");
+      expect(mod.shouldReloadForOriginAgentCluster()).toBe(false);
+    });
+
+    it("does not attempt a second reload once the guard is persisted", async () => {
+      globalThis.sessionStorage.setItem("shadowclaw-oac-reload-attempted", "1");
+      Object.defineProperty(globalThis, "originAgentCluster", {
+        configurable: true,
+        value: false,
+      });
+
+      const mod = await import("./init.js");
+
+      expect(mod.shouldReloadForOriginAgentCluster()).toBe(false);
+    });
+  });
 });

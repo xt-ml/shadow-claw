@@ -127,6 +127,38 @@ async function respondWithWorkspaceRouteFile(
   }
 }
 
+function isNavigationRequest(request: Request): boolean {
+  return request.mode === "navigate" || request.destination === "document";
+}
+
+// GitHub Pages (and other static hosts) cannot send the Origin-Agent-Cluster
+// response header, which Firefox requires to origin-isolate the page (Chrome
+// isolates HTTPS origins automatically). Once this service worker controls
+// the page, inject the header on same-origin navigations so the *next*
+// top-level navigation is origin-keyed and @mcp-b/webmcp-polyfill can
+// register tools. See src/service-worker/init.ts for the one-time reload
+// that lets the very first, uncontrolled navigation pick this up.
+async function fetchWithOriginAgentCluster(
+  request: Request,
+): Promise<Response> {
+  const response = await fetch(request);
+  if (response.headers.get("Origin-Agent-Cluster")) {
+    return response;
+  }
+
+  const headers: Record<string, string> = {};
+  response.headers.forEach((value, key) => {
+    headers[key] = value;
+  });
+  headers["Origin-Agent-Cluster"] = "?1";
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
 // On every SW startup (including after the browser terminates and restarts the SW
 // to save memory), request the current proxy config from all window clients so the
 // in-memory state is restored without requiring the user to re-save settings.
@@ -171,6 +203,12 @@ self.addEventListener("message", (event: MessageEvent) => {
 self.addEventListener("fetch", (event: FetchEvent) => {
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin === location.origin) {
+    if (isNavigationRequest(event.request)) {
+      event.respondWith(fetchWithOriginAgentCluster(event.request));
+
+      return;
+    }
+
     const workspacePath = getWorkspaceRouteRequestPath(requestUrl.pathname);
     if (workspacePath && shouldServeWorkspaceRouteRequest(event.request)) {
       event.respondWith(

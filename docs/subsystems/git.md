@@ -126,8 +126,12 @@ isomorphic-git uses the standard `isomorphic-git/http/web` HTTP client. Direct c
 
 The proxy is only needed when:
 
-- The Git host doesn't support CORS for API endpoints
+- Running in the browser where the Git host doesn't support CORS for API endpoints
 - Basic Auth is needed (some browsers strip `Authorization` on cross-origin requests)
+
+### Headless Mode Direct Connections
+
+In headless Node.js mode (`isHeadlessMode()`), network requests are not bound by browser CORS policies. `resolveCorsProxy` automatically returns `undefined` (unless an explicit custom proxy is configured), allowing `gitClone`, `gitPull`, `gitPush`, and `gitFetch` to connect directly over HTTPS without local proxy indirection. In addition, `initGitFs` guards checks against `navigator.storage` to prevent runtime errors in Node environments.
 
 ## Dispatch Pattern
 

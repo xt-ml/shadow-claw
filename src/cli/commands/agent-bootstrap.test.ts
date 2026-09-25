@@ -178,4 +178,31 @@ describe("agent-bootstrap", () => {
       "true",
     );
   });
+
+  it("defaults workspace to a unique random isolated sandbox in tmpdir when workspace is omitted", async () => {
+    const result1 = await bootstrapHeadlessAgent({
+      quiet: true,
+      core: mockCore,
+    } as any);
+
+    const result2 = await bootstrapHeadlessAgent({
+      quiet: true,
+      core: mockCore,
+    } as any);
+
+    const basePrefix = path.join(os.tmpdir(), "shadow-claw", "workspace-");
+    expect(result1.workspaceDir.startsWith(basePrefix)).toBe(true);
+    expect(result2.workspaceDir.startsWith(basePrefix)).toBe(true);
+    // Two separate calls must generate different random directories to avoid agent collisions
+    expect(result1.workspaceDir).not.toBe(result2.workspaceDir);
+    expect(result1.workspaceDir).not.toBe(
+      path.resolve(process.cwd(), ".cache"),
+    );
+    expect(result1.workspaceDir).not.toBe(process.cwd());
+    expect(mockCore.setStorageRootFromPath).toHaveBeenCalledWith(
+      result2.workspaceDir,
+    );
+    expect(fs.existsSync(result1.workspaceDir)).toBe(true);
+    expect(fs.existsSync(result2.workspaceDir)).toBe(true);
+  });
 });

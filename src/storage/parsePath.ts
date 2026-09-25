@@ -17,5 +17,17 @@ export function parsePath(filePath: string): {
 
   const filename = parts.pop();
 
+  if (
+    parts.some((p) => p === ".." || p === ".") ||
+    filename === ".." ||
+    filename === "."
+  ) {
+    const err: any = new Error(
+      `SecurityError: Path traversal is not allowed: "${filePath}"`,
+    );
+    err.name = "SecurityError";
+    throw err;
+  }
+
   return { dirs: parts, filename: filename || "" };
 }

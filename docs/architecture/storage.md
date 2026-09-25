@@ -31,11 +31,15 @@ The storage root is resolved dynamically:
 
 ## Headless Filesystem Backend (`NodeFsDirectoryHandle`)
 
-To enable the headless CLI agent (`shadow-claw agent`) to execute the same file tools and declarative skill discovery as the browser without code duplication, `NodeFsDirectoryHandle` (`src/storage/node-fs-handle.ts`) implements the standard Web `FileSystemDirectoryHandle` and `FileSystemFileHandle` interfaces using `node:fs` and `node:path`:
+To enable the headless CLI agent (`shadow-claw agent`) and Stateless MCP server to execute the same file tools and declarative skill discovery as the browser without code duplication, `NodeFsDirectoryHandle` (`src/storage/node-fs-handle.ts`) implements the standard Web `FileSystemDirectoryHandle` and `FileSystemFileHandle` interfaces using `node:fs` and `node:path`:
 
-- Implements `getDirectoryHandle`, `getFileHandle`, `entries()`, `removeEntry()`, and `createWritable()`.
-- Browser bundles (`index.js`, `agent.worker.js`) do not import or bundle Node modules. `node-fs-handle.ts` self-registers its adapter dynamically when loaded in Node environments.
-- In headless mode, `getGroupDir(db, groupId)` resolves directly to the workspace root, allowing tools (`read_file`, `write_file`, `git_*`, `search_files`) to read and edit host project files directly.
+- **Standards-Compliant Writable Streams:** `NodeFsFileHandle.createWritable()` supports writing strings, `Uint8Array`, `ArrayBuffer`, `Blob` (via `.arrayBuffer()`, `.bytes()`, `.text()`, or `FileReader`), and `{ type, data }` write params.
+- **Entry Equality:** Implements `isSameEntry()` across both file and directory handles.
+- **Spec-Compliant Errors:** Enforces W3C File System spec error types including `TypeMismatchError` (requesting a file as a directory or vice-versa), `NotFoundError` (deleting non-existent entries), and `InvalidModificationError` (deleting a non-empty directory non-recursively).
+- **Backwards Path Traversal Security:** Both `NodeFsDirectoryHandle` child resolution (`_resolveChild`) and `parsePath` enforce strict workspace containment. Traversal attempts via `..` or leading dots that escape the root throw `SecurityError`.
+- **Active Root & Process Confinement:** `setStorageRootFromPath()` and `getStorageRootPath()` track the active root path, ensuring host-native child processes (such as headless `bash`) execute strictly within the active storage root (`cwd: getStorageRootPath()`).
+- **Dynamic Adapter Registration:** Browser bundles (`index.js`, `agent.worker.js`) do not import or bundle Node modules. `node-fs-handle.ts` self-registers its adapter dynamically when loaded in Node environments.
+- **Direct Workspace Resolution:** In headless mode, `getGroupDir(db, groupId)` resolves directly to the workspace root, allowing tools (`read_file`, `write_file`, `git_*`, `search_files`) to read and edit project files directly.
 
 ## Group Workspace Structure
 

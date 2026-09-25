@@ -246,10 +246,11 @@ The agent has access to **50+ tools** including:
 
 Tools negotiate execution capabilities depending on the active environment:
 
-- **Headless-Safe Tools:** Files, git, bash, fetch, tasks, javascript, email, MCP, and time execute natively in both browser Web Workers and headless CLI environments. In headless mode, `bash` executes directly with full host OS command power via `child_process`.
+- **Headless-Safe Tools:** Files, git, bash, fetch, tasks, javascript, email, MCP, and time execute natively in both browser Web Workers and headless CLI environments. In headless mode, `bash` executes directly with full host OS command power via `child_process` strictly bound to the active workspace directory, and git operations connect directly over HTTPS bypassing browser CORS proxies.
 - **Browser-Only Tools:** Interactive UI, chat, and PeerJS room tools (`ask_user`, `render_component`, `clear_chat`, `create_room`, `open_file`, `show_toast`, etc.) are filtered out of prompt schemas in headless mode so models are never presented with tools they cannot execute, and report clear capability diagnostics if directly invoked via CLI.
 - **Direct Tool Inspection & Execution:** Inspect schemas or execute tools directly from the terminal via `npx shadow-claw agent tool <name> [jsonArgs]` and `npx shadow-claw agent tools`.
 - **Stdin Piping & Unix Composability:** Pipe JSON or plain text directly into tools (`echo ... | shadow-claw agent tool rewrite_text`) or prompts (`cat doc.txt | shadow-claw agent run "..." -o out.txt`), redirect to files with `-o, --output <file>`, and suppress logs with `-q, --quiet` for clean Unix pipelines.
+- **Stateless MCP Host Tools & Sandboxing:** In `shadow-claw mcp` mode, headless tools are exposed to external coding agents (Claude Desktop, Cursor, Goose) under a tri-tier naming hierarchy (`shadowclaw_server_*`, `shadowclaw_local_*`, `shadowclaw_client_*`) with optional unprefixed routing (`--tool-prefix none`). When `--workspace` is omitted, filesystem tools default to an isolated OS sandbox (`<tmpdir>/shadow-claw/workspace`) with strict backwards path traversal containment.
 
 ### WebMCP Integration
 
@@ -348,7 +349,9 @@ npx shadow-claw backup list                          # List available backup sna
 npx shadow-claw backup delete --backup-id <id>       # Delete a backup snapshot
 
 # Server Services & Daemon
-npx shadow-claw mcp                                  # Run official Stateless MCP server (STDIO)
+npx shadow-claw mcp                                  # Run Stateless MCP server (STDIO, isolated tmpdir sandbox)
+npx shadow-claw mcp --workspace .                    # Run Stateless MCP server exposing tools for current workspace
+npx shadow-claw mcp --tool-prefix none               # Expose unprefixed tools (read_file, bash) for Cursor/Claude
 npx shadow-claw server --tmp                         # Run services with temporary directory cache (/tmp/shadow-claw)
 npx shadow-claw server --cache-dir <dir>             # Run services with custom cache directory
 npx shadow-claw webrtc listen                        # Start headless WebRTC DataChannel daemon

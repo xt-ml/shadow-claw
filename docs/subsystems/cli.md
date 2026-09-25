@@ -200,7 +200,7 @@ npx shadow-claw agent import https://xt-ml.github.io/shadow-claw-agent-cli-weath
 
 | Option                               | Type    | Description                                                                          | Default                                   |
 | :----------------------------------- | :------ | :----------------------------------------------------------------------------------- | :---------------------------------------- |
-| `--workspace <dir>`                  | string  | Workspace directory for file I/O and configuration                                   | `".cache"`                                |
+| `--workspace <dir>`                  | string  | Workspace directory for file I/O and configuration                                   | isolated sandbox in `tmpdir()`            |
 | `--database-dir <dir>`               | string  | Directory where SQLite databases (`shadow-claw.db`) are stored                       | `<workspace>/database`                    |
 | `--cache-dir <dir>`                  | string  | Custom cache directory for databases, models, and logs                               | `undefined`                               |
 | `--tmp, --temp`                      | boolean | Store cache, token, and databases in OS temporary directory (`tmpdir()`)             | `false`                                   |
@@ -458,20 +458,36 @@ npx shadow-claw mcp --mcp-transport http --port 8888
 npx shadow-claw mcp --transport webrtc --client <browser-peer-id>
 ```
 
-| Option                    | Type    | Description                                                          | Default       |
-| :------------------------ | :------ | :------------------------------------------------------------------- | :------------ |
-| `--mcp-transport <mode>`  | string  | MCP host transport: `stdio` or `http`                                | `"stdio"`     |
-| `--relay-client-tools`    | boolean | Discover and relay tools from connected browser clients              | `true`        |
-| `--client <id>`           | string  | Target client ID or PeerJS peer ID (defaults to first active client) | `""`          |
-| `--transport <transport>` | string  | Control plane client transport: `http` or `webrtc`                   | `"http"`      |
-| `--host <host>`           | string  | Control plane host                                                   | `"127.0.0.1"` |
-| `--port <port>`           | number  | Control plane port or HTTP MCP port                                  | `8888`        |
-| `--token <token>`         | string  | Control token                                                        | Auto-resolved |
-| `--https`                 | boolean | Connect to server via HTTPS                                          | `false`       |
-| `-k, --insecure`          | boolean | Allow self-signed TLS certificates                                   | `true`        |
-| `--cache-dir <dir>`       | string  | Custom cache directory for control token and databases               | `""`          |
+| Option                               | Type    | Description                                                                           | Default                                                            |
+| :----------------------------------- | :------ | :------------------------------------------------------------------------------------ | :----------------------------------------------------------------- |
+| `--mcp-transport <mode>`             | string  | MCP host transport: `stdio` or `http`                                                 | `"stdio"`                                                          |
+| `--workspace <dir>`                  | string  | Target workspace directory for local agent file operations and bash execution         | Host-agnostic sandbox directory (`<tmpdir>/shadow-claw/workspace`) |
+| `--local-tools` / `--no-local-tools` | boolean | Expose host-native CLI agent tools (`read_file`, `write_file`, `bash`, `git_*`, etc.) | `true`                                                             |
+| `--tool-prefix <prefix>`             | string  | Tool prefix style for local tools: `local` (`shadowclaw_local_`) \| `none`            | `"local"` (`shadowclaw_local_`)                                    |
+| `--tools <tools>`                    | string  | Comma-separated list of local agent tools to expose                                   | All headless-safe tools                                            |
+| `--tools-profile <name>`             | string  | Tools profile to activate for local tools (`coding`, `chat`, `review`, `minimal`)     | Auto-discovered / all                                              |
+| `--allow-internet`                   | boolean | Grant internet access permissions for shell execution                                 | `false`                                                            |
+| `--group <groupId>`                  | string  | Conversation group ID for local tools context                                         | `"server:main"`                                                    |
+| `--database-dir <dir>`               | string  | Directory where SQLite databases are stored                                           | `<workspace>/database`                                             |
+| `--relay-client-tools`               | boolean | Discover and relay tools from connected browser clients                               | `true`                                                             |
+| `--client <id>`                      | string  | Target client ID or PeerJS peer ID (defaults to first active client)                  | `""`                                                               |
+| `--transport <transport>`            | string  | Control plane client transport: `http` or `webrtc`                                    | `"http"`                                                           |
+| `--host <host>`                      | string  | Control plane host                                                                    | `"127.0.0.1"`                                                      |
+| `--port <port>`                      | number  | Control plane port or HTTP MCP port                                                   | `8888`                                                             |
+| `--token <token>`                    | string  | Control token                                                                         | Auto-resolved                                                      |
+| `--https`                            | boolean | Connect to server via HTTPS                                                           | `false`                                                            |
+| `-k, --insecure`                     | boolean | Allow self-signed TLS certificates                                                    | `true`                                                             |
+| `--cache-dir <dir>`                  | string  | Custom cache directory for control token and databases                                | `""`                                                               |
 
-> **Client & Server Tool Naming:** Built-in server and CLI tools are exposed with the `shadowclaw_server_` prefix (e.g. `shadowclaw_server_list_clients`, `shadowclaw_server_send_message`, `shadowclaw_server_status`), while relayed client tools use `shadowclaw_client_` (e.g. `shadowclaw_client_read_file`, `shadowclaw_client_javascript`, `shadowclaw_client_list_files`). Legacy and unprefixed aliases are preserved for backward compatibility.
+> **Tri-Tier Tool Naming Hierarchy:** MCP tools follow a clean tri-tier hierarchy to avoid collisions:
+>
+> 1. `shadowclaw_server_*`: Built-in server management tools (e.g. `shadowclaw_server_list_clients`, `shadowclaw_server_send_message`, `shadowclaw_server_status`).
+> 2. `shadowclaw_local_*`: Host-native CLI agent tools running directly against the host filesystem and child processes (e.g. `read_file`, `write_file`, `bash`, `git_*`). Use `--tool-prefix none` for standard unprefixed names.
+> 3. `shadowclaw_client_*`: Relayed tools from connected browser clients (e.g. `shadowclaw_client_read_file`, `shadowclaw_client_javascript`).
+>
+> Unprefixed tool calls (such as `read_file` or `bash`) automatically route to the host-native CLI agent tool if no browser client is connected.
+>
+> **Workspace Sandboxing:** When `--workspace` is omitted, `shadow-claw mcp` isolates file operations and bash execution inside an isolated temporary directory (`<tmpdir>/shadow-claw/workspace`) instead of exposing `process.cwd()` or IDE runtime files.
 >
 > **Control Token Auto-Discovery:** Control plane commands automatically search candidate tokens across the `--token` flag, `SHADOWCLAW_CONTROL_TOKEN`, the system temporary directory (`<tmpdir>/shadow-claw/control-token[-<port>].json`), ancestor directory trees, user config/cache directories, and SQLite database metadata. If a 401 Unauthorized response is encountered, the client automatically retries across remaining candidate tokens.
 

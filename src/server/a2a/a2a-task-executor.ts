@@ -33,7 +33,7 @@ import type { A2ATaskExecutor } from "./types.js";
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface A2ATaskExecutorOptions {
-  /** Workspace directory (defaults to process.cwd()) */
+  /** Workspace directory (defaults to isolated fallback sandbox) */
   workspace?: string;
   /** Override LLM provider id */
   provider?: string;

@@ -62,6 +62,20 @@ describe("NodeFsDirectoryHandle", () => {
     await expect(root.getFileHandle("missing.txt")).rejects.toThrow();
   });
 
+  it("getFileHandle throws TypeMismatchError when target is an existing directory", async () => {
+    await root.getDirectoryHandle("somedir", { create: true });
+    await expect(root.getFileHandle("somedir")).rejects.toThrow(
+      /TypeMismatchError/i,
+    );
+  });
+
+  it("getDirectoryHandle throws TypeMismatchError when target is an existing file", async () => {
+    await root.getFileHandle("somefile.txt", { create: true });
+    await expect(root.getDirectoryHandle("somefile.txt")).rejects.toThrow(
+      /TypeMismatchError/i,
+    );
+  });
+
   it("createWritable writes content and getFile reads it back", async () => {
     const fh = await root.getFileHandle("hello.txt", { create: true });
     const writable = await fh.createWritable();
@@ -147,6 +161,99 @@ describe("NodeFsDirectoryHandle", () => {
     await w.close();
     await root.removeEntry("subtree", { recursive: true });
     expect(existsSync(path.join(tmpDir, "subtree"))).toBe(false);
+  });
+
+  // ── Path traversal security guards ────────────────────────────────────
+
+  it("rejects path traversal backwards up the filesystem tree in getDirectoryHandle", async () => {
+    await expect(root.getDirectoryHandle("..")).rejects.toThrow(/traversal/i);
+    await expect(root.getDirectoryHandle("../escape")).rejects.toThrow(
+      /traversal/i,
+    );
+    await expect(root.getDirectoryHandle("sub/../../escape")).rejects.toThrow(
+      /traversal/i,
+    );
+  });
+
+  it("rejects path traversal backwards up the filesystem tree in getFileHandle", async () => {
+    await expect(root.getFileHandle("../secret.txt")).rejects.toThrow(
+      /traversal/i,
+    );
+    await expect(root.getFileHandle("../../etc/passwd")).rejects.toThrow(
+      /traversal/i,
+    );
+    await expect(root.getFileHandle("sub/../../secret.txt")).rejects.toThrow(
+      /traversal/i,
+    );
+  });
+
+  it("rejects path traversal in removeEntry", async () => {
+    await expect(root.removeEntry("..")).rejects.toThrow(/traversal/i);
+    await expect(root.removeEntry("../escape")).rejects.toThrow(/traversal/i);
+  });
+
+  it("child handles cannot traverse backwards outside workspace root", async () => {
+    const child = await root.getDirectoryHandle("sub", { create: true });
+    await expect(child.getDirectoryHandle("..")).rejects.toThrow(/traversal/i);
+  });
+
+  // ── Binary & Blob writes ──────────────────────────────────────────────
+
+  it("createWritable writes Blob content correctly", async () => {
+    const fh = await root.getFileHandle("blob.bin", { create: true });
+    const w = await fh.createWritable();
+    const blob = new Blob(["binary blob content"]);
+    await w.write(blob);
+    await w.close();
+    const file = await fh.getFile();
+    expect(await file.text()).toBe("binary blob content");
+  });
+
+  it("createWritable writes ArrayBuffer / Uint8Array content correctly", async () => {
+    const fh = await root.getFileHandle("bytes.bin", { create: true });
+    const w = await fh.createWritable();
+    await w.write(new Uint8Array([65, 66, 67]));
+    await w.close();
+    const file = await fh.getFile();
+    expect(await file.text()).toBe("ABC");
+  });
+
+  // ── removeEntry specification compliance ─────────────────────────────
+
+  it("removeEntry throws NotFoundError when entry does not exist", async () => {
+    await expect(root.removeEntry("nonexistent.txt")).rejects.toThrow(
+      /NotFoundError/i,
+    );
+  });
+
+  it("removeEntry deletes an empty directory without recursive option", async () => {
+    await root.getDirectoryHandle("emptydir", { create: true });
+    await root.removeEntry("emptydir");
+    await expect(root.getDirectoryHandle("emptydir")).rejects.toThrow(
+      /NotFoundError/i,
+    );
+  });
+
+  it("removeEntry throws when deleting non-empty directory without recursive: true", async () => {
+    const sub = await root.getDirectoryHandle("nonemptydir", { create: true });
+    await sub.getFileHandle("child.txt", { create: true });
+    await expect(root.removeEntry("nonemptydir")).rejects.toThrow();
+  });
+
+  // ── isSameEntry ───────────────────────────────────────────────────────
+
+  it("implements isSameEntry on directory handles", async () => {
+    const d1 = await root.getDirectoryHandle("testdir", { create: true });
+    const d2 = await root.getDirectoryHandle("testdir");
+    expect(await d1.isSameEntry(d2)).toBe(true);
+    expect(await d1.isSameEntry(root)).toBe(false);
+  });
+
+  it("implements isSameEntry on file handles", async () => {
+    const f1 = await root.getFileHandle("testfile.txt", { create: true });
+    const f2 = await root.getFileHandle("testfile.txt");
+    expect(await f1.isSameEntry(f2)).toBe(true);
+    expect(await f1.isSameEntry(root as any)).toBe(false);
   });
 });
 

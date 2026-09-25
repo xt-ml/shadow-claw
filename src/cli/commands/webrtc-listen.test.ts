@@ -377,5 +377,28 @@ describe("webrtc-listen command", () => {
       expect(result.ok).toBe(true);
       expect(result.peerId).toBe("cli-custom-peer");
     });
+
+    it("creates isolated random fallback workspace directories when workspace is omitted", async () => {
+      const handlers1 = createDefaultWebRtcHandlers({
+        cacheDir: tmpDir,
+      });
+      const handlers2 = createDefaultWebRtcHandlers({
+        cacheDir: tmpDir,
+      });
+
+      const res1 = await handlers1["send-file"]({
+        fileName: "test1.txt",
+        data: Buffer.from("data-1").toString("base64"),
+      });
+      const res2 = await handlers2["send-file"]({
+        fileName: "test2.txt",
+        data: Buffer.from("data-2").toString("base64"),
+      });
+
+      expect(res1.path).not.toBe(res2.path);
+      expect(path.dirname(res1.path)).not.toBe(path.dirname(res2.path));
+      expect(res1.path.includes("shadow-claw")).toBe(true);
+      expect(res1.path.includes("workspace-")).toBe(true);
+    });
   });
 });

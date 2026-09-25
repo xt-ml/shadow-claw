@@ -3,7 +3,8 @@
  * Headless CLI agent participant supporting init, skills, tools, skill, and run.
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 import type {
@@ -61,19 +62,9 @@ export async function runAgentInit(
   if (options.workspace) {
     workspace = path.resolve(options.workspace);
   } else {
-    const { resolveCacheDir } = await import("../utils/resolve-cache-dir.js");
-    const resolved = await resolveCacheDir({
-      contentRoot: process.cwd(),
-      cacheDir: options.cacheDir,
-      databaseDir: options.databaseDir,
-      tmp: options.tmp || options.temp,
-      yes: options.yes || options.y,
-      quiet: options.quiet,
-      isTTY: options.isTTY,
-      stdin: options.stdin,
-      stdout: options.stdout,
-    });
-    workspace = resolved.cacheDir;
+    const baseTmp = path.join(tmpdir(), "shadow-claw");
+    await mkdir(baseTmp, { recursive: true });
+    workspace = await mkdtemp(path.join(baseTmp, "workspace-"));
   }
 
   const skillsDir = path.join(workspace, ".agents", "skills");

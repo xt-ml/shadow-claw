@@ -13,6 +13,7 @@
 
 import fs from "node:fs";
 import http from "node:http";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   CliWebRtcListener,
@@ -52,11 +53,14 @@ export function createDefaultWebRtcHandlers(
   options: WebRtcListenOptions = {},
 ): Record<string, (args?: any, context?: any) => Promise<any> | any> {
   const isAgentEnabled = options.agent !== false;
-  const workspaceDir =
-    options.workspace ||
-    options.cacheDir ||
-    (process.env.SHADOWCLAW_CACHE_DIR || "").trim() ||
-    path.join(process.cwd(), ".cache");
+  let workspaceDir: string;
+  if (options.workspace) {
+    workspaceDir = path.resolve(options.workspace);
+  } else {
+    const baseTmp = path.join(tmpdir(), "shadow-claw");
+    fs.mkdirSync(baseTmp, { recursive: true });
+    workspaceDir = fs.mkdtempSync(path.join(baseTmp, "workspace-"));
+  }
   const transfersDir =
     options.transfersDir || path.join(workspaceDir, "transfers");
 

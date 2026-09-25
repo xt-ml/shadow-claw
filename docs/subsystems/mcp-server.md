@@ -11,8 +11,9 @@
 ShadowClaw's core orchestration and tool-use loop run client-side in the browser. To allow external AI coding agents, desktop clients, and autonomous frameworks (e.g. Claude Desktop, Cursor, Goose, Hermes) to participate in this ecosystem, ShadowClaw provides a Stateless Model Context Protocol server adhering to the **[Stateless MCP Specification (2026-07-28)](https://modelcontextprotocol.io/specification/2026-07-28)** across both the Node.js server and CLI:
 
 1. **Query and Drive Connected Clients**: List connected browser and Electron clients, inspect active conversation state, and dispatch prompts into the orchestrator queue.
-2. **Execute In-Browser Workspace Tools**: Dynamically discover and execute tools running inside a connected browser tab (such as `read_file`, `write_file`, `bash`, and `git_*` against OPFS and IndexedDB).
-3. **Interactive Human-in-the-Loop via MRTR**: Handle interactive prompts (such as `ask_user`) using 2026-07-28 **Multi Round-Trip Requests (MRTR)** with `resultType: "input_required"`.
+2. **Execute Host-Native CLI Agent Tools**: Directly run host-native agent tools (`read_file`, `write_file`, `bash`, `git_*`, etc.) against the local filesystem with OS-level sandbox isolation, backwards path traversal protection, and child process working directory confinement.
+3. **Execute In-Browser Workspace Tools**: Dynamically discover and execute tools running inside a connected browser tab (such as `read_file`, `write_file`, `bash`, and `git_*` against OPFS and IndexedDB).
+4. **Interactive Human-in-the-Loop via MRTR**: Handle interactive prompts (such as `ask_user`) using 2026-07-28 **Multi Round-Trip Requests (MRTR)** with `resultType: "input_required"`.
 
 ---
 
@@ -29,7 +30,12 @@ graph TB
         STDIO_ENDPOINT["shadow-claw mcp<br>(STDIO JSON-RPC Lines)"]
         ENGINE["McpServer Core Engine<br>"]
         BUILTIN["Built-in Tools<br>(shadowclaw_server_*)"]
+        LOCAL["Host-Native CLI Tools<br>(shadowclaw_local_*)"]
         RELAY["ClientToolRelay<br>(Dynamic WebMCP Discovery:<br>shadowclaw_client_*)"]
+    end
+
+    subgraph HostSystem ["Host Operating System"]
+        HOST_FS["Host Filesystem & Child Processes<br>(NodeFsDirectoryHandle, native bash)"]
     end
 
     subgraph ControlPlane ["Control Plane Bridge"]
@@ -46,7 +52,9 @@ graph TB
     HTTP_ENDPOINT --> ENGINE
     STDIO_ENDPOINT --> ENGINE
     ENGINE --> BUILTIN
+    ENGINE --> LOCAL
     ENGINE --> RELAY
+    LOCAL <-->|read/write/exec| HOST_FS
     RELAY <-->|list-tools & invoke-tool| CP_GW
     CP_GW <-->|command:execute / command:result| TAB
     TAB <-->|postMessage| WORKER
@@ -58,11 +66,24 @@ graph TB
 
 ### 1. STDIO Transport (`shadow-claw mcp`)
 
-Ideal for local desktop integrations (e.g. Claude Desktop, Cursor). Messages are framed as newline-delimited JSON-RPC objects over standard input and standard output. Diagnostic logs are strictly piped to `stderr` to preserve stdout framing.
+Ideal for local desktop integrations (e.g. Claude Desktop, Cursor, Goose). Messages are framed as newline-delimited JSON-RPC objects over standard input and standard output. Diagnostic logs are strictly piped to `stderr` to preserve stdout framing.
 
 ```bash
-npx shadow-claw mcp
+npx shadow-claw mcp [options]
 ```
+
+#### CLI Options
+
+| Flag                                 | Description                                                                            | Default                                                            |
+| :----------------------------------- | :------------------------------------------------------------------------------------- | :----------------------------------------------------------------- |
+| `--workspace <dir>`                  | Explicit target workspace directory for local agent file operations and bash execution | Host-agnostic sandbox directory (`<tmpdir>/shadow-claw/workspace`) |
+| `--local-tools` / `--no-local-tools` | Expose host-native CLI agent tools (`read_file`, `write_file`, `bash`, `git_*`, etc.)  | `true` (enabled)                                                   |
+| `--tool-prefix <prefix>`             | Prefix applied to local agent tool names (`none` for unprefixed)                       | `shadowclaw_local_`                                                |
+| `--tools <list>`                     | Comma-separated list of specific tools to expose (e.g. `read_file,write_file,bash`)    | All headless-compatible tools                                      |
+| `--tools-profile <name>`             | Preconfigured tool profile (`coding`, `chat`, `review`, `minimal`)                     | Auto-discovered / all                                              |
+| `--group <groupId>`                  | Target conversation group for agent context                                            | `"default"`                                                        |
+| `--database-dir <dir>`               | Directory for SQLite state databases                                                   | `~/.shadow-claw` or resolved root                                  |
+| `--allow-internet`                   | Grant internet access permissions for shell execution                                  | Disabled by default                                                |
 
 ### 2. Streamable HTTP Transport (`POST /mcp`)
 
@@ -173,6 +194,40 @@ Static schemas and metadata for built-in tools are declared in `src/server/mcp/t
 
 ---
 
+## Tri-Tier Tool Architecture & Naming Convention
+
+The Stateless MCP server uses a clean tri-tier hierarchy to avoid collision between server control-plane commands, host-native CLI agent tools, and dynamic in-browser tools:
+
+1. **`shadowclaw_server_*` (Server Control Plane):** Built-in management tools for querying connected clients, inspecting orchestrator state, sending notifications, and dispatching queue messages.
+2. **`shadowclaw_local_*` (Host-Native CLI Agent Tools):** Direct Node.js-driven tools running against the host machine's filesystem and child processes (e.g. `read_file`, `write_file`, `bash`, `list_files`, `git_status`, `git_diff`, etc.). Enabled by default in `mcp` mode.
+3. **`shadowclaw_client_*` (In-Browser WebMCP Tools):** Dynamically discovered tools relayed through the Control Plane from connected browser tabs or Electron windows (e.g. OPFS and IndexedDB access).
+
+---
+
+## Host-Native CLI Agent Tools in MCP Mode
+
+When running in STDIO mode (`shadow-claw mcp`), ShadowClaw exposes full agent development tools to any standard MCP client without requiring an active browser tab or Electron window.
+
+### Workspace Security & Host-Agnostic Isolation
+
+- **Explicit Workspace Requirement:** To bind local tools to a specific repository, external clients should pass `--workspace <dir>`.
+- **Host-Agnostic Fallback Sandbox:** When `--workspace` is omitted, ShadowClaw **never defaults to `process.cwd()`**, preventing accidental exposure of host IDE application folders (such as Electron runtime binaries, system libraries, or crashpad handlers). Instead, it initializes a clean, isolated host-agnostic temporary workspace directory (`<tmpdir>/shadow-claw/workspace`).
+- **Graceful Failure Fallback:** If creating or accessing the fallback temporary workspace fails (e.g. restricted permissions or read-only tmp), local workspace tools are automatically disabled, and the server runs in pure control-plane mode exposing only `shadowclaw_server_*` tools.
+- **Strict Backwards Path Traversal Guards:** All filesystem adapters (`NodeFsDirectoryHandle`, `parsePath`, and workspace tools) enforce strict root containment. Any attempt to traverse backwards (`..`) or escape the active workspace is blocked with a `SecurityError`.
+- **Bash Working Directory Isolation:** Headless native bash commands execute with their working directory strictly bound to the active workspace (`getStorageRootPath()`), preventing host process directory pollution.
+
+### Features & Execution Model
+
+- **Direct Host Execution:** Tools like `read_file`, `write_file`, `bash`, `patch_file`, `list_files`, `git_commit`, and declarative tools execute headlessly in Node.js using host filesystem handles and child processes.
+- **Unprefixed Tool Routing Fallback:** For MCP clients that expect standard tool names (such as `read_file` or `bash`):
+  - When `--tool-prefix none` is configured, tools are exposed without prefixes.
+  - When external clients call unprefixed tool names (e.g. `read_file`), the server automatically routes to the host-native local agent tool if no browser client is currently connected. If a browser tab is connected, calls continue relaying to the browser for backward compatibility.
+- **Stream Integrity:** Headless agent initialization executes in non-interactive mode (`quiet: true`, `yes: true`, `isTTY: false`). Standard output is strictly reserved for newline-delimited JSON-RPC framing; any diagnostics or error logs are routed to `stderr`.
+- **Filtering & Profiles:** Tools can be constrained using `--tools <list>` (e.g. `--tools read_file,write_file,bash`) or preconfigured profiles via `--tools-profile <coding|chat|review|minimal>`.
+- **Declarative Tools:** Custom tools defined in `.agents/tools/main/**/*.json` within the workspace are automatically discovered and exposed with the `shadowclaw_local_` prefix.
+
+---
+
 ## Dynamic In-Browser Tool Relaying & Multi-Client Targeting
 
 When external hosts call tools belonging to connected browser clients (e.g. `shadowclaw_client_read_file`, `shadowclaw_client_write_file`, `shadowclaw_client_bash`, `shadowclaw_client_git_*`, or interactive `shadowclaw_client_ask_user`):
@@ -213,12 +268,14 @@ When the browser tab receives an `invoke-tool` command:
 
 ### Claude Desktop (`claude_desktop_config.json`)
 
+Exposing both server control plane tools and host-native CLI agent tools for a specific workspace:
+
 ```json
 {
   "mcpServers": {
     "shadowclaw": {
       "command": "npx",
-      "args": ["shadow-claw", "mcp"]
+      "args": ["shadow-claw", "mcp", "--workspace", "/path/to/my-project"]
     }
   }
 }
@@ -226,15 +283,40 @@ When the browser tab receives an `invoke-tool` command:
 
 ### Cursor (`~/.cursor/mcp.json`)
 
+Using unprefixed tools (`read_file`, `write_file`, `bash`) for standard coding assistants:
+
 ```json
 {
   "mcpServers": {
     "shadowclaw": {
       "command": "npx",
-      "args": ["shadow-claw", "mcp"]
+      "args": [
+        "shadow-claw",
+        "mcp",
+        "--workspace",
+        "/path/to/my-project",
+        "--tool-prefix",
+        "none"
+      ]
     }
   }
 }
+```
+
+### Goose / CLI MCP Client
+
+```yaml
+# ~/.config/goose/config.yaml
+extensions:
+  shadowclaw:
+    enabled: true
+    type: stdio
+    cmd: npx
+    args:
+      - shadow-claw
+      - mcp
+      - --workspace
+      - /path/to/my-project
 ```
 
 ---

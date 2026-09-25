@@ -22,7 +22,7 @@ Run instantly without cloning the repo:
 - `npx shadow-claw server --a2a` — Expose the A2A v1.0 agent card, JSON-RPC, and SSE endpoints.
 - `npx shadow-claw send "prompt"` — Dispatch prompts to connected clients or peer agents directly from your terminal (supports -f, --file).
 - `npx shadow-claw send-file <file> --client <peerId>` — Transfer files directly to connected peers over WebRTC with optional prompt instructions.
-- `npx shadow-claw mcp` — Run the official Stateless Model Context Protocol (2026-07-28) server over STDIO or HTTP.
+- `npx shadow-claw mcp [--workspace <dir>]` — Run the official Stateless Model Context Protocol (2026-07-28) server over STDIO or HTTP, exposing host-native CLI agent tools (`read_file`, `write_file`, `bash`, `git_*`) and server control plane tools with tri-tier naming and sandbox isolation.
 - [CLI Reference](https://xt-ml.github.io/shadow-claw/docs/subsystems/cli.md) — Complete guide to all CLI commands, flags, and control plane options.
 
 ## When to Use This
@@ -39,7 +39,7 @@ ShadowClaw is best suited for:
 - **Control plane & client bridge:** Driving browser and Electron execution surfaces from external tools, scripts, or CLI commands via real-time SSE, WebSockets, or WebRTC.
 - **Peer-to-peer agent collaboration & file sharing:** Connecting multiple headless CLI agents and browser clients over WebRTC DataChannels, dispatching peer prompts, transferring files directly from the Files browser and File Viewer UI or terminal CLI (`send-file`, `send --file`), and allowing agents to autonomously discover and prompt peers via built-in tools (`prompt_peer`, `list_peers`, `send_file`).
 - **Headless server & background services:** Running a persistent 24/7 Node backend (`shadow-claw server`) to manage client schedules in SQLite, tick cron schedules, wake dormant clients via Web Push, and serve REST APIs and MCP endpoints.
-- **Model Context Protocol (MCP) integrations:** Interfacing with external coding agents (Claude Desktop, Cursor, Goose) via STDIO or Streamable HTTP.
+- **Model Context Protocol (MCP) integrations:** Interfacing with external coding agents (Claude Desktop, Cursor, Goose) via STDIO or Streamable HTTP, exposing host-native CLI agent tools against real workspace files with strict root traversal security, isolated bash execution, and tri-tier tool hierarchy.
 - **Static knowledge hubs:** Authoring and deploying static documentation and agent-assisted knowledge repositories.
 
 When to look elsewhere:

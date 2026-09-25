@@ -98,38 +98,53 @@ describe("agent init", () => {
     expect(content).toEqual(existing);
   });
 
-  it("defaults workspace to .cache dir when options.workspace is not provided", async () => {
+  it("defaults workspace to a unique random isolated sandbox when options.workspace is not provided", async () => {
     const { runAgentInit } = await import("./agent.js");
-    const customCache = path.join(tmpDir, ".custom-cache");
-    const result = await runAgentInit({ cacheDir: customCache });
-    expect(result.workspace).toBe(path.resolve(customCache));
+    const result1 = await runAgentInit({});
+    const result2 = await runAgentInit({});
+    const basePrefix = path.join(tmpdir(), "shadow-claw", "workspace-");
+    expect(result1.workspace.startsWith(basePrefix)).toBe(true);
+    expect(result2.workspace.startsWith(basePrefix)).toBe(true);
+    expect(result1.workspace).not.toBe(result2.workspace);
     await expect(
-      access(path.join(customCache, ".agents", "skills"), constants.F_OK),
+      access(path.join(result1.workspace, ".agents", "skills"), constants.F_OK),
     ).resolves.toBeUndefined();
     await expect(
-      access(path.join(customCache, "database", "agent.db"), constants.F_OK),
+      access(
+        path.join(result1.workspace, "database", "agent.db"),
+        constants.F_OK,
+      ),
     ).resolves.toBeUndefined();
   });
 
-  it("bootstrapHeadlessAgent defaults workspace to .cache unless --workspace is explicitly passed", async () => {
+  it("bootstrapHeadlessAgent defaults workspace to isolated sandbox unless --workspace is explicitly passed", async () => {
     const { bootstrapHeadlessAgent } = await import("./agent-bootstrap.js");
     const { closeSqliteDatabase } =
       await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
         closeSqliteDatabase: () => {},
       }));
 
-    // 1. Without workspace option, defaults to path.resolve(process.cwd(), ".cache")
-    const resDefault = await bootstrapHeadlessAgent({ quiet: true });
-    expect(resDefault.workspaceDir).toBe(path.resolve(process.cwd(), ".cache"));
+    const basePrefix = path.join(tmpdir(), "shadow-claw", "workspace-");
+
+    // 1. Without workspace option, defaults to a unique fallback in tmpdir
+    const resDefault1 = await bootstrapHeadlessAgent({ quiet: true });
+    const resDefault2 = await bootstrapHeadlessAgent({ quiet: true });
+    expect(resDefault1.workspaceDir.startsWith(basePrefix)).toBe(true);
+    expect(resDefault2.workspaceDir.startsWith(basePrefix)).toBe(true);
+    expect(resDefault1.workspaceDir).not.toBe(resDefault2.workspaceDir);
+    expect(resDefault1.workspaceDir).not.toBe(
+      path.resolve(process.cwd(), ".cache"),
+    );
+    expect(resDefault1.workspaceDir).not.toBe(process.cwd());
     closeSqliteDatabase?.();
 
-    // 2. With cacheDir, defaults to cacheDir
+    // 2. With cacheDir, workspace still defaults to a unique fallback (does not share cacheDir as workspace)
     const customCache = path.join(tmpDir, "custom-cache");
     const resCache = await bootstrapHeadlessAgent({
       cacheDir: customCache,
       quiet: true,
     });
-    expect(resCache.workspaceDir).toBe(path.resolve(customCache));
+    expect(resCache.workspaceDir.startsWith(basePrefix)).toBe(true);
     closeSqliteDatabase?.();
 
     // 3. With explicit workspace, uses explicit workspace even if cacheDir is provided
@@ -179,7 +194,14 @@ describe("agent init", () => {
         "No existing .cache directory was detected in:",
       );
       expect(capturedOutput).toContain("Using current directory cache");
-      expect(result.workspaceDir).toBe(path.join(emptyDir, ".cache"));
+      expect(result.dbPath).toBe(
+        path.join(emptyDir, ".cache", "database", "agent.db"),
+      );
+      expect(
+        result.workspaceDir.startsWith(
+          path.join(tmpdir(), "shadow-claw", "workspace-"),
+        ),
+      ).toBe(true);
       closeSqliteDatabase?.();
     } finally {
       process.chdir(prevCwd);
@@ -216,7 +238,14 @@ describe("agent init", () => {
         stdout: mockStdout,
       });
       expect(capturedOutput).toContain("Using temporary directory");
-      expect(result.workspaceDir).toBe(path.join(tmpdir(), "shadow-claw"));
+      expect(result.dbPath).toBe(
+        path.join(tmpdir(), "shadow-claw", "database", "agent.db"),
+      );
+      expect(
+        result.workspaceDir.startsWith(
+          path.join(tmpdir(), "shadow-claw", "workspace-"),
+        ),
+      ).toBe(true);
       closeSqliteDatabase?.();
     } finally {
       process.chdir(prevCwd);

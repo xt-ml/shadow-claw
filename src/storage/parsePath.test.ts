@@ -62,4 +62,11 @@ describe("parsePath.js", () => {
 
     expect(filename).toBe("file.txt");
   });
+
+  it("should throw error for path traversal", () => {
+    expect(() => parsePath("../secret.txt")).toThrow(/traversal/i);
+    expect(() => parsePath("a/../../secret.txt")).toThrow(/traversal/i);
+    expect(() => parsePath("..")).toThrow(/traversal/i);
+    expect(() => parsePath(".")).toThrow(/traversal/i);
+  });
 });

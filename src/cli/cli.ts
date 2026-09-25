@@ -802,8 +802,34 @@ program
   )
   .option("--peer-id <id>", "Custom WebRTC CLI peer ID")
   .option(
-    "--cache-dir <dir>",
-    "Custom cache directory for control token and databases",
+    "--local-tools",
+    "Expose headless CLI agent tools (read_file, write_file, bash, git_*, etc.)",
+    true,
+  )
+  .option("--no-local-tools", "Disable exposing headless CLI agent tools")
+  .option(
+    "--tool-prefix <prefix>",
+    "Tool prefix style for local tools: local | none | shadowclaw (default: local)",
+    "local",
+  )
+  .optionsGroup("Workspace & Local Agent Tools Options:")
+  .option(
+    "--workspace <dir>",
+    "Workspace directory for local tools (default: current working directory)",
+  )
+  .option("--database-dir <dir>", "Directory where SQLite databases are stored")
+  .option(
+    "--group <groupId>",
+    "Conversation group ID for local tools (default: server:main)",
+  )
+  .option(
+    "--tools <tools>",
+    "Comma-separated list of local agent tools to expose (default: all headless-safe tools)",
+  )
+  .option("--tools-profile <name>", "Tools profile to activate for local tools")
+  .option(
+    "--allow-internet, --internet-access",
+    "Allow full internet access for local Bash and JavaScript tools",
   )
   .action(async (options) => {
     await runMcpCommand(options);
@@ -1205,7 +1231,10 @@ program
     "Run the headless CLI agent (init | model | skills | tools | tool | skill | import | run | listen)",
   )
   .optionsGroup("Agent Options:")
-  .option("--workspace <dir>", "Workspace directory (default: .cache)")
+  .option(
+    "--workspace <dir>",
+    "Workspace directory (default: isolated sandbox in temporary directory)",
+  )
   .option("--database-dir <dir>", "Directory where SQLite databases are stored")
   .option("--cache-dir <dir>", "Custom cache directory for databases and logs")
   .option(

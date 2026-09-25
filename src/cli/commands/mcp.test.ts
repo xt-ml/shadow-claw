@@ -1,5 +1,7 @@
 import { getProjectRoot } from "../utils/resolve-project-root.js";
 import fs from "node:fs";
+import { mkdtemp, rm, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   describe,
@@ -677,5 +679,412 @@ describe("CLI MCP Engine (createCliMcpEngine)", () => {
       },
     });
     expect(resAlias.result.isError).toBe(true);
+  });
+
+  describe("Local CLI Agent Tools in MCP Mode", () => {
+    let tmpWorkspace: string;
+
+    beforeEach(async () => {
+      tmpWorkspace = await mkdtemp(path.join(tmpdir(), "sc-mcp-local-tools-"));
+    });
+
+    afterEach(async () => {
+      const { closeSqliteDatabase } =
+        await import("../../db/sqlite/openSqliteDatabase.js").catch(() => ({
+          closeSqliteDatabase: () => {},
+        }));
+      closeSqliteDatabase?.();
+      await rm(tmpWorkspace, { recursive: true, force: true });
+    });
+
+    it("exposes local CLI agent tools with shadowclaw_local_ prefix in tools/list by default", async () => {
+      const mockClient = {
+        listClients: jest.fn<any>().mockResolvedValue([]),
+      };
+
+      const engine = createCliMcpEngine({
+        client: mockClient,
+        workspace: tmpWorkspace,
+        localTools: true,
+      });
+
+      const res = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 201,
+        method: "tools/list",
+      });
+
+      expect(res).toBeDefined();
+      expect(res.result.resultType).toBe("complete");
+      const toolNames = res.result.tools.map((t: any) => t.name);
+
+      // Built-in control plane tools
+      expect(toolNames).toContain("shadowclaw_server_list_clients");
+      expect(toolNames).toContain("shadowclaw_server_send_message");
+
+      // Local CLI agent tools
+      expect(toolNames).toContain("shadowclaw_local_read_file");
+      expect(toolNames).toContain("shadowclaw_local_write_file");
+      expect(toolNames).toContain("shadowclaw_local_bash");
+      expect(toolNames).toContain("shadowclaw_local_list_files");
+
+      // Browser-only tools should NOT be exposed in local tools
+      expect(toolNames).not.toContain("shadowclaw_local_ask_user");
+      expect(toolNames).not.toContain("shadowclaw_local_show_toast");
+      expect(toolNames).not.toContain("shadowclaw_local_spawn_subagent");
+    });
+
+    it("exposes local CLI agent tools without prefix when toolPrefix is 'none'", async () => {
+      const mockClient = {
+        listClients: jest.fn<any>().mockResolvedValue([]),
+      };
+
+      const engine = createCliMcpEngine({
+        client: mockClient,
+        workspace: tmpWorkspace,
+        localTools: true,
+        toolPrefix: "none",
+      });
+
+      const res = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 202,
+        method: "tools/list",
+      });
+
+      expect(res).toBeDefined();
+      const toolNames = res.result.tools.map((t: any) => t.name);
+
+      expect(toolNames).toContain("read_file");
+      expect(toolNames).toContain("write_file");
+      expect(toolNames).toContain("bash");
+      expect(toolNames).toContain("shadowclaw_server_list_clients");
+    });
+
+    it("filters local tools when options.tools is specified", async () => {
+      const mockClient = {
+        listClients: jest.fn<any>().mockResolvedValue([]),
+      };
+
+      const engine = createCliMcpEngine({
+        client: mockClient,
+        workspace: tmpWorkspace,
+        localTools: true,
+        tools: "read_file,bash",
+      });
+
+      const res = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 203,
+        method: "tools/list",
+      });
+
+      expect(res).toBeDefined();
+      const toolNames = res.result.tools.map((t: any) => t.name);
+
+      expect(toolNames).toContain("shadowclaw_local_read_file");
+      expect(toolNames).toContain("shadowclaw_local_bash");
+      expect(toolNames).not.toContain("shadowclaw_local_write_file");
+      expect(toolNames).not.toContain("shadowclaw_local_list_files");
+    });
+
+    it("does not expose local CLI agent tools when localTools is false", async () => {
+      const mockClient = {
+        listClients: jest.fn<any>().mockResolvedValue([]),
+      };
+
+      const engine = createCliMcpEngine({
+        client: mockClient,
+        workspace: tmpWorkspace,
+        localTools: false,
+      });
+
+      const res = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 204,
+        method: "tools/list",
+      });
+
+      expect(res).toBeDefined();
+      const toolNames = res.result.tools.map((t: any) => t.name);
+
+      expect(toolNames).toContain("shadowclaw_server_list_clients");
+      expect(toolNames).not.toContain("shadowclaw_local_read_file");
+      expect(toolNames).not.toContain("read_file");
+    });
+
+    it("executes local tools (write_file, read_file) against workspace in tools/call", async () => {
+      const mockClient = {
+        listClients: jest.fn<any>().mockResolvedValue([]),
+      };
+
+      const engine = createCliMcpEngine({
+        client: mockClient,
+        workspace: tmpWorkspace,
+        localTools: true,
+      });
+
+      // Write a file using shadowclaw_local_write_file
+      const writeRes = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 205,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_local_write_file",
+          arguments: {
+            path: "test-note.txt",
+            content: "Hello from local MCP tool test!",
+          },
+        },
+      });
+
+      expect(writeRes).toBeDefined();
+      expect(writeRes.result.isError).toBe(false);
+      expect(writeRes.result.content[0].text).toContain("Written");
+
+      // Verify file on disk
+      const onDisk = await readFile(
+        path.join(tmpWorkspace, "test-note.txt"),
+        "utf8",
+      );
+      expect(onDisk).toBe("Hello from local MCP tool test!");
+
+      // Read back via shadowclaw_local_read_file
+      const readRes = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 206,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_local_read_file",
+          arguments: { path: "test-note.txt" },
+        },
+      });
+
+      expect(readRes).toBeDefined();
+      expect(readRes.result.isError).toBe(false);
+      expect(readRes.result.content[0].text).toBe(
+        "Hello from local MCP tool test!",
+      );
+
+      // Read back using unprefixed name when no client is connected
+      const readUnprefixedRes = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 207,
+        method: "tools/call",
+        params: {
+          name: "read_file",
+          arguments: { path: "test-note.txt" },
+        },
+      });
+      expect(readUnprefixedRes.result.content[0].text).toBe(
+        "Hello from local MCP tool test!",
+      );
+    });
+
+    it("executes local bash tool in workspace in tools/call", async () => {
+      const mockClient = {
+        listClients: jest.fn<any>().mockResolvedValue([]),
+      };
+
+      const engine = createCliMcpEngine({
+        client: mockClient,
+        workspace: tmpWorkspace,
+        localTools: true,
+      });
+
+      const res = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 208,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_local_bash",
+          arguments: { command: "echo 'local bash execution success'" },
+        },
+      });
+
+      expect(res).toBeDefined();
+      expect(res.result.isError).toBe(false);
+      expect(res.result.content[0].text).toContain(
+        "local bash execution success",
+      );
+    });
+
+    it("handles execution errors in local tools cleanly with isError: true", async () => {
+      const mockClient = {
+        listClients: jest.fn<any>().mockResolvedValue([]),
+      };
+
+      const engine = createCliMcpEngine({
+        client: mockClient,
+        workspace: tmpWorkspace,
+        localTools: true,
+      });
+
+      const res = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 209,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_local_read_file",
+          arguments: { path: "does-not-exist.txt" },
+        },
+      });
+
+      expect(res).toBeDefined();
+      expect(res.result.isError).toBe(true);
+      expect(res.result.content[0].text).toMatch(/not found|does not exist/i);
+    });
+
+    it("falls back to host-agnostic tmpdir workspace without exposing process.cwd() when workspace is omitted", async () => {
+      const mockClient = {
+        listClients: jest.fn<any>().mockResolvedValue([]),
+      };
+
+      const engine = createCliMcpEngine({
+        client: mockClient,
+        localTools: true,
+        // No workspace provided!
+      });
+
+      const listRes = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 210,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_local_list_files",
+          arguments: {},
+        },
+      });
+
+      expect(listRes).toBeDefined();
+      expect(listRes.result.isError).toBe(false);
+      // Must NOT contain project root or host IDE application files
+      expect(listRes.result.content[0].text).not.toContain("package.json");
+      expect(listRes.result.content[0].text).not.toContain("chrome-sandbox");
+      expect(listRes.result.content[0].text).not.toContain("antigravity-ide");
+    });
+
+    it("ensures two concurrent MCP engines without workspace receive isolated random directories", async () => {
+      const mockClient = {
+        listClients: jest.fn<any>().mockResolvedValue([]),
+      };
+
+      const engine1 = createCliMcpEngine({
+        client: mockClient,
+        localTools: true,
+      });
+
+      const engine2 = createCliMcpEngine({
+        client: mockClient,
+        localTools: true,
+      });
+
+      await engine1.handleMessage({
+        jsonrpc: "2.0",
+        id: 211,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_local_write_file",
+          arguments: {
+            path: "isolated-marker.txt",
+            content: "engine1-data",
+          },
+        },
+      });
+
+      const list1 = await engine1.handleMessage({
+        jsonrpc: "2.0",
+        id: 212,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_local_read_file",
+          arguments: { path: "isolated-marker.txt" },
+        },
+      });
+      expect(list1.result.isError).toBe(false);
+      expect(list1.result.content[0].text).toBe("engine1-data");
+
+      const list2 = await engine2.handleMessage({
+        jsonrpc: "2.0",
+        id: 213,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_local_read_file",
+          arguments: { path: "isolated-marker.txt" },
+        },
+      });
+      // Engine 2 has its own isolated workspace and must NOT see engine 1's file!
+      expect(list2.result.isError).toBe(true);
+      expect(list2.result.content[0].text).toMatch(/not found|does not exist/i);
+    });
+
+    it("blocks backwards path traversal (..) attempts in local tools", async () => {
+      const mockClient = {
+        listClients: jest.fn<any>().mockResolvedValue([]),
+      };
+
+      const engine = createCliMcpEngine({
+        client: mockClient,
+        workspace: tmpWorkspace,
+        localTools: true,
+      });
+
+      const readTraversalRes = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 211,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_local_read_file",
+          arguments: { path: "../../etc/passwd" },
+        },
+      });
+
+      expect(readTraversalRes).toBeDefined();
+      expect(readTraversalRes.result.isError).toBe(true);
+      expect(readTraversalRes.result.content[0].text).toMatch(/traversal/i);
+
+      const writeTraversalRes = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 212,
+        method: "tools/call",
+        params: {
+          name: "shadowclaw_local_write_file",
+          arguments: { path: "../escape.txt", content: "payload" },
+        },
+      });
+
+      expect(writeTraversalRes).toBeDefined();
+      expect(writeTraversalRes.result.isError).toBe(true);
+      expect(writeTraversalRes.result.content[0].text).toMatch(/traversal/i);
+    });
+
+    it("disables local workspace tools and only shows server tools if workspace initialization fails", async () => {
+      const mockClient = {
+        listClients: jest.fn<any>().mockResolvedValue([]),
+      };
+
+      // Point to an invalid directory that cannot be created
+      const engine = createCliMcpEngine({
+        client: mockClient,
+        workspace: "/dev/null/invalid-path/never-works",
+        localTools: true,
+      });
+
+      const res = await engine.handleMessage({
+        jsonrpc: "2.0",
+        id: 213,
+        method: "tools/list",
+      });
+
+      expect(res).toBeDefined();
+      const toolNames = res.result.tools.map((t: any) => t.name);
+      // Server tools are still exposed
+      expect(toolNames).toContain("shadowclaw_server_list_clients");
+      expect(toolNames).toContain("shadowclaw_server_status");
+      // Local workspace tools are disabled
+      expect(toolNames).not.toContain("shadowclaw_local_read_file");
+      expect(toolNames).not.toContain("shadowclaw_local_write_file");
+      expect(toolNames).not.toContain("shadowclaw_local_bash");
+    });
   });
 });

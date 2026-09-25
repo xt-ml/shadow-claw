@@ -9,6 +9,7 @@
  */
 
 import { DEFAULT_DEV_HOST, DEFAULT_DEV_PORT } from "../../config/config.js";
+import { isHeadlessMode } from "../../config/headless.js";
 
 import git from "isomorphic-git";
 import { Buffer } from "buffer";
@@ -691,14 +692,21 @@ export async function initGitFs(): Promise<{
       _http = httpClient;
 
       if (!_fs) {
-        let opfsRoot: FileSystemDirectoryHandle;
-        try {
-          opfsRoot = await navigator.storage.getDirectory();
-        } catch (err) {
-          console.warn(
-            "OPFS is unavailable for git root, falling back to memory:",
-            err,
-          );
+        let opfsRoot: FileSystemDirectoryHandle | null = null;
+        if (
+          typeof navigator !== "undefined" &&
+          typeof (navigator as any).storage?.getDirectory === "function"
+        ) {
+          try {
+            opfsRoot = await navigator.storage.getDirectory();
+          } catch (err) {
+            console.warn(
+              "OPFS is unavailable for git root, falling back to memory:",
+              err,
+            );
+          }
+        }
+        if (!opfsRoot) {
           const { getMemoryOpfsRoot } =
             await import("../../storage/memoryStorage.js");
           opfsRoot = getMemoryOpfsRoot();
@@ -887,7 +895,7 @@ export async function gitClone({
   const repo = name || repoNameFromUrl(url);
   const dir = repoDirFn(repo);
 
-  if (!corsProxy) {
+  if (!corsProxy && !isHeadlessMode()) {
     corsProxy = getProxyUrl("local");
   }
 
@@ -1583,7 +1591,8 @@ export async function gitPull({
     remote,
     singleBranch: true,
     author: { name: authorName, email: authorEmail },
-    corsProxy: corsProxy || getProxyUrl("local"),
+    corsProxy:
+      corsProxy || (isHeadlessMode() ? undefined : getProxyUrl("local")),
     ...auth,
   };
 
@@ -1638,7 +1647,8 @@ export async function gitPush({
     ref,
     remote,
     force,
-    corsProxy: corsProxy || getProxyUrl("local"),
+    corsProxy:
+      corsProxy || (isHeadlessMode() ? undefined : getProxyUrl("local")),
     ...auth,
     ...(remoteRef ? { remoteRef } : {}),
     ...(tags ? { tags: true } : {}),
@@ -1862,7 +1872,8 @@ export async function gitFetch({
     dir,
     remote,
     singleBranch: true,
-    corsProxy: corsProxy || getProxyUrl("local"),
+    corsProxy:
+      corsProxy || (isHeadlessMode() ? undefined : getProxyUrl("local")),
     ...auth,
   };
 

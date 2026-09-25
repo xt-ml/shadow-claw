@@ -1,5 +1,6 @@
 import "../utils/suppress-warnings.js";
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import process from "node:process";
 
@@ -56,7 +57,9 @@ export async function bootstrapHeadlessAgent(
       stdin: options.stdin,
       stdout: options.stdout,
     });
-    workspaceDir = resolved.cacheDir;
+    const baseTmp = path.join(tmpdir(), "shadow-claw");
+    await mkdir(baseTmp, { recursive: true });
+    workspaceDir = await mkdtemp(path.join(baseTmp, "workspace-"));
     dbDir = resolved.databaseDir;
   }
 

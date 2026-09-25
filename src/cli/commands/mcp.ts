@@ -9,6 +9,8 @@
 import readline from "node:readline";
 import http from "node:http";
 import fs from "node:fs";
+import { mkdir, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -30,6 +32,7 @@ function getCliVersion(): string {
 
 export const MCP_CLIENT_TOOL_PREFIX = "shadowclaw_client_";
 export const MCP_SERVER_TOOL_PREFIX = "shadowclaw_server_";
+export const MCP_LOCAL_TOOL_PREFIX = "shadowclaw_local_";
 
 import {
   getClientRawToolName,
@@ -40,10 +43,128 @@ import {
   resolveTargetClientId,
 } from "../../server/mcp/tools/built-in-tool-definitions.js";
 import type { McpTool } from "../../server/mcp/types.js";
+import { getAgentCore } from "../utils/agent-core.js";
+import { bootstrapHeadlessAgent } from "./agent-bootstrap.js";
+import { BROWSER_ONLY_TOOLS } from "../../config/headless.js";
 
 export type McpToolDefinition = McpTool;
 
 export const CLI_BUILTIN_TOOLS: McpToolDefinition[] = BUILTIN_TOOL_DEFINITIONS;
+
+export function formatLocalToolName(
+  name: string,
+  target: "raw" | "exposed",
+  prefix: string = MCP_LOCAL_TOOL_PREFIX,
+): string {
+  if (typeof name !== "string") {
+    return name;
+  }
+  if (target === "raw") {
+    if (name.startsWith(MCP_LOCAL_TOOL_PREFIX)) {
+      return name.slice(MCP_LOCAL_TOOL_PREFIX.length);
+    }
+    if (name.startsWith("shadowclaw_")) {
+      return name.slice("shadowclaw_".length);
+    }
+    return name;
+  }
+  return !name.startsWith(prefix) ? `${prefix}${name}` : name;
+}
+
+export function toLocalMcpTool(
+  def: any,
+  prefix: string = MCP_LOCAL_TOOL_PREFIX,
+): McpToolDefinition {
+  const rawSchema = def.inputSchema || def.input_schema;
+  const inputSchema =
+    rawSchema && typeof rawSchema === "object"
+      ? {
+          ...rawSchema,
+          type: rawSchema.type || "object",
+          properties: rawSchema.properties || {},
+        }
+      : { type: "object", properties: {} };
+
+  const exposedName = prefix ? `${prefix}${def.name}` : def.name;
+
+  return {
+    name: exposedName,
+    description: def.description || `CLI agent tool: ${def.name}`,
+    inputSchema,
+    annotations: def.annotations,
+  };
+}
+
+export function formatLocalToolResult(
+  output: any,
+  serverInfo: any,
+  reqId: any,
+): any {
+  let isError = false;
+  let content: Array<{
+    type: string;
+    text?: string;
+    data?: string;
+    mimeType?: string;
+  }> = [];
+
+  if (Array.isArray(output)) {
+    content = output.map((item) => {
+      if (item && typeof item === "object") {
+        if (item.type === "image") {
+          return {
+            type: "image",
+            data: item.data || "",
+            mimeType: item.media_type || item.mimeType || "image/png",
+          };
+        }
+        if (item.type === "text") {
+          return {
+            type: "text",
+            text: String(item.text ?? ""),
+          };
+        }
+        return {
+          type: "text",
+          text: JSON.stringify(item, null, 2),
+        };
+      }
+      return {
+        type: "text",
+        text: String(item ?? ""),
+      };
+    });
+  } else if (typeof output === "string") {
+    if (
+      output.toLowerCase().startsWith("error") ||
+      output.toLowerCase().startsWith("tool error") ||
+      output.includes("SecurityError") ||
+      (output.startsWith('Tool "') && output.includes("is not allowed")) ||
+      (output.startsWith('Tool "') && output.includes("is not available"))
+    ) {
+      isError = true;
+    }
+    content = [{ type: "text", text: output }];
+  } else if (output && typeof output === "object") {
+    if (output.error || output.success === false) {
+      isError = true;
+    }
+    content = [{ type: "text", text: JSON.stringify(output, null, 2) }];
+  } else {
+    content = [{ type: "text", text: String(output ?? "") }];
+  }
+
+  return {
+    jsonrpc: "2.0",
+    id: reqId,
+    result: {
+      resultType: "complete",
+      isError,
+      content,
+      _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+    },
+  };
+}
 
 export interface CliMcpEngineOptions extends ControlClientOptions {
   client?: any;
@@ -51,6 +172,19 @@ export interface CliMcpEngineOptions extends ControlClientOptions {
   targetClientId?: string;
   clientTarget?: string;
   version?: string;
+  localTools?: boolean;
+  toolPrefix?: "local" | "none" | "shadowclaw" | string;
+  workspace?: string;
+  workspaceDir?: string;
+  databaseDir?: string;
+  cacheDir?: string;
+  group?: string;
+  tools?: string;
+  toolsProfile?: string;
+  allowInternet?: boolean;
+  internetAccess?: boolean;
+  core?: any;
+  db?: any;
   [key: string]: any;
 }
 
@@ -58,6 +192,7 @@ export interface CliMcpEngine {
   handleMessage: (request: any, headers?: Record<string, any>) => Promise<any>;
   getActiveClientId: () => string;
   setActiveClientId: (id: string) => void;
+  close?: () => Promise<void>;
 }
 
 export function createCliMcpEngine(
@@ -92,6 +227,293 @@ export function createCliMcpEngine(
 
   const toolSupportingClientsMap = new Map<string, any[]>();
   const toolDefMap = new Map<string, any>();
+
+  const localTools = options.localTools !== false;
+  const toolPrefix = options.toolPrefix ?? "local";
+  const prefixStr =
+    toolPrefix === "none" || toolPrefix === ""
+      ? ""
+      : toolPrefix === "shadowclaw"
+        ? "shadowclaw_"
+        : MCP_LOCAL_TOOL_PREFIX;
+
+  const localToolDefMap = new Map<string, any>();
+  let headlessContextPromise: Promise<{
+    db: any;
+    workspaceDir: string;
+    core: any;
+  } | null> | null = null;
+
+  async function getHeadlessContext(): Promise<{
+    db: any;
+    workspaceDir: string;
+    core: any;
+  } | null> {
+    if (!headlessContextPromise) {
+      headlessContextPromise = (async () => {
+        if (options.core && options.db) {
+          let fallbackWs: string;
+          if (options.workspaceDir || options.workspace) {
+            fallbackWs = (options.workspaceDir || options.workspace)!;
+          } else {
+            const baseTmp = path.join(tmpdir(), "shadow-claw");
+            await mkdir(baseTmp, { recursive: true });
+            fallbackWs = await mkdtemp(path.join(baseTmp, "workspace-"));
+          }
+          return {
+            db: options.db,
+            workspaceDir: fallbackWs,
+            core: options.core,
+          };
+        }
+        const core = options.core || (await getAgentCore());
+        const explicitWorkspace = options.workspaceDir || options.workspace;
+        let targetWorkspace: string | null = null;
+        let targetCacheDir: string | null = null;
+        let targetDbDir: string | null = null;
+
+        if (explicitWorkspace) {
+          targetWorkspace = path.resolve(explicitWorkspace);
+          targetCacheDir = options.cacheDir
+            ? path.resolve(options.cacheDir)
+            : path.join(targetWorkspace, ".cache");
+          targetDbDir = options.databaseDir
+            ? path.resolve(options.databaseDir)
+            : path.join(targetCacheDir, "database");
+        } else {
+          // No explicit workspace: use a unique process-isolated tmp dir that can't be traversed backwards
+          try {
+            const baseTmp = path.join(tmpdir(), "shadow-claw");
+            await mkdir(baseTmp, { recursive: true });
+            const hostAgnosticTmp = await mkdtemp(
+              path.join(baseTmp, "workspace-"),
+            );
+            targetWorkspace = hostAgnosticTmp;
+            targetCacheDir = options.cacheDir
+              ? path.resolve(options.cacheDir)
+              : await mkdtemp(path.join(baseTmp, "cache-"));
+            targetDbDir = options.databaseDir
+              ? path.resolve(options.databaseDir)
+              : path.join(targetCacheDir, "database");
+            await mkdir(targetCacheDir, { recursive: true });
+            await mkdir(targetDbDir, { recursive: true });
+          } catch (err: any) {
+            console.error(
+              `[ShadowClaw MCP] Warning: No --workspace provided and failed to initialize temporary fallback workspace (${err.message}). Local workspace tools are disabled.`,
+            );
+            return null;
+          }
+        }
+
+        try {
+          const bootstrapResult = await bootstrapHeadlessAgent({
+            ...options,
+            workspace: targetWorkspace,
+            cacheDir: targetCacheDir,
+            databaseDir: targetDbDir,
+            yes: true,
+            quiet: true,
+            isTTY: false,
+            core,
+          });
+
+          return {
+            db: bootstrapResult.db,
+            workspaceDir: bootstrapResult.workspaceDir,
+            core: bootstrapResult.core,
+          };
+        } catch (err: any) {
+          console.error(
+            `[ShadowClaw MCP] Warning: Failed to bootstrap headless agent context (${err.message}). Local workspace tools are disabled.`,
+          );
+          return null;
+        }
+      })();
+    }
+    return headlessContextPromise;
+  }
+
+  async function getLocalAgentTools(): Promise<McpToolDefinition[]> {
+    if (!localTools) {
+      return [];
+    }
+
+    let ctx: any;
+    try {
+      ctx = await getHeadlessContext();
+    } catch (err: any) {
+      console.error(
+        `[ShadowClaw MCP] Failed to initialize local agent context: ${err.message}`,
+      );
+      return [];
+    }
+
+    if (!ctx) {
+      return [];
+    }
+
+    const { db, core } = ctx;
+    const groupId =
+      options.group || core.DEFAULT_SERVER_GROUP_ID || "server:main";
+
+    let profileToolNames: Set<string> | null = null;
+    if (options.toolsProfile || options.profile) {
+      const target = String(options.toolsProfile || options.profile)
+        .trim()
+        .toLowerCase();
+      const defaultBuiltinProfile = core.DEFAULT_BUILTIN_PROFILE || null;
+      let dbProfiles: any[] = [];
+      if (typeof core.getConfig === "function") {
+        try {
+          const raw = await core.getConfig(
+            db,
+            core.CONFIG_KEYS?.TOOL_PROFILES || "tool_profiles",
+          );
+          if (typeof raw === "string") dbProfiles = JSON.parse(raw);
+          else if (Array.isArray(raw)) dbProfiles = raw;
+        } catch {}
+      }
+      const allProfiles = [defaultBuiltinProfile, ...dbProfiles].filter(
+        Boolean,
+      );
+      const matched = allProfiles.find(
+        (p: any) =>
+          (p.id && String(p.id).toLowerCase() === target) ||
+          (p.name && String(p.name).toLowerCase() === target),
+      );
+      if (matched) {
+        profileToolNames = new Set(matched.enabledToolNames || []);
+      }
+    }
+
+    let allowedExplicitTools: Set<string> | null = null;
+    if (
+      options.tools &&
+      typeof options.tools === "string" &&
+      options.tools.trim()
+    ) {
+      const list = options.tools
+        .split(",")
+        .map((s: string) => s.trim())
+        .filter(Boolean);
+      allowedExplicitTools = new Set(list);
+    }
+
+    const allTools = [...(core.TOOL_DEFINITIONS || [])];
+    if (typeof core.loadDeclarativeTools === "function") {
+      try {
+        const decl = await core.loadDeclarativeTools(db, groupId);
+        if (decl && Array.isArray(decl.tools)) {
+          for (const dt of decl.tools) {
+            if (!allTools.some((t: any) => t.name === dt.name)) {
+              allTools.push(dt);
+            }
+          }
+        }
+      } catch {}
+    }
+
+    const browserOnly = core.BROWSER_ONLY_TOOLS || BROWSER_ONLY_TOOLS;
+    localToolDefMap.clear();
+
+    const resultTools: McpToolDefinition[] = [];
+
+    for (const def of allTools) {
+      if (!def || !def.name) continue;
+      if (browserOnly && browserOnly.has(def.name)) continue;
+      if (allowedExplicitTools && !allowedExplicitTools.has(def.name)) continue;
+      if (profileToolNames && !profileToolNames.has(def.name)) continue;
+
+      const mcpTool = toLocalMcpTool(def, prefixStr);
+      localToolDefMap.set(def.name, def);
+      localToolDefMap.set(`shadowclaw_local_${def.name}`, def);
+      localToolDefMap.set(`shadowclaw_${def.name}`, def);
+
+      resultTools.push(mcpTool);
+    }
+
+    return resultTools;
+  }
+
+  async function executeLocalTool(
+    toolDef: any,
+    toolArgs: Record<string, any>,
+    reqId: any,
+  ): Promise<any> {
+    try {
+      const ctx = await getHeadlessContext();
+      if (!ctx) {
+        return {
+          jsonrpc: "2.0",
+          id: reqId,
+          result: {
+            resultType: "complete",
+            isError: true,
+            content: [
+              {
+                type: "text",
+                text: "Error: Local workspace tools are not initialized.",
+              },
+            ],
+            _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+          },
+        };
+      }
+      const groupId =
+        options.group || ctx.core.DEFAULT_SERVER_GROUP_ID || "server:main";
+      let invokeContext: any = undefined;
+      try {
+        const { resolveAgentProvider } = await import("./agent.js");
+        const resolved = await resolveAgentProvider(
+          ctx.db,
+          ctx.core,
+          ctx.workspaceDir,
+          {
+            ...options,
+            interactive: false,
+          },
+        );
+        invokeContext = {
+          db: ctx.db,
+          provider: resolved.providerId,
+          model: resolved.model,
+          apiKey: resolved.apiKey,
+        };
+      } catch {}
+
+      console.error(
+        `[ShadowClaw MCP] Executing local tool '${toolDef.name}' in workspace: ${ctx.workspaceDir}`,
+      );
+
+      const output = await ctx.core.executeTool(
+        ctx.db,
+        toolDef.name,
+        toolArgs,
+        groupId,
+        {
+          invokeContext,
+        },
+      );
+
+      return formatLocalToolResult(output, serverInfo, reqId);
+    } catch (err: any) {
+      return {
+        jsonrpc: "2.0",
+        id: reqId,
+        result: {
+          resultType: "complete",
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: `Error executing local tool '${toolDef.name}': ${err.message || String(err)}`,
+            },
+          ],
+          _meta: { "io.modelcontextprotocol/serverInfo": serverInfo },
+        },
+      };
+    }
+  }
 
   async function getRelayedTools(): Promise<McpToolDefinition[]> {
     if (!relayClientTools) {
@@ -289,9 +711,15 @@ export function createCliMcpEngine(
           .filter(Boolean);
 
         const relayed = await getRelayedTools();
+        const localToolsList = await getLocalAgentTools();
         const combined = new Map<string, McpToolDefinition>();
         for (const t of CLI_BUILTIN_TOOLS) {
           combined.set(t.name, t);
+        }
+        for (const t of localToolsList) {
+          if (!combined.has(t.name)) {
+            combined.set(t.name, t);
+          }
         }
         for (const t of relayed) {
           if (!combined.has(t.name)) {
@@ -813,8 +1241,37 @@ export function createCliMcpEngine(
           };
         }
 
+        // Check local tools
+        if (localTools && localToolDefMap.size === 0) {
+          await getLocalAgentTools();
+        }
+
+        const isLocalPrefix = toolName.startsWith(MCP_LOCAL_TOOL_PREFIX);
+        const isClientPrefix = toolName.startsWith(MCP_CLIENT_TOOL_PREFIX);
+
+        let localDef = localToolDefMap.get(toolName);
+        if (!localDef && isLocalPrefix) {
+          localDef = localToolDefMap.get(
+            toolName.slice(MCP_LOCAL_TOOL_PREFIX.length),
+          );
+        }
+        if (
+          !localDef &&
+          toolName.startsWith("shadowclaw_") &&
+          !isClientPrefix
+        ) {
+          localDef = localToolDefMap.get(toolName.slice("shadowclaw_".length));
+        }
+
+        // If explicitly called with shadowclaw_local_ prefix, execute locally
+        if (isLocalPrefix && localDef) {
+          const localArgs = { ...args };
+          delete localArgs.clientId;
+          return await executeLocalTool(localDef, localArgs, reqId);
+        }
+
         // Relayed client tools (invoke-tool)
-        if (toolDefMap.size === 0) {
+        if (relayClientTools && toolDefMap.size === 0) {
           await getRelayedTools();
         }
 
@@ -825,6 +1282,32 @@ export function createCliMcpEngine(
         const supportingClientIds = supportingClients
           .map((cl) => cl.clientId || cl.id)
           .filter(Boolean);
+
+        let connectedClients: any[] = [];
+        try {
+          connectedClients = await client.listClients();
+        } catch (_) {}
+
+        // If unprefixed tool was requested:
+        // When toolPrefix === "none", local tools take precedence if no clientId was specified.
+        // If connected clients are present and relayClientTools is enabled, proxy to client (backward compatibility);
+        // otherwise if localDef exists, execute locally!
+        if (!isClientPrefix && localDef) {
+          if (toolPrefix === "none" && !args.clientId) {
+            const localArgs = { ...args };
+            delete localArgs.clientId;
+            return await executeLocalTool(localDef, localArgs, reqId);
+          }
+          if (
+            !relayClientTools ||
+            !Array.isArray(connectedClients) ||
+            connectedClients.length === 0
+          ) {
+            const localArgs = { ...args };
+            delete localArgs.clientId;
+            return await executeLocalTool(localDef, localArgs, reqId);
+          }
+        }
 
         let targetId = "";
         if (args.clientId) {
@@ -989,6 +1472,16 @@ export function createCliMcpEngine(
     setActiveClientId: (id: string) => {
       activeClientId = id;
     },
+    close: async () => {
+      if (headlessContextPromise) {
+        try {
+          const ctx = await headlessContextPromise;
+          if (typeof ctx?.core?.closeSqliteDatabase === "function") {
+            ctx.core.closeSqliteDatabase();
+          }
+        } catch {}
+      }
+    },
   };
 }
 
@@ -1125,6 +1618,10 @@ export async function runMcpCommand(
       };
       process.stdout.write(JSON.stringify(errorResponse) + "\n");
     }
+  });
+
+  rl.on("close", async () => {
+    await engine.close?.();
   });
 
   console.error("[ShadowClaw MCP] STDIO MCP server active (2026-07-28)");

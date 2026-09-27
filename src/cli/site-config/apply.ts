@@ -57,12 +57,44 @@ export interface SiteConfigPwa {
   screenshots?: any[];
 }
 
+export interface SiteConfigSidebarSectionItem {
+  title?: string;
+  label?: string;
+  href?: string;
+  target?: string;
+  rel?: string;
+  active?: boolean;
+}
+
+export interface SiteConfigSidebarSection {
+  title?: string;
+  headerHref?: string;
+  items?: SiteConfigSidebarSectionItem[];
+  html?: string;
+}
+
+export interface SiteConfigSidebar {
+  pagesHidden?: boolean;
+  chatHidden?: boolean;
+  tasksHidden?: boolean;
+  filesHidden?: boolean;
+  defaultPage?: string;
+  slotHtml?: string;
+  slotPath?: string;
+  sections?: SiteConfigSidebarSection[];
+}
+
 export interface SiteConfig {
   site?: SiteConfigSite;
   branding?: SiteConfigBranding;
   theme?: SiteConfigTheme;
   pwa?: SiteConfigPwa;
-  pages?: { notFoundPath?: string };
+  sidebar?: SiteConfigSidebar;
+  pages?: {
+    notFoundPath?: string;
+    sortOrder?: string;
+    defaultPinnedPage?: string;
+  };
   notFoundPath?: string;
   manifestPath?: string;
   sitemapPath?: string;
@@ -87,13 +119,11 @@ export function insertBeforeClosingHead(
   html: string,
   contentToInsert: string,
 ): string {
-  const lastHeadIndex = html.lastIndexOf("</head>");
-  if (lastHeadIndex !== -1) {
+  const headMatch = /<\/head>/i.exec(html);
+  if (headMatch) {
+    const headIndex = headMatch.index;
     return (
-      html.slice(0, lastHeadIndex) +
-      contentToInsert +
-      "\n" +
-      html.slice(lastHeadIndex)
+      html.slice(0, headIndex) + contentToInsert + "\n" + html.slice(headIndex)
     );
   }
   return `${contentToInsert}\n${html}`;
@@ -137,7 +167,67 @@ async function writeText(filePath: string, content: string): Promise<void> {
   await writeFile(filePath, content, "utf8");
 }
 
-export function patchIndexHtml(html: string, config: SiteConfig): string {
+export function renderSidebarSectionsHtml(
+  sections: SiteConfigSidebarSection[],
+): string {
+  if (!Array.isArray(sections) || sections.length === 0) {
+    return "";
+  }
+
+  const sectionsHtml = sections
+    .map((section, idx) => {
+      if (section.html) {
+        return section.html;
+      }
+      const sectionId = section.title
+        ? `sidebar-${section.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`
+        : `sidebar-section-${idx + 1}`;
+
+      const headerContent = section.headerHref
+        ? `<a href="${escapeHtml(section.headerHref)}" class="sidebar-link">${escapeHtml(section.title || "")}</a>`
+        : `<span>${escapeHtml(section.title || "")}</span>`;
+
+      const headerHtml = section.title
+        ? `    <div class="sidebar-section-header">${headerContent}</div>`
+        : "";
+
+      const itemsHtml = (section.items || [])
+        .map((item) => {
+          const title = item.title || item.label || "";
+          const href = item.href || "#";
+          const targetAttr = item.target
+            ? ` target="${escapeHtml(item.target)}"`
+            : "";
+          const relAttr = item.rel
+            ? ` rel="${escapeHtml(item.rel)}"`
+            : item.target === "_blank"
+              ? ' rel="noopener noreferrer"'
+              : "";
+          const activeClass = item.active ? " active" : "";
+          const ariaCurrent = item.active ? ' aria-current="page"' : "";
+          return `    <div class="sidebar-item"><a href="${escapeHtml(href)}"${targetAttr}${relAttr} class="sidebar-link${activeClass}"${ariaCurrent}>${escapeHtml(title)}</a></div>`;
+        })
+        .join("\n");
+
+      return [
+        `  <section class="sidebar-section" id="${sectionId}">`,
+        headerHtml,
+        itemsHtml,
+        `  </section>`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n");
+
+  return `<nav slot="sidebar" class="sidebar-custom-sections" aria-label="Site Navigation">\n${sectionsHtml}\n</nav>`;
+}
+
+export function patchIndexHtml(
+  html: string,
+  config: SiteConfig,
+  customSidebarHtml?: string,
+): string {
   let next = html;
 
   const site = config.site || {};
@@ -265,10 +355,24 @@ export function patchIndexHtml(html: string, config: SiteConfig): string {
   if (theme.stylesheet) {
     const stylesheetHref = resolveThemeStylesheetHref(theme.stylesheet);
     const themeCssTag = `<link rel="stylesheet" href="${escapeHtml(stylesheetHref)}" />`;
-    if (
-      !next.includes(`href="${stylesheetHref}"`) &&
-      !next.includes(`href="${escapeHtml(stylesheetHref)}"`)
-    ) {
+    const escapedHrefPattern = escapeHtml(stylesheetHref).replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&",
+    );
+    const rawHrefPattern = stylesheetHref.replace(
+      /[.*+?^${}()|[\]\\]/g,
+      "\\$&",
+    );
+    const linkRegex = new RegExp(
+      `<link\\s+[^>]*href=["'](?:${rawHrefPattern}|${escapedHrefPattern})["'][^>]*>`,
+      "iu",
+    );
+    const headContent = next.slice(0, Math.max(0, next.indexOf("</head>")));
+    const headWithoutScripts = headContent.replace(
+      /<script\b[\s\S]*?<\/script>/gi,
+      "",
+    );
+    if (!linkRegex.test(headWithoutScripts)) {
       if (/<link\s+rel="stylesheet"\s+href="index\.css"\s*\/?>/iu.test(next)) {
         next = next.replace(
           /(<link\s+rel="stylesheet"\s+href="index\.css"\s*\/?>)/iu,
@@ -311,6 +415,41 @@ export function patchIndexHtml(html: string, config: SiteConfig): string {
     );
   } else {
     next = insertBeforeClosingHead(next, `  ${siteConfigScript}`);
+  }
+
+  const sidebarHtmlToInject =
+    customSidebarHtml ||
+    config.sidebar?.slotHtml ||
+    (config.sidebar?.sections
+      ? renderSidebarSectionsHtml(config.sidebar.sections)
+      : "");
+
+  if (sidebarHtmlToInject) {
+    let formattedSidebarHtml = sidebarHtmlToInject.trim();
+    if (
+      !/\bslot="sidebar(?:-nav|-content|-footer)?"/iu.test(formattedSidebarHtml)
+    ) {
+      formattedSidebarHtml = `<div slot="sidebar" class="sidebar-custom-sections">\n${formattedSidebarHtml}\n</div>`;
+    }
+
+    const existingMatch = next.match(
+      /<[^>]+?\bslot="sidebar(?:-nav|-content|-footer)?"[^>]*>[\s\S]*?<\/[^>]+>/iu,
+    );
+    if (existingMatch) {
+      next = next.replace(existingMatch[0], "");
+    }
+
+    if (next.includes("</shadow-claw>")) {
+      next = next.replace(
+        "</shadow-claw>",
+        `  ${formattedSidebarHtml}\n</shadow-claw>`,
+      );
+    } else if (next.includes("<shadow-claw></shadow-claw>")) {
+      next = next.replace(
+        "<shadow-claw></shadow-claw>",
+        `<shadow-claw>\n  ${formattedSidebarHtml}\n</shadow-claw>`,
+      );
+    }
   }
 
   return next;
@@ -993,10 +1132,39 @@ export async function applySiteConfig(
 
   await copyCustomSiteFiles(config, distPublicDir, siteConfigPath);
 
+  const configDir = siteConfigPath
+    ? path.dirname(path.resolve(siteConfigPath))
+    : process.cwd();
+  const templateRootDir = getTemplateRootDir(configDir);
+
+  let sidebarHtml: string | undefined;
+  if (config.sidebar?.slotHtml) {
+    sidebarHtml = config.sidebar.slotHtml;
+  } else if (config.sidebar?.sections) {
+    sidebarHtml = renderSidebarSectionsHtml(config.sidebar.sections);
+  } else {
+    const sidebarCandidates = [
+      config.sidebar?.slotPath,
+      "pages/main/sidebar.html",
+      "pages/sidebar.html",
+      "sidebar.html",
+      "resources/sidebar.html",
+    ].filter(Boolean) as string[];
+
+    const candidatePaths = sidebarCandidates.flatMap((c) =>
+      getCandidateFilePaths(c, configDir, templateRootDir),
+    );
+    const foundSidebar = await findFirstExisting(candidatePaths);
+    if (foundSidebar) {
+      sidebarHtml = (await readText(foundSidebar)) ?? undefined;
+      console.log(`  Found slotted sidebar: ${foundSidebar}`);
+    }
+  }
+
   const indexPath = path.join(distPublicDir, "index.html");
   const indexHtml = await readText(indexPath);
   if (indexHtml) {
-    const patched = patchIndexHtml(indexHtml, config);
+    const patched = patchIndexHtml(indexHtml, config, sidebarHtml);
     await writeText(indexPath, patched);
     console.log("  Patched index.html");
   }

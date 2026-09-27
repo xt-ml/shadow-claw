@@ -135,16 +135,59 @@ Minimal `pages/routes.json`:
 ```json
 {
   "routes": {
-    "/pages/main/index.html": { "prettyPath": "/main" },
-    "/pages/main/~/content/about.md": { "prettyPath": "/main/about" },
-    "/pages/main/MEMORY.md": { "prettyPath": "/main/memory" }
+    "/pages/main/index.html": { "prettyPath": "/" },
+    "/pages/main/~/content/about.md": { "prettyPath": "/about" },
+    "/pages/main/MEMORY.md": { "prettyPath": "/memory" }
   }
 }
 ```
 
-> **Reserved path prefixes** — the following first-path-segments are owned by ShadowClaw's own router and **must not** be used as pretty path prefixes:
-> `/`, `/chat`, `/files`, `/tasks`, `/pages`, `/settings`, `/tools`, `/channels`.
-> `/` (root) is also reserved as the default pinned page and is unreachable as a pretty path. Use a safe namespace like `/main/`, `/articles/`, `/docs/`, or any custom prefix that doesn't collide with the list above.
+> **Reserved path prefixes** — the following first-path-segments are owned by ShadowClaw's own router and **must not** be used as custom pretty path prefixes:
+> `/chat`, `/files`, `/tasks`, `/pages`, `/settings`, `/tools`, `/channels`.
+> Root (`/`) is supported as a pretty path (e.g. `"/pages/main/index.html": { "prettyPath": "/" }`). For custom subpaths, use a safe namespace like `/main/`, `/articles/`, `/docs/`, or any custom prefix that doesn't collide with the reserved list above.
+
+#### Custom Sidebar Navigation & Slots
+
+Customize the navigation sidebar either by providing a custom sidebar template or defining declarative sections in `shadow-claw.config.json`:
+
+- **Auto-discovered Template:** Add `pages/main/sidebar.html` (or `sidebar.html`) containing sidebar markup:
+  ```html
+  <nav
+    slot="sidebar"
+    class="sidebar-custom-sections"
+    aria-label="Site Navigation"
+  >
+    <section class="sidebar-section">
+      <div class="sidebar-section-header"><span>Documentation</span></div>
+      <div class="sidebar-item"><a href="/" class="sidebar-link">Home</a></div>
+      <div class="sidebar-item">
+        <a href="/about" class="sidebar-link">About</a>
+      </div>
+    </section>
+  </nav>
+  ```
+- **Declarative Sections in `shadow-claw.config.json`:**
+  ```json
+  {
+    "sidebar": {
+      "sections": [
+        {
+          "title": "Navigation",
+          "headerHref": "/",
+          "items": [
+            { "title": "About", "href": "/about" },
+            {
+              "title": "GitHub",
+              "href": "https://github.com/xt-ml/shadow-claw",
+              "target": "_blank"
+            }
+          ]
+        }
+      ]
+    }
+  }
+  ```
+  Slotted navigation links (`.sidebar-link`) automatically synchronize `.active` and `aria-current="page"` on route navigation, and clicking a slotted link automatically closes the navigation drawer on mobile viewports.
 
 #### Default Pinned Page (`/`)
 

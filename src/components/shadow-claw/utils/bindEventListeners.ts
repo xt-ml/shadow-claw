@@ -12,6 +12,7 @@ import { showPage } from "./showPage.js";
 import { supportsNavigationApi } from "./supportsNavigationApi.js";
 import { setupAppLifecycle } from "./setupAppLifecycle.js";
 import { syncPageHeaderMainVisibilityOverride } from "./syncPageHeaderMainVisibilityOverride.js";
+import { setupSlottedSidebarActiveLinks } from "./syncSlottedSidebarActiveLinks.js";
 
 import { toggleActivityLogVisibility } from "./toggleActivityLogVisibility.js";
 import { togglePageHeaderMainVisibility } from "./togglePageHeaderMainVisibility.js";
@@ -87,6 +88,28 @@ export function bindEventListeners(
         }
       });
     });
+
+    sidebar.addEventListener("click", (e: Event) => {
+      const target = e.target as HTMLElement | null;
+      if (
+        win.innerWidth < 896 &&
+        target?.closest("a, button, .nav-item, .sidebar-link, .sidebar-item")
+      ) {
+        sidebar.classList.remove("open");
+      }
+    });
+
+    if (typeof (shadowClaw as any)?.addEventListener === "function") {
+      shadowClaw.addEventListener("click", (e: Event) => {
+        const target = e.target as HTMLElement | null;
+        if (
+          win.innerWidth < 896 &&
+          target?.closest('[slot^="sidebar"] a, .sidebar-custom-sections a')
+        ) {
+          sidebar.classList.remove("open");
+        }
+      });
+    }
 
     // Close sidebar when clicking outside of it (mobile only).
     // Use composedPath() instead of e.target because Shadow DOM event
@@ -251,7 +274,11 @@ export function bindEventListeners(
 
     shadowClaw.navigationListenerAttached = true;
   } else {
-    shadowClaw.popstateListener = () => {
+    shadowClaw.popstateListener = (ev?: any) => {
+      const state = ev?.state || (win as any).history?.state;
+      if (state?.inFeedScroll || state?.scrollSpy || state?.suppressRouter) {
+        return;
+      }
       applyRouteFromCurrentLocation(
         shadow,
         shadowClaw,
@@ -312,4 +339,6 @@ export function bindEventListeners(
       shadowClaw.orchestrator,
     );
   }
+
+  setupSlottedSidebarActiveLinks(shadowClaw);
 }

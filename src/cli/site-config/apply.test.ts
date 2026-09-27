@@ -202,6 +202,60 @@ describe("apply-site-config", () => {
         '<link href="favicon.svg" rel="apple-touch-icon" />',
       );
     });
+
+    it("injects slotted sidebar html into shadow-claw light DOM when slotHtml is configured", () => {
+      const config = {
+        sidebar: {
+          slotHtml: '<nav class="custom-nav"><a href="/about">About</a></nav>',
+        },
+      };
+
+      const patched = patchIndexHtml(baseHtml, config);
+      expect(patched).toContain('slot="sidebar"');
+      expect(patched).toContain('<a href="/about">About</a>');
+      expect(patched).toContain("<shadow-claw>");
+      expect(patched).toContain("</shadow-claw>");
+    });
+
+    it("renders and injects declarative sidebar sections into shadow-claw light DOM", () => {
+      const config = {
+        sidebar: {
+          sections: [
+            {
+              title: "Home",
+              headerHref: "/",
+              items: [{ title: "About", href: "/about" }],
+            },
+            {
+              title: "Links",
+              items: [
+                {
+                  title: "GitHub",
+                  href: "https://github.com/xt-ml/shadow-claw",
+                  target: "_blank",
+                },
+              ],
+            },
+          ],
+        },
+      };
+
+      const patched = patchIndexHtml(baseHtml, config);
+      expect(patched).toContain('slot="sidebar"');
+      expect(patched).toContain('class="sidebar-custom-sections"');
+      expect(patched).toContain('href="/" class="sidebar-link">Home</a>');
+      expect(patched).toContain('href="/about" class="sidebar-link">About</a>');
+      expect(patched).toContain(
+        'href="https://github.com/xt-ml/shadow-claw" target="_blank" rel="noopener noreferrer"',
+      );
+    });
+
+    it("injects customSidebarHtml parameter directly into shadow-claw light DOM", () => {
+      const customHtml =
+        '<div slot="sidebar" class="my-custom-sidebar"><p>Hello</p></div>';
+      const patched = patchIndexHtml(baseHtml, {}, customHtml);
+      expect(patched).toContain(customHtml);
+    });
   });
 
   describe("patchManifest", () => {
@@ -755,6 +809,42 @@ https://example.com/about`;
           "utf8",
         ),
       ).rejects.toThrow();
+    });
+
+    it("discovers pages/main/sidebar.html and injects it into dist/public/index.html", async () => {
+      const distPublicDir = path.join(tmpDir, "dist/public");
+      const repoDir = tmpDir;
+      const pagesMainDir = path.join(repoDir, "pages/main");
+      await mkdir(distPublicDir, { recursive: true });
+      await mkdir(pagesMainDir, { recursive: true });
+
+      const indexPath = path.join(distPublicDir, "index.html");
+      await writeFile(
+        indexPath,
+        "<!doctype html><html><head></head><body><shadow-claw></shadow-claw></body></html>",
+        "utf8",
+      );
+
+      const sidebarContent =
+        '<nav class="my-sidebar"><a href="/about">About Us</a></nav>';
+      await writeFile(
+        path.join(pagesMainDir, "sidebar.html"),
+        sidebarContent,
+        "utf8",
+      );
+
+      const siteConfigPath = path.join(repoDir, "shadow-claw.config.json");
+      const config = {
+        site: { title: "Custom Sidebar Site" },
+      };
+      await writeFile(siteConfigPath, JSON.stringify(config), "utf8");
+
+      const result = await applySiteConfig(distPublicDir, siteConfigPath);
+      expect(result.applied).toBe(true);
+
+      const patchedIndex = await readFile(indexPath, "utf8");
+      expect(patchedIndex).toContain('slot="sidebar"');
+      expect(patchedIndex).toContain("About Us");
     });
   });
 });

@@ -817,6 +817,12 @@ describe("bindEventListeners", () => {
         oStore,
         new URL("https://example.com/files/main/"),
       );
+
+      // Verify that popstateListener does not call applyRouteFromCurrentLocation when inFeedScroll is true
+      mockApplyRouteFromCurrentLocation.mockClear();
+      (win as any).history = { state: { inFeedScroll: true } };
+      shadowClaw.popstateListener();
+      expect(mockApplyRouteFromCurrentLocation).not.toHaveBeenCalled();
     });
   });
 

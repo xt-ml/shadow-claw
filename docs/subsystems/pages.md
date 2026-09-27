@@ -71,6 +71,8 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 ### Navigation & URL State Synchronization
 
 - **URL Sync & App Route Validation**: Selecting or reordering pages dispatches navigation events (`shadow-claw-navigate`) and updates browser URL history via `history.pushState()`, preserving active page state across refreshes. Same-origin link navigation uses `isPossibleAppRoute(pathname)` to validate internal routes against top-level valid pages (`VALID_PAGES`) and static route manifests; same-origin links pointing to non-app paths (such as external demo applications or static deployments) bypass SPA router interception and fall back to native browser navigation (`window.open`).
+- **Root Pretty Path Resolution**: `src/storage/staticRouting.ts` supports mapping root paths (`/` and `/index.html`) directly to page definitions (e.g. `/pages/main/index.html`) via `"prettyPath": "/"`, and reverse-resolves root page routes back to `"/"`.
+- **In-Feed Scroll & Navigation Guarding**: `replaceState` navigations with state flags (`inFeedScroll: true`, `scrollSpy: true`, or `suppressRouter: true` in history or Navigation API destination state) are bypassed by the router in `getRoute` and `popstateListener`, preventing unnecessary page resets and view thrashing during scroll-driven URL synchronization.
 - **Ebook-Style Pagination**: Includes Previous (`[data-pages-prev]`) and Next (`[data-pages-next]`) page controls. Navigation buttons are dynamically enabled/disabled and set to `hidden` (`display: none !important`) based on current page index to avoid layout shifts.
 - **Keyboard & Gesture Navigation**: Supports `ArrowLeft` and `ArrowRight` keyboard navigation for page turning, with strict focus guards to prevent interference when typing in inputs or content-editable regions. Swipe gestures are fully supported via touch and mouse drag interactions, including swipe passthrough from sandboxed iframe previews via `postMessage`.
 - **Accessibility Announcements**: Uses an `aria-live` announcer to provide immediate screen reader feedback (`Navigated to page: [Title]`) when the active page changes.
@@ -130,24 +132,29 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `src/cli/p
   - When navigating to pages not embedded in the initial HTML or stored in local storage, `shadow-claw-pages` and `getStaticPageContent()` dynamically fetch individual markdown files from `static-main/` or fallback to `static-main-manifest.json`.
 - **Pretty Paths & Sub-Routes**:
   - Configured via `routes.json` (normally `pages/routes.json`) to map markdown page sources to clean URL paths (e.g. `/2026/06/30/on-developing-loops/`). Candidate locations include `pages/resources/`, `pages/deps/`, `resources/`, `deps/`, `pages/`, and the project root.
-  - Supports recursive nested `subRoutes` entries matching child URL hierarchies.
+  - Supports recursive nested `subRoutes` entries matching child URL hierarchies, as well as root pretty path mapping (`"prettyPath": "/"`).
   - The pre-render pipeline generates dedicated physical `index.html` files with page-specific DSD templates.
   - If no `routes.json` exists, pretty-path generation is skipped without failing the build.
 - **Static Routing Manifest**:
   - Embedded via `#shadow-claw-static-routing` JSON script tags or fetched via `static-routing.json` (`src/storage/staticRouting.ts`), allowing client-side router (`app-routes.ts`) and pages component to resolve routes asynchronously (`resolvePrettyPathToRouteAsync`, `parseRouteFromUrlAsync`) across Node.js, Electron, and GitHub Pages.
 - **Server Middleware Fallbacks**:
-  - Express server includes static file middleware serving fallback content from `pages/main` for `/files/main/`, `/static-main/`, and `/pages/`, alongside SPA redirect fallback middleware for clean URL reloads.
+  - Express server includes static file middleware serving fallback content from `pages/main` for `/files/main/`, `/static-main/`, and `/pages/`, alongside SPA redirect fallback middleware for clean URL reloads, serving `index.html` for app routes even when matching directories exist on disk.
 - **DSD Shell Override**:
   - Enabled via the "Override pre-rendered content" toggle in Settings (`CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON`). Hides the initial DSD shell on boot, showing the skeleton loader until hydration finishes.
 - **Declarative Configuration (`shadow-claw.config.json`)**:
   - Template repositories and content publishers can declaratively brand and customize the site shell without editing ShadowClaw source files. The canonical location is `shadow-claw.config.json` in the project root (legacy `site-config.json` is also supported for backward compatibility):
     - **`site`**: `title`, `description`, `themeColor`, `lang`.
     - **`branding`**: `titleText`, `siteUrl`, `repoUrl`, `repoLabel`, `faviconPath`, `appleTouchIconPath`, `logoSlotHtml`.
-    - **`sidebar`**: `pagesHidden`, `chatHidden`, `tasksHidden`, `filesHidden`, `defaultPage` (`"pages"` | `"chat"` | `"tasks"` | `"files"`).
+    - **`sidebar`**: `pagesHidden`, `chatHidden`, `tasksHidden`, `filesHidden`, `defaultPage` (`"pages"` | `"chat"` | `"tasks"` | `"files"`), `slotHtml` (raw HTML string), `slotPath` (path to a custom sidebar HTML file), `sections` (array of declarative sidebar sections with `title`, `headerHref`, `items: [{ title, label, href, target, rel, active }]`, or `html`).
     - **`pages`**: `sortOrder` (`"asc"` | `"desc"`), `defaultPinnedPage`.
     - **`theme`**: `stylesheet` (custom theme CSS stylesheet injected into head).
     - **`settings`**: `assistantName` (pre-seeds the default assistant name), `defaultToolsProfile` (pre-seeds the default tool profile e.g. `"__builtin_default"` or `"none"`), `enabledTools` (pre-seeds default enabled built-in tool array).
     - **`cacheDir`** / **`server.cacheDir`**: Custom directory for storing cache, control tokens, and SQLite databases.
+  - **Slotted Sidebar & Custom Sections**:
+    - The root `<shadow-claw>` web component exposes named slots for custom navigation: `slot="sidebar-nav"`, `slot="sidebar"`, `slot="sidebar-content"`, and `slot="sidebar-footer"`.
+    - `applySiteConfig` discovers sidebar markup from `sidebar.slotHtml`, `sidebar.sections`, or auto-discovered candidate files (`pages/main/sidebar.html`, `pages/sidebar.html`, `sidebar.html`, `resources/sidebar.html`), patching the markup directly into `<shadow-claw>` light DOM.
+    - Slotted links (`.sidebar-link`, `[slot^="sidebar"] a`) automatically synchronize active classes (`.active`) and `aria-current="page"` via `syncSlottedSidebarActiveLinks` on route changes, `popstate`, and Navigation API `navigate`.
+    - On mobile viewports (<896px), clicking any slotted sidebar link automatically closes the navigation drawer.
   - **Build-Time Application**: `src/cli/site-config/apply.ts` patches `index.html`, `manifest.json`, `sitemap.xml` / `sitemap.txt`, and copies custom theme stylesheets into the build distribution. Stylesheets under `pages/resources/`, `pages/deps/`, `resources/`, `deps/`, `pages/assets/`, or `pages/main/assets/` are flattened to the distribution root and have that prefix removed from the generated `href`; other paths, such as `pages/main/theme.css`, retain their path.
   - **Branding Asset Precedence**: For `faviconPath` and `appleTouchIconPath`, content-specific locations under `pages/` and its supported resource/dependency paths are checked before bare repository-root defaults, so a published site's branding assets are not shadowed by ShadowClaw's built-in assets.
   - **DSD Shell Navigation Visibility**: `src/cli/prerender/dsd-shell/prerender-dsd-shell.ts` applies `hidden` and `aria-hidden` attributes to sidebar navigation items at build time, preventing layout shift on first paint.

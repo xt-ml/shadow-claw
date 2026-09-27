@@ -73,11 +73,28 @@ describe("staticRouting", () => {
         "/pages/main/posts/2026-07-01_03-37-38.md": {
           prettyPath: "/2026/06/30/on-developing-loops/",
         },
+        "/pages/main/index.html": {
+          prettyPath: "/",
+        },
         "/pages/main/about.md": {
           prettyPath: "/about",
         },
       },
     };
+
+    // Test root path "/"
+    expect(resolvePrettyPathToRoute("/", manifest)).toEqual({
+      page: "pages",
+      groupId: "br:main",
+      path: "index.html",
+    });
+
+    // Test root index.html
+    expect(resolvePrettyPathToRoute("/index.html", manifest)).toEqual({
+      page: "pages",
+      groupId: "br:main",
+      path: "index.html",
+    });
 
     // Test with explicit manifest
     expect(
@@ -155,6 +172,25 @@ describe("staticRouting", () => {
         manifest,
       ),
     ).toBeNull();
+
+    const manifestWithRoot: StaticRoutesManifest = {
+      routes: {
+        "/pages/main/index.html": {
+          prettyPath: "/",
+        },
+      },
+    };
+
+    expect(
+      resolveRouteToPrettyPath(
+        { page: "pages", groupId: "br:main" },
+        manifestWithRoot,
+      ),
+    ).toBe("/");
+
+    expect(resolveRouteToPrettyPath({ page: "pages" }, manifestWithRoot)).toBe(
+      "/",
+    );
   });
 
   it("fetches static routing manifest when not embedded in DOM", async () => {

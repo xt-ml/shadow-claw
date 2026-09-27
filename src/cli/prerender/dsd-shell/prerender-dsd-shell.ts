@@ -675,7 +675,13 @@ export function applySidebarVisibilityToTemplate(
   };
 
   if (sidebarConfig.pagesHidden) hidePage("pages");
-  if (sidebarConfig.chatHidden) hidePage("chat");
+  if (sidebarConfig.chatHidden) {
+    hidePage("chat");
+    next = next.replace(
+      /(<shadow-claw-conversations)(?![^>]*\bhidden\b)([^>]*>)/iu,
+      '$1 hidden aria-hidden="true"$2',
+    );
+  }
   if (sidebarConfig.tasksHidden) hidePage("tasks");
   if (sidebarConfig.filesHidden) hidePage("files");
 

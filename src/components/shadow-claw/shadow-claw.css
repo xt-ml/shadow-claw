@@ -90,6 +90,10 @@ a:hover {
   transition: transform 0.2s ease;
 }
 
+.header-main-toggle {
+  display: var(--shadow-claw-header-main-toggle-display, block);
+}
+
 .header-main-toggle[aria-pressed="true"],
 .activity-log-toggle[aria-pressed="true"] {
   box-shadow: 0 0 0.5rem
@@ -277,6 +281,28 @@ a:hover {
   list-style: none;
   margin: 0;
   padding: 0.5rem;
+}
+
+.nav-menu:not(:has(.nav-item:not([hidden]))) {
+  display: none;
+}
+
+slot[name="sidebar"],
+slot[name="sidebar-nav"],
+slot[name="sidebar-content"],
+slot[name="sidebar-footer"] {
+  display: block;
+}
+
+::slotted([slot="sidebar"]),
+::slotted([slot="sidebar-nav"]),
+::slotted([slot="sidebar-content"]),
+::slotted([slot="sidebar-footer"]) {
+  display: block;
+}
+
+.sidebar-footer {
+  display: var(--shadow-claw-sidebar-footer-display, block);
 }
 
 .sidebar-spacer {

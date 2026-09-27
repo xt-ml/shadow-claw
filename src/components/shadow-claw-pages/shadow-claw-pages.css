@@ -186,6 +186,11 @@ article > h2,
 .pages__rendered > h1,
 .pages__rendered > h2 {
   margin-top: 0;
+  margin-bottom: var(--shadow-claw-article-header-margin-bottom, 1.5rem);
+}
+
+.pages__rendered :is(h1, h2, h3, h4) {
+  clear: both;
 }
 
 .pages__iframe {
@@ -219,7 +224,7 @@ article > h2,
 
 .pages__dropdown-container {
   align-items: center;
-  display: flex;
+  display: var(--shadow-claw-pages-dropdown-container-display, flex);
   gap: 0.5rem;
   margin-bottom: 1rem;
   position: relative;
@@ -485,6 +490,10 @@ article > h2,
   .pages__content.pages__content--sidebar-collapsed .pages__nav-btn--prev {
     left: 0.5rem;
   }
+}
+
+shadow-claw-page-header {
+  display: var(--shadow-claw-page-header-display, block);
 }
 
 ul {

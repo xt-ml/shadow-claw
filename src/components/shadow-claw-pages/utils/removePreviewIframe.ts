@@ -8,5 +8,8 @@ export function removePreviewIframe(root: ShadowRoot | HTMLElement): void {
   }
 
   iframe.removeAttribute("srcdoc");
+  try {
+    iframe.src = "about:blank";
+  } catch {}
   iframe.remove();
 }

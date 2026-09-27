@@ -307,3 +307,63 @@ dialog::backdrop,
   background: color-mix(in srgb, black 65%, transparent);
   backdrop-filter: blur(2px);
 }
+
+/* Slotted Sidebar Sections */
+.sidebar-custom-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.5rem;
+}
+
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.sidebar-section-header {
+  color: var(--shadow-claw-text-tertiary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.5rem 0.75rem 0.25rem 0.75rem;
+  text-transform: uppercase;
+}
+
+.sidebar-section-header a.sidebar-link {
+  color: inherit;
+  font-weight: 700;
+  padding: 0;
+  text-transform: uppercase;
+}
+
+.sidebar-item {
+  display: flex;
+}
+
+.sidebar-link {
+  align-items: center;
+  border-radius: var(--shadow-claw-radius-m);
+  color: var(--shadow-claw-text-secondary);
+  display: flex;
+  font-size: var(--shadow-claw-font-size-sm);
+  font-weight: 500;
+  padding: 0.5rem 0.75rem;
+  text-decoration: none;
+  transition:
+    background-color 0.15s,
+    color 0.15s;
+  width: 100%;
+}
+
+.sidebar-link:hover {
+  background-color: var(--shadow-claw-text-secondary);
+  color: var(--shadow-claw-on-primary);
+}
+
+.sidebar-link.active,
+.sidebar-link[aria-current="page"] {
+  background-color: var(--shadow-claw-accent-primary);
+  color: var(--shadow-claw-on-primary);
+}

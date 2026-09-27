@@ -34,12 +34,20 @@ export function applySidebarNavVisibility(
     `.nav-item[data-page="${page}"]`,
   ) as HTMLElement | null;
 
-  if (!navItem) {
-    return;
+  if (navItem) {
+    navItem.hidden = hidden;
+    navItem.setAttribute("aria-hidden", String(hidden));
   }
 
-  navItem.hidden = hidden;
-  navItem.setAttribute("aria-hidden", String(hidden));
+  if (page === "chat") {
+    const convoEl = shadow.querySelector(
+      "shadow-claw-conversations",
+    ) as HTMLElement | null;
+    if (convoEl) {
+      convoEl.hidden = hidden;
+      convoEl.setAttribute("aria-hidden", String(hidden));
+    }
+  }
 }
 
 /**

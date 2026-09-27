@@ -111,4 +111,25 @@ describe("navigateToRoute", () => {
       route,
     );
   });
+
+  it("should applyRoute directly without calling nav.navigate if already at finalPath", async () => {
+    mockSupportsNavigationApi.mockReturnValue(true);
+    const origPathname = window.location.pathname;
+    try {
+      window.history.replaceState({}, "", "/base/chat");
+      await navigateToRoute(shadowRoot, shadowClaw, db, fStore, oStore, route);
+
+      expect(mockNav.navigate).not.toHaveBeenCalled();
+      expect(mockApplyRoute).toHaveBeenCalledWith(
+        shadowRoot,
+        shadowClaw,
+        db,
+        fStore,
+        oStore,
+        route,
+      );
+    } finally {
+      window.history.replaceState({}, "", origPathname);
+    }
+  });
 });

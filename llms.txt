@@ -40,7 +40,7 @@ ShadowClaw is best suited for:
 - **Peer-to-peer agent collaboration & file sharing:** Connecting multiple headless CLI agents and browser clients over WebRTC DataChannels, dispatching peer prompts, transferring files directly from the Files browser and File Viewer UI or terminal CLI (`send-file`, `send --file`), and allowing agents to autonomously discover and prompt peers via built-in tools (`prompt_peer`, `list_peers`, `send_file`).
 - **Headless server & background services:** Running a persistent 24/7 Node backend (`shadow-claw server`) to manage client schedules in SQLite, tick cron schedules, wake dormant clients via Web Push, and serve REST APIs and MCP endpoints.
 - **Model Context Protocol (MCP) integrations:** Interfacing with external coding agents (Claude Desktop, Cursor, Goose) via STDIO or Streamable HTTP, exposing host-native CLI agent tools against real workspace files with strict root traversal security, isolated bash execution, and tri-tier tool hierarchy.
-- **Static knowledge hubs:** Authoring and deploying static documentation and agent-assisted knowledge repositories.
+- **Static knowledge hubs & site publishing:** Authoring and deploying static documentation, agent-assisted knowledge repositories, and custom sites with Declarative Shadow DOM (DSD) SSR, root pretty paths, and slotted sidebar navigation.
 
 When to look elsewhere:
 

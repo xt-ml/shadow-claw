@@ -16,4 +16,16 @@ describe("insertBeforeClosingHead", () => {
     const result = insertBeforeClosingHead(html, tag);
     expect(result.startsWith(`${tag}\n`)).toBe(true);
   });
+
+  it("targets the first outer </head> tag when nested templates have their own head", () => {
+    const html =
+      '<!doctype html><html><head><title>Outer</title></head><body><template shadowrootmode="open"><head><title>Inner</title></head></template></body></html>';
+    const tag = '<script id="outer-test">true</script>';
+    const result = insertBeforeClosingHead(html, tag);
+    const outerIndex = result.indexOf(tag);
+    const firstHeadClose = result.indexOf("</head>");
+    const secondHeadClose = result.lastIndexOf("</head>");
+    expect(outerIndex).toBeLessThan(firstHeadClose);
+    expect(firstHeadClose).toBeLessThan(secondHeadClose);
+  });
 });

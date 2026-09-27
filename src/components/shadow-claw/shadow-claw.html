@@ -136,8 +136,12 @@
             <li class="nav-item" data-page="files">📁 Files</li>
           </ul>
         </nav>
+        <slot name="sidebar-nav"></slot>
+        <slot name="sidebar"></slot>
+        <slot name="sidebar-content"></slot>
         <div class="sidebar-spacer"></div>
         <shadow-claw-conversations></shadow-claw-conversations>
+        <slot name="sidebar-footer"></slot>
         <div class="sidebar-footer">
           <button class="settings-btn" data-action="show-settings">
             ⚙️ Settings

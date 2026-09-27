@@ -112,15 +112,18 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
     }
 
     const urlPathname = new URL(req.url || "/", "http://localhost").pathname;
+    if (
+      isSpaShellRequest(req, requestPath) ||
+      isSpaShellRequest(req, urlPathname)
+    ) {
+      res.sendFile(path.join(rootPath, "index.html"));
+
+      return;
+    }
+
     const filePath = path.join(rootPath, urlPathname);
     fs.stat(filePath, (err, stats) => {
       if (err || !stats) {
-        if (isSpaShellRequest(req, requestPath)) {
-          res.sendFile(path.join(rootPath, "index.html"));
-
-          return;
-        }
-
         // Check if request has a subpath prefix matching a root file (e.g. /shadow-claw/index.js -> /index.js)
         const strippedSegmentPath = requestPath.replace(/^\/[^/]+/, "");
         if (strippedSegmentPath) {
@@ -212,6 +215,11 @@ export function registerStaticFilesMiddleware(app: Express, rootPath: string) {
             } else {
               res.sendFile(indexPath);
             }
+          } else if (
+            isSpaShellRequest(req, requestPath) ||
+            isSpaShellRequest(req, urlPathname)
+          ) {
+            res.sendFile(path.join(rootPath, "index.html"));
           } else {
             next();
           }

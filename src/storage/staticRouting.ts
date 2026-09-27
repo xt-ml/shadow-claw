@@ -214,9 +214,6 @@ export function resolvePrettyPathToRoute(
   }
 
   const normalizedPath = normalizePrettyPathKey(pathname);
-  if (!normalizedPath) {
-    return null;
-  }
 
   for (const [canonicalKey, routeDef] of Object.entries(
     routesManifest.routes,
@@ -363,6 +360,29 @@ export function resolveRouteToPrettyPath(
       candidateKeys.push(`pages/${normalizedGroupId}/${cleanPath}`);
       candidateKeys.push(`/pages/${groupId}/${cleanPath}`);
     }
+  } else if (page === "pages" && !path) {
+    if (normalizedGroupId === "main" || !normalizedGroupId) {
+      candidateKeys.push(
+        "/pages/main/index.html",
+        "pages/main/index.html",
+        "/pages/br:main/index.html",
+        "/pages/br-main/index.html",
+        "/main/index.html",
+        "main/index.html",
+        "/index.html",
+        "index.html",
+        "/pages/main",
+        "pages/main",
+        "/pages",
+        "pages",
+      );
+    } else if (normalizedGroupId) {
+      candidateKeys.push(
+        `/pages/${normalizedGroupId}/index.html`,
+        `pages/${normalizedGroupId}/index.html`,
+        `/pages/${groupId}/index.html`,
+      );
+    }
   } else if (page === "files" && path) {
     const cleanPath = trimSlashes(path);
     if (normalizedGroupId) {
@@ -382,6 +402,14 @@ export function resolveRouteToPrettyPath(
         routeDef?.prettyPath
       ) {
         return routeDef.prettyPath;
+      }
+    }
+  }
+
+  if (page === "pages" && !path) {
+    for (const routeDef of Object.values(routesManifest.routes)) {
+      if (routeDef && routeDef.prettyPath === "/") {
+        return "/";
       }
     }
   }

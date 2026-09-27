@@ -21,6 +21,16 @@ export async function navigateToRoute(
   const targetPath = buildRoutePath(route);
   const finalPath = applyBasePath(targetPath);
 
+  const currentPath =
+    typeof window !== "undefined" && window.location
+      ? `${window.location.pathname}${window.location.search}${window.location.hash}`
+      : "";
+
+  if (currentPath && finalPath === currentPath) {
+    await applyRoute(shadow, shadowClaw, db, fStore, oStore, route);
+    return;
+  }
+
   if (supportsNavigationApi()) {
     const nav = (window as any).navigation;
 

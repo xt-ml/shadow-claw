@@ -11,6 +11,24 @@ export function getRoute(db: ShadowClawDatabase, ev: Event) {
     return;
   }
 
+  const destinationState =
+    typeof navigateEvent?.destination?.getState === "function"
+      ? navigateEvent.destination.getState()
+      : null;
+  const navState =
+    destinationState ||
+    (navigateEvent.navigationType === "replace" &&
+    typeof history !== "undefined"
+      ? history.state
+      : null);
+  if (
+    navState?.inFeedScroll ||
+    navState?.scrollSpy ||
+    navState?.suppressRouter
+  ) {
+    return;
+  }
+
   const destinationUrl = navigateEvent?.destination?.url;
   if (typeof destinationUrl !== "string") {
     return;

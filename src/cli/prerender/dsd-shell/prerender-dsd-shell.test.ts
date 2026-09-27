@@ -502,11 +502,14 @@ describe("prerenderDsdShell purge flag pages", () => {
 
     it("applies sidebar visibility config to template", () => {
       const tpl =
-        '<li class="nav-item" data-page="chat">Chat</li><li class="nav-item" data-page="files">Files</li>';
+        '<li class="nav-item" data-page="chat">Chat</li><li class="nav-item" data-page="files">Files</li><shadow-claw-conversations></shadow-claw-conversations>';
       const modified = applySidebarVisibilityToTemplate(tpl, {
         chatHidden: true,
       });
       expect(modified).toContain('data-page="chat" hidden aria-hidden="true"');
+      expect(modified).toContain(
+        '<shadow-claw-conversations hidden aria-hidden="true">',
+      );
       expect(modified).not.toContain('data-page="files" hidden');
     });
 

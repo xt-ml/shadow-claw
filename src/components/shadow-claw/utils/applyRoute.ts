@@ -2,6 +2,7 @@ import { DEFAULT_GROUP_ID } from "../../../config/config.js";
 
 import { applyAnchorWithRetry } from "./applyAnchorWithRetry.js";
 import { showPage } from "./showPage.js";
+import { syncSlottedSidebarActiveLinks } from "./syncSlottedSidebarActiveLinks.js";
 
 import type { ShadowClawDatabase } from "../../../db/types.js";
 import type { ShadowClawAppRoute } from "../../../core/app-routes.js";
@@ -139,4 +140,6 @@ export async function applyRoute(
       }
     }
   }
+
+  syncSlottedSidebarActiveLinks(shadowClaw);
 }

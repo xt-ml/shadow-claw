@@ -93,4 +93,56 @@ describe("getRoute", () => {
 
     expect(result).toBeUndefined();
   });
+
+  it("returns undefined if destination state indicates an in-feed scroll", () => {
+    const navigateEvent = new Event("navigate") as any;
+    navigateEvent.navigationType = "replace";
+    navigateEvent.destination = {
+      url: `${window.location.origin}/test`,
+      getState: () => ({ inFeedScroll: true }),
+    };
+
+    const result = getRoute(db, navigateEvent);
+    expect(result).toBeUndefined();
+    expect(isPossibleAppRouteMock).not.toHaveBeenCalled();
+  });
+
+  it("returns undefined if window.history.state indicates an in-feed scroll", () => {
+    const origState = window.history.state;
+    try {
+      window.history.replaceState({ inFeedScroll: true }, "", "/test");
+      const navigateEvent = new Event("navigate") as any;
+      navigateEvent.navigationType = "replace";
+      navigateEvent.destination = {
+        url: `${window.location.origin}/test`,
+        getState: () => null,
+      };
+
+      const result = getRoute(db, navigateEvent);
+      expect(result).toBeUndefined();
+      expect(isPossibleAppRouteMock).not.toHaveBeenCalled();
+    } finally {
+      window.history.replaceState(origState, "", "/");
+    }
+  });
+
+  it("does not ignore push navigation even if window.history.state has inFeedScroll: true", () => {
+    const origState = window.history.state;
+    try {
+      window.history.replaceState({ inFeedScroll: true }, "", "/");
+      const navigateEvent = new Event("navigate") as any;
+      navigateEvent.navigationType = "push";
+      navigateEvent.destination = {
+        url: `${window.location.origin}/about`,
+        getState: () => null,
+      };
+
+      const result = getRoute(db, navigateEvent);
+      expect(result).toBeDefined();
+      expect(result?.parsedUrl.pathname).toBe("/about");
+      expect(isPossibleAppRouteMock).toHaveBeenCalledWith("/about");
+    } finally {
+      window.history.replaceState(origState, "", "/");
+    }
+  });
 });

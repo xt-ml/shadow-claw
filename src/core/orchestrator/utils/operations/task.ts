@@ -4,7 +4,7 @@ import { showToast } from "../../../../ui/toast.js";
 import type { Task } from "../../../../db/types.js";
 import type { OrchestratorState } from "../../orchestrator-state.js";
 
-function getTaskFetchOptions(
+export function getTaskFetchOptions(
   url: string,
   baseOptions: RequestInit = {},
 ): RequestInit {

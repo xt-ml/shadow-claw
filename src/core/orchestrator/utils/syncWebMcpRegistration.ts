@@ -14,6 +14,8 @@ import { CONFIG_KEYS } from "../../../config/config.js";
 import { setConfig } from "../../../db/setConfig.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
+import type { DeclarativeToolDefinition } from "../../../subsystems/tools/declarative.js";
+import type { SkillRecord } from "../../../subsystems/skills/types.js";
 import type { WebMcpMode } from "../../../subsystems/mcp/webmcp.js";
 import type { OrchestratorState } from "../orchestrator-state.js";
 import type { Orchestrator } from "../orchestrator.js";
@@ -60,7 +62,7 @@ export function syncWebMcpRegistration(
         // Small delay to allow the browser's ModelContext to process the unregistrations.
         await new Promise((resolve) => setTimeout(resolve, 0));
 
-        let declarativeTools: any[] = [];
+        let declarativeTools: DeclarativeToolDefinition[] = [];
         try {
           declarativeTools = await toolsStore.refreshDeclarativeTools(
             db,
@@ -80,7 +82,7 @@ export function syncWebMcpRegistration(
             ? candidateTools.filter((t) => group.toolTags!.includes(t.name))
             : [...globalTools, ...enabledDeclarativeTools];
 
-        let skillDiscovery: { skills: any[] } = { skills: [] };
+        let skillDiscovery: { skills: SkillRecord[] } = { skills: [] };
         try {
           skillDiscovery = await discoverSkills(db, activeGroupId);
         } catch {

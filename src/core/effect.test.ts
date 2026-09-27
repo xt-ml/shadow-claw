@@ -80,6 +80,25 @@ describe("effect", () => {
     expect(cleanup).toHaveBeenCalledTimes(1);
   });
 
+  it("invokes cleanup before next execution when effect re-runs", () => {
+    const cleanup = jest.fn();
+    (globalThis as any).queueMicrotask = jest.fn((fn: any) => fn());
+
+    let runCount = 0;
+    effect(() => {
+      runCount++;
+      return cleanup as any;
+    });
+
+    // In effect, watcher.watch(computed) is called.
+    const lastWatched = watcherInstance.watch.mock.calls.slice(-1)[0][0];
+    watcherInstance.pending = [lastWatched];
+    watcherInstance.trigger();
+
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(runCount).toBe(2);
+  });
+
   it("processes pending signals and re-watches on watcher callback", () => {
     const pendingA: any = { get: jest.fn() };
     const pendingB: any = { get: jest.fn() };

@@ -78,6 +78,7 @@ import { ensureControlPlaneConnected } from "../utils/initControlPlane.js";
 import { applyAllChannelRunningStates } from "./utils/operations/channel.js";
 
 import type { ShadowClawDatabase } from "../../db/db.js";
+import type { InboundMessage } from "../../subsystems/channels/types.js";
 import type { A2UIAction } from "../../ui/a2ui/types.js";
 import type { DirectToolCommandPolicy } from "./utils/types.js";
 
@@ -139,7 +140,7 @@ export class Orchestrator {
 
   meshLlmHost: string = "";
 
-  messageQueue: any[] = [];
+  messageQueue: InboundMessage[] = [];
   model: string = getDefaultProvider().defaultModel;
 
   /** Peer groupIds where the A2A task has reached a terminal state */
@@ -503,15 +504,7 @@ export class Orchestrator {
     if (!storedKey) {
       this.#encryptedApiKey = "";
     } else {
-      try {
-        // We now store the encrypted key directly in the field.
-        // decryptValue is only called on-demand.
-        this.#encryptedApiKey = storedKey;
-      } catch (e) {
-        console.warn("[Orchestrator] Failed to load API key:", e);
-
-        this.#encryptedApiKey = "";
-      }
+      this.#encryptedApiKey = storedKey;
     }
 
     this.#apiKeyCache = null; // Invalidate cache

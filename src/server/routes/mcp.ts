@@ -256,7 +256,7 @@ export function registerMcpRoutes(
         name: "shadow-claw",
         version: getPackageVersion(),
         description:
-          "Browser-native personal AI assistant with local and remote LLM orchestration, Web Workers, OPFS storage, and agentic tool execution.",
+          "Multi-runtime AI assistant with local and remote LLM orchestration, Web Workers, OPFS storage, and agentic tool execution.",
         title: "ShadowClaw MCP Server",
         websiteUrl: `${origin}/shadow-claw/`,
         repository: {
@@ -332,7 +332,7 @@ export function registerMcpRoutes(
         servers: [
           {
             name: "shadow-claw",
-            description: "ShadowClaw Browser-Native AI Assistant MCP Server",
+            description: "ShadowClaw Multi-Runtime AI Assistant MCP Server",
             endpoint: `${origin}/mcp`,
             capabilities: ["tools", "extensions"],
             card: `${origin}/.well-known/mcp.json`,

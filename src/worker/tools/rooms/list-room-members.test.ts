@@ -1,16 +1,19 @@
-import { jest } from "@jest/globals";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import type { RoomMeta } from "../../../subsystems/channels/types.js";
+import type { ShadowClawDatabase } from "../../../db/types.js";
+
+const mockGetRoomMetadata = jest.fn<() => Promise<RoomMeta[]>>();
 
 jest.unstable_mockModule("../../../db/rooms.js", () => ({
   ROOM_PREFIX: "room:",
   roomIdFromGroupId: (g: string) => g.replace(/^room:/, ""),
-  getRoomMetadata: jest.fn(),
+  getRoomMetadata: mockGetRoomMetadata,
 }));
 
 const { executeListRoomMembers } = await import("./list-room-members.js");
-const { getRoomMetadata } = await import("../../../db/rooms.js");
 
 describe("executeListRoomMembers", () => {
-  const mockDb: any = {};
+  const mockDb = {} as ShadowClawDatabase;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -24,7 +27,7 @@ describe("executeListRoomMembers", () => {
   });
 
   it("returns error when room is not found in database", async () => {
-    (getRoomMetadata as jest.Mock<any>).mockResolvedValue([]);
+    mockGetRoomMetadata.mockResolvedValue([]);
 
     const result = await executeListRoomMembers(
       mockDb,
@@ -35,8 +38,12 @@ describe("executeListRoomMembers", () => {
   });
 
   it("handles room with no members", async () => {
-    (getRoomMetadata as jest.Mock<any>).mockResolvedValue([
-      { roomId: "room-1", name: "Empty Room", members: [] },
+    mockGetRoomMetadata.mockResolvedValue([
+      {
+        roomId: "room-1",
+        name: "Empty Room",
+        members: [],
+      } as unknown as RoomMeta,
     ]);
 
     const result = await executeListRoomMembers(
@@ -47,8 +54,8 @@ describe("executeListRoomMembers", () => {
     expect(result).toBe('Room "Empty Room" (room-1) has no members yet.');
   });
 
-  it("formats members list including agents and hosts", async () => {
-    (getRoomMetadata as jest.Mock<any>).mockResolvedValue([
+  it("formats members list including agents, hosts, anonymous agents and missing aliases", async () => {
+    mockGetRoomMetadata.mockResolvedValue([
       {
         roomId: "room-1",
         name: "Dev Team",
@@ -61,8 +68,12 @@ describe("executeListRoomMembers", () => {
             kind: "agent",
             agentName: "coder",
           },
+          {
+            peerId: "peer-anon-agent",
+            kind: "agent",
+          },
         ],
-      },
+      } as unknown as RoomMeta,
     ]);
 
     const result = await executeListRoomMembers(mockDb, {}, "room:room-1");
@@ -70,6 +81,9 @@ describe("executeListRoomMembers", () => {
     expect(result).toContain("- Host Alice — human [host] (peer: peer-host)");
     expect(result).toContain(
       "- Assistant Bot — agent (@coder) (peer: peer-bot)",
+    );
+    expect(result).toContain(
+      "- peer-anon-agent — agent (peer: peer-anon-agent)",
     );
   });
 });

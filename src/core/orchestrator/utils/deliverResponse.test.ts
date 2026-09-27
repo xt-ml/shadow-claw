@@ -81,6 +81,78 @@ describe("deliverResponse", () => {
 
       consoleSpy.mockRestore();
     });
+
+    it("should deliver intermediate response for browser channel without sending to router", async () => {
+      mockOrchestrator.channelRegistry.getChannelType.mockReturnValue(
+        "browser",
+      );
+
+      await deliverIntermediateResponse(
+        mockOrchestrator,
+        mockDb,
+        "group1",
+        "Hello browser",
+      );
+
+      expect(mockOrchestrator.router.send).not.toHaveBeenCalled();
+      expect(mockOrchestrator.events.emit).toHaveBeenCalledWith(
+        "message",
+        expect.objectContaining({
+          channel: "browser",
+          content: "Hello browser",
+        }),
+      );
+    });
+
+    it("should deliver intermediate response over non-browser channel successfully", async () => {
+      mockOrchestrator.channelRegistry.getChannelType.mockReturnValue(
+        "telegram",
+      );
+
+      await deliverIntermediateResponse(
+        mockOrchestrator,
+        mockDb,
+        "group1",
+        "Hello",
+      );
+
+      expect(mockOrchestrator.router.send).toHaveBeenCalledWith(
+        "group1",
+        "Hello",
+      );
+      expect(mockOrchestrator.events.emit).toHaveBeenCalledWith(
+        "message",
+        expect.objectContaining({
+          channel: "telegram",
+          content: "Hello",
+        }),
+      );
+    });
+
+    it("should handle non-Error throw in intermediate response", async () => {
+      mockOrchestrator.channelRegistry.getChannelType.mockReturnValue(
+        "telegram",
+      );
+      mockOrchestrator.router.send.mockRejectedValue("String failure");
+
+      const consoleSpy = (
+        jest.spyOn(console, "error") as any
+      ).mockImplementation();
+
+      await deliverIntermediateResponse(
+        mockOrchestrator,
+        mockDb,
+        "group1",
+        "Hello",
+      );
+
+      expect(mockOrchestrator.events.emit).toHaveBeenCalledWith("error", {
+        groupId: "group1",
+        error: "Failed to deliver response to telegram: String failure",
+      });
+
+      consoleSpy.mockRestore();
+    });
   });
 
   describe("deliverResponse", () => {
@@ -108,6 +180,34 @@ describe("deliverResponse", () => {
       consoleSpy.mockRestore();
     });
 
+    it("should handle non-Error rejection in deliverResponse", async () => {
+      mockOrchestrator.channelRegistry.getChannelType.mockReturnValue(
+        "telegram",
+      );
+      mockOrchestrator.router.send.mockRejectedValue("String error");
+
+      const consoleSpy = (
+        jest.spyOn(console, "error") as any
+      ).mockImplementation();
+
+      await deliverResponse(mockOrchestrator, mockDb, "group1", "Hello");
+
+      expect(mockOrchestrator.events.emit).toHaveBeenCalledWith("error", {
+        groupId: "group1",
+        error: "Failed to deliver response to telegram: String error",
+      });
+
+      consoleSpy.mockRestore();
+    });
+
+    it("should succeed when router is undefined", async () => {
+      mockOrchestrator.router = undefined;
+
+      await deliverResponse(mockOrchestrator, mockDb, "group1", "Hello");
+
+      expect(mockOrchestrator.setState).toHaveBeenCalledWith("idle", "group1");
+    });
+
     it("should play chime and clear pending scheduled task if present", async () => {
       mockOrchestrator.pendingScheduledTasks.add("group1");
 
@@ -126,6 +226,33 @@ describe("deliverResponse", () => {
         "peer:123",
       );
       expect(mockOrchestrator.peerCompletedContexts.has("peer:123")).toBe(true);
+    });
+
+    it("should not add to peerCompletedContexts if completeActiveTask returns false", async () => {
+      mockOrchestrator.channelRegistry.getChannelType.mockReturnValue("peerjs");
+      mockOrchestrator.peerjs.completeActiveTask.mockReturnValue(false);
+
+      await deliverResponse(mockOrchestrator, mockDb, "peer:123", "Hello");
+
+      expect(mockOrchestrator.peerCompletedContexts.has("peer:123")).toBe(
+        false,
+      );
+    });
+
+    it("should not complete active task if group is peer: but deliveryError occurred", async () => {
+      mockOrchestrator.channelRegistry.getChannelType.mockReturnValue("peerjs");
+      mockOrchestrator.router.send.mockRejectedValue(
+        new Error("Peer send failed"),
+      );
+
+      const consoleSpy = (
+        jest.spyOn(console, "error") as any
+      ).mockImplementation();
+
+      await deliverResponse(mockOrchestrator, mockDb, "peer:123", "Hello");
+
+      expect(mockOrchestrator.peerjs.completeActiveTask).not.toHaveBeenCalled();
+      consoleSpy.mockRestore();
     });
   });
 });

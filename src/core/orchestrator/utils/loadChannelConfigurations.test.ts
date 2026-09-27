@@ -196,4 +196,54 @@ describe("loadChannelConfigurations", () => {
 
     consoleWarn.mockRestore();
   });
+
+  it("should configure empty peerjs server config when host is empty", async () => {
+    mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+      if (key === "PEERJS_SERVER_HOST") return "";
+      if (key === "PEERJS_SERVER_PORT") return "not-a-number";
+      if (key === "PEERJS_PEER_ALIASES") return null;
+      return null;
+    });
+
+    await loadChannelConfigurations(mockOrchestrator, mockDb);
+
+    expect(mockOrchestrator.peerjsServerPort).toBe(0);
+    expect(mockOrchestrator.peerjsPeerAliases).toEqual({});
+    expect(mockOrchestrator.peerjs.configure).toHaveBeenCalledWith(
+      "",
+      ["id1", "id2"],
+      {},
+    );
+  });
+
+  it("should omit port and path when they are zero or empty and host is set", async () => {
+    mockGetConfig.mockImplementation(async (_db: any, key: string) => {
+      if (key === "PEERJS_SERVER_HOST") return "custom-host";
+      if (key === "PEERJS_SERVER_PORT") return "0";
+      if (key === "PEERJS_SERVER_PATH") return "";
+      return null;
+    });
+
+    await loadChannelConfigurations(mockOrchestrator, mockDb);
+
+    expect(mockOrchestrator.peerjs.configure).toHaveBeenCalledWith(
+      "",
+      ["id1", "id2"],
+      {
+        host: "custom-host",
+        port: undefined,
+        path: undefined,
+        secure: true,
+      },
+    );
+  });
+
+  it("should evaluate fallback path in fileReader when path is empty string", async () => {
+    await loadChannelConfigurations(mockOrchestrator, mockDb);
+
+    const fileReader = mockOrchestrator.telegram.fileReader;
+    const blob = await fileReader("group1", "");
+
+    expect(blob).toBeInstanceOf(Blob);
+  });
 });

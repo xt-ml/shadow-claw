@@ -104,7 +104,7 @@ const program = new Command();
 
 program
   .name("shadow-claw")
-  .description("Browser-native personal AI assistant and static site publisher")
+  .description("Multi-runtime AI assistant and static site publisher")
   .version(version, "-v, --version", "Output the current version");
 
 // ---------------------------------------------------------------------------
@@ -1154,7 +1154,7 @@ slug: "home"
 
 <article>
   <h1>Welcome to ShadowClaw</h1>
-  <p>Your browser-native personal AI assistant and static site publisher.</p>
+  <p>Your multi-runtime AI assistant and static site publisher.</p>
 </article>
 `;
         await writeFile(indexPath, defaultIndexHtml, "utf8");

@@ -185,6 +185,29 @@ describe("dispatchSubagentInvoke", () => {
     expect(callArgs[6]).toBe(controller.signal);
   });
 
+  it("forwards emit callback messages to workerPost", async () => {
+    mockInvokeWithTransformersJs.mockImplementationOnce(
+      async (
+        _db: unknown,
+        _groupId: string,
+        _sys: string,
+        _msgs: unknown[],
+        _tokens: number,
+        emit: (msg: { type: string; content: string }) => Promise<void>,
+      ) => {
+        await emit({ type: "stream", content: "chunk" });
+      },
+    );
+
+    const payload = makePayload({ provider: "transformers_js_browser" });
+    await dispatchSubagentInvoke(mockDb, payload);
+
+    expect(mockWorkerPost).toHaveBeenCalledWith({
+      type: "stream",
+      content: "chunk",
+    });
+  });
+
   // ── prompt_api path ───────────────────────────────────────────────────────
 
   it("routes prompt_api to invokeWithPromptApi when supported", async () => {

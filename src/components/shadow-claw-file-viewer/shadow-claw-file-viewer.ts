@@ -1667,6 +1667,37 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
   }
 
+  async handleSendFileToPeer() {
+    const file = fileViewerStore.file;
+    if (!file || !file.path) {
+      showError("No file is currently open.", 4500);
+
+      return;
+    }
+
+    const activeGroupId = file.groupId || orchestratorStore.activeGroupId || "";
+    const isPeer = activeGroupId.startsWith("peer:");
+    const isRoom = activeGroupId.startsWith("room:");
+
+    if (!isPeer && !isRoom) {
+      showError(
+        "Can only send files to peers in a peer or room conversation.",
+        4500,
+      );
+
+      return;
+    }
+
+    try {
+      await orchestratorStore.sendFileToPeer(file.path, activeGroupId, {
+        fileName: file.name,
+        mimeType: file.mimeType,
+      });
+    } catch {
+      // Toast error handled in sendFileToPeer
+    }
+  }
+
   async handleShareFile() {
     const file = fileViewerStore.file;
     if (!file || !this.canShareCurrentFile(file)) {
@@ -1703,37 +1734,6 @@ export class ShadowClawFileViewer extends ShadowClawElement {
 
       const message = err instanceof Error ? err.message : String(err);
       showError(`Failed to share file: ${message}`, 5000);
-    }
-  }
-
-  async handleSendFileToPeer() {
-    const file = fileViewerStore.file;
-    if (!file || !file.path) {
-      showError("No file is currently open.", 4500);
-
-      return;
-    }
-
-    const activeGroupId = file.groupId || orchestratorStore.activeGroupId || "";
-    const isPeer = activeGroupId.startsWith("peer:");
-    const isRoom = activeGroupId.startsWith("room:");
-
-    if (!isPeer && !isRoom) {
-      showError(
-        "Can only send files to peers in a peer or room conversation.",
-        4500,
-      );
-
-      return;
-    }
-
-    try {
-      await orchestratorStore.sendFileToPeer(file.path, activeGroupId, {
-        fileName: file.name,
-        mimeType: file.mimeType,
-      });
-    } catch {
-      // Toast error handled in sendFileToPeer
     }
   }
 

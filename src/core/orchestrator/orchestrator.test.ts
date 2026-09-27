@@ -1,16 +1,80 @@
 import { jest } from "@jest/globals";
+import { webcrypto } from "node:crypto";
+
+const mockSubtle = {
+  generateKey: jest.fn(async () => ({ type: "secret" })),
+  encrypt: jest.fn(
+    async (_cfg: unknown, _key: unknown, data: BufferSource) =>
+      new Uint8Array(data as ArrayBuffer).slice().buffer,
+  ),
+  decrypt: jest.fn(
+    async (_cfg: unknown, _key: unknown, data: BufferSource) =>
+      new Uint8Array(data as ArrayBuffer).slice().buffer,
+  ),
+};
+
+Object.defineProperty(globalThis, "crypto", {
+  value: {
+    ...webcrypto,
+    subtle: mockSubtle,
+    getRandomValues: <T extends ArrayBufferView | null>(array: T): T => {
+      if (array && "fill" in array) {
+        (array as unknown as Uint8Array).fill(1);
+      }
+      return array;
+    },
+  },
+  configurable: true,
+  writable: true,
+});
+
+async function resetKeystore(): Promise<void> {
+  const db = await new Promise<IDBDatabase>((resolve, reject) => {
+    const req = indexedDB.open("shadowclaw-keystore", 1);
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore("keys");
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+  const tx = db.transaction("keys", "readwrite");
+  tx.objectStore("keys").put(
+    { type: "secret" } as CryptoKey,
+    "api-key-encryption",
+  );
+  await new Promise<void>((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
 
 import {
   ASSISTANT_NAME,
+  CONFIG_KEYS,
   LLAMAFILE_PROXY_URL,
   getProvider,
+  getProviderApiKeyConfigKey,
 } from "../../config/config.js";
-import { createGroup, updateGroupPinnedProvider } from "../../db/groups.js";
+import {
+  createGroup,
+  saveGroupMetadata,
+  updateGroupPinnedProvider,
+} from "../../db/groups.js";
+import { openDatabase } from "../../db/openDatabase.js";
+import { getConfig } from "../../db/getConfig.js";
+import { setConfig } from "../../db/setConfig.js";
+import { encryptValue } from "../../security/crypto.js";
 import { orchestratorStore } from "../../stores/orchestrator.js";
 import { toolsStore } from "../../stores/tools.js";
 import { getWebMcpMode } from "../../subsystems/mcp/webmcp.js";
 import { buildSystemPrompt } from "../../worker/utils/system-prompt.js";
 import { Orchestrator } from "./orchestrator.js";
+import type { ShadowClawDatabase } from "../../db/db.js";
+import type { A2UIAction } from "../../ui/a2ui/types.js";
+import type { ToolDefinition } from "../../subsystems/tools/tools.js";
+import type { TaskScheduler } from "../../subsystems/tools/task-scheduler.js";
+import type { ControlPlaneClient } from "../control-plane-client.js";
 
 import {
   deliverIntermediateResponse,
@@ -1898,7 +1962,7 @@ describe("Orchestrator", () => {
   describe("ensureAllConnections", () => {
     it("coordinates Control Plane, channels, task server, and scheduler", async () => {
       const o = new Orchestrator();
-      const fakeDb = {} as any;
+      const fakeDb = {} as unknown as ShadowClawDatabase;
       o.db = fakeDb;
       o.taskServerEnabled = true;
 
@@ -1906,14 +1970,16 @@ describe("Orchestrator", () => {
         start: jest.fn(),
         tick: jest.fn().mockResolvedValue(undefined as never),
       };
-      o.scheduler = mockScheduler as any;
+      o.scheduler = mockScheduler as unknown as TaskScheduler;
 
       const ensureControlPlaneSpy = jest
         .spyOn(o, "ensureControlPlaneConnected")
-        .mockResolvedValue(null as any);
+        .mockResolvedValue(null as unknown as ControlPlaneClient);
 
       const peerjsEnsureSpy = jest.fn();
-      (o.peerjs as any).ensureConnected = peerjsEnsureSpy;
+      (
+        o.peerjs as unknown as { ensureConnected: (force?: boolean) => void }
+      ).ensureConnected = peerjsEnsureSpy;
       o.peerjs.running = true;
       o.channelEnabledByType.peerjs = true;
       o.peerjsMyPeerId = "my-peer";
@@ -1938,9 +2004,624 @@ describe("Orchestrator", () => {
       expect(mockScheduler.start).toHaveBeenCalled();
       expect(mockScheduler.tick).toHaveBeenCalled();
 
+      // Test with default options (force: false) and no taskServer / no scheduler
+      o.taskServerEnabled = false;
+      o.db = null;
+      o.scheduler = null;
+      await o.ensureAllConnections();
+      expect(ensureControlPlaneSpy).toHaveBeenCalledWith({
+        orchestrator: o,
+        db: undefined,
+        force: false,
+      });
+
+      // Test error handling in Control Plane and channel running states
+      const warnSpy = jest.spyOn(console, "warn").mockImplementation(() => {});
+      ensureControlPlaneSpy.mockRejectedValueOnce(
+        new Error("CP network failure"),
+      );
+      jest.spyOn(o.browserChat, "start").mockImplementationOnce(() => {
+        throw new Error("Browser chat error");
+      });
+
+      await o.ensureAllConnections();
+      expect(warnSpy).toHaveBeenCalled();
+      warnSpy.mockRestore();
+
       ensureControlPlaneSpy.mockRestore();
       replaySpy.mockRestore();
       loadTasksSpy.mockRestore();
+    });
+  });
+
+  describe("Orchestrator instance methods and lifecycle", () => {
+    it("initializes room notification handler delegating to roomManager", () => {
+      const o = new Orchestrator();
+      const handleSpy = jest
+        .spyOn(o.roomManager, "handleNotification")
+        .mockImplementation(() => {});
+
+      const peerChannel = o.peerjs as unknown as {
+        _roomNotificationHandler?: (
+          from: string,
+          method: string,
+          params: unknown,
+        ) => void;
+      };
+      peerChannel._roomNotificationHandler?.("peer-sender", "room/ping", {
+        data: 123,
+      });
+
+      expect(handleSpy).toHaveBeenCalledWith("peer-sender", "room/ping", {
+        data: 123,
+      });
+    });
+
+    it("initializes orchestrator via init() and sets database and listeners", async () => {
+      const origWorker = globalThis.Worker;
+      globalThis.Worker = class {
+        postMessage() {}
+        terminate() {}
+        addEventListener() {}
+        removeEventListener() {}
+      } as unknown as typeof Worker;
+
+      const o = new Orchestrator();
+      jest.spyOn(o.roomManager, "loadRooms").mockImplementation(() => {});
+      jest.spyOn(toolsStore, "load").mockResolvedValue(undefined);
+      jest.spyOn(o, "loadApiKeyForProvider").mockResolvedValue();
+      jest.spyOn(o, "loadSecretConfig").mockResolvedValue("");
+
+      const readySpy = jest.fn();
+      o.events.on("ready", readySpy);
+
+      const db = await o.init();
+      expect(db).toBeDefined();
+      expect(o.db).toBe(db);
+      expect(readySpy).toHaveBeenCalled();
+
+      // Flush microtasks and tick timer for background channel setup
+      await new Promise<void>((resolve) => setTimeout(resolve, 30));
+      await o.browserChat.send("br:main", "test-display");
+
+      if (!origWorker) {
+        delete (globalThis as unknown as { Worker?: unknown }).Worker;
+      } else {
+        globalThis.Worker = origWorker;
+      }
+    });
+
+    it("shuts down channels, scheduler, pollers, worker, and webMcp cleanup", () => {
+      const o = new Orchestrator();
+      const mockWorker = {
+        terminate: jest.fn(),
+        postMessage: jest.fn(),
+      } as unknown as Worker;
+      o.agentWorker = mockWorker;
+
+      const mockScheduler = {
+        stop: jest.fn(),
+        start: jest.fn(),
+        tick: jest.fn(),
+      } as unknown as TaskScheduler;
+      o.scheduler = mockScheduler;
+
+      const mockCleanup = jest.fn();
+      o.webMcpEffectCleanup = mockCleanup;
+
+      o.transformersProgressPollers.set("group-poll-1", 123);
+
+      o.shutdown();
+
+      expect(mockWorker.terminate).toHaveBeenCalled();
+      expect(mockScheduler.stop).toHaveBeenCalled();
+      expect(mockCleanup).toHaveBeenCalled();
+      expect(o.transformersProgressPollers.size).toBe(0);
+    });
+
+    it("manages provider request IDs for llamafile vs other providers", () => {
+      const o = new Orchestrator();
+      o.provider = "openrouter";
+      expect(o.createProviderRequestId("group-1")).toBe("");
+
+      o.provider = "llamafile";
+      const reqId = o.createProviderRequestId("group-llama");
+      expect(reqId).toContain("group-llama:");
+      expect(o.inFlightProviderRequestIds.get("group-llama")).toBe(reqId);
+
+      o.clearProviderRequest("group-llama");
+      expect(o.inFlightProviderRequestIds.has("group-llama")).toBe(false);
+    });
+
+    it("manages state transitions, submitMessage, and stopCurrentRequest across providers", () => {
+      const o = new Orchestrator();
+      const stateSpy = jest.fn();
+      o.events.on("state-change", stateSpy);
+
+      o.setState("thinking", "group-state");
+      expect(o.state).toBe("thinking");
+      expect(stateSpy).toHaveBeenCalledWith({
+        state: "thinking",
+        groupId: "group-state",
+      });
+
+      const submitSpy = jest
+        .spyOn(o.browserChat, "submit")
+        .mockImplementation(() => {});
+      o.submitMessage("Hello from user", "group-submit");
+      expect(submitSpy).toHaveBeenCalledWith("Hello from user", "group-submit");
+      o.submitMessage("Default message");
+      expect(submitSpy).toHaveBeenCalledWith("Default message", "br:main");
+
+      // Early return when not thinking or responding
+      o.state = "idle";
+      o.stopCurrentRequest("group-idle");
+      o.stopCurrentRequest();
+
+      // Stop current request with llamafile, promptController, and agentWorker
+      o.state = "thinking";
+      o.provider = "llamafile";
+      o.inFlightProviderRequestIds.set("group-stop", "req-stop-1");
+      const mockAbort = jest.fn();
+      o.promptControllers.set("group-stop", {
+        abort: mockAbort,
+      } as unknown as AbortController);
+      o.inFlightTriggerByGroup.set("group-stop", "trigger-content");
+      o.inFlightEffectiveProviderByGroup.set("group-stop", {
+        providerId: "llamafile",
+        providerConfig: o.providerConfig,
+        model: "model",
+      });
+
+      const mockWorker = {
+        postMessage: jest.fn(),
+        terminate: jest.fn(),
+      } as unknown as Worker;
+      o.agentWorker = mockWorker;
+
+      o.stopCurrentRequest("group-stop");
+
+      expect(mockWorker.postMessage).toHaveBeenCalledWith({
+        type: "cancel",
+        payload: { groupId: "group-stop" },
+      });
+      expect(mockAbort).toHaveBeenCalled();
+      expect(o.inFlightTriggerByGroup.has("group-stop")).toBe(false);
+      expect(o.inFlightEffectiveProviderByGroup.has("group-stop")).toBe(false);
+      expect(o.state).toBe("idle");
+
+      // Stop current request when responding with non-llamafile
+      o.state = "responding";
+      o.provider = "anthropic";
+      o.stopCurrentRequest("group-resp");
+      expect(o.state).toBe("idle");
+    });
+
+    it("handles API key retrieval, caching, setting, and decryption failure", async () => {
+      const o = new Orchestrator();
+      const db = await openDatabase();
+
+      // No encrypted key returns null
+      expect(await o.getApiKey()).toBeNull();
+
+      // Set key and retrieve (first call decrypts, second hits cache)
+      await o.setApiKey(db, "sk-test-secret-key-1");
+      const key1 = await o.getApiKey();
+      expect(key1).toBe("sk-test-secret-key-1");
+
+      const key2 = await o.getApiKey();
+      expect(key2).toBe("sk-test-secret-key-1");
+
+      // setApiKey throws when encryptValue returns null
+      indexedDB.deleteDatabase("shadowclaw-keystore");
+      mockSubtle.generateKey.mockResolvedValue(null as unknown as CryptoKey);
+      await expect(o.setApiKey(db, "bad-key")).rejects.toThrow(
+        "key failed to encrypt",
+      );
+      mockSubtle.generateKey.mockResolvedValue({ type: "secret" });
+      await resetKeystore();
+
+      // Decryption failure caught and returns null
+      const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+      await o.setApiKey(db, "key-to-fail");
+      mockSubtle.decrypt.mockRejectedValueOnce(new Error("Decryption error"));
+      const failedKey = await o.getApiKey();
+      expect(failedKey).toBeNull();
+      errSpy.mockRestore();
+
+      // Decryption returns null when decryptValue returns null
+      indexedDB.deleteDatabase("shadowclaw-keystore");
+      mockSubtle.generateKey.mockResolvedValueOnce(
+        null as unknown as CryptoKey,
+      );
+      const nullKey = await o.getApiKey();
+      expect(nullKey).toBeNull();
+      await resetKeystore();
+    });
+
+    it("gets API key for specific provider with openrouter legacy fallback and error handling", async () => {
+      const o = new Orchestrator();
+      const db = await openDatabase();
+
+      // Provider key exists
+      const encAnthropic = await encryptValue("sk-anthropic-specific");
+      await setConfig(
+        db,
+        getProviderApiKeyConfigKey("anthropic"),
+        encAnthropic,
+      );
+      expect(await o.getApiKeyForSpecificProvider(db, "anthropic")).toBe(
+        "sk-anthropic-specific",
+      );
+
+      // OpenRouter legacy fallback
+      await setConfig(db, getProviderApiKeyConfigKey("openrouter"), "");
+      const encLegacy = await encryptValue("sk-openrouter-legacy");
+      await setConfig(db, CONFIG_KEYS.API_KEY, encLegacy);
+      expect(await o.getApiKeyForSpecificProvider(db, "openrouter")).toBe(
+        "sk-openrouter-legacy",
+      );
+
+      // OpenRouter with empty key and empty legacy key
+      await setConfig(db, getProviderApiKeyConfigKey("openrouter"), "");
+      await setConfig(db, CONFIG_KEYS.API_KEY, "");
+      expect(await o.getApiKeyForSpecificProvider(db, "openrouter")).toBe("");
+
+      // Decrypted empty string returns empty string
+      const encVal = await encryptValue("val");
+      await setConfig(db, getProviderApiKeyConfigKey("openrouter"), encVal);
+      mockSubtle.decrypt.mockResolvedValueOnce(new Uint8Array(0).buffer);
+      expect(await o.getApiKeyForSpecificProvider(db, "openrouter")).toBe("");
+
+      // Missing key returns empty string
+      expect(await o.getApiKeyForSpecificProvider(db, "nonexistent")).toBe("");
+
+      // Decryption failure caught and returns empty string
+      const errSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+      mockSubtle.decrypt.mockRejectedValueOnce(new Error("Bad cipher"));
+      expect(await o.getApiKeyForSpecificProvider(db, "openrouter")).toBe("");
+      errSpy.mockRestore();
+    });
+
+    it("loads API key for provider with legacy migration and missing key handling", async () => {
+      const o = new Orchestrator();
+      const db = await openDatabase();
+
+      // Direct key exists
+      const encDirect = await encryptValue("sk-direct-key");
+      await setConfig(
+        db,
+        getProviderApiKeyConfigKey("bedrock_proxy"),
+        encDirect,
+      );
+      await o.loadApiKeyForProvider(db, "bedrock_proxy");
+      expect(await o.getApiKey()).toBe("sk-direct-key");
+
+      // OpenRouter with legacy key migration
+      await setConfig(db, getProviderApiKeyConfigKey("openrouter"), "");
+      const encLegacy = await encryptValue("sk-migrated-openrouter");
+      await setConfig(db, CONFIG_KEYS.API_KEY, encLegacy);
+      await o.loadApiKeyForProvider(db, "openrouter");
+      expect(await o.getApiKey()).toBe("sk-migrated-openrouter");
+      expect(
+        await getConfig(db, getProviderApiKeyConfigKey("openrouter")),
+      ).toBe(encLegacy);
+
+      // OpenRouter with missing key and missing legacy key
+      await setConfig(db, getProviderApiKeyConfigKey("openrouter"), "");
+      await setConfig(db, CONFIG_KEYS.API_KEY, "");
+      await o.loadApiKeyForProvider(db, "openrouter");
+      expect(await o.getApiKey()).toBeNull();
+
+      // Missing key clears internal key
+      await o.loadApiKeyForProvider(db, "missing-provider");
+      expect(await o.getApiKey()).toBeNull();
+    });
+
+    it("loads and saves secret config with auto-migration and error handling", async () => {
+      const o = new Orchestrator();
+      const db = await openDatabase();
+
+      // Empty value clears secret
+      await o.saveSecretConfig(db, "empty_secret", "");
+      expect(await getConfig(db, "empty_secret")).toBe("");
+      expect(await o.loadSecretConfig(db, "empty_secret")).toBe("");
+
+      // Non-empty value encrypted and decrypted
+      await o.saveSecretConfig(db, "my_secret", "secret-content-xyz");
+      const storedEncrypted = await getConfig(db, "my_secret");
+      expect(storedEncrypted).not.toBe("secret-content-xyz");
+      expect(await o.loadSecretConfig(db, "my_secret")).toBe(
+        "secret-content-xyz",
+      );
+
+      // Decrypted empty string returns empty string
+      const encEmptyCipher = await encryptValue("val-empty");
+      await setConfig(db, "empty_cipher_secret", encEmptyCipher);
+      mockSubtle.decrypt.mockResolvedValueOnce(new Uint8Array(0).buffer);
+      expect(await o.loadSecretConfig(db, "empty_cipher_secret")).toBe("");
+
+      // Auto-encrypt migration for plaintext value
+      await setConfig(db, "legacy_plaintext", "raw-secret-value");
+      const migrated = await o.loadSecretConfig(db, "legacy_plaintext");
+      expect(migrated).toBe("raw-secret-value");
+      const newEncrypted = await getConfig(db, "legacy_plaintext");
+      expect(newEncrypted).not.toBe("raw-secret-value");
+
+      // Auto-encrypt migration where encryptValue returns null
+      const encTemp = await encryptValue("plain-text-val");
+      await setConfig(db, "unencrypted-secret-fail", encTemp);
+      mockSubtle.decrypt.mockImplementationOnce(async () => {
+        indexedDB.deleteDatabase("shadowclaw-keystore");
+        mockSubtle.generateKey.mockResolvedValue(null as unknown as CryptoKey);
+        throw new Error("bad decrypt");
+      });
+      expect(await o.loadSecretConfig(db, "unencrypted-secret-fail")).toBe(
+        encTemp,
+      );
+      mockSubtle.generateKey.mockResolvedValue({ type: "secret" });
+      await resetKeystore();
+
+      // saveSecretConfig throws when encryptValue returns null
+      indexedDB.deleteDatabase("shadowclaw-keystore");
+      mockSubtle.generateKey.mockResolvedValueOnce(
+        null as unknown as CryptoKey,
+      );
+      await expect(
+        o.saveSecretConfig(db, "fail_secret", "val"),
+      ).rejects.toThrow("Failed to encrypt secret config");
+      mockSubtle.generateKey.mockResolvedValue({ type: "secret" });
+      await resetKeystore();
+    });
+
+    it("handles compaction and new session lifecycle", async () => {
+      const o = new Orchestrator();
+      const db = await openDatabase();
+
+      const compactSpy = jest.fn();
+      const typingSpy = jest.fn();
+      o.events.on("context-compacted", compactSpy);
+      o.events.on("typing", typingSpy);
+
+      await o.handleCompactDone(db, "group-compact", "Compacted chat history");
+      expect(compactSpy).toHaveBeenCalledWith({
+        groupId: "group-compact",
+        summary: "Compacted chat history",
+      });
+      expect(typingSpy).toHaveBeenCalledWith({
+        groupId: "group-compact",
+        typing: false,
+      });
+      expect(o.state).toBe("idle");
+
+      const sessionSpy = jest.fn();
+      o.events.on("session-reset", sessionSpy);
+      await o.newSession(db, "group-session");
+      expect(sessionSpy).toHaveBeenCalledWith({ groupId: "group-session" });
+
+      // newSession with default groupId
+      await o.newSession(db);
+      expect(sessionSpy).toHaveBeenCalledWith({ groupId: "br:main" });
+    });
+
+    it("restarts current request when active or returns false when inactive", async () => {
+      const o = new Orchestrator();
+
+      // State is idle (also testing default groupId)
+      o.state = "idle";
+      expect(await o.restartCurrentRequest("g-restart")).toBe(false);
+      expect(await o.restartCurrentRequest()).toBe(false);
+
+      // State is thinking but db is null
+      o.state = "thinking";
+      o.db = null;
+      expect(await o.restartCurrentRequest("g-restart")).toBe(false);
+
+      // Db present but no in-flight trigger
+      const db = await openDatabase();
+      o.db = db;
+      expect(await o.restartCurrentRequest("g-restart")).toBe(false);
+
+      // Active request restarted
+      o.state = "thinking";
+      o.inFlightTriggerByGroup.set("g-restart", "Original prompt");
+      o.agentWorker = {
+        postMessage: jest.fn(),
+        terminate: jest.fn(),
+      } as unknown as Worker;
+
+      const stopSpy = jest.spyOn(o, "stopCurrentRequest");
+      const restarted = await o.restartCurrentRequest("g-restart");
+      expect(restarted).toBe(true);
+      expect(stopSpy).toHaveBeenCalledWith("g-restart");
+    });
+
+    it("routes room A2UI actions to local enqueue or remote broadcast", async () => {
+      const o = new Orchestrator();
+      const action: A2UIAction = {
+        type: "a2ui-action",
+        actionId: "act-1",
+        surfaceId: "surf-1",
+        dataModel: { val: 42 },
+      };
+
+      // Local surface with no db returns early
+      o.db = null;
+      await o.routeRoomA2UIAction("room:room-local", action);
+      expect(o.messageQueue).toHaveLength(0);
+
+      // Local surface with db enqueues action
+      const db = await openDatabase();
+      o.db = db;
+      o.peerjsMyPeerId = "peer-local";
+      o.peerjs.myPeerId = "peer-local";
+      jest
+        .spyOn(o.roomManager, "getSurfaceOwner")
+        .mockReturnValue("peer-local");
+
+      await o.routeRoomA2UIAction("room:room-local", action);
+      expect(o.messageQueue.length).toBeGreaterThanOrEqual(1);
+
+      // Local surface with missing alias and peer id defaults sender to "you"
+      o.peerjsMyAlias = "";
+      o.peerjs.myPeerId = "";
+      o.peerjsMyPeerId = "";
+      jest.spyOn(o.roomManager, "getSurfaceOwner").mockReturnValue("");
+      await o.routeRoomA2UIAction("room:room-local-you", action);
+      expect(o.messageQueue[o.messageQueue.length - 1].sender).toBe("you");
+
+      // Remote surface broadcasts action to room mesh
+      jest
+        .spyOn(o.roomManager, "getSurfaceOwner")
+        .mockReturnValue("peer-remote-99");
+      const broadcastSpy = jest
+        .spyOn(o.roomManager, "broadcastA2UIAction")
+        .mockImplementation(() => null);
+
+      await o.routeRoomA2UIAction("room:room-remote", action);
+      expect(broadcastSpy).toHaveBeenCalledWith("room-remote", action);
+    });
+
+    it("refreshes context usage across group pinned models, prompt_api fallbacks, and tokenUsage blending", async () => {
+      const o = new Orchestrator();
+      const db = await openDatabase();
+      o.db = db;
+
+      const contextSpy = jest.fn();
+      o.events.on("context-usage", contextSpy);
+
+      // Groups with pinnedProvider, pinnedModel, pinnedMaxTokens, and prompt_api
+      await saveGroupMetadata(db, [
+        {
+          groupId: "group-pinned-model",
+          name: "Pinned Group",
+          createdAt: Date.now(),
+          pinnedProvider: "openrouter",
+          pinnedModel: "anthropic/claude-3-5-sonnet",
+          pinnedMaxTokens: 4096,
+        },
+        {
+          groupId: "group-provider-default-model",
+          name: "Provider Default Model",
+          createdAt: Date.now(),
+          pinnedProvider: "anthropic",
+        },
+        {
+          groupId: "group-unknown-provider",
+          name: "Unknown Provider",
+          createdAt: Date.now(),
+          pinnedProvider: "unknown_xyz_provider",
+        },
+        {
+          groupId: "group-prompt-api",
+          name: "Prompt API Group",
+          createdAt: Date.now(),
+          pinnedProvider: "prompt_api",
+          pinnedModel: "browser-built-in",
+        },
+        {
+          groupId: "group-prompt-api-default",
+          name: "Prompt API Default Fallback",
+          createdAt: Date.now(),
+          pinnedProvider: "prompt_api",
+          pinnedModel: "",
+        },
+      ]);
+
+      // Token usage blending via orchestratorStore
+      const usageSpy = jest
+        .spyOn(orchestratorStore, "tokenUsage", "get")
+        .mockReturnValue({
+          inputTokens: 600,
+          cacheReadTokens: 150,
+          outputTokens: 250,
+          totalTokens: 1000,
+          cacheCreationTokens: 0,
+          contextLimit: 4096,
+          groupId: "group-pinned-model",
+        });
+
+      await o.refreshContextUsage(db, "group-pinned-model");
+      expect(contextSpy).toHaveBeenCalled();
+      usageSpy.mockRestore();
+
+      // Token usage blending with falsy/zero values
+      const usageZeroSpy = jest
+        .spyOn(orchestratorStore, "tokenUsage", "get")
+        .mockReturnValue({
+          inputTokens: 0,
+          cacheReadTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          cacheCreationTokens: 0,
+          contextLimit: 4096,
+          groupId: "group-provider-default-model",
+        });
+
+      await o.refreshContextUsage(db, "group-provider-default-model");
+      expect(contextSpy).toHaveBeenCalled();
+      usageZeroSpy.mockRestore();
+
+      // Provider default model lookup when pinnedProvider has no pinnedModel
+      await o.refreshContextUsage(db, "group-provider-default-model");
+      // Unknown provider fallback to this.model
+      await o.refreshContextUsage(db, "group-unknown-provider");
+
+      // Active tools undefined fallback to 0 tokens
+      const toolsSpy = jest
+        .spyOn(toolsStore, "enabledTools", "get")
+        .mockReturnValue(undefined as unknown as ToolDefinition[]);
+      await o.refreshContextUsage(db, "group-provider-default-model");
+      toolsSpy.mockRestore();
+
+      // Default groupId argument
+      await o.refreshContextUsage(db);
+
+      const savedLm = (globalThis as Record<string, unknown>).LanguageModel;
+      const savedWinLm = (window as unknown as Record<string, unknown>)
+        .LanguageModel;
+      (globalThis as Record<string, unknown>).LanguageModel = undefined;
+      (window as unknown as Record<string, unknown>).LanguageModel = undefined;
+
+      // Configured fallback model for prompt_api
+      await setConfig(
+        db,
+        CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL,
+        "custom-prompt-fallback",
+      );
+      await o.refreshContextUsage(db, "group-prompt-api");
+      expect(contextSpy).toHaveBeenCalled();
+
+      // Default fallback model for prompt_api when configuredFallback is empty
+      await setConfig(db, CONFIG_KEYS.PROMPT_API_FALLBACK_MODEL, "");
+      await o.refreshContextUsage(db, "group-prompt-api-default");
+      expect(contextSpy).toHaveBeenCalled();
+
+      // Prompt API fallback when this.provider === "prompt_api" and group has no pinned provider
+      o.provider = "prompt_api";
+      o.model = "";
+      await o.refreshContextUsage(db, "group-unknown");
+      expect(contextSpy).toHaveBeenCalled();
+
+      if (savedLm !== undefined) {
+        (globalThis as Record<string, unknown>).LanguageModel = savedLm;
+      }
+      if (savedWinLm !== undefined) {
+        (window as unknown as Record<string, unknown>).LanguageModel =
+          savedWinLm;
+      }
+    });
+
+    it("handles saveSecretConfig encryption failure", async () => {
+      const o = new Orchestrator();
+      const db = await openDatabase();
+      indexedDB.deleteDatabase("shadowclaw-keystore");
+      mockSubtle.generateKey.mockResolvedValue(null as unknown as CryptoKey);
+      await expect(
+        o.saveSecretConfig(db, "secret-key", "secret-value"),
+      ).rejects.toThrow("Failed to encrypt secret config");
+      mockSubtle.generateKey.mockResolvedValue({ type: "secret" });
+      await resetKeystore();
     });
   });
 });

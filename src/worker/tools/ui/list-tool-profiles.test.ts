@@ -1,28 +1,30 @@
-import { jest } from "@jest/globals";
+import { beforeEach, describe, expect, it, jest } from "@jest/globals";
+import type { ShadowClawDatabase } from "../../../db/types.js";
+
+const mockGetConfig = jest.fn<() => Promise<unknown>>();
 
 jest.unstable_mockModule("../../../db/getConfig.js", () => ({
-  getConfig: jest.fn(),
+  getConfig: mockGetConfig,
 }));
 
 const { executeListToolProfiles } = await import("./list-tool-profiles.js");
-const { getConfig } = await import("../../../db/getConfig.js");
 
 describe("executeListToolProfiles", () => {
-  const mockDb: any = {};
+  const mockDb = {} as ShadowClawDatabase;
 
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
   it("lists default profile when no custom profiles in DB", async () => {
-    (getConfig as jest.Mock<any>).mockResolvedValue(null);
+    mockGetConfig.mockResolvedValue(null);
 
     const result = await executeListToolProfiles(mockDb);
     expect(result).toContain("[Profile ID: __builtin_default]");
     expect(result).toContain("Tools:");
   });
 
-  it("includes custom profiles when stored in DB as JSON string or array", async () => {
+  it("includes custom profiles when stored in DB as JSON string", async () => {
     const customProfiles = [
       {
         id: "coding",
@@ -30,13 +32,33 @@ describe("executeListToolProfiles", () => {
         enabledToolNames: ["bash", "read_file", "write_file"],
       },
     ];
-    (getConfig as jest.Mock<any>).mockResolvedValue(
-      JSON.stringify(customProfiles),
-    );
+    mockGetConfig.mockResolvedValue(JSON.stringify(customProfiles));
 
     const result = await executeListToolProfiles(mockDb);
     expect(result).toContain("[Profile ID: __builtin_default]");
     expect(result).toContain("[Profile ID: coding] Coding Profile");
     expect(result).toContain("Tools: bash, read_file, write_file");
+  });
+
+  it("handles custom profiles when stored directly as an array in DB", async () => {
+    const customProfiles = [
+      {
+        id: "research",
+        name: "Research Profile",
+        enabledToolNames: ["web_search"],
+      },
+    ];
+    mockGetConfig.mockResolvedValue(customProfiles);
+
+    const result = await executeListToolProfiles(mockDb);
+    expect(result).toContain("[Profile ID: research] Research Profile");
+    expect(result).toContain("Tools: web_search");
+  });
+
+  it("handles corrupted JSON gracefully", async () => {
+    mockGetConfig.mockResolvedValue("{ not valid json");
+
+    const result = await executeListToolProfiles(mockDb);
+    expect(result).toContain("[Profile ID: __builtin_default]");
   });
 });

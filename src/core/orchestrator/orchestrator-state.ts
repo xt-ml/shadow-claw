@@ -12,6 +12,7 @@ import type { TaskScheduler } from "../../subsystems/tools/task-scheduler.js";
 import type { Router } from "../router.js";
 import type { EventBus } from "./utils/EventBus.js";
 import type { DirectToolCommandPolicy } from "./utils/types.js";
+import type { InboundMessage } from "../../subsystems/channels/types.js";
 
 export interface OrchestratorState {
   // ── Core ──────────────────────────────────────────────────────────────────
@@ -77,7 +78,7 @@ export interface OrchestratorState {
   >;
   inFlightProviderRequestIds: Map<string, string>;
   inFlightTriggerByGroup: Map<string, string>;
-  messageQueue: any[];
+  messageQueue: InboundMessage[];
   processing: boolean;
   promptControllers: Map<string, AbortController>;
 

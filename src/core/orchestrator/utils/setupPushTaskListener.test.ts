@@ -61,6 +61,18 @@ describe("setupPushTaskListener", () => {
         {} as ShadowClawDatabase,
       ),
     ).not.toThrow();
+
+    Object.defineProperty(global, "navigator", {
+      value: {},
+      configurable: true,
+    });
+
+    expect(() =>
+      setupPushTaskListener(
+        mockOrchestrator as Orchestrator,
+        {} as ShadowClawDatabase,
+      ),
+    ).not.toThrow();
   });
 
   it("should register a message listener if serviceWorker exists", () => {
@@ -201,6 +213,52 @@ describe("setupPushTaskListener", () => {
         "hello",
         "g3",
       );
+    });
+
+    it("should ignore events without data or without groupId", () => {
+      listener({ data: null });
+      listener({ data: { type: "scheduled-task-trigger", taskId: "t1" } });
+      expect(mockOrchestrator.schedulerTriggeredGroups?.size).toBe(0);
+    });
+
+    it("should create default taskId and prompt for tool task when omitted", async () => {
+      mockOrchestratorStore.tasks = [];
+
+      listener({
+        data: {
+          type: "scheduled-task-trigger",
+          groupId: "g2",
+          taskType: "tools",
+          tools: ["t1"],
+        },
+      });
+
+      await new Promise(process.nextTick);
+
+      expect(mockOrchestratorStore.runTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          groupId: "g2",
+          type: "tools",
+          tools: ["t1"],
+          prompt: "",
+        }),
+      );
+    });
+
+    it("should do nothing if neither task, tools, nor prompt are present", async () => {
+      mockOrchestratorStore.tasks = [];
+
+      listener({
+        data: {
+          type: "scheduled-task-trigger",
+          groupId: "g-empty",
+        },
+      });
+
+      await new Promise(process.nextTick);
+
+      expect(mockOrchestratorStore.runTask).not.toHaveBeenCalled();
+      expect(mockSubmitMessage).not.toHaveBeenCalled();
     });
 
     it("should handle error in runTaskHandler", async () => {

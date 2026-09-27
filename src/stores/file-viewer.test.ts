@@ -155,4 +155,15 @@ describe("FileViewerStore", () => {
       mimeType: "text/plain",
     });
   });
+
+  it("handles empty path and extension-less filenames", async () => {
+    (readGroupFile as any).mockResolvedValue("empty-content");
+    const s = new FileViewerStore();
+
+    expect(s.getPreviewBinaryMimeType("")).toBe("");
+    expect(s.getPreviewBinaryMimeType("noextension")).toBe("");
+
+    await s.openFile({} as any, "");
+    expect(s.file?.name).toBe("");
+  });
 });

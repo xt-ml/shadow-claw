@@ -204,4 +204,31 @@ describe("configurePeerJs", () => {
 
     expect(mockOrchestrator.peerjs.start).not.toHaveBeenCalled();
   });
+
+  it("should handle non-finite port and empty path/port when serverHost is provided", async () => {
+    mockOrchestrator.getChannelEnabled.mockReturnValue(true);
+
+    await configurePeerJs(
+      mockOrchestrator,
+      mockDb,
+      "my-peer",
+      [],
+      "host.com",
+      NaN,
+      "",
+      true,
+    );
+
+    expect(mockOrchestrator.peerjsServerPort).toBe(0);
+    expect(mockOrchestrator.peerjs.configure).toHaveBeenCalledWith(
+      "my-peer",
+      ["trusted-1", "trusted-2"],
+      {
+        host: "host.com",
+        path: undefined,
+        port: undefined,
+        secure: true,
+      },
+    );
+  });
 });

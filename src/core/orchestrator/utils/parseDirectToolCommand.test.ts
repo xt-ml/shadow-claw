@@ -116,5 +116,11 @@ describe("parseDirectToolCommand", () => {
   it("should return null if JSON parses to a primitive", () => {
     const msg = createMsg('/test_tool "hello"');
     expect(parseDirectToolCommand(policy, assistantName, msg)).toBeNull();
+
+    const msgNumber = createMsg("/test_tool 123");
+    expect(parseDirectToolCommand(policy, assistantName, msgNumber)).toBeNull();
+
+    const msgNull = createMsg("/test_tool null");
+    expect(parseDirectToolCommand(policy, assistantName, msgNull)).toBeNull();
   });
 });

@@ -101,6 +101,31 @@ describe("ToastStore", () => {
 
     // No-op for non-existent or action-less toast
     await store.runAction(999);
+
+    const noActionId = store.show("without action");
+    await store.runAction(noActionId);
+  });
+
+  test("pause and resume handle missing or invalid timers gracefully", () => {
+    const store = new ToastStore();
+
+    // Calling pause on nonexistent toast or already paused toast
+    expect(() => store.pause(999)).not.toThrow();
+
+    const id = store.show("toast", { duration: 1000 });
+    store.pause(id);
+    // Pause again when timeoutId is undefined
+    expect(() => store.pause(id)).not.toThrow();
+
+    // Calling resume on nonexistent toast, or already running toast, or expired toast
+    expect(() => store.resume(999)).not.toThrow();
+
+    const runningId = store.show("running", { duration: 1000 });
+    // Resume when timer.timeoutId is still active
+    expect(() => store.resume(runningId)).not.toThrow();
+
+    // Clear timer on nonexistent toast
+    expect(() => store.clearTimer(999)).not.toThrow();
   });
 
   test("resolvers handle invalid inputs gracefully", () => {

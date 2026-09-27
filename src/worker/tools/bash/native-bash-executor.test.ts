@@ -1,7 +1,11 @@
-import { describe, it, expect } from "@jest/globals";
+import { describe, it, expect, afterEach } from "@jest/globals";
 import { nativeBashExecutor } from "./native-bash-executor.js";
 
 describe("nativeBashExecutor", () => {
+  afterEach(() => {
+    delete (globalThis as Record<string, unknown>).__getStorageRootPath;
+  });
+
   it("executes a shell command and captures stdout", async () => {
     const output = await nativeBashExecutor({
       command: "echo 'hello from native bash'",
@@ -25,5 +29,31 @@ describe("nativeBashExecutor", () => {
       timeoutSec: 5,
     });
     expect(output).toContain("test stderr output");
+  });
+
+  it("captures both stdout and stderr formatted with newline", async () => {
+    const output = await nativeBashExecutor({
+      command: 'node -e \'process.stdout.write("out"); console.error("err");\'',
+      timeoutSec: 5,
+    });
+    expect(output).toContain("out\nerr");
+  });
+
+  it("falls back to error message when command fails with empty output", async () => {
+    const output = await nativeBashExecutor({
+      command: "node -e 'process.exit(42)'",
+      timeoutSec: 5,
+    });
+    expect(output).toContain("Command failed");
+  });
+
+  it("uses __getStorageRootPath when provided on globalThis", async () => {
+    (globalThis as Record<string, unknown>).__getStorageRootPath = () =>
+      process.cwd();
+    const output = await nativeBashExecutor({
+      command: "pwd",
+      timeoutSec: 5,
+    });
+    expect(output.trim()).toBe(process.cwd());
   });
 });

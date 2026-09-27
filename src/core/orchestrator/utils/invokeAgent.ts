@@ -50,6 +50,7 @@ import {
 } from "./operations/provider.js";
 
 import type { ShadowClawDatabase } from "../../../db/db.js";
+import type { ToolDefinition } from "../../../subsystems/tools/types.js";
 import type { SubagentInvokeContext } from "../../../worker/tools/spawn-subagent/spawn-subagent.js";
 import type { Orchestrator } from "../orchestrator.js";
 
@@ -197,10 +198,7 @@ export async function invokeAgent(
   const contextLimit = getContextLimit(modelForTokenLimits);
   const systemPromptTokens =
     estimateTokens(systemPrompt) +
-    (activeTools?.reduce(
-      (acc, t) => acc + estimateTokens(JSON.stringify(t)),
-      0,
-    ) ?? 0);
+    activeTools.reduce((acc, t) => acc + estimateTokens(JSON.stringify(t)), 0);
   let allMessages = await buildConversationMessages(groupId, 200);
   if (freshContext) {
     if (allMessages.length > 0) {
@@ -265,12 +263,12 @@ export async function invokeAgent(
       apiKey: "",
       assistantName: o.assistantName,
       db,
-      enabledTools: activeTools as any,
+      enabledTools: activeTools as unknown as ToolDefinition[],
       invokeSubagent: async (subPayload) => {
         await dispatchSubagentInvoke(db, subPayload, controller.signal);
       },
       maxTokens: effectiveMaxTokens,
-      memory: memory ?? "",
+      memory,
       model: effectiveModel,
       provider: effectiveProviderId,
       providerHeaders: getProviderRuntimeHeaders(
@@ -345,12 +343,12 @@ export async function invokeAgent(
       apiKey: "",
       assistantName: o.assistantName,
       db,
-      enabledTools: activeTools as any,
+      enabledTools: activeTools as unknown as ToolDefinition[],
       invokeSubagent: async (subPayload) => {
         await dispatchSubagentInvoke(db, subPayload, controller.signal);
       },
       maxTokens: effectiveMaxTokens,
-      memory: memory ?? "",
+      memory,
       model: effectiveModel,
       provider: effectiveProviderId,
       providerHeaders: getProviderRuntimeHeaders(
@@ -421,12 +419,12 @@ export async function invokeAgent(
       apiKey: "",
       assistantName: o.assistantName,
       db,
-      enabledTools: activeTools as any,
+      enabledTools: activeTools as unknown as ToolDefinition[],
       invokeSubagent: async (subPayload) => {
         await dispatchSubagentInvoke(db, subPayload, controller.signal);
       },
       maxTokens: effectiveMaxTokens,
-      memory: memory ?? "",
+      memory,
       model: effectiveModel,
       provider: effectiveProviderId,
       providerHeaders: getProviderRuntimeHeaders(

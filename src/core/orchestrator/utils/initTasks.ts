@@ -4,7 +4,6 @@ import {
   DEFAULT_MAX_ITERATIONS,
   DEFAULT_PROMPT_API_FALLBACK_MODEL,
   buildTriggerPattern,
-  getDefaultProvider,
   getModelMaxTokens,
   getProvider,
 } from "../../../config/config.js";
@@ -292,10 +291,12 @@ export async function initProviderAndModel(
     getConfig(db, CONFIG_KEYS.RATE_LIMIT_AUTO_ADAPT),
   ]);
 
-  if (storedProvider && getProvider(storedProvider)) {
+  const matchedProvider = storedProvider
+    ? getProvider(storedProvider)
+    : undefined;
+  if (storedProvider && matchedProvider) {
     orchestrator.provider = storedProvider;
-    orchestrator.providerConfig =
-      getProvider(storedProvider) || getDefaultProvider();
+    orchestrator.providerConfig = matchedProvider;
   }
 
   // Load API key — must happen after provider is set.

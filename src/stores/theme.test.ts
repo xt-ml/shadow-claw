@@ -11,8 +11,8 @@ describe("themeStore", () => {
     localStorage.clear();
     document.documentElement.className = "";
 
-    // Mock dispatchEvent
-    (window as any).dispatchEvent = jest.fn();
+    // Spy on dispatchEvent so event listeners still fire
+    jest.spyOn(window, "dispatchEvent");
   });
 
   it("applies and persists explicit theme", async () => {
@@ -134,5 +134,44 @@ describe("themeStore", () => {
     expect(themeStore.theme).toBe("system");
     expect(themeStore.resolved).toBe("light");
     expect(localStorage.getItem("shadow-claw-theme")).toBe("system");
+  });
+
+  it("handles storage event for tab synchronization", async () => {
+    const { getNamespacedStorageKey } =
+      await import("../utils/namespacedStorage.js");
+    const { themeStore } = await import("./theme.js");
+    const targetKey = getNamespacedStorageKey("shadow-claw-theme");
+
+    // Other key should be ignored
+    const otherEv = new Event("storage") as any;
+    otherEv.key = "other-key";
+    otherEv.newValue = "dark";
+    window.dispatchEvent(otherEv);
+    expect(themeStore.theme).not.toBe("dark");
+
+    // Target key with null newValue should be ignored
+    const nullEv = new Event("storage") as any;
+    nullEv.key = targetKey;
+    nullEv.newValue = null;
+    window.dispatchEvent(nullEv);
+
+    // Target key with valid newValue updates theme
+    const validEv = new Event("storage") as any;
+    validEv.key = targetKey;
+    validEv.newValue = "dark";
+    window.dispatchEvent(validEv);
+
+    expect(themeStore.theme).toBe("dark");
+    expect(themeStore.resolved).toBe("dark");
+  });
+
+  it("falls back gracefully when matchMedia is not a function", async () => {
+    (window as any).matchMedia = undefined;
+    jest.resetModules();
+    localStorage.clear();
+    const { themeStore } = await import("./theme.js");
+
+    themeStore.setTheme("system");
+    expect(themeStore.resolved).toBe("light");
   });
 });

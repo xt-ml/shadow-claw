@@ -42,6 +42,7 @@ export interface PrerenderPrettyPathsOptions {
   indexPath?: string;
   prerenderPages?: string | number;
   silent?: boolean;
+  siteConfigPath?: string;
 }
 
 export interface PrerenderPrettyPathsResult {
@@ -63,6 +64,25 @@ export async function prerenderPrettyPaths(
   const indexPath = path.resolve(
     options.indexPath || path.join(publicDir, "index.html"),
   );
+
+  let siteConfig: any = {};
+  const configCandidatePaths = [
+    options.siteConfigPath,
+    path.resolve(path.dirname(sourcePath), "shadow-claw.config.json"),
+    path.resolve(path.dirname(sourcePath), "site-config.json"),
+    path.resolve("shadow-claw.config.json"),
+    path.resolve("site-config.json"),
+    path.join(publicDir, "shadow-claw.config.json"),
+    path.join(publicDir, "site-config.json"),
+  ].filter(Boolean) as string[];
+
+  for (const candidate of configCandidatePaths) {
+    try {
+      const raw = await readFile(candidate, "utf8");
+      siteConfig = JSON.parse(raw);
+      break;
+    } catch {}
+  }
 
   const rawPagesOpt =
     options.prerenderPages !== undefined
@@ -360,6 +380,7 @@ export async function prerenderPrettyPaths(
       shadowClawDsdTemplate = buildShadowClawDsdTemplateWithoutPages(
         shadowClawTemplateContent,
         shadowClawCssSource,
+        siteConfig.sidebar,
       );
     } else {
       const pagesDsdHost = buildPagesDsdHost(
@@ -375,6 +396,7 @@ export async function prerenderPrettyPaths(
         shadowClawTemplateContent,
         pagesDsdHost,
         shadowClawCssSource,
+        siteConfig.sidebar,
       );
     }
 

@@ -14,6 +14,11 @@ import { fileURLToPath } from "node:url";
 
 import { resolveCustomElementScripts } from "./custom-elements/resolve-custom-element-scripts.js";
 import { sanitizeEmbeddedCustomElementScripts } from "./custom-elements/sanitize-embedded-custom-element-scripts.js";
+import {
+  findClosingHeadIndex,
+  insertBeforeClosingHead,
+} from "../prerender/utils/insert-before-closing-head.js";
+import { applySidebarVisibilityToTemplate } from "../prerender/dsd-shell/prerender-dsd-shell.js";
 
 export interface SiteConfigSite {
   title?: string;
@@ -115,19 +120,7 @@ export function escapeHtml(str: string): string {
     .replace(/'/g, "&#39;");
 }
 
-export function insertBeforeClosingHead(
-  html: string,
-  contentToInsert: string,
-): string {
-  const headMatch = /<\/head>/i.exec(html);
-  if (headMatch) {
-    const headIndex = headMatch.index;
-    return (
-      html.slice(0, headIndex) + contentToInsert + "\n" + html.slice(headIndex)
-    );
-  }
-  return `${contentToInsert}\n${html}`;
-}
+export { insertBeforeClosingHead, findClosingHeadIndex };
 
 const FLATTENED_STYLESHEET_PREFIXES = [
   "pages/resources/",
@@ -367,7 +360,9 @@ export function patchIndexHtml(
       `<link\\s+[^>]*href=["'](?:${rawHrefPattern}|${escapedHrefPattern})["'][^>]*>`,
       "iu",
     );
-    const headContent = next.slice(0, Math.max(0, next.indexOf("</head>")));
+    const closingHeadIdx = findClosingHeadIndex(next);
+    const headContent =
+      closingHeadIdx !== -1 ? next.slice(0, closingHeadIdx) : next;
     const headWithoutScripts = headContent.replace(
       /<script\b[\s\S]*?<\/script>/gi,
       "",
@@ -450,6 +445,10 @@ export function patchIndexHtml(
         `<shadow-claw>\n  ${formattedSidebarHtml}\n</shadow-claw>`,
       );
     }
+  }
+
+  if (config.sidebar) {
+    next = applySidebarVisibilityToTemplate(next, config.sidebar);
   }
 
   return next;

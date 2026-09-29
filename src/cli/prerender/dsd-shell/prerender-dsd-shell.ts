@@ -968,7 +968,13 @@ export async function prerenderDsdShell(
   let siteConfig: any = {};
   const configCandidatePaths = [
     options.siteConfigPath,
+    path.resolve("shadow-claw-config.json"),
+    path.resolve("shadow-claw.config.json"),
+    path.resolve("shadowclaw.config.json"),
+    path.resolve("pages/shadow-claw-config.json"),
+    path.resolve("pages/shadow-claw.config.json"),
     path.resolve("site-config.json"),
+    path.resolve("pages/site-config.json"),
   ].filter(Boolean) as string[];
 
   for (const cfgPath of configCandidatePaths) {

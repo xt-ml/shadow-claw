@@ -186,23 +186,26 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
 
     await run("npm run -s rolldown");
 
+    const siteConfigCandidate = await findFirstExistingPath(
+      getSiteConfigCandidates(),
+    );
+    const siteConfigPath = siteConfigCandidate || "pages/site-config.json";
+
     if (prerenderMainMemory) {
       await prerenderDsdShell({
         indexPath: "dist/public/index.html",
         sourcePath: "pages/main",
         prerenderPages,
+        siteConfigPath,
       });
     } else {
       await prerenderDsdShell({
         indexPath: "dist/public/index.html",
         noSeed: true,
+        siteConfigPath,
       });
     }
 
-    const siteConfigCandidate = await findFirstExistingPath(
-      getSiteConfigCandidates(),
-    );
-    const siteConfigPath = siteConfigCandidate || "pages/site-config.json";
     try {
       await applySiteConfig("dist/public", siteConfigPath);
     } catch {}
@@ -299,6 +302,7 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
       routesPath,
       sourcePath: "pages/main",
       prerenderPages,
+      siteConfigPath,
     });
 
     await run("npm run -s build:service-worker");
@@ -509,27 +513,29 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     }
   }
 
-  // 7. Prerender DSD Shell
+  // 7. Prerender DSD Shell & 8. Apply site-config
+  const siteConfigCandidate = await findFirstExistingPath(
+    getSiteConfigCandidates(contentRoot),
+  );
+  const siteConfigPath =
+    siteConfigCandidate || join(contentRoot, "pages/site-config.json");
+
   const indexPath = join(distPublicDir, "index.html");
   if (prerenderMainMemory && (await pathExists(contentPagesMain))) {
     await prerenderDsdShell({
       indexPath,
       sourcePath: contentPagesMain,
       prerenderPages,
+      siteConfigPath,
     });
   } else {
     await prerenderDsdShell({
       indexPath,
       noSeed: true,
+      siteConfigPath,
     });
   }
 
-  // 8. Apply site-config
-  const siteConfigCandidate = await findFirstExistingPath(
-    getSiteConfigCandidates(contentRoot),
-  );
-  const siteConfigPath =
-    siteConfigCandidate || join(contentRoot, "pages/site-config.json");
   try {
     await applySiteConfig(distPublicDir, siteConfigPath);
   } catch {}
@@ -656,6 +662,7 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
     routesPath,
     sourcePath: mainSourcePath,
     prerenderPages,
+    siteConfigPath,
   });
 
   // 11. Service Worker patch

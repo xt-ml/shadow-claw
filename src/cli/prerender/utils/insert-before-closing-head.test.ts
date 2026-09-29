@@ -1,5 +1,8 @@
 import { describe, it, expect } from "@jest/globals";
-import { insertBeforeClosingHead } from "./insert-before-closing-head.js";
+import {
+  findClosingHeadIndex,
+  insertBeforeClosingHead,
+} from "./insert-before-closing-head.js";
 
 describe("insertBeforeClosingHead", () => {
   it("inserts content before </head> tag when present", () => {
@@ -27,5 +30,23 @@ describe("insertBeforeClosingHead", () => {
     const secondHeadClose = result.lastIndexOf("</head>");
     expect(outerIndex).toBeLessThan(firstHeadClose);
     expect(firstHeadClose).toBeLessThan(secondHeadClose);
+  });
+
+  it("ignores </head> string literals inside inlined <script> blocks", () => {
+    const html =
+      '<!doctype html><html><head><title>Outer</title><script>var x = "<head></head>";</script></head><body></body></html>';
+    const tag = '<link rel="stylesheet" href="theme.css" />';
+    const result = insertBeforeClosingHead(html, tag);
+    expect(result).toContain(`${tag}\n</head><body>`);
+    expect(findClosingHeadIndex(html)).toBe(html.lastIndexOf("</head>"));
+  });
+
+  it("ignores </head> inside comments and style blocks", () => {
+    const html =
+      "<!doctype html><html><head><!-- </head> --><style>/* </head> */</style></head><body></body></html>";
+    const tag = '<link rel="stylesheet" href="theme.css" />';
+    const result = insertBeforeClosingHead(html, tag);
+    expect(result).toContain(`${tag}\n</head><body>`);
+    expect(findClosingHeadIndex(html)).toBe(html.lastIndexOf("</head>"));
   });
 });

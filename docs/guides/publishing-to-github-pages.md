@@ -189,6 +189,52 @@ Customize the navigation sidebar either by providing a custom sidebar template o
   ```
   Slotted navigation links (`.sidebar-link`) automatically synchronize `.active` and `aria-current="page"` on route navigation, and clicking a slotted link automatically closes the navigation drawer on mobile viewports.
 
+#### Custom Theming, Stylesheets & Layout Tokens
+
+Sites can supply custom styling and override shell visibility by declaring `theme.stylesheet` in `shadow-claw.config.json` (see [Theming Subsystem](../subsystems/theming.md)):
+
+```json
+{
+  "theme": {
+    "stylesheet": "pages/main/theme.css"
+  }
+}
+```
+
+In `pages/main/theme.css`, you can override CSS custom property tokens and style the light DOM slotted sidebar:
+
+```css
+:root {
+  /* Hide unwanted built-in shell elements */
+  --shadow-claw-sidebar-footer-display: none; /* Hides Settings footer */
+  --shadow-claw-header-main-toggle-display: none; /* Hides top drawer menu */
+  --shadow-claw-page-header-display: none; /* Hides page header bar */
+  --shadow-claw-pages-dropdown-container-display: none; /* Hides pages dropdown */
+  --shadow-claw-article-header-margin-bottom: 1.5rem;
+}
+
+/* Prevent outer window dual scrollbars */
+html:has(shadow-claw),
+body:has(shadow-claw) {
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+/* Make custom slotted sidebar scroll vertically within the viewport */
+.sidebar-custom-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-height: calc(100vh - 4rem);
+  max-height: calc(100dvh - 4rem);
+  overflow-y: auto;
+  padding: 0.5rem;
+}
+```
+
+The build pipeline (`npx shadow-claw build --prod`) copies the stylesheet into `dist/public`, injects `<link rel="stylesheet">` before `</head>` in all pre-rendered HTML pages, and automatically mirrors the stylesheet and CSS tokens into sandboxed preview iframes.
+
 #### Default Pinned Page (`/`)
 
 When visitors navigate to the root URL (`/`) of your published site, ShadowClaw displays the **default pinned page**.

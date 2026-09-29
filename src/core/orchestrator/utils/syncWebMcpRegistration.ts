@@ -5,6 +5,8 @@ import {
   setWebMcpMode as applyWebMcpMode,
   registerWebMcpTools,
   unregisterWebMcpTools,
+  onWebMcpToolActivated,
+  onWebMcpToolCancel,
 } from "../../../subsystems/mcp/webmcp.js";
 
 import { effect } from "../../effect.js";
@@ -38,6 +40,19 @@ export function syncWebMcpRegistration(
     return;
   }
 
+  // Subscribe to WebMCP lifecycle events (PR #245 / Chrome 156+ with backwards compatibility).
+  const unsubscribeActivated = onWebMcpToolActivated((event) => {
+    orchestrator.events?.emit("webmcp-tool-activated", {
+      toolName: event.toolName,
+    });
+  });
+
+  const unsubscribeCancel = onWebMcpToolCancel((event) => {
+    orchestrator.events?.emit("webmcp-tool-cancel", {
+      toolName: event.toolName,
+    });
+  });
+
   // Register WebMCP tools and re-register when tool config changes.
   // This effect runs once immediately to perform the initial registration.
   // We intentionally do NOT call isWebMcpSupported() here — that accesses
@@ -45,7 +60,7 @@ export function syncWebMcpRegistration(
   // early-preview renderer. Instead, registerWebMcpTools handles feature detection
   // internally and skips modelContext access entirely when 0 tools are
   // passed.
-  orchestrator.webMcpEffectCleanup = effect(() => {
+  const disposeEffect = effect(() => {
     // Access signals to establish tracking.
     const activeGroupId = orchestratorStore.activeGroupId;
     const allTools = toolsStore.allTools;
@@ -109,6 +124,18 @@ export function syncWebMcpRegistration(
         console.error("WebMCP registration failed:", err);
       });
   });
+
+  orchestrator.webMcpEffectCleanup = () => {
+    try {
+      unsubscribeActivated();
+    } catch {}
+    try {
+      unsubscribeCancel();
+    } catch {}
+    if (typeof disposeEffect === "function") {
+      disposeEffect();
+    }
+  };
 }
 export async function setWebMcpMode(
   _state: Pick<

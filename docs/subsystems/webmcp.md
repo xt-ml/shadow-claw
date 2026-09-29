@@ -143,7 +143,32 @@ Executes a tool on a WebMCP `ModelContext` instance with backwards compatibility
 1. Accepts an optional JavaScript object directly or a JSON string.
 2. Calls `modelContext.executeTool(tool, inputObject, options)` first.
 3. If the host environment rejects with an error starting with `"Failed to parse input"` (Chrome < 155 / `@mcp-b/webmcp-polyfill`) or a WebIDL `TypeError`, it retries with `JSON.stringify(inputObject)`.
-4. Propagates all other errors without retrying.
+
+### `getWebMcpEventTarget(type?): WebMcpEventTarget | null`
+
+Resolves the appropriate `EventTarget` for WebMCP lifecycle events (`toolactivated` and `toolcancel`) with backwards compatibility across Chrome versions:
+
+- **Chrome 156.0.8076.0+ (PR #245):** Returns `document.modelContext` when `ontoolactivated` or `ontoolcancel` exists on `document.modelContext`.
+- **Chrome < 156:** Falls back to `window` where legacy event handlers resided.
+- **Older Canary (< 152):** Checks `navigator.modelContext` if `document.modelContext` is not defined.
+- **Node.js / Headless / Workers:** Safely returns `null` without throwing `ReferenceError`.
+
+### `addWebMcpEventListener(type, listener, options?): () => void`
+
+Safely registers a listener for WebMCP lifecycle events (`toolactivated`, `toolcancel`) with graceful degradation, event payload normalization, and automatic unsubscription:
+
+- Automatically extracts and normalizes `toolName` whether passed on `event.toolName` (`ToolActivatedEvent` / `ToolCancelEvent`) or legacy `event.detail.toolName`.
+- Returns an idempotent unsubscribe cleanup function `() => void`.
+- Supports standard `AddEventListenerOptions` including `{ signal }` for `AbortSignal`-driven unsubscription.
+- Supports `{ listenBoth: true }` to listen across both `document.modelContext` and `window` with tick-level deduplication during migration periods.
+
+### `onWebMcpToolActivated(listener, options?): () => void`
+
+Convenience helper to subscribe to tool execution start events (`toolactivated`). Returns an unsubscribe cleanup function.
+
+### `onWebMcpToolCancel(listener, options?): () => void`
+
+Convenience helper to subscribe to tool execution cancel events (`toolcancel`). Returns an unsubscribe cleanup function.
 
 ### `unregisterWebMcpTools(): void`
 
@@ -366,6 +391,69 @@ Internally, `executeWebMcpTool()`:
 1. Passes the JavaScript object to `executeTool(tool, inputObject, options)` first.
 2. If `executeTool` rejects with an error starting with `"Failed to parse input"` or a `TypeError`, it transparently retries with `JSON.stringify(inputObject)`.
 3. Propagates all other application or execution errors without retrying.
+
+### Tool Lifecycle Events & Backward Compatibility (PR #245 / Chrome 156+)
+
+Starting in Chrome 156.0.8076.0 (PR #245, superseding PR #146), the `ontoolactivated` and `ontoolcancel` event handler properties and lifecycle events moved from `window` to `document.modelContext`.
+
+The WebMCP specification introduces dedicated event interfaces:
+
+- `ToolActivatedEvent`: Dispatched when tool execution starts, exposing `readonly attribute DOMString toolName`.
+- `ToolCancelEvent`: Dispatched when tool execution is cancelled, exposing `readonly attribute DOMString toolName`.
+
+#### Backward Compatibility & Degradation Strategy
+
+Because Chrome updates unevenly across user environments, enterprise installs, channels (Stable vs Dev vs Canary), and runtime shells (Electron, PWA, headless agents), ShadowClaw implements a robust target detection and subscription layer:
+
+```ts
+import {
+  getWebMcpEventTarget,
+  addWebMcpEventListener,
+  onWebMcpToolActivated,
+  onWebMcpToolCancel,
+} from "./webmcp.js";
+
+// 1. Subscribe to tool execution start
+const unsubscribeActivated = onWebMcpToolActivated(({ toolName }) => {
+  console.log(`Tool "${toolName}" started execution.`);
+});
+
+// 2. Subscribe to tool execution cancellation
+const unsubscribeCancel = onWebMcpToolCancel(({ toolName }) => {
+  console.log(`Tool "${toolName}" execution is cancelled.`);
+});
+
+// Clean up listeners when needed
+unsubscribeActivated();
+unsubscribeCancel();
+```
+
+#### Why ShadowClaw's Implementation is More Robust
+
+While the canonical Chrome preview compat snippet checks:
+
+```js
+const targetFor = (type, listener, options) =>
+  (`on${type}` in (document.modelContext ?? {})
+    ? document.modelContext
+    : window
+  ).addEventListener(type, listener, options);
+```
+
+ShadowClaw's `getWebMcpEventTarget()` and `addWebMcpEventListener()` add essential production safeguards:
+
+1. **Environment Safety:** Safely guards against `ReferenceError` when `document` or `window` are undefined (such as in Node.js headless CLI agents, background tasks, or Web Workers).
+2. **Capability Verification:** Verifies that the resolved target actually implements `addEventListener` (guarding against partial mocks, older polyfills, or non-EventTarget objects).
+3. **Multi-tier Fallback Chain:**
+   - Checks `document.modelContext` (Chrome 156+).
+   - Falls back to `navigator.modelContext` (retained for older Canary builds < 152).
+   - Falls back to `window` (Chrome < 156 legacy event location).
+   - Returns `null` cleanly in non-browser environments without throwing.
+4. **Idempotent Cleanup:** Returns an unsubscription callback `() => void` to prevent memory leaks and dangling listeners.
+5. **AbortSignal Support:** Accepts standard `AddEventListenerOptions` including `{ signal }` to automatically unsubscribe when an `AbortController` triggers.
+6. **Payload Normalization:** Safely resolves `toolName` whether delivered directly via `ToolActivatedEvent` / `ToolCancelEvent` (`event.toolName`) or through legacy/custom event payloads (`event.detail.toolName`).
+7. **Optional Dual-Coverage with Deduplication:** Allows `{ listenBoth: true }` to listen across both `modelContext` and `window` during migration/testing phases while deduplicating duplicate firings within the same tick.
+8. **Orchestrator Event Bus Integration:** `syncWebMcpRegistration()` automatically binds WebMCP lifecycle events to `orchestrator.events`, emitting `"webmcp-tool-activated"` and `"webmcp-tool-cancel"` and cleaning up listeners during unregistration.
 
 ### Tool Querying & Graceful Degradation (`getWebMcpTools`)
 

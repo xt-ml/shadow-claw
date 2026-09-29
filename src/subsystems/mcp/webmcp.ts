@@ -344,6 +344,259 @@ export function isWebMcpSupported(): boolean {
 }
 
 /**
+ * Event fired when a tool execution begins (PR #245 / Chrome 156+).
+ * Dispatched on `document.modelContext` in Chrome 156+, or `window` in Chrome < 156.
+ */
+export interface WebMcpToolActivatedEvent extends Event {
+  readonly toolName: string;
+}
+
+/**
+ * Event fired when a tool execution is cancelled (PR #245 / Chrome 156+).
+ * Dispatched on `document.modelContext` in Chrome 156+, or `window` in Chrome < 156.
+ */
+export interface WebMcpToolCancelEvent extends Event {
+  readonly toolName: string;
+}
+
+export type WebMcpEventTarget = EventTarget & {
+  addEventListener: (type: string, listener: any, options?: any) => void;
+  removeEventListener: (type: string, listener: any, options?: any) => void;
+};
+
+export interface WebMcpEventListenerOptions extends AddEventListenerOptions {
+  /**
+   * If true, also attaches a fallback listener to window when modelContext is selected
+   * (or vice versa), deduplicating events by toolName within the same tick if both fire.
+   */
+  listenBoth?: boolean;
+}
+
+/**
+ * Resolves the appropriate EventTarget for WebMCP lifecycle events
+ * (`toolactivated` and `toolcancel`) with backwards compatibility.
+ *
+ * Starting in Chrome 156.0.8076.0 (PR #245), `ontoolactivated` and `ontoolcancel`
+ * event handler properties and lifecycle events moved from `window` to `document.modelContext`.
+ * In Chrome < 156, these events were fired on `window`.
+ *
+ * This function practices robust feature detection and graceful degradation:
+ * 1. Safely checks for existence of `document` and `window` to avoid ReferenceErrors
+ *    in non-DOM / headless / Node.js environments.
+ * 2. Checks if `on${type}` is present in `document.modelContext` (or `navigator.modelContext`).
+ *    If present and it supports `addEventListener`, `modelContext` is returned.
+ * 3. Checks if `on${type}` is present in `window`. If present and `window` supports
+ *    `addEventListener`, `window` is returned (legacy Chrome < 156 path).
+ * 4. Fallback: If neither has `on${type}` (e.g. polyfill, synthetic mock, or uninitialized prototype),
+ *    prefers `modelContext` if it supports `addEventListener`, otherwise falls back to `window`.
+ * 5. Returns `null` if no valid EventTarget is found.
+ */
+export function getWebMcpEventTarget(
+  type?: "toolactivated" | "toolcancel" | string,
+): WebMcpEventTarget | null {
+  const doc = typeof document !== "undefined" ? document : undefined;
+  const win = typeof window !== "undefined" ? window : undefined;
+  const nav = typeof navigator !== "undefined" ? navigator : undefined;
+
+  const modelContext: any =
+    (doc as any)?.modelContext ?? (nav as any)?.modelContext;
+
+  const hasModelContextListener =
+    modelContext && typeof modelContext.addEventListener === "function";
+  const hasWindowListener =
+    win && typeof (win as any).addEventListener === "function";
+
+  if (type) {
+    const handlerKey = `on${type}`;
+
+    // 1. Chrome 156+ path (PR #245): ontoolactivated / ontoolcancel on document.modelContext
+    if (modelContext && handlerKey in modelContext && hasModelContextListener) {
+      return modelContext as WebMcpEventTarget;
+    }
+
+    // 2. Chrome < 156 legacy path: ontoolactivated / ontoolcancel on window
+    if (win && handlerKey in win && hasWindowListener) {
+      return win as WebMcpEventTarget;
+    }
+  }
+
+  // 3. Fallback when neither target explicitly reflects on${type}
+  if (hasModelContextListener) {
+    return modelContext as WebMcpEventTarget;
+  }
+
+  if (hasWindowListener) {
+    return win as WebMcpEventTarget;
+  }
+
+  return null;
+}
+
+/**
+ * Safely registers a listener for WebMCP lifecycle events (`toolactivated`, `toolcancel`)
+ * with graceful degradation, event payload normalization, and automatic unsubscription.
+ *
+ * Returns an idempotent unsubscribe cleanup function.
+ */
+export function addWebMcpEventListener<
+  T extends "toolactivated" | "toolcancel" | string =
+    | "toolactivated"
+    | "toolcancel",
+>(
+  type: T,
+  listener: (
+    event: T extends "toolactivated"
+      ? WebMcpToolActivatedEvent
+      : T extends "toolcancel"
+        ? WebMcpToolCancelEvent
+        : Event & { toolName?: string },
+  ) => void,
+  options?: boolean | WebMcpEventListenerOptions,
+): () => void {
+  const target = getWebMcpEventTarget(type);
+  const opts = typeof options === "object" ? options : undefined;
+  const listenBoth = opts?.listenBoth ?? false;
+
+  const win =
+    typeof window !== "undefined" &&
+    typeof (window as any).addEventListener === "function"
+      ? (window as unknown as WebMcpEventTarget)
+      : null;
+  const doc = typeof document !== "undefined" ? document : null;
+  const nav = typeof navigator !== "undefined" ? navigator : null;
+  const modelContext: any =
+    (doc as any)?.modelContext ?? (nav as any)?.modelContext;
+  const hasMc =
+    modelContext && typeof modelContext.addEventListener === "function";
+
+  const secondaryTarget: WebMcpEventTarget | null = listenBoth
+    ? target === modelContext
+      ? win !== target
+        ? win
+        : null
+      : hasMc
+        ? (modelContext as WebMcpEventTarget)
+        : null
+    : null;
+
+  if (!target && !secondaryTarget) {
+    return () => {};
+  }
+
+  let recentToolNames: Set<string> | null = null;
+  let clearTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const wrapHandler = (evt: Event) => {
+    let toolName = (evt as any).toolName;
+    if (
+      typeof toolName !== "string" &&
+      "detail" in evt &&
+      typeof (evt as any).detail === "object"
+    ) {
+      toolName = (evt as any).detail?.toolName;
+    }
+    if (typeof toolName !== "string") {
+      toolName = "";
+    }
+
+    if (!("toolName" in evt) || (evt as any).toolName !== toolName) {
+      try {
+        Object.defineProperty(evt, "toolName", {
+          value: toolName,
+          configurable: true,
+          enumerable: true,
+        });
+      } catch {
+        // Ignore errors if event is sealed
+      }
+    }
+
+    if (listenBoth && toolName) {
+      if (!recentToolNames) {
+        recentToolNames = new Set();
+      }
+      if (recentToolNames.has(toolName)) {
+        return;
+      }
+      recentToolNames.add(toolName);
+      if (!clearTimer) {
+        clearTimer = setTimeout(() => {
+          recentToolNames?.clear();
+          clearTimer = null;
+        }, 100);
+      }
+    }
+
+    listener(evt as any);
+  };
+
+  if (target) {
+    target.addEventListener(type, wrapHandler as EventListener, options);
+  }
+  if (secondaryTarget) {
+    secondaryTarget.addEventListener(
+      type,
+      wrapHandler as EventListener,
+      options,
+    );
+  }
+
+  let unsubscribed = false;
+  const unsubscribe = () => {
+    if (unsubscribed) {
+      return;
+    }
+    unsubscribed = true;
+    if (clearTimer) {
+      clearTimeout(clearTimer);
+      clearTimer = null;
+    }
+    if (target) {
+      target.removeEventListener(type, wrapHandler as EventListener, options);
+    }
+    if (secondaryTarget) {
+      secondaryTarget.removeEventListener(
+        type,
+        wrapHandler as EventListener,
+        options,
+      );
+    }
+  };
+
+  if (opts?.signal) {
+    if (opts.signal.aborted) {
+      unsubscribe();
+      return () => {};
+    }
+    opts.signal.addEventListener("abort", () => unsubscribe(), { once: true });
+  }
+
+  return unsubscribe;
+}
+
+/**
+ * Convenience helper to subscribe to tool execution start events (`toolactivated`).
+ * Returns an unsubscribe cleanup function.
+ */
+export function onWebMcpToolActivated(
+  listener: (event: WebMcpToolActivatedEvent) => void,
+  options?: boolean | WebMcpEventListenerOptions,
+): () => void {
+  return addWebMcpEventListener("toolactivated", listener, options);
+}
+
+/**
+ * Convenience helper to subscribe to tool execution cancel events (`toolcancel`).
+ * Returns an unsubscribe cleanup function.
+ */
+export function onWebMcpToolCancel(
+  listener: (event: WebMcpToolCancelEvent) => void,
+  options?: boolean | WebMcpEventListenerOptions,
+): () => void {
+  return addWebMcpEventListener("toolcancel", listener, options);
+}
+
+/**
  * Consequential tools that perform high-stakes, irreversible, or external real-world actions
  * (such as deleting data, executing arbitrary system commands, or transmitting live communications).
  * Signals consuming agents to require explicit user confirmation prior to execution (Chrome 154.0.8017.0+).

@@ -817,4 +817,259 @@ describe("webmcp integration", () => {
       errorSpy.mockRestore();
     });
   });
+
+  describe("WebMCP lifecycle events (PR #245 / Chrome 156+)", () => {
+    let originalWindowOntoolactivated: any;
+    let originalWindowOntoolcancel: any;
+
+    beforeEach(() => {
+      originalWindowOntoolactivated = (globalThis as any).window
+        ?.ontoolactivated;
+      originalWindowOntoolcancel = (globalThis as any).window?.ontoolcancel;
+      if (typeof window !== "undefined") {
+        delete (window as any).ontoolactivated;
+        delete (window as any).ontoolcancel;
+      }
+    });
+
+    afterEach(() => {
+      if (typeof window !== "undefined") {
+        if (originalWindowOntoolactivated !== undefined) {
+          (window as any).ontoolactivated = originalWindowOntoolactivated;
+        } else {
+          delete (window as any).ontoolactivated;
+        }
+        if (originalWindowOntoolcancel !== undefined) {
+          (window as any).ontoolcancel = originalWindowOntoolcancel;
+        } else {
+          delete (window as any).ontoolcancel;
+        }
+      }
+    });
+
+    describe("getWebMcpEventTarget", () => {
+      it("resolves to document.modelContext when ontoolactivated is in document.modelContext (Chrome 156+ / PR #245)", async () => {
+        const { getWebMcpEventTarget } = await import("./webmcp.js");
+
+        const mockTarget = new EventTarget();
+        (mockTarget as any).ontoolactivated = null;
+        (mockTarget as any).ontoolcancel = null;
+
+        Object.defineProperty((globalThis as any).document, "modelContext", {
+          configurable: true,
+          value: mockTarget,
+        });
+
+        // Also define ontoolactivated on window to ensure modelContext takes precedence
+        if (typeof window !== "undefined") {
+          (window as any).ontoolactivated = null;
+        }
+
+        expect(getWebMcpEventTarget("toolactivated")).toBe(mockTarget);
+        expect(getWebMcpEventTarget("toolcancel")).toBe(mockTarget);
+      });
+
+      it("falls back to window when ontoolactivated is only present on window (legacy Chrome < 156)", async () => {
+        const { getWebMcpEventTarget } = await import("./webmcp.js");
+
+        const mockModelContext = {
+          registerTool: jest.fn(),
+          // No ontoolactivated or ontoolcancel
+        };
+
+        Object.defineProperty((globalThis as any).document, "modelContext", {
+          configurable: true,
+          value: mockModelContext,
+        });
+
+        if (typeof window !== "undefined") {
+          (window as any).ontoolactivated = null;
+          (window as any).ontoolcancel = null;
+        }
+
+        expect(getWebMcpEventTarget("toolactivated")).toBe(window);
+        expect(getWebMcpEventTarget("toolcancel")).toBe(window);
+      });
+
+      it("resolves to navigator.modelContext if document.modelContext is absent (Chrome < 152)", async () => {
+        const { getWebMcpEventTarget } = await import("./webmcp.js");
+
+        delete ((globalThis as any).document as any).modelContext;
+
+        const navTarget = new EventTarget();
+        (navTarget as any).ontoolactivated = null;
+
+        Object.defineProperty((globalThis as any).navigator, "modelContext", {
+          configurable: true,
+          value: navTarget,
+        });
+
+        expect(getWebMcpEventTarget("toolactivated")).toBe(navTarget);
+
+        delete ((globalThis as any).navigator as any).modelContext;
+      });
+
+      it("prefers modelContext when neither target has on{type} property but modelContext is an EventTarget", async () => {
+        const { getWebMcpEventTarget } = await import("./webmcp.js");
+
+        const mockTarget = new EventTarget();
+        Object.defineProperty((globalThis as any).document, "modelContext", {
+          configurable: true,
+          value: mockTarget,
+        });
+
+        expect(getWebMcpEventTarget("toolactivated")).toBe(mockTarget);
+        expect(getWebMcpEventTarget()).toBe(mockTarget);
+      });
+
+      it("falls back to window if modelContext lacks addEventListener", async () => {
+        const { getWebMcpEventTarget } = await import("./webmcp.js");
+
+        Object.defineProperty((globalThis as any).document, "modelContext", {
+          configurable: true,
+          value: {
+            // Not an EventTarget
+            registerTool: jest.fn(),
+          },
+        });
+
+        expect(getWebMcpEventTarget("toolactivated")).toBe(window);
+      });
+    });
+
+    describe("addWebMcpEventListener and convenience helpers", () => {
+      it("listens to toolactivated on document.modelContext in Chrome 156+", async () => {
+        const { addWebMcpEventListener } = await import("./webmcp.js");
+
+        const mockTarget = new EventTarget();
+        (mockTarget as any).ontoolactivated = null;
+
+        Object.defineProperty((globalThis as any).document, "modelContext", {
+          configurable: true,
+          value: mockTarget,
+        });
+
+        const listener = jest.fn();
+        const unsubscribe = addWebMcpEventListener("toolactivated", listener);
+
+        const event = new CustomEvent("toolactivated");
+        (event as any).toolName = "read_file";
+        mockTarget.dispatchEvent(event);
+
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(listener).toHaveBeenCalledWith(
+          expect.objectContaining({ toolName: "read_file" }),
+        );
+
+        // Unsubscribe should remove the listener
+        unsubscribe();
+        mockTarget.dispatchEvent(event);
+        expect(listener).toHaveBeenCalledTimes(1);
+      });
+
+      it("normalizes toolName from detail.toolName if event.toolName is not directly set", async () => {
+        const { onWebMcpToolActivated } = await import("./webmcp.js");
+
+        const mockTarget = new EventTarget();
+        (mockTarget as any).ontoolactivated = null;
+
+        Object.defineProperty((globalThis as any).document, "modelContext", {
+          configurable: true,
+          value: mockTarget,
+        });
+
+        const listener = jest.fn();
+        const unsubscribe = onWebMcpToolActivated(listener);
+
+        const legacyEvent = new CustomEvent("toolactivated", {
+          detail: { toolName: "bash" },
+        });
+        mockTarget.dispatchEvent(legacyEvent);
+
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(listener).toHaveBeenCalledWith(
+          expect.objectContaining({ toolName: "bash" }),
+        );
+
+        unsubscribe();
+      });
+
+      it("listens to toolcancel on window in legacy Chrome < 156", async () => {
+        const { onWebMcpToolCancel } = await import("./webmcp.js");
+
+        delete ((globalThis as any).document as any).modelContext;
+        (window as any).ontoolcancel = null;
+
+        const listener = jest.fn();
+        const unsubscribe = onWebMcpToolCancel(listener);
+
+        const event = new CustomEvent("toolcancel");
+        (event as any).toolName = "fetch_url";
+        window.dispatchEvent(event);
+
+        expect(listener).toHaveBeenCalledTimes(1);
+        expect(listener).toHaveBeenCalledWith(
+          expect.objectContaining({ toolName: "fetch_url" }),
+        );
+
+        unsubscribe();
+        window.dispatchEvent(event);
+        expect(listener).toHaveBeenCalledTimes(1);
+      });
+
+      it("automatically cleans up when AbortSignal is aborted", async () => {
+        const { onWebMcpToolActivated } = await import("./webmcp.js");
+
+        const mockTarget = new EventTarget();
+        (mockTarget as any).ontoolactivated = null;
+
+        Object.defineProperty((globalThis as any).document, "modelContext", {
+          configurable: true,
+          value: mockTarget,
+        });
+
+        const controller = new AbortController();
+        const listener = jest.fn();
+        onWebMcpToolActivated(listener, { signal: controller.signal });
+
+        controller.abort();
+
+        const event = new CustomEvent("toolactivated");
+        (event as any).toolName = "write_file";
+        mockTarget.dispatchEvent(event);
+
+        expect(listener).not.toHaveBeenCalled();
+      });
+
+      it("supports listenBoth: true and deduplicates events within same tick", async () => {
+        const { addWebMcpEventListener } = await import("./webmcp.js");
+
+        const mockTarget = new EventTarget();
+        (mockTarget as any).ontoolactivated = null;
+
+        Object.defineProperty((globalThis as any).document, "modelContext", {
+          configurable: true,
+          value: mockTarget,
+        });
+
+        const listener = jest.fn();
+        const unsubscribe = addWebMcpEventListener("toolactivated", listener, {
+          listenBoth: true,
+        });
+
+        const evt1 = new CustomEvent("toolactivated");
+        (evt1 as any).toolName = "list_files";
+        const evt2 = new CustomEvent("toolactivated");
+        (evt2 as any).toolName = "list_files";
+
+        // Dispatch on both targets
+        mockTarget.dispatchEvent(evt1);
+        window.dispatchEvent(evt2);
+
+        expect(listener).toHaveBeenCalledTimes(1);
+
+        unsubscribe();
+      });
+    });
+  });
 });

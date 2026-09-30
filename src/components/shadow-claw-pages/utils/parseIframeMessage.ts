@@ -8,7 +8,7 @@ export type ParsedIframeMessage =
     }
   | { kind: "swipe"; direction: "left" | "right" | string }
   | { kind: "iframe-resize"; height: number }
-  | { kind: "file-viewer-link"; href: string };
+  | { kind: "file-viewer-link"; href: string; target?: string };
 
 /**
  * Parses and validates raw MessageEvent.data sent from iframes.
@@ -69,6 +69,7 @@ export function parseIframeMessage(data: unknown): ParsedIframeMessage | null {
     return {
       kind: "file-viewer-link",
       href: payload.href,
+      target: typeof payload.target === "string" ? payload.target : undefined,
     };
   }
 

@@ -357,6 +357,28 @@ export function buildRoutePath(route: ShadowClawAppRoute): string {
       return `/settings${anchor}`;
   }
 }
+export const PAGE_EXTENSIONS = new Set([
+  "html",
+  "htm",
+  "xhtml",
+  "md",
+  "markdown",
+]);
+
+export function isNonPageFilePath(path: string | undefined): boolean {
+  if (!path) {
+    return false;
+  }
+  const clean = path.split(/[?#]/, 1)[0].replace(/\\/g, "/");
+  const filename = clean.split("/").pop() || "";
+  const dotIndex = filename.lastIndexOf(".");
+  if (dotIndex <= 0) {
+    return false;
+  }
+  const ext = filename.slice(dotIndex + 1).toLowerCase();
+
+  return !PAGE_EXTENSIONS.has(ext);
+}
 
 export function parseRouteFromUrl(
   url: URL,
@@ -420,19 +442,33 @@ export function parseRouteFromUrl(
   }
 
   if (page === "pages") {
+    if (parts.includes("assets")) {
+      return null;
+    }
+
     if (parts.length >= 3) {
+      const path = sanitizeWorkspacePath(parts.slice(2).join("/"));
+      if (isNonPageFilePath(path)) {
+        return null;
+      }
+
       return {
         page: "pages",
         groupId: normalizeRouteGroupId(parts[1]),
-        path: sanitizeWorkspacePath(parts.slice(2).join("/")),
+        path,
         anchor,
       };
+    }
+
+    const path = sanitizeWorkspacePath(parts.slice(1).join("/"));
+    if (path && isNonPageFilePath(path)) {
+      return null;
     }
 
     return {
       page: "pages",
       groupId: normalizeRouteGroupId(fallbackGroupId),
-      path: sanitizeWorkspacePath(parts.slice(1).join("/")),
+      path,
       anchor,
     };
   }
@@ -475,6 +511,18 @@ export function isPossibleAppRoute(pathname: string): boolean {
   if (parts.length === 0) return true; // root
 
   const page = parts[0].toLowerCase();
+  if (page === "pages") {
+    if (parts.includes("assets")) {
+      return false;
+    }
+    const lastSegment = parts[parts.length - 1];
+    if (isNonPageFilePath(lastSegment)) {
+      return false;
+    }
+
+    return true;
+  }
+
   if (VALID_PAGES.has(page)) return true;
 
   if (resolvePrettyPathToRoute(relativePath)) return true;

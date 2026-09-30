@@ -624,4 +624,86 @@ describe("app-routes", () => {
       }
     });
   });
+
+  describe("pages asset and non-page route filtering", () => {
+    it("excludes asset directories and non-page extensions from pages routing in isPossibleAppRoute", () => {
+      // Asset subdirectories should never be treated as app routes
+      expect(
+        isPossibleAppRoute(
+          "/pages/main/assets/uploads/2021/04/haiku-r1-beta2-screenshot.png",
+        ),
+      ).toBe(false);
+      expect(
+        isPossibleAppRoute(
+          "/pages/main/assets/uploads/2020/05/fast-traxx-pi-controller-wiring.jpg",
+        ),
+      ).toBe(false);
+      expect(isPossibleAppRoute("/pages/main/assets/style.css")).toBe(false);
+      expect(isPossibleAppRoute("/pages/assets/logo.svg")).toBe(false);
+
+      // Non-page file extensions should not be treated as page routes
+      expect(isPossibleAppRoute("/pages/main/photo.png")).toBe(false);
+      expect(isPossibleAppRoute("/pages/main/document.pdf")).toBe(false);
+      expect(isPossibleAppRoute("/pages/main/media.mp4")).toBe(false);
+      expect(isPossibleAppRoute("/pages/main/archive.zip")).toBe(false);
+
+      // Valid pages routes should still match
+      expect(isPossibleAppRoute("/pages")).toBe(true);
+      expect(isPossibleAppRoute("/pages/main")).toBe(true);
+      expect(isPossibleAppRoute("/pages/main/index.html")).toBe(true);
+      expect(
+        isPossibleAppRoute("/pages/main/posts/2021-04-18-using-open.md"),
+      ).toBe(true);
+      expect(
+        isPossibleAppRoute("/pages/br:main/posts/fast-traxx-pi.markdown"),
+      ).toBe(true);
+    });
+
+    it("returns null in parseRouteFromUrl for asset directories and non-page extensions under pages", () => {
+      expect(
+        parseRouteFromUrl(
+          new URL(
+            "http://localhost:8888/pages/main/assets/uploads/2021/04/haiku-r1-beta2-screenshot.png",
+          ),
+        ),
+      ).toBeNull();
+
+      expect(
+        parseRouteFromUrl(
+          new URL("http://localhost:8888/pages/main/photo.png"),
+        ),
+      ).toBeNull();
+
+      expect(
+        parseRouteFromUrl(
+          new URL("http://localhost:8888/pages/main/document.pdf"),
+        ),
+      ).toBeNull();
+
+      // Valid page route returns proper ShadowClawAppRoute
+      expect(
+        parseRouteFromUrl(
+          new URL("http://localhost:8888/pages/main/index.html"),
+        ),
+      ).toEqual({
+        page: "pages",
+        groupId: "br:main",
+        path: "index.html",
+        anchor: undefined,
+      });
+
+      expect(
+        parseRouteFromUrl(
+          new URL(
+            "http://localhost:8888/pages/main/posts/2021-04-18-using-open.md",
+          ),
+        ),
+      ).toEqual({
+        page: "pages",
+        groupId: "br:main",
+        path: "posts/2021-04-18-using-open.md",
+        anchor: undefined,
+      });
+    });
+  });
 });

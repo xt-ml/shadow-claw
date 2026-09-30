@@ -45,6 +45,10 @@ module.exports = {
     /^\/$/,
     /^\/(chat|files|pages|tasks|settings)(?:\/.*)?$/,
   ],
+  navigateFallbackDenylist: [
+    /\/assets\//,
+    /\.(png|jpe?g|gif|webp|svg|ico|bmp|avif|mp4|webm|mp3|wav|ogg|pdf|zip|gz|tar|css|js|json|wasm)$/i,
+  ],
   // cleanupOutdatedCaches: true,
   // https://developer.chrome.com/docs/workbox/modules/workbox-build#property-BasePartial-maximumFileSizeToCacheInBytes
   // maximumFileSizeToCacheInBytes: 1024 * 1024 * 6, // 6MB

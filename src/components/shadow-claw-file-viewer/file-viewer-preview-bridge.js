@@ -386,7 +386,11 @@
     event.preventDefault();
 
     window.parent.postMessage(
-      { type: "shadow-claw-file-viewer-link", href: href },
+      {
+        type: "shadow-claw-file-viewer-link",
+        href: href,
+        target: link.getAttribute("target") || "",
+      },
       "*",
     );
   });

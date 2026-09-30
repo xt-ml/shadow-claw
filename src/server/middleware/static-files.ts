@@ -3,6 +3,7 @@ import path from "node:path";
 import express from "express";
 import expressUrlrewrite from "express-urlrewrite";
 import type { Request, Response, NextFunction, Express } from "express";
+import { isNonPageFilePath } from "../../core/app-routes.js";
 
 const SPA_ROUTE_PREFIXES = new Set([
   "chat",
@@ -41,9 +42,23 @@ function isSpaShellRequest(req: Request, pathname: string): boolean {
     return false;
   }
 
-  const firstSegment = normalized.split("/", 1)[0] || "";
+  const parts = normalized.split("/").filter(Boolean);
+  const firstSegment = parts[0] || "";
 
-  return SPA_ROUTE_PREFIXES.has(firstSegment);
+  if (!SPA_ROUTE_PREFIXES.has(firstSegment)) {
+    return false;
+  }
+
+  if (firstSegment === "pages") {
+    if (
+      parts.includes("assets") ||
+      isNonPageFilePath(parts[parts.length - 1])
+    ) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 const ALLOWED_ROOT_DOT_DIRS = new Set([".well-known", ".agents"]);

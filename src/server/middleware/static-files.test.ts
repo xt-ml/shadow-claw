@@ -280,6 +280,60 @@ describe("static-files-middleware", () => {
     expect(next).toHaveBeenCalled();
   });
 
+  it("does not serve SPA shell for /pages/ asset paths even with navigation headers and text/html accept", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const req = {
+      method: "GET",
+      headers: {
+        accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "sec-fetch-dest": "document",
+        "sec-fetch-mode": "navigate",
+        "sec-fetch-user": "?1",
+      },
+      originalUrl:
+        "/pages/main/assets/uploads/2021/04/haiku-r1-beta2-screenshot.png",
+      url: "/pages/main/assets/uploads/2021/04/haiku-r1-beta2-screenshot.png",
+    };
+    const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+    const next = jest.fn();
+
+    fsMock.stat.mockImplementation((_path: string, cb: any) => cb(new Error()));
+
+    middleware(req, res, next);
+
+    expect(res.sendFile).not.toHaveBeenCalledWith(
+      expect.stringContaining("/root/index.html"),
+    );
+  });
+
+  it("does not serve SPA shell for /pages/ non-page file extensions", async () => {
+    await register();
+    const middleware = app.use.mock.calls[1][0];
+
+    const req = {
+      method: "GET",
+      headers: {
+        accept: "text/html",
+        "sec-fetch-dest": "document",
+      },
+      originalUrl: "/pages/main/photo.png",
+      url: "/pages/main/photo.png",
+    };
+    const res = { setHeader: jest.fn(), sendFile: jest.fn() };
+    const next = jest.fn();
+
+    fsMock.stat.mockImplementation((_path: string, cb: any) => cb(new Error()));
+
+    middleware(req, res, next);
+
+    expect(res.sendFile).not.toHaveBeenCalledWith(
+      expect.stringContaining("/root/index.html"),
+    );
+  });
+
   it("does not serve SPA shell for missing non-app paths", async () => {
     await register();
     const middleware = app.use.mock.calls[1][0];

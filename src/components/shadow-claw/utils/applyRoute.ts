@@ -107,10 +107,23 @@ export async function applyRoute(
 
     // When a specific path is in the URL, pin it before rendering.
     if (path) {
-      await oStore.setActivePinnedPage(db, {
-        groupId: groupId || oStore.activeGroupId || DEFAULT_GROUP_ID,
-        path: path,
-      });
+      const targetGroup = groupId || oStore.activeGroupId || DEFAULT_GROUP_ID;
+      const isAllowed =
+        typeof oStore.isPageAllowed === "function"
+          ? oStore.isPageAllowed(path, targetGroup)
+          : true;
+      if (isAllowed) {
+        await oStore.setActivePinnedPage(db, {
+          groupId: targetGroup,
+          path: path,
+        });
+      } else {
+        const defaultPage =
+          oStore.effectiveDefaultPage ||
+          (oStore.pages && oStore.pages[0]) ||
+          null;
+        await oStore.setActivePinnedPage(db, defaultPage);
+      }
     } else {
       const defaultPage =
         oStore.effectiveDefaultPage ||

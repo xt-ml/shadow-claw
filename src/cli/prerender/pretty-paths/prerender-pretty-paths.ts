@@ -31,6 +31,7 @@ import { extractDisplayPathFromRouteKey } from "../utils/extract-display-path-fr
 import { injectStaticRoutingScript } from "../utils/inject-static-routing-script.js";
 import { insertBeforeClosingHead } from "../utils/insert-before-closing-head.js";
 import { trimSlashes } from "../utils/trim-slashes.js";
+import { isPagePathAllowed } from "../../../utils/isPagePathAllowed.js";
 
 export { injectStaticRoutingScript };
 export { insertBeforeClosingHead };
@@ -43,6 +44,7 @@ export interface PrerenderPrettyPathsOptions {
   prerenderPages?: string | number;
   silent?: boolean;
   siteConfigPath?: string;
+  siteConfig?: any;
 }
 
 export interface PrerenderPrettyPathsResult {
@@ -65,23 +67,25 @@ export async function prerenderPrettyPaths(
     options.indexPath || path.join(publicDir, "index.html"),
   );
 
-  let siteConfig: any = {};
-  const configCandidatePaths = [
-    options.siteConfigPath,
-    path.resolve(path.dirname(sourcePath), "shadow-claw.config.json"),
-    path.resolve(path.dirname(sourcePath), "site-config.json"),
-    path.resolve("shadow-claw.config.json"),
-    path.resolve("site-config.json"),
-    path.join(publicDir, "shadow-claw.config.json"),
-    path.join(publicDir, "site-config.json"),
-  ].filter(Boolean) as string[];
+  let siteConfig: any = options.siteConfig || {};
+  if (!options.siteConfig) {
+    const configCandidatePaths = [
+      options.siteConfigPath,
+      path.resolve(path.dirname(sourcePath), "shadow-claw.config.json"),
+      path.resolve(path.dirname(sourcePath), "site-config.json"),
+      path.resolve("shadow-claw.config.json"),
+      path.resolve("site-config.json"),
+      path.join(publicDir, "shadow-claw.config.json"),
+      path.join(publicDir, "site-config.json"),
+    ].filter(Boolean) as string[];
 
-  for (const candidate of configCandidatePaths) {
-    try {
-      const raw = await readFile(candidate, "utf8");
-      siteConfig = JSON.parse(raw);
-      break;
-    } catch {}
+    for (const candidate of configCandidatePaths) {
+      try {
+        const raw = await readFile(candidate, "utf8");
+        siteConfig = JSON.parse(raw);
+        break;
+      } catch {}
+    }
   }
 
   const rawPagesOpt =
@@ -160,6 +164,36 @@ export async function prerenderPrettyPaths(
     delete routesData.subRoutes;
   }
 
+  const filterOptions = {
+    allowList:
+      siteConfig?.pages?.allowList ??
+      siteConfig?.pages?.allowlist ??
+      siteConfig?.allowList ??
+      siteConfig?.allowlist,
+    denyList:
+      siteConfig?.pages?.denyList ??
+      siteConfig?.pages?.denylist ??
+      siteConfig?.denyList ??
+      siteConfig?.denylist,
+  };
+
+  for (const [routeKey, routeDef] of Object.entries(allRoutes)) {
+    const expectedDisplayPath = extractDisplayPathFromRouteKey(routeKey);
+    const isAllowed =
+      isPagePathAllowed(expectedDisplayPath, {
+        ...filterOptions,
+        basePathPrefix: sourcePath,
+      }) &&
+      isPagePathAllowed(routeKey, filterOptions) &&
+      (!routeDef?.prettyPath ||
+        isPagePathAllowed(routeDef.prettyPath, filterOptions));
+
+    if (!isAllowed) {
+      delete allRoutes[routeKey];
+      delete routesData.routes[routeKey];
+    }
+  }
+
   const routeEntries = Object.entries(allRoutes);
   if (routeEntries.length === 0) {
     return { count: 0, skipped: true, reason: "Empty routes table" };
@@ -215,7 +249,18 @@ export async function prerenderPrettyPaths(
     readFile(shadowClawTemplatePath, "utf8"),
     readFile(pagesTemplatePath, "utf8").catch(() => ""),
     readFile(pageHeaderTemplatePath, "utf8").catch(() => ""),
-    collectPageSources(sourcePath),
+    collectPageSources(sourcePath, "desc", {
+      allowList:
+        siteConfig?.pages?.allowList ??
+        siteConfig?.pages?.allowlist ??
+        siteConfig?.allowList ??
+        siteConfig?.allowlist,
+      denyList:
+        siteConfig?.pages?.denyList ??
+        siteConfig?.pages?.denylist ??
+        siteConfig?.denyList ??
+        siteConfig?.denylist,
+    }),
     readFile(shadowClawCssPath, "utf8").catch(() => ""),
     readFile(pagesCssPath, "utf8").catch(() => ""),
     readFile(pageHeaderCssPath, "utf8").catch(() => ""),

@@ -11,5 +11,6 @@ export * from "./normalizeWorkspacePath.js";
 export * from "./parseBooleanConfig.js";
 export * from "./normalizeStringList.js";
 export * from "./parseStoredStringList.js";
+export * from "./isPagePathAllowed.js";
 export * from "./ulid.js";
 export * from "./utils.js";

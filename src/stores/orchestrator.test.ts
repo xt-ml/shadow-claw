@@ -3293,4 +3293,76 @@ describe("OrchestratorStore", () => {
       expect(mockRouter.setTyping).toHaveBeenCalledWith("peer:peer-xyz", false);
     });
   });
+
+  describe("pages allowList and denyList", () => {
+    it("allows all pages by default when lists are empty", () => {
+      const store = new OrchestratorStore();
+      expect(store.isPageAllowed("sidebar.html")).toBe(true);
+      expect(store.isPageAllowed("pages/main/sidebar.html")).toBe(true);
+      expect(store.isPageAllowed("posts/post1.md")).toBe(true);
+    });
+
+    it("denies pages in pagesDenyList", () => {
+      const store = new OrchestratorStore();
+      store._pagesDenyList.set(["pages/main/sidebar.html"]);
+
+      expect(store.isPageAllowed("pages/main/sidebar.html")).toBe(false);
+      expect(store.isPageAllowed("sidebar.html", "main")).toBe(false);
+      expect(store.isPageAllowed("sidebar.html")).toBe(false);
+      expect(store.isPageAllowed("index.html")).toBe(true);
+    });
+
+    it("filters denied pages when adding a page via addPage", async () => {
+      const store = new OrchestratorStore();
+      store._pagesDenyList.set(["pages/main/sidebar.html"]);
+      const mockDb: any = {};
+
+      await store.addPage(mockDb, "sidebar.html", DEFAULT_GROUP_ID);
+      expect(store.pages.some((p) => p.path === "sidebar.html")).toBe(false);
+
+      await store.addPage(mockDb, "post1.md", DEFAULT_GROUP_ID);
+      expect(store.pages.some((p) => p.path === "post1.md")).toBe(true);
+    });
+
+    it("filters denied pages in effectiveDefaultPage and setActivePinnedPage", async () => {
+      const store = new OrchestratorStore();
+      store._pagesDenyList.set(["pages/main/sidebar.html"]);
+      (store as any).setPages([
+        { groupId: DEFAULT_GROUP_ID, path: "index.html" },
+      ]);
+
+      const mockDb: any = {};
+      await store.setActivePinnedPage(mockDb, {
+        groupId: DEFAULT_GROUP_ID,
+        path: "sidebar.html",
+      });
+
+      // Should fall back to effectiveDefaultPage (index.html), not the denied page
+      expect(store.activePinnedPage?.path).toBe("index.html");
+    });
+
+    it("applies allowList and denyList from site config in applySiteConfigDefaults", async () => {
+      const store = new OrchestratorStore();
+      const mockDb: any = {};
+
+      const configElement = document.createElement("script");
+      configElement.id = "shadow-claw-site-config";
+      configElement.type = "application/json";
+      configElement.textContent = JSON.stringify({
+        pages: {
+          denyList: ["pages/main/sidebar.html"],
+        },
+      });
+      document.head.appendChild(configElement);
+
+      try {
+        await (store as any).applySiteConfigDefaults(mockDb);
+        expect(store.pagesDenyList).toEqual(["pages/main/sidebar.html"]);
+        expect(store.isPageAllowed("sidebar.html")).toBe(false);
+        expect(store.isPageAllowed("index.html")).toBe(true);
+      } finally {
+        configElement.remove();
+      }
+    });
+  });
 });

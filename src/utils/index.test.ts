@@ -66,9 +66,10 @@ describe("src/utils/index", () => {
     expect(typeof utils.sleep).toBe("function");
   });
 
-  it("exports string list utilities", () => {
+  it("exports string list and page path utilities", () => {
     expect(typeof utils.normalizeStringList).toBe("function");
     expect(typeof utils.parseStoredStringList).toBe("function");
+    expect(typeof utils.isPagePathAllowed).toBe("function");
   });
 
   it("exports ulid utility", () => {

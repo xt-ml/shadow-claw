@@ -73,6 +73,9 @@ import { writeGroupFile } from "../storage/writeGroupFile.js";
 import { AGUIAdapter } from "../ui/agui-adapter.js";
 import { showError, showSuccess } from "../ui/toast.js";
 import { applyJsonPatch } from "../utils/jsonPatch.js";
+import { isPagePathAllowed } from "../utils/isPagePathAllowed.js";
+import { normalizeStringList } from "../utils/normalizeStringList.js";
+import { parseStoredStringList } from "../utils/parseStoredStringList.js";
 import { ulid } from "../utils/ulid.js";
 import { toolsStore } from "./tools.js";
 
@@ -413,6 +416,8 @@ export class OrchestratorStore {
   public _modelDownloadProgress: Signal.State<ModelDownloadProgressPayload | null>;
   private _onlineReplayHandler: (() => void) | null;
   public _pages: Signal.State<SavedPageRef[]>;
+  public _pagesAllowList: Signal.State<string[]>;
+  public _pagesDenyList: Signal.State<string[]>;
   public _peerStateByGroup: Signal.State<Map<string, Record<string, unknown>>>;
   public _proxyUrl: Signal.State<string>;
   public _ready: Signal.State<boolean>;
@@ -467,6 +472,8 @@ export class OrchestratorStore {
     this._activePage = new Signal.State("pages");
     this._sidebarDefaultPage = new Signal.State("chat");
     this._pages = new Signal.State([]);
+    this._pagesAllowList = new Signal.State([]);
+    this._pagesDenyList = new Signal.State([]);
     this._activePinnedPage = new Signal.State(null);
     this._defaultPinnedPage = new Signal.State(null);
     this._remoteAgentStatusByGroup = new Signal.State(new Map());
@@ -507,7 +514,28 @@ export class OrchestratorStore {
     return this._defaultPinnedPage.get();
   }
 
+  get pagesAllowList(): string[] {
+    return this._pagesAllowList.get();
+  }
+
+  get pagesDenyList(): string[] {
+    return this._pagesDenyList.get();
+  }
+
+  isPageAllowed(path: string, groupId?: string | null): boolean {
+    return isPagePathAllowed(path, {
+      allowList: this._pagesAllowList.get(),
+      denyList: this._pagesDenyList.get(),
+      groupId: groupId ?? this._activeGroupId.get(),
+    });
+  }
+
   get effectiveDefaultPage(): SavedPageRef | null {
+    const def = this._defaultPinnedPage.get();
+    if (def && this.isPageAllowed(def.path, def.groupId)) {
+      return def;
+    }
+
     const pages = this._pages.get();
 
     return pages[0] || null;
@@ -891,7 +919,7 @@ export class OrchestratorStore {
   ): Promise<void> {
     const normalized =
       groupId === DEFAULT_GROUP_ID ? this.normalizePagePath(path) : path.trim();
-    if (!normalized) {
+    if (!normalized || !this.isPageAllowed(normalized, groupId)) {
       return;
     }
 
@@ -1443,6 +1471,16 @@ export class OrchestratorStore {
     installCustomElementsRegistryGuard();
     installCustomElementDomGuard();
 
+    // Load pages allowList / denyList from DB
+    const rawAllowList = await getConfig(db, CONFIG_KEYS.PAGES_ALLOW_LIST);
+    const rawDenyList = await getConfig(db, CONFIG_KEYS.PAGES_DENY_LIST);
+    if (rawAllowList) {
+      this._pagesAllowList.set(parseStoredStringList(String(rawAllowList)));
+    }
+    if (rawDenyList) {
+      this._pagesDenyList.set(parseStoredStringList(String(rawDenyList)));
+    }
+
     // Seed static main site files (including declarative tools) first
     const rawPagesList = await getConfig(db, CONFIG_KEYS.PAGES_LIST);
     const existingPages =
@@ -1497,7 +1535,8 @@ export class OrchestratorStore {
         if (
           parsed &&
           typeof parsed.path === "string" &&
-          typeof parsed.groupId === "string"
+          typeof parsed.groupId === "string" &&
+          this.isPageAllowed(parsed.path, parsed.groupId)
         ) {
           this._activePinnedPage.set(parsed);
         }
@@ -1966,6 +2005,9 @@ export class OrchestratorStore {
     db: ShadowClawDatabase,
     page: SavedPageRef | null,
   ): Promise<void> {
+    if (page && !this.isPageAllowed(page.path, page.groupId)) {
+      page = this.effectiveDefaultPage;
+    }
     this._activePinnedPage.set(page);
     if (page) {
       await setConfig(
@@ -1982,6 +2024,9 @@ export class OrchestratorStore {
     db: ShadowClawDatabase,
     page: SavedPageRef | null,
   ): Promise<void> {
+    if (page && !this.isPageAllowed(page.path, page.groupId)) {
+      return;
+    }
     const current = this._defaultPinnedPage.get();
     const isSame =
       current &&
@@ -2407,10 +2452,11 @@ export class OrchestratorStore {
   }
 
   private setPages(pages: SavedPageRef[]): void {
-    const memoryPages = pages.filter(
+    const allowed = pages.filter((p) => this.isPageAllowed(p.path, p.groupId));
+    const memoryPages = allowed.filter(
       (p) => p.path.toLowerCase() === "memory.md",
     );
-    const otherPages = pages.filter(
+    const otherPages = allowed.filter(
       (p) => p.path.toLowerCase() !== "memory.md",
     );
     this._pages.set([...otherPages, ...memoryPages]);
@@ -2813,6 +2859,56 @@ export class OrchestratorStore {
             defaultPinnedPage,
           );
         }
+      }
+
+      const rawAllowList =
+        config.pages?.allowList ??
+        config.pages?.allowlist ??
+        config.allowList ??
+        config.allowlist;
+      const rawDenyList =
+        config.pages?.denyList ??
+        config.pages?.denylist ??
+        config.denyList ??
+        config.denylist;
+      if (Array.isArray(rawAllowList)) {
+        const allowList = normalizeStringList(rawAllowList.map(String));
+        this._pagesAllowList.set(allowList);
+        await setConfig(
+          db,
+          CONFIG_KEYS.PAGES_ALLOW_LIST,
+          JSON.stringify(allowList),
+        );
+      }
+      if (Array.isArray(rawDenyList)) {
+        const denyList = normalizeStringList(rawDenyList.map(String));
+        this._pagesDenyList.set(denyList);
+        await setConfig(
+          db,
+          CONFIG_KEYS.PAGES_DENY_LIST,
+          JSON.stringify(denyList),
+        );
+      }
+
+      // Filter existing pages if any denied pages were previously saved
+      const currentPages = this._pages.get();
+      const filtered = currentPages.filter((p) =>
+        this.isPageAllowed(p.path, p.groupId),
+      );
+      if (filtered.length !== currentPages.length) {
+        this.setPages(filtered);
+        await this.persistPages(db);
+      }
+      const activePinned = this._activePinnedPage.get();
+      if (
+        activePinned &&
+        !this.isPageAllowed(activePinned.path, activePinned.groupId)
+      ) {
+        await this.setActivePinnedPage(db, this.effectiveDefaultPage);
+      }
+      const defPinned = this._defaultPinnedPage.get();
+      if (defPinned && !this.isPageAllowed(defPinned.path, defPinned.groupId)) {
+        await this.setDefaultPinnedPage(db, null);
       }
 
       if (Array.isArray(config.enabledTools)) {

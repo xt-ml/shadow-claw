@@ -766,4 +766,65 @@ describe("seedStaticMainSite – localStorage-gated purge", () => {
 
     expect(mockDeleteGroupDirectory).not.toHaveBeenCalled();
   });
+
+  it("filters manifest pages and existingPages when denyList is specified in site config", async () => {
+    const siteConfigScript = document.createElement("script");
+    siteConfigScript.id = "shadow-claw-site-config";
+    siteConfigScript.type = "application/json";
+    siteConfigScript.textContent = JSON.stringify({
+      pages: {
+        denyList: ["pages/main/sidebar.html"],
+      },
+    });
+    document.head.appendChild(siteConfigScript);
+
+    injectManifestScript({
+      pages: [
+        { displayPath: "index.html", content: "<h1>Home</h1>" },
+        { displayPath: "sidebar.html", content: "<div>Sidebar</div>" },
+        { displayPath: "post.md", content: "# Post" },
+      ],
+    });
+
+    const existingPages = [
+      { groupId: DEFAULT_GROUP_ID, path: "sidebar.html" },
+      { groupId: DEFAULT_GROUP_ID, path: "index.html" },
+    ];
+
+    const result = await seedStaticMainSite(
+      {} as any,
+      DEFAULT_GROUP_ID,
+      existingPages,
+    );
+
+    expect(result.map((p) => p.path)).toEqual(["index.html", "post.md"]);
+    expect(result.some((p) => p.path === "sidebar.html")).toBe(false);
+
+    siteConfigScript.remove();
+  });
+
+  it("filters manifest pages when allowList is specified in site config", async () => {
+    const siteConfigScript = document.createElement("script");
+    siteConfigScript.id = "shadow-claw-site-config";
+    siteConfigScript.type = "application/json";
+    siteConfigScript.textContent = JSON.stringify({
+      pages: {
+        allowList: ["index.html"],
+      },
+    });
+    document.head.appendChild(siteConfigScript);
+
+    injectManifestScript({
+      pages: [
+        { displayPath: "index.html", content: "<h1>Home</h1>" },
+        { displayPath: "sidebar.html", content: "<div>Sidebar</div>" },
+      ],
+    });
+
+    const result = await seedStaticMainSite({} as any, DEFAULT_GROUP_ID, []);
+
+    expect(result.map((p) => p.path)).toEqual(["index.html"]);
+
+    siteConfigScript.remove();
+  });
 });

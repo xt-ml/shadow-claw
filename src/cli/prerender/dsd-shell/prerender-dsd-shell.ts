@@ -29,6 +29,7 @@ import { normalizePrerenderPagesOption } from "../utils/normalize-prerender-page
 import { escapeJsonForHtmlScript } from "../utils/escape-json-for-html-script.js";
 import { insertBeforeClosingHead } from "../utils/insert-before-closing-head.js";
 import { injectStaticManifestScript } from "../utils/inject-static-manifest-script.js";
+import { isPagePathAllowed } from "../../../utils/isPagePathAllowed.js";
 
 export { escapeHtml };
 export { sanitizeRenderedHtml };
@@ -202,6 +203,12 @@ export function sortPagePaths(
 export async function collectPageSources(
   sourcePath: string,
   sortOrder: "asc" | "desc" = "desc",
+  filterOptions?: {
+    allowList?: string[];
+    denyList?: string[];
+    allowlist?: string[];
+    denylist?: string[];
+  },
 ): Promise<PageSource[]> {
   let sourceStats;
   try {
@@ -215,6 +222,15 @@ export async function collectPageSources(
 
   if (sourceStats.isFile()) {
     const displayPath = toPosixPath(path.basename(sourcePath));
+    if (
+      !isPagePathAllowed(displayPath, {
+        allowList: filterOptions?.allowList ?? filterOptions?.allowlist,
+        denyList: filterOptions?.denyList ?? filterOptions?.denylist,
+        basePathPrefix: sourcePath,
+      })
+    ) {
+      return buildDefaultPageSource();
+    }
     return [{ absolutePath: sourcePath, displayPath }];
   }
 
@@ -235,6 +251,23 @@ export async function collectPageSources(
       }
 
       const displayPath = toPosixPath(path.relative(sourcePath, absolutePath));
+      if (
+        !isPagePathAllowed(displayPath, {
+          allowList: filterOptions?.allowList ?? filterOptions?.allowlist,
+          denyList: filterOptions?.denyList ?? filterOptions?.denylist,
+          basePathPrefix: sourcePath,
+        })
+      ) {
+        if (displayPath.endsWith(".md")) {
+          try {
+            const rawHead = await readFile(absolutePath, "utf8");
+            if (rawHead.includes('slug: "shadow-claw--purge-pages"')) {
+              pages.push({ absolutePath, displayPath });
+            }
+          } catch {}
+        }
+        continue;
+      }
       pages.push({ absolutePath, displayPath });
     }
   }
@@ -1031,7 +1064,18 @@ export async function prerenderDsdShell(
     readFile(shadowClawTemplatePath, "utf8"),
     readFile(pagesTemplatePath, "utf8").catch(() => ""),
     readFile(pageHeaderTemplatePath, "utf8").catch(() => ""),
-    collectPageSources(sourcePath, sortOrder),
+    collectPageSources(sourcePath, sortOrder, {
+      allowList:
+        siteConfig?.pages?.allowList ??
+        siteConfig?.pages?.allowlist ??
+        siteConfig?.allowList ??
+        siteConfig?.allowlist,
+      denyList:
+        siteConfig?.pages?.denyList ??
+        siteConfig?.pages?.denylist ??
+        siteConfig?.denyList ??
+        siteConfig?.denylist,
+    }),
     collectSkillSources(skillsSourcePath),
     collectToolSources(toolsSourcePath),
     readFile(shadowClawCssPath, "utf8").catch(() => ""),

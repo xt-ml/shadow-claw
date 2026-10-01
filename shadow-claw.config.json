@@ -15,15 +15,17 @@
     "themeColor": "#000000"
   },
   "sitemapPath": "sitemap.xml",
-  "assets": [
-    "assets"
-  ],
+  "assets": ["assets"],
   "sidebar": {
     "pagesHidden": false,
     "chatHidden": false,
     "tasksHidden": false,
     "filesHidden": false,
     "defaultPage": "pages"
+  },
+  "pages": {
+    "allowList": [],
+    "denyList": []
   },
   "settings": {
     "defaultToolsProfile": "__builtin_default"
@@ -38,10 +40,7 @@
       "block-garden-option",
       "block-garden-select"
     ],
-    "allowedDomains": [
-      "kherrick.github.io",
-      "cdn.jsdelivr.net"
-    ]
+    "allowedDomains": ["kherrick.github.io", "cdn.jsdelivr.net"]
   },
   "security": {
     "connectSrc": [

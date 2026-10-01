@@ -622,6 +622,12 @@ export class ShadowClawPages extends ShadowClawElement {
   };
 
   navigateToPage(page: SavedPageRef) {
+    if (
+      typeof orchestratorStore.isPageAllowed === "function" &&
+      !orchestratorStore.isPageAllowed(page.path, page.groupId)
+    ) {
+      return;
+    }
     this.selectedPage = page;
     this.showNavButtonsTemporarily(2500);
     this.announcePageChange(page);
@@ -1173,7 +1179,15 @@ export class ShadowClawPages extends ShadowClawElement {
     }
 
     const selectedPage = this.selectedPage;
-    if (!this.db || !selectedPage) {
+    if (
+      !this.db ||
+      !selectedPage ||
+      (typeof orchestratorStore.isPageAllowed === "function" &&
+        !orchestratorStore.isPageAllowed(
+          selectedPage.path,
+          selectedPage.groupId,
+        ))
+    ) {
       this.renderedKey = null;
       this.renderedContent = null;
       this.renderedFrontmatterToggle = null;

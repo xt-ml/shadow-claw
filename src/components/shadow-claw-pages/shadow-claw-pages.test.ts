@@ -50,6 +50,7 @@ jest.unstable_mockModule("../../stores/orchestrator.js", () => {
       removePage: jest.fn(),
       removeAllPages: jest.fn(),
       reorderPages: jest.fn(),
+      isPageAllowed: jest.fn(() => true),
       setDefaultPinnedPage: jest.fn(async (_db: any, val: any) => {
         mockDefaultPinnedPage = val;
       }),
@@ -1727,6 +1728,32 @@ describe("shadow-claw-pages", () => {
       component.selectedPage = pages[0];
 
       expect(announcer?.textContent).toContain("docs/first.md");
+    });
+
+    it("does not render or navigate to denied pages", async () => {
+      const component = new ShadowClawPages();
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const rendered = root.querySelector("[data-pages-rendered]");
+      const empty = root.querySelector("[data-pages-empty]");
+
+      (orchestratorStore.isPageAllowed as jest.Mock).mockReturnValue(false);
+
+      // Attempt navigation to denied page
+      component.selectedPage = { groupId: "group-1", path: "docs/first.md" };
+      component.navigateToPage({ groupId: "group-1", path: "sidebar.html" });
+      expect(component.selectedPage?.path).toBe("docs/first.md");
+
+      // Attempt rendering denied page
+      component.selectedPage = { groupId: "group-1", path: "sidebar.html" };
+      await component.renderSelectedPage();
+
+      expect(rendered?.hasAttribute("hidden")).toBe(true);
+      expect(empty?.hasAttribute("hidden")).toBe(false);
+
+      (orchestratorStore.isPageAllowed as jest.Mock).mockReturnValue(true);
     });
   });
 });

@@ -99,7 +99,15 @@ export interface SiteConfig {
     notFoundPath?: string;
     sortOrder?: string;
     defaultPinnedPage?: string;
+    allowList?: string[];
+    denyList?: string[];
+    allowlist?: string[];
+    denylist?: string[];
   };
+  allowList?: string[];
+  denyList?: string[];
+  allowlist?: string[];
+  denylist?: string[];
   notFoundPath?: string;
   manifestPath?: string;
   sitemapPath?: string;

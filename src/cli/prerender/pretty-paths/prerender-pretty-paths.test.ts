@@ -587,4 +587,112 @@ describe("prerenderPrettyPaths", () => {
     expect(fullManifest.pages).toHaveLength(1);
     expect(fullManifest.pages[0].displayPath).toBe("posts/post1.md");
   });
+
+  it("excludes routes matching denyList from static-routing.json and does not prerender them", async () => {
+    const publicDir = path.join(tmpDir, "dist/public");
+    const indexPath = path.join(publicDir, "index.html");
+    const sourcePath = path.join(tmpDir, "pages/main");
+    const routesPath = path.join(tmpDir, "pages/routes.json");
+
+    await mkdir(path.join(publicDir, "components/shadow-claw"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-pages"), {
+      recursive: true,
+    });
+    await mkdir(path.join(publicDir, "components/shadow-claw-page-header"), {
+      recursive: true,
+    });
+    await mkdir(path.join(sourcePath, "posts"), { recursive: true });
+
+    await writeFile(
+      path.join(publicDir, "components/shadow-claw/shadow-claw.html"),
+      "<shadow-claw><template shadowrootmode='open'><slot></slot></template></shadow-claw>",
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-pages/shadow-claw-pages.html",
+      ),
+      "<shadow-claw-pages><template shadowrootmode='open'><slot></slot></template></shadow-claw-pages>",
+      "utf8",
+    );
+    await writeFile(
+      path.join(
+        publicDir,
+        "components/shadow-claw-page-header/shadow-claw-page-header.html",
+      ),
+      "<shadow-claw-page-header><template shadowrootmode='open'></template></shadow-claw-page-header>",
+      "utf8",
+    );
+    await writeFile(
+      indexPath,
+      "<!doctype html><html><head></head><body><shadow-claw></shadow-claw></body></html>",
+      "utf8",
+    );
+
+    await writeFile(
+      path.join(sourcePath, "posts/post1.md"),
+      '---\ntitle: "Post 1"\nslug: "post-1"\n---\n# Post 1',
+      "utf8",
+    );
+    await writeFile(
+      path.join(sourcePath, "MEMORY.md"),
+      '---\ntitle: "Memory"\nslug: "memory"\n---\n# Memory Content',
+      "utf8",
+    );
+
+    const routesJson = {
+      routes: {
+        "/pages/main/posts/post1.md": {
+          prettyPath: "/post-1/",
+        },
+        "/pages/main/MEMORY.md": {
+          prettyPath: "/main/memory",
+        },
+      },
+    };
+    await writeFile(routesPath, JSON.stringify(routesJson, null, 2), "utf8");
+
+    await prerenderPrettyPaths({
+      publicDir,
+      routesPath,
+      sourcePath,
+      indexPath,
+      prerenderPages: "all",
+      siteConfig: {
+        pages: {
+          denyList: ["/main/memory"],
+        },
+      },
+    });
+
+    // post-1 should be generated
+    const post1Exists = await readFile(
+      path.join(publicDir, "post-1/index.html"),
+      "utf8",
+    ).then(
+      () => true,
+      () => false,
+    );
+    expect(post1Exists).toBe(true);
+
+    // /main/memory should NOT be generated
+    const memoryExists = await readFile(
+      path.join(publicDir, "main/memory/index.html"),
+      "utf8",
+    ).then(
+      () => true,
+      () => false,
+    );
+    expect(memoryExists).toBe(false);
+
+    // static-routing.json should not contain /main/memory
+    const staticRouting = JSON.parse(
+      await readFile(path.join(publicDir, "static-routing.json"), "utf8"),
+    );
+    expect(staticRouting.routes["/pages/main/MEMORY.md"]).toBeUndefined();
+    expect(staticRouting.routes["/pages/main/posts/post1.md"]).toBeDefined();
+  });
 });

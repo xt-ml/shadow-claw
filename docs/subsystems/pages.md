@@ -53,6 +53,7 @@ During store initialization, `seedStaticMainSite()` seeds default pages from the
 2. **Background Full Sync**: Full manifest synchronization (`static-main-manifest.json`) is scheduled asynchronously via `scheduleBackgroundStaticMainSiteSeeding()` (leveraging `requestIdleCallback`) to download any remaining static assets in the background without blocking the main UI thread.
 3. **Workspace Seeding**: On first boot, seeds static markdown files (including subdirectories like `posts/`) into the `br:main` workspace file storage and records seeding state in IndexedDB under `CONFIG_KEYS.STATIC_MAIN_SITE_SEEDED`.
 4. **Suppression & Deletion Respect**: Ensures `index.html`, `MEMORY.md`, and default static workspace pages exist unless marked as suppressed. Subsequent reloads skip redundant re-seeding unless storage is cleared or a deployment purge is triggered via `purgeId`. Note that pages containing the `--purge-pages` flag are excluded from DSD pre-rendering and production static site manifests.
+5. **Allow & Deny List Filtering**: Pages and directories configured in `pages.allowList` or `pages.denyList` (or their root counterparts in `shadow-claw.config.json`) are filtered during build-time DSD pre-rendering and runtime static main site seeding. Files placed on `denyList` (such as `pages/main/sidebar.html`) continue to exist on disk and serve other roles (like custom slotted sidebars) while being excluded from the pages viewer, list, and swipe cycling.
 
 ### Page Suppression (`src/storage/suppressedPages.ts`)
 
@@ -146,7 +147,7 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `src/cli/p
     - **`site`**: `title`, `description`, `themeColor`, `lang`.
     - **`branding`**: `titleText`, `siteUrl`, `repoUrl`, `repoLabel`, `faviconPath`, `appleTouchIconPath`, `logoSlotHtml`.
     - **`sidebar`**: `pagesHidden`, `chatHidden`, `tasksHidden`, `filesHidden`, `defaultPage` (`"pages"` | `"chat"` | `"tasks"` | `"files"`), `slotHtml` (raw HTML string), `slotPath` (path to a custom sidebar HTML file), `sections` (array of declarative sidebar sections with `title`, `headerHref`, `items: [{ title, label, href, target, rel, active }]`, or `html`).
-    - **`pages`**: `sortOrder` (`"asc"` | `"desc"`), `defaultPinnedPage`.
+    - **`pages`**: `sortOrder` (`"asc"` | `"desc"`), `defaultPinnedPage`, `allowList` (array of allowed page or directory path patterns), `denyList` (array of denied page or directory path patterns excluded from the viewer, page navigation, and static manifest seeding).
     - **`theme`**: `stylesheet` (custom theme CSS stylesheet injected into head).
     - **`settings`**: `assistantName` (pre-seeds the default assistant name), `defaultToolsProfile` (pre-seeds the default tool profile e.g. `"__builtin_default"` or `"none"`), `enabledTools` (pre-seeds default enabled built-in tool array).
     - **`cacheDir`** / **`server.cacheDir`**: Custom directory for storing cache, control tokens, and SQLite databases.

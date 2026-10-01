@@ -22,6 +22,8 @@ import {
 import { groupFileExists } from "./groupFileExists.js";
 import { isPageSuppressed, pageRefKey } from "./suppressedPages.js";
 import { writeGroupFile } from "./writeGroupFile.js";
+import { isPagePathAllowed } from "../utils/isPagePathAllowed.js";
+import { normalizeStringList } from "../utils/normalizeStringList.js";
 
 import type { SavedPageRef, ShadowClawDatabase } from "../db/types.js";
 
@@ -296,6 +298,36 @@ function getSiteConfigSortOrder(): "asc" | "desc" {
   return "desc";
 }
 
+export function getSiteConfigPageFilter(): {
+  allowList: string[];
+  denyList: string[];
+} {
+  if (typeof document !== "undefined") {
+    try {
+      const scriptEl = document.getElementById("shadow-claw-site-config");
+      if (scriptEl?.textContent) {
+        const config = JSON.parse(scriptEl.textContent);
+        const allowList = normalizeStringList(
+          config?.pages?.allowList ??
+            config?.pages?.allowlist ??
+            config?.allowList ??
+            config?.allowlist ??
+            [],
+        );
+        const denyList = normalizeStringList(
+          config?.pages?.denyList ??
+            config?.pages?.denylist ??
+            config?.denyList ??
+            config?.denylist ??
+            [],
+        );
+        return { allowList, denyList };
+      }
+    } catch {}
+  }
+  return { allowList: [], denyList: [] };
+}
+
 export function sortSavedPageRefs(
   refs: SavedPageRef[],
   sortOrder?: "asc" | "desc",
@@ -480,8 +512,20 @@ export async function seedStaticMainSite(
       )
     : [...existingPages];
 
+  const { allowList, denyList } = getSiteConfigPageFilter();
+
   for (const page of manifest.pages) {
     if (page.content?.includes('slug: "shadow-claw--purge-pages"')) {
+      continue;
+    }
+
+    if (
+      !isPagePathAllowed(page.displayPath, {
+        allowList,
+        denyList,
+        groupId,
+      })
+    ) {
       continue;
     }
 
@@ -576,17 +620,25 @@ export async function seedStaticMainSite(
     await setStaticMainSiteSeeded(db, groupId, true);
   }
 
-  Object.defineProperty(resultPages, "didPurge", {
+  const filteredResultPages = (resultPages as SavedPageRef[]).filter((ref) =>
+    isPagePathAllowed(ref.path, {
+      allowList,
+      denyList,
+      groupId: ref.groupId,
+    }),
+  );
+
+  Object.defineProperty(filteredResultPages, "didPurge", {
     value: didPurge,
     enumerable: false,
     writable: true,
     configurable: true,
   });
-  Object.defineProperty(resultPages, "didPurgeSkills", {
+  Object.defineProperty(filteredResultPages, "didPurgeSkills", {
     value: didPurgeSkills,
     enumerable: false,
     writable: true,
     configurable: true,
   });
-  return sortSavedPageRefs(resultPages);
+  return sortSavedPageRefs(filteredResultPages);
 }

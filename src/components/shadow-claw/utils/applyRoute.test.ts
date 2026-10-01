@@ -334,5 +334,22 @@ describe("applyRoute", () => {
       expect(pagesComp.handleAnchorNavigation).toHaveBeenCalledWith("top");
       expect(mockApplyAnchorWithRetry).toHaveBeenCalled();
     });
+
+    it("falls back to default page when requested route path is not allowed", async () => {
+      route.path = "sidebar.html";
+      oStore.isPageAllowed = jest.fn().mockReturnValue(false);
+      oStore.effectiveDefaultPage = { groupId: "group1", path: "index.html" };
+
+      await applyRoute(shadow, shadowClaw, db, fStore, oStore, route);
+
+      expect(oStore.isPageAllowed).toHaveBeenCalledWith(
+        "sidebar.html",
+        "group1",
+      );
+      expect(oStore.setActivePinnedPage).toHaveBeenCalledWith(db, {
+        groupId: "group1",
+        path: "index.html",
+      });
+    });
   });
 });

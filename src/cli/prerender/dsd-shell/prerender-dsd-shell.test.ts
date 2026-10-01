@@ -366,6 +366,54 @@ describe("collectPageSources without a pages directory", () => {
       pages.every(({ inlineContent }) => typeof inlineContent === "string"),
     ).toBe(true);
   });
+
+  it("filters pages based on denyList and allowList", async () => {
+    const tmpDir = path.join(
+      os.tmpdir(),
+      `sc-dsd-filter-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    const sourcePath = path.join(tmpDir, "pages/main");
+    await mkdir(sourcePath, { recursive: true });
+    await writeFile(
+      path.join(sourcePath, "index.html"),
+      "<h1>Home</h1>",
+      "utf8",
+    );
+    await writeFile(
+      path.join(sourcePath, "sidebar.html"),
+      "<div>Sidebar</div>",
+      "utf8",
+    );
+    await writeFile(path.join(sourcePath, "post1.md"), "# Post 1", "utf8");
+
+    // Default: both blank/empty -> all 3 pages included
+    const allPages = await collectPageSources(sourcePath, "desc", {
+      allowList: [],
+      denyList: [],
+    });
+    expect(allPages.map((p) => p.displayPath).sort()).toEqual([
+      "index.html",
+      "post1.md",
+      "sidebar.html",
+    ]);
+
+    // Deny pages/main/sidebar.html
+    const deniedPages = await collectPageSources(sourcePath, "desc", {
+      denyList: ["pages/main/sidebar.html"],
+    });
+    expect(deniedPages.map((p) => p.displayPath).sort()).toEqual([
+      "index.html",
+      "post1.md",
+    ]);
+
+    // AllowList only post1.md
+    const allowedOnly = await collectPageSources(sourcePath, "desc", {
+      allowList: ["post1.md"],
+    });
+    expect(allowedOnly.map((p) => p.displayPath)).toEqual(["post1.md"]);
+
+    await rm(tmpDir, { recursive: true, force: true });
+  });
 });
 
 describe("prerenderDsdShell purge flag pages", () => {

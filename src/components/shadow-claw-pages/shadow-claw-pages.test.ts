@@ -1481,6 +1481,65 @@ describe("shadow-claw-pages", () => {
       }
     });
 
+    it("throttles keyboard navigation when holding down arrow keys", async () => {
+      const component = new ShadowClawPages();
+      document.body.appendChild(component);
+      await component.connectedCallback();
+      const root = component.shadowRoot;
+      if (!root) return;
+
+      const pages = [
+        { groupId: "group-1", path: "docs/first.md" },
+        { groupId: "group-1", path: "docs/second.md" },
+        { groupId: "group-1", path: "docs/third.md" },
+        { groupId: "group-1", path: "docs/fourth.md" },
+      ];
+      (orchestratorStore as any).pages = pages;
+      component.selectedPage = pages[0]; // first page
+      component.renderPageList(pages, []);
+      await Promise.resolve();
+
+      const navigateListener = jest.fn();
+      document.addEventListener("shadow-claw-navigate", navigateListener);
+
+      // Initial press: navigates to second page
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }),
+      );
+      expect(component.selectedPage).toEqual(pages[1]);
+      expect(navigateListener).toHaveBeenCalledTimes(1);
+
+      // Immediate repeated press (simulating holding down key): throttled!
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowRight",
+          bubbles: true,
+          repeat: true,
+        }),
+      );
+      expect(component.selectedPage).toEqual(pages[1]);
+      expect(navigateListener).toHaveBeenCalledTimes(1);
+
+      // Advance navigation timestamp past throttle interval
+      component.keyNavState.lastNavigationTime -= 350;
+
+      // Repeat after throttle interval: navigates to third page
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          key: "ArrowRight",
+          bubbles: true,
+          repeat: true,
+        }),
+      );
+      expect(component.selectedPage).toEqual(pages[2]);
+      expect(navigateListener).toHaveBeenCalledTimes(2);
+
+      document.removeEventListener("shadow-claw-navigate", navigateListener);
+      if (component.parentNode) {
+        component.parentNode.removeChild(component);
+      }
+    });
+
     it("suppresses keyboard navigation when focus is inside editable elements or sidebar list", async () => {
       const component = new ShadowClawPages();
       await component.connectedCallback();

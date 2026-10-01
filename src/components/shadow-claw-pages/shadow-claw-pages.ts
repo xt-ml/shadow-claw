@@ -50,7 +50,10 @@ import { groupPagesByGroup } from "./utils/groupPagesByGroup.js";
 import { handleAnchorNavigation } from "./utils/handleAnchorNavigation.js";
 import { handleAutoRefreshConfigEvent } from "./utils/handleAutoRefreshConfigEvent.js";
 import { handleFileSavedEvent } from "./utils/handleFileSavedEvent.js";
-import { handleKeyDownNavigation } from "./utils/handleKeyDownNavigation.js";
+import {
+  handleKeyDownNavigation,
+  type KeyNavigationState,
+} from "./utils/handleKeyDownNavigation.js";
 import { handleMouseDownGesture } from "./utils/handleMouseDownGesture.js";
 import { handleMouseUpGesture } from "./utils/handleMouseUpGesture.js";
 import { handlePageReorder } from "./utils/handlePageReorder.js";
@@ -123,6 +126,10 @@ export class ShadowClawPages extends ShadowClawElement {
   db: ShadowClawDatabase | null = null;
   draggedPageIndex: number | null = null;
   isMouseDown: boolean = false;
+  keyNavState: KeyNavigationState = {
+    lastNavigationTime: 0,
+    lastDirection: null,
+  };
   mouseStartTime: number = 0;
   mouseStartX: number = 0;
   mouseStartY: number = 0;
@@ -349,6 +356,7 @@ export class ShadowClawPages extends ShadowClawElement {
       this.handleFileSaved,
     );
     document.removeEventListener("keydown", this.handleKeyDown);
+    this.keyNavState = { lastNavigationTime: 0, lastDirection: null };
     this.broadcastProxy?.dispose();
     this.broadcastProxy = null;
     this.previewFrameWindow = null;
@@ -531,6 +539,7 @@ export class ShadowClawPages extends ShadowClawElement {
           this.goToNextPage();
         }
       },
+      this.keyNavState,
     );
   };
 

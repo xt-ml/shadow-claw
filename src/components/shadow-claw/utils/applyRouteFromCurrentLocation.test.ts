@@ -22,7 +22,18 @@ describe("applyRouteFromCurrentLocation", () => {
     jest.clearAllMocks();
 
     jest.unstable_mockModule("../../../core/app-routes.js", () => ({
+      parseRouteFromUrl: jest.fn(),
       parseRouteFromUrlAsync: jest.fn(),
+      getAppBasePath: jest.fn(() => "/"),
+      applyBasePath: jest.fn((p: string) => p),
+      getDeploymentNamespace: jest.fn(() => ""),
+      resolveDefaultPinnedPageRef: jest.fn((v: any) =>
+        typeof v === "object" ? v : null,
+      ),
+      resolveRouteToPrettyPathAsync: jest.fn(),
+    }));
+    jest.unstable_mockModule("../../../storage/staticRouting.js", () => ({
+      resolveRouteToPrettyPathAsync: jest.fn(),
     }));
     jest.unstable_mockModule("./applyRoute.js", () => ({
       applyRoute: jest.fn(),
@@ -31,6 +42,11 @@ describe("applyRouteFromCurrentLocation", () => {
     const appRoutes = await import("../../../core/app-routes.js");
     mockParseRouteFromUrlAsync =
       appRoutes.parseRouteFromUrlAsync as jest.Mock<any>;
+
+    const staticRouting = await import("../../../storage/staticRouting.js");
+    const mockResolveRouteToPrettyPathAsync =
+      staticRouting.resolveRouteToPrettyPathAsync as jest.Mock<any>;
+    mockResolveRouteToPrettyPathAsync.mockResolvedValue("/");
 
     const applyRouteModule = await import("./applyRoute.js");
     mockApplyRoute = applyRouteModule.applyRoute as jest.Mock<any>;
@@ -83,6 +99,112 @@ describe("applyRouteFromCurrentLocation", () => {
       oStore.activeGroupId,
     );
     expect(mockApplyRoute).not.toHaveBeenCalled();
+  });
+
+  it("routes to defaultPinnedPage when browsing to root URL instead of last visited page", async () => {
+    mockParseRouteFromUrlAsync.mockResolvedValue(null);
+    (oStore as any).defaultPinnedPage = {
+      groupId: "br:main",
+      path: "index.html",
+    };
+    const rootUrl = new URL("http://localhost:8888/");
+
+    await applyRouteFromCurrentLocation(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      rootUrl,
+    );
+
+    expect(mockApplyRoute).toHaveBeenCalledWith(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      {
+        page: "pages",
+        groupId: "br:main",
+        path: "index.html",
+      },
+    );
+  });
+
+  it("replaces history state when defaultPinnedPage has a non-root pretty path", async () => {
+    const appRoutes = await import("../../../core/app-routes.js");
+    (
+      appRoutes.resolveRouteToPrettyPathAsync as jest.Mock<any>
+    ).mockResolvedValue("/portfolio/");
+
+    const replaceStateSpy = jest.spyOn(window.history, "replaceState");
+
+    (oStore as any).defaultPinnedPage = {
+      groupId: "br:main",
+      path: "portfolio.html",
+    };
+    const rootUrl = new URL("http://localhost:8888/");
+
+    await applyRouteFromCurrentLocation(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      rootUrl,
+    );
+
+    expect(replaceStateSpy).toHaveBeenCalledWith(null, "", "/portfolio/");
+    expect(mockApplyRoute).toHaveBeenCalledWith(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      {
+        page: "pages",
+        groupId: "br:main",
+        path: "portfolio.html",
+      },
+    );
+
+    replaceStateSpy.mockRestore();
+  });
+
+  it("does not override with defaultPinnedPage when browsing to non-root page URL", async () => {
+    (oStore as any).defaultPinnedPage = {
+      groupId: "br:main",
+      path: "index.html",
+    };
+    const aboutUrl = new URL("http://localhost:8888/about");
+    mockParseRouteFromUrlAsync.mockResolvedValue({
+      page: "pages",
+      groupId: "br:main",
+      path: "about.md",
+    });
+
+    await applyRouteFromCurrentLocation(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      aboutUrl,
+    );
+
+    expect(mockApplyRoute).toHaveBeenCalledWith(
+      shadow,
+      shadowClaw,
+      db,
+      fStore,
+      oStore,
+      {
+        page: "pages",
+        groupId: "br:main",
+        path: "about.md",
+      },
+    );
   });
 
   it("should call applyRoute with parsed route", async () => {

@@ -3,9 +3,11 @@ import {
   clearStaticRoutesManifestCache,
   getEmbeddedStaticRoutesManifest,
   getStaticRoutingManifest,
+  resolveDefaultPinnedPageRef,
   resolvePrettyPathToRoute,
   resolvePrettyPathToRouteAsync,
   resolveRouteToPrettyPath,
+  resolveRouteToPrettyPathAsync,
   resolveStaticRoutingManifestUrl,
   setStaticRoutesManifest,
   STATIC_ROUTING_SCRIPT_ID,
@@ -403,6 +405,116 @@ describe("staticRouting", () => {
       page: "pages",
       groupId: "br:main",
       path: "custom.md",
+    });
+  });
+
+  it("falls back to fetching /pages/routes.json when /static-routing.json returns 404", async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      globalThis.fetch = jest.fn(async (input: any) => {
+        const urlStr = String(input);
+        if (urlStr.includes("static-routing.json")) {
+          return { ok: false, status: 404 } as any;
+        }
+        if (urlStr.includes("pages/routes.json")) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              routes: {
+                "/pages/main/index.html": {
+                  prettyPath: "/",
+                },
+                "/pages/main/about.md": {
+                  prettyPath: "/about",
+                },
+              },
+            }),
+          } as any;
+        }
+        return { ok: false, status: 404 } as any;
+      }) as any;
+
+      const manifest = await getStaticRoutingManifest();
+      expect(manifest.routes["/pages/main/index.html"]).toEqual({
+        prettyPath: "/",
+      });
+
+      const routeForRoot = resolvePrettyPathToRoute("/");
+      expect(routeForRoot).toEqual({
+        page: "pages",
+        groupId: "br:main",
+        path: "index.html",
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("resolves route to pretty path asynchronously", async () => {
+    const customManifest: StaticRoutesManifest = {
+      routes: {
+        "/pages/main/index.html": {
+          prettyPath: "/",
+        },
+        "/pages/main/about.md": {
+          prettyPath: "/about",
+        },
+      },
+    };
+
+    setStaticRoutesManifest(customManifest);
+    const prettyPath = await resolveRouteToPrettyPathAsync({
+      page: "pages",
+      groupId: "br:main",
+      path: "index.html",
+    });
+    expect(prettyPath).toBe("/");
+  });
+
+  describe("resolveDefaultPinnedPageRef", () => {
+    it("normalizes canonical page paths into SavedPageRef", () => {
+      expect(resolveDefaultPinnedPageRef("/pages/main/index.html")).toEqual({
+        groupId: "br:main",
+        path: "index.html",
+      });
+
+      expect(resolveDefaultPinnedPageRef("pages/main/portfolio.html")).toEqual({
+        groupId: "br:main",
+        path: "portfolio.html",
+      });
+
+      expect(
+        resolveDefaultPinnedPageRef("/pages/custom-group/docs/readme.md"),
+      ).toEqual({
+        groupId: "custom-group",
+        path: "docs/readme.md",
+      });
+
+      expect(resolveDefaultPinnedPageRef("index.html")).toEqual({
+        groupId: "br:main",
+        path: "index.html",
+      });
+
+      expect(
+        resolveDefaultPinnedPageRef(
+          JSON.stringify({ groupId: "br:main", path: "about.md" }),
+        ),
+      ).toEqual({
+        groupId: "br:main",
+        path: "about.md",
+      });
+
+      expect(
+        resolveDefaultPinnedPageRef({ groupId: "br:main", path: "about.md" }),
+      ).toEqual({
+        groupId: "br:main",
+        path: "about.md",
+      });
+
+      expect(resolveDefaultPinnedPageRef("")).toBeNull();
+      expect(resolveDefaultPinnedPageRef(null)).toBeNull();
+      expect(resolveDefaultPinnedPageRef(undefined)).toBeNull();
     });
   });
 });

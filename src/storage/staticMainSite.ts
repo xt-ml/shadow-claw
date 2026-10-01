@@ -298,6 +298,22 @@ function getSiteConfigSortOrder(): "asc" | "desc" {
   return "desc";
 }
 
+export function getSiteConfigDefaultPinnedPage(): string | null {
+  if (typeof document !== "undefined") {
+    try {
+      const scriptEl = document.getElementById("shadow-claw-site-config");
+      if (scriptEl?.textContent) {
+        const config = JSON.parse(scriptEl.textContent);
+        const def = config?.pages?.defaultPinnedPage;
+        if (typeof def === "string" && def.trim().length > 0) {
+          return def.trim();
+        }
+      }
+    } catch {}
+  }
+  return null;
+}
+
 export function getSiteConfigPageFilter(): {
   allowList: string[];
   denyList: string[];

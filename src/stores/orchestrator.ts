@@ -65,9 +65,14 @@ import {
   loadCustomElementSecurityFromDb,
 } from "../security/custom-element-security.js";
 import {
+  getSiteConfigDefaultPinnedPage,
   isStaticMainSiteSeeded,
   seedStaticMainSite,
 } from "../storage/staticMainSite.js";
+import {
+  getAppBasePath,
+  resolveDefaultPinnedPageRef,
+} from "../core/app-routes.js";
 import { suppressPage, unsuppressPage } from "../storage/suppressedPages.js";
 import { writeGroupFile } from "../storage/writeGroupFile.js";
 import { AGUIAdapter } from "../ui/agui-adapter.js";
@@ -1525,22 +1530,73 @@ export class OrchestratorStore {
       this.normalizeSidebarDefaultPage(sidebarDefaultPageRaw),
     );
 
-    const lastPinnedPageRaw = await getConfig(
-      db,
-      CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE,
-    );
-    if (lastPinnedPageRaw) {
-      try {
-        const parsed = JSON.parse(lastPinnedPageRaw as string);
-        if (
-          parsed &&
-          typeof parsed.path === "string" &&
-          typeof parsed.groupId === "string" &&
-          this.isPageAllowed(parsed.path, parsed.groupId)
-        ) {
-          this._activePinnedPage.set(parsed);
+    const siteConfigDefaultPinned = getSiteConfigDefaultPinnedPage();
+    let defaultPinnedRef: SavedPageRef | null = null;
+    if (siteConfigDefaultPinned) {
+      defaultPinnedRef = resolveDefaultPinnedPageRef(siteConfigDefaultPinned);
+    }
+    if (!defaultPinnedRef) {
+      const rawDefaultPinned = await getConfig(
+        db,
+        CONFIG_KEYS.DEFAULT_PINNED_PAGE,
+      );
+      if (rawDefaultPinned) {
+        defaultPinnedRef = resolveDefaultPinnedPageRef(
+          rawDefaultPinned as string,
+        );
+      }
+    }
+    if (
+      defaultPinnedRef &&
+      this.isPageAllowed(defaultPinnedRef.path, defaultPinnedRef.groupId)
+    ) {
+      this._defaultPinnedPage.set(defaultPinnedRef);
+    }
+
+    const isRootLocation =
+      typeof window !== "undefined" &&
+      window.location &&
+      (() => {
+        let pathname = window.location.pathname || "/";
+        const basePath = getAppBasePath();
+        if (basePath !== "/" && pathname.startsWith(basePath)) {
+          pathname = "/" + pathname.slice(basePath.length);
         }
-      } catch {}
+        const parts = pathname.split("/").filter(Boolean);
+        return (
+          parts.length === 0 ||
+          (parts.length === 1 && parts[0] === "index.html")
+        );
+      })();
+
+    let activePinnedSet = false;
+    if (
+      isRootLocation &&
+      defaultPinnedRef &&
+      this.isPageAllowed(defaultPinnedRef.path, defaultPinnedRef.groupId)
+    ) {
+      this._activePinnedPage.set(defaultPinnedRef);
+      activePinnedSet = true;
+    }
+
+    if (!activePinnedSet) {
+      const lastPinnedPageRaw = await getConfig(
+        db,
+        CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE,
+      );
+      if (lastPinnedPageRaw) {
+        try {
+          const parsed = JSON.parse(lastPinnedPageRaw as string);
+          if (
+            parsed &&
+            typeof parsed.path === "string" &&
+            typeof parsed.groupId === "string" &&
+            this.isPageAllowed(parsed.path, parsed.groupId)
+          ) {
+            this._activePinnedPage.set(parsed);
+          }
+        } catch {}
+      }
     }
 
     // Initialize proxy values from orchestrator
@@ -2689,6 +2745,22 @@ export class OrchestratorStore {
             this.orchestrator.vmBashFullInternetAccess = true;
           }
           this._vmBashFullInternetAccess.set(true);
+        }
+      }
+
+      // If site configuration declares default pinned page, ensure it is honored
+      if (config.pages && typeof config.pages === "object") {
+        const { defaultPinnedPage } = config.pages;
+        if (defaultPinnedPage && typeof defaultPinnedPage === "string") {
+          const resolved = resolveDefaultPinnedPageRef(defaultPinnedPage);
+          if (resolved && this.isPageAllowed(resolved.path, resolved.groupId)) {
+            this._defaultPinnedPage.set(resolved);
+            await setConfig(
+              db,
+              CONFIG_KEYS.DEFAULT_PINNED_PAGE,
+              JSON.stringify(resolved),
+            );
+          }
         }
       }
 

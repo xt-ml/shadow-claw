@@ -241,6 +241,21 @@ jest.unstable_mockModule("../storage/staticMainSite.js", () => ({
   setStaticMainSiteSeeded: mockSetStaticMainSiteSeeded,
   getStaticMainManifest: mockGetStaticMainManifest,
   sortSavedPageRefs: (refs: any[]) => refs,
+  getSiteConfigDefaultPinnedPage: () => {
+    if (typeof document !== "undefined") {
+      try {
+        const scriptEl = document.getElementById("shadow-claw-site-config");
+        if (scriptEl?.textContent) {
+          const config = JSON.parse(scriptEl.textContent);
+          const def = config?.pages?.defaultPinnedPage;
+          if (typeof def === "string" && def.trim().length > 0) {
+            return def.trim();
+          }
+        }
+      } catch {}
+    }
+    return null;
+  },
 }));
 
 jest.unstable_mockModule("../storage/copyGroupDirectory.js", () => ({
@@ -3362,6 +3377,126 @@ describe("OrchestratorStore", () => {
         expect(store.isPageAllowed("index.html")).toBe(true);
       } finally {
         configElement.remove();
+      }
+    });
+
+    it("loads defaultPinnedPage from site config and prioritizes it over last visited page at root URL", async () => {
+      const store = new OrchestratorStore();
+      const mockDb: any = {};
+      const { EventEmitter } = await import("events");
+      const events = new EventEmitter();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+      };
+
+      const configElement = document.createElement("script");
+      configElement.id = "shadow-claw-site-config";
+      configElement.type = "application/json";
+      configElement.textContent = JSON.stringify({
+        pages: {
+          defaultPinnedPage: "/pages/main/index.html",
+        },
+      });
+      document.head.appendChild(configElement);
+
+      const origHref = window.location.href;
+      try {
+        window.history.pushState({}, "", "/");
+
+        const dbMock = {
+          ...mockDb,
+        };
+        // Mock getConfig to return last visited page
+        const dbGetConfig = await import("../db/getConfig.js");
+        jest
+          .spyOn(dbGetConfig, "getConfig")
+          .mockImplementation(async (_db: any, key: string) => {
+            if (key === CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE) {
+              return JSON.stringify({
+                groupId: "br:main",
+                path: "posts/last-visited.md",
+              });
+            }
+            if (key === CONFIG_KEYS.DEFAULT_PINNED_PAGE) {
+              return undefined;
+            }
+            return undefined;
+          });
+
+        // Mock loadHistory, loadTasks, loadFiles to avoid full DB operations
+        jest.spyOn(store, "loadHistory").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadTasks").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadFiles").mockResolvedValue(undefined as any);
+
+        await store.init(dbMock, orch);
+
+        expect(store.defaultPinnedPage).toEqual({
+          groupId: "br:main",
+          path: "index.html",
+        });
+        // At root URL, activePinnedPage MUST be defaultPinnedPage, not the last visited page!
+        expect(store.activePinnedPage).toEqual({
+          groupId: "br:main",
+          path: "index.html",
+        });
+      } finally {
+        window.history.pushState({}, "", origHref);
+        configElement.remove();
+        jest.restoreAllMocks();
+      }
+    });
+
+    it("restores last visited page at root URL when defaultPinnedPage is NOT configured", async () => {
+      const store = new OrchestratorStore();
+      const mockDb: any = {};
+      const { EventEmitter } = await import("events");
+      const events = new EventEmitter();
+      const orch: any = {
+        events,
+        getUseProxy: () => false,
+        getProxyUrl: () => "",
+        getGitProxyUrl: () => "",
+        getVMBashFullInternetAccess: () => false,
+        getTaskServerUrl: () => "/schedule",
+      };
+
+      const origHref = window.location.href;
+      try {
+        window.history.pushState({}, "", "/");
+
+        const dbGetConfig = await import("../db/getConfig.js");
+        jest
+          .spyOn(dbGetConfig, "getConfig")
+          .mockImplementation(async (_db: any, key: string) => {
+            if (key === CONFIG_KEYS.LAST_SELECTED_PINNED_PAGE) {
+              return JSON.stringify({
+                groupId: "br:main",
+                path: "posts/last-visited.md",
+              });
+            }
+            return undefined;
+          });
+
+        jest.spyOn(store, "loadHistory").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadTasks").mockResolvedValue(undefined as any);
+        jest.spyOn(store, "loadFiles").mockResolvedValue(undefined as any);
+
+        await store.init(mockDb, orch);
+
+        expect(store.defaultPinnedPage).toBeNull();
+        // When defaultPinnedPage is NOT configured, restore last visited page
+        expect(store.activePinnedPage).toEqual({
+          groupId: "br:main",
+          path: "posts/last-visited.md",
+        });
+      } finally {
+        window.history.pushState({}, "", origHref);
+        jest.restoreAllMocks();
       }
     });
   });

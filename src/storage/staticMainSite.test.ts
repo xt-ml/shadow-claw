@@ -56,6 +56,7 @@ const {
   resolveStaticMainManifestUrl,
   PURGE_STORAGE_KEY,
   SKILLS_PURGE_STORAGE_KEY,
+  getSiteConfigDefaultPinnedPage,
 } = await import("./staticMainSite.js");
 const { CONFIG_KEYS, DEFAULT_GROUP_ID } = await import("../config/config.js");
 
@@ -826,5 +827,45 @@ describe("seedStaticMainSite – localStorage-gated purge", () => {
     expect(result.map((p) => p.path)).toEqual(["index.html"]);
 
     siteConfigScript.remove();
+  });
+
+  describe("getSiteConfigDefaultPinnedPage", () => {
+    it("reads defaultPinnedPage from #shadow-claw-site-config", () => {
+      expect(getSiteConfigDefaultPinnedPage()).toBeNull();
+
+      const siteConfigScript = document.createElement("script");
+      siteConfigScript.id = "shadow-claw-site-config";
+      siteConfigScript.type = "application/json";
+      siteConfigScript.textContent = JSON.stringify({
+        pages: {
+          defaultPinnedPage: "/pages/main/index.html",
+        },
+      });
+      document.head.appendChild(siteConfigScript);
+
+      try {
+        expect(getSiteConfigDefaultPinnedPage()).toBe("/pages/main/index.html");
+      } finally {
+        siteConfigScript.remove();
+      }
+    });
+
+    it("returns null if defaultPinnedPage is empty or missing", () => {
+      const siteConfigScript = document.createElement("script");
+      siteConfigScript.id = "shadow-claw-site-config";
+      siteConfigScript.type = "application/json";
+      siteConfigScript.textContent = JSON.stringify({
+        pages: {
+          defaultPinnedPage: "   ",
+        },
+      });
+      document.head.appendChild(siteConfigScript);
+
+      try {
+        expect(getSiteConfigDefaultPinnedPage()).toBeNull();
+      } finally {
+        siteConfigScript.remove();
+      }
+    });
   });
 });

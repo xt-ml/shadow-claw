@@ -37,6 +37,7 @@
     "skipLibCheck": true,
     "noEmit": false,
     "types": [
+      "node",
       "jest",
       "dom-chromium-ai"
     ],

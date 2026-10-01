@@ -1,5 +1,8 @@
 /// <reference lib="dom" />
 import { applyBasePath, type ShadowClawAppRoute } from "../core/app-routes.js";
+import type { SavedPageRef } from "../db/types.js";
+
+const DEFAULT_GROUP_ID = "br:main";
 
 export interface StaticRouteDefinition {
   prettyPath: string;
@@ -43,7 +46,7 @@ function normalizePrettyPathKey(path: string): string {
   return trimSlashes(clean);
 }
 
-function parseCanonicalRouteKey(
+export function parseCanonicalRouteKey(
   canonicalKey: string,
 ): ShadowClawAppRoute | null {
   const normalizedKey = trimSlashes(canonicalKey);
@@ -164,16 +167,25 @@ export async function getStaticRoutingManifest(): Promise<StaticRoutesManifest> 
 
   if (!baseManifest) {
     if (typeof fetch === "function") {
-      try {
-        const res = await fetch(baseUrl);
-        if (res.ok) {
-          const parsed = await res.json();
-          if (parsed && typeof parsed === "object") {
-            baseManifest = parsed as StaticRoutesManifest;
+      const candidates = [
+        baseUrl,
+        applyBasePath("/pages/routes.json"),
+        applyBasePath("/routes.json"),
+        applyBasePath("/pages/resources/routes.json"),
+      ];
+      for (const candidateUrl of candidates) {
+        try {
+          const res = await fetch(candidateUrl);
+          if (res.ok) {
+            const parsed = await res.json();
+            if (parsed && typeof parsed === "object" && parsed.routes) {
+              baseManifest = parsed as StaticRoutesManifest;
+              break;
+            }
           }
+        } catch {
+          // Fetch unavailable or failed, try next candidate
         }
-      } catch {
-        // Fetch unavailable or failed
       }
     }
   }
@@ -414,5 +426,66 @@ export function resolveRouteToPrettyPath(
     }
   }
 
+  return null;
+}
+
+export async function resolveRouteToPrettyPathAsync(
+  route: ShadowClawAppRoute,
+): Promise<string | null> {
+  const syncMatch = resolveRouteToPrettyPath(route);
+  if (syncMatch) return syncMatch;
+
+  const manifest = await getStaticRoutingManifest();
+  return resolveRouteToPrettyPath(route, manifest);
+}
+
+export function resolveDefaultPinnedPageRef(
+  value: string | SavedPageRef | null | undefined,
+): SavedPageRef | null {
+  if (!value) return null;
+  if (typeof value === "object") {
+    if (
+      typeof (value as any).path === "string" &&
+      (value as any).path.trim().length > 0
+    ) {
+      return {
+        groupId: (value as any).groupId || DEFAULT_GROUP_ID,
+        path: (value as any).path.trim(),
+      };
+    }
+    return null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (
+        parsed &&
+        typeof parsed.path === "string" &&
+        parsed.path.trim().length > 0
+      ) {
+        return {
+          groupId: parsed.groupId || DEFAULT_GROUP_ID,
+          path: parsed.path.trim(),
+        };
+      }
+    } catch {}
+
+    const route = parseCanonicalRouteKey(trimmed);
+    if (route && route.path) {
+      return {
+        groupId: route.groupId || DEFAULT_GROUP_ID,
+        path: route.path,
+      };
+    }
+    const clean = trimSlashes(trimmed);
+    if (clean) {
+      return {
+        groupId: DEFAULT_GROUP_ID,
+        path: clean,
+      };
+    }
+  }
   return null;
 }

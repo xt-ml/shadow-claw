@@ -2,7 +2,19 @@ import {
   resolvePrettyPathToRoute,
   resolveRouteToPrettyPath,
   resolvePrettyPathToRouteAsync,
+  resolveRouteToPrettyPathAsync,
+  resolveDefaultPinnedPageRef,
 } from "../storage/staticRouting.js";
+
+export {
+  resolvePrettyPathToRoute,
+  resolveRouteToPrettyPath,
+  resolvePrettyPathToRouteAsync,
+  resolveRouteToPrettyPathAsync,
+  resolveDefaultPinnedPageRef,
+};
+
+let cachedBasePath: string | null = null;
 
 export type ShadowClawPageRoute =
   | "chat"
@@ -38,8 +50,6 @@ export function decodePathSegment(value: string): string {
     return value;
   }
 }
-
-let cachedBasePath: string | null = null;
 
 const VALID_PAGES = new Set([
   "chat",

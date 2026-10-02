@@ -520,8 +520,28 @@ export async function runBuild(options: RunBuildOptions = {}): Promise<void> {
   const siteConfigPath =
     siteConfigCandidate || join(contentRoot, "pages/site-config.json");
 
+  // Allow shadow-claw.config.json to opt out of the skeleton overlay at build
+  // time via settings.overridePrerenderSkeleton: false. Only honour this when
+  // the caller has not already supplied an explicit prerenderMainMemory option.
+  let effectivePrerenderMainMemory = prerenderMainMemory;
+  if (options.prerenderMainMemory === undefined && siteConfigCandidate) {
+    try {
+      const rawCfg = JSON.parse(
+        await readFile(siteConfigCandidate, "utf8"),
+      ) as Record<string, any>;
+      if (rawCfg?.settings?.overridePrerenderSkeleton === false) {
+        effectivePrerenderMainMemory = false;
+        log(
+          "  site-config: overridePrerenderSkeleton=false — skeleton overlay disabled.",
+        );
+      }
+    } catch {
+      // Non-critical: ignore parse errors and keep the default.
+    }
+  }
+
   const indexPath = join(distPublicDir, "index.html");
-  if (prerenderMainMemory && (await pathExists(contentPagesMain))) {
+  if (effectivePrerenderMainMemory && (await pathExists(contentPagesMain))) {
     await prerenderDsdShell({
       indexPath,
       sourcePath: contentPagesMain,

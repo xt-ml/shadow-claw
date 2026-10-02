@@ -89,12 +89,27 @@ export interface SiteConfigSidebar {
   sections?: SiteConfigSidebarSection[];
 }
 
+export interface SiteConfigSettings {
+  /**
+   * When `false`, disables the "Override pre-rendered content with workspace
+   * skeleton loader" behaviour at build time so that pre-rendered DSD content
+   * is shown immediately without a skeleton overlay on first paint.
+   * Defaults to `true` (skeleton overlay enabled) when omitted.
+   */
+  overridePrerenderSkeleton?: boolean;
+  /** Default tools profile for the agent (e.g. "none"). */
+  defaultToolsProfile?: string;
+  /** Display name shown as the assistant name in the UI. */
+  assistantName?: string;
+}
+
 export interface SiteConfig {
   site?: SiteConfigSite;
   branding?: SiteConfigBranding;
   theme?: SiteConfigTheme;
   pwa?: SiteConfigPwa;
   sidebar?: SiteConfigSidebar;
+  settings?: SiteConfigSettings;
   pages?: {
     notFoundPath?: string;
     sortOrder?: string;

@@ -323,4 +323,42 @@ describe("build without and with pages", () => {
       await rm(tempConsumerRoot, { recursive: true, force: true });
     }
   });
+  it("honours settings.overridePrerenderSkeleton: false from shadow-claw.config.json", async () => {
+    const tempConsumerRoot = await mkdtemp(
+      path.join(os.tmpdir(), "shadow-claw-prerender-opt-out-"),
+    );
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      // Place a config that opts out of the skeleton overlay
+      await writeFile(
+        path.join(tempConsumerRoot, "shadow-claw.config.json"),
+        JSON.stringify({
+          site: { title: "No Skeleton Site", description: "Test." },
+          settings: { overridePrerenderSkeleton: false },
+        }),
+        "utf8",
+      );
+
+      await runConsumerBuild({
+        contentRoot: tempConsumerRoot,
+        toolchainRoot: tempProjectRoot,
+        isProduction: false,
+        quiet: true,
+        stdio: "pipe",
+      });
+
+      const indexHtml = await readFile(
+        path.join(tempConsumerRoot, "dist/public/index.html"),
+        "utf8",
+      );
+
+      // When overridePrerenderSkeleton is false the DSD shell must be built
+      // with noSeed=true, which bakes data-prerender-no-seed="true" into the
+      // <shadow-claw> element so no skeleton overlay is shown on first paint.
+      expect(indexHtml).toMatch(/data-prerender-no-seed="true"/);
+    } finally {
+      logSpy.mockRestore();
+      await rm(tempConsumerRoot, { recursive: true, force: true });
+    }
+  });
 });

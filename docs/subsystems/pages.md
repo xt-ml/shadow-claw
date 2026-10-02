@@ -144,6 +144,8 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `src/cli/p
   - Express server includes static file middleware serving fallback content from `pages/main` for `/files/main/`, `/static-main/`, and `/pages/`, alongside SPA redirect fallback middleware for clean URL reloads, serving `index.html` for app routes even when matching directories exist on disk.
 - **DSD Shell Override**:
   - Enabled via the "Override pre-rendered content" toggle in Settings (`CONFIG_KEYS.OVERRIDE_PRERENDER_SKELETON`). Hides the initial DSD shell on boot, showing the skeleton loader until hydration finishes.
+  - Sites can disable the skeleton overlay at build time with `settings.overridePrerenderSkeleton: false` in `shadow-claw.config.json`, so pre-rendered DSD content shows immediately.
+  - An explicit `prerenderMainMemory` option passed to the build takes precedence over the config value.
 - **Declarative Configuration (`shadow-claw.config.json`)**:
   - Template repositories and content publishers can declaratively brand and customize the site shell without editing ShadowClaw source files. The canonical location is `shadow-claw.config.json` in the project root (legacy `site-config.json` is also supported for backward compatibility):
     - **`site`**: `title`, `description`, `themeColor`, `lang`.
@@ -151,7 +153,7 @@ Applications pre-rendered with Declarative Shadow DOM (DSD) shell via `src/cli/p
     - **`sidebar`**: `pagesHidden`, `chatHidden`, `tasksHidden`, `filesHidden`, `defaultPage` (`"pages"` | `"chat"` | `"tasks"` | `"files"`), `slotHtml` (raw HTML string), `slotPath` (path to a custom sidebar HTML file), `sections` (array of declarative sidebar sections with `title`, `headerHref`, `items: [{ title, label, href, target, rel, active }]`, or `html`).
     - **`pages`**: `sortOrder` (`"asc"` | `"desc"`), `defaultPinnedPage`, `allowList` (array of allowed page or directory path patterns), `denyList` (array of denied page or directory path patterns excluded from the viewer, page navigation, and static manifest seeding).
     - **`theme`**: `stylesheet` (custom theme CSS stylesheet injected into head).
-    - **`settings`**: `assistantName` (pre-seeds the default assistant name), `defaultToolsProfile` (pre-seeds the default tool profile e.g. `"__builtin_default"` or `"none"`), `enabledTools` (pre-seeds default enabled built-in tool array).
+    - **`settings`**: `assistantName` (pre-seeds the default assistant name), `defaultToolsProfile` (pre-seeds the default tool profile e.g. `"__builtin_default"` or `"none"`), `enabledTools` (pre-seeds default enabled built-in tool array), `overridePrerenderSkeleton` (set `false` to disable the skeleton overlay at build time).
     - **`cacheDir`** / **`server.cacheDir`**: Custom directory for storing cache, control tokens, and SQLite databases.
   - **Slotted Sidebar & Custom Sections**:
     - The root `<shadow-claw>` web component exposes named slots for custom navigation: `slot="sidebar-nav"`, `slot="sidebar"`, `slot="sidebar-content"`, and `slot="sidebar-footer"`.

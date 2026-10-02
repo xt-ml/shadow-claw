@@ -22,6 +22,12 @@ import {
   normalizeMessagesForChatTemplate,
   renderChatTemplate,
 } from "../../subsystems/providers/utils/chatTemplate.js";
+import {
+  createFileModelCacheFetch,
+  patchFileCacheForResume,
+  modelDownloadEvents,
+  DownloadProgressEvent,
+} from "../../subsystems/providers/utils/createFileModelCacheFetch.js";
 
 const DEFAULT_USER_AGENT =
   process.env.SHADOWCLAW_USER_AGENT || "ShadowClaw/1.0";
@@ -172,6 +178,7 @@ export interface TransformersRuntimeService {
   prewarmModel(params: {
     modelId: string;
     verbose: boolean;
+    cacheDir?: string;
     onProgress?: (info: any) => void;
   }): Promise<{ modelId: string; loader: string; cacheDir: string }>;
   disposeRuntime(modelId: string): Promise<void>;
@@ -408,16 +415,39 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
     );
   }
 
-  async function ensureDiskCacheConfig(transformers: any) {
+  async function ensureDiskCacheConfig(
+    transformers: any,
+    customCacheDir?: string,
+  ) {
     const envConfig = Reflect.get(transformers, "env");
     if (!envConfig || typeof envConfig !== "object") {
       return;
     }
 
-    await mkdir(TRANSFORMERS_JS_RUNTIME_CACHE_DIR, { recursive: true });
+    const effectiveCacheDir = customCacheDir
+      ? path.resolve(customCacheDir)
+      : TRANSFORMERS_JS_RUNTIME_CACHE_DIR;
+
+    await mkdir(effectiveCacheDir, { recursive: true });
     Reflect.set(envConfig, "useFSCache", true);
     Reflect.set(envConfig, "useBrowserCache", false);
-    Reflect.set(envConfig, "cacheDir", TRANSFORMERS_JS_RUNTIME_CACHE_DIR);
+    Reflect.set(envConfig, "cacheDir", effectiveCacheDir);
+
+    // Patch FileCache.prototype to use stable .part files instead of random
+    // .tmp.PID.random files that get deleted on error (SIGINT, network drop, etc.).
+    // This enables true resume: interrupted downloads leave a .part file on disk
+    // that the patched match() detects and resumes on the next run.
+    patchFileCacheForResume(transformers);
+
+    // Also set env.fetch as a secondary backstop — handles the case where
+    // patchFileCacheForResume can't locate FileCache via module reflection.
+    Reflect.set(
+      envConfig,
+      "fetch",
+      createFileModelCacheFetch({
+        cacheDir: effectiveCacheDir,
+      }),
+    );
   }
 
   async function pathExists(target: string): Promise<boolean> {
@@ -442,6 +472,7 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
     modelId: string,
     verbose: boolean,
     onProgress?: (info: any) => void,
+    cacheDir?: string,
   ): Promise<TransformersJsRuntime> {
     const supportedModelIds = STATIC_MODELS.map((m) => m.id);
     if (!supportedModelIds.includes(modelId)) {
@@ -464,9 +495,11 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
       return cached;
     }
 
+    let removeDownloadListener: () => void = () => {};
+
     const loadingPromise = (async () => {
       const transformers = await import(TRANSFORMERS_JS_MODULE_ID);
-      await ensureDiskCacheConfig(transformers);
+      await ensureDiskCacheConfig(transformers, cacheDir);
       const AutoProcessor = Reflect.get(transformers, "AutoProcessor");
       const AutoTokenizer = Reflect.get(transformers, "AutoTokenizer");
       const Gemma4Processor = Reflect.get(transformers, "Gemma4Processor");
@@ -551,8 +584,34 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
         modelId,
       });
 
+      // Transformers.js never sees bytes written by env.fetch, so its aggregate
+      // `progress_total` loaded count lags; merge in our per-file byte counts.
+      const fetchedFiles = new Map<string, { loaded: number; total: number }>();
+      let knownFiles: Record<string, { loaded: number; total: number }> = {};
+
+      const buildTotalInfo = () => {
+        let loaded = 0;
+        let total = 0;
+        for (const [file, entry] of Object.entries(knownFiles)) {
+          const own = fetchedFiles.get(file);
+          loaded += Math.max(entry.loaded, own?.loaded ?? 0);
+          total += entry.total;
+        }
+        return {
+          status: "progress_total",
+          name: modelId,
+          loaded,
+          total,
+          progress: total > 0 ? (loaded / total) * 100 : 0,
+        };
+      };
+
       const handleProgress = (info: any, label: string) => {
         if (info?.status === "progress_total") {
+          if (info.files && typeof info.files === "object") {
+            knownFiles = info.files;
+          }
+          info = { ...info, ...buildTotalInfo() };
           const pct = Number(info.progress);
           setDownloadStatus({
             status: "running",
@@ -567,6 +626,36 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
           onProgress?.(info);
         } catch {}
       };
+
+      // Bridge incremental bytes from env.fetch (downloadWithResume) to onProgress,
+      // since FileCache.put() is bypassed and Transformers.js only reports at 100%.
+      const downloadProgressListener = (e: Event) => {
+        if (!(e instanceof DownloadProgressEvent)) return;
+        const { file, loaded, total, progress } = e.detail;
+        fetchedFiles.set(file, { loaded, total });
+        try {
+          onProgress?.({
+            status: "progress",
+            name: modelId,
+            file,
+            loaded,
+            total,
+            progress,
+          });
+          if (Object.keys(knownFiles).length > 0) {
+            onProgress?.(buildTotalInfo());
+          }
+        } catch {}
+      };
+      modelDownloadEvents.addEventListener(
+        "progress",
+        downloadProgressListener,
+      );
+      removeDownloadListener = () =>
+        modelDownloadEvents.removeEventListener(
+          "progress",
+          downloadProgressListener,
+        );
 
       let processor: any = null;
       if (isGemma4Model) {
@@ -703,9 +792,13 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
         modelId,
       });
 
+      // Clean up the download progress event listener.
+      removeDownloadListener();
+
       return { processor, model, TextStreamer, modelLoaderName };
     })().catch((error) => {
       runtimeCache.delete(modelId);
+      removeDownloadListener();
 
       throw error;
     });
@@ -1076,13 +1169,15 @@ export function createTransformersRuntimeService(): TransformersRuntimeService {
     },
 
     async prewarmModel(params) {
-      const { modelId, verbose, onProgress } = params;
-      const runtime = await loadRuntime(modelId, verbose, onProgress);
+      const { modelId, verbose, onProgress, cacheDir } = params;
+      const runtime = await loadRuntime(modelId, verbose, onProgress, cacheDir);
 
       return {
         modelId,
         loader: runtime.modelLoaderName,
-        cacheDir: TRANSFORMERS_JS_RUNTIME_CACHE_DIR,
+        cacheDir: cacheDir
+          ? path.resolve(cacheDir)
+          : TRANSFORMERS_JS_RUNTIME_CACHE_DIR,
       };
     },
 

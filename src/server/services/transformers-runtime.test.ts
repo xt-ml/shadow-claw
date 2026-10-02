@@ -135,6 +135,7 @@ describe("TransformersRuntimeService", () => {
       stat: statMock,
       unlink: unlinkMock,
       readdir: readdirMock,
+      rename: jest.fn().mockResolvedValue(undefined as never),
     }));
 
     jest.unstable_mockModule(
@@ -476,6 +477,93 @@ describe("TransformersRuntimeService", () => {
 
       expect(onProgress).toHaveBeenCalled();
       expect(progressEvents.some((e) => e.status === "progress")).toBe(true);
+    });
+
+    it("prewarms model with custom cacheDir and configures resumable env.fetch", async () => {
+      const service = await getService();
+      const customDir = "/tmp/custom-cache-dir";
+
+      const res = await service.prewarmModel({
+        modelId: "onnx-community/gemma-4-E2B-it-ONNX",
+        verbose: false,
+        cacheDir: customDir,
+      });
+
+      expect(res.cacheDir).toBe(customDir);
+      expect(transformersMock.env.cacheDir).toBe(customDir);
+      expect(typeof transformersMock.env.fetch).toBe("function");
+    });
+
+    it("merges bytes written by env.fetch into progress_total", async () => {
+      const events =
+        await import("../../subsystems/providers/utils/createFileModelCacheFetch.js");
+      const service = await getService();
+      const totals: any[] = [];
+
+      transformersMock.Gemma4ForConditionalGeneration.from_pretrained.mockImplementationOnce(
+        async (_id: string, opts: any) => {
+          opts.progress_callback({
+            status: "progress_total",
+            loaded: 0,
+            total: 100,
+            progress: 0,
+            files: { "onnx/a.onnx_data": { loaded: 0, total: 100 } },
+          });
+          events.modelDownloadEvents.dispatchEvent(
+            new events.DownloadProgressEvent({
+              file: "onnx/a.onnx_data",
+              loaded: 40,
+              total: 100,
+              progress: 40,
+              resumeOffset: 0,
+            }),
+          );
+
+          return modelMock;
+        },
+      );
+
+      await service.prewarmModel({
+        modelId: "onnx-community/gemma-4-E2B-it-ONNX",
+        verbose: false,
+        onProgress: (info: any) => {
+          if (info.status === "progress_total") totals.push(info);
+        },
+      });
+
+      const last = totals[totals.length - 1];
+      expect(last.loaded).toBe(40);
+      expect(last.total).toBe(100);
+      expect(last.progress).toBe(40);
+    });
+
+    it("removes the download listener when loading fails", async () => {
+      const events =
+        await import("../../subsystems/providers/utils/createFileModelCacheFetch.js");
+      const removeSpy = jest.spyOn(
+        events.modelDownloadEvents,
+        "removeEventListener",
+      );
+      const service = await getService();
+
+      for (const loader of [
+        "Gemma4ForConditionalGeneration",
+        "AutoModelForImageTextToText",
+        "AutoModelForCausalLM",
+      ]) {
+        transformersMock[loader].from_pretrained = jest
+          .fn()
+          .mockRejectedValue(new Error("boom") as never);
+      }
+
+      await expect(
+        service.prewarmModel({
+          modelId: "onnx-community/gemma-4-E2B-it-ONNX",
+          verbose: false,
+        }),
+      ).rejects.toThrow();
+
+      expect(removeSpy).toHaveBeenCalledWith("progress", expect.any(Function));
     });
 
     it("calls onProgress callback when running chat completion", async () => {

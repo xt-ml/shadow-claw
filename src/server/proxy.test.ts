@@ -623,6 +623,7 @@ describe("Llamafile proxy cancellation", () => {
       writeFile: jest.fn(),
       mkdir: jest.fn(),
       unlink: jest.fn(),
+      rename: jest.fn(),
     }));
 
     const processKillMock = jest
@@ -817,6 +818,7 @@ describe("Llamafile CLI tool-call normalization", () => {
       writeFile: jest.fn(),
       mkdir: jest.fn(),
       unlink: jest.fn(),
+      rename: jest.fn(),
     }));
 
     const mod = await import("./proxy.js");
@@ -911,6 +913,7 @@ describe("Llamafile CLI tool-call normalization", () => {
       writeFile: jest.fn(),
       mkdir: jest.fn(),
       unlink: jest.fn(),
+      rename: jest.fn(),
     }));
 
     const mod = await import("./proxy.js");
@@ -994,6 +997,7 @@ describe("Llamafile CLI tool-call normalization", () => {
       writeFile: jest.fn(),
       mkdir: jest.fn(),
       unlink: jest.fn(),
+      rename: jest.fn(),
     }));
 
     const mod = await import("./proxy.js?issue2=" + Date.now());

@@ -70,6 +70,26 @@ describe("local-models", () => {
       ).toBe(false);
     });
 
+    it("returns false when directory only contains .part or .tmp files", async () => {
+      const testDir = await mkdtemp(path.join(tmpdir(), "sc-cached-test-"));
+      try {
+        const modelDir = path.join(testDir, "test-org/test-model");
+        fs.mkdirSync(modelDir, { recursive: true });
+        fs.writeFileSync(path.join(modelDir, "tokenizer.json.part"), "partial");
+        fs.writeFileSync(path.join(modelDir, "model.onnx.tmp.1234.abc"), "tmp");
+
+        expect(isModelLocallyCached("test-org/test-model", testDir)).toBe(
+          false,
+        );
+
+        // Once a valid file is present, returns true
+        fs.writeFileSync(path.join(modelDir, "tokenizer.json"), "complete");
+        expect(isModelLocallyCached("test-org/test-model", testDir)).toBe(true);
+      } finally {
+        await rm(testDir, { recursive: true, force: true });
+      }
+    });
+
     it("checks llamafile cache correctly", () => {
       const dir = getLlamafileCacheDir();
       expect(dir).toContain("assets/cache/llamafile");
@@ -271,6 +291,88 @@ describe("local-models", () => {
         expect(st.size).toBe(fakeData.length);
         // Verify executable permission
         expect((st.mode & 0o111) !== 0).toBe(true);
+      } finally {
+        globalThis.fetch = originalFetch;
+        await rm(testCacheDir, { recursive: true, force: true });
+      }
+    });
+
+    it("resumes partial llamafile download from .part file using Range header", async () => {
+      const originalFetch = globalThis.fetch;
+      const testCacheDir = await mkdtemp(
+        path.join(tmpdir(), "sc-llamafile-resume-"),
+      );
+      try {
+        const llamaDir = path.join(testCacheDir, "llamafile");
+        fs.mkdirSync(llamaDir, { recursive: true });
+        const partPath = path.join(
+          llamaDir,
+          "gemma-4-E2B-it-Q5_K_M.llamafile.part",
+        );
+        fs.writeFileSync(partPath, Buffer.from("part1-"));
+
+        let passedHeaders: any = null;
+        globalThis.fetch = (jest.fn() as any).mockImplementation(
+          async (_url: any, init: any) => {
+            passedHeaders = init?.headers;
+            const remaining = Buffer.from("part2-done");
+            return {
+              ok: true,
+              status: 206,
+              headers: new Headers({
+                "content-range": "bytes 6-15/16",
+                "content-length": String(remaining.length),
+              }),
+              body: new ReadableStream({
+                start(controller) {
+                  controller.enqueue(remaining);
+                  controller.close();
+                },
+              }),
+            };
+          },
+        );
+
+        const res = await downloadLlamafile("gemma-4-E2B-it-Q5_K_M.llamafile", {
+          cacheDir: testCacheDir,
+          isTTY: false,
+          progress: false,
+        });
+
+        expect(res.success).toBe(true);
+        expect(passedHeaders["Range"]).toBe("bytes=6-");
+        expect(fs.existsSync(partPath)).toBe(false);
+        expect(fs.existsSync(res.path!)).toBe(true);
+        expect(fs.readFileSync(res.path!, "utf8")).toBe("part1-part2-done");
+      } finally {
+        globalThis.fetch = originalFetch;
+        await rm(testCacheDir, { recursive: true, force: true });
+      }
+    });
+
+    it("skips download if llamafile already exists and has content", async () => {
+      const originalFetch = globalThis.fetch;
+      const testCacheDir = await mkdtemp(
+        path.join(tmpdir(), "sc-llamafile-skip-"),
+      );
+      try {
+        const llamaDir = path.join(testCacheDir, "llamafile");
+        fs.mkdirSync(llamaDir, { recursive: true });
+        const destPath = path.join(llamaDir, "gemma-4-E2B-it-Q5_K_M.llamafile");
+        fs.writeFileSync(destPath, Buffer.from("already-here"));
+
+        const fetchMock = jest.fn();
+        globalThis.fetch = fetchMock as any;
+
+        const res = await downloadLlamafile("gemma-4-E2B-it-Q5_K_M.llamafile", {
+          cacheDir: testCacheDir,
+          isTTY: false,
+          progress: false,
+        });
+
+        expect(res.success).toBe(true);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(res.path).toBe(destPath);
       } finally {
         globalThis.fetch = originalFetch;
         await rm(testCacheDir, { recursive: true, force: true });

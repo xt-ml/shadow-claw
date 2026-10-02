@@ -74,6 +74,15 @@ During download, a terminal progress bar displays:
 - Transferred vs. total size in human-readable units (e.g. `(245.3 MB / 542.1 MB)`)
 - Dynamic single-line updates in interactive TTY terminals; milestone logs in non-interactive CI/log pipes.
 
+Downloads are resumable:
+
+- Files are written to a stable `<file>.part` path and renamed to the final path only when complete.
+- After an interruption (Ctrl+C, network drop), re-running the command sends `Range: bytes=N-` and appends only the missing bytes.
+- A `416 Range Not Satisfiable` response discards the stale `.part` file and restarts the file from zero.
+- Files ending in `.part` or containing `.tmp` do not count when checking whether a model is locally cached.
+- Pass `--cache-dir <dir>` to store model files in a custom cache directory.
+- Llamafile downloads use the same `.part` resume behavior.
+
 ### 3. Set Default CLI Model
 
 ```bash
@@ -92,6 +101,16 @@ shadow-claw agent init --model onnx-community/gemma-3-1b-it-ONNX-GQA --download
 ---
 
 ## Model & Dependency Downloading Architecture
+
+### 0. Resumable Download Interceptor (`createFileModelCacheFetch`)
+
+Located at `src/subsystems/providers/utils/createFileModelCacheFetch.ts`, this interceptor is installed as `env.fetch` for in-process Transformers.js runs:
+
+- `downloadWithResume()` streams each file into `<path>.part` and atomically renames it on completion.
+- Transformers.js `FileCache.put()` is bypassed, so interrupted downloads are no longer deleted.
+- `FileCache` is patched at runtime to find completed files as cache hits.
+- Byte-level progress is emitted through `modelDownloadEvents` and merged into the aggregate `progress_total` progress reported to the CLI progress bar.
+- `TransformersRuntimeService.prewarmModel()` accepts an optional `cacheDir` that overrides the default runtime cache directory.
 
 ### 1. In-Process Node.js Execution (`executeNodeTransformersCompletion`)
 

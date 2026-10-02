@@ -6,7 +6,7 @@ import {
   afterEach,
   jest,
 } from "@jest/globals";
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -78,6 +78,77 @@ describe("agent model command and declarative agent config", () => {
     const resolved = await resolveAgentProvider(mockDb, mockCore, tmpDir, {});
     expect(resolved.providerId).toBe("transformers_js_local");
     expect(resolved.model).toBe("onnx-community/gemma-4-E4B-it-ONNX");
+  });
+
+  describe("resolveAgentProvider without an interactive prompt", () => {
+    let cwdSpy;
+
+    beforeEach(() => {
+      cwdSpy = jest.spyOn(process, "cwd").mockReturnValue(tmpDir);
+    });
+
+    afterEach(() => {
+      cwdSpy.mockRestore();
+    });
+
+    const mockCore = () => ({
+      getConfig: jest.fn<any>().mockResolvedValue(null),
+      getProvider: jest.fn((id: any) => ({ id, defaultModel: "default" })),
+    });
+
+    it("reads agent config from the current directory when the workspace is an isolated sandbox", async () => {
+      const { resolveAgentProvider } = await import("./agent.js");
+      const sandbox = await mkdtemp(path.join(tmpdir(), "sc-sandbox-"));
+      const cwdSpy = jest.spyOn(process, "cwd").mockReturnValue(tmpDir);
+      await writeFile(
+        path.join(tmpDir, "shadow-claw.config.json"),
+        JSON.stringify({
+          agent: {
+            defaultProvider: "transformers_js_local",
+            defaultModel: "onnx-community/gemma-4-E4B-it-ONNX",
+          },
+        }),
+        "utf8",
+      );
+
+      try {
+        const resolved = await resolveAgentProvider({}, mockCore(), sandbox, {
+          isTTY: false,
+        });
+        expect(resolved.providerId).toBe("transformers_js_local");
+        expect(resolved.model).toBe("onnx-community/gemma-4-E4B-it-ONNX");
+      } finally {
+        cwdSpy.mockRestore();
+        await rm(sandbox, { recursive: true, force: true });
+      }
+    });
+
+    it.each([
+      ["onnx-community/gemma-4-E4B-it-ONNX", "transformers_js_local"],
+      ["mozilla-ai/gemma-4-E4B-it-Q5_K_M.llamafile", "llamafile"],
+    ])(
+      "infers the provider for --model %s instead of prompting",
+      async (model, provider) => {
+        const { resolveAgentProvider } = await import("./agent.js");
+        // Mark the model as cached so no download prompt appears.
+        await mkdir(path.join(tmpDir, "llamafile"), { recursive: true });
+        await writeFile(
+          path.join(tmpDir, "llamafile", path.basename(model)),
+          "x",
+        );
+        await mkdir(path.join(tmpDir, model), { recursive: true });
+        await writeFile(path.join(tmpDir, model, "config.json"), "{}");
+
+        const resolved = await resolveAgentProvider({}, mockCore(), tmpDir, {
+          isTTY: false,
+          cacheDir: tmpDir,
+          model,
+        });
+
+        expect(resolved.providerId).toBe(provider);
+        expect(resolved.model).toBe(model);
+      },
+    );
   });
 
   describe("runAgentModel", () => {

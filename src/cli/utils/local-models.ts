@@ -206,7 +206,10 @@ export function isModelLocallyCached(
     try {
       if (fs.existsSync(p)) {
         const entries = fs.readdirSync(p);
-        if (entries.length > 0) {
+        const validEntries = entries.filter(
+          (e) => !e.endsWith(".part") && !e.includes(".tmp"),
+        );
+        if (validEntries.length > 0) {
           return true;
         }
       }
@@ -331,7 +334,28 @@ export async function downloadLlamafile(
   fs.mkdirSync(dir, { recursive: true });
 
   const destPath = path.join(dir, fileName);
-  const tempPath = path.join(dir, `${fileName}.downloading.${Date.now()}`);
+  const partPath = path.join(dir, `${fileName}.part`);
+
+  if (fs.existsSync(destPath)) {
+    try {
+      const st = fs.statSync(destPath);
+      if (st.size > 0) {
+        return { success: true, modelId, path: destPath };
+      }
+    } catch {}
+  }
+
+  let resumeOffset = 0;
+  if (fs.existsSync(partPath)) {
+    try {
+      const st = fs.statSync(partPath);
+      if (st.size > 0) {
+        resumeOffset = st.size;
+      }
+    } catch {
+      resumeOffset = 0;
+    }
+  }
 
   const showProgress = progress !== false && !noProgress;
   const progressBar = createCliProgressBar({
@@ -346,25 +370,71 @@ export async function downloadLlamafile(
       stream.write(`[Llamafile] Downloading ${url}...\n`);
     }
 
+    const requestHeaders: Record<string, string> = {
+      "User-Agent": "ShadowClaw-CLI",
+      "Accept-Encoding": "identity",
+    };
+    if (resumeOffset > 0) {
+      requestHeaders["Range"] = `bytes=${resumeOffset}-`;
+    }
+
     const fetchFn = options.fetch || globalThis.fetch;
-    const res = await fetchFn(url, {
-      headers: { "User-Agent": "ShadowClaw-CLI" },
+    let res = await fetchFn(url, {
+      headers: requestHeaders,
       redirect: "follow",
       signal: abortSignal,
     });
 
-    if (!res.ok) {
+    if (res.status === 416 && resumeOffset > 0) {
+      try {
+        if (fs.existsSync(partPath)) fs.unlinkSync(partPath);
+      } catch {}
+      resumeOffset = 0;
+      delete requestHeaders["Range"];
+      res = await fetchFn(url, {
+        headers: requestHeaders,
+        redirect: "follow",
+        signal: abortSignal,
+      });
+    }
+
+    if (!res.ok && res.status !== 206) {
       throw new Error(
         `Failed to download ${url}: HTTP ${res.status} ${res.statusText}`,
       );
     }
 
-    const contentLength = parseInt(
-      res.headers?.get?.("content-length") || "0",
-      10,
-    );
-    const fileStream = fs.createWriteStream(tempPath);
+    const is206 = res.status === 206;
+    let totalSize = 0;
     let loaded = 0;
+    let fileStream: fs.WriteStream;
+
+    if (is206) {
+      const contentRange = res.headers?.get?.("content-range");
+      const match = contentRange?.match(/\/\s*(\d+)\s*$/);
+      const contentLength = parseInt(
+        res.headers?.get?.("content-length") || "0",
+        10,
+      );
+      totalSize = match ? parseInt(match[1], 10) : resumeOffset + contentLength;
+      loaded = resumeOffset;
+      fileStream = fs.createWriteStream(partPath, { flags: "a" });
+    } else {
+      resumeOffset = 0;
+      totalSize = parseInt(res.headers?.get?.("content-length") || "0", 10);
+      loaded = 0;
+      fileStream = fs.createWriteStream(partPath, { flags: "w" });
+    }
+
+    if (loaded > 0) {
+      progressBar.update({
+        status: "progress",
+        file: fileName,
+        loaded,
+        total: totalSize,
+        progress: totalSize > 0 ? (loaded / totalSize) * 100 : undefined,
+      });
+    }
 
     if (res.body) {
       const { Readable } = await import("node:stream");
@@ -381,7 +451,7 @@ export async function downloadLlamafile(
       } else {
         const buf = Buffer.from(await res.arrayBuffer());
         fileStream.write(buf);
-        loaded = buf.length;
+        loaded += buf.length;
       }
 
       if (readableStream) {
@@ -393,9 +463,8 @@ export async function downloadLlamafile(
             status: "progress",
             file: fileName,
             loaded,
-            total: contentLength,
-            progress:
-              contentLength > 0 ? (loaded / contentLength) * 100 : undefined,
+            total: totalSize,
+            progress: totalSize > 0 ? (loaded / totalSize) * 100 : undefined,
           });
         }
       }
@@ -407,7 +476,7 @@ export async function downloadLlamafile(
       fileStream.on("error", reject);
     });
 
-    fs.renameSync(tempPath, destPath);
+    fs.renameSync(partPath, destPath);
     try {
       fs.chmodSync(destPath, 0o755);
     } catch {}
@@ -415,9 +484,6 @@ export async function downloadLlamafile(
     progressBar.finish();
     return { success: true, modelId, path: destPath };
   } catch (err: any) {
-    try {
-      if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
-    } catch {}
     const message = err instanceof Error ? err.message : String(err);
     progressBar.fail(`✖ Error downloading ${fileName}: ${message}`);
     return { success: false, modelId, error: message };
@@ -477,6 +543,7 @@ export async function downloadLocalModel(
     await service.prewarmModel({
       modelId,
       verbose,
+      cacheDir: options.cacheDir,
       onProgress: (info: any) => {
         progressBar.update(info);
       },

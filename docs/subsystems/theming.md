@@ -65,6 +65,7 @@ These tokens allow a custom site to selectively hide or reconfigure default buil
 | CSS Custom Property                              | Default  | Purpose / Usage                                                                             |
 | :----------------------------------------------- | :------- | :------------------------------------------------------------------------------------------ |
 | `--shadow-claw-sidebar-footer-display`           | `block`  | Set to `none` to hide the default sidebar footer containing the Settings button.            |
+| `--shadow-claw-sidebar-nav-display`              | `flex`   | Set to `none` to hide the default built-in sidebar navigation menu (`.nav-menu`).           |
 | `--shadow-claw-header-main-toggle-display`       | `block`  | Set to `none` to hide the top-left main app drawer / hamburger toggle button in the header. |
 | `--shadow-claw-page-header-display`              | `flex`   | Set to `none` to hide the `<shadow-claw-page-header>` component entirely.                   |
 | `--shadow-claw-pages-dropdown-container-display` | `flex`   | Set to `none` to hide the page navigation dropdown / breadcrumb selector.                   |

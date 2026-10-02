@@ -178,7 +178,7 @@
 }
 
 .pages__rendered a {
-  color: var(--shadow-claw-accent-primary);
+  color: var(--shadow-claw-link, var(--shadow-claw-accent-primary));
 }
 
 article > h1,
@@ -191,6 +191,16 @@ article > h2,
 
 .pages__rendered :is(h1, h2, h3, h4) {
   clear: both;
+}
+
+.pages__rendered :is(h1, h2, h3, h4, h5, h6) a {
+  color: var(--shadow-claw-text-primary, inherit);
+  text-decoration: none;
+}
+
+.pages__rendered :is(h1, h2, h3, h4, h5, h6) a:hover {
+  color: var(--shadow-claw-link-hover, inherit);
+  text-decoration: underline;
 }
 
 .pages__iframe {

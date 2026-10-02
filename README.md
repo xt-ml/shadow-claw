@@ -1,7 +1,7 @@
 # 🦞 [ShadowClaw](https://xt-ml.github.io/shadow-claw/)
 
 [![npm version](https://img.shields.io/npm/v/shadow-claw.svg)](https://www.npmjs.com/package/shadow-claw)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/xt-ml/shadow-claw)
+[![Ask DeepWiki](https://img.shields.io/badge/DeepWiki-xt--ml%2Fshadow--claw-blue.svg)](https://deepwiki.com/xt-ml/shadow-claw)
 
 **ShadowClaw** is a multi-runtime AI assistant featuring a rich interactive frontend client, a host-native headless server-side agent participant, and a local control plane that bridges them both.
 

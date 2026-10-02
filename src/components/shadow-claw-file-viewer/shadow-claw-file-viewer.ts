@@ -59,6 +59,8 @@ import {
   getIframeSandboxPolicy,
   hasApprovedCustomElement,
   isAllowedCustomElement,
+  isApprovedScript,
+  loadApprovedCustomElementScript,
 } from "../../security/custom-element-security.js";
 import ShadowClawElement from "../shadow-claw-element.js";
 import shadowClawFileViewerStyles from "./shadow-claw-file-viewer.css" with { type: "css" };
@@ -73,7 +75,7 @@ const previewSanitizeOptions: Config = {
   // Allow blob URLs for locally resolved OPFS preview assets.
   ALLOWED_URI_REGEXP:
     /^(?:(?:https?|mailto|ftp|tel|file|blob|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
-  ADD_TAGS: ["iframe", "figure", "figcaption"],
+  ADD_TAGS: ["iframe", "figure", "figcaption", "script"],
   CUSTOM_ELEMENT_HANDLING: {
     tagNameCheck: (tagName: string) => isAllowedCustomElement(tagName),
     attributeNameCheck: () => true,
@@ -86,6 +88,10 @@ const previewSanitizeOptions: Config = {
     "scrolling",
     "referrerpolicy",
     "loading",
+    "src",
+    "type",
+    "async",
+    "defer",
   ],
 };
 
@@ -1909,6 +1915,12 @@ export class ShadowClawFileViewer extends ShadowClawElement {
     }
 
     setSanitizedHtml(content, resolvedPreviewHtml, previewSanitizeOptions);
+    content.querySelectorAll("script").forEach((scriptEl) => {
+      const src = scriptEl.getAttribute("src");
+      if (src && isApprovedScript(src)) {
+        void loadApprovedCustomElementScript(src);
+      }
+    });
     this.wrapCodeLines(content);
     await this.resolveMarkdownImages(content, basePath);
   }

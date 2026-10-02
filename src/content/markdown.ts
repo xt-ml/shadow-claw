@@ -22,7 +22,10 @@ import {
   ensureIframeSanitizerHook,
   getDOMPurify,
 } from "../security/iframe-sanitizer.js";
-import { isAllowedCustomElement } from "../security/custom-element-security.js";
+import {
+  ensureCustomElementSanitizerHook,
+  isAllowedCustomElement,
+} from "../security/custom-element-security.js";
 
 export interface MarkdownRenderOptions {
   breaks?: boolean;
@@ -68,8 +71,35 @@ function extractCodeAndLang(
   };
 }
 
-// Configure marked with a custom renderer for code blocks (compatible with marked v17+)
+// Configure marked with a custom renderer and tokenizer for custom elements
 marked.use({
+  tokenizer: {
+    html(src: string) {
+      // Treat custom elements (tags with a hyphen like <x-postpress-code>, <x-hook-component>)
+      // as block-level HTML so marked does not wrap them in <p> tags.
+      // Wrapping in <p> causes the browser's HTML parser to eject <pre> or other block children
+      // out of the custom element into sibling position, breaking web component light DOM slots.
+      const match =
+        src.match(
+          /^ {0,3}<([a-zA-Z][a-zA-Z0-9]*-[a-zA-Z0-9_-]*)(?:\s+[^>]*)?>[\s\S]*?<\/\1>(?:[ \t]*(?:\n+|$))?/i,
+        ) ||
+        src.match(
+          /^ {0,3}<([a-zA-Z][a-zA-Z0-9]*-[a-zA-Z0-9_-]*)(?:\s+[^>]*)?\s*\/>(?:[ \t]*(?:\n+|$))?/i,
+        );
+
+      if (match) {
+        return {
+          type: "html",
+          block: true,
+          raw: match[0],
+          text: match[0],
+          pre: false,
+        };
+      }
+
+      return false;
+    },
+  },
   renderer: {
     code(
       codeOrToken: string | { text?: string; lang?: string },
@@ -177,65 +207,12 @@ export async function renderMarkdown(
       headingCounts,
     } as any);
 
-    // Ensure DOMPurify has the iframe sanitizer hook registered
+    // Ensure DOMPurify has the iframe and custom element/script sanitizer hooks registered
     ensureIframeSanitizerHook();
+    ensureCustomElementSanitizerHook();
 
     // Sanitize with DOMPurify to remove any dangerous content
     const safe = getDOMPurify().sanitize(html, {
-      ALLOWED_TAGS: [
-        "p",
-        "br",
-        "strong",
-        "b",
-        "em",
-        "i",
-        "u",
-        "del",
-        "s",
-        "h1",
-        "h2",
-        "h3",
-        "h4",
-        "h5",
-        "h6",
-        "ul",
-        "ol",
-        "li",
-        "blockquote",
-        "code",
-        "pre",
-        "table",
-        "thead",
-        "tbody",
-        "tr",
-        "th",
-        "td",
-        "a",
-        "img",
-        "hr",
-        "svg",
-        "g",
-        "path",
-        "line",
-        "rect",
-        "circle",
-        "ellipse",
-        "polygon",
-        "polyline",
-        "text",
-        "tspan",
-        "defs",
-        "use",
-        "marker",
-        "linearGradient",
-        "radialGradient",
-        "stop",
-        "div",
-        "span",
-        "figure",
-        "figcaption",
-        "iframe",
-      ],
       ALLOWED_ATTR: [
         "href",
         "title",
@@ -280,8 +257,11 @@ export async function renderMarkdown(
         "referrerpolicy",
         "sandbox",
         "scrolling",
+        "type",
+        "async",
+        "defer",
       ],
-      ADD_TAGS: ["iframe", "figure", "figcaption"],
+      ADD_TAGS: ["iframe", "figure", "figcaption", "script"],
       CUSTOM_ELEMENT_HANDLING: {
         tagNameCheck: (tagName: string) => isAllowedCustomElement(tagName),
         attributeNameCheck: () => true,
@@ -294,6 +274,10 @@ export async function renderMarkdown(
         "scrolling",
         "referrerpolicy",
         "loading",
+        "src",
+        "type",
+        "async",
+        "defer",
       ],
       ALLOW_DATA_ATTR: false,
       RETURN_DOM: false,

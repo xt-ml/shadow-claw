@@ -16,7 +16,12 @@ import {
 
 import { getDb } from "../../db/db.js";
 import { getConfig } from "../../db/getConfig.js";
-import { isAllowedCustomElement } from "../../security/custom-element-security.js";
+import {
+  getApprovedCustomElementScriptDescriptors,
+  isAllowedCustomElement,
+  isApprovedScript,
+  loadApprovedCustomElementScript,
+} from "../../security/custom-element-security.js";
 
 import {
   setSanitizedHtml,
@@ -97,7 +102,7 @@ const previewSanitizeOptions: Config = {
   // Allow blob URLs for locally resolved OPFS preview assets.
   ALLOWED_URI_REGEXP:
     /^(?:(?:https?|mailto|ftp|tel|file|blob|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
-  ADD_TAGS: ["iframe", "figure", "figcaption"],
+  ADD_TAGS: ["iframe", "figure", "figcaption", "script"],
   CUSTOM_ELEMENT_HANDLING: {
     tagNameCheck: (tagName: string) => isAllowedCustomElement(tagName),
     attributeNameCheck: () => true,
@@ -110,6 +115,10 @@ const previewSanitizeOptions: Config = {
     "scrolling",
     "referrerpolicy",
     "loading",
+    "src",
+    "type",
+    "async",
+    "defer",
   ],
 };
 
@@ -1350,6 +1359,48 @@ export class ShadowClawPages extends ShadowClawElement {
         const html = await renderMarkdown(content, {
           renderFrontmatter,
         });
+        if (token !== this.renderToken) {
+          return;
+        }
+
+        // Extract approved script srcs from the raw HTML *before* DOMPurify
+        // strips <script> tags. DOMPurify removes scripts during sanitization,
+        // so we must collect them here from the raw string, not from the DOM.
+        const approvedScriptSrcs: string[] = [];
+        const scriptSrcRegex = /<script\b[^>]*\bsrc=["']([^"']+)["'][^>]*>/gi;
+        let scriptMatch: RegExpExecArray | null;
+        while ((scriptMatch = scriptSrcRegex.exec(html)) !== null) {
+          const src = scriptMatch[1];
+          if (src && isApprovedScript(src)) {
+            approvedScriptSrcs.push(src);
+          }
+        }
+
+        // Load approved scripts BEFORE injecting HTML into the DOM.
+        // This ensures custom elements (e.g. x-postpress-code) are already
+        // defined when setSanitizedHtml first creates their DOM nodes, so
+        // connectedCallback fires correctly and slotchange is captured on
+        // first connection rather than after a late upgrade.
+        const scriptDescriptors = getApprovedCustomElementScriptDescriptors();
+        await Promise.all(
+          approvedScriptSrcs.map(async (src) => {
+            await loadApprovedCustomElementScript(src);
+            const desc = scriptDescriptors.find((d) => d.src === src);
+            if (desc?.hasInit) {
+              try {
+                const mod = await import(/* @vite-ignore */ src);
+                if (typeof mod?.init === "function") {
+                  await mod.init();
+                }
+              } catch (e) {
+                console.error(
+                  "[ShadowClaw] Error executing init for " + src,
+                  e,
+                );
+              }
+            }
+          }),
+        );
         if (token !== this.renderToken) {
           return;
         }

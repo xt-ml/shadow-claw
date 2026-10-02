@@ -379,21 +379,30 @@ export async function collectToolSources(
 export async function renderPageHtml(
   pageContent: string,
   pagePath: string,
+  options?:
+    | { approvedScripts?: string[] | Set<string> }
+    | string[]
+    | Set<string>,
 ): Promise<string> {
   const ext = path.extname(pagePath).toLowerCase();
   const isHtml = ext === ".html" || ext === ".htm" || ext === ".xhtml";
+
+  const approvedScripts =
+    Array.isArray(options) || options instanceof Set
+      ? options
+      : options?.approvedScripts;
 
   let parsed: { data: Record<string, any>; content: string };
   let rendered: string;
 
   if (isHtml) {
     parsed = splitFrontmatterWithGrayMatter(pageContent);
-    rendered = sanitizeRenderedHtml(parsed.content);
+    rendered = sanitizeRenderedHtml(parsed.content, approvedScripts);
   } else {
     try {
       parsed = splitFrontmatterWithGrayMatter(pageContent);
       const markdownHtml = await marked.parse(parsed.content);
-      rendered = sanitizeRenderedHtml(markdownHtml);
+      rendered = sanitizeRenderedHtml(markdownHtml, approvedScripts);
     } catch {
       parsed = { data: {}, content: pageContent };
       rendered = `<p>${escapeHtml(pageContent)}</p>`;
@@ -1256,9 +1265,14 @@ export async function prerenderDsdShell(
     const frontmatterTitle =
       parsed.data && parsed.data.title ? parsed.data.title : "";
 
+    const approvedScripts = (siteConfig?.customElements?.scripts || [])
+      .map((s: any) => (typeof s === "string" ? s : s?.src))
+      .filter(Boolean);
+
     const renderedHtml = await renderPageHtml(
       defaultPage.content!,
       defaultPage.absolutePath || defaultPage.displayPath,
+      { approvedScripts },
     );
 
     const pagesDsdHost = buildPagesDsdHost(

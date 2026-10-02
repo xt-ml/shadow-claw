@@ -16,11 +16,13 @@ import {
   installCustomElementDomGuard,
   installCustomElementsRegistryGuard,
   isAllowedCustomElement,
+  isApprovedScript,
   isSafeCustomElementSource,
   loadApprovedCustomElementScript,
   loadCustomElementSecurityFromDb,
   setAllowedCustomElementHostPatterns,
   setAllowedCustomElements,
+  setApprovedCustomElementScripts,
   setIframeSandboxPolicy,
   uninstallCustomElementsRegistryGuard,
 } from "./custom-element-security.js";
@@ -34,10 +36,12 @@ describe("custom-element-security", () => {
     setAllowedCustomElementHostPatterns(
       DEFAULT_ALLOWED_CUSTOM_ELEMENT_HOST_PATTERNS,
     );
+    setApprovedCustomElementScripts([]);
     uninstallCustomElementsRegistryGuard();
   });
 
   afterEach(() => {
+    setApprovedCustomElementScripts([]);
     uninstallCustomElementsRegistryGuard();
   });
 
@@ -511,6 +515,76 @@ describe("custom-element-security", () => {
       expect(
         hasApprovedCustomElement("<shadow-claw-toast></shadow-claw-toast>"),
       ).toBe(false);
+    });
+  });
+
+  describe("isApprovedScript & setApprovedCustomElementScripts", () => {
+    it("returns false for invalid or dangerous script sources", () => {
+      setApprovedCustomElementScripts([
+        "/pages/main/assets/x-hook-component.js",
+      ]);
+
+      expect(isApprovedScript("")).toBe(false);
+      expect(isApprovedScript("   ")).toBe(false);
+      expect(isApprovedScript(null as any)).toBe(false);
+      expect(isApprovedScript(undefined as any)).toBe(false);
+      expect(isApprovedScript("javascript:alert(1)")).toBe(false);
+      expect(isApprovedScript("data:text/javascript,alert(1)")).toBe(false);
+      expect(isApprovedScript("vbscript:alert(1)")).toBe(false);
+    });
+
+    it("returns false when no scripts are approved", () => {
+      setApprovedCustomElementScripts([]);
+      expect(isApprovedScript("/pages/main/assets/x-hook-component.js")).toBe(
+        false,
+      );
+    });
+
+    it("approves exact and normalized relative script paths", () => {
+      setAllowedCustomElementHostPatterns(["unpkg.com"]);
+      setApprovedCustomElementScripts([
+        { src: "/pages/main/assets/x-hook-component.js", hasInit: true },
+        "https://unpkg.com/my-lib@1.0.0/dist/index.js",
+      ]);
+
+      expect(isApprovedScript("/pages/main/assets/x-hook-component.js")).toBe(
+        true,
+      );
+      expect(isApprovedScript("pages/main/assets/x-hook-component.js")).toBe(
+        true,
+      );
+      expect(isApprovedScript("./pages/main/assets/x-hook-component.js")).toBe(
+        true,
+      );
+      expect(
+        isApprovedScript("/pages/main/assets/x-hook-component.js?v=2#hash"),
+      ).toBe(true);
+      expect(
+        isApprovedScript("https://unpkg.com/my-lib@1.0.0/dist/index.js"),
+      ).toBe(true);
+    });
+
+    it("rejects unapproved script paths", () => {
+      setApprovedCustomElementScripts([
+        "/pages/main/assets/x-hook-component.js",
+      ]);
+
+      expect(isApprovedScript("/pages/main/assets/unapproved.js")).toBe(false);
+      expect(isApprovedScript("https://evil.example.com/exploit.js")).toBe(
+        false,
+      );
+    });
+
+    it("filters out unsafe sources when registering approved scripts", () => {
+      setApprovedCustomElementScripts([
+        "javascript:alert(1)",
+        "/pages/main/assets/valid.js",
+      ]);
+
+      const approved = getApprovedCustomElementScripts();
+      expect(approved).toEqual(["/pages/main/assets/valid.js"]);
+      expect(isApprovedScript("javascript:alert(1)")).toBe(false);
+      expect(isApprovedScript("/pages/main/assets/valid.js")).toBe(true);
     });
   });
 });

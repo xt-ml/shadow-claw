@@ -148,6 +148,15 @@ export function isSafeCustomElementSource(urlStr: string): boolean {
     return true;
   }
 
+  // Relative same-origin paths are trusted
+  if (
+    trimmed.startsWith("/") ||
+    trimmed.startsWith("./") ||
+    trimmed.startsWith("../")
+  ) {
+    return true;
+  }
+
   try {
     const base =
       typeof globalThis !== "undefined" &&
@@ -322,6 +331,17 @@ export function configureCustomElementSecurity(config: {
     setAllowedCustomElementHostPatterns(domains);
   }
 
+  // Extract custom element scripts
+  const scripts =
+    typeof config.customElements === "object" &&
+    !Array.isArray(config.customElements)
+      ? config.customElements?.scripts
+      : undefined;
+
+  if (scripts !== undefined) {
+    setApprovedCustomElementScripts(scripts);
+  }
+
   // Extract security iframe sandbox settings
   if (config.security?.iframeSandbox !== undefined) {
     setIframeSandboxPolicy(config.security.iframeSandbox);
@@ -377,10 +397,39 @@ export interface CustomElementScriptDescriptor {
   hasInit: boolean;
 }
 
+let activeApprovedScripts: CustomElementScriptDescriptor[] = [];
+
 /**
- * Retrieve approved custom element script descriptors from the embedded site config.
+ * Set approved custom element scripts in memory.
+ */
+export function setApprovedCustomElementScripts(
+  scripts: Array<string | { src: string; hasInit?: boolean }>,
+): void {
+  if (Array.isArray(scripts)) {
+    activeApprovedScripts = scripts
+      .map((s: any) => {
+        const src = typeof s === "string" ? s : s?.src;
+        const hasInit =
+          typeof s === "object" && s !== null ? Boolean(s.hasInit) : false;
+        return { src, hasInit };
+      })
+      .filter(
+        (entry): entry is CustomElementScriptDescriptor =>
+          typeof entry.src === "string" && isSafeCustomElementSource(entry.src),
+      );
+  } else {
+    activeApprovedScripts = [];
+  }
+}
+
+/**
+ * Retrieve approved custom element script descriptors from memory or embedded site config.
  */
 export function getApprovedCustomElementScriptDescriptors(): CustomElementScriptDescriptor[] {
+  if (activeApprovedScripts.length > 0) {
+    return [...activeApprovedScripts];
+  }
+
   if (typeof document === "undefined") {
     return [];
   }
@@ -399,18 +448,8 @@ export function getApprovedCustomElementScriptDescriptors(): CustomElementScript
         : undefined;
 
     if (Array.isArray(scripts)) {
-      return scripts
-        .map((s: any) => {
-          const src = typeof s === "string" ? s : s?.src;
-          const hasInit =
-            typeof s === "object" && s !== null ? Boolean(s.hasInit) : false;
-          return { src, hasInit };
-        })
-        .filter(
-          (entry): entry is CustomElementScriptDescriptor =>
-            typeof entry.src === "string" &&
-            isSafeCustomElementSource(entry.src),
-        );
+      setApprovedCustomElementScripts(scripts);
+      return [...activeApprovedScripts];
     }
   } catch {}
 
@@ -422,6 +461,52 @@ export function getApprovedCustomElementScriptDescriptors(): CustomElementScript
  */
 export function getApprovedCustomElementScripts(): string[] {
   return getApprovedCustomElementScriptDescriptors().map((d) => d.src);
+}
+
+/**
+ * Check if a script source URL is an approved custom element script.
+ */
+export function isApprovedScript(src: string): boolean {
+  if (!src || typeof src !== "string") {
+    return false;
+  }
+
+  const trimmed = src.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  if (/^(?:javascript|data|vbscript):/i.test(trimmed)) {
+    return false;
+  }
+
+  const approved = getApprovedCustomElementScripts();
+  if (approved.length === 0) {
+    return false;
+  }
+
+  const clean = trimmed.split("?")[0].split("#")[0].trim();
+  const stripPrefix = (s: string) =>
+    s
+      .replace(/^\.?\//, "")
+      .replace(/^pages\/main\//, "")
+      .toLowerCase();
+  const normClean = stripPrefix(clean);
+
+  return approved.some((app) => {
+    if (app === clean) return true;
+    if (stripPrefix(app) === normClean) return true;
+    try {
+      const urlTarget = new URL(trimmed, "http://localhost");
+      const urlApp = new URL(app, "http://localhost");
+      return (
+        urlTarget.pathname.toLowerCase() === urlApp.pathname.toLowerCase() ||
+        stripPrefix(urlTarget.pathname) === stripPrefix(urlApp.pathname)
+      );
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**
@@ -660,6 +745,16 @@ export function ensureCustomElementSanitizerHook(): void {
           }
           if (el.parentNode) {
             el.parentNode.removeChild(el);
+          }
+        } else if (tagName === "script") {
+          const src = el.getAttribute("src") || "";
+          if (!src || !isApprovedScript(src)) {
+            if (typeof el.remove === "function") {
+              el.remove();
+            }
+            if (el.parentNode) {
+              el.parentNode.removeChild(el);
+            }
           }
         }
       }

@@ -415,9 +415,14 @@ export async function prerenderPrettyPaths(
     const frontmatterTitle =
       parsed.data && parsed.data.title ? parsed.data.title : "";
 
+    const approvedScripts = (siteConfig?.customElements?.scripts || [])
+      .map((s: any) => (typeof s === "string" ? s : s?.src))
+      .filter(Boolean);
+
     const rendered = await renderPageHtml(
       matchedPage.content || "",
       matchedPage.displayPath,
+      { approvedScripts },
     );
 
     let shadowClawDsdTemplate: string;

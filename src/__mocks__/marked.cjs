@@ -53,6 +53,8 @@ function renderHeadingBlock(text, depth) {
   return `<h${depth} id="${slug}">${escapeHtml(text)}</h${depth}>`;
 }
 
+let activeTokenizer = {};
+
 exports.marked = {
   parse: (val, options) => {
     if (typeof val !== "string") {
@@ -74,6 +76,31 @@ exports.marked = {
       return `@@MOCK_CODE_BLOCK_${index}@@`;
     });
 
+    const htmlBlocks = [];
+    if (typeof activeTokenizer.html === "function") {
+      let remaining = res;
+      let newRes = "";
+      while (remaining.length > 0) {
+        const token = activeTokenizer.html(remaining);
+        if (token && token.block) {
+          const index = htmlBlocks.length;
+          htmlBlocks.push(token.text || token.raw);
+          newRes += `\n\n@@MOCK_HTML_BLOCK_${index}@@\n\n`;
+          remaining = remaining.slice(token.raw.length);
+        } else {
+          const nextNewline = remaining.indexOf("\n");
+          if (nextNewline === -1) {
+            newRes += remaining;
+            break;
+          } else {
+            newRes += remaining.slice(0, nextNewline + 1);
+            remaining = remaining.slice(nextNewline + 1);
+          }
+        }
+      }
+      res = newRes;
+    }
+
     res = res.replace(/^(#{1,6})\s+(.+)$/gm, (_, hashes, text) => {
       return renderHeadingBlock(text, hashes.length);
     });
@@ -93,7 +120,7 @@ exports.marked = {
     });
 
     res = res.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
-    res = res.replace(/\n\n/g, "</p><p>");
+    res = res.replace(/\n\n+/g, "</p><p>");
 
     if (options?.breaks) {
       res = res.replace(/\n/g, "<br>");
@@ -107,6 +134,16 @@ exports.marked = {
       return codeBlocks[Number(index)] || "";
     });
 
+    res = res.replace(/<p>\s*@@MOCK_HTML_BLOCK_(\d+)@@\s*<\/p>/g, (_, index) => {
+      return htmlBlocks[Number(index)] || "";
+    });
+
+    res = res.replace(/@@MOCK_HTML_BLOCK_(\d+)@@/g, (_, index) => {
+      return htmlBlocks[Number(index)] || "";
+    });
+
+    res = res.replace(/<p>\s*<\/p>/g, "");
+
     return res;
   },
   use: (options) => {
@@ -114,6 +151,12 @@ exports.marked = {
       activeRenderer = {
         ...activeRenderer,
         ...options.renderer,
+      };
+    }
+    if (options && options.tokenizer) {
+      activeTokenizer = {
+        ...activeTokenizer,
+        ...options.tokenizer,
       };
     }
   },

@@ -15,7 +15,9 @@
     "themeColor": "#000000"
   },
   "sitemapPath": "sitemap.xml",
-  "assets": ["assets"],
+  "assets": [
+    "assets"
+  ],
   "sidebar": {
     "pagesHidden": false,
     "chatHidden": false,
@@ -40,7 +42,10 @@
       "block-garden-option",
       "block-garden-select"
     ],
-    "allowedDomains": ["kherrick.github.io", "cdn.jsdelivr.net"]
+    "allowedDomains": [
+      "kherrick.github.io",
+      "cdn.jsdelivr.net"
+    ]
   },
   "security": {
     "connectSrc": [

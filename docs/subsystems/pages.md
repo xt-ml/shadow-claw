@@ -102,6 +102,8 @@ The `shadow-claw-pages` web component handles rendering the UI and displaying fi
 3. Link paths (`a[href]`) are rewritten to resolve against the active workspace route.
 4. Images (`img[src]`) with relative workspace paths are fetched from OPFS via `readGroupFileBytes()`, converted to `Blob` data URLs based on their mime type, and injected back into the HTML.
 5. Content is sanitized using `setSanitizedHtml` and a custom `DOMPurify` configuration (`previewSanitizeOptions`) that specifically allows `blob:` URIs.
+6. **Custom Element Block Tokenizer:** `marked` is configured with a custom `tokenizer.html` rule (see `src/content/markdown.ts`) that detects standalone block-level custom element tags (any tag containing a hyphen, e.g. `<x-postpress-code>`) and forces them to be emitted as block-level HTML tokens rather than inline content. Without this rule, `marked` wraps unrecognized inline tags in `<p>` elements, which breaks light DOM slot behavior and causes custom elements to host a duplicate shadow root.
+7. **`hasInit` Execution Gating:** After approved custom element scripts are loaded but before page HTML is injected into the DOM, `shadow-claw-pages` calls `init()` on any script that declares `{ hasInit: true }` in its descriptor (see [`custom-element-security.md`](custom-element-security.md#6-approved-script-loader--script-descriptors-customelementscriptdescriptor)). This ensures element definitions are fully registered before `connectedCallback` fires on first paint.
 
 #### HTML (`.html`, `.xhtml`)
 

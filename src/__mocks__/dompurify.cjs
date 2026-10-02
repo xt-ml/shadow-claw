@@ -25,8 +25,18 @@ exports.sanitize = (val, options) => {
     return val;
   }
 
-  // Strip script tags by default
-  let clean = val.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "");
+  const allowsScript =
+    (options &&
+      Array.isArray(options.ALLOWED_TAGS) &&
+      options.ALLOWED_TAGS.map((t) => t.toLowerCase()).includes("script")) ||
+    (options &&
+      Array.isArray(options.ADD_TAGS) &&
+      options.ADD_TAGS.map((t) => t.toLowerCase()).includes("script"));
+
+  // Strip script tags by default unless explicitly allowed in options
+  let clean = allowsScript
+    ? val
+    : val.replace(/<script\b[^>]*>([\s\S]*?)<\/script>/gim, "");
 
   // If running in DOM environment (JSDOM/browser)
   if (typeof document !== "undefined") {

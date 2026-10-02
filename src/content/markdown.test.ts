@@ -1,4 +1,8 @@
 import { renderMarkdown } from "./markdown.js";
+import {
+  setAllowedCustomElements,
+  setApprovedCustomElementScripts,
+} from "../security/custom-element-security.js";
 
 describe("renderMarkdown", () => {
   it("renders markdown and keeps safe html", async () => {
@@ -13,6 +17,30 @@ describe("renderMarkdown", () => {
     expect(html).not.toContain("<script>");
 
     expect(html).toContain("ok");
+  });
+
+  it("allows approved script tags while stripping unapproved and inline scripts", async () => {
+    setApprovedCustomElementScripts(["/pages/main/assets/x-hook-component.js"]);
+
+    const input = [
+      "<article>",
+      '<script type="module" src="/pages/main/assets/x-hook-component.js"></script>',
+      '<script type="module" src="/pages/main/assets/unapproved.js"></script>',
+      "<script>alert('xss')</script>",
+      "<p>approved content</p>",
+      "</article>",
+    ].join("\n");
+
+    const html = await renderMarkdown(input);
+
+    expect(html).toContain(
+      '<script type="module" src="/pages/main/assets/x-hook-component.js"></script>',
+    );
+    expect(html).not.toContain("unapproved.js");
+    expect(html).not.toContain("alert('xss')");
+    expect(html).toContain("approved content");
+
+    setApprovedCustomElementScripts([]);
   });
 
   it("preserves single newlines as spaces by default", async () => {
@@ -147,5 +175,29 @@ describe("renderMarkdown", () => {
     expect(html).toContain(
       '<img src="./sub%20folder/My%20Image%20With%20Spaces.png" alt="My Image">',
     );
+  });
+
+  it("preserves custom elements as block-level HTML without wrapping in p tags", async () => {
+    setAllowedCustomElements(["x-postpress-code", "x-hook-component"]);
+
+    const input = [
+      "<p>Intro paragraph</p>",
+      "",
+      '<x-postpress-code type="html"><pre>&lt;script src="test.js"&gt;&lt;/script&gt;</pre></x-postpress-code>',
+      "",
+      '<x-hook-component value="5"></x-hook-component>',
+      "",
+      "<p>Outro paragraph</p>",
+    ].join("\n");
+
+    const html = await renderMarkdown(input);
+
+    expect(html).not.toMatch(/<p>\s*<x-postpress-code/);
+    expect(html).toContain('<x-postpress-code type="html"><pre>');
+    expect(html).toContain("</pre></x-postpress-code>");
+    expect(html).not.toMatch(/<p>\s*<x-hook-component/);
+    expect(html).toContain('<x-hook-component value="5"></x-hook-component>');
+
+    setAllowedCustomElements([]);
   });
 });
